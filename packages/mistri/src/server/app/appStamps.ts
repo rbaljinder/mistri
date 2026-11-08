@@ -31,6 +31,8 @@ export interface AppStamps {
 export interface StampMoment {
   readonly now: Date;
   readonly who?: string;
+  /** The signed-in account's id, set with `who`: what `auth.me.by: 'account'` finds the person's row by. */
+  readonly account?: string;
   /** The signed-in person's row of `auth.me`'s table, read only when a stamp writes it (null: nobody's row). */
   readonly person?: () => Promise<string | number | null>;
 }

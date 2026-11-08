@@ -5,7 +5,17 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { BUILT, BUNDLER_ONLY, CHECKOUT_ONLY, builtTarget, hostExports, published } from '../scripts/pack-manifest.mjs';
+import {
+  BUILT,
+  BUNDLER_ONLY,
+  CHANGELOG_URL,
+  CHECKOUT_ONLY,
+  GENERATED,
+  builtTarget,
+  hostExports,
+  published,
+  rcChangelog,
+} from '../scripts/pack-manifest.mjs';
 
 const read = (path: string) => JSON.parse(readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')) as Record<string, any>;
 const manifests = readdirSync(new URL('../packages/', import.meta.url)).map((dir) => [dir, read(`packages/${dir}/package.json`)] as const);
@@ -89,4 +99,19 @@ test('an install of the kit names its client modules only where the host list do
     Object.keys(published(kit, {}).exports),
     Object.keys(kit.exports).filter((subpath) => !bundlerOnly(subpath)),
   );
+});
+
+test('the App framework carries the release candidates and a link to the rest, not the whole changelog', () => {
+  const whole = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
+  const carried = rcChangelog(whole);
+  const headings = carried.match(/^## .*/gm) ?? [];
+  assert.ok(headings.length > 10);
+  assert.ok(
+    headings.every((heading) => heading.startsWith('## 1.0.0-rc.')),
+    headings.join('\n'),
+  );
+  assert.ok(carried.length < whole.length);
+  assert.ok(carried.trimEnd().endsWith(`The full changelog: ${CHANGELOG_URL}`));
+  assert.match(CHANGELOG_URL, /^https:\/\/github\.com\/rbaljinder\/mistri\/blob\/main\/CHANGELOG\.md$/);
+  assert.ok(Object.keys(GENERATED.mistri ?? {}).includes('CHANGELOG.md'));
 });

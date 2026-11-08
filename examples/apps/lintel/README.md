@@ -81,6 +81,17 @@ under [`examples/databases/lintel`](../../databases/lintel/); the generated
   gets one of the record's remaining fields; a showcase does not. A repair has two pages, chosen by role: the office's, with the
   resident's card and the history of changes, and the resident's own
   ([`resident_request.ts`](pages/resident_request.ts)), which has neither.
+  Two pages are drawn whole by code:
+  [`delivery-board.page.tsx`](pages/delivery-board.page.tsx), the storeroom's
+  board (see below), and [`add-charge.page.tsx`](pages/add-charge.page.tsx),
+  under Books for the manager and the accountant. It chooses a current lease
+  and asks the lease's own Add charge command over two steps with `<Steps>`:
+  what the charge is for, then how much and when it is due. Continue checks
+  only the step it is on, in the browser and on the server, and the command
+  runs once, from the last step. The step is a page param, so a reload or a
+  shared link opens the same step, or the first one not answered yet. Its
+  test, [`pages/add-charge.test.tsx`](pages/add-charge.test.tsx), runs under
+  Vitest.
 - [`blueprint.ts`](blueprint.ts): a second theme written from scratch, the office's drawing set (blue ink on gridded
   vellum, a blueprint in dark mode), that a reader picks under Preferences; the App still wears Lintel's own.
 - [`hearth.ts`](hearth.ts): a third, calm and one thing at a time: big tight Figtree titles
@@ -91,6 +102,55 @@ under [`examples/databases/lintel`](../../databases/lintel/); the generated
 
 `authority.lock` beside `app.ts` records every grant; the server refuses to
 start an App whose grants differ from it, and the permissions test reads it.
+
+## Records and a carrier's API
+
+Lintel reads from three places, and the storeroom's delivery board draws all
+three together.
+
+- **Records:** the database under [`examples/databases/lintel`](../../databases/lintel/)
+  (PostgreSQL, or SQLite). The storeroom's deliveries (`part_receipt`) carry
+  the carrier's `tracking_number`.
+- **The API:** Northbound Freight, a made-up carrier whose tracking API is read
+  over HTTP and never written. The `carrier` source in `app.ts` names its
+  connection, never its URL. [`carrier/openapi.json`](../../databases/lintel/carrier/openapi.json)
+  is the pinned spec and [`carrier/northbound.http.json`](../../databases/lintel/carrier/northbound.http.json)
+  the `mistri.http/1` description drafted from it (the sha256 of the spec is
+  pinned inside; `tests/carrier.test.ts` fails when either changes alone).
+  Its shipments are the table `carrier.shipments`: a status, the carrier's
+  ETA and the last scan's place and time, filtered by `status` and sorted by
+  ETA. The Carrier tracking list in the menu reads it on its own.
+- **The room that reads both:** [`pages/delivery-board.page.tsx`](pages/delivery-board.page.tsx),
+  Lintel's first free-form page, under Maintenance. It declares both reads and
+  draws what is on its way (soonest first, with the last scan), what needs a
+  look (a held parcel, a late one, a delivery nobody booked in) and what was
+  received lately, with the carrier's word beside each. A foreign key cannot
+  cross sources yet, so the page matches a shipment to its delivery by
+  tracking number itself, which is why it stays hand-built rather than a
+  `<Board>`. A `<Calendar>` under the tables stands the same deliveries on the
+  month they fell in, the list views' own calendar over the read the page
+  already holds. Its test, [`pages/delivery-board.test.tsx`](pages/delivery-board.test.tsx),
+  runs under Vitest.
+- **Grants:** an HTTP connection reads only, and the App's roles decide who
+  reads it: the office (leasing, manager, admin) and technicians, never a
+  resident or the accountant. A page is offered only to a role granted every
+  read it declares, so the board is offered to the manager, the admin and
+  technicians (its `roles`), and the roles without the carrier read the
+  deliveries list instead.
+
+To run the stub beside the App, give it a port and point the carrier
+connection at it. [`carrier/api.mjs`](../../databases/lintel/carrier/api.mjs)
+answers the spec with the same shipments every start (one for each seeded
+delivery, all delivered, and four still on their way) and needs no key:
+
+```sh
+node examples/databases/lintel/carrier/api.mjs --port 4782
+```
+
+The seed's config already names the connection at `http://127.0.0.1:4782/v1/`;
+on another port, change its `url`. [`carrier/server.example.json`](../../databases/lintel/carrier/server.example.json)
+is the same connection to add beside `lintel` in a server config of your own.
+`tests/start.ts` serves the stub on a free port for each test run.
 
 ## Run locally
 
@@ -146,15 +206,16 @@ does: a workspace of its own, the App copied into it, the real seed, the App
 served with its jobs and policy, an account per role (each office account is a seeded staff member, so Today greets Maya by name), and one seeded
 resident's address made the resident account's.
 
-| File                   | Covers                                                                                                                                                                 |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `permissions.test.ts`  | every role × resource and command as `authority.lock` says; a resident's household and nothing else; a technician and the ledger, Cancel and New; what a visitor reads |
-| `ledger.test.ts`       | rent posted once however often asked, a payment, a one-off charge in cents, the late-fee workflow on a test clock (`createWorkflowDriver`)                             |
-| `maintenance.test.ts`  | a visit booked, started and completed, the resident mailed or not by their consent, parts off the shelf and a take past zero refused, internal notes                   |
-| `portal.test.ts`       | a resident's home, a problem reported on their own home and written on, a visit window asked only when entry is not allowed, a neighbor's repair refused               |
-| `integrations.test.ts` | the processor's signed callback applied once, replayed, forged and wrong ones refused                                                                                  |
-| `decisions.test.ts`    | the routing decision on a scripted model: each new repair suggested a technician, the office reads it, nothing assigned, a neighbor's refused to a resident            |
-| `*.spec.ts`            | the browser: the public listings and viewing request, the staff desk, the resident portal on a phone, each role's shared pages, a listing's and a repair's layout      |
+| File                   | Covers                                                                                                                                                                      |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `permissions.test.ts`  | every role × resource and command as `authority.lock` says; a resident's household and nothing else; a technician and the ledger, Cancel and New; what a visitor reads      |
+| `ledger.test.ts`       | rent posted once however often asked, a payment, a one-off charge in cents, the late-fee workflow on a test clock (`createWorkflowDriver`)                                  |
+| `maintenance.test.ts`  | a visit booked, started and completed, the resident mailed or not by their consent, parts off the shelf and a take past zero refused, internal notes                        |
+| `portal.test.ts`       | a resident's home, a problem reported on their own home and written on, a visit window asked only when entry is not allowed, a neighbor's repair refused                    |
+| `tracking.test.ts`     | the carrier's tracking read through the App by the office and refused to a resident, the accountant and a visitor; the delivery board offered to the storeroom's roles only |
+| `integrations.test.ts` | the processor's signed callback applied once, replayed, forged and wrong ones refused                                                                                       |
+| `decisions.test.ts`    | the routing decision on a scripted model: each new repair suggested a technician, the office reads it, nothing assigned, a neighbor's refused to a resident                 |
+| `*.spec.ts`            | the browser: the public listings and viewing request, the staff desk, the resident portal on a phone, each role's shared pages, a listing's and a repair's layout           |
 
 ```sh
 node scripts/test-node.mjs examples/apps/lintel/tests/*.test.ts

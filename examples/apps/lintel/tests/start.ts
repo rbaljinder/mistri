@@ -11,14 +11,19 @@
  * seeded technician's the technician account's, so a visit booked for them
  * mails someone who can sign in, and each role's account takes a password a
  * browser can type.
+ *
+ * The carrier's tracking API (examples/databases/lintel/carrier/api.mjs) is the App's second source: its stub is
+ * served on a free port for the fixture's life, and the seeded config is pointed at it.
  */
-import { mkdir, readFile, symlink } from 'node:fs/promises';
+import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { createHmac } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
+import type { AddressInfo } from 'node:net';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { createTestWorkspace, startTestApp, type TestClient, type TestDecisionScript } from '@mistriwork/mistri/testing';
+import { createCarrier } from '../../../databases/lintel/carrier/api.mjs';
 import { seed } from '../../../databases/lintel/seed.mjs';
 
 /** The App under test. LINTEL_APP points it at a changed copy: prove-red.mjs uses it to break one rule. */
@@ -33,6 +38,7 @@ export const emailOf = (role: Role) => `${role}@example.test`;
 /** `decisions`: the routing decision's answers, scripted (decisions.test.ts); without them it has no provider and asks no one. */
 export async function startLintel(options: { decisions?: (staff: Record<Role, number>) => TestDecisionScript } = {}) {
   const workspace = await createTestWorkspace();
+  const carrier = createCarrier();
   try {
     // A copied App resolves `@mistriwork/mistri/app` the way an installed one does.
     await mkdir(workspace.path('node_modules/@mistriwork'), { recursive: true });
@@ -45,6 +51,11 @@ export async function startLintel(options: { decisions?: (staff: Record<Role, nu
     const mailSecret = 'lintel-unsubscribe-test-secret';
     process.env.LINTEL_MAIL_SECRET ??= mailSecret;
     const database = seed(workspace.path('data/lintel.db'));
+    await new Promise<void>((listening) => carrier.listen(0, '127.0.0.1', listening));
+    const carrierUrl = `http://127.0.0.1:${(carrier.address() as AddressInfo).port}/v1/`;
+    const config = JSON.parse(await readFile(`${database}.json`, 'utf8'));
+    config.connections.find((connection: { name: string }) => connection.name === 'carrier').url = carrierUrl;
+    await writeFile(`${database}.json`, JSON.stringify(config, null, 2));
     const resident = linkResident(database);
     const { names, ids } = linkStaff(database, resident.name);
     const host = await startTestApp({
@@ -136,9 +147,13 @@ export async function startLintel(options: { decisions?: (staff: Record<Role, nu
       mail,
       mailed,
       settle,
-      close: () => workspace.close(),
+      close: async () => {
+        carrier.close();
+        await workspace.close();
+      },
     };
   } catch (error) {
+    carrier.close();
     await workspace.close();
     throw error;
   }

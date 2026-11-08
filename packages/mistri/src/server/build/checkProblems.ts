@@ -26,6 +26,7 @@ import type { ContractPromise } from './themeContract.js';
 
 export type CheckStep =
   | 'pending'
+  | 'schema file'
   | 'themes'
   | 'fonts'
   | 'files'

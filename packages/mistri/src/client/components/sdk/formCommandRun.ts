@@ -9,7 +9,7 @@ import { sessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { queryClient } from '@mistriwork/kit/client/components/mount.js';
 import type { ServedForm as RoomForm } from '@mistriwork/kit/client/components/appRooms.js';
 import type { AppPayloadApp } from '../../../shared/appPayload.js';
-import { commandInput, prefilledCommandValues, readyToJudge } from '../CommandFields.js';
+import { commandInput, prefilledCommandValues, readyToJudge, refusedFields, type CommandValues } from '../CommandFields.js';
 import type { UiCommandOptions, UiCommandOutcome } from './context.js';
 import { say } from '../../copy/components/components/sdk/formCommandRun.js';
 
@@ -61,7 +61,8 @@ export async function runFormCommand(
     idempotencyKey: key,
     input: values,
   });
-  return sendFormCommand(served.form.label, envelope, sessionIdentity(), false);
+  const named = (path: string | undefined, message: string) => refusedFields(path, message, fields, values as CommandValues);
+  return sendFormCommand(served.form.label, envelope, sessionIdentity(), false, named, Boolean(options?.quiet));
 }
 
 async function sendFormCommand(
@@ -69,6 +70,9 @@ async function sendFormCommand(
   envelope: Readonly<Record<string, unknown>>,
   identity: ReturnType<typeof sessionIdentity>,
   checking: boolean,
+  named: (path: string | undefined, message: string) => Readonly<Record<string, string>> | undefined,
+  /** The caller says the outcome (`quiet`): no toast. */
+  quiet = false,
 ): Promise<UiCommandOutcome> {
   const check = (): Promise<UiCommandOutcome> => {
     // The key is the session's: under another account the same key is another run, so it is not asked there.
@@ -76,7 +80,7 @@ async function sendFormCommand(
       const message = say('checkedElsewhere', { label });
       return Promise.resolve({ status: 'unknown', message, check });
     }
-    return sendFormCommand(label, envelope, identity, true);
+    return sendFormCommand(label, envelope, identity, true, named, quiet);
   };
   try {
     const sent = (await api('/api/commands/execute', { ...envelope, ...ownedBy(state.activeConnection ?? '') })) as {
@@ -85,15 +89,16 @@ async function sendFormCommand(
     void queryClient.invalidateQueries();
     return { status: 'applied', ...(sent?.result !== undefined ? { output: sent.result } : {}) };
   } catch (error) {
-    const failure = error as Error & { outcome?: unknown };
+    const failure = error as Error & { outcome?: unknown; field?: unknown };
     // Only an answer that says nothing ran is a refusal; a lost or uncertain one is not known (commandState.ts settleFailure).
     if (failure.outcome === 'not_applied') {
       const message = failure.message || say('isNotSomethingYouCanDo', { label });
-      toast(message, 'error');
-      return { status: 'refused', message };
+      if (!quiet) toast(message, 'error');
+      const fields = named(typeof failure.field === 'string' ? failure.field : undefined, message);
+      return { status: 'refused', message, ...(fields ? { fields } : {}) };
     }
     const message = say('notKnown', { label });
-    if (!checking) toast(message, 'error');
+    if (!checking && !quiet) toast(message, 'error');
     return { status: 'unknown', message, check };
   }
 }

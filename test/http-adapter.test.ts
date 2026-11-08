@@ -245,3 +245,17 @@ test('a refusal names the columns it quotes, and an App error carries them, so a
     .catch((error: unknown) => error);
   assert.deepEqual((sort as Refusal).columns, ['score']);
 });
+
+test('a row policy reaches an API whole or not at all: a narrowing filter and an absent grant are refused, and nothing is sent', async () => {
+  const whole = await adapter.scopeReads({ contacts: true });
+  const before = api.seen.length;
+  const { rows } = await whole.query({ table: 'contacts', limit: 2, offset: 0 });
+  assert.equal(rows.length, 2);
+  assert.equal(api.seen.length, before + 1, 'a whole grant reads the API as an unscoped read does');
+
+  const narrowed = await adapter.scopeReads({ contacts: { groups: [[{ column: 'name', op: '=', value: 'Contact 1' }]] } });
+  await assert.rejects(narrowed.query({ table: 'contacts', limit: 2, offset: 0 }), refusal(/a row policy cannot narrow its rows/));
+  await assert.rejects(whole.query({ table: 'tickets', limit: 2, offset: 0 }), refusal(/not readable under this row policy/));
+  await assert.rejects(whole.count('contacts'), refusal(/reports no totals/));
+  assert.equal(api.seen.length, before + 1, 'a refused read never reaches the API');
+});

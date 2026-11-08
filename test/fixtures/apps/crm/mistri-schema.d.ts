@@ -43,6 +43,22 @@ export type Rows = {
   task: { id: number; subject: string; status: string; priority: number; is_urgent: number; due_on: string; owner_id: number; account_id: number | null; opportunity_id: number | null; created_on: string };
 };
 
+/** Each table's primary-key columns: what names one of its records. A table without one is absent. */
+export type Keys = {
+  account: "id";
+  activity: "id";
+  campaign: "id";
+  campaign_member: "campaign_id" | "lead_id";
+  contact: "id";
+  industry: "id";
+  lead: "id";
+  opportunity: "id";
+  opportunity_line: "opportunity_id" | "line_no";
+  product: "sku";
+  sales_rep: "id";
+  task: "id";
+};
+
 /** Each table's references, by the name a label path follows (`owner_id`
     in `owner_id.name`), and the table each lands on: what lets every hop of
     a path be checked. A table that references nothing is absent. */
@@ -110,5 +126,5 @@ export type Flags<Manifest> = AppFlagValues<Manifest>;
 export type FlagName<Manifest> = keyof Flags<Manifest>;
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { schema(): { columns: Columns; references: References; segments: Segments } }
+  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments } }
 }

@@ -111,7 +111,9 @@ export const APP_DATA: DataHooks = {
     const me = app
       ? (reader: Adapter) =>
           source.person?.(reader) ??
-          (identity.emailUnproven ? Promise.resolve(unprovenPerson(app, source.schema)) : lookupPerson(app, source.schema, who, reader))
+          (identity.emailUnproven
+            ? Promise.resolve(unprovenPerson(app, source.schema))
+            : lookupPerson(app, source.schema, who, reader, undefined, who ? identity.id : undefined))
       : undefined;
     return {
       appNow: () => appNowFor(registry, appHosts, source.connectionId, source.zone),

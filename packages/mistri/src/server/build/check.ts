@@ -28,10 +28,12 @@ import { existsSync } from 'node:fs';
 import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { Registry, redact } from '@mistriwork/engine/server/connections.js';
+import { presentationOf } from '../cli/apps.js';
 import { appRoutes, appThemeProblems, loadApp, saidByMessage, type LoadedApp } from '../app/apps.js';
 import { BUILD_MANIFEST } from '../app/appBuild.js';
 import { authorityLockProblem } from '../app/authorityLock.js';
 import { staleSkillWarning } from '../cli/agentInit.js';
+import { httpSpecFindings } from './checkHttpSpec.js';
 import { placementIn } from '../../shared/appUi.js';
 import { fontBudgetProblem, fontSummary } from '../app/appFonts.js';
 import { writtenAt, type FixedThemeProblem } from '../../shared/themeFix.js';
@@ -142,7 +144,7 @@ const CHECK_EXIT = {
 } as const;
 
 const CHECK_USAGE =
-  'mistri check [--app <dir>] [--app-entry <file>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>] [--routes [--mount <app>=<path>] [--base-path <path>]] [--design] [--fix] [--fail-on-design-warning] [--defaults] [--no-index-check] [--no-query-check] [--warnings] [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]] [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]';
+  'mistri check [--app <dir>] [--app-entry <file>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>] [--routes [--mount <app>=<path>] [--base-path <path>]] [--design] [--fix] [--fail-on-design-warning] [--defaults] [--no-index-check] [--no-query-check] [--warnings] [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]] [--schema-file [<schema.sql>] [--dev-url <url>]] [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]';
 
 /* `pending` is the stores step's alone: what `mistri migrate up --app` makes, which no change to the App fixes. */
 type Status = 'passed' | 'failed' | 'skipped' | 'pending';
@@ -214,6 +216,7 @@ function appCommandTypes(loaded: LoadedApp): string | undefined {
         ),
       ),
     ],
+    Object.entries(loaded.app.views).flatMap(([key, view]) => ('sections' in view && view.page?.record ? [key] : [])),
   );
 }
 
@@ -276,7 +279,10 @@ function foundByFile(loaded: LoadedApp, appDir: string): string[] {
   const free = (loaded.pageFiles ?? [])
     .map((file) => [file, /^pages\/(.+)\.page\.[jt]sx$/.exec(file)?.[1]] as const)
     .filter((entry): entry is readonly [string, string] => entry[1] !== undefined)
-    .map(([file, path]) => [file, `page "${path}"`] as const);
+    .map(([file, path]) => {
+      const tab = /^([^/]+)\/\[id\]\/([^/]+)$/.exec(path);
+      return [file, tab ? `record tab "${tab[2]}" of "${tab[1]}"` : `page "${path}"`] as const;
+    });
   const catalogs = (loaded.messageFiles ?? []).map((file) => [file, `catalog "${basename(file).replace(/\.[^.]+$/, '')}"`] as const);
   const found = [...records, ...free, ...catalogs].sort(([a], [b]) => a.localeCompare(b));
   const width = Math.max(0, ...found.map(([file]) => file.length));
@@ -487,6 +493,16 @@ export async function schemaTypes(registry: Registry, loaded: LoadedApp | undefi
       step('passed', `updated ${TYPES} to match the database and the App's resources — ${drift(existing, types)}`, lost);
 }
 
+/** A scratch database the steps read in the database's place: `--pending`'s copy, or `--schema-file`'s (schemaFile.ts). */
+interface ScratchCopy {
+  readonly args: string[];
+  readonly status: 'passed' | 'failed';
+  readonly detail: string;
+  readonly lines: string[];
+  readonly name?: CheckStep;
+  cleanup(): Promise<void>;
+}
+
 /* The lines mistri check sends to stderr that are only its startup narration. */
 /**
  * The stores step: the stores the App uses that its database lacks (stores/storesCli.ts appStoresPlan, the plan
@@ -671,7 +687,7 @@ export async function runCheck(
     problems: (refused.length ? refused : ['the App could not be checked']).map((message) =>
       problem(
         'check',
-        'could-not-check',
+        NO_DATABASE.test(message) ? 'catalog-missing' : 'could-not-check',
         message.replace(/^mistri check: /, '').replace(new RegExp(` ${CHECK_USAGE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`), ''),
       ),
     ),
@@ -696,6 +712,8 @@ const PREVIEW_FEATURE = 'preview-feature';
     refused load `invalid-app` names. */
 const AUTOMATION = 'automation';
 const NOT_LOADED = 'not-loaded';
+/** The refusal to check with no database and no --schema-file named (runSteps), coded `catalog-missing`. */
+const NO_DATABASE = /^(?:mistri check: )?no database to check the App against/;
 
 /* Where the documentation's fix points at the message ("the nearest"), the shortest hint that stands alone. */
 const BRIEF_HINTS: Record<string, string> = {
@@ -775,6 +793,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
   let queryCheck = true;
   let pending = false;
   let pendingOn: string | undefined;
+  let schemaFile: string | true | undefined;
+  let devUrl: string | undefined;
   let deploy = false;
   let replicas: number | undefined;
   let connectionLimit: number | undefined;
@@ -854,6 +874,20 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       pendingOn = given;
       continue;
     }
+    if (argv[i] === '--schema-file') {
+      // A file named, or the App's own schema.sql: a database to check beside is never a .sql.
+      schemaFile = argv[i + 1] !== undefined && /\.sql$/i.test(argv[i + 1]) ? argv[++i] : true;
+      continue;
+    }
+    if (argv[i] === '--dev-url') {
+      const given = argv[++i];
+      if (given === undefined || given.startsWith('-')) {
+        console.error(`mistri check: --dev-url needs the URL of a PostgreSQL server where scratch databases may be made. ${CHECK_USAGE}`);
+        return CHECK_EXIT.couldNotCheck;
+      }
+      devUrl = given;
+      continue;
+    }
     if (argv[i] === '--strict-migrations') {
       strictMigrations = true;
       continue;
@@ -931,6 +965,16 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     console.error(`mistri check: --migrations and --history-table say where --pending and --deploy find the migrations. ${CHECK_USAGE}`);
     return CHECK_EXIT.couldNotCheck;
   }
+  if (devUrl !== undefined && schemaFile === undefined) {
+    console.error(`mistri check: --dev-url is the server --schema-file loads its scratch database on. ${CHECK_USAGE}`);
+    return CHECK_EXIT.couldNotCheck;
+  }
+  if (schemaFile !== undefined && (pending || deploy)) {
+    console.error(
+      `mistri check: --schema-file checks the App against a scratch database made from schema.sql; --pending and --deploy judge the migrations against a real one. ${CHECK_USAGE}`,
+    );
+    return CHECK_EXIT.couldNotCheck;
+  }
   if (strictMigrations && !deploy) {
     console.error(`mistri check: --strict-migrations makes --deploy fail on a migration that breaks the running code. ${CHECK_USAGE}`);
     return CHECK_EXIT.couldNotCheck;
@@ -974,7 +1018,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
 
   /* With --pending, the database is a scratch copy with the pending
      migrations applied (build/pending.ts), and every step below reads it. */
-  let copy: Awaited<ReturnType<typeof import('./pending.js').pendingCopy>> | undefined;
+  let copy: ScratchCopy | undefined;
   if (pending) {
     const { pendingCopy } = await import('./pending.js');
     try {
@@ -1014,6 +1058,26 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     opts = parseArgs(rest);
   }
 
+  /* With --schema-file, the database is a scratch one made from schema.sql (build/schemaFile.ts): the App's own is
+     never reached, and every step below reads the scratch. */
+  if (schemaFile !== undefined) {
+    const { schemaFileCopy } = await import('./schemaFile.js');
+    try {
+      const made = await schemaFileCopy(
+        appDir,
+        rest,
+        { ...(typeof schemaFile === 'string' ? { file: schemaFile } : {}), ...(devUrl !== undefined ? { devUrl } : {}) },
+        CONFIG_SECTIONS,
+      );
+      copy = { ...made, status: 'passed', name: 'schema file' };
+    } catch (error) {
+      console.error(`mistri check: --schema-file could not make its scratch database: ${(error as Error).message}`);
+      return CHECK_EXIT.couldNotCheck;
+    }
+    rest = copy.args;
+    opts = parseArgs(rest);
+  }
+
   /* The database, as a start would reach it. Its narration is not this
      command's to print: stdout is the three verdicts. */
   const registry = new Registry();
@@ -1040,7 +1104,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     if (!registry.list().length) {
       console.error(
         'mistri check: no database to check the App against. Name it — a SQLite file, --db <url>, or --config <file> — ' +
-          'or keep a mistri.json beside where you run it.',
+          'or keep a mistri.json beside where you run it; or, with none, check against the schema the App declares: ' +
+          '--schema-file [<schema.sql>] (--dev-url <server> on PostgreSQL).',
       );
       return CHECK_EXIT.couldNotCheck;
     }
@@ -1055,11 +1120,21 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       opts.appEntry !== undefined
         ? resolve(opts.appEntry)
         : ['app.ts', 'app.mjs', 'app.json'].map((name) => join(appDir, name)).find((file) => existsSync(file));
+    /* The config's "presentation", laid over the App as a start lays it, so the name, theme and fonts judged here are
+       the ones served. A presentation the server would refuse is said once, in the server's words, by the validation
+       step, which runs the real start; here the App is read without it. */
+    let presentation: ReturnType<typeof presentationOf>;
+    try {
+      presentation = presentationOf(config);
+    } catch {
+      presentation = undefined;
+    }
     const load = async () => {
       loaded = partial = undefined;
       try {
         loaded = await loadApp(appDir, {
           lock: 'report',
+          ...(presentation ? { presentation } : {}),
           // Its own components step names each finding, coded and placed; a refused load would say them once, unplaced.
           componentLint: false,
           ...(opts.appEntry !== undefined ? { entry: opts.appEntry } : {}),
@@ -1161,8 +1236,11 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     const conventions = named ? appEntries(named, opts) : {};
     if (fromProfile(context) && claimContext()) for (const line of contextLines(context, conventions)) write(`  ${line}`);
     if (config.environmentTargetNote) write(`  note: ${config.environmentTargetNote}`);
+    const presented = loaded && presentation?.apps[loaded.app.id];
+    if (loaded && presentation && presented)
+      write(`  presentation: ${Object.keys(presented).join(', ')} from ${shown(presentation.file ?? 'the config file')}`);
     let routeTableSaid: Array<{ path: string; what: string }> | undefined;
-    const steps: Step[] = copy ? [{ name: 'pending', status: copy.status, detail: copy.detail, lines: copy.lines }] : [];
+    const steps: Step[] = copy ? [{ name: copy.name ?? 'pending', status: copy.status, detail: copy.detail, lines: copy.lines }] : [];
     if (fixStep) steps.push(fixStep);
     /* A page is named by its label in a sentence and by its key in the definition. */
     const pageIds = new Map((named?.pages ?? []).map((page) => [page.name, page.id] as const));
@@ -1446,13 +1524,30 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
               },
     );
 
-    /* The agent skill a project copied in (`mistri agent init`) stamped by an older mistri: said, never failed. */
+    /* The agent skill a project copied in (`mistri agent init`) stamped by an older mistri: a failure, since an agent
+       reading it writes keys and commands that have since moved, and the fix is one command. */
     const staleSkill = staleSkillWarning(appDir);
     if (staleSkill) {
       const judged = steps.findLast((step) => step.name === 'validation');
       if (judged) {
-        judged.lines = [...judged.lines, `warning: ${staleSkill}`];
-        judged.problems = [...(judged.problems ?? []), problem('validation', 'skill-stale', staleSkill, {}, 'warning')];
+        judged.lines = [...judged.lines, `error: ${staleSkill}`];
+        judged.problems = [...(judged.problems ?? []), problem('validation', 'skill-stale', staleSkill)];
+        judged.status = 'failed';
+      }
+    }
+
+    /* An HTTP connection's description against the spec it pins: the adapter reads the description alone, so a spec that
+       moved on is said here. A warning (a spec file that is gone) does not fail. */
+    const specFindings = await httpSpecFindings(registry.configs());
+    if (specFindings.length) {
+      const judged = steps.findLast((step) => step.name === 'validation');
+      if (judged) {
+        judged.lines = [...judged.lines, ...specFindings.map((found) => `${found.severity}: ${found.message}`)];
+        judged.problems = [
+          ...(judged.problems ?? []),
+          ...specFindings.map((found) => problem('validation', found.code, found.message, { fix: found.fix }, found.severity)),
+        ];
+        if (specFindings.some((found) => found.severity === 'error')) judged.status = 'failed';
       }
     }
 

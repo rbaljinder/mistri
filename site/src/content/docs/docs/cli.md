@@ -47,7 +47,9 @@ The first line of the help says it: *mistri — the App framework: a few lines o
 | `mistri deploy [init cloudflare|status|verify|rollback|logs]` | an App on Cloudflare Containers (see below) |
 | `mistri docs [topic]` | the App reference, offline: access, relationships, dates, dashboards, reload and restart, … |
 | `mistri agent init` | put the agent skill where coding agents read it (see below) |
+| `mistri upgrade [--app <dir>] [--check]` | rewrite an App's source to the names this mistri reads (see below) |
 | `mistri compare-openapi <previous.json> <current.json>` | compare two exported App API documents; no server |
+| `mistri api client <spec.json> --out <client.ts>` | a typed fetch client from an exported App API document; no server |
 | `mistri api-token --help` | local token-store maintenance; no server |
 | `mistri mail-dns [<config.json>]` | the SPF, DKIM and DMARC records a tenant App's mail is sent under; makes the DKIM key if it is missing |
 
@@ -117,6 +119,7 @@ mistri check [--app <dir>] [--app-entry <file>]
                 [--design] [--fix] [--defaults] [--fail-on-design-warning] [--warnings]
                 [--no-index-check] [--no-query-check]
                 [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]]
+                [--schema-file [<schema.sql>] [--dev-url <url>]]
                 [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
 
 Three or four steps, each with its own verdict line. Schema types: regenerates
@@ -160,7 +163,11 @@ the database — and every step reads the copy. --pending-on <url> (which
 implies --pending) runs them on the scratch database that URL names instead,
 on any engine: a branch or restore of the real one, or an empty one the whole
 history can build; for a hosted role without CREATEDB. It is never dropped
-and never the App's own database; a \${NAME} in the URL is expanded. --deploy adds a step that
+and never the App's own database; a \${NAME} in the URL is expanded.
+--schema-file [<schema.sql>] checks an App with no database to reach: the file
+(the App's schema.sql by default) is run on a scratch database, as a migration
+is — SQLite, or PostgreSQL on the server --dev-url names, which needs CREATEDB —
+every step reads it, and it is dropped after. Its tables are empty. --deploy adds a step that
 judges whether the App survives a container being replaced: it refuses a
 source or auth.store on a SQLite file, the default auth.store, a missing
 BETTER_AUTH_SECRET and a \${NAME} the environment lacks (run it with the
@@ -679,6 +686,20 @@ that is set: a shell whose XDG_CONFIG_HOME differs from the one used at
 wrangler login reports "not logged in". Exit codes: 1 could not, declined or failed, 7 refused.
 ```
 
+## Writing a client from an exported App API document
+
+```text
+mistri api client <spec.json> --out <client.ts>
+
+Reads the file --export openapi wrote and writes one TypeScript file with no
+imports: a type for every row, command input and result, a function per
+operation under createClient({ baseUrl, token, fetch? }), and an ApiError
+carrying the status and the parsed problem details of a refusal. The same
+document gives the same bytes. It uses only fetch, URL and URLSearchParams, so
+it runs in a browser, Node 20+, Deno and Workers. Loads no App and starts no
+server. Exit 1: no --out, or a file that is not an App API document.
+```
+
 ## Comparing exported App API documents
 
 ```text
@@ -718,6 +739,22 @@ writes both.
     --force         replace a copy the project has changed
 A re-run updates a copy it installed and says so; one the project changed
 is left alone, and the exit code is 1.
+```
+
+## Bringing an App's source up to date
+
+```text
+mistri upgrade [--app <dir>] [--check]
+
+Rewrites the App's source files (default: the current directory; not
+node_modules, dist or generated .d.ts): tablewalk/app and the package's
+other entry points become @mistriwork/mistri/*, and the keys and names
+the CHANGELOG renamed are renamed where they mean one thing (a dashboard's
+layout: [...] is areas: [...], a theme's palette: { light, dark } is
+colors). What it cannot place with certainty it leaves alone and prints
+as file:line, for you to change; a second run finds nothing to rewrite.
+    --check         write nothing; exit 1 when a run would change a file or
+                    refuse something, for CI
 ```
 
 ## Running an App on this machine, and testing it
@@ -830,7 +867,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--api-requests-per-minute` | [Options](#options) |
 | `--api-token-env` | [Options](#options) |
 | `--api-url` | [Options](#options) |
-| `--app` | [Options](#options), [Commands](#commands), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [A theme as it is worn](#a-theme-as-it-is-worn), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once) |
+| `--app` | [Options](#options), [Commands](#commands), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [A theme as it is worn](#a-theme-as-it-is-worn), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Bringing an App's source up to date](#bringing-an-apps-source-up-to-date), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once) |
 | `--app-entry` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once) |
 | `--app-mcp` | [Options](#options) |
 | `--append` | [Rows to look at](#rows-to-look-at) |
@@ -843,6 +880,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--brief` | [Commands](#commands), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Reading the reference offline](#reading-the-reference-offline) |
 | `--browser` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app) |
 | `--bump` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
+| `--check` | [Commands](#commands), [Bringing an App's source up to date](#bringing-an-apps-source-up-to-date) |
 | `--click` | [Looking at an App](#looking-at-an-app) |
 | `--commands` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--compare` | [Looking at an App](#looking-at-an-app) |
@@ -860,14 +898,14 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--design` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--desk` | [Looking at an App](#looking-at-an-app) |
 | `--dev` | [Options](#options), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
-| `--dev-url` | [Changing the schema](#changing-the-schema) |
+| `--dev-url` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Changing the schema](#changing-the-schema) |
 | `--diff` | [A theme as it is worn](#a-theme-as-it-is-worn) |
 | `--dir` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Giving a coding agent the App skill](#giving-a-coding-agent-the-app-skill) |
 | `--dockerfile` | [Building an App for production](#building-an-app-for-production) |
 | `--drain-delay` | [Options](#options) |
 | `--dry-run` | [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--errors` | [Watching what a --dev server did](#watching-what-a---dev-server-did) |
-| `--export` | [Options](#options) |
+| `--export` | [Options](#options), [Writing a client from an exported App API document](#writing-a-client-from-an-exported-app-api-document) |
 | `--fail-on-design-warning` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--fix` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--flow` | [Starting flows on records already there](#starting-flows-on-records-already-there) |
@@ -899,7 +937,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--open` | [Options](#options) |
 | `--openapi` | [Options](#options) |
 | `--operator` | [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes) |
-| `--out` | [Looking at an App](#looking-at-an-app), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
+| `--out` | [Commands](#commands), [Looking at an App](#looking-at-an-app), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Writing a client from an exported App API document](#writing-a-client-from-an-exported-app-api-document) |
 | `--palette` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app) |
 | `--pending` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--pending-on` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
@@ -925,7 +963,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--scaffold-app` | [Options](#options) |
 | `--scale` | [Looking at an App](#looking-at-an-app) |
 | `--schema` | [Options](#options), [Changing the schema](#changing-the-schema) |
-| `--schema-file` | [Changing the schema](#changing-the-schema) |
+| `--schema-file` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Changing the schema](#changing-the-schema) |
 | `--search` | [Reading the reference offline](#reading-the-reference-offline) |
 | `--seed` | [Rows to look at](#rows-to-look-at) |
 | `--shutdown-grace` | [Options](#options) |

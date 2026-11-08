@@ -25,6 +25,7 @@ import {
   prefilledCommandValues,
   type CommandValues,
 } from './CommandFields.js';
+import { PHONE_QUERY, useMediaQuery } from '@mistriwork/kit/client/components/useMediaQuery.js';
 import { MultiStepForm } from '@mistriwork/kit/client/components/MultiStepForm.js';
 import { Button, buttonClass } from '@mistriwork/ui/Button.js';
 import {
@@ -178,8 +179,11 @@ export function SavedFormSurface({
   base,
   draft,
   onDismiss,
+  at,
 }: {
   form: SavedFormPresentation;
+  /** The step a page asked to open at (`useForm(...).goTo`): honored only up to the first step not yet saved, so no step is skipped. */
+  at?: string;
   /** Opened in a dialog (FormRoom): Cancel beside the steps and Done on the receipt close it, as FormSurface's do. */
   onDismiss?: () => void;
   /** A signed-in form's own server (draftFormApi.ts): the person's draft, found by who they are, instead of a cookie's. */
@@ -189,6 +193,8 @@ export function SavedFormSurface({
   base?: string;
 }) {
   const id = useId();
+  /* A saved draft's note is one line on a phone, with Start over beside it: the page's room goes to the fields. */
+  const phone = useMediaQuery(PHONE_QUERY);
   const byName = useMemo(() => new Map(form.input.map((field) => [field.name, field])), [form.input]);
   const fieldsOf = (names: readonly string[]) => names.flatMap((name) => byName.get(name) ?? []);
   const submitFields = fieldsOf(form.save.submit);
@@ -271,17 +277,17 @@ export function SavedFormSurface({
         if (draft) for (const id of list) draft.clearKey(id);
         setSaved(list);
         // Resumed: on at the step today's rules reopen, else the first not saved, or the review when all are.
-        if (list.length) {
-          const reopened = reopen === null ? -1 : steps.findIndex((step) => step.id === reopen);
-          setCurrent(
-            reopened >= 0
-              ? reopened
-              : Math.max(
-                  0,
-                  steps.findIndex((step) => step.id === REVIEW || !list.includes(step.id)),
-                ),
-          );
-        }
+        const reopened = reopen === null ? -1 : steps.findIndex((step) => step.id === reopen);
+        const onward = list.length
+          ? reopened >= 0
+            ? reopened
+            : Math.max(
+                0,
+                steps.findIndex((step) => step.id === REVIEW || !list.includes(step.id)),
+              )
+          : 0;
+        const asked = at === undefined ? -1 : steps.findIndex((step) => step.id === at);
+        setCurrent(asked >= 0 && asked <= onward ? asked : onward);
       },
       () => {
         if (live) setSaved([]);
@@ -290,6 +296,8 @@ export function SavedFormSurface({
     return () => {
       live = false;
     };
+    // `at` is where the form opened, read once with the draft: a page asking again opens the form again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.id, steps, draft]);
 
   const atReview = steps[current]?.id === REVIEW;
@@ -434,6 +442,8 @@ export function SavedFormSurface({
       forget();
       setReceipt(answer);
     } catch (error) {
+      // Refused for certain: the key is spent on nothing, and the draft is no longer a submit in flight (Start over, `useForm`).
+      if ((error as { outcome?: unknown }).outcome === 'not_applied') draft?.clearKey(REVIEW);
       refused(error, submitFields);
     } finally {
       guarded.current?.reset();
@@ -587,8 +597,18 @@ export function SavedFormSurface({
       {/* The description is the first step's alone (FormSurface's rule): over the bar it was read again on every step. */}
       {/* A signed-in draft is the person's own and is said only once there is one; the public note explains the privacy. */}
       {(!draft || (saved?.length ?? 0) > 0) && (
-        <p className="form-note">
-          {draft ? say('yourDraftIsSaved') : resumed ? say('yourApplicationIsSaved') : say('eachStepIsSaved')}
+        <p className={draft && phone ? 'form-note form-note-compact' : 'form-note'}>
+          {draft ? (
+            phone ? (
+              <span className="form-note-text">{say('yourDraftIsSavedShort')}</span>
+            ) : (
+              say('yourDraftIsSaved')
+            )
+          ) : resumed ? (
+            say('yourApplicationIsSaved')
+          ) : (
+            say('eachStepIsSaved')
+          )}
           {draft && (
             <>
               {' '}
@@ -596,6 +616,12 @@ export function SavedFormSurface({
                 intent="quiet"
                 size="compact"
                 onClick={() => {
+                  /* A submit sent and not yet known to have landed keeps its draft: discarding it could lose what the
+                     server has already taken. Submit again (the same key) to learn how it ended. */
+                  if (draft.holds(REVIEW)) {
+                    setFailure(say('submitNotSettled'));
+                    return;
+                  }
                   // One click, and the draft and its rows are gone: the first step again, blank.
                   void draft.discard().then(
                     () => {

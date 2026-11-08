@@ -236,3 +236,17 @@ test("in a tenant App a person is told by account id, and the check says when au
   assert.match(notifyAdvisories(byId, schema)[0], /"account_id" looks like an id\. A notice is told at the email that column holds/);
   assert.deepEqual(notifyAdvisories({ ...byId, auth: { ...byId.auth, rows: 'tenant' as const } }, schema), []);
 });
+
+test("with me.by: 'account' an App's people are told by account id too, and the check reads the column that way", () => {
+  const signed = app([{ on: 'insert', to: ['thread_id.author_id', 'watcher'], title: 'x' }]);
+  const byAccount = { ...signed, auth: { ...signed.auth!, me: { ...signed.auth!.me!, by: 'account' as const } } };
+  // Account ids are not emails: unflagged, every one failed the writer's email check and nobody was told.
+  const [rule] = appNotifyRules(byAccount, schema).rules.get('post')!;
+  assert.deepEqual(
+    rule.to.map((path) => path.account === true),
+    [true, false],
+  );
+  assert.match(notifyAdvisories(byAccount, schema)[0], /looks like an email column\. With by: 'account' it holds each person's account id/);
+  const idColumn = { ...byAccount, auth: { ...byAccount.auth, me: { from: 'person', column: 'account_id', by: 'account' as const } } };
+  assert.deepEqual(notifyAdvisories(idColumn, schema), []);
+});

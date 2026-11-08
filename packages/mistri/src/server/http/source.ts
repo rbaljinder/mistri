@@ -28,7 +28,7 @@ import { compileAppDefinitionValidation } from '../app/appValidation.js';
 import { compileAppTransitions } from '../app/appTransitions.js';
 import { compileAppStamps, signedInAs, stampInsert, stampUpdate, type StampMoment } from '../app/appStamps.js';
 import { lookupPerson, personKey, unprovenPerson } from '../app/appMe.js';
-import { ensurePersonRow, personRowSeen } from '../app/appPersonRows.js';
+import { ensurePersonRow, personMatch, personRowSeen } from '../app/appPersonRows.js';
 import { clockNow } from '@mistriwork/engine/server/http/clock.js';
 import { httpPolicyReads } from '../policy/appPolicyHttp.js';
 import { readablePage } from '../app/appFieldProjection.js';
@@ -174,7 +174,13 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
   let resources: RuntimeResources | undefined;
   /** The App's own catalog and reads, for who `me` is (below). */
   let whole:
-    | { app: AppDef; who: string | undefined; unproven: boolean; catalog: NonNullable<Parameters<typeof lookupPerson>[4]> }
+    | {
+        app: AppDef;
+        who: string | undefined;
+        account: string | undefined;
+        unproven: boolean;
+        catalog: NonNullable<Parameters<typeof lookupPerson>[4]>;
+      }
     | undefined;
   let access: ResourceAccess | undefined;
   let wholeRowWrites: ReadonlySet<string> | undefined;
@@ -227,14 +233,15 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
     /* A new account's person row (`auth.me.create`), made on its first signed-in
        request through the App's own catalog and writer, before anything reads `me`. */
     const account = signedInAs(identity);
-    if (account && host.app.app.auth?.me?.create && !personRowSeen(host.app.app, account)) {
+    const matched = account && personMatch(host.app.app, { email: account, ...(identity.id ? { id: identity.id } : {}) });
+    if (account && matched && host.app.app.auth?.me?.create && !personRowSeen(host.app.app, matched)) {
       const own = await loadAppRuntimeResources(registry, host.app.app, target, lease);
       if (own.adapter.insert)
         await ensurePersonRow(
           host.app.app,
           own.schema,
           { query: own.adapter.query.bind(own.adapter), insert: own.adapter.insert.bind(own.adapter) },
-          { email: account, ...(identity.name ? { name: identity.name } : {}) },
+          { email: account, ...(identity.id ? { id: identity.id } : {}), ...(identity.name ? { name: identity.name } : {}) },
         );
     }
     if (policyContext) {
@@ -294,7 +301,7 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
       const moment = (reader: Parameters<typeof lookupPerson>[3]): StampMoment => ({
         now: clockNow(),
         ...(who ? { who } : {}),
-        person: () => (identity.emailUnproven ? Promise.resolve(null) : personKey(app, personSchema, who, reader)),
+        person: () => (identity.emailUnproven ? Promise.resolve(null) : personKey(app, personSchema, who, reader, identity.id)),
       });
       const stamp = stamps?.rules.size
         ? (request: UpdateRequest, reader: Parameters<typeof lookupPerson>[3]) => stampUpdate(stamps, request, moment(reader))
@@ -305,12 +312,20 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
       /* The App's own catalog and reads, before any grant narrows them: where
          the reader may not read people's emails, the server finds the
          reader's own row by the verified one (appMe.ts). */
-      whole = { app, who, unproven: identity.emailUnproven === true, catalog: { schema: resources.schema, reader: resources.adapter } };
+      whole = {
+        app,
+        who,
+        account: identity.id,
+        unproven: identity.emailUnproven === true,
+        catalog: { schema: resources.schema, reader: resources.adapter },
+      };
       /* `me` in an action's `when` is judged for the same person, only where a transition or a granted action needs judging. */
       const me =
         transitions || granted
           ? (reader: Parameters<typeof lookupPerson>[3]) =>
-              identity.emailUnproven ? Promise.resolve(unprovenPerson(app, personSchema)) : lookupPerson(app, personSchema, who, reader)
+              identity.emailUnproven
+                ? Promise.resolve(unprovenPerson(app, personSchema))
+                : lookupPerson(app, personSchema, who, reader, undefined, identity.id)
           : undefined;
       /* Every App serves its resources and nothing else, signed in or not:
          the catalog is cut to them, every read and write is checked against
@@ -373,7 +388,7 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
     ? (reader: Parameters<typeof lookupPerson>[3]) =>
         whole!.unproven
           ? Promise.resolve(unprovenPerson(whole!.app, readerSchema!))
-          : lookupPerson(whole!.app, readerSchema!, whole!.who, reader, whole!.catalog)
+          : lookupPerson(whole!.app, readerSchema!, whole!.who, reader, whole!.catalog, whole!.account)
     : undefined;
   return {
     adapter,

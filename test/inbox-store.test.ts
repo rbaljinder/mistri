@@ -98,6 +98,46 @@ test('a bound change writes its notice in the same transaction, to the person it
   });
 });
 
+test("a person told by account id is told at that account's email, and its words are said for that account", async () => {
+  await fixture(async (adapter, db) => {
+    db.exec(`ALTER TABLE person ADD COLUMN account_id TEXT; UPDATE person SET account_id = 'acc-' || id`);
+    const heard: unknown[] = [];
+    bindNotices(
+      adapter,
+      new Map([
+        [
+          'ticket',
+          [
+            rule(
+              { kind: 'update', columns: ['status'] },
+              {
+                to: [{ column: 'owner_id', hops: [{ table: 'person', key: 'id', column: 'account_id' }], account: true }],
+                members: async (account) => ({ 'acc-1': 'Ann@Example.test' })[account],
+                say: {
+                  args: [],
+                  words: async (_values, recipient) => {
+                    heard.push(recipient);
+                    return 'Yours changed';
+                  },
+                },
+              },
+            ),
+          ],
+        ],
+      ]),
+    );
+    await attributeWrites({ actor: 'bob@example.test', name: 'Bob', via: 'app' }, () =>
+      adapter.update({ table: 'ticket', key: { id: 1 }, values: { status: 'closed' } }),
+    );
+    assert.deepEqual(
+      notices(db).map((n) => [n.recipient, n.title]),
+      [['ann@example.test', 'Yours changed']],
+    );
+    // The words are looked up by the account the column holds, not the email it was told at (server/app/noticeWords.ts).
+    assert.deepEqual(heard, [{ email: 'ann@example.test', account: 'acc-1' }]);
+  });
+});
+
 test('the writer is never told, a record told of twice in one write is one notice, and when narrows by the values after it', async () => {
   await fixture(async (adapter, db) => {
     bindNotices(

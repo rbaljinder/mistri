@@ -2000,6 +2000,10 @@ export class PostgresAdapter implements Adapter {
                 }
               : undefined,
             scope,
+            async (fk, key) => {
+              const statement = referencesStatement(catalog, fk, key, POSTGRES_STYLE);
+              return Number((await write.query(statement.text, statement.params)).rows[0]?.n ?? 0);
+            },
           );
           if (journal?.fixedRecords) records = journal.fixedRecords(records);
           const invoke = scopedCommandInvoker(operations, true, journal !== undefined, isRuntimeRelation);

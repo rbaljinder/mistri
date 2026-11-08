@@ -51,6 +51,12 @@ TypeScript module graph directly.
   registered through `ui.customThemes` in `app.ts` and offered in the reader's theme
   picker; the app's own default stays the legacy accent tokens.
 - [`pages/`](pages/): record pages built with `page`, `related`, and timeline streams, one per file (`export default page(…)`), found by their file without a list in `app.ts`.
+- [`pages/accounts/[id]/pipeline.page.tsx`](pages/accounts/%5Bid%5D/pipeline.page.tsx): a free-form page
+  placed as a tab of the account's record page by its folder, at `/compass/accounts/13/pipeline`. It reads the
+  account it is on with `page.useRecordKey('account')`, typed `{ id: number }` from the schema, and draws that
+  account's open pipeline, won value, open deals by stage and the deals that close next, from
+  `@mistriwork/mistri/page` alone. Its test, [`pipeline.test.tsx`](pages/accounts/%5Bid%5D/pipeline.test.tsx), draws it
+  on account 13 with fixture rows.
 - [`app.ts`](app.ts) also declares `assistant({ instructions, exclude, limits })`: with
   `ANTHROPIC_API_KEY` set and the store provisioned, a rep asks it to sum up a lead, show stale deals or log a
   call, and confirms each change it proposes.

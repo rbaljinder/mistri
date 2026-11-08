@@ -17,7 +17,7 @@ technician: {
     resident: { read: ['id', 'name', 'email', 'phone', 'language'] },
 ```
 
-See it in the sample (`examples/apps/lintel/app.ts:68`).
+See it in the sample (`examples/apps/lintel/app.ts:69`).
 
 <!-- no picture: a grant changes which rows, columns and buttons a page offers, not how the page is drawn. -->
 
@@ -152,7 +152,7 @@ public: {
     // …
 ```
 
-See it in the sample (`examples/apps/lintel/app.ts:136`).
+See it in the sample (`examples/apps/lintel/app.ts:138`).
 
 Each resource is named; `read: true` is refused, so nothing is public by
 accident. A public resource's record opens for a visitor at its own address

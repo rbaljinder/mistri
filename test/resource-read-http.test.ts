@@ -447,3 +447,30 @@ for (const app of [false, true]) {
     });
   });
 }
+
+for (const app of [false, true]) {
+  test(`${app ? 'App' : 'browser'} a view's object where is read as the query it means, and one naming what the table lacks is refused`, async () => {
+    await fixture(app, async (f) => {
+      const table = app ? 'inventory.item' : 'physical_item';
+      const run = (body: Record<string, unknown>) =>
+        f.call('/api/view/run', { view: { base: table, columns: [{ path: 'name' }] }, ...body });
+      const names = (reply: { body: { rows?: Array<{ name: string }> } }) => reply.body.rows?.map((row) => row.name);
+      const one = await run({ where: { name: 'second 2' } });
+      assert.equal(one.status, 200, JSON.stringify(one.body));
+      assert.deepEqual(names(one), ['second 2']);
+      // The where and the query are both asked, joined by "and"; a list is any of its values.
+      const both = await run({ where: { id: [1, 2, 3], name: { not: 'second 1' } }, query: 'id < 3' });
+      assert.deepEqual(names(both), ['second 2']);
+      for (const where of [{ nam: 'x' }, { name: { over: 1 } }, 'name = x']) {
+        const refused = await run({ where });
+        assert.equal(refused.status, 400, JSON.stringify({ where, body: refused.body }));
+        assert.equal('rows' in refused.body, false);
+      }
+      if (app) {
+        // A column the reader may not read is refused as the query language refuses it, never read past.
+        const hidden = await run({ where: { hidden: secret } });
+        assert.ok(!hidden.body.rows?.length, JSON.stringify(hidden.body));
+      }
+    });
+  });
+}

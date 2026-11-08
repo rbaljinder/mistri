@@ -70,7 +70,7 @@ From the lightest to the heaviest: Save, a fixed action, a machine, a command. E
 | A record's states and the only moves between them | a `machine` on the resource: buttons, stepper, board lanes and the server's refusal | the column is edited freely | `examples/apps/lintel/resources.ts:140`, `examples/apps/lintel/resources.ts:171` |
 | Two fields must agree | `validation`: `{ must, when?, message }` | the check reads other rows (a command) | `examples/apps/lintel/resources.ts:78`, `examples/apps/lintel/resources.ts:148` |
 | A decision checked against stored state, who acts, or several tables in one transaction | a [command](/docs/commands/): `defineCommand` in the server-only commands module, named by an `action` | a plain `set` would do | `examples/apps/lintel/commands/leasing.ts:11` |
-| Create records through a guided form, signed in | [`commandForm(...)`](/docs/command-forms/), granted by `commands` | a resource `form` would do | `examples/apps/lintel/views.ts:220` |
+| Create records through a guided form, signed in | [`commandForm(...)`](/docs/command-forms/), granted by `commands` | a resource `form` would do | `examples/apps/lintel/views.ts:228` |
 | Take a submission from anyone | a `commandForm` with `public: true` | the visitor must read anything back | `examples/apps/lintel/views.ts:38`, `examples/apps/lintel/commands/viewing.ts:12` |
 | A long public application, not lost to a closed tab | a public form whose `step()`s each run a command | it fits one sitting | — |
 
@@ -92,7 +92,7 @@ Figures first, then how they move and divide, then what waits ([Design a dashboa
 | When | Use | Not when | In a sample |
 | --- | --- | --- | --- |
 | The menu has more than six entries | `navGroup` in the order the day runs, each with an icon | — | `examples/apps/lintel/navigation.ts:15` |
-| Roles start in different places | `home` as a list of rules | — | `examples/apps/lintel/app.ts:161` |
+| Roles start in different places | `home` as a list of rules | — | `examples/apps/lintel/app.ts:163` |
 | A front page for signed-out visitors | a [`landing(...)`](/docs/landing-pages/) with a `hero`, embedded lists and a call to action | an App without sign-in | `examples/apps/lintel/landing.ts:6` |
 
 ## Later or elsewhere

@@ -186,3 +186,22 @@ test('at a narrow desk every lane and its head stand inside the board, which doe
     expect(board, `${width}`).toEqual({ scrolls: false, past: 0, heads: 0 });
   }
 });
+
+/* A free-form page as a record's tab (pages/accounts/[id]/pipeline.page.tsx): its own address under the account,
+   reached by a click on the tab as well as by URL, and scoped to that account — the deals it lists are the open ones
+   the database holds for account 13, in the order they close, and no other account's. */
+test("an account's Pipeline tab is the page drawn for that account, at its own address", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const open = read<{ name: string }>(
+    "SELECT name FROM opportunity WHERE account_id = 13 AND stage NOT IN ('closed_won', 'closed_lost') ORDER BY close_date, id LIMIT 8",
+  ).map((deal) => deal.name);
+  expect(open.length).toBeGreaterThan(0);
+  await page.goto(`${origin}/accounts/13`);
+  await page.getByRole('tab', { name: 'Pipeline' }).click();
+  await expect(page).toHaveURL(new RegExp('/accounts/13/pipeline$'));
+  const list = page.getByRole('list', { name: 'Open deals by close date' });
+  await expect(list.getByRole('listitem')).toHaveCount(open.length);
+  expect(await list.getByRole('listitem').locator('strong').allTextContents()).toEqual(open);
+  await page.reload();
+  await expect(page.getByRole('list', { name: 'Open deals by close date' }).getByRole('listitem')).toHaveCount(open.length);
+});

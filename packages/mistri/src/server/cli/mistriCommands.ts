@@ -59,6 +59,11 @@ export const MISTRI_COMMANDS: Subcommands = {
       }
     },
   },
+  /* A typed fetch client written from an exported App API document (apiClientCommand.ts); only `api client` is its. */
+  api: {
+    takes: (argv) => argv[0] === 'client',
+    run: async (argv) => (await import('./apiClientCommand.js')).runApiClient(argv.slice(1)),
+  },
   /* A new App, written whole with its database: a starter to serve with `mistri dev` (newApp.ts), or with --api an
      App that is only an API (newApi.ts). mistri opens no bare file, so the word is always the command. */
   new: {
@@ -79,6 +84,8 @@ export const MISTRI_COMMANDS: Subcommands = {
   shot: { run: async (argv) => (await import('../build/shot.js')).runShot(argv) },
   /* The skill a coding agent loads, copied into the project it works in. */
   agent: { run: async (argv) => (await import('./agentInit.js')).runAgent(argv) },
+  /* An App's source brought to the names this mistri reads (upgrade.ts); touches no database. */
+  upgrade: { run: async (argv) => (await import('./upgrade.js')).runUpgrade(argv) },
   /* A starter suite for an App: a journey per role and a permissions matrix. */
   test: { run: async (argv) => (await import('./testInit.js')).runTestCommand(argv) },
   /* Schema changes as versioned SQL files, with an App's stores and files. */

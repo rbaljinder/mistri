@@ -13,6 +13,7 @@ import {
   type ServedApp as ServedAppShape,
   type ServedDashboardView,
   type ServedFormView,
+  type ServedRecordTab,
   type ServedResource,
 } from '@mistriwork/engine/shared/servedApp.js';
 import { embeddedOnlyViews } from '@mistriwork/engine/shared/appEmbeds.js';
@@ -155,6 +156,22 @@ export function formAt<A extends ServedApp>(app: A, pageId: string | undefined):
   return room && isFormView(room) ? (room as ServedForm<A>) : undefined;
 }
 
+const isRecordTab = (room: object): boolean =>
+  'sections' in room && Boolean((room as { page?: { record?: ServedRecordTab } }).page?.record);
+
+/**
+ * The free-form pages that are tabs of a record of this table
+ * (`pages/<list view>/[id]/<tab>.page.tsx`), in the App's order. The served
+ * App holds only the pages this reader may open, so a tab they may not
+ * read is not among them, as a view they may not read is not in the menu.
+ */
+export function recordTabs<A extends ServedApp>(app: A, tableId: string): Array<DashboardOf<A> & { page: { record: ServedRecordTab } }> {
+  return [...roomsByKey(app).values()].filter(
+    (room): room is DashboardOf<A> & { page: { record: ServedRecordTab } } =>
+      isRecordTab(room) && (room as { page: { record: ServedRecordTab } }).page.record.table === tableId,
+  );
+}
+
 const listedRooms = new WeakMap<object, AppRoom[]>();
 
 /**
@@ -169,7 +186,8 @@ export function appRooms<A extends ServedApp>(served: A): RoomOf<A>[] {
   let held = listedRooms.get(app);
   if (!held) {
     const embeddedOnly = embeddedOnlyViews(app, app.home === undefined ? [] : [app.home]);
-    held = [...roomsByKey(app).values()].filter((room) => !embeddedOnly.has(room.id));
+    // A record's tab is drawn on its record's page: it needs a record, so no menu or palette lists it.
+    held = [...roomsByKey(app).values()].filter((room) => !embeddedOnly.has(room.id) && !isRecordTab(room));
     listedRooms.set(app, held);
   }
   return held as RoomOf<A>[];

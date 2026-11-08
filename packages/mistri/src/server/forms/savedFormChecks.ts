@@ -148,7 +148,7 @@ export function publicFormProblems(app: AppDef, registry: BusinessCommandRegistr
   return undefined;
 }
 
-function footprintCatalog(app: AppDef, command: AnyBusinessCommand, schema: DatabaseSchema): CommandCatalog | undefined {
+export function footprintCatalog(app: AppDef, command: AnyBusinessCommand, schema: DatabaseSchema): CommandCatalog | undefined {
   return commandCatalog(schema, command.read, (local) => logicalResource(app, command.source, local));
 }
 
@@ -260,6 +260,25 @@ export function signedInDraftProblems(app: AppDef, registry: BusinessCommandRegi
   return undefined;
 }
 
+/**
+ * Start over removes a signed-in draft under the first step's grant, and a grant that deletes a row must read every
+ * table that references it (engine/src/server/columnGrants.ts assertRelatedWrites). A table the command does not list
+ * is beyond that boundary, so the person's Start over would be refused whatever the rows hold; said here, where it is
+ * written, and not as a 403 on the day someone presses the button.
+ */
+function referencedOutsideProblem(schema: DatabaseSchema, root: string, startId: string, catalog: CommandCatalog): string | undefined {
+  const rootId = catalog[root].meta.id;
+  const inside = new Set(Object.values(catalog).map((table) => table.meta.id));
+  const outside = schema.foreignKeys.find((key) => !key.declared && key.to.table === rootId && !inside.has(key.from.table));
+  if (!outside) return undefined;
+  const table = schema.tables.find((candidate) => candidate.id === outside.from.table)?.name ?? outside.from.table;
+  return (
+    `"${table}" has a foreign key to the draft's root "${root}", and the first step's command "${startId}" does not read it [draft-referenced]. ` +
+    `Start over deletes the draft under that command's grant, which must read every table that references it, so it would be refused at the policy boundary. ` +
+    `Keep the draft self-contained and write "${table}" when the form is submitted (an outbox row the submit creates, finalized by a job), or add "${table}" to the command's read.`
+  );
+}
+
 /** Exported for the case that holds its wording: a public saved form in a row-policy App is still refused. */
 export function savedFormProblem(
   app: AppDef,
@@ -320,6 +339,8 @@ export function savedFormProblem(
     if (save.owner !== undefined) {
       const problem = ownerProblem(app, schema, root, save.owner, column(save.owner));
       if (problem) return problem;
+      const referenced = referencedOutsideProblem(schema, root, startId, startCatalog);
+      if (referenced) return referenced;
     }
     if (form.statusCheck) {
       const check = form.statusCheck;

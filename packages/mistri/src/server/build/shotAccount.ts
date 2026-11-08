@@ -130,7 +130,7 @@ const PEOPLE_MOST = 10_000;
  */
 export async function personEmails(app: LoadedApp['app'], adapter: Pick<Adapter, 'query'>): Promise<Set<string>> {
   const me = app.auth?.me;
-  if (!me || app.auth?.rows === 'tenant') return new Set();
+  if (!me || app.auth?.rows === 'tenant' || me.by === 'account') return new Set();
   try {
     const found = await adapter.query({ table: me.from, columns: [me.column], limit: PEOPLE_MOST, offset: 0 });
     const emails = new Set<string>();

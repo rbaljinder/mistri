@@ -77,6 +77,17 @@ test.describe('Commons', () => {
     for (const h of heads) expect(h, `${h.name} head`).toMatchObject({ left: true, right: true, cut: false });
   });
 
+  test('Start here, a bare front door, opens signed out with the busy threads, the boards and a way in', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${sample.origin}/start-here`);
+    await expect(page.getByRole('heading', { name: 'Welcome to Commons' })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Busy right now' }).getByRole('listitem')).toHaveCount(5);
+    await expect(page.getByRole('button', { name: /^Help Desk/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Join or sign in' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await expect(page.locator('[data-section-error]')).toHaveCount(0);
+  });
+
   test('a signed-out reader reads the front page, a thread and a post, and sees no moderation', async ({ page }) => {
     await page.goto(`${sample.origin}/`);
     await expect(page.getByRole('heading', { name: 'Where makers show their work' })).toBeVisible();
@@ -290,6 +301,26 @@ test.describe('Commons', () => {
     const lefts = await fields.evaluateAll((all) => all.map((field) => Math.round(field.getBoundingClientRect().left)));
     expect(lefts.length).toBeGreaterThan(1);
     expect(new Set(lefts).size).toBe(1);
+  });
+
+  test('the Report desk lists the open reports beside the picked one, and the pick is in the address', async ({ page }) => {
+    const signIn = await page.request.post(`${sample.origin}/api/auth/sign-in/email`, {
+      headers: { origin: sample.origin },
+      data: COMMONS_ADMIN,
+    });
+    expect(signIn.ok(), await signIn.text()).toBe(true);
+    await page.goto(`${sample.origin}/report-queue`);
+    const queue = page.getByRole('list', { name: 'Open reports' });
+    const open = Number(scalar(sample.db, "SELECT COUNT(*) FROM report WHERE status = 'open'"));
+    await expect(queue.locator('li')).toHaveCount(open);
+    await queue.locator('.queue-pick').nth(1).click();
+    await expect(page).toHaveURL(/report=\d+/);
+    await expect(queue.locator('.queue-pick').nth(1)).toHaveAttribute('aria-current', 'true');
+    await expect(page.getByRole('complementary', { name: 'Details' })).toBeVisible();
+    // A reload keeps the pick.
+    await page.reload();
+    await expect(queue.locator('.queue-pick').nth(1)).toHaveAttribute('aria-current', 'true');
+    await expect(page.locator('[data-section-error]')).toHaveCount(0);
   });
 
   test('a moderator removes a reported post from the queue', async ({ page }) => {

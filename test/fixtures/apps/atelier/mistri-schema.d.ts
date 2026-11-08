@@ -57,6 +57,29 @@ export type Rows = {
   variant: { id: number; product_id: number; sku: string; color: string; size: string; position: number; price_amount: number | string; compare_at_amount: number | string | null; cost_amount: number | string; barcode: string | null; reorder_point: number; active: boolean; version: number };
 };
 
+/** Each table's primary-key columns: what names one of its records. A table without one is absent. */
+export type Keys = {
+  collection: "id";
+  collection_product: "id";
+  customer: "id";
+  discount: "id";
+  fulfillment: "id";
+  inventory_level: "id";
+  inventory_movement: "id";
+  location: "id";
+  order_line: "id";
+  order_return: "id";
+  payment: "id";
+  product: "id";
+  product_image: "id";
+  product_tag: "id";
+  refund: "id";
+  return_line: "id";
+  sales_order: "id";
+  tag: "id";
+  variant: "id";
+};
+
 /** Each table's references, by the name a label path follows (`owner_id`
     in `owner_id.name`), and the table each lands on: what lets every hop of
     a path be checked. A table that references nothing is absent. */
@@ -140,5 +163,5 @@ export type Flags<Manifest> = AppFlagValues<Manifest>;
 export type FlagName<Manifest> = keyof Flags<Manifest>;
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { schema(): { columns: Columns; references: References; segments: Segments } }
+  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments } }
 }

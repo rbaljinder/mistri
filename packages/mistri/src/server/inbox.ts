@@ -38,6 +38,8 @@ import { bindNotices } from './stores/writeCaptures.js';
 import { storesOf } from './stores/appStores.js';
 import { recordNoun, type AppDef } from '../shared/app.js';
 import { findTable, primaryKey, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { nativeAccountEmailOf } from './auth/authAccounts.js';
+import type { AppAuthRuntime } from './auth/auth.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
 import type { AppHost, LoadedApp } from './app/apps.js';
 import { loadAppRuntimeResources, type RuntimeResources } from './app/appRuntimeResources.js';
@@ -110,7 +112,7 @@ function inboxUnavailable(connection: string, dialect: string): string {
 }
 
 /** The compiled rules in physical table ids, for the writer. */
-function physicalRules(app: AppDef, resources: Pick<RuntimeResources, 'schema' | 'toPhysical' | 'connectionFor'>) {
+function physicalRules(app: AppDef, resources: Pick<RuntimeResources, 'schema' | 'toPhysical' | 'connectionFor'>, auth?: AppAuthRuntime) {
   const { rules, problems } = appNotifyRules(app, resources.schema);
   if (problems.length) throw new Error(problems[0]);
   const byConnection = new Map<string, Map<string, NoticeRule[]>>();
@@ -121,7 +123,19 @@ function physicalRules(app: AppDef, resources: Pick<RuntimeResources, 'schema' |
       key: hop.key,
       column: hop.column,
     })),
+    ...(logical.account ? { account: true as const } : {}),
   });
+  /* `me.by: 'account'`: a person row names an account, told at its email while the account exists (and, in a
+     suite, may use this App). A tenant App's are asked of the tenant instead (tenant/tenantInbox.ts). */
+  const members = auth
+    ? {
+        members: (account: string) =>
+          nativeAccountEmailOf(auth, account).then(
+            (email) => email ?? undefined,
+            () => undefined,
+          ),
+      }
+    : {};
   /* A title said from the App's messages, per recipient (app/noticeWords.ts). */
   const sayOf = (rule: { say?: { message: string; args: Array<{ name: string; path: NotifyPath }> } }) => {
     const said =
@@ -168,6 +182,7 @@ function physicalRules(app: AppDef, resources: Pick<RuntimeResources, 'schema' |
           ...sayOf(rule),
           open: rule.open,
           uses: rule.uses,
+          ...members,
           ...(rule.email ? { email: true as const } : {}),
           ...(rule.mentions
             ? {
@@ -186,12 +201,17 @@ function physicalRules(app: AppDef, resources: Pick<RuntimeResources, 'schema' |
   return byConnection;
 }
 
-async function bindAppInbox(registry: Registry, loaded: Pick<LoadedApp, 'app'>, resources: RuntimeResources): Promise<void> {
+async function bindAppInbox(
+  registry: Registry,
+  loaded: Pick<LoadedApp, 'app'>,
+  resources: RuntimeResources,
+  auth?: AppAuthRuntime,
+): Promise<void> {
   const state = registries.get(registry);
   const keeps = appKeepsInbox(loaded.app);
   if (!keeps && !state) return;
   const inbox = registryInbox(registry);
-  const wanted = keeps ? physicalRules(loaded.app, resources) : new Map<string, Map<string, NoticeRule[]>>();
+  const wanted = keeps ? physicalRules(loaded.app, resources, auth) : new Map<string, Map<string, NoticeRule[]>>();
   const connections = new Set([
     ...wanted.keys(),
     ...[...inbox.byConnection].filter(([, byApp]) => byApp.has(loaded.app.id)).map(([id]) => id),
@@ -244,7 +264,7 @@ export async function ensureAppInbox(registry: Registry, host: AppHost): Promise
   const releases: Array<() => void> = [];
   try {
     const resources = await loadAppRuntimeResources(registry, app, entry, (owner) => releases.push(registry.lease(owner)));
-    await bindAppInbox(registry, host.app, resources);
+    await bindAppInbox(registry, host.app, resources, host.auth);
   } finally {
     for (const release of releases.reverse()) release();
   }

@@ -111,6 +111,12 @@ test.describe('Depot inventory operations', () => {
       expect(scalar(sample.db, 'SELECT status FROM pick_list WHERE id = ?', list)).toBe('picked');
       expect(count(sample.db, `SELECT count(*) FROM stock_movement WHERE pick_list_id = ${list} AND kind = 'pick'`)).toBeGreaterThan(0);
       await expect(page.locator('[data-section-error]')).toHaveCount(0);
+      // The pick board, on the same phone: the next lists to pick and the board, and no sideways scroll.
+      await page.goto(`${sample.origin}/pick-board`);
+      await expect(page.getByRole('list', { name: 'Next to pick' })).toBeVisible();
+      await expect(page.getByLabel('Open pick lists by stage')).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      await expect(page.locator('[data-section-error]')).toHaveCount(0);
       // The floor at a glance, and on hand beside its month.
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto(`${sample.origin}/warehouses/1`);
@@ -118,6 +124,36 @@ test.describe('Depot inventory operations', () => {
       await expect(map.getByRole('region', { name: 'Aisle A' }).getByRole('button')).toHaveCount(36);
       await page.goto(`${sample.origin}/products`);
       await expect(page.locator('[data-component="stock-sparkline"] svg').first()).toBeVisible();
+      await expect(page.locator('[data-section-error]')).toHaveCount(0);
+    } finally {
+      await sample.stop();
+    }
+  });
+
+  test('the Photo gallery draws the active products as cards, narrows to a category and opens a product', async ({ page }) => {
+    const sample = await startSample('depot');
+    try {
+      await signIn(page, sample.origin);
+      await page.goto(`${sample.origin}/product-gallery`);
+      const cards = page.locator('.cards-card');
+      await expect(cards.first()).toBeVisible();
+      const active = count(sample.db, "SELECT count(*) FROM product WHERE status = 'active'");
+      expect(await cards.count()).toBe(Math.min(active, 60));
+      // One category's products, kept in the address.
+      const [category, name] = String(
+        scalar(
+          sample.db,
+          "SELECT category_id || '|' || c.name FROM product p JOIN category c ON c.id = p.category_id WHERE p.status = 'active' LIMIT 1",
+        ),
+      ).split('|');
+      // Past five categories the choice is a listbox, not a row of segments.
+      await page.getByRole('button', { name: /^Category/ }).click();
+      await page.getByRole('option', { name, exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(`category=${category}`));
+      const own = count(sample.db, `SELECT count(*) FROM product WHERE status = 'active' AND category_id = ${category}`);
+      await expect(cards).toHaveCount(own);
+      await cards.first().click();
+      await expect(page).toHaveURL(/\/products\/\d+/);
       await expect(page.locator('[data-section-error]')).toHaveCount(0);
     } finally {
       await sample.stop();

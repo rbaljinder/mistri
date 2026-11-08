@@ -731,7 +731,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.20: a signed-in saved form's `owner` (one entry, a name `owner` already counted): 1727/510.
     // 1.0.0-rc.20: a file rule's `stamps`, the columns the server writes on an upload (one entry, one new name): 1728/511.
     // 1.0.0-rc.18: a dashboard's `head`, compact or none (one entry, no new name: `head` is a theme's already): 1726/510.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1728, names: 511 });
+    // 1.0.0-rc.23: `me.by`, a column that holds the account's id rather than its email (one entry, a name `by`
+    // already counted): 1729/511.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1729, names: 511 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

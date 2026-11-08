@@ -21,6 +21,9 @@ test-results/
 # ...and the snapshots the Playwright MCP writes while a page is being looked at.
 .playwright-mcp/
 
+# The changelog a pack writes into the App framework's tarball (scripts/pack-manifest.mjs).
+/packages/mistri/CHANGELOG.md
+
 # Maintainer working notes stay local; the repository is public.
 .notes/
 # Each maintainer's editor and agent state.

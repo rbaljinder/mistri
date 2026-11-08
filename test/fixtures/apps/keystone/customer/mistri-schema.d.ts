@@ -37,6 +37,18 @@ export type Rows = {
   payoff_quote: { id: number; customer_id: number; loan_id: number; requested_on: string; good_through: string; amount: string; per_diem: string; requested_via: string; status: string; version: number };
 };
 
+/** Each table's primary-key columns: what names one of its records. A table without one is absent. */
+export type Keys = {
+  autopay: "id";
+  customer: "id";
+  dealer: "id";
+  installment: "id";
+  loan: "id";
+  loan_document: "id";
+  payment: "id";
+  payoff_quote: "id";
+};
+
 /** Each table's references, by the name a label path follows (`owner_id`
     in `owner_id.name`), and the table each lands on: what lets every hop of
     a path be checked. A table that references nothing is absent. */
@@ -94,5 +106,5 @@ export type Flags<Manifest> = AppFlagValues<Manifest>;
 export type FlagName<Manifest> = keyof Flags<Manifest>;
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { schema(): { columns: Columns; references: References; segments: Segments } }
+  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments } }
 }

@@ -250,7 +250,7 @@ for (const secondary of [false, true]) {
     const issuer = f.issue();
     await issuer.withContext({ body: { actor: { roles: ['viewer'] } } }, async (context) => {
       assert.ok(Object.isFrozen(context.commands));
-      assert.deepEqual(Reflect.ownKeys(context.commands!).sort(), ['availability', 'draft', 'execute', 'prepare', 'status']);
+      assert.deepEqual(Reflect.ownKeys(context.commands!).sort(), ['availability', 'check', 'draft', 'execute', 'prepare', 'status']);
       const { prepare } = context.commands!;
       assert.deepEqual(await prepare(request(), { requestId: 'trusted-prepare' }), { expectedVersion: 7 });
       assert.deepEqual(await prepare(request({ key: { id: '1', part: 'b' } })), { expectedVersion: 9 });
@@ -269,6 +269,21 @@ for (const secondary of [false, true]) {
 test('prepare neither needs nor creates a journal and never invokes validators or a handler', async (t) => {
   const f = await fixture(t, false, false);
   assert.deepEqual(await f.issue().withContext({}, (context) => context.commands!.prepare(request())), { expectedVersion: 7 });
+  f.untouched();
+});
+
+test('a step check under a row policy reads no row, needs no journal and runs nothing', async (t) => {
+  const f = await fixture(t, false, false);
+  const step = { command: 'assign', commandVersion: 1, fields: [], input: {} };
+  assert.deepEqual(await f.issue().withContext({}, (context) => context.commands!.check!(step)), { problems: {} });
+  await assert.rejects(
+    f.issue().withContext({}, (context) => context.commands!.check!({ ...step, commandVersion: 2 })),
+    { code: 'command_version_mismatch' },
+  );
+  await assert.rejects(
+    f.issue().withContext({ role: 'viewer' }, (context) => context.commands!.check!(step)),
+    { code: 'forbidden' },
+  );
   f.untouched();
 });
 

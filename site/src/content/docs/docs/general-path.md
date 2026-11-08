@@ -39,8 +39,8 @@ drawn for you.
 ## The three seams
 
 - **A free-form page inside the App.** `pages/check-in.page.tsx` declares what
-  it reads and the one command it runs, and draws the App's `Metric` and
-  `Rows` blocks beside its own React ([free-form pages](/docs/custom-components/#free-form-pages)).
+  it reads and the one command it runs, and draws the App's `Metric`, `Rows`
+  and `List` blocks under one `Scope`, a `CommandButton` on each party, beside its own React ([free-form pages](/docs/custom-components/#free-form-pages)).
 - **A route of your own beside the App.** `host/server.ts` hands `/api/mistri` to
   `createHandler` from `@mistriwork/mistri/handler` and answers `/schedule.json`
   itself, from the same database with its own driver

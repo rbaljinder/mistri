@@ -70,15 +70,41 @@ A fields section once took more forms. They are refused, and the refusal prints 
 Every section takes `title`, `region` (`'aside'` for the side panel), `tab`,
 `width`, `hidden` and `when` (`'status = converted'`).
 
-A free-form page (`pages/<path>.page.tsx`) draws a read through `Loaded`, which says its loading, empty and failed states as the platform does ([`Loaded`](/docs/custom-components/), Preview):
+A free-form page (`pages/<path>.page.tsx`) imports everything from `@mistriwork/mistri/page`, which holds the whole of `@mistriwork/mistri/ui` and more. Its rows are typed from `show` and the schema: an id past 2^53 is its digits, never a rounded number.
 
 ```tsx
-const guests = page.useRows('booking', { query: 'status = booked', show: ['id', 'guest_name'] });
+// An address parameter of a kind, checked before the page sees it: 'id', 'text', 'date', 'date-range' or a list of its values.
+const page = definePage({ label: 'Check-in', reads: ['booking'], commands: ['checkIn'], params: { class: 'id' }, component: CheckIn });
+const [chosen, choose] = page.useParam('class'); // number | `${bigint}` | undefined
 
+// Controls bound to a param: the address is their state (replace, not push). `layout: 'bare'` drops the sidebar and the top bar.
+// <Choose param="region" from="region" label="name" all="All regions" />  <Search param="q" />  <DateRange param="placed" />
+const kiosk = definePage({ label: 'Wallboard', layout: 'bare', reads: ['order'], params: { placed: 'date-range' }, component: Wallboard });
+
+// A condition as an object, keyed and typed by the columns: the same condition the query language would say.
+const guests = page.useRows('booking', { where: { status: ['booked', 'waiting'], party_size: { gt: 1 } }, show: ['id', 'guest_name'] });
+
+// A read past its limit says so: `page.hasMore`, and `more()` reads on. A refresh that fails keeps the rows (`isStale`).
+// Each read is consistent on its own; two reads are two answers, never one snapshot.
+
+// A form view the page opens (`forms: ['apply']`), its draft read as the form resumes it.
+const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}` : 'Start'; apply.open(), apply.goTo(step)
+
+// A read's loading, empty and failed states, as the platform says them (Preview).
 <Loaded query={guests} empty={<Empty title="Everyone is in" />}>
-  {(rows) => <ul>{rows.map((row) => <li key={String(row.id)}>{String(row.guest_name)}</li>)}</ul>}
+  {(rows) => <ul>{rows.map((row) => <li key={row.id}>{row.guest_name}</li>)}</ul>}
 </Loaded>
+
+// One condition said once: every block inside reads under it, and a List draws a row each.
+<Scope from="booking" where={{ class_session_id: chosen }}>
+  <Metric title="Arrived" where={{ status: 'checked_in' }} measure="sum party_size" />
+  <List where={{ status: 'booked' }} show={['guest_name']} sort="guest_name" empty="Everyone is in.">
+    {(booking) => <CommandButton command="checkIn" row={booking} done={`${booking.guest_name} is checked in.`} />}
+  </List>
+</Scope>
 ```
+
+`<CommandButton command row />` and `<ActionButton action row />` are hidden where the reader is not granted them, held where the row's state does not allow them, busy while they run, named with the row's title ("Check in Morgan Lee"), and say the outcome aloud (`done` words it). `Modal`, `Drawer`, `Popover`, `Tooltip`, `TextField`, `DateField`, `Select`, `Choices`, `Switch`, `Slider`, `Pagination` and `Avatar` are the shell's own controls, dressed as it dresses them.
 
 ## `pages`
 
@@ -449,7 +475,7 @@ const guests = page.useRows('booking', { query: 'status = booked', show: ['id', 
 | `pages.*.sections[][kind=timeline].reactions.from` | string | Preview | The table whose rows are the reactions: one per person, per kind, per entry. Used in `examples/apps/lintel/app.ts`. |
 | `pages.*.sections[][kind=timeline].reactions.kinds` | array | Preview | The kinds offered under each entry, in the order they are drawn: values of column, each said through its display rule. |
 | `pages.*.sections[][kind=timeline].reactions.whose` | string | Preview | The column of from that names the entry. Absent, the one column of from that refers to a stream's table; with none or several, the check asks for it. Used in `examples/apps/lintel/resources.ts`. |
-| `pages.*.sections[][kind=timeline].side` | string | Stable | The other party's rows, drawn against the far edge on a soft surface: a condition over each stream's rows in the query language, where record.&lt;column> is the page's record ('author_id = record.caller_id'). A stream whose table lacks a column it names is never on the far side; a stream's own side replaces it. |
+| `pages.*.sections[][kind=timeline].side` | string | Stable | The other party's rows, drawn against the far edge on a soft surface: a condition over each stream's rows in the query language, where record.&lt;column> is the page's record ('author_id = record.caller_id'). A stream whose table lacks a column it names is never on the far side; a stream's own side replaces it. Used in `examples/apps/lintel/resources.ts`. |
 | `pages.*.sections[][kind=timeline].streams` | array | Stable | Dated child rows from several tables, merged newest-first into one stream. |
 | `pages.*.sections[][kind=timeline].streams[].about` | string | Stable | A reference column of the page's table: the stream is about the row it names, and `whose` leads there. Used in `examples/apps/lintel/views.ts`. |
 | `pages.*.sections[][kind=timeline].streams[].at` | string | Stable | The date column the stream is ordered and merged by. Used in `examples/apps/lintel/resources.ts`. |
@@ -458,7 +484,7 @@ const guests = page.useRows('booking', { query: 'status = booked', show: ['id', 
 | `pages.*.sections[][kind=timeline].streams[].compact` |  | Stable | Every row of this stream drawn as one line, in place of the timeline's compact rules. One of `true`. |
 | `pages.*.sections[][kind=timeline].streams[].from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `pages.*.sections[][kind=timeline].streams[].query` | string | Stable | Extra narrowing, in the query language. |
-| `pages.*.sections[][kind=timeline].streams[].side` | string | Stable | This stream's own far side, in place of the timeline's: a condition over its rows ('person_id = record.caller_id'). |
+| `pages.*.sections[][kind=timeline].streams[].side` | string | Stable | This stream's own far side, in place of the timeline's: a condition over its rows ('person_id = record.caller_id'). Used in `examples/apps/lintel/resources.ts`. |
 | `pages.*.sections[][kind=timeline].streams[].text` | string | Stable | The row's text, its main value (a description, a title): a column, or a dotted path. It leads a row nobody wrote; in a message it sits under who, the badge and when. Used in `examples/apps/lintel/views.ts`. |
 | `pages.*.sections[][kind=timeline].streams[].tone` | `"good"` · `"warn"` · `"bad"` · `"info"` · `"neutral"` | Stable | Every row of this stream on a quiet ground in this tone, in place of the timeline's tone rules. One of `bad`, `good`, `info`, `neutral`, `warn`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=timeline].streams[].whose` | string | Stable | The path from `from` back to this record. Used in `examples/apps/lintel/resources.ts`. |
@@ -597,16 +623,16 @@ const guests = page.useRows('booking', { query: 'status = booked', show: ['id', 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `&lt;component>.props` | object | Stable |  |
-| `&lt;component>.props.*[type=boolean].default` | boolean | Stable |  |
+| `&lt;component>.props.*[type=boolean].default` | boolean | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `&lt;component>.props.*[type=boolean].type` |  | Stable |  One of `boolean`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `&lt;component>.props.*[type=choice].default` | string | Stable |  |
+| `&lt;component>.props.*[type=choice].default` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `&lt;component>.props.*[type=choice].options` | array | Stable |  |
 | `&lt;component>.props.*[type=choice].type` |  | Stable |  One of `choice`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `&lt;component>.props.*[type=number].default` | number | Stable |  |
+| `&lt;component>.props.*[type=number].default` | number | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `&lt;component>.props.*[type=number].max` | number | Stable |  |
 | `&lt;component>.props.*[type=number].min` | number | Stable |  |
 | `&lt;component>.props.*[type=number].type` |  | Stable |  One of `number`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `&lt;component>.props.*[type=text].default` | string | Stable |  |
+| `&lt;component>.props.*[type=text].default` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `&lt;component>.props.*[type=text].max` | integer | Stable |  |
 | `&lt;component>.props.*[type=text].type` |  | Stable |  One of `text`. Used in `examples/apps/lintel/blueprint.ts`. |
 

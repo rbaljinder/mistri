@@ -11,7 +11,8 @@
  */
 import type { QueryRequest, QueryResult } from '@mistriwork/engine/adapters/adapter.js';
 import type { AppDef } from '../../shared/appModel.js';
-import { personTable } from '../../shared/appMe.js';
+import { peopleByAccount, personTable } from '../../shared/appMe.js';
+import type { NoticeRecipient } from '../../adapters/inbox/inbox.js';
 import { canonicalLocale, localeColumn } from '@mistriwork/engine/shared/appLocale.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 
@@ -48,17 +49,22 @@ export function noticeLines(locale: string | undefined): NoticeLines {
  * The recipient's locale: their person row's `ui.locale` column, where it is
  * the people table `auth.me` names, read under their own grants; else the
  * App's. A read that fails says the App's, rather than holding the mail.
+ * Where people are told by account (a tenant App, or `me.by: 'account'`) the
+ * column holds account ids, so the row is found by the recipient's account,
+ * and a recipient whose account is not known is said in the App's locale.
  */
 export async function recipientLocale(
   app: AppDef,
   schema: DatabaseSchema,
   query: (request: QueryRequest) => Promise<QueryResult>,
-  email: string,
+  recipient: NoticeRecipient,
 ): Promise<string | undefined> {
   const named = localeColumn(app.ui);
+  const value = peopleByAccount(app) ? recipient.account : recipient.email;
   const person = named && personTable(app, schema);
   const table = named && tableNamed(schema, named.resource);
   if (
+    value &&
     named &&
     person?.table &&
     person.column &&
@@ -68,7 +74,7 @@ export async function recipientLocale(
   ) {
     const own = await query({
       table: table.id,
-      filter: { groups: [[{ column: person.column, op: '=', value: email }]] },
+      filter: { groups: [[{ column: person.column, op: '=', value }]] },
       columns: [named.column],
       limit: 1,
       offset: 0,

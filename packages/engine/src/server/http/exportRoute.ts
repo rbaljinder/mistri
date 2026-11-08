@@ -49,7 +49,7 @@ import type { Writable } from 'node:stream';
 import { withCancellation } from '../../adapters/statementControl.js';
 import { parseQuery } from '../../shared/query.js';
 import { textToView } from '../../shared/viewtext.js';
-import { findTable, resolveOrder, type DatabaseSchema, type TableMeta } from '../../shared/schema.js';
+import { findTable, resolveOrder, tableDialect, type DatabaseSchema, type TableMeta } from '../../shared/schema.js';
 import { backrefsTo, resolveAggregate, tryResolvePath, type ViewDef } from '../../shared/viewPaths.js';
 import { CRLF, csvField, csvRecord, jsonRecord } from '../../shared/csv.js';
 import type { PageStep } from '../../shared/keysetPage.js';
@@ -217,11 +217,11 @@ export async function exportFile(asked: ExportAsked): Promise<(() => void) | und
   for (const reached of queryTables(schema, table, query, wanted))
     if (!may(reached)) return refuseTable(answer, reached === UNKNOWN_TABLE ? table.id : reached);
   /* The order the list reads in, made total with the key; an offset batch reads in it too. */
-  const order = schema.dialect === 'http' && !query.orderBy?.length ? undefined : resolveOrder(table, query.orderBy).order;
+  const order = tableDialect(schema, table) === 'http' && !query.orderBy?.length ? undefined : resolveOrder(table, query.orderBy).order;
   let step: PageStep | undefined;
   const read = async (offset: number, size: number) => {
     /* A union pages by offset: its rows have no one key order across branches (unionReads.ts), as the list's. */
-    const paging = table.union ? undefined : recordsPaging(table, schema.dialect, query.orderBy, wanted, query.filter, step);
+    const paging = table.union ? undefined : recordsPaging(table, tableDialect(schema, table), query.orderBy, wanted, query.filter, step);
     /* Past the first batch with no boundary to resume from, the file goes on by offset in the same total order. */
     const continued = paging && (!step || paging.continuation) ? paging : undefined;
     /* An order column the file does not show is read for the boundary and taken out again (settlePage): it never

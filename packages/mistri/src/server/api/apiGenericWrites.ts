@@ -161,19 +161,19 @@ function editorAccess(app: AppDef, schema: DatabaseSchema) {
   const validation = compileAppDefinitionValidation(schema, app);
   const transitions = compileAppTransitions(schema, app);
   const stamps = compileAppStamps(schema, app);
-  return (roles: readonly string[], who: string | undefined, now: Date): ResourceAccess => ({
+  return (roles: readonly string[], who: string | undefined, now: Date, account?: string): ResourceAccess => ({
     ...resolveAppAccess(app, schema, [...roles]),
     ...(validation ? { validation } : {}),
     ...(transitions ? { transitions } : {}),
     ...(stamps
       ? {
           stamp: (request, reader) =>
-            stampUpdate(stamps, request, { now, ...(who ? { who } : {}), person: () => personKey(app, schema, who, reader) }),
+            stampUpdate(stamps, request, { now, ...(who ? { who } : {}), person: () => personKey(app, schema, who, reader, account) }),
           fill: (request, reader) =>
-            stampInsert(stamps, request, { now, ...(who ? { who } : {}), person: () => personKey(app, schema, who, reader) }),
+            stampInsert(stamps, request, { now, ...(who ? { who } : {}), person: () => personKey(app, schema, who, reader, account) }),
         }
       : {}),
-    me: (reader) => lookupPerson(app, schema, who, reader),
+    me: (reader) => lookupPerson(app, schema, who, reader, undefined, account),
   });
 }
 
@@ -197,7 +197,7 @@ function synthesize(app: AppDef, schema: DatabaseSchema, write: ApiWrite): AnyBu
   const keyOf = (row: Readonly<Record<string, unknown>>) => Object.fromEntries(key.map((name) => [name, row[name] as string | number]));
   const run = async (
     ctx: {
-      actor: { roles: readonly string[]; email?: string };
+      actor: { roles: readonly string[]; email?: string; id?: string };
       now: () => Date;
       tx: Parameters<typeof authorizeTransaction>[2];
       record?: Readonly<Record<string, unknown>>;
@@ -205,7 +205,11 @@ function synthesize(app: AppDef, schema: DatabaseSchema, write: ApiWrite): AnyBu
     values: Record<string, unknown>,
   ) => {
     // The role's editor rules over the command's own transaction: what the UI would refuse, this refuses.
-    const tx = authorizeTransaction(schema, access(ctx.actor.roles, ctx.actor.email, ctx.now()), ctx.tx);
+    const tx = authorizeTransaction(
+      schema,
+      access(ctx.actor.roles, ctx.actor.email, ctx.now(), ctx.actor.email ? ctx.actor.id : undefined),
+      ctx.tx,
+    );
     const given = Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined)) as Record<
       string,
       string | number | boolean | null

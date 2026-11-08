@@ -273,6 +273,22 @@ export function draftHidden(fields: readonly AppCommandField[], values: CommandV
   return hidden;
 }
 
+/**
+ * The input a refusal named (`field`, by its path), said beside it for a component that draws its own fields: only one
+ * the command declares and the values sent leave shown, so the server's words are never placed on a field the
+ * component does not draw, nor on a name it made up. What no field can hold stays in the refusal's message.
+ */
+export function refusedFields(
+  path: string | undefined,
+  message: string,
+  fields: readonly AppCommandField[],
+  values: CommandValues,
+): Readonly<Record<string, string>> | undefined {
+  const name = path && /^[^.[]+/.exec(path)?.[0];
+  if (!name || !fields.some((field) => field.name === name) || draftHidden(fields, values).has(name)) return undefined;
+  return { [path]: message };
+}
+
 /** What is sent: a number typed as text read as a number, and nothing the declaration does not ask, nor a question its condition hides. */
 function submitted(fields: readonly AppCommandField[], values: CommandValues, whole?: CommandDraft): Record<string, unknown> {
   const result: Record<string, unknown> = {};

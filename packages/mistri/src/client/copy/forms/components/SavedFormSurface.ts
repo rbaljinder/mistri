@@ -35,6 +35,8 @@ export const say = defineMessages({
   eachStepIsSaved:
     'Each step is saved as you go. We don’t show your details back to you; keep this tab open to review them before you submit.',
   startOver: 'Start over',
+  submitNotSettled: 'Your submission was sent and its result is not known yet. Submit again to find out how it ended.',
+  yourDraftIsSavedShort: 'Your draft is saved.',
   yourDraftIsSaved: 'Your draft is saved. Carry on where you left off, or start over.',
   savedEarlier: 'Saved earlier',
   draftChangedElsewhere: 'This draft changed somewhere else. Review it again before you submit.',

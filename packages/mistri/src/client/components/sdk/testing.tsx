@@ -12,12 +12,15 @@
  * never followed or sent. The App's locale and currency are the test's to
  * say; en-US and USD unless it does.
  */
-import { cleanup, render, type RenderResult } from '@testing-library/react';
-import { createElement, useState, type ComponentType } from 'react';
+import { act, cleanup, render, type RenderResult } from '@testing-library/react';
+import { createElement, useState, type ComponentType, type ReactNode } from 'react';
 import { installShell } from '@mistriwork/kit/client/shellMode.js';
+import type { QueryClient } from '@tanstack/react-query';
+import type { UiRow } from './context.js';
 import {
   FixtureComponent,
   SectionFrame,
+  fixtureClient,
   fixtureHost,
   fixtures,
   sectionProps,
@@ -41,7 +44,39 @@ export {
   type RenderOptions,
 } from './fixture.js';
 
-type Drawn = RenderResult & { navigations: Navigation[]; commands: CommandCall[] };
+/** What changes on the server between two reads: a resource's rows now, and the resources the reader is refused now. */
+export interface FixtureChange {
+  data?: Record<string, readonly UiRow[]>;
+  /** The whole refused set after the change: a resource left out is readable again. */
+  refused?: Record<string, 401 | 403>;
+}
+
+type Drawn = RenderResult & {
+  navigations: Navigation[];
+  commands: CommandCall[];
+  /**
+   * The server changed under the drawn page, then every read was asked again, as a live update or a refocus asks:
+   * resolves once the reads have answered. A read that fails now keeps its last good rows (`isStale`), as the
+   * page's does; a read never answered shows its refused or failed state.
+   */
+  refresh(change?: FixtureChange): Promise<void>;
+};
+
+/* The test's options with fixture tables of their own: a refresh changes this drawing's server, never the test's
+   fixtures. The layer inherits the test's tables rather than copying them, so a table is still read only when a read
+   asks for it, and a test whose tables throw on read (a dropped connection) fails that read, not the drawing. */
+function live(options: RenderOptions): RenderOptions {
+  const data = options.data ?? fixtures({});
+  return { ...options, data: { tables: Object.create(data.tables) as typeof data.tables, display: data.display } };
+}
+
+function refresher(options: RenderOptions, client: QueryClient) {
+  return async (change: FixtureChange = {}) => {
+    for (const [resource, rows] of Object.entries(change.data ?? {})) options.data!.tables[resource] = rows;
+    if (change.refused) options.refused = change.refused;
+    await act(() => client.invalidateQueries({ queryKey: ['mistri-ui'] }));
+  };
+}
 
 function prepare(options: RenderOptions): void {
   /* One drawing at a time: Testing Library unmounts after each test only
@@ -65,12 +100,42 @@ function drawn(
   options: RenderOptions,
 ): Drawn {
   prepare(options);
+  const served = live(options);
+  const client = fixtureClient();
   const navigations: Navigation[] = [];
   const commands: CommandCall[] = [];
   const view = render(
-    <FixtureComponent component={component} declaration={declaration} options={options} navigations={navigations} commands={commands} />,
+    <FixtureComponent
+      component={component}
+      declaration={declaration}
+      options={served}
+      navigations={navigations}
+      commands={commands}
+      client={client}
+    />,
   );
-  return Object.assign(view, { navigations, commands });
+  return Object.assign(view, { navigations, commands, refresh: refresher(served, client) });
+}
+
+/** One component in the frame its placement gives it, over this drawing's own fixture server. */
+function framed(options: RenderOptions, id: string, className: string | undefined, body: (served: RenderOptions) => ReactNode): Drawn {
+  prepare(options);
+  const served = live(options);
+  const client = fixtureClient();
+  const navigations: Navigation[] = [];
+  const commands: CommandCall[] = [];
+  const view = render(
+    <SectionFrame
+      host={fixtureHost(served.data!, served, navigations, commands)}
+      id={id}
+      width={served.width ?? 960}
+      client={client}
+      {...(className ? { className } : {})}
+    >
+      {body(served)}
+    </SectionFrame>,
+  );
+  return Object.assign(view, { navigations, commands, refresh: refresher(served, client) });
 }
 
 /**
@@ -80,16 +145,9 @@ function drawn(
  * every navigation and command the component asked for.
  */
 export function renderSection<P>(component: ComponentType<P>, declaration: AuthoredSection, options: RenderOptions = {}): Drawn {
-  prepare(options);
-  const data = options.data ?? fixtures({});
-  const navigations: Navigation[] = [];
-  const commands: CommandCall[] = [];
-  const view = render(
-    <SectionFrame host={fixtureHost(data, options, navigations, commands)} id={declaration.component.id} width={options.width ?? 960}>
-      {createElement(component as ComponentType<Record<string, unknown>>, sectionProps(declaration, data, options))}
-    </SectionFrame>,
+  return framed(options, declaration.component.id, undefined, (served) =>
+    createElement(component as ComponentType<Record<string, unknown>>, sectionProps(declaration, served.data!, served)),
   );
-  return Object.assign(view, { navigations, commands });
 }
 
 /**
@@ -121,21 +179,9 @@ export function renderValue<P>(
   },
   options: RenderOptions = {},
 ): Drawn {
-  prepare(options);
-  const navigations: Navigation[] = [];
-  const commands: CommandCall[] = [];
   const context = value.context ?? 'record';
   const props = { value: value.value, row: value.row, column: value.column, context, compact: context !== 'record' };
-  const view = render(
-    <SectionFrame
-      host={fixtureHost(options.data ?? fixtures({}), options, navigations, commands)}
-      id={declaration.id}
-      width={options.width ?? 960}
-    >
-      {createElement(component as ComponentType<Record<string, unknown>>, props)}
-    </SectionFrame>,
-  );
-  return Object.assign(view, { navigations, commands });
+  return framed(options, declaration.id, undefined, () => createElement(component as ComponentType<Record<string, unknown>>, props));
 }
 
 /** An input component in a form, holding its value as the form would: `view.value()` is what the form now holds. */
@@ -187,29 +233,19 @@ export function renderInput<P>(
   },
   options: RenderOptions = {},
 ): Drawn & { changes: Array<string | number | boolean | null>; value(): string | number | boolean | null } {
-  prepare(options);
   const changes: Array<string | number | boolean | null> = [];
-  const navigations: Navigation[] = [];
-  const commands: CommandCall[] = [];
-  const view = render(
-    <SectionFrame
-      host={fixtureHost(options.data ?? fixtures({}), options, navigations, commands)}
-      id={declaration.id}
-      width={options.width ?? 960}
-      className="custom-input"
-    >
-      <HeldInput
-        component={component as ComponentType<Record<string, unknown>>}
-        start={field.value}
-        field={{ name: field.name, ...(field.resource ? { resource: field.resource } : {}) }}
-        context={field.context ?? 'edit'}
-        label={field.label ?? field.name}
-        required={field.required ?? false}
-        onChange={(next) => changes.push(next)}
-      />
-    </SectionFrame>,
-  );
-  return Object.assign(view, { navigations, commands, changes, value: () => (changes.length ? changes[changes.length - 1] : field.value) });
+  const view = framed(options, declaration.id, 'custom-input', () => (
+    <HeldInput
+      component={component as ComponentType<Record<string, unknown>>}
+      start={field.value}
+      field={{ name: field.name, ...(field.resource ? { resource: field.resource } : {}) }}
+      context={field.context ?? 'edit'}
+      label={field.label ?? field.name}
+      required={field.required ?? false}
+      onChange={(next) => changes.push(next)}
+    />
+  ));
+  return Object.assign(view, { changes, value: () => (changes.length ? changes[changes.length - 1] : field.value) });
 }
 
 /**

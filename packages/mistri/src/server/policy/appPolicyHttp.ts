@@ -165,7 +165,7 @@ export async function loadHttpAppPolicy(options: {
     (table) => deleting.has(table),
     transitions,
     stamps,
-    (schema, who, reader) => lookupPerson(app, schema, who, reader),
+    (schema, who, reader, account) => lookupPerson(app, schema, who, reader, undefined, account),
   );
   let retired = false;
   let retirement: Promise<void> | undefined;
@@ -285,6 +285,8 @@ export function httpRowPolicyAllows(method: string | undefined, path: string, co
             '/api/commands/status',
             '/api/commands/availability',
             COMMAND_ROUTES.draft,
+            /* A step's check reads the answers alone, never a row (commands/commandCheck.ts), under this principal's grants. */
+            COMMAND_ROUTES.check,
           ].includes(path))
     : (method === 'GET' || method === 'HEAD') && readGets.has(path);
 }

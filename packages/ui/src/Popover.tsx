@@ -6,9 +6,16 @@
  * `open`/`onOpenChange`, uncontrolled with `defaultOpen`. Where the
  * popup is a menu of actions, DropMenu is the right primitive instead:
  * a popover is a layer, not a list of commands.
+ *
+ * Placed as DropMenu places its menu: anchored on the zoom-aware ruler
+ * (anchor.ts) and fixed to the viewport, and drawn inside an enclosing
+ * dialog, so the density zoom cannot throw it a room away from its trigger
+ * and a dialog's focus trap keeps it as its own.
  */
-import { isValidElement, type ReactNode } from 'react';
+import { isValidElement, useRef, type ReactNode } from 'react';
 import { Popover as BasePopover } from '@base-ui/react/popover';
+import { layoutViewport, zoomAnchor } from './internal/anchor.js';
+import { popupContainer, useDialogContainer } from './internal/popups.js';
 
 export interface PopoverProps {
   trigger: ReactNode;
@@ -27,11 +34,19 @@ export function Popover({ trigger, children, open, defaultOpen, onOpenChange, cl
      buttons for one control. The render prop merges onto the caller's
      element (DropMenu.tsx does the same for its trigger). */
   const triggerElement = isValidElement(trigger) ? trigger : <button type="button">{trigger}</button>;
+  const anchor = useRef<HTMLButtonElement>(null);
+  const container = useDialogContainer(anchor);
   return (
     <BasePopover.Root open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
-      <BasePopover.Trigger className="ui-popover-trigger" render={triggerElement} />
-      <BasePopover.Portal>
-        <BasePopover.Positioner sideOffset={8}>
+      <BasePopover.Trigger className="ui-popover-trigger" render={triggerElement} ref={anchor} />
+      <BasePopover.Portal container={container ?? popupContainer()}>
+        <BasePopover.Positioner
+          anchor={() => (anchor.current ? zoomAnchor(anchor.current) : null)}
+          positionMethod="fixed"
+          sideOffset={8}
+          collisionBoundary={layoutViewport()}
+          collisionPadding={8}
+        >
           <BasePopover.Popup className={['ui-popover', className].filter(Boolean).join(' ')} aria-label={ariaLabel}>
             {children}
           </BasePopover.Popup>

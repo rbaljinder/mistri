@@ -10,6 +10,7 @@
  * (FormDialog.tsx), and nothing on a first paint needs either.
  */
 import { FormBody, type FormOutcome } from './FormRoom.js';
+import type { FormReceipt } from './FormSurface.js';
 import type { ServedForm as RoomForm } from '@mistriwork/kit/client/components/appRooms.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
 
@@ -25,6 +26,8 @@ export function SignedInFormDialog({
   initial,
   onClose,
   onOutcome,
+  onReceipt,
+  at,
 }: {
   form: ServedForm;
   appName: string;
@@ -35,6 +38,9 @@ export function SignedInFormDialog({
   onClose: () => void;
   /** How each submission ended, for the component that opened the form (`useCommand(…).open`). */
   onOutcome?: (outcome: FormOutcome) => void;
+  /** A saved form's receipt, and the step it opens at, for a page's `useForm`. */
+  onReceipt?: (receipt: FormReceipt) => void;
+  at?: string;
 }) {
   return (
     <Modal className="form-dialog" onClose={onClose} ariaLabel={form.label}>
@@ -44,6 +50,8 @@ export function SignedInFormDialog({
         {...(prefill === undefined ? {} : { prefill })}
         {...(initial ? { initial } : {})}
         {...(onOutcome ? { onOutcome } : {})}
+        {...(onReceipt ? { onReceipt } : {})}
+        {...(at === undefined ? {} : { at })}
         onDismiss={onClose}
       />
     </Modal>

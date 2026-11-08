@@ -14,9 +14,14 @@
  * never hovers must still understand the trigger from its own label, and
  * a note that carries an action belongs in a Popover instead, where it
  * can be reached and used.
+ *
+ * Placed as Popover.tsx places its layer: on the zoom-aware ruler, fixed to
+ * the viewport, and inside an enclosing dialog.
  */
-import { cloneElement, isValidElement, useId, useState, type ReactNode } from 'react';
+import { cloneElement, isValidElement, useId, useRef, useState, type ReactNode } from 'react';
 import { Tooltip as BaseTooltip } from '@base-ui/react/tooltip';
+import { layoutViewport, zoomAnchor } from './internal/anchor.js';
+import { popupContainer, useDialogContainer } from './internal/popups.js';
 
 export interface TooltipProps {
   /** The element the note belongs to; a button, a word, an icon. */
@@ -41,6 +46,8 @@ export function Tooltip({ trigger, children, open, defaultOpen, onOpenChange, cl
   const triggerElement = isOpen
     ? cloneElement(base, { 'aria-describedby': [existing, tooltipId].filter(Boolean).join(' ') } as Record<string, unknown>)
     : base;
+  const anchor = useRef<HTMLButtonElement>(null);
+  const container = useDialogContainer(anchor);
   return (
     <BaseTooltip.Root
       open={open}
@@ -51,9 +58,15 @@ export function Tooltip({ trigger, children, open, defaultOpen, onOpenChange, cl
         void details;
       }}
     >
-      <BaseTooltip.Trigger className="ui-tooltip-trigger" render={triggerElement} />
-      <BaseTooltip.Portal>
-        <BaseTooltip.Positioner sideOffset={8}>
+      <BaseTooltip.Trigger className="ui-tooltip-trigger" render={triggerElement} ref={anchor} />
+      <BaseTooltip.Portal container={container ?? popupContainer()}>
+        <BaseTooltip.Positioner
+          anchor={() => (anchor.current ? zoomAnchor(anchor.current) : null)}
+          positionMethod="fixed"
+          sideOffset={8}
+          collisionBoundary={layoutViewport()}
+          collisionPadding={8}
+        >
           <BaseTooltip.Popup id={tooltipId} role="tooltip" className={['ui-tooltip', className].filter(Boolean).join(' ')}>
             {children}
           </BaseTooltip.Popup>

@@ -23,7 +23,7 @@
  * not the boundary.
  */
 import type * as ReactTypes from 'react';
-import type { AppIcon, PropValues, SectionWidth } from './app.js';
+import type { AppIcon, PropValues, Register, SectionWidth } from './app.js';
 export type { SectionWidth };
 
 /** Pass the generated `Flags<typeof manifest>` alias. These are evaluated
@@ -57,6 +57,23 @@ export declare const useReducer: typeof ReactTypes.useReducer;
 export declare const useContext: typeof ReactTypes.useContext;
 
 /* ---------- props ---------- */
+
+type Loaders = Register extends { loaders: infer V } ? V : never;
+/** What a loader returns, by its name: a page's `data`. */
+export type LoaderData<L extends string> = [Loaders] extends [never]
+  ? unknown
+  : L extends keyof Loaders
+    ? Loaders[L] extends { readonly load: (...args: never[]) => infer R } ? Awaited<R> : unknown
+    : unknown;
+
+/* A page's props live here rather than beside definePage: @mistriwork/mistri/page types its house controls from
+   @mistriwork/ui, which in a checkout is .tsx source, so the generated mistri-components.d.ts importing from there
+   failed the typecheck (TS6142) of an App whose tsconfig sets no jsx. ui.d.ts reaches only react. */
+/** What a page's component is drawn with: the result of the loader it names (`PageProps<'pickWalk'>`), and its placement's props. */
+export interface PageProps<L extends string = never> {
+  data: [L] extends [never] ? null : LoaderData<L>;
+  props: Readonly<Record<string, unknown>>;
+}
 
 /** One row as a component receives it: keyed by the paths it declared, each typed from the generated rows where the path is a column. */
 type Cell<Row, P> = Row extends object ? (P extends keyof Row ? Row[P] : unknown) : unknown;
@@ -280,22 +297,34 @@ export declare function Table<Row extends Record<string, unknown>>(props: {
 
 /* ---------- hooks ---------- */
 
-/** A read as a hook holds it. */
+/** A read as a hook holds it. `isPending` is the first read, with nothing to draw yet; `isFetching` is any read under way, a
+    background refresh included. A refresh that fails keeps the last good `data` and flags it (`isStale`, `refreshError`):
+    it is never shown as fresh. Each hook is one read, consistent on its own; two hooks share no snapshot. */
 export interface UiQuery<T> {
   data: T | undefined;
   isPending: boolean;
+  isFetching: boolean;
   isError: boolean;
   error: Error | null;
+  isStale: boolean;
+  refreshError: Error | null;
   refetch(): unknown;
+}
+/** How far a `useRows` read has paged: the page size, whether the server holds more, and `total` only where the server counted. */
+export interface UiRowsPage { limit: number; hasMore: boolean; total?: number }
+/** `useRows`' read: the rows read so far, with `page` and `more()`, which reads the next `limit` rows onto the end. */
+export interface UiRowsQuery<Row = UiRow> extends UiQuery<Row[]> {
+  page: UiRowsPage;
+  more(): void;
 }
 export type UiRow = Readonly<Record<string, unknown>>;
 export type OpenMode = 'page' | 'drawer' | 'modal';
 /** Where `useNavigate().openView` opens a list: a tab by its label, the name box's phrase and the filter boxes by column. */
 export interface OpenViewOptions { tab?: string; search?: string; filters?: Readonly<Record<string, string>> }
 
-/** Rows of one App resource, by the resource's name: `useRows('pay_run', { query: 'status = review', show: ['title'], sort: 'pay_date desc', limit: 12 })`.
-    `enabled: false` asks nothing yet. On a free-form page, a resource is one of the page's `reads`. */
-export declare function useRows(resource: string, options?: { query?: string; show?: readonly string[]; sort?: string; limit?: number; enabled?: boolean }): UiQuery<UiRow[]>;
+/** Rows of one App resource, by the resource's name: `useRows('pay_run', { where: { status: 'review' }, show: ['title'], sort: 'pay_date desc', limit: 12 })`. `where` is a condition as an object, joined to `query` by "and".
+    `enabled: false` asks nothing yet. On a free-form page, a resource is one of the page's `reads`. The first `limit` rows (20 unless said); `page.hasMore` and `more()` read on. */
+export declare function useRows(resource: string, options?: { query?: string; where?: Readonly<Record<string, unknown>>; show?: readonly string[]; sort?: string; limit?: number; enabled?: boolean }): UiRowsQuery;
 /** One record by its key: `useRecord('employee', { id: 4 }, ['name', 'title'])`. Null when there is none; not asked while the key is undefined. */
 export declare function useRecord(resource: string, key: Readonly<Record<string, unknown>> | undefined, show?: readonly string[]): UiQuery<UiRow | null>;
 /** A resource's rows grouped and measured: `useBreakdown('pay_stub', { by: 'status', measure: 'sum net' })`. Each row is keyed as the
@@ -322,14 +351,29 @@ export declare function useComposer(): { fill(text: string, options?: { mode?: '
 export declare function useFile(resource: string): (key: Readonly<Record<string, unknown>>, options?: { thumbnail?: boolean }) => string | undefined;
 /** Who is reading: signed in or not, and the signed-in account's id. What a component knows of the reader; the server decides every request. */
 export declare function useViewer(): { signedIn: boolean; account?: string };
+/** What this server presents the App as, read-only: the deployment's name, mark, theme and language (its config's `"presentation"` is already in them) and the path it is served under. Presentation only, never a credential or a connection. */
+export declare function useDeployment(): {
+  /** The program's name, as the bar and the page title say it. */
+  readonly name: string;
+  /** Where the logo's picture is served (its mark where it has one), or null: the App's logo is an icon, or it has none. */
+  readonly mark: string | null;
+  /** The theme the App is set in, by id, or null where the App sets none. */
+  readonly theme: string | null;
+  /** The language tag the App is set in, or null where the reader's browser decides. */
+  readonly locale: string | null;
+  /** The path a reverse proxy serves the server under (`/tools`), or '' at the root. */
+  readonly basePath: string;
+};
 /** How a command a component ran ended: applied, with what its handler returned as `output` (the new record's id, the
     ticket it opened: read it as the shape your command returns), refused in the server's words, a form closed with
     nothing sent, or `unknown`: it was sent and no answer said whether it ran (the connection dropped, the server could
     not say). Never send it again under a new key: `check()` asks under the same one, so it cannot run twice, and
-    resolves as the run would have. A public page with a human check hands `check` a fresh token. */
+    resolves as the run would have. A public page with a human check hands `check` a fresh token. A refusal about one
+    input names it in `fields`, by its path, where the command declares it and the values sent leave it shown: say it
+    beside the field you draw; `message` always holds the words. */
 export type CommandOutcome =
   | { status: 'applied'; message?: string; output?: unknown }
-  | { status: 'refused'; message: string }
+  | { status: 'refused'; message: string; fields?: Readonly<Record<string, string>> }
   | { status: 'closed' }
   | { status: 'unknown'; message: string; check(options?: { challenge?: string }): Promise<CommandOutcome> };
 /** How a run is sent: the word its form says it by, a public page's human-check token, and the key a run that names no
@@ -338,6 +382,8 @@ export type CommandOutcome =
 export interface CommandRunOptions { label?: string; challenge?: string; attempt?: string }
 /** Why a command cannot be run on a record: signed out, the reader's role not granted it, or its `when` not holding for the record now. */
 export type CommandUnavailable = 'signed-out' | 'not-granted' | 'unavailable';
+/** What a component hands a command's run: any of its declared inputs, by name (every name where the App is not typed). */
+export type CommandInput<N extends string> = Readonly<Partial<Record<import('./app.js').CommandInputName<N>, unknown>>>;
 /**
  * One of the App's commands, as its actions offer it, by name: `const react = useCommand('reactToPost')`. `run(record, input)` sends it when the
  * input is complete and valid, and opens the platform's own form, filled with what was given, when it is not; `open` always opens the form.
@@ -348,21 +394,94 @@ export type CommandUnavailable = 'signed-out' | 'not-granted' | 'unavailable';
  * command that names no record (`targets: 'none'`) is reached the same way, through its form or, when no form runs it, by name; pass
  * `{}` as its record: `markAllRead.run({}, {})`. An applied run resolves with what the command returned as `output`:
  * `const done = await raise.run({}, input); if (done.status === 'applied') nav.openRecord('ticket', { id: (done.output as { id: number }).id })`.
+ * Its input is typed by the command's declared inputs (`CommandInputName`), so a misspelled one is a type error.
  */
-export declare function useCommand(command: import('./app.js').CommandName): {
+export declare function useCommand<const N extends import('./app.js').CommandName>(command: N): {
   label: string;
   granted: boolean;
   available(record: Readonly<Record<string, unknown>>): boolean | undefined;
   /** Why it cannot be run on this record; undefined while it can be, and until the server has said. */
   reason(record: Readonly<Record<string, unknown>>): CommandUnavailable | undefined;
   pending(record: Readonly<Record<string, unknown>>): boolean;
-  run(record: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>, options?: CommandRunOptions): Promise<CommandOutcome>;
-  open(record: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>, options?: CommandRunOptions): Promise<CommandOutcome>;
+  run(record: Readonly<Record<string, unknown>>, input?: CommandInput<N>, options?: CommandRunOptions): Promise<CommandOutcome>;
+  open(record: Readonly<Record<string, unknown>>, input?: CommandInput<N>, options?: CommandRunOptions): Promise<CommandOutcome>;
   /** The choices one of its inputs offers, as served with the command: a choice's options, or a table's rows
       (`field.choice({ from })`) where they come with it. Undefined for an input that offers none, or whose rows its own
       form reads. */
-  choices(field: string): ReadonlyArray<{ value: string | number | boolean; label: string }> | undefined;
+  choices(field: import('./app.js').CommandInputName<N>): ReadonlyArray<{ value: string | number | boolean; label: string }> | undefined;
 };
+/** An amount as typed, read: whole minor units as text (exact past 2^53) and the major amount with a point, or why not. */
+export type MoneyParse = { minor: string; major: string } | { problem: string };
+/**
+ * Text a person typed as an amount of `currency`, read as the platform's money box reads it: grouping and the currency's
+ * sign dropped, the locale's decimal mark (the App's `ui.locale` unless said) taken as the point, at most the currency's own
+ * decimal places (19.999 dollars is refused, never rounded), and a negative only where `negative` allows one, as a field
+ * allows one only when its `min` is below zero: `parseMoney('1.234,50', { currency: 'EUR', locale: 'de-DE' })` is
+ * `{ minor: '123450', major: '1234.50' }`. Text to text, so an amount past 2^53 is exact.
+ */
+export declare function parseMoney(text: string, options: { currency: string; locale?: string; negative?: boolean }): MoneyParse;
+/** One input of a command, bound (`useField`). */
+export interface Field {
+  /** What an App's input component receives in the platform's own form, for the control the component draws. */
+  inputProps: InputProps & { context: 'command' };
+  /** What the control last handed back, as text. */
+  text: string;
+  /** The value as the platform's own form sends it — an amount as its major-unit text, which the server reads into the
+      minor units a `minor` handler receives, exactly, past 2^53 too; null while there is none, or it is not one. */
+  value: unknown;
+  /** Whether the control has handed anything back. */
+  touched: boolean;
+  /** Whether the value is other than the one the field starts with. */
+  dirty: boolean;
+  /** What is wrong with it, in the person's words: said once `validate()` has run, and kept current from then on.
+      `inputProps.describedBy` is then the id to give the element that says it. */
+  error: string | undefined;
+  /** Judges it now and says what is wrong from here on; true when nothing is. */
+  validate(): boolean;
+}
+/**
+ * One input of a command, by name, for a control a component draws itself: `const amount = useField('transfer', 'amount')`.
+ * `inputProps` is the contract an App's input component receives in the platform's own form, and the value is judged by
+ * the same declaration — its kind, `required`, bounds and format — so a custom control and the form agree; a money input
+ * reads what is typed with `parseMoney`, in the App's locale and the field's currency. Nothing is sent: hand `value` to
+ * `useCommand(...).run`, where the server judges it again, and say a refusal's `fields[name]` beside it. For a reader not
+ * served the command the control is drawn disabled.
+ */
+export declare function useField<const N extends import('./app.js').CommandName>(command: N, name: import('./app.js').CommandInputName<N>): Field;
+/** A record a reference input offers, named as the platform's own picker names it. */
+export interface Option {
+  key: string | number;
+  label: string;
+  detail?: string;
+}
+/** A reference input's choices, searched and paged, and the one picked (`useOptions`). */
+export interface Options {
+  /** The text searched for, as typed. */
+  query: string;
+  setQuery(text: string): void;
+  /** The matches read so far, a page each; the latest query's, never an earlier one's. */
+  pages: Option[][];
+  hasMore: boolean;
+  /** Reads the next page onto the end; nothing while there is none or one is already under way. */
+  more(): void;
+  /** The picked record's key. */
+  selected: string | number | undefined;
+  select(key: string | number | undefined): void;
+  /** The picked record named, read by its key when it is not on a page; `available` is false when the reader cannot see it. */
+  resolved: (Option & { available: boolean }) | undefined;
+  /** True while what is typed has not been searched yet. */
+  isPending: boolean;
+  error: Error | null;
+}
+/**
+ * The records one reference input of a command offers: `const nurse = useOptions('assignVisit', 'nurse')`. They are read
+ * where the platform's own picker reads them, under the reader's access and the input's filter. Typing searches (the
+ * latest text wins), `more()` reads the next page, and `select(key)` holds a pick whose name is read by its key when it
+ * is not on a page. A reader who has lost access is told the pick is not available, never that it does not exist; a
+ * reader not granted the command is offered nothing. Draw the list with `Typeahead` from `@mistriwork/ui`, which keeps
+ * the keyboard.
+ */
+export declare function useOptions<const N extends import('./app.js').CommandName>(command: N, name: import('./app.js').CommandInputName<N>): Options;
 /**
  * One of the App's fixed actions, a machine's verb or `action(label, { set })`, by its id: `const start = useAction('startVisit')`. Held
  * as a command is (`granted`, `available`, `reason`, `pending`, `run`, `open`, the same outcome), but it is the record page's own
@@ -400,6 +519,8 @@ export interface MoneyFormat {
 /** Figures in the App's locale, currency and timezone, as every built-in section says them. Money is exact: a decimal
     string (as a database sends one) is said digit for digit, past 2^53 too, and minor units are read exactly. */
 export declare function useFormat(): {
+  /** The App's zone (`ui.timezone`), for reckoning "today" as the App's day; undefined where the App names none. */
+  timezone: string | undefined;
   number(value: number | string, options?: Intl.NumberFormatOptions): string;
   /** `money('1999', { minor: true })` is "$19.99"; a currency code alone is `money(5, 'EUR')`. */
   money(value: number | string, options?: string | MoneyFormat): string;

@@ -71,6 +71,32 @@ test('each table has one route: the resource names it, else the first plain list
   assert.equal(plain.records.get('task')!.segment, 'task-calendar');
 });
 
+test("a free-form page is a room's address as a dashboard is; a record's tab page is its record's, with the tab's word", () => {
+  const paged = appAddressBook({
+    ...input,
+    order: [...input.order, 'walk', 'leads-history'],
+    views: {
+      ...input.views,
+      walk: { sections: [], page: {} },
+      'leads-history': { sections: [], page: { record: { view: 'leads', table: 'lead', tab: 'history' } } },
+    },
+  });
+  assert.deepEqual(paged.problems, []);
+  assert.equal(paged.views.get('walk'), 'walk');
+  assert.deepEqual(readAppSegments(paged, ['walk']), { kind: 'route', target: { kind: 'dashboard', view: 'walk', freeForm: true } });
+  assert.equal(paged.views.get('leads-history'), undefined, 'a tab has no route of its own');
+  assert.equal(readAppSegments(paged, ['leads-history']), undefined);
+  // /compass/accounts/13/pipeline: the record's address, then the tab's word, read back as the record's tab.
+  assert.deepEqual(recordSegments(paged, 'lead', { key: { id: 127 }, tab: 'history' }), ['leads', '127', 'history']);
+  assert.deepEqual(readAppSegments(paged, ['leads', '127', 'history']), {
+    kind: 'record',
+    target: { kind: 'list', view: 'leads', table: 'lead' },
+    table: 'lead',
+    key: { id: '127' },
+    tab: 'history',
+  });
+});
+
 test('a record is written under its route and read back to the same key', () => {
   const at = recordSegments(book, 'lead', { key: { id: 127 } });
   assert.deepEqual(at, ['leads', '127']);

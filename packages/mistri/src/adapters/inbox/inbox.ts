@@ -82,6 +82,12 @@ export interface NoticePath {
  */
 export type NoticeMembers = (account: string, tenant: string | undefined) => Promise<string | undefined>;
 
+/** Whom a notice's words are said for: the email it is told at, and the account it was reached as, if one. */
+export interface NoticeRecipient {
+  readonly email: string;
+  readonly account?: string;
+}
+
 /** One `notify` rule, compiled against the catalog by trusted server code. */
 export interface NoticeRule {
   /** The App the notice belongs to: its inbox is read per App. */
@@ -100,12 +106,13 @@ export interface NoticeRule {
   /** The words, literal parts and values read off the record; on a `flow` rule, `{ message }` is the step's own words. */
   readonly title: readonly (string | NoticePath | NoticeMessage)[];
   /** A title said from the App's messages instead: its arguments read off the record once, and the words said for
-      each recipient in their own locale (server/app/noticeWords.ts) — `recipient` absent for a channel's address. */
+      each recipient in their own locale (server/app/noticeWords.ts) — `recipient` absent for a channel's address,
+      and its `account` the account it was told as, where it was reached through one. */
   readonly say?: {
     readonly args: readonly { readonly name: string; readonly path: NoticePath }[];
     readonly words: (
       values: Readonly<Record<string, unknown>>,
-      recipient: string | undefined,
+      recipient: NoticeRecipient | undefined,
       tenant: string | undefined,
       sink: Pick<NoticeSink, 'rows'>,
     ) => Promise<string>;
@@ -511,7 +518,14 @@ export function captureNotices(adapter: object, sink: NoticeSink, context: Notic
       /* An account is told at its email, and only while it is a member where
          this notice is kept: a person row that names an account from outside
          the tenant tells nobody. */
-      for (const account of accounts) if (rule.members) tell(await rule.members(account, owner as string | undefined));
+      const accountOf = new Map<string, string>();
+      for (const account of accounts) {
+        if (!rule.members) break;
+        const email = await rule.members(account, owner as string | undefined);
+        tell(email);
+        // The account a person was reached as is how their own row is found, for the locale they are told in.
+        if (typeof email === 'string') accountOf.set(email.trim().toLowerCase(), account);
+      }
       if (!recipients.size && !rule.send) continue;
       const line = (text: string) => {
         const said = text.replace(/\s+/g, ' ').trim();
@@ -528,7 +542,18 @@ export function captureNotices(adapter: object, sink: NoticeSink, context: Notic
         for (const arg of rule.say.args) values[arg.name] = await resolve(arg.path, row);
       }
       const titleFor = async (recipient: string | undefined) =>
-        rule.say ? line(await rule.say.words(values!, recipient, typeof owner === 'string' ? owner : undefined, sink)) : title;
+        rule.say
+          ? line(
+              await rule.say.words(
+                values!,
+                recipient === undefined
+                  ? undefined
+                  : { email: recipient, ...(accountOf.has(recipient) ? { account: accountOf.get(recipient)! } : {}) },
+                typeof owner === 'string' ? owner : undefined,
+                sink,
+              ),
+            )
+          : title;
       if (!rule.say && !title) continue;
       if (rule.send) {
         const said = await titleFor(undefined);

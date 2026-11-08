@@ -200,6 +200,45 @@ test("a refusal is said in the server's words", async () => {
   expect(toasts).toEqual(['The desk is closed.']);
 });
 
+/* A component that draws its own fields places the server's words beside one; only a field the command declares and
+   the values sent leave shown is named, so a refusal about a hidden or made-up input stays in the message. */
+test('a refusal about an input names that field, when the command declares it and it is shown', async () => {
+  const refuse = (field: string) => async () => {
+    throw Object.assign(new Error('That is not a date.'), { status: 422, code: 'invalid_input', outcome: 'not_applied', field });
+  };
+  answer = refuse('title');
+  expect(await handle('raise').run({}, { title: 'Late' })).toEqual({
+    status: 'refused',
+    message: 'That is not a date.',
+    fields: { title: 'That is not a date.' },
+  });
+  answer = refuse('on');
+  expect(await settles(handle('remind').run({}, { timing: 'later', on: '2026-12-01' }))).toMatchObject({
+    fields: { on: 'That is not a date.' },
+  });
+  expect(await settles(handle('remind').run({}, { timing: 'now' }))).toEqual({ status: 'refused', message: 'That is not a date.' });
+  answer = refuse('nowhere');
+  expect(await handle('raise').run({}, { title: 'Late' })).toEqual({ status: 'refused', message: 'That is not a date.' });
+});
+
+test("a record's command names the field a refusal is about, and not one its condition hides", async () => {
+  await onDesk();
+  const refuse = (field: string) => async () => {
+    if (calls.at(-1)!.path === '/api/commands/prepare') return { expectedVersion: 4 };
+    throw Object.assign(new Error('Say why it was lost.'), { status: 422, code: 'invalid_input', outcome: 'not_applied', field });
+  };
+  answer = refuse('reason');
+  expect(await settles(handle('closeDeal').run({ id: 7 }, { outcome: 'lost', reason: 'Price' }))).toEqual({
+    status: 'refused',
+    message: 'Say why it was lost.',
+    fields: { reason: 'Say why it was lost.' },
+  });
+  expect(await settles(handle('closeDeal').run({ id: 7 }, { outcome: 'won' }))).toEqual({
+    status: 'refused',
+    message: 'Say why it was lost.',
+  });
+});
+
 /* A field report: on a page whose draft logic had not loaded yet, a component's run validated with nothing hidden.
    These come first: the logic is fetched once per page, and a form drawn by an earlier test would have fetched it. */
 test("a record's command judges its conditions before it sends, so a hidden field's default stays home", async () => {

@@ -1626,6 +1626,7 @@ function resolveDashboard(
     ...(entry.heading ? { heading: entry.heading } : {}),
     ...(entry.headingHidden ? { headingHidden: true as const } : {}),
     ...(entry.head ? { head: entry.head } : {}),
+    ...(entry.layout ? { layout: entry.layout } : {}),
     ...(entry.description ? { description: entry.description } : {}),
     // The menu's mark, served like the label: the menus draw both.
     ...(entry.icon ? { icon: entry.icon } : {}),
@@ -1664,6 +1665,10 @@ function resolveDashboard(
               if (!table) problems.push(`The page reads "${name}", which this connection does not have or this reader cannot read.`);
               return table?.id ?? name;
             }),
+            // A record's tab is matched to the record page by its table's id, as the page's reads are.
+            ...(entry.page.record
+              ? { record: { ...entry.page.record, table: tableNamed(schema, entry.page.record.table)?.id ?? entry.page.record.table } }
+              : {}),
           },
         }
       : {}),

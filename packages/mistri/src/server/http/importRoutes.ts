@@ -84,7 +84,9 @@ export async function importRoutes(ctx: RequestContext): Promise<boolean> {
     const table = findTable(source.schema, request.table);
     if (!declared || !table) throw new ImportUnavailable(404, 'This list does not import files.');
     const who = signedInAs(identity);
-    const person = await lookupPerson(host.app.app, source.schema, who, source.adapter).catch(() => undefined);
+    const person = await lookupPerson(host.app.app, source.schema, who, source.adapter, undefined, who ? identity.id : undefined).catch(
+      () => undefined,
+    );
     const runtime = {
       app,
       schema: source.schema,

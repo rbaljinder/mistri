@@ -14,5 +14,5 @@ export const navigation = [
   'listings',
   navGroup('leasing', 'Leasing', ['units', 'leases', 'occupancy', 'residents', 'viewings'], { icon: 'key' }),
   navGroup('books', 'Books', ['ledger', 'payments', 'post-rent'], { icon: 'receipt' }),
-  navGroup('maintenance', 'Maintenance', ['my-repairs', 'repair-board', 'repairs', 'parts', 'deliveries'], { icon: 'wrench' }),
+  navGroup('maintenance', 'Maintenance', ['my-repairs', 'repair-board', 'repairs', 'parts', 'deliveries', 'shipments'], { icon: 'wrench' }),
 ] satisfies Navigation;

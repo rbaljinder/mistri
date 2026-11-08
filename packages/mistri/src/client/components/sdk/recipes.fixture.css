@@ -1,0 +1,6 @@
+@media print {
+  body * { visibility: hidden; }
+  .c-sheet, .c-sheet * { visibility: visible; }
+  .c-sheet { position: absolute; inset: 0; }
+  .c-sheet-actions { display: none; }
+}

@@ -209,10 +209,16 @@ const require = createRequire(join(ROOT, 'package.json'));
    isolated by a before/after run here). Types and symbols rise to about 1.5% above; instantiations hold.
    rc.16: Ignition measures 191,026 symbols, 26 past; the release renamed and regrouped the App vocabulary (`rollup.*`,
    the display and listTab words), names read once in the declarations, nothing per table (not isolated by a
-   before/after run here). Symbols rise to about 1.5% above; types and instantiations hold. */
+   before/after run here). Symbols rise to about 1.5% above; types and instantiations hold.
+   rc.23: Compass gains a free-form page (an account's pipeline tab), so it is typed as an App with a page is: the
+   DOM lib and React's declarations beside the App's own, and the budget's project installs `@types/react`, as an
+   App with a page does. Measured with and without the page: 30,258 / 120,306 / 93,576 without the DOM lib or the
+   page, 31,225 / 124,068 / 101,566 with both. The DOM lib is 25,500 of the symbols and React's declarations and the
+   page about 8,000; neither grows with the schema. Compass's symbols ceiling rises to about 3% above; its types and
+   instantiations hold, as do synthetic's and Ignition's. */
 export const BUDGET = {
   synthetic: { types: 184_400, instantiations: 991_600, symbols: 480_200 },
-  compass: { types: 32_500, instantiations: 149_000, symbols: 72_000 },
+  compass: { types: 32_500, instantiations: 149_000, symbols: 104_600 },
   ignition: { types: 65_900, instantiations: 242_300, symbols: 193_900 },
 };
 
@@ -313,6 +319,9 @@ async function project() {
   /* The packages an install brings, each with its built declarations: what a project types against. */
   installPackages(join(dir, 'node_modules'), { filter: (file) => !/\.(?:js|map|br|gz|css|html|json)$/.test(file) });
   symlinkSync(join(ROOT, 'node_modules', '@types', 'node'), join(dir, 'node_modules', '@types', 'node'), 'dir');
+  /* An App with a free-form page installs React, mistri's optional peer, and types its pages against it. */
+  symlinkSync(join(ROOT, 'node_modules', '@types', 'react'), join(dir, 'node_modules', '@types', 'react'), 'dir');
+  symlinkSync(join(ROOT, 'node_modules', 'csstype'), join(dir, 'node_modules', 'csstype'), 'dir');
   const typegen = await import(pathToFileURL(join(ROOT, 'packages', 'mistri', 'dist', 'server', 'typegen.js')).href);
   const { writeSyntheticApp } = await import(pathToFileURL(join(ROOT, 'scripts', 'synthetic-app.mjs')).href);
   writeSyntheticApp(join(dir, 'synthetic'), typegen);

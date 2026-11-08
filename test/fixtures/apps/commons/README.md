@@ -103,7 +103,17 @@ npx tsx packages/mistri/src/server/index.ts --config "$commons_demo/pg.json" --a
    thread's status wears its mark (`icons`).
 9. [pages/](pages/): a thread (photos, the conversation, each post, its
    standing and `history()`), a post (its words, photos, reactions, earlier
-   versions, and Report), a member's profile, a board, a report.
+   versions, and Report), a member's profile, a board, a report; and
+   `start-here.page.tsx`, **Start here** (`/start-here`), a bare front door
+   from page blocks alone: what Commons is, the threads busy right now and the
+   ones with the most to read, every board, and its own bar with Join or sign
+   in (a member is offered the boards instead). It is public, as the forum is,
+   and reads only what `auth.public` already opens. `report-queue.page.tsx`,
+   the **Report desk** (`/report-queue`, under Moderation), is a `<Split>`:
+   the open reports oldest first beside the picked report's reason, status and
+   details, the pick kept in the address (`?report=12`) so Back and a shared
+   link keep it. It is the moderators' alone; deciding a report stays in the
+   Moderation queue.
 10. [components.ts](components.ts) and [widgets/](widgets/): Commons' own
    [custom components](../../../../site/src/content/docs/docs/custom-components.md).
    The **post stream** draws a thread's posts (`customList()` on the

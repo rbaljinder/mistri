@@ -76,28 +76,24 @@ export const UI_EXPORTS = [
   'useVisitor',
   'useAnalytics',
   'useMessage',
+  'useDeployment',
+  'useField',
+  'parseMoney',
+  'useOptions',
 ] as const;
 
 /**
- * Every value `@mistriwork/mistri/page` exports: `definePage`, and the blocks a
- * free-form page draws with — the kit's layout and parts, and the
- * platform's own command form (components/sdk/page.tsx).
+ * What `@mistriwork/mistri/page` adds to the SDK: `definePage`, the platform's command form and per-row buttons,
+ * `Scope` and `List`, the platform's sections as blocks (components/sdk/page.tsx) and the house controls.
  */
-export const PAGE_EXPORTS = [
+const PAGE_ONLY = [
   'definePage',
   'useAddressState',
   'CommandForm',
-  'Stack',
-  'Row',
-  'Cluster',
-  'Columns',
-  'Card',
-  'Heading',
-  'Button',
-  'Empty',
-  'Loaded',
-  'Stat',
-  'Value',
+  'CommandButton',
+  'ActionButton',
+  'Scope',
+  'List',
   'Grid',
   'Panel',
   'Tabs',
@@ -109,8 +105,37 @@ export const PAGE_EXPORTS = [
   'Timeline',
   'Tree',
   'Gantt',
+  'Board',
+  'Calendar',
+  'Gallery',
+  'Split',
   'Assistant',
+  'Choose',
+  'Search',
+  'DateRange',
+  'Steps',
+  'Avatar',
+  'CheckCards',
+  'Checkbox',
+  'ChoiceCards',
+  'DateField',
+  'Drawer',
+  'Modal',
+  'Pagination',
+  'Popover',
+  'Select',
+  'Slider',
+  'Switch',
+  'TextField',
+  'Tooltip',
+  'YesNo',
 ] as const;
+
+/**
+ * Every value `@mistriwork/mistri/page` exports: the one import a page needs. `@mistriwork/mistri/ui` is a part of
+ * it, so a component written for a record page moves to a free-form page without changing an import.
+ */
+export const PAGE_EXPORTS = [...UI_EXPORTS, ...PAGE_ONLY] as const;
 
 /** Where an App's compiled components are served: `/{app}/_components/<file>`. */
 export const COMPONENTS_SEGMENT = '_components';

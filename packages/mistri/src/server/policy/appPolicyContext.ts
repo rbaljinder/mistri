@@ -29,6 +29,7 @@ import { compileAppStamps, sessionActorWords, stampUpdate } from '../app/appStam
 import { lookupPerson, personKey } from '../app/appMe.js';
 import { compileAppTransitions } from '../app/appTransitions.js';
 import { whenPerson } from '../commands/commandWhen.js';
+import { checkCommandStep, checkedNames } from '../commands/commandCheck.js';
 import { runDraftRoute } from '../forms/draftHttp.js';
 import { forbiddenBy } from '../commands/commandErrors.js';
 import { clockNow } from '@mistriwork/engine/server/http/clock.js';
@@ -106,6 +107,8 @@ export interface AppPolicyContext {
     status(raw: unknown, options?: PolicyCommandOptions): Promise<BusinessCommandStatus>;
     /** A signed-in form saved on every step (forms/draftHttp.ts): in this principal's rows, as every command here is. */
     draft?(raw: unknown, options?: PolicyCommandOptions): Promise<unknown>;
+    /** A step of a form checked before it goes on (commandCheck.ts): no row is read, so no scope is needed for it. */
+    check?(raw: unknown): Promise<{ problems: Record<string, string> }>;
   };
   transaction<T>(source: string, run: (tx: WriteTransaction) => Promise<T>): Promise<T>;
   /** One source's connection read alone, under this principal's rows there: a
@@ -456,13 +459,13 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
               /* A granted action reaches the facade as its words alone (appPolicyUpdates updateOne), so the facade
                  resolves the move's own stamps (`since`, a state's `ready_at`) after it has judged the action on them. */
               ...(transitionRules ? { transitions: transitionRules } : {}),
-              me: (reader) => lookupPerson(app, schema, principal.email, reader),
+              me: (reader) => lookupPerson(app, schema, principal.email, reader, undefined, principal.email ? principal.id : undefined),
               stamp: async (request, reader) =>
                 actions.has(request.table) && request.restore !== true
                   ? stampUpdate(stamps, request, {
                       now: clockNow(),
                       ...(principal.email ? { who: principal.email } : {}),
-                      person: () => personKey(app, schema, principal.email, reader),
+                      person: () => personKey(app, schema, principal.email, reader, principal.email ? principal.id : undefined),
                     })
                   : request,
             }
@@ -798,6 +801,27 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                     ...execution,
                     flags: await authorizedCommandFlags(commandBinding, principal, body, flags),
                   });
+                }),
+              // The ordinary host's check, asked of this principal: it reads the answers alone, never a row, so a
+              // row policy has nothing to scope and a refused step need not wait for the whole form to be sent.
+              check: (raw) =>
+                track(async () => {
+                  const request = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+                  try {
+                    if (typeof request.command !== 'string') throw new CommandInputError('command');
+                    const authorized = commandBinding.authorize(request.command, principal);
+                    if (!commandReferences!.has(request.command)) throw new AppAccessDenied();
+                    if (request.commandVersion !== authorized.command.version)
+                      throw new BusinessCommandExecutionError('command_version_mismatch', 'unknown');
+                    const asked = checkedNames(authorized.command, request.fields);
+                    if (!asked) throw new CommandInputError('fields');
+                    return { problems: checkCommandStep(authorized.command, request.input, asked) };
+                  } catch (error) {
+                    if (error instanceof CommandInputError)
+                      throw new BusinessCommandExecutionError('invalid_input', 'unknown', error.field);
+                    if (error instanceof AppAccessDenied) throw forbiddenBy(error);
+                    throw error;
+                  }
                 }),
               draft: (raw, options) =>
                 track(async () => {

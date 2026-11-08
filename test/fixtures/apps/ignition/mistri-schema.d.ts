@@ -53,6 +53,30 @@ export type Rows = {
   vehicle_model: { id: string; make: string; model: string; model_year: number };
 };
 
+/** Each table's primary-key columns: what names one of its records. A table without one is absent. */
+export type Keys = {
+  "applicants.applicant": "id";
+  "applicants.contact": "id";
+  "applicants.employment": "id";
+  "applicants.residence": "id";
+  application_document: "id";
+  application_review: "id";
+  assignment_history: "id";
+  dealer: "id";
+  intake_co_applicant: "id";
+  intake_submission: "id";
+  lead: "id";
+  lead_co_applicant: "id";
+  lender_staff: "id";
+  loan_application: "id";
+  loan_decision: "id";
+  review_alert: "id";
+  review_desk: "id";
+  review_file: "id";
+  vehicle: "id";
+  vehicle_model: "id";
+};
+
 /** Each table's references, by the name a label path follows (`owner_id`
     in `owner_id.name`), and the table each lands on: what lets every hop of
     a path be checked. A table that references nothing is absent. */
@@ -125,5 +149,5 @@ export type Flags<Manifest> = AppFlagValues<Manifest>;
 export type FlagName<Manifest> = keyof Flags<Manifest>;
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { schema(): { columns: Columns; references: References } }
+  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys } }
 }

@@ -317,17 +317,22 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
   const deliveries: Array<{ job: string; store: EventDeliveryStore; producer: EventProducer; kind: 'job' | 'workflow'; name: string }> = [];
   let opened: JobStore | undefined;
   let workflows: WorkflowStore | undefined;
+  /* What was being opened when it failed: "could not be opened" named no store, and the one a new event job adds is the
+     delivery destination, which is not the one an older App already had. */
+  let opening = 'the job store';
   try {
     const store = pg
       ? await openPostgresJobStore(pg, deployment.store, { clock })
       : openSqliteJobStore((target as { sqlite: string }).sqlite, deployment.store);
     opened = store;
     if (module.workflows.size) {
+      opening = 'the workflow store';
       // One App's instances on a shared database: the workflow store shares the job store's namespace.
       workflows = pg
         ? await openPostgresWorkflowStore(pg, deployment.store.namespace)
         : openSqliteWorkflowStore((target as { sqlite: string }).sqlite);
       for (const { workflow, policy } of deployment.workflowDestinations) {
+        opening = `the event delivery destination of workflow "${workflow}"`;
         const delivery = pg
           ? await openPostgresEventDeliveryStore(pg, policy, { clock })
           : openSqliteEventDeliveryStore((target as { sqlite: string }).sqlite, policy);
@@ -357,6 +362,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
       }
     }
     for (const { job, policy } of deployment.destinations) {
+      opening = `the event delivery destination of job "${job}"`;
       const delivery = pg
         ? await openPostgresEventDeliveryStore(pg, policy, { clock })
         : openSqliteEventDeliveryStore((target as { sqlite: string }).sqlite, policy);
@@ -396,8 +402,8 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
       );
     }
     throw new JobDeclarationError(
-      `Jobs: the job store or event delivery on source "${deployment.sourceId}" could not be opened and attested. ` +
-        `Provision them once, with the server stopped, through ${options.provisioning ?? "`mistri migrate stores up --app <the App's directory> --jobs <file>`, or provisionStores with the App and its jobs from @mistriwork/mistri/maintenance"}.`,
+      `Jobs: ${opening} on source "${deployment.sourceId}" could not be opened and attested; it is not provisioned here, or is not this version's layout. ` +
+        `Provision it once, with the server stopped, through ${options.provisioning ?? "`mistri migrate up --app <the App's directory> --jobs <file>` (`mistri migrate status` lists what is missing), or provisionStores with the App and its jobs from @mistriwork/mistri/maintenance"}.`,
     );
   }
   const jobs = opened;

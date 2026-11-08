@@ -49,7 +49,8 @@ export interface BusinessCommandAuthorizationOptions {
   /** Private, already-attested logical ownership, never an App field grant. */
   managedOwnership?: Readonly<Record<string, string>>;
   /** The people table's `auth.me` column holds the actor's account id, not an email: a tenant App's, whose
-      people are the tenant's own rows (appMe.ts lookupTenantPerson). The tenant host says so, never the App. */
+      people are the tenant's own rows (appMe.ts lookupTenantPerson). The tenant host says so, never the App; an
+      App that binds `auth.me.by: 'account'` says so itself. */
   peopleByAccount?: boolean;
 }
 
@@ -790,7 +791,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           versionField,
           ...(appZone(app.ui) ? { timezone: appZone(app.ui) } : {}),
           currency: app.ui?.currency ?? 'USD',
-          ...peopleIn(app, schema, catalog, options.peopleByAccount === true),
+          ...peopleIn(app, schema, catalog, options.peopleByAccount === true || app.auth?.me?.by === 'account'),
           ...(files.size ? { files } : {}),
         },
       ] as const;

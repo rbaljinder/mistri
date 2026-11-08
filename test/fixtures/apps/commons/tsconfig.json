@@ -1,6 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2023",
+    "lib": ["ES2023", "DOM"],
+    "jsx": "react-jsx",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "strict": true,
@@ -19,5 +21,5 @@
       "@mistriwork/mistri/policy": ["../../../../packages/mistri/src/server/policy.ts"]
     }
   },
-  "include": ["**/*.ts"]
+  "include": ["**/*.ts", "pages/*.page.tsx", "widgets/*.tsx"]
 }

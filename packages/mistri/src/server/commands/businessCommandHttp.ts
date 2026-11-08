@@ -228,8 +228,11 @@ export async function dispatchScopedBusinessCommandHttp(options: {
       signal: controller.signal,
       ...(typeof res.getHeader('x-request-id') === 'string' ? { requestId: String(res.getHeader('x-request-id')) } : {}),
     };
-    // A step's check is the ordinary host's; a scoped deployment's forms are judged when they are sent.
-    if (path === '/api/commands/check') throw new BusinessCommandExecutionError('forbidden', 'not_applied');
+    if (path === '/api/commands/check') {
+      // A context that has no check (a server's own) refuses it, and the form is judged when it is sent.
+      if (!commands.check) throw new BusinessCommandExecutionError('forbidden', 'not_applied');
+      return await commands.check(body);
+    }
     if (path === COMMAND_ROUTES.draft) {
       if (!commands.draft) throw new BusinessCommandExecutionError('forbidden', 'unknown');
       return await commands.draft(body, { ...execution, door: browserDoor(req) });

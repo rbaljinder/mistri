@@ -596,6 +596,14 @@ export interface DeleteRequest {
   table: string;
   /** The whole primary key, and nothing else. */
   key: Record<string, string | number>;
+  /**
+   * Delete only while nothing refers to the row. On a principal's scoped transaction with no bound, a table that is
+   * not wholly visible is then no refusal in itself: the references are counted on the writer over every row, and a
+   * row anything still refers to is refused, never cascaded. Opt-in per delete (a draft's Start over), because the
+   * refusal says whether a row the principal cannot see refers to it; every other scoped delete refuses such a table
+   * outright, whatever it holds.
+   */
+  unreferenced?: true;
 }
 
 export interface DeleteResult {

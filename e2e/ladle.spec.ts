@@ -134,7 +134,9 @@ test('the school’s site, its own schedule route, and the staff App embedded un
   // The free-form page: tonight's class, a guest checked in, the blocks beside the page's own list.
   await embed.getByRole('navigation', { name: 'App menu' }).getByRole('button', { name: 'Check-in' }).click();
   await expect.poll(() => new URL(page.url()).pathname).toBe('/staff/check-in');
-  await embed.getByRole('button', { name: /^Fresh pasta by hand/ }).click();
+  // Four classes with their dates are too many words for a row of segments: the class is chosen from the listbox.
+  await embed.getByRole('button', { name: /^Class\b/ }).click();
+  await embed.getByRole('option', { name: /Fresh pasta by hand/ }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get('class')).toBe('2');
   await expect(embed.getByRole('button', { name: /^8 Still expected/ })).toBeVisible();
   await embed.getByRole('button', { name: 'Check in Morgan Lee' }).click();

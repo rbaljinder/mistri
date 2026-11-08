@@ -493,6 +493,11 @@ export function labelColumn(table: TableMeta): string | undefined {
 }
 
 /** Primary key columns, in declaration order. */
+/** The engine `table` is read on: its own source's where an App's catalog merges several (`sourceDialect`), the catalog's otherwise. */
+export function tableDialect(schema: Pick<DatabaseSchema, 'dialect'>, table: Pick<TableMeta, 'sourceDialect'> | undefined): Dialect {
+  return table?.sourceDialect ?? schema.dialect;
+}
+
 export function primaryKey(table: TableMeta): string[] {
   return table.columns.filter((c) => c.primaryKey).map((c) => c.name);
 }

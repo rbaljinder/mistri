@@ -11,7 +11,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, currentEntry, renderCrumbs, state } from '@mistriwork/kit/client/core.js';
 import { activeApp } from '../appState.js';
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
-import { COMMAND_ROUTES } from '../../shared/commandRoutes.js';
 import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import type { CommandInputValue } from '../commandState.js';
 import { formAt, type ServedForm as RoomForm } from '@mistriwork/kit/client/components/appRooms.js';
@@ -22,6 +21,7 @@ type ServedForm = RoomForm<AppPayloadApp>;
 import { FormSurface, type FormPresentation, type FormReceipt } from './FormSurface.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { draftTransport } from './draftFormApi.js';
+import { checkCommandStep } from './commandStepCheck.js';
 import type { SavedFormPresentation } from './SavedFormSurface.js';
 import type { CommandQuestions } from './CommandFields.js';
 import type { PageEntry } from '@mistriwork/kit/client/components/pageModel.js';
@@ -120,9 +120,15 @@ export function FormBody({
   initial,
   onDismiss,
   onOutcome,
+  onReceipt,
+  at,
 }: {
   form: ServedForm;
   appName: string;
+  /** A saved form's step to open at, as a page asked (`useForm(...).goTo`). */
+  at?: string;
+  /** A saved form's receipt as it landed: its reference and status, which a page's `useForm` resolves with. */
+  onReceipt?: (receipt: FormReceipt) => void;
   /** Where it starts, as a query string, when it is not drawn at its own address. */
   prefill?: string;
   /** Where it starts, as a component gave it: every input, over what the command prepared. */
@@ -168,10 +174,11 @@ export function FormBody({
         // What the form created shows in every list that reads it.
         void client.invalidateQueries();
         onOutcome?.({ status: 'applied' });
+        onReceipt?.(receipt);
         return receipt;
       },
     };
-    // `onOutcome` is the opener's callback and is read when the submit lands, not a reason to read the draft again.
+    // `onOutcome` and `onReceipt` are the opener's callbacks and is read when the submit lands, not a reason to read the draft again.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, connection, client]);
   if (form.error) return <p className="note">{form.error}</p>;
@@ -182,6 +189,7 @@ export function FormBody({
         form={savedPresentation(form)}
         appName={appName}
         draft={draft}
+        {...(at === undefined ? {} : { at })}
         {...(onDismiss ? { onDismiss } : {})}
       />
     );
@@ -202,7 +210,7 @@ export function FormBody({
       {...(prepared.data?.questions ? { questions: prepared.data.questions } : {})}
       {...(prefill === undefined ? {} : { prefill })}
       {...(onDismiss ? { onDismiss } : {})}
-      checkStep={(_step, input, names) => checkSignedInStep(connection, form, names, input)}
+      checkStep={(_step, input, names) => checkCommandStep(connection, form.command, names, input)}
       submit={async (submission, input) => {
         /* Said once per send. An answer that never said whether it ran is `unknown`, and its `check` sends the same
            submission again: the server answers a run it already has with its receipt, so it never runs twice. */
@@ -229,30 +237,4 @@ export function FormBody({
       }}
     />
   );
-}
-
-/**
- * A signed-in form's step checked by the server (`/api/commands/check`): the same reader, `when`s and rules the run
- * uses, over the fields asked so far, nothing run. A check that cannot be asked — a host with none (a tenant's, a
- * row policy's), the budget spent, offline — is no word: the step goes on and the submission is judged whole.
- */
-async function checkSignedInStep(
-  connection: string | null,
-  form: ServedForm,
-  names: readonly string[],
-  input: unknown,
-): Promise<Record<string, string> | undefined> {
-  try {
-    const result = (await api(COMMAND_ROUTES.check, {
-      ...ownedBy(connection),
-      command: form.command.id,
-      commandVersion: form.command.version,
-      fields: [...names],
-      input,
-    })) as { problems?: unknown } | undefined;
-    const problems = result?.problems && typeof result.problems === 'object' ? (result.problems as Record<string, unknown>) : {};
-    return Object.fromEntries(Object.entries(problems).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
-  } catch {
-    return undefined;
-  }
 }

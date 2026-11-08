@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { savedFormProblem } from '../packages/mistri/src/server/forms/savedFormChecks.js';
-import { draftApp, draftPolicyServer, DRAFT_FORM } from './support/signedInDrafts.js';
+import { draftApp, draftPolicyServer, DRAFT_FORM, DRAFT_POLICY } from './support/signedInDrafts.js';
 
 test(
   'a signed-in saved form works under a row policy: each step in the member’s rows, the submit finishing the draft',
@@ -63,3 +63,38 @@ test('a public saved form in a row-policy App is still refused, and the refusal 
   assert.match(refused ?? '', /leave out public and name owner/);
   assert.equal(owner, 'person_id');
 });
+
+/* Start over deletes the root under the person's own rows. A table that references it and is not wholly theirs used to
+   refuse the delete outright (a generic 503). Now the references are counted on the writer across every row: none, and
+   the delete runs; any left, even one the person cannot see, and the draft stays with a reason. Nothing cascades. */
+test(
+  'Start over works where a referencing table is only partly the member’s, and refuses while a row they cannot see still refers to the draft',
+  { timeout: 60_000 },
+  async (t) => {
+    const narrowContacts = DRAFT_POLICY.replace(
+      'contact: true,',
+      "contact: { groups: [[{ column: 'label', op: '=', value: 'ann@work.test' }]] },",
+    );
+    const f = await draftPolicyServer(t, { policy: narrowContacts });
+    const ann = await f.signUp('ann');
+    for (const step of ['you', 'plan', 'contact']) assert.equal((await f.step(ann, step)).status, 200);
+    const id = f.onboardings()[0].id as number;
+    // A contact someone else wrote, which Ann's rows do not include: the delete is refused and nothing is removed.
+    f.addContact(id, 'someone-else');
+    const refused = await f.op(ann, 'discard');
+    assert.equal(refused.status, 409, JSON.stringify(refused.body));
+    assert.equal(refused.body.code, 'ineligible_state');
+    assert.match(refused.body.message, /Other records still refer to this draft/);
+    assert.equal(f.onboardings().length, 1);
+    assert.deepEqual(
+      f.contacts().map((row) => row.label),
+      ['ann@work.test', 'someone-else'],
+      'the refusal rolls the whole delete back, her own contact included',
+    );
+    // Once nothing refers to the draft, Start over removes it and the rows she could see.
+    f.removeContacts('someone-else');
+    assert.deepEqual((await f.op(ann, 'discard')).body, { discarded: true });
+    assert.equal(f.onboardings().length, 0);
+    assert.equal(f.contacts().length, 0);
+  },
+);

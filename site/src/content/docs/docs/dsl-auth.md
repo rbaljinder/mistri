@@ -59,8 +59,9 @@ tenant App refuses one at startup ([Tenant Apps](/docs/tenant-apps/)).
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `auth.me` | object | Stable | Who me is as a row: the table people are rows of and its column holding their sign-in email, so owner_id = me compares a reference to that table with the signed-in person's row. Without it, me is the account's email and compares with text columns only. In a tenant App column holds the account's id, and me is the row of the tenant the request is in; a tenant with no row for them matches nothing. Used in `examples/apps/lintel/app.ts`. |
+| `auth.me.by` |  | Stable | Column holds the account's id instead of its sign-in email: an email change keeps the person, and an email another account later takes does not reach their row. A tenant App's column always holds the account's id. One of `account`. Used in `examples/apps/lintel/pages/resident.ts`. |
 | `auth.me.column` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `auth.me.create` | object | Stable | Make each new account's row the first time it is signed in to the App: its email in column (which must be unique) and, where name names a column, its name there. Every other column the row needs must have a default. Not in a tenant App yet. Used in `examples/apps/lintel/app.ts`. |
+| `auth.me.create` | object | Stable | Make each new account's row the first time it is signed in to the App: its email in column (or its id, with by: 'account'), which must be unique, and, where name names a column, its name there. Every other column the row needs must have a default. Not in a tenant App yet. Used in `examples/apps/lintel/app.ts`. |
 | `auth.me.create.name` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `auth.me.from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 

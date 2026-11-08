@@ -612,3 +612,35 @@ test("a declared date is the App's word, not the database's: the scoped catalog 
     `"job.created_at" has type "TEXT" in the App's catalog and "INTEGER" in the database's`,
   );
 });
+
+test("an API's list evidence is carried, never fingerprinted, and holds only the table's own columns", () => {
+  const described = (extra: Record<string, unknown>): DatabaseSchema => ({
+    // An HTTP resource reaches a policy App inside a combined catalog, marked by its source (appSourceCatalog.ts).
+    dialect: 'postgres',
+    label: '',
+    readAt: '',
+    foreignKeys: [],
+    tables: [
+      {
+        id: 'shipment',
+        name: 'shipment',
+        schema: 'carrier',
+        isView: false,
+        sourceDialect: 'http',
+        columns: [column('id', { primaryKey: true, type: 'TEXT' }), column('status', { type: 'TEXT' })],
+        ...extra,
+      },
+    ],
+  });
+  const plain = described({});
+  const evidenced = described({ filterable: ['status'], sortable: ['id', 'status'], countable: false });
+  const captured = captureScopeCatalog(evidenced);
+  assert.deepEqual(captured.tables[0].filterable, ['status']);
+  assert.equal(captured.tables[0].countable, false);
+  assert.doesNotThrow(() => assertScopeCatalog(evidenced, plain));
+  assert.equal(scopeCatalogDifference(evidenced, plain), undefined);
+  rejects(described({ filterable: ['missing'] }));
+  rejects(described({ sortable: 'status' }));
+  rejects(described({ filterable: [1] }));
+  rejects(described({ countable: true }));
+});

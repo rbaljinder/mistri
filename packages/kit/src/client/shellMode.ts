@@ -196,6 +196,8 @@ interface AppRoomSlots {
   SplitRecord: ComponentType<{ entry: RowEntry & { view?: string }; spec: ListSpec }> | null;
   /** A record put on paper (Document.tsx), where its address names one of its documents. */
   Document: ComponentType<{ entry: PageEntry | RowEntry; document: NonNullable<ReturnType<typeof documentAt>> }> | null;
+  /** A free-form page that is a tab of a record (RecordTabPage.tsx), drawn in the record page's tab strip. */
+  RecordTab: ComponentType<{ dashboard: DashboardDef; recordKey: Record<string, unknown> }> | null;
 }
 
 /** An App's components, fetched for the kit's slots; the Workbench draws none. */
@@ -447,6 +449,7 @@ const WORKBENCH: ShellMode = Object.freeze({
     Page: null,
     SplitRecord: null,
     Document: null,
+    RecordTab: null,
   }),
 });
 

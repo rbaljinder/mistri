@@ -26,7 +26,7 @@ export type Commands = {
 export type Loaders = typeof import("./commands.ts").loaders;
 
 /** Each free-form page by its path (pages/<path>.page.tsx): what the App's `home` may name beside its views. */
-export type PagePaths = "pick-walk";
+export type PagePaths = "pick-board" | "pick-walk";
 
 /** The App's fixed actions by id (a resource's machine verbs and `action(label, { set })`): what a page's `actions` may name. */
 export type ActionNames = "discontinue" | "reactivate";

@@ -75,6 +75,7 @@ export async function appFileRoute(ctx: RequestContext, source: ResolvedSource):
           table: table.id,
           key: key as Record<string, string | number>,
           who: signedInAs(ctx.identity),
+          ...(signedInAs(ctx.identity) && ctx.identity.id ? { account: ctx.identity.id } : {}),
         }))
       ) {
         send(res, 404, { error: 'No file here.' });

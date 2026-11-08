@@ -91,19 +91,29 @@ const DRAFT_FILE_SQL = `CREATE TABLE document(id INTEGER PRIMARY KEY, onboarding
   file_name TEXT NOT NULL, data BLOB);`;
 
 /** The server, and a person's calls on the form. */
-export async function draftPolicyServer(t: TestContext, options: { files?: boolean } = {}) {
+export async function draftPolicyServer(t: TestContext, options: { files?: boolean; policy?: string } = {}) {
   const base = draftApp() as { resources: Record<string, unknown> };
   const app = options.files
     ? { ...base, resources: { ...base.resources, document: { file: { content: 'data', name: 'file_name' } } } }
     : base;
   const sql = options.files ? `${DRAFT_POLICY_SQL}\n  ${DRAFT_FILE_SQL}` : DRAFT_POLICY_SQL;
-  const policy = options.files
-    ? DRAFT_POLICY.replaceAll('contact: false', 'contact: false, document: false').replace(
-        'contact: true,',
-        'contact: true, document: true,',
+  const policy = options.policy
+    ? options.policy
+    : options.files
+      ? DRAFT_POLICY.replaceAll('contact: false', 'contact: false, document: false').replace(
+          'contact: true,',
+          'contact: true, document: true,',
+        )
+      : DRAFT_POLICY;
+  /* A file table beneath the root is in the footprint of the commands that keep a draft (check refuses a table that
+     references the root and sits beyond the first step's read: draft-referenced). */
+  const commands = options.files
+    ? DRAFT_COMMANDS.replace(
+        "read: ['onboarding', 'contact', 'person'], write: ['onboarding', 'contact']",
+        "read: ['onboarding', 'contact', 'person', 'document'], write: ['onboarding', 'contact']",
       )
-    : DRAFT_POLICY;
-  const server = await policyServer(t, { app, sql, commands: DRAFT_COMMANDS, policy });
+    : DRAFT_COMMANDS;
+  const server = await policyServer(t, { app, sql, commands, policy });
   let n = 0;
   const key = (tag: string) => `${tag}-${String(++n).padStart(6, '0')}-draft-key`;
   const commandOf: Record<string, string> = { you: 'startOnboarding', plan: 'savePlan', contact: 'saveContact' };
@@ -171,6 +181,23 @@ export async function draftPolicyServer(t: TestContext, options: { files?: boole
     },
     onboardings: () => rows<Record<string, unknown>>('SELECT * FROM onboarding ORDER BY id'),
     contacts: () => rows<Record<string, unknown>>('SELECT * FROM contact ORDER BY id'),
+    /** A contact row beneath a draft's root that nobody's step wrote, as another desk's work would leave it. */
+    addContact: (onboarding: number, label: string) => {
+      const db = database();
+      try {
+        db.prepare('INSERT INTO contact(onboarding_id, label) VALUES (?, ?)').run(onboarding, label);
+      } finally {
+        db.close();
+      }
+    },
+    removeContacts: (label: string) => {
+      const db = database();
+      try {
+        db.prepare('DELETE FROM contact WHERE label = ?').run(label);
+      } finally {
+        db.close();
+      }
+    },
     /** A file beneath a draft's root, written as a step's upload would leave it (`files` only). */
     attach: (onboarding: number, name: string) => {
       const db = database();

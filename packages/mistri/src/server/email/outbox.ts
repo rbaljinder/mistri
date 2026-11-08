@@ -193,7 +193,10 @@ export function createEmailOutbox(options: OutboxOptions) {
           } catch {
             segments = undefined;
           }
-          const locale = await recipientLocale(app, reader.schema, (request) => reader.adapter.query(request), mail.recipient);
+          const locale = await recipientLocale(app, reader.schema, (request) => reader.adapter.query(request), {
+            email: mail.recipient,
+            account: person.id,
+          });
           return { title: told.title, segments, locale };
         };
         let told: Awaited<ReturnType<typeof tell>>;

@@ -151,39 +151,14 @@ export async function pendingCopy(
       throw error;
     }
 
-    /* The check reads the copy where it would read the database: the
-       command line's target replaced, or the config's connection pointed at
-       the copy in a config written beside the original, so every path in it
-       still means what it did. */
-    let args: string[];
-    let written: string | undefined;
-    if (argument) {
-      args = rest.filter(
-        (arg, i) => arg !== opts.target && !(['--db', '-d'].includes(arg) && rest[i + 1] === opts.target) && arg !== `--db=${opts.target}`,
-      );
-      args.push('--db', `\${${PENDING_URL}}`);
-    } else {
-      const path = config.configPath!;
-      const raw = JSON.parse(await readFile(path, 'utf8')) as { connections: Array<Record<string, unknown>> };
-      raw.connections = raw.connections.map((entry) =>
-        entry.name === target.connection.name ? { ...entry, url: `\${${PENDING_URL}}` } : entry,
-      );
-      written = join(dirname(path), `.mistri-pending-${randomBytes(4).toString('hex')}.json`);
-      await writeFile(written, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
-      args = rest.filter(
-        (arg, i) => arg !== '--config' && rest[i - 1] !== '--config' && !arg.startsWith('--config=') && arg !== '--no-config',
-      );
-      args.push('--config', written);
-    }
-    process.env[PENDING_URL] = scratchUrl;
+    const pointed = await pointAt(rest, opts, config, argument, target.connection.name, scratchUrl);
     return {
-      args,
+      args: pointed.args,
       status: 'passed',
       detail: `${pending.length} pending migration${pending.length === 1 ? '' : 's'} applied to ${how}; the steps below read it`,
       lines: pending.map((file) => file.script),
       async cleanup() {
-        delete process.env[PENDING_URL];
-        if (written) await rm(written, { force: true });
+        await pointed.restore();
         await drop();
       },
     };
@@ -191,6 +166,48 @@ export async function pendingCopy(
     console.log = log;
     await registry.closeAll();
   }
+}
+
+/**
+ * The check's arguments with a scratch database in the place of the one it would read: the command line's target
+ * replaced, or the config's connection pointed at the scratch in a config written beside the original, so every
+ * path in it still means what it did. The URL travels in the environment (a password never reaches a command line
+ * or a file). `--schema-file` reads its scratch the same way.
+ */
+export async function pointAt(
+  rest: string[],
+  opts: ReturnType<typeof parseArgs>,
+  config: Awaited<ReturnType<typeof readStartupConfig>>,
+  argument: string | undefined,
+  connectionName: string | undefined,
+  scratchUrl: string,
+): Promise<{ args: string[]; restore(): Promise<void> }> {
+  let args: string[];
+  let written: string | undefined;
+  if (argument || !config.configPath) {
+    args = rest.filter(
+      (arg, i) => arg !== opts.target && !(['--db', '-d'].includes(arg) && rest[i + 1] === opts.target) && arg !== `--db=${opts.target}`,
+    );
+    args.push('--db', `\${${PENDING_URL}}`);
+  } else {
+    const path = config.configPath;
+    const raw = JSON.parse(await readFile(path, 'utf8')) as { connections: Array<Record<string, unknown>> };
+    raw.connections = raw.connections.map((entry) => (entry.name === connectionName ? { ...entry, url: `\${${PENDING_URL}}` } : entry));
+    written = join(dirname(path), `.mistri-pending-${randomBytes(4).toString('hex')}.json`);
+    await writeFile(written, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+    args = rest.filter(
+      (arg, i) => arg !== '--config' && rest[i - 1] !== '--config' && !arg.startsWith('--config=') && arg !== '--no-config',
+    );
+    args.push('--config', written);
+  }
+  process.env[PENDING_URL] = scratchUrl;
+  return {
+    args,
+    async restore() {
+      delete process.env[PENDING_URL];
+      if (written) await rm(written, { force: true });
+    },
+  };
 }
 
 /** Whether two database URLs reach the same database: the same file, or the same host, port and name. */

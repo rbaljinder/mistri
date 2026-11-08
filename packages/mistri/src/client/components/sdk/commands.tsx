@@ -34,6 +34,7 @@ import { confirmFor } from '@mistriwork/kit/client/prompt.js';
 import { expectedValues, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { commandOperations, type CommandOperation, type CommandOwner } from '../../commandState.js';
 import { sendCommand } from '../../commandSend.js';
+import { checkCommandStep } from '../commandStepCheck.js';
 import { commandAvailable, useCommandAvailability } from '../../commandAvailability.js';
 import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { pageBridge, registerCommandHost } from '@mistriwork/kit/client/uiBridge.js';
@@ -43,9 +44,20 @@ import type { AppPayloadApp } from '../../../shared/appPayload.js';
 /** A signed-in form as the App serves it: the whole form, which the kit's room type reads only part of. */
 type ServedForm = RoomForm<AppPayloadApp>;
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
-import { commandInput, prefilledCommandValues, readyToJudge } from '../CommandFields.js';
+import { commandInput, prefilledCommandValues, readyToJudge, refusedFields, type CommandValues } from '../CommandFields.js';
 import { mount, queryClient } from '@mistriwork/kit/client/components/mount.js';
-import type { UiChoice, UiCommandHandle, UiCommandOptions, UiCommandOutcome, UiCommandRef } from './context.js';
+import type {
+  UiChoice,
+  UiCommandHandle,
+  UiCommandOptions,
+  UiCommandOutcome,
+  UiCommandRef,
+  UiFormHandle,
+  UiFormOutcome,
+  UiFormState,
+} from './context.js';
+import type { FormReceipt } from '../FormSurface.js';
+import type { FormOutcome } from '../FormRoom.js';
 import { say } from '../../copy/components/components/sdk/commands.js';
 import { portalRoot } from '@mistriwork/kit/client/shellHost.js';
 
@@ -68,6 +80,12 @@ export function actionOf(id: UiCommandRef): AppCommandAction | undefined {
     }
   }
   return undefined;
+}
+
+/** The resource whose actions hold this one: the table its records are rows of. */
+function resourceOffering(action: AppCommandAction): string | undefined {
+  const app = pageBridge.activeApp() as ServedApp | null;
+  return Object.entries(app?.resources ?? {}).find(([, resource]) => (resource.actions as unknown[] | undefined)?.includes(action))?.[0];
 }
 
 /** The signed-in form this reader is served over this command, where no action offers it. */
@@ -164,7 +182,7 @@ const ownerFor = (action: AppCommandAction, key: Record<string, unknown>): Comma
 });
 
 /** How an operation the pipeline settled ended, for the component that ran it. */
-function outcomeOf(operation: CommandOperation | undefined): UiCommandOutcome {
+function outcomeOf(operation: CommandOperation | undefined, fields?: Readonly<Record<string, string>>): UiCommandOutcome {
   // The command's own words, when its output said any, go back with it: a caller with no form to say them in says them.
   // So does the output itself: a component acts on what it made (the ticket it opened) by its id, not by looking it up.
   if (operation?.phase === 'success')
@@ -173,7 +191,7 @@ function outcomeOf(operation: CommandOperation | undefined): UiCommandOutcome {
       ...(operation.said ? { message: operation.said } : {}),
       ...(operation.output !== undefined ? { output: operation.output } : {}),
     };
-  if (operation?.phase === 'error') return { status: 'refused', message: operation.message };
+  if (operation?.phase === 'error') return { status: 'refused', message: operation.message, ...(fields ? { fields } : {}) };
   return { status: 'closed' };
 }
 
@@ -269,14 +287,14 @@ async function runCommand(
   }
   if ('refused' in sent) {
     const message = sent.refused || say('isNotAvailableOnThisRecord', { label: action.label });
-    toast(message, 'error');
+    if (!options.quiet) toast(message, 'error');
     return { status: 'refused', message };
   }
   const { operation } = sent;
   if (operation.phase === 'unknown' || operation.phase === 'pending') return openForm(action, key, input, options);
-  const outcome = outcomeOf(operation);
+  const outcome = outcomeOf(operation, refusedFields(operation.field, operation.message, fields, values as CommandValues));
   commandOperations.forget(owner);
-  if (outcome.status === 'refused') toast(outcome.message, 'error');
+  if (outcome.status === 'refused' && !options.quiet) toast(outcome.message, 'error');
   return outcome;
 }
 
@@ -339,12 +357,142 @@ function openViewForm(view: string, prefill: Readonly<Record<string, string | nu
   void openPublicForm(view, prefill, app?.id);
 }
 
+/* A saved form's draft, through the transport its own layout uses (draftFormApi.ts): fetched where a page reads one,
+   so an App's first paint does not carry it. */
+const drafts = () => import('../draftFormApi.js');
+const savesDraft = (form: ServedForm) => (form as { save?: { owner?: string } }).save?.owner !== undefined;
+/* The submit's key, held while a submit is not known to have landed (SavedFormSurface's REVIEW). */
+const SUBMIT = '#review';
+
+/**
+ * A form view a page declares, as `page.useForm` holds it: the form its room draws, over the page, on the same draft
+ * and under the same keys as that layout, so what the page says of the draft is what the form resumes. A form this
+ * reader is not served (or a public form, which has no session draft) opens as `openForm` opens it.
+ */
+function formHandle(view: string): UiFormHandle {
+  const served = () => {
+    const app = pageBridge.activeApp() as (ServedApp & { name?: string; views?: Record<string, { command?: unknown }> }) | null;
+    if (!app?.views || !Object.hasOwn(app.views, view) || !app.views[view].command) return undefined;
+    const form = formAt(app as unknown as AppPayloadApp, formPageId(view));
+    return form && !form.error ? { form, appName: app.name ?? '' } : undefined;
+  };
+  const transport = async (form: ServedForm) => {
+    if (!savesDraft(form)) return undefined;
+    const { draftTransport } = await drafts();
+    return draftTransport(state.activeConnection as string | null, form as unknown as Parameters<typeof draftTransport>[1]);
+  };
+  const stepsOf = (form: ServedForm) =>
+    ((form as { steps?: Array<{ id: string; label?: unknown }> }).steps ?? []).map((step) => ({
+      id: step.id,
+      label: typeof step.label === 'string' ? step.label : humanName(step.id),
+    }));
+  /* How the form ended, once it closed: its receipt where a saved form landed, the outcome its submit said, else what
+     the draft holds now — a submit still unconfirmed, the steps saved part way, or nothing. */
+  const settle = async (form: ServedForm, receipt: FormReceipt | undefined, last: FormOutcome | undefined): Promise<UiFormOutcome> => {
+    const said = receipt?.message ? { message: receipt.message } : {};
+    if (receipt?.reference) return { status: 'received', reference: receipt.reference, ...said };
+    if (receipt && receipt.receipt.status !== 'applied')
+      return { status: 'processing', message: receipt.message ?? say('formProcessing', { label: form.label }) };
+    if (receipt) return { status: 'done', ...said };
+    if (last?.status === 'applied') return { status: 'done', ...(last.message ? { message: last.message } : {}) };
+    if (last?.status === 'unknown') return { status: 'processing', message: last.message };
+    const draft = await transport(form);
+    if (draft?.holds(SUBMIT)) return { status: 'processing', message: say('notConfirmed', { label: form.label }) };
+    const summary = draft ? await draft.resume().catch(() => null) : null;
+    return summary?.saved.length ? { status: 'saved', saved: summary.saved } : { status: 'closed' };
+  };
+  return {
+    async state(): Promise<UiFormState> {
+      const found = served();
+      if (!found) return { label: humanName(view), granted: false, steps: [], draft: null, pending: false };
+      const steps = stepsOf(found.form);
+      const draft = await transport(found.form);
+      const summary = draft ? await draft.resume() : null;
+      return {
+        label: found.form.label,
+        granted: true,
+        steps,
+        // Where the form opens, as its layout decides: the step today's rules reopen, else the first not saved; null at the review.
+        draft: summary
+          ? {
+              saved: summary.saved,
+              step: summary.reopen ?? steps.find((step) => !summary.saved.includes(step.id))?.id ?? null,
+              expiresAt: summary.expiresAt ?? null,
+            }
+          : null,
+        pending: Boolean(draft?.holds(SUBMIT)),
+      };
+    },
+    async open(input, { at } = {}) {
+      const found = served();
+      if (!found) {
+        openViewForm(view, {});
+        return { status: 'closed' };
+      }
+      const { SignedInFormDialog } = await import('../SignedInFormDialog.js');
+      let receipt: FormReceipt | undefined;
+      let last: FormOutcome | undefined;
+      const closed = new Promise<void>((resolve) => {
+        const host = document.createElement('div');
+        portalRoot().append(host);
+        let take = () => {};
+        let leave = () => {};
+        const close = () => {
+          leave();
+          take();
+          host.remove();
+          resolve();
+        };
+        // A form the session is taken from lets go, as `useCommand(...).open` does: it could never close.
+        const opened = sessionIdentity();
+        leave = subscribeSessionIdentity(() => {
+          if (sessionIdentity() !== opened) close();
+        });
+        take = mount(
+          host,
+          createElement(SignedInFormDialog, {
+            form: found.form,
+            appName: found.appName,
+            ...(input ? { initial: input } : {}),
+            ...(at === undefined ? {} : { at }),
+            onOutcome: (outcome) => {
+              last = outcome;
+            },
+            onReceipt: (landed) => {
+              receipt = landed;
+            },
+            onClose: close,
+          }),
+        );
+      });
+      await closed;
+      return settle(found.form, receipt, last);
+    },
+    async startOver() {
+      const found = served();
+      const draft = found && (await transport(found.form));
+      // A submit sent and not known to have landed keeps its draft, as the form's own Start over does.
+      if (!draft || draft.holds(SUBMIT) || !(await draft.resume())) return false;
+      await draft.discard();
+      draft.clearKeys();
+      // The page's reads of the draft (`useForm`) read it again.
+      void queryClient.invalidateQueries({ queryKey: ['mistri-ui'] });
+      return true;
+    },
+  };
+}
+
 /** The choices an input of `input` offers as served: a choice's options — a table's rows where they were served with
     it — or undefined for a field that offers none, or none yet. */
 function servedChoices(input: readonly AppCommandField[] | undefined, name: string): readonly UiChoice[] | undefined {
   const field = input?.find((each) => each.name === name);
   if (!field || (field.type !== 'choice' && field.type !== 'choices') || !field.options.length) return undefined;
   return field.options.map((option) => ({ value: option.value, label: option.label }));
+}
+
+/** One input of `input` as it was served, a group's own fields left to their group. */
+function servedInput(input: readonly AppCommandField[] | undefined, name: string): AppCommandField | undefined {
+  return input?.find((each) => each.name === name);
 }
 
 /* A public page's command, its module fetched as the handle is made (publicPageCommand.ts): the App's first paint does
@@ -358,6 +506,7 @@ function publicPageHandle(page: string, id: string, reference: AppFormCommandRef
     run: (record, input, options) => door.then((handle) => handle.run(record, input, options)),
     open: (record, input, options) => door.then((handle) => handle.open(record, input, options)),
     choices: (field) => servedChoices(reference.input, field),
+    input: (name) => servedInput(reference.input, name),
   };
 }
 
@@ -389,6 +538,9 @@ export function commandHandle(ref: UiCommandRef, page?: string): UiCommandHandle
           : refuse(),
       open: (_record, input, options) => (granted ? openFormCommand(labelled(served, options), input) : refuse()),
       choices: (field) => servedChoices(served.form.command.input, field),
+      input: (name) => servedInput(served.form.command.input, name),
+      check: async (input, names) =>
+        granted ? checkCommandStep(state.activeConnection ?? null, served.form.command, names, input) : undefined,
     };
   }
   const granted =
@@ -404,6 +556,7 @@ export function commandHandle(ref: UiCommandRef, page?: string): UiCommandHandle
   return {
     label: action?.label ?? ref,
     granted,
+    resource: action ? resourceOffering(action) : undefined,
     available: async (record) => {
       if (!granted) return false;
       try {
@@ -419,6 +572,8 @@ export function commandHandle(ref: UiCommandRef, page?: string): UiCommandHandle
     run: (record, input, options = {}) => (granted ? runCommand(action!, keyFor(action!, record), input, options) : refuse()),
     open: (record, input, options = {}) => (granted ? openForm(action!, keyFor(action!, record), input, options) : refuse()),
     choices: (field) => servedChoices(action?.command.input, field),
+    input: (name) => servedInput(action?.command.input, name),
+    check: async (input, names) => (granted ? checkCommandStep(state.activeConnection ?? null, action!.command, names, input) : undefined),
   };
 }
 
@@ -473,7 +628,11 @@ function actionHandle(id: UiCommandRef, reads?: readonly string[]): UiCommandHan
       bulkKey(table, keyOf(table, record)),
     );
   };
-  const run = async (record: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>): Promise<UiCommandOutcome> => {
+  const run = async (
+    record: Readonly<Record<string, unknown>>,
+    input?: Readonly<Record<string, unknown>>,
+    options: UiCommandOptions = {},
+  ): Promise<UiCommandOutcome> => {
     if (!found || !granted) return refusedFor();
     const { table: tableId, action } = found;
     const table = findTable(tableId) as TableMeta | undefined;
@@ -497,7 +656,7 @@ function actionHandle(id: UiCommandRef, reads?: readonly string[]): UiCommandHan
     const outcome = result.outcomes[0];
     if (outcome.kind === 'applied') {
       void queryClient.invalidateQueries();
-      toast(say('actionDone', { label }), 'ok');
+      toast(options.done ?? say('actionDone', { label }), 'ok');
       return { status: 'applied' };
     }
     if (outcome.kind === 'uncertain') {
@@ -517,6 +676,7 @@ function actionHandle(id: UiCommandRef, reads?: readonly string[]): UiCommandHan
   return {
     label,
     granted,
+    resource: found?.table,
     available: async (record) => {
       if (!granted) return false;
       try {
@@ -525,9 +685,9 @@ function actionHandle(id: UiCommandRef, reads?: readonly string[]): UiCommandHan
         return false;
       }
     },
-    run: (record, input) => run(record, input),
+    run: (record, input, options) => run(record, input, options),
     // A fixed action has no form of its own: opening it is running it, asking first as the record page does.
-    open: (record, input) => run(record, input),
+    open: (record, input, options) => run(record, input, options),
   };
 }
 
@@ -551,4 +711,4 @@ export function recordCommand(
 /** A selection's commands in the kit's lists (shellMode.ts `bulkCommands`): the same pipeline and form, sent once for the group. */
 export const bulkCommands = { operations: commandOperations, useAvailability: useCommandAvailability, Form: CommandForm };
 
-registerCommandHost({ command: commandHandle, action: actionHandle, openForm: openViewForm });
+registerCommandHost({ command: commandHandle, action: actionHandle, openForm: openViewForm, form: formHandle });

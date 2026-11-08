@@ -279,4 +279,30 @@ describe('what the App asks of its trail (ui.shell.breadcrumbs)', () => {
       cleanup();
     }
   });
+  test("a free-form page's trail is a dashboard's, and a record's tab page is its record's, as any tab of it is", () => {
+    appMode = true;
+    const free = { kind: 'page', pageId: 'dash-forecast', label: 'Forecast' };
+    const tabbed = { ...lead, tab: 'pipeline' };
+    // Reached from the menu, a page draws no bar, as a dashboard does; a record's tab page is a step past its list.
+    expect(shown(undefined, [free])).toBe(shown(undefined, [dashboard]));
+    expect(shown(undefined, [free])).toBe(false);
+    expect(shown(undefined, [list, tabbed])).toBe(shown(undefined, [list, { ...lead, tab: 'activity' }]));
+    expect(shown(undefined, [list, tabbed])).toBe(true);
+    const page = { reads: ['lead'], commands: [], params: [] };
+    app = {
+      name: 'Compass',
+      nav: [],
+      views: { forecast: { label: 'Forecast', sections: [], page } },
+      resources: {},
+      ui: { shell: { breadcrumbs: true } },
+    };
+    walk.stack = [free];
+    const drawn = render(<Crumbs onHome={() => {}} />);
+    expect(drawn.container.querySelector('.crumb-table-step')).toBeNull();
+    expect(screen.getByText('Forecast')).toHaveClass('current');
+    cleanup();
+    walk.stack = [list, tabbed];
+    render(<Crumbs onHome={() => {}} />);
+    expect(screen.getByText('Ada Stone')).toHaveClass('current');
+  });
 });

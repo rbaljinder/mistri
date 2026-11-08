@@ -374,19 +374,19 @@ describe('mistri check --json', () => {
     );
   });
 
-  test('a skill copy stamped by an older mistri is a warning that never fails check', async () => {
+  test('a skill copy stamped by an older mistri fails check, and `mistri agent init` is the fix', async () => {
     const tick = readFileSync(join(ROOT, 'examples/apps/tick/app.ts'), 'utf8');
     const dir = app('skill-stale', { 'app.ts': tick });
     mkdirSync(join(dir, '.claude', 'skills', 'mistri'), { recursive: true });
     writeFileSync(join(dir, '.claude', 'skills', 'mistri', '.mistri-skill.json'), JSON.stringify({ mistri: '0.0.1', files: {} }));
     const ran = await run(['check', '--app', dir, '--config', config, '--json']);
-    assert.equal(ran.code, 0, ran.out + ran.err);
+    assert.equal(ran.code, 4, ran.out + ran.err);
     const report = JSON.parse(ran.out);
     conforms(report);
     const found = (report.problems as Problem[]).filter((problem) => problem.code === 'skill-stale');
     assert.deepEqual(
       found.map((problem) => problem.severity),
-      ['warning'],
+      ['error'],
       ran.out,
     );
     assert.match(found[0]!.message, /0\.0\.1.*agent init/);
@@ -568,6 +568,7 @@ describe('the codes and the paths', () => {
       'automation',
       'deprecated',
       'could-not-check',
+      'catalog-missing',
       'pending-migration',
       'unknown-connection',
       'database-unreachable',

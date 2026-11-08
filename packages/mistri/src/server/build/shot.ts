@@ -28,6 +28,7 @@ import { pathToFileURL } from 'node:url';
 import type { Browser, BrowserContext, BrowserType, Page } from 'playwright-core';
 import { settled, watchRequests } from '../testing/settled.js';
 import { Registry, redact } from '@mistriwork/engine/server/connections.js';
+import { assertPresentationNamesApps, presentationOf } from '../cli/apps.js';
 import { appRoutes, loadApp, type LoadedApp } from '../app/apps.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import { homeSourceOf, isTenantApp } from '../../shared/app.js';
@@ -109,6 +110,15 @@ interface ShotOptions {
 
 /** A run that cannot go on, said to the reader as one line: shot's and grade's. */
 export class Refusal extends Error {}
+
+/** A server refusal said as it says it, as this command's own. */
+function refused<T>(read: () => T): T {
+  try {
+    return read();
+  } catch (error) {
+    throw new Refusal((error as Error).message);
+  }
+}
 
 /** This command's own flags; the rest are a start's (the database, the server entries) and go to the server. */
 function readFlags(argv: string[]): ShotOptions {
@@ -1393,13 +1403,17 @@ class ShotRun {
           this.registry.add({ name: redact(opts.target), url: opts.target, schemas: opts.schemas, source: 'argument' }).id,
         );
       const env = config.appEnv[appDir];
+      /* The deployment's presentation, as the server below reads it: its refusals are the serve messages. */
+      const presentation = refused(() => presentationOf(config));
       const loaded = await loadApp(appDir, {
         lock: 'report',
+        ...(presentation ? { presentation } : {}),
         ...(opts.appEntry !== undefined ? { entry: opts.appEntry } : {}),
         ...(env ? { env } : {}),
       }).catch((error) => {
         throw new Refusal(`the App did not load: ${(error as Error).message.split('\n')[0]} mistri check --app says more.`);
       });
+      refused(() => assertPresentationNamesApps(presentation, [loaded]));
       const bound = loaded.app.connection ?? (loaded.app.sources ? loaded.app.sources[homeSourceOf(loaded.app)!]?.connection : undefined);
       const connection = bound
         ? this.registry.list().find((c) => c.id === bound || c.name === bound)

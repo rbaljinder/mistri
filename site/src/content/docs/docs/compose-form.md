@@ -36,12 +36,12 @@ Lintel's Report a problem are the worked examples.
   parent already knows — `examples/apps/lintel/pages/maintenance_request.ts:30`.
 - **When the form decides something against stored state, runs in steps, or
   is filled all day**, make it a `commandForm` with `step`s and
-  `field.*({ help })` — `examples/apps/lintel/views.ts:220`,
+  `field.*({ help })` — `examples/apps/lintel/views.ts:228`,
   `examples/apps/lintel/commands/maintenance.ts:37`.
 - **When it is a long application, public or not**, give it `style: 'intake'`:
   one question a step, the step's `title`, `lead` and `next`, a `note` of
   reassurance and a review before submitting —
-  `examples/apps/lintel/views.ts:229`.
+  `examples/apps/lintel/views.ts:237`.
 
 Text named like prose (`notes`, `description`) is a box of several lines on
 its own; `fields.<name>.multiline` says so for any other. The keys are in

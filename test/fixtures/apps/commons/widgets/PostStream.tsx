@@ -106,8 +106,9 @@ export default function PostStream({ rows }: Props) {
     enabled: viewer.signedIn && Boolean(viewer.account),
   });
   const mine = me.data?.[0]?.id;
-  /* Signed in and granted the posting commands, and no member row: every handler would say "Join Commons first". */
-  const newcomer = viewer.signedIn && react.granted && me.isSuccess && mine === undefined;
+  /* Signed in and granted the posting commands, and no member row: every handler would say "Join Commons first".
+     Read rows (`data`), not TanStack's isSuccess: a read holds only what UiQuery declares. */
+  const newcomer = viewer.signedIn && react.granted && me.data !== undefined && mine === undefined;
   const join = () => openForm('join');
   if (!rows.length) return <Empty title="No posts in this thread yet." />;
 

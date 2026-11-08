@@ -110,6 +110,7 @@ export async function startTenantServing(
       const observed = await loadApp(opts.apps[0], {
         ...loadOptions,
         ...(loaded.entry ? { entry: loaded.entry } : {}),
+        ...(loaded.presentation ? { presentation: loaded.presentation } : {}),
         ...(opts.commands ? { commands: opts.commands } : {}),
       });
       if (changed || JSON.stringify(observed) !== JSON.stringify(loaded))
@@ -286,6 +287,7 @@ export async function startTenantServing(
       const next = await loadApp(opts.apps![0], {
         ...loadOptions,
         ...(loaded.entry ? { entry: loaded.entry } : {}),
+        ...(loaded.presentation ? { presentation: loaded.presentation } : {}),
         ...(opts.commands ? { commands: opts.commands } : {}),
       });
       const look = lookOnlyChange(current, next, touched);

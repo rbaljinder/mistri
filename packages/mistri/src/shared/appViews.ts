@@ -53,7 +53,6 @@ import {
   parseRealm,
   resourceCeiling,
   type AppAuth,
-  type AppRoleGrant,
   type AppDashSection,
   type DashTarget,
   type FilterBar,
@@ -106,13 +105,13 @@ import {
   parseFindSection,
   parseSectionWindows,
 } from './appDashSections.js';
-import { parseCustomList, parsePage } from '@mistriwork/engine/shared/appComponents.js';
+import { parseCustomList } from '@mistriwork/engine/shared/appComponents.js';
 import { conditionsOnly, parseChartShape, parseAreas, parseFunnelStages, parseNoteBanner, parseStepsShape } from './appDashShapes.js';
 import { AppProblems, gather } from './appProblems.js';
 import { autoKeyOf } from '@mistriwork/engine/shared/autoBucket.js';
 import { parseOpenRoles } from './appViewRoles.js';
 import { parseNav } from './appNav.js';
-import { isRegisteredCommand, registeredCommand } from './command.js';
+import { favoriteFlag, parseHead, parsePageView } from './appPageViews.js';
 
 /* Each view as parsed: the AppDef view itself, beside what only parsing
    needs — its key and where it was written, and a dashboard's tables and
@@ -123,7 +122,7 @@ interface ListView {
   at: string;
   view: AppListView;
 }
-interface DashboardView {
+export interface DashboardView {
   kind: 'dashboard';
   key: string;
   at: string;
@@ -138,19 +137,19 @@ interface LandingView {
   at: string;
   raw: Record<string, unknown>;
 }
-interface FormView {
+export interface FormView {
   kind: 'form';
   key: string;
   at: string;
   form: AppFormView;
 }
-type ParsedView = ListView | DashboardView | LandingView | FormView;
+export type ParsedView = ListView | DashboardView | LandingView | FormView;
 
 /** A parsed view's kind, as a destination reads it (appDestinations.ts). */
 const parsedKind = (view: ParsedView | undefined): DestinationKind | undefined =>
   view === undefined ? undefined : view.kind === 'form' ? (view.form.public ? 'public form' : 'form') : view.kind;
 
-interface ContentContext {
+export interface ContentContext {
   data: ParsedData;
   name: string;
   auth?: AppAuth;
@@ -161,13 +160,6 @@ interface ParsedContent {
   nav: AppNavNode[];
   home: AppHomeRule[];
   landing?: { view: string; content: AppLanding };
-}
-
-/** A view's Favorites star is opt-in: true, or false, which is the same as leaving it out. */
-function favoriteFlag(value: unknown, at: string): boolean {
-  if (value === undefined) return false;
-  if (typeof value !== 'boolean') throw new Error(`${at}: "favorite" must be true (a star on the view) or false.`);
-  return value;
 }
 
 /* Spellings renamed before 1.0, refused with the word that replaced them (allowKeys' `refused`). */
@@ -323,7 +315,7 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
         raw.kind === 'dashboard'
           ? parseDashboardView(raw, key, at, ctx.data, views, Boolean(ctx.auth))
           : raw.kind === 'page'
-            ? parsePageView(raw, key, at, ctx)
+            ? parsePageView(raw, key, at, ctx, views)
             : undefined;
       if (parsed)
         views.set(key, {
@@ -462,31 +454,39 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
     );
   /* A menu the App wrote leads with the overview it did not: the room every reader starts on is one they can go back to. */
   if (overview && nav?.length && !navViewKeys(nav).includes(OVERVIEW)) nav.unshift({ view: OVERVIEW });
+  /* A record's tab is opened on its record (pages/<view>/[id]/<tab>.page.tsx): no visitor starts on one, and nothing
+     else need reach it. */
+  const recordTabKeys = order.filter((key) => {
+    const view = views.get(key);
+    return view?.kind === 'dashboard' && view.view.page?.record !== undefined;
+  });
   const homeViews = new Map<string, HomeView>(
-    order.map((key) => {
-      const view = views.get(key)!;
-      if (view.kind === 'form') {
+    order
+      .filter((key) => !recordTabKeys.includes(key))
+      .map((key) => {
+        const view = views.get(key)!;
+        if (view.kind === 'form') {
+          return [
+            key,
+            {
+              kind: 'form',
+              tables: [],
+              command: view.form.command.id,
+              ...(view.form.public ? { public: true as const } : {}),
+              ...(view.form.roles ? { roles: view.form.roles } : {}),
+            },
+          ];
+        }
+        const roles = view.kind === 'landing' ? undefined : view.view.roles;
         return [
           key,
           {
-            kind: 'form',
-            tables: [],
-            command: view.form.command.id,
-            ...(view.form.public ? { public: true as const } : {}),
-            ...(view.form.roles ? { roles: view.form.roles } : {}),
+            kind: view.kind,
+            tables: view.kind === 'list' ? [view.view.table] : view.kind === 'dashboard' ? view.tables : [],
+            ...(roles ? { roles } : {}),
           },
         ];
-      }
-      const roles = view.kind === 'landing' ? undefined : view.view.roles;
-      return [
-        key,
-        {
-          kind: view.kind,
-          tables: view.kind === 'list' ? [view.view.table] : view.kind === 'dashboard' ? view.tables : [],
-          ...(roles ? { roles } : {}),
-        },
-      ];
-    }),
+      }),
   );
   const rules = gather(across, () =>
     parseHome(overview ? OVERVIEW : a.home, where, homeViews, ctx.auth, resourceCeiling(ctx.data).read, ctx.name),
@@ -517,7 +517,21 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
     ...rawNew.flatMap((entry) => (typeof entry.view === 'string' && views.has(entry.view) ? [entry.view] : [])),
     ...forms.filter(({ form }) => !form.public && rawNew.some((entry) => entry.command === form.command.id)).map(({ key }) => key),
   ];
-  const reachable = new Set([...navKeys, ...rules.map((rule) => rule.view), ...landingKeys, ...apiViews, ...pageEmbeds, ...newKeys]);
+  /* A free-form page is always served at its address, so a signed-in form it opens (`forms`) is reached from it. */
+  const pageFormKeys = order.flatMap((key) => {
+    const view = views.get(key);
+    return view?.kind === 'dashboard' ? (view.view.page?.forms ?? []) : [];
+  });
+  const reachable = new Set([
+    ...navKeys,
+    ...rules.map((rule) => rule.view),
+    ...landingKeys,
+    ...apiViews,
+    ...pageEmbeds,
+    ...newKeys,
+    ...pageFormKeys,
+    ...recordTabKeys,
+  ]);
   for (const key of reachable) {
     const view = views.get(key);
     if (view?.kind !== 'dashboard') continue;
@@ -539,7 +553,7 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
     const view = views.get(key)!;
     if (view.kind === 'form' && !view.form.public && !reachable.has(key)) {
       across.push(
-        `${view.at} is a signed-in form referenced by nothing — not nav, not home, not the New menu (ui.shell.new) — so nothing could open it. Reference it, or remove it.`,
+        `${view.at} is a signed-in form referenced by nothing — not nav, not home, not the New menu (ui.shell.new), not a page's forms — so nothing could open it. Reference it, or remove it.`,
       );
     }
     if (view.kind === 'dashboard' && !reachable.has(key)) {
@@ -1493,208 +1507,6 @@ function parseDashboardView(
       ...(favoriteFlag(v.favorite, at) ? { favorite: true as const } : {}),
     },
   };
-}
-
-/**
- * The keys of a free-form page as the App loader writes it from a
- * `pages/*.page.tsx` file (packages/mistri/src/server/app/appPages.ts) — never authored in
- * `views`, which refuses the kind. `heading` and `props` are the internal
- * Console's, whose pages are written as data.
- */
-const PAGE_VIEW_KEYS = [
-  'kind',
-  'label',
-  'icon',
-  'description',
-  'heading',
-  'head',
-  'favorite',
-  'component',
-  'reads',
-  'commands',
-  'actions',
-  'params',
-  'loader',
-  'props',
-  'roles',
-  'public',
-] as const;
-
-/**
- * `head`: the form a dashboard's or a page's head takes. `'compact'` is the title alone on one line with its verbs,
- * with no intro; `false` is a page that draws its own head, its title kept for a screen reader so the room keeps its
- * one h1, and the label still the document title, the crumb and the palette's word. Absent is the full head.
- */
-function parseHead(value: unknown, at: string): { head?: 'compact' | 'own'; headingHidden?: true } {
-  if (value === undefined) return {};
-  if (value === false) return { head: 'own', headingHidden: true };
-  if (value === 'compact') return { head: 'compact' };
-  throw new Error(`${at}: "head" is 'compact' (the title on one line with its verbs, no intro) or false (the page draws its own head).`);
-}
-
-/**
- * A free-form page: the whole page drawn by the author's component. It is
- * served as a dashboard of one full-width custom section — so its menu
- * entry, its home rule, its address and its favorite star are a
- * dashboard's, with nothing to learn twice — which says `page`: the
- * resources it reads, which gate it like a section's table gates a
- * dashboard (a reader who cannot read one is not served the page), the
- * commands it runs, the address parameters it keeps its place in and the
- * loader that reads for it on the server.
- *
- * Who is offered it is said once, here, by what it reads: every role a page
- * names must be granted every read, or the page is a mistake some role would
- * meet broken; one that names none is offered to the people's roles that
- * are — never a service role, which no person holds — and never to a
- * signed-out visitor unless it says `public: true`, when every read must be
- * one `auth.public` opens. A command is not a door: a reader the page is
- * offered to who may not run one of its commands meets the page without it
- * (the command's handle says `granted: false`, and the server refuses it as
- * it refuses any command not granted). A command no role offered the page
- * may run is a mistake, as an unreadable read is.
- */
-function parsePageView(v: Record<string, unknown>, key: string, at: string, ctx: ContentContext): DashboardView {
-  allowKeys(v, PAGE_VIEW_KEYS, `${at} (a free-form page)`);
-  if (typeof v.label !== 'string' || !v.label.trim()) throw new Error(`[page-file] ${at} is a free-form page and has no "title".`);
-  const page = parsePage(v, at);
-  for (const resource of page.reads) {
-    checkResourceSlot(resource, `${at}, "reads"`, ctx.data);
-    checkDeclaredResource(resource, `${at}, "reads"`, ctx.data);
-  }
-  for (const command of page.commands) {
-    if (!isRegisteredCommand(command)) {
-      throw new Error(`[page-commands] ${at} runs the command "${command}", which the commands module does not register.`);
-    }
-  }
-  if (v.public !== undefined && v.public !== true) throw new Error(`[page-public] ${at} has a "public" that is not true.`);
-  if (v.public === true && page.actions.length)
-    throw new Error(`[page-public] ${at}: a public page runs public commands, not actions: a signed-out visitor holds no role to run one.`);
-  /* A fixed action (a machine's verb, `action(label, { set })`) is the resource's own, run by the reader the way its record page
-     runs it, so it is found on a resource the page reads; a command is not one and is named in "commands". */
-  for (const id of page.actions) {
-    const offered = page.reads.flatMap((resource) => ctx.data.resources?.[resource]?.actions ?? []);
-    const found = offered.find((action) => action.id === id);
-    if (found?.command || (!found && offered.some((action) => action.command?.id === id)))
-      throw new Error(`[page-action] ${at}: "${id}" is a command; name it in commands.`);
-    if (!found) {
-      const fixed = offered.filter((action) => !action.command).map((action) => `"${action.id}"`);
-      throw new Error(
-        `[page-action] ${at}: "${id}" is not a fixed action of ${page.reads.map((resource) => `"${resource}"`).join(', ')}, the resources it reads. Their fixed actions: ${fixed.join(', ') || 'none'}.`,
-      );
-    }
-  }
-  /* A public page's commands are run by a signed-out visitor through the page's own door (http/pageCommandRoutes.ts),
-     as the public principal: only a command that is itself public, and one that makes its record rather than naming
-     one, the way a public form's is. A signed-in page's need roles to be granted to. */
-  if (v.public === true) {
-    for (const command of page.commands) {
-      const entry = registeredCommand(command);
-      if (entry?.public !== true)
-        throw new Error(
-          `[page-commands] ${at} is public and runs "${command}", which is not public: a public page runs only commands that say public: true.`,
-        );
-      if (entry.targets !== 'none')
-        throw new Error(`[page-commands] ${at} is public and runs "${command}", which names a record; a public command makes its own.`);
-    }
-    if (page.commands.length && !ctx.auth)
-      throw new Error(`[page-commands] ${at} runs public commands, and a public command needs "auth" (with "auth.public").`);
-  } else if (page.commands.length && !ctx.auth?.roles)
-    throw new Error(`[page-commands] ${at} runs commands, and commands need "auth" and "auth.roles".`);
-  const roles = pageRoles(v, page, at, ctx);
-  const description = optionalText(v, 'description', at);
-  if (v.heading !== undefined && v.heading !== false) throw new Error(`${at}: a page's "heading" is false, to draw it without its title.`);
-  return {
-    kind: 'dashboard',
-    key,
-    at,
-    embeds: [],
-    tables: page.reads,
-    view: {
-      ...(v.heading === false ? { headingHidden: true as const } : {}),
-      ...parseHead(v.head, at),
-      label: v.label.trim(),
-      ...(description === undefined ? {} : { description }),
-      sections: [
-        {
-          kind: 'custom',
-          component: page.component,
-          props: page.props,
-          width: 'full',
-        },
-      ],
-      page: {
-        reads: page.reads,
-        commands: page.commands,
-        ...(page.actions.length ? { actions: page.actions } : {}),
-        params: page.params,
-        ...(page.loader ? { loader: page.loader } : {}),
-        ...(v.public === true ? { public: true as const } : {}),
-      },
-      ...(v.icon === undefined ? {} : { icon: parseIcon(v.icon, at) }),
-      ...(favoriteFlag(v.favorite, at) ? { favorite: true as const } : {}),
-      ...(roles ? { roles } : {}),
-    },
-  };
-}
-
-/**
- * The roles a free-form page is offered to. Named, each must be granted
- * what the page reads (`page-coverage`); unnamed, the roles that are, but
- * a service role. Either way each command it runs must be some offered
- * role's. A public page names none: it is everyone's, a signed-out
- * visitor's too, and reads only what `auth.public` opens.
- */
-function pageRoles(
-  v: Record<string, unknown>,
-  page: { reads: string[]; commands: string[] },
-  at: string,
-  ctx: ContentContext,
-): string[] | undefined {
-  const grants = ctx.auth?.roles;
-  if (v.public === true) {
-    if (v.roles !== undefined) throw new Error(`[page-public] ${at} is public and names "roles": a public page is everyone's.`);
-    const open = new Set(ctx.auth?.public?.read ?? []);
-    if (!ctx.auth?.public)
-      throw new Error(`[page-public] ${at} is public, and the App opens nothing to signed-out visitors (auth.public).`);
-    const closed = page.reads.find((resource) => !open.has(resource));
-    if (closed) throw new Error(`[page-public] ${at} is public and reads "${closed}", which "auth.public" does not open.`);
-    return undefined;
-  }
-  if (!grants) return parseOpenRoles(v.roles, at, ctx.auth);
-  const reads = (grant: AppRoleGrant, resource: string) =>
-    grant.read === true || (Array.isArray(grant.read) && grant.read.includes(resource));
-  const unread = (grant: AppRoleGrant): string | undefined => page.reads.find((resource) => !reads(grant, resource));
-  /* Each command is some offered role's to run, or no one could: a mistake, as an unreadable read is. */
-  const runnable = (offered: readonly string[]) => {
-    const stray = page.commands.find((command) => !offered.some((role) => (grants[role].commands ?? []).includes(command)));
-    if (stray !== undefined) {
-      throw new Error(
-        `[page-coverage] ${at} runs "${stray}", which no role it is offered to is granted. Grant it to one, or leave it out of "commands".`,
-      );
-    }
-  };
-  const named = parseOpenRoles(v.roles, at, ctx.auth);
-  if (named) {
-    for (const role of named) {
-      const missing = unread(grants[role]);
-      if (missing !== undefined) {
-        throw new Error(
-          `[page-coverage] ${at} is offered to the role "${role}", which is not granted "${missing}". ` +
-            'Every role a page names reads all it reads: grant it, or leave the role out.',
-        );
-      }
-    }
-    runnable(named);
-    return named;
-  }
-  const able = Object.keys(grants).filter((role) => !grants[role].service && unread(grants[role]) === undefined);
-  if (!able.length) {
-    throw new Error(
-      `[page-coverage] ${at} reads what no person's role is granted all of, so no one could open it. Grant a role, or narrow the page.`,
-    );
-  }
-  runnable(able);
-  return able;
 }
 
 /** A view with the roles it names, checked against the App's (appViewRoles.ts). */

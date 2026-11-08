@@ -82,6 +82,41 @@ export type Rows = {
   vehicle_photo: { id: string; dealer_id: string; vehicle_id: string; position: number; caption: string; file_name: string; content_type: string; byte_size: number; data: unknown; thumbnail: unknown };
 };
 
+/** Each table's primary-key columns: what names one of its records. A table without one is absent. */
+export type Keys = {
+  applicant: "id";
+  autopay: "id";
+  customer: "id";
+  deal: "id";
+  deal_scenario: "id";
+  dealer: "id";
+  dealer_site: "id";
+  dealer_user: "id";
+  dealer_visit: "id";
+  decision_alert: "id";
+  funding: "id";
+  installment: "id";
+  intake_submission: "id";
+  lead: "id";
+  lead_activity: "id";
+  lender_user: "id";
+  loan: "id";
+  loan_application: "id";
+  loan_document: "id";
+  payment: "id";
+  payoff_quote: "id";
+  prequalification: "id";
+  program: "id";
+  saved_vehicle: "id";
+  servicing_note: "id";
+  stipulation: "id";
+  trade_in: "id";
+  underwriting_file: "id";
+  underwriting_note: "id";
+  vehicle: "id";
+  vehicle_photo: "id";
+};
+
 /** Each table's references, by the name a label path follows (`owner_id`
     in `owner_id.name`), and the table each lands on: what lets every hop of
     a path be checked. A table that references nothing is absent. */
@@ -193,5 +228,5 @@ export type Flags<Manifest> = AppFlagValues<Manifest>;
 export type FlagName<Manifest> = keyof Flags<Manifest>;
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { schema(): { columns: Columns; references: References; segments: Segments } }
+  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments } }
 }

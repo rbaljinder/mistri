@@ -51,7 +51,8 @@ export default defineApp({
   name: 'Lintel',
   // Open pages follow what others change: a repair moved by a technician shows on the office's board as it happens.
   live: true,
-  sources: { lintel: { connection: 'lintel' } },
+  // The records are Lintel's own; the carrier's tracking API is a second source, read-only, whose tables are named `carrier.…`.
+  sources: { lintel: { connection: 'lintel', default: true }, carrier: { connection: 'carrier' } },
   resources,
   auth: {
     rows: 'policy',
@@ -79,6 +80,7 @@ export default defineApp({
           'request_note',
           'part',
           'part_receipt',
+          'carrier.shipments',
         ],
         write: ['maintenance_request', 'request_part', 'part_receipt'],
         create: ['request_part', 'part_receipt'],

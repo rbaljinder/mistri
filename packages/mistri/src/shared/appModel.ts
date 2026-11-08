@@ -330,7 +330,7 @@ export interface AppAuth extends AppSignIn {
   /** Who `me` is as a row (appMe.ts): the table people are rows of, and its
       column holding their sign-in email — in a tenant App, their account's id, one row per membership.
       Absent, `me` is the email alone. */
-  me?: { from: string; column: string; create?: { name?: string } };
+  me?: { from: string; column: string; by?: 'account'; create?: { name?: string } };
 }
 
 /** A signed-out visitor's reads: every resource named, never `true`, and nothing written. */
@@ -741,6 +741,9 @@ export interface AppDashboardView extends ServedDashboardView {
   /** `head: 'compact'`: the title alone on one line with its verbs, no intro; `head: false` is served as `own`, a page
       that draws its own head (appViews.ts parseHead). */
   head?: 'compact' | 'own';
+  /** `layout: 'bare'` (a free-form page): no sidebar and no top bar, the page's component owns the whole window; its title
+      stays for a screen reader and the tab (appViews.ts). */
+  layout?: 'bare';
   /** A short plain-text introduction shown under the dashboard heading; it may greet `{me.name}` too. */
   description?: string;
   /** The menu's mark for it, one of the App icons (appIcons.ts). */
@@ -799,7 +802,19 @@ interface AppPageManifest {
   actions?: string[];
   params: string[];
   loader?: string;
+  /** The App's form views it opens (`page.useForm`); left out when it opens none. */
+  forms?: string[];
   public?: true;
+  /** A record's tab (`pages/accounts/[id]/map.page.tsx`): the list view whose records it is under, their table, and its word
+      after the record's address (`/compass/accounts/13/map`). Such a page has no address or menu entry of its own. */
+  record?: AppPageRecord;
+}
+
+/** Where a page that is a record's tab is drawn. */
+export interface AppPageRecord {
+  view: string;
+  table: string;
+  tab: string;
 }
 
 /** One resource an activity section reads: its mark, and its word in the feed where not its noun. */

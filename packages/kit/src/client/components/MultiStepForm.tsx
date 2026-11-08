@@ -63,6 +63,8 @@ interface MultiStepFormProps<Field extends string = string> {
       an h2 and the actions stay in the flow, at the dialog's foot, beside the host's `leading` (a host with one keeps
       them in the flow too). A page also draws the steps beside the form where it is wide enough; a dialog never. */
   presentation?: 'page' | 'dialog';
+  /** A page's intake heading: 1, the room's own; 2 under a page that already has its h1 (a page's `<Steps>`). */
+  headingLevel?: 1 | 2;
   /** A page's steps beside the form: what a step already answered said in a line under its name (the host's words,
       from its draft), or nothing. Asked with the step being answered, so a host says nothing on its review. */
   summarize?: (step: FormStep<Field>, active: FormStep<Field>) => string | undefined;
@@ -101,6 +103,7 @@ export function MultiStepForm<Field extends string = string>({
   note,
   isStepEmpty,
   presentation = 'page',
+  headingLevel = 1,
   summarize,
 }: MultiStepFormProps<Field>) {
   const id = useId();
@@ -308,7 +311,7 @@ export function MultiStepForm<Field extends string = string>({
         {note}
         <div className="intake-head">
           {progressRow}
-          <StepHeader id={titleId} title={heading} {...(active.lead ? { lead: active.lead } : {})} />
+          <StepHeader level={headingLevel} id={titleId} title={heading} {...(active.lead ? { lead: active.lead } : {})} />
         </div>
         {panelNode}
         {problemNode}

@@ -276,7 +276,7 @@ redrive is never forgotten, however old.
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `sources.*.connection` | string | Stable | Server-configured connection ID or name, never a connection URL. Used in `examples/apps/tick/app.ts`. |
-| `sources.*.default` | boolean | Stable | The source whose resources stay bare. At most one says true when there are several, and none has to; a source standing alone is the default unless it says false. |
+| `sources.*.default` | boolean | Stable | The source whose resources stay bare. At most one says true when there are several, and none has to; a source standing alone is the default unless it says false. Used in `examples/apps/lintel/app.ts`. |
 | `sources.*.realm` |  | Stable | A platform-only source: read by a tenant App's platform realm alone, never the default, never written. Its resources are owner platform, access read. One of `platform`. |
 | `sources.*.resources` | array | Stable | The tables this source brings in without a block each: 'all', or their names. Each is an implicit {} block, granting nothing. One of `all`. Used in `examples/apps/tick/app.ts`. |
 | `sources.*.schema` | string | Stable | The one schema of its connection this source sees (a PostgreSQL schema). Several sources may share a connection, each with a schema of its own. Not on SQLite. |

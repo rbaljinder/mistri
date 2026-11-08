@@ -1231,8 +1231,13 @@ export interface AppAuth<Resource extends string = string, Role extends string =
   me?: {
     from: Resource;
     column: string;
+    /** What `column` holds. Left out, the sign-in email. `'account'`: the account's id, so an email change keeps the
+        person and an email another account later takes does not reach their row; an account with no row is nobody
+        (or gets one, with `create`). A tenant App's column always holds the account's id. */
+    by?: 'account';
     /** Make each new account's row: the first time an account is signed in to the App (after sign-up, or a first
-        sign-in through an identity provider) the server inserts a row with its email in `column` and, where `name`
+        sign-in through an identity provider) the server inserts a row with its email (its id, with `by: 'account'`)
+        in `column` and, where `name`
         names a column, its name there. Never a second row: `column` must be unique, and an account whose row is
         there already is left as it is. Every other column the row needs must have a default. The insert is the
         server's own, as a stamp is: no role needs to write the table. Not in a tenant App yet. */

@@ -318,6 +318,11 @@ test('test init writes a suite for a row-policy App: its policy and jobs served,
   // Where a grant lands is the policy's to say: no allowed write or command row, every refusal and read kept.
   assert.doesNotMatch(matrix, /(write|command): '[^']+'.*allowed: true/);
   assert.match(matrix, /\{ role: 'resident', write: 'staff'.*allowed: false \}/);
+  // The carrier is an HTTP service the generated start does not serve: an allowed read of it waits, commented, for
+  // a stub; a refused one never reaches it and stays.
+  assert.match(matrix, /carrier is an HTTP source this suite's start does not serve/);
+  assert.match(matrix, /\/\/ \{ role: '[^']+', read: 'carrier\.[^']+', allowed: true \}/);
+  assert.doesNotMatch(matrix, /^ {4}\{ role: '[^']+', read: 'carrier\.[^']+', allowed: true \}/m);
   const run = spawnSync(
     process.execPath,
     [

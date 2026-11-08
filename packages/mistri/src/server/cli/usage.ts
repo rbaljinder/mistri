@@ -57,8 +57,12 @@ over your own database.
   mistri docs [topic]             the App reference, offline: access, relationships,
                                   dates, dashboards, reload and restart, …
   mistri agent init               put the agent skill where coding agents read it (see below)
+  mistri upgrade [--app <dir>] [--check]
+                                  rewrite an App's source to the names this mistri reads (see below)
   mistri compare-openapi <previous.json> <current.json>
                                   compare two exported App API documents; no server
+  mistri api client <spec.json> --out <client.ts>
+                                  a typed fetch client from an exported App API document; no server
   mistri api-token --help         local token-store maintenance; no server
   mistri mail-dns [<config.json>]
                                   the SPF, DKIM and DMARC records a tenant App's mail
@@ -316,6 +320,7 @@ Checking an App while authoring it — the one command of the loop:
                   [--design] [--fix] [--defaults] [--fail-on-design-warning] [--warnings]
                   [--no-index-check] [--no-query-check]
                   [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]]
+                  [--schema-file [<schema.sql>] [--dev-url <url>]]
                   [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
 
   Three or four steps, each with its own verdict line. Schema types: regenerates
@@ -359,7 +364,11 @@ Checking an App while authoring it — the one command of the loop:
   implies --pending) runs them on the scratch database that URL names instead,
   on any engine: a branch or restore of the real one, or an empty one the whole
   history can build; for a hosted role without CREATEDB. It is never dropped
-  and never the App's own database; a \${NAME} in the URL is expanded. --deploy adds a step that
+  and never the App's own database; a \${NAME} in the URL is expanded.
+  --schema-file [<schema.sql>] checks an App with no database to reach: the file
+  (the App's schema.sql by default) is run on a scratch database, as a migration
+  is — SQLite, or PostgreSQL on the server --dev-url names, which needs CREATEDB —
+  every step reads it, and it is dropped after. Its tables are empty. --deploy adds a step that
   judges whether the App survives a container being replaced: it refuses a
   source or auth.store on a SQLite file, the default auth.store, a missing
   BETTER_AUTH_SECRET and a \${NAME} the environment lacks (run it with the
@@ -824,6 +833,18 @@ Deploying an App to Cloudflare Containers — a Worker in front of one always-on
   that is set: a shell whose XDG_CONFIG_HOME differs from the one used at
   wrangler login reports "not logged in". Exit codes: 1 could not, declined or failed, 7 refused.
 
+Writing a client from an exported App API document:
+
+  mistri api client <spec.json> --out <client.ts>
+
+  Reads the file --export openapi wrote and writes one TypeScript file with no
+  imports: a type for every row, command input and result, a function per
+  operation under createClient({ baseUrl, token, fetch? }), and an ApiError
+  carrying the status and the parsed problem details of a refusal. The same
+  document gives the same bytes. It uses only fetch, URL and URLSearchParams, so
+  it runs in a browser, Node 20+, Deno and Workers. Loads no App and starts no
+  server. Exit 1: no --out, or a file that is not an App API document.
+
 Comparing exported App API documents:
 
   mistri compare-openapi <previous.json> <current.json>
@@ -858,6 +879,20 @@ Giving a coding agent the App skill:
       --force         replace a copy the project has changed
   A re-run updates a copy it installed and says so; one the project changed
   is left alone, and the exit code is 1.
+
+Bringing an App's source up to date:
+
+  mistri upgrade [--app <dir>] [--check]
+
+  Rewrites the App's source files (default: the current directory; not
+  node_modules, dist or generated .d.ts): tablewalk/app and the package's
+  other entry points become @mistriwork/mistri/*, and the keys and names
+  the CHANGELOG renamed are renamed where they mean one thing (a dashboard's
+  layout: [...] is areas: [...], a theme's palette: { light, dark } is
+  colors). What it cannot place with certainty it leaves alone and prints
+  as file:line, for you to change; a second run finds nothing to rewrite.
+      --check         write nothing; exit 1 when a run would change a file or
+                      refuse something, for CI
 
 Running an App on this machine, and testing it:
 
@@ -983,7 +1018,7 @@ over your own database.
   mistri docs [topic]             the App reference, offline
   mistri explain <check-code>     what a check code means, with a fix example
   and: new, deploy, suite, virtual, flags, experiments, analytics, theme, schema, messages,
-       flows, jobs, decide, tenant, agent, observe, compare-openapi, api-token, mail-dns
+       flows, jobs, decide, tenant, agent, upgrade, observe, compare-openapi, api client, api-token, mail-dns
 
 Common options:
   -d, --db <target>   SQLite file path or postgres:// URL (or set DATABASE_URL)

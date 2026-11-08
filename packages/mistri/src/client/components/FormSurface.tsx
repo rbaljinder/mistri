@@ -295,7 +295,10 @@ export function FormSurface({
   review = false,
   attempt,
   inDialog = false,
+  headingLevel = 1,
   checkStep,
+  cursor,
+  draft,
 }: {
   form: FormPresentation;
   appName: string;
@@ -314,9 +317,19 @@ export function FormSurface({
   review?: boolean;
   /** Drawn in a dialog: the step's title is the dialog's heading and the actions stay at its foot. */
   inDialog?: boolean;
+  /** Drawn inside a page that has its own h1 (a page's `<Steps>`): 2, and the step's title and the receipt's heading
+      are h2s under it rather than a second h1. */
+  headingLevel?: 1 | 2;
   /** The server's word on the steps so far, asked once the page's own check of a step passes: field path → what is
       wrong with it. A step with a problem marks its fields and does not go on. */
   checkStep?: (stepId: string, input: CommandInputValue, names: readonly string[]) => Promise<Record<string, string> | undefined>;
+  /** A stepped form whose step its host holds (a page's `<Steps>`, in its address): the step drawn, and each move,
+      which the host writes. A refusal about a field on another step moves there too, with the refusal's words, so
+      the host can say which step holds it; the form's own line is left for what no step holds. */
+  cursor?: { step: number; onStep(index: number, refusal?: string): void };
+  /** What was typed, kept by the host while the form is away (a page's `<Steps>`, in memory): where the form starts,
+      and each change as it is made. */
+  draft?: { values?: CommandValues; keep(values: CommandValues): void };
   /** Where the form starts, as a query string. The form's own page reads the
       address it was opened at; a form drawn over a record (FormDialog) is
       handed the same string instead, so both routes start the same way. */
@@ -345,8 +358,9 @@ export function FormSurface({
   useArrived(draftLogic, !!form.rules?.length);
   const byName = useMemo(() => new Map(fields.map((field) => [field.name, field])), [fields]);
   const [values, setValues] = useState<CommandValues>(
-    () => attempt?.values ?? startingValues(fields, form.prefillable, attempt?.locked ? '' : prefill, initial),
+    () => attempt?.values ?? draft?.values ?? startingValues(fields, form.prefillable, attempt?.locked ? '' : prefill, initial),
   );
+  useEffect(() => draft?.keep(values), [values]);
   const [problems, setProblems] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState('');
   /* How a send ended, when it ended in the form's own line: a check of the form before sending has no outcome. */
@@ -367,7 +381,7 @@ export function FormSurface({
     if (pending) return;
     const root = surface.current;
     if (receipt) {
-      root?.querySelector<HTMLElement>('h1')?.focus({ preventScroll: true });
+      root?.querySelector<HTMLElement>(`[id="${id}-done"]`)?.focus({ preventScroll: true });
       return;
     }
     const intent = attempt?.recovery ? 'invalid' : focusIntent.current;
@@ -478,6 +492,12 @@ export function FormSurface({
         refusal.field,
       );
       if (refusal.field) setProblems((before) => ({ ...before, [refusal.field!]: refusal.beside }));
+      // A host holding the step opens the one that asks for the refused field, where it is said beside it.
+      const holder = cursor && refusal.field ? (form.steps ?? []).findIndex((step) => step.fields.includes(rootOf(refusal.field!))) : -1;
+      if (cursor && holder >= 0 && holder !== cursor.step) {
+        cursor.onStep(holder, refusal.beside);
+        return;
+      }
       if (!shown) {
         setFailure(refusal.alone);
         setOutcome(
@@ -504,13 +524,14 @@ export function FormSurface({
   };
 
   if (receipt) {
+    const DoneHeading = headingLevel === 1 ? 'h1' : 'h2';
     const message = receipt.message ?? form.done?.description ?? (receipt.reference ? say('keepThisReference') : undefined);
     return (
       <section ref={surface} className="form-page form-page-done" aria-labelledby={`${id}-done`}>
         {!intake && <p className="eyebrow">{appName}</p>}
-        <h1 id={`${id}-done`} tabIndex={-1}>
+        <DoneHeading id={`${id}-done`} tabIndex={-1}>
           {form.done?.title ?? say('received')}
-        </h1>
+        </DoneHeading>
         {receipt.reference && (
           <>
             <p className="form-page-reference-label">{say('yourReference')}</p>
@@ -777,12 +798,14 @@ export function FormSurface({
               said={said}
               onStepChange={(index: number) => {
                 setFailure('');
-                if (reviewing) setCurrent(index);
+                if (cursor) cursor.onStep(index);
+                else if (reviewing) setCurrent(index);
               }}
-              {...(reviewing ? { step: current } : {})}
+              {...(cursor ? { step: cursor.step } : reviewing ? { step: current } : {})}
               validateStep={validateStep}
               onComplete={complete}
               presentation={inDialog ? 'dialog' : 'page'}
+              headingLevel={headingLevel}
               /* What each step said, beside a page's form; nothing on the review, which says it all. */
               summarize={(step: FormStep, active: FormStep) => {
                 if (active.id === REVIEW) return undefined;

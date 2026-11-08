@@ -143,6 +143,35 @@ One App is served at the root (`https://host/leads/127`). Several each keep thei
 
 An App that signs people in needs a server of its own; put several behind one proxy, each under its own path. Its session cookie is scoped to that path, so two Apps on one host never read each other's session.
 
+## One App, several programs
+
+A bank that runs a retail program and a credit-union program from one App, or a company with a portal per region, serves the same App more than once, each instance with its own name, logo, theme and language. That is a deployment fact, so it lives in the config file next to `"mount"` and `"basePath"`, never in the App:
+
+```json
+{
+  "connections": [{ "name": "ledger", "url": "postgres://…" }],
+  "presentation": {
+    "bank": { "name": "Northside Bank", "logo": "logos/northside.svg", "theme": "mono", "locale": "en-AU" }
+  }
+}
+```
+
+```sh
+npx @mistriwork/mistri --app ./bank --config northside.json --port 4001
+npx @mistriwork/mistri --app ./bank --config harbor.json --port 4002 --base-path /harbor
+```
+
+The second config says `{ "name": "Harbor Credit Union", "logo": "logos/harbor.svg" }` under the same App id. Each key is optional and keyed by the App's id:
+
+- `name`: the program's name, in the bar, the page title, the sign-in screen and the install manifest. It replaces `shortName` too.
+- `logo`: a picture in the App's directory, written as `ui.logo` is (a path, or `{ "src", "dark", "mark" }`). It is served from the App's own origin, under the base path when there is one.
+- `theme`: a built-in theme, or one the App registers in `ui.customThemes`, by name, or `{ "preset": "mono", "palette": "…" }` to choose one of that theme's palettes.
+- `locale`: a language tag such as `en-AU`.
+
+It is applied before sign-in as well as after, so the sign-in screen, public pages and forms, and the landing wear it. A tenant's own branding still wins over it, and it wins over the App's definition. A theme or logo the App cannot load, a key it does not take, or an id the server does not serve stops the start and names the key. A built App takes `name`, `theme` and `locale`; its logo is the one it was built with. A custom page reads the result, presentation only, with `useDeployment()` from `@mistriwork/mistri/ui` (or `/page`): `{ name, mark, theme, locale, basePath }`. Credentials and connection settings are never part of the override or of what the page reads.
+
+`mistri check --config northside.json` judges the App as that config presents it and refuses what a start would: the same message for an unknown theme, a missing logo, a bad locale or an id the App does not have, and a line in its report when a presentation applies. `mistri shot` reads it the same way.
+
 ## On a custom domain
 
 Serve an App, or one tenant of a tenant App, at an address of your own (`https://desk.example.com`) by pointing the name at a TLS proxy and telling the server what that proxy is.

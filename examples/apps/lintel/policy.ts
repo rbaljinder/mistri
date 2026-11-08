@@ -93,7 +93,8 @@ export default defineAppRowPolicy<Rows>({
   services: ['rent-poster', 'lease-clock', 'payment-processor', 'repair-triage'],
   async resolveRows(principal, { db }) {
     if (principal.kind === 'service') return { ...all(false), ...(SERVICES[principal.id] ?? {}) };
-    if (principal.roles.some((role) => OFFICE.includes(role))) return all(true);
+    // The carrier's tracking is an API: a policy grants it whole or not at all, and only the office has it.
+    if (principal.roles.some((role) => OFFICE.includes(role))) return { ...all(true), 'carrier.shipments': true };
     if (principal.roles.includes('resident')) return household(db, principal.email);
     return all(false);
   },

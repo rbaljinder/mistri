@@ -433,6 +433,8 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
         let builtIn = await filesSweep(registry, app, options.current, owner);
         for (const job of builtIn)
           jobLines = [...jobLines, `the jobs sweep ${app.id}'s buckets each day at ${job.every.text} (cron, UTC).`];
+        /* A saved form that purges its abandoned drafts: removed on a schedule, never cascading past the draft's own rows. */
+        builtIn = [...builtIn, ...(await draftRetention(registry, app, options.current, owner, jobRegistry))];
         /* The App's `retention`: one daily prune of its runtime tables, on the job store's database and every connection the App uses. */
         {
           const { retentionJob } = await import('../retention.js');
@@ -661,6 +663,45 @@ async function filesSweep(
           );
           // A delete the bucket refused is retried by the job's own retries, not lost.
           if (code !== 0) throw new Error('The files sweep could not delete every unnamed object.');
+        } finally {
+          for (const release of releases.reverse()) release();
+        }
+      },
+    },
+  ];
+}
+
+/** An App's abandoned drafts removed hourly (forms/draftRetention.ts), read and deleted on the App's own connection. */
+async function draftRetention(
+  registry: Registry,
+  app: AppDef,
+  current: () => AppDef,
+  owner: string,
+  commands: BusinessCommandRegistry,
+): Promise<readonly import('../jobs/jobHost.js').BuiltInJob[]> {
+  const [{ DRAFT_RETENTION_JOB, DRAFT_RETENTION_EVERY, keepsDrafts, sweepDrafts }, { parseEvery }] = await Promise.all([
+    import('../forms/draftRetention.js'),
+    import('../jobs/jobSchedule.js'),
+  ]);
+  if (!keepsDrafts(app)) return [];
+  return [
+    {
+      id: DRAFT_RETENTION_JOB,
+      every: parseEvery(DRAFT_RETENTION_EVERY),
+      run: async () => {
+        const { loadAppRuntimeResources } = await import('../app/appRuntimeResources.js');
+        const releases: Array<() => void> = [];
+        try {
+          const resources = await loadAppRuntimeResources(registry, current(), owner, (id) => releases.push(registry.lease(id)));
+          await sweepDrafts(
+            current(),
+            commands,
+            resources.schema,
+            (table) => resources.forConnection(resources.connectionFor(table)),
+            new Date(),
+            (table, key) =>
+              console.log(`mistri: draft retention: ${table} ${key} is expired but another row refers to it, so it was kept.`),
+          );
         } finally {
           for (const release of releases.reverse()) release();
         }

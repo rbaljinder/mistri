@@ -7,11 +7,13 @@
  * twice, everything is present and nothing is made again.
  */
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+import { draftDescription } from '../packages/engine/src/adapters/http/httpDescription.js';
+import { readOpenApi } from '../packages/engine/src/adapters/http/openapi.js';
 import { runMigrate } from '../packages/engine/src/server/migrate/cli.js';
 import { MIGRATE_APPS } from '../packages/mistri/src/server/cli/appTargets.js';
 import { installMistri } from './support/installedMistri.js';
@@ -157,4 +159,46 @@ export default defineCommands({
   );
   assert.equal(code, 0, lines.join('\n'));
   assert.match(lines.join('\n'), /desk: command journal v\d+ provisioned/);
+});
+
+test('migrate stores up --app keeps no live sync store on an HTTP source, and keeps one on the database beside it', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-app-stores-http-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const file = join(directory, 'desk.db');
+  const db = new DatabaseSync(file);
+  db.exec('CREATE TABLE ticket (id INTEGER PRIMARY KEY, title TEXT NOT NULL);');
+  db.close();
+  const spec = JSON.parse(readFileSync(new URL('./fixtures/http/openapi.json', import.meta.url), 'utf8'));
+  writeFileSync(join(directory, 'crm.http.json'), JSON.stringify(draftDescription(readOpenApi(spec))));
+  const config = join(directory, 'mistri.json');
+  writeFileSync(
+    config,
+    JSON.stringify({
+      connections: [
+        { name: 'desk-db', url: file },
+        // Never reached: provisioning reads the config, and an HTTP source has no store to keep.
+        { name: 'crm-api', kind: 'http', url: 'http://127.0.0.1:9/v1', description: 'crm.http.json', insecure: true },
+      ],
+    }),
+  );
+  const app = join(directory, 'app');
+  mkdirSync(app);
+  writeFileSync(
+    join(app, 'app.json'),
+    JSON.stringify({
+      id: 'deskcrm',
+      name: 'Desk',
+      sources: { desk: { connection: 'desk-db', default: true }, crm: { connection: 'crm-api' } },
+      resources: { ticket: {}, 'crm.contacts': {} },
+      views: { tickets: { kind: 'list', from: 'ticket' }, contacts: { kind: 'list', from: 'crm.contacts' } },
+      home: 'tickets',
+      nav: ['tickets', 'contacts'],
+    }),
+  );
+  const lines: string[] = [];
+  const code = await runMigrate(['stores', 'up', '--app', app, '--config', config], (line) => lines.push(line), undefined, MIGRATE_APPS);
+  const text = lines.join('\n');
+  assert.equal(code, 0, text);
+  assert.match(text, /desk-db: live sync store v\d+ provisioned/);
+  assert.doesNotMatch(text, /crm-api/, text);
 });

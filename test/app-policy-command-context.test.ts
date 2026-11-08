@@ -240,7 +240,7 @@ test('commands expose frozen availability/prepare/execute/status bound to verifi
         'trial',
         'writeFields',
       ]);
-      assert.deepEqual(Reflect.ownKeys(context.commands!).sort(), ['availability', 'draft', 'execute', 'prepare', 'status']);
+      assert.deepEqual(Reflect.ownKeys(context.commands!).sort(), ['availability', 'check', 'draft', 'execute', 'prepare', 'status']);
       assert.ok(Object.isFrozen(context.commands));
       const { execute, status } = context.commands!;
       assert.deepEqual(await status(request()), { status: 'not_found', outcome: 'unknown' });
@@ -265,6 +265,13 @@ test('commands expose frozen availability/prepare/execute/status bound to verifi
     Refusal,
   );
   assert.equal(f.loan().assignee, 'Ada');
+  // A step is checked only for a command a form of this App offers, as the ordinary host checks it: none offers this one.
+  const step = { command: 'assign', commandVersion: 1, fields: ['assignee'], input: { assignee: 'Ada' } };
+  await assert.rejects(
+    issuer.withContext(signedIn, (context) => context.commands!.check!(step)),
+    { code: 'forbidden' },
+  );
+  assert.equal(f.control.calls, 1);
 });
 
 test('session verification precedes command exposure and ignores body identity', async (t) => {

@@ -30,10 +30,21 @@ test('CRM: TypeScript DSL matches its seeded schema and generated authoring type
     );
     // Each page is found by its file (pages/<key>.ts, a default export): app.ts lists none.
     assert.equal(loaded.sources.lead, resolve('test/fixtures/apps/crm/pages/lead.ts'));
-    assert.deepEqual(
-      loaded.pageFiles,
-      ['account', 'campaign', 'contact', 'lead', 'opportunity'].map((key) => `pages/${key}.ts`),
-    );
+    // A free-form page placed as the account's tab is found by its folder (pages/accounts/[id]/).
+    assert.deepEqual(loaded.pageFiles, [
+      'pages/account.ts',
+      'pages/accounts/[id]/pipeline.page.tsx',
+      'pages/campaign.ts',
+      'pages/contact.ts',
+      'pages/lead.ts',
+      'pages/opportunity.ts',
+    ]);
+    assert.deepEqual((loaded.app.views['accounts-pipeline'] as { page?: unknown }).page, {
+      reads: ['account', 'opportunity'],
+      commands: [],
+      params: [],
+      record: { view: 'accounts', table: 'account', tab: 'pipeline' },
+    });
     assert.equal(
       readFileSync(resolve('test/fixtures/apps/crm/mistri-schema.d.ts'), 'utf8'),
       // The App's rollups are named with their table's columns (typegen.ts).

@@ -21,6 +21,8 @@ interface DraftSummary {
   reopen: string | null;
   /** The saved answers by the steps' input names, as input (a lines field is its rows): the earlier steps and the review start from them. */
   values: Record<string, unknown>;
+  /** When the server lets the draft go, where it said: a page's `useForm` shows it. */
+  expiresAt?: string;
 }
 
 /** What SavedFormSurface needs of a signed-in form's server. */
@@ -35,6 +37,8 @@ export interface DraftTransport {
   discard(): Promise<void>;
   /** The key in flight for a step (or the submit, `#review`), held across a reload. */
   keyFor(step: string): string;
+  /** Whether a key is held for a step without making one: a held `#review` key is a submit not yet known to have landed. */
+  holds(step: string): boolean;
   clearKey(step: string): void;
   clearKeys(): void;
 }
@@ -90,12 +94,15 @@ export function draftTransport(connection: string | null | undefined, form: Draf
   const call = (body: Record<string, unknown>) => api(COMMAND_ROUTES.draft, { form: form.id, ...ownedBy(connection), ...body });
   return {
     keyFor,
+    holds: (step) => read(step) !== undefined,
     clearKey,
     clearKeys() {
       for (const step of [...(form.steps ?? []).map((item) => item.id), SUBMIT]) clearKey(step);
     },
     async resume() {
-      const answer = (await call({ op: 'resume' })) as { draft?: { saved?: unknown; reopen?: unknown; values?: unknown } | null };
+      const answer = (await call({ op: 'resume' })) as {
+        draft?: { saved?: unknown; reopen?: unknown; values?: unknown; expiresAt?: unknown } | null;
+      };
       const draft = answer?.draft;
       if (!draft) return null;
       return {
@@ -103,6 +110,7 @@ export function draftTransport(connection: string | null | undefined, form: Draf
         reopen: typeof draft.reopen === 'string' ? draft.reopen : null,
         values:
           draft.values && typeof draft.values === 'object' && !Array.isArray(draft.values) ? (draft.values as Record<string, unknown>) : {},
+        ...(typeof draft.expiresAt === 'string' ? { expiresAt: draft.expiresAt } : {}),
       };
     },
     async step(step, key, input) {

@@ -73,6 +73,11 @@ const ALLOWED = [
     text: '400 11px system-ui, sans-serif',
     reason: "a heat map head's font, to measure its names with, never shown",
   },
+  {
+    file: 'components/sdk/fixture.tsx',
+    text: 'The object form has no operator "{}".',
+    reason: "the test fixture's refusal of a malformed where, read by the test's author and never drawn in an App",
+  },
   { file: 'components/sdk/blocks.tsx', text: 'Metric', reason: "a block's component name, as the author writes it in JSX" },
   { file: 'components/sdk/blocks.tsx', text: 'Chart', reason: "a block's component name, as the author writes it in JSX" },
   { file: 'components/sdk/blocks.tsx', text: 'Breakdown', reason: "a block's component name, as the author writes it in JSX" },
@@ -82,6 +87,10 @@ const ALLOWED = [
   { file: 'components/sdk/blocks.tsx', text: 'Tree', reason: "a block's component name, as the author writes it in JSX" },
   { file: 'components/sdk/blocks.tsx', text: 'Gantt', reason: "a block's component name, as the author writes it in JSX" },
   { file: 'components/sdk/blocks.tsx', text: 'Assistant', reason: "a block's component name, as the author writes it in JSX" },
+  { file: 'components/sdk/blocks.tsx', text: 'Board', reason: "a block's component name, as the author writes it in JSX" },
+  { file: 'components/sdk/blocks.tsx', text: 'Calendar', reason: "a block's component name, as the author writes it in JSX" },
+  { file: 'components/sdk/blocks.tsx', text: 'Gallery', reason: "a block's component name, as the author writes it in JSX" },
+  { file: 'components/sdk/blocks.tsx', text: 'Split', reason: "a block's component name, as the author writes it in JSX" },
   { file: '*', text: 'SQL', reason: "the language's name" },
   {
     file: 'components/useGridGroups.ts',

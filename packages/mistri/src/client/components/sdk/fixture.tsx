@@ -26,7 +26,10 @@ import {
   UiSizeContext,
   type OpenMode,
   type UiCommandHandle,
+  type UiCommandOptions,
   type UiCommandOutcome,
+  type UiFormOutcome,
+  type UiFormState,
   type UiHost,
   type UiLook,
   type UiPageFrame,
@@ -38,6 +41,8 @@ import { captureAppFlagValues, type AppFlagValue } from '../../../shared/appFlag
 import { registerPageBlocks } from './pageBlocks.js';
 import { sayAppMessage } from './appMessage.js';
 import { totalFigure, totalGroups } from '../../../shared/customTotals.js';
+import { humanName } from '@mistriwork/engine/shared/model.js';
+import type { AppCommandField } from '../../../shared/command.js';
 
 /* A page drawn here draws its blocks as an App's does (CustomPage.tsx): the platform's, loaded when one is first drawn. */
 registerPageBlocks(() => import('./blocks.js'));
@@ -59,7 +64,7 @@ export function fixtures<R = Record<string, UiRow>>(
 export type Navigation =
   | { kind: 'record'; resource: string; key: Readonly<Record<string, unknown>>; mode: OpenMode }
   | { kind: 'view'; view: string; tab?: string; search?: string; filters?: Readonly<Record<string, string>> }
-  | { kind: 'form'; view: string; prefill: Readonly<Record<string, string | number>> }
+  | { kind: 'form'; view: string; prefill: Readonly<Record<string, string | number>>; at?: string }
   | { kind: 'composer'; text: string; mode?: 'reply' | 'note' };
 
 /** A command a component ran or opened, recorded instead of sent. */
@@ -76,7 +81,8 @@ export interface RenderOptions {
   /** Where `useAnalytics().emit` calls are collected, for a test to read. */
   analytics?: { name: string; fields?: Readonly<Record<string, string | number | boolean>> }[];
   data?: Fixtures;
-  /** The page's record, for a section that declares `record`: its fields are read from here. */
+  /** The page's record, for a section that declares `record`: its fields are read from here. A record's tab page
+   * (`pages/<view>/[id]/<tab>.page.tsx`) is drawn on it: `useRecordKey` answers it. */
   record?: UiRow;
   /** Props beside the declaration's own: a test of one prop's effect. */
   props?: Record<string, unknown>;
@@ -98,7 +104,15 @@ export interface RenderOptions {
    */
   commands?: Record<
     string,
-    { label?: string; available?: (key: Readonly<Record<string, unknown>>) => boolean; outcome?: UiCommandOutcome }
+    {
+      label?: string;
+      available?: (key: Readonly<Record<string, unknown>>) => boolean;
+      outcome?: UiCommandOutcome;
+      /** Its inputs, by name, as the command declares them, for `useField`: a kind and the rules it is judged by. */
+      input?: Record<string, FixtureInput>;
+      /** What the server's check of a step answers (`<Steps>`): each named input's problem, by path; none unless said. */
+      check?: (input: Readonly<Record<string, unknown>>, names: readonly string[]) => Readonly<Record<string, string>> | undefined;
+    }
   >;
   /** A free-form page's address parameters as the reader arrived with them. */
   address?: Record<string, string>;
@@ -113,8 +127,48 @@ export interface RenderOptions {
   files?: Record<string, string>;
   /** The App's catalog `useMessage` says, in the language under test: `{ 'help.title': 'Help center' }`. A key left out is said as itself. */
   messages?: Record<string, string>;
+  /** Where what a page announces (`<CommandButton>`'s outcome) is collected, for a test to read; it is also drawn in a `status` region. */
+  announced?: { text: string; tone: 'ok' | 'error' }[];
   /** What `useNavigate().publicLink` answers, by view key: a tenant's own links. None by default. */
   publicLinks?: Record<string, string>;
+  /**
+   * The resources the reader may not read, each with the status the server refuses it with: 401 signed out, 403 not
+   * this reader's role. A read of one fails as the page's does, so a test sees the refused state; `refresh` can take
+   * a grant away from a page already drawn.
+   */
+  refused?: Record<string, 401 | 403>;
+  /**
+   * A page's declared forms (`page.useForm`), by view key: the draft the reader has, a submit still pending, and how
+   * the form ends when the test's page opens it. A form left out is not granted, and none is to a signed-out reader,
+   * as with `commands`; either still opens, with no draft, and closes with nothing sent.
+   */
+  forms?: Record<string, FixtureForm>;
+}
+
+/** One declared form as a test sets it: a resumed draft, a submit not yet known to have landed, the outcome it closes with. */
+interface FixtureForm {
+  label?: string;
+  steps?: ReadonlyArray<{ id: string; label: string }>;
+  draft?: UiFormState['draft'];
+  pending?: boolean;
+  outcome?: UiFormOutcome;
+}
+
+/** One input of a fixture's command, as the command declares it: what `useField` binds to and judges by. */
+interface FixtureInput {
+  type: 'text' | 'textarea' | 'number' | 'money' | 'boolean' | 'date' | 'reference';
+  label?: string;
+  required?: boolean;
+  min?: number;
+  max?: number;
+  maxLength?: number;
+  /** A money input kept in minor units, in `currency` (the App's unless said). */
+  minor?: boolean;
+  currency?: string;
+  /** A reference's resource, whose fixture rows are its choices (`useOptions`), by its key (`id`) and label (`name`) columns. */
+  from?: string;
+  by?: string;
+  labelColumn?: string;
 }
 
 interface AuthoredRead {
@@ -155,8 +209,47 @@ export interface AuthoredPage {
   reads: readonly string[];
   commands?: readonly string[];
   actions?: readonly string[];
-  params?: readonly string[];
+  /** Its address parameters: names, or each name with its kind (`{ class: 'id' }`). */
+  params?: readonly string[] | Readonly<Record<string, unknown>>;
   loader?: string;
+}
+
+/* An object condition (pageWhere.ts) judged on fixture rows as the server's query would judge it: a list is any of
+   its values, null is empty, and digits match the number they spell, as a bare number does in the language. */
+const plainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+const same = (a: unknown, b: unknown) =>
+  a === b || (a !== null && a !== undefined && b !== null && b !== undefined && String(a) === String(b));
+function compared(a: unknown, b: unknown): number {
+  const x = Number(a),
+    y = Number(b);
+  if (typeof a !== 'boolean' && a !== '' && b !== '' && Number.isFinite(x) && Number.isFinite(y)) return x - y;
+  return String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
+}
+function holds(value: unknown, wanted: unknown): boolean {
+  if (wanted === null) return value === null || value === undefined;
+  if (Array.isArray(wanted)) return wanted.some((one) => same(value, one));
+  if (!plainObject(wanted)) return same(value, wanted);
+  return Object.entries(wanted).every(([op, operand]) => {
+    if (operand === undefined) return true;
+    if (op === 'not') return !holds(value, operand);
+    if (value === null || value === undefined) return false;
+    const text = String(value).toLowerCase(),
+      part = String(operand).toLowerCase();
+    if (op === 'gt') return compared(value, operand) > 0;
+    if (op === 'gte') return compared(value, operand) >= 0;
+    if (op === 'lt') return compared(value, operand) < 0;
+    if (op === 'lte') return compared(value, operand) <= 0;
+    if (op === 'contains') return text.includes(part);
+    if (op === 'startsWith') return text.startsWith(part);
+    if (op === 'endsWith') return text.endsWith(part);
+    throw new Error(`The object form has no operator "${op}".`);
+  });
+}
+function matches(row: UiRow, where: unknown): boolean {
+  if (where === undefined || where === null) return true;
+  if (Array.isArray(where)) return where.every((each) => matches(row, each));
+  return Object.entries(where as Record<string, unknown>).every(([column, wanted]) => wanted === undefined || holds(row[column], wanted));
 }
 
 const pick = (row: UiRow, show: readonly string[] | undefined): UiRow =>
@@ -188,9 +281,14 @@ function read(
   show: readonly string[] | undefined,
   sort: string | undefined,
   limit: number | undefined,
+  where?: unknown,
+  offset = 0,
 ): UiRow[] {
-  return ordered(data.tables[resource] ?? [], sort)
-    .slice(0, limit ?? 20)
+  return ordered(
+    (data.tables[resource] ?? []).filter((row) => matches(row, where)),
+    sort,
+  )
+    .slice(offset, offset + (limit ?? 20))
     .map((row) => pick(row, show));
 }
 
@@ -245,7 +343,15 @@ function breakdown(data: Fixtures, resource: string, by: string, measure: string
 }
 
 export function fixtureHost(data: Fixtures, options: RenderOptions, navigations: Navigation[], commands: CommandCall[] = []): UiHost {
+  /* Read at every call, not once: a test's `refresh` takes a grant away from a page already drawn. */
+  const refuse = (resource: string) => {
+    const status = options.refused?.[resource];
+    if (status) throw Object.assign(new Error(say('fixtureRefused', { resource })), { status });
+  };
   const look: UiLook = { look: options.look ?? 'workshop', mode: options.mode ?? 'light', density: 'comfortable' };
+  /* A fresh page says nothing yet: an announcement left by the test before is not this one's. */
+  // host-global: the test's own document, where the fixture said what it announced.
+  if (typeof document !== 'undefined') document.getElementById('mistri-fixture-announce')?.remove();
   const viewer = options.viewer ?? { signedIn: false };
   const served = options.commands ?? {};
   const values =
@@ -260,25 +366,47 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
     },
   });
   /* A command and a fixed action are served the same way here: by id, granted to a signed-in reader. */
-  const handle = (id: string): UiCommandHandle => {
+  const handle = (id: string, kind: 'command' | 'action'): UiCommandHandle => {
     const entry = Object.hasOwn(served, id) ? served[id] : undefined;
     const granted = Boolean(entry) && viewer.signedIn;
+    const label = entry?.label ?? id;
     const call =
       (mode: 'run' | 'open') =>
-      async (key: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>): Promise<UiCommandOutcome> => {
-        if (!granted) return { status: 'refused', message: viewer.signedIn ? say('notGranted') : say('signInToDo') };
+      async (
+        key: Readonly<Record<string, unknown>>,
+        input?: Readonly<Record<string, unknown>>,
+        options: UiCommandOptions = {},
+      ): Promise<UiCommandOutcome> => {
+        /* A refusal is said by the run itself, as the page's is (commands.tsx), so a test reads it where a person would. */
+        if (!granted) {
+          const message = viewer.signedIn ? say('notGranted') : say('signInToDo');
+          host.announce(message, 'error');
+          return { status: 'refused', message };
+        }
         commands.push({ command: id, mode, key, ...(input ? { input } : {}) });
-        return entry!.outcome ?? (mode === 'open' ? { status: 'closed' } : { status: 'applied' });
+        const outcome =
+          entry!.outcome ?? (mode === 'open' && kind === 'command' ? { status: 'closed' as const } : { status: 'applied' as const });
+        if (outcome.status === 'refused' && !options.quiet) host.announce(outcome.message, 'error');
+        /* A fixed action says its own outcome, as the page's does (commands.tsx); a command leaves it to its caller. */
+        if (kind === 'action' && outcome.status === 'applied') host.announce(options.done ?? say('actionDone', { label }), 'ok');
+        return outcome;
       };
     return {
-      label: entry?.label ?? id,
+      label,
       granted,
       available: async (key) => granted && (entry!.available?.(key) ?? true),
       run: call('run'),
       open: call('open'),
+      /* Served as the page serves it: a field with its label, the name said as words where the fixture gives none. */
+      input: (name) => {
+        const declared = entry?.input && Object.hasOwn(entry.input, name) ? entry.input[name] : undefined;
+        const reference = declared?.type === 'reference' ? { by: 'id', labelColumn: 'name' } : {};
+        return declared && ({ name, label: humanName(name), ...reference, ...declared } as AppCommandField);
+      },
+      check: async (input, names) => (granted ? { ...entry!.check?.(input, names) } : undefined),
     };
   };
-  return {
+  const host: UiHost = {
     flags: { ...flags, snapshot: () => flags, subscribe: () => () => {}, load: async () => {} },
     analytics: {
       emit: (name, fields) => {
@@ -286,14 +414,25 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
       },
     },
     scope: ['test'],
-    rows: async (resource, { show, sort, limit }) => read(data, resource, show, sort, limit),
+    /* A fixture's key is `id`, as its custom list's is (ListBody). */
+    /* Asked one past the page, as the page host asks the server, so `more` is the same answer in a test. */
+    rows: async (resource, { show, sort, limit, where, keys, offset }) => {
+      refuse(resource);
+      const size = limit ?? 20;
+      const got = read(data, resource, keys && show?.length ? [...new Set([...show, 'id'])] : show, sort, size + 1, where, offset);
+      return { rows: got.slice(0, size), more: got.length > size };
+    },
     record: async (resource, key, show) => {
+      refuse(resource);
       const row = (data.tables[resource] ?? []).find((candidate) =>
         Object.entries(key).every(([column, value]) => candidate[column] === value),
       );
       return row && pick(row, show);
     },
-    breakdown: async (resource, { by, measure, limit }) => breakdown(data, resource, by, measure, limit),
+    breakdown: async (resource, { by, measure, limit }) => {
+      refuse(resource);
+      return breakdown(data, resource, by, measure, limit);
+    },
     load: async () => options.loaded ?? null,
     openRecord: (resource, key, { mode = 'page' } = {}) => {
       navigations.push({ kind: 'record', resource, key, mode });
@@ -304,6 +443,37 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
     openForm: (view, prefill = {}) => {
       navigations.push({ kind: 'form', view, prefill });
     },
+    /* Read at every call, as `refused` is: a started-over draft is gone for the page's next read. */
+    form: (view) => {
+      const declared = () => options.forms?.[view] ?? {};
+      return {
+        state: async () => {
+          const form = declared();
+          return {
+            label: form.label ?? view,
+            granted: viewer.signedIn && Object.hasOwn(options.forms ?? {}, view),
+            steps: form.steps ?? [],
+            draft: form.draft ?? null,
+            pending: form.pending ?? false,
+          };
+        },
+        open: async (input, { at } = {}) => {
+          navigations.push({
+            kind: 'form',
+            view,
+            prefill: (input ?? {}) as Readonly<Record<string, string | number>>,
+            ...(at === undefined ? {} : { at }),
+          });
+          return declared().outcome ?? { status: 'closed' };
+        },
+        startOver: async () => {
+          const form = declared();
+          if (!form.draft || form.pending) return false;
+          options.forms = { ...options.forms, [view]: { ...form, draft: null } };
+          return true;
+        },
+      };
+    },
     publicLink: (view) => (options.publicLinks && Object.hasOwn(options.publicLinks, view) ? options.publicLinks[view] : undefined),
     /* A fixture page draws one composer, so a fill lands: the test reads what was put there. */
     fillComposer: (text, mode) => {
@@ -313,8 +483,27 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
     fileAddress: (resource, key, { thumbnail } = {}) =>
       options.files?.[`${resource}/${Object.values(key).join('-')}`] ??
       `/fixture/${resource}/${Object.values(key).join('-')}${thumbnail ? '?thumb' : ''}`,
-    command: (id) => handle(id),
-    action: (id) => handle(id),
+    command: (id) => handle(id, 'command'),
+    action: (id) => handle(id, 'action'),
+    /* A reference's choices are its resource's fixture rows by their label, as the picker reads them; a refused
+       resource is refused here too, so a test takes the reader's access away from a choice already made. */
+    choices: async (field, text, { offset, limit }) => {
+      refuse(field.from);
+      const wanted = text.trim().toLowerCase();
+      const named = (data.tables[field.from] ?? [])
+        .flatMap((row) => {
+          const key = row[field.by];
+          return typeof key === 'string' || typeof key === 'number' ? [{ key, label: String(row[field.labelColumn] ?? key) }] : [];
+        })
+        .filter((option) => option.label.toLowerCase().includes(wanted))
+        .sort((one, other) => one.label.localeCompare(other.label));
+      return { options: named.slice(offset, offset + limit), more: named.length > offset + limit };
+    },
+    choiceName: async (field, key) => {
+      refuse(field.from);
+      const row = (data.tables[field.from] ?? []).find((candidate) => candidate[field.by] === key);
+      return row ? { key, label: String(row[field.labelColumn] ?? key) } : null;
+    },
     viewer: () => viewer,
     subscribeViewer: () => () => {},
     column: (resource, name) => {
@@ -323,12 +512,39 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
       return { meta: { name, type } as never, rule: authoredDisplay(data.display[`${resource}.${name}`]), label: name };
     },
     look: () => look,
+    deployment: () => ({ name: 'Fixture App', mark: null, theme: look.look, locale: options.locale ?? null, basePath: '' }),
     token: (name) => options.tokens?.[name] ?? '',
     subscribeLook: () => () => {},
     app: true,
     message: (key, args) => sayAppMessage(options.messages, key, args),
+    /* Said where a test finds it, as the page's live region says it: `findByText` reads what a button announced. */
+    announce: (text, tone) => {
+      options.announced?.push({ text, tone });
+      if (typeof document === 'undefined') return;
+      // host-global: the fixture renders into a test's own document, which has no shell to ask.
+      let region = document.getElementById('mistri-fixture-announce');
+      if (!region) {
+        region = document.createElement('div');
+        region.id = 'mistri-fixture-announce';
+        region.setAttribute('role', 'status');
+        // host-global: as above, the test's document.
+        document.body.append(region);
+      }
+      region.textContent = text;
+    },
+    rowTitle: (_resource, row) => {
+      for (const name of ['title', 'name', 'label', 'subject']) {
+        if (row[name] !== null && row[name] !== undefined && String(row[name]) !== '') return String(row[name]);
+      }
+      const text = Object.entries(row).find(([name, value]) => name.endsWith('name') && typeof value === 'string' && value)?.[1];
+      return typeof text === 'string' ? text : row.id === undefined || row.id === null ? undefined : String(row.id);
+    },
   };
+  return host;
 }
+
+/** A query cache as a test wants one: a failed read fails at once rather than after the page's retries. */
+export const fixtureClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
 /** The frame a component is drawn in: the fixture host, its measured width, and a query cache of its own. */
 export function SectionFrame({
@@ -337,14 +553,17 @@ export function SectionFrame({
   width,
   children,
   className = 'custom-section',
+  client: given,
 }: {
   host: UiHost;
   id: string;
   width: number;
   children: ReactNode;
   className?: string;
+  /** The test's own cache, when it refreshes what is drawn (`Drawn.refresh`); else one of the frame's own. */
+  client?: QueryClient;
 }) {
-  const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }));
+  const [client] = useState(() => given ?? fixtureClient());
   return (
     <QueryClientProvider client={client}>
       <UiHostContext.Provider value={host}>
@@ -442,7 +661,7 @@ function ListBody({
 }
 
 /** A free-form page's frame over fixtures: its address kept in the frame, as the walk keeps a page's. */
-function useFixturePage(declaration: AuthoredPage, address: Record<string, string> = {}): UiPageFrame {
+function useFixturePage(declaration: AuthoredPage, address: Record<string, string> = {}, record?: UiRow): UiPageFrame {
   const [place, setPlace] = useState<Record<string, string>>(address);
   return useMemo(
     () => ({
@@ -451,8 +670,9 @@ function useFixturePage(declaration: AuthoredPage, address: Record<string, strin
       reads: declaration.reads,
       commands: declaration.commands ?? [],
       actions: declaration.actions ?? [],
-      params: declaration.params ?? [],
+      params: Array.isArray(declaration.params) ? declaration.params : Object.keys(declaration.params ?? {}),
       ...(declaration.loader ? { loader: declaration.loader } : {}),
+      ...(record ? { record: { key: record } } : {}),
       get: (name) => place[name],
       set: (name, value) =>
         setPlace((before) => {
@@ -462,7 +682,7 @@ function useFixturePage(declaration: AuthoredPage, address: Record<string, strin
           return next;
         }),
     }),
-    [declaration, place],
+    [declaration, place, record],
   );
 }
 
@@ -475,7 +695,7 @@ function PageBody({
   declaration: AuthoredPage;
   options: RenderOptions;
 }) {
-  const frame = useFixturePage(declaration, options.address);
+  const frame = useFixturePage(declaration, options.address, options.record);
   return (
     <UiPageContext.Provider value={frame}>
       {createElement(component, { data: options.loaded ?? null, props: { ...options.props } })}
@@ -515,12 +735,14 @@ export function FixtureComponent({
   options = {},
   navigations = [],
   commands = [],
+  client,
 }: {
   component: ComponentType<never>;
   declaration: Declared;
   options?: RenderOptions;
   navigations?: Navigation[];
   commands?: CommandCall[];
+  client?: QueryClient;
 }) {
   const data = options.data ?? fixtures({});
   const [host] = useState(() => fixtureHost(data, options, navigations, commands));
@@ -556,6 +778,7 @@ export function FixtureComponent({
       host={host}
       id={id}
       width={width}
+      client={client}
       className={kind === 'value' ? 'custom-value' : kind === 'list' ? 'custom-list' : kind === 'page' ? 'custom-room' : 'custom-section'}
     >
       {body}

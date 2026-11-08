@@ -34,7 +34,7 @@
  */
 import { isTenantApp, type AppDef } from './appModel.js';
 import { isRecord, plainRecord, allowKeys } from '@mistriwork/engine/shared/model.js';
-import { personTable } from './appMe.js';
+import { peopleByAccount, personTable } from './appMe.js';
 import { isMessageRef, type AppMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import { parseQuery } from '@mistriwork/engine/shared/query.js';
 import { columnKind, isBinaryType, primaryKey, tableNamed, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
@@ -318,8 +318,9 @@ export function appNotifyRules(app: AppDef, schema: DatabaseSchema): { rules: Ma
       .flatMap((each) => each.actions ?? [])
       .find((action) => action.id === id)?.label;
   const person = personTable(app, schema);
-  /* A tenant App's people are rows per membership, found by account id: a notice tells that account. */
-  const account = isTenantApp(app) ? { account: true as const } : {};
+  /* A tenant App's people are rows per membership, found by account id, and so are an App's whose `auth.me` says
+     `by: 'account'`: a notice tells that account. */
+  const account = peopleByAccount(app) ? { account: true as const } : {};
   const tableOf = (name: string): TableMeta | undefined => schema.tables.find((table) => table.id === name) ?? tableNamed(schema, name);
   /* A team mentioned is told as its members: the team's row by its handle, and the rows that put a person in it. */
   const mentionGroups = (
@@ -619,7 +620,8 @@ export function appNotifyRules(app: AppDef, schema: DatabaseSchema): { rules: Ma
 /**
  * Advice, never a refusal: a configuration that writes every notice to
  * nobody, silently. A notice reaches a person through the column `auth.me`
- * names — an email in an App, the account's id in a tenant App — and a value
+ * names — an email in an App, the account's id in a tenant App or under
+ * `me.by: 'account'` — and a value
  * of the other kind tells nobody, without an error, since the catalog cannot
  * say what a text column holds. Its name usually can.
  */
@@ -636,12 +638,13 @@ export function notifyAdvisories(app: AppDef, schema: DatabaseSchema): string[] 
   );
   if (!reaches) return [];
   const at = `resources "${reaches[0]}", notify`;
-  if (isTenantApp(app) && /mail/i.test(me.column))
+  const byAccount = peopleByAccount(app);
+  if (byAccount && /mail/i.test(me.column))
     return [
-      `${at}: auth.me's "${me.column}" looks like an email column. In a tenant App it holds each person's account id, ` +
+      `${at}: auth.me's "${me.column}" looks like an email column. ${isTenantApp(app) ? 'In a tenant App' : "With by: 'account'"} it holds each person's account id, ` +
         "which a notice is told at; an email there tells nobody (and is nobody's me).",
     ];
-  if (!isTenantApp(app) && /(?:^|_)id$|account/i.test(me.column))
+  if (!byAccount && /(?:^|_)id$|account/i.test(me.column))
     return [
       `${at}: auth.me's "${me.column}" looks like an id. A notice is told at the email that column holds, so a value ` +
         'that is not an email tells nobody. Name the column holding the email.',

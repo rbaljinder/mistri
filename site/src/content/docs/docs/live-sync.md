@@ -10,7 +10,8 @@ An App asks for it with one key, and is off without it:
 
 ```ts title="examples/apps/lintel/app.ts"
 live: true,
-sources: { lintel: { connection: 'lintel' } },
+// The records are Lintel's own; the carrier's tracking API is a second source, read-only, whose tables are named `carrier.…`.
+sources: { lintel: { connection: 'lintel', default: true }, carrier: { connection: 'carrier' } },
 resources,
 ```
 
