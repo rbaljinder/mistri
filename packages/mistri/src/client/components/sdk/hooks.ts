@@ -33,6 +33,7 @@ import {
   type UiOpenViewOptions,
   type UiBreakdownOptions,
   type UiChoice,
+  type UiCommandHandle,
   type UiCommandOptions,
   type UiCommandOutcome,
   type UiCommandRef,
@@ -275,6 +276,37 @@ export function useCommand(ref: UiCommandRef): UiCommand {
   }
   const viewer = useViewer();
   const handle = useMemo(() => host.command(ref, page?.view), [host, ref, page?.view, viewer.signedIn, viewer.account]); // eslint-disable-line react-hooks/exhaustive-deps
+  return useHandle(handle, viewer);
+}
+
+/**
+ * One of the App's fixed actions, a machine's verb or `action(label, { set })`, by its id: `useAction('startVisit')`. It
+ * is held as a command is (`granted`, `available`, `reason`, `pending`, `run`, `open`, and the same outcome), but it is
+ * the record page's own button: `run(record)` writes the action's `set` to that record by its key through the update
+ * route, asking first when the action says `confirm`, and the server judges it again, as it judges the record page's —
+ * a record in a state the action leaves, or one this reader may not move, is refused in its words, never skipped. It
+ * takes no input, but for the reason an action asks (`run(record, { reason })`). On a free-form page it is one of the
+ * page's `actions`, which name fixed actions of the resources it reads.
+ */
+export function useAction(ref: UiCommandRef): UiCommand {
+  const host = useUiHost();
+  const page = useContext(UiPageContext);
+  if (page && !(page.actions ?? []).includes(ref)) {
+    throw new Error(
+      say('thePageRunsActionIsNotOne', {
+        label: page.label,
+        map: page.actions?.length ? page.actions.map((name) => `"${name}"`).join(', ') : say('noActions'),
+        action: ref,
+      }),
+    );
+  }
+  const viewer = useViewer();
+  const handle = useMemo(() => host.action(ref, page?.reads), [host, ref, page?.reads, viewer.signedIn, viewer.account]); // eslint-disable-line react-hooks/exhaustive-deps
+  return useHandle(handle, viewer);
+}
+
+/** What `useCommand` and `useAction` share: a handle held as a component holds it, its availability asked of the server once per record. */
+function useHandle(handle: UiCommandHandle, viewer: UiViewer): UiCommand {
   const [answers, setAnswers] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [running, setRunning] = useState<ReadonlySet<string>>(new Set());
   const asked = useRef(new Map<string, Readonly<Record<string, unknown>>>());

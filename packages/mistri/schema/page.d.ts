@@ -27,9 +27,9 @@
  * the page's hooks be typed from the definition it is part of.
  */
 import type * as ReactTypes from 'react';
-import type { AppIcon, AppMessageRef, CommandName, Register } from './app.js';
+import type { ActionName, AppIcon, AppMessageRef, CommandName, Register } from './app.js';
 import type { CommandOutcome, CommandRunOptions, CommandUnavailable, UiQuery, UiRow } from './ui.js';
-export { Button, Card, Columns, Empty, Heading, Loaded, Row, Stack, Stat, Value } from './ui.js';
+export { Button, Card, Cluster, Columns, Empty, Heading, Loaded, Row, Stack, Stat, Value } from './ui.js';
 
 /* ---------- what the App's generated types register ---------- */
 
@@ -81,10 +81,10 @@ export interface PageCommand {
 }
 
 /** A page as `definePage` makes it: the component that draws it, and its hooks, held to what it declares. */
-export interface PageDefinition<R extends string, C extends string, P extends string, L extends string> {
+export interface PageDefinition<R extends string, C extends string, P extends string, L extends string, A extends string = never> {
   (props: PageProps<L>): ReactTypes.ReactNode;
   readonly definition: { readonly label: string | AppMessageRef; readonly reads: readonly R[]; readonly commands?: readonly C[];
-    readonly params?: readonly P[]; readonly loader?: L };
+    readonly actions?: readonly A[]; readonly params?: readonly P[]; readonly loader?: L };
   /** Rows of one of the page's reads: `page.useRows('pick_list', { show: ['id', 'reference'], query: 'status = to_pick' })`. */
   useRows<T extends R>(resource: T, options?: { show?: readonly ColumnPath<T>[]; query?: string; sort?: string; limit?: number; enabled?: boolean }): UiQuery<UiRow[]>;
   /** One record of one of the page's reads, by its key; null when there is none, not asked while the key is undefined. */
@@ -95,6 +95,10 @@ export interface PageDefinition<R extends string, C extends string, P extends st
   useFile<T extends R>(resource: T): (key: Readonly<Record<string, unknown>>, options?: { thumbnail?: boolean }) => string | undefined;
   /** One of the page's commands: `page.useCommand('pickList')`. */
   useCommand(command: C): PageCommand;
+  /** One of the page's fixed actions, a machine's verb or `action(label, { set })` on a resource it reads: `page.useAction('startVisit')`.
+      The record page's own button, run on a record of the resource by its key: `run(record)` asks first when the action says
+      `confirm`, is refused when the record's state does not allow it, and takes no input. */
+  useAction(action: A): PageCommand;
   /** One of the page's address parameters, read and written: `/{app}/pick-walk?list=12`. A change refines the place the reader is
       on, unless `{ push: true }` makes it a step Back returns from. */
   useParam(name: P): [string | undefined, (value: string | number | undefined, options?: { push?: boolean }) => void];
@@ -113,6 +117,7 @@ export declare function definePage<
   const C extends CommandName = never,
   const P extends Lowercase<string> = never,
   const L extends LoaderName = never,
+  const A extends ActionName = never,
 >(definition: {
   label: string | AppMessageRef;
   icon?: AppIcon;
@@ -127,10 +132,12 @@ export declare function definePage<
   head?: 'compact' | false;
   reads: readonly R[];
   commands?: readonly C[];
+  /** The fixed actions it runs (a machine's verbs, `action(label, { set })`) on what it reads; commands are named in `commands`. Not on a public page. */
+  actions?: readonly A[];
   params?: readonly P[];
   loader?: L;
   component: (props: PageProps<L>) => ReactTypes.ReactNode;
-}): PageDefinition<R, C, P, L>;
+}): PageDefinition<R, C, P, L, A>;
 
 /** A free-form page's place, kept in its address: `const [list, setList] = useAddressState('list')` for `/{app}/pick-walk?list=12`. The name
     is one of the page's `params` (`page.useParam` is this hook, typed to them; this one serves a module the page draws); a change refines the place the reader is on, unless

@@ -181,6 +181,7 @@ export default defineConfig({
             { label: 'Forms', slug: 'docs/forms' },
             { label: 'Dashboards', slug: 'docs/dashboards' },
             { label: 'Navigation and the shell', slug: 'docs/nav-and-shell' },
+            { label: 'Workspaces', slug: 'docs/workspaces' },
             { label: 'Public pages', slug: 'docs/landing-pages' },
             { label: 'Display rules', slug: 'docs/vocabularies' },
             { label: 'Money, lines and live totals', slug: 'docs/order-lines' },

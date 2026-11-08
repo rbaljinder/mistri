@@ -166,16 +166,17 @@ export function authorityReport(app: AppDef, origins?: AppOrigins, env: readonly
       `public form ${key} runs command ${form.command.id} version ${form.command.version}${SEPARATOR}${feature ? `features "${feature}"` : THE_APP}`,
     );
   }
-  /* A free-form page reads, runs and loads what it declares: which resources
-     and commands an author's whole page may ask for is authority, as a
-     role's grants are, and so is a public page, which a signed-out visitor
-     opens. Its file is the App's own, so the App contributes it. */
+  /* A free-form page's loader and its being public are authority; its reads and commands are not, so saving a page
+     does not restart the server. A public page can read only what `auth.public` opens, and that is a fact of its own
+     above; any other page's reads are checked on each request against the reader's grants (`pageManifestRefusal`).
+     A signed-in page's commands need the role's grant likewise. What stands outside both is a public page's commands:
+     a door for signed-out visitors, as a public form's command is, so those are named. Its file is the App's own,
+     so the App contributes it. */
   for (const key of sorted(Object.keys(app.views))) {
     const view = app.views[key];
     if (!('sections' in view) || !view.page) continue;
     const by = `${SEPARATOR}${origins?.views[key] ? `features "${origins.views[key]}"` : THE_APP}`;
-    for (const resource of sorted(view.page.reads)) lines.push(`page ${key} reads ${resource}${by}`);
-    for (const command of sorted(view.page.commands)) lines.push(`page ${key} runs ${command}${by}`);
+    if (view.page.public) for (const command of sorted(view.page.commands)) lines.push(`page ${key} runs ${command}${by}`);
     if (view.page.loader) lines.push(`page ${key} loads ${view.page.loader}${by}`);
     if (view.page.public) lines.push(`page ${key} public${by}`);
   }

@@ -142,6 +142,10 @@ test('an opened host takes the beacon, delivers to its sink and releases both on
       'the sink was sent the stored events, and only the declared ones',
     );
     assert.match(String(received[0].key), /^analytics:warehouse:1-\d$/);
+    /* The cursor moves after the sink answers, not with the request the sink received: read at once under a loaded
+       machine it was still 0. */
+    for (let waited = 0; (await host.store.ensureCursor('warehouse')) < 2 && waited < 100; waited++)
+      await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(await host.store.ensureCursor('warehouse'), 2);
   } finally {
     await host.close();

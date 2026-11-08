@@ -207,6 +207,13 @@ function appCommandTypes(loaded: LoadedApp): string | undefined {
     loaded.app.name,
     loaded.loaders ? `./${basename(loaded.commands!.file)}` : undefined,
     pages,
+    [
+      ...new Set(
+        Object.values(loaded.app.resources ?? {}).flatMap((resource) =>
+          (resource.actions ?? []).filter((action) => !action.command).map((action) => action.id),
+        ),
+      ),
+    ],
   );
 }
 

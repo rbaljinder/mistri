@@ -25,6 +25,7 @@ import {
   UiPageContext,
   UiSizeContext,
   type OpenMode,
+  type UiCommandHandle,
   type UiCommandOutcome,
   type UiHost,
   type UiLook,
@@ -93,6 +94,7 @@ export interface RenderOptions {
   /**
    * The commands the reader is served, by id, each with its label, whether it is available on a record
    * (true unless said) and what a run answers (applied unless said). A command not named here is not granted.
+   * A page's fixed action (`useAction`) is served the same way, by its id.
    */
   commands?: Record<
     string,
@@ -152,6 +154,7 @@ export interface AuthoredPage {
   label: string;
   reads: readonly string[];
   commands?: readonly string[];
+  actions?: readonly string[];
   params?: readonly string[];
   loader?: string;
 }
@@ -256,6 +259,25 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
       return values[key];
     },
   });
+  /* A command and a fixed action are served the same way here: by id, granted to a signed-in reader. */
+  const handle = (id: string): UiCommandHandle => {
+    const entry = Object.hasOwn(served, id) ? served[id] : undefined;
+    const granted = Boolean(entry) && viewer.signedIn;
+    const call =
+      (mode: 'run' | 'open') =>
+      async (key: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>): Promise<UiCommandOutcome> => {
+        if (!granted) return { status: 'refused', message: viewer.signedIn ? say('notGranted') : say('signInToDo') };
+        commands.push({ command: id, mode, key, ...(input ? { input } : {}) });
+        return entry!.outcome ?? (mode === 'open' ? { status: 'closed' } : { status: 'applied' });
+      };
+    return {
+      label: entry?.label ?? id,
+      granted,
+      available: async (key) => granted && (entry!.available?.(key) ?? true),
+      run: call('run'),
+      open: call('open'),
+    };
+  };
   return {
     flags: { ...flags, snapshot: () => flags, subscribe: () => () => {}, load: async () => {} },
     analytics: {
@@ -291,24 +313,8 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
     fileAddress: (resource, key, { thumbnail } = {}) =>
       options.files?.[`${resource}/${Object.values(key).join('-')}`] ??
       `/fixture/${resource}/${Object.values(key).join('-')}${thumbnail ? '?thumb' : ''}`,
-    command: (id) => {
-      const entry = Object.hasOwn(served, id) ? served[id] : undefined;
-      const granted = Boolean(entry) && viewer.signedIn;
-      const call =
-        (mode: 'run' | 'open') =>
-        async (key: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>): Promise<UiCommandOutcome> => {
-          if (!granted) return { status: 'refused', message: viewer.signedIn ? say('notGranted') : say('signInToDo') };
-          commands.push({ command: id, mode, key, ...(input ? { input } : {}) });
-          return entry!.outcome ?? (mode === 'open' ? { status: 'closed' } : { status: 'applied' });
-        };
-      return {
-        label: entry?.label ?? id,
-        granted,
-        available: async (key) => granted && (entry!.available?.(key) ?? true),
-        run: call('run'),
-        open: call('open'),
-      };
-    },
+    command: (id) => handle(id),
+    action: (id) => handle(id),
     viewer: () => viewer,
     subscribeViewer: () => () => {},
     column: (resource, name) => {
@@ -444,6 +450,7 @@ function useFixturePage(declaration: AuthoredPage, address: Record<string, strin
       label: declaration.label,
       reads: declaration.reads,
       commands: declaration.commands ?? [],
+      actions: declaration.actions ?? [],
       params: declaration.params ?? [],
       ...(declaration.loader ? { loader: declaration.loader } : {}),
       get: (name) => place[name],

@@ -35,6 +35,7 @@ export const DOC_TOPICS: ReadonlyArray<{ topic: string; page: string }> = [
   { topic: 'pages', page: 'pages' },
   { topic: 'forms', page: 'forms' },
   { topic: 'nav-and-shell', page: 'nav-and-shell' },
+  { topic: 'workspaces', page: 'workspaces' },
   /* How to compose each kind of page: rules of "when X, use Y", each pointing at one worked example. */
   { topic: 'compose-record-page', page: 'compose-record-page' },
   { topic: 'compose-form', page: 'compose-form' },

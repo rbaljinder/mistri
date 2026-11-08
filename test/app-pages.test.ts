@@ -259,23 +259,12 @@ function Board() {
 });
 
 describe('what the App records of its pages', () => {
-  test('authority.lock records what each page reads, runs and loads, and that it is public', () => {
+  test("authority.lock records which pages load and which are public; what a signed-in page reads and runs is the roles' grants", () => {
     const lines = authorityReport(parse())
       .split('\n')
       .filter((line) => line.startsWith('page '))
       .map((line) => line.replace(/ — the App$/, ''));
-    assert.deepEqual(lines, [
-      'page board reads desk',
-      'page board reads ticket',
-      'page board loads board',
-      'page lobby reads desk',
-      'page lobby loads lobby',
-      'page lobby public',
-      'page notes reads note',
-      'page notes loads notes',
-      'page settle reads ticket',
-      'page settle runs settle',
-    ]);
+    assert.deepEqual(lines, ['page board loads board', 'page lobby loads lobby', 'page lobby public', 'page notes loads notes']);
   });
 
   test("the generated types carry the loaders, so a page's data is typed from what its loader returns", () => {

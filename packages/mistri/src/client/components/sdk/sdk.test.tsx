@@ -352,3 +352,25 @@ test("a row at the page's foot says so, and an ordinary row says nothing", () =>
   expect(foot).toHaveAttribute('data-foot-actions', '');
   expect(plain).not.toHaveAttribute('data-foot-actions');
 });
+
+/* A cluster is a grid whose columns are as wide as `min` where there is room and fewer where there is not: the width
+   it asks of a column is the box's own at most, so a phone gets one and nothing scrolls sideways (kit.css). */
+test('a cluster asks each column for its minimum width, 16rem unless told, and takes a gap of the Stack and Row scale', () => {
+  const { container } = render(
+    <>
+      <ui.Cluster>
+        <span>One</span>
+        <span>Two</span>
+      </ui.Cluster>
+      <ui.Cluster min="9rem" gap="tight" className="mine">
+        <span>Three</span>
+      </ui.Cluster>
+    </>,
+  );
+  const [plain, narrow] = container.querySelectorAll<HTMLElement>('.kit-cluster');
+  expect(plain.style.getPropertyValue('--kit-cluster-min')).toBe('16rem');
+  expect(plain).toHaveClass('kit-gap-field');
+  expect(narrow.style.getPropertyValue('--kit-cluster-min')).toBe('9rem');
+  expect(narrow).toHaveClass('kit-gap-tight', 'mine');
+  expect(plain.textContent).toBe('OneTwo');
+});

@@ -41,6 +41,8 @@ interface GridColumnSize {
   status?: boolean;
   /** Every value is the words the cell draws ("4 weeks ago", "$22,495"), not a raw value it formats, and nothing beside them (a bar, a ring, an App's own renderer). */
   dressed?: boolean;
+  /** A date no rule dresses: its values are the words the cell draws ("Aug 22, 2026"), measured in the cell's font. */
+  drawnDate?: boolean;
 }
 
 export const GRID_SIZE_SAMPLE = 40;
@@ -148,7 +150,16 @@ export function columnSizeHint(
     return fixed(Math.max(headLeast, width), Math.max(header, width));
   }
   if (column.kind === 'date') {
-    const width = measured && column.dressed ? Math.min(column.showTime ? 176 : 112, textWidth + 24) : column.showTime ? 176 : 112;
+    const usual = column.showTime ? 176 : 112;
+    /* Drawn by the cell in its own font, a date is as wide as it measures: the data face runs wider than the sans
+       the usual width was set for, and "Aug 22, 2026" was cut to "Aug 22, 20…" at 1280. It never takes less than the
+       usual width, which a relative date's words (above) may. */
+    const width =
+      measured && column.dressed
+        ? Math.min(usual, textWidth + 24)
+        : measured && column.drawnDate
+          ? Math.max(usual, Math.min(column.showTime ? 240 : 176, textWidth + 24))
+          : usual;
     return fixed(Math.max(headLeast, width), Math.max(header, width));
   }
   /* A number measured as it is drawn ("$22,495", "18,340 mi") is as wide as
@@ -227,6 +238,7 @@ function sizeHints(
   headChar: number,
   measure?: (text: string, column: number) => number,
   squeezeName = false,
+  cut = true,
 ): ReturnType<typeof columnSizeHint>[] {
   /* `values` says whose words may take their two-line floor: nobody's, only the row's name, or every text column's. */
   const hints = (heads: boolean, values: 'none' | 'title' | 'all') =>
@@ -242,16 +254,19 @@ function sizeHints(
         squeezeName,
       ),
     );
+  /* Whether the secondary text may be cut to its head to spare the room. A table that can fold its columns asks no:
+     the documented order folds before it cuts, and a table sized as cut already fits, so it never folds one. */
+  const way = <T extends { minimum: number; least: number }>(list: T[], space: number): T[] => (cut ? giveWay(list, space) : list);
   const fits = (list: { minimum: number }[]) => list.reduce((sum, hint) => sum + hint.minimum, 0) <= room;
   const whole = hints(false, 'none');
-  if (fits(whole) || !columns.some((column) => column.wrapHead || column.wrapValues)) return giveWay(whole, room);
+  if (fits(whole) || !columns.some((column) => column.wrapHead || column.wrapValues)) return way(whole, room);
   const heads = hints(true, 'none');
-  if (fits(heads) || !columns.some((column) => column.wrapValues)) return giveWay(heads, room);
+  if (fits(heads) || !columns.some((column) => column.wrapValues)) return way(heads, room);
   /* The row's name is the most important text in the row, so it takes its second line before a short secondary value
      (a person's two-word name) is given one: the others keep their floors while the name's alone still spares the room. */
   const named = hints(true, 'title');
-  if (columns.some((column) => column.title && column.wrapValues) && fits(named)) return giveWay(named, room);
-  return giveWay(hints(true, 'all'), room);
+  if (columns.some((column) => column.title && column.wrapValues) && fits(named)) return way(named, room);
+  return way(hints(true, 'all'), room);
 }
 
 /* Where the minima together run past the room, the secondary text columns
@@ -289,7 +304,7 @@ export function keepFitting(
 ): boolean[] | null {
   if (!(available > 0)) return null;
   let room = available - (expandable ? GRID_EXPANDER_WIDTH : 0) - (trailing ? GRID_TRAIL_WIDTH : 0);
-  const hints = sizeHints(columns, room, headChar, measure);
+  const hints = sizeHints(columns, room, headChar, measure, false, false);
   if (hints.reduce((sum, hint) => sum + hint.minimum, 0) <= room) return null;
   const kept = columns.map((column, index) => index === 0 || Boolean(column.title) || Boolean(column.status));
   room -= hints.reduce((sum, hint, index) => sum + (kept[index] ? hint.minimum : 0), 0);

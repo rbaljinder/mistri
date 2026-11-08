@@ -21,28 +21,29 @@ type CommandOutcome =
   | { status: 'closed' }
   | { status: 'unknown'; message: string; check(options?: { challenge?: string }): Promise<CommandOutcome> };
 
-/** What sdk/commands.tsx hands the SDK's host: a command as a component holds it, and a form over the page. */
+/* UiCommandHandle (sdk/context.ts), said without importing the React half. */
+interface CommandHandle {
+  label: string;
+  granted: boolean;
+  available(key: Readonly<Record<string, unknown>>): Promise<boolean>;
+  run(
+    key: Readonly<Record<string, unknown>>,
+    input?: Readonly<Record<string, unknown>>,
+    options?: { label?: string; challenge?: string; attempt?: string },
+  ): Promise<CommandOutcome>;
+  open(
+    key: Readonly<Record<string, unknown>>,
+    input?: Readonly<Record<string, unknown>>,
+    options?: { label?: string; attempt?: string },
+  ): Promise<CommandOutcome>;
+  choices?(field: string): ReadonlyArray<{ value: string | number | boolean; label: string }> | undefined;
+}
+
+/** What sdk/commands.tsx hands the SDK's host: a command, or a fixed action, as a component holds it, and a form over the page. */
 interface CommandHost {
-  /* UiCommandHandle (sdk/context.ts), said without importing the React half. */
-  command: (
-    ref: string,
-    page?: string,
-  ) => {
-    label: string;
-    granted: boolean;
-    available(key: Readonly<Record<string, unknown>>): Promise<boolean>;
-    run(
-      key: Readonly<Record<string, unknown>>,
-      input?: Readonly<Record<string, unknown>>,
-      options?: { label?: string; challenge?: string; attempt?: string },
-    ): Promise<CommandOutcome>;
-    open(
-      key: Readonly<Record<string, unknown>>,
-      input?: Readonly<Record<string, unknown>>,
-      options?: { label?: string; attempt?: string },
-    ): Promise<CommandOutcome>;
-    choices?(field: string): ReadonlyArray<{ value: string | number | boolean; label: string }> | undefined;
-  };
+  command: (ref: string, page?: string) => CommandHandle;
+  /** A fixed action found on one of the resources `reads` names (any, without them). */
+  action: (ref: string, reads?: readonly string[]) => CommandHandle;
   openForm: (view: string, prefill: Readonly<Record<string, string | number>>) => void;
 }
 

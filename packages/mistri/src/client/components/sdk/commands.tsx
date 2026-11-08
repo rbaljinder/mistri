@@ -24,9 +24,14 @@
  */
 import { createElement } from 'react';
 import type { AppCommandAction } from '../../../shared/app.js';
+import type { AppUpdateAction } from '../../../shared/appModel.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import type { AppCommandField, AppFormCommandReference } from '../../../shared/command.js';
 import { findTable, go, pageView, primaryKey, state, toast } from '@mistriwork/kit/client/core.js';
+import { mayRunAny } from '@mistriwork/kit/client/actionGrants.js';
+import { applyBulk, bulkKey, matchingKeys } from '@mistriwork/kit/client/bulkActions.js';
+import { confirmFor } from '@mistriwork/kit/client/prompt.js';
+import { expectedValues, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { commandOperations, type CommandOperation, type CommandOwner } from '../../commandState.js';
 import { sendCommand } from '../../commandSend.js';
 import { commandAvailable, useCommandAvailability } from '../../commandAvailability.js';
@@ -47,8 +52,9 @@ import { portalRoot } from '@mistriwork/kit/client/shellHost.js';
 const CommandForm = onDemand(() => import('../CommandForm.js'), 'CommandForm', { quiet: true });
 
 interface ServedApp {
-  resources?: Record<string, { actions?: Array<{ label: string; command?: unknown }> }>;
+  resources?: Record<string, { actions?: Array<{ id?: string; label: string; command?: unknown }> }>;
   grantedCommands?: string[];
+  grantedActions?: Record<string, string[]>;
   formCommands?: Record<string, AppFormCommandReference>;
 }
 
@@ -417,6 +423,115 @@ export function commandHandle(ref: UiCommandRef, page?: string): UiCommandHandle
 }
 
 /**
+ * The fixed action by this id: the resource action that has it and runs no command, on one of the resources `reads`
+ * names (any resource without them). Fixed is a machine's verb or `action(label, { set })`, the record page's own
+ * button; a command's action is `actionOf`'s.
+ */
+function verbOf(id: UiCommandRef, reads?: readonly string[]): { table: string; action: AppUpdateAction } | undefined {
+  const app = pageBridge.activeApp() as ServedApp | null;
+  for (const [table, resource] of Object.entries(app?.resources ?? {})) {
+    if (reads && !reads.includes(table)) continue;
+    for (const action of resource.actions ?? []) {
+      if (action.id === id && !action.command) return { table, action: action as AppUpdateAction };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * A fixed action as a component holds it: the record page's button, found by `verbOf`, run on one record by its key.
+ * `run` is the update every list's bulk bar sends (`applyBulk`), one record at a time through the ordinary update
+ * route, whose gate judges it again: it never posts a command. What the browser can know is asked first so a click
+ * is answered in words — the reader's grant (`mayRunAny`, which reads the writable connection and the role's
+ * `actions`), the action's `when` for this record (a row whose state does not allow it is refused, not skipped, as a
+ * list's bar skips) — and `confirm` asks before anything is sent.
+ */
+function actionHandle(id: UiCommandRef, reads?: readonly string[]): UiCommandHandle {
+  const found = verbOf(id, reads);
+  const app = pageBridge.activeApp() as ServedApp | null;
+  const granted = Boolean(found) && mayRunAny(app, found!.table, [found!.action]);
+  const label = found?.action.label ?? id;
+  const refuse = (message: string): Promise<UiCommandOutcome> => {
+    toast(message, 'error');
+    return Promise.resolve({ status: 'refused', message });
+  };
+  const refusedFor = () =>
+    refuse(sessionIdentity().mode === 'authenticated' ? say('isNotSomethingYouCanDo', { label }) : say('signInToDo'));
+  const keyOf = (table: TableMeta, record: Readonly<Record<string, unknown>>): Record<string, string | number> => {
+    const key: Record<string, string | number> = {};
+    for (const column of primaryKey(table) as string[]) {
+      const value = record[column];
+      if (typeof value === 'string' || (typeof value === 'number' && Number.isSafeInteger(value))) key[column] = value;
+      else throw new Error(say('theRecordHanded', { label, column }));
+    }
+    return key;
+  };
+  const matches = async (record: Readonly<Record<string, unknown>>): Promise<boolean> => {
+    const table = findTable(found!.table) as TableMeta | undefined;
+    if (!table) return false;
+    return (await matchingKeys(table, [keyOf(table, record)], found!.action.when, state.activeConnection)).has(
+      bulkKey(table, keyOf(table, record)),
+    );
+  };
+  const run = async (record: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>): Promise<UiCommandOutcome> => {
+    if (!found || !granted) return refusedFor();
+    const { table: tableId, action } = found;
+    const table = findTable(tableId) as TableMeta | undefined;
+    if (!table) return refusedFor();
+    const key = keyOf(table, record);
+    /* A reason is data the action asks for and writes with its set (a record never moves this way unexplained). */
+    const reason = typeof input?.reason === 'string' ? input.reason.trim() : '';
+    if (action.reason && !reason) return refuse(say('asksAReason', { label }));
+    if (!(await matches(record))) return refuse(say('isNotAvailableOnThisRecord', { label }));
+    if (action.confirm && !(await confirmFor({ title: `${label}?`, body: say('confirmBody', { label }), confirmLabel: label })))
+      return { status: 'closed' };
+    const opened = sessionIdentity();
+    const values = action.reason ? { ...action.set, [action.reason]: reason } : action.set;
+    const expected = expectedValues(table, action.set, record as Record<string, unknown>);
+    const result = await applyBulk(
+      { connection: state.activeConnection ?? null, table: tableId },
+      values,
+      [{ key, label, ...(expected ? { expected } : {}) }],
+      () => sessionIdentity() === opened,
+    );
+    const outcome = result.outcomes[0];
+    if (outcome.kind === 'applied') {
+      void queryClient.invalidateQueries();
+      toast(say('actionDone', { label }), 'ok');
+      return { status: 'applied' };
+    }
+    if (outcome.kind === 'uncertain') {
+      toast(outcome.message, 'error');
+      const unknown: UiCommandOutcome = {
+        status: 'unknown',
+        message: outcome.message,
+        check: async () => {
+          await queryClient.invalidateQueries();
+          return unknown;
+        },
+      };
+      return unknown;
+    }
+    return refuse(outcome.message);
+  };
+  return {
+    label,
+    granted,
+    available: async (record) => {
+      if (!granted) return false;
+      try {
+        return await matches(record);
+      } catch {
+        return false;
+      }
+    },
+    run: (record, input) => run(record, input),
+    // A fixed action has no form of its own: opening it is running it, asking first as the record page does.
+    open: (record, input) => run(record, input),
+  };
+}
+
+/**
  * A command the App names outside any action (a tag picker's add and remove,
  * G58), run on one record as an action's button would, if this reader is
  * granted it; undefined when it is not, so the caller draws nothing to press.
@@ -436,4 +551,4 @@ export function recordCommand(
 /** A selection's commands in the kit's lists (shellMode.ts `bulkCommands`): the same pipeline and form, sent once for the group. */
 export const bulkCommands = { operations: commandOperations, useAvailability: useCommandAvailability, Form: CommandForm };
 
-registerCommandHost({ command: commandHandle, openForm: openViewForm });
+registerCommandHost({ command: commandHandle, action: actionHandle, openForm: openViewForm });

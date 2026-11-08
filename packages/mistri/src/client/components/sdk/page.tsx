@@ -22,13 +22,13 @@
  * like `@mistriwork/mistri/ui`; its value exports are `PAGE_EXPORTS` (shared/uiSdk.ts).
  */
 import { createElement, type ComponentType, type ReactNode } from 'react';
-import { useAddressState, useBreakdown, useCommand, useFile, useRecord, useRows } from './hooks.js';
+import { useAction, useAddressState, useBreakdown, useCommand, useFile, useRecord, useRows } from './hooks.js';
 import { Button } from './kit.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { pageBlocks } from './pageBlocks.js';
 import { say } from '../../copy/components/components/sdk/page.js';
 
-export { Card, Columns, Empty, Heading, Loaded, Row, Stack, Stat, Value } from './kit.js';
+export { Card, Cluster, Columns, Empty, Heading, Loaded, Row, Stack, Stat, Value } from './kit.js';
 export { Button };
 /* A page's place in its address: `page.useParam` is this hook, typed to the page's `params`; this one is for a module
    the page draws that is not the page itself (a widget, the Console's rooms). */
@@ -78,7 +78,21 @@ export interface PageProps<D = unknown> {
   props: Readonly<Record<string, unknown>>;
 }
 
-const FIELDS = ['label', 'icon', 'nav', 'roles', 'reads', 'commands', 'params', 'loader', 'public', 'description', 'favorite', 'head'];
+const FIELDS = [
+  'label',
+  'icon',
+  'nav',
+  'roles',
+  'reads',
+  'commands',
+  'actions',
+  'params',
+  'loader',
+  'public',
+  'description',
+  'favorite',
+  'head',
+];
 
 /** A page as `definePage` makes it: the component that draws it, its definition and its hooks. */
 export interface PageDefinition<D = unknown> {
@@ -89,10 +103,11 @@ export interface PageDefinition<D = unknown> {
   readonly useBreakdown: typeof useBreakdown;
   readonly useFile: typeof useFile;
   readonly useCommand: typeof useCommand;
+  readonly useAction: typeof useAction;
   readonly useParam: typeof useAddressState;
 }
 
-/** A free-form page: its label, reads, commands, parameters and loader, and the component that draws it. */
+/** A free-form page: its label, reads, commands, actions, parameters and loader, and the component that draws it. */
 export function definePage<D = unknown>(
   definition: Record<string, unknown> & { component: ComponentType<PageProps<D>> },
 ): PageDefinition<D> {
@@ -109,6 +124,7 @@ export function definePage<D = unknown>(
     useBreakdown,
     useFile,
     useCommand,
+    useAction,
     useParam: useAddressState,
   });
 }

@@ -34,9 +34,10 @@ import {
   isAssistantRoom,
   isListRoom,
   type MenuEntry,
+  type ShownApp,
 } from './appRooms.js';
 import { isServedForm as isFormView } from '@mistriwork/engine/shared/servedApp.js';
-import type { AvailableNavigationNode } from './navigationTree.js';
+import { navigationPaths, type AvailableNavigationNode } from './navigationTree.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { shownFavorites } from './favoriteNav.js';
 import type { Favorite } from './favorites.js';
@@ -44,6 +45,7 @@ import { formatApprox, formatNumber } from '../locale.js';
 import type { NavCount, NavCountSpec } from './navCounts.js';
 import { say } from '../copy/shell/components/sidebarModel.js';
 import { shellBody } from '../shellHost.js';
+import { inWorkspace, workspacesHolding, workspacesOf, type Workspace, type WorkspaceMenu } from './workspaces.js';
 
 interface TableLike {
   id: string;
@@ -176,7 +178,11 @@ export function sidebarItems(filterText: string): SidebarItem[] {
       );
     matches += starred.length;
     /* A target into another App of the suite leads where the shell says (shellMode.ts `navTargets`), and nowhere where it has none. */
-    const menu = appMenu(app, shell().slots.navTargets?.hrefs(app, state.schema as DatabaseSchema | null) ?? leadsNowhere);
+    const whole = menuOf(app);
+    /* With workspaces the sidebar is one product's menu: the model reduces the list, so the rail, the filter, the counts and
+       the arrow-key skim all work on what is drawn. */
+    const spaces = workspacesOf(whole);
+    const menu = spaces ? inWorkspace(spaces, currentWorkspaceId(spaces, app)) : whole;
     /* A footer group is drawn last, after a gap that takes the room left over: Settings and Help stay at the foot
        however short the menu. Its heading is anchored there, under its rows, so it opens upward: the gap gives up
        what the rows take, and the heading a person pressed stays where they pressed it. The heading still comes
@@ -216,6 +222,68 @@ export function sidebarItems(filterText: string): SidebarItem[] {
   }
   if (!items.length) items.push({ kind: 'note', text: say('noMatches') });
   return items;
+}
+
+/* ---------- workspaces ---------- */
+
+/** The App's nav as the sidebar draws it, whole: a target into another App of the suite leads where the shell says (shellMode.ts `navTargets`). */
+const menuOf = (app: ShownApp) => appMenu(app, shell().slots.navTargets?.hrefs(app, state.schema as DatabaseSchema | null) ?? leadsNowhere);
+
+/* The workspace the reader was last in, by App, for a room no workspace holds (a view served outside nav, reached by ⌘K or a
+   link). In memory and per tab: the workspace is never in the address, so a reload begins from the room's own. */
+const lastWorkspace = new Map<string, string>();
+let observedWalk = -1;
+const workspaceMemoryKey = (app: ShownApp): string => JSON.stringify([state.activeConnection, (app as { id?: string }).id ?? app.name]);
+
+/** The view id of the room on screen, as nav names it: a dashboard or form's key, or the list the walk's query leads. */
+function currentRoomId(menu: WorkspaceMenu<MenuEntry>, app: ShownApp): string | undefined {
+  const page = currentDashView() ?? currentFormView();
+  if (page) return page;
+  const lists = menu.spaces.flatMap((space) => navigationPaths(space.children).map(({ entry }) => entry)).filter(isListRoom);
+  const here = currentEntry() as { table?: string; query?: string; view?: string } | undefined;
+  if (here?.table) return lists[currentNavIndex(lists, here.table, here.query ?? '', here.view)]?.id;
+  const home = here ? undefined : homeRoom(app);
+  return home && isListRoom(home) ? home.id : undefined;
+}
+
+/**
+ * Which workspace is current: the one whose subtree holds the room on screen; where a page is in several, the one the
+ * reader is already in; where it is in none, the one they were last in, else the first.
+ */
+function currentWorkspaceId(menu: WorkspaceMenu<MenuEntry>, app: ShownApp): string {
+  const key = workspaceMemoryKey(app);
+  const last = lastWorkspace.get(key);
+  /* Read again only when the walk has moved: between a choice in the switcher and the walk following it, the room on screen
+     is still the old one, and reading it would take the choice back. */
+  if (last !== undefined && observedWalk === walkVersion() && menu.spaces.some((space) => space.id === last)) return last;
+  observedWalk = walkVersion();
+  const room = currentRoomId(menu, app);
+  const holding = room === undefined ? [] : workspacesHolding(menu, room);
+  const chosen =
+    (last !== undefined && holding.includes(last) ? last : holding[0]) ??
+    (menu.spaces.some((space) => space.id === last) ? last : undefined) ??
+    menu.spaces[0].id;
+  lastWorkspace.set(key, chosen);
+  return chosen;
+}
+
+/**
+ * The header's switcher: the workspaces this reader may open, in the App's order, and the current one. Null where the App has
+ * none, or this reader sees only one (then the sidebar is that workspace's entries and nothing is switched).
+ */
+export function workspaceSwitcher(app: ShownApp): { spaces: Workspace<MenuEntry>[]; current: string } | null {
+  const menu = workspacesOf(menuOf(app));
+  if (!menu || menu.spaces.length < 2) return null;
+  return { spaces: menu.spaces, current: currentWorkspaceId(menu, app) };
+}
+
+/** The reader chose a workspace in the switcher: it is current before the walk moves, which matters where a room is in two. */
+export function chooseWorkspace(app: ShownApp, id: string): void {
+  lastWorkspace.set(workspaceMemoryKey(app), id);
+  observedWalk = walkVersion();
+  cursor = -1;
+  cursorAt = walkVersion();
+  tell();
 }
 
 /* Stable authored group IDs, scoped to the App/connection, survive label and

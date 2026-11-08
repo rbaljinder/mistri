@@ -23,9 +23,10 @@ import {
   hasUnresolvedInvitations,
 } from './tenantAccountState.js';
 import { invalidateSession } from '@mistriwork/kit/client/sessionLifecycle.js';
-import { railed } from '@mistriwork/kit/client/components/sidebarModel.js';
+import { railed, workspaceSwitcher } from '@mistriwork/kit/client/components/sidebarModel.js';
 import { AppIssues } from '@mistriwork/kit/client/components/AppIssues.js';
 import { MobileNavDrawer } from './components/MobileNavDrawer.js';
+import { WorkspaceSwitcher } from './components/WorkspaceSwitcher.js';
 import { applyHeaderShell } from './appHeader.js';
 import { dockBar, headerInSidebar } from './sidebarShell.js';
 import { $, allowMutationExit, el, state } from '@mistriwork/kit/client/core.js';
@@ -390,7 +391,9 @@ export function appMenuShell() {
   shellBody().classList.toggle('app-mobile-nav', mobileDrawer);
   /* The bar in the sidebar (`ui.shell.header`, the default): at a desk, where the side menu is drawn. A phone's
      drawer, the top placement, a signed-out visitor's storefront and `header: 'bar'` keep the bar (sidebarShell.js). */
-  const sidebarHead = Boolean(appMode && rooms && !noMenu && !topMode && !mobileDrawer && headerInSidebar(app?.ui.shell));
+  /* An App with workspaces keeps the bar across the window: their tabs stand in it, after the mark, where a sidebar's head is too narrow for five. */
+  const workspaced = Boolean(app?.nav.some((node) => 'group' in node && node.workspace));
+  const sidebarHead = Boolean(appMode && rooms && !noMenu && !topMode && !mobileDrawer && !workspaced && headerInSidebar(app?.ui.shell));
   shellBody().classList.toggle('app-sidebar-shell', sidebarHead);
   dockBar(sidebarHead);
   /* The icon rail: folding this App's side menu leaves its icons standing
@@ -400,11 +403,34 @@ export function appMenuShell() {
   const header = shellQuery('.topbar');
   /* In the sidebar the head is the sidebar's width: the content's ruler (`headerWidth`) is a band's. */
   if (header instanceof HTMLElement) applyHeaderShell(header, $('content'), appMode && !sidebarHead ? app?.ui.shell : undefined);
+  /* The workspaces' tabs, in the bar at a desk where the side menu is drawn: a phone's are the drawer's, and in the top
+     placement a workspace is a group like any. */
+  const workspaces = Boolean(appMode && rooms && !noMenu && !topMode && !mobileDrawer && workspaceSwitcher(app));
+  renderWorkspaces(workspaces, app);
   const topnav = $('topnav');
   topnav.hidden = !(topMode || mobileDrawer);
   if (topMode || mobileDrawer) renderTopNav(topnav, app, mobileDrawer);
   else unmount(topnav);
   return !(topMode || mobileDrawer);
+}
+
+/* The switcher's host stands in the bar, after the mark, and takes the room between the mark and the bar's keys. */
+function renderWorkspaces(on, app) {
+  let host = shellById('workspace-host');
+  if (!on) {
+    if (host) {
+      unmount(host);
+      host.remove();
+    }
+    return;
+  }
+  if (!host) {
+    const header = shellQuery('header.topbar');
+    if (!header) return;
+    host = el('div', { id: 'workspace-host', class: 'workspace-host' });
+    (header.querySelector(':scope > .brand') ?? header.firstElementChild)?.after(host);
+  }
+  mount(host, createElement(WorkspaceSwitcher, { app, variant: 'header' }));
 }
 
 /**

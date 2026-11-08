@@ -1331,6 +1331,44 @@ body.app-custom-gutter .topbar[data-header-width="content"] { --app-shell-outer-
 /* The focus ring hugs the label instead of the full-height slot, whose
    ring crossed into the row below. */
 .tn-item:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -6px; border-radius: var(--radius-panel); }
+/* Workspaces (WorkspaceSwitcher.tsx): the products of one App as links in the bar, after the mark, the current one marked
+   as the top bar marks its room — ink, and a short accent line on the bar's edge. A label is never cut: what does not fit
+   the room goes under More (useTabFold.ts). The host is empty until the App has two to pick from. */
+.workspace-host { display: flex; align-items: center; flex: 1 1 0; min-width: 0; }
+.workspace-tabs { min-width: 0; flex: 1 1 auto; }
+.workspace-strip { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+.workspace-tab {
+  position: relative; flex: none; height: 32px; box-sizing: border-box;
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: 0 var(--space-3); border-radius: var(--radius);
+  font: var(--text-base) var(--mono); color: var(--ink-muted);
+  background: none; border: none; text-decoration: none; white-space: nowrap; cursor: pointer;
+}
+@media (hover: hover) { .workspace-tab:hover { color: var(--ink); } }
+.workspace-tab[aria-current="page"] { color: var(--ink); }
+.workspace-tab[aria-current="page"]::after {
+  content: ''; position: absolute; left: var(--space-3); right: var(--space-3); bottom: 0; height: 2px;
+  border-radius: min(2px, var(--radius)); background: var(--accent);
+}
+.workspace-tab:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -2px; }
+.workspace-tab .nav-icon { flex: none; width: 15px; height: 15px; color: inherit; }
+.workspace-more { flex: none; }
+/* The caret the Export button wears, so More reads as a menu and not a fourth workspace. */
+.workspace-more .workspace-tab::after { content: "▾"; color: var(--ink-subtle); }
+/* At the top of a phone's drawer: a list, one row each, icon and label with the label wrapping whole, the current one
+   marked in weight, and a rule before that workspace's entries. */
+.workspace-tabs-drawer { flex: none; padding: var(--space-3) var(--space-3) 0; border-bottom: 1px solid var(--line); padding-bottom: var(--space-3); box-sizing: border-box; }
+.workspace-list { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.workspace-list .workspace-tab {
+  display: flex; width: 100%; height: auto; min-height: 44px; padding: var(--space-3); border-radius: var(--radius);
+  white-space: normal; overflow-wrap: anywhere; text-align: left; color: var(--ink); font: var(--type-ui)/1.35 var(--sans);
+}
+/* Current is said in weight and a neutral fill, not the accent: the entry below keeps the accent's bar, and two
+   marks in colour in one drawer both shout. */
+.workspace-list .workspace-tab[aria-current="page"] { background: var(--row-hover); color: var(--ink); font-weight: 600; }
+.workspace-list .workspace-tab[aria-current="page"] .nav-icon { color: var(--ink); }
+.workspace-list .workspace-tab[aria-current="page"]::after { content: none; }
+.workspace-list .nav-icon { width: var(--icon-ui); height: var(--icon-ui); color: var(--ink-muted); }
 .tn-caret { color: var(--ink-subtle); margin-left: var(--space-2); font-size: var(--text-xs); }
 /* Menu icons (NavGlyph.tsx) in the top bar and its menus: before the words,
    quieter than them, in the current entry's own color. */

@@ -45,6 +45,7 @@ export function FreePage({
     label: dashboard.label,
     reads: page.reads,
     commands: page.commands,
+    ...(page.actions ? { actions: page.actions } : {}),
     params: page.params,
     ...(page.loader ? { loader: page.loader } : {}),
     get: (name) => place[name],

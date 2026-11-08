@@ -259,13 +259,6 @@ role purchaser fields supplier write name — the App
 role purchaser fields supplier write phone — the App
 role purchaser fields supplier write state — the App
 role purchaser fields supplier write terms — the App
-page pick-walk reads bin — the App
-page pick-walk reads order_line — the App
-page pick-walk reads pick_list — the App
-page pick-walk reads product — the App
-page pick-walk reads sales_order — the App
-page pick-walk reads warehouse — the App
-page pick-walk runs pickList — the App
 page pick-walk loads pickWalk — the App
 api version 1 — the App
 api public-spec false — the App

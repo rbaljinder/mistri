@@ -144,6 +144,9 @@ export interface UiHost {
   /** A command as this reader is served it; `page` is the free-form page asking, whose public commands run through
       its own door. */
   command(ref: UiCommandRef, page?: string): UiCommandHandle;
+  /** A fixed action (a machine's verb, `action(label, { set })`) as this reader is served it, found on one of `reads`
+      (the free-form page's) or any resource without them; run on a record by its key, as the record page's button runs it. */
+  action(ref: UiCommandRef, reads?: readonly string[]): UiCommandHandle;
   viewer(): UiViewer;
   /** Called when the reader signs in, out or as someone else; returns the unsubscribe. */
   subscribeViewer(listener: () => void): () => void;
@@ -171,6 +174,8 @@ export interface UiPageFrame {
   label: string;
   reads: readonly string[];
   commands: readonly string[];
+  /** The fixed actions it declared it runs (`useAction`), on the resources it reads. */
+  actions?: readonly string[];
   params: readonly string[];
   loader?: string;
   get(name: string): string | undefined;

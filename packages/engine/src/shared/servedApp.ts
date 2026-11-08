@@ -443,6 +443,7 @@ export type AppPayloadNavNode =
       placement?: 'footer';
       inline?: true;
       folded?: true;
+      workspace?: true;
       children: AppPayloadNavNode[];
     };
 

@@ -288,6 +288,13 @@ function drawnWords(display: DisplayRule | null, plan: Plan, value: unknown, lab
   if (label !== null && label !== undefined && String(label) !== '') return label;
   const dress = dressFor(display, value);
   if (!dress && plan.kind === 'number' && value != null) return numberShown(value, plan) ?? value;
+  /* A date is drawn as the cell says it ("Aug 22, 2026", in the data face), not as it is stored ("2026-08-22"):
+     a column sized by the stored form was cut to "Aug 22, 20…" once the data face ran wider than the sans. */
+  if (!dress && plan.kind === 'date' && value != null) {
+    const raw = String(value);
+    const near = shellBody().classList.contains('app-mode') ? sayNearDay(raw, Boolean(plan.showTime)) : null;
+    return near?.text ?? (plan.showTime ? formatDateTime(raw) : formatDate(raw));
+  }
   return (dress?.kind === 'tone' || dress?.kind === 'word' || dress?.kind === 'mark' ? dress.label : dress?.text) ?? value;
 }
 
@@ -1067,6 +1074,8 @@ export function Grid({
               const dress = dressFor(display, row[name]);
               return dress ? drawsWords(dress) : plan.kind === 'number' && numberShown(row[name], plan) != null;
             }),
+          /* A date no rule dresses is drawn as the cell formats it, and sized by that. */
+          drawnDate: plan.kind === 'date' && !labelColumn && !display?.component,
           status:
             !labelColumn &&
             plan.kind !== 'number' &&

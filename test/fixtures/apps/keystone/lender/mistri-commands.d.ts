@@ -30,6 +30,9 @@ export type Commands = {
 /** Each free-form page by its path (pages/<path>.page.tsx): what the App's `home` may name beside its views. */
 export type PagePaths = "workflows";
 
+/** The App's fixed actions by id (a resource's machine verbs and `action(label, { set })`): what a page's `actions` may name. */
+export type ActionNames = "markFollowedUp" | "reinstateProgram" | "retireProgram";
+
 declare module '@mistriwork/mistri/app' {
-  interface Register { commands: Commands; pagePaths: PagePaths }
+  interface Register { commands: Commands; pagePaths: PagePaths; actions: ActionNames }
 }

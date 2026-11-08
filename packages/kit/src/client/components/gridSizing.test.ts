@@ -236,6 +236,36 @@ describe('fit table allocation', () => {
     expect(columnSizeHint({ label: 'Total', kind: 'number', values: ['3'] }, undefined, measure).minimum).toBe(88);
   });
 
+  test('a date drawn in a face wider than the sans is as wide as it measures, never cut to "Aug 22, 20…"', () => {
+    // The data face: ten pixels a character, so "Aug 22, 2026" is 120 and the usual 112 cut it.
+    const mono = (text: string) => text.length * 10;
+    const created = { label: 'Created', kind: 'date', drawnDate: true, values: ['Sep 2, 2026', 'Aug 22, 2026'] };
+    expect(columnSizeHint(created, undefined, mono).minimum).toBe(120 + 24);
+    // A narrow face keeps the usual width; and without a measure the usual width is all there is.
+    expect(columnSizeHint(created, undefined, (text) => text.length * 6).minimum).toBe(112);
+    expect(columnSizeHint(created).minimum).toBe(112);
+    expect(columnSizeHint({ ...created, showTime: true, values: ['Aug 22, 2026, 3:45 PM'] }, undefined, mono).minimum).toBe(234);
+  });
+
+  test('columns are folded before the secondary text is cut to its head, so an owner is never left a letter', () => {
+    const measure = (text: string) => text.length * 7;
+    const leads = [
+      { label: 'Name', kind: 'text', title: true, values: ['Margot Fontaine'], subValues: ['margot.fontaine@example.org'] },
+      { label: 'Company', kind: 'text', values: ['Stonebridge Marine Inc'] },
+      { label: 'Status', kind: 'text', chip: true, status: true, values: ['New'] },
+      { label: 'Source', kind: 'text', values: ['Referral'] },
+      { label: 'Owner', kind: 'text', avatar: true, values: ['Tariq Andersen'] },
+      { label: 'Created', kind: 'date', drawnDate: true, values: ['Aug 22, 2026'] },
+    ];
+    // 612px: the table fits only by cutting Company and Owner to their heads, which cut an owner to "T…".
+    const kept = keepFitting(leads, 612, false, true, undefined, measure);
+    expect(kept).not.toBeNull();
+    expect(kept![5]).toBe(false);
+    expect(kept![0]).toBe(true);
+    // Room for all of them whole folds nothing.
+    expect(keepFitting(leads, 1400, false, true, undefined, measure)).toBeNull();
+  });
+
   test('a yes-or-no said in words is as wide as its chip; one drawn as a mark keeps the mark width (G187)', () => {
     const measure = (text: string) => text.length * 7;
     // An SLA's computed yes-or-no, its display's words in tone chips: "On track" and the chip's dot and padding.
