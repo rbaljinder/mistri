@@ -27,8 +27,5 @@ role manager read class_session — the App
 role manager write booking — the App
 role manager write class_session — the App
 role manager command checkIn — the App
-page check-in reads booking — the App
-page check-in reads class_session — the App
-page check-in runs checkIn — the App
 
 contract checkIn v1 4e4c132380ea

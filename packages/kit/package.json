@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/kit",
-  "version": "1.0.0-rc.21",
+  "version": "1.0.0-rc.22",
   "description": "The shared React client both shells are drawn with: the walk and the address, Grid, Value, the record page, lists, filters and charts.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -333,6 +333,14 @@
       "mistri-built": "./dist/client/components/navigationTree.js",
       "default": "./src/client/components/navigationTree.ts"
     },
+    "./client/components/useTabFold.js": {
+      "mistri-built": "./dist/client/components/useTabFold.js",
+      "default": "./src/client/components/useTabFold.ts"
+    },
+    "./client/components/workspaces.js": {
+      "mistri-built": "./dist/client/components/workspaces.js",
+      "default": "./src/client/components/workspaces.ts"
+    },
     "./client/components/newMenuModel.js": {
       "mistri-built": "./dist/client/components/newMenuModel.js",
       "default": "./src/client/components/newMenuModel.ts"
@@ -456,6 +464,10 @@
     "./client/copy/shell/components/MobileNavDrawer.js": {
       "mistri-built": "./dist/client/copy/shell/components/MobileNavDrawer.js",
       "default": "./src/client/copy/shell/components/MobileNavDrawer.ts"
+    },
+    "./client/copy/shell/components/WorkspaceSwitcher.js": {
+      "mistri-built": "./dist/client/copy/shell/components/WorkspaceSwitcher.js",
+      "default": "./src/client/copy/shell/components/WorkspaceSwitcher.ts"
     },
     "./client/copy/shell/components/TopNav.js": {
       "mistri-built": "./dist/client/copy/shell/components/TopNav.js",
@@ -753,8 +765,8 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "dependencies": {
-    "@mistriwork/engine": "1.0.0-rc.21",
-    "@mistriwork/ui": "1.0.0-rc.21",
+    "@mistriwork/engine": "1.0.0-rc.22",
+    "@mistriwork/ui": "1.0.0-rc.22",
     "intl-messageformat": "12.1.2",
     "qrcode-generator": "^2.0.4"
   },

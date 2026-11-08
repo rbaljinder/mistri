@@ -30,6 +30,7 @@ import { vouchForOrigin } from '../packages/engine/src/server/http/trust.js';
 import type { RequestContext } from '../packages/engine/src/server/http/context.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { parseTestApp } from './support/commandCatalog.js';
+import { authorityDiff, authorityReport } from '../packages/mistri/src/shared/appAuthority.js';
 
 const enrolInput = { name: { label: 'Name', type: 'text', max: 20 } } as const;
 const component = (key: string) => ({ id: `page-${key}`, module: `./pages/${key}.page.tsx`, kind: 'page' });
@@ -517,4 +518,29 @@ test('without MISTRI_FORM_KEY a start that knows it is one of several refuses, a
     (ticketKeyStart({ doors: true, shared: false, production: true, env: { MISTRI_FORM_KEY: 'short' } }) as { warn: string }).warn,
     /at least 32 bytes/,
   );
+});
+
+/* Saving a page restarts the server only where the page changes what a signed-out visitor may do. A public page's
+   reads are what `auth.public` opens (its own fact); any other page's reads and commands are checked per request
+   against the reader's grants. A public page's commands are a door for signed-out visitors, so they are authority. */
+test('saving a page changes the authority only where it changes the public door', () => {
+  const report = (views: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+    authorityReport(parseTestApp({ ...RAW, ...extra, views: { ...RAW.views, ...views } }, 'authority fixture', CONTRACTS));
+  const base = report({});
+  assert.doesNotMatch(base, /^page \S+ reads /m, 'a page names no read of its own');
+  assert.match(base, /^page lobby runs enrol /m, 'a public page names the command it opens to visitors');
+  assert.doesNotMatch(base, /^page desk runs /m, 'a signed-in page rides on the role grant');
+  const changed = (views: Record<string, unknown>, extra?: Record<string, unknown>) => authorityDiff(base, report(views, extra), 'facts');
+  // No restart: another read of something already readable, and a command on a signed-in page.
+  assert.deepEqual(changed({ desk: { ...RAW.views.desk, reads: ['enrolment', 'desk'] } }), []);
+  assert.deepEqual(changed({ desk: { ...RAW.views.desk, commands: [] } }), []);
+  // A restart: a public page that runs another public command, or stops being public, and the grants around it.
+  assert.notDeepEqual(changed({ quiet: { ...RAW.views.quiet, commands: ['enrol'] } }), []);
+  assert.notDeepEqual(changed({ quiet: { ...RAW.views.quiet, public: undefined } }), []);
+  assert.notDeepEqual(changed({}, { auth: { ...RAW.auth, public: { read: ['desk', 'enrolment'] } } }), []);
+  assert.notDeepEqual(
+    changed({}, { auth: { ...RAW.auth, roles: { clerk: { read: true, write: true, commands: ['logEnrolment'] } } } }),
+    [],
+  );
+  assert.notDeepEqual(changed({}, { ui: { csp: { connect: ['https://api.example.com'] } } }), []);
 });

@@ -6,12 +6,14 @@ import { Sidebar } from '@mistriwork/kit/client/components/Sidebar.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
 import { message, messageLanguage, subscribeMessages } from '@mistriwork/kit/client/messages.js';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher.js';
 import { openPalette } from '@mistriwork/kit/client/palette.js';
 import { headerSearchShown } from '../publicVisitor.js';
 import { say } from '@mistriwork/kit/client/copy/shell/components/MobileNavDrawer.js';
+import type { ShownApp } from '@mistriwork/kit/client/components/appRooms.js';
 
 interface MobileNavDrawerProps {
-  app: Partial<Pick<AppPayloadApp, 'name' | 'ui'>>;
+  app: Partial<Pick<AppPayloadApp, 'name' | 'ui' | 'nav' | 'views' | 'resources' | 'home'>>;
 }
 
 export function MobileNavDrawer({ app }: MobileNavDrawerProps) {
@@ -75,6 +77,8 @@ function MobileDrawerContents({
             </button>
           </span>
         </header>
+        {/* At the top of the menu, then that workspace's entries: a phone's header has no room for a row of them. */}
+        {app.nav ? <WorkspaceSwitcher app={app as ShownApp} variant="drawer" /> : null}
         <ul ref={setList} className="mobile-nav-list" />
         <div ref={setFooter} className="mobile-nav-footer" />
         {list ? createPortal(<Sidebar tabNavigation host={list} footerHost={footer} onSelect={onClose} />, list) : null}

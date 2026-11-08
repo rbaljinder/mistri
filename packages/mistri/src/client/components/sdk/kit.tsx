@@ -92,6 +92,27 @@ export function Row({
   );
 }
 
+/** Children in a grid of equal columns as wide as `min` where there is room, fewer where there is not: it wraps, and
+    never scrolls sideways. A card or a stat that should sit three across at a desk and stack on a phone, with no
+    breakpoint written. `min` is a CSS length (`'16rem'` by default); a column is never wider than the box itself. */
+export function Cluster({
+  min = '16rem',
+  gap = 'field',
+  children,
+  className,
+}: {
+  min?: string;
+  gap?: Gap;
+  children?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={['kit-cluster', GAPS[gap], className].filter(Boolean).join(' ')} style={{ '--kit-cluster-min': min } as CSSProperties}>
+      {children}
+    </div>
+  );
+}
+
 /** A heading inside a section: the section's own title is its h2, so this is an h3 by default. */
 export function Heading({ level = 3, children, className }: { level?: 3 | 4; children?: ReactNode; className?: string }) {
   const Tag = level === 4 ? 'h4' : 'h3';

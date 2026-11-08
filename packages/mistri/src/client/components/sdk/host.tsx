@@ -161,6 +161,14 @@ const pageHost: UiHost = {
       run: async () => ({ status: 'refused', message: say('thisPageCannotRun') }),
       open: async () => ({ status: 'refused', message: say('thisPageCannotRun') }),
     },
+  action: (ref, reads) =>
+    pageBridge.commands?.action(ref, reads) ?? {
+      label: ref,
+      granted: false,
+      available: async () => false,
+      run: async () => ({ status: 'refused', message: say('thisPageCannotRun') }),
+      open: async () => ({ status: 'refused', message: say('thisPageCannotRun') }),
+    },
   viewer() {
     const identity = sessionIdentity();
     return identity.mode === 'authenticated' && identity.accountId ? { signedIn: true, account: identity.accountId } : { signedIn: false };

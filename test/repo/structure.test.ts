@@ -441,6 +441,8 @@ const CLIENT_CROSSINGS = [
   'LandingSurface',
   'LayoutBuilder',
   'MobileNavDrawer',
+  // The bar's workspace tabs: their host is made by the shell (appChrome.js), as the New menu's is.
+  'WorkspaceSwitcher',
   // The header's New menu: its host is in the shell, the menu fetched on demand when an App declares one.
   'NewMenu',
   'NewRecord',

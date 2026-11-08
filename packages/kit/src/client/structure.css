@@ -319,8 +319,13 @@
   .page-tab-more {
     flex: 0 0 auto;
   }
+  /* The workspaces' strip in the bar: it fits the room between the mark and the bar's keys, the rest under More. */
+  .workspace-strip.folds {
+    position: relative;
+    overflow: clip;
+  }
   /* A folded tab keeps its width, measured, out of the row; More is measured the same way while nothing is under it. */
-  :is(.page-tabstrip, .tabs).folds [data-folded] {
+  :is(.page-tabstrip, .tabs, .workspace-strip).folds [data-folded] {
     position: absolute;
     top: 0;
     inset-inline-start: 0;

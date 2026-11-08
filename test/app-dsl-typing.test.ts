@@ -474,6 +474,26 @@ test('home may name a free-form page by its path, once the generated types name 
   assert.match(typo.stdout, /pick-wlak/);
 });
 
+test('a saved form step names a signed-in command in a signed-in form, with no cast (a field report)', () => {
+  const types = commandTypes(
+    {
+      startApplication: { target: 'ticket', targets: 'none', input: ['subject'] },
+      logCall: { target: 'ticket', targets: 'none', input: ['subject'], public: true },
+    },
+    'Helpdesk',
+  );
+  const source = [
+    'import "./mistri-commands.d.ts";',
+    'import { commandForm, step } from "@mistriwork/mistri/app";',
+    'export const signedIn = commandForm("Apply", "startApplication", [step("About you", "startApplication")], {',
+    '  resume: { token: "token", expires: "expires", progress: "progress" }, draft: { start: "subject" },',
+    '});',
+    'export const publicOne = step("Call", "logCall");',
+  ].join('\n');
+  const compiled = compile(source, {}, { 'mistri-commands.d.ts': types });
+  assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+});
+
 test("a page's blocks take their section's words, each column typed to the block's resource", () => {
   const page = (show: string) => `
     import type {} from './mistri-schema.js';
@@ -508,6 +528,32 @@ test("definePage takes no path: the file's name is the page's path", () => {
     export default definePage({ path: 'help', label: 'Help', reads: ['ticket'], component: () => null });
   `);
   assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+});
+
+test("a page's useAction takes only the actions it declared, and what it declares are the App's fixed actions", () => {
+  const types = commandTypes(undefined, 'Helpdesk', undefined, ['board'], ['startVisit', 'finishJob']);
+  const page = (declared: string, used: string) => `
+    import './mistri-commands.d.ts';
+    import type {} from './mistri-schema.js';
+    import { definePage } from '@mistriwork/mistri/page';
+    const page = definePage({ label: 'Board', reads: ['ticket'], actions: [${declared}],
+      component: () => { ${used}; return null; } });
+    export default page;
+  `;
+  const files = { 'mistri-commands.d.ts': types };
+  const fine = compile(page("'startVisit'", "page.useAction('startVisit').run({ id: 1 })"), {}, files);
+  assert.equal(fine.status, 0, fine.stdout + fine.stderr);
+  // The page's own hook is bound to its declaration: finishJob is the App's, but this page did not declare it.
+  const undeclared = compile(page("'startVisit'", "page.useAction('finishJob')"), {}, files);
+  assert.notEqual(undeclared.status, 0, 'an action the page did not declare is a type error');
+  assert.match(undeclared.stdout, /finishJob/);
+  // And a declaration is held to the App's fixed actions, once the types are generated.
+  const stray = compile(page("'dance'", "page.useAction('dance')"), {}, files);
+  assert.notEqual(stray.status, 0, 'an id that is no fixed action of the App is a type error');
+  assert.match(stray.stdout, /dance/);
+  // A page that declares none has no useAction to call.
+  const none = compile(page('', "page.useAction('startVisit')"), {}, files);
+  assert.notEqual(none.status, 0);
 });
 
 test("every caption a reader sees takes msg(): a dashboard's, its sections', a document's, an action's, a nav group's, a step's", () => {

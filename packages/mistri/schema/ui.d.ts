@@ -184,6 +184,9 @@ export declare function Stack(props: Children & { gap?: Gap; as?: 'div' | 'ul' |
 export declare function Row(
   props: Children & { gap?: Gap; align?: 'start' | 'center' | 'baseline' | 'end'; foot?: boolean; className?: string },
 ): ReactTypes.ReactElement;
+/** Children in a grid of equal columns, each as wide as `min` (a CSS length, `'16rem'` by default) where there is room
+    and fewer columns where there is not: it wraps, and never scrolls sideways. Three cards across at a desk, one on a phone. */
+export declare function Cluster(props: Children & { min?: string; gap?: Gap; className?: string }): ReactTypes.ReactElement;
 /** A heading inside a section, whose own title is its h2. */
 export declare function Heading(props: Children & { level?: 3 | 4; className?: string }): ReactTypes.ReactElement;
 /** The platform's one button. */
@@ -359,6 +362,22 @@ export declare function useCommand(command: import('./app.js').CommandName): {
       (`field.choice({ from })`) where they come with it. Undefined for an input that offers none, or whose rows its own
       form reads. */
   choices(field: string): ReadonlyArray<{ value: string | number | boolean; label: string }> | undefined;
+};
+/**
+ * One of the App's fixed actions, a machine's verb or `action(label, { set })`, by its id: `const start = useAction('startVisit')`. Held
+ * as a command is (`granted`, `available`, `reason`, `pending`, `run`, `open`, the same outcome), but it is the record page's own
+ * button: `run(record)` writes the action's `set` to that record, by its key, through the update route, asking first when the
+ * action says `confirm`. A record in a state the action does not leave is refused in words (`available` says so before the click),
+ * and the server judges the write again. It takes no input, but for the reason an action asks: `run(record, { reason })`.
+ */
+export declare function useAction(action: import('./app.js').ActionName): {
+  label: string;
+  granted: boolean;
+  available(record: Readonly<Record<string, unknown>>): boolean | undefined;
+  reason(record: Readonly<Record<string, unknown>>): CommandUnavailable | undefined;
+  pending(record: Readonly<Record<string, unknown>>): boolean;
+  run(record: Readonly<Record<string, unknown>>, input?: Readonly<{ reason?: string }>): Promise<CommandOutcome>;
+  open(record: Readonly<Record<string, unknown>>, input?: Readonly<{ reason?: string }>): Promise<CommandOutcome>;
 };
 /** One of the App's messages (`messages/<locale>.ts`) in the reader's language, its `{name}`s filled from `args`:
     `useMessage('help.title')`, `useMessage('help.results', { count: 3 })`. Redraws when the reader picks another

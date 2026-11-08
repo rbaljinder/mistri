@@ -2,8 +2,8 @@
  * `nav`: the menu that only arranges references to views, read once the views
  * are known (appViews.ts). Local references normalize to `{ view, label? }`,
  * checked static destinations to `{ label, to }`, and groups to
- * `{ group, label, children }`; a view appears in it at most once, and a
- * public view not at all.
+ * `{ group, label, children }`; a view appears in it at most once (once in each
+ * workspace, where it has them), and a public view not at all.
  */
 import { ASSISTANT_ROOM } from './appAddress.js';
 import { isRoom, type DestinationKind } from './appDestinations.js';
@@ -26,13 +26,22 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) throw new Error(`${where}: "nav" must be an array.`);
   const groups = new Set<string>();
-  const placed = new Set<string>();
+  /* Where each view stands: the workspaces it is in, '' for outside any. A view may stand in several workspaces (a page
+     both teams use), never twice in one, and never in a workspace and outside it. */
+  const placedIn = new Map<string, Set<string>>();
+  let workspace = '';
+  const place = (key: string): boolean => {
+    const where = placedIn.get(key) ?? new Set<string>();
+    if (where.has(workspace) || (where.size > 0 && (workspace === '' || where.has('')))) return false;
+    where.add(workspace);
+    placedIn.set(key, where);
+    return true;
+  };
   const visiting = new Set<object>();
   const leaf = (key: unknown, label: string | undefined, at: string, color?: SeriesColor): AppNavNode => {
     const view = typeof key === 'string' ? views.get(key) : undefined;
     if (!view && key === ASSISTANT_ROOM && assistantPage) {
-      if (placed.has(ASSISTANT_ROOM)) throw new Error(`${at} names the assistant a second time; it appears in nav at most once.`);
-      placed.add(ASSISTANT_ROOM);
+      if (!place(ASSISTANT_ROOM)) throw new Error(`${at} names the assistant a second time; it appears in nav at most once.`);
       return {
         view: ASSISTANT_ROOM,
         ...(label === undefined ? {} : { label }),
@@ -51,8 +60,8 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
           "a landing is reached through home, a public form through its address and a landing's call to action.",
       );
     }
-    if (placed.has(view.key)) throw new Error(`${at} names the view "${view.key}" a second time; a view appears in nav at most once.`);
-    placed.add(view.key);
+    if (!place(view.key))
+      throw new Error(`${at} names the view "${view.key}" a second time; a view appears in nav at most once, or once in each workspace.`);
     return {
       view: view.key,
       ...(label === undefined ? {} : { label }),
@@ -68,7 +77,11 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
       if (Object.hasOwn(node, 'children')) {
         if (visiting.has(node)) throw new Error(`${at} contains a navigation cycle.`);
         if (depth >= 8) throw new Error(`${at} exceeds the maximum navigation group depth of 8.`);
-        allowKeys(node, ['id', 'label', 'icon', 'realm', 'placement', 'inline', 'folded', 'children'], `${at} (a navigation group)`);
+        allowKeys(
+          node,
+          ['id', 'label', 'icon', 'realm', 'placement', 'inline', 'folded', 'workspace', 'children'],
+          `${at} (a navigation group)`,
+        );
         if (typeof node.id !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(node.id)) {
           throw new Error(`${at} needs a group "id" using lowercase letters, digits and hyphens.`);
         }
@@ -91,9 +104,26 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
            section stays one line until it is wanted. Their own choice, once made, is kept over it. */
         if (node.folded !== undefined && node.folded !== true)
           throw new Error(`${at} has a "folded" of ${JSON.stringify(node.folded)}: it is true, or left out.`);
+        /* `workspace` makes a top-level group a product of its own: the header's switcher picks it, and the sidebar lists
+           only its children. It is the whole menu's shape, so it is checked once the top level is read (below). */
+        if (node.workspace !== undefined && node.workspace !== true)
+          throw new Error(`${at} has a "workspace" of ${JSON.stringify(node.workspace)}: it is true, or left out.`);
+        if (node.workspace !== undefined && depth > 0)
+          throw new Error(`${at} is a group inside a group with "workspace". Only a group of the top level is a workspace.`);
+        if (node.workspace !== undefined && node.inline !== undefined)
+          throw new Error(
+            `${at} (${node.id}) is a workspace with "inline". A workspace is picked in the header and its rooms listed in the sidebar; inline is the top bar's, and a workspace is no group of it.`,
+          );
+        if (node.workspace !== undefined && node.placement !== undefined)
+          throw new Error(
+            `${at} (${node.id}) is a workspace with a "placement". A footer group stays at the sidebar's foot in every workspace; it is not one of them.`,
+          );
         groups.add(node.id);
         visiting.add(node);
+        const outer = workspace;
+        if (node.workspace !== undefined) workspace = node.id;
         const children = walk(node.children, `${at} (${node.id})`, depth + 1);
+        workspace = outer;
         visiting.delete(node);
         return {
           group: node.id,
@@ -103,6 +133,7 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
           ...(node.placement === undefined ? {} : { placement: 'footer' as const }),
           ...(node.inline === undefined ? {} : { inline: true as const }),
           ...(node.folded === undefined ? {} : { folded: true as const }),
+          ...(node.workspace === undefined ? {} : { workspace: true as const }),
           children,
         };
       }
@@ -128,6 +159,18 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
       throw new Error(`${at} is not a view id, a { label, to } or a navGroup.`);
     });
   const nav = walk(raw, where, 0);
+  /* Workspaces split the whole menu, or none of it: a room outside them would show in no workspace's sidebar, or in all.
+     Only a footer group stands outside, held at the sidebar's foot whichever workspace is open. */
+  if (nav.some((node) => 'group' in node && node.workspace)) {
+    nav.forEach((node, i) => {
+      if ('group' in node && (node.workspace || node.placement === 'footer')) return;
+      const name = 'group' in node ? `the group "${node.group}"` : 'view' in node ? `the view "${node.view}"` : `the entry "${node.label}"`;
+      throw new Error(
+        `${where}: nav entry ${i + 1} is ${name}, outside every workspace. When one top-level group is a workspace, every one is, ` +
+          `except a group with placement: 'footer'. Put it in a navGroup(…, { workspace: true }).`,
+      );
+    });
+  }
   /* The assistant's page is always reachable: where nav does not place it, it closes the menu. */
-  return assistantPage && !placed.has(ASSISTANT_ROOM) ? [...nav, { view: ASSISTANT_ROOM }] : nav;
+  return assistantPage && !placedIn.has(ASSISTANT_ROOM) ? [...nav, { view: ASSISTANT_ROOM }] : nav;
 }

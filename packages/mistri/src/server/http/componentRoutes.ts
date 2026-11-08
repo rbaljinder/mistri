@@ -61,6 +61,17 @@ export function withHostPaths(files: Readonly<Record<string, string>>, name: str
   return code;
 }
 
+/** Whether a path is under a `_components` segment, where an App's compiled files are served and nothing else is. */
+const underComponents = (path: string) => path.split('/').includes(COMPONENTS_SEGMENT);
+
+/* An address under `_components` that names no file served here is not a page: answered 404 with no body, never the
+   HTML shell, which a script tag or a curl would take for the file. */
+function missing(ctx: Pick<RequestContext, 'req' | 'res'>): true {
+  ctx.res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8', 'content-length': 0, 'x-content-type-options': 'nosniff' });
+  ctx.res.end();
+  return true;
+}
+
 function reply(ctx: Pick<RequestContext, 'req' | 'res'>, body: string, type: string, cache: string): true {
   const head = ctx.req.method === 'HEAD';
   ctx.res.writeHead(200, {
@@ -102,7 +113,7 @@ export async function tenantComponentRoute(
     return reply(ctx, source, TYPES.js, 'no-cache');
   }
   const match = FILE.exec(path);
-  if (!match) return false;
+  if (!match) return underComponents(path) ? missing(ctx) : false;
   let named: string;
   try {
     named = decodeURIComponent(match[1]);
@@ -111,8 +122,7 @@ export async function tenantComponentRoute(
   }
   const visitorMay = match[3] !== 'js.map' && visitorFiles.has(match[2]);
   if (named !== appId || !files || !Object.hasOwn(files, match[2]) || (!visitorMay && !(await signedIn()))) {
-    send(ctx.res, 404, { error: 'No such component file.' });
-    return true;
+    return missing(ctx);
   }
   const extension = match[3] === 'js.map' ? 'map' : match[3];
   const body = extension === 'js' ? withHostPaths(files, match[2], base) : files[match[2]];
@@ -151,7 +161,7 @@ export async function componentRoutes(ctx: RequestContext): Promise<boolean> {
     return reply(ctx, source, TYPES.js, 'no-cache');
   }
   const match = FILE.exec(path);
-  if (!match) return false;
+  if (!match) return underComponents(path) ? missing(ctx) : false;
   let appId: string;
   try {
     appId = decodeURIComponent(match[1]);
@@ -172,8 +182,7 @@ export async function componentRoutes(ctx: RequestContext): Promise<boolean> {
   const visitorMay = match[3] !== 'js.map' && (opensPublic || (host !== undefined && publicFormFiles(host).has(match[2])));
   const files = signsIn && !signedIn && !visitorMay ? undefined : host?.app.components?.files;
   if (!files || !Object.hasOwn(files, match[2])) {
-    send(res, 404, { error: 'No such component file.' });
-    return true;
+    return missing(ctx);
   }
   const extension = match[3] === 'js.map' ? 'map' : match[3];
   const cache =

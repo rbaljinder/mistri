@@ -195,17 +195,12 @@ describe('as the App declares them', () => {
     assert.ok(appComponents({ ...app, auth: { rows: 'tenant' } } as AppDef, [], 'lot').size > 0);
   });
 
-  test('egress is a list of origins, each a line of authority.lock beside what a page reads', () => {
+  test('egress is a list of origins, each a line of authority.lock; the reads of a page are not', () => {
     const app = parseTestApp(APP, 'lot');
     assert.deepEqual(app.ui.csp?.connect, ['https://api.example.com']);
     assert.deepEqual(app.ui.csp?.images, ['https://img.example.com']);
     const report = authorityReport(app);
-    for (const line of [
-      'page desk reads inquiry',
-      'page desk reads vehicle',
-      'egress connect https://api.example.com',
-      'egress images https://img.example.com',
-    ]) {
+    for (const line of ['egress connect https://api.example.com', 'egress images https://img.example.com']) {
       assert.match(report, new RegExp(`^${line.replace(/[.]/g, '\\.')} — the App$`, 'm'));
     }
     for (const origin of [
@@ -341,6 +336,20 @@ describe('served', () => {
       assert.equal(code.status, 200);
       assert.match(String(code.body), /export default function Stream/);
       assert.equal((await call('/_components/stream-ffffffffffff.js')).status, 404);
+      /* Anything under `_components` that names no served file is a 404 with no body, as plain text, never the HTML shell a
+         script tag or a curl would take for it: a name the file pattern does not match, a path below it, an App that is not here. */
+      for (const path of [
+        '/_components/missing',
+        '/_components/a/b.js',
+        '/_components/Stream.JS',
+        '/other/_components/x-1.js',
+        '/lot/_components/page-nope.js',
+      ]) {
+        const answer = await call(path);
+        assert.equal(answer.status, 404, path);
+        assert.equal(answer.body, '', path);
+        assert.match(String(answer.headers.get('content-type')), /^text\/plain/, path);
+      }
       // What a component's hook asks of the server is the public grant's to answer.
       const cars = await call('/api/view/run', {
         view: { id: 'ui:vehicle', name: 'vehicle', base: 'vehicle', columns: [{ path: 'make' }, { path: 'dealer_id.name' }], limit: 5 },

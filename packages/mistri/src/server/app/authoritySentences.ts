@@ -222,7 +222,6 @@ const RULES: ReadonlyArray<[RegExp, (...parts: string[]) => Read]> = [
       can: { who: 'Anyone', does: `run ${code(command)} (version ${version}) through the form ${code(form)}` },
     }),
   ],
-  [/^page (\S+) reads (\S+)$/, (page, resource) => ({ group: 'data', can: { who: `Page ${code(page)}`, does: `read ${code(resource)}` } })],
   [/^page (\S+) runs (\S+)$/, (page, command) => ({ group: 'data', can: { who: `Page ${code(page)}`, does: `run ${code(command)}` } })],
   [/^page (\S+) loads (\S+)$/, (page, loader) => ({ group: 'data', can: { who: `Page ${code(page)}`, does: `load ${code(loader)}` } })],
   [/^page (\S+) public$/, (page) => ({ group: 'public', can: { who: 'Anyone', does: `open the page ${code(page)}` } })],

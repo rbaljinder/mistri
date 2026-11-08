@@ -253,14 +253,22 @@ function cssFindings(
 }
 
 /** What a free-form page declares, by its component's id: what its sources are held to (appPages.ts scanPageSource). */
-type PageManifests = ReadonlyMap<string, { key: string; reads: readonly string[]; commands: readonly string[] }>;
+type PageManifests = ReadonlyMap<
+  string,
+  { key: string; reads: readonly string[]; commands: readonly string[]; actions?: readonly string[] }
+>;
 
 /** Each free-form page's manifest, by its component's id: a page is a dashboard of one component, with what it declares. */
 export function pageManifestsOf(app: { views: AppDef['views'] }): PageManifests {
   return new Map(
     Object.entries(app.views).flatMap(([key, view]) =>
       'sections' in view && view.page && view.sections[0]?.component
-        ? [[view.sections[0].component.id, { key, reads: view.page.reads, commands: view.page.commands }] as const]
+        ? [
+            [
+              view.sections[0].component.id,
+              { key, reads: view.page.reads, commands: view.page.commands, actions: view.page.actions ?? [] },
+            ] as const,
+          ]
         : [],
     ),
   );

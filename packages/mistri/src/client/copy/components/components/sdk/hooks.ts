@@ -5,8 +5,10 @@ export const say = defineMessages({
   visitorUnavailable: 'Visitor experiments are unavailable in this component host.',
   thePageReadsIsNotOne: 'The page "{label}" reads {map}; "{resource}" is not one of them. Add it to the page\'s reads.',
   thePageRunsIsNotOne: 'The page "{label}" runs {map}; "{command}" is not one of them. Add it to the page\'s commands.',
+  thePageRunsActionIsNotOne: 'The page "{label}" runs {map}; "{action}" is not one of them. Add it to the page\'s actions.',
   useaddressstateKeepsAPages: "useAddressState keeps a page's place in its address; it is drawn on a free-form page (definePage).",
   thePageKeepsInItsAddress: 'The page "{label}" keeps {params} in its address; add "{name}" to its params.',
   noCommands: 'no commands',
+  noActions: 'no actions',
   noParameters: 'no parameters',
 });

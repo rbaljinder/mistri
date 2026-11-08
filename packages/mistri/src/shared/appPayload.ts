@@ -291,6 +291,7 @@ function servedNav(nav: readonly AppNavNode[], views: Readonly<Record<string, { 
           ...(node.placement ? { placement: node.placement } : {}),
           ...(node.inline ? { inline: true as const } : {}),
           ...(node.folded ? { folded: true as const } : {}),
+          ...(node.workspace ? { workspace: true as const } : {}),
           children: servedNav(node.children, views),
         }
       : 'to' in node

@@ -70,9 +70,9 @@ export default function BinMap({ rows }: SectionProps<typeof warehouseBins, Rows
 
 `@mistriwork/mistri/ui` is the only mistri module a component imports. It holds:
 
-- **The kit**: `Card`, `Stack`, `Row`, `Heading`, `Button`, `Value`, `Tone`, `Meter`, `Stat`, `Columns`, `Table`, `Dropdown`, `Segmented`, `SplitListDetail`, `Empty`, `Loaded`, `Icon`. `Table` draws each cell as a `Value`, dressed as the App dresses that column; sorting stays yours (`sort`, `onSort`), and `onRowClick` makes the first cell a link. A free-form page's row of verbs at the screen's foot is `<Row foot>`: on a phone a notice stands above it instead of covering it.
+- **The kit**: `Card`, `Stack`, `Row`, `Cluster`, `Heading`, `Button`, `Value`, `Tone`, `Meter`, `Stat`, `Columns`, `Table`, `Dropdown`, `Segmented`, `SplitListDetail`, `Empty`, `Loaded`, `Icon`. `Table` draws each cell as a `Value`, dressed as the App dresses that column; sorting stays yours (`sort`, `onSort`), and `onRowClick` makes the first cell a link. A free-form page's row of verbs at the screen's foot is `<Row foot>`: on a phone a notice stands above it instead of covering it. `<Cluster min="14rem">` lays its children in equal columns at least that wide, as many across as fit and one on a phone, and never scrolls sideways: `<Cluster>{teams.map((team) => <Card key={team.id} title={team.name}>…</Card>)}</Cluster>`.
 - **Reads**: `useRows`, `useRecord`, `useBreakdown`, `useFile`, all under the reader's grants, row policy and tenant.
-- **Commands**: `useCommand(cmd)` with `available`, `reason`, `run` and `open`; an applied run resolves with the command's `output`.
+- **Commands**: `useCommand(cmd)` with `available`, `reason`, `run` and `open`; an applied run resolves with the command's `output`. `useAction(id)` is the same handle for a fixed action (a machine's verb, `action(label, { set })`).
 - **The rest**: `useNavigate`, `useComposer` (fills the page's conversation box, never sends), `useViewer`, `useFormat`, `useMessage`, `useLook`, `useToken`, `useFlags`.
 
 `<Loaded query={rows}>{(data) => …}</Loaded>` draws a read's three other states as the platform does: a skeleton while it loads, `empty` (or "Nothing here yet.") for no rows, and the error with Try again. `useFormat().money(value, { currency, minor, whole, compact })` says a figure as a `money` column does, exactly, from a decimal string too; `dateTime(value, { timezone: 'America/Chicago' })` says it in that zone.
@@ -89,6 +89,19 @@ const can = close.available(ticket); // undefined while the server is asked
 - `run` resolves with `{ status }`: `applied`, `refused` (in the server's words), `closed` when its form was closed unsent, or `unknown` when the answer was lost. On `unknown`, call `check()` before sending again: it asks under the same key, so the run applies at most once.
 - One key covers each run. For a command that names no record, or a public page's, a run that must survive a reload takes `{ attempt }`: a `crypto.randomUUID()` made once per intent and kept (in the address, say). The same attempt sent again is the same run.
 - Inputs a command's `when` hides are neither required nor sent, as in its form.
+
+### Run an action
+
+A resource's fixed actions (a machine's verbs, `action(label, { set })`) are not commands, so `useCommand` does not run them. `useAction` is the record page's own button, with the handle a command has:
+
+```tsx
+const start = page.useAction('startVisit'); // the page declares `actions: ['startVisit']`
+{start.granted && <Button disabled={start.reason(request) === 'unavailable'} onClick={() => start.run(request)}>{start.label}</Button>}
+```
+
+- `run(record)` writes the action's `set` to that record, found by its key. An action that says `confirm` asks first, in the platform's dialog; one that asks a reason takes it as `run(record, { reason })`. It takes no other input.
+- `granted` is the record page's rule: the reader writes the resource, or a role of theirs runs this action (`roles.<role>.actions`). `available(record)` is the action's `when` for this record, and a run on a record in another state is refused in words, never skipped. The server judges the write again as it judges any update.
+- A page declares its actions beside its reads, as it declares its commands. A command's id there is refused (`[page-action]`: name it in `commands`), as is an id that is no fixed action of a resource the page reads, and a `public` page declares none: a signed-out visitor holds no role to run one. They are the role's grants, not the page's authority, so adding one does not change `authority.lock`.
 
 An id past 2^53 arrives as a string: draw it with `Value`, never through `Number()`.
 
@@ -130,10 +143,10 @@ const page = definePage({
 See it in the sample (`examples/apps/ladle/pages/check-in.page.tsx:13`).
 
 - The path is the file's name, and the address: `/check-in?class=2`. `home` may name a page by its path.
-- `page.useRows`, `useRecord`, `useBreakdown` and `useFile` read only its `reads`; `page.useCommand` runs only its `commands`; `page.useParam('class')` keeps state in the address. Anything else is a type error, a `[page-undeclared]` problem in `check`, and refused by the server.
+- `page.useRows`, `useRecord`, `useBreakdown` and `useFile` read only its `reads`; `page.useCommand` runs only its `commands` and `page.useAction` only its `actions`; `page.useParam('class')` keeps state in the address. Anything else is a type error, a `[page-undeclared]` problem in `check`, and refused by the server.
 - A role is offered the page when it is granted every read (`roles` narrows it; `public: true` opens it within `auth.public`). `useCommand(…).granted` is false for a command the role lacks; draw its button where `available(record)` is not false. A service role is offered a page only where the page names it.
 - A `public: true` page may name `public: true` commands, and a signed-out visitor runs them through the page's own door. That door asks for the page's ticket, takes a request from the page's own origin only (never from a host that embeds it), and holds the run to the public form's rules. `run(record, input, { challenge })` passes a human check's token where `auth.challenge` names one. The answer is `{ reference, receipt }`, never the input; a lost answer is `unknown`, and `check({ challenge })` asks again under the same submission.
-- `authority.lock` records each page's reads, commands and loader. `<CommandForm command="…" />` is a command's own dialog behind a button.
+- `authority.lock` records which pages are public, the public commands each runs, and which load; what a signed-in page reads and runs is the roles' grants, which the lock already records. `<CommandForm command="…" />` is a command's own dialog behind a button.
 - `head` says the form of the page's head. `head: 'compact'` is the title alone on one line with its star, at a list's size, with no `description` under it: a working page whose controls start at once. `head: false` is a page that draws its own head: the platform's title stays for a screen reader only, so the room keeps one `h1`, and the label still names the browser tab, the crumb and the palette entry. Draw your own title as an `h2` or the kit's `<Heading>`, never a second `h1`; say the intro yourself. Absent, the page has the full head: title, star and description.
 
 A `loader` runs on the server for the reader and hands the component its `data`. It is exported from the commands module with `defineLoaders` and `defineLoader` (`@mistriwork/mistri/commands`); a page that names one it does not export, or one that reads past the page, fails `check` (`[page-loader]`):

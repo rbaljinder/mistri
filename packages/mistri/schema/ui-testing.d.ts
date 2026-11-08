@@ -61,7 +61,7 @@ export interface RenderOptions {
   tokens?: Record<string, string>;
   /** Who is reading; signed out unless said. */
   viewer?: { signedIn: boolean; account?: string };
-  /** The commands the reader is served, by id: its label, whether it is available on a record (true unless said), what a run answers
+  /** The commands the reader is served, and a page's fixed actions (`useAction`), by id: its label, whether it is available on a record (true unless said), what a run answers
       (applied unless said). A command not named here is not granted, and none is to a signed-out reader. */
   commands?: Record<string, { label?: string; available?: (key: Readonly<Record<string, unknown>>) => boolean; outcome?: CommandOutcome }>;
   /** A free-form page's address parameters as the reader arrived with them. */

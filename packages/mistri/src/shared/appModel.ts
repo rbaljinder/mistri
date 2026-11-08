@@ -218,6 +218,7 @@ export type AppNavNode =
       placement?: 'footer';
       inline?: true;
       folded?: true;
+      workspace?: true;
       children: AppNavNode[];
     };
 
@@ -794,6 +795,8 @@ export interface AppDashboardView extends ServedDashboardView {
 interface AppPageManifest {
   reads: string[];
   commands: string[];
+  /** The fixed actions it runs on what it reads; left out when it runs none. */
+  actions?: string[];
   params: string[];
   loader?: string;
   public?: true;

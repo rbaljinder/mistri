@@ -20,6 +20,8 @@ export type AvailableNavigationNode<T> =
       placement?: 'footer';
       inline?: true;
       folded?: true;
+      /** A top-level group the header's switcher picks (workspaces.ts): the sidebar lists only the current one's children. */
+      workspace?: true;
       children: AvailableNavigationNode<T>[];
     };
 
@@ -67,6 +69,7 @@ export function navigationTree<T>(
             ...(node.placement ? { placement: node.placement } : {}),
             ...(node.inline ? { inline: true as const } : {}),
             ...(node.folded ? { folded: true as const } : {}),
+            ...(node.workspace ? { workspace: true as const } : {}),
             children,
           },
         ]

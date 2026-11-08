@@ -455,6 +455,11 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
       `${where}: views "${ASSISTANT_ROOM}" takes the word the assistant's page is placed by (assistant placement 'page'). Give the view another key.`,
     );
   const nav = gather(across, () => parseNav(a.nav, where, views, order, parsedKind, assistantPage));
+  /* Workspaces stand in a band across the window (the header's switcher), which a header held in the sidebar's head cannot hold. */
+  if (nav?.some((node) => 'group' in node && node.workspace) && isRecord(a.ui) && isRecord(a.ui.shell) && a.ui.shell.header === 'sidebar')
+    across.push(
+      `${where}: ui.shell.header 'sidebar' draws no bar across the window, and nav workspaces are picked in one: their tabs stand in the bar after the App's mark. Remove header, or say 'bar'.`,
+    );
   /* A menu the App wrote leads with the overview it did not: the room every reader starts on is one they can go back to. */
   if (overview && nav?.length && !navViewKeys(nav).includes(OVERVIEW)) nav.unshift({ view: OVERVIEW });
   const homeViews = new Map<string, HomeView>(
@@ -1507,6 +1512,7 @@ const PAGE_VIEW_KEYS = [
   'component',
   'reads',
   'commands',
+  'actions',
   'params',
   'loader',
   'props',
@@ -1561,6 +1567,22 @@ function parsePageView(v: Record<string, unknown>, key: string, at: string, ctx:
     }
   }
   if (v.public !== undefined && v.public !== true) throw new Error(`[page-public] ${at} has a "public" that is not true.`);
+  if (v.public === true && page.actions.length)
+    throw new Error(`[page-public] ${at}: a public page runs public commands, not actions: a signed-out visitor holds no role to run one.`);
+  /* A fixed action (a machine's verb, `action(label, { set })`) is the resource's own, run by the reader the way its record page
+     runs it, so it is found on a resource the page reads; a command is not one and is named in "commands". */
+  for (const id of page.actions) {
+    const offered = page.reads.flatMap((resource) => ctx.data.resources?.[resource]?.actions ?? []);
+    const found = offered.find((action) => action.id === id);
+    if (found?.command || (!found && offered.some((action) => action.command?.id === id)))
+      throw new Error(`[page-action] ${at}: "${id}" is a command; name it in commands.`);
+    if (!found) {
+      const fixed = offered.filter((action) => !action.command).map((action) => `"${action.id}"`);
+      throw new Error(
+        `[page-action] ${at}: "${id}" is not a fixed action of ${page.reads.map((resource) => `"${resource}"`).join(', ')}, the resources it reads. Their fixed actions: ${fixed.join(', ') || 'none'}.`,
+      );
+    }
+  }
   /* A public page's commands are run by a signed-out visitor through the page's own door (http/pageCommandRoutes.ts),
      as the public principal: only a command that is itself public, and one that makes its record rather than naming
      one, the way a public form's is. A signed-in page's need roles to be granted to. */
@@ -1603,6 +1625,7 @@ function parsePageView(v: Record<string, unknown>, key: string, at: string, ctx:
       page: {
         reads: page.reads,
         commands: page.commands,
+        ...(page.actions.length ? { actions: page.actions } : {}),
         params: page.params,
         ...(page.loader ? { loader: page.loader } : {}),
         ...(v.public === true ? { public: true as const } : {}),

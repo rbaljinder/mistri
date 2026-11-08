@@ -32,9 +32,18 @@ vi.mock('../../../../mistri/src/client/appState.js', () => ({
 /* The kit reads the App through the shell's answers (shellMode.ts), which the mock above gives it. */
 beforeEach(bridgeShell);
 
-const { state } = await import('../core.js');
-const { currentDashView, currentSidebarIndex, rowCount, sidebarItems, tableRows, railed, setSidebarGroupCollapsed } =
-  await import('./sidebarModel.js');
+const { state, renderCrumbs } = await import('../core.js');
+const {
+  chooseWorkspace,
+  currentDashView,
+  currentSidebarIndex,
+  rowCount,
+  sidebarItems,
+  tableRows,
+  railed,
+  setSidebarGroupCollapsed,
+  workspaceSwitcher,
+} = await import('./sidebarModel.js');
 const { countsChanged, navCountKey } = await import('./navCounts.js');
 const { queryClient } = await import('./mount.js');
 const { captureRecordWriteRefresh } = await import('../recordWriteRefresh.js');
@@ -344,4 +353,109 @@ test("every refresh this browser's writes already make reaches the menu's counts
   }
   // A tab badge's key (['count', connection, query]) never shares an entry with a menu count.
   expect(navCountKey('crm', { table: 'invoice', condition: '' })).not.toEqual(['count', 'crm', 'invoice']);
+});
+
+/* ---------- workspaces ---------- */
+
+/* Two products in one App: a desk (tickets, a queue) and a CRM (customers), a page both use, and a footer group. */
+const spaced = (name: string, nav: unknown[]): Served => ({
+  name,
+  resources: {},
+  views: {
+    tickets: { table: 'invoice', label: 'Tickets' },
+    queue: { table: 'invoice', label: 'Queue', query: 'status = open' },
+    people: { table: 'customer', label: 'People' },
+    totals: { table: 'customer_totals', label: 'Totals' },
+    board: { sections: [], label: 'Board' },
+  },
+  nav,
+});
+const space = (id: string, children: unknown[], extra: Record<string, unknown> = {}) => ({
+  group: id,
+  label: id.toUpperCase(),
+  workspace: true,
+  children,
+  ...extra,
+});
+const sections = [
+  space('desk', [
+    { view: 'tickets', label: 'Tickets' },
+    { group: 'more', label: 'More', children: [{ view: 'queue', label: 'Queue' }] },
+    { view: 'totals', label: 'Totals' },
+  ]),
+  space('crm', [
+    { view: 'people', label: 'People' },
+    { view: 'totals', label: 'Totals' },
+  ]),
+  { group: 'help', label: 'Help', placement: 'footer', children: [{ view: 'board', label: 'Board' }] },
+];
+const labels = (items: ReturnType<typeof sidebarItems>) =>
+  items.filter((item) => item.kind !== 'gap').map((item) => ('label' in item ? item.label : ''));
+const walkTo = (entry: Record<string, unknown> | undefined) => {
+  state.stack = entry ? [entry] : [];
+  /* The walk's tick, as a real move makes it: the workspace is read again when the walk has moved. */
+  renderCrumbs();
+};
+afterEach(() => {
+  state.stack = [];
+});
+
+test('the sidebar lists only the current workspace, then the footer group', () => {
+  app = spaced('Two products', sections);
+  walkTo({ kind: 'table', table: 'invoice', query: 'invoice', view: 'tickets' });
+  expect(labels(sidebarItems(''))).toEqual(['Tickets', 'More', 'Queue', 'Totals', 'Help', 'Board']);
+  /* The menu's filter and the rows the keyboard skims are of that list alone. */
+  expect(sidebarItems('people').map((item) => item.kind)).toEqual(['note']);
+  expect(tableRows(sidebarItems('')).map((row) => row.label)).toEqual(['Tickets', 'Queue', 'Totals']);
+  walkTo({ kind: 'table', table: 'customer', query: 'customer', view: 'people' });
+  expect(labels(sidebarItems(''))).toEqual(['People', 'Totals', 'Help', 'Board']);
+  expect(workspaceSwitcher(app as never)).toMatchObject({ current: 'crm', spaces: [{ id: 'desk' }, { id: 'crm' }] });
+});
+
+test('a room in two workspaces keeps the one the reader is in; a choice of the switcher decides it', () => {
+  app = spaced('Shared page', sections);
+  walkTo({ kind: 'table', table: 'customer', query: 'customer', view: 'people' });
+  expect(workspaceSwitcher(app as never)?.current).toBe('crm');
+  /* Totals is in both: the walk lands on it, and the reader stays in the CRM. */
+  walkTo({ kind: 'table', table: 'customer_totals', query: 'customer_totals', view: 'totals' });
+  expect(workspaceSwitcher(app as never)?.current).toBe('crm');
+  chooseWorkspace(app as never, 'desk');
+  expect(workspaceSwitcher(app as never)?.current).toBe('desk');
+  expect(labels(sidebarItems(''))).toContain('Tickets');
+});
+
+test('a room no workspace holds keeps the last one, and a fresh tab the first', () => {
+  app = spaced('Outside nav', sections);
+  /* Fresh: nothing on the walk, the home is not in nav. */
+  expect(workspaceSwitcher(app as never)?.current).toBe('desk');
+  walkTo({ kind: 'table', table: 'customer', query: 'customer', view: 'people' });
+  expect(workspaceSwitcher(app as never)?.current).toBe('crm');
+  /* A served view outside nav (reached by ⌘K or a link): a table no entry names. */
+  walkTo({ kind: 'table', table: 'elsewhere', query: 'elsewhere' });
+  expect(workspaceSwitcher(app as never)?.current).toBe('crm');
+  expect(labels(sidebarItems(''))).toEqual(['People', 'Totals', 'Help', 'Board']);
+});
+
+test('a workspace with no visible entries is not offered; one that is left has no switcher and is the whole menu', () => {
+  /* Role filtering is the server's: the payload this reader is served has no CRM group left. */
+  app = spaced('One product', [sections[0], sections[2]]);
+  expect(workspaceSwitcher(app as never)).toBeNull();
+  expect(labels(sidebarItems(''))).toEqual(['Tickets', 'More', 'Queue', 'Totals', 'Help', 'Board']);
+  app = spaced('None', [{ group: 'help', label: 'Help', placement: 'footer', children: [{ view: 'board', label: 'Board' }] }]);
+  expect(workspaceSwitcher(app as never)).toBeNull();
+});
+
+test('an App without workspaces draws the whole menu and offers no switcher', () => {
+  app = spaced('Plain', [
+    {
+      group: 'all',
+      label: 'All',
+      children: [
+        { view: 'tickets', label: 'Tickets' },
+        { view: 'people', label: 'People' },
+      ],
+    },
+  ]);
+  expect(workspaceSwitcher(app as never)).toBeNull();
+  expect(labels(sidebarItems(''))).toEqual(['All', 'Tickets', 'People']);
 });

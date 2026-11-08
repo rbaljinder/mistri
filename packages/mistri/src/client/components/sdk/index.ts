@@ -19,6 +19,7 @@ export { Fragment, useCallback, useContext, useEffect, useId, useMemo, useReduce
 export {
   Button,
   Card,
+  Cluster,
   Columns,
   Dropdown,
   Empty,
@@ -36,6 +37,7 @@ export {
   Value,
 } from './kit.js';
 export {
+  useAction,
   useAnalytics,
   useBreakdown,
   useComposer,

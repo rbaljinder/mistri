@@ -9,7 +9,7 @@
  */
 import { describe, expect, test, vi } from 'vitest';
 import type { ReactElement } from 'react';
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { fixtures, renderInput, renderList, renderPage, renderSection } from './testing.js';
 import { useBreakdown, useCommand } from './hooks.js';
 import { CommandForm, definePage } from './page.js';
@@ -140,6 +140,37 @@ describe('commands, inputs, lists and pages', () => {
     expect(() => definePage({ label: 'X', reads: [], rooms: [], component: () => null })).toThrow(/definePage has no "rooms"/);
     // The file's name is the page's path, so a page does not say one.
     expect(() => definePage({ path: 'x', label: 'X', reads: [], component: () => null })).toThrow(/definePage has no "path"/);
+    errors.mockRestore();
+  });
+
+  test('a page runs only the fixed actions it declared, held as a command is and bound to what it reads', async () => {
+    const Start = () => {
+      const start = page.useAction('startVisit');
+      return (
+        <button type="button" disabled={!start.granted} onClick={() => void start.run({ id: 7 })}>
+          {start.label}
+        </button>
+      );
+    };
+    const page = definePage({ label: 'Board', reads: ['request'], actions: ['startVisit'], component: Start });
+    const drawn = renderPage(page, { viewer: { signedIn: true, account: 'a' }, commands: { startVisit: { label: 'Start visit' } } });
+    (await screen.findByRole('button', { name: 'Start visit' })).click();
+    await vi.waitFor(() => expect(drawn.commands).toEqual([{ command: 'startVisit', mode: 'run', key: { id: 7 } }]));
+    cleanup();
+    // Not granted to a signed-out reader, and the handle says why before any click.
+    const Why = () => <p>{page.useAction('startVisit').reason({ id: 7 }) ?? 'can'}</p>;
+    renderPage(definePage({ label: 'Board', reads: ['request'], actions: ['startVisit'], component: Why }), {
+      commands: { startVisit: { label: 'Start visit' } },
+    });
+    expect(await screen.findByText('signed-out')).toBeInTheDocument();
+    cleanup();
+    // A name the page did not declare is the page's mistake, told before the server could refuse it.
+    const stray = definePage({ label: 'Stray', reads: ['request'], commands: ['startVisit'], component: () => <p>{pageless()}</p> });
+    function pageless() {
+      return (stray as unknown as { useAction(name: string): { label: string } }).useAction('startVisit').label;
+    }
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => renderPage(stray)).toThrow(/runs no actions; "startVisit" is not one of them. Add it to the page's actions/);
     errors.mockRestore();
   });
 

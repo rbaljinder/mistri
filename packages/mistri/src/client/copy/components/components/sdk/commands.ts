@@ -7,5 +7,8 @@ export const say = defineMessages({
   isNotSomethingYouCanDo: '{label} is not something you can do here.',
   signInToDo: 'Sign in to do that.',
   this: 'This',
+  asksAReason: '{label} asks for a reason; run it with the reason in its input.',
+  confirmBody: 'Run {label} on this record?',
+  actionDone: '{label} done.',
   notConfirmed: '{label} was sent, and its result is not confirmed. Check the record before you send it again.',
 });

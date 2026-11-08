@@ -157,7 +157,7 @@ export interface DashboardDef {
   filters?: string[];
   refresh?: number;
   /** A free-form page (definePage): what its component reads and runs, the address parameters it keeps its place in, and its loader. */
-  page?: { reads: string[]; commands: string[]; params: string[]; loader?: string; public?: true };
+  page?: { reads: string[]; commands: string[]; actions?: string[]; params: string[]; loader?: string; public?: true };
   error?: string;
 }
 

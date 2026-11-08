@@ -33,7 +33,21 @@ import { exportNames } from './componentSdk.js';
 /** A page's file name: its path, then the suffix. */
 const PAGE_FILE = /^(.+)\.page\.(tsx|jsx)$/;
 /** The keys `definePage` takes, beside `component`. */
-const PAGE_KEYS = ['label', 'icon', 'nav', 'roles', 'reads', 'commands', 'params', 'loader', 'public', 'description', 'favorite', 'head'];
+const PAGE_KEYS = [
+  'label',
+  'icon',
+  'nav',
+  'roles',
+  'reads',
+  'commands',
+  'actions',
+  'params',
+  'loader',
+  'public',
+  'description',
+  'favorite',
+  'head',
+];
 const NAV_KEYS = ['group', 'position'];
 /* Spellings renamed before 1.0, refused with the word that replaced them. */
 const RENAMED: Readonly<Record<string, string>> = {
@@ -154,7 +168,7 @@ export function placePages(raw: Record<string, unknown>, pages: readonly PageFil
       kind: 'page',
       label: fields.label,
       component: { id: pageComponentId(page.key), module: page.module, kind: 'page' },
-      ...pick(fields, ['icon', 'description', 'favorite', 'head', 'reads', 'commands', 'params', 'loader', 'roles', 'public']),
+      ...pick(fields, ['icon', 'description', 'favorite', 'head', 'reads', 'commands', 'actions', 'params', 'loader', 'roles', 'public']),
     };
     if (!placing) continue;
     if (!nav) throw new Error(`[page-nav] ${at} asks for a place in nav, and the App has no nav. Say nav: false, or give the App a nav.`);
@@ -309,6 +323,7 @@ function walk(node: unknown, visit: (node: AstNode) => void): void {
 /** The hooks whose first argument names a resource the page must read, or a command it must run. */
 const READ_HOOKS = new Set(['useRows', 'useRecord', 'useBreakdown', 'useFile']);
 const COMMAND_HOOKS = new Set(['useCommand']);
+const ACTION_HOOKS = new Set(['useAction']);
 const SDK = new Set(['@mistriwork/mistri/ui', '@mistriwork/mistri/page', '@mistriwork/mistri/ui', '@mistriwork/mistri/page']);
 
 /** What a page's sources ask of its manifest, by file and line: what it does not declare, and what check cannot read. */
@@ -330,7 +345,7 @@ export function scanPageSource(
   parseAst: Parse,
   code: string,
   lang: 'ts' | 'tsx' | 'js' | 'jsx',
-  manifest: { key: string; reads: readonly string[]; commands: readonly string[] },
+  manifest: { key: string; reads: readonly string[]; commands: readonly string[]; actions?: readonly string[] },
 ): PageScan {
   const scan: PageScan = { undeclared: [], unread: [] };
   let program: unknown;
@@ -358,16 +373,16 @@ export function scanPageSource(
       return ((node.quasis as AstNode[])[0]?.value as { cooked?: string })?.cooked;
     return undefined;
   };
-  const hold = (what: 'reads' | 'commands', said: string, node: AstNode | undefined, at: number | undefined) => {
+  const hold = (what: 'reads' | 'commands' | 'actions', said: string, node: AstNode | undefined, at: number | undefined) => {
     const name = literal(node);
     if (name === undefined) {
       scan.unread.push({
         line: lineOf(at),
-        text: `${said} names its ${what === 'reads' ? 'resource' : 'command'} with an expression, which check cannot hold to the page "${manifest.key}"'s ${what}`,
+        text: `${said} names its ${what === 'reads' ? 'resource' : what === 'actions' ? 'action' : 'command'} with an expression, which check cannot hold to the page "${manifest.key}"'s ${what}`,
       });
       return;
     }
-    if (!manifest[what].includes(name)) {
+    if (!(manifest[what] ?? []).includes(name)) {
       scan.undeclared.push({
         line: lineOf(at),
         text: `[page-undeclared] ${said} ${what === 'reads' ? 'reads' : 'runs'} "${name}", which the page "${manifest.key}" does not declare in its ${what}`,
@@ -387,6 +402,7 @@ export function scanPageSource(
       const first = (node.arguments as AstNode[])[0];
       if (READ_HOOKS.has(name)) hold('reads', `${name}(…)`, first, node.start);
       else if (COMMAND_HOOKS.has(name)) hold('commands', `${name}(…)`, first, node.start);
+      else if (ACTION_HOOKS.has(name)) hold('actions', `${name}(…)`, first, node.start);
       return;
     }
     if (node.type === 'JSXOpeningElement') {

@@ -466,6 +466,8 @@ interface PageDecl {
   reads: string[];
   /** The commands the page runs; any other is refused, in the browser and by the server. */
   commands: string[];
+  /** The fixed actions it runs (a machine's verbs, `action(label, { set })`) on the resources it reads: they are not commands, so they are named apart. */
+  actions: string[];
   /** The address parameters the page keeps its place in: `/{app}/pick-walk?list=12`. */
   params: string[];
   /** The loader that reads for it on the server, by its name in the commands module (`defineLoaders`). */
@@ -500,6 +502,8 @@ export function parsePage(raw: Record<string, unknown>, at: string): PageDecl {
   const commands = raw.commands === undefined ? [] : raw.commands;
   if (!words(commands))
     throw new Error(`[page-commands] ${at} has "commands" that are not a list of command names: commands: ['pickList'].`);
+  const actions = raw.actions === undefined ? [] : raw.actions;
+  if (!words(actions)) throw new Error(`[page-action] ${at} has "actions" that are not a list of action ids: actions: ['startVisit'].`);
   const params = raw.params === undefined ? [] : raw.params;
   if (
     !Array.isArray(params) ||
@@ -520,6 +524,7 @@ export function parsePage(raw: Record<string, unknown>, at: string): PageDecl {
     component,
     reads: [...new Set(reads.map((name) => name.trim()))],
     commands: [...new Set(commands.map((name) => name.trim()))],
+    actions: [...new Set(actions.map((name) => name.trim()))],
     params: [...new Set(params as string[])],
     ...(raw.loader === undefined ? {} : { loader: raw.loader as string }),
     props: componentPropValues(component, raw.props, at),

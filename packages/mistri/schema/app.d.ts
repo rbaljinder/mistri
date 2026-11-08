@@ -153,6 +153,8 @@ export type CommandName = NamesWhere<RegisteredCommand>;
 /** The App's free-form pages by their paths (`pages/<path>.page.tsx`), filled in by the same generated file: `home` may name
     one beside a view. None without the generated file, whose `mistri check` writes it before it typechecks. */
 type PagePath = Register extends { pagePaths: infer P extends string } ? P : never;
+/** Any fixed action of the App (a machine's verb, `action(label, { set })`) by its id, as a page's `actions` names it; any text without the generated file. */
+export type ActionName = Register extends { actions: infer A extends string } ? A : string;
 /** A command on an existing record of `Table`: what that resource's actions and import may run. */
 export type CommandOn<Table extends string = string> = NamesWhere<{ target: Table; targets: 'one' | 'many' }>;
 /** A command a form runs: it names no existing record. `Public` narrows to those a public form may run, or those it may not. */
@@ -280,7 +282,7 @@ export interface SavedFormStep {
       within the form. Absent, the label's slug, as `step()` makes it. */
   id?: string;
   label: string | AppMessageRef;
-  command: FormCommandName<true>;
+  command: FormCommandName;
   /** As a step that lists fields (`title`, `lead`, `next`); a saved step has no `skip`, as it asks its command's inputs. */
   title?: string | AppMessageRef;
   lead?: string | AppMessageRef;
@@ -2971,6 +2973,11 @@ export interface AppNavGroup<View extends string = Lowercase<string>, Placement 
   /** In the sidebar, the section starts folded to its heading for someone who has never opened or closed it: for a section used rarely.
       Their own fold, once chosen, is remembered over it; the section still opens itself while it holds the current room, while the menu is filtered, and in the rail. */
   folded?: true;
+  /** A top-level group that is a product of its own: the bar across the window draws the workspaces as tabs after the App's mark (what does not fit goes under More; on a phone, a list at
+      the top of the menu drawer; `header: 'sidebar'` is refused) and the sidebar lists only the current workspace's entries. Set it on every top-level group, bar
+      one with `placement: 'footer'`, which stays at the sidebar's foot in each. A view may stand in two workspaces. The
+      workspace is the room's, never in the address; in the top placement a workspace is an ordinary group. Not with `inline`. */
+  workspace?: true;
 }
 /** In the App's nav and its groups only: the named feature's nav fragment, spliced in place, once. */
 export interface AppNavPlacement<Feature extends string = Lowercase<string>> { feature: Feature }
@@ -3794,7 +3801,7 @@ export declare function commandForm<const Name extends FormCommandName, const O 
     (a `msg()` label's key's slug, the same in every language). */
 export declare function step<const F extends string>(label: string | AppMessageRef, fields: readonly (F | readonly F[])[], opts?: StepOptions): FormStep<F>;
 /** A step of a form saved on every step: it asks the named command's inputs, and its handler saves them. */
-export declare function step(label: string | AppMessageRef, command: FormCommandName<true>, opts?: Omit<StepOptions, 'skip'>): SavedFormStep;
+export declare function step(label: string | AppMessageRef, command: FormCommandName, opts?: Omit<StepOptions, 'skip'>): SavedFormStep;
 /** What `step()` takes beside its label and fields: the id, and the intake style's words. */
 export interface StepOptions {
   id?: string;
@@ -4204,8 +4211,8 @@ export declare function customList<const C extends ComponentDecl<string, 'list'>
 ): { kind: 'custom'; readonly [madeBy]: 'customList'; component: C; show: S } & Authored<O>;
 /** Structural navigation parent; its children are view ids, `{ to, label }` or groups, kept as literals. */
 export declare function navGroup<const Children extends readonly AppNavNode<Lowercase<string>, AppNavPlacement>[]>(
-  id: string, label: string | AppMessageRef, children: Children, opts?: Pick<AppNavGroup, 'realm' | 'icon' | 'placement' | 'inline' | 'folded'>,
-): { id: string; label: string | AppMessageRef; children: Children; realm?: 'tenant' | 'platform'; icon?: AppIcon; placement?: 'footer'; inline?: true; folded?: true };
+  id: string, label: string | AppMessageRef, children: Children, opts?: Pick<AppNavGroup, 'realm' | 'icon' | 'placement' | 'inline' | 'folded' | 'workspace'>,
+): { id: string; label: string | AppMessageRef; children: Children; realm?: 'tenant' | 'platform'; icon?: AppIcon; placement?: 'footer'; inline?: true; folded?: true; workspace?: true };
 
 /* ---------- schema-typed names ----------
    Pair with `mistri --export types > mistri-schema.d.ts`: the

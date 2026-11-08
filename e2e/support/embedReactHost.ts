@@ -45,7 +45,11 @@ const vite = await createVite({
   appType: 'custom',
   logLevel: 'warn',
   plugins: embedPlugins(),
-  server: { middlewareMode: true, hmr: false, fs: { allow: [REPO] } },
+  /* `hmr: false` stops updates, not the socket: the page Vite writes still loads its client, which dials the default
+     port 24678 that every Vite on the machine shares. Under parallel specs it met another process's socket or none,
+     closed before it opened, and the harness's crash tripwire failed the spec. Its socket rides this server, as
+     devclient.ts does for ours. */
+  server: { middlewareMode: true, hmr: false, ws: { server }, fs: { allow: [REPO] } },
 });
 
 const ours = (url: string) => url === '/api/mistri' || url.startsWith('/api/mistri/') || url.startsWith('/api/mistri?');
