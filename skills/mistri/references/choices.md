@@ -16,7 +16,7 @@ grants or sign-in needs a restart (`mistri docs reload-and-restart`).
   schema cannot change or the target is in another database, where it cannot
   filter, sort or roll up (`mistri docs relationships`). The generated
   `References` type lists every hop —
-  [lintel/mistri-schema.d.ts:53](../../../examples/apps/lintel/mistri-schema.d.ts#L53).
+  [lintel/mistri-schema.d.ts:74](../../../examples/apps/lintel/mistri-schema.d.ts#L74).
 - **Name every source**, the first too: other sources' tables are
   `source.table` in every view, path and grant, and sources on different
   connections share no joins or transactions; one PostgreSQL database with
@@ -25,7 +25,7 @@ grants or sign-in needs a restart (`mistri docs reload-and-restart`).
 - **Declare resources one by one** when they carry access, display or forms
   (`{}` for a table read only as a label); `resources: 'all'` suits a
   read-mostly source. Every declared table is served whole to whoever reads it —
-  [lintel/app.ts:55](../../../examples/apps/lintel/app.ts#L55).
+  [lintel/app.ts:56](../../../examples/apps/lintel/app.ts#L56).
 - **Dates stored as text** (SQLite `TEXT`) are declared on the resource,
   `types: { due_on: 'date', created_at: 'datetime' }`: without it a date is a
   string, so `month due_on`, `relative` and the calendar have nothing to read
@@ -39,7 +39,7 @@ grants or sign-in needs a restart (`mistri docs reload-and-restart`).
 | --- | --- | --- |
 | No `auth` | one person on loopback, or behind a proxy that signs people in; every declared column reaches every browser | `mistri docs access-model` |
 | `auth` without `roles` | everyone signed in may read and write the same things | `mistri docs roles` |
-| `auth.roles` | people differ by what they may read, write or decide; each role grants within the resources' `access` ceilings | [lintel/app.ts:61](../../../examples/apps/lintel/app.ts#L61) |
+| `auth.roles` | people differ by what they may read, write or decide; each role grants within the resources' `access` ceilings | [lintel/app.ts:62](../../../examples/apps/lintel/app.ts#L62) |
 | `rows: 'policy'` | a reader sees only their own rows; a server-only `defineAppRowPolicy` says which | [lintel/policy.ts:91](../../../examples/apps/lintel/policy.ts#L91) |
 | `rows: 'tenant'` | one App serves several organizations, each seeing only its own | `mistri docs tenant-apps` |
 
@@ -50,9 +50,9 @@ is shown, not what is served.
   `defaultRole` is what a stranger gets, so name the role with the fewest
   grants (`mistri docs roles`).
 - **Who "me" is**: `auth.me` matches an account to its row —
-  [lintel/app.ts:59](../../../examples/apps/lintel/app.ts#L59).
+  [lintel/app.ts:60](../../../examples/apps/lintel/app.ts#L60).
 - **A column a role must not read**: a `fields` ceiling —
-  [lintel/app.ts:86](../../../examples/apps/lintel/app.ts#L86).
+  [lintel/app.ts:88](../../../examples/apps/lintel/app.ts#L88).
 - **Decisions only through commands**: `access: 'write'` on the resource as
   the commands' ceiling, no role granted `write`, each role its `commands` —
   [lintel/app.ts:24](../../../examples/apps/lintel/app.ts#L24) (a lease moves only by its commands).
@@ -84,7 +84,7 @@ is shown, not what is served.
 
 - **Signed-out reads are named per resource**: `auth.public.read`, needs
   `auth.roles`; `read: true` is refused —
-  [lintel/app.ts:136](../../../examples/apps/lintel/app.ts#L136).
+  [lintel/app.ts:138](../../../examples/apps/lintel/app.ts#L138).
 - **A public form is write-only**: `public: true` on the `commandForm`
   ([lintel/views.ts:38](../../../examples/apps/lintel/views.ts#L38)) and its command, whose `output`
   is a reference and a fixed sentence

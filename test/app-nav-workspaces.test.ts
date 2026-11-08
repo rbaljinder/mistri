@@ -6,6 +6,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { servedApp } from '../packages/mistri/src/shared/appPayload.js';
+import { placePages } from '../packages/mistri/src/server/app/appPages.js';
 import { parseTestApp } from './support/commandCatalog.js';
 
 const LIST = { kind: 'list', from: 'task' } as const;
@@ -87,6 +88,41 @@ describe('nav workspaces', () => {
         ]),
       /names the view "tickets" a second time/,
     );
+  });
+
+  test("a free-form page is a workspace's entry where it places itself, and is refused at the top of the menu", () => {
+    const page = (nav: unknown) => ({
+      key: 'forecast',
+      module: './pages/forecast.page.tsx',
+      fields: { label: 'Forecast', reads: ['task'], nav },
+    });
+    const raw = {
+      name: 'x',
+      views,
+      home: 'tickets',
+      resources: { task: {} },
+      nav: [space('desk', ['tickets', 'queue']), space('crm', ['leads'])],
+    };
+    const placed = placePages(raw, [page({ group: 'crm', position: 0 })], 'x');
+    const app = parseTestApp(placed, 'test/app.json');
+    const crm = app.nav[1] as { group: string; workspace?: true; children: Array<{ view?: string }> };
+    assert.equal(crm.workspace, true);
+    assert.deepEqual(
+      crm.children.map((node) => node.view),
+      ['forecast', 'leads'],
+    );
+    assert.ok((app.views.forecast as { page?: object }).page, 'parsed as a page');
+    const served = servedApp(app, { label: 'demo', dialect: 'sqlite', readAt: '', tables: [], foreignKeys: [] });
+    assert.deepEqual(
+      (served.nav[1] as { children: Array<{ view?: string }> }).children.map((node) => node.view),
+      ['forecast', 'leads'],
+    );
+    // Left to the top of the menu, it would stand in no workspace: refused with the place to put it.
+    assert.throws(
+      () => placePages(raw, [page(undefined)], 'x'),
+      /\[page-nav\] x: pages\/forecast\.page\.tsx: the App's nav is split into workspaces.*nav: \{ group: 'desk' \}.*The workspaces: desk, crm/,
+    );
+    assert.deepEqual(placePages(raw, [page(false)], 'x').nav, raw.nav, 'nav: false keeps it out of every workspace');
   });
 
   test("workspaces stand in the bar across the window, so a header held in the sidebar's head is refused", () => {

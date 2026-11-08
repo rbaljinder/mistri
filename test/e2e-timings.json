@@ -41,6 +41,7 @@
  "e2e/dashboard-row-height.spec.ts": 5.8,
  "e2e/date-picker.spec.ts": 11.3,
  "e2e/decide.spec.ts": 13.3,
+ "e2e/deployment-presentation.spec.ts": 5.4,
  "e2e/depot.spec.ts": 52.9,
  "e2e/desk-conversation.spec.ts": 16.6,
  "e2e/documents.spec.ts": 11.8,

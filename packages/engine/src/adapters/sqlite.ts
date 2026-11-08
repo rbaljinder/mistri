@@ -1650,6 +1650,11 @@ export class SqliteAdapter implements Adapter {
             // Triggers the App names, on a principal's own transaction: their effects proven per write (triggerProof.ts).
             accepted,
             scope,
+            async (fk, key) => {
+              const statement = referencesStatement(catalog, fk, key, ANSI_STYLE);
+              const [row] = await this.readRows(statement.text, statement.params, true, handle);
+              return Number(row?.n ?? 0);
+            },
           );
           /* Each row the transaction's own statements write, told to the session after the statement and after the
              proof has said what its triggers reached: a trigger the proof did not reach that writes it again later is

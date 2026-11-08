@@ -15,7 +15,17 @@ import type { DatabaseSchema } from '../../shared/schema.js';
 import { compileView, type CompiledColumn } from '../../shared/view.js';
 import type { ViewDef } from '../../shared/viewPaths.js';
 import type { HttpOperationReply, HttpOperations, HttpParam } from '../../shared/httpOperations.js';
-import { ANSI_STYLE, type Adapter, type Condition, type Filter, type QueryRequest, type QueryResult, type ViewResult } from '../adapter.js';
+import {
+  ANSI_STYLE,
+  type Adapter,
+  type Condition,
+  type Filter,
+  type QueryRequest,
+  type QueryResult,
+  type ScopedReads,
+  type ViewResult,
+} from '../adapter.js';
+import { snapshotRowScope, type RowScope } from '../../shared/rowScope.js';
 import { describedSchema, type HttpDescription } from './httpDescription.js';
 import type { HttpColumn, HttpFilter, HttpResource } from './openapi.js';
 import { HttpSourceError, send, type EgressPolicy } from './egress.js';
@@ -137,6 +147,57 @@ export class HttpAdapter implements Adapter {
   }
 
   async close(): Promise<void> {}
+
+  /* A row policy over an API grants a resource whole or not at all. Its rows
+     cannot be narrowed: the narrowing would have to be a filter the API
+     declares and enforces, and a policy that silently became a page filter
+     here would show rows it meant to hide the moment the API ignored it. So a
+     scope that names conditions for an API resource is refused, a resource the
+     scope leaves out (or denies) is refused, and a whole grant reads as the
+     unscoped adapter does — a view's one-step lookups included, which need
+     their targets granted whole as well. Counting refuses as `count` does. */
+  async scopeReads(input: RowScope): Promise<ScopedReads> {
+    this.catalog ??= describedSchema(this.connection.description, this.connection.label);
+    const scope = snapshotRowScope(this.catalog, input);
+    const whole = (table: string) => {
+      const entry = scope[table];
+      if (entry === true) return;
+      if (entry && typeof entry === 'object')
+        throw new Refusal(`${table} comes from an API, so a row policy cannot narrow its rows; grant it whole or not at all.`);
+      throw new Refusal(`${table} is not readable under this row policy.`);
+    };
+    const viewReach = (view: ViewDef) => {
+      whole(view.base);
+      for (const path of compileView(this.catalog!, view, ANSI_STYLE)
+        .columns.filter((column) => column.hops === 1)
+        .map((column) => column.path.split('.')[0])) {
+        const fk = this.catalog!.foreignKeys.find((each) => each.from.table === view.base && each.from.columns[0] === path);
+        if (fk) whole(fk.to.table);
+      }
+    };
+    const uncounted = (table: string): never => {
+      whole(table);
+      throw new Refusal(`${table} comes from an API that reports no totals, so it cannot be counted.`);
+    };
+    const noBreakdown = (base: string): never => {
+      whole(base);
+      throw new Refusal(`${base} comes from an API, so it cannot be summarized.`);
+    };
+    return Object.freeze({
+      query: async (request: QueryRequest) => {
+        whole(request.table);
+        return this.query(request);
+      },
+      count: async (table: string) => uncounted(table),
+      runView: async (view: ViewDef, offset?: number) => {
+        viewReach(view);
+        return this.runView(view, offset);
+      },
+      countView: async (view: ViewDef) => uncounted(view.base),
+      runBreakdown: async (breakdown: { base: string }) => noBreakdown(breakdown.base),
+      countBreakdown: async (breakdown: { base: string }) => noBreakdown(breakdown.base),
+    });
+  }
 
   /** A resource's two documented reads, for the explorer's API tab: the list with its declared parameters, and the item by its key. */
   operations(table: string): HttpOperations {

@@ -12,7 +12,7 @@ export default defineAppRowPolicy<Rows>({
   // …
   async resolveRows(principal, { db }) {
     // …
-    if (principal.roles.some((role) => OFFICE.includes(role))) return all(true);
+    if (principal.roles.some((role) => OFFICE.includes(role))) return { ...all(true), 'carrier.shipments': true };
     if (principal.roles.includes('resident')) return household(db, principal.email);
     return all(false);
   },

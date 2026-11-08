@@ -552,7 +552,7 @@ tenant's own words over the catalogs. See [Languages](/docs/languages/).
 | --- | --- | --- | --- |
 | `ui.locale` | string \| object | Stable | BCP 47 tag the App is said and written in: the language of its captions where it has messages/ catalogs, and every figure — numbers, money, percents, dates, times, relative days and counts ("en-AU"). Absent: the reader’s browser decides the figures. { column, default } reads each reader's own tag from the first row of that text column they may read; a tenant's (branding allow locale) comes next, then default. Used in `examples/apps/lintel/app.ts`. |
 | `ui.locale.column` | string | Stable | The resource's text column naming the reader's language tag: "person.locale". Used in `examples/apps/lintel/app.ts`. |
-| `ui.locale.default` | string | Stable | The App's own language: its source catalog's, and the reader's where nothing nearer names one. |
+| `ui.locale.default` | string | Stable | The App's own language: its source catalog's, and the reader's where nothing nearer names one. Used in `examples/apps/lintel/app.ts`. |
 
 ## `ui.logo`
 
@@ -670,7 +670,7 @@ tenant's own words over the catalogs. See [Languages](/docs/languages/).
 | --- | --- | --- | --- |
 | `ui.timezone` | string \| object | Stable | IANA zone the app’s "today" is reckoned in ("Australia/Sydney"). Absent: the server’s clock. A TIMESTAMP or DATETIME that carries no zone holds the wall clock in this zone (UTC when the App names none) — whatever writes it: an action's now, a machine's since, a Date a command writes, a New form's now. A column with a zone (timestamptz) holds the instant. { column, default } counts each reader's days in the zone the first row of that text column they may read names (their tenant's, their account's); writes keep default. Used in `examples/apps/lintel/app.ts`. |
 | `ui.timezone.column` | string | Stable | The resource's text column naming the reader's IANA zone: "desk_setting.timezone". Used in `examples/apps/lintel/app.ts`. |
-| `ui.timezone.default` | string | Stable | The App's own zone: what writes keep, and the reader's where the row names none. |
+| `ui.timezone.default` | string | Stable | The App's own zone: what writes keep, and the reader's where the row names none. Used in `examples/apps/lintel/app.ts`. |
 
 ## `theme file: theme.colors`
 

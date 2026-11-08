@@ -28,6 +28,7 @@ import { checkPageLoaders } from './pageLoaderCheck.js';
 import type { CompiledComponents } from './appComponents.js';
 import { readBuiltFonts } from './appFonts.js';
 import { readBuiltBrand } from './appBrand.js';
+import { overlayPresentation, presentServed, type AppPresentation } from './appPresentation.js';
 import { resolveMistriFromBuild } from './buildResolution.js';
 import { assertAppApiContext, readApiApp } from '../api/appApiValidation.js';
 
@@ -293,6 +294,8 @@ async function builtFonts(app: LoadedApp['app'], dir: string): Promise<Pick<Load
 
 /* ---------- reading a build ---------- */
 
+const withoutLogo = ({ logo: _logo, ...rest }: AppPresentation): AppPresentation => rest;
+
 const rebuild = 'Rebuild it with `mistri build`; a build is not edited in place.';
 
 /** The manifest, once its format and version say this runtime may serve it. */
@@ -340,11 +343,25 @@ async function verifyBuildFiles(dir: string, manifest: BuildManifest): Promise<v
  * same one — an App whose authority is not its lock's does not start — with
  * `lock: 'report'` for mistri check, which names the difference instead.
  */
-export async function loadBuiltApp(dir: string, options: { lock?: 'enforce' | 'report' } = {}): Promise<LoadedApp> {
+export async function loadBuiltApp(
+  dir: string,
+  options: { lock?: 'enforce' | 'report'; presentation?: LoadedApp['presentation'] } = {},
+): Promise<LoadedApp> {
   const manifest = await readBuildManifest(dir);
   await verifyBuildFiles(dir, manifest);
   const path = join(dir, manifest.outputs.manifest);
-  const { app, pages, origins, authority: report, messages } = decodeCompiledApp(await readFile(path, 'utf8'), path);
+  const decoded = decodeCompiledApp(await readFile(path, 'utf8'), path);
+  const { pages, origins, authority: report, messages } = decoded;
+  /* The deployment's presentation of the App (appPresentation.ts), over what the build compiled: its name, theme and
+     locale (a build's logo is its own). A reader's language is parsed again from the build's definition, so that gets
+     the same overlay. */
+  const presented = options.presentation?.apps[decoded.app.id];
+  const app = presented
+    ? presentServed(decoded.app, presented, {
+        ...(options.presentation?.file === undefined ? {} : { file: options.presentation.file }),
+        id: decoded.app.id,
+      })
+    : decoded.app;
   const lockPath = join(dir, AUTHORITY_LOCK);
   const lock = Object.hasOwn(manifest.sha256, AUTHORITY_LOCK) ? await readFile(lockPath, 'utf8') : undefined;
   const authority: AppAuthority = { report, lockPath, ...(lock === undefined ? {} : { lock }) };
@@ -375,7 +392,13 @@ export async function loadBuiltApp(dir: string, options: { lock?: 'enforce' | 'r
   if (messages) {
     /* The formatter is imported only for a build with catalogs, as a source load imports it (appMessages.ts). */
     const { default: Format } = await import('intl-messageformat');
-    const { raw, filePages, catalog } = messages.definition;
+    const { raw: compiled, filePages, catalog } = messages.definition;
+    const raw = presented
+      ? await overlayPresentation(compiled as Record<string, unknown>, withoutLogo(presented), {
+          ...(options.presentation?.file === undefined ? {} : { file: options.presentation.file }),
+          id: app.id,
+        })
+      : compiled;
     const definition: DefinitionInput = {
       raw: raw as DefinitionInput['raw'],
       path,
@@ -397,6 +420,7 @@ export async function loadBuiltApp(dir: string, options: { lock?: 'enforce' | 'r
     authority,
     origins,
     build: { dir: resolve(dir), mistri: manifest.mistri, node: manifest.node, entries, id: manifest.id },
+    ...(options.presentation ? { presentation: options.presentation } : {}),
     ...(manifest.outputs.components ? { components: await readBuiltComponents(dir, manifest.outputs.components) } : {}),
     ...(await builtFonts(app, dir)),
     ...(loaders ? { loaders } : {}),

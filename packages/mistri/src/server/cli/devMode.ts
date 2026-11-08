@@ -136,12 +136,12 @@ interface Person {
  * one per role. A throwaway address matched no row, so a view of `mechanic_id = me` — My bench — was empty for the
  * one account made to look at it. A row naming the role in one of its words (a `role` of 'mechanic', a title of
  * 'Manager') is that role's first; then a role named as the table is, then the rest in the order they are declared. A role left
- * over, or an App with no `auth.me` (or a tenant App, where `me` is a membership), keeps its throwaway address.
+ * over, or an App with no `auth.me` (a tenant App, where `me` is a membership, or `me.by: 'account'`, where the row holds an account's id), keeps its throwaway address.
  */
 export async function devPeople(loaded: LoadedApp, roles: readonly string[], registry: Registry): Promise<Map<string, Person>> {
   const me = loaded.app.auth?.me;
   const chosen = new Map<string, Person>();
-  if (!me || isTenantApp(loaded.app)) return chosen;
+  if (!me || isTenantApp(loaded.app) || me.by === 'account') return chosen;
   const sources = Object.values(loaded.app.sources ?? {});
   const bound = loaded.app.connection ?? (sources.length === 1 ? sources[0].connection : undefined);
   const connection = registry.list().find((c) => c.id === bound || c.name === bound) ?? (bound ? undefined : registry.list()[0]);

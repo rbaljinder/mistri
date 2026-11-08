@@ -11,7 +11,7 @@ import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, test, type TestContext } from 'node:test';
 import { connect } from '../packages/engine/src/adapters/connect.js';
@@ -28,6 +28,7 @@ import { createApp } from './support/createApp.js';
 import { loadHttpAppPolicy, type HttpAppPolicy } from '../packages/mistri/src/server/policy/appPolicyHttp.js';
 import { commandTypes } from '../packages/mistri/src/server/typegen.js';
 import { authorityReport } from '../packages/mistri/src/shared/appAuthority.js';
+import { appForRoles } from '../packages/mistri/src/shared/appViewRoles.js';
 import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
 import { parseTestApp } from './support/commandCatalog.js';
 
@@ -84,7 +85,10 @@ describe('what check refuses, one fixture per code', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mistri-pages-'));
     t.after(() => rmSync(dir, { recursive: true, force: true }));
     mkdirSync(join(dir, 'pages'));
-    for (const [name, source] of Object.entries(files)) writeFileSync(join(dir, 'pages', name), source);
+    for (const [name, source] of Object.entries(files)) {
+      mkdirSync(dirname(join(dir, 'pages', name)), { recursive: true });
+      writeFileSync(join(dir, 'pages', name), source);
+    }
     return readPageFiles(dir, await pageFiles(dir));
   }
   const pageSource = (fields: string) =>
@@ -142,6 +146,75 @@ export default definePage({ label: String(typeof process === 'object' && process
     assert.deepEqual(placePages(APP, [page(false)], 'desk').nav, APP.nav, 'nav: false keeps it out of the menu');
   });
 
+  test("page-file: a record's tab is pages/<list view>/[id]/<tab>.page.tsx, placed under no menu; a page anywhere else in a folder is refused", async (t) => {
+    const read = await readFiles(t, {
+      'tickets/[id]/history.page.tsx': pageSource("label: 'History', reads: ['ticket', 'note']"),
+      'walk.page.tsx': pageSource("label: 'Walk', reads: ['desk']"),
+    });
+    assert.deepEqual(
+      read.map((page) => [page.key, page.module, page.record]),
+      [
+        ['tickets-history', './pages/tickets/[id]/history.page.tsx', { view: 'tickets', tab: 'history' }],
+        ['walk', './pages/walk.page.tsx', undefined],
+      ],
+      "a tab's key joins its list's and its word",
+    );
+    for (const misplaced of ['tickets/history.page.tsx', 'tickets/[id]/more/history.page.tsx', 'tickets/[key]/history.page.tsx'])
+      await assert.rejects(
+        readFiles(t, { [misplaced]: pageSource("label: 'History', reads: ['ticket']") }),
+        new RegExp(`\\[page-file\\] pages/${misplaced.replace(/[[\]/.]/g, '\\$&')} is misplaced`),
+        misplaced,
+      );
+    await assert.rejects(
+      readFiles(t, { 'tickets/[id]/history.page.tsx': pageSource("label: 'History', reads: ['ticket'], nav: { group: 'floor' }") }),
+      /\[page-nav\] pages\/tickets\/\[id\]\/history\.page\.tsx is a record's tab and has "nav"/,
+    );
+    const placed = placePages(APP, read, 'desk');
+    assert.deepEqual(placed.nav, [...APP.nav, 'walk'], 'the tab takes no menu entry; the page beside it does');
+    assert.deepEqual((placed.views as Record<string, { record?: unknown }>)['tickets-history'].record, { view: 'tickets', tab: 'history' });
+  });
+
+  test("page-file: a record's tab is under a list view, reads its record, and keeps no address of its own", () => {
+    const tab = (change: Record<string, unknown> = {}) =>
+      views({
+        'tickets-history': {
+          kind: 'page',
+          label: 'History',
+          component: component('tickets-history'),
+          reads: ['ticket', 'note'],
+          record: { view: 'tickets', tab: 'history' },
+          ...change,
+        },
+      });
+    const app = parse(tab());
+    const view = app.views['tickets-history'] as { page?: unknown; roles?: string[] };
+    assert.deepEqual(view.page, {
+      reads: ['ticket', 'note'],
+      commands: [],
+      params: [],
+      record: { view: 'tickets', table: 'ticket', tab: 'history' },
+    });
+    /* Reached from its record's page alone: not a menu entry, not a place to start, and offered as a page is, by its reads. */
+    assert.deepEqual(view.roles, ['clerk']);
+    assert.ok(!('tickets-history' in appForRoles(app, ['reader']).views), 'a reader who may not read notes is not offered the tab');
+    assert.ok('tickets-history' in appForRoles(app, ['clerk']).views);
+    assert.throws(() => parse({ ...tab(), home: 'tickets-history' }), /tickets-history/, 'no visitor starts on a tab');
+
+    assert.throws(
+      () => parse(tab({ record: { view: 'board', tab: 'history' } })),
+      /\[page-file\].*under "board", which is not a list view this App declares.*the list views: tickets/,
+    );
+    assert.throws(
+      () => parse(tab({ record: { view: 'nowhere', tab: 'history' } })),
+      /\[page-file\].*under "nowhere", which is not a list view/,
+    );
+    assert.throws(() => parse(tab({ reads: ['note'] })), /\[page-file\].*a tab of a "ticket" record and does not read "ticket"/);
+    assert.throws(() => parse(tab({ params: ['desk'] })), /\[page-file\].*is a record's tab and has "params"/);
+    assert.throws(() => parse(tab({ public: true })), /is a record's tab and has "public"/);
+    for (const word of ['edit', 'new'])
+      assert.throws(() => parse(tab({ record: { view: 'tickets', tab: word } })), /\[page-file\].*is not a record's tab word/, word);
+  });
+
   test("head: a page file, a page and a dashboard say their head's form; the label still names the room", async (t) => {
     const [read] = await readFiles(t, { 'walk.page.tsx': pageSource("label: 'Walk', reads: ['desk'], head: 'compact'") });
     assert.equal(read.fields.head, 'compact', 'definePage takes head');
@@ -162,6 +235,33 @@ export default definePage({ label: String(typeof process === 'object' && process
     assert.deepEqual([view('desk').head, view('desk').headingHidden], ['own', true], 'a dashboard says it the same way');
     assert.throws(() => parse(views({ board: { ...APP.views.board, head: 'big' } })), /"head" is 'compact' .* or false/);
     assert.throws(() => parse(views({ board: { ...APP.views.board, head: true } })), /"head" is 'compact'/);
+  });
+
+  test('layout: a bare page owns the window, keeps its title for a screen reader, and is held to auth.public when it is public', async (t) => {
+    const [read] = await readFiles(t, { 'kiosk.page.tsx': pageSource("label: 'Kiosk', reads: ['desk'], layout: 'bare'") });
+    assert.equal(read.fields.layout, 'bare', 'definePage takes layout');
+    const placed = placePages(APP, [read], 'desk') as { views: Record<string, { layout?: unknown }> };
+    assert.equal(placed.views.kiosk.layout, 'bare', 'and the page view it is placed as carries it');
+    const app = parse(views({ lobby: { ...APP.views.lobby, layout: 'bare' } }));
+    const lobby = app.views.lobby as { layout?: string; head?: string; headingHidden?: true; label: string; page?: { public?: true } };
+    assert.deepEqual([lobby.layout, lobby.head, lobby.headingHidden, lobby.label], ['bare', 'own', true, 'Lobby']);
+    assert.equal(lobby.page?.public, true, 'a public bare page is the landing page');
+    assert.equal((app.views.board as { layout?: string }).layout, undefined, 'a page that says nothing keeps the App frame');
+    // A public bare page opens nothing auth.public does not: the existing bounds hold.
+    assert.throws(
+      () => parse(views({ lobby: { ...APP.views.lobby, layout: 'bare', reads: ['ticket'] } })),
+      /\[page-public\].*"ticket", which "auth.public" does not open/,
+    );
+    // Any other word, or a head beside a bare page, is a [page-layout].
+    assert.throws(() => parse(views({ board: { ...APP.views.board, layout: 'wide' } })), /\[page-layout\].*"layout" is 'bare'/);
+    assert.throws(
+      () => parse(views({ board: { ...APP.views.board, layout: 'bare', head: 'compact' } })),
+      /\[page-layout\].*is bare and names "head"/,
+    );
+    await assert.rejects(
+      readFiles(t, { 'wide.page.tsx': pageSource("label: 'Wide', reads: ['desk'], layout: 'wide'") }),
+      /\[page-layout\].*The one word a free-form page takes is 'bare'/,
+    );
   });
 
   test('page-reads, page-params, page-commands, page-public, page-coverage: what the page declares, held to the App', () => {
@@ -188,6 +288,63 @@ export default definePage({ label: String(typeof process === 'object' && process
     assert.throws(
       () => parse(views({ settle: { ...APP.views.settle, roles: ['reader'] } })),
       /\[page-coverage\].*runs "settle", which no role it is offered to is granted/,
+    );
+  });
+
+  test("page-forms: a page opens the App's form views; a signed-in one it names needs no menu entry of its own", () => {
+    const contracts = {
+      ...CONTRACTS,
+      apply: { input: { name: { type: 'text' } } },
+      inquire: { public: true, input: { name: { type: 'text' } } },
+    };
+    const withForms = (change: Record<string, unknown>, roles: Record<string, unknown> = APP.auth.roles) =>
+      parseTestApp(
+        {
+          ...APP,
+          auth: { ...APP.auth, roles },
+          views: {
+            ...APP.views,
+            apply: { kind: 'form', label: 'Apply', command: 'apply' },
+            ask: { kind: 'form', label: 'Ask', command: 'inquire', public: true },
+            ...change,
+          },
+        },
+        'desk',
+        contracts,
+      );
+    const clerk = { ...APP.auth.roles.clerk, commands: ['settle', 'apply'] };
+    const roles = { ...APP.auth.roles, clerk };
+    /* Named by no page, menu or home, the signed-in form is refused as unreachable; named in a page's forms, it is served. */
+    assert.throws(() => withForms({}, roles), /views "apply" is a signed-in form referenced by nothing.*not a page's forms/);
+    const app = withForms({ settle: { ...APP.views.settle, forms: ['apply', 'apply'] } }, roles);
+    assert.deepEqual((app.views.settle as { page?: { forms?: string[] } }).page?.forms, ['apply']);
+    assert.equal((app.views.apply as { command?: { id: string } }).command?.id, 'apply');
+    assert.throws(
+      () => withForms({ settle: { ...APP.views.settle, forms: ['tickets'] } }, roles),
+      /\[page-forms\].*opens the form "tickets", which is not a form view this App declares\. Its form views: "apply", "ask"/,
+    );
+    assert.throws(
+      () => withForms({ settle: { ...APP.views.settle, forms: 'apply' } }, roles),
+      /\[page-forms\].*not a list of form view keys/,
+    );
+    /* A public page opens only a public form: a visitor holds no session to submit a signed-in one. */
+    assert.throws(
+      () => withForms({ settle: { ...APP.views.settle, forms: ['apply'] }, lobby: { ...APP.views.lobby, forms: ['apply'] } }, roles),
+      /\[page-forms\].*"lobby" is public and opens "apply", a signed-in form/,
+    );
+    assert.deepEqual(
+      (
+        withForms({ settle: { ...APP.views.settle, forms: ['apply'] }, lobby: { ...APP.views.lobby, forms: ['ask'] } }, roles).views
+          .lobby as {
+          page?: { forms?: string[] };
+        }
+      ).page?.forms,
+      ['ask'],
+    );
+    /* A form whose command no role the page is offered to may run is a door no reader could use. */
+    assert.throws(
+      () => withForms({ settle: { ...APP.views.settle, forms: ['apply'] } }),
+      /\[page-coverage\].*opens the form "apply", whose command "apply" no role the page is offered to is granted/,
     );
   });
 
@@ -256,6 +413,43 @@ function Board() {
     );
     assert.equal(scan.unread.length, 1, 'a name check cannot read is a warning, not a pass');
   });
+
+  test('page-undeclared: a block, Scope or List reading, or a CommandButton, Steps or ActionButton running, what the page does not declare', async () => {
+    const source = `import { definePage, Scope, List, Metric, CommandButton, ActionButton, Empty, Steps, Value } from '@mistriwork/mistri/page';
+const page = definePage({ label: 'Board', reads: ['ticket'], commands: ['settle'], actions: ['start'], component: Board });
+export default page;
+function Board() {
+  return (
+    <Scope from="note" where={{ open: true }}>
+      <Metric title="Open" from="ticket" />
+      <List from="reply">{(row) => <CommandButton command="refund" row={row} />}</List>
+      <List from="ticket">{(row) => <ActionButton action="finish" row={row} />}</List>
+      <CommandButton command="settle" row={{}} />
+      <Steps command="reopen" param="step" steps={[{ id: 'why', label: 'Why', inputs: ['reason'] }]} />
+      <ActionButton action="start" row={{}} />
+      <Empty title="None" action={<ActionButton action="start" row={{}} />} />
+      <Value value={1} resource="invoice" />
+    </Scope>
+  );
+}`;
+    const scan = scanPageSource(await astParser(), source, 'tsx', {
+      key: 'board',
+      reads: ['ticket'],
+      commands: ['settle'],
+      actions: ['start'],
+    });
+    assert.deepEqual(
+      scan.undeclared.map((problem) => problem.text),
+      [
+        '[page-undeclared] <Scope from> reads "note", which the page "board" does not declare in its reads',
+        '[page-undeclared] <List from> reads "reply", which the page "board" does not declare in its reads',
+        '[page-undeclared] <CommandButton command> runs "refund", which the page "board" does not declare in its commands',
+        '[page-undeclared] <ActionButton action> runs "finish", which the page "board" does not declare in its actions',
+        '[page-undeclared] <Steps command> runs "reopen", which the page "board" does not declare in its commands',
+      ],
+    );
+    assert.equal(scan.unread.length, 0, '<Empty action> is a button and <Value resource> reads nothing: neither is a name to hold');
+  });
 });
 
 describe('what the App records of its pages', () => {
@@ -273,6 +467,11 @@ describe('what the App records of its pages', () => {
     assert.match(text, /export type PagePaths = "board" \| "lobby";/);
     assert.match(text, /interface Register { commands: Commands; loaders: Loaders; pagePaths: PagePaths }/);
     assert.doesNotMatch(commandTypes({}, 'Desk'), /Loaders|PagePaths/);
+    /* A record's tab is a page path no link names: it is opened on its record, never as a place of its own. */
+    assert.match(
+      commandTypes({}, 'Desk', undefined, ['board', 'tickets-history'], [], ['tickets-history']),
+      /export type PagePaths = "board";/,
+    );
     /* An App with pages and no commands module names its pages alone, so its command names stay unjudged rather than none. */
     assert.match(commandTypes(undefined, 'Desk', undefined, ['board']), /interface Register { pagePaths: PagePaths }/);
   });

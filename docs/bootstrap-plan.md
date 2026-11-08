@@ -29,7 +29,7 @@ event and two roles, served from this checkout against a fresh SQLite file.
 | `check --app . --jobs jobs.ts` | 4 | Now a real authoring fault appears (`command-and-edit`), which the store refusal had hidden. After that is fixed, the next missing store: `Jobs startup error: … job store or event delivery … could not be opened`. |
 | `migrate stores up --app . --jobs jobs.ts` | 0 | `job store provisioned, 1 delivery destination(s), 1 added` |
 | `check --app . --jobs jobs.ts` | 0 | Passes and lists `jobs: touchFinished@1 on task.completed@1 …`. |
-| `check --app .` (no `--jobs`) | **0** | Also passes, with no line saying the jobs were not loaded. A sample App with a policy, an inbound endpoint and a decision also passes `check` without `--jobs`. |
+| `check --app .` (no `--jobs`) | **0** | Also passes, with no line saying the jobs were not loaded. A sample App with a policy, an inbound endpoint and a decision also passes `check` without `--jobs`. (Since rc.11 it still passes, with a `not-loaded` info line naming the jobs file it did not read.) |
 | serve and `mistri dev` before `stores up` | refuse | The same event-store sentence. Neither one migrates or provisions. |
 | `seed --app .` before `stores up` | 0 | Seeding writes rows directly and needs no store. |
 | `stores up` before `migrate up`, on an empty file | 0 | On SQLite, stores do not depend on the App's tables. The order only matters because `up --app` checks the App. |

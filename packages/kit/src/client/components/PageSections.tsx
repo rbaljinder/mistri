@@ -34,7 +34,8 @@ import { assertNever } from '@mistriwork/engine/shared/model.js';
 import { appTargetFields } from '@mistriwork/engine/shared/appLinks.js';
 import { readPageFields } from './pageFieldsRead.js';
 import { pathEqualityFilter } from '../resourceRequests.js';
-import { resourceOf } from './appRooms.js';
+import { recordTabs, resourceOf } from './appRooms.js';
+import type { DashboardDef } from './dashboardModel.js';
 
 /* A record's history, fetched the first time a page holds one. */
 const RecordHistory = onDemand(() => import('./PageHistory.js'), 'RecordHistory');
@@ -220,6 +221,15 @@ interface Tab {
   token: string;
   label: ReactNode;
 }
+/** A free-form page that is a tab of this record (pages/<list view>/[id]/<tab>.page.tsx): a tab that draws itself. */
+interface PageTab extends Tab {
+  draw: () => ReactNode;
+}
+/** A strip's own tabs, then the record's page tabs after them: one strip, each panel drawn by whichever owns it. */
+const withPageTabs = (tabs: Tab[], draw: (i: number) => ReactNode, pages: PageTab[] = []) => ({
+  tabs: [...tabs, ...pages.map(({ key, token, label }) => ({ key, token, label }))],
+  draw: (i: number) => (i < tabs.length ? draw(i) : pages[i - tabs.length].draw()),
+});
 
 /** Names across the top, one panel under them, each panel drawn the first time it is opened (or at once, where `eager`). */
 export function TabStrip({
@@ -346,6 +356,7 @@ function ListTabs({
   draw,
   scoped,
   counting,
+  pages,
 }: {
   items: Shown[];
   entry: PageEntry;
@@ -354,6 +365,7 @@ function ListTabs({
   scoped: boolean;
   /** On an inferred page: the record whose rows each tab counts. */
   counting?: Counting;
+  pages?: PageTab[];
 }) {
   useMessageLanguage();
   /* The token is the source's words (apps.ts keepAddresses), so an address names one tab in every language. */
@@ -385,7 +397,8 @@ function ListTabs({
       </>
     ),
   }));
-  return <TabStrip tabs={tabs} name="Related lists" entry={entry} onTab={onTab} draw={(i) => draw(items[i])} scoped={scoped} />;
+  const strip = withPageTabs(tabs, (i) => draw(items[i]), pages);
+  return <TabStrip tabs={strip.tabs} name="Related lists" entry={entry} onTab={onTab} draw={strip.draw} scoped={scoped} />;
 }
 
 /** The record's sections as tabs: a panel is sections again, laid out as the page lays them out. */
@@ -395,12 +408,14 @@ function SectionTabs({
   onTab,
   lay,
   scoped,
+  pages,
 }: {
   groups: Array<{ name: string; items: Shown[] }>;
   entry: PageEntry;
   onTab: (tab: string | undefined) => void;
   lay: (items: Shown[]) => ReactNode[];
   scoped: boolean;
+  pages?: PageTab[];
 }) {
   useMessageLanguage();
   /* Tokened by the tab's source words (apps.ts keepAddresses): an address names one tab in every language. */
@@ -413,16 +428,17 @@ function SectionTabs({
      fields are what name the record in its head, and one row costs nothing.
      A panel of lists still costs nothing until it is opened. */
   const eager = groups.flatMap((group, i) => (group.items.some(({ section }) => section.kind === 'fields') ? [i] : []));
+  const strip = withPageTabs(tabs, (i) => <div className="page-tab-sections">{lay(groups[i].items)}</div>, pages);
   return (
     <TabStrip
-      tabs={tabs}
+      tabs={strip.tabs}
       name="Record sections"
       entry={entry}
       onTab={onTab}
       scoped={scoped}
       eager={eager}
       className=" page-tabs-sections"
-      draw={(i) => <div className="page-tab-sections">{lay(groups[i].items)}</div>}
+      draw={strip.draw}
     />
   );
 }
@@ -471,6 +487,28 @@ export function Sections({
         (!region || (section.region ?? 'main') === region),
     );
   const firstFields = shown.find(({ section }) => section.kind === 'fields')?.index;
+  /* The App's free-form pages placed as this record's tabs (pages/<list view>/[id]/<tab>.page.tsx), in the main
+     column only. They join the record's first strip of tabs, its named sections' or else its lists'; a record with
+     no strip gets one of its own after its sections. Each is said by its word in the address
+     (/compass/accounts/13/pipeline), and is drawn the first time it is opened, as any tab is. */
+  const RecordTab = shell().rooms.RecordTab;
+  const app = shell().inApp() ? shell().app() : null;
+  let pageTabs: PageTab[] =
+    RecordTab && app && region !== 'aside' && !only
+      ? recordTabs(app, base.id).map((dashboard) => ({
+          key: `page:${dashboard.id}`,
+          token: dashboard.page.record.tab,
+          label: dashboard.label,
+          draw: () => <RecordTab dashboard={dashboard as unknown as DashboardDef} recordKey={key} />,
+        }))
+      : [];
+  /** The page tabs, handed once to the first strip that asks: no record says one of them twice. */
+  const takePageTabs = (): PageTab[] | undefined => {
+    if (!pageTabs.length) return undefined;
+    const taken = pageTabs;
+    pageTabs = [];
+    return taken;
+  };
   /* Only the aside's strips are scoped: the main column is the page, with or
      without an aside beside it, so its tabs keep their words in the address
      (/accounts/26/opportunities), never an index. */
@@ -565,6 +603,7 @@ export function Sections({
               draw={draw}
               scoped={scoped}
               counting={inferred ? { base, recordKey: key } : undefined}
+              pages={grouped ? undefined : takePageTabs()}
             />,
           );
         }
@@ -610,12 +649,21 @@ export function Sections({
     if (group) group.items.push(item);
     else groups.push({ name, items: [item] });
   }
-  if (groups.length < 2) return <>{lay(shown, true)}</>;
+  if (groups.length < 2) {
+    const laid = lay(shown, true);
+    const own = takePageTabs();
+    if (own)
+      laid.push(
+        <TabStrip key="page-tabs" tabs={own} name="Record pages" entry={entry} onTab={onTab} scoped={scoped} draw={(i) => own[i].draw()} />,
+      );
+    return <>{laid}</>;
+  }
   const first = shown.findIndex((item) => item.section.tab);
+  const pages = takePageTabs();
   return (
     <>
       {lay(shown.slice(0, first), true)}
-      <SectionTabs groups={groups} entry={entry} onTab={onTab} scoped={scoped} lay={(items) => lay(items, false, true)} />
+      <SectionTabs groups={groups} entry={entry} onTab={onTab} scoped={scoped} lay={(items) => lay(items, false, true)} pages={pages} />
       {lay(
         shown.slice(first).filter((item) => !item.section.tab),
         true,

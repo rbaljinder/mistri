@@ -12,7 +12,7 @@
  * sign-out or a switch of account never serves one reader's rows to another.
  */
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
   defaultCurrency,
   formatAbsolute,
@@ -22,6 +22,7 @@ import {
   formatNumber,
   formatPercent,
   formatRelativeDay,
+  formatTimezone,
   formatWholeMoney,
 } from '@mistriwork/kit/client/locale.js';
 import { minorFigure } from '@mistriwork/engine/shared/money.js';
@@ -37,6 +38,8 @@ import {
   type UiCommandOptions,
   type UiCommandOutcome,
   type UiCommandRef,
+  type UiFormOutcome,
+  type UiFormState,
   type UiLook,
   type UiRow,
   type UiRowsOptions,
@@ -113,17 +116,84 @@ function useDeclared(resource: string): string | undefined {
   return page?.view;
 }
 
-/** Rows of one App resource: `useRows('pay_run', { query: 'status = review', show: ['title', 'net_total'], sort: 'pay_date desc', limit: 12 })`. */
-export function useRows(resource: string, options: UiRowsOptions & { enabled?: boolean } = {}): UseQueryResult<UiRow[]> {
+/**
+ * A read's freshness beside its data. `isPending` is the first read, with nothing to draw yet; `isFetching` is any read
+ * under way, a background refresh included. A refresh that fails keeps the last good data and says so (`isStale`,
+ * `refreshError`), so a component never shows it as fresh nor swaps a finished screen for a note. Each read is
+ * consistent on its own: two hooks are two reads, with no snapshot across them.
+ */
+interface UiReadState {
+  isFetching: boolean;
+  isStale: boolean;
+  refreshError: Error | null;
+}
+
+/* TanStack's own `isStale` is "older than its stale time", which every read here always is (no stale time is set):
+   the one a component can act on is whether the data it holds failed to refresh. */
+function withReadState<T>(result: UseQueryResult<T>): UseQueryResult<T> & UiReadState {
+  return { ...result, isStale: result.isRefetchError, refreshError: result.isRefetchError ? result.error : null };
+}
+
+/** How far a `useRows` read has paged: the page size asked, whether the server holds more, and its count where it made one. */
+interface UiRowsPaging {
+  limit: number;
+  hasMore: boolean;
+  /** Only from a count the server made; never a page's length. */
+  total?: number;
+}
+
+/** What `useRows` holds: the rows read so far, the read's state, and `more()` for the next page. */
+export interface UiRowsQuery extends UiReadState {
+  data: UiRow[] | undefined;
+  isPending: boolean;
+  isError: boolean;
+  error: Error | null;
+  refetch(): unknown;
+  page: UiRowsPaging;
+  /** Reads the next `limit` rows onto the end; nothing while there are none or one is already under way. */
+  more(): void;
+}
+
+const ROWS_LIMIT = 20;
+
+/**
+ * Rows of one App resource: `useRows('pay_run', { query: 'status = review', show: ['title', 'net_total'], sort: 'pay_date desc', limit: 12 })`.
+ * The first `limit` rows (20 unless said); `page.hasMore` says whether the server holds more, and `more()` reads them.
+ */
+export function useRows(resource: string, options: UiRowsOptions & { enabled?: boolean } = {}): UiRowsQuery {
   const host = useUiHost();
-  const page = useDeclared(resource);
-  const { enabled = true, ...rest } = options;
-  const asked = page ? { ...rest, page } : rest;
-  return useQuery({
+  const declared = useDeclared(resource);
+  const { enabled = true, offset: _offset, ...rest } = options;
+  const asked = declared ? { ...rest, page: declared } : rest;
+  const limit = rest.limit ?? ROWS_LIMIT;
+  const query = useInfiniteQuery({
     queryKey: ['mistri-ui', 'rows', ...host.scope, resource, asked],
-    queryFn: () => host.rows(resource, asked),
+    queryFn: ({ pageParam }) => host.rows(resource, pageParam ? { ...asked, offset: pageParam } : asked),
+    initialPageParam: 0,
+    /* The next page starts where the rows read so far end: a refresh re-reads every page from the first. */
+    getNextPageParam: (last, pages) => (last.more ? pages.reduce((sum, one) => sum + one.rows.length, 0) : undefined),
     enabled,
   });
+  const pages = query.data?.pages;
+  const data = useMemo(() => pages?.flatMap((one) => one.rows), [pages]);
+  const total = pages?.[pages.length - 1]?.total;
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
+  const more = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  const failedOver = query.isRefetchError || query.isFetchNextPageError;
+  return {
+    data,
+    isPending: query.isPending,
+    isFetching: query.isFetching,
+    isError: query.isError,
+    error: query.error,
+    isStale: query.isRefetchError,
+    refreshError: failedOver ? query.error : null,
+    refetch: query.refetch,
+    page: { limit, hasMore: hasNextPage, ...(total === undefined ? {} : { total }) },
+    more,
+  };
 }
 
 /** One record of an App resource by its key: `useRecord('employee', { id: 4 }, ['name', 'title'])`. */
@@ -131,14 +201,16 @@ export function useRecord(
   resource: string,
   key: Readonly<Record<string, unknown>> | undefined,
   show?: readonly string[],
-): UseQueryResult<UiRow | null> {
+): UseQueryResult<UiRow | null> & UiReadState {
   const host = useUiHost();
   const page = useDeclared(resource);
-  return useQuery({
-    queryKey: ['mistri-ui', 'record', ...host.scope, resource, key, show, page],
-    queryFn: async () => (await host.record(resource, key!, show, page ? { page } : {})) ?? null,
-    enabled: key !== undefined,
-  });
+  return withReadState(
+    useQuery({
+      queryKey: ['mistri-ui', 'record', ...host.scope, resource, key, show, page],
+      queryFn: async () => (await host.record(resource, key!, show, page ? { page } : {})) ?? null,
+      enabled: key !== undefined,
+    }),
+  );
 }
 
 /**
@@ -146,14 +218,91 @@ export function useRecord(
  * Each row is keyed as the server names its columns: the groups by their paths (`status`, `day(moved_at)`),
  * the measure as written (`count`, `sum(net)`, `max(on_hand_after)`).
  */
-export function useBreakdown(resource: string, options: UiBreakdownOptions): UseQueryResult<UiRow[]> {
+export function useBreakdown(resource: string, options: UiBreakdownOptions): UseQueryResult<UiRow[]> & UiReadState {
   const host = useUiHost();
   const page = useDeclared(resource);
   const asked = page ? { ...options, page } : options;
-  return useQuery({
-    queryKey: ['mistri-ui', 'breakdown', ...host.scope, resource, asked],
-    queryFn: () => host.breakdown(resource, asked),
-  });
+  return withReadState(
+    useQuery({
+      queryKey: ['mistri-ui', 'breakdown', ...host.scope, resource, asked],
+      queryFn: () => host.breakdown(resource, asked),
+    }),
+  );
+}
+
+/** What `page.useForm` holds: the declared form's draft as it stands, how its last opening ended, and the form itself. */
+interface UiForm extends UiReadState {
+  label: string;
+  /** Whether this reader is served the form; one that is not (or a public form) opens as `openForm` does. */
+  granted: boolean;
+  steps: UiFormState['steps'];
+  /** The open draft, as the form's own layout resumes it; null without one. */
+  resume: UiFormState['draft'];
+  /** Where the form opens: the step its draft reopens, or the first not saved; null at the review, or without a draft. */
+  step: string | null;
+  saved: readonly string[];
+  /** The draft holds saved steps not yet submitted: leaving loses nothing, but they are not sent. */
+  dirty: boolean;
+  expiresAt: string | null;
+  /** A submit sent and not yet known to have landed: `startOver()` refuses until it is. */
+  pending: boolean;
+  /** How the form ended the last time this page opened it; null before. */
+  outcome: UiFormOutcome | null;
+  isPending: boolean;
+  error: Error | null;
+  /** The form over the page, filled with what was given; resolves as it closes, and the draft is read again. */
+  open(input?: Readonly<Record<string, unknown>>): Promise<UiFormOutcome>;
+  /** The form opened at a step its draft has reached (never past the first not saved). */
+  goTo(step: string): Promise<UiFormOutcome>;
+  /** The draft discarded, as the form's Start over does: false while a submit is pending, or without a draft. */
+  startOver(): Promise<boolean>;
+}
+
+/**
+ * One of the form views a page declares (`forms: ['apply']`): `const apply = page.useForm('apply')`. Its draft is the
+ * one the form's own layout resumes, read through the same server and keys, so the page's "Continue your application"
+ * and the form never disagree. Every submit is still the server's to grant.
+ */
+export function useForm(view: string): UiForm {
+  const host = useUiHost();
+  const handle = useMemo(() => host.form(view), [host, view]);
+  const [outcome, setOutcome] = useState<UiFormOutcome | null>(null);
+  const read = withReadState(useQuery({ queryKey: ['mistri-ui', 'form', ...host.scope, view], queryFn: () => handle.state() }));
+  const { refetch } = read;
+  const opened = useCallback(
+    async (input?: Readonly<Record<string, unknown>>, at?: string) => {
+      const ended = await handle.open(input, at === undefined ? {} : { at });
+      setOutcome(ended);
+      void refetch();
+      return ended;
+    },
+    [handle, refetch],
+  );
+  const state = read.data;
+  return {
+    label: state?.label ?? view,
+    granted: state?.granted ?? false,
+    steps: state?.steps ?? [],
+    resume: state?.draft ?? null,
+    step: state?.draft?.step ?? null,
+    saved: state?.draft?.saved ?? [],
+    dirty: (state?.draft?.saved.length ?? 0) > 0,
+    expiresAt: state?.draft?.expiresAt ?? null,
+    pending: state?.pending ?? false,
+    outcome,
+    isPending: read.isPending,
+    error: read.error,
+    isFetching: read.isFetching,
+    isStale: read.isStale,
+    refreshError: read.refreshError,
+    open: (input) => opened(input),
+    goTo: (step) => opened(undefined, step),
+    startOver: async () => {
+      const gone = await handle.startOver();
+      void refetch();
+      return gone;
+    },
+  };
 }
 
 /** Where a component may send the reader: a record (as a page, a peek or a dialog), one of the App's views, or one of its forms in a dialog. */
@@ -214,6 +363,8 @@ export type CommandUnavailable = 'signed-out' | 'not-granted' | 'unavailable';
 interface UiCommand {
   label: string;
   granted: boolean;
+  /** The resource whose records it runs on, where it has one (not public: `CommandButton` names its row from it). */
+  resource?: string;
   /** Whether it is available on this record now; undefined until the server has said. */
   available(record: Readonly<Record<string, unknown>>): boolean | undefined;
   /**
@@ -262,6 +413,12 @@ interface UiCommand {
  * what it made without looking it up.
  */
 export function useCommand(ref: UiCommandRef): UiCommand {
+  const viewer = useViewer();
+  return useHandle(useCommandHandle(ref, viewer), viewer);
+}
+
+/** The host's handle on a command, as this reader is served it: what `useCommand` holds, and `useField` reads its input from. */
+export function useCommandHandle(ref: UiCommandRef, viewer: UiViewer): UiCommandHandle {
   const host = useUiHost();
   /* A free-form page runs what it declared (definePage, `commands`), as it reads what it declared. */
   const page = useContext(UiPageContext);
@@ -274,9 +431,7 @@ export function useCommand(ref: UiCommandRef): UiCommand {
       }),
     );
   }
-  const viewer = useViewer();
-  const handle = useMemo(() => host.command(ref, page?.view), [host, ref, page?.view, viewer.signedIn, viewer.account]); // eslint-disable-line react-hooks/exhaustive-deps
-  return useHandle(handle, viewer);
+  return useMemo(() => host.command(ref, page?.view), [host, ref, page?.view, viewer.signedIn, viewer.account]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**
@@ -365,6 +520,7 @@ function useHandle(handle: UiCommandHandle, viewer: UiViewer): UiCommand {
   return {
     label: handle.label,
     granted: handle.granted,
+    resource: handle.resource,
     available,
     reason(record) {
       // A public page's public command is everyone's: granted, signed in or not (publicPageCommand.ts).
@@ -451,6 +607,8 @@ function sayMoney(value: number | string, options: string | UiMoneyFormat = {}):
 /** Figures in the App's locale, currency and timezone (`ui.locale`, `ui.currency`, `ui.timezone`), as every built-in section says them. */
 export function useFormat() {
   return {
+    /** The App's day (`ui.timezone`): the zone a page reckons "today" in, as the built-in calendar does. Undefined where the App names none, so `Intl` uses the reader's own. */
+    timezone: formatTimezone(),
     number: (value: number | string, options?: Intl.NumberFormatOptions) => formatNumber(value, options),
     money: (value: number | string, options?: string | UiMoneyFormat) => sayMoney(value, options),
     percent: (value: number) => formatPercent(value),

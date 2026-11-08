@@ -17,7 +17,18 @@ import * as ReactDOM from 'react-dom';
 import * as ui from './index.js';
 import * as page from './page.js';
 import './kit.css';
-import { api, columnDisplay, columnLabel, openRecord, pageApi, primaryKey, quote, state } from '@mistriwork/kit/client/core.js';
+import {
+  api,
+  columnDisplay,
+  columnLabel,
+  openRecord,
+  pageApi,
+  primaryKey,
+  quote,
+  rowLabel,
+  state,
+  toast,
+} from '@mistriwork/kit/client/core.js';
 import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
@@ -28,7 +39,7 @@ import { tableNamed, type TableMeta } from '@mistriwork/engine/shared/schema.js'
 import { HOST_GLOBAL } from '../../../shared/uiSdk.js';
 import { pageBridge } from '@mistriwork/kit/client/uiBridge.js';
 import type { DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
-import { setPageHost, type UiHost, type UiLook, type UiRow } from './context.js';
+import { setPageHost, type UiDeployment, type UiHost, type UiLook, type UiRow } from './context.js';
 import { rowsByPath } from './rows.js';
 import { sayAppMessage } from './appMessage.js';
 import { say } from '../../copy/components/components/sdk/host.js';
@@ -54,11 +65,16 @@ async function viewRows(
   query: string,
   limit: number,
   page?: string,
+  where?: unknown,
+  offset?: number,
 ): Promise<UiRow[]> {
   const paths = show?.length ? [...show] : table.columns.map((column) => column.name);
   const body = {
     count: 'none' as const,
     ...(query.trim() ? { query: query.trim() } : {}),
+    /* Sent as written, not compiled here: the server judges it against the columns this reader is served. */
+    ...(where === undefined ? {} : { where }),
+    ...(offset ? { offset } : {}),
     view: { id: `ui:${table.id}`, name: table.name, base: table.id, columns: paths.map((path) => ({ path })), limit },
   };
   const got = page ? await pageApi(page, '/api/view/run', body) : await api('/api/view/run', body);
@@ -72,6 +88,22 @@ function look(): UiLook {
   const dark = attribute === 'dark' || (!attribute && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
   const density = densityChoice() as UiLook['density'];
   return { look: root().dataset.visualTheme ?? 'workshop', mode: dark ? 'dark' : 'light', density };
+}
+
+/** The App as this deployment presents it: read from the payload the page was served (the overrides are already in it). */
+function deployment(): UiDeployment {
+  const app = pageBridge.activeApp() as {
+    name?: string;
+    ui?: { logo?: string | { href?: string; markHref?: string }; theme?: { preset?: string }; locale?: string };
+  } | null;
+  const logo = app?.ui?.logo;
+  return {
+    name: app?.name ?? '',
+    mark: logo && typeof logo === 'object' ? (logo.markHref ?? logo.href ?? null) : null,
+    theme: app?.ui?.theme?.preset ?? null,
+    locale: app?.ui?.locale ?? null,
+    basePath: served(''),
+  };
 }
 
 let flags: ReturnType<typeof createPageAppFlags> | undefined;
@@ -88,9 +120,14 @@ const pageHost: UiHost = {
   get scope() {
     return [state.activeConnection ?? '', sessionIdentity().epoch];
   },
-  rows(resource, { query, show, sort, limit, page }) {
+  /* One row past the page is asked for and dropped: whether there are more is then the server's answer, where a
+     full page would only say there might be. No total is asked for (`count: 'none'`), so none is reported. */
+  async rows(resource, { where, query, show, sort, limit, page, keys, offset }) {
     const table = tableOf(resource);
-    return viewRows(table, show, [query ?? '', sort ? `sort ${sort}` : ''].join(' '), limit ?? 20, page);
+    const paths = keys && show?.length ? [...new Set([...show, ...(primaryKey(table) as string[])])] : show;
+    const size = limit ?? 20;
+    const got = await viewRows(table, paths, [query ?? '', sort ? `sort ${sort}` : ''].join(' '), size + 1, page, where, offset);
+    return { rows: got.slice(0, size), more: got.length > size };
   },
   async record(resource, key, show, asking = {}) {
     const table = tableOf(resource);
@@ -126,6 +163,18 @@ const pageHost: UiHost = {
   openForm(view, prefill = {}) {
     if (!pageBridge.commands) throw new Error(say('thePageCannotOpen'));
     pageBridge.commands.openForm(view, prefill);
+  },
+  /* Asked of the bridge at each call, not as the handle is made: a page draws before sdk/commands.tsx has loaded. */
+  form(view) {
+    const served = () => {
+      if (!pageBridge.commands) throw new Error(say('thePageCannotOpen'));
+      return pageBridge.commands.form(view);
+    };
+    return {
+      state: async () => served().state(),
+      open: async (input, options) => served().open(input, options),
+      startOver: async () => served().startOver(),
+    };
   },
   /* A tenant's link to hand out: a view a visitor reads by the tenant's public address, a public
      form (never one of the payload's rooms) by its intake address. Only the tenant's own lease is served them. */
@@ -169,6 +218,21 @@ const pageHost: UiHost = {
       run: async () => ({ status: 'refused', message: say('thisPageCannotRun') }),
       open: async () => ({ status: 'refused', message: say('thisPageCannotRun') }),
     },
+  /* The platform's own picker reads (CommandReference.tsx), through the reader's connection: loaded where a component
+     first asks, so a page that draws no picker never carries it. */
+  async choices(field, text, { offset, limit }) {
+    const { commandChoicePage } = await import('../CommandReference.js');
+    const page = await commandChoicePage(field, text, state.activeConnection ?? '', offset, limit);
+    return {
+      options: page.choices.map(({ value, label, detail }) => ({ key: value, label, ...(detail ? { detail } : {}) })),
+      more: page.more,
+    };
+  },
+  async choiceName(field, key) {
+    const { readReferenceName } = await import('../CommandReference.js');
+    const named = await readReferenceName(field, key, state.activeConnection ?? '');
+    return named && { key, ...named };
+  },
   viewer() {
     const identity = sessionIdentity();
     return identity.mode === 'authenticated' && identity.accountId ? { signedIn: true, account: identity.accountId } : { signedIn: false };
@@ -184,6 +248,7 @@ const pageHost: UiHost = {
     };
   },
   look,
+  deployment,
   token: (name) => getComputedStyle(root()).getPropertyValue(name).trim(),
   subscribeLook(listener) {
     const observer = new MutationObserver(listener);
@@ -197,6 +262,11 @@ const pageHost: UiHost = {
   },
   get app() {
     return pageBridge.inAppMode();
+  },
+  announce: (text, tone) => toast(text, tone),
+  rowTitle(resource, row) {
+    const table = state.schema ? (tableNamed(state.schema, resource) as TableMeta | undefined) : undefined;
+    return table ? (rowLabel(table, row) as string) : undefined;
   },
   message: (key, args) =>
     sayAppMessage((pageBridge.activeApp() as { messages?: Readonly<Record<string, readonly unknown[]>> } | null)?.messages, key, args),

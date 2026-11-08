@@ -327,14 +327,35 @@ export const resources = {
     access: 'write',
     noun: 'delivery',
     recordLabel: '{part_id.name} from {vendor}',
+    labels: { tracking_number: 'Tracking' },
     restocks: { column: 'part_id.on_hand', by: 'quantity', message: 'Only {part_id.on_hand} of {part_id.name} are still on the shelf' },
     // Read off the packing slip in pairs: what came and how many, then when and from whom. A row is side by side.
     form: {
-      show: [
-        ['part_id', 'quantity'],
-        ['received_on', 'vendor'],
-      ],
+      show: [['part_id', 'quantity'], ['received_on', 'vendor'], ['tracking_number']],
       defaults: { received_on: today },
+    },
+  },
+
+  /* The carrier's side: Northbound Freight's tracking API, read as it answers (examples/databases/lintel/carrier). */
+  'carrier.shipments': {
+    noun: 'shipment',
+    segments: {
+      coming: 'status = in_transit',
+      out_for_delivery: 'status = out_for_delivery',
+      held: 'status = exception',
+      delivered: 'status = delivered',
+    },
+    labels: {
+      eta: 'Estimated delivery',
+      last_scan_location: 'Last scan',
+      last_scan_at: 'Scanned',
+      origin_city: 'From',
+      origin_state: 'From state',
+      exception_reason: 'Held because',
+    },
+    display: {
+      status: { tone: { label_created: 'neutral', in_transit: 'info', out_for_delivery: 'warn', delivered: 'good', exception: 'bad' } },
+      eta: { format: 'relative' },
     },
   },
 

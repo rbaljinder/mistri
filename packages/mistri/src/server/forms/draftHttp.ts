@@ -23,6 +23,8 @@
  * and never a column no step shows: the owner, the token, the expiry, the progress and the platform's own.
  */
 import type { WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
+import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
+import { ScopeRefusal } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
 import type { Filter } from '@mistriwork/engine/shared/filter.js';
 import { isFormView, type AppDef, type AppFormView } from '../../shared/app.js';
 import { formCommands, isSavedForm, platformColumns, type AppFormSave } from '../../shared/appSavedForms.js';
@@ -314,8 +316,8 @@ export async function runDraftRoute(options: DraftRouteOptions): Promise<unknown
     });
   }
 
-  if (selector.op === 'discard') {
-    return inTransaction(authorized, async (tx) => {
+  const startOver = () =>
+    inTransaction(authorized, async (tx) => {
       const found = await open(tx);
       // Nothing to start over from is already started over.
       if (!found) return { discarded: false };
@@ -335,10 +337,27 @@ export async function runDraftRoute(options: DraftRouteOptions): Promise<unknown
         }));
         // Start over takes the files away too: bucket objects first, and the draft stays whole if the bucket does not answer.
         if (!(await dropObjects(tx, authorized.files, doomed))) throw new BusinessCommandExecutionError('temporarily_unavailable');
-        for (const entry of doomed) await tx.remove(entry);
+        for (const entry of doomed) await tx.remove({ ...entry, unreferenced: true });
       }
-      await tx.remove({ table: found.table, key: rootKeyOf(catalog, found) });
+      await tx.remove({ table: found.table, key: rootKeyOf(catalog, found), unreferenced: true });
       return { discarded: true };
+    });
+
+  if (selector.op === 'discard') {
+    return startOver().catch((error: unknown) => {
+      /* The scoped delete never cascades and refuses a row something still references, whoever can see that row. A
+         transaction that failed answers with the first failure it met, whatever its callback threw, so it is said
+         here, outside it, as what it is, where it fell through to temporarily_unavailable and a retry that could never succeed. */
+      const cause = error instanceof CommandTransactionFailure ? error.cause : error;
+      if (cause instanceof ScopeRefusal)
+        throw new BusinessCommandExecutionError(
+          'ineligible_state',
+          'not_applied',
+          undefined,
+          undefined,
+          'Other records still refer to this draft, so it cannot be started over. Ask whoever manages it to remove them first.',
+        );
+      throw error;
     });
   }
 

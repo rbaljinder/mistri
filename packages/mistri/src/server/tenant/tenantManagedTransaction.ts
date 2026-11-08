@@ -323,7 +323,10 @@ async function runManaged<T>(
       }),
     remove: (request: DeleteRequest) =>
       invoke(request, (value) => {
-        tenantRecord(value, ['table', 'key']);
+        /* `unreferenced` (a draft's Start over) is accepted and dropped: under a tenant's bound every referencing
+           table must be whole whatever the delete asks (scopedTransaction.ts), so it changes nothing here. */
+        tenantRecord(value, ['table', 'key', 'unreferenced']);
+        if (value.unreferenced !== undefined && value.unreferenced !== true) return denyTenant();
         const { table, column } = writable(value.table, 'remove');
         return remove(captureTenantData({ table: table.id, key: key(table, column, value.key) }));
       }),

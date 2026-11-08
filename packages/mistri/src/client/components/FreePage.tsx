@@ -4,7 +4,7 @@
  * the shell's rooms slot `Page`): the App framework's, with the page's side of
  * @mistriwork/mistri/ui, so the kit's rooms name none of it.
  */
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { currentEntry, go, state } from '@mistriwork/kit/client/core.js';
 import { syncHash } from '@mistriwork/kit/client/url.js';
 import { DashHead } from '@mistriwork/kit/client/components/DashHead.js';
@@ -24,6 +24,10 @@ const CustomPage = onDemand(() => import('./sdk/CustomPage.js'), 'CustomPageBody
  * root slot as a dashboard's picks do, so `/{app}/pick-walk?list=12` opens
  * where the reader was; a change is a step Back returns from, unless the
  * component says it refines this one.
+ *
+ * A bare page (`layout: 'bare'`) owns the window: the body wears `page-bare` while it is the room, which takes the
+ * sidebar and the bars out of the flow (features.css), and the title stays for a screen reader (DashHead). The skip
+ * link, the document title and the pane's focus are the shell's, unchanged.
  */
 export function FreePage({
   entry,
@@ -37,6 +41,14 @@ export function FreePage({
   initialEntry?: () => PageEntry;
 }) {
   const [tick, setTick] = useState(0);
+  const bare = dashboard.layout === 'bare';
+  // Before paint, so the bars never flash in front of a page that has none.
+  useLayoutEffect(() => {
+    if (!bare) return;
+    // host-global: the body class is the shell's own frame, which this room owns while it is the page.
+    document.body.classList.add('page-bare');
+    return () => document.body.classList.remove('page-bare');
+  }, [bare]);
   const initial = useRef<PageEntry | undefined>(undefined);
   const section = dashboard.sections[0];
   const place = pagePlace(dashboard, entry?.rootBody);
@@ -78,7 +90,7 @@ export function FreePage({
     <>
       <DashHead dashboard={dashboard} />
       {/* The page's one component, on the page's own body: it is not a dashboard's tile, so no look's tray frames it. */}
-      <div className="page-body free-page-body">
+      <div className={`page-body free-page-body${bare ? ' is-bare' : ''}`}>
         <section className="page-section width-full">
           <ErrorBoundary>
             <UiPageContext.Provider value={frame}>{section ? <CustomPage frame={frame} section={section} /> : null}</UiPageContext.Provider>

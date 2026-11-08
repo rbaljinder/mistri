@@ -36,7 +36,8 @@ export async function scopedWriteRoutes(ctx: RequestContext): Promise<boolean> {
       if (Object.hasOwn(body, 'app') && body.app !== policy!.appId) throw new AppAccessDenied();
       // An action's stamps: the server's clock and the verified session's person, never the body's.
       const who = signedInAs(ctx.identity);
-      const moment = () => ({ now: clockNow(), ...(who ? { who } : {}) });
+      const account = who ? ctx.identity.id : undefined;
+      const moment = () => ({ now: clockNow(), ...(who ? { who } : {}), ...(account ? { account } : {}) });
       /* A record's lines (formLinesWrite.ts), judged on this principal's own catalog and grants:
          each row is then written as the policy writes that row alone. */
       let lines: LineCollection[] | undefined;

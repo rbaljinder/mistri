@@ -24,6 +24,9 @@ export type Commands = {
   warnMember: { target: "member"; targets: "one"; input: "reason" | "note" };
 };
 
+/** Each free-form page by its path (pages/<path>.page.tsx): what the App's `home` may name beside its views. */
+export type PagePaths = "start-here";
+
 declare module '@mistriwork/mistri/app' {
-  interface Register { commands: Commands }
+  interface Register { commands: Commands; pagePaths: PagePaths }
 }

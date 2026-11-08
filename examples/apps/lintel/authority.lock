@@ -6,6 +6,7 @@ auth providers email — the App
 auth sign-up invite — the App
 auth default-role user — the App
 auth rows policy — the App
+source carrier connection "carrier" — the App
 source lintel connection "lintel" — the App
 source lintel default — the App
 scope roles: every read and write is granted by role, within the ceilings — the App
@@ -40,6 +41,7 @@ role accountant command postRent — the App
 role accountant command recordPayment — the App
 role accountant action charge "waive" — the App
 role admin extends manager — the App
+role admin read carrier.shipments — the App
 role admin read charge — the App
 role admin read lease — the App
 role admin read maintenance_request — the App
@@ -99,6 +101,7 @@ role admin fields viewing write unit_id — the App
 role lease_clock read lease — the App
 role lease_clock read unit — the App
 role lease_clock command endLease — the App
+role leasing read carrier.shipments — the App
 role leasing read charge — the App
 role leasing read lease — the App
 role leasing read maintenance_request — the App
@@ -133,6 +136,7 @@ role leasing fields viewing write preferred_on — the App
 role leasing fields viewing write status — the App
 role leasing fields viewing write unit_id — the App
 role manager extends leasing — the App
+role manager read carrier.shipments — the App
 role manager read charge — the App
 role manager read lease — the App
 role manager read maintenance_request — the App
@@ -220,6 +224,7 @@ role resident fields part read name — the App
 role resident fields staff read id — the App
 role resident fields staff read name — the App
 role resident fields staff read title — the App
+role technician read carrier.shipments — the App
 role technician read lease — the App
 role technician read maintenance_request — the App
 role technician read part — the App
@@ -276,7 +281,7 @@ public fields unit read property_id — the App
 public fields unit read sqft — the App
 public form request-viewing runs command requestViewing version 1 — the App
 
-contract addCharge v1 815ce8e1d750
+contract addCharge v1 0b0978250726
 contract addNote v1 f46703911a9f
 contract assessLateFees v1 0df607b2e80c
 contract assignTechnician v1 922438d3fed8
@@ -288,7 +293,7 @@ contract messageOffice v1 2bf332f75f6d
 contract postRent v1 093d4704700e
 contract recordPayment v1 8cbb7afe63d3
 contract replyToResident v1 06e717f79b8a
-contract reportIssue v1 dd5eeee5c5c7
+contract reportIssue v1 59f64cdf7961
 contract requestViewing v1 aa4b3e46a834
 contract scheduleVisit v1 ef34b8de7203
 contract settleCharge v1 b17c3db7792a

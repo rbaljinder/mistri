@@ -16,7 +16,7 @@ Dress an App in one of five built-in looks, adjust its accent and corners, or re
       rail: true,
 ```
 
-See it in the sample (`examples/apps/lintel/app.ts:169`): Lintel names a look of its own (Lumen with one recipe changed, `theme.ts`), offers three more in the reader's picker ([Blueprint](/docs/themes/#a-look-of-your-own), Hearth, `hearth.ts`, and [Tidelight](/docs/themes/#a-brand-in-one-block)), and folds its side menu to a rail. `ui: { theme: { preset: 'sage' } }` picks another built-in look, `palette: 'cobalt'` one of the twelve palettes every look offers; `theme: { accent: '#2258cf', radius: '8px' }` adjusts the accent and corners of the one it names.
+See it in the sample (`examples/apps/lintel/app.ts:171`): Lintel names a look of its own (Lumen with one recipe changed, `theme.ts`), offers three more in the reader's picker ([Blueprint](/docs/themes/#a-look-of-your-own), Hearth, `hearth.ts`, and [Tidelight](/docs/themes/#a-brand-in-one-block)), and folds its side menu to a rail. `ui: { theme: { preset: 'sage' } }` picks another built-in look, `palette: 'cobalt'` one of the twelve palettes every look offers; `theme: { accent: '#2258cf', radius: '8px' }` adjusts the accent and corners of the one it names.
 
 ![Lintel's leases in Lumen: a stone menu with the current room in a soft blue pill, the table on white, statuses as a dot and a word, the current tab underlined in blue.](../../../assets/looks/lumen.webp)
 

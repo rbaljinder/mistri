@@ -136,11 +136,13 @@ test('a props type is named for its component, and written once for each kind of
   );
 });
 
-function compile(source: string) {
+/* No --jsx and no DOM, as an App's own tsconfig may well have: the generated file is read by every file the App's
+   tsconfig includes, and has to typecheck under it. */
+function compile(source: string, types = componentTypes(app, pages, 'Helpdesk', true)!) {
   const dir = mkdtempSync(join(ROOT, 'test', '.components-typing-'));
   try {
     writeFileSync(join(dir, 'mistri-schema.d.ts'), typesForSchema(SCHEMA));
-    writeFileSync(join(dir, 'mistri-components.d.ts'), componentTypes(app, pages, 'Helpdesk', true)!);
+    writeFileSync(join(dir, 'mistri-components.d.ts'), types);
     writeFileSync(join(dir, 'module.ts'), source);
     return spawnSync(
       process.execPath,
@@ -157,6 +159,10 @@ function compile(source: string) {
         '--allowImportingTsExtensions',
         '--target',
         'es2022',
+        '--lib',
+        'es2022',
+        '--types',
+        'node',
         '--pretty',
         'false',
         join(dir, 'module.ts'),
@@ -206,4 +212,39 @@ test('a component imports its props type: reads, figures and props are typed fro
     export const f = (p: TicketBoardProps) => p.figures.nope;
   `);
   assert.notEqual(typo.status, 0, 'a total the declaration does not make is a type error');
+});
+
+/* A page's props type came from @mistriwork/mistri/page, whose house controls are typed from @mistriwork/ui: in a
+   checkout that is the controls' .tsx source, and an App whose tsconfig set no jsx failed its typecheck with TS6142
+   on files it never wrote. */
+test('the generated file typechecks where the App sets no jsx, with a free-form page and without one', () => {
+  const walk = { id: 'pick-walk', module: './pages/pick-walk.page.tsx', kind: 'page' };
+  const withPage = parseAppConfig(
+    {
+      name: 'Helpdesk',
+      resources: { ticket: {} },
+      views: {
+        tickets: { kind: 'list', from: 'ticket' },
+        walk: { kind: 'page', label: 'Walk', component: walk, reads: ['ticket'] },
+      },
+      home: 'tickets',
+      nav: ['tickets', 'walk'],
+    },
+    'fixture',
+  );
+  const paged = componentTypes(withPage, [], 'Helpdesk', true)!;
+  assert.match(paged, /^export type PickWalkProps = PageProps;$/m);
+  const page = compile(
+    `
+    import type { PickWalkProps } from './mistri-components.d.ts';
+    export const walk = (p: PickWalkProps) => { const none: null = p.data; return p.props; };
+  `,
+    paged,
+  );
+  assert.equal(page.status, 0, page.stdout + page.stderr);
+  const plain = compile(`
+    import type { TicketBoardProps } from './mistri-components.d.ts';
+    export const rows = (p: TicketBoardProps): number | undefined => p.props.rows;
+  `);
+  assert.equal(plain.status, 0, plain.stdout + plain.stderr);
 });

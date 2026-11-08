@@ -10,7 +10,8 @@
  *
  * The day is today in Denver, or `LINTEL_TODAY=YYYY-MM-DD`, which makes the
  * same file every time. Writes the database and `<file>.json`: a writable
- * connection named `lintel`, and an email service that writes each message
+ * connection named `lintel`, the carrier's tracking API (`carrier`, read-only:
+ * start carrier/api.mjs for it, or set LINTEL_CARRIER_URL), and an email service that writes each message
  * to `<file>.mail.log` instead of sending it, its unsubscribe links signed
  * with the secret in LINTEL_MAIL_SECRET. Then it provisions every store the App
  * and its jobs use, as `mistri migrate stores up --app … --jobs …` does.
@@ -33,11 +34,19 @@ export const APP = process.env.LINTEL_APP
   ? `${resolve(process.env.LINTEL_APP)}/`
   : fileURLToPath(new URL('../../apps/lintel/', import.meta.url));
 
-/** The server's config for a seeded database: the connection, and mail kept in a file beside it. */
+/** The carrier's connection: Northbound Freight's tracking API (carrier/api.mjs), described by carrier/northbound.http.json. */
+export function carrierConnection(url = process.env.LINTEL_CARRIER_URL ?? 'http://127.0.0.1:4782/v1/') {
+  const description = JSON.parse(readFileSync(new URL('./carrier/northbound.http.json', import.meta.url), 'utf8'));
+  // `insecure` allows the stub's plain http; a real carrier is https and drops it.
+  return { name: 'carrier', kind: 'http', url, description, insecure: true };
+}
+
+/** The server's config for a seeded database: the connection, the carrier's API, and mail kept in a file beside it. */
 export function lintelConfig(url, mailLog) {
   return {
     connections: [
       { name: 'lintel', url, writable: true },
+      carrierConnection(),
       {
         name: 'mail',
         kind: 'email',
@@ -74,7 +83,13 @@ export function provisionStores(config) {
       },
     },
   );
-  if (result.status !== 0) throw new Error(`Provisioning the App's stores failed:\n${result.stdout}${result.stderr}`);
+  /* `live: true` asks for a change store on every connection a resource is read from, and the carrier's API is one
+     (it is no database, so it says so and `migrate stores up` exits non-zero). Everything else was made; nothing is
+     kept on the API, so that one line is the only complaint to let by. */
+  const complaints = result.stdout.split('\n').filter((line) => /could not be provisioned/.test(line));
+  const carrierOnly = complaints.length > 0 && complaints.every((line) => line.trim().startsWith('carrier:'));
+  if (result.status !== 0 && !(carrierOnly && !result.stderr.trim()))
+    throw new Error(`Provisioning the App's stores failed:\n${result.stdout}${result.stderr}`);
 }
 
 export function seed(file, { today = process.env.LINTEL_TODAY, photos = true, stores = true } = {}) {

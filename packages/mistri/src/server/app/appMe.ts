@@ -26,6 +26,10 @@ type Reader = { query: (request: QueryRequest) => Promise<QueryResult> };
  * Who `me` is for one request. `who` is the verified account's email
  * (signedInAs); absent, nobody is signed in and a condition on `me` says so.
  * Two rows carrying one email name nobody in particular, so neither is theirs.
+ *
+ * Where `auth.me.by` is 'account', the row is found by the verified session's account id (`account`) instead, so
+ * the email is only what text beside `me` compares with: an email that changed still finds the row, and one
+ * another account took finds none. No `account`, no person.
  */
 export async function lookupPerson(
   app: AppDef,
@@ -33,8 +37,11 @@ export async function lookupPerson(
   who: string | undefined,
   reader: Reader,
   trusted?: { schema: DatabaseSchema; reader: Reader },
+  account?: string,
 ): Promise<QueryPerson> {
   const email = who ?? null;
+  /* What the people table's column holds for this session: the account's id where it is bound by account, else the email. */
+  const match = app.auth?.me?.by === 'account' ? (typeof account === 'string' && account ? account : null) : email;
   const { table, column } = personTable(app, schema);
   /* The reader's catalog lacks the email column (or the table): the App's
      own catalog says who people are, and the reader only whose row it sees. */
@@ -42,14 +49,14 @@ export async function lookupPerson(
     const whole = personTable(app, trusted.schema);
     if (!whole.table || !whole.column) return { email };
     const person = { table: whole.table.id, key: null };
-    if (email === null) return { email, person };
+    if (match === null) return { email, person };
     const [pk] = primaryKey(whole.table);
     const found = await trusted.reader.query({
       table: whole.table.id,
       columns: [pk],
       limit: 2,
       offset: 0,
-      filter: { groups: [[{ column: whole.column, op: '=', value: email }]] },
+      filter: { groups: [[{ column: whole.column, op: '=', value: match }]] },
     });
     const key = found.rows.length === 1 ? found.rows[0][pk] : null;
     if (typeof key !== 'number' && typeof key !== 'string') return { email, person };
@@ -71,14 +78,14 @@ export async function lookupPerson(
     return { email, person: { table: whole.table.id, key: seen ? key : null } };
   }
   if (!table || !column) return { email };
-  if (email === null) return { email, person: { table: table.id, key: null } };
+  if (match === null) return { email, person: { table: table.id, key: null } };
   const [pk] = primaryKey(table);
   const found = await reader.query({
     table: table.id,
     columns: [pk],
     limit: 2,
     offset: 0,
-    filter: { groups: [[{ column, op: '=', value: email }]] },
+    filter: { groups: [[{ column, op: '=', value: match }]] },
   });
   const key = found.rows.length === 1 ? found.rows[0][pk] : null;
   return { email, person: { table: table.id, key: typeof key === 'number' || typeof key === 'string' ? key : null } };
@@ -190,8 +197,9 @@ export async function personKey(
   schema: DatabaseSchema,
   who: string | undefined,
   reader: Reader,
+  account?: string,
 ): Promise<string | number | null> {
-  return (await lookupPerson(app, schema, who, reader)).person?.key ?? null;
+  return (await lookupPerson(app, schema, who, reader, undefined, account)).person?.key ?? null;
 }
 
 /**
@@ -219,7 +227,8 @@ export function textsMentionMe(texts: readonly unknown[], schema: DatabaseSchema
  */
 export function emailOnly(app: AppDef, texts: readonly unknown[], schema: DatabaseSchema): boolean {
   const column = app.auth?.me?.column;
-  if (!column || !/^[A-Za-z_]\w*$/.test(column)) return false;
+  /* A column that holds the account's id is not the email: `me` beside it is the person's row. */
+  if (!column || !/^[A-Za-z_]\w*$/.test(column) || app.auth?.me?.by === 'account') return false;
   const said = texts.filter((text): text is string => typeof text === 'string');
   if (segmentsNamed(said, schema).some((text) => mentionsMe(text))) return false;
   const compared = new RegExp(`(?:^|[^\\w.])(?:[A-Za-z_]\\w*\\.)*${column}\\s*!?=\\s*$`, 'i');

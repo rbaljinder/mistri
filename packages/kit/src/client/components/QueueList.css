@@ -109,14 +109,9 @@
 .queue-pick-list .queue-pick[aria-current='true'] { background: var(--selected, color-mix(in srgb, var(--accent) 10%, transparent)); }
 .queue-pick-list .queue-pick > .avatar-value { flex: none; }
 .queue-pick-list .queue-pick > .avatar-value .avatar-text { display: none; }
-
-/* A split's list: each row is the button that picks its record, the one beside the list marked by a ground, not a stripe
-   (docs/design.md refuses the side tab). */
-.queue-pick { all: unset; box-sizing: border-box; display: flex; align-items: flex-start; gap: var(--space-3h); width: 100%; cursor: pointer; }
-.queue-pick:focus-visible { outline: var(--focus-width) solid var(--focus, var(--accent)); outline-offset: -2px; }
-.queue-pick-list .queue-list > .queue-row { padding: 0; }
-.queue-pick-list .queue-pick { padding: var(--space-3h) var(--space-4); }
-.queue-pick-list .queue-pick:hover { background: var(--hover, color-mix(in srgb, var(--ink) 4%, transparent)); }
-.queue-pick-list .queue-pick[aria-current='true'] { background: var(--selected, color-mix(in srgb, var(--accent) 10%, transparent)); }
-.queue-pick-list .queue-pick > .avatar-value { flex: none; }
-.queue-pick-list .queue-pick > .avatar-value .avatar-text { display: none; }
+/* The primary takes the row and each line sits under it on one line of its own: side by side, a short value such as a
+   date was squeezed beside the title until it broke word by word. A long line is cut at the edge; the record beside the
+   list holds all of it. */
+.queue-pick-list .queue-pick { flex-wrap: wrap; row-gap: var(--space-1); }
+.queue-pick-list .queue-pick > strong { flex: 1 1 100%; min-width: 0; }
+.queue-pick-list .queue-pick > span { flex: 1 1 100%; max-width: 100%; overflow: hidden; color: var(--ink-muted); font-size: var(--text-sm); white-space: nowrap; text-overflow: ellipsis; }

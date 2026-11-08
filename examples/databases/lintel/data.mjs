@@ -10,6 +10,7 @@
  * Money is whole cents. A rent is posted on the first and late after the
  * fifth (late_fee rows); most of it is paid, by ACH or card, within days.
  */
+import { RECEIPT_TRACKING, receiptDays } from './carrier/tracking.mjs';
 import { renderBuilding } from './images.mjs';
 
 /** The day in Denver, the buildings' own, as `YYYY-MM-DD`. */
@@ -536,12 +537,15 @@ export function generate({ today, photos = true } = {}) {
 
   for (const p of PARTS) add('part', { ...p, version: 0 });
   const partBySku = new Map(tables.part.map((p) => [p.sku, p]));
+  const receivedOn = receiptDays(today);
   for (const [i, sku] of ['HV-FLT-01', 'PL-FLAP-01', 'EL-LED-02', 'PL-SUPP-05', 'PT-WALL-01', 'EL-GFCI-01'].entries())
     add('part_receipt', {
       part_id: partBySku.get(sku).id,
       quantity: [24, 12, 12, 10, 6, 6][i],
-      received_on: addDays(today, -80 + i * 13),
+      received_on: receivedOn[i],
       vendor: i % 2 ? 'Front Range Supply' : 'Mile High Hardware',
+      // The carrier's number for the parcel it came in (carrier/api.mjs answers for it).
+      tracking_number: RECEIPT_TRACKING[i],
     });
 
   /* Four months of repairs. Older ones are done; the newest wait to be

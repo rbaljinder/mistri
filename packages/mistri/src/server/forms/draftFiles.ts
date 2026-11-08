@@ -77,6 +77,8 @@ export async function draftFileHidden(options: {
   table: string;
   key: Record<string, string | number>;
   who: string | undefined;
+  /** The signed-in account's id, where `auth.me.by` binds people by account (appMe.ts lookupPerson). */
+  account?: string;
   /** Who the reader is, where `who` alone does not say: a tenant's people are found by account (appMe.ts lookupTenantPerson). */
   person?: () => Promise<string | number | null>;
 }): Promise<boolean> {
@@ -106,7 +108,11 @@ export async function draftFileHidden(options: {
         offset: 0,
       });
       if (root.rows.length !== 1 || String(root.rows[0][each.state.column]) !== each.state.value) continue;
-      person ??= options.person ? await options.person() : who === undefined ? null : await personKey(app, schema, who, reader);
+      person ??= options.person
+        ? await options.person()
+        : who === undefined
+          ? null
+          : await personKey(app, schema, who, reader, options.account);
       if (person === null || String(root.rows[0][each.owner]) !== String(person)) return true;
     }
     return false;

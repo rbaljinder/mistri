@@ -47,3 +47,24 @@ test('the desk’s New work order asks for the kind of problem as one row of cho
   await expect(cards.getByRole('radio', { name: 'Plumbing' })).toBeChecked();
   if (isMobile) await fitsTheWidth(page);
 });
+
+test('Add a charge asks for a lease, then a step at a time, and nothing it asks is refused', async ({ page, lintel }) => {
+  await signIn(page, lintel, 'manager');
+  // Every request the page makes is answered, the step check Continue asks included: Lintel's row policy once
+  // refused that check outright, a console error on every step.
+  const refused: string[] = [];
+  page.on('response', (response) => {
+    if (response.status() >= 400) refused.push(`${response.status()} ${response.request().method()} ${response.url()}`);
+  });
+  await open(page, lintel, '/add-charge');
+  await expect(page.getByText('Choose a lease').first()).toBeVisible();
+  await page.locator('.kit-param').getByRole('button', { name: 'Lease' }).click();
+  await page.getByRole('option').first().click();
+  await expect(page.getByRole('heading', { level: 2, name: 'What is the charge for?' })).toBeVisible();
+  await page.getByRole('radio', { name: 'Repair' }).check({ force: true });
+  await page.getByLabel(/^Description/).fill('Replaced a cracked window');
+  // Continue checks the first step on the server too.
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { level: 2, name: 'How much, and when is it due?' })).toBeVisible();
+  expect(refused).toEqual([]);
+});

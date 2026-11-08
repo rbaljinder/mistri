@@ -24,7 +24,16 @@ function unreadable(good: ReturnType<typeof fixtures>, ...broken: string[]) {
 
 test('draws the classes still to come', async () => {
   const view = renderPage(page, { viewer, commands, data: fixtures({ class_session: classes }) });
-  expect(await view.findByRole('button', { name: /^Fresh pasta by hand/ })).toBeInTheDocument();
+  expect(await view.findByRole('radio', { name: /^Fresh pasta by hand/ })).toBeInTheDocument();
+});
+
+test('choosing a class puts it in the address and opens its guest list', async () => {
+  const view = renderPage(page, { viewer, commands, data: fixtures({ class_session: classes, booking: [] }) });
+  expect(await view.findByText('Choose a class')).toBeInTheDocument();
+  (await view.findByRole('radio', { name: /^Fresh pasta by hand/ })).click();
+  expect(await view.findByText('Everyone is in')).toBeInTheDocument();
+  expect(view.queryByText('Choose a class')).toBeNull();
+  expect(view.getByRole('radio', { name: /^Fresh pasta by hand/ })).toHaveAttribute('aria-checked', 'true');
 });
 
 test('with no class to come, it says so', async () => {
@@ -48,4 +57,23 @@ test('a guest list that cannot be read offers Try again, not "Everyone is in"', 
   });
   await view.findAllByRole('button', { name: 'Try again' });
   expect(view.queryByText('Everyone is in')).toBeNull();
+});
+
+test("the door lists the chosen class's expected parties, and checks one in by name", async () => {
+  const announced: { text: string; tone: 'ok' | 'error' }[] = [];
+  const data = fixtures({
+    class_session: classes,
+    booking: [
+      { id: 1, class_session_id: 2, guest_name: 'Morgan Lee', party_size: 2, status: 'booked' },
+      { id: 2, class_session_id: 2, guest_name: 'Ana Ruiz', party_size: 1, status: 'checked_in' },
+      { id: 3, class_session_id: 3, guest_name: 'Sam Ito', party_size: 3, status: 'booked' },
+    ],
+  });
+  const view = renderPage(page, { viewer, commands, address: { class: '2' }, data, announced });
+  const door = await view.findByRole('list', { name: 'Still expected' });
+  expect(door).toHaveTextContent('Morgan Lee · party of 2');
+  expect(door).not.toHaveTextContent('Sam Ito');
+  view.getByRole('button', { name: 'Check in Morgan Lee' }).click();
+  expect(await view.findByText('Morgan Lee is checked in.')).toBeInTheDocument();
+  expect(view.commands).toEqual([{ command: 'checkIn', mode: 'run', key: expect.objectContaining({ id: 1 }) }]);
 });

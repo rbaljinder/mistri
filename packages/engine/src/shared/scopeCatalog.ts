@@ -135,6 +135,9 @@ export function captureScopeCatalog(schema: DatabaseSchema): DatabaseSchema {
         'deletable',
         'insertable',
         'sourceDialect',
+        'filterable',
+        'sortable',
+        'countable',
       ]);
       if (
         !identifier(table.id) ||
@@ -220,6 +223,18 @@ export function captureScopeCatalog(schema: DatabaseSchema): DatabaseSchema {
           ))
       )
         return refuse();
+      /* What an API can filter and sort by, and that it reports no totals (adapters/http): evidence for which boxes
+         a list offers, never a grant, so it is carried and left out of the fingerprint. Only columns this table has. */
+      for (const names of [table.filterable, table.sortable])
+        if (
+          names !== undefined &&
+          (!Array.isArray(names) ||
+            names.some(
+              (name) => typeof name !== 'string' || !(table.columns as Array<{ name: unknown }>).some((column) => column.name === name),
+            ))
+        )
+          return refuse();
+      if (table.countable !== undefined && table.countable !== false) return refuse();
       // Index advice, as `unique` is address evidence: only columns this table has.
       if (
         table.trigram !== undefined &&

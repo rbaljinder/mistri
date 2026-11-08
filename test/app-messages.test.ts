@@ -637,12 +637,12 @@ describe('a notice, said per recipient', () => {
       },
     });
     const values = { title: 'Printer jam' };
-    assert.equal(await say.words(values, 'bob@example.test', undefined, sink()), 'Assigned: Printer jam');
-    assert.equal(await say.words(values, 'bob@example.test', 'south', sink()), 'Asignada: Printer jam', "the tenant's tag");
+    assert.equal(await say.words(values, { email: 'bob@example.test' }, undefined, sink()), 'Assigned: Printer jam');
+    assert.equal(await say.words(values, { email: 'bob@example.test' }, 'south', sink()), 'Asignada: Printer jam', "the tenant's tag");
     assert.equal(
       await say.words(
         values,
-        'bob@example.test',
+        { email: 'bob@example.test' },
         'south',
         sink([{ tenant_id: 'south', key: 'ticket.assigned', locale: 'es', text: 'Para ti: {title}' }]),
       ),
@@ -651,7 +651,7 @@ describe('a notice, said per recipient', () => {
     assert.equal(
       await say.words(
         values,
-        'bob@example.test',
+        { email: 'bob@example.test' },
         'north',
         sink([{ tenant_id: 'south', key: 'ticket.assigned', locale: 'en', text: 'South only: {title}' }]),
       ),
@@ -1035,7 +1035,7 @@ describe('i18n wave 2', () => {
         asked.push(request.filter);
         return { columns: ['locale'], rows: [{ locale: 'es-MX' }] } as never;
       },
-      'ana@example.test',
+      { email: 'ana@example.test' },
     );
     assert.equal(locale, 'es-MX');
     assert.deepEqual(asked, [{ groups: [[{ column: 'email', op: '=', value: 'ana@example.test' }]] }]);
@@ -1045,8 +1045,30 @@ describe('i18n wave 2', () => {
       'Asignada: Printer\n\nEn North.\nPor Ana.\nÁbrelo: https://words.test/words/tickets/1\n\nRecibes esto porque las notificaciones por correo están activadas en tu cuenta de Words. Desactívalas en Notificaciones, en Words.',
     );
     assert.match(messageOf(app, 'https://x', 'T', '', undefined, 'fr').text, /^T\n\nOpen it: https:\/\/x\n\nYou get this/);
-    const failing = await recipientLocale(app, SCHEMA, async () => Promise.reject(new Error('down')), 'ana@example.test');
+    const failing = await recipientLocale(app, SCHEMA, async () => Promise.reject(new Error('down')), { email: 'ana@example.test' });
     assert.equal(failing, 'en-US', "a read that fails says the App's own");
+  });
+
+  test("with me.by: 'account' a notice email's language is read from the row holding the recipient's account id", async () => {
+    const app = {
+      id: 'words',
+      name: 'Words',
+      auth: { me: { from: 'person', column: 'email', by: 'account' } },
+      ui: { locale: 'en-US', localeColumn: 'person.locale' },
+    } as unknown as AppDef;
+    const asked: unknown[] = [];
+    const read = async (request: { filter?: unknown }) => {
+      asked.push(request.filter);
+      return { columns: ['locale'], rows: [{ locale: 'es-MX' }] } as never;
+    };
+    assert.equal(await recipientLocale(app, SCHEMA, read, { email: 'ana@example.test', account: 'acc-1' }), 'es-MX');
+    assert.deepEqual(asked, [{ groups: [[{ column: 'email', op: '=', value: 'acc-1' }]] }]);
+    assert.equal(
+      await recipientLocale(app, SCHEMA, read, { email: 'ana@example.test' }),
+      'en-US',
+      "an account that is not known is said in the App's locale, never matched by email",
+    );
+    assert.equal(asked.length, 1);
   });
 
   test('messages extract: a catalog gains its missing keys as comments once; literal captions are listed with keys', async () => {

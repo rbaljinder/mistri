@@ -17,7 +17,7 @@ and assert who may read and do what.
       args: ['--jobs', 'jobs.ts', '--policy', 'policy.ts'],
 ```
 
-See it in the sample (`examples/apps/lintel/tests/start.ts:44`): Lintel's suite copies the App into a disposable workspace, seeds a database and starts it with its jobs and row policy, as production does.
+See it in the sample (`examples/apps/lintel/tests/start.ts:50`): Lintel's suite copies the App into a disposable workspace, seeds a database and starts it with its jobs and row policy, as production does.
 
 `npx @mistriwork/mistri test init` writes a starting suite on these helpers: a
 journey per role, each job at times run once, and a permissions matrix from

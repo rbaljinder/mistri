@@ -17,6 +17,12 @@ export type Rows = {
   class_session: { id: number; title: string; cuisine: string; chef: string; starts_at: string; seats: number; price: number | string; status: string };
 };
 
+/** Each table's primary-key columns: what names one of its records. A table without one is absent. */
+export type Keys = {
+  booking: "id";
+  class_session: "id";
+};
+
 /** Each table's references, by the name a label path follows (`owner_id`
     in `owner_id.name`), and the table each lands on: what lets every hop of
     a path be checked. A table that references nothing is absent. */
@@ -63,5 +69,5 @@ export type Flags<Manifest> = AppFlagValues<Manifest>;
 export type FlagName<Manifest> = keyof Flags<Manifest>;
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { schema(): { columns: Columns; references: References; segments: Segments } }
+  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments } }
 }

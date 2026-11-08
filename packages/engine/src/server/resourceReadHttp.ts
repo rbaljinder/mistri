@@ -1,7 +1,8 @@
 import { ANSI_STYLE, POSTGRES_STYLE, type Adapter, type Filter, type SqlStyle } from '../adapters/adapter.js';
-import { findTable, type DatabaseSchema, type Order } from '../shared/schema.js';
+import { findTable, tableDialect, type DatabaseSchema, type Order } from '../shared/schema.js';
 import type { Condition } from '../shared/filter.js';
-import { parseQuery, explain, type QueryPerson } from '../shared/query.js';
+import { andQuery, parseQuery, explain, type QueryPerson } from '../shared/query.js';
+import { compileWhere } from '../shared/pageWhere.js';
 import { PathError, explainView, parseViewQuery, type ViewDef } from '../shared/view.js';
 import { textToView, viewToTextWithSchema } from '../shared/viewtext.js';
 import { breakdownToText, sectionFromText, textToBreakdown } from '../shared/breakdowntext.js';
@@ -288,21 +289,22 @@ export async function dispatchResourceReadHttp(
     /* An API reports no totals (adapters/http), and counting one would walk
        every page of someone else's rate budget: its lists page by whether a
        full page came back, as a view without a count does. */
+    const own = findTable(schema, q.table);
+    const dialect = tableDialect(schema, own);
     const exact = body.exactCount === true || body.count === 'exact';
-    const countMode = schema.dialect === 'http' || body.count === 'none' || lanes ? 'none' : exact ? 'exact' : 'estimate';
+    const countMode = dialect === 'http' || body.count === 'none' || lanes ? 'none' : exact ? 'exact' : 'estimate';
     /* A filtered total is counted to DEFAULT_COUNT_LIMIT unless the request
        asks for the exact number or names its own bound: past it the list says
        "10,000+" and offers to count exactly. Unfiltered, the catalog's
        estimate or a plain count answers as before. */
     const countLimit = body.countLimit ?? (!exact && q.filter?.groups?.length ? DEFAULT_COUNT_LIMIT : undefined);
-    const own = findTable(schema, q.table);
     /* Lanes are a column of one stored table's rows: a union pages its branches apart, an API answers in its own order. */
-    if (lanes && (!own || own.union || schema.dialect === 'http' || step || !own.columns.some((column) => column.name === lanes.by))) {
+    if (lanes && (!own || own.union || dialect === 'http' || step || !own.columns.some((column) => column.name === lanes.by))) {
       return refusal(400, [`A board reads its lanes in one read only by a column of ${q.table}'s own rows.`]);
     }
     const most = options.rowsMost?.(own?.id ?? q.table);
     const bounded = (limit: unknown) => (most === undefined ? limit : Math.min(clampLimit(limit), most));
-    const paging = own && !own.union && !lanes ? recordsPaging(own, schema.dialect, q.orderBy, q.columns, q.filter, step) : undefined;
+    const paging = own && !own.union && !lanes ? recordsPaging(own, dialect, q.orderBy, q.columns, q.filter, step) : undefined;
     if (step && !paging?.continuation) {
       const refused = tooDeep();
       if (refused) return refused;
@@ -604,8 +606,19 @@ export async function dispatchResourceReadHttp(
       merged = parsed.view;
     }
 
-    if (typeof body.query === 'string' && body.query.trim()) {
-      const parsed = parseViewQuery(schema, view.base, body.query, options.now(), person);
+    /* A page's object condition (pageWhere.ts) joins its query as the text it means, so the one parser reads both
+       under this reader's grants. A where that names what the table lacks is refused, never dropped: dropped, the
+       read would be wider than the page asked for. */
+    let query = typeof body.query === 'string' ? body.query : '';
+    if (body.where !== undefined) {
+      const table = findTable(schema, view.base);
+      if (!table) return refusal(400, ['A where needs the view to name its base table.']);
+      const where = compileWhere(body.where, table);
+      if ('error' in where) return refusal(400, [where.error]);
+      query = andQuery(where.text, query);
+    }
+    if (query.trim()) {
+      const parsed = parseViewQuery(schema, view.base, query, options.now(), person);
       errors.push(...parsed.errors);
       merged = {
         ...view,

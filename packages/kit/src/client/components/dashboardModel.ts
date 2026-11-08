@@ -8,6 +8,7 @@
  */
 import { andQuery } from '@mistriwork/engine/shared/query.js';
 import type { FigureFormat } from '@mistriwork/engine/shared/model.js';
+import type { ServedRecordTab } from '@mistriwork/engine/shared/servedApp.js';
 import { breakdownText, sectionPeriod, windowed } from '@mistriwork/engine/shared/dashboardAsks.js';
 import { columnDisplay, findTable, quote } from '../core.js';
 import { defaultCurrency, formatLocale, formatMoney, formatNumber, formatPercent, formatWholeMoney } from '../locale.js';
@@ -142,6 +143,8 @@ export interface DashboardDef {
   /** The head's form (`head`): `compact`, the title alone on one line with its verbs and no intro; `own`, a page that
       draws its own head (`head: false`), its title kept for a screen reader and its intro left to it (DashHead.tsx). */
   head?: 'compact' | 'own';
+  /** A free-form page that owns the whole window (`layout: 'bare'`): the shell draws no sidebar and no top bar around it. */
+  layout?: 'bare';
   /** Plain text, authored with the dashboard and served only with it. */
   description?: string;
   sections: Section[];
@@ -157,7 +160,16 @@ export interface DashboardDef {
   filters?: string[];
   refresh?: number;
   /** A free-form page (definePage): what its component reads and runs, the address parameters it keeps its place in, and its loader. */
-  page?: { reads: string[]; commands: string[]; actions?: string[]; params: string[]; loader?: string; public?: true };
+  page?: {
+    reads: string[];
+    commands: string[];
+    actions?: string[];
+    params: string[];
+    loader?: string;
+    public?: true;
+    /** A record's tab (pages/<list view>/[id]/<tab>.page.tsx): drawn in that record's tab strip, never as a room. */
+    record?: ServedRecordTab;
+  };
   error?: string;
 }
 

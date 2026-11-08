@@ -596,22 +596,34 @@ function applicationRecords(
  * same place. A draft whose children are more than one pass removes is left
  * for the next.
  */
-async function purgeExpired(
+export async function purgeExpired(
   records: WriteTransaction,
   catalog: CommandCatalog,
   root: string,
-  run: SavedDraftRun,
+  run: Pick<SavedDraftRun, 'save'>,
   now: Date,
   files?: ReadonlyMap<string, CommandFileRule>,
-): Promise<void> {
+  /** Asked before a draft is deleted, with the rows that would go: false leaves the draft whole (the retention job's: nothing else may refer to it). */
+  deletable?: (rows: ReadonlyArray<{ table: string; key: Record<string, string | number> }>) => Promise<boolean>,
+  /** Expired drafts to pass over first: the ones an earlier pass of the same run left whole, which sort ahead of the rest. */
+  skip = 0,
+): Promise<{ removed: number; left: number }> {
+  let removed = 0,
+    left = 0;
   const { save } = run,
     meta = catalog[root];
-  if (meta.key.length !== 1) return;
+  if (meta.key.length !== 1) return { removed, left };
   const [key] = meta.key;
+  /* Oldest expiry first, so the expired lead the page and a draft not yet due never hides one that is; the drafts a
+     pass leaves whole stay at the front of that order, and `skip` steps over them. */
   const candidates = await records.query({
     table: root,
     limit: 25,
-    offset: 0,
+    offset: skip,
+    orderBy: [
+      { column: save.resume.expires, direction: 'asc' },
+      { column: key, direction: 'asc' },
+    ],
     columns: [key, save.resume.expires],
     filter: {
       groups: [
@@ -647,14 +659,22 @@ async function purgeExpired(
       for (const found of rows.rows)
         doomed.push({ table, key: Object.fromEntries(child.key.map((column) => [column, found[column] as string | number])) });
     }
-    if (!whole) continue;
+    if (!whole || (deletable && !(await deletable([...doomed, { table: root, key: { [key]: value } }])))) {
+      left++;
+      continue;
+    }
     /* A draft's files leave their bucket before their rows do: a row whose object is gone is only a row, while an
        object whose row is gone is one nobody names. A bucket that does not answer leaves the draft whole, expired
        and found again by the next pass. */
-    if (!(await dropObjects(records, files, doomed))) continue;
+    if (!(await dropObjects(records, files, doomed))) {
+      left++;
+      continue;
+    }
     for (const entry of doomed) await records.remove(entry);
     await records.remove({ table: root, key: { [key]: value } });
+    removed++;
   }
+  return { removed, left };
 }
 
 /**

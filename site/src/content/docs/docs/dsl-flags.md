@@ -144,7 +144,7 @@ neither lists roles or tenants itself.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `flags.*.default` | flagValue | Preview |  |
+| `flags.*.default` | flagValue | Preview |  Used in `examples/apps/lintel/app.ts`. |
 | `flags.*.expiry` | string | Preview |  |
 | `flags.*.owner` | string | Preview |  |
 | `flags.*.safeValue` | flagValue | Preview |  One of `false`. |

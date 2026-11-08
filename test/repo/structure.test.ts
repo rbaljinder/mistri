@@ -459,6 +459,9 @@ const CLIENT_CROSSINGS = [
   'Prefs',
   'Prompt',
   'RecordModal',
+  // A free-form page as a record's tab, named as the shell's `rooms` by appnav.js: a small frame, like FreePage,
+  // whose dashboard and sections are fetched on demand behind it.
+  'RecordTabPage',
   // A public form saved on every step, fetched when one is shown.
   'SavedFormSurface',
   'Sidebar',

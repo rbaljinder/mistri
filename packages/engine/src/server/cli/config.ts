@@ -79,6 +79,9 @@ export interface StartupConfig {
   mount?: Record<string, string>;
   /** `"basePath": "/tools"`, as written; `--base-path` wins. */
   basePath?: string;
+  /** `"presentation": { "<app>": { name, logo, theme, locale } }`, as written: one deployment's name, logo, theme and
+      locale for an App, which the App framework checks and applies (mistri app/appPresentation.ts). Never read by the browser. */
+  presentation?: unknown;
 }
 
 /**
@@ -219,7 +222,12 @@ export async function readStartupConfig(
       }
       /* Where the Apps are served, beside which Apps: a deployment's fact,
          checked with the flags' own rule once the Apps are loaded (main). */
-      const { mount, basePath } = JSON.parse(await readFile(config.path, 'utf8')) as { mount?: unknown; basePath?: unknown };
+      const { mount, basePath, presentation } = JSON.parse(await readFile(config.path, 'utf8')) as {
+        mount?: unknown;
+        basePath?: unknown;
+        presentation?: unknown;
+      };
+      if (presentation !== undefined) read.presentation = presentation;
       if (mount !== undefined) {
         if (!mount || typeof mount !== 'object' || Array.isArray(mount) || Object.values(mount).some((at) => typeof at !== 'string')) {
           throw new Error(`${config.path}: "mount" must name each App's place by its id, like { "main": "/", "billing": "/billing" }.`);

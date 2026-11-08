@@ -107,7 +107,8 @@ export function ddl(dialect) {
     [
       'part_receipt',
       `CREATE TABLE part_receipt (${id}, part_id integer NOT NULL REFERENCES part(id),
-        quantity integer NOT NULL CHECK (quantity > 0), received_on ${date} NOT NULL, vendor text NOT NULL)`,
+        quantity integer NOT NULL CHECK (quantity > 0), received_on ${date} NOT NULL, vendor text NOT NULL,
+        tracking_number text)`,
     ],
     [
       'maintenance_request',

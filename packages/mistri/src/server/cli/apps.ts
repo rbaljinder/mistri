@@ -26,6 +26,7 @@ import type { StartupConfig } from '@mistriwork/engine/server/cli/config.js';
  */
 export const CHECK_BUILD_OF = 'MISTRI_CHECK_BUILD_OF';
 import type { AppEnvName } from '../../shared/appAuthority.js';
+import { parsePresentation } from '../app/appPresentation.js';
 
 /* A built App is started with the entries it was built with: the manifest's
    own where no flag names one (docs/bootstrap-plan.md D9), never a module
@@ -91,6 +92,24 @@ export function startupTargets(
   return targets;
 }
 
+/** The config's `"presentation"` as the loader takes it; undefined when the file has none. */
+export function presentationOf(config: Pick<StartupConfig, 'presentation' | 'configPath'>): LoadedApp['presentation'] | undefined {
+  if (config.presentation === undefined) return undefined;
+  const file = config.configPath ?? 'the config file';
+  return { ...(config.configPath === undefined ? {} : { file: config.configPath }), apps: parsePresentation(config.presentation, file) };
+}
+
+/** A presentation for an App this server does not serve is a typo or a stale config: said, with the Apps it does serve. */
+export function assertPresentationNamesApps(presentation: LoadedApp['presentation'] | undefined, loadedApps: readonly LoadedApp[]): void {
+  if (!presentation) return;
+  const ids = loadedApps.map((loaded) => loaded.app.id);
+  const stray = Object.keys(presentation.apps).filter((id) => !ids.includes(id));
+  if (stray.length)
+    throw new Error(
+      `${presentation.file ?? 'the config file'}: "presentation.${stray[0]}" names no App this server serves (${ids.map((id) => `"${id}"`).join(', ') || 'none'}). Key each presentation by the App's id.`,
+    );
+}
+
 export async function loadStartupApps(opts: Options, registry: Registry, config: StartupConfig): Promise<StartupApps> {
   /* The app layer. Loaded whether or not a config file was — `--app` is
      an explicit ask, and the config's "apps" list is the same ask written
@@ -103,6 +122,15 @@ export async function loadStartupApps(opts: Options, registry: Registry, config:
     appTargets = startupTargets(opts, config, opts.checkApp ? process.env[CHECK_BUILD_OF] || undefined : undefined);
   } catch (err) {
     console.error(`App error: ${startupReport(err)}`);
+    if (opts.embedded) throw err;
+    process.exit(1);
+  }
+  /* The deployment's name, logo, theme and locale for its Apps (config "presentation"), checked before any App loads. */
+  let presentation: LoadedApp['presentation'] | undefined;
+  try {
+    presentation = presentationOf(config);
+  } catch (err) {
+    console.error(`Config error: ${startupReport(err)}`);
     if (opts.embedded) throw err;
     process.exit(1);
   }
@@ -120,7 +148,12 @@ export async function loadStartupApps(opts: Options, registry: Registry, config:
       for (const { target, ...more } of appTargets) {
         /* --commands names the one --app's module; an App without it may keep commands.ts beside its manifest. */
         const own = opts.commands !== undefined && opts.apps?.length === 1 && resolve(opts.apps[0]) === resolve(target);
-        const loaded = await loadApp(target, { ...loadOptions, ...more, ...(own ? { commands: opts.commands } : {}) });
+        const loaded = await loadApp(target, {
+          ...loadOptions,
+          ...more,
+          ...(presentation ? { presentation } : {}),
+          ...(own ? { commands: opts.commands } : {}),
+        });
         /* A build is served with the entries it was built with (decision D9 of docs/bootstrap-plan.md): the build is
            the hashed record of the authority someone chose, and `migrate stores up` already reads it. A flag still
            names the build's own bundle or is refused (assertBuildEntries); a tenant App's policy is the build's. */
@@ -143,6 +176,7 @@ export async function loadStartupApps(opts: Options, registry: Registry, config:
         );
       }
       assertBuildEntries(opts, loadedApps);
+      assertPresentationNamesApps(presentation, loadedApps);
       assertAppScopes(loadedApps, (scope) => registry.list().find((c) => c.id === scope || c.name === scope)?.id ?? scope);
       // A search names a search connection the config has; said here, not at the first keystroke.
       assertAppSearch(

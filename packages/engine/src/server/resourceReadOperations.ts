@@ -10,7 +10,7 @@ import {
   type QueryRequest,
 } from '../adapters/adapter.js';
 import { snapshotScopedData } from '../adapters/scoped/scopedReads.js';
-import { findTable, resolveOrder, type DatabaseSchema, type Order } from '../shared/schema.js';
+import { findTable, resolveOrder, tableDialect, type DatabaseSchema, type Order } from '../shared/schema.js';
 import { withViewComputed, withViewLabels, type ViewDef } from '../shared/view.js';
 import { measureConditions, withBreakdownComputed, withGroupNames, type BreakdownDef } from '../shared/breakdown.js';
 import type { StructuredFilter } from '../shared/structuredFilter.js';
@@ -377,7 +377,9 @@ export async function readRecords(
      key as a default sort is one most APIs do not document, and would turn
      every plain list into a refusal (adapters/http). */
   const order = snapshotScopedData(
-    schema.dialect === 'http' && !given.orderBy?.length ? { order: [] as Order[], implicit: true } : resolveOrder(table, given.orderBy),
+    tableDialect(schema, table) === 'http' && !given.orderBy?.length
+      ? { order: [] as Order[], implicit: true }
+      : resolveOrder(table, given.orderBy),
   );
   const request: QueryRequest = {
     ...given,

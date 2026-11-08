@@ -116,6 +116,7 @@ export default defineConfig({
             { label: 'Conventions', slug: 'docs/conventions' },
             { label: 'Reload and restart', slug: 'docs/reload-and-restart' },
             { label: 'Custom components', slug: 'docs/custom-components' },
+            { label: 'Page recipes', slug: 'docs/page-recipes' },
             { label: 'The general path', slug: 'docs/general-path' },
             { label: 'Mount in your server', slug: 'docs/mount-in-your-server' },
             { label: 'Embed in a React app', slug: 'docs/embed-in-a-react-app' },
@@ -215,6 +216,7 @@ export default defineConfig({
           label: 'Ship',
           items: [
             { label: 'Build and deploy', slug: 'docs/build-and-deploy' },
+            { label: 'Self-host', slug: 'docs/self-host' },
             { label: 'Move from tablewalk 0.9', slug: 'docs/upgrade-from-0-9' },
             { label: 'Connections and services', slug: 'docs/services' },
             { label: 'Installable PWAs', slug: 'docs/pwa' },

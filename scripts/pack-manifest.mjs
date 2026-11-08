@@ -18,6 +18,10 @@
  * (packages/mistri/src/server/shipped.ts). `strip` copies them into the package for the tarball and `restore` removes
  * them.
  *
+ * `mistri` also carries a CHANGELOG.md the pack writes (`GENERATED`): the repository's changelog is 700 KB of every
+ * release since 0.x, and an install needs the release candidates it can be on. `rcChangelog` keeps the `1.0.0-rc.*`
+ * sections and ends with a link to the whole file.
+ *
  * Only the tarball's copy changes. npm publish sends the registry the manifest it re-reads after `postpack`, so the
  * registry's metadata still lists the scripts; what an install unpacks, and what `npm test` there reads, does not.
  */
@@ -44,6 +48,26 @@ export const CARRIED = {
   mistri: { ...EVERY, skills: 'skills', examples: 'examples' },
   'create-mistri': EVERY,
   cloudflare: EVERY,
+};
+
+/** What the repository's changelog becomes in a tarball: the 1.0 release candidates, then a link to all of it. */
+export const CHANGELOG_URL = 'https://github.com/rbaljinder/mistri/blob/main/CHANGELOG.md';
+export function rcChangelog(changelog) {
+  const sections = changelog.split(/^(?=## )/m).filter((section) => section.startsWith('## 1.0.0-rc.'));
+  return [
+    '# Changelog',
+    '',
+    'The 1.0 release candidates of `@mistriwork/mistri`. Every earlier release is in the full changelog.',
+    '',
+    ...sections.map((section) => section.trimEnd() + '\n'),
+    `The full changelog: ${CHANGELOG_URL}`,
+    '',
+  ].join('\n');
+}
+
+/** Files a pack writes into a package rather than copies: `path in the package → text from the checkout`. */
+export const GENERATED = {
+  mistri: { 'CHANGELOG.md': () => rcChangelog(readFileSync(join(ROOT, 'CHANGELOG.md'), 'utf8')) },
 };
 
 /** An export target as an install reads it: the dev form's built target in place of its source. */
@@ -90,12 +114,18 @@ export function published(manifest, host = hostExports()) {
 
 const files = (dir) => {
   const manifest = join(dir, 'package.json');
-  return { manifest, backup: `${manifest}.pack-original`, carried: CARRIED[basename(dir)] ?? {} };
+  return {
+    manifest,
+    backup: `${manifest}.pack-original`,
+    carried: CARRIED[basename(dir)] ?? {},
+    generated: GENERATED[basename(dir)] ?? {},
+  };
 };
 
 function restore(dir) {
-  const { manifest, backup, carried } = files(dir);
+  const { manifest, backup, carried, generated } = files(dir);
   if (existsSync(backup)) renameSync(backup, manifest);
+  for (const path of Object.keys(generated)) rmSync(join(dir, path), { force: true });
   for (const path of Object.keys(carried)) {
     rmSync(join(dir, path), { recursive: true, force: true });
     /* The folder a carried file went into (schema/) is the pack's too. */
@@ -106,7 +136,7 @@ function restore(dir) {
 
 function strip(dir) {
   restore(dir);
-  const { manifest, backup, carried } = files(dir);
+  const { manifest, backup, carried, generated } = files(dir);
   const text = readFileSync(manifest, 'utf8');
   /* A package with no `exports` (create-mistri: a bin and nothing to import) has no dist/ to be missing. */
   if (JSON.parse(text).exports !== undefined && !existsSync(join(dir, 'dist')))
@@ -117,6 +147,7 @@ function strip(dir) {
       /* A sample's local database and an App's own install are the checkout's, never the package's. */
       filter: (source) => !/(?:^|\/)node_modules(?:\/|$)|\.db(?:-wal|-shm|\.json)?$/.test(source),
     });
+  for (const [path, make] of Object.entries(generated)) writeFileSync(join(dir, path), make());
   writeFileSync(backup, text);
   writeFileSync(manifest, `${JSON.stringify(published(JSON.parse(text)), null, 2)}\n`);
 }

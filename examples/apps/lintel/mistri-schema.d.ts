@@ -6,11 +6,12 @@ import type { TypedAppConfig, TypedFeature, AppFlagValues } from '@mistriwork/mi
     A type alias, not an interface: the TypedAppConfig constraint needs
     the structural index an interface refuses to imply. */
 export type Tables = {
+  "carrier.shipments": "tracking_number" | "status" | "service" | "origin_city" | "origin_state" | "eta" | "last_scan_location" | "last_scan_at" | "delivered_at" | "signed_by" | "exception_reason";
   charge: "id" | "lease_id" | "kind" | "period" | "description" | "due_on" | "amount" | "status" | "posted_on" | "paid_on" | "waived_reason" | "version";
   lease: "id" | "unit_id" | "resident_id" | "start_on" | "end_on" | "rent" | "deposit" | "status" | "signed_on" | "notice_on" | "ended_on" | "version" | "balance" | "charged" | "paid";
   maintenance_request: "id" | "unit_id" | "resident_id" | "title" | "description" | "category" | "priority" | "status" | "assigned_to" | "entry_ok" | "reported_on" | "scheduled_on" | "completed_on" | "resolution" | "status_since" | "version" | "parts_used";
   part: "id" | "sku" | "name" | "category" | "on_hand" | "reorder_at" | "unit_cost" | "bin" | "version" | "used" | "received";
-  part_receipt: "id" | "part_id" | "quantity" | "received_on" | "vendor";
+  part_receipt: "id" | "part_id" | "quantity" | "received_on" | "vendor" | "tracking_number";
   payment: "id" | "lease_id" | "charge_id" | "received_on" | "amount" | "method" | "reference";
   property: "id" | "name" | "address" | "city" | "state" | "zip" | "kind" | "year_built" | "manager_id" | "description" | "homes" | "vacant" | "open_repairs";
   property_photo: "id" | "property_id" | "position" | "alt" | "file_name" | "content_type" | "byte_size" | "data" | "thumbnail";
@@ -31,11 +32,12 @@ export type Computed = {
 /** Each table's row as a command handler reads it, every column with its
     value's type: what `defineSource<Rows>` in @mistriwork/mistri/commands types. */
 export type Rows = {
+  "carrier.shipments": { tracking_number: string; status: string; service: string; origin_city: string | null; origin_state: string | null; eta: string | null; last_scan_location: string | null; last_scan_at: string | null; delivered_at: string | null; signed_by: string | null; exception_reason: string | null };
   charge: { id: number; lease_id: number; kind: string; period: string; description: string; due_on: string; amount: number; status: string; posted_on: string; paid_on: string | null; waived_reason: string | null; version: number };
   lease: { id: number; unit_id: number; resident_id: number; start_on: string; end_on: string; rent: number; deposit: number; status: string; signed_on: string | null; notice_on: string | null; ended_on: string | null; version: number };
   maintenance_request: { id: number; unit_id: number; resident_id: number | null; title: string; description: string | null; category: string; priority: string; status: string; assigned_to: number | null; entry_ok: boolean; reported_on: string; scheduled_on: string | null; completed_on: string | null; resolution: string | null; status_since: string | null; version: number };
   part: { id: number; sku: string; name: string; category: string; on_hand: number; reorder_at: number; unit_cost: number; bin: string | null; version: number };
-  part_receipt: { id: number; part_id: number; quantity: number; received_on: string; vendor: string };
+  part_receipt: { id: number; part_id: number; quantity: number; received_on: string; vendor: string; tracking_number: string | null };
   payment: { id: number; lease_id: number; charge_id: number | null; received_on: string; amount: number; method: string; reference: string };
   property: { id: number; name: string; address: string; city: string; state: string; zip: string; kind: string; year_built: number; manager_id: number | null; description: string | null };
   property_photo: { id: number; property_id: number; position: number; alt: string; file_name: string; content_type: string; byte_size: number; data: unknown; thumbnail: unknown };
@@ -45,6 +47,25 @@ export type Rows = {
   staff: { id: number; name: string; email: string; phone: string | null; role: string; title: string; active: boolean };
   unit: { id: number; property_id: number; number: string; code: string; floor: number; bedrooms: number; bathrooms: number | string; sqft: number; market_rent: number; status: string; listed: boolean; available_on: string | null; headline: string | null; description: string | null; version: number };
   viewing: { id: number; unit_id: number | null; reference: string; name: string; email: string; phone: string | null; preferred_on: string; message: string | null; status: string; received_at: string; version: number };
+};
+
+/** Each table's primary-key columns: what names one of its records. A table without one is absent. */
+export type Keys = {
+  "carrier.shipments": "tracking_number";
+  charge: "id";
+  lease: "id";
+  maintenance_request: "id";
+  part: "id";
+  part_receipt: "id";
+  payment: "id";
+  property: "id";
+  property_photo: "id";
+  request_note: "id";
+  request_part: "id";
+  resident: "id";
+  staff: "id";
+  unit: "id";
+  viewing: "id";
 };
 
 /** Each table's references, by the name a label path follows (`owner_id`
@@ -69,11 +90,12 @@ export type References = {
     and the other helpers that name a table check their `query`, `sort`,
     `measure` and `by` against. */
 export type Columns = {
+  "carrier.shipments": { tracking_number: 'text'; status: ["label_created", "in_transit", "out_for_delivery", "delivered", "exception"]; service: ["ground", "expedited", "freight"]; origin_city: 'text'; origin_state: 'text'; eta: 'date'; last_scan_location: 'text'; last_scan_at: 'date'; delivered_at: 'date'; signed_by: 'text'; exception_reason: 'text' };
   charge: { id: 'number'; lease_id: 'number'; kind: ["rent", "late_fee", "utility", "repair", "other"]; period: 'text'; description: 'text'; due_on: 'date'; amount: 'number'; status: ["open", "paid", "waived"]; posted_on: 'date'; paid_on: 'date'; waived_reason: 'text'; version: 'number' };
   lease: { id: 'number'; unit_id: 'number'; resident_id: 'number'; start_on: 'date'; end_on: 'date'; rent: 'number'; deposit: 'number'; status: ["draft", "active", "notice", "ended"]; signed_on: 'date'; notice_on: 'date'; ended_on: 'date'; version: 'number'; balance: 'number'; charged: 'number'; paid: 'number' };
   maintenance_request: { id: 'number'; unit_id: 'number'; resident_id: 'number'; title: 'text'; description: 'text'; category: ["plumbing", "electrical", "appliance", "hvac", "general"]; priority: ["low", "normal", "urgent"]; status: ["new", "triaged", "scheduled", "in_progress", "on_hold", "completed", "closed", "cancelled"]; assigned_to: 'number'; entry_ok: 'boolean'; reported_on: 'date'; scheduled_on: 'date'; completed_on: 'date'; resolution: 'text'; status_since: 'date'; version: 'number'; parts_used: 'number' };
   part: { id: 'number'; sku: 'text'; name: 'text'; category: ["plumbing", "electrical", "appliance", "hvac", "hardware", "paint"]; on_hand: 'number'; reorder_at: 'number'; unit_cost: 'number'; bin: 'text'; version: 'number'; used: 'number'; received: 'number' };
-  part_receipt: { id: 'number'; part_id: 'number'; quantity: 'number'; received_on: 'date'; vendor: 'text' };
+  part_receipt: { id: 'number'; part_id: 'number'; quantity: 'number'; received_on: 'date'; vendor: 'text'; tracking_number: 'text' };
   payment: { id: 'number'; lease_id: 'number'; charge_id: 'number'; received_on: 'date'; amount: 'number'; method: ["ach", "card", "check", "cash"]; reference: 'text' };
   property: { id: 'number'; name: 'text'; address: 'text'; city: 'text'; state: 'text'; zip: 'text'; kind: ["apartments", "lofts", "townhomes"]; year_built: 'number'; manager_id: 'number'; description: 'text'; homes: 'number'; vacant: 'number'; open_repairs: 'number' };
   property_photo: { id: 'number'; property_id: 'number'; position: 'number'; alt: 'text'; file_name: 'text'; content_type: 'text'; byte_size: 'number'; data: 'other'; thumbnail: 'other' };
@@ -87,6 +109,7 @@ export type Columns = {
 
 /** Each table's segments, by name: what a tab, a `table.segment` source and a bare word in a query may name. */
 export type Segments = {
+  "carrier.shipments": "coming" | "out_for_delivery" | "held" | "delivered";
   charge: "unpaid" | "overdue" | "rent" | "late_fees";
   lease: "current" | "ending_soon" | "notice_given" | "drafts" | "past";
   maintenance_request: "to_triage" | "outstanding" | "visits" | "urgent" | "mine" | "coming" | "behind" | "finished";
@@ -97,7 +120,7 @@ export type Segments = {
 
 /** The server connections this App may bind, by name: what `connection`
     and `sources.*.connection` accept. */
-export type Connections = "lintel";
+export type Connections = "carrier" | "lintel";
 
 /** The app config with this schema’s own names: use `satisfies App`
     (TS) or a JSDoc `@type` line (JS) on the default export. */
@@ -119,5 +142,5 @@ export type Flags<Manifest> = AppFlagValues<Manifest>;
 export type FlagName<Manifest> = keyof Flags<Manifest>;
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { schema(): { columns: Columns; references: References; segments: Segments } }
+  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments } }
 }

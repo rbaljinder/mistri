@@ -17,6 +17,7 @@ import { setRecordDialog } from '@mistriwork/kit/client/peekpanel.js';
 import { AppHome } from './components/AppHome.js';
 import { FormRoom } from './components/FormRoom.js';
 import { FreePage } from './components/FreePage.js';
+import { RecordTabPage } from './components/RecordTabPage.js';
 import { ImportButton } from './components/ImportButton.js';
 import { AppTargetAction } from './components/AppTargetAction.js';
 import { bulkCommands, recordCommand } from './components/sdk/commands.js';
@@ -84,6 +85,8 @@ export const appChrome = {
       /* A long menu's Directory: its own part, fetched when it is first opened, so no first page grows by it. */
       Directory: onDemand(() => import('./components/Directory.js'), 'DirectoryRoom'),
       Page: FreePage,
+      /* A free-form page that is a record's tab: drawn by the record page's tab strip (PageSections.tsx). */
+      RecordTab: RecordTabPage,
       SplitRecord: SplitRecordRoom,
       /* A record put on paper: its own part, so no first page carries the sheet. */
       Document: onDemand(() => import('./components/Document.js'), 'DocumentRoom'),

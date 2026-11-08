@@ -594,10 +594,13 @@ async function provisionAppStores(
       code = EXIT.couldNot;
       continue;
     }
+    /* An HTTP source keeps no change store: live sync watches only the databases it writes (liveStore.ts liveStoreOf). */
+    const owed = steps.filter((each) => each.connection === name && !(config.http && each.ids.every((id) => id === 'live-change')));
+    if (!owed.length) continue;
     try {
       const { url } = await resolveConnection(config.name, config.url, { secrets: true });
       const where = { url, dialect: dialectOf(url), target: storeTargetOf(url) };
-      for (const step of steps.filter((each) => each.connection === name)) {
+      for (const step of owed) {
         try {
           const done = await step.run(where);
           if (done !== undefined) write(`  ${config.name}: ${done}`);

@@ -39,12 +39,36 @@ interface CommandHandle {
   choices?(field: string): ReadonlyArray<{ value: string | number | boolean; label: string }> | undefined;
 }
 
+/* UiFormHandle (sdk/context.ts), said the same way. */
+interface FormHandle {
+  state(): Promise<{
+    label: string;
+    granted: boolean;
+    steps: ReadonlyArray<{ id: string; label: string }>;
+    draft: { saved: readonly string[]; step: string | null; expiresAt: string | null } | null;
+    pending: boolean;
+  }>;
+  open(
+    input?: Readonly<Record<string, unknown>>,
+    options?: { at?: string },
+  ): Promise<
+    | { status: 'done'; message?: string }
+    | { status: 'received'; reference: string; message?: string }
+    | { status: 'processing'; message: string }
+    | { status: 'saved'; saved: readonly string[] }
+    | { status: 'closed' }
+  >;
+  startOver(): Promise<boolean>;
+}
+
 /** What sdk/commands.tsx hands the SDK's host: a command, or a fixed action, as a component holds it, and a form over the page. */
 interface CommandHost {
   command: (ref: string, page?: string) => CommandHandle;
   /** A fixed action found on one of the resources `reads` names (any, without them). */
   action: (ref: string, reads?: readonly string[]) => CommandHandle;
   openForm: (view: string, prefill: Readonly<Record<string, string | number>>) => void;
+  /** A form view a page declares, with its draft. */
+  form: (view: string) => FormHandle;
 }
 
 interface Bridge {

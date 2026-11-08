@@ -1,6 +1,7 @@
 /**
  * The platform's blocks as a free-form page's components (`@mistriwork/mistri/page`): `<Rows>`, `<Metric>`, `<Chart>`,
- * `<Breakdown>`, `<RecordCard>`, `<Timeline>`, `<Tree>`, `<Gantt>`, `<Assistant>` and `<Tabs>`.
+ * `<Breakdown>`, `<RecordCard>`, `<Timeline>`, `<Tree>`, `<Gantt>`, `<Board>`, `<Calendar>`, `<Gallery>`, `<Split>`,
+ * `<Assistant>` and `<Tabs>`.
  *
  * Each is the component that draws the same thing on a dashboard, a record page or a list, handed the section it
  * would be handed there: no block draws anything of its own. Their props are the DSL's words for that section
@@ -15,14 +16,15 @@
  * not be drawn (an authoring mistake, which the browser suites fail on), while the rest of the page stays. What
  * throws while drawing stands behind the block's own boundary, as a dashboard section does.
  */
-import { createElement, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createElement, useContext, type ComponentProps, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { pageFor, state } from '@mistriwork/kit/client/core.js';
 import { tableNamed, type TableMeta } from '@mistriwork/engine/shared/schema.js';
-import { parsePresentation } from '../../../shared/appViews.js';
+import { parsePresentation, PRESENTATION_KEYS } from '../../../shared/appViews.js';
 import { BETTER, DASH_CHART_SHAPES } from '../../../shared/appModel.js';
 import { FIGURE_FORMATS } from '@mistriwork/engine/shared/model.js';
 import { TABLE_SIZINGS } from '@mistriwork/engine/shared/tableSizing.js';
-import type { AppGanttList, AppTreeList } from '@mistriwork/engine/shared/listPresentations.js';
+import type { AppGanttList, AppSplitListDetail, AppTreeList } from '@mistriwork/engine/shared/listPresentations.js';
+import { primaryKey } from '@mistriwork/engine/shared/schema.js';
 import { ErrorBoundary } from '@mistriwork/kit/client/components/ErrorBoundary.js';
 import { Problem } from '@mistriwork/kit/client/components/Notes.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
@@ -30,13 +32,19 @@ import { captureRecordSurfaceOwner } from '@mistriwork/kit/client/components/rec
 import type { Section } from '@mistriwork/kit/client/components/dashboardModel.js';
 import type { PageSections } from '../RecordPageBody.js';
 import type { PageEntry } from '@mistriwork/kit/client/components/pageModel.js';
-import { UiPageContext, type UiPageFrame } from './context.js';
+import { andQuery } from '@mistriwork/engine/shared/query.js';
+import { compileWhere } from '@mistriwork/engine/shared/pageWhere.js';
+import { scopedCondition, UiPageContext, UiScopeContext, type UiPageFrame, type UiScope } from './context.js';
 import { say } from '../../copy/components/components/sdk/blocks.js';
+import { useRows } from './hooks.js';
+import { Value } from './kit.js';
 
 const DashboardBlock = onDemand(() => import('../Dashboard.js'), 'DashboardBlock');
 const RecordPageBody = onDemand(() => import('../RecordPageBody.js'), 'RecordPageBody');
 const TreeList = onDemand(() => import('../TreeList.js'), 'TreeList');
 const GanttList = onDemand(() => import('../GanttList.js'), 'GanttList');
+const PresentedList = onDemand(() => import('./PresentedList.js'), 'PresentedList');
+const SplitListDetail = onDemand(() => import('../SplitListDetail.js'), 'SplitListDetail');
 const AssistantRoom = onDemand(() => import('../AssistantPanel.js'), 'AssistantRoom');
 const TabStrip = onDemand(() => import('@mistriwork/kit/client/components/PageSections.js'), 'TabStrip');
 
@@ -94,13 +102,32 @@ function resourceOf(block: string, resource: unknown, page: UiPageFrame | null):
   return table;
 }
 
-/* A block: its props judged against the page it stands in, then drawn by the platform's component behind a boundary. */
-function block<R extends object>(judge: (props: Props, page: UiPageFrame | null) => R, draw: (resolved: R) => ReactNode) {
+/* The resource a block reads: its own `from`, or the Scope's around it. */
+function fromOf(props: Props, scope: UiScope | null): unknown {
+  return props.from ?? scope?.from;
+}
+
+/* A block's condition as the one query text a section carries: the Scope's (when it reads the Scope's resource), then
+   the block's own `where` and `query`, each object compiled against the table's columns as the server compiles them. */
+function conditionOf(block: string, props: Props, scope: UiScope | null, table: TableMeta): string | undefined {
+  const asked = scopedCondition(scope, fromOf(props, scope) as string, props.where, props.query as string | undefined);
+  const compiled = compileWhere(asked.where, table);
+  if ('error' in compiled) throw new Error(say('blockWhere', { block, problem: compiled.error }));
+  const query = andQuery(asked.query, compiled.text);
+  return query || undefined;
+}
+
+/* A block: its props judged against the page and Scope it stands in, then drawn by the platform's component behind a boundary. */
+function block<R extends object>(
+  judge: (props: Props, page: UiPageFrame | null, scope: UiScope | null) => R,
+  draw: (resolved: R) => ReactNode,
+) {
   return function Block(props: Props) {
     const page = useContext(UiPageContext);
+    const scope = useContext(UiScopeContext);
     let resolved: R;
     try {
-      resolved = judge(props, page);
+      resolved = judge(props, page, scope);
     } catch (error) {
       const text = (error as Error).message;
       console.error(text);
@@ -117,10 +144,11 @@ function SectionBlock({ section }: { section: Section }) {
   return <DashboardBlock section={held} />;
 }
 
-const METRIC = ['title', 'from', 'query', 'measure', 'compare', 'better', 'format', 'unit', 'target', 'width'];
-function metricSection(props: Props, page: UiPageFrame | null): { section: Section } {
+const METRIC = ['title', 'from', 'where', 'query', 'measure', 'compare', 'better', 'format', 'unit', 'target', 'width'];
+function metricSection(props: Props, page: UiPageFrame | null, scope: UiScope | null): { section: Section } {
   takes('Metric', props, METRIC);
-  const table = resourceOf('Metric', props.from, page);
+  const table = resourceOf('Metric', fromOf(props, scope), page);
+  const query = conditionOf('Metric', props, scope, table);
   const title = needs('Metric', props, 'title');
   oneOf('Metric', props, 'better', BETTER);
   oneOf('Metric', props, 'format', FIGURE_FORMATS);
@@ -141,7 +169,8 @@ function metricSection(props: Props, page: UiPageFrame | null): { section: Secti
     section: {
       kind: 'metric',
       table: table.id,
-      ...carried(props, ['query', 'measure', 'compare', 'better', 'format', 'unit', 'width']),
+      ...(query === undefined ? {} : { query }),
+      ...carried(props, ['measure', 'compare', 'better', 'format', 'unit', 'width']),
       title,
       ...(target === undefined ? {} : { target }),
     } as Section,
@@ -154,6 +183,7 @@ const CHART = [
   'title',
   'from',
   'by',
+  'where',
   'query',
   'measure',
   'shape',
@@ -167,9 +197,10 @@ const CHART = [
   'unit',
   'width',
 ];
-function chartSection(props: Props, page: UiPageFrame | null): { section: Section } {
+function chartSection(props: Props, page: UiPageFrame | null, scope: UiScope | null): { section: Section } {
   takes('Chart', props, CHART);
-  const table = resourceOf('Chart', props.from, page);
+  const table = resourceOf('Chart', fromOf(props, scope), page);
+  const query = conditionOf('Chart', props, scope, table);
   const title = needs('Chart', props, 'title');
   needs('Chart', props, 'by');
   oneOf('Chart', props, 'shape', DASH_CHART_SHAPES);
@@ -181,16 +212,18 @@ function chartSection(props: Props, page: UiPageFrame | null): { section: Sectio
       kind: 'chart',
       table: table.id,
       shape: 'line',
-      ...carried(props, ['by', 'query', 'measure', 'shape', 'x', 'curve', 'total', 'target', 'limit', 'height', 'format', 'unit', 'width']),
+      ...(query === undefined ? {} : { query }),
+      ...carried(props, ['by', 'measure', 'shape', 'x', 'curve', 'total', 'target', 'limit', 'height', 'format', 'unit', 'width']),
       title,
     } as Section,
   };
 }
 
-const BREAKDOWN = ['title', 'from', 'by', 'query', 'measure', 'limit', 'format', 'unit', 'width'];
-function breakdownSection(props: Props, page: UiPageFrame | null): { section: Section } {
+const BREAKDOWN = ['title', 'from', 'by', 'where', 'query', 'measure', 'limit', 'format', 'unit', 'width'];
+function breakdownSection(props: Props, page: UiPageFrame | null, scope: UiScope | null): { section: Section } {
   takes('Breakdown', props, BREAKDOWN);
-  const table = resourceOf('Breakdown', props.from, page);
+  const table = resourceOf('Breakdown', fromOf(props, scope), page);
+  const query = conditionOf('Breakdown', props, scope, table);
   const title = needs('Breakdown', props, 'title');
   needs('Breakdown', props, 'by');
   oneOf('Breakdown', props, 'format', FIGURE_FORMATS);
@@ -199,16 +232,18 @@ function breakdownSection(props: Props, page: UiPageFrame | null): { section: Se
     section: {
       kind: 'breakdown',
       table: table.id,
-      ...carried(props, ['by', 'query', 'measure', 'limit', 'format', 'unit', 'width']),
+      ...(query === undefined ? {} : { query }),
+      ...carried(props, ['by', 'measure', 'limit', 'format', 'unit', 'width']),
       title,
     } as Section,
   };
 }
 
-const ROWS = ['title', 'from', 'query', 'show', 'sort', 'limit', 'sizing', 'width'];
-function rowsSection(props: Props, page: UiPageFrame | null): { section: Section } {
+const ROWS = ['title', 'from', 'where', 'query', 'show', 'sort', 'limit', 'sizing', 'width'];
+function rowsSection(props: Props, page: UiPageFrame | null, scope: UiScope | null): { section: Section } {
   takes('Rows', props, ROWS);
-  const table = resourceOf('Rows', props.from, page);
+  const table = resourceOf('Rows', fromOf(props, scope), page);
+  const query = conditionOf('Rows', props, scope, table);
   const title = needs('Rows', props, 'title');
   oneOf('Rows', props, 'sizing', TABLE_SIZINGS);
   oneOf('Rows', props, 'width', WIDTHS);
@@ -217,7 +252,8 @@ function rowsSection(props: Props, page: UiPageFrame | null): { section: Section
     section: {
       kind: 'rows',
       table: table.id,
-      ...carried(props, ['query', 'sort', 'limit', 'sizing', 'width']),
+      ...(query === undefined ? {} : { query }),
+      ...carried(props, ['sort', 'limit', 'sizing', 'width']),
       ...(show ? { show: [...show] } : {}),
       title,
     } as Section,
@@ -295,11 +331,11 @@ interface Presented {
 }
 
 function presented(blockName: string, kind: 'tree' | 'gantt', words: string[]) {
-  return (props: Props, page: UiPageFrame | null): Presented => {
-    takes(blockName, props, ['from', 'query', ...words]);
-    const table = resourceOf(blockName, props.from, page);
+  return (props: Props, page: UiPageFrame | null, scope: UiScope | null): Presented => {
+    takes(blockName, props, ['from', 'where', 'query', ...words]);
+    const table = resourceOf(blockName, fromOf(props, scope), page);
     const spec = parsePresentation({ kind, ...carried(props, words) }, `<${blockName}>`) as AppTreeList | AppGanttList;
-    return { table, spec, entry: { kind: 'table', table: table.id, query: (props.query as string | undefined) ?? '' } };
+    return { table, spec, entry: { kind: 'table', table: table.id, query: conditionOf(blockName, props, scope, table) ?? '' } };
   };
 }
 
@@ -314,6 +350,141 @@ function GanttBlock({ table, spec, entry }: Presented) {
   const words = JSON.stringify([spec, entry]);
   const held = useMemo(() => ({ spec, entry }), [words]); // eslint-disable-line react-hooks/exhaustive-deps
   return <GanttList table={table} spec={held.spec as AppGanttList} entry={held.entry} />;
+}
+
+/* A board, a calendar and a gallery are list presentations too, but they read through the list's own room (the lanes'
+   counts, the month, the cards), which PresentedList draws. Their words are the presentation's, and `where`, `query`,
+   `sort` and `limit` ask the question as a `<Rows>` asks it; a gallery is the list's cards, led by their `image`. */
+
+type PresentedAsk = ComponentProps<typeof PresentedList>;
+
+function listed(blockName: string, kind: 'board' | 'calendar' | 'cards', required: readonly string[]) {
+  const words = PRESENTATION_KEYS[kind].filter((word) => word !== 'kind');
+  return (props: Props, page: UiPageFrame | null, scope: UiScope | null): PresentedAsk => {
+    takes(blockName, props, ['from', 'where', 'query', 'sort', 'limit', 'label', ...(kind === 'board' ? ['move'] : []), ...words]);
+    /* A gallery's `image` is a column or the related file resource's `{ from, whose, sort }`: parsed as the cards' own. */
+    for (const name of required)
+      if (!(name === 'image' && props[name] !== null && typeof props[name] === 'object')) needs(blockName, props, name);
+    const table = resourceOf(blockName, fromOf(props, scope), page);
+    const spec = parsePresentation({ kind, ...carried(props, words) }, `<${blockName}>`);
+    if (props.limit !== undefined && (!Number.isInteger(props.limit) || (props.limit as number) < 1))
+      throw new Error(say('blockValue', { block: blockName, name: 'limit', value: String(props.limit), allowed: say('blockWholeNumber') }));
+    return {
+      table,
+      spec,
+      query: conditionOf(blockName, props, scope, table) ?? '',
+      ...carried(props, ['sort', 'limit']),
+      label: typeof props.label === 'string' ? props.label : blockName,
+      moves: movesOf(blockName, props, page),
+    };
+  };
+}
+
+/* What a drop may run: the commands and fixed actions the page declared, or the ones `move` names out of them. */
+function movesOf(blockName: string, props: Props, page: UiPageFrame | null): readonly string[] {
+  const declared = [...(page?.commands ?? []), ...(page?.actions ?? [])];
+  const named = props.move as readonly string[] | undefined;
+  if (named === undefined) return declared;
+  for (const name of named) {
+    if (!declared.includes(name)) {
+      throw new Error(
+        say('blockMoveUndeclared', {
+          block: blockName,
+          name,
+          label: page?.label ?? '',
+          declared: declared.length ? declared.map((each) => `"${each}"`).join(', ') : say('blockNothing'),
+        }),
+      );
+    }
+  }
+  return named;
+}
+
+function PresentedBlock(ask: PresentedAsk) {
+  return <PresentedList {...ask} />;
+}
+
+/* A split: the rows in a queue beside the picked record's own page, the pick kept in a page param when it names one. */
+interface SplitAsk {
+  table: TableMeta;
+  spec: AppSplitListDetail & { row: NonNullable<AppSplitListDetail['row']> };
+  query: string;
+  sort?: string;
+  param?: string;
+  label: string;
+  page: UiPageFrame | null;
+}
+
+function splitAsk(props: Props, page: UiPageFrame | null, scope: UiScope | null): SplitAsk {
+  takes('Split', props, ['from', 'where', 'query', 'sort', 'param', 'label', 'detail', 'limit', 'row']);
+  if (props.row === null || typeof props.row !== 'object') throw new Error(say('blockNeeds', { block: 'Split', name: 'row' }));
+  const table = resourceOf('Split', fromOf(props, scope), page);
+  const spec = parsePresentation({ kind: 'split', ...carried(props, ['detail', 'limit', 'row']) }, '<Split>') as SplitAsk['spec'];
+  if (primaryKey(table).length !== 1)
+    throw new Error(say('blockSplitKey', { resource: table.id, count: String(primaryKey(table).length) }));
+  const param = props.param as string | undefined;
+  if (param !== undefined && !page?.params.includes(param)) throw new Error(say('blockSplitParam', { param: String(param) }));
+  return {
+    table,
+    spec,
+    query: conditionOf('Split', props, scope, table) ?? '',
+    ...carried(props, ['sort', 'param']),
+    label: typeof props.label === 'string' ? props.label : 'Split',
+    page,
+  };
+}
+
+function SplitBlock({ table, spec, query, sort, param, label, page }: SplitAsk) {
+  const [local, setLocal] = useState<string | undefined>();
+  const [key] = primaryKey(table);
+  const picked = param ? page?.get(param) : local;
+  const pick = (value: string | undefined) => (param ? page?.set(param, value) : setLocal(value));
+  const { primary, lines = [] } = spec.row;
+  const rows = useRows(table.id, {
+    query: query || undefined,
+    sort,
+    limit: spec.limit ?? 20,
+    show: [primary, ...lines],
+    keys: true,
+  });
+  const list = rows.data ?? [];
+  const row = picked === undefined ? undefined : list.find((each) => String(each[key]) === picked);
+  return (
+    <SplitListDetail
+      listLabel={label}
+      detailLabel={say('blockSplitDetail')}
+      detailTitle={row ? String(row[primary] ?? '') : say('blockSplitDetail')}
+      selected={Boolean(row)}
+      onCloseDetail={() => pick(undefined)}
+      sentenceTitle
+      list={
+        <div className="queue queue-pick-list">
+          <ul className="queue-list" aria-label={label}>
+            {list.map((each) => {
+              const id = String(each[key]);
+              return (
+                <li key={id} className="queue-row">
+                  <button type="button" className="queue-pick" aria-current={id === picked ? 'true' : undefined} onClick={() => pick(id)}>
+                    <strong>
+                      <Value value={each[primary]} resource={table.id} column={primary} compact />
+                    </strong>
+                    {lines.map((line) => (
+                      <span key={line}>
+                        <Value value={each[line]} resource={table.id} column={line} compact />
+                      </span>
+                    ))}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      }
+      detail={
+        row ? <RecordBlock table={table} recordKey={{ [key]: row[key] }} {...(spec.detail ? { show: spec.detail } : {})} /> : undefined
+      }
+    />
+  );
 }
 
 interface TabSpec {
@@ -377,6 +548,10 @@ export const Timeline = block((props, page) => {
 }, RecordBlock);
 export const Tree = block(presented('Tree', 'tree', ['parent', 'primary', 'lines']), TreeBlock);
 export const Gantt = block(presented('Gantt', 'gantt', ['start', 'end', 'primary', 'by', 'progress']), GanttBlock);
+export const Board = block(listed('Board', 'board', ['by']), PresentedBlock);
+export const Calendar = block(listed('Calendar', 'calendar', ['date']), PresentedBlock);
+export const Gallery = block(listed('Gallery', 'cards', ['image']), PresentedBlock);
+export const Split = block(splitAsk, SplitBlock);
 export const Assistant = block(
   (props) => {
     takes('Assistant', props, ['conversation']);
@@ -385,3 +560,6 @@ export const Assistant = block(
   (ask: { conversation?: string }) => <AssistantRoom {...ask} />,
 );
 export const Tabs = block(tabsAsk, TabsBlock);
+/* `<Steps>` (steps.tsx): a command's form over several steps, its stepper and the intake style's sheets loaded with
+   it, so a page that draws none carries none. */
+export const Steps = onDemand(() => import('./steps.js'), 'Steps', { quiet: true });

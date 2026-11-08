@@ -5,6 +5,7 @@
  */
 import { afterEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { installShell } from '@mistriwork/kit/client/shellMode.js';
 import { useFormat } from './hooks.js';
 import { Loaded } from './kit.js';
 
@@ -27,6 +28,13 @@ test('a moment is said in a named zone with its name, and as the App clock says 
   expect(format.dateTime('2026-09-04T21:30:00Z', { timezone: 'America/Los_Angeles' })).toBe('Sep 4, 2026, 2:30 PM PDT');
   expect(format.dateTime('2026-09-04T21:30:00Z', { timezone: 'Asia/Tokyo' })).toBe('Sep 5, 2026, 6:30 AM GMT+9');
   expect(format.dateTime('2026-09-04 21:30')).toBe(format.dateTime('2026-09-04 21:30', {}));
+});
+
+test("a page reckons the App's day in the App's zone, and in the reader's own where the App names none", () => {
+  installShell({ format: () => ({ locale: 'en-US', timezone: 'America/Denver' }) });
+  expect(useFormat().timezone).toBe('America/Denver');
+  installShell({ format: () => ({ locale: 'en-US' }) });
+  expect(useFormat().timezone).toBeUndefined();
 });
 
 const query = <T,>(state: { data?: T; isError?: boolean; error?: Error | null }) => ({

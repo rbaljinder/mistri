@@ -1,0 +1,4 @@
+/* The standalone primitives' rules (Switch, Drawer, Popover, Avatar, Pagination: @mistriwork/ui's standalone.css), in
+   the base layer beside the kit's own (packages/kit/src/client/style.css says why base). A page's first paint does not
+   carry them: they arrive with the first house control a free-form page draws (pageControls.ts). */
+@import '@mistriwork/ui/standalone.css' layer(base);

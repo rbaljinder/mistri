@@ -404,8 +404,41 @@ type SeedValue = string | number | boolean | { from: string; column: string };
  */
 type Seed = { table: string; row: Record<string, SeedValue>; as?: string; byHand: string[] };
 
-function permissionsModule(loaded: LoadedApp, grants: Map<string | null, Grants>, from: 'lock' | 'report', seeds: Seed[]): string {
+/**
+ * The App's sources the config serves over HTTP: a service, which the suite's start does not run. A refused read or
+ * write of one never reaches it; an allowed one answers only where something serves it, as a stub in start.ts would.
+ */
+async function httpSourcesOf(app: LoadedApp['app'], configFile: string | undefined): Promise<Set<string>> {
+  const http = new Set<string>();
+  if (!configFile || !app.sources) return http;
+  let connections: Array<{ name?: string; kind?: string }> = [];
+  try {
+    connections = JSON.parse(await readFile(configFile, 'utf8')).connections ?? [];
+  } catch {
+    return http;
+  }
+  const served = new Set(connections.filter((each) => each.kind === 'http').map((each) => each.name));
+  for (const [name, source] of Object.entries(app.sources)) if (served.has(source.connection)) http.add(name);
+  return http;
+}
+
+function permissionsModule(
+  loaded: LoadedApp,
+  grants: Map<string | null, Grants>,
+  from: 'lock' | 'report',
+  seeds: Seed[],
+  httpSources: Set<string>,
+): string {
   const app = loaded.app;
+  /* A row that needs an HTTP source to answer is written commented out, so the first run is green and the row is
+     a line to restore once start.ts serves a stub of that source. */
+  const overHttp = (table: string | undefined) => !!table && httpSources.has(app.resources?.[table]?.source ?? '');
+  const unserved = new Set<string>();
+  const row = (text: string, table: string | undefined, allowed: boolean) => {
+    if (!allowed || !overHttp(table)) return text;
+    unserved.add(app.resources![table!]!.source!);
+    return text.replace(/^    /, '    // ');
+  };
   const policy = isRowPolicyApp(app);
   const resources = Object.keys(app.resources ?? {}).sort();
   const registry = loaded.commands?.registry ?? {};
@@ -415,16 +448,29 @@ function permissionsModule(loaded: LoadedApp, grants: Map<string | null, Grants>
   const rows: string[] = [];
   for (const [role, held] of grants) {
     const who = role === null ? 'null' : q(role);
-    for (const table of resources) rows.push(`    { role: ${who}, read: ${q(table)}, allowed: ${held.read.has(table)} },`);
+    for (const table of resources)
+      rows.push(row(`    { role: ${who}, read: ${q(table)}, allowed: ${held.read.has(table)} },`, table, held.read.has(table)));
     for (const table of resources) {
       if (policy && held.write.has(table)) continue;
       const column = held.fields.get(table)?.[0];
-      rows.push(`    { role: ${who}, write: ${q(table)}${column ? `, column: ${q(column)}` : ''}, allowed: ${held.write.has(table)} },`);
+      rows.push(
+        row(
+          `    { role: ${who}, write: ${q(table)}${column ? `, column: ${q(column)}` : ''}, allowed: ${held.write.has(table)} },`,
+          table,
+          held.write.has(table),
+        ),
+      );
     }
     for (const name of commandNames) {
       if (policy && held.commands.has(name)) continue;
       const target = commandTarget(loaded, name);
-      rows.push(`    { role: ${who}, command: ${q(name)}${target ? `, on: ${q(target)}` : ''}, allowed: ${held.commands.has(name)} },`);
+      rows.push(
+        row(
+          `    { role: ${who}, command: ${q(name)}${target ? `, on: ${q(target)}` : ''}, allowed: ${held.commands.has(name)} },`,
+          target,
+          held.commands.has(name),
+        ),
+      );
     }
   }
   const source =
@@ -462,7 +508,13 @@ import { startApp } from './start.ts';
 
 test('each role may do what it is granted, and is refused the rest', async (t) => {
   const host = await startApp(t);${arranged}
-  await assertPermissions(host, [
+  await assertPermissions(host, [${
+    unserved.size
+      ? `
+    // ${[...unserved].sort().join(', ')} ${unserved.size === 1 ? 'is an HTTP source' : 'are HTTP sources'} this suite's start does not serve: the rows that need ${unserved.size === 1 ? 'it' : 'them'} to
+    // answer are commented out. Serve a stub in start.ts, point the config's connection at it, and restore them.`
+      : ''
+  }
 ${rows.join('\n')}
   ]);
 });
@@ -684,7 +736,13 @@ export async function runTestCommand(argv: string[]): Promise<number> {
       : {
           'start.ts': start,
           'journeys.test.ts': journeysModule(loaded, grants, serving),
-          'permissions.test.ts': permissionsModule(loaded, grants, from, await seedsFor(loaded, grants, configFile)),
+          'permissions.test.ts': permissionsModule(
+            loaded,
+            grants,
+            from,
+            await seedsFor(loaded, grants, configFile),
+            await httpSourcesOf(loaded.app, configFile),
+          ),
         };
     const standing = Object.keys(files).filter((name) => existsSync(join(tests, name)));
     if (standing.length && !force)

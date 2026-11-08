@@ -61,12 +61,38 @@ A fields section once took more forms. They are refused, and the refusal prints 
 Every section takes `title`, `region` (`'aside'` for the side panel), `tab`,
 `width`, `hidden` and `when` (`'status = converted'`).
 
-A free-form page (`pages/<path>.page.tsx`) draws a read through `Loaded`, which says its loading, empty and failed states as the platform does ([`Loaded`](/docs/custom-components/), Preview):
+A free-form page (`pages/<path>.page.tsx`) imports everything from `@mistriwork/mistri/page`, which holds the whole of `@mistriwork/mistri/ui` and more. Its rows are typed from `show` and the schema: an id past 2^53 is its digits, never a rounded number.
 
 ```tsx
-const guests = page.useRows('booking', { query: 'status = booked', show: ['id', 'guest_name'] });
+// An address parameter of a kind, checked before the page sees it: 'id', 'text', 'date', 'date-range' or a list of its values.
+const page = definePage({ label: 'Check-in', reads: ['booking'], commands: ['checkIn'], params: { class: 'id' }, component: CheckIn });
+const [chosen, choose] = page.useParam('class'); // number | `${bigint}` | undefined
 
+// Controls bound to a param: the address is their state (replace, not push). `layout: 'bare'` drops the sidebar and the top bar.
+// <Choose param="region" from="region" label="name" all="All regions" />  <Search param="q" />  <DateRange param="placed" />
+const kiosk = definePage({ label: 'Wallboard', layout: 'bare', reads: ['order'], params: { placed: 'date-range' }, component: Wallboard });
+
+// A condition as an object, keyed and typed by the columns: the same condition the query language would say.
+const guests = page.useRows('booking', { where: { status: ['booked', 'waiting'], party_size: { gt: 1 } }, show: ['id', 'guest_name'] });
+
+// A read past its limit says so: `page.hasMore`, and `more()` reads on. A refresh that fails keeps the rows (`isStale`).
+// Each read is consistent on its own; two reads are two answers, never one snapshot.
+
+// A form view the page opens (`forms: ['apply']`), its draft read as the form resumes it.
+const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}` : 'Start'; apply.open(), apply.goTo(step)
+
+// A read's loading, empty and failed states, as the platform says them (Preview).
 <Loaded query={guests} empty={<Empty title="Everyone is in" />}>
-  {(rows) => <ul>{rows.map((row) => <li key={String(row.id)}>{String(row.guest_name)}</li>)}</ul>}
+  {(rows) => <ul>{rows.map((row) => <li key={row.id}>{row.guest_name}</li>)}</ul>}
 </Loaded>
+
+// One condition said once: every block inside reads under it, and a List draws a row each.
+<Scope from="booking" where={{ class_session_id: chosen }}>
+  <Metric title="Arrived" where={{ status: 'checked_in' }} measure="sum party_size" />
+  <List where={{ status: 'booked' }} show={['guest_name']} sort="guest_name" empty="Everyone is in.">
+    {(booking) => <CommandButton command="checkIn" row={booking} done={`${booking.guest_name} is checked in.`} />}
+  </List>
+</Scope>
 ```
+
+`<CommandButton command row />` and `<ActionButton action row />` are hidden where the reader is not granted them, held where the row's state does not allow them, busy while they run, named with the row's title ("Check in Morgan Lee"), and say the outcome aloud (`done` words it). `Modal`, `Drawer`, `Popover`, `Tooltip`, `TextField`, `DateField`, `Select`, `Choices`, `Switch`, `Slider`, `Pagination` and `Avatar` are the shell's own controls, dressed as it dresses them.

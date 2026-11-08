@@ -194,6 +194,36 @@ mistri compare-openapi previous-api.json current-api.json
 the version requirement is met, `1` when a needed version increase is missing,
 `2` for invalid input. It is a review aid, not a compatibility proof.
 
+## A typed client
+
+`mistri api client` writes a TypeScript client from the exported document. It
+reads the file offline, with no server, App or database, and writes one file
+with no imports: a type for every row and every command's input and result, a
+function per operation, and an `ApiError` for a refusal.
+
+```sh
+mistri api client current-api.json --out ./src/ledger-client.ts
+```
+
+```ts
+import { createClient, ApiError } from './ledger-client';
+
+const api = createClient({ baseUrl: 'https://example.com/api/apps/ledger/v1', token });
+const item = await api.readItemItem({ id: '1' });
+try {
+  await api.commandChange({ id: item.id, ifMatch: '"0"', idempotencyKey: crypto.randomUUID(), body: {} });
+} catch (error) {
+  if (error instanceof ApiError && error.problem?.code === 'stale_record') {
+    // error.status is 409; error.problem is the refusal's problem details.
+  }
+}
+```
+
+The same document gives the same bytes, so the file can be committed and
+reviewed beside `compare-openapi`'s report. Ids past 2^53 stay strings, as the
+document declares them. The client uses only `fetch`, `URL` and
+`URLSearchParams`, so it runs in a browser, Node 20+, Deno and Workers.
+
 ## Tenant Apps
 
 A tenant App's token binds one membership:

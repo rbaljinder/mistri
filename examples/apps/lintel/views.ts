@@ -188,8 +188,16 @@ export const views = {
   deliveries: listView('Parts deliveries', 'part_receipt', {
     icon: 'truck',
     roles: ['manager', 'admin', 'technician'],
-    show: ['part_id', 'quantity', 'vendor', 'received_on'],
+    show: ['part_id', 'quantity', 'vendor', 'received_on', 'tracking_number'],
     sort: 'received_on desc',
+  }),
+  // What the carrier says of the parcels on their way: the API's one status filter and its sorts, nothing it cannot answer.
+  shipments: listView('Carrier tracking', 'carrier.shipments', {
+    icon: 'truck',
+    roles: ['manager', 'admin', 'leasing', 'technician'],
+    show: ['tracking_number', 'status', 'service', 'eta', 'last_scan_location', 'last_scan_at'],
+    filters: ['status'],
+    tabs: [{ segment: 'coming', sort: 'eta' }, 'out_for_delivery', 'held', 'delivered', { label: 'All' }],
   }),
 
   /* ---------- a resident's own ---------- */

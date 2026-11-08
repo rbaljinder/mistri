@@ -43,6 +43,25 @@ export type Rows = {
   timesheet: { id: number; employee_id: number; week_start: string; week_end: string; regular_hours: number | string; overtime_hours: number | string; total_hours: number | string; status: string; submitted_on: string | null; approved_by: string | null; approved_at: string | null; version: number };
 };
 
+/** Each table's primary-key columns: what names one of its records. A table without one is absent. */
+export type Keys = {
+  benefit: "id";
+  benefit_plan: "id";
+  company: "id";
+  company_event: "id";
+  department: "id";
+  document: "id";
+  employee: "id";
+  onboarding_task: "id";
+  pay_run: "id";
+  pay_stub: "id";
+  time_entry: "id";
+  time_off: "id";
+  time_off_balance: "id";
+  time_off_policy: "id";
+  timesheet: "id";
+};
+
 /** Each table's references, by the name a label path follows (`owner_id`
     in `owner_id.name`), and the table each lands on: what lets every hop of
     a path be checked. A table that references nothing is absent. */
@@ -117,5 +136,5 @@ export type Flags<Manifest> = AppFlagValues<Manifest>;
 export type FlagName<Manifest> = keyof Flags<Manifest>;
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { schema(): { columns: Columns; references: References; segments: Segments } }
+  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments } }
 }

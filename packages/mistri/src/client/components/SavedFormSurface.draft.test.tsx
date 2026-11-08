@@ -34,6 +34,7 @@ function transport(overrides: Partial<DraftTransport> = {}): DraftTransport {
     keyFor: (step) => keys.get(step) ?? (keys.set(step, `key-${step}`), `key-${step}`),
     clearKey: (step) => void keys.delete(step),
     clearKeys: () => keys.clear(),
+    holds: (step) => keys.has(step),
     ...overrides,
   };
 }
@@ -77,6 +78,28 @@ test('Start over discards the draft in one click and begins again at the first s
   await waitFor(() => expect(screen.getByLabelText('Full name (required)')).toBeInTheDocument());
   expect(draft.discard).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole('button', { name: 'Start over' })).toBeNull();
+});
+
+test('a page that asks for a step the draft has reached opens there; one past the first not saved opens at that', async () => {
+  const draft = () => transport({ resume: async () => ({ saved: ['you'], reopen: null, values: {} }) });
+  const { unmount } = render(<SavedFormSurface form={form} appName="Club" draft={draft()} at="you" />);
+  await waitFor(() => expect(screen.getByLabelText('Full name (required)')).toBeInTheDocument());
+  unmount();
+  render(<SavedFormSurface form={form} appName="Club" draft={transport()} at="tier" />);
+  await waitFor(() => expect(screen.getByLabelText('Full name (required)')).toBeInTheDocument());
+});
+
+test('Start over is refused while a submit was sent and its result is not known, and nothing is discarded', async () => {
+  const draft = transport({
+    resume: vi.fn(async () => ({ saved: ['you'], reopen: null, values: {} })),
+    holds: (step) => step === '#review',
+  });
+  render(<SavedFormSurface form={form} appName="Club" draft={draft} />);
+  await waitFor(() => expect(screen.getByLabelText('Tier (required)')).toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: 'Start over' }));
+  await waitFor(() => expect(screen.getByText(/result is not known yet/)).toBeInTheDocument());
+  expect(draft.discard).not.toHaveBeenCalled();
+  expect(screen.getByLabelText('Tier (required)')).toBeInTheDocument();
 });
 
 async function toReview(draft: DraftTransport, onDismiss?: () => void) {
@@ -194,4 +217,44 @@ test('the transport reads the resume answer with its values, and none when the s
     values: { full_name: 'Ann' },
   });
   expect((await send({ draft: { saved: [] } }))?.values).toEqual({});
+});
+
+/* A narrow screen gives the note one compact line with Start over beside it; a desk keeps the whole sentence. */
+const widths = (phone: boolean) =>
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: phone && query === '(max-width: 600px)',
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+  }));
+const resumedDraft = () => transport({ resume: vi.fn(async () => ({ saved: ['you'], reopen: null, values: {} })) });
+
+test('on a phone the resumed draft is one compact line, and Start over is still there by its name', async () => {
+  widths(true);
+  try {
+    render(<SavedFormSurface form={form} appName="Club" draft={resumedDraft()} />);
+    await waitFor(() => expect(screen.getByLabelText('Tier (required)')).toBeInTheDocument());
+    const start = screen.getByRole('button', { name: 'Start over' });
+    const note = start.closest('p')!;
+    expect(note).toHaveClass('form-note', 'form-note-compact');
+    expect(note).toHaveTextContent('Your draft is saved. Start over');
+    expect(note).not.toHaveTextContent('Carry on');
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test('at a desk the resumed draft keeps its whole sentence', async () => {
+  widths(false);
+  try {
+    render(<SavedFormSurface form={form} appName="Club" draft={resumedDraft()} />);
+    await waitFor(() => expect(screen.getByLabelText('Tier (required)')).toBeInTheDocument());
+    const note = screen.getByRole('button', { name: 'Start over' }).closest('p')!;
+    expect(note).not.toHaveClass('form-note-compact');
+    expect(note).toHaveTextContent('Your draft is saved. Carry on where you left off, or start over.');
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

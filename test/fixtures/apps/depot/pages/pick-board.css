@@ -1,0 +1,6 @@
+/* The next lists to pick: each a row the width of the panel, its Pick at the right edge where a thumb finds it,
+   and the line under the name quieter. Tokens only; served inside @layer components and scoped. */
+.c-page-pick-board-next { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+li:first-child > .c-page-pick-board-next { border-top: 0; padding-top: 0; }
+.c-page-pick-board-next p { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.c-page-pick-board-next p span { display: block; font-size: 13px; color: var(--ink-muted); }

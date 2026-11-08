@@ -137,20 +137,29 @@ export function parseAuthGrants(
   }
   /* Shape only; whether the table and column exist, and hold an email, is the
      catalog's to say (appMe.personTable). */
-  let me: { from: string; column: string; create?: { name?: string } } | undefined;
+  let me: { from: string; column: string; by?: 'account'; create?: { name?: string } } | undefined;
   if (raw.me !== undefined) {
     const here = `${at}, "me"`;
     if (!isRecord(raw.me))
       throw new Error(
         `${here} is not an object { from, column }: the resource people are rows of, and its column holding their sign-in email.`,
       );
-    allowKeys(raw.me, ['from', 'column', 'create'], here, { table: 'is now "from": the resource people are rows of' });
+    allowKeys(raw.me, ['from', 'column', 'by', 'create'], here, { table: 'is now "from": the resource people are rows of' });
     const word = (value: unknown, key: string): string => {
       if (typeof value !== 'string' || !value.trim())
         throw new Error(`${here} needs a "${key}", like { from: 'employee', column: 'email' }.`);
       return value.trim();
     };
     me = { from: word(raw.me.from, 'from'), column: word(raw.me.column, 'column') };
+    /* What `column` holds: the sign-in email (default), or the account's id, which an email change keeps and a recycled
+       email does not inherit. A tenant App's always holds the id, so it says nothing of this. */
+    if (raw.me.by !== undefined) {
+      if (raw.me.by !== 'account')
+        throw new Error(`${here}, "by" is 'account' (column holds the account's id) or left out (column holds the sign-in email).`);
+      if (rows === 'tenant')
+        throw new Error(`${here}, "by" is for an App that is not a tenant App: a tenant App's \`column\` already holds the account's id.`);
+      me.by = 'account';
+    }
     /* A new account's row, made by the server as the account is (server
        appPersonRows.ts). Whether the table can take it is the catalog's to say
        (appMe.personTable). */

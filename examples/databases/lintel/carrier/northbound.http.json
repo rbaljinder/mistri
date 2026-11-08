@@ -1,0 +1,129 @@
+{
+  "format": "mistri.http/1",
+  "title": "Northbound Freight Tracking API",
+  "version": "1.0.0",
+  "spec": {
+    "file": "openapi.json",
+    "sha256": "c55c3b179e29edaf79c3c71f0e025e473204735d00b10f6b46c901b349fa93f4"
+  },
+  "resources": [
+    {
+      "name": "shipments",
+      "list": "/shipments",
+      "item": "/shipments/{tracking_number}",
+      "key": "tracking_number",
+      "rows": "",
+      "columns": [
+        {
+          "name": "tracking_number",
+          "type": "string",
+          "nullable": false,
+          "readOnly": true,
+          "comment": "The carrier's tracking number"
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "nullable": false,
+          "readOnly": false,
+          "allowed": [
+            "label_created",
+            "in_transit",
+            "out_for_delivery",
+            "delivered",
+            "exception"
+          ]
+        },
+        {
+          "name": "service",
+          "type": "string",
+          "nullable": false,
+          "readOnly": false,
+          "allowed": [
+            "ground",
+            "expedited",
+            "freight"
+          ]
+        },
+        {
+          "name": "origin_city",
+          "type": "string",
+          "nullable": true,
+          "readOnly": false
+        },
+        {
+          "name": "origin_state",
+          "type": "string",
+          "nullable": true,
+          "readOnly": false
+        },
+        {
+          "name": "eta",
+          "type": "date",
+          "nullable": true,
+          "readOnly": false,
+          "comment": "The carrier's estimated delivery day"
+        },
+        {
+          "name": "last_scan_location",
+          "type": "string",
+          "nullable": true,
+          "readOnly": false,
+          "comment": "Where the parcel was last scanned"
+        },
+        {
+          "name": "last_scan_at",
+          "type": "datetime",
+          "nullable": true,
+          "readOnly": false,
+          "comment": "When it was last scanned"
+        },
+        {
+          "name": "delivered_at",
+          "type": "datetime",
+          "nullable": true,
+          "readOnly": false
+        },
+        {
+          "name": "signed_by",
+          "type": "string",
+          "nullable": true,
+          "readOnly": false
+        },
+        {
+          "name": "exception_reason",
+          "type": "string",
+          "nullable": true,
+          "readOnly": false,
+          "comment": "Why it is held, when it is"
+        }
+      ],
+      "filters": {
+        "status": {
+          "param": "status",
+          "ops": [
+            "="
+          ]
+        }
+      },
+      "search": "q",
+      "sort": {
+        "param": "sort",
+        "values": [
+          "eta",
+          "-eta",
+          "-last_scan_at"
+        ]
+      },
+      "paging": {
+        "kind": "offset",
+        "offset": "offset",
+        "limit": "limit"
+      },
+      "guesses": [
+        "paging: offset — \"offset\" and \"limit\""
+      ],
+      "comment": "Shipments, soonest due first"
+    }
+  ]
+}

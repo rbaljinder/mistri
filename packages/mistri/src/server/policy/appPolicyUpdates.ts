@@ -35,7 +35,7 @@ export function createHttpPolicyUpdates(
   transitions: (schema: DatabaseSchema) => AppTransitionRules | undefined = () => undefined,
   stamps: (schema: DatabaseSchema) => AppStamps | undefined = () => undefined,
   /** Who `me` is in an action's `when`: the stamp's person, as a row where the App says (appMe). */
-  person?: (schema: DatabaseSchema, who: string | undefined, reader: WriteTransaction) => Promise<QueryPerson>,
+  person?: (schema: DatabaseSchema, who: string | undefined, reader: WriteTransaction, account?: string) => Promise<QueryPerson>,
 ) {
   // Without a default source every name is qualified, so a bare one names no source.
   const sourceFor = (table: string) => (table.includes('.') ? table.split('.')[0] : (defaultSource ?? ''));
@@ -123,7 +123,7 @@ export function createHttpPolicyUpdates(
       request,
       before.rows[0],
       undefined,
-      person && (() => person(context.schema, moment().who, tx)),
+      person && (() => person(context.schema, moment().who, tx, moment().account)),
     );
     // Judged on the words an action sets, then written as what they mean now (appStamps).
     // A granted action goes to the writer as its words, the move's own stamps too left out: its facade judges it on
@@ -131,7 +131,7 @@ export function createHttpPolicyUpdates(
     if (granted(context, request.table)) return tx.update(request);
     const moved = since ? { ...request, values: { ...request.values, ...since } } : request;
     const said = moment();
-    const people = person && (() => person(context.schema, said.who, tx).then((found) => found.person?.key ?? null));
+    const people = person && (() => person(context.schema, said.who, tx, said.account).then((found) => found.person?.key ?? null));
     return tx.update(await stampUpdate(stamps(context.schema), moved, { ...said, ...(people ? { person: people } : {}) }));
   };
   /* One row removed, as the delete route removes one: the deletion policy asked of the row before and after. */
@@ -263,7 +263,7 @@ export function createHttpPolicyUpdates(
             }
             /* The columns the file rule stamps: the server's clock and this session's person, never the body's. */
             const said = moment();
-            const people = person && (() => person(context.schema, said.who, tx).then((found) => found.person?.key ?? null));
+            const people = person && (() => person(context.schema, said.who, tx, said.account).then((found) => found.person?.key ?? null));
             request = carryServerRequest(
               request,
               await stampInsert(stamps(context.schema), request, { ...said, ...(people ? { person: people } : {}) }),

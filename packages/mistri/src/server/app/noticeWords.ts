@@ -1,16 +1,17 @@
 /**
  * A notify rule's title said from the App's messages (`title: msg('ticket.assigned')`),
  * per recipient, after the write: each one's own locale, nearest first — the
- * `ui.locale` column on their person row (found by the email they are told
- * at), their tenant's default (`branding.allow: 'locale'`), the App's own —
+ * `ui.locale` column on their person row (found by the account they were
+ * reached as where the people column holds account ids, a tenant App's or
+ * `me.by: 'account'`, else by the email they are told at), their tenant's default (`branding.allow: 'locale'`), the App's own —
  * and the tenant's own words over the App's where it keeps any. The record's
  * values are read once (adapters/inbox/inbox.ts); only the saying is per person.
  */
-import type { NoticeRule, NoticeSink } from '../../adapters/inbox/inbox.js';
+import type { NoticeRecipient, NoticeRule, NoticeSink } from '../../adapters/inbox/inbox.js';
 import type { AppDef, AppFormView } from '../../shared/appModel.js';
 import { recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import { canonicalLocale, localeColumn } from '@mistriwork/engine/shared/appLocale.js';
-import { personTable } from '../../shared/appMe.js';
+import { peopleByAccount, personTable } from '../../shared/appMe.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { appCatalogs, MessageSayer, type MessageOverrides } from './appMessages.js';
 import { checkTenantMessages, messageColumns, MOST_MESSAGE_ROWS } from './recordMessages.js';
@@ -43,6 +44,7 @@ export function noticeWords(
           table: options.physical(person.table.id),
           by: person.column,
           column: column.column,
+          byAccount: peopleByAccount(app),
         }
       : undefined;
   const spec = app.ui.messages?.source ? app.ui.messages : undefined;
@@ -66,13 +68,16 @@ export function noticeWords(
     args,
     async words(
       values: Readonly<Record<string, unknown>>,
-      recipient: string | undefined,
+      recipient: NoticeRecipient | undefined,
       tenant: string | undefined,
       sink: Pick<NoticeSink, 'rows'>,
     ) {
       let locale: string | undefined;
-      if (own && recipient) {
-        const rows = await sink.rows(own.table, { [own.by]: recipient }, [own.column], 1).catch(() => []);
+      /* The person column holds what `auth.me` finds a person by: the account where it holds ids (an address told
+         from a plain email column has no row to find there), else the email. */
+      const by = own && recipient && (own.byAccount ? recipient.account : recipient.email);
+      if (own && by) {
+        const rows = await sink.rows(own.table, { [own.by]: by }, [own.column], 1).catch(() => []);
         locale = canonicalLocale(rows[0]?.[own.column]);
       }
       if (!locale && tenant && options.tenantLocale) locale = canonicalLocale(await options.tenantLocale(tenant).catch(() => undefined));

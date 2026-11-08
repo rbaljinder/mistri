@@ -92,6 +92,7 @@ import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
 import type { AppEnvName } from '../../shared/appAuthority.js';
 import { assertAppApiContext, readApiApp } from '../api/appApiValidation.js';
 import { BUILD_MANIFEST, loadBuiltApp, type AppBuildInfo } from './appBuild.js';
+import { overlayPresentation, type AppPresentation } from './appPresentation.js';
 import { iconGlyphsIn } from './iconPayload.js';
 import { accessibleSchema } from './appAccess.js';
 import { isTenantApp, type AppRealm } from '../../shared/appModel.js';
@@ -179,9 +180,24 @@ function importFresh(
              + 'See \`mistri docs secrets\`.');
          },
        }) });
+       /* Where the first value is that cannot cross: the engine's own sentence ("() => {} could not be cloned") names
+          no key, in a definition of hundreds. */
+       const unclonable = (value, path, visited) => {
+         if (typeof value === 'function' || typeof value === 'symbol') return path + ' is ' + (typeof value === 'function' ? 'a function' : 'a symbol');
+         if (value === null || typeof value !== 'object' || visited.has(value)) return undefined;
+         visited.add(value);
+         for (const key of Object.keys(value)) {
+           const found = unclonable(value[key], Array.isArray(value) ? path + '[' + key + ']' : path + '.' + key, visited);
+           if (found) return found;
+         }
+         return undefined;
+       };
        import(workerData.href).then(
          (mod) => { try { parentPort.postMessage({ ok: true, value: mod.default, files: [...seen] }); } catch (err) {
-           parentPort.postMessage({ ok: false, message: 'the app must be plain data — ' + err.message });
+           const at = unclonable(mod.default, 'default export', new Set());
+           parentPort.postMessage({ ok: false, message: 'the app must be plain data — ' + (at
+             ? at + ', which a definition cannot hold. Write it as a literal value; logic belongs in a command, job or page module, which are code.'
+             : err.message) });
          } },
          (err) => parentPort.postMessage({ ok: false, message: String((err && err.message) || err), stack: String((err && err.stack) || '') }),
        );`,
@@ -249,6 +265,8 @@ export interface LoadedApp {
   entry?: string;
   /** The environment names mistri.json passes its definition (`apps[].env`), which a reload passes again. */
   env?: readonly AppEnvName[];
+  /** The deployment's presentation of its Apps, by App id, and the config file it was read from (appPresentation.ts): what a reload passes again. */
+  presentation?: { file?: string; apps: Readonly<Record<string, AppPresentation>> };
   /** Its commands module, when it has one: `--commands`, or commands.ts beside the manifest. Each command at the
       version its contract holds in authority.lock; the App's command names were resolved from it. */
   commands?: { file: string; registry: BusinessCommandRegistry };
@@ -290,6 +308,7 @@ export const LOADED_APP_KEYS = [
   'components',
   'entry',
   'env',
+  'presentation',
   'commands',
   'loaders',
   'challenges',
@@ -419,6 +438,8 @@ export async function loadApp(
     commands?: string | BusinessCommandRegistry;
     /** Handed what the definition is parsed from, before any msg() is said: `mistri messages extract` reads its literal captions. */
     definition?: (input: DefinitionInput) => void;
+    /** The deployment's name, logo, theme and locale for this App, by App id (appPresentation.ts): laid over the definition before it is parsed. */
+    presentation?: LoadedApp['presentation'];
   } = {},
 ): Promise<LoadedApp> {
   let path = target;
@@ -519,6 +540,16 @@ export async function loadApp(
       throw new Error(`${path}: ${(err as Error).message}`);
     }
   }
+  /* The deployment's presentation of it (appPresentation.ts), laid over the definition before anything reads it, so
+     a page's loader, a catalog's language and the sign-in screen's name are the one App; a tenant's own branding,
+     resolved per request over the parsed App, still wins. */
+  const presented = options.presentation?.apps[String((raw as { id?: unknown }).id)];
+  if (presented)
+    raw = await overlayPresentation(raw as Record<string, unknown>, presented, {
+      ...(options.presentation?.file === undefined ? {} : { file: options.presentation.file }),
+      id: String((raw as { id?: unknown }).id),
+      ...(dir ? { dir } : {}),
+    });
   /* Its free-form pages, each read from its file under stand-ins and written
      into the definition as the view it is (appPages.ts), so everything after
      this judges a page as it judges any view. */
@@ -633,6 +664,7 @@ export async function loadApp(
     ...(brand ? { brand } : {}),
     ...(options.entry !== undefined ? { entry: path } : {}),
     ...(options.env?.length ? { env: options.env } : {}),
+    ...(options.presentation ? { presentation: options.presentation } : {}),
     ...(commands ? { commands } : {}),
     ...(loaders ? { loaders } : {}),
     ...(challenges ? { challenges } : {}),
@@ -1897,6 +1929,7 @@ export async function reloadApp(host: AppHost, target: string, configPages: Page
     const loaded = await loadApp(target, {
       entry: host.app.entry,
       env: host.app.env,
+      ...(host.app.presentation ? { presentation: host.app.presentation } : {}),
       ...(host.app.commands ? { commands: host.app.commands.file || host.app.commands.registry } : {}),
     });
     /* What a running server grants, and who may sign in to it, are what it

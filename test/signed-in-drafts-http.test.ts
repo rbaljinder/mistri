@@ -462,6 +462,15 @@ test('the load check: a signed-in saved form names an owner that is a real perso
       String(signedInDraftProblems(parseTestApp(config({ ...form, abandoned: 'keep' }), 'kept'), narrow, resources.schema)),
       /starting over removes a signed-in draft.*must list "contact" in write/,
     );
+    // A table that references the draft's root and sits beyond the command's read is the policy boundary Start over
+    // would meet: refused at check, with its code and the outbox pattern, not as a 403 on the button.
+    const beyond = defineCommands({
+      ...base,
+      startOnboarding: defineCommand({ ...start, read: ['onboarding', 'person'], write: ['onboarding'] } as never),
+    } as never);
+    const outside = String(problemOf({}, beyond));
+    assert.match(outside, /"contact" has a foreign key to the draft's root "onboarding".*does not read it \[draft-referenced\]/);
+    assert.match(outside, /policy boundary.*outbox/);
   });
 });
 

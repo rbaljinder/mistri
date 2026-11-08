@@ -8,6 +8,7 @@ import {
   hasRooms,
   homeRoom,
   offeredBy,
+  recordTabs,
   resourceOf,
   viewRoom,
 } from './appRooms.js';
@@ -15,6 +16,7 @@ import type { AppAction } from '../../../../mistri/src/shared/app.js';
 import type { AppPayloadApp } from '../../../../mistri/src/shared/appPayload.js';
 import { appNavTargetKey } from '../../../../mistri/src/client/appNavTargets.js';
 import { navigationPaths } from './navigationTree.js';
+import { inWorkspace, workspacesHolding, workspacesOf } from './workspaces.js';
 
 const start: AppAction = { id: 'start', label: 'Start', set: { status: 'doing' } };
 const finish: AppAction = { id: 'finish', label: 'Finish', set: { status: 'done' }, bulk: true };
@@ -162,4 +164,54 @@ test('the home room is the one the server served, looked up and never chosen', (
   expect(homeRoom({ ...app(views, nav), home: 'welcome' })).toBeUndefined();
   expect(homeRoom(app(views, nav))).toBeUndefined();
   expect(homeRoom(app({ tasks }, []))).toBeUndefined();
+});
+
+test("a record's tab page is found by its record's table, and listed as no room: it needs a record to be drawn on", () => {
+  const tab = (key: string, table: string) =>
+    ({ label: key, sections: [], page: { reads: [table], commands: [], params: [], record: { view: 'tasks', table, tab: key } } }) as never;
+  const served = app(
+    {
+      tasks: { table: 'task', label: 'Tasks' },
+      walk: { label: 'Walk', sections: [], page: { reads: ['task'], commands: [], params: [] } } as never,
+      'tasks-history': tab('history', 'task'),
+      'tasks-map': tab('map', 'task'),
+      'notes-thread': tab('thread', 'note'),
+    },
+    [{ view: 'tasks', label: 'Tasks' }],
+  );
+  expect(recordTabs(served, 'task').map((room) => [room.id, room.page.record.tab])).toEqual([
+    ['tasks-history', 'history'],
+    ['tasks-map', 'map'],
+  ]);
+  expect(recordTabs(served, 'note').map((room) => room.id)).toEqual(['notes-thread']);
+  expect(recordTabs(served, 'lead')).toEqual([]);
+  // The top-level page is a room as any dashboard is; the tabs are not.
+  expect(appRooms(served).map((room) => room.id)).toEqual(['tasks', 'walk']);
+});
+
+test("a free-form page in a workspace is that workspace's entry, as a list is", () => {
+  const served = app(
+    {
+      tasks: { table: 'task', label: 'Tasks' },
+      leads: { table: 'task', label: 'Leads' },
+      forecast: { label: 'Forecast', sections: [], page: { reads: ['task'], commands: [], params: [] } } as never,
+    },
+    [
+      { group: 'desk', label: 'Desk', workspace: true, children: [{ view: 'tasks', label: 'Tasks' }] },
+      {
+        group: 'crm',
+        label: 'CRM',
+        workspace: true,
+        children: [
+          { view: 'forecast', label: 'Forecast' },
+          { view: 'leads', label: 'Leads' },
+        ],
+      },
+    ] as never,
+  );
+  const menu = workspacesOf(appMenu(served))!;
+  expect(menu.spaces.map((space) => space.id)).toEqual(['desk', 'crm']);
+  expect(workspacesHolding(menu, 'forecast')).toEqual(['crm']);
+  expect(navigationPaths(inWorkspace(menu, 'crm')).map((path) => path.entry.id)).toEqual(['forecast', 'leads']);
+  expect(navigationPaths(inWorkspace(menu, 'desk')).map((path) => path.entry.id)).toEqual(['tasks']);
 });

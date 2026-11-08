@@ -106,7 +106,11 @@ export function overviewSections(
   const people = app.auth?.me ? tableNamed(schema, app.auth.me.from) : undefined;
   const mine = people ? main.columns.find((column) => column.references?.table === people.id)?.name : undefined;
   /* Through the person's email where this reader may read it: the rows and who the reader is in one statement. */
-  const email = people && app.auth?.me?.column && people.columns.some((column) => column.name === app.auth!.me!.column);
+  const email =
+    people &&
+    app.auth?.me?.by !== 'account' &&
+    app.auth?.me?.column &&
+    people.columns.some((column) => column.name === app.auth!.me!.column);
   const theirs = mine && (email ? `${mine}.${app.auth!.me!.column} = me` : `${mine} = me`);
   if (theirs)
     sections.push(

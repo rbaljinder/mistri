@@ -23,6 +23,7 @@ import {
   columnKind,
   CONNECTION_HIDDEN,
   isFlagColumn,
+  primaryKey,
   type ColumnMeta,
   type DatabaseSchema,
   type Dialect,
@@ -122,6 +123,7 @@ export function typesForSchema(
   hidden: Readonly<Record<string, readonly string[]>> = {},
 ): string {
   const tables = [...schema.tables].sort((a, b) => a.id.localeCompare(b.id));
+  const keyed = tables.filter((t) => primaryKey(t).length);
   const names = [...new Set(connections ?? [])].sort((a, b) => a.localeCompare(b));
   const cut = (table: string, column: string) => hidden[table]?.includes(column) ?? false;
   /* A hop through a hidden column is one no label path can take: the served catalog drops that edge. */
@@ -209,6 +211,22 @@ export function typesForSchema(
     ...tables.map((t) => `  ${key(t.id)}: { ${t.columns.map((c) => `${key(c.name)}: ${valueType(c, schema.dialect)}`).join('; ')} };`),
     '};',
     '',
+    /* A record's key, by its columns: what a page that is a record's tab reads
+       with `page.useRecordKey`, typed `{ id: number }` rather than any object. */
+    ...(keyed.length
+      ? [
+          "/** Each table's primary-key columns: what names one of its records. A table without one is absent. */",
+          'export type Keys = {',
+          ...keyed.map(
+            (t) =>
+              `  ${key(t.id)}: ${primaryKey(t)
+                .map((name) => JSON.stringify(name))
+                .join(' | ')};`,
+          ),
+          '};',
+          '',
+        ]
+      : []),
     "/** Each table's references, by the name a label path follows (`owner_id`",
     '    in `owner_id.name`), and the table each lands on: what lets every hop of',
     '    a path be checked. A table that references nothing is absent. */',
@@ -284,7 +302,7 @@ export function typesForSchema(
        two overloads where two properties would clash, and the checker then
        stands down rather than read one App by the other's columns. */
     "declare module '@mistriwork/mistri/app' {",
-    `  interface Register { schema(): { columns: Columns; references: References${
+    `  interface Register { schema(): { columns: Columns; references: References; rows: Rows${keyed.length ? '; keys: Keys' : ''}${
       tables.some((t) => t.segments && Object.keys(t.segments).length) ? '; segments: Segments' : ''
     } } }`,
     '}',
@@ -321,6 +339,8 @@ export function commandTypes(
   pages: readonly string[] = [],
   /** The ids of the App's fixed actions (a machine's verbs, `action(label, { set })`), which a page's `actions` names. */
   actions: readonly string[] = [],
+  /** The pages among them that are a record's tab (pages/<view>/[id]/<tab>.page.tsx): opened on a record, never `home`. */
+  tabs: readonly string[] = [],
 ): string {
   const union = (names: readonly string[]) => (names.length ? names.map((name) => JSON.stringify(name)).join(' | ') : 'never');
   const registered = [
@@ -358,7 +378,7 @@ export function commandTypes(
     ...(pages.length
       ? [
           "/** Each free-form page by its path (pages/<path>.page.tsx): what the App's `home` may name beside its views. */",
-          `export type PagePaths = ${union([...pages].sort())};`,
+          `export type PagePaths = ${union(pages.filter((page) => !tabs.includes(page)).sort())};`,
           '',
         ]
       : []),

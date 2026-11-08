@@ -50,7 +50,7 @@ Commit them with the project.
 After upgrading mistri, run `npx @mistriwork/mistri agent init` again. An untouched
 copy is updated; one the project has edited is left alone, the command names
 the files that differ and exits 1, and `--force` replaces them. `mistri check`
-warns (`skill-stale`, never a failure) when a copy was installed by an older mistri.
+fails (`skill-stale`) when a copy was installed by an older mistri.
 
 ## 2. Hand it the brief
 

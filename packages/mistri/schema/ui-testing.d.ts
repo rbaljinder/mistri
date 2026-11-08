@@ -30,14 +30,14 @@ export declare function fixtures<R = Record<string, UiRow>>(
 export type Navigation =
   | { kind: 'record'; resource: string; key: Readonly<Record<string, unknown>>; mode: OpenMode }
   | { kind: 'view'; view: string; tab?: string }
-  | { kind: 'form'; view: string; prefill: Readonly<Record<string, string | number>> }
+  | { kind: 'form'; view: string; prefill: Readonly<Record<string, string | number>>; at?: string }
   | { kind: 'composer'; text: string; mode?: 'reply' | 'note' };
 
 /** A command a component ran or opened, recorded instead of sent. */
 export interface CommandCall { command: string; mode: 'run' | 'open'; key: Readonly<Record<string, unknown>>; input?: Readonly<Record<string, unknown>> }
 export type CommandOutcome =
   | { status: 'applied'; message?: string; output?: unknown }
-  | { status: 'refused'; message: string }
+  | { status: 'refused'; message: string; fields?: Readonly<Record<string, string>> }
   | { status: 'closed' }
   | { status: 'unknown'; message: string; check(options?: { challenge?: string }): Promise<CommandOutcome> };
 
@@ -45,7 +45,8 @@ export interface RenderOptions {
   /** Evaluated values only; these fixtures never grant access or record exposure. */
   flags?: Readonly<Record<string, FlagValue>>;
   data?: Fixtures;
-  /** The page's record, for a section that declares `record`: its declared fields are read from here. */
+  /** The page's record, for a section that declares `record`: its declared fields are read from here. A record's tab
+   * page (`pages/<view>/[id]/<tab>.page.tsx`) is drawn on it, and `useRecordKey` answers it. */
   record?: UiRow;
   /** Props over the declaration's own. */
   props?: Record<string, unknown>;
@@ -63,7 +64,18 @@ export interface RenderOptions {
   viewer?: { signedIn: boolean; account?: string };
   /** The commands the reader is served, and a page's fixed actions (`useAction`), by id: its label, whether it is available on a record (true unless said), what a run answers
       (applied unless said). A command not named here is not granted, and none is to a signed-out reader. */
-  commands?: Record<string, { label?: string; available?: (key: Readonly<Record<string, unknown>>) => boolean; outcome?: CommandOutcome }>;
+  commands?: Record<
+    string,
+    {
+      label?: string;
+      available?: (key: Readonly<Record<string, unknown>>) => boolean;
+      outcome?: CommandOutcome;
+      /** Its inputs, by name, as the command declares them, for `useField`: a kind and the rules it is judged by. */
+      input?: Record<string, FixtureInput>;
+      /** What the server's check of a step answers (`<Steps>`): each named input's problem, by path; none unless said. */
+      check?: (input: Readonly<Record<string, unknown>>, names: readonly string[]) => Readonly<Record<string, string>> | undefined;
+    }
+  >;
   /** A free-form page's address parameters as the reader arrived with them. */
   address?: Record<string, string>;
   /** What a free-form page's loader answers: the page is drawn with it as `data`. */
@@ -77,9 +89,59 @@ export interface RenderOptions {
   files?: Record<string, string>;
   /** The App's catalog `useMessage` says, in the language under test: `{ 'help.title': 'Help center' }`. A key left out is said as itself. */
   messages?: Record<string, string>;
+  /** Where what a page announces (`<CommandButton>`'s outcome, a refusal) is collected, for a test to read; it is also
+      drawn in a `status` region, so `findByText` reads it as a person hears it. */
+  announced?: { text: string; tone: 'ok' | 'error' }[];
+  /** The resources the reader may not read, with the status the server refuses each with (401 signed out, 403 not this role):
+      a read of one fails as the page's does, so the refused state is what is drawn. */
+  refused?: Record<string, 401 | 403>;
+  /** The form views the reader is served, for `page.useForm`, by view id. A form not named here is not granted, and none
+      is to a signed-out reader. */
+  forms?: Record<string, FixtureForm>;
 }
 
-type Drawn = RenderResult & { navigations: Navigation[]; commands: CommandCall[] };
+/** One input of a fixture's command, as the command declares it: what `useField` binds to and judges by. */
+export interface FixtureInput {
+  type: 'text' | 'textarea' | 'number' | 'money' | 'boolean' | 'date' | 'reference';
+  label?: string;
+  required?: boolean;
+  min?: number;
+  max?: number;
+  maxLength?: number;
+  /** A money input kept in minor units, in `currency` (the App's unless said). */
+  minor?: boolean;
+  currency?: string;
+  /** A reference's resource, whose fixture rows are its choices (`useOptions`), by its key (`id`) and label (`name`) columns.
+      A resource in `refused` takes the reader's access to them away. */
+  from?: string;
+  by?: string;
+  labelColumn?: string;
+}
+/** A form view as a page's test serves it: its draft as the server would resume it, and how an opening ends (closed unless said). */
+export interface FixtureForm {
+  label?: string;
+  steps?: ReadonlyArray<{ id: string; label: string }>;
+  draft?: { saved: readonly string[]; step: string | null; expiresAt: string | null } | null;
+  /** A submit was sent and its result is not known: `startOver()` refuses. */
+  pending?: boolean;
+  outcome?:
+    | { status: 'done'; message?: string }
+    | { status: 'received'; reference: string; message?: string }
+    | { status: 'processing'; message: string }
+    | { status: 'saved'; saved: readonly string[] }
+    | { status: 'closed' };
+}
+
+/** What changed on the server between two reads: a resource's rows now, and the whole refused set now (a resource left out is readable again). */
+export interface FixtureChange { data?: Record<string, readonly UiRow[]>; refused?: Record<string, 401 | 403> }
+
+type Drawn = RenderResult & {
+  navigations: Navigation[];
+  commands: CommandCall[];
+  /** The server changed under the drawn page and every read was asked again, as a live update asks; resolves once they answered.
+      A read that fails now keeps its last good rows (`isStale`, `refreshError`); one never answered shows its refused state. */
+  refresh(change?: FixtureChange): Promise<void>;
+};
 
 /** Draw a custom section's component: its declared reads answered from `data`, its record from `record`, its props with their defaults. */
 export declare function renderSection<P>(component: ComponentType<P>, declaration: object, options?: RenderOptions): Drawn;

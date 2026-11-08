@@ -7,7 +7,8 @@ keywords: [sources, connection, several databases, multiple databases, schema, p
 Bind an App to one database or several, by connection name, and name each table so its source is plain.
 
 ```ts title="examples/apps/lintel/app.ts"
-  sources: { lintel: { connection: 'lintel' } },
+  // The records are Lintel's own; the carrier's tracking API is a second source, read-only, whose tables are named `carrier.…`.
+  sources: { lintel: { connection: 'lintel', default: true }, carrier: { connection: 'carrier' } },
   resources,
 ```
 

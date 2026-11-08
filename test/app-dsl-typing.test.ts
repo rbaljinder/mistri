@@ -83,6 +83,10 @@ function compile(source: string, hidden: Record<string, string[]> = {}, files: R
         '--moduleResolution',
         'nodenext',
         '--allowImportingTsExtensions',
+        // The page entry re-exports @mistriwork/ui's controls, which a checkout resolves to their TSX source; an
+        // installed package answers from its built declarations, and a page file is TSX anyway.
+        '--jsx',
+        'react-jsx',
         '--target',
         'es2022',
         '--pretty',
@@ -424,7 +428,10 @@ test('a list tab names a segment, with its own order in `sort`', () => {
 test('a segment misspelled — as a source, an option, a tab or a word in a query — is a type error where it is written', () => {
   const types = typesForSchema(SEGMENTED);
   assert.match(types, /export type Segments = \{\n {2}ticket: "open" \| "urgent";\n\};/);
-  assert.match(types, /interface Register \{ schema\(\): \{ columns: Columns; references: References; segments: Segments \} \}/);
+  assert.match(
+    types,
+    /interface Register \{ schema\(\): \{ columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments \} \}/,
+  );
   const compiled = compile(
     [
       'import type { Views } from "./mistri-schema.d.ts";',
@@ -507,6 +514,41 @@ test("a page's blocks take their section's words, each column typed to the block
   const typo = compile(page("'subjet'"));
   assert.notEqual(typo.status, 0, 'a column the resource does not have is a type error');
   assert.match(typo.stdout, /subjet/);
+});
+
+test("a page's controls are held to its params and reads, and layout is 'bare' or nothing", () => {
+  const compiled = compile(`
+    import type {} from './mistri-schema.js';
+    import { Choose, definePage } from '@mistriwork/mistri/page';
+    const page = definePage({ label: 'Board', reads: ['ticket', 'person'], layout: 'bare',
+      params: { owner: 'id', view: ['list', 'board'], q: 'text', period: 'date-range' },
+      component: () => null });
+    export default page;
+    // What passes: a param of the right kind, a read of the page, columns of that read.
+    page.Choose({ param: 'owner', from: 'person', label: 'name', sort: 'name desc', where: { name: { startsWith: 'A' } } });
+    page.Choose({ param: 'owner', from: 'ticket', value: 'id', label: (row) => row.subject });
+    page.Choose({ param: 'view', all: 'Any view' });
+    page.Search({ param: 'q', placeholder: 'Find' });
+    page.DateRange({ param: 'period' });
+    Choose({ param: 'anything', from: 'ticket', label: 'subject' });
+    // @ts-expect-error The param is one the page declared.
+    page.Choose({ param: 'nope', from: 'ticket' });
+    // @ts-expect-error The read is one the page declared.
+    page.Choose({ param: 'owner', from: 'reply' });
+    // @ts-expect-error The label is a column of the read.
+    page.Choose({ param: 'owner', from: 'ticket', label: 'subjet' });
+    // @ts-expect-error The order is a column of the read.
+    page.Choose({ param: 'owner', from: 'ticket', sort: 'subjet' });
+    // @ts-expect-error Without a read, the options are the param's words: a param of kind id has none.
+    page.Choose({ param: 'owner' });
+    // @ts-expect-error A search box is kept in a text param.
+    page.Search({ param: 'owner' });
+    // @ts-expect-error A date range is kept in a param of kind date-range.
+    page.DateRange({ param: 'q' });
+    // @ts-expect-error A free-form page's one layout is bare.
+    definePage({ label: 'Wide', reads: ['ticket'], layout: 'wide', component: () => null });
+  `);
+  assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
 });
 
 test("a page's label and description take msg(), as a view's caption does", () => {

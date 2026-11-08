@@ -32,7 +32,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { RUNTIME_TABLE_PREFIXES } from '../../shared/runtimeTables.js';
-import { dialectOf, openMigrationDb, quoteIdent, sqlitePath } from './database.js';
+import { dialectOf, openMigrationDb, quoteIdent, sqlitePath, type Dialect } from './database.js';
 import { readMigrations } from './files.js';
 import { migrateUp, type MigrateTarget } from './runner.js';
 import { envName, product, productEnv } from '../product.js';
@@ -194,6 +194,45 @@ async function scratch(url: string, devUrl?: string): Promise<Scratch> {
     );
   }
   return { built: at(names[0]), dev: at(names[1]), drop };
+}
+
+/**
+ * schema.sql built into one scratch database and handed back as a URL: what `mistri check --schema-file` reads in
+ * place of the App's database. It is run as the file is, by the same executor a migration is (`schema.sql` is the
+ * first migration, firstMigration), so the catalog the describer reads is the one `migrate up` would make, down to
+ * how a column's type is spelled. Atlas was tried for this and set aside: it writes the schema back in its own
+ * spelling (`BOOLEAN` as `boolean`), so the scratch described differently from the database the same file built.
+ * SQLite needs no server; PostgreSQL needs the one `devUrl` names, with CREATEDB, as `migrate diff` does. The caller
+ * drops it.
+ */
+export async function schemaDatabase(options: {
+  readonly schemaFile: string;
+  readonly devUrl?: string;
+  readonly schema?: string;
+}): Promise<{ readonly url: string; readonly dialect: Dialect; readonly drop: () => Promise<void> }> {
+  if (!existsSync(options.schemaFile))
+    throw new Error(`there is no ${options.schemaFile}: write the schema you want there, or name it with --schema-file.`);
+  const dialect = options.devUrl !== undefined ? dialectOf(options.devUrl) : 'sqlite';
+  const text = readFileSync(options.schemaFile, 'utf8');
+  const db = await scratch(options.devUrl ?? 'scratch.db', options.devUrl);
+  try {
+    const schema = dialect === 'postgres' ? (options.schema ?? 'public') : undefined;
+    const built = await openMigrationDb(db.built, schema !== undefined ? [schema] : [], true);
+    try {
+      if (schema !== undefined && schema !== 'public') {
+        await built.run(`CREATE SCHEMA IF NOT EXISTS ${quoteIdent('postgres', schema)}`);
+        await built.script(`SET search_path TO ${quoteIdent('postgres', schema)};\n${text}`);
+      } else await built.script(dialect === 'sqlite' ? sqliteDesired(text) : text);
+    } catch (error) {
+      throw new Error(`${options.schemaFile} did not run on a scratch ${dialect} database: ${(error as Error).message}`);
+    } finally {
+      await built.close();
+    }
+    return { url: db.built, dialect, drop: db.drop };
+  } catch (error) {
+    await db.drop();
+    throw error;
+  }
 }
 
 interface DesiredOptions {

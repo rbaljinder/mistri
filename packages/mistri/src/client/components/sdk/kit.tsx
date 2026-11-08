@@ -245,7 +245,7 @@ export function Icon({ name, label, size }: { name: AppIconName; label?: string;
  * chosen one filled in the look's tab dress — a filter's All / Needs attention,
  * a range's 7 d / 30 d. A choice may carry a count, a pill beside its word.
  * One target: arrows move the choice, as a radio group's do. Past four or five
- * choices it is a Dropdown's job.
+ * choices it is a Dropdown's job. A value no option carries leaves every one unchosen (the first stays the tab stop).
  */
 export function Segmented<T extends string>({
   label,
@@ -287,7 +287,7 @@ export function Segmented<T extends string>({
           key={option.value}
           type="button"
           role="radio"
-          aria-checked={index === at}
+          aria-checked={option.value === value}
           tabIndex={index === at ? 0 : -1}
           aria-label={option.name}
           ref={(node) => {

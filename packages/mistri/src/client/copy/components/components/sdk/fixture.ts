@@ -4,5 +4,7 @@ import { defineMessages } from '@mistriwork/kit/client/messages.js';
 export const say = defineMessages({
   signInToDo: 'Sign in to do that.',
   notGranted: 'Not granted.',
+  actionDone: '{label} done.',
   flagFixtureUnavailable: 'Evaluated flag fixture unavailable.',
+  fixtureRefused: 'The reader may not read {resource}.',
 });

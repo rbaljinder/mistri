@@ -480,6 +480,24 @@ const MAX_PAGE_PARAMS = 8;
 const PARAM = /^[a-z][a-z0-9_]{0,31}$/;
 const LOADER = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 
+/* A parameter's kind is how the page reads its text back (sdk/page.tsx): the address always holds text. */
+const PARAM_KINDS: readonly unknown[] = ['id', 'text', 'date', 'date-range'];
+const paramKind = (kind: unknown): boolean =>
+  PARAM_KINDS.includes(kind) ||
+  (Array.isArray(kind) &&
+    kind.length > 0 &&
+    kind.every((value) => typeof value === 'string' && value !== '') &&
+    new Set(kind).size === kind.length);
+
+/* `params: ['list']` is the names alone, each read as text; `params: { list: 'id' }` gives each a kind. The server keeps
+   the names: the address and the loader carry text either way, and the page reads it as its kind. */
+function pageParamNames(raw: unknown): unknown[] | undefined {
+  if (raw === undefined) return [];
+  if (Array.isArray(raw)) return raw;
+  if (!isRecord(raw)) return undefined;
+  return Object.values(raw).every(paramKind) ? Object.keys(raw) : undefined;
+}
+
 const words = (raw: unknown): raw is string[] => Array.isArray(raw) && raw.every((name) => typeof name === 'string' && name.trim() !== '');
 
 /**
@@ -504,15 +522,15 @@ export function parsePage(raw: Record<string, unknown>, at: string): PageDecl {
     throw new Error(`[page-commands] ${at} has "commands" that are not a list of command names: commands: ['pickList'].`);
   const actions = raw.actions === undefined ? [] : raw.actions;
   if (!words(actions)) throw new Error(`[page-action] ${at} has "actions" that are not a list of action ids: actions: ['startVisit'].`);
-  const params = raw.params === undefined ? [] : raw.params;
+  const params = pageParamNames(raw.params);
   if (
-    !Array.isArray(params) ||
+    !params ||
     params.length > MAX_PAGE_PARAMS ||
     params.some((name) => typeof name !== 'string' || !PARAM.test(name)) ||
     params.includes('period')
   ) {
     throw new Error(
-      `[page-params] ${at} has "params" that are not up to ${MAX_PAGE_PARAMS} lowercase words, like params: ['list']; "period" is a dashboard's.`,
+      `[page-params] ${at} has "params" that are not up to ${MAX_PAGE_PARAMS} lowercase words, each 'id', 'text', 'date', 'date-range' or a list of its values, like params: { list: 'id' }; "period" is a dashboard's.`,
     );
   }
   if (raw.loader !== undefined && (typeof raw.loader !== 'string' || !LOADER.test(raw.loader))) {

@@ -6,7 +6,9 @@
 
 The App framework: navigation, record pages, forms, dashboards, commands,
 policies, jobs and workflows declared in a typed DSL over a database you
-already have — SQLite or PostgreSQL — and served from it.
+already have — SQLite or PostgreSQL — and served from it. Any screen is a
+TypeScript page beside your declarations: a React component that reads only
+what it declares and writes only through a command.
 
 ```bash
 npm create mistri@next                          # a starter App, in a directory of its own
@@ -28,7 +30,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.22; the
+These App features ship in mistri 1.0.0-rc.23; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -203,6 +205,8 @@ mistri tenant clone|import|clock
                               a tenant App's sandboxes: clone, import plan, dev clock (below)
 mistri docs [topic]           the App reference, offline (below)
 mistri agent init             put the agent skill where coding agents read it (below)
+mistri upgrade [--app <dir>] [--check]
+                              rewrite an App's source to the names this mistri reads (below)
 mistri mail-dns [<config>]    the SPF, DKIM and DMARC records tenant mail is sent under
   -d, --db <target>           the App's database: a SQLite path or a URL (or set DATABASE_URL,
                               used when no config names connections)
@@ -430,6 +434,13 @@ mistri compare-openapi <previous.json> <current.json>
                               Requires no-follow/nonblocking file-open support;
                               Windows comparison is not supported yet.
 
+mistri api client <spec.json> --out <client.ts>
+                              a typed fetch client from an exported App API
+                              document: one TypeScript file with no imports,
+                              the same bytes for the same document; no server
+                              or database. Exit 1: no --out, or a file that is
+                              not an App API document.
+
 mistri check [--app <dir>] [--app-entry <file>]
                 [<db> | --db <target> | --config <path>]
                 [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>]
@@ -437,6 +448,7 @@ mistri check [--app <dir>] [--app-entry <file>]
                 [--design] [--fix] [--defaults] [--fail-on-design-warning] [--warnings]
                 [--no-index-check] [--no-query-check]
                 [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]]
+                [--schema-file [<schema.sql>] [--dev-url <url>]]
                 [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
                               the authoring loop in one command: regenerate the
                               App's mistri-schema.d.ts when the database
@@ -463,6 +475,9 @@ mistri check [--app <dir>] [--app-entry <file>]
                               … TEMPLATE); --pending-on <url> applies them
                               to the scratch database that URL names instead
                               (a branch of the real one; no CREATEDB needed);
+                              --schema-file [<schema.sql>] checks with no database
+                              to reach: the file is run on a scratch database
+                              (SQLite; PostgreSQL on --dev-url's server);
                               --deploy judges whether the App
                               survives a replaced container (no SQLite
                               source or auth.store, BETTER_AUTH_SECRET set;
@@ -854,6 +869,15 @@ mistri agent init [--dir <project>] [--tool claude|codex|cursor|copilot|all] [--
       --dir <project>         with agent init: where (default: here)
       --tool <name>           with agent init: which agents; default all
       --force                 with agent init: replace a changed copy
+
+mistri upgrade [--app <dir>] [--check]
+                              rewrite the App's source (default: here; not node_modules, dist
+                              or generated .d.ts): tablewalk/app and the other entry points of
+                              the old package become @mistriwork/mistri/*, and keys the
+                              CHANGELOG renamed are renamed where they mean one thing; what it
+                              cannot place with certainty it prints as file:line (exit 1)
+      --check                 with upgrade: write nothing; exit 1 when a run would change a
+                              file or refuse something, for CI
 
 mistri dev [--app <dir>]        serve the App as --app <dir> --dev does, with a
                               throwaway session secret and an account per

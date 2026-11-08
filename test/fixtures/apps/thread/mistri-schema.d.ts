@@ -29,6 +29,18 @@ export type Rows = {
   project: { id: number; name: string; status: string; lead_id: number | null; target_on: string | null; summary: string | null; health: number | null };
 };
 
+/** Each table's primary-key columns: what names one of its records. A table without one is absent. */
+export type Keys = {
+  attachment: "id";
+  comment: "id";
+  cycle: "id";
+  issue: "id";
+  issue_label: "id";
+  label: "id";
+  member: "id";
+  project: "id";
+};
+
 /** Each table's references, by the name a label path follows (`owner_id`
     in `owner_id.name`), and the table each lands on: what lets every hop of
     a path be checked. A table that references nothing is absent. */
@@ -80,5 +92,5 @@ export type Flags<Manifest> = AppFlagValues<Manifest>;
 export type FlagName<Manifest> = keyof Flags<Manifest>;
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { schema(): { columns: Columns; references: References; segments: Segments } }
+  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments } }
 }

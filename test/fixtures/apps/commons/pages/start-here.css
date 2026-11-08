@@ -1,0 +1,43 @@
+/* Commons' front door: a page of its own, the width of a reading column at a desk and the phone's at a phone, with its
+   own bar (a bare page has none), a two-part opening — the words and the photograph — and the forum's lists below.
+   Rules, not boxes, as the rest of Commons. Tokens only; served inside @layer components and scoped. */
+.c-page-start-here { box-sizing: border-box; max-width: 1120px; margin: 0 auto; padding: 0 20px 56px; min-width: 0; }
+
+.c-page-start-here-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 16px 0; margin-bottom: 32px; border-bottom: 1px solid var(--line);
+}
+.c-page-start-here-name { display: flex; align-items: center; gap: 8px; margin: 0; font: var(--heading-weight, 600) var(--text-lg, 18px)/1.2 var(--heading-font, var(--sans)); color: var(--ink); }
+.c-page-start-here-bar a { color: var(--link); }
+
+.c-page-start-here-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: center; margin-bottom: 48px; }
+.c-page-start-here-intro { display: grid; gap: 16px; min-width: 0; }
+.c-page-start-here-intro h2 { margin: 0; font: var(--heading-weight, 600) 40px/1.1 var(--heading-font, var(--sans)); letter-spacing: var(--track-display, -0.01em); color: var(--ink); text-wrap: balance; }
+.c-page-start-here-intro p { margin: 0; max-width: 34em; font-size: var(--text-md, 16px); line-height: 1.55; color: var(--ink-muted); }
+.c-page-start-here-hero img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--line); }
+
+.c-page-start-here-join {
+  display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border: 1px solid var(--line-control);
+  border-radius: var(--radius); color: var(--ink); text-decoration: none;
+}
+.c-page-start-here-join:hover { border-color: var(--ink); }
+
+/* A thread, a board: a whole-width target with its name over a quieter line, ruled from the next. */
+.c-page-start-here-thread, .c-page-start-here-board {
+  display: grid; gap: 4px; width: 100%; min-width: 0; padding: 10px 0; text-align: left;
+  border: 0; border-top: 1px solid var(--line); background: none; color: var(--ink); font: inherit; cursor: pointer;
+}
+li:first-child > .c-page-start-here-thread { border-top: 0; padding-top: 0; }
+.c-page-start-here-thread strong, .c-page-start-here-board strong { overflow-wrap: anywhere; }
+.c-page-start-here-thread:hover strong, .c-page-start-here-board:hover strong { color: var(--link); }
+.c-page-start-here-thread span, .c-page-start-here-board small { font-size: var(--text-sm, 13px); color: var(--ink-muted); }
+.c-page-start-here-board { align-content: start; padding: 12px 0 4px; border-top: 2px solid var(--ink); }
+.c-page-start-here-board span { color: var(--ink-muted); line-height: 1.45; }
+.c-page-start-here-thread:focus-visible, .c-page-start-here-board:focus-visible { outline: var(--focus-width, 2px) solid var(--focus); outline-offset: 2px; }
+
+@media (max-width: 720px) {
+  .c-page-start-here { padding: 0 16px 40px; }
+  .c-page-start-here-bar { margin-bottom: 20px; }
+  .c-page-start-here-hero { grid-template-columns: minmax(0, 1fr); gap: 20px; margin-bottom: 32px; }
+  .c-page-start-here-intro h2 { font-size: 30px; }
+}

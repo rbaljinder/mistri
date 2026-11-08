@@ -130,16 +130,16 @@ Shapes that many keys take, listed once here: a message that may be translated, 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `&lt;component>.props` | object | Stable |  |
-| `&lt;component>.props.*[type=boolean].default` | boolean | Stable |  |
+| `&lt;component>.props.*[type=boolean].default` | boolean | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `&lt;component>.props.*[type=boolean].type` |  | Stable |  One of `boolean`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `&lt;component>.props.*[type=choice].default` | string | Stable |  |
+| `&lt;component>.props.*[type=choice].default` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `&lt;component>.props.*[type=choice].options` | array | Stable |  |
 | `&lt;component>.props.*[type=choice].type` |  | Stable |  One of `choice`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `&lt;component>.props.*[type=number].default` | number | Stable |  |
+| `&lt;component>.props.*[type=number].default` | number | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `&lt;component>.props.*[type=number].max` | number | Stable |  |
 | `&lt;component>.props.*[type=number].min` | number | Stable |  |
 | `&lt;component>.props.*[type=number].type` |  | Stable |  One of `number`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `&lt;component>.props.*[type=text].default` | string | Stable |  |
+| `&lt;component>.props.*[type=text].default` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `&lt;component>.props.*[type=text].max` | integer | Stable |  |
 | `&lt;component>.props.*[type=text].type` |  | Stable |  One of `text`. Used in `examples/apps/lintel/blueprint.ts`. |
 

@@ -7,7 +7,7 @@
    of the shell; a signed-in form sits in the content pane beside the menu. */
 .form-page { width: min(40rem, 100%); margin: 0 auto; padding: var(--space-7) 20px 56px; display: grid; gap: var(--space-4h); }
 .form-page .eyebrow { margin: 0; font: 500 var(--text-xs) var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); }
-.form-page h1 { margin: 0; font: var(--heading-weight, 600) calc(24px * var(--type-k)) var(--heading-font, var(--sans)); letter-spacing: var(--track-display, -0.015em); }
+.form-page h1, .form-page-done > h2 { margin: 0; font: var(--heading-weight, 600) calc(24px * var(--type-k)) var(--heading-font, var(--sans)); letter-spacing: var(--track-display, -0.015em); }
 .form-page-description { margin: 0 0 var(--space-4); color: var(--ink-muted); font-size: var(--text-md); line-height: 1.5; max-width: 70rem; }
 .form-page-steps { padding-top: var(--space-2h); }
 .form-page .command-field input[type="checkbox"] { width: auto; }
@@ -26,6 +26,10 @@
 .form-page-done-home a { color: var(--accent-ink, var(--accent)); text-underline-offset: 3px; }
 /* A public form's review, drawn from the page's memory, and a saved form's note before its first step. */
 .form-note { margin: 0; padding: var(--space-3h) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink-muted); font-size: var(--text-base); line-height: 1.5; }
+/* A saved draft's note on a phone (SavedFormSurface.tsx): one line, the sentence clipped before Start over is pushed off. */
+.form-note-compact { display: flex; align-items: center; gap: var(--space-3); padding-block: var(--space-2h); }
+.form-note-compact > .form-note-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.form-note-compact > .btn { flex: none; }
 /* The review, the stepper's and the intake's alike (MultiStepForm.css keeps only the intake's larger heading): each
    step a section, more room between sections than between rows; its name with Change attached to it, a quiet link in
    the link ink, so the eye that finds the step finds the way back to it and the Tab order runs name, Change, answers.
@@ -96,7 +100,7 @@ body.public-form-mode .brand-name { min-width: 0; overflow: hidden; text-overflo
 body.public-form-mode .public-sign-in { margin-left: auto; flex: none; }
 @media (max-width: 600px) {
   .form-page { padding: 20px var(--space-4h) 40px; }
-  .form-page h1 { font-size: calc(21px * var(--type-k)); }
+  .form-page h1, .form-page-done > h2 { font-size: calc(21px * var(--type-k)); }
 }
 /* An intake form: its progress bar and the step's title are the page, so there is no eyebrow or form heading. The
    brand row keeps the App's mark and its name, as every public page's does: with the mark alone a reader on a

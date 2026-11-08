@@ -204,16 +204,18 @@ system made for work people do all day.
 
 ## Hooks: yours to change
 
-When a default is not enough, each layer has a hook, and what you write is
-still checked against the database. Ladle, a cooking school, draws its door
-list as a page of its own:
+Any screen is a TypeScript page beside your declarations: a React component
+that reads only what it declares and writes only through a command. When a
+default is not enough, each layer has a hook, and what you write is still
+checked against the database. Ladle, a cooking school, draws its door list as
+a page of its own:
 
 ```tsx title="examples/apps/ladle/pages/check-in.page.tsx"
 const page = definePage({
   label: 'Check-in',
   reads: ['class_session', 'booking'],
   commands: ['checkIn'],
-  params: ['class'],
+  params: { class: 'id' },
   component: CheckIn,
 });
 ```

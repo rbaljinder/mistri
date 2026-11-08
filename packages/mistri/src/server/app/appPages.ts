@@ -21,7 +21,7 @@
  */
 import { Worker } from 'node:worker_threads';
 import { readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { isRecord, VIEW_KEY } from '@mistriwork/engine/shared/model.js';
 import { COMPONENT_ID, type ComponentDecl } from '@mistriwork/engine/shared/appComponents.js';
 import { isMessageRef } from '@mistriwork/engine/shared/appMessages.js';
@@ -32,6 +32,8 @@ import { exportNames } from './componentSdk.js';
 
 /** A page's file name: its path, then the suffix. */
 const PAGE_FILE = /^(.+)\.page\.(tsx|jsx)$/;
+/** A record's tab: `accounts/[id]/map.page.tsx`, the list view its records open from, then the tab's word. */
+const RECORD_TAB_FILE = /^([^/]+)\/\[id\]\/([^/]+)\.page\.(tsx|jsx)$/;
 /** The keys `definePage` takes, beside `component`. */
 const PAGE_KEYS = [
   'label',
@@ -43,10 +45,12 @@ const PAGE_KEYS = [
   'actions',
   'params',
   'loader',
+  'forms',
   'public',
   'description',
   'favorite',
   'head',
+  'layout',
 ];
 const NAV_KEYS = ['group', 'position'];
 /* Spellings renamed before 1.0, refused with the word that replaced them. */
@@ -66,12 +70,18 @@ interface PageFile {
   module: string;
   /** What `definePage` was given, but its component. */
   fields: Record<string, unknown>;
+  /** A record's tab: the list view whose records it is under, and its word after a record's address. */
+  record?: { view: string; tab: string };
 }
 
-/** The page files an App directory holds, by name; none without a pages/ folder. */
+/** The page files an App directory holds, by their path under pages/ (`accounts/[id]/map.page.tsx` for a record's tab);
+    none without a pages/ folder. A folder holds no page but a record's tab, which readPageFiles holds to its place. */
 export async function pageFiles(dir: string): Promise<string[]> {
   try {
-    return (await readdir(join(dir, 'pages'))).filter((file) => PAGE_FILE.test(file)).sort();
+    return (await readdir(join(dir, 'pages'), { recursive: true }))
+      .map((file) => file.split(sep).join('/'))
+      .filter((file) => PAGE_FILE.test(file.slice(file.lastIndexOf('/') + 1)) && !file.split('/').includes('node_modules'))
+      .sort();
   } catch {
     return [];
   }
@@ -87,7 +97,14 @@ export async function readPageFiles(dir: string, files: readonly string[]): Prom
   const read: PageFile[] = [];
   for (const file of files) {
     const at = `pages/${file}`;
-    const key = PAGE_FILE.exec(file)![1];
+    const tab = RECORD_TAB_FILE.exec(file);
+    if (file.includes('/') && !tab)
+      throw new Error(
+        `[page-file] ${at} is misplaced: a page is pages/<path>.page.tsx, and a record's tab pages/<list view>/[id]/<tab>.page.tsx.`,
+      );
+    const record = tab ? { view: tab[1], tab: tab[2] } : undefined;
+    /* A tab's view key joins its list's and its word: one of the App's views, gated and recorded as any. */
+    const key = record ? `${record.view}-${record.tab}` : PAGE_FILE.exec(file)![1];
     const module = `./pages/${file}`;
     const decl: ComponentDecl = { id: pageComponentId(key), module, kind: 'page' };
     const code = await compilePageModule(dir, decl);
@@ -99,7 +116,7 @@ export async function readPageFiles(dir: string, files: readonly string[]): Prom
     } catch (error) {
       throw new Error(`[page-file] ${at}: ${(error as Error).message}`);
     }
-    read.push({ key, module, fields: checkedFields(fields, key, at) });
+    read.push({ key, module, fields: checkedFields(fields, key, at, Boolean(record)), ...(record ? { record } : {}) });
   }
   return read;
 }
@@ -107,18 +124,21 @@ export async function readPageFiles(dir: string, files: readonly string[]): Prom
 /** The component a page is drawn by: its path, prefixed so it never meets a component the App names. */
 const pageComponentId = (key: string) => `page-${key}`;
 
-function checkedFields(raw: unknown, key: string, at: string): Record<string, unknown> {
+function checkedFields(raw: unknown, key: string, at: string, tab = false): Record<string, unknown> {
   if (!isRecord(raw)) throw new Error(`[page-file] ${at} has no default export made by definePage: export default definePage({ … }).`);
   for (const name of Object.keys(raw)) {
     if (Object.hasOwn(RENAMED, name)) throw new Error(`[page-file] ${at}: definePage has "${name}", which is now ${RENAMED[name]}.`);
     /* An archetype arranges a record page's sections; a free-form page has none to arrange. */
-    if (name === 'layout')
+    if (name === 'layout' && raw.layout !== 'bare')
       throw new Error(
-        `[page-layout] ${at}: definePage has "layout", which is a record page's (page(…, { layout })): a free-form page lays itself out in its component. Remove it.`,
+        `[page-layout] ${at}: definePage has "layout", which is a record page's (page(…, { layout })): a free-form page lays itself out in its component. Remove it. The one word a free-form page takes is 'bare' (no sidebar and no top bar).`,
       );
     if (!PAGE_KEYS.includes(name))
       throw new Error(`[page-file] ${at}: definePage has no "${name}". It takes ${PAGE_KEYS.join(', ')} and component.`);
   }
+  /* A tab is drawn on its record's page: it has no menu entry, and its place is its file's. */
+  if (tab && raw.nav !== undefined)
+    throw new Error(`[page-nav] ${at} is a record's tab and has "nav": a tab is reached from its record's page, so it takes none.`);
   if (!VIEW_KEY.test(key) || !COMPONENT_ID.test(pageComponentId(key)) || RESERVED_PATHS.includes(key)) {
     throw new Error(
       `[page-path] ${at}: "${key}" is not a page's path — lowercase letters, digits and hyphens, at most 43 characters, and not one the server answers itself (${RESERVED_PATHS.join(', ')}).`,
@@ -163,15 +183,38 @@ export function placePages(raw: Record<string, unknown>, pages: readonly PageFil
         `[page-nav] ${where}: nav names "${page.key}", a free-form page. A page places itself: definePage({ nav: { group: '…' } }).`,
       );
     }
-    const placing = isRecord(fields.nav) ? fields.nav : fields.nav === false ? undefined : {};
+    const placing = page.record ? undefined : isRecord(fields.nav) ? fields.nav : fields.nav === false ? undefined : {};
     views[page.key] = {
       kind: 'page',
       label: fields.label,
       component: { id: pageComponentId(page.key), module: page.module, kind: 'page' },
-      ...pick(fields, ['icon', 'description', 'favorite', 'head', 'reads', 'commands', 'actions', 'params', 'loader', 'roles', 'public']),
+      ...(page.record ? { record: page.record } : {}),
+      ...pick(fields, [
+        'icon',
+        'description',
+        'favorite',
+        'head',
+        'layout',
+        'reads',
+        'commands',
+        'actions',
+        'params',
+        'loader',
+        'forms',
+        'roles',
+        'public',
+      ]),
     };
     if (!placing) continue;
     if (!nav) throw new Error(`[page-nav] ${at} asks for a place in nav, and the App has no nav. Say nav: false, or give the App a nav.`);
+    /* A menu split into workspaces has nothing at its top but them (appNav.ts): a page stands in one, by its id. */
+    const spaces = nav.flatMap((node) => (isRecord(node) && node.workspace === true ? [String(node.id)] : []));
+    if (placing.group === undefined && spaces.length) {
+      throw new Error(
+        `[page-nav] ${at}: the App's nav is split into workspaces, and a page stands in one: ` +
+          `definePage({ nav: { group: '${spaces[0]}' } }), or nav: false. The workspaces: ${spaces.join(', ')}.`,
+      );
+    }
     const siblings = placing.group === undefined ? nav : groupChildren(nav, placing.group as string);
     if (!siblings) throw new Error(`[page-nav] ${at}: nav has no group "${String(placing.group)}".`);
     const position = typeof placing.position === 'number' ? Math.min(placing.position, siblings.length) : siblings.length;
@@ -321,9 +364,22 @@ function walk(node: unknown, visit: (node: AstNode) => void): void {
 }
 
 /** The hooks whose first argument names a resource the page must read, or a command it must run. */
-const READ_HOOKS = new Set(['useRows', 'useRecord', 'useBreakdown', 'useFile']);
+const READ_HOOKS = new Set(['useRows', 'useRecord', 'useRecordKey', 'useBreakdown', 'useFile']);
 const COMMAND_HOOKS = new Set(['useCommand']);
 const ACTION_HOOKS = new Set(['useAction']);
+/* The props by which a block names what it reads or runs: a block's, a `<Scope>`'s and a `<List>`'s `from` (a block
+   that names none reads its Scope's, held where the Scope names it), `<CommandForm>`'s and `<CommandButton>`'s
+   `command`, `<ActionButton>`'s `action` (`<Empty action>` is a button, not a name). `resource` is the word blocks
+   took before `from`; they refuse it, and it is held here too so an author hears the resource as well as the rename —
+   except on `<Value>`, where it names whose display rules dress a value and reads nothing. */
+const BLOCK_NAMES: Readonly<
+  Record<string, { what: 'reads' | 'commands' | 'actions'; on?: ReadonlySet<string>; off?: ReadonlySet<string> }>
+> = {
+  from: { what: 'reads' },
+  resource: { what: 'reads', off: new Set(['Value']) },
+  command: { what: 'commands', on: new Set(['CommandForm', 'CommandButton', 'Steps']) },
+  action: { what: 'actions', on: new Set(['ActionButton']) },
+};
 const SDK = new Set(['@mistriwork/mistri/ui', '@mistriwork/mistri/page', '@mistriwork/mistri/ui', '@mistriwork/mistri/page']);
 
 /** What a page's sources ask of its manifest, by file and line: what it does not declare, and what check cannot read. */
@@ -334,9 +390,10 @@ interface PageScan {
 
 /**
  * One source file of a page's graph, held to the page's manifest: every
- * literal resource a read hook or a block's `resource` names is one of its
- * reads, every literal command `useCommand` or `<CommandForm command>` names
- * one of its commands. A name written as an expression is said as a
+ * literal resource a read hook or a block's, Scope's or List's `from` names
+ * is one of its reads, every literal command `useCommand`, `<CommandForm
+ * command>`, `<CommandButton command>` or `<Steps command>` names one of its commands, and every
+ * action `useAction` or `<ActionButton action>` names one of its actions. A name written as an expression is said as a
  * warning, with its line: check cannot read it, and the browser still
  * refuses it if it is not declared. Types catch most of this; this is for
  * a widget the page draws and JavaScript without types.
@@ -411,11 +468,12 @@ export function scanPageSource(
       if (!block) return;
       for (const attribute of (node.attributes as AstNode[]) ?? []) {
         if (attribute.type !== 'JSXAttribute') continue;
-        const prop = (attribute.name as AstNode).name;
-        if (prop !== 'resource' && prop !== 'command') continue;
+        const prop = (attribute.name as AstNode).name as string;
+        const named = Object.hasOwn(BLOCK_NAMES, prop) ? BLOCK_NAMES[prop] : undefined;
+        if (!named || (named.on && !named.on.has(block)) || named.off?.has(block)) continue;
         const value = attribute.value as AstNode | undefined;
         const given = value?.type === 'JSXExpressionContainer' ? (value.expression as AstNode) : value;
-        hold(prop === 'resource' ? 'reads' : 'commands', `<${block} ${prop}>`, given, attribute.start);
+        hold(named.what, `<${block} ${prop}>`, given, attribute.start);
       }
     }
   });

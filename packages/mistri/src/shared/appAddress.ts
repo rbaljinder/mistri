@@ -90,6 +90,8 @@ interface ViewLike {
   presentation?: { kind?: string };
   sections?: unknown;
   command?: unknown;
+  /** A free-form page's manifest: one with a `record` is a record's tab, said under it. */
+  page?: { record?: unknown };
 }
 
 export interface AddressBookInput {
@@ -289,6 +291,9 @@ export function appAddressBook(input: AddressBookInput): AddressBook {
   for (const key of input.order) {
     const view = input.views[key];
     if (!view) continue;
+    /* A record's tab page is said under its record (`/compass/accounts/13/pipeline`, appPages.ts), as a
+       document is: no route of its own. */
+    if (view.page?.record) continue;
     const target: RouteTarget | undefined = isDashboard(view)
       ? { kind: 'dashboard', view: key, ...parametersOf(view) }
       : isForm(view)

@@ -7,7 +7,7 @@
   "packages/kit/src/client/components/ListEmpty.css": 1,
   "packages/kit/src/client/components/ListFilterBar.css": 2,
   "packages/kit/src/client/components/LiveNotices.css": 2,
-  "packages/kit/src/client/components/QueueList.css": 3,
+  "packages/kit/src/client/components/QueueList.css": 2,
   "packages/kit/src/client/components/RichTextEditor.css": 1,
   "packages/kit/src/client/composer.css": 9,
   "packages/kit/src/client/features.css": 44,

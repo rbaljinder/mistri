@@ -18,6 +18,11 @@
  *
  *   segments: { my_groups: 'assignment_group_id in (me.group_member.group_id)' },  tabs: ['my_groups']
  *
+ * `by: 'account'` binds the row to the account's id instead of its email, in any App: an email change keeps the
+ * person, and an email another account later takes does not reach the old person's row.
+ *
+ *   auth: { me: { from: 'employee', column: 'account_id', by: 'account', create: {} } }
+ *
  * In a tenant App (`auth.rows: 'tenant'`) a person is a row per membership:
  * `auth.me.column` holds the account's id, and `me` is the row of the tenant
  * the request's lease is in — never another tenant's, and nobody where that
@@ -173,6 +178,11 @@ export function checkMe(app: AppDef, pages: readonly PageDef[], where: string): 
   }
 }
 
+/** Whether `auth.me.column` holds the account's id rather than its email: always in a tenant App, and where `me.by` says so. */
+export function peopleByAccount(app: Pick<AppDef, 'auth'>): boolean {
+  return isTenantApp(app) || app.auth?.me?.by === 'account';
+}
+
 /**
  * `auth.me` against one catalog: the table people are rows of, with one key and a text column holding the
  * email — or, in a tenant App, the account's id, which is what a membership names (one account, a row in each
@@ -186,7 +196,7 @@ export function personTable(app: AppDef, schema: DatabaseSchema): { table?: Tabl
   const column = table.columns.find((c) => c.name === me.column);
   if (!column) return { problem: `auth.me names "${me.column}", which is not a column of ${table.name}.` };
   if (columnKind(column.type) !== 'text') {
-    const held = isTenantApp(app) ? "account's id" : "account's email";
+    const held = peopleByAccount(app) ? "account's id" : "account's email";
     return {
       problem: `auth.me: "${me.column}" is ${column.type || 'untyped'}, and it is compared with the signed-in ${held}, which only a text column holds.`,
     };
@@ -195,7 +205,7 @@ export function personTable(app: AppDef, schema: DatabaseSchema): { table?: Tabl
     return { problem: `auth.me: ${table.name} needs a one-column primary key, which is what a reference to a person holds.` };
   }
   if (me.create) {
-    const problem = personCreateProblem(table, column.name, me.create);
+    const problem = personCreateProblem(table, column.name, me.create, peopleByAccount(app));
     if (problem) return { problem };
   }
   return { table, column: column.name };
@@ -208,10 +218,10 @@ export function personTable(app: AppDef, schema: DatabaseSchema): { table?: Tabl
  * lookupPerson); the name column must hold text; and every other column the
  * row needs must fill itself — a default, or a key the database assigns.
  */
-function personCreateProblem(table: TableMeta, email: string, create: { name?: string }): string | undefined {
+function personCreateProblem(table: TableMeta, email: string, create: { name?: string }, byAccount: boolean): string | undefined {
   if (!table.unique?.includes(email) && !table.columns.some((c) => c.name === email && c.primaryKey && primaryKey(table).length === 1)) {
     return (
-      `auth.me.create makes one ${table.name} row per account, found again by "${email}", which nothing makes unique. ` +
+      `auth.me.create makes one ${table.name} row per account, found again by "${email}"${byAccount ? " (the account's id)" : ''}, which nothing makes unique. ` +
       `Add a unique constraint on ${table.name}(${email}).`
     );
   }

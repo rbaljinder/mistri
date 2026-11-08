@@ -32,7 +32,7 @@ indexes every key). The sample Apps the references and guides link, Tick, Lintel
       `compose-list`, `compose-dashboard`, `compose-record-page`, `compose-overview`, `compose-form`); a form's rows,
       steps and the intake style are in [recipes.md](references/recipes.md#forms-a-record-form-in-rows-an-application-as-an-intake);
    2. edit, then `npx @mistriwork/mistri check --app . --brief` until it exits 0: one line per problem,
-      `code file:line message — fix: …`; an unfamiliar code is `npx @mistriwork/mistri explain <code>`;
+      `code file:line message — fix: …`; an unfamiliar code is `npx @mistriwork/mistri explain <code>` (no database? `check --schema-file`);
    3. `npx @mistriwork/mistri check --app . --design --brief`, and fix every warning (`--fix` deletes `restated` ones;
       `--defaults` prints what the platform infers, which the App need not say);
    4. `npx @mistriwork/mistri shot --app . <route> --text` to verify what the page shows (headings, columns, row count, actions, empty states, errors);
@@ -73,7 +73,7 @@ indexes every key). The sample Apps the references and guides link, Tick, Lintel
   Never reseed, migrate or write to an existing database without asking.
 - Prefer a built-in block; a custom component only for a drawing no block makes, after the gap is shown. Spell every key as the docs do; never guess one.
 - A whole screen no view draws is a free-form page: `pages/<path>.page.tsx`, `definePage` from `@mistriwork/mistri/page`,
-  declaring its `reads`, `commands`, `params` and `loader`; it writes only through those commands, never `fetch`.
+  declaring its `reads`, `commands`, `params` and `loader`; a condition is a `where` object, a row's verb a `<CommandButton command row />`; it writes only through those commands, never `fetch`.
 - A branded public site, a flow the person's own React owns, or a route that is not a command takes the general
   path, settled in step 2: [choices.md](references/choices.md#the-general-path), with Ladle as its sample.
 

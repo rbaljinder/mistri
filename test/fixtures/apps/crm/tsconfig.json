@@ -6,13 +6,15 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "lib": ["ES2023"],
+    "lib": ["ES2023", "DOM"],
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "noUnusedParameters": true,
+    "jsx": "react-jsx"
   },
   "include": [
-    "**/*.ts"
+    "**/*.ts",
+    "pages/**/*.page.tsx"
   ]
 }

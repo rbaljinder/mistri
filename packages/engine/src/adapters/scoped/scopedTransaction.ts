@@ -367,6 +367,13 @@ export function createScopedTransaction(
   triggers?: ScopedTriggers,
   /** The principal's rows, for the `via` conditions a write's parents are checked against (viaChecks). */
   scope?: RowScope,
+  /**
+   * How many rows of any table reference a row, counted on the writer itself over every row (referencesStatement).
+   * Where there is no bound, a delete that asks for it (DeleteRequest.unreferenced) is allowed only when this counts none: nothing is then
+   * left for a cascade to reach, so no row the principal cannot see is touched, and the row is refused while any
+   * reference remains.
+   */
+  referencesOf?: ScopeBound['references'],
 ): WriteTransaction {
   /* The rows this transaction inserted inside the principal's rows, by table, and the reads that count them in
      (ScopeOwnRows). Rebuilt on each such insert; until the first, the reads are the ones resolved for the request. */
@@ -820,7 +827,11 @@ export function createScopedTransaction(
       const table = target(request.table, { kind: 'delete' });
       const children = catalog.schema.foreignKeys.filter((fk) => fk.to.table === table.id);
       const hidden = children.find((fk) => !bound?.whole.has(fk.from.table));
-      if (hidden)
+      /* With a bound, the tenant's own rule stands: every referencing table whole. Without one, a delete that asks
+         for it (request.unreferenced) is not refused for a table not wholly visible: the references are counted on
+         the writer below, over every row, and a row anything still references is refused, never cascaded. */
+      const counted = bound?.references ?? (request.unreferenced ? referencesOf : undefined);
+      if (hidden && (bound || !counted))
         return refuse(`A scoped command may not delete from "${table.id}": "${hidden.from.table}" references it, and a hidden row might.`);
       const row = await stored(table, request.key);
       /* Locked first (stored), so no reference can be made to it while these
@@ -833,7 +844,7 @@ export function createScopedTransaction(
         if (!values.every(comparable))
           return refuse(`"${table.id}".${fk.to.columns.join('+')} holds a value that is not a text or a number.`);
         const key: Filter = { groups: [Object.entries(request.key).map(([column, value]) => ({ column, op: '=', value }))] };
-        if ((await bound?.references(fk, key)) !== 0)
+        if ((await counted?.(fk, key)) !== 0)
           return refuse(
             `A scoped command may not delete the "${table.id}" row ${keyText(request.key)}: "${fk.from.table}" still references it.`,
           );

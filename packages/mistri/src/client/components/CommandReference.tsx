@@ -398,13 +398,38 @@ interface Choice {
   declared?: boolean;
 }
 export async function commandChoices(field: ReferenceField, text: string, source: ChoiceSource): Promise<Choice[]> {
+  return (await readChoices(field, text, source, 20, 0)).choices;
+}
+
+/**
+ * A page of them for a component's own picker (`useOptions`): the same read, past the ones already shown, with one
+ * row past the page asked and dropped, so whether there are more is the server's answer.
+ */
+export async function commandChoicePage(
+  field: ReferenceField,
+  text: string,
+  source: ChoiceSource,
+  offset: number,
+  limit: number,
+): Promise<{ choices: Choice[]; more: boolean }> {
+  const read = await readChoices(field, text, source, limit + 1, offset);
+  return { choices: read.choices.slice(0, limit), more: read.rows > limit };
+}
+
+async function readChoices(
+  field: ReferenceField,
+  text: string,
+  source: ChoiceSource,
+  limit: number,
+  offset: number,
+): Promise<{ choices: Choice[]; rows: number }> {
   // Authored filters constrain eligibility; this picker owns projection, ordering and page size.
   const condition = andQuery(splitClauseTail(field.query ?? '').head, text ? `${field.labelColumn} contains ${JSON.stringify(text)}` : '');
   const detail = referenceDetail(field, source);
   const q = [field.from, condition, shown(field, detail), `sort ${field.labelColumn}`].filter(Boolean).join(' ');
-  const data = await run(source, { q, limit: 20, offset: 0, count: 'none' });
+  const data = await run(source, { q, limit, offset, count: 'none' });
   if (data.errors?.length || !Array.isArray(data.rows)) throw new Error(say('choicesCouldNotBeLoaded'));
-  return data.rows.slice(0, 20).flatMap((row: Record<string, unknown>) => {
+  const choices = data.rows.slice(0, limit).flatMap((row: Record<string, unknown>) => {
     const value = row[field.by];
     return typeof value === 'string' || (typeof value === 'number' && Number.isSafeInteger(value))
       ? [
@@ -416,4 +441,5 @@ export async function commandChoices(field: ReferenceField, text: string, source
         ]
       : [];
   });
+  return { choices, rows: data.rows.length };
 }

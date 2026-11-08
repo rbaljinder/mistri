@@ -63,6 +63,8 @@ const need = {
     'schema/app.schema.json',
     'schema/page.schema.json',
     'skills/mistri/SKILL.md',
+    /* Written by the pack (scripts/pack-manifest.mjs): the release candidates, not the repository's 700 KB. */
+    'CHANGELOG.md',
   ],
   'create-mistri': [...common, 'bin.js'],
   '@mistriwork/cloudflare': [...common, 'dist/index.js', 'dist/index.d.ts'],

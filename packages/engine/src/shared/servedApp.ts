@@ -627,7 +627,17 @@ export interface ServedDashboardView {
   icon?: AppIconName;
   sections: readonly object[];
   favorite?: true;
+  /** A free-form page's manifest; one with a `record` is a tab of that table's record page, never a room of its own. */
+  page?: { record?: ServedRecordTab };
   error?: string;
+}
+
+/** A free-form page placed as a record's tab (`pages/<list view>/[id]/<tab>.page.tsx`): the list view whose records it
+    is a tab of, that view's table by id, and the word the record's address says it by. */
+export interface ServedRecordTab {
+  view: string;
+  table: string;
+  tab: string;
 }
 
 /** A signed-in form as the shared client reads it: its words and the command it runs (appModel.ts AppFormView). */

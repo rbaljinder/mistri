@@ -6,7 +6,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { UiPageContext, type UiPageFrame } from './context.js';
+import { UiPageContext, UiScopeContext, type UiPageFrame } from './context.js';
 
 const mocks = vi.hoisted(() => ({
   pageFor: vi.fn(async (table: string) => (table === 'note' ? null : `page-${table}`)),
@@ -52,6 +52,25 @@ vi.mock('../RecordPageBody.js', () => ({
 }));
 vi.mock('../TreeList.js', () => ({ TreeList: ({ spec, entry }: Record<string, unknown>) => handed('tree')({ spec, entry }) }));
 vi.mock('../GanttList.js', () => ({ GanttList: ({ spec, entry }: Record<string, unknown>) => handed('gantt')({ spec, entry }) }));
+vi.mock('./PresentedList.js', () => ({ PresentedList: handed('presented') }));
+vi.mock('../SplitListDetail.js', () => ({
+  SplitListDetail: ({ list, detail, selected, detailTitle }: Record<string, ReactNode | boolean | string>) => (
+    <div data-selected={String(selected)}>
+      <h2>{detailTitle}</h2>
+      {list}
+      <div data-testid="detail">{detail}</div>
+    </div>
+  ),
+}));
+vi.mock('./hooks.js', () => ({
+  useRows: vi.fn(() => ({
+    data: [
+      { id: 1, name: 'Boiler', parent_id: 'A' },
+      { id: 2, name: 'Pump', parent_id: 'B' },
+    ],
+  })),
+}));
+vi.mock('./kit.js', () => ({ Value: ({ value }: { value: unknown }) => <>{String(value)}</> }));
 vi.mock('../AssistantPanel.js', () => ({ AssistantRoom: handed('assistant') }));
 vi.mock('../../../../../kit/src/client/components/PageSections.js', () => ({
   TabStrip: ({
@@ -82,7 +101,8 @@ vi.mock('../../../../../kit/src/client/components/PageSections.js', () => ({
   },
 }));
 
-const { Assistant, Breakdown, Chart, Gantt, Metric, RecordCard, Rows, Tabs, Timeline, Tree } = await import('./blocks.js');
+const { Assistant, Board, Breakdown, Calendar, Chart, Gallery, Gantt, Metric, RecordCard, Rows, Split, Tabs, Timeline, Tree } =
+  await import('./blocks.js');
 
 afterEach(() => {
   cleanup();
@@ -93,9 +113,10 @@ const frame: UiPageFrame = {
   view: 'board',
   label: 'Board',
   reads: ['ticket', 'task', 'note'],
-  commands: [],
-  params: ['tab'],
-  get: (name) => (name === 'tab' ? 'closed' : undefined),
+  commands: ['advance'],
+  actions: ['close'],
+  params: ['tab', 'pick'],
+  get: (name) => (name === 'tab' ? 'closed' : name === 'pick' ? '2' : undefined),
   set: (...args) => mocks.set(...args),
 };
 const inPage = (block: ReactNode) => render(<UiPageContext.Provider value={frame}>{block}</UiPageContext.Provider>);
@@ -152,6 +173,28 @@ test("Metric, Chart and Rows hand the dashboard's section their DSL words, on th
     show: ['name', 'due_on'],
     title: 'Newest',
   });
+});
+
+test("a block's `where` is asked as the query language says it, and inside a Scope adds to the Scope's condition", async () => {
+  inPage(<Metric title="Named" from="ticket" query="status = open" where={{ name: 'x', parent_id: { not: ['1', '2'] } }} />);
+  expect((await json('section')).section.query).toBe('status = open and name = "x" and parent_id != "1" and parent_id != "2"');
+  cleanup();
+  const scoped = (block: ReactNode) =>
+    inPage(
+      <UiScopeContext.Provider value={{ from: 'ticket', where: [{ parent_id: '3' }], query: 'status = open' }}>
+        {block}
+      </UiScopeContext.Provider>,
+    );
+  scoped(<Rows title="Mine" where={{ name: 'x' }} show={['name']} />);
+  expect((await json('section')).section).toMatchObject({ table: 'ticket', query: 'status = open and parent_id = "3" and name = "x"' });
+  cleanup();
+  // A block naming another resource reads that one alone: the Scope's condition is not its.
+  scoped(<Rows title="Tasks" from="task" show={['name']} />);
+  expect((await json('section')).section).not.toHaveProperty('query');
+  cleanup();
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  inPage(<Metric title="Odd" from="ticket" where={{ colour: 'red' } as never} />);
+  expect(await screen.findByText(/<Metric> has a where it cannot ask: ticket has no column "colour"/)).toBeTruthy();
 });
 
 test('a block refuses a word it does not take, a value outside its words, and a resource the page does not read', async () => {
@@ -220,4 +263,81 @@ test("Tabs open where the page param says and keep the tab picked in it; Assista
   cleanup();
   inPage(<Assistant conversation="c-1" />);
   expect(await json('assistant')).toEqual({ conversation: 'c-1' });
+});
+
+test('Board, Calendar and Gallery hand the list room their presentation, their question and the moves the page declared', async () => {
+  inPage(<Board from="ticket" by="name" primary="name" where={{ parent_id: 'A' }} sort="name" limit={30} label="Work" />);
+  expect(await json('presented')).toEqual({
+    table: expect.objectContaining({ id: 'ticket' }),
+    spec: { kind: 'board', by: 'name', primary: 'name' },
+    query: 'parent_id = "A"',
+    sort: 'name',
+    limit: 30,
+    label: 'Work',
+    moves: ['advance', 'close'],
+  });
+  cleanup();
+  // `move` narrows a drop to some of what the page declared.
+  inPage(<Board from="ticket" by="name" move={['close']} />);
+  expect((await json('presented')).moves).toEqual(['close']);
+  cleanup();
+  inPage(<Calendar from="task" date="due_on" end="starts_on" primary="name" query="name != x" />);
+  expect(await json('presented')).toMatchObject({
+    spec: { kind: 'calendar', date: 'due_on', end: 'starts_on', primary: 'name' },
+    query: 'name != x',
+    label: 'Calendar',
+  });
+  cleanup();
+  inPage(<Gallery from="task" image="name" primary="name" />);
+  expect((await json('presented')).spec).toEqual({ kind: 'cards', image: 'name', primary: 'name' });
+  cleanup();
+  // The picture may be a related file resource's first file, as the cards of a list view say it.
+  inPage(<Gallery from="task" image={{ from: 'note', whose: 'parent_id', sort: 'name' }} primary="name" />);
+  expect((await json('presented')).spec).toEqual({
+    kind: 'cards',
+    image: { from: 'note', whose: 'parent_id', sort: 'name' },
+    primary: 'name',
+  });
+});
+
+test('a presentation block refuses a drop the page did not declare, a missing word and a resource the page does not read', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  inPage(
+    <>
+      <Board from="ticket" by="name" move={['reopen' as never]} />
+      <Calendar from="task" {...({} as { date: string })} />
+      <Gallery from={'desk' as never} image="name" />
+      <Board from="ticket" by="name" colour="red" />
+    </>,
+  );
+  expect(
+    await screen.findByText(/<Board> moves a card with "reopen", which the page "Board" does not declare. It declares "advance", "close"/),
+  ).toBeTruthy();
+  expect(screen.getByText(/<Calendar> needs "date"/)).toBeTruthy();
+  expect(screen.getByText(/<Gallery> reads "desk", which the page "Board" does not read/)).toBeTruthy();
+  expect(screen.getByText(/<Board> has no "colour"/)).toBeTruthy();
+  expect(screen.queryByTestId('presented')).toBeNull();
+});
+
+test("Split lists the rows beside the picked record's own page, and keeps the pick in the page param it names", async () => {
+  inPage(<Split from="task" row={{ primary: 'name', lines: ['parent_id'] }} detail={['name']} param="pick" />);
+  const pick = await screen.findByRole('button', { name: /Pump/ });
+  expect(pick).toHaveAttribute('aria-current', 'true');
+  expect(await json('record')).toEqual({
+    tableId: 'task',
+    recordKey: { id: 2 },
+    pageId: 'page-task',
+    sections: [{ kind: 'fields', paths: ['name'] }],
+  });
+  await userEvent.click(screen.getByRole('button', { name: /Boiler/ }));
+  expect(mocks.set).toHaveBeenCalledWith('pick', '1');
+  cleanup();
+  // Without a param the block holds the pick itself, and starts with nothing picked.
+  inPage(<Split from="task" row={{ primary: 'name' }} />);
+  await userEvent.click(await screen.findByRole('button', { name: /Boiler/ }));
+  expect(await json('record')).toMatchObject({ recordKey: { id: 1 } });
+  cleanup();
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  inPage(<Split from="task" row={{ primary: 'name' }} param="view" />);
+  expect(await screen.findByText(/<Split> keeps its pick in "view", which is not one of the page's params/)).toBeTruthy();
 });

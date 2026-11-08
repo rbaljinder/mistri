@@ -815,6 +815,11 @@
       "tests": [{ "file": "test/app-check.test.ts" }, { "file": "test/check-json.test.ts" }]
     },
     {
+      "id": "cli-command-api",
+      "surface": ["cli: command api"],
+      "tests": [{ "file": "test/api-client-gen.test.ts" }]
+    },
+    {
       "id": "cli-command-compare-openapi",
       "surface": ["cli: command compare-openapi"],
       "tests": [{ "file": "test/api-export-cli.test.ts" }]
@@ -866,6 +871,7 @@
     },
     { "id": "cli-command-test", "surface": ["cli: command test"], "tests": [{ "file": "test/app-test-kit.test.ts" }] },
     { "id": "cli-command-theme", "surface": ["cli: command theme"], "tests": [{ "file": "test/theme-tooling.test.ts" }] },
+    { "id": "cli-command-upgrade", "surface": ["cli: command upgrade"], "tests": [{ "file": "test/upgrade.test.ts" }] },
     { "id": "cli-command-virtual", "surface": ["cli: command virtual"], "tests": [{ "file": "test/virtualization-cli.test.ts" }] },
     {
       "id": "cli-flag-allowed-host",
@@ -933,6 +939,7 @@
     },
     { "id": "cli-flag-browser", "surface": ["cli: flag --browser"], "tests": [{ "file": "test/first-run.test.ts" }] },
     { "id": "cli-flag-bump", "surface": ["cli: flag --bump"], "tests": [{ "file": "test/command-contracts.test.ts" }] },
+    { "id": "cli-flag-check", "surface": ["cli: flag --check"], "tests": [{ "file": "test/upgrade.test.ts" }] },
     { "id": "cli-flag-click", "surface": ["cli: flag --click"], "tests": [{ "file": "test/shot-interaction.test.ts" }] },
     {
       "id": "cli-flag-commands",

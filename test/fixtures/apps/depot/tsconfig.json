@@ -30,6 +30,6 @@
   },
   "include": [
     "**/*.ts",
-    "pages/*.page.tsx"
+    "pages/*.page.tsx", "widgets/*.tsx"
   ]
 }

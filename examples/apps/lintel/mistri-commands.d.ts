@@ -23,6 +23,12 @@ export type Commands = {
   signLease: { target: "lease"; targets: "one"; input: never };
 };
 
+/** Each free-form page by its path (pages/<path>.page.tsx): what the App's `home` may name beside its views. */
+export type PagePaths = "add-charge" | "delivery-board";
+
+/** The App's fixed actions by id (a resource's machine verbs and `action(label, { set })`): what a page's `actions` may name. */
+export type ActionNames = "cancelViewing" | "close" | "confirm" | "hold" | "markShown" | "resume" | "start" | "triage" | "waive";
+
 declare module '@mistriwork/mistri/app' {
-  interface Register { commands: Commands }
+  interface Register { commands: Commands; pagePaths: PagePaths; actions: ActionNames }
 }

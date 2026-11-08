@@ -1,0 +1,11 @@
+{
+  "connections": [
+    {
+      "name": "carrier",
+      "kind": "http",
+      "url": "http://127.0.0.1:4782/v1/",
+      "description": "northbound.http.json",
+      "insecure": true
+    }
+  ]
+}

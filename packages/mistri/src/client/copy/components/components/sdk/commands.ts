@@ -10,5 +10,6 @@ export const say = defineMessages({
   asksAReason: '{label} asks for a reason; run it with the reason in its input.',
   confirmBody: 'Run {label} on this record?',
   actionDone: '{label} done.',
+  formProcessing: '{label} was received and is still being processed.',
   notConfirmed: '{label} was sent, and its result is not confirmed. Check the record before you send it again.',
 });

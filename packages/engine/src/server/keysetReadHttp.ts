@@ -10,7 +10,7 @@
  * they may read it, but the list did not ask to show it.
  */
 import type { Filter } from '../adapters/adapter.js';
-import { defaultOrder, resolveOrder, withKey, type DatabaseSchema, type Order, type TableMeta } from '../shared/schema.js';
+import { defaultOrder, resolveOrder, tableDialect, withKey, type DatabaseSchema, type Order, type TableMeta } from '../shared/schema.js';
 import type { ViewDef, ViewCondition } from '../shared/viewPaths.js';
 import {
   continueGroups,
@@ -93,7 +93,7 @@ export function viewPaging(schema: DatabaseSchema, table: TableMeta, view: ViewD
         given.map((o) => ({ column: o.path, direction: o.direction })),
       )
     : defaultOrder(table);
-  if (!keysetOrder(table, order, schema.dialect)) return undefined;
+  if (!keysetOrder(table, order, tableDialect(schema, table))) return undefined;
   // No columns is every column of the base table, the order's among them.
   const shown = new Set(view.columns.map((c) => c.path));
   const extra = view.columns.length ? order.map((o) => o.column).filter((column) => !shown.has(column)) : [];
@@ -102,7 +102,7 @@ export function viewPaging(schema: DatabaseSchema, table: TableMeta, view: ViewD
     orderBy: order.map((o) => ({ path: o.column, direction: o.direction })),
     ...(extra.length ? { columns: [...view.columns, ...extra.map((path) => ({ path }))] } : {}),
   };
-  const planned = step && continuationGroups(table, order, step, schema.dialect);
+  const planned = step && continuationGroups(table, order, step, tableDialect(schema, table));
   if (step && !planned) return { view: read, order, extra };
   const toPaths = (groups: ReturnType<typeof keysetAfter> & object): ViewCondition[][] =>
     groups.map((group) => group.map(({ column, op, value }) => ({ path: column, op, ...(value === undefined ? {} : { value }) })));

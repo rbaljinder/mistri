@@ -228,6 +228,12 @@
     padding: var(--space-4) var(--space-4h);
     color: var(--ink-muted);
   }
+  /* Under a <List> the server holds more of: quiet, so it reads as a fact about the list and not as a row. */
+  .kit-list-more {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
   /* A component's own element: what its scoped stylesheet is scoped to, and never wider than its section. */
   .custom-section,
   .custom-value,
@@ -256,5 +262,36 @@
     text-transform: none;
     white-space: normal;
     color: var(--ink);
+  }
+  /* A control bound to a page param (paramControls.tsx). Its box is a control tall before the part arrives and after, so
+     nothing below it moves; a listbox or a search box stops at a reading width rather than running the page's. */
+  .kit-param {
+    min-block-size: var(--control-h);
+    min-width: 0;
+    max-width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2h);
+  }
+  .kit-param > .dd,
+  .kit-param > .kit-param-search {
+    flex: 1 1 14rem;
+    max-width: 24rem;
+    min-width: 0;
+  }
+  .kit-param-dates {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2h);
+  }
+  .kit-param-dates > .date-field {
+    flex: 1 1 10rem;
+    min-width: 0;
+    max-width: 14rem;
+  }
+  .kit-param-dash {
+    color: var(--ink-muted);
   }
 }
