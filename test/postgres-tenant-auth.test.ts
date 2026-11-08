@@ -25,7 +25,6 @@ import { namedCommands } from './support/commandCatalog.js';
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { once } from 'node:events';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage } from 'node:http';
@@ -69,6 +68,7 @@ import { invitationTokenId } from '../packages/mistri/src/server/tenant/tenantIn
 import { ADMINISTRATION_HTTP_HEADER } from '../packages/mistri/src/shared/tenantAdministration.js';
 import { liveSkip } from './live.js';
 import { uuidPostgresDatabase } from './support/tenantDialects.js';
+import { holdPort } from './support/heldPort.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
 const appId = 'pg-tenant-auth';
@@ -92,15 +92,6 @@ async function client(url: string): Promise<Control> {
   const created = new Client({ connectionString: url, statement_timeout: 10_000 });
   await created.connect();
   return created;
-}
-async function reservePort(): Promise<number> {
-  const server = createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  assert.ok(address && typeof address !== 'string');
-  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-  return address.port;
 }
 function object(value: unknown): Record<string, unknown> {
   assert.ok(value && typeof value === 'object' && !Array.isArray(value));
@@ -267,8 +258,10 @@ describe('the tenant host on a PostgreSQL authentication store, against a real s
       source: 'config',
       writable: true,
     };
-    const port = await reservePort(),
+    const held = await holdPort(),
+      port = held.port,
       origin = `http://127.0.0.1:${port}`;
+    t.after(() => held.release());
     const previous = process.env.BETTER_AUTH_SECRET,
       previousKept = process.env.MISTRI_AUTH_SESSION_CACHE;
     process.env.BETTER_AUTH_SECRET = 'synthetic-postgres-auth-tenant-secret-at-least-thirty-two-characters';
@@ -320,15 +313,14 @@ describe('the tenant host on a PostgreSQL authentication store, against a real s
     const bootstrap = createServer((req: IncomingMessage, res) => {
       void runtime.handler(req, res).catch(() => res.destroy());
     });
-    bootstrap.listen(port, '127.0.0.1');
-    await once(bootstrap, 'listening');
+    await held.adopt(bootstrap);
     let operator: Account, member: Account;
     try {
       operator = await signup('Operator');
       member = await signup('Member');
     } finally {
+      // Not closed: the owner below takes over the very handle, so the port is never unbound.
       bootstrap.closeAllConnections();
-      await new Promise<void>((resolve) => bootstrap.close(() => resolve()));
     }
     if (options.administration)
       writeFileSync(
@@ -395,8 +387,7 @@ describe('the tenant host on a PostgreSQL authentication store, against a real s
     }
     const { enrollment } = await prepareTenantStartup({ loaded, connections: [connection], policyFile, commandsFile });
     owner = await createTenantAuthenticatedHttpServer({ loaded, auth: runtime, enrollment, bound: { host: '127.0.0.1', port } });
-    owner.server.listen(port, '127.0.0.1');
-    await once(owner.server, 'listening');
+    await held.adopt(owner.server);
     const signedIn = (account: Account) => ({ cookie: account.cookie, 'x-mistri-account': account.accountId });
     const grant = (account: Account, tenantId = 'north') =>
       administer((admin) =>

@@ -18,6 +18,7 @@ import type { AppHost } from '../packages/mistri/src/server/app/apps.js';
 import type { Identity } from '../packages/mistri/src/server/auth/auth.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { createApp } from './support/createApp.js';
+import { bindUploadParent, readUploadParent } from '../packages/mistri/src/server/files/uploadParent.js';
 import { loadHttpAppPolicy } from '../packages/mistri/src/server/policy/appPolicyHttp.js';
 
 const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 255, 128]);
@@ -246,4 +247,47 @@ test('check: stamps name real columns that can hold them, and `me` needs a peopl
   assert.match(problems({ uploaded_by: 'now' })[0], /file stamps "uploaded_by" with now/);
   assert.throws(() => problems({ uploaded_by: 'sometimes' }), /me.*now|stamps/);
   assert.throws(() => problems({ file_name: 'now' }), /itself|fills/i);
+});
+
+test('two composite references to the parent that share a first column are told apart by all their columns', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-related-upload-composite-'));
+  const path = join(directory, 'composite.db');
+  const db = new DatabaseSync(path);
+  db.exec(`CREATE TABLE item (tenant_id TEXT NOT NULL, item_id INTEGER NOT NULL, PRIMARY KEY (tenant_id, item_id));
+    INSERT INTO item VALUES ('north', 1), ('north', 2);
+    CREATE TABLE item_file (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, item_id INTEGER, replacement_id INTEGER, file_name TEXT,
+      FOREIGN KEY (tenant_id, item_id) REFERENCES item(tenant_id, item_id),
+      FOREIGN KEY (tenant_id, replacement_id) REFERENCES item(tenant_id, item_id));`);
+  db.close();
+  const adapter = new SqliteAdapter(path, 'c');
+  t.after(() => {
+    adapter.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+  const schema = await adapter.introspect();
+  const read = (request: Parameters<typeof adapter.query>[0]) => adapter.query(request);
+  const key = { tenant_id: 'north', item_id: 2 };
+  const bind = (link?: string | readonly string[]) =>
+    bindUploadParent(schema, 'item_file', { table: 'item', key, ...(link === undefined ? {} : { link }) }, {}, read);
+
+  // The first column alone fits both references: refused, as ambiguous, and nothing is guessed.
+  assert.deepEqual(await bind('tenant_id'), {
+    status: 400,
+    error: 'This list could not tell which reference of the file points at its record.',
+  });
+  assert.equal('error' in (await bind()), true);
+  // The whole reference names one, whichever order the columns come in.
+  assert.deepEqual(await bind(['tenant_id', 'item_id']), { values: { tenant_id: 'north', item_id: 2 } });
+  assert.deepEqual(await bind(['replacement_id', 'tenant_id']), { values: { tenant_id: 'north', replacement_id: 2 } });
+  // A set that is no reference of the file's is refused, not matched by a part of it.
+  assert.equal('error' in (await bind(['item_id'])), true);
+  assert.equal('error' in (await bind(['tenant_id', 'item_id', 'replacement_id'])), true);
+  // The wire shape: a string, or a non-empty list of strings.
+  assert.equal('error' in readUploadParent({ parent: { table: 'item', key, link: [] } }), true);
+  assert.equal('error' in readUploadParent({ parent: { table: 'item', key, link: ['tenant_id', 7] } }), true);
+  /* A column said twice is not a column set: it must not pass for the single-column reference on tenant_id. */
+  assert.equal('error' in readUploadParent({ parent: { table: 'item', key, link: ['tenant_id', 'tenant_id'] } }), true);
+  assert.deepEqual(readUploadParent({ parent: { table: 'item', key, link: ['tenant_id', 'item_id'] } }), {
+    parent: { table: 'item', key, link: ['tenant_id', 'item_id'] },
+  });
 });

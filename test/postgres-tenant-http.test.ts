@@ -19,7 +19,6 @@ import { namedCommands, parseTestApp } from './support/commandCatalog.js';
  * CREATEDB) and resets every `__mistri_*` table and its fixtures there.
  */
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -51,6 +50,7 @@ import { provisionPostgresInbox } from '../packages/mistri/src/adapters/inbox/po
 import { tenantInbox } from '../packages/mistri/src/adapters/inbox/inbox.js';
 import { dedicatedPostgresUrl } from './support/tenantDialects.js';
 import { runtimeTable } from '../packages/engine/src/shared/runtimeTables.js';
+import { holdPort } from './support/heldPort.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
 const appId = 'pg-tenant-http';
@@ -72,15 +72,6 @@ async function client(url: string): Promise<Control> {
   const created = new Client({ connectionString: url, statement_timeout: 10_000 });
   await created.connect();
   return created;
-}
-async function reservePort(): Promise<number> {
-  const server = createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  assert.ok(address && typeof address !== 'string');
-  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-  return address.port;
 }
 function object(value: unknown): Record<string, unknown> {
   assert.ok(value && typeof value === 'object' && !Array.isArray(value));
@@ -315,8 +306,10 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
   async function fixture(t: TestContext, patch: { mentions?: boolean | 'email'; pages?: boolean; mail?: EmailTransport } = {}) {
     const { loaded, prepare } = await deployment(t, patch);
     const prepared = await prepare();
-    const port = await reservePort(),
+    const held = await holdPort(),
+      port = held.port,
       origin = `http://127.0.0.1:${port}`;
+    t.after(() => held.release());
     const auth = await nativeAuth(loaded, origin);
     const registry = patch.mail && mailRegistry(patch.mail);
     let owner: Owner;
@@ -340,8 +333,7 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
       await registry?.closeAll();
       auth.close();
     });
-    owner.server.listen(port, '127.0.0.1');
-    await once(owner.server, 'listening');
+    await held.adopt(owner.server);
     const call = async (path: string, body?: unknown, headers: Record<string, string> = {}): Promise<Answer> => {
       const response = await fetch(origin + path, {
         method: body === undefined ? 'GET' : 'POST',
@@ -445,8 +437,10 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
 
   test('administration on PostgreSQL: an operator creates a tenant, grants and revokes a membership, with receipts in its journal', async (t) => {
     const { loaded, policyFile, prepare } = await deployment(t, { administration: true });
-    const port = await reservePort(),
+    const held = await holdPort(),
+      port = held.port,
       origin = `http://127.0.0.1:${port}`;
+    t.after(() => held.release());
     const auth = await nativeAuth(loaded, origin);
     let owner: Owner | undefined;
     t.after(async () => {
@@ -483,15 +477,14 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
     const bootstrap = createServer((req, res) => {
       void auth.handler(req, res).catch(() => res.destroy());
     });
-    bootstrap.listen(port, '127.0.0.1');
-    await once(bootstrap, 'listening');
+    await held.adopt(bootstrap);
     let operator: Account, member: Account;
     try {
       operator = await signup('Operator');
       member = await signup('Member');
     } finally {
+      // Not closed: the owner below takes over the very handle, so the port is never unbound.
       bootstrap.closeAllConnections();
-      await new Promise<void>((resolve) => bootstrap.close(() => resolve()));
     }
     writeFileSync(
       policyFile,
@@ -506,8 +499,7 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
       enrollment: prepared.enrollment,
       bound: { host: '127.0.0.1', port },
     });
-    owner.server.listen(port, '127.0.0.1');
-    await once(owner.server, 'listening');
+    await held.adopt(owner.server);
     const root = (operation: string, query = '') => `/api/tenant/administration/${operation}?app=${appId}${query}`;
     const identity = (account: Account) => ({ cookie: account.cookie, 'x-mistri-app': appId, 'x-mistri-account': account.accountId });
     const opened = await call(root('open'), {}, identity(operator));

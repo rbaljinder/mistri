@@ -5,6 +5,11 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.21
+
+- **A related-files upload links to a parent with a key of several columns.** The upload now names every column of the record's reference (`tenant_id` and `item_id`, say), and the server matches the reference whose columns are exactly those, in any order. It sent the first column alone, which was ambiguous when two references begin with the same column (an item and its replacement, both under one tenant): such an upload is now refused by name, as is a list that names only part of a reference or more than it.
+- **Smaller fixes.** A test server takes its port without letting it go first, so a parallel test file can no longer take it between the two; the React embed host is warmed before it says it is listening; the suite chooser's sign-in runs without the sign-up rate limit, as every other suite's does.
+
 ## 1.0.0-rc.20
 
 - **A row scope can read through a relationship.** `via('case_id', 'support_case')` shows a row when its key is among the rows the person may see in another resource, so "a customer sees the messages on their own cases" and "a program is shown by an active access row" no longer list the parents' keys (and no longer stop at 4,096). The target's own scope applies, a target the role cannot read still decides, `via.where` narrows it, a table that names itself walks a tree, and a write is held to the same parent. Tenant Apps read the target in the same tenant; `check` is silent but the server advises once when no index leads a `via`'s key. A grant held in rows is gone at the next statement. See [row access](https://mistriwork.dev/docs/row-access/#scope-through-a-relationship).

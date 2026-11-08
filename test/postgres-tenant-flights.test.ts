@@ -17,9 +17,7 @@
  * fixture works in databases of its own (ignitionLendingFixture.ts).
  */
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test, type TestContext } from 'node:test';
@@ -38,20 +36,11 @@ import { uuidPostgresDatabase } from './support/tenantDialects.js';
 import { provisionPostgresInbox } from '../packages/mistri/src/adapters/inbox/postgresInbox.js';
 import { tenantInbox } from '../packages/mistri/src/adapters/inbox/inbox.js';
 import { startLatencyProxy, type LatencyProxy, type Statement } from '../e2e/support/latencyProxy.js';
+import { holdPort } from './support/heldPort.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
 const PRINT = process.env.TABLEWALK_FLIGHTS_PRINT === '1';
 const password = 'Ignition-flights-password-123!';
-
-async function reservePort(): Promise<number> {
-  const server = createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  assert.ok(address && typeof address !== 'string');
-  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-  return address.port;
-}
 
 interface Answer {
   status: number;
@@ -130,8 +119,10 @@ async function deploy(t: TestContext, relay: LatencyProxy) {
   };
   const served = { ...loaded, app } as typeof loaded;
   await provisionPostgresInbox((lending.target as { postgres: string }).postgres);
-  const port = await reservePort(),
+  const held = await holdPort(),
+    port = held.port,
     origin = `http://127.0.0.1:${port}`;
+  t.after(() => held.release());
   const auth = await createAppAuth(served, { baseURL: origin, trustedOrigins: [origin], listenHost: '127.0.0.1' });
   t.after(() => auth.close());
   const email = 'flights.admin@north.example.invalid',
@@ -170,8 +161,7 @@ async function deploy(t: TestContext, relay: LatencyProxy) {
     owner.server.closeAllConnections();
     await owner.retire();
   });
-  owner.server.listen(port, '127.0.0.1');
-  await once(owner.server, 'listening');
+  await held.adopt(owner.server);
   const boot = {
     statements: relay.statements(booting.at),
     described: postgresDescriptionCounts().described - booting.described,

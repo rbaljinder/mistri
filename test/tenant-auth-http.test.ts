@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { createServer, IncomingMessage, request as httpRequest } from 'node:http';
+import { IncomingMessage, request as httpRequest } from 'node:http';
 import { Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,6 +17,7 @@ import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { defineCommand, defineCommands, literal } from '../packages/mistri/src/server/commands.js';
 import { defineLoader, defineLoaders, type PageLoader } from '../packages/mistri/src/server/commands/pageLoaders.js';
 import { fromRecord, type ResolvedBranding } from '../packages/mistri/src/shared/branding.js';
+import { holdPort } from './support/heldPort.js';
 
 const appId = 'tenant-auth-http';
 const password = 'Disposable-local-password-123!';
@@ -47,15 +47,6 @@ function gate() {
   });
   return { promise, release };
 }
-async function reservePort(): Promise<number> {
-  const server = createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  assert.ok(address && typeof address !== 'string');
-  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-  return address.port;
-}
 /* A free-form page with a loader, and one whose loader tries to write: what a tenant's member is served of each. */
 const PAGE_LOADERS = defineLoaders({
   board: defineLoader({
@@ -83,7 +74,8 @@ async function fixture(t: TestContext, start = true, pages = false) {
   const business = join(directory, 'business.db'),
     authStore = join(directory, 'auth.db');
   const db = new DatabaseSync(business),
-    port = await reservePort(),
+    held = await holdPort(),
+    port = held.port,
     origin = `http://127.0.0.1:${port}`;
   let owner: Owner | undefined, auth: AppAuthRuntime | undefined;
   t.after(async () => {
@@ -94,6 +86,7 @@ async function fixture(t: TestContext, start = true, pages = false) {
       }
     } finally {
       auth?.close();
+      await held.release();
       db.close();
       rmSync(directory, { recursive: true, force: true });
     }
@@ -188,8 +181,7 @@ async function fixture(t: TestContext, start = true, pages = false) {
   };
   const launch = async () => {
     owner = await createTenantAuthenticatedHttpServer(options);
-    owner.server.listen(port, '127.0.0.1');
-    await once(owner.server, 'listening');
+    await held.adopt(owner.server);
     return owner;
   };
   if (start) await launch();

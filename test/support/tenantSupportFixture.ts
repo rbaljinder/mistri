@@ -11,9 +11,8 @@
  * an impersonation — never by a stand-in proof.
  */
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { createServer, type IncomingMessage } from 'node:http';
+import type { IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -54,6 +53,7 @@ import type { EmbedIssuerConfig } from '../../packages/mistri/src/server/embed/i
 import { TENANT_HTTP_HEADERS as headers, type TenantContextReply } from '../../packages/mistri/src/shared/tenantContext.js';
 import { pgClient, uuidPostgresDatabase, type Control, type TenantDialect } from './tenantDialects.js';
 import { postgresRuntimeSql } from './runtimeSql.js';
+import { holdPort, type HeldPort } from './heldPort.js';
 
 export const SUPPORT_SECRET = 'synthetic-support-audit-key-at-least-thirty-two-bytes';
 export const appId = 'lending-support';
@@ -135,15 +135,6 @@ export interface FixtureOptions {
   readonly tenantPolicy?: Record<string, unknown>;
 }
 
-async function reservePort(): Promise<number> {
-  const server = createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  assert.ok(address && typeof address !== 'string');
-  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-  return address.port;
-}
 const numbered = (sql: string) => {
   let n = 0;
   return sql.replace(/\?/g, () => `$${++n}`);
@@ -170,6 +161,7 @@ export async function tenantSupportFixture(t: TestContext, dialect: TenantDialec
   const grants = grantDb ? openSuiteGrantStore(grantDb, 'support-suite') : undefined;
   /** Owners this fixture handed out, retired before their stores close. */
   const owners: TenantSupport[] = [];
+  let held: HeldPort | undefined;
   t.after(async () => {
     try {
       // A handed-out owner holds its own writer: retire it before the stores go.
@@ -179,6 +171,8 @@ export async function tenantSupportFixture(t: TestContext, dialect: TenantDialec
         await host.retire();
       } else auth?.close();
     } finally {
+      /* A start that threw never handed its port to a server: let it go, or the process waits on it. */
+      await held?.release();
       nativeAuth?.close();
       grantDb?.close();
       authDb?.close();
@@ -249,7 +243,8 @@ export async function tenantSupportFixture(t: TestContext, dialect: TenantDialec
 
   // A restart takes a fresh port: fetch would otherwise reuse a keep-alive
   // socket the retired host already destroyed.
-  let port = await reservePort(),
+  held = await holdPort();
+  let port = held.port,
     origin = `http://127.0.0.1:${port}`;
   const raw = supportManifest(authPath);
   options.manifest?.(raw);
@@ -300,8 +295,7 @@ export async function tenantSupportFixture(t: TestContext, dialect: TenantDialec
         now: () => Date.now() + clock.offset,
       },
     });
-    host.server.listen(port, '127.0.0.1');
-    await once(host.server, 'listening');
+    await held!.adopt(host.server);
   };
   await start();
   /** Retire the host and its native runtime, then start both again on the same stores. */
@@ -311,7 +305,9 @@ export async function tenantSupportFixture(t: TestContext, dialect: TenantDialec
     previous.server.closeAllConnections();
     await previous.retire();
     nativeAuth?.close();
-    port = await reservePort();
+    await held!.release();
+    held = await holdPort();
+    port = held.port;
     origin = `http://127.0.0.1:${port}`;
     await start();
   };

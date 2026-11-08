@@ -13,7 +13,7 @@
  * minute-long statement that its person is Rita, for the page to hand the
  * Provider's `auth.assertion`, as the issuer "portal" in the config file.
  */
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +24,15 @@ import { embedPlugins } from '../../config/vite.embed.config.ts';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '../..');
 const PAGE = join(HERE, 'embed-react-host');
-const [config, port, app = 'test/fixtures/apps/crm'] = process.argv.slice(2);
+const [config, requested, app = 'test/fixtures/apps/crm'] = process.argv.slice(2);
+
+/* Port 0 asks the OS: the server listens first and the origin is read from what it was given, so no number is chosen,
+   released and bound again (a gap in which a parallel spec's server can take it). A number is still honoured.
+   Until the handler and the warmed page are ready a request is answered 503, not dispatched to a handler not yet defined. */
+let ready = false;
+const server = createServer((req, res) => (ready ? handle(req, res) : void res.writeHead(503).end()));
+await new Promise<void>((done) => server.listen(Number(requested), '127.0.0.1', done));
+const port = (server.address() as { port: number }).port;
 const origin = `http://127.0.0.1:${port}`;
 
 const mistri = createHandler({ config, basePath: '/api/mistri', publicOrigin: origin, app });
@@ -42,7 +50,7 @@ const vite = await createVite({
 
 const ours = (url: string) => url === '/api/mistri' || url.startsWith('/api/mistri/') || url.startsWith('/api/mistri?');
 
-const server = createServer((req, res) => {
+const handle = (req: IncomingMessage, res: ServerResponse) => {
   const url = req.url ?? '/';
   if (ours(url)) return void mistri.node(req, res);
   if (SECRET && url === '/host/assertion' && req.method === 'POST') {
@@ -63,10 +71,16 @@ const server = createServer((req, res) => {
     const html = await vite.transformIndexHtml(url, readFileSync(join(PAGE, 'index.html'), 'utf8'));
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(html);
   });
-});
+};
 
 await mistri.ready;
-server.listen(Number(port), '127.0.0.1', () => console.log(`Host listening on ${port}`));
+/* Compile the host's page and find its dependencies before anyone visits. Found on a first visit under load, the
+   optimizer re-bundles mid-page and the page's imports answer 504 "Outdated Optimize Dep" (the dev server has no
+   socket to tell it to reload: hmr is off), which fails whichever test happened to be first. */
+await vite.warmupRequest('/main.tsx');
+await vite.waitForRequestsIdle();
+ready = true;
+console.log(`Host listening on ${port}`);
 
 process.once('SIGTERM', async () => {
   await Promise.all([mistri.close(), vite.close()]);
