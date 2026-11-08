@@ -9,7 +9,7 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import type { ViewDef } from '@mistriwork/engine/shared/view.js';
-import { snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
+import { renameViaTargets, snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { createAppResourcesOver, mapAppScopedReads, appResourceVerifiedCommandRunner, type AppResourceCatalog } from './appResources.js';
 import type { VerifiedCommandRunner } from '../commands/verifiedCommandRunner.js';
 import { runScopedTransactionFacade } from '../policy/scopedTransactionFacade.js';
@@ -159,7 +159,13 @@ export function createAppSourceAdapter(
         }
         for (const [resource, rule] of Object.entries(scope)) {
           const target = targetFor(resource, anchor);
-          mapped.get(target.group)![target.physicalTable] = rule;
+          /* A relationship test reads through a table of its own connection: one on another is no table of this reader's catalog. */
+          mapped.get(target.group)![target.physicalTable] = renameViaTargets(rule, (via) => {
+            const through = targetFor(via, anchor);
+            if (through.group !== target.group)
+              throw new Refusal(`The row policy reads "${resource}" through "${via}", which lives on another connection.`);
+            return through.physicalTable;
+          });
         }
         // Keep one map per connection even when physical table IDs coincide.
         // All rules and capabilities have been checked before any connection binds.

@@ -61,6 +61,8 @@ import { readDraftProgress, type SavedDraftRun } from '../forms/savedForms.js';
 import { publicPrincipal } from '../commands/formHttp.js';
 import type { CommandResultReference } from '../commands/scopedBusinessCommandAccess.js';
 import { captureTenantCommandExecution, tenantCommandDomain, type TenantCommandExecutionOptions } from './tenantCommands.js';
+import { STAGED_FILE_ID } from '../../shared/command.js';
+import { StageRefusal, stageCommandFile } from '../commands/stagedFiles.js';
 import { runTenantCommandTransaction } from './tenantCommandTransaction.js';
 import {
   captureTenantData,
@@ -112,6 +114,17 @@ export interface TenantIntakeSubmission {
   readonly submission: string;
   /** Present on a saved form's step and submit; the command it runs is the form's, never the request's. */
   readonly draft?: TenantIntakeDraft;
+  /** The visitor's token from their own cookie: whose held files (commands/stagedFiles.ts) the submission may take. */
+  readonly visitor?: string;
+}
+/** A file sent to be held for a public form's command, in the place its address resolves to. */
+export interface TenantIntakeHold {
+  readonly form: string;
+  readonly address: unknown;
+  /** `{ field, file: { name, type, data } }`; the command is the form's, never the body's. */
+  readonly body: unknown;
+  /** The visitor's token from their own cookie, or a new one this request is setting. */
+  readonly visitor: string;
 }
 /** A saved form's resume: which steps of the applicant's draft, in the place this address resolves to, are saved. */
 export interface TenantIntakeResume {
@@ -422,8 +435,69 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
         idempotencyKey: request.submission,
         input: request.input,
       },
-      { ...options, flags, ...(run ? { draft: run } : {}) },
+      { ...options, flags, ...(run ? { draft: run } : {}), ...(request.visitor ? { visitor: request.visitor } : {}) },
     );
+  };
+
+  /** One resolution and one fenced attempt to hold a file for a stock public form's command, in the place its
+   * address resolves to now: the same admission a submission has, so the file is held where the submission will land. */
+  const holdOnce = async (request: TenantIntakeHold, state: { moved: boolean }) => {
+    const form = forms.get(request.form)!,
+      id = form.command.id,
+      extractor = extractors.get(id)!;
+    const admitted = await admit(request.form, request.address, false);
+    const principal = publicPrincipal(app.id, request.form);
+    authorizer.authorize(id, principal);
+    admitted.active();
+    let transacted = false;
+    const binding = Object.freeze<BusinessCommandBinding>({
+      scoped: true,
+      authorize: (commandId, actor) => {
+        if (actor !== principal || commandId !== id) return deny();
+        const authorization = authorizer.authorize(commandId, actor);
+        return Object.freeze<AuthorizedBusinessCommand>({
+          ...authorization,
+          transaction: deny,
+          intake: admitted.place,
+          commandTransaction: async (work) => {
+            if (transacted) return deny();
+            transacted = true;
+            return inPlace(admitted, authorization, extractor, state, async (records, journal) => work(records, journal!));
+          },
+        });
+      },
+    });
+    const said = request.body && typeof request.body === 'object' && !Array.isArray(request.body) ? request.body : {};
+    return stageCommandFile(binding, principal, { ...said, command: id }, { visitor: request.visitor });
+  };
+  const hold = async (input: TenantIntakeHold) => {
+    let finish!: () => void;
+    const held = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    pending.add(held);
+    try {
+      if (retired) throw new BusinessCommandExecutionError('temporarily_unavailable');
+      let request: TenantIntakeHold;
+      try {
+        request = captureTenantData(tenantOptions(input, ['form', 'address', 'body', 'visitor'])) as unknown as TenantIntakeHold;
+      } catch {
+        throw new StageRefusal(400, 'invalid_input', 'A file is held as { command, field, file: { name, type, data } }.');
+      }
+      // A form saved on every step holds no public files, and a key that names no form holds nothing.
+      if (typeof request.form !== 'string' || !forms.has(request.form) || drafts.has(request.form))
+        throw new StageRefusal(403, 'forbidden', 'This file cannot be held.');
+      const first = { moved: false };
+      try {
+        return await holdOnce(request, first);
+      } catch (error) {
+        if (!first.moved || retired) throw error;
+      }
+      return await holdOnce(request, { moved: false });
+    } finally {
+      pending.delete(held);
+      finish();
+    }
   };
 
   /** A saved form's resume, in the place the address resolves to now: the saved steps' ids, never a value. */
@@ -495,8 +569,10 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
       let request: TenantIntakeSubmission;
       try {
         request = captureTenantData(
-          tenantOptions(input, ['form', 'address', 'input', 'submission', 'draft']),
+          tenantOptions(input, ['form', 'address', 'input', 'submission', 'draft', 'visitor']),
         ) as unknown as TenantIntakeSubmission;
+        if (request.visitor !== undefined && (typeof request.visitor !== 'string' || !STAGED_FILE_ID.test(request.visitor)))
+          throw new Error();
         if (request.draft !== undefined) {
           const draft = tenantOptions(request.draft, ['phase', 'step', 'token']);
           if (
@@ -586,6 +662,7 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
   return Object.freeze({
     submit,
     resume,
+    hold,
     /** Read-only experiment admission uses exactly the intake resolver. No
      * selector becomes a tenant membership and no placement is disclosed. */
     async withPublicFlags<T>(

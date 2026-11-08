@@ -15,8 +15,17 @@ import { pathToFileURL } from 'node:url';
 export const SAVED_APP_ID = 'saved-application';
 const FIXTURE = resolve('test/fixtures/apps/saved-application');
 
-/** `flags`: more of the server's own, such as where the App is mounted (`--mount`, `--base-path`). */
-export async function startSavedFormApp(flags: readonly string[] = []) {
+/** The signed-in draft fixture (test/fixtures/apps/saved-draft): the same server over an App whose form's draft is a person's. */
+export const SAVED_DRAFT = { directory: resolve('test/fixtures/apps/saved-draft'), database: 'club.db' } as const;
+
+/**
+ * `flags`: more of the server's own, such as where the App is mounted (`--mount`, `--base-path`).
+ * `fixture`: another App served the same way; the saved application's by default.
+ */
+export async function startSavedFormApp(
+  flags: readonly string[] = [],
+  fixture: { directory: string; database: string } = { directory: FIXTURE, database: 'lending.db' },
+) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-saved-form-'));
   let child: ReturnType<typeof spawn> | undefined;
   const stop = async () => {
@@ -33,14 +42,14 @@ export async function startSavedFormApp(flags: readonly string[] = []) {
     rmSync(directory, { recursive: true, force: true });
   };
   try {
-    const database = join(directory, 'lending.db');
-    execFileSync(process.execPath, ['--import', 'tsx', join(FIXTURE, 'seed.mjs'), database], { stdio: 'pipe' });
+    const database = join(directory, fixture.database);
+    execFileSync(process.execPath, ['--import', 'tsx', join(fixture.directory, 'seed.mjs'), database], { stdio: 'pipe' });
     const authoring = join(directory, 'app');
     mkdirSync(authoring);
     const app = join(authoring, 'app.ts');
     writeFileSync(
       app,
-      `import app from ${JSON.stringify(pathToFileURL(join(FIXTURE, 'app.ts')).href)};
+      `import app from ${JSON.stringify(pathToFileURL(join(fixture.directory, 'app.ts')).href)};
       export default { ...app, auth: { ...app.auth, store: ${JSON.stringify(join(directory, 'sessions.db'))} } };`,
     );
     const reservation = createServer();
@@ -61,7 +70,7 @@ export async function startSavedFormApp(flags: readonly string[] = []) {
         '--app',
         app,
         '--commands',
-        join(FIXTURE, 'commands.ts'),
+        join(fixture.directory, 'commands.ts'),
         '--port',
         String(port),
         ...flags,
@@ -97,7 +106,7 @@ export async function startSavedFormApp(flags: readonly string[] = []) {
         reject(new Error(`Saved application fixture exited: ${log}`));
       });
     });
-    return { origin: `http://127.0.0.1:${port}`, database, stop };
+    return { origin: `http://127.0.0.1:${port}`, database, sessions: join(directory, 'sessions.db'), stop };
   } catch (error) {
     await stop();
     throw error;

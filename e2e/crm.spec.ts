@@ -176,7 +176,9 @@ test('the New form draws its rows side by side at a desk, boxes level whatever i
   const control = (name: string) =>
     name === 'Owner'
       ? dialog.locator('.picker', { has: page.getByRole('combobox', { name: 'Owner', exact: true }) })
-      : dialog.getByRole(name === 'Source' ? 'button' : 'textbox', { name, exact: true });
+      : name === 'Source'
+        ? dialog.getByRole('button', { name: /^Source(?: |$)/ })
+        : dialog.getByRole('textbox', { name, exact: true });
   const box = async (name: string) => (await control(name).boundingBox())!;
   const level = async (left: string, right: string) => {
     const [a, b] = [await box(left), await box(right)];

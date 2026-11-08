@@ -38,7 +38,7 @@
  */
 import type { Filter, ScopedReads } from '../adapter.js';
 import type { Condition } from '../../shared/filter.js';
-import type { RowScope, RowScopeFilter } from '../../shared/rowScope.js';
+import type { RowScope, RowScopeFilter, ViaCondition } from '../../shared/rowScope.js';
 import type { ForeignKey, TableMeta } from '../../shared/schema.js';
 import { overlaid, storedText, withStoredText } from './storedText.js';
 import { firedBy, type EffectRef, type EffectTerm, type ScopeTrigger, type TriggerEffect, type TriggeringWrite } from './scopeTriggers.js';
@@ -242,7 +242,10 @@ export function createTriggerProof(acceptance: TriggerAcceptance, tools: ProofTo
     if (/int|serial/i.test(type) && comparable(value) && comparable(wanted)) return String(value) === String(wanted);
     return UNKNOWN;
   };
-  const holds = (table: TableMeta, condition: Condition, row: Row): boolean | typeof UNKNOWN => {
+  const holds = (table: TableMeta, given: Condition | ViaCondition, row: Row): boolean | typeof UNKNOWN => {
+    // A relationship test reads another table's rows, which a trigger's inserted row cannot say.
+    if (given.via !== undefined) return UNKNOWN;
+    const condition = given as Condition;
     if (condition.other !== undefined || condition.any !== undefined || condition.collation !== undefined) return UNKNOWN;
     if (!Object.hasOwn(row, condition.column)) return UNKNOWN;
     const value = row[condition.column];

@@ -202,6 +202,7 @@ test('the authorizer rebuilds the actor: a public or service principal carrying 
   );
   const schema = {
     dialect: 'sqlite',
+    foreignKeys: [],
     tables: [
       {
         id: 'bin',

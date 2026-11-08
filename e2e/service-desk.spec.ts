@@ -113,12 +113,12 @@ test.describe('Service Atlas ITSM', () => {
         if (width > 1100) expect(bounds.x).toBeGreaterThanOrEqual(main.x + main.width);
         else expect(bounds.y).toBeGreaterThanOrEqual(main.y + main.height);
         await context.scrollIntoViewIfNeeded();
-        await expect(context.getByRole('button', { name: 'Edit Asset', exact: true })).toBeVisible();
-        await context.getByRole('button', { name: 'Edit Asset', exact: true }).click();
+        await expect(context.getByRole('button', { name: /^Edit Asset(?: |$)/ })).toBeVisible();
+        await context.getByRole('button', { name: /^Edit Asset(?: |$)/ }).click();
         const input = context.locator('.picker-input');
         await expect(input).toBeFocused();
         await context.getByRole('button', { name: 'Done editing Asset', exact: true }).click();
-        await expect(context.getByRole('button', { name: 'Edit Asset', exact: true })).toBeVisible();
+        await expect(context.getByRole('button', { name: /^Edit Asset(?: |$)/ })).toBeVisible();
         await expect(title).toHaveText(expectedName);
         await page.screenshot({ path: info.outputPath(`record-context-${theme}-${width}.png`) });
       }
@@ -672,7 +672,7 @@ test.describe('Service Atlas ITSM', () => {
       await page.setViewportSize({ width, height: 924 });
       await page.goto(`${sample.origin}/@incident~1`);
       await expect(page.locator('.workflow-steps [aria-current]')).toHaveText('Triage');
-      await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+      await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
       await page.getByRole('textbox', { name: 'Name', exact: true }).fill(`Parent draft ${width}`);
       await page.getByRole('button', { name: '+ Add work note', exact: true }).click();
       const form = page.locator('.newpanel');

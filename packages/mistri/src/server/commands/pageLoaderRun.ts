@@ -4,6 +4,7 @@
  * its result held to a size (pageLoaders.ts says what a loader is).
  */
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
+import { renamedAnyRows } from '@mistriwork/engine/shared/filter.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { commandCatalog, createCommandDb, type ReadTable, type UntypedRow } from './commandDb.js';
 import { isBusinessCommandExecutionError } from './commandErrors.js';
@@ -57,17 +58,25 @@ export async function runPageLoader(options: {
   let open = true;
   const controller = new AbortController();
   const revoked = () => new PageLoaderRefused(504, 'loader_timeout', `The loader "${options.name}" ran out of time.`);
+  /* An `any`/`no` child is named locally as the table is, and is one of the loader's declared reads (commandDb.ts). */
+  const child = (local: string): string => {
+    const id = idOf(local);
+    if (id === undefined)
+      throw new PageLoaderRefused(403, 'page_undeclared', `The loader "${options.name}" reads what this reader cannot.`);
+    return id;
+  };
+  const named = (filter: Parameters<Adapter['count']>[1]) => (filter ? { filter: renamedAnyRows(filter, child) } : {});
   /* Only these, and only while it runs: no transaction, no writer, no other table. */
   const tx = Object.freeze({
     query: async (request: Parameters<Adapter['query']>[0]) => {
       if (!open) throw revoked();
-      const result = await reader.query({ ...request, table: idOf(request.table)! });
+      const result = await reader.query({ ...request, table: idOf(request.table)!, ...named(request.filter) });
       if (!open) throw revoked();
       return result;
     },
     count: async (table: string, filter?: Parameters<Adapter['count']>[1]) => {
       if (!open) throw revoked();
-      const result = await reader.count(idOf(table)!, filter);
+      const result = await reader.count(idOf(table)!, renamedAnyRows(filter, child));
       if (!open) throw revoked();
       return result;
     },

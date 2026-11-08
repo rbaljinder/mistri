@@ -21,6 +21,8 @@ import { fileStoreTrouble, placeFile } from '../files/fileStorage.js';
 import { updateActionLabel } from '../recordHistory.js';
 import type { PostContext } from '@mistriwork/engine/server/http/context.js';
 import { uploadValues } from './fileRows.js';
+import { bindUploadParent, readUploadParent } from '../files/uploadParent.js';
+import { serverRequest } from '@mistriwork/engine/server/serverRequests.js';
 import { readLines } from './formLinesWrite.js';
 import type { RecordHooks, RecordRules } from '@mistriwork/engine/server/http/recordWrites.js';
 import { send, sendResource } from '@mistriwork/engine/server/http/reply.js';
@@ -79,6 +81,20 @@ const RULES: RecordRules = {
     const rule = host && tableId ? appFileRules(host.app.app, post.schema).rules.get(tableId) : undefined;
     const upload = uploadValues(rule, post.body);
     if ('error' in upload) return upload;
+    /* The record the list hangs off comes from the list's own context, read as this actor, and the link is written
+       from it (files/uploadParent.ts); then the columns the rule stamps are the server's (appStamps.ts). */
+    const named = readUploadParent(post.body);
+    if ('error' in named) return named;
+    if (named.parent) {
+      const bound = await bindUploadParent(post.schema, tableId!, named.parent, upload.values, (request) => post.adapter.query(request));
+      if ('error' in bound) return bound;
+      // The values are the server's own (a file's object and hash): a copy must still be.
+      upload.values = serverRequest(bound.values);
+    }
+    if (rule!.stamps && post.access?.fill) {
+      const stamped = await post.access.fill({ table: tableId!, values: upload.values as InsertRequest['values'] }, post.adapter);
+      upload.values = serverRequest({ ...stamped.values });
+    }
     /* Into the bucket before the row is written, when the resource keeps its bytes there (files/fileStorage.ts). */
     try {
       const placed = await placeFile(rule!, upload.values, { app: host!.app.app.id });

@@ -8,6 +8,9 @@
  * connect, or the leased writer inside a scoped transaction.
  */
 import { isProxy } from 'node:util/types';
+import { inlineRows } from '../shared/anyRows.js';
+import { asksAboutRows } from '../shared/filter.js';
+import { qualifiedTable } from '../shared/sqlRelation.js';
 import {
   POSTGRES_STYLE,
   buildWhere,
@@ -119,9 +122,9 @@ import {
   noteCatalogVersion,
   readsCatalogVersion,
   suspectsStores,
-  type PipelinedStatement,
 } from './postgresTransactionHandle.js';
 import { snapshotRead, withoutSnapshotRead } from './snapshotRead.js';
+import { SCOPED_SESSION, beginOf, snapshotHandles, verifierPin, type PostgresTransactionVerifier } from './postgresTransactionOpening.js';
 import { withoutWriteAhead, writeAhead, type WriteAhead } from './writeAhead.js';
 import { KeyRows } from './scoped/keyRows.js';
 import {
@@ -170,6 +173,7 @@ export const isPostgresVerifiedCommandSource = (value: unknown): value is Postgr
   !!value && typeof value === 'object' && !isProxy(value) && pinnedReaders.has(value);
 
 export type { PostgresReadSnapshot } from './postgresReadSnapshot.js';
+export type { PostgresTransactionVerifier } from './postgresTransactionOpening.js';
 
 const SCOPED_CATALOG_DIGEST = postgresCatalogDigestStatement(SYSTEM_SCHEMAS);
 
@@ -881,10 +885,23 @@ export class PostgresAdapter implements Adapter {
     });
   }
 
+  /* A read's filter. Rows that point at the one read (`any`/`no`) are asked as an EXISTS over the child's own table, read
+     as the parent is: no scope sits between, so the caller's declaration of what it may read is the only bound
+     (commandDb.ts). The catalog is read only when the filter asks, and a filter that asks of a catalog this handle
+     cannot read is refused, as one nothing resolves is. */
+  private async whereOf(id: string, qualified: string, filter: Filter | undefined): Promise<SqlFragment> {
+    if (!asksAboutRows(filter)) return buildWhere(filter, POSTGRES_STYLE);
+    const schema = await this.schema().catch(() => undefined);
+    const inline = schema && inlineRows(schema, id, qualified, POSTGRES_STYLE, (child) => qualifiedTable(schema, child.id, POSTGRES_STYLE));
+    return buildWhere(filter, POSTGRES_STYLE, 1, undefined, undefined, undefined, undefined, false, undefined, false, inline);
+  }
+
   private async queryOn(request: QueryRequest, db: PgQuery, read = false): Promise<QueryResult> {
     const { schema, name } = read ? await this.readTable(request.table) : await this.assertTable(request.table, db);
     const qualified = `${POSTGRES_STYLE.quote(schema)}.${POSTGRES_STYLE.quote(name)}`;
-    const where = buildWhere(request.filter, POSTGRES_STYLE);
+    const where = asksAboutRows(request.filter)
+      ? await this.whereOf(request.table, qualified, request.filter)
+      : buildWhere(request.filter, POSTGRES_STYLE);
     const cols = request.columns?.length ? request.columns.map((c) => POSTGRES_STYLE.quote(c)).join(', ') : '*';
     const order = orderClause(
       request.orderBy,
@@ -1039,8 +1056,9 @@ export class PostgresAdapter implements Adapter {
 
   private async countOn(table: string, filter: Filter | undefined, db: PgQuery, limit?: number, read = false): Promise<number> {
     const { schema, name } = read ? await this.readTable(table) : await this.assertTable(table, db);
-    const where = buildWhere(filter, POSTGRES_STYLE);
-    const text = countStatement(`${POSTGRES_STYLE.quote(schema)}.${POSTGRES_STYLE.quote(name)}${where.text}`, limit);
+    const qualified = `${POSTGRES_STYLE.quote(schema)}.${POSTGRES_STYLE.quote(name)}`;
+    const where = asksAboutRows(filter) ? await this.whereOf(table, qualified, filter) : buildWhere(filter, POSTGRES_STYLE);
+    const text = countStatement(`${qualified}${where.text}`, limit);
     const result = await db.query(text, where.params);
     return Number((result.rows[0] as { n?: string })?.n ?? 0);
   }
@@ -1981,6 +1999,7 @@ export class PostgresAdapter implements Adapter {
                   scope,
                 }
               : undefined,
+            scope,
           );
           if (journal?.fixedRecords) records = journal.fixedRecords(records);
           const invoke = scopedCommandInvoker(operations, true, journal !== undefined, isRuntimeRelation);
@@ -2192,47 +2211,3 @@ export class PostgresAdapter implements Adapter {
     return assertPostgresTable(id, db, this.epochOf(db), this.catalogCache, () => this.conn());
   }
 }
-
-/** Trusted host verification on the writer of a verified scoped transaction:
- * the scope catalog it was pinned and read with, and the adapter's own
- * introspection on the same writer. */
-export type PostgresTransactionVerifier = {
-  (client: PgQuery, catalog: PostgresScopeCatalog, describe: () => Promise<DatabaseSchema>, epoch?: string): Promise<void>;
-  /**
-   * The verifier's own LOCK, without parameters, taken in the message that
-   * begins the transaction, after the scope's pin and before the schema epoch
-   * (or catalog digest) is read. The epoch then covers everything it pinned:
-   * DDL committed before it is in the epoch, DDL after it waits for this
-   * transaction. The verifier is handed that epoch as `epoch`, so a full
-   * attestation it made under the same epoch stands without being read again
-   * (tenantWriteSource.ts). A message that fails begins again plainly, and
-   * the verifier is handed no epoch.
-   */
-  readonly pin?: string;
-  /**
-   * The statements the verifier's first pass sends, exactly, sent behind the
-   * BEGIN with what else the transaction opens with (sendWriteAhead): each
-   * answers the identical statement once when the verifier sends it. A
-   * statement it does not send is left unread.
-   */
-  readonly ahead?: () => readonly PipelinedStatement[];
-};
-
-/** A verifier's pin, when it is only LOCK statements with no parameters (it rides in the simple-protocol message).
-    Anything else is not taken: the transaction then runs as it would without one, and its verifier attests in full. */
-function verifierPin(verify: PostgresTransactionVerifier | undefined): string | undefined {
-  const pin = verify?.pin;
-  return typeof pin === 'string' && /^LOCK TABLE [^;$]+ IN [A-Z ]+ MODE(; LOCK TABLE [^;$]+ IN [A-Z ]+ MODE)*$/.test(pin) ? pin : undefined;
-}
-
-/* Handles whose transaction reads one snapshot (snapshotRead.ts): REPEATABLE READ from its BEGIN, so every statement
-   reads as of its first. Kept on the handle, as its epoch is, so a retry of the opening begins the same way. */
-const snapshotHandles = new WeakSet<PgQuery>();
-const beginOf = (write: PgQuery) => (snapshotHandles.has(write) ? 'BEGIN ISOLATION LEVEL REPEATABLE READ' : 'BEGIN');
-
-/* What a scoped transaction's BEGIN also says, in its one message: the text a date is read as, whatever the role or
-   database set. A check binds a key's stored text and the database reads it back (storedText.ts, keyTypes.ts); under
-   `DateStyle = 'SQL, YMD'` a date said as 01/02/2026 reads back as another day. Only the output style is set: the
-   field order, which decides how a person's own 01/02/2026 is read, stays the database's. The float and interval
-   text, which no key is (keyTypes.ts), is pinned as well, so a value a trigger's proof compares reads as stored. */
-const SCOPED_SESSION = '; SET LOCAL DateStyle = ISO; SET LOCAL IntervalStyle = postgres; SET LOCAL extra_float_digits = 3';

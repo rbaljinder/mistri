@@ -193,6 +193,7 @@ const STATIC = [
   '/customThemes.css',
   '/structure.css',
   '/themeFamilies.css',
+  '/plexMono.css',
   '/boot.js',
   '/core.js',
   '/deeplink.js',

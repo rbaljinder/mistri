@@ -189,9 +189,9 @@ describe('what the form asks for', () => {
     // The word stands a space apart from the label in the markup itself: no stylesheet of the forms room is loaded here.
     expect(fields[2].querySelector('.form-field-label-row')?.textContent).toBe('Status (optional)');
     // A vocabulary is a listbox, a reference a picker, a date a date box.
-    expect(screen.getByRole('button', { name: 'Source' })).toHaveAttribute('aria-haspopup', 'listbox');
+    expect(screen.getByRole('button', { name: /^Source\b/ })).toHaveAttribute('aria-haspopup', 'listbox');
     // With nothing chosen the listbox asks, in the placeholder's quiet ink, rather than showing a dash.
-    const unchosen = screen.getByRole('button', { name: 'Source' }).querySelector('.dd-value');
+    const unchosen = screen.getByRole('button', { name: /^Source\b/ }).querySelector('.dd-value');
     expect(unchosen).toHaveTextContent('Choose source');
     expect(unchosen).toHaveClass('is-empty');
     expect(screen.getByRole('combobox', { name: 'Owner' })).toBeInTheDocument();
@@ -412,7 +412,7 @@ describe('required means required', () => {
         <NewRecordForm {...props()} table={{ ...lead, columns: [column] }} label={() => 'Choice'} />
       </>,
     );
-    const control = screen.getByRole(role, { name: 'Choice' });
+    const control = screen.getByRole(role, { name: /^Choice\b/ });
     control.setAttribute('aria-describedby', 'field-help');
     control.setAttribute('aria-invalid', 'false');
     await user.click(screen.getByRole('button', { name: 'Add' }));
@@ -503,7 +503,7 @@ describe('required means required', () => {
     const user = userEvent.setup();
     const insert = vi.fn().mockResolvedValue({ key: { id: 1 } });
     draw(<NewRecordForm {...props()} table={{ ...lead, columns: [column] }} label={() => 'Contact preference'} insert={insert} />);
-    const trigger = screen.getByRole('button', { name: 'Contact preference' });
+    const trigger = screen.getByRole('button', { name: /^Contact preference\b/ });
     expect(trigger).not.toHaveAttribute('aria-invalid', 'true');
     await user.click(screen.getByRole('button', { name: 'Add' }));
     expect(trigger).toHaveFocus();
@@ -959,7 +959,7 @@ describe('the controls', () => {
   test('the listbox opens on the page, walks with the keyboard, and shows what was chosen', async () => {
     const user = userEvent.setup();
     draw(<NewRecordForm {...props()} />);
-    const source = screen.getByRole('button', { name: 'Source' });
+    const source = screen.getByRole('button', { name: /^Source\b/ });
     await user.click(source);
     const list = screen.getByRole('listbox', { name: 'Source' });
     expect(within(list).getAllByRole('option')).toHaveLength(4);
@@ -1008,11 +1008,11 @@ describe('the drawer', () => {
     const user = userEvent.setup();
     const p = props();
     draw(<NewRecordDrawer {...p} />);
-    await user.click(screen.getByRole('button', { name: 'Source' }));
+    await user.click(screen.getByRole('button', { name: /^Source\b/ }));
     await user.keyboard('{Escape}');
     expect(p.onCancel).not.toHaveBeenCalled();
     // The listbox took it: closed, and the drawer still up.
-    expect(screen.getByRole('button', { name: 'Source' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /^Source\b/ })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByRole('dialog', { name: 'New lead' })).toBeInTheDocument();
   });
 });
@@ -1055,10 +1055,10 @@ describe('unsaved creation', () => {
     const p = props();
     draw(<NewRecordDrawer {...p} />);
     await user.type(screen.getByLabelText('Name'), 'Keep me');
-    await user.click(screen.getByRole('button', { name: 'Source' }));
+    await user.click(screen.getByRole('button', { name: /^Source\b/ }));
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Discard new record?' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Source' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /^Source\b/ })).toHaveAttribute('aria-expanded', 'false');
     await user.keyboard('{Escape}');
     await screen.findByRole('dialog', { name: 'Discard new record?' });
     expect(p.onCancel).not.toHaveBeenCalled();

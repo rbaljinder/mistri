@@ -299,32 +299,43 @@ function derivedWhen(table: Table, derived: CommandDerived, when: string, now: D
 
 type Reader = Pick<WriteTransaction, 'query' | 'count'>;
 
-/** The table people are rows of, by its local name, where the command reads it (businessCommandAuthorization.ts peopleIn). */
-export type CommandPeople = Readonly<{ table: string; column: string; key: string; id: string }>;
+/** The table people are rows of, by its local name, where the command reads it (businessCommandAuthorization.ts peopleIn).
+ * `account`: the column holds the actor's account id rather than an email, as a tenant App's people table does
+ * (appMe.ts lookupTenantPerson); its rows are the tenant's own, so the transaction's reader finds this tenant's person. */
+export type CommandPeople = Readonly<{ table: string; column: string; key: string; id: string; account?: true }>;
+
+/** The value the people table's `auth.me` column holds for this actor: its account id where the column holds
+ * accounts, else its verified email. Null where the actor has none, and then nobody is theirs. */
+export function personMatch(actor: { readonly email?: string; readonly id?: string }, people: CommandPeople): string | null {
+  if (people.account) return typeof actor.id === 'string' && actor.id ? actor.id : null;
+  return actor.email ?? null;
+}
 
 /**
  * Who `me` is in a command's `when` and its inputs' (`when: 'owner = me'`, a "my records" verb): the actor, as
  * an action's `when` reads the writer (appTransitions.ts) — their verified email, and where the command reads
- * the people table (`auth.me`, binding.people) their row there, found in the same transaction. Undefined where
+ * the people table (`auth.me`, binding.people) their row there, found in the same transaction (by account in a
+ * tenant App, personMatch). Undefined where
  * no text says `me`. An actor with no verified email (a service principal, an unproven sign-up) is someone,
  * and nothing is theirs. A check before any request reads `me` as anyone's (ANYONE) instead.
  */
 export async function whenPerson(
   reader: Pick<Reader, 'query'>,
-  actor: { readonly email?: string },
+  actor: { readonly email?: string; readonly id?: string },
   people: CommandPeople | undefined,
   texts: readonly (string | undefined)[],
 ): Promise<QueryPerson | undefined> {
   if (!texts.some((text) => mentionsMe(text))) return undefined;
   const email = actor.email ?? null;
-  if (email === null) return { email, unproven: true, ...(people ? { person: { table: people.id, key: null } } : {}) };
+  const match = people ? personMatch(actor, people) : email;
+  if (match === null) return { email, unproven: true, ...(people ? { person: { table: people.id, key: null } } : {}) };
   if (!people) return { email };
   const found = await reader.query({
     table: people.table,
     columns: [people.key],
     limit: 2,
     offset: 0,
-    filter: { groups: [[{ column: people.column, op: '=', value: email }]] },
+    filter: { groups: [[{ column: people.column, op: '=', value: match }]] },
   });
   // Two rows carrying one email name nobody in particular, as appMe.ts says.
   const key = found.rows.length === 1 ? found.rows[0][people.key] : null;

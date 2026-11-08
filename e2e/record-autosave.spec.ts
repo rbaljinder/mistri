@@ -31,7 +31,7 @@ const test = base.extend<{ sample: AutosaveApp; saveMode: 'blur' | 'explicit'; u
 });
 
 async function edit(page: Page, label: string) {
-  await page.getByRole('button', { name: `Edit ${label}`, exact: true }).click();
+  await page.getByRole('button', { name: new RegExp(`^Edit ${label}(?: |$)`) }).click();
   return page.getByRole('textbox', { name: label, exact: true });
 }
 
@@ -88,7 +88,7 @@ for (const width of [1440, 390])
       await page.getByText('Review the draft', { exact: true }).filter({ visible: true }).click();
       const preview = page.locator('.peekpanel-modal');
       await expect(preview).toBeVisible();
-      await expect(preview.getByRole('button', { name: 'Edit Name', exact: true })).toBeVisible();
+      await expect(preview.getByRole('button', { name: /^Edit Name(?: |$)/ })).toBeVisible();
       // Simply opening the editable modal does not start an edit or a write.
       await expect(preview.getByRole('textbox')).toHaveCount(0);
       await quiet(page, updates, 0);
@@ -142,7 +142,7 @@ for (const width of [1440, 390])
       await page.goto(`${sample.origin}${recordPath}`);
       const name = await edit(page, 'Name');
       await name.fill('');
-      await page.getByRole('button', { name: 'Edit Assignee', exact: true }).click();
+      await page.getByRole('button', { name: /^Edit Assignee(?: |$)/ }).click();
       const assignee = page.getByRole('combobox', { name: 'Assignee', exact: true });
       await assignee.fill('Missing');
       await leaveField(page);
@@ -340,7 +340,7 @@ for (const width of [1440, 390])
       await follow(page, recordPath);
       await expect(page).toHaveURL(`${sample.origin}${recordPath}`);
       await expect(page.locator('.pending-uncertain')).toContainText('Update not confirmed');
-      await expect(page.getByRole('button', { name: 'Edit Name', exact: true })).toBeDisabled();
+      await expect(page.getByRole('button', { name: /^Edit Name(?: |$)/ })).toBeDisabled();
       await leaveField(page);
       await page.keyboard.press('Enter');
       await quiet(page, updates, 1);
@@ -399,7 +399,7 @@ for (const width of [1440, 390])
       await name.fill('');
       await leaveField(page);
       await expect(name).toHaveAttribute('aria-invalid', 'true');
-      await page.getByRole('button', { name: 'Edit Assignee', exact: true }).click();
+      await page.getByRole('button', { name: /^Edit Assignee(?: |$)/ }).click();
       const assignee = page.getByRole('combobox', { name: 'Assignee', exact: true });
       // Edit mode puts the current value in the box; typing before that lands
       // appended ("Ada NorthBea") and matches nothing.
@@ -461,7 +461,7 @@ for (const width of [1440, 390])
       expected.applied.push({ table_name: 'task', record_id: 1 });
       expect(sample.snapshot()).toEqual(expected);
 
-      await page.getByRole('button', { name: 'Edit Backup', exact: true }).click();
+      await page.getByRole('button', { name: /^Edit Backup(?: |$)/ }).click();
       const backup = page.getByRole('combobox', { name: 'Backup', exact: true });
       await backup.locator('xpath=ancestor::*[contains(@class,"picker")][1]').getByRole('button', { name: 'Clear', exact: true }).click();
       await leaveField(page);
@@ -478,7 +478,7 @@ for (const width of [1440, 390])
       await quiet(page, updates, 3);
       expect(sample.snapshot()).toEqual(expected);
       await assignee.press('Escape');
-      await expect(page.getByRole('button', { name: 'Edit Assignee', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Edit Assignee(?: |$)/ })).toBeVisible();
       await quiet(page, updates, 3);
       expect(sample.snapshot()).toEqual(expected);
     });

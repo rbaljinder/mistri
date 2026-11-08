@@ -240,6 +240,8 @@ export function compileBreakdown(
   style: SqlStyle,
   offset: number | unknown = 0,
   scope?: RowScope,
+  /** The catalog a row scope's `via` targets resolve in, where the reader's own is pruned (rowScope.ts ScopedRelations). */
+  policy: DatabaseSchema = schema,
 ): CompiledBreakdown {
   /* A breakdown compiles to the same statement against the same catalog, and an App's enter asks for each of its
      rail's and dashboard's breakdowns several times — against the reader's pruned catalog and the full one for
@@ -248,10 +250,11 @@ export function compileBreakdown(
      whose text says all of it (breakdownText), and only where compiling read neither the clock nor the reader
      (query.ts readsOf): a statement that wrote a request's instant, day or email is that request's, and is never
      handed to another. */
-  const text = typeof offset === 'number' && fixedCatalog(schema) ? breakdownText(def) : undefined;
+  // A scope read through another catalog than the one it is kept against is no key of it: compiled afresh.
+  const text = typeof offset === 'number' && policy === schema && fixedCatalog(schema) ? breakdownText(def) : undefined;
   if (text === undefined) {
     breakdownsCompiled++;
-    return compileBreakdownFresh(schema, def, style, offset, scope);
+    return compileBreakdownFresh(schema, def, style, offset, scope, policy);
   }
   let byStyle = breakdownsKept.get(schema);
   if (!byStyle) breakdownsKept.set(schema, (byStyle = new WeakMap()));
@@ -264,7 +267,7 @@ export function compileBreakdown(
     kept.set(key, found);
   } else {
     breakdownsCompiled++;
-    const read = readsOf(() => compileBreakdownFresh(schema, def, style, offset, scope));
+    const read = readsOf(() => compileBreakdownFresh(schema, def, style, offset, scope, policy));
     if (read.clock !== 0 || read.reader) return read.value;
     found = read.value;
     kept.set(key, found);
@@ -333,6 +336,7 @@ function compileBreakdownFresh(
   style: SqlStyle,
   offset: number | unknown,
   scope: RowScope | undefined,
+  policy: DatabaseSchema,
 ): CompiledBreakdown {
   // The App's soft keys, where this catalog is the database's own (declaredReferences.ts).
   schema = withViewReferences(schema, def.references);
@@ -358,7 +362,7 @@ function compileBreakdownFresh(
     throw new PathError('A breakdown needs something to measure — `count`, or `sum total`.', '', '', 0);
   }
 
-  const relations = new ScopedRelations(schema, style, scope);
+  const relations = new ScopedRelations(schema, style, scope, policy);
   const baseRelation = relations.table(base.id);
   const plan = new JoinPlan(schema, base, style, relations.table);
   /* The view compiler's paths, so a rollup — the base's or through a
@@ -721,8 +725,9 @@ export function compileBreakdownCount(
   style: SqlStyle,
   scope?: RowScope,
   limit?: number,
+  policy: DatabaseSchema = schema,
 ): { text: string; params: unknown[] } {
-  const inner = compileBreakdown(schema, def, style, 0, scope);
+  const inner = compileBreakdown(schema, def, style, 0, scope, policy);
   /* The LIMIT/OFFSET line is the last one and carries the last two
      parameters. Dropped by rebuilding rather than by string surgery would be
      nicer; it is the last line by construction, and the test says so. */

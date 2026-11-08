@@ -47,6 +47,8 @@ export interface TenantBrandingValue {
   /** The logo drawn on a dark bar or by night, where the light one would not read. Allowed with `logo`; the light logo
       stands where this is none. */
   readonly logoDark?: { readonly hash: string; readonly type: string };
+  /** The tab icon (PNG, ICO or SVG), by content hash like the logo. Allowed with `logo`; the App's own icon stands where this is none. */
+  readonly favicon?: { readonly hash: string; readonly type: string };
   /** One color for both grounds (mixed toward white on the dark one), or one for each. */
   readonly accent?: { readonly light: string; readonly dark: string };
   /** One of the theme's palettes. */
@@ -215,13 +217,13 @@ export function parseTenantBranding(raw: unknown, declaration: BrandingDeclarati
   for (const [key, value] of Object.entries(input)) {
     if (value === undefined || value === null) continue;
     if (
-      !(BRANDING_KEYS as readonly string[]).includes(key === 'logoDark' ? 'logo' : key) ||
-      !allowed.has(key === 'logoDark' ? 'logo' : key)
+      !(BRANDING_KEYS as readonly string[]).includes(key === 'logoDark' || key === 'favicon' ? 'logo' : key) ||
+      !allowed.has(key === 'logoDark' || key === 'favicon' ? 'logo' : key)
     ) {
       refusals.push({ field: 'name', message: `This App does not let a customer change "${key}".` });
       continue;
     }
-    switch (key as BrandingKey | 'logoDark') {
+    switch (key as BrandingKey | 'logoDark' | 'favicon') {
       case 'name':
         // eslint-disable-next-line no-control-regex -- a name is one line of text
         if (typeof value !== 'string' || !value.trim() || value.trim().length > 80 || /[\u0000-\u001f\u007f<>]/.test(value))
@@ -245,6 +247,18 @@ export function parseTenantBranding(raw: unknown, declaration: BrandingDeclarati
                 : 'Upload the dark logo again: the saved one was not recognized.',
           });
         else out[key as 'logo' | 'logoDark'] = { hash: logo.hash, type: logo.type };
+        break;
+      }
+      case 'favicon': {
+        const icon = typeof value === 'object' ? (value as Record<string, unknown>) : {};
+        if (
+          typeof icon.hash !== 'string' ||
+          !/^[0-9a-f]{64}$/.test(icon.hash) ||
+          typeof icon.type !== 'string' ||
+          !/^image\/(png|svg\+xml|x-icon)$/.test(icon.type)
+        )
+          refusals.push({ field: 'logo', message: 'Upload the tab icon again: the saved one was not recognized.' });
+        else out.favicon = { hash: icon.hash, type: icon.type };
         break;
       }
       case 'accent': {

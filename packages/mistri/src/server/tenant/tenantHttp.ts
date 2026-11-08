@@ -29,12 +29,12 @@ import {
   type UpdateRequest,
   type UpdateResult,
 } from '@mistriwork/engine/adapters/adapter.js';
-import { appFileRules, isTenantApp, tenantAppShape, zonedNow, type AppDef } from '../../shared/app.js';
+import { isTenantApp, tenantAppShape, zonedNow, type AppDef } from '../../shared/app.js';
 import type { PageDef } from '@mistriwork/engine/shared/pageModel.js';
 import { wearing, type TenantLook } from './tenantLook.js';
 import { appZone } from '../../shared/appUi.js';
 import { localeWeekStart } from '@mistriwork/engine/shared/weekStart.js';
-import { shownWrite, uploadValues } from '../http/fileRows.js';
+import { shownWrite } from '../http/fileRows.js';
 import { fileStoreTrouble, placeFile, writePlaced } from '../files/fileStorage.js';
 import { judgeLines } from '../http/formLinesWrite.js';
 import type { LineCollection } from '@mistriwork/engine/server/recordWriteOperations.js';
@@ -94,6 +94,11 @@ import {
 } from './tenantHttpRoutes.js';
 import { servedBaseOf, tenantServedSchema, withRequestInstant } from './tenantServedSchema.js';
 import { lookupTenantPerson } from '../app/appMe.js';
+import { compileAppStamps } from '../app/appStamps.js';
+import { readUploadParent } from '../files/uploadParent.js';
+import { readTenantUpload, tenantCommandRoute } from './tenantDraftHttp.js';
+import { BOUNDED_READS, ReadsTold, capturedLoaders, carriable, type TenantDiscovery } from './tenantRequestParts.js';
+import { serverRequest } from '@mistriwork/engine/server/serverRequests.js';
 import { tenantExport, tenantFileRead } from './tenantFiles.js';
 import { TenantWriteFailure } from './tenantWriteSource.js';
 import { SUPPORT_HTTP_OPERATIONS, SUPPORT_HTTP_ROOT } from '../../shared/tenantSupport.js';
@@ -168,38 +173,6 @@ export { tenantHttpBinding, tenantHttpHeader, send } from './tenantWire.js';
 
 /** What a read needs from a context, a tenant's or the platform realm's. Both
  * present their granted commands; only a tenant context presents edits. */
-/* Where one read the page's boot carries says the tables it answered from (live/liveReads.ts), as its own
-   request's `mistri-reads` header would have said them: each read apart, never the union of the boot's. */
-class ReadsTold {
-  readonly headersSent = false;
-  value: string | undefined;
-  setHeader(_name: string, value: string): void {
-    this.value = value;
-  }
-  removeHeader(): void {
-    this.value = undefined;
-  }
-}
-
-/** A reply the client takes as an answer: a success that says no error (engine http/firstPaint.ts `ok`). */
-const carriable = (reply: { status: number; body: unknown }): boolean =>
-  reply.status >= 200 &&
-  reply.status < 300 &&
-  reply.body !== null &&
-  typeof reply.body === 'object' &&
-  !('error' in reply.body) &&
-  !('errors' in reply.body && Array.isArray(reply.body.errors) && reply.body.errors.length > 0);
-
-/** What discovery answers (`/api/tenant/bootstrap`): signed out, or the account's tenants with their names and marks. */
-type TenantDiscovery =
-  | Readonly<{ status: 'signed_out' }>
-  | Readonly<{
-      status: 'ready';
-      appId: string;
-      accountId: string;
-      memberships: readonly Readonly<{ tenantId: string; name?: string; sandbox?: true }>[];
-      platform?: true;
-    }>;
 type ReadContext = Pick<TenantReadContext, 'schema' | 'data'> & {
   readonly capabilities?: TenantReadContext['capabilities'];
   readonly principal: { readonly roles: readonly string[]; readonly tenantId?: string };
@@ -212,18 +185,6 @@ type ReadContext = Pick<TenantReadContext, 'schema' | 'data'> & {
 };
 /** `work` with its reads on one snapshot of `context`, where the context can share one; else as it is. */
 const together = <T>(context: ReadContext, work: () => Promise<T>): Promise<T> => (context.together ? context.together(work) : work());
-/* The resource reads whose every statement is the context's own and bounded: no file's bytes from object storage
-   (FILE_READ_PATH), and each answered from the database alone (withBoundedReads). */
-const BOUNDED_READS: ReadonlySet<string> = new Set([
-  '/api/query',
-  '/api/count',
-  '/api/counts',
-  '/api/run',
-  '/api/view/run',
-  '/api/breakdown',
-  '/api/breakdowns',
-]);
-
 /* The App and pages in another language or a tenant's own words, captured once per localization. localizedApp keeps
    each (locale, words) localization as the same two objects, built from the App's definition and nobody's request,
    so they are this process's as the App itself is; their capture was a deep copy of the whole App on every request
@@ -275,17 +236,6 @@ interface TenantHttpOptions {
   /** Whether this request's login was made here in the last five minutes, by the rule opening a support session
       keeps (nativeSignInAge.ts): what issuing an API token asks. Absent, no token is issued. */
   readonly recentSignIn?: (req: IncomingMessage) => Promise<boolean>;
-}
-
-/* The loaders as handed over, captured once: own names, each a defineLoader's object, never a proxy. */
-function capturedLoaders(value: unknown): Readonly<Record<string, PageLoader>> {
-  if (!value || typeof value !== 'object' || isProxy(value) || Array.isArray(value)) return denyTenant();
-  const held: Record<string, PageLoader> = Object.create(null);
-  for (const [name, loader] of Object.entries(value)) {
-    if (!loader || typeof loader !== 'object' || isProxy(loader) || typeof (loader as PageLoader).load !== 'function') return denyTenant();
-    held[name] = loader as PageLoader;
-  }
-  return Object.freeze(held);
 }
 
 /** Private integration server, deliberately not mounted by the CLI/createApp.
@@ -357,6 +307,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
   )
     return denyTenant();
   exposed(headers.app, app.id);
+  /* A file rule's `stamps`, written on an upload as a single App's are (appStamps.ts formDefaultStamps). */
+  const uploadStamps = compileAppStamps(ownership.schema, app);
+  const uploadsMeOwned = app.auth?.me ? ownership.ownership[app.auth.me.from]?.kind === 'tenant' : false;
   const computedSaysMe = Object.values(app.resources ?? {}).some((resource) =>
     Object.values(resource.computed ?? {}).some((computed) => /\bme\b/i.test(computed.value)),
   );
@@ -772,17 +725,19 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           ? {}
           : await body(
               req,
-              commands.has(path)
-                ? 65536
-                : control
-                  ? 16384
-                  : path === '/api/import'
-                    ? IMPORT_BODY
-                    : path === FILE_UPLOAD_PATH
-                      ? TENANT_FILE_UPLOAD_BODY
-                      : path === '/api/branding/save'
-                        ? BRANDING_SAVE_BODY
-                        : 262144,
+              path === '/api/commands/files'
+                ? TENANT_FILE_UPLOAD_BODY
+                : commands.has(path)
+                  ? 65536
+                  : control
+                    ? 16384
+                    : path === '/api/import'
+                      ? IMPORT_BODY
+                      : path === FILE_UPLOAD_PATH
+                        ? TENANT_FILE_UPLOAD_BODY
+                        : path === '/api/branding/save'
+                          ? BRANDING_SAVE_BODY
+                          : 262144,
             );
       if (!get && !flagExposures) tenantRouteBody(path, input);
       assertActive();
@@ -1387,7 +1342,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               try {
                 const saved = await tenantBranding.save(
                   tenantId,
-                  { value: input.branding, logo: input.logo, darkLogo: input.darkLogo },
+                  { value: input.branding, logo: input.logo, darkLogo: input.darkLogo, favicon: input.favicon },
                   session.identity.id,
                 );
                 return reply(said(saved));
@@ -1640,6 +1595,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               schema,
               input,
               platform ? { app: app.id, anyTenant: true } : { app: app.id, tenant: tenantId as string },
+              platform ? undefined : { context, person: async () => (await tenantPerson(context, schema)).person?.key ?? null },
             );
           }
           /* A list's text filter on a searched field is asked of the engine
@@ -1895,25 +1851,15 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       if (commands.has(path)) {
         const execution = { signal: controller.signal };
         const result = await attributed(
-          async () =>
-            platform
-              ? path.endsWith('/availability')
-                ? await contexts.availabilityPlatform(req, expected, input, execution)
-                : path.endsWith('/prepare')
-                  ? await contexts.preparePlatform(req, expected, input, execution)
-                  : path.endsWith('/status')
-                    ? await contexts.statusPlatform(req, expected, input, execution)
-                    : await contexts.executePlatform(req, expected, input, execution)
-              : path.endsWith('/availability')
-                ? await contexts.availability(req, selectors, expected, input, execution)
-                : path.endsWith('/prepare')
-                  ? await contexts.prepare(req, selectors, expected, input, execution)
-                  : path.endsWith('/status')
-                    ? await contexts.status(req, selectors, expected, input, execution)
-                    : await contexts.execute(req, selectors, expected, input, execution),
+          () => tenantCommandRoute(contexts, { path, platform, req, selectors, expected, input, execution }),
           commandActionLabel(app, input),
         );
-        completedWrite = path.endsWith('/execute');
+        completedWrite = path.endsWith('/execute') || path.endsWith('/draft');
+        // A file refused is answered in the ordinary host's words and status (commands/stagedFileHttp.ts).
+        if (path.endsWith('/files') && result.value && typeof result.value === 'object' && 'refused' in result.value) {
+          const { status, code, message } = (result.value as { refused: { status: number; code: string; message: string } }).refused;
+          return send(req, res, status, { code, error: message }, ownerHeaders(result.context));
+        }
         return send(req, res, 200, result.value, ownerHeaders(result.context));
       }
       /* The platform realm's generic edit is Save, New and Delete on its own rows, judged by its
@@ -1982,16 +1928,29 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       let inserted = { table: input.table, values: input.values, ...(lines ? { lines } : {}) } as unknown as InsertRequest;
       let placed: Awaited<ReturnType<typeof placeFile>> | undefined;
       if (path === FILE_UPLOAD_PATH) {
-        const { schema, tenantId } = (
-          await contexts.withContext(req, selectors, expected, (context) => ({
-            schema: tenantServedSchema(context, app, new Date(now())),
-            tenantId: (context.principal as { tenantId?: unknown }).tenantId,
-          }))
+        /* The record the list hangs off is read on this lease, and the file's columns, link and stamps are built from what
+           was read (tenantDraftHttp.ts readTenantUpload). */
+        const named = readUploadParent(input);
+        if ('error' in named) return send(req, res, named.status, { error: named.error });
+        const read = (
+          await contexts.withContext(req, selectors, expected, (context) =>
+            readTenantUpload(context, readAdapter(context), {
+              app,
+              input,
+              parent: named.parent,
+              stamps: uploadStamps,
+              meOwned: uploadsMeOwned,
+              now: new Date(now()),
+              who: session?.identity.who,
+            }),
+          )
         ).value;
-        const table = findTable(schema, typeof input.table === 'string' ? input.table : '');
-        const rule = table ? appFileRules(app, schema).rules.get(table.id) : undefined;
-        const upload = uploadValues(rule && { ...rule, maxBytes: Math.min(rule.maxBytes, TENANT_FILE_MOST) }, input);
-        if ('error' in upload) return send(req, res, upload.status, { error: upload.error });
+        const { rule, tableId, tenantId } = read;
+        if ('error' in read.upload) return send(req, res, read.upload.status, { error: read.upload.error });
+        /* The lease hands back a copy of what its callback returned, and the server's mark (serverRequests.ts) is on
+           the object, not in it: these are the values the server built above (the file's own columns, its hash, the
+           link and the stamps), so they are marked again, or the hash would be refused as a column the request named. */
+        const upload = { values: serverRequest({ ...read.upload.values }) };
         if (typeof tenantId !== 'string') return denyTenant();
         /* Into the bucket under this tenant's prefix before the row is written (files/fileStorage.ts). */
         try {
@@ -2001,7 +1960,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           if (!trouble) throw error;
           return send(req, res, 503, { error: trouble });
         }
-        inserted = { table: table!.id, values: placed.values } as InsertRequest;
+        inserted = { table: tableId!, values: placed.values } as InsertRequest;
       }
       if (path === '/api/insert' || path === FILE_UPLOAD_PATH) {
         const insert = (): Promise<{ value: { result: InsertResult; undoId?: string }; context: TenantContextReply }> =>

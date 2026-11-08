@@ -196,6 +196,17 @@ export function writeSqliteBranding(db: DatabaseSync, write: BrandingWrite, atte
       write.darkLogo.bytes,
     );
   }
+  if (write.favicon) {
+    db.prepare(`INSERT OR IGNORE INTO main."${logo}" (app, hash, type, bytes) VALUES (?, ?, ?, ?)`).run(
+      write.app,
+      write.favicon.hash,
+      write.favicon.type,
+      write.favicon.bytes,
+    );
+  }
+  const iconHash = (JSON.parse(write.value) as { favicon?: { hash?: string } }).favicon?.hash;
+  if (iconHash && !db.prepare(`SELECT 1 FROM main."${logo}" WHERE app = ? AND hash = ?`).get(write.app, iconHash))
+    throw new Refusal('Branding: the favicon the value names is not stored.');
   const darkHash = (JSON.parse(write.value) as { logoDark?: { hash?: string } }).logoDark?.hash;
   if (darkHash && !db.prepare(`SELECT 1 FROM main."${logo}" WHERE app = ? AND hash = ?`).get(write.app, darkHash))
     throw new Refusal('Branding: the dark logo the value names is not stored.');
@@ -214,7 +225,9 @@ export function writeSqliteBranding(db: DatabaseSync, write: BrandingWrite, atte
     `DELETE FROM main."${logo}" WHERE app = ? AND hash NOT IN
     (SELECT logo_hash FROM main."${value}" WHERE app = ? AND logo_hash IS NOT NULL)
     AND hash NOT IN (SELECT json_extract(value_json, '$.logoDark.hash') FROM main."${value}" WHERE app = ?
-      AND json_extract(value_json, '$.logoDark.hash') IS NOT NULL)`,
-  ).run(write.app, write.app, write.app);
+      AND json_extract(value_json, '$.logoDark.hash') IS NOT NULL)
+    AND hash NOT IN (SELECT json_extract(value_json, '$.favicon.hash') FROM main."${value}" WHERE app = ?
+      AND json_extract(value_json, '$.favicon.hash') IS NOT NULL)`,
+  ).run(write.app, write.app, write.app, write.app);
   return Number(saved.revision);
 }

@@ -95,7 +95,7 @@ test.describe('live sync', () => {
   test('a record being edited is not changed underneath: a notice, and what was typed stays', async ({ browser }) => {
     const alice = await person(browser, 0, '/tickets/1');
     const bob = await person(browser, 1, '/tickets/1');
-    await bob.page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+    await bob.page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
     const input = bob.page.getByRole('textbox', { name: 'Name', exact: true });
     await input.fill('Bob is typing');
     await input.press('Tab');

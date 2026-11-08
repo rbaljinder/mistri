@@ -143,6 +143,33 @@ One App is served at the root (`https://host/leads/127`). Several each keep thei
 
 An App that signs people in needs a server of its own; put several behind one proxy, each under its own path. Its session cookie is scoped to that path, so two Apps on one host never read each other's session.
 
+## On a custom domain
+
+Serve an App, or one tenant of a tenant App, at an address of your own (`https://desk.example.com`) by pointing the name at a TLS proxy and telling the server what that proxy is.
+
+1. **DNS.** Point the name at the proxy: an `A` or `AAAA` record to its address, or a `CNAME` to the host your platform gives you. mistri does not terminate TLS; the proxy holds the certificate.
+2. **Forward the host.** The proxy passes the request's `Host` header through unchanged to the server's port (its default is `127.0.0.1:4111`; bind another interface with `--host`).
+3. **Name the host and the address.** `--allowed-host desk.example.com` (or `MISTRI_ALLOWED_HOSTS`) lets the server answer for the name, and `MISTRI_PUBLIC_URL=https://desk.example.com` is the address sign-in and emailed links use. If the proxy serves mistri under a path (`https://example.com/tools`), add `--base-path /tools` (or `MISTRI_BASE_PATH`) as in [Where an App is served](#where-an-app-is-served).
+4. **Trust the proxy for the visitor's address.** `--trust-proxy <address|CIDR>` (or `MISTRI_TRUST_PROXY`), `--trust-proxy-hops <n>` or `--trust-proxy-cloudflare` as in [Behind a load balancer](#behind-a-load-balancer): the client address that rate limits and the human check see. It never decides who a person is.
+5. **Identity from the proxy, only if it signs people in.** `--auth-proxy-header X-Forwarded-User` (or `MISTRI_AUTH_PROXY_HEADER`) names the header your proxy sets with the signed-in user, and `--auth-proxy-from <address|CIDR>` (or `MISTRI_AUTH_PROXY_FROM`) is the only peer, beside loopback, whose value is believed. The proxy must sign people in on every path it forwards and drop any copy of the header a visitor sent, since mistri takes the value it is handed; a request on loopback without the header is `local`. Leave both out when the App signs people in itself: a header from any other peer is ignored, so a visitor cannot write it.
+
+For **one tenant on its own domain**, a [suite](/docs/suites/) file maps the host to the tenant, beside its `apps`. The suite answers for its `publicOrigin`'s host and each mapped `host` itself, so neither needs `--allowed-host`. The mapped host shows that tenant's landing, public forms and sign-in in its published look, and nothing else; people sign in at the `publicOrigin`.
+
+```json
+{
+  "publicOrigin": "https://app.example.com",
+  "apps": [{ "id": "lintel", "directory": "./lintel", "config": "./lintel-connections.json",
+             "policy": "./lintel/policy.ts" }],
+  "hosts": [{ "host": "north.example.com", "app": "lintel", "tenant": "north" }]
+}
+```
+
+```sh
+npx @mistriwork/mistri suite ./suite.json
+```
+
+A `host` is a bare lowercase name: no port, wildcard or IP, and not the `publicOrigin`'s own. Mapping a host places a visitor; it grants nothing, and each read is still authorized as the tenant's visitor.
+
 ## Behind a load balancer
 
 Run several instances of the same image and config, each stateless:

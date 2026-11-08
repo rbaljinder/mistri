@@ -215,7 +215,7 @@ test('an owner is chosen by name in place, and "Set field…" hands a selection 
   await page.getByRole('button', { name: 'Set field…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Set a field' });
   await expect(dialog).toContainText('Writes one value to 2 selected records.');
-  await dialog.getByRole('button', { name: 'Field', exact: true }).click();
+  await dialog.getByRole('button', { name: /^Field(?: |$)/ }).click();
   await page.getByRole('option', { name: 'Owner', exact: true }).click();
   await dialog.locator('.picker-input').fill(otherName.split(' ')[0]);
   await dialog.locator('.picker-option', { hasText: otherName }).first().click();

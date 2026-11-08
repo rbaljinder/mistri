@@ -56,6 +56,9 @@ export const TENANT_COMMAND_ROUTES: ReadonlySet<string> = new Set([
   '/api/commands/prepare',
   '/api/commands/execute',
   '/api/commands/status',
+  '/api/commands/draft',
+  // A file held for a signed-in form's command (commands/stagedFiles.ts); its body is the file's, not an envelope.
+  '/api/commands/files',
 ]);
 export const TENANT_METADATA_GETS: ReadonlySet<string> = new Set(['/api/runtime', '/api/app', '/api/pages', '/api/pages/suggested']);
 export const TENANT_METADATA_POSTS: ReadonlySet<string> = new Set([
@@ -101,7 +104,7 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
   '/api/tokens/issue': ['label', 'roles', 'operations', 'days'],
   '/api/tokens/revoke': ['id'],
   '/api/branding': [],
-  '/api/branding/save': ['branding', 'logo', 'darkLogo'],
+  '/api/branding/save': ['branding', 'logo', 'darkLogo', 'favicon'],
   '/api/integrations': [],
   '/api/integrations/save': ['integration', 'secrets'],
   '/api/query': ['table', 'filter', 'columns', 'orderBy', 'limit', 'offset'],
@@ -116,7 +119,9 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
   '/api/breakdowns': ['items'],
   '/api/update': ['table', 'key', 'values', 'column', 'value', 'expected'],
   '/api/insert': ['table', 'values', 'lines'],
-  [FILE_UPLOAD_PATH]: ['table', 'values', 'file'],
+  /* `parent` names the record a related list hangs off; the server reads it in the tenant and writes the link
+     itself (files/uploadParent.ts), as a single App's upload does. */
+  [FILE_UPLOAD_PATH]: ['table', 'values', 'file', 'parent'],
   [FILE_READ_PATH]: ['table', 'key', 'variant', 'inline'],
   '/api/delete': ['table', 'key', 'confirm'],
   '/api/import': ['table', 'view', 'name', 'csv', 'mapping', 'mode', 'skipRefused'],
@@ -132,6 +137,8 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
   '/api/commands/availability': ['checks'],
   '/api/commands/execute': ['command', 'commandVersion', 'key', 'expectedVersion', 'idempotencyKey', 'input'],
   '/api/commands/status': ['command', 'commandVersion', 'key', 'expectedVersion', 'idempotencyKey', 'input'],
+  '/api/commands/draft': ['form', 'op', 'step', 'draft', 'version', 'request'],
+  '/api/commands/files': ['command', 'field', 'file'],
 };
 
 /** Hold a body to the fields its route takes. The caller hears the one fixed

@@ -30,6 +30,24 @@ const FIXTURE = 'test/combinations.test.ts';
 /** Each: the defect, where it lived, and the edit that puts it back. */
 const MUTATIONS = [
   {
+    id: 'a-via-target-the-role-cannot-read',
+    defect:
+      'A row scope that reads through a membership table (via) was zeroed with the table, because the role cannot read it: the reader saw nothing, and live sync told them of nothing.',
+    file: 'packages/mistri/src/server/app/appAccess.ts',
+    find: '  const kept = (resource: string) => access.readable.has(resource) || decides.has(resource);',
+    // The resource ceiling drops every rule of an unreadable table again, a via target included.
+    replace: '  const kept = (resource: string) => access.readable.has(resource);',
+  },
+  {
+    id: 'a-via-live-fingerprint-ignores-the-targets-rule',
+    defect:
+      'Two readers whose via scopes read alike shared one live probe, because the digest left out the target rule (bench_access.who = me): one was told of rows only the other reaches.',
+    file: 'packages/mistri/src/server/live/liveFilter.ts',
+    find: 'JSON.stringify(closure === undefined ? [owner, table, scope] : [owner, table, scope, closure])',
+    // The digest hashes the table's own filter alone again.
+    replace: 'JSON.stringify([owner, table, scope])',
+  },
+  {
     id: 'api-commands-through-a-feature',
     defect: 'A command exposed through a feature was dropped from the composed API.',
     file: 'packages/mistri/src/shared/appApi.ts',
@@ -81,9 +99,8 @@ const MUTATIONS = [
     defect:
       "A command's aggregate compiled without the row scope its transaction carries, so it counted another tenant's rows and a policy's hidden ones that its own where never listed.",
     file: 'packages/engine/src/adapters/scoped/scopedReads.ts',
-    find: '      const compiled = compileBreakdown(schema, aggregateBreakdown(schema, snapshotScopedData(request)), style, 0, scope);',
-    replace:
-      '      const compiled = compileBreakdown(schema, aggregateBreakdown(schema, snapshotScopedData(request)), style, 0, undefined);',
+    find: '      const compiled = compileAggregate(schema, snapshotScopedData(request), style, 0, scope, schema);',
+    replace: '      const compiled = compileAggregate(schema, snapshotScopedData(request), style, 0, undefined, schema);',
   },
 ];
 

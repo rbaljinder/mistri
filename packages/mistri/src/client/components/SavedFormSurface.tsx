@@ -17,7 +17,14 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { AppCommandField } from '../../shared/command.js';
 import type { FormStep } from '../../shared/formRules.js';
-import { CommandFields, blankCommandValues, commandInput, commandProblems, type CommandValues } from './CommandFields.js';
+import {
+  CommandFields,
+  blankCommandValues,
+  commandInput,
+  commandProblems,
+  prefilledCommandValues,
+  type CommandValues,
+} from './CommandFields.js';
 import { MultiStepForm } from '@mistriwork/kit/client/components/MultiStepForm.js';
 import { Button, buttonClass } from '@mistriwork/ui/Button.js';
 import {
@@ -40,6 +47,7 @@ import {
   type SavedFormFailure,
 } from './savedFormApi.js';
 import { armLeaveGuard } from './formLeaveGuard.js';
+import type { DraftTransport } from './draftFormApi.js';
 import { Field } from '@mistriwork/ui/Field.js';
 import { IntakeNote } from './IntakeNote.js';
 import { say } from '../copy/forms/components/SavedFormSurface.js';
@@ -168,8 +176,14 @@ export function SavedFormSurface({
   form,
   appName,
   base,
+  draft,
+  onDismiss,
 }: {
   form: SavedFormPresentation;
+  /** Opened in a dialog (FormRoom): Cancel beside the steps and Done on the receipt close it, as FormSurface's do. */
+  onDismiss?: () => void;
+  /** A signed-in form's own server (draftFormApi.ts): the person's draft, found by who they are, instead of a cookie's. */
+  draft?: DraftTransport;
   appName: string;
   /** The form's own address (`/{app}/form/{key}`): its status check and account pages are under it. */
   base?: string;
@@ -217,7 +231,13 @@ export function SavedFormSurface({
   /* The App's human check (PublicGuard.tsx): a fresh token for every step and the submit, each asked after an answer. */
   const guarded = useRef<GuardHandle | undefined>(undefined);
   const token = async () => (await guarded.current?.take())?.challenge;
+  /** The draft's version the review was shown at: the submit carries it back, and one changed since is refused. */
+  const [version, setVersion] = useState<string | null>(null);
+  /** Counts reviews asked again after a refusal as stale. */
+  const [reviewed, setReviewed] = useState(0);
   const keyFor = (step: string) => {
+    // A signed-in form keeps the key in flight across a reload (draftFormApi.ts), so the server is asked, not written to twice.
+    if (draft) return draft.keyFor(step);
     let key = keys.current.get(step);
     if (!key) keys.current.set(step, (key = crypto.randomUUID()));
     return key;
@@ -225,18 +245,43 @@ export function SavedFormSurface({
 
   useEffect(() => {
     let live = true;
-    savedSteps(form.id).then(
-      (list) => {
+    const resumed = draft
+      ? draft.resume().then((found) => ({ list: found?.saved ?? [], reopen: found?.reopen ?? null, answers: found?.values }))
+      : savedSteps(form.id).then((list) => ({ list, reopen: null as string | null, answers: undefined }));
+    resumed.then(
+      ({ list, reopen, answers }) => {
         if (!live) return;
+        // A signed-in draft comes back with what it holds: the steps start from it, and the review shows it all.
+        if (answers && Object.keys(answers).length) {
+          const prefilled = prefilledCommandValues(form.input, answers);
+          const earlier: Record<string, Record<string, unknown>> = {};
+          for (const step of form.steps) {
+            const fields = fieldsOf(step.fields);
+            if (!list.includes(step.id) || !fields.some((field) => Object.hasOwn(answers, field.name))) continue;
+            try {
+              earlier[step.id] = commandInput(fields, prefilled);
+            } catch {
+              // A step the saved answers no longer complete is asked again, not reviewed.
+            }
+          }
+          setValues(prefilled);
+          setHeld(earlier);
+        }
+        // What the server already has needs no retry: its keys are spent, and a changed step is a new attempt.
+        if (draft) for (const id of list) draft.clearKey(id);
         setSaved(list);
-        // Resumed: on at the first step not saved, or the review when all are.
-        if (list.length)
+        // Resumed: on at the step today's rules reopen, else the first not saved, or the review when all are.
+        if (list.length) {
+          const reopened = reopen === null ? -1 : steps.findIndex((step) => step.id === reopen);
           setCurrent(
-            Math.max(
-              0,
-              steps.findIndex((step) => step.id === REVIEW || !list.includes(step.id)),
-            ),
+            reopened >= 0
+              ? reopened
+              : Math.max(
+                  0,
+                  steps.findIndex((step) => step.id === REVIEW || !list.includes(step.id)),
+                ),
           );
+        }
       },
       () => {
         if (live) setSaved([]);
@@ -245,13 +290,36 @@ export function SavedFormSurface({
     return () => {
       live = false;
     };
-  }, [form.id, steps]);
+  }, [form.id, steps, draft]);
+
+  const atReview = steps[current]?.id === REVIEW;
+  useEffect(() => {
+    if (!draft || !atReview || saved === null) return;
+    let live = true;
+    setVersion(null);
+    draft.review().then(
+      (hash) => {
+        if (live) setVersion(hash);
+      },
+      (error: unknown) => {
+        if (!live) return;
+        // Gone is said as gone; anything else leaves Submit with no version to carry, and the person is told so.
+        if ((error as SavedFormFailure).status === 404) refused(error, []);
+        else setFailure(say('reviewNotRead'));
+      },
+    );
+    return () => {
+      live = false;
+    };
+    // `refused` reads this render's state only to say a failure; a review is asked on arrival and again after a stale refusal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, atReview, saved === null, reviewed]);
 
   const forget = () => {
     setHeld({});
     setValues(blankCommandValues(form.input));
   };
-  const armed = !receipt && (Object.keys(held).length > 0 || (saved?.length ?? 0) > 0);
+  const armed = !draft && !receipt && (Object.keys(held).length > 0 || (saved?.length ?? 0) > 0);
   // pagehide drops the answers the page holds: a page kept in the back-forward cache keeps none.
   useEffect(() => (armed ? armLeaveGuard(forget) : undefined), [armed]);
 
@@ -279,10 +347,18 @@ export function SavedFormSurface({
     if (failed.gone) {
       // Forged, expired or finished: the server has nothing for this browser any more.
       keys.current.clear();
+      draft?.clearKeys();
       forget();
       setSaved([]);
       setCurrent(0);
       setFailure(GONE);
+      return;
+    }
+    if (draft && failed.code === 'stale_record') {
+      // Changed on another tab or device since the review: nothing was submitted, and the review is read again.
+      setFailure(say('draftChangedElsewhere'));
+      setReviewed((before) => before + 1);
+      setRefusedAt((before) => before + 1);
       return;
     }
     /* One place for each problem: a refusal about a field on this step is
@@ -309,7 +385,8 @@ export function SavedFormSurface({
       return false;
     }
     try {
-      await saveStep(form.id, step.id, keyFor(step.id), input, await token());
+      if (draft) await draft.step(step.id, keyFor(step.id), input);
+      else await saveStep(form.id, step.id, keyFor(step.id), input, await token());
     } catch (error) {
       refused(error, fields);
       return false;
@@ -317,6 +394,7 @@ export function SavedFormSurface({
       guarded.current?.reset();
     }
     keys.current.delete(step.id);
+    draft?.clearKey(step.id);
     setHeld((before) => ({ ...before, [step.id]: input }));
     setSaved((before) => [...new Set([...(before ?? []), step.id])]);
     return true;
@@ -336,8 +414,21 @@ export function SavedFormSurface({
     }
     try {
       const input = commandInput(submitFields, values);
-      const challenge = await token();
-      const answer = await submitPublicForm(form.id, keyFor(REVIEW), input, intakeAddress(), challenge ? { challenge } : {});
+      let answer: FormReceipt;
+      if (draft) {
+        /* The review has not answered yet: there is no version to carry, so nothing is sent on a guess. The person is
+           told, and the review is asked again, so the next Submit has one. */
+        if (version === null) {
+          setFailure(say('reviewNotReady'));
+          setReviewed((before) => before + 1);
+          return;
+        }
+        answer = await draft.submit(keyFor(REVIEW), input, version);
+        draft.clearKeys();
+      } else {
+        const challenge = await token();
+        answer = await submitPublicForm(form.id, keyFor(REVIEW), input, intakeAddress(), challenge ? { challenge } : {});
+      }
       // Received: the page lets go of every answer it held.
       keys.current.clear();
       forget();
@@ -406,6 +497,13 @@ export function SavedFormSurface({
             <a href={`${base}/status`}>{say('checkItsStatus')}</a> {say('anyTimeWithYourReference')}
           </p>
         )}
+        {onDismiss && (
+          <div className="form-actions">
+            <Button intent="primary" onClick={onDismiss}>
+              {say('common.done')}
+            </Button>
+          </div>
+        )}
       </section>
     );
   }
@@ -458,7 +556,7 @@ export function SavedFormSurface({
                   ))}
               </dl>
             ) : (
-              <p>{saved?.includes(step.id) ? PRIVATE : say('notSavedYet')}</p>
+              <p>{saved?.includes(step.id) ? (draft ? say('savedEarlier') : PRIVATE) : say('notSavedYet')}</p>
             )}
           </section>
         );
@@ -487,7 +585,37 @@ export function SavedFormSurface({
       {!intake && <p className="eyebrow">{appName}</p>}
       {!intake && <h1 id={`${id}-title`}>{form.label}</h1>}
       {/* The description is the first step's alone (FormSurface's rule): over the bar it was read again on every step. */}
-      <p className="form-note">{resumed ? say('yourApplicationIsSaved') : say('eachStepIsSaved')}</p>
+      {/* A signed-in draft is the person's own and is said only once there is one; the public note explains the privacy. */}
+      {(!draft || (saved?.length ?? 0) > 0) && (
+        <p className="form-note">
+          {draft ? say('yourDraftIsSaved') : resumed ? say('yourApplicationIsSaved') : say('eachStepIsSaved')}
+          {draft && (
+            <>
+              {' '}
+              <Button
+                intent="quiet"
+                size="compact"
+                onClick={() => {
+                  // One click, and the draft and its rows are gone: the first step again, blank.
+                  void draft.discard().then(
+                    () => {
+                      draft.clearKeys();
+                      forget();
+                      setSaved([]);
+                      setCurrent(0);
+                      setChanging(false);
+                      setFailure('');
+                    },
+                    (error: unknown) => setFailure((error as Error).message),
+                  );
+                }}
+              >
+                {say('startOver')}
+              </Button>
+            </>
+          )}
+        </p>
+      )}
       {saved === null ? (
         <p className="form-page-description" role="status">
           {say('checkingForAnApplication')}
@@ -527,6 +655,14 @@ export function SavedFormSurface({
             }
           </MultiStepForm>
         </form>
+      )}
+      {/* The draft is kept as it stands: closing the dialog loses nothing a step has saved. */}
+      {onDismiss && (
+        <div className="form-actions">
+          <Button intent="secondary" onClick={onDismiss}>
+            {say('common.cancel')}
+          </Button>
+        </div>
       )}
     </section>
   );

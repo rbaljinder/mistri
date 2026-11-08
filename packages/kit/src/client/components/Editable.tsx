@@ -141,6 +141,7 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
     if (column.references) setPickerGeneration((generation) => generation + 1);
   }, [discarded, column.references]);
   const errorId = useId();
+  const nameId = useId();
   const dateId = useId();
   /* A box the browser cannot read (badInput), or the calendar's text box
      holding what is not a date (its own validity), is not a value to save. */
@@ -371,16 +372,21 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
           </button>
         </div>
       ) : (
+        /* Named "Edit {field}" and then by the value it shows: the name holds the visible words (WCAG 2.5.3). */
         <button
           ref={launcher}
+          id={`${nameId}-edit`}
           type="button"
           className="inline-edit-value"
           aria-label={say('edit', { label })}
+          aria-labelledby={`${nameId}-edit ${nameId}-value`}
           title={say('edit', { label })}
           disabled={applying}
           onClick={() => setOpened(true)}
         >
-          {body}
+          <span id={`${nameId}-value`} style={{ display: 'contents' }}>
+            {body}
+          </span>
         </button>
       ),
     );

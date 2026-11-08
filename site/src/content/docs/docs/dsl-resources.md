@@ -459,6 +459,7 @@ resource.
 | `resources.*.file.name` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `resources.*.file.object` | string | Stable | A text column naming each file's object in the bucket; null for a file kept in content. The server's alone: granted with content, named by no request. |
 | `resources.*.file.size` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `resources.*.file.stamps` | object | Stable | Columns the server writes on every upload and a request never does: me is the signed-in person (as a New form's me default writes it), now the server's clock. A body that names one is overwritten. A tenant App writes them too, me as the member's row in its own tenant. |
 | `resources.*.file.storage` | `"database"` · `"bucket"` | Stable | Where new files' bytes go: database (when unsaid) or bucket. A file is read from wherever its row says. One of `bucket`, `database`. |
 | `resources.*.file.thumbnail` | string | Stable | A binary column holding a smaller copy of each file's picture, which cards and gallery strips draw instead of the whole file. Whoever writes the row fills it (a seed, an import); a row without one is drawn from the file itself. Used in `examples/apps/lintel/resources.ts`. |
 | `resources.*.file.type` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |

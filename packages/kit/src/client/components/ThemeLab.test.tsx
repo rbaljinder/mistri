@@ -24,7 +24,7 @@ afterEach(async () => {
 test('Spanish color-mode choices apply and persist dark, light and system', async () => {
   const user = userEvent.setup();
   render(<ThemeLab onDone={() => {}} />);
-  const control = screen.getByRole('button', { name: 'Modo de color' });
+  const control = screen.getByRole('button', { name: /^Modo de color\b/ });
   expect(control).toHaveTextContent('Sistema');
   for (const [label, value] of [
     ['Oscuro', 'dark'],

@@ -453,7 +453,13 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
   const filterFor = (table: string, input?: Filter, server = false) => {
     assertRead(table);
     const filter = requestData(input);
-    if (filter) for (const group of filter.groups) for (const condition of group) assertFields(table, [condition.column], 'read', server);
+    /* An `any`/`no` condition names the rows that point here, not a column of this table: its child, reference and
+       conditions are held to the reader as a view's are (assertAnyRows), and its own `column` is never read. */
+    if (filter)
+      for (const group of filter.groups)
+        for (const condition of group)
+          if (condition.any) assertAnyRows({ groups: [[{ ...condition, path: condition.column }]] });
+          else assertFields(table, [condition.column], 'read', server);
     return filter;
   };
   const queryFor = (input: QueryRequest) => {

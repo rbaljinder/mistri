@@ -795,6 +795,8 @@ export interface AppResource<Column extends string = string, Page extends string
     object?: Column;
     /** A text column the upload fills with the file's SHA-256 (hex), which tags it for caches. The server's alone: granted with `content`, named by no request. */
     hash?: Column;
+    /** Columns the server writes on every upload and a request never does: `me` the signed-in person (as a New form's `me` default writes it), `now` the server's clock. A body that names one is overwritten. A tenant App writes them too, `me` as the member's row in its own tenant. */
+    stamps?: { readonly [column in Column]?: 'me' | 'now' };
     /** Where new files' bytes go: 'database' (when unsaid) or 'bucket'. A file is read from wherever its row says. */
     storage?: 'database' | 'bucket';
     bucket?: AppFileBucket;
@@ -2266,6 +2268,8 @@ export interface AppFormView<Field extends string = string> {
   draft?: Readonly<Record<string, string>>;
   /** An expired draft: `'purge'` (the default) removes the root and the rows that point at it; `'keep'` leaves them for follow-up. */
   abandoned?: 'purge' | 'keep';
+  /** A signed-in form saved on every step: the root's column the server fills with the signed-in person (`me`) on the first step and finds the draft by on every other. Never an input and never asked on a step. A public form takes none. */
+  owner?: string;
   statusCheck?: SavedFormStatusCheck;
   link?: SavedFormLink;
   /** The realm it belongs to: a tenant's (the default) or the platform realm's, which needs `auth.tenancy.platform`. */

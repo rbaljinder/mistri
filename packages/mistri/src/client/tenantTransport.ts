@@ -720,7 +720,8 @@ const mutationFields: Record<(typeof MUTATION_PATHS)[number], readonly string[]>
   '/api/update': ['table', 'key', 'values', 'column', 'value', 'expected', 'lines'],
   '/api/insert': ['table', 'values', 'lines'],
   // A file into a file resource: the bytes as base64, the row they belong to in `values`.
-  '/api/file/upload': ['table', 'values', 'file'],
+  // `parent` is the record the related list hangs off: the server writes the link to it (files/uploadParent.ts).
+  '/api/file/upload': ['table', 'values', 'file', 'parent'],
   '/api/delete': ['table', 'key', 'confirm'],
   '/api/revert': ['limit', 'confirm', 'expectedId'],
   // A CSV file into a resource this member writes: checked, then written in one transaction of the lease's tenant.
@@ -728,6 +729,10 @@ const mutationFields: Record<(typeof MUTATION_PATHS)[number], readonly string[]>
   '/api/commands/prepare': ['command', 'commandVersion', 'key'],
   '/api/commands/execute': ['command', 'commandVersion', 'key', 'expectedVersion', 'idempotencyKey', 'input'],
   '/api/commands/status': ['command', 'commandVersion', 'key', 'expectedVersion', 'idempotencyKey', 'input'],
+  // A signed-in saved form's step, resume, review, submit or discard: the server finds the draft by its owner.
+  '/api/commands/draft': ['form', 'op', 'step', 'draft', 'version', 'request'],
+  // A file held for a signed-in form's command: sent on its own as it is picked, named in the input by its id.
+  '/api/commands/files': ['command', 'field', 'file'],
 };
 export const isTenantMutationPath = (path: string): boolean => (MUTATION_PATHS as readonly string[]).includes(path);
 const mutationError = (message: string, outcome: 'not_applied' | 'rejected' | 'unknown', detail: Record<string, unknown> = {}) =>
@@ -784,6 +789,24 @@ function mutationBody(path: string, body: Record<string, unknown>): void {
     }
     return;
   }
+  if (path === '/api/commands/draft') {
+    /* The envelope a step or submit carries is the command's own, judged by the server as an execute's is; the
+       draft id is only a hint, which the owner predicate decides (forms/draftHttp.ts). */
+    if (
+      !id(body.form) ||
+      typeof body.op !== 'string' ||
+      (body.step !== undefined && !id(body.step)) ||
+      (body.draft !== undefined && typeof body.draft !== 'string' && typeof body.draft !== 'number') ||
+      (body.version !== undefined && typeof body.version !== 'string') ||
+      (body.request !== undefined && !object(body.request))
+    )
+      throw new Error(say('invalidCommandRequest'));
+    return;
+  }
+  if (path === '/api/commands/files') {
+    if (!id(body.command) || !id(body.field) || !object(body.file)) throw new Error(say('invalidCommandRequest'));
+    return;
+  }
   if (path.startsWith('/api/commands/')) {
     if (!id(body.command) || !Number.isSafeInteger(body.commandVersion) || (body.commandVersion as number) < 1)
       throw new Error(say('invalidCommandRequest'));
@@ -811,7 +834,8 @@ function mutationBody(path: string, body: Record<string, unknown>): void {
       typeof file.name !== 'string' ||
       (file.type !== undefined && typeof file.type !== 'string') ||
       typeof file.data !== 'string' ||
-      !object(body.values)
+      !object(body.values) ||
+      (body.parent !== undefined && (!object(body.parent) || !id(body.parent.table) || !object(body.parent.key)))
     )
       throw new Error(say('invalidWriteValues'));
     writeValues(body.values);
@@ -859,13 +883,16 @@ export async function tenantMutationApi(
     delete payload.app;
     if (url.searchParams.size) throw new Error(say('invalidMutationSelector'));
     mutationBody(url.pathname, payload);
-    const bound = url.pathname.startsWith('/api/commands/')
-      ? 65536
-      : url.pathname === '/api/import'
-        ? IMPORT_BODY
-        : url.pathname === '/api/file/upload'
-          ? FILE_UPLOAD_BODY
-          : 262144;
+    const bound =
+      url.pathname === '/api/commands/files'
+        ? FILE_UPLOAD_BODY
+        : url.pathname.startsWith('/api/commands/')
+          ? 65536
+          : url.pathname === '/api/import'
+            ? IMPORT_BODY
+            : url.pathname === '/api/file/upload'
+              ? FILE_UPLOAD_BODY
+              : 262144;
     if (new TextEncoder().encode(JSON.stringify(payload)).length > bound) throw new Error(say('theMutationIsToo'));
     // The platform realm changes rows through its commands, and its own rows by Save, New and Delete
     //; an import, an Undo or an upload has no platform answer, so none is sent.

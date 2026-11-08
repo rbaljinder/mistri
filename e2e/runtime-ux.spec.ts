@@ -52,7 +52,7 @@ test('runtime UX: app editors are rectangular, named, and discard without a writ
     await route.abort();
   });
   await page.goto(`${CRM}/opportunity/~1`);
-  await page.getByRole('button', { name: 'Edit Opportunity', exact: true }).click();
+  await page.getByRole('button', { name: /^Edit Opportunity(?: |$)/ }).click();
   const name = page.getByRole('textbox', { name: 'Opportunity', exact: true });
   await expect(name).toBeVisible();
   const original = await name.inputValue();
@@ -61,7 +61,7 @@ test('runtime UX: app editors are rectangular, named, and discard without a writ
   expect(parseFloat(await name.evaluate((element) => getComputedStyle(element).borderRadius))).toBeLessThanOrEqual(8);
   await expect(page.getByRole('textbox', { name: /^ID$/ })).toHaveCount(0);
   const owner = page.getByRole('combobox', { name: 'Owner', exact: true });
-  await page.getByRole('button', { name: 'Edit Owner', exact: true }).click();
+  await page.getByRole('button', { name: /^Edit Owner(?: |$)/ }).click();
   await expect(owner).toHaveValue(/[A-Za-z]/);
   const previousOwner = await owner.inputValue();
   await owner.fill('');
@@ -122,7 +122,7 @@ test('runtime UX: acknowledged edits survive subsequent edits and discard', asyn
   });
   try {
     await page.goto(`${CRM}/opportunity/~1`);
-    await page.getByRole('button', { name: 'Edit Opportunity', exact: true }).click();
+    await page.getByRole('button', { name: /^Edit Opportunity(?: |$)/ }).click();
     const name = page.getByRole('textbox', { name: 'Opportunity', exact: true });
     await name.fill('Acknowledged edit');
     await page.getByRole('button', { name: 'Save changes', exact: true }).click();

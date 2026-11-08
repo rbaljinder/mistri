@@ -52,7 +52,7 @@ test.describe('private tenant membership-driven write UI', () => {
     await expect(page.getByRole('heading', { name: 'North item', exact: true })).toBeVisible();
   };
   const editName = async (page: Page, name: string) => {
-    await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+    await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
     const field = page.getByRole('textbox', { name: 'Name', exact: true });
     await field.fill(name);
     await field.press('Tab');
@@ -101,7 +101,7 @@ test.describe('private tenant membership-driven write UI', () => {
     app = await startTenantApp({ writable: true });
     await enter(page);
     await openRecord(page);
-    await expect(page.getByRole('button', { name: 'Edit Tenant ID', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Edit Tenant ID(?: |$)/ })).toHaveCount(0);
     await editName(page, 'North saved');
     const update = page.waitForResponse((reply) => new URL(reply.url()).pathname === '/api/update');
     await page.getByRole('button', { name: 'Save changes', exact: true }).click();
@@ -398,7 +398,7 @@ test.describe('private tenant membership-driven write UI', () => {
     const north = await enter(page);
     await expect(page.getByRole('button', { name: '+ New item', exact: true })).toBeVisible();
     await openRecord(page);
-    await expect(page.getByRole('button', { name: 'Edit Name', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Edit Name(?: |$)/ })).toBeVisible();
     await page.getByRole('button', { name: 'More actions', exact: true }).click();
     await expect(page.getByRole('menuitem', { name: 'Delete…', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');

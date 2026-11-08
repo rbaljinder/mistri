@@ -25,13 +25,13 @@ test.describe('field-level platform permissions', () => {
     expect(login.ok()).toBe(true);
     await page.goto(`${app.origin}/@ticket~1`);
     await expect(page.getByRole('heading', { name: 'Session-owned ticket', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Edit Name', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Edit Status', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Edit Name(?: |$)/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Edit Status(?: |$)/ })).toHaveCount(0);
     await expect(page.locator('.page-body')).toContainText('open');
     await expect(page.locator('body')).not.toContainText('FIELD_PRIVATE_SENTINEL');
     await expect(page.getByRole('button', { name: /^Delete/ })).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+    await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Allowed field edit');
     await page.getByRole('textbox', { name: 'Name', exact: true }).press('Tab');
     await page.getByRole('button', { name: 'Save changes', exact: true }).click();

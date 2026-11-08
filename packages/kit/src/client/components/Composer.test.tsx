@@ -186,7 +186,7 @@ test('says what the view is, lists the base fields ticked as chosen, and the rel
       <Composer />
     </div>,
   );
-  expect(screen.getByRole('button', { name: 'Base table' })).toHaveTextContent('customer');
+  expect(screen.getByRole('button', { name: /^Base table\b/ })).toHaveTextContent('customer');
   expect(document.querySelector('.composer-summary strong')).toHaveTextContent('One row per customer.');
   const checks = document.querySelectorAll('.composer-check');
   expect(checks).toHaveLength(3);
@@ -233,7 +233,7 @@ test('numeric summaries emit qualified relationships rather than physical constr
       <Composer />
     </div>,
   );
-  await user.click(screen.getByRole('button', { name: 'Summarize invoice' }));
+  await user.click(screen.getByRole('button', { name: /^Summarize invoice\b/ }));
   await user.click(screen.getByRole('option', { name: /Total total/ }));
   expect(act.addAggregate).toHaveBeenCalledWith({ fn: 'sum', via: 'invoice.customer_id', column: 'total' });
 });

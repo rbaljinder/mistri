@@ -176,7 +176,7 @@ test('a scope past a size bound is refused naming the bound, how far past it wen
     (error: Error) =>
       error instanceof Refusal &&
       error.message.startsWith('Invalid row scope: a list holds 5,000 values, 904 past the bound of 4,096 per list. ') &&
-      /Narrow the policy, or scope by a relationship instead of a list/.test(error.message),
+      /Narrow the policy, or scope through the parent with `via` instead of listing its keys/.test(error.message),
   );
   const many: Filter = { groups: [[{ column: 'tenant', op: 'in', value: Array.from({ length: 4000 }, () => 1) }]] };
   const wideSchema = { ...schema, tables: Array.from({ length: 5 }, (_, i) => ({ ...schema.tables[0], id: `r${i}` })) };

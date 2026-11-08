@@ -16,7 +16,8 @@ import {
   type AppDef,
   type AppUpdateAction,
 } from '../../shared/app.js';
-import { snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
+import { rowScopeViaAdvisories, snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
+import { warnOnce } from '@mistriwork/engine/server/startupWarnings.js';
 import { captureScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { AppAccessDenied, authorizeResources } from '../app/appAccess.js';
@@ -28,6 +29,7 @@ import { compileAppStamps, sessionActorWords, stampUpdate } from '../app/appStam
 import { lookupPerson, personKey } from '../app/appMe.js';
 import { compileAppTransitions } from '../app/appTransitions.js';
 import { whenPerson } from '../commands/commandWhen.js';
+import { runDraftRoute } from '../forms/draftHttp.js';
 import { forbiddenBy } from '../commands/commandErrors.js';
 import { clockNow } from '@mistriwork/engine/server/http/clock.js';
 import {
@@ -102,6 +104,8 @@ export interface AppPolicyContext {
     prepare(raw: unknown, options?: PolicyCommandOptions): Promise<PreparedCommand | { targets: PreparedCommandTarget[] }>;
     execute(raw: unknown, options?: PolicyCommandOptions): Promise<BusinessCommandResult>;
     status(raw: unknown, options?: PolicyCommandOptions): Promise<BusinessCommandStatus>;
+    /** A signed-in form saved on every step (forms/draftHttp.ts): in this principal's rows, as every command here is. */
+    draft?(raw: unknown, options?: PolicyCommandOptions): Promise<unknown>;
   };
   transaction<T>(source: string, run: (tx: WriteTransaction) => Promise<T>): Promise<T>;
   /** One source's connection read alone, under this principal's rows there: a
@@ -419,6 +423,8 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
       // thenables are not policy data and fail strict scope validation.
       rows = snapshotRowScope(schema, isPromise(resolved) ? await resolved : resolved);
     }
+    // Slow, not wrong: said once to the operator, who owns the indexes (a `check` cannot see a policy's rows).
+    for (const line of rowScopeViaAdvisories(schema, rows)) warnOnce(`row-scope-via ${app.id} ${line}`, line);
     assertDeployed();
     let active = true;
     const assertActive = () => {
@@ -792,6 +798,29 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                     ...execution,
                     flags: await authorizedCommandFlags(commandBinding, principal, body, flags),
                   });
+                }),
+              draft: (raw, options) =>
+                track(async () => {
+                  const body = snapshotScopedData(raw);
+                  try {
+                    return await runDraftRoute({
+                      app,
+                      commands: commandOptions!.registry,
+                      binding: commandBinding,
+                      actor: principal,
+                      body,
+                      execution: { signal: options?.signal, requestId: options?.requestId },
+                      flagsFor: (envelope) => authorizedCommandFlags(commandBinding, principal, envelope, flags),
+                      ...(options?.door ? { door: options.door } : {}),
+                    });
+                  } catch (thrown) {
+                    const error = thrown instanceof CommandTransactionFailure ? thrown.cause : thrown;
+                    if (error instanceof BusinessCommandExecutionError) throw error;
+                    if (error instanceof AppAccessDenied) throw forbiddenBy(error);
+                    if (error instanceof CommandInputError)
+                      throw new BusinessCommandExecutionError('invalid_input', 'not_applied', error.field);
+                    throw new BusinessCommandExecutionError('temporarily_unavailable');
+                  }
                 }),
               status: (raw, options) =>
                 track(async () => {

@@ -88,7 +88,7 @@ test('a control of several parts takes the wiring through a function', () => {
       }
     </Field>,
   );
-  const trigger = screen.getByRole('button', { name: 'Team' });
+  const trigger = screen.getByRole('button', { name: /^Team\b/ });
   // The label's `for` reaches the listbox's button: the id is the one the field handed over.
   expect(trigger).toHaveAttribute('id', handed!.id);
   expect(trigger).toHaveAttribute('aria-invalid', 'true');

@@ -1,11 +1,13 @@
-import type { Condition } from '@mistriwork/engine/adapters/adapter.js';
+import { Refusal, type Condition } from '@mistriwork/engine/adapters/adapter.js';
 import {
   isRowScopeSnapshot,
   ROW_SCOPE_LIMITS,
+  renameViaTargets,
   rowScopeText,
   snapshotRowScope,
   type RowScope,
   type RowScopeFilter,
+  type ViaCondition,
 } from '@mistriwork/engine/shared/rowScope.js';
 import { captureTenantData, denyTenant, isCapturedTenantData, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import { parseTenantSelector, type TenantMembershipEvidence } from './tenantMembership.js';
@@ -31,10 +33,30 @@ function size(value: unknown): Size {
   return { nodes, characters };
 }
 
+const VIA_OUTSIDE = 'A row scope `via` names a table outside the tenant ownership classes (platform-owned or unknown).';
+const relates = (condition: RowScopeFilter['groups'][number][number]): condition is ViaCondition =>
+  !!condition.via && 'resource' in condition.via;
+
+/** Every `via` target is a table the tenant context can read: a tenant-owned or global one. */
+function viaTargetsOwned(policy: RowScopeFilter, ownership: TenantOwnershipSnapshot['ownership']): boolean {
+  return policy.groups.every((group) =>
+    group.every((condition) => {
+      if (!relates(condition)) return true;
+      const rule = Object.hasOwn(ownership, condition.via.resource) ? ownership[condition.via.resource] : undefined;
+      return rule !== undefined && rule.kind !== 'platform';
+    }),
+  );
+}
+
+/** A composed (logical) scope in the source's physical names: the keys and every `via` target translate by the same mapping. */
+export function physicalRowScope(scope: RowScope, toPhysical: (id: string) => string): RowScope {
+  return Object.fromEntries(Object.entries(scope).map(([id, rule]) => [toPhysical(id), renameViaTargets(rule, toPhysical)]));
+}
+
 interface Plan {
   id: string;
-  left: Condition[][];
-  right: Condition[][];
+  left: RowScopeFilter['groups'];
+  right: RowScopeFilter['groups'];
   tenant: Condition[];
   binary: string[];
 }
@@ -173,10 +195,16 @@ export function composeTenantReadScope(
       // A newly imposed collation can widen != or range conditions. Refuse an
       // ambiguous intersection, rather than silently reinterpret either layer.
       for (const policy of [a, b]) {
+        // A relationship test reads another table's scoped rows. That table is composed in this same pass, tenant predicate included, so a
+        // parent in another tenant never satisfies it; one the tenant does not own cannot be read through at all.
+        if (policy !== true && !viaTargetsOwned(policy, owned.ownership)) return denyTenant(new Refusal(VIA_OUTSIDE));
         if (
           policy !== true &&
           policy.groups.some((group) =>
-            group.some((condition) => binary.includes(condition.column) && !policy.binary?.includes(condition.column)),
+            group.some(
+              (condition) =>
+                typeof condition.column === 'string' && binary.includes(condition.column) && !policy.binary?.includes(condition.column),
+            ),
           )
         )
           return denyTenant();

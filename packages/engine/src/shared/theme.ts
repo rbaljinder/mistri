@@ -803,9 +803,12 @@ function stateFindings(
       soft && nav ? over(soft, nav) : undefined,
     );
   /* A round avatar look draws the sidebar's identity mark in the menu's accent on a 12% tint of that accent, laid on
-     the menu's ground (lumenLook.css). */
+     the menu's ground (lumenLook.css). A part that names the mark's ink or ground replaces that pair (partsLook.css),
+     and the parts loop below measures the one drawn instead. */
   const navAccent = color('navAccent');
-  if (recipes.avatar === 'round') check('navAccent/its own tint over navGround (the identity mark)', navAccent, tintOver(navAccent, nav));
+  const markPart = theme.parts?.identityMark;
+  if (recipes.avatar === 'round' && markPart?.ink === undefined && markPart?.ground === undefined)
+    check('navAccent/its own tint over navGround (the identity mark)', navAccent, tintOver(navAccent, nav));
   /* The search is a field on the surface in the page's ink (themeFamilies.css), a pair the page's checks read; the
      dark bar alone draws it on an 8% ink tint of its own ground in its muted ink (brandLook.css). */
   if (recipes.bar === 'dark') check('navMuted/navigation search', color('navMuted'), navGround(0.08));

@@ -24,6 +24,7 @@ import { supportManagedKind } from './tenantManagedKindSupport.js';
 import type { TenantMembershipEvidence } from './tenantMembership.js';
 import { captureTenantOwnership, type TenantOwnershipSnapshot } from './tenantOwnership.js';
 import { assertStructuredReadFilter } from '@mistriwork/engine/server/resourceReadOperations.js';
+import { heldFileMethods } from './tenantHeldFiles.js';
 import { aggregateColumns } from '@mistriwork/engine/shared/aggregate.js';
 
 /** The principals a managed transaction runs for, chosen by the evidence's own
@@ -154,6 +155,13 @@ async function runManaged<T>(
     typeof Object.getOwnPropertyDescriptor(journal, 'nextNumber')?.value === 'function'
       ? journalMethod('nextNumber')
       : undefined;
+  const own = (name: string) =>
+    journal &&
+    typeof journal === 'object' &&
+    !isProxy(journal) &&
+    typeof Object.getOwnPropertyDescriptor(journal, name)?.value === 'function';
+  const staging = own('stage') ? journalMethod('stage') : undefined,
+    taking = own('takeStaged') ? journalMethod('takeStaged') : undefined;
   const operations = new TransactionOperations();
   let accepting = true;
   let callbackFailure: { error: unknown } | undefined;
@@ -354,6 +362,7 @@ async function runManaged<T>(
                 invoke({ appId, name, per, start }, (input) => numbering(input.appId, input.name, input.per, input.start)),
             }
           : {}),
+        ...heldFileMethods(invoke, staging, taking),
       })
     : undefined;
   const completed = (value: T): T => {

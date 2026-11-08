@@ -16,6 +16,7 @@
  * platform's (tenant/tenantIntake.ts).
  */
 import {
+  isFormView,
   isPublicCommandPage,
   isPublicForm,
   isRowPolicyApp,
@@ -24,10 +25,11 @@ import {
   type AppDef,
   type AppFormView,
 } from '../../shared/app.js';
-import { findTable, primaryKey, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { columnKind, findTable, primaryKey, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { commandFieldsDeep } from '../../shared/command.js';
 import { compileNotifyWhen, notifyWhenHolds } from '../../shared/appNotify.js';
 import { formCommands, isSavedForm } from '../../shared/appSavedForms.js';
+import { personTable } from '../../shared/appMe.js';
 import { commandCatalog, type CommandCatalog } from '../commands/commandDb.js';
 import { describeShape, type ShapeDescriptor } from '../commands/commandShapes.js';
 import { getCommandEvents, type AnyBusinessCommand, type BusinessCommandRegistry } from '../commands/businessCommands.js';
@@ -210,20 +212,73 @@ function platformColumnProblem(
   return undefined;
 }
 
-function savedFormProblem(
+/**
+ * A signed-in draft's owner column: a real column of the root, of the type a
+ * person's key is (what `me` writes), so the signed-in person fits it.
+ */
+function ownerProblem(
+  app: AppDef,
+  schema: DatabaseSchema,
+  root: string,
+  owner: string,
+  found: { type: string } | undefined,
+): string | undefined {
+  if (!found) return `save.owner names "${root}.${owner}", which is not a column.`;
+  const people = personTable(app, schema);
+  if (people.problem || !people.table) {
+    return `save.owner needs auth.me, the table people are rows of, so the signed-in person can own the draft${people.problem ? `: ${people.problem}` : '.'}`;
+  }
+  const [key] = primaryKey(people.table);
+  const keyColumn = people.table.columns.find((candidate) => candidate.name === key);
+  if (keyColumn && columnKind(found.type) !== columnKind(keyColumn.type)) {
+    return `"${root}.${owner}" (save.owner) is ${found.type}, and a person's key (${people.table.name}.${key}) is ${keyColumn.type}: the column holds the signed-in person.`;
+  }
+  return undefined;
+}
+
+/** Every problem of the App's signed-in saved forms (a person's drafts), the first first. */
+export function signedInDraftProblems(app: AppDef, registry: BusinessCommandRegistry, schema: DatabaseSchema): string | undefined {
+  const rooted = new Map<string, string>();
+  for (const [key, view] of Object.entries(app.views)) {
+    if (!isFormView(view) || view.public) continue;
+    const form = view;
+    if (!isSavedForm(form) || form.save.owner === undefined) continue;
+    const problem = savedFormProblem(app, form, registry, schema);
+    if (problem) return `Form "${key}": ${problem}`;
+    /* A draft is found by its owner among the form's roots, and nothing on the row says which form made it: two
+       forms saving drafts into one table would find each other's. */
+    const start = registry[formCommands(form)[0].id];
+    const catalog = footprintCatalog(app, start, schema);
+    for (const root of catalog ? savedFormRoots(form, start, catalog) : []) {
+      const table = logicalResource(app, start.source, root);
+      const other = rooted.get(table);
+      if (other)
+        return `Form "${key}" keeps its drafts in "${table}", which form "${other}" does too: a draft is found by its owner, so each form needs a root of its own.`;
+      rooted.set(table, key);
+    }
+  }
+  return undefined;
+}
+
+/** Exported for the case that holds its wording: a public saved form in a row-policy App is still refused. */
+export function savedFormProblem(
   app: AppDef,
   form: AppFormView & { save: NonNullable<AppFormView['save']> },
   registry: BusinessCommandRegistry,
   schema: DatabaseSchema,
 ): string | undefined {
   const { save } = form;
+  const signedIn = save.owner !== undefined;
   /* A row-policy App's public intake places one insert and changes nothing
      after it (policy/policyPublicIntake.ts): a draft that later steps update
      needs that placement re-proved on every step, which it does not do yet.
      A tenant App's intake does (tenant/tenantIntake.ts): each step is
-     resolved again, and its draft is found only in the place it resolves to. */
-  if (isRowPolicyApp(app)) {
-    return "saves each step, which an ordinary or a tenant App's public form does; a row-policy App's public intake inserts once and changes nothing after.";
+     resolved again, and its draft is found only in the place it resolves to.
+     A signed-in draft is not that intake: every step runs under the person's
+     own grant and row policy, resolved again on each request, so the refusal
+     is the public form's alone. */
+  if (!signedIn && isRowPolicyApp(app)) {
+    return "saves each step, which an ordinary or a tenant App's public form does; a row-policy App's public intake inserts once and changes nothing after. A signed-in form saves each step under a row policy: leave out public and name owner.";
   }
   /* The status check and the link read and write an application outside any
      step's command — a lockout stamp, an account's id — and a tenant App's
@@ -262,6 +317,10 @@ function savedFormProblem(
       if (!found.nullable) return `"${root}.${name}" (resume.${role}) must be nullable: the platform clears it on submit.`;
     }
     if (!column(save.draft.column)) return `the root table "${root}" has no column "${save.draft.column}" for the draft state.`;
+    if (save.owner !== undefined) {
+      const problem = ownerProblem(app, schema, root, save.owner, column(save.owner));
+      if (problem) return problem;
+    }
     if (form.statusCheck) {
       const check = form.statusCheck;
       for (const name of [check.receipt, ...check.confirm.map((item) => item.column), ...check.show]) {
@@ -274,7 +333,7 @@ function savedFormProblem(
   const asked = new Map<string, string>();
   for (const [index, [id, command]] of commands.entries()) {
     const role = index < steps.length ? 'step' : 'submit';
-    if (role === 'step') {
+    if (role === 'step' && !signedIn) {
       const problem = publicOutputProblem(id, command!, 'step');
       if (problem) return problem;
     }
@@ -284,6 +343,14 @@ function savedFormProblem(
     }
     const catalog = footprintCatalog(app, command!, schema);
     if (!catalog) return `command "${id}" names a table the catalog does not hold.`;
+    if (save.owner !== undefined) {
+      const people = personTable(app, schema).table;
+      if (!people || !Object.values(catalog).some((table) => table.meta.id === people.id)) {
+        return `command "${id}" does not read "${people?.name ?? 'the people table'}", which the draft's owner is found through: add it to the command's read, so the person is the one signed in.`;
+      }
+      if (command!.fields.some((field) => field.name === save.owner))
+        return `command "${id}" asks for "${save.owner}", the draft's owner. The server fills it with the signed-in person; no step asks it.`;
+    }
     for (const root of roots) {
       if (!command!.write.includes(root))
         return `command "${id}" does not write the root table "${root}"; every step and the submit keep the application's place on it.`;
@@ -312,6 +379,14 @@ function savedFormProblem(
       if (save.abandoned === 'purge' && !start.write.includes(table)) {
         return (
           `abandoned: 'purge' removes an expired draft with every row that points at it, in the first step's transaction, ` +
+          `so its command "${startId}" must list "${table}" in write.`
+        );
+      }
+      /* Start over on a signed-in draft removes the draft with its rows, under the first step's command (draftHttp.ts):
+         a table only a later step writes would be left behind, pointing at nothing, whatever `abandoned` says. */
+      if (save.owner !== undefined && !start.write.includes(table)) {
+        return (
+          `starting over removes a signed-in draft with every row that points at it, under the first step's command, ` +
           `so its command "${startId}" must list "${table}" in write.`
         );
       }

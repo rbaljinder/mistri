@@ -14,6 +14,8 @@ import type { AppDef } from '../../shared/app.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import type { CommandJournalAppScope } from '../../adapters/commands/commandJournalTypes.js';
+import { BusinessCommandExecutionError } from './commandErrors.js';
+import { AppAccessDenied } from '../app/appAccess.js';
 import { bindHttpBusinessCommands } from './businessCommandLoader.js';
 import type { BusinessCommandActor, BusinessCommandRegistry } from './businessCommands.js';
 import {
@@ -136,4 +138,51 @@ export async function stagePublicFileHttp(
     visitor,
     command: options.command,
   });
+}
+
+/**
+ * A row-policy App's public file, held through its fixed intake (policy/policyPublicIntake.ts): the same visitor cookie,
+ * body bound and answers as stagePublicFileHttp, but the transaction is the intake's own, in its captured destination,
+ * so nothing about where a file is held comes from the request.
+ */
+export async function holdPolicyFileHttp(
+  ctx: RequestContext,
+  key: string,
+  hold: (form: string, body: unknown, visitor: string) => Promise<{ id: string; name: string; type: string; size: number }>,
+  secure: boolean,
+): Promise<void> {
+  const { req, res } = ctx;
+  let visitor = readVisitorToken(req, key);
+  const fresh = !visitor;
+  visitor ??= newVisitorToken();
+  const length = Number(req.headers['content-length']);
+  if (Number.isFinite(length) && length > PUBLIC_FILE_BODY) {
+    res.setHeader('connection', 'close');
+    send(res, 413, { code: 'too_large', error: 'This file is too large.' });
+    return;
+  }
+  let body: Record<string, unknown>;
+  try {
+    body = await readJson(req, PUBLIC_FILE_BODY);
+  } catch (error) {
+    if (!(error instanceof HttpError)) throw error;
+    if (error.status === 413) res.setHeader('connection', 'close');
+    send(res, error.status, { code: error.status === 413 ? 'too_large' : 'invalid_input', error: error.message });
+    return;
+  }
+  try {
+    // The command is the form's own, said by the intake; whatever the body names is ignored.
+    const form = ctx.signedIn!.app.app.views[key] as { command: { id: string } };
+    const held = await hold(key, { ...body, command: form.command.id }, visitor);
+    if (fresh) res.setHeader('set-cookie', cookieUnder(ctx.mount.base, visitorCookie(key, visitor, secure)));
+    send(res, 200, held);
+  } catch (error) {
+    // An intake that is retiring, or none for this form, is a while or for good, never a stack trace.
+    if (error instanceof BusinessCommandExecutionError || error instanceof AppAccessDenied) {
+      send(res, 503, { code: 'temporarily_unavailable', error: 'Files cannot be held just now.' });
+      return;
+    }
+    if (!(error instanceof StageRefusal)) throw error;
+    send(res, error.status, { code: error.code, error: error.message });
+  }
 }

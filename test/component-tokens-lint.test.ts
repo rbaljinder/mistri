@@ -89,6 +89,10 @@ test('an icon name a component writes, plain or in either branch of a conditiona
       'export const dynamic = <Icon name={row.icon} />;',
       "export const compared = <Icon name={kind === 'hosue' ? 'house' : name} />;",
       "export const mark = { icon: '', title: 'icon' };",
+      // A property of something else, or a name that only ends in "icon", is not an icon the App draws.
+      "el.dataset.icon = 'not-an-icon';",
+      "export const $icon = 'not-an-icon';",
+      "export const tray = { trayicon: 'not-an-icon' };",
     ].join('\n'),
   });
   assert.deepEqual(warnings, []);

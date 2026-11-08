@@ -58,9 +58,9 @@ const inApp = () => configureVisualThemes([], undefined, true);
 test('Workbench offers its native default and explicit built-ins without changing other preferences', async () => {
   const user = userEvent.setup();
   render(<PrefsDialog onClose={() => {}} />);
-  const control = screen.getByRole('button', { name: 'Visual theme' });
+  const control = screen.getByRole('button', { name: /^Visual theme\b/ });
   expect(control).toHaveTextContent('Workbench default');
-  expect(screen.getByRole('button', { name: 'Color mode' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: /^Color mode\b/ })).toBeTruthy();
   await user.click(control);
   await user.click(screen.getByRole('option', { name: 'Sage' }));
   expect(control).toHaveTextContent('Sage');
@@ -85,7 +85,7 @@ test("a host's own looks are offered beside the native default, worn by one attr
   ]);
   const user = userEvent.setup();
   const view = render(<PrefsDialog onClose={() => {}} />);
-  const control = screen.getByRole('button', { name: 'Visual theme' });
+  const control = screen.getByRole('button', { name: /^Visual theme\b/ });
   await user.click(control);
   const names = screen.getAllByRole('option').map((option) => option.textContent?.replace('✓', ''));
   expect(names.slice(0, 3)).toEqual(['Workbench default', 'Blueprint', 'Console']);
@@ -106,7 +106,7 @@ test("a host's own looks are offered beside the native default, worn by one attr
   registerHostLooks([{ id: 'blueprint', label: 'Blueprint', sheet: loaded }]);
   expect(document.documentElement).toHaveAttribute('data-host-look', 'blueprint');
   render(<PrefsDialog onClose={() => {}} />);
-  const again = screen.getByRole('button', { name: 'Visual theme' });
+  const again = screen.getByRole('button', { name: /^Visual theme\b/ });
   expect(again).toHaveTextContent('Blueprint');
   // A built-in look takes its place, and the native default takes every look away.
   await user.click(again);
@@ -129,7 +129,7 @@ test('color mode applies each explicit choice once without changing other prefer
   inApp();
   const user = userEvent.setup();
   render(<PrefsDialog onClose={() => {}} />);
-  const control = screen.getByRole('button', { name: 'Color mode' });
+  const control = screen.getByRole('button', { name: /^Color mode\b/ });
   expect(control).toHaveTextContent('System');
   for (const label of ['Dark', 'Light', 'System']) {
     await user.click(control);
@@ -137,7 +137,7 @@ test('color mode applies each explicit choice once without changing other prefer
     expect(control).toHaveTextContent(label);
   }
   expect(set.colorMode.mock.calls).toEqual([['dark'], ['light'], ['system']]);
-  expect(screen.getByRole('button', { name: 'Visual theme' })).toHaveTextContent('Workshop');
+  expect(screen.getByRole('button', { name: /^Visual theme\b/ })).toHaveTextContent('Workshop');
   expect(localStorage.getItem(VISUAL_THEME_KEY)).toBeNull();
   expect(set.density).not.toHaveBeenCalled();
   expect(set.typography).not.toHaveBeenCalled();
@@ -148,12 +148,12 @@ test('visual presets show swatches, persist immediately, and leave the other pre
   inApp();
   const user = userEvent.setup();
   render(<PrefsDialog onClose={() => {}} />);
-  expect(screen.getByRole('button', { name: 'Visual theme' })).toHaveTextContent('Workshop');
-  await user.click(screen.getByRole('button', { name: 'Visual theme' }));
+  expect(screen.getByRole('button', { name: /^Visual theme\b/ })).toHaveTextContent('Workshop');
+  await user.click(screen.getByRole('button', { name: /^Visual theme\b/ }));
   const option = screen.getByRole('option', { name: 'Mono' });
   expect(option.querySelectorAll('.dd-swatches > span')).toHaveLength(3);
   await user.click(option);
-  expect(screen.getByRole('button', { name: 'Visual theme' })).toHaveTextContent('Mono');
+  expect(screen.getByRole('button', { name: /^Visual theme\b/ })).toHaveTextContent('Mono');
   expect(localStorage.getItem(VISUAL_THEME_KEY)).toBe('mono');
   expect(set.density).not.toHaveBeenCalled();
   expect(set.typography).not.toHaveBeenCalled();
@@ -165,7 +165,7 @@ test('the App’s own theme is marked in the picker, and a reader’s pick can b
   configureVisualThemes([], 'sage', true);
   const user = userEvent.setup();
   render(<PrefsDialog onClose={() => {}} />);
-  const control = screen.getByRole('button', { name: 'Visual theme' });
+  const control = screen.getByRole('button', { name: /^Visual theme\b/ });
   expect(control).toHaveTextContent('Sage');
   expect(screen.queryByRole('button', { name: 'Reset to the App’s theme' })).toBeNull();
   await user.click(control);
@@ -195,7 +195,7 @@ test('under a dark-only theme the color mode is shown as dark and cannot be chan
   colorMode = 'light';
   configureVisualThemes([night], 'night', true);
   render(<PrefsDialog onClose={() => {}} />);
-  const control = screen.getByRole('button', { name: 'Color mode' });
+  const control = screen.getByRole('button', { name: /^Color mode\b/ });
   expect(control).toHaveTextContent('Dark');
   expect(control).toBeDisabled();
   expect(screen.getByText('This theme is dark only.')).toBeTruthy();
@@ -204,8 +204,8 @@ test('under a dark-only theme the color mode is shown as dark and cannot be chan
 test('typography exposes an explicit route back to the app default', async () => {
   const user = userEvent.setup();
   render(<PrefsDialog onClose={() => {}} />);
-  expect(screen.getByRole('button', { name: 'Typography' })).toHaveTextContent('App default');
-  await user.click(screen.getByRole('button', { name: 'Typography' }));
+  expect(screen.getByRole('button', { name: /^Typography\b/ })).toHaveTextContent('App default');
+  await user.click(screen.getByRole('button', { name: /^Typography\b/ }));
   await user.click(screen.getByRole('option', { name: /^Mono/ }));
   expect(set.typography).toHaveBeenCalledWith('mono');
 });
@@ -213,19 +213,19 @@ test('typography exposes an explicit route back to the app default', async () =>
 test('shows each setting as it is and writes a change to its own store', async () => {
   const user = userEvent.setup();
   render(<PrefsDialog onClose={() => {}} />);
-  expect(screen.getByRole('button', { name: 'Density' })).toHaveTextContent('Comfortable');
-  expect(screen.getByRole('button', { name: 'Rows per related list' })).toHaveTextContent('10');
-  await user.click(screen.getByRole('button', { name: 'Density' }));
+  expect(screen.getByRole('button', { name: /^Density\b/ })).toHaveTextContent('Comfortable');
+  expect(screen.getByRole('button', { name: /^Rows per related list\b/ })).toHaveTextContent('10');
+  await user.click(screen.getByRole('button', { name: /^Density\b/ }));
   await user.click(screen.getByRole('option', { name: /Compact/ }));
   expect(set.density).toHaveBeenCalledWith('compact');
-  await user.click(screen.getByRole('button', { name: 'Rows per list' }));
+  await user.click(screen.getByRole('button', { name: /^Rows per list\b/ }));
   await user.click(screen.getByRole('option', { name: '50' }));
   expect(set.pageSize).toHaveBeenCalledWith(50);
-  await user.click(screen.getByRole('button', { name: 'Rows per related list' }));
+  await user.click(screen.getByRole('button', { name: /^Rows per related list\b/ }));
   await user.click(screen.getByRole('option', { name: '20' }));
   expect(relatedRows()).toBe(20);
-  expect(screen.getByRole('button', { name: 'Rows per related list' })).toHaveTextContent('20');
-  await user.click(screen.getByRole('button', { name: 'Rows per related list' }));
+  expect(screen.getByRole('button', { name: /^Rows per related list\b/ })).toHaveTextContent('20');
+  await user.click(screen.getByRole('button', { name: /^Rows per related list\b/ }));
   expect(screen.getByRole('option', { name: '20' })).toHaveAttribute('aria-selected', 'true');
   expect(set.render).toHaveBeenCalledTimes(2);
 });
@@ -254,14 +254,14 @@ test('Palette appears only for themes with variants and does not change color mo
   );
   const user = userEvent.setup();
   render(<PrefsDialog onClose={() => {}} />);
-  await user.click(screen.getByRole('button', { name: 'Palette' }));
+  await user.click(screen.getByRole('button', { name: /^Palette\b/ }));
   await user.click(screen.getByRole('option', { name: 'Mint' }));
   expect(visualPaletteChoice()).toBe('mint');
-  expect(screen.getByRole('button', { name: 'Color mode' })).toHaveTextContent('System');
-  await user.click(screen.getByRole('button', { name: 'Visual theme' }));
+  expect(screen.getByRole('button', { name: /^Color mode\b/ })).toHaveTextContent('System');
+  await user.click(screen.getByRole('button', { name: /^Visual theme\b/ }));
   await user.click(screen.getByRole('option', { name: 'Mono' }));
   // Every built-in look offers the twelve palettes, its own colors under the one it names.
-  expect(screen.getByRole('button', { name: 'Palette' })).toHaveTextContent('Ink');
+  expect(screen.getByRole('button', { name: /^Palette\b/ })).toHaveTextContent('Ink');
   expect(set.colorMode).not.toHaveBeenCalled();
 });
 
@@ -272,12 +272,12 @@ test('language changes update the open preferences without changing presentation
   const user = userEvent.setup();
   render(<PrefsDialog onClose={() => {}} />);
   try {
-    await user.click(screen.getByRole('button', { name: 'Language' }));
+    await user.click(screen.getByRole('button', { name: /^Language\b/ }));
     await user.click(screen.getByRole('option', { name: 'Español' }));
     /* The Spanish words are fetched on demand (messages.ts fetchWords); the switch lands when they arrive. */
     expect(await screen.findByRole('dialog', { name: 'Preferencias' })).toBeVisible();
     expect(document.documentElement.lang).toBe('es');
-    expect(screen.getByRole('button', { name: 'Idioma' })).toHaveTextContent('Español');
+    expect(screen.getByRole('button', { name: /^Idioma\b/ })).toHaveTextContent('Español');
     expect(set.density).not.toHaveBeenCalled();
     expect(set.typography).not.toHaveBeenCalled();
     expect(set.render).not.toHaveBeenCalled();

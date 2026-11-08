@@ -344,6 +344,11 @@ export interface AppFileDef {
   object?: string;
   /** A text column given the SHA-256 of the bytes (hex) on every upload: the file's tag wherever its bytes are. */
   hash?: string;
+  /**
+   * Columns the server writes on every upload and a request never does: `me` the signed-in person (as a New form's
+   * `me` default writes it) and `now` the server's clock. A body that names one is overwritten.
+   */
+  stamps?: Readonly<Record<string, 'me' | 'now'>>;
   /** Where a new upload's bytes go: `content` ('database', the default) or `bucket`. A row is read from wherever it says. */
   storage?: 'database' | 'bucket';
   /** The S3-compatible bucket the bytes are kept in; its credentials are the server's (MISTRI_S3_*), never the App's. */

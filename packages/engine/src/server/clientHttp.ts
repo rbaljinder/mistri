@@ -221,7 +221,7 @@ interface ShellTitle {
  * carries as JSON.
  */
 interface HeadBranding {
-  readonly value: { readonly theme: unknown };
+  readonly value: { readonly theme: unknown; readonly icon?: unknown };
   readonly private: boolean;
 }
 
@@ -272,7 +272,7 @@ const writesHead = (head: ShellTitle | undefined) =>
 
 /** Generate only registered token names and validated theme values. Row text
  * exists only in escaped JSON; it can never close a style/script element. */
-function brandingHead(html: string, presentation: HeadBranding): string {
+function brandingHead(html: string, presentation: HeadBranding, base?: string): string {
   const theme = parseThemes([presentation.value.theme], 'Request branding')![0];
   const declarations = (mode: 'light' | 'dark') => {
     const pairs: Array<[string, string]> = [];
@@ -313,7 +313,27 @@ function brandingHead(html: string, presentation: HeadBranding): string {
     : /<head>/i.test(out)
       ? out.replace(/<head>/i, (match) => `${match}${block}`)
       : `${block}${out}`;
-  return out;
+  return tenantIcon(out, presentation.value.icon, base);
+}
+
+/** An address a tenant's tab icon may have: the App's own branding-image route, by content hash (server tenantBranding.ts). */
+const BRAND_ICON_ADDRESS = /^\/api\/branding\/logo\/[0-9a-f]{64}$/;
+
+/**
+ * A tenant's own tab icon, in the page's `<link rel="icon">` from the first byte, so the tab never shows another icon first.
+ * It replaces the shell's default icon; `data-brand-icon` tells the client not to draw its own over it (appBrand.tsx).
+ * Anything but the App's own image address is ignored: the App's icon, then the platform's, stands.
+ */
+function tenantIcon(html: string, icon: unknown, base?: string): string {
+  if (typeof icon !== 'string' || !BRAND_ICON_ADDRESS.test(icon)) return html;
+  const link = `<link rel="icon" data-brand-icon href="${base ?? ''}${icon}" />`;
+  let replaced = false;
+  const out = html.replace(/<link\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi, (tag) => {
+    if (replaced || !/\brel=["']icon["']/i.test(tag)) return tag;
+    replaced = true;
+    return link;
+  });
+  return replaced ? out : out.replace(/<\/head>/i, `${link}</head>`);
 }
 
 /**
@@ -326,7 +346,7 @@ function brandingHead(html: string, presentation: HeadBranding): string {
 export function withHead(html: string, head: ShellTitle | undefined): string {
   if (!writesHead(head)) return html;
   let out = html;
-  if (head?.branding) out = brandingHead(out, head.branding);
+  if (head?.branding) out = brandingHead(out, head.branding, head.mount?.base);
   const base = head!.mount?.base;
   if (base) {
     out = out.replace(/(\s(?:src|href)=")\/(?=assets\/)/g, (_, attribute: string) => `${attribute}${base}/`);

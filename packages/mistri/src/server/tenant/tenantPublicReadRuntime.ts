@@ -39,6 +39,7 @@ import { intakeAddressQuery } from './tenantIntakeModel.js';
 import { parseTenantSelector } from './tenantMembership.js';
 import { publicAddress, type TenantPublicEvidence } from './tenantPublicRead.js';
 import { composePublicReadScope } from './tenantReadScope.js';
+import { keepTenantDraftReader } from './tenantReadRuntime.js';
 import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { tenantVisibleFields } from './tenantVisibleFields.js';
@@ -338,6 +339,31 @@ export function bindPublicReadRuntime(options: PublicReadRuntimeOptions) {
           const schema = captureScopeCatalog(guarded.schema);
           assertActive();
           const context: PublicReadContext = Object.freeze({ principal: Object.freeze({ ...principal, roles: [] }), schema, data });
+          /* Whether a file sits beneath someone's open draft (tenantReadRuntime.ts tenantDraftReaderOf), asked under
+             the tenant's rows alone, since the visitor's own policy may not show the draft's root. */
+          keepTenantDraftReader(context, () => {
+            const every = Object.fromEntries(ownership.schema.tables.map((table) => [table.id, true] as const));
+            const drafts = authorizeResources(
+              resources,
+              tenantVisibleFields(ownership, {
+                readable: new Set(Object.keys(every)),
+                writable: new Set<string>(),
+                rows: composePublicReadScope(ownership, principal, every),
+              }),
+              assertActive,
+            ).adapter;
+            return {
+              schema: ownership.schema,
+              reader: {
+                query: (input) =>
+                  track(
+                    input,
+                    async (value) => withoutDiagnostics(await drafts.query(value)),
+                    (value) => assertStructuredReadFilter(value.filter, 'column'),
+                  ),
+              },
+            };
+          });
           let output: T | undefined,
             callbackFailed = false,
             fault: TenantRequestFault | undefined;

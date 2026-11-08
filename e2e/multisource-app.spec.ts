@@ -49,7 +49,7 @@ test.describe('one App with independently owned database sources', () => {
       await expect(page.getByRole('button', { name: /New / })).toHaveCount(0);
       await openRecord(page, 'Operations ticket');
       await expect(page.getByRole('heading', { level: 1, name: 'Operations ticket', exact: true })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Edit Name', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /^Edit Name(?: |$)/ })).toHaveCount(0);
       await expect(page.getByRole('button', { name: /^Delete/ })).toHaveCount(0);
       await page.screenshot({ path: info.outputPath(`multisource-readonly-${width}.png`) });
 
@@ -57,7 +57,7 @@ test.describe('one App with independently owned database sources', () => {
       await openRecord(page, 'Inventory ticket');
       await expect(page.getByRole('heading', { level: 1, name: 'Inventory ticket', exact: true })).toBeVisible();
       expect(new URL(page.url()).pathname).toBe('/inventory/1');
-      await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+      await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
       const changed = `Inventory checked at ${width}px`;
       await page.getByRole('textbox', { name: 'Name', exact: true }).fill(changed);
       await page.getByRole('button', { name: 'Save changes', exact: true }).click();
@@ -80,7 +80,7 @@ test.describe('one App with independently owned database sources', () => {
       await saved.getByRole('button', { name: 'Dismiss', exact: true }).click();
       await page.reload();
       await expect(page.getByRole('heading', { level: 1, name: 'Inventory ticket', exact: true })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Edit Name', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Edit Name(?: |$)/ })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
       await page.screenshot({ path: info.outputPath(`multisource-details-${width}.png`) });
     });

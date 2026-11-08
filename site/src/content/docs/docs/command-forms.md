@@ -43,15 +43,15 @@ Its command, `reportIssue`, says `targets: 'none'`: it names no record and inser
 
 ## Options
 
-| Key | What it does | Default | Status |
-| --- | --- | --- | --- |
-| `steps` (third argument) | `step(title, inputs)`: each input in exactly one step | one page | Stable |
-| `style` | `'intake'` (with steps): one question at a time under a progress bar, a sticky action bar, an editable review, and `note` under the title | `'stepper'` | Stable |
-| `done` | The screen after submitting: `{ title, message }` | a generic one | Stable |
-| `submitLabel`, `description`, `icon` | The button's words, the words under the heading, the menu's mark (signed in only) | none | Stable |
-| `public` | Serve it signed out at `/form/<key>`, running a `public: true` command; a signed-out visitor who opens `/<key>` is sent there | `false` | Stable |
-| `prefillable` | Inputs a page's link may fill in | none | Stable |
-| `resume`, `draft` | Save every step into your tables as the visitor goes | none | Stable |
+| Key                                  | What it does                                                                                                                              | Default       | Status |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ------ |
+| `steps` (third argument)             | `step(title, inputs)`: each input in exactly one step                                                                                     | one page      | Stable |
+| `style`                              | `'intake'` (with steps): one question at a time under a progress bar, a sticky action bar, an editable review, and `note` under the title | `'stepper'`   | Stable |
+| `done`                               | The screen after submitting: `{ title, message }`                                                                                         | a generic one | Stable |
+| `submitLabel`, `description`, `icon` | The button's words, the words under the heading, the menu's mark (signed in only)                                                         | none          | Stable |
+| `public`                             | Serve it signed out at `/form/<key>`, running a `public: true` command; a signed-out visitor who opens `/<key>` is sent there             | `false`       | Stable |
+| `prefillable`                        | Inputs a page's link may fill in                                                                                                          | none          | Stable |
+| `resume`, `draft`                    | Save every step into your tables as the visitor goes                                                                                      | none          | Stable |
 
 All keys: [the generated reference](/docs/dsl-views/).
 
@@ -136,16 +136,31 @@ rules: [{ must: 'confirm_email = email', message: 'The email addresses do not ma
 
 ### Forms saved on every step
 
-A public form whose steps each name a command of their own
+A form whose steps each name a command of their own
 (`step('Address', 'saveAddress')`) saves a long application into your tables
-as the applicant goes; the form's command is the final submit. No shipped
-example shows one. A row-policy App refuses one, and a tenant App serves one
-without `statusCheck` or `link` ([what each kind of App can do](/docs/row-access/#what-each-kind-of-app-can-do)).
+as the person goes; the form's command is the final submit. `resume` and
+`draft` are the same either way, and `after` (up to 90 days) is how long a
+draft lasts: past it, the draft is not found. A form is public or signed in, never both.
 
-- `resume: { token, expires, progress, after: '14 days' }` names the root row's columns. The applicant's place is an HttpOnly, `SameSite=Strict` cookie; only its SHA-256 is stored, and it is cleared on submit.
+- `resume: { token, expires, progress, after: '14 days' }` names the root row's columns.
 - Later steps write tables that point at the root; the server fills the link in, and a step reads and writes only its own application's rows.
-- Nothing saved is answered back, even with the cookie. After a reload the review reads "Saved — not shown for your privacy".
-- `draft: { status: 'in_progress' }` keeps drafts out of staff lists; a tab whose query names that value shows them. Expired drafts are purged when a new application starts, unless `abandoned: 'keep'`.
+- `draft: { status: 'in_progress' }` keeps drafts out of staff lists; a tab whose query names that value shows them.
+
+**Public (cookie).** The applicant's place is an HttpOnly, `SameSite=Strict` cookie; only its SHA-256 is stored, and it is cleared on submit. Nothing saved is answered back, even with the cookie: after a reload the review reads "Saved — not shown for your privacy". Expired drafts are purged when a new application starts, unless `abandoned: 'keep'`. A row-policy App refuses one, and a tenant App serves one without `statusCheck` or `link` ([what each kind of App can do](/docs/row-access/#what-each-kind-of-app-can-do)).
+
+**Signed in (owner).** `owner: 'person_id'` names the root's column that holds the signed-in person. The server fills it from the session on the first step and finds the draft by it on every other, so another account never sees, resumes or submits it (a guessed id is "not found"). Every step and the submit run under the person's own grant and row policy, so a row-policy App may use one; losing the grant refuses the next step and leaves the draft as it is. `check` refuses an `owner` that is not a person-key column of the root or that a step asks. In a tenant App the draft is a root in the member's own tenant, its owner the member's row there, so neither another member nor another tenant's account finds it.
+
+```ts
+commandForm('Join the club', 'submitMembership', [step('You', 'startMembership'), step('Tier', 'saveTier')], {
+  resume: { token: 'resume_token_hash', expires: 'resume_expires_at', progress: 'resume_progress', after: '14 days' },
+  draft: { status: 'in_progress' },
+  owner: 'person_id',
+});
+```
+
+- Opening the form lands straight in the open draft, at the first step today's rules refuse or else the first step not saved, with a quiet **Start over** that discards the draft and its rows.
+- The review asks the server for a version of the draft's rows, and the submit carries it back. A draft changed elsewhere since is refused as stale, nothing is written, and the page says "Review again".
+- Each step and the submit carry an idempotency key, and the page keeps the one in flight across a reload: a step or a submit sent twice writes once and answers the first outcome.
 
 A `statusCheck` lets an applicant ask for a submitted application's state at
 `/form/<key>/status`, confirmed by one to three details only they know. Every

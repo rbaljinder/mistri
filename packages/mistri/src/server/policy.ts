@@ -11,7 +11,8 @@ export type {
 } from './policy/appRowPolicy.js';
 export type { PolicyPrincipal } from './policy/appPolicyContext.js';
 export type { PolicyDb, PolicyReadContext } from './policy/policyDb.js';
-export type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
+export type { RowScope, RowScopeVia, ViaCondition } from '@mistriwork/engine/shared/rowScope.js';
+export { via } from '@mistriwork/engine/shared/rowScope.js';
 export { defineAppTenantPolicy } from './policy/appTenantPolicy.js';
 export type { AppTenantPolicy, TenantPolicyOwnership } from './policy/appTenantPolicy.js';
 export type { TenantMembershipEvidence } from './tenant/tenantMembership.js';

@@ -48,6 +48,58 @@ export interface Condition {
    * and everywhere else it is refused.
    */
   equality?: ConditionEquality;
+  /**
+   * The rows of another relation hold a match for this row's key: a row scope's `via` (rowScope.ts), already written as
+   * the `EXISTS (…)` over the target's scoped relation, which binds nothing of its own (a target's filter is a CTE
+   * there). SQL text, so only a builder that asks for it (`buildWhere`'s `via`) compiles it, and everywhere else it is
+   * refused, never dropped.
+   */
+  via?: ConditionVia;
+}
+
+/**
+ * The child rows of an `any` condition, as a builder that writes the test inline resolved them (`buildWhere`'s
+ * `inline`): the relation they are read from, the alias it stands under, the join to the row asked about, and how
+ * the child's own columns are written. The child's conditions are bound by `buildWhere`, in the statement's order.
+ */
+export interface InlineRows {
+  readonly relation: string;
+  readonly alias: string;
+  /** The join to the row asked about, written with the alias and the row's own name. */
+  readonly on: string;
+  /** One of the child's own columns, qualified; refuses a name the child does not hold. */
+  readonly column: (name: string) => string;
+  /** A child column's catalog type, where the style names its operators by schema. */
+  readonly types?: (name: string) => string | undefined;
+}
+
+/** Whether a filter asks about the rows that point at the one read (`any`/`no`) anywhere. */
+export const asksAboutRows = (filter: Filter | undefined): boolean =>
+  filter?.groups.some((group) => group.some((condition) => condition.any !== undefined)) === true;
+
+/**
+ * A filter whose `any`/`no` children are named in another namespace: a layer that renames the tables of a request
+ * (an App's resources to the database's, a loader's local names to the catalog's) renames the child as it renames the
+ * table, since the child is a table of the same read. A child the rename does not know throws, as a table would.
+ */
+export function renamedAnyRows(filter: Filter | undefined, rename: (table: string) => string): Filter | undefined {
+  if (!filter || !asksAboutRows(filter)) return filter;
+  return {
+    ...filter,
+    groups: filter.groups.map((group) =>
+      group.map((condition) => {
+        if (condition.any === undefined) return condition;
+        const { via } = condition.any;
+        const at = via.lastIndexOf('.');
+        return { ...condition, any: { ...condition.any, via: `${rename(via.slice(0, at))}${via.slice(at)}` } };
+      }),
+    ),
+  };
+}
+
+/** A relationship test (`Condition.via`) as the builder that resolved it wrote it. */
+interface ConditionVia {
+  readonly text: string;
 }
 
 /** A foreign key's comparison of one column (`Condition.equality`): each part SQL as the catalog gave it. */
@@ -447,6 +499,11 @@ export function buildWhere(
   /** The catalog's type of a column the filter names, where the style names its operators by schema
    * (SqlStyle.builtin): an App's scoped reads. Absent, or undefined for a name, the operator as written. */
   types?: (name: string) => string | undefined,
+  /** Whether a condition may carry a resolved relationship test (`Condition.via`): a row scope's own relations only. */
+  via = false,
+  /** How an `any` condition is written when its child's values are bound here, in order, with the rest of the
+      filter: a read that resolves the child itself (anyRows.ts). Absent, and without `exists`, one is refused. */
+  inline?: (rows: AnyRows) => InlineRows,
 ): SqlFragment {
   if (!filter?.groups.length) return { text: '', params: [] };
   const params: unknown[] = [];
@@ -487,14 +544,35 @@ export function buildWhere(
         if (c.collation !== undefined && !COMPARISONS.has(c.op)) {
           throw new RequestFault('Only a comparison can compare text by bytes.');
         }
+        /* Before the column is written: a relationship test names its own columns and binds nothing. */
+        if (c.via !== undefined) {
+          if (!via || typeof c.via.text !== 'string') throw new RequestFault('This read cannot ask about a related row.');
+          return c.via.text;
+        }
         /* Before the column is written: child rows are no column of this row. Their
            values are bound where their relation is planned (rowScope.ts `filtered`),
            so the EXISTS carries no parameter here and the numbering is untouched. */
         if (c.any !== undefined) {
-          if (!exists || typeof c.any !== 'object' || c.any === null)
+          if ((!exists && !inline) || typeof c.any !== 'object' || c.any === null)
             throw new RequestFault('This read cannot ask about the rows that point at it.');
+          let text: string;
+          if (exists) text = exists(c.any);
+          else {
+            /* The child's own values are bound here, after everything before it and before everything after: the
+               text and the parameters are written in one order, which is the only thing a `$n` needs. */
+            const rows = inline!(c.any);
+            let narrowed = '';
+            if (c.any.filter?.groups.length) {
+              /* No hooks: a second `any` inside, a column on the right and a resolved test are refused, never dropped. */
+              const inner = buildWhere(c.any.filter, style, index, rows.column, undefined, undefined, undefined, false, rows.types);
+              params.push(...inner.params);
+              index += inner.params.length;
+              narrowed = inner.text ? ` AND (${inner.text.slice(' WHERE '.length)})` : '';
+            }
+            text = `EXISTS (SELECT 1 FROM ${rows.relation} ${rows.alias} WHERE ${rows.on}${narrowed})`;
+          }
           /* `no task …` is the same rows asked the other way: none of them matches. */
-          return c.op === 'isNull' ? `NOT ${exists(c.any)}` : exists(c.any);
+          return c.op === 'isNull' ? `NOT ${text}` : text;
         }
         /* Before the column is written: a record's tags are no column. */
         if (c.op === 'has') {
@@ -610,7 +688,8 @@ function sameCondition(a: Condition, b: Condition): boolean {
     a.collation !== b.collation ||
     a.other !== b.other ||
     a.any !== b.any ||
-    a.equality !== b.equality
+    a.equality !== b.equality ||
+    a.via?.text !== b.via?.text
   )
     return false;
   if (Array.isArray(a.value) || Array.isArray(b.value)) {

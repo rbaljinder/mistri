@@ -386,6 +386,7 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
     publicScope,
     publicDefinition,
     ...(person ? { person } : {}),
+    ...(whole ? { appReader: whole.catalog } : {}),
     ...(zone === undefined ? {} : { zone }),
     ...(locale === undefined ? {} : { locale }),
     ...(words?.words.size ? { messages: { stamp: words.stamp, words: words.words } } : {}),

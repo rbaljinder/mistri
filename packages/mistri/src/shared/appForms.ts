@@ -38,11 +38,12 @@ export const FORM_VIEW_KEYS = [
   'resume',
   'draft',
   'abandoned',
+  'owner',
   'statusCheck',
   'link',
 ] as const;
 /* What only a form saved on every step takes. */
-const SAVED_KEYS = ['resume', 'draft', 'abandoned', 'statusCheck', 'link'] as const;
+const SAVED_KEYS = ['resume', 'draft', 'abandoned', 'owner', 'statusCheck', 'link'] as const;
 
 const isText = (value: unknown, max: number): value is string => typeof value === 'string' && Boolean(value.trim()) && value.length <= max;
 
@@ -133,7 +134,7 @@ export function parseFormView(e: Record<string, unknown>, at: string): AppFormVi
   let steps: AppFormView['steps'];
   if (saved) {
     if (e.steps === undefined) throw new Error(`${at} saves each step and names none: steps: [step('About you', 'startApplication'), …].`);
-    steps = parseSavedSteps(e.steps, `${at}, "steps"`);
+    steps = parseSavedSteps(e.steps, `${at}, "steps"`, isPublic);
     if (steps.some((step) => step.command!.id === command.id))
       throw new Error(`${at} submits through "${command.id}", which a step runs too. The submit is its own command.`);
     /* The page holds one application in memory, keyed by input name, and

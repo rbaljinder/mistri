@@ -17,6 +17,9 @@ export const MUTATION_PATHS = [
   '/api/commands/prepare',
   '/api/commands/execute',
   '/api/commands/status',
+  '/api/commands/draft',
+  // Holds a file for a command; changes no record, but is sent as a write so a stale answer is not kept beside it.
+  '/api/commands/files',
 ] as const;
 
 /* Writes the transport does not carry: a record flow, an agent's tool call and an HTTP operation run the App's own work. */

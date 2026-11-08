@@ -14,11 +14,24 @@ import { createScopedReads } from '../packages/engine/src/adapters/scoped/scoped
 import { readSqliteScopeCatalog } from '../packages/engine/src/adapters/scoped/sqliteScopeCatalog.js';
 import { compileView, compileViewCount, type ViewDef } from '../packages/engine/src/shared/view.js';
 import { compileBreakdown, compileBreakdownCount, type BreakdownDef } from '../packages/engine/src/shared/breakdown.js';
-import { ScopedRelations, snapshotRowScope, type RowScope, type RowScopeFilter } from '../packages/engine/src/shared/rowScope.js';
+import {
+  ScopedRelations,
+  snapshotRowScope,
+  via as viaTo,
+  type RowScope,
+  type RowScopeFilter,
+  type ViaCondition,
+} from '../packages/engine/src/shared/rowScope.js';
+import { refusalCause } from '../packages/engine/src/shared/refusal.js';
 import { TenantContextError } from '../packages/engine/src/server/evidence.js';
 import { createTenantMembershipIssuer, type TenantMembershipEvidence } from '../packages/mistri/src/server/tenant/tenantMembership.js';
 import { captureTenantOwnership, type TenantOwnershipInput } from '../packages/mistri/src/server/tenant/tenantOwnership.js';
-import { composeCounters, composePublicReadScope, composeTenantReadScope } from '../packages/mistri/src/server/tenant/tenantReadScope.js';
+import {
+  composeCounters,
+  composePublicReadScope,
+  composeTenantReadScope,
+  physicalRowScope,
+} from '../packages/mistri/src/server/tenant/tenantReadScope.js';
 import type { TenantPublicEvidence } from '../packages/mistri/src/server/tenant/tenantPublicRead.js';
 import {
   readRecords,
@@ -574,7 +587,7 @@ test('ordinary resource request filters reject private binary metadata before an
     runBreakdown: refuse,
     countBreakdown: refuse,
   };
-  const filter: Filter = { ...eq('id', 1), binary: ['id'] } as RowScopeFilter;
+  const filter = { ...eq('id', 1), binary: ['id'] } as unknown as Filter;
   const paths = { groups: [[{ path: 'id', op: '=' as const, value: 1 }]], binary: ['id'] };
   for (const read of [
     () => readRecords(reader, f.schema, { table: 'items', filter }, 'estimate'),
@@ -644,6 +657,57 @@ test('a public scope reads one tenant exactly, denies unnamed tables, and passes
   denied(() => composePublicReadScope(f.ownership, visitor('north'), { items: true, ghost: true }));
 });
 
+/* A relationship test (`via`) reads the target's scoped rows, and the target is composed in the same pass with the
+   tenant's predicate on every group: another tenant's parent never satisfies it, whatever the child's own tenant says. */
+test("a via reads only this tenant's parents; a target the tenant does not own is refused with its reason", async (t) => {
+  const f = fixture(t);
+  const scope = f.compose({ ...f.allow, notes: { groups: [[viaTo('item_id', 'items')]] } });
+  const reader = createScopedReads(f.schema, scope, ANSI_STYLE, f.execute);
+  // Note 5 is north's, but its item (5) is tenant 'North': not a parent this tenant may see. Notes 2-4 are other tenants'.
+  assert.deepEqual(
+    (await reader.query({ table: 'notes', columns: ['id'], limit: 100, offset: 0, orderBy: [{ column: 'id', direction: 'asc' }] })).rows,
+    [{ id: 1 }],
+  );
+  assert.equal(await reader.count('notes'), 1);
+  // The parent's own policy still decides: only closed items.
+  const narrow = f.compose({
+    ...f.allow,
+    items: eq('status', 'closed'),
+    notes: { groups: [[viaTo('item_id', 'items')]] },
+  });
+  assert.equal(await createScopedReads(f.schema, narrow, ANSI_STYLE, f.execute).count('notes'), 0);
+  // The platform realm's tables cannot be read through from a tenant (no foreign key joins them, or ownership would refuse).
+  const side = new DatabaseSync(':memory:');
+  t.after(() => side.close());
+  side.exec(`CREATE TABLE audit (id INTEGER PRIMARY KEY, note TEXT);
+    CREATE TABLE tasks (id INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, audit_id INTEGER);`);
+  side.exec('BEGIN IMMEDIATE');
+  const sideSchema = readSqliteScopeCatalog(side).schema;
+  side.exec('COMMIT');
+  const platform: TenantOwnershipInput = {
+    appId: 'tenant-proof',
+    source: { id: 'business', connection: 'owned-source' },
+    schema: sideSchema,
+    physicalSchema: structuredClone(sideSchema),
+    resources: { audit: 'audit', tasks: 'tasks' },
+    ownership: { audit: { kind: 'platform' }, tasks: { kind: 'tenant', column: 'tenant_id' } },
+  };
+  const rule = { tasks: { groups: [[viaTo('audit_id', 'audit')]] }, audit: true } as RowScope;
+  const attempt = () => composeTenantReadScope(platform, member(), rule, { tasks: true, audit: true });
+  denied(attempt);
+  try {
+    attempt();
+  } catch (error) {
+    let reason: unknown = error;
+    while (refusalCause(reason) !== undefined) reason = refusalCause(reason);
+    assert.match((reason as Error).message, /outside the tenant ownership/);
+  }
+  // A via beside the tenant predicate maps to the source's physical names alongside the keys.
+  const physical = physicalRowScope(scope, (id) => `p_${id}`);
+  const mapped = physical.p_notes as RowScopeFilter;
+  assert.equal((mapped.groups[0].find((c) => c.via) as ViaCondition).via!.resource, 'p_items');
+});
+
 /* A composition is kept by what it is composed of (tenantReadScope.ts): the
    ownership, both layers as snapshots, and the tenant. Never the person, and
    never across tenants: the same layers for another tenant compose afresh. */
@@ -660,7 +724,8 @@ test('a kept composition is shared only by the same layers and the same tenant',
   const south = composeTenantReadScope(owned, { ...member(), tenantId: 'south' }, layer, all);
   assert.notEqual(south, north);
   assert.equal(composeCounters.composed - before, 2);
-  const tenantOf = (scope: RowScope) => (scope.items as RowScopeFilter).groups[0].find((c) => c.column === 'tenant_id')?.value;
+  const tenantOf = (scope: RowScope) =>
+    ((scope.items as RowScopeFilter).groups[0].find((c) => c.column === 'tenant_id') as Condition | undefined)?.value;
   assert.equal(tenantOf(north), 'north');
   assert.equal(tenantOf(south), 'south');
   // Other layers compose their own.

@@ -17,7 +17,7 @@ import type { LiveKey } from '../../adapters/live/liveChange.js';
 import type { AppDef } from '../../shared/app.js';
 import { primaryKey } from '@mistriwork/engine/shared/schema.js';
 import type { RowScopeFilter } from '@mistriwork/engine/shared/rowScope.js';
-import { scopeFingerprint, type LiveAuthority, type LiveGrant } from '../live/liveFilter.js';
+import { scopeFingerprint, viaClosure, type LiveAuthority, type LiveGrant } from '../live/liveFilter.js';
 import type { LiveHub } from '../live/liveHub.js';
 import { probedKeys, readColumns } from '../live/liveRoute.js';
 import { openLiveStream } from '../live/liveStream.js';
@@ -35,6 +35,8 @@ interface TenantLiveGrants {
     readonly key: readonly string[];
     readonly columns: readonly string[];
     readonly scope: true | RowScopeFilter;
+    /** The rules a `via` in the scope reads through (liveFilter.viaClosure): part of what the scope shares by. */
+    readonly closure?: unknown;
   }>;
 }
 
@@ -64,7 +66,15 @@ export function tenantLiveGrants(
       const groups = scope.groups.map((group) => group.filter((condition) => !ownTenant(condition)));
       filter = groups.some((group) => group.length === 0) ? true : { groups, ...(scope.binary ? { binary: scope.binary } : {}) };
     }
-    tables.push({ id: table.id, physical, key: primaryKey(table), columns: [...(columns.get(table.id) ?? [])], scope: filter });
+    const closure = viaClosure(scope, rows);
+    tables.push({
+      id: table.id,
+      physical,
+      key: primaryKey(table),
+      columns: [...(columns.get(table.id) ?? [])],
+      scope: filter,
+      ...(closure === undefined ? {} : { closure }),
+    });
   }
   return { tenantId, accountId: context.principal.accountId, tables };
 }
@@ -87,7 +97,7 @@ export function tenantLiveAuthority(
         columns: new Set(table.columns),
         scope: table.scope,
         /* The tenant is in the digest: two tenants' members never share a probe, though their scopes read alike. */
-        fingerprint: scopeFingerprint(`${appId}\u0000${grants.tenantId}`, table.physical, table.scope),
+        fingerprint: scopeFingerprint(`${appId}\u0000${grants.tenantId}`, table.physical, table.scope, table.closure),
       }),
     );
     logical.set(table.physical, table.id);

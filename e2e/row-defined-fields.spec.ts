@@ -28,7 +28,7 @@ test.describe('Row-defined fields', () => {
       const section = page.getByRole('complementary', { name: 'Record context' });
       // In the definitions' order, by their captions: the tent's three, then the field every product has.
       await expect(section.locator('.page-field dt')).toContainText(['Sleeps', 'Season', 'Freestanding', 'Warranty (years)']);
-      await section.getByRole('button', { name: 'Edit Sleeps', exact: true }).click();
+      await section.getByRole('button', { name: /^Edit Sleeps(?: |$)/ }).click();
       await section.getByRole('textbox', { name: 'Sleeps', exact: true }).fill('3');
       const dock = page.getByRole('region', { name: 'Unsaved changes', exact: true });
       await dock.getByRole('button', { name: 'Save changes', exact: true }).click();

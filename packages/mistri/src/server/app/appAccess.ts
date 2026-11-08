@@ -308,16 +308,33 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
   /* A snapshot (rowScope.ts), and the captured one itself where the ceiling
      takes nothing from it: every read the facade binds hands this scope on,
      and a snapshot is checked once rather than copied at each of them. */
+  /* A table a readable resource's scope reads through (`via`) decides which of that resource's rows show, so its own
+     rule stays whole though the role cannot read it: reading it directly is refused by the grant, not by this rule. */
+  const decides = new Set<string>();
+  if (capturedRows !== undefined) {
+    const walk = (resource: string) => {
+      const rule = capturedRows[resource];
+      if (rule === undefined || rule === true || rule === false) return;
+      for (const group of rule.groups)
+        for (const condition of group) {
+          const target = (condition.via as { resource?: unknown } | undefined)?.resource;
+          if (typeof target === 'string' && !decides.has(target)) {
+            decides.add(target);
+            walk(target);
+          }
+        }
+    };
+    for (const resource of access.readable) walk(resource);
+  }
+  const kept = (resource: string) => access.readable.has(resource) || decides.has(resource);
   const rows =
     capturedRows === undefined
       ? undefined
-      : Object.entries(capturedRows).every(([resource, rule]) => rule === false || access.readable.has(resource))
+      : Object.entries(capturedRows).every(([resource, rule]) => rule === false || kept(resource))
         ? capturedRows
         : snapshotRowScope(
             full,
-            Object.fromEntries(
-              Object.entries(capturedRows).map(([resource, rule]) => [resource, access.readable.has(resource) ? rule : false]),
-            ),
+            Object.fromEntries(Object.entries(capturedRows).map(([resource, rule]) => [resource, kept(resource) ? rule : false])),
           );
   if (rows !== undefined) {
     access = { ...access, rows };

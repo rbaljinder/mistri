@@ -10,6 +10,8 @@ export const COMMAND_ROUTES = {
   availability: '/api/commands/availability',
   /** A signed-in form's step checked: the answers so far judged, nothing run (server/commands/commandCheck.ts). */
   check: '/api/commands/check',
+  /** A signed-in form saved on every step: one step, the submit, the resume, the review, a fresh start (server/forms/draftHttp.ts). */
+  draft: '/api/commands/draft',
   /** A file sent to be held for a command's `field.files` or `field.signature` (server/commands/stagedFiles.ts). */
   files: '/api/commands/files',
 } as const;

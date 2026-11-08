@@ -102,6 +102,7 @@ export interface AppPolicyDeployment<Request> {
     form: string,
     ...args: Parameters<ReturnType<typeof bindPolicyPublicIntake>['submit']>
   ) => ReturnType<ReturnType<typeof bindPolicyPublicIntake>['submit']>;
+  holdPublicFile?: (form: string, body: unknown, visitor: string) => ReturnType<ReturnType<typeof bindPolicyPublicIntake>['hold']>;
   placedPublicForm?(form: string): boolean;
   preparePublicPlacement?: (
     form: string,
@@ -578,6 +579,11 @@ export async function createAppPolicyDeployment<Request>(
               const intake = intakes.get(form);
               if (retired || !intake) return Promise.reject(new BusinessCommandExecutionError('temporarily_unavailable'));
               return intake.submit(...args);
+            },
+            holdPublicFile: (form: string, body: unknown, visitor: string) => {
+              const intake = intakes.get(form);
+              if (retired || !intake) return Promise.reject(new BusinessCommandExecutionError('temporarily_unavailable'));
+              return intake.hold(body, visitor);
             },
           }
         : {}),

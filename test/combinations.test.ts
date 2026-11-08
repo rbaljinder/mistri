@@ -27,6 +27,8 @@ import { captureAuthStoreExclusion } from '../packages/mistri/src/server/auth/au
 import { spawn } from 'node:child_process';
 import { childEnv, cliArgs, freePort, ROOT, runCli, SESSION_SECRET, serveApi } from './appApiCli.js';
 import { scratch } from './support/scratch.js';
+import { policyServer } from './support/policyServer.js';
+import { draftPolicyServer } from './support/signedInDrafts.js';
 import {
   apiReads,
   apiTouchCommand,
@@ -877,3 +879,212 @@ test('combination: a layout × a first run leads outside the grid, and takes no 
   assert.notEqual(placed.checked.code, 0);
   assert.match(`${placed.checked.out}${placed.checked.err}`, /first run, which leads the dashboard outside its areas/);
 });
+
+/** A relationship row scope (`via`) × live sync. The live filter cannot believe a via from the change alone (the
+ * scope reads another table), so a probe asks the database as the reader: a row outside the relationship before and
+ * after a change is told to no one, one that enters it is told by key, one that leaves it is not (a before image cannot judge a relationship), and none of it names a row
+ * the reader may not see. Each feature is covered alone (row-scope-via.test.ts, live-sync-route.test.ts). */
+test('combination: a via row scope × live sync tells a reader only of rows the relationship reaches', { timeout: 90_000 }, async (t) => {
+  const server = await policyServer(t, {
+    app: {
+      id: 'spoke',
+      name: 'Spoke',
+      live: true,
+      auth: {
+        signUp: 'open',
+        defaultRole: 'rider',
+        rows: 'policy',
+        roles: {
+          admin: { label: 'Owner', read: true, write: true },
+          rider: { label: 'Rider', read: ['job', 'bench'], write: ['job'], fields: { job: { write: ['title'] } } },
+        },
+      },
+      resources: { job: { access: 'write' }, bench: { access: 'write' }, bench_access: { access: 'write' } },
+      views: { jobs: { kind: 'list', from: 'job' } },
+      home: 'jobs',
+      nav: ['jobs'],
+    },
+    policy: `export default { appId: 'spoke', resolveRows(principal) {
+      if (principal.roles.includes('admin')) return { job: true, bench: true, bench_access: true };
+      const held = { resource: 'bench_access', column: 'bench_id' };
+      return { bench_access: true, bench: { groups: [[{ column: 'id', op: 'in', via: held }]] },
+        job: { groups: [[{ column: 'bench_id', op: 'in', via: held }]] } };
+    } };`,
+    sql: `CREATE TABLE bench(id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+      CREATE TABLE bench_access(id INTEGER PRIMARY KEY, bench_id INTEGER NOT NULL);
+      CREATE TABLE job(id INTEGER PRIMARY KEY, title TEXT NOT NULL, bench_id INTEGER REFERENCES bench(id));
+      INSERT INTO bench VALUES (1, 'Front'), (2, 'Back');
+      INSERT INTO bench_access VALUES (1, 1);
+      INSERT INTO job(id, title, bench_id) VALUES (1, 'Tune', 1), (2, 'Hidden', 2), (3, 'Leaving', 1);`,
+    live: true,
+  });
+  const owner = await server.owner();
+  const rider = await server.signUp('rider');
+  const controller = new AbortController();
+  const response = await fetch(`${server.origin}/api/live?app=spoke`, {
+    headers: { origin: server.origin, cookie: rider },
+    signal: controller.signal,
+  });
+  let text = '';
+  const done = (async () => {
+    const decoder = new TextDecoder();
+    try {
+      for await (const chunk of response.body!) text += decoder.decode(chunk as Uint8Array, { stream: true });
+    } catch {
+      /* aborted */
+    }
+  })();
+  t.after(async () => {
+    controller.abort();
+    await done;
+  });
+  const told = () => [...text.matchAll(/event: change\ndata: (.*)\n/g)].map((m) => JSON.parse(m[1]).tables.job?.keys?.[0]?.id);
+  const until = async (ok: () => boolean) => {
+    for (let n = 0; n < 250 && !ok(); n++) await new Promise((done) => setTimeout(done, 20));
+    assert.ok(ok(), text);
+  };
+  await until(() => text.includes('event: hello'));
+  const update = async (id: number, values: object) =>
+    assert.equal((await server.api('update', { table: 'job', key: { id }, values }, owner)).status, 200);
+
+  // Outside the relationship before and after: told to no one, and no byte names it.
+  await update(2, { title: 'Still hidden' });
+  await new Promise((done) => setTimeout(done, 900));
+  assert.deepEqual(told(), []);
+  assert.doesNotMatch(text, /Hidden|"id":2/);
+  // Leaves it by its own change: a before image cannot say whether another table's rows admitted it, so the
+  // reader is not told (live sync fails closed, liveFilter.ts); their next refresh drops the row.
+  await update(3, { bench_id: 2 });
+  await new Promise((done) => setTimeout(done, 900));
+  assert.deepEqual(told(), []);
+  // Enters it: told, by key (the probe asks the database as the reader).
+  await update(2, { bench_id: 1 });
+  await until(() => told().length === 1);
+  assert.deepEqual(told(), [2]);
+  // Outside, then changed while outside: not told.
+  await update(3, { title: 'Gone' });
+  await new Promise((done) => setTimeout(done, 900));
+  assert.equal(told().length, 1, text);
+  assert.doesNotMatch(text, /Gone/);
+});
+
+/** Two readers whose `via` target rules differ by who they are (a per-user membership table). The scope's own filter
+ * reads alike for both (`bench_id in via bench_access`), so a probe shared by that filter alone would answer one
+ * rider's question with the other's membership: each is told only of the jobs their own membership reaches. */
+test(
+  'combination: a via row scope × live sync never shares a probe between readers whose target rules differ',
+  { timeout: 90_000 },
+  async (t) => {
+    const server = await policyServer(t, {
+      app: {
+        id: 'spoke',
+        name: 'Spoke',
+        live: true,
+        auth: {
+          signUp: 'open',
+          defaultRole: 'rider',
+          rows: 'policy',
+          roles: {
+            admin: { label: 'Owner', read: true, write: true },
+            rider: { label: 'Rider', read: ['job', 'bench'], write: ['job'], fields: { job: { write: ['title'] } } },
+          },
+        },
+        resources: { job: { access: 'write' }, bench: { access: 'write' }, bench_access: { access: 'write' } },
+        views: { jobs: { kind: 'list', from: 'job' } },
+        home: 'jobs',
+        nav: ['jobs'],
+      },
+      policy: `export default { appId: 'spoke', resolveRows(principal) {
+      if (principal.roles.includes('admin')) return { job: true, bench: true, bench_access: true };
+      const held = { resource: 'bench_access', column: 'bench_id' };
+      return { bench_access: { groups: [[{ column: 'who', op: '=', value: principal.id }]] },
+        bench: { groups: [[{ column: 'id', op: 'in', via: held }]] },
+        job: { groups: [[{ column: 'bench_id', op: 'in', via: held }]] } };
+    } };`,
+      sql: `CREATE TABLE bench(id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+      CREATE TABLE bench_access(id INTEGER PRIMARY KEY, bench_id INTEGER NOT NULL, who TEXT NOT NULL);
+      CREATE TABLE job(id INTEGER PRIMARY KEY, title TEXT NOT NULL, bench_id INTEGER REFERENCES bench(id));
+      INSERT INTO bench VALUES (1, 'Front'), (2, 'Back');
+            INSERT INTO job(id, title, bench_id) VALUES (1, 'Alice job', 1), (2, 'Bob job', 2);`,
+      live: true,
+    });
+    const owner = await server.owner();
+    const alice = await server.signUp('alice');
+    const bob = await server.signUp('bob');
+    // Each rider's membership names the verified account's id, so the two target rules differ by who is asking.
+    const idOf = async (cookie: string) =>
+      ((await server.call('/api/auth/get-session', undefined, cookie)).body as { user: { id: string } }).user.id;
+    for (const [bench, cookie] of [
+      [1, alice],
+      [2, bob],
+    ] as const)
+      assert.equal(
+        (await server.api('insert', { table: 'bench_access', values: { bench_id: bench, who: await idOf(cookie) } }, owner)).status,
+        200,
+      );
+    const controller = new AbortController();
+    const streams = [alice, bob].map((cookie) => {
+      const seen = { text: '' };
+      const open = fetch(`${server.origin}/api/live?app=spoke`, {
+        headers: { origin: server.origin, cookie },
+        signal: controller.signal,
+      }).then(async (response) => {
+        const decoder = new TextDecoder();
+        try {
+          for await (const chunk of response.body!) seen.text += decoder.decode(chunk as Uint8Array, { stream: true });
+        } catch {
+          /* aborted */
+        }
+      });
+      return { seen, open };
+    });
+    t.after(async () => {
+      controller.abort();
+      await Promise.all(streams.map((stream) => stream.open));
+    });
+    const [a, b] = streams.map((stream) => stream.seen);
+    const told = (seen: { text: string }) =>
+      [...seen.text.matchAll(/event: change\ndata: (.*)\n/g)].map((m) => JSON.parse(m[1]).tables.job?.keys?.[0]?.id);
+    const until = async (ok: () => boolean) => {
+      for (let n = 0; n < 250 && !ok(); n++) await new Promise((done) => setTimeout(done, 20));
+      assert.ok(ok(), a.text + b.text + server.log());
+    };
+    await until(() => a.text.includes('event: hello') && b.text.includes('event: hello'));
+    const update = async (id: number, title: string) =>
+      assert.equal((await server.api('update', { table: 'job', key: { id }, values: { title } }, owner)).status, 200);
+
+    await update(1, 'Alice job, edited');
+    await until(() => told(a).length === 1);
+    await new Promise((done) => setTimeout(done, 900));
+    assert.deepEqual(told(a), [1]);
+    assert.deepEqual(told(b), []);
+    await update(2, 'Bob job, edited');
+    await until(() => told(b).length === 1);
+    await new Promise((done) => setTimeout(done, 900));
+    assert.deepEqual(told(b), [2]);
+    assert.deepEqual(told(a), [1]);
+  },
+);
+
+test(
+  'combination: a signed-in draft × a narrowing row scope refuses the next step, leaves the draft as it was, and resumes once the scope is back',
+  { timeout: 60_000 },
+  async (t) => {
+    const f = await draftPolicyServer(t);
+    const ann = await f.signUp('ann');
+    for (const step of ['you', 'plan']) assert.equal((await f.step(ann, step)).status, 200);
+
+    // An operator moves ann out of region 1 between two steps: the draft's root is no longer in her rows.
+    f.setRegion('ann@example.org', 2);
+    const refused = await f.step(ann, 'contact');
+    assert.ok([403, 404].includes(refused.status), JSON.stringify(refused.body));
+    assert.deepEqual(f.contacts(), [], 'the refused step wrote nothing');
+    assert.equal(f.onboardings()[0].resume_progress, 'you,plan', 'and the draft is intact');
+
+    f.setRegion('ann@example.org', 1);
+    const back = await f.op(ann, 'resume');
+    assert.equal(back.status, 200, JSON.stringify(back.body));
+    assert.deepEqual(back.body.draft.saved, ['you', 'plan']);
+    assert.equal((await f.step(ann, 'contact')).status, 200);
+  },
+);

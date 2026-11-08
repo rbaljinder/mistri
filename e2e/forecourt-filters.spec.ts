@@ -53,7 +53,7 @@ test.describe("Forecourt's filter rail", () => {
     const applied = page.getByRole('group', { name: 'Vehicles filters applied' });
     await expect(applied.locator('.applist-chip', { hasText: 'Make is Toyota' })).toBeVisible();
     await expect(applied.locator('.applist-chip', { hasText: 'Price up to $15,000' })).toBeVisible();
-    await expect(page.locator('.applist-results-head').getByRole('button', { name: 'Sort', exact: true })).toBeVisible();
+    await expect(page.locator('.applist-results-head').getByRole('button', { name: /^Sort(?: |$)/ })).toBeVisible();
 
     // The address is the selection: a reload draws the same ticks and ends.
     await page.reload();

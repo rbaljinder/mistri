@@ -734,6 +734,9 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
       const data = (await coreApi('/api/file/upload', {
         table: table.id,
         values: { ...creation!.defaults, ...defaults },
+        /* The record this list is drawn on, said once: the server reads it as this reader and writes the link itself,
+           so the link above is only what the list believes. A tenant lease's upload says no parent yet. */
+        ...(lease ? {} : { parent: { table: base.id, key: recordKey, link: creation!.bindings![0].column } }),
         ...ownedBy(connection),
         file: { name: picked.name, type: picked.type, data: await fileToBase64(picked) },
       })) as { errors?: Array<{ message: string }> };

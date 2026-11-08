@@ -17,6 +17,16 @@
  * submit), needs no key management, and there is no ciphertext to tamper with
  * or replay against another application.
  *
+ * A signed-in form's draft (`save.owner`) is held by the person instead of a
+ * cookie: the root carries the session's `me` in the owner column, filled by
+ * the server on the first step and never by the request, and every later step
+ * and the submit find the root by that owner, in the draft state, before its
+ * expiry, inside the step's own transaction. The transaction is the actor's
+ * ordinary one, so each step runs under their grant and row policy, resolved
+ * again on this request. A draft id the page names is a hint the owner
+ * predicate has the last word on: another person's draft, or a guess, is as
+ * absent as an expired one (404, never 403).
+ *
  * The fence (`applicationRecords`) is what makes "a step touches only its own
  * application" structural rather than the handler's good manners. Under it a
  * step reads and writes the root row by its key alone, and the tables that
@@ -34,6 +44,9 @@ import type { AppFormSave } from '../../shared/appSavedForms.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { BusinessCommandExecutionError } from '../commands/commandErrors.js';
 import { keyFilter, type CommandCatalog } from '../commands/commandDb.js';
+import type { CommandFileRule } from '../commands/businessCommandAuthorization.js';
+import { bucketOf } from '../files/fileStorage.js';
+import { serverRequest } from '@mistriwork/engine/server/serverRequests.js';
 
 /** What the route tells the executor about a saved form's step: never a request field. */
 export interface SavedDraftRun {
@@ -48,6 +61,15 @@ export interface SavedDraftRun {
   readonly order: readonly string[];
   /** The tables a root may be in, where this request lands: local names. */
   readonly roots: readonly string[];
+  /**
+   * A signed-in draft: the owner column, whose value is the session's person, resolved in the step's own transaction
+   * (`me`). Then `token` is empty and the draft is found by its owner. Absent, the draft is a public form's.
+   */
+  readonly owner?: { readonly column: string };
+  /** A signed-in draft the page named, by its root's key: a hint the owner predicate may still find absent. */
+  readonly hint?: string | number;
+  /** The submit's: what the review showed (`draftVersion`). A draft changed since refuses the submit as stale. */
+  readonly version?: string;
   /** The root's other columns the server keeps and no handler writes: the link's, the alert's (platformColumns). */
   readonly owned: readonly string[];
   /** A submit that leaves a claim in this browser (formLink.ts): its hash and expiry, written with the submit. */
@@ -67,7 +89,7 @@ export interface SavedDraftContext {
    * into it (`db.application.insert({ ...input, ...draft.start })`). Empty on
    * every later step.
    */
-  readonly start: Readonly<Record<string, string>>;
+  readonly start: Readonly<Record<string, string | number>>;
   /** On every later step and the submit: the root row's key, resolved from the cookie. Null on the first. */
   readonly root: Readonly<Record<string, string | number>> | null;
 }
@@ -199,6 +221,69 @@ const and = (filter: Filter | undefined, conditions: Condition[]): Filter => ({
 });
 const same = (a: unknown, b: unknown) => a !== null && a !== undefined && String(a) === String(b);
 
+/** A signed-in person's open draft: its root's table and row, and the steps saved. */
+interface OwnedDraft {
+  readonly table: string;
+  readonly row: Record<string, unknown>;
+  readonly saved: string[];
+}
+
+/**
+ * The person's open draft, if any: owner, draft state and not yet expired, found in the caller's own transaction.
+ * Two tabs racing the first step can each insert one, so more than one may be open; the page's hint wins if it names
+ * one of them, else the one with the latest expiry (the newest), the key breaking a tie, so the same request always
+ * finds the same draft and the other is never a lock-out. A hint that names none of the person's open drafts is the
+ * same absence as a stranger's: gone.
+ */
+export async function findOwnedDraft(
+  records: Pick<WriteTransaction, 'query'>,
+  catalog: CommandCatalog,
+  roots: readonly string[],
+  save: AppFormSave,
+  owner: string,
+  person: string | number,
+  order: readonly string[],
+  now: Date,
+  hint?: string | number,
+): Promise<OwnedDraft | undefined> {
+  const open: Array<{ table: string; row: Record<string, unknown>; until: number; key: string }> = [];
+  for (const table of roots) {
+    const meta = catalog[table];
+    if (meta.key.length !== 1) return deny();
+    // Expired-but-unpurged drafts are left out by the query itself, so they cannot crowd the open one out of the page.
+    const result = await records.query({
+      table,
+      filter: {
+        groups: [
+          [
+            { column: owner, op: '=', value: person },
+            { column: save.draft.column, op: '=', value: save.draft.value },
+            { column: save.resume.expires, op: '>', value: now.toISOString() },
+          ],
+        ],
+      },
+      orderBy: [{ column: save.resume.expires, direction: 'desc' }],
+      limit: 25,
+      offset: 0,
+      columns: [...meta.key, save.resume.expires, save.resume.progress],
+    });
+    for (const row of result.rows) {
+      // The stored text may not compare as the instant does (a bare timestamp), so the instant still decides.
+      const until = instant(row[save.resume.expires]);
+      if (Number.isFinite(until) && until > now.getTime()) open.push({ table, row, until, key: String(row[meta.key[0]]) });
+    }
+  }
+  /* A named draft that is not one of this person's open drafts is not found, whether or not they hold any: a guessed
+     id answers as nothing at all, never as "you have no draft". */
+  if (!open.length) return hint === undefined ? undefined : gone();
+  const pick =
+    hint === undefined
+      ? open.sort((a, b) => b.until - a.until || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))[0]
+      : open.find((item) => same(item.row[catalog[item.table].key[0]], hint));
+  if (!pick) return gone();
+  return { table: pick.table, row: pick.row, saved: progressOf(pick.row[save.resume.progress], order) };
+}
+
 interface Opened {
   readonly context: SavedDraftContext;
   /** The transaction the step runs under: its own application, and nothing else. */
@@ -212,19 +297,48 @@ interface Opened {
  * cookie's hash (a later step, the submit), or prepare its creation (the
  * first), and fence the handler's transaction to it.
  */
-export async function openSavedDraft(run: SavedDraftRun, records: WriteTransaction, catalog: CommandCatalog, now: Date): Promise<Opened> {
-  if (!HASH.test(run.token)) return gone();
+export async function openSavedDraft(
+  run: SavedDraftRun,
+  records: WriteTransaction,
+  catalog: CommandCatalog,
+  now: Date,
+  /** A signed-in draft's person: the key `me` is, or null for nobody. */
+  person?: string | number | null,
+  /** The file resources the step writes, by local name: an expired draft's files go with it. */
+  files?: ReadonlyMap<string, CommandFileRule>,
+): Promise<Opened> {
   const { save } = run;
-  const owned = new Set([save.resume.token, save.resume.expires, save.resume.progress, ...run.owned]);
+  const signedIn = run.owner !== undefined;
+  // Nobody signed in as a person owns no draft; a token that is no hash finds none.
+  if (signedIn) {
+    if (person === undefined || person === null || run.token !== '') return deny();
+  } else if (!HASH.test(run.token)) return gone();
+  const owned = new Set([
+    save.resume.token,
+    save.resume.expires,
+    save.resume.progress,
+    ...run.owned,
+    ...(run.owner ? [run.owner.column] : []),
+  ]);
   const roots = run.roots.filter((name) => Object.hasOwn(catalog, name));
   if (!roots.length) return deny();
   const draftState: Condition = { column: save.draft.column, op: '=', value: save.draft.value };
-  const byToken: Condition = { column: save.resume.token, op: '=', value: run.token };
+  /* The predicate that finds a draft: a public one's token, a signed-in one's owner. */
+  const mine: Condition = run.owner
+    ? { column: run.owner.column, op: '=', value: person as string | number }
+    : { column: save.resume.token, op: '=', value: run.token };
+
+  const findOwn = () =>
+    findOwnedDraft(records, catalog, roots, save, run.owner!.column, person as string | number, run.order, now, run.hint);
 
   if (run.phase === 'start') {
-    if (save.abandoned === 'purge') for (const root of roots) await purgeExpired(records, catalog, root, run, now);
+    if (save.abandoned === 'purge') for (const root of roots) await purgeExpired(records, catalog, root, run, now, files);
+    /* A signed-in person who already has a draft starts nothing: the first step saves into the one they have,
+       as a "Change" from review does. */
+    const existing = signedIn ? await findOwn() : undefined;
+    if (existing) return resumed(existing.table, existing.row, existing.saved);
     const start = Object.freeze({
-      [save.resume.token]: run.token,
+      ...(signedIn ? { [run.owner!.column]: person as string | number } : { [save.resume.token]: run.token }),
       [save.resume.expires]: new Date(now.getTime() + save.resume.days * 86_400_000).toISOString(),
       [save.resume.progress]: run.step,
       [save.draft.column]: save.draft.value,
@@ -249,13 +363,84 @@ export async function openSavedDraft(run: SavedDraftRun, records: WriteTransacti
     };
   }
 
+  /** A draft found, opened for a step or the submit. */
+  async function resumed(rootTable: string, row: Record<string, unknown>, saved: string[]): Promise<Opened> {
+    const rootKey = Object.freeze(Object.fromEntries(catalog[rootTable].key.map((column) => [column, row[column] as string | number])));
+    // A start that found the person's own draft saves into it as a step does.
+    const phase = run.phase === 'start' ? 'step' : run.phase;
+    if (phase === 'submit' && run.order.some((step) => !saved.includes(step))) {
+      throw new BusinessCommandExecutionError(
+        'ineligible_state',
+        'not_applied',
+        undefined,
+        undefined,
+        'Some steps of this application are not saved yet. Go back and continue them.',
+      );
+    }
+    /* What was reviewed is what is submitted: the draft's rows as they are now must be the ones the review hashed. */
+    if (
+      signedIn &&
+      phase === 'submit' &&
+      (run.version === undefined || run.version !== (await draftVersion(records, catalog, rootTable, rootKey, save)))
+    ) {
+      throw new BusinessCommandExecutionError(
+        'stale_record',
+        'not_applied',
+        undefined,
+        undefined,
+        'This application changed since you reviewed it. Review it again.',
+      );
+    }
+    const root = { table: rootTable, key: rootKey };
+    const fence = applicationRecords(records, catalog, () => root, owned, save, phase === 'step', { roots });
+    return {
+      context: Object.freeze({ step: run.step, start: Object.freeze({}), root: rootKey }),
+      records: fence,
+      finish: async () => {
+        if (phase === 'step') {
+          const progress = progressText(run.order, [...saved, run.step]);
+          await records.update({ table: rootTable, key: { ...rootKey }, values: { [save.resume.progress]: progress } });
+          return;
+        }
+        /* The submit moved the application out of its draft state (the handler
+           did), and the token dies with it: a cookie that outlived the submit,
+           or a copy of it, finds nothing. A signed-in draft has no token to
+           clear: its owner predicate stops matching once the state moves. */
+        const after = await records.query({
+          table: rootTable,
+          filter: keyFilter({ ...rootKey }),
+          limit: 2,
+          offset: 0,
+          columns: [save.draft.column],
+        });
+        if (after.rows.length !== 1 || same(after.rows[0][save.draft.column], save.draft.value))
+          throw new BusinessCommandExecutionError('invalid_result');
+        if (signedIn) return;
+        await records.update({
+          table: rootTable,
+          key: { ...rootKey },
+          values: {
+            [save.resume.token]: null,
+            ...(run.claim ? { [run.claim.columns.token]: run.claim.hash, [run.claim.columns.expires]: run.claim.until } : {}),
+          },
+        });
+      },
+    };
+  }
+
+  if (signedIn) {
+    const own = await findOwn();
+    if (!own) return gone();
+    return resumed(own.table, own.row, own.saved);
+  }
+
   const found: Array<{ table: string; row: Record<string, unknown> }> = [];
   for (const table of roots) {
     const meta = catalog[table];
     if (meta.key.length !== 1) return deny();
     const result = await records.query({
       table,
-      filter: { groups: [[byToken, draftState]] },
+      filter: { groups: [[mine, draftState]] },
       limit: 2,
       offset: 0,
       columns: [...meta.key, save.resume.expires, save.resume.progress],
@@ -266,50 +451,47 @@ export async function openSavedDraft(run: SavedDraftRun, records: WriteTransacti
   const [{ table: rootTable, row }] = found;
   const expires = instant(row[save.resume.expires]);
   if (!Number.isFinite(expires) || expires <= now.getTime()) return gone();
-  const rootKey = Object.freeze(Object.fromEntries(catalog[rootTable].key.map((column) => [column, row[column] as string | number])));
-  const saved = progressOf(row[save.resume.progress], run.order);
-  if (run.phase === 'submit' && run.order.some((step) => !saved.includes(step))) {
-    throw new BusinessCommandExecutionError(
-      'ineligible_state',
-      'not_applied',
-      undefined,
-      undefined,
-      'Some steps of this application are not saved yet. Go back and continue them.',
-    );
-  }
-  const root = { table: rootTable, key: rootKey };
-  const fence = applicationRecords(records, catalog, () => root, owned, save, run.phase === 'step', { roots });
-  return {
-    context: Object.freeze({ step: run.step, start: Object.freeze({}), root: rootKey }),
-    records: fence,
-    finish: async () => {
-      if (run.phase === 'step') {
-        const progress = progressText(run.order, [...saved, run.step]);
-        await records.update({ table: rootTable, key: { ...rootKey }, values: { [save.resume.progress]: progress } });
-        return;
-      }
-      /* The submit moved the application out of its draft state (the handler
-         did), and the token dies with it: a cookie that outlived the submit,
-         or a copy of it, finds nothing. */
-      const after = await records.query({
-        table: rootTable,
-        filter: keyFilter({ ...rootKey }),
-        limit: 2,
-        offset: 0,
-        columns: [save.draft.column],
-      });
-      if (after.rows.length !== 1 || same(after.rows[0][save.draft.column], save.draft.value))
-        throw new BusinessCommandExecutionError('invalid_result');
-      await records.update({
-        table: rootTable,
-        key: { ...rootKey },
-        values: {
-          [save.resume.token]: null,
-          ...(run.claim ? { [run.claim.columns.token]: run.claim.hash, [run.claim.columns.expires]: run.claim.until } : {}),
-        },
-      });
-    },
+  return resumed(rootTable, row, progressOf(row[save.resume.progress], run.order));
+}
+
+/**
+ * A digest of a draft's rows as they are now: the root's columns (but its expiry, which no step moves) and every row
+ * of the tables that reference it, in key order. The review shows it and the submit carries it back, so a change made
+ * in between — another tab, another device, to the root or to a row beneath it — refuses the submit instead of
+ * submitting what was not reviewed. Computed on the server from the draft's rows, so the App adds no column for it.
+ */
+export async function draftVersion(
+  records: Pick<WriteTransaction, 'query'>,
+  catalog: CommandCatalog,
+  rootTable: string,
+  rootKey: Readonly<Record<string, string | number>>,
+  save: AppFormSave,
+): Promise<string> {
+  const read = async (table: string, filter: Filter) => {
+    const meta = catalog[table];
+    const result = await records.query({ table, filter, limit: 1001, offset: 0, columns: meta.meta.columns.map((column) => column.name) });
+    if (result.rows.length > 1000) throw new BusinessCommandExecutionError('invalid_result');
+    const keyText = (row: Record<string, unknown>) => JSON.stringify(meta.key.map((column) => row[column]));
+    return result.rows.map((row) => [keyText(row), row] as const).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   };
+  const mixed: Array<[string, unknown]> = [];
+  for (const [, row] of await read(rootTable, keyFilter({ ...rootKey }))) {
+    const { [save.resume.expires]: _expires, ...kept } = row;
+    mixed.push([rootTable, kept]);
+  }
+  const value = Object.values(rootKey)[0];
+  for (const [table, link] of [...draftChildren(catalog, rootTable)].sort(([a], [b]) => (a < b ? -1 : 1))) {
+    for (const [, row] of await read(table, { groups: [[{ column: link, op: '=', value }]] })) mixed.push([table, row]);
+  }
+  const text = JSON.stringify(mixed, (_key, item: unknown) => {
+    if (typeof item === 'bigint') return `${item}n`;
+    if (item instanceof Date) return item.toISOString();
+    if (item instanceof Uint8Array) return Buffer.from(item).toString('base64');
+    if (item && typeof item === 'object' && !Array.isArray(item))
+      return Object.fromEntries(Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+    return item;
+  });
+  return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
 /**
@@ -420,6 +602,7 @@ async function purgeExpired(
   root: string,
   run: SavedDraftRun,
   now: Date,
+  files?: ReadonlyMap<string, CommandFileRule>,
 ): Promise<void> {
   const { save } = run,
     meta = catalog[root];
@@ -465,8 +648,38 @@ async function purgeExpired(
         doomed.push({ table, key: Object.fromEntries(child.key.map((column) => [column, found[column] as string | number])) });
     }
     if (!whole) continue;
+    /* A draft's files leave their bucket before their rows do: a row whose object is gone is only a row, while an
+       object whose row is gone is one nobody names. A bucket that does not answer leaves the draft whole, expired
+       and found again by the next pass. */
+    if (!(await dropObjects(records, files, doomed))) continue;
     for (const entry of doomed) await records.remove(entry);
     await records.remove({ table: root, key: { [key]: value } });
+  }
+}
+
+/**
+ * The bucket objects the rows of a draft name, deleted; false when one could not be, so the rows stay as the record
+ * of what is left to delete. A file kept in the database has no object, and a bucket delete of one already gone is
+ * not an error (bucket.ts).
+ */
+export async function dropObjects(
+  records: Pick<WriteTransaction, 'query'>,
+  files: ReadonlyMap<string, CommandFileRule> | undefined,
+  rows: ReadonlyArray<{ table: string; key: Record<string, string | number> }>,
+): Promise<boolean> {
+  try {
+    for (const { table, key } of rows) {
+      const rule = files?.get(table);
+      if (!rule?.object || !rule.bucket) continue;
+      // The object's key is the server's column: only a request marked as its own may name it.
+      const read = await records.query(serverRequest({ table, columns: [rule.object], filter: keyFilter(key), limit: 2, offset: 0 }));
+      const object = read.rows.length === 1 ? read.rows[0][rule.object] : undefined;
+      if (typeof object === 'string' && object) await bucketOf(rule).delete(object);
+    }
+    return true;
+  } catch (error) {
+    console.error(`mistri: a draft's files could not be removed from their bucket yet: ${(error as Error).message}`);
+    return false;
   }
 }
 

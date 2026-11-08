@@ -193,6 +193,12 @@ ink darker than its hairlines and still quieter than its text.
   points at `--sans` unless the App or its preset names a face, and what
   is read character by character — code, the query language, and in
   Mono a grid's short values (ids, dates, codes) — keeps `--code`. A column may ask for a face (`display: { vin: { face: 'code' } }`); unasked, an App sets only keys, references and codes in the data face.
+  **Data columns are IBM Plex Mono** (`--figures`), in every look and in nothing else: the ids, codes and numbers a
+  table's cells set apart (`td.mono`) and the figures, dates and keys of a record's fields and header facts. Body
+  type, headings, names, statuses and a stat's hero figure keep their look's faces. The face is the kit's own, with
+  its OFL text beside it and a metric-matched fallback (`IBM Plex Mono Fallback`), declared in `themeFamilies.css`;
+  a browser fetches it only when a cell is drawn in it, so a page with no data column asks for nothing. A theme
+  whose data face reaches figures (`type.data.reach: 'figures'`) names its own and wins.
   A look's sans is the system's own, and its identity comes from scale,
   weight and tracking — except Workshop's and Lumen's. Workshop is set in
   Barlow, its labels in the semibold, and its titles, a stat's figures and the

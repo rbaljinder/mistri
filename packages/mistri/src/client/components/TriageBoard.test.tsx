@@ -54,19 +54,19 @@ describe('TriageBoard', () => {
       />,
     );
     expect(screen.getByRole('heading', { level: 2, name: 'New' }).querySelector('.tone')).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Broken login, Aster' }).querySelector('.tone-bad')).not.toBeNull();
+    expect(screen.getByRole('button', { name: /^Broken login Aster\b/ }).querySelector('.tone-bad')).not.toBeNull();
   });
 
   it("draws a card title's second line quietly under it, before the card's line, and names the card with it", () => {
     render(<TriageBoard lanes={lanes} cards={[{ ...cards[0], second: 'aster@example.test' }, cards[1]]} />);
-    const card = screen.getByRole('button', { name: 'Broken login, aster@example.test, Aster' });
+    const card = screen.getByRole('button', { name: /^Broken login aster@example\.test Aster\b/ });
     expect([...card.children].map((part) => part.className)).toEqual([
       'triage-card-title',
       'triage-card-second',
       'triage-card-subtitle',
       'triage-card-meta',
     ]);
-    expect(screen.getByRole('button', { name: 'Slow export, Compass' }).querySelector('.triage-card-second')).toBeNull();
+    expect(screen.getByRole('button', { name: /^Slow export Compass\b/ }).querySelector('.triage-card-second')).toBeNull();
   });
 
   it('names the lane in view and steps to the next, for a phone that shows one lane at a time', async () => {
@@ -81,7 +81,7 @@ describe('TriageBoard', () => {
   it('selects a card without owning its detail or persistence', async () => {
     const onSelect = vi.fn();
     await userEvent.click(
-      render(<TriageBoard lanes={lanes} cards={cards} onSelect={onSelect} />).getByRole('button', { name: 'Broken login, Aster' }),
+      render(<TriageBoard lanes={lanes} cards={cards} onSelect={onSelect} />).getByRole('button', { name: /^Broken login Aster\b/ }),
     );
     expect(onSelect).toHaveBeenCalledWith(cards[0]);
   });
@@ -98,10 +98,10 @@ describe('TriageBoard', () => {
 
   it('moves keyboard focus between cards without changing lanes', async () => {
     render(<TriageBoard lanes={lanes} cards={cards} />);
-    const first = screen.getByRole('button', { name: 'Broken login, Aster' });
+    const first = screen.getByRole('button', { name: /^Broken login Aster\b/ });
     first.focus();
     await userEvent.keyboard('{ArrowRight}');
-    expect(screen.getByRole('button', { name: 'Slow export, Compass' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: /^Slow export Compass\b/ })).toHaveFocus();
   });
 
   it('draws no menu for a card whose host offers nothing', () => {
@@ -166,7 +166,7 @@ describe('TriageBoard', () => {
     expect(facts[1]).toHaveClass('is-person');
     expect(facts[1].querySelector('.avatar-stack')).not.toBeNull();
     // The card's name carries its facts for assistive technology.
-    expect(card.getAttribute('aria-label')).toContain('Ada Lovelace');
+    expect(card).toHaveAccessibleName(expect.stringContaining('Ada Lovelace'));
     // A card without them draws neither.
     const plain = screen.getByRole('button', { name: /Slow export/ });
     expect(plain.querySelector('.triage-card-category')).toBeNull();
@@ -275,7 +275,7 @@ describe('TriageBoard', () => {
     const onEdit = vi.fn();
     const edits = [{ field: 'name', label: 'Name' }];
     const { rerender } = render(<TriageBoard lanes={lanes} cards={[{ ...cards[0], edits }]} onEdit={onEdit} />);
-    const card = screen.getByRole('button', { name: 'Broken login, Aster' });
+    const card = screen.getByRole('button', { name: /^Broken login Aster\b/ });
     expect(card).toHaveAttribute('aria-keyshortcuts', 'F2');
     card.focus();
     await userEvent.keyboard('{F2}');

@@ -81,7 +81,7 @@ test('palette is independent, persists and follows System mode', async ({ page }
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('menuitem', { name: /^Preferences/ }).click();
   const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
-  await prefs.getByRole('button', { name: 'Palette', exact: true }).click();
+  await prefs.getByRole('button', { name: /^Palette(?: |$)/ }).click();
   await page.getByRole('option', { name: 'Mint', exact: true }).click();
   await expect(root).toHaveAttribute('data-visual-theme', theme.id);
   await expect(root).toHaveAttribute('data-theme-palette', 'mint');

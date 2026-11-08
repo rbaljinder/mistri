@@ -158,10 +158,11 @@ export function compileAggregate(
   style: SqlStyle,
   offset: number | unknown = 0,
   scope?: RowScope,
+  policy: DatabaseSchema = schema,
 ): ReturnType<typeof compileBreakdown> {
   const def = aggregateBreakdown(schema, request);
   try {
-    return compileBreakdown(schema, def, style, offset, scope);
+    return compileBreakdown(schema, def, style, offset, scope, policy);
   } catch (error) {
     if (error instanceof PathError) throw new RequestFault(error.message, { cause: error });
     throw error;

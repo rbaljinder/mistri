@@ -39,6 +39,9 @@ export interface TenantRequestScope {
   readonly rows: RowScope;
   readonly grants: ResourceAccess;
   session(): Promise<void>;
+  /** The account's email as the session check proved it (admission runs one before any callback): who
+   * a `me` stamp writes and whose row of the people table it looks up (appStamps.ts). Never a request's word. */
+  who(): string;
   /** `operation` names which of the host's operations ran, for a writer kind
    * that records one: Undo passes 'undo' because `undo()` is what called. It is
    * never taken from a request, so it states what happened rather than what a
@@ -199,6 +202,7 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
         proved = false;
       let operations = new TransactionOperations();
       let principal: TenantMembershipEvidence | undefined;
+      let verifiedWho: string | undefined;
       let releaseFlags = () => {};
       try {
         let lastTime = 0;
@@ -231,6 +235,7 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
             (identity.role !== undefined && typeof identity.role !== 'string')
           )
             return denyTenant();
+          verifiedWho = identity.who;
           const verified = revalidateTenantInvocation(guard, principal!);
           if (isPromise(verified)) await verified;
           active();
@@ -406,6 +411,7 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
             rows,
             grants,
             session,
+            who: () => verifiedWho ?? denyTenant(),
             advisoryReads,
             transaction: (run, operation) => transaction(false, run, undefined, operation),
             commandTransaction: (run, read) => transaction(true, (records, journal) => run(records, journal!), read),

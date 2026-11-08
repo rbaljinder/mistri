@@ -23,7 +23,7 @@ import { ROOT, SESSION_SECRET, childEnv, freePort, mcpEnv, runCli, serveApi, sta
 
 const storeId = '5b0c8f0e-2a4d-4c55-9e1a-3f6f0d6c2b11';
 
-async function desk(t: TestContext) {
+async function desk(t: TestContext, options: { via?: boolean } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'tw-api-row-policy-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const business = join(directory, 'business.db'),
@@ -32,7 +32,11 @@ async function desk(t: TestContext) {
   try {
     db.exec(
       'CREATE TABLE ticket(id INTEGER PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 0, owner TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL); ' +
-        "INSERT INTO ticket(id, owner, title, status) VALUES (1, 'ann', 'Printer', 'open'), (2, 'bob', 'Laptop', 'open')",
+        "INSERT INTO ticket(id, owner, title, status) VALUES (1, 'ann', 'Printer', 'open'), (2, 'bob', 'Laptop', 'open')" +
+        // A membership table no role reads: whose tickets an account's policy reaches (options.via).
+        (options.via
+          ? "; CREATE TABLE member(id INTEGER PRIMARY KEY, subject TEXT NOT NULL, owner TEXT NOT NULL); INSERT INTO member VALUES (1, 'bob', 'bob')"
+          : ''),
     );
   } finally {
     db.close();
@@ -49,7 +53,7 @@ async function desk(t: TestContext) {
       id: 'desk',
       name: 'Desk',
       sources: { business: { connection: 'data', default: true } },
-      resources: { ticket: { access: 'write' } },
+      resources: { ticket: { access: 'write' }, ...(options.via ? { member: {} } : {}) },
       auth: {
         store: authPath,
         rows: 'policy',
@@ -85,7 +89,12 @@ export default defineCommands({
     policy,
     `export default { appId: 'desk',
   resolveRows(principal) {
-    return { ticket: { groups: [[{ column: 'owner', op: '=', value: principal.id }]] } };
+    ${
+      options.via
+        ? `return { member: { groups: [[{ column: 'subject', op: '=', value: principal.id }]] },
+      ticket: { groups: [[{ column: 'owner', op: 'in', via: { resource: 'member', column: 'owner' } }]] } };`
+        : `return { ticket: { groups: [[{ column: 'owner', op: '=', value: principal.id }]] } };`
+    }
   },
   resultReferences: { close: () => [] },
 };
@@ -163,7 +172,15 @@ export default defineCommands({
       { appId: 'desk', storeId, exclusions, tokenId: tokenIds[id], expectedVersion: '1', actorId: id },
       Date.now(),
     );
-  return { appDir, config, commands, policy, tokens, status, revoke };
+  const forget = (id: number) => {
+    const edit = new DatabaseSync(business);
+    try {
+      edit.prepare('DELETE FROM member WHERE id = ?').run(id);
+    } finally {
+      edit.close();
+    }
+  };
+  return { appDir, config, commands, policy, tokens, status, revoke, forget };
 }
 
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
@@ -299,6 +316,38 @@ test('--app-mcp serves a row-policy App under its --policy: the token account’
   });
   assert.equal(closed.result.isError, true);
   assert.equal(f.status(1), 'open');
+  mcp.end();
+  assert.equal(await mcp.closed, 0);
+});
+
+test('--app-mcp: a grant held in membership rows is gone at the next call of the same session', { timeout: 180000 }, async (t) => {
+  const f = await desk(t, { via: true });
+  const mcp = startAppMcp(
+    t,
+    [
+      '--app-mcp',
+      '--api-integers',
+      'decimal-string',
+      '--config',
+      f.config,
+      '--app',
+      f.appDir,
+      '--commands',
+      f.commands,
+      '--policy',
+      f.policy,
+    ],
+    mcpEnv(f.tokens.bob),
+  );
+  const tools = (await mcp.request('tools/list')).result.tools as { name: string }[];
+  const list = tools.find((tool) => tool.name.startsWith('list_'))?.name ?? assert.fail(JSON.stringify(tools));
+  const titles = async () =>
+    ((await mcp.request('tools/call', { name: list, arguments: {} })).result.structuredContent.items as { title: string }[]).map(
+      (row) => row.title,
+    );
+  assert.deepEqual(await titles(), ['Laptop']);
+  f.forget(1);
+  assert.deepEqual(await titles(), []);
   mcp.end();
   assert.equal(await mcp.closed, 0);
 });

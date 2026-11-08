@@ -27,7 +27,7 @@ test.describe('Thread editable issue modal', () => {
         .click();
       const modal = page.locator('.record-modal');
       await expect(modal).toBeVisible();
-      await modal.getByRole('button', { name: 'Edit Name', exact: true }).click();
+      await modal.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
       const input = modal.getByRole('textbox', { name: 'Name', exact: true });
       await input.fill('A manually saved Thread issue');
       await modal.getByRole('button', { name: '+ Add update', exact: true }).click();
@@ -100,7 +100,7 @@ test.describe('Thread editable issue modal', () => {
     const routeBefore = page.url();
     await issue.click();
     const modal = page.locator('.record-modal');
-    await modal.getByRole('button', { name: 'Edit Name', exact: true }).click();
+    await modal.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
     const parentInput = modal.locator('input[aria-label="Name"]');
     await parentInput.fill('Parent draft survives a background failure');
     await modal.getByRole('button', { name: '+ Add update', exact: true }).click();

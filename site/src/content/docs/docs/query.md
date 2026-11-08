@@ -34,17 +34,17 @@ invoice total between 100 and 1000 and status = issued
 invoice invoice_date = last 30 days
 ```
 
-| Intent | Spelling |
-| --- | --- |
-| Compare | `=`, `!=`, `<`, `<=`, `>`, `>=`, `between a and b` |
+| Intent             | Spelling                                                                                                                                                                          |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Compare            | `=`, `!=`, `<`, `<=`, `>`, `>=`, `between a and b`                                                                                                                                |
 | Compare two values | `qty < reorder_at`, `paid < owed` (a rollup): beside a number, a date or a flag, a bare word naming a column, rollup or computed column is its value; beside text it stays a word |
-| Match text | `contains`, `startswith`, `endswith` (case-insensitive where the database allows) |
-| Match a set | `in (AU, NZ)`, `not in (AU, NZ)` |
-| Check null | `is empty`, `is not empty` |
-| A machine's states | `status is open` (not final), `status is onBench` (a group it names), `is not` for the rest |
-| Combine | `and`, `or`, parentheses |
-| Choose columns | `show` (or `select`), with `as` to rename |
-| Order and cut | `sort column desc` (or `order by`), `limit 20` |
+| Match text         | `contains`, `startswith`, `endswith` (case-insensitive where the database allows)                                                                                                 |
+| Match a set        | `in (AU, NZ)`, `not in (AU, NZ)`                                                                                                                                                  |
+| Check null         | `is empty`, `is not empty`                                                                                                                                                        |
+| A machine's states | `status is open` (not final), `status is onBench` (a group it names), `is not` for the rest                                                                                       |
+| Combine            | `and`, `or`, parentheses                                                                                                                                                          |
+| Choose columns     | `show` (or `select`), with `as` to rename                                                                                                                                         |
+| Order and cut      | `sort column desc` (or `order by`), `limit 20`                                                                                                                                    |
 
 Dates are phrases: `today`, `yesterday`, `this week`, `last month`,
 `this quarter`, `last 30 days`, `next 7 days`; `previous 30 days` is the window
@@ -84,20 +84,27 @@ holding both, put both inside one: `any invoice where (status = paid and total >
 The same words are read in several places, and they do not all reach as far.
 A resource's query follows references and asks about the rows that point at a
 record; a handler's `db.<table>.where` and a policy's `db` read one table's own
-columns, and refuse a path or an `any`.
+columns and ask about the rows that point at it (`any`/`no`) among the tables
+they declare, and refuse a path.
 
-| Where                                                                  | Own columns | Reference path (`customer_id.name`) | `any` / `no` (`via`) |
-| ---------------------------------------------------------------------- | ----------- | ----------------------------------- | -------------------- |
-| Resource queries: a list's `where`, segments, `q=`, the App API          | yes         | yes                                 | yes                  |
-| `useRows` (`query`)                                                    | yes         | yes                                 | yes                  |
-| A command's or a page loader's `db.<table>.where`                      | yes         | no                                  | no                   |
-| A policy's `db.<table>.where`                                          | yes         | no                                  | no                   |
-| A row scope (`RowScope`)                                               | local columns only, as a structured filter, not text | no | no |
+| Where                                                           | Own columns                                          | Reference path (`customer_id.name`) | `any` / `no` (`via`)                                                                         |
+| --------------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------- |
+| Resource queries: a list's `where`, segments, `q=`, the App API | yes                                                  | yes                                 | yes                                                                                          |
+| `useRows` (`query`)                                             | yes                                                  | yes                                 | yes                                                                                          |
+| A command's or a page loader's `db.<table>.where`               | yes                                                  | no                                  | yes, within the declared reads                                                               |
+| A policy's `db.<table>.where`                                   | yes                                                  | no                                  | yes, among the App's resources                                                               |
+| A row scope (`RowScope`)                                        | local columns only, as a structured filter, not text | no                                  | no                                                                                           |
+| A row scope's `via(column, resource)`                           | the target's key, among the rows the person may see  | no                                  | a relationship test, not text ([row access](/docs/row-access/#scope-through-a-relationship)) |
 
 A resource query and `useRows` are the resource's read, so they are held to the
 reader's grants at every hop. A handler's `db` reads the tables its command or
-loader declares, as itself: to ask about related rows there, read the child
-table by its own column (`db.invoice.where({ customer_id })`).
+loader declares, as itself. An `any` or `no` there may name only a child that is
+among those tables, and is read as its parent is: a command's and a policy's
+unscoped, a loader's under the reader's row scope, so a row they cannot read does
+not satisfy an `any`. A child outside the declared reads is refused by name.
+A sum or a group over such a `where` is refused (read the rows, or count them),
+and a command in a tenant App does not take `any`/`no` yet: it reads the child by
+its own column (`db.invoice.where({ customer_id })`).
 
 ## Group and measure
 

@@ -29,7 +29,7 @@ import {
   type BusinessCommandRegistry,
 } from './businessCommands.js';
 import { commandCatalog, zonedCatalog, type CommandCatalog } from './commandDb.js';
-import { compileWhen, withDerived } from './commandWhen.js';
+import { compileWhen, withDerived, type CommandPeople } from './commandWhen.js';
 import { sayRefusal } from '@mistriwork/engine/shared/refusal.js';
 import { withSaying } from './commandSaying.js';
 import { versionColumn } from './commandRevision.js';
@@ -48,6 +48,9 @@ export interface BusinessCommandAuthorizationOptions {
   transactionalConnection: (connection: string) => boolean;
   /** Private, already-attested logical ownership, never an App field grant. */
   managedOwnership?: Readonly<Record<string, string>>;
+  /** The people table's `auth.me` column holds the actor's account id, not an email: a tenant App's, whose
+      people are the tenant's own rows (appMe.ts lookupTenantPerson). The tenant host says so, never the App. */
+  peopleByAccount?: boolean;
 }
 
 export interface BusinessCommandAuthorization {
@@ -71,7 +74,7 @@ export interface BusinessCommandAuthorization {
   /** The App's `ui.currency`: what a minor-unit amount in a command's input is typed in where it names none (USD when absent). */
   readonly currency?: string;
   /** The table people are rows of (`auth.me`), where the command reads it: what `me` writes to a reference to it. */
-  readonly people?: Readonly<{ table: string; column: string; key: string; id: string }>;
+  readonly people?: CommandPeople;
   /** The file resources it writes, by local name: where a new row's bytes go and the most it may hold (the
       resource's `maxBytes`, and a tenant host's 10 MB), as an upload is held. */
   readonly files?: ReadonlyMap<string, CommandFileRule>;
@@ -397,6 +400,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
       'writableConnection',
       'transactionalConnection',
       'managedOwnership',
+      'peopleByAccount',
     ]) as unknown as BusinessCommandAuthorizationOptions;
     app = captureTenantData(options.app);
     schema = captureTenantData(options.schema);
@@ -786,7 +790,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           versionField,
           ...(appZone(app.ui) ? { timezone: appZone(app.ui) } : {}),
           currency: app.ui?.currency ?? 'USD',
-          ...peopleIn(app, schema, catalog),
+          ...peopleIn(app, schema, catalog, options.peopleByAccount === true),
           ...(files.size ? { files } : {}),
         },
       ] as const;
@@ -943,13 +947,19 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
 
 /* The people table by its local name in the command's catalog, where the command reads it: a handler's `me`
    on a reference to it is the actor's row, looked up in the same transaction as the write. */
-function peopleIn(
-  app: AppDef,
-  schema: DatabaseSchema,
-  catalog: CommandCatalog,
-): { people?: { table: string; column: string; key: string; id: string } } {
+function peopleIn(app: AppDef, schema: DatabaseSchema, catalog: CommandCatalog, byAccount = false): { people?: CommandPeople } {
   const { table, column } = personTable(app, schema);
   if (!table || !column) return {};
   const local = Object.keys(catalog).find((name) => catalog[name].meta.id === table.id);
-  return local ? { people: Object.freeze({ table: local, column, key: primaryKey(table)[0], id: table.id }) } : {};
+  return local
+    ? {
+        people: Object.freeze({
+          table: local,
+          column,
+          key: primaryKey(table)[0],
+          id: table.id,
+          ...(byAccount ? { account: true as const } : {}),
+        }),
+      }
+    : {};
 }

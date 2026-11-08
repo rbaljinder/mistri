@@ -99,7 +99,10 @@ test("a round avatar's identity mark is measured whatever the menu is, and a par
   assert.deepEqual(found({ recipes: { nav: 'quiet', avatar: 'plain' } }), [], 'a plain mark draws no such pair');
   // A part names the mark: its own pair is the one measured.
   const styled = found({ recipes: { nav: 'quiet', avatar: 'round' }, parts: { identityMark: { ink: 'nav.ink', ground: 'nav.ground' } } });
-  assert.ok(styled.every((problem) => problem.check.startsWith('navAccent/') || problem.check.startsWith('parts.identityMark')));
+  assert.deepEqual(styled, [], 'a readable named pair replaces the default one, which is no longer drawn');
+  // Only the ink named: it is drawn on the default tint, and that pair is the one measured.
+  const inked = found({ recipes: { nav: 'quiet', avatar: 'round' }, parts: { identityMark: { ink: 'nav.accent' } } });
+  assert.ok(inked.length && inked.every((problem) => problem.check.startsWith('parts.identityMark')));
 });
 
 test('the built-in looks pass the measures where drawn, in every palette and both modes', () => {

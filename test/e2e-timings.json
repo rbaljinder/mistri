@@ -126,6 +126,7 @@
  "e2e/row-defined-fields.spec.ts": 14.8,
  "e2e/runtime-ux.spec.ts": 16.1,
  "e2e/sample-apps.spec.ts": 18.5,
+ "e2e/saved-draft.spec.ts": 9,
  "e2e/saved-form-account.spec.ts": 11,
  "e2e/saved-form.spec.ts": 7.4,
  "e2e/scan-signature.spec.ts": 45,

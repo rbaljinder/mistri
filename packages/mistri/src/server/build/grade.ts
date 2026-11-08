@@ -381,6 +381,10 @@ export async function runGrade(
       const everyTheme = options.theme === 'all',
         everyPalette = options.palette === 'all',
         everyRole = options.as === 'all';
+      /* --as all signs in a fresh account per role, made in the run's own store; --store names accounts to sign in as,
+         so together the store would be read by nothing and the grade would say it was. */
+      if (everyRole && options.store)
+        throw new Refusal('--as all makes a fresh account for each role; --store goes with --as <role|email>, which signs in from it.');
       const matrix = everyTheme || everyPalette || everyRole;
       const opened = await run.open({
         ...options,

@@ -14,7 +14,8 @@ import {
   lookupBusinessCommandStatus,
   type CommandDoor,
 } from './businessCommandExecution.js';
-import { COMMAND_ROUTE_PATHS } from '../../shared/commandRoutes.js';
+import { COMMAND_ROUTE_PATHS, COMMAND_ROUTES } from '../../shared/commandRoutes.js';
+import { runDraftRoute } from '../forms/draftHttp.js';
 import { checkCommandStep, checkedNames } from './commandCheck.js';
 import { ROW_LOCKED_RETRY_AFTER_SECONDS } from '@mistriwork/engine/adapters/writeLanes.js';
 import { prepareCommandTargets } from './commandTargets.js';
@@ -229,6 +230,10 @@ export async function dispatchScopedBusinessCommandHttp(options: {
     };
     // A step's check is the ordinary host's; a scoped deployment's forms are judged when they are sent.
     if (path === '/api/commands/check') throw new BusinessCommandExecutionError('forbidden', 'not_applied');
+    if (path === COMMAND_ROUTES.draft) {
+      if (!commands.draft) throw new BusinessCommandExecutionError('forbidden', 'unknown');
+      return await commands.draft(body, { ...execution, door: browserDoor(req) });
+    }
     if (path === '/api/commands/availability') {
       if (!commands.availability) throw new BusinessCommandExecutionError('temporarily_unavailable');
       return await commands.availability(body, execution);
@@ -304,6 +309,17 @@ export async function dispatchBusinessCommandHttp(options: {
        the source's readers, every check at once, not one writer transaction
        after another (a record with five verbs was five, queued behind every
        write, at several round trips each). */
+    if (path === COMMAND_ROUTES.draft)
+      return await runDraftRoute({
+        app,
+        commands,
+        binding,
+        actor,
+        body,
+        execution,
+        flagsFor: (envelope) => authorizedCommandFlags(binding, actor, envelope, admittedFlags),
+        door: browserDoor(req),
+      });
     if (path === '/api/commands/availability')
       return await collectCommandAvailability(
         parseCommandAvailability(body),

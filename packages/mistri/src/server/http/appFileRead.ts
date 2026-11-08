@@ -6,6 +6,9 @@
 import { findTable } from '@mistriwork/engine/shared/schema.js';
 import { appFileRules } from '../../shared/app.js';
 import { appForConnection } from '../app/apps.js';
+import { signedInAs } from '../app/appStamps.js';
+import { beneathDraft, draftFileHidden } from '../forms/draftFiles.js';
+import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import { fileTag } from '../files/fileStorage.js';
 import { sniffImage } from './imageSniff.js';
 import {
@@ -47,6 +50,39 @@ export async function appFileRoute(ctx: RequestContext, source: ResolvedSource):
     key = JSON.parse(url.searchParams.get('key') ?? '');
   } catch {
     key = undefined;
+  }
+  /* A file beneath a signed-in draft is the draft's person's alone until it is submitted (forms/draftFiles.ts): to
+     anyone else it is as absent as a file that is not there. The question is put to the App's own reader. A row
+     policy's source carries none, since its reads are the person's: there the App's reader is opened for this one
+     question, and only for a table that can sit beneath a draft, so an ordinary file costs nothing more. */
+  if (key && typeof key === 'object') {
+    const app = host!.app.app;
+    const releases: Array<() => void> = [];
+    try {
+      const catalog =
+        source.appReader ??
+        (beneathDraft(app, schema!, table.id)
+          ? await loadAppRuntimeResources(registry, app, connectionId, (owner) => releases.push(registry.lease(owner))).then(
+              (resources) => ({ schema: resources.schema, reader: resources.adapter }),
+            )
+          : undefined);
+      if (
+        catalog &&
+        (await draftFileHidden({
+          app,
+          schema: catalog.schema,
+          reader: catalog.reader,
+          table: table.id,
+          key: key as Record<string, string | number>,
+          who: signedInAs(ctx.identity),
+        }))
+      ) {
+        send(res, 404, { error: 'No file here.' });
+        return true;
+      }
+    } finally {
+      for (const release of releases.reverse()) release();
+    }
   }
   // A width is made from the original, never from the smaller copy.
   let found: Awaited<ReturnType<typeof readFileRow>>;

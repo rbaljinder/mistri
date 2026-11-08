@@ -30,7 +30,7 @@
  */
 import { createHash } from 'node:crypto';
 import type { Condition } from '@mistriwork/engine/shared/filter.js';
-import type { RowScopeFilter } from '@mistriwork/engine/shared/rowScope.js';
+import type { RowScopeFilter, ViaCondition } from '@mistriwork/engine/shared/rowScope.js';
 import type { LiveEntry, LiveKey, LiveKind, StoredLiveChange } from '../../adapters/live/liveChange.js';
 
 /** One table a subscriber may be told of, by its physical name in the change store. */
@@ -82,11 +82,33 @@ export const keyText = (key: LiveKey): string =>
       .map((column) => [column, key[column]]),
   );
 
-/** The digest a scope is shared by: equal only for the same App, table and filter. */
-export function scopeFingerprint(owner: string, table: string, scope: true | RowScopeFilter): string {
+/**
+ * The rules a scope reads through, with theirs in turn: every `via` target's resolved rule, by resource id, in id order.
+ * Undefined where the scope holds no `via`. A via condition names only a resource and a key; what the target admits for
+ * THIS reader (`bench_access.user_id = <me>`) is in the target's rule, so it is part of what makes two scopes alike.
+ */
+export function viaClosure(scope: true | RowScopeFilter, rules: Readonly<Record<string, boolean | RowScopeFilter | undefined>>): unknown {
+  const found = new Map<string, unknown>();
+  const visit = (rule: RowScopeFilter) => {
+    for (const group of rule.groups)
+      for (const condition of group) {
+        const via = (condition as ViaCondition).via;
+        if (via === undefined || found.has(via.resource)) continue;
+        const target = rules[via.resource];
+        // A target the map does not hold is recorded as absent, so no two scopes alike by omission.
+        found.set(via.resource, target ?? null);
+        if (target !== undefined && target !== true && target !== false) visit(target);
+      }
+  };
+  if (scope !== true) visit(scope);
+  return found.size ? [...found].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) : undefined;
+}
+
+/** The digest a scope is shared by: equal only for the same App, table, filter and (for a `via`) the targets' rules. */
+export function scopeFingerprint(owner: string, table: string, scope: true | RowScopeFilter, closure?: unknown): string {
   if (scope === true) return '';
   return createHash('sha256')
-    .update(JSON.stringify([owner, table, scope]))
+    .update(JSON.stringify(closure === undefined ? [owner, table, scope] : [owner, table, scope, closure]))
     .digest('base64url');
 }
 
@@ -100,7 +122,10 @@ const folded = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').
 /* One value as a stored scalar compares with another: a number and its text are the same key on every engine. */
 const same = (a: Scalar, b: unknown): boolean => a !== null && b !== null && b !== undefined && (a === b || String(a) === String(b));
 
-function condition(row: Readonly<Record<string, Scalar>>, test: Condition): boolean {
+function condition(row: Readonly<Record<string, Scalar>>, given: Condition | ViaCondition): boolean {
+  // A relationship test reads another table's rows, which a before image cannot say: not believed (a probe decides).
+  if (given.via !== undefined) return false;
+  const test = given as Condition;
   if (test.other !== undefined || test.column.includes('.') || !Object.hasOwn(row, test.column)) return false;
   const value = row[test.column];
   switch (test.op) {

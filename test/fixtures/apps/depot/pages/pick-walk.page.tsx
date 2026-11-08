@@ -14,7 +14,7 @@
  * short; nothing here writes.
  */
 import type { ReactNode } from 'react';
-import { Button, definePage, Empty, Stack, type PageProps } from '@mistriwork/mistri/page';
+import { Button, Card, definePage, Empty, Loaded, Stack, type PageProps } from '@mistriwork/mistri/page';
 import { useFormat, useState } from '@mistriwork/mistri/ui';
 import './pick-walk.css';
 
@@ -77,99 +77,109 @@ function Walk({
     sort: 'bin_id.code, id',
     limit: 200,
   });
-  if (lines.isPending)
-    return (
-      <p className="c-page-pick-walk-quiet" role="status">
-        Reading the lines…
-      </p>
+  const body = (all: readonly Row[]): ReactNode => {
+    const units = all.reduce((sum, line) => sum + Number(line.qty ?? 0), 0);
+    const head = (
+      <div className="c-page-pick-walk-head">
+        <p className="c-page-pick-walk-ref">
+          {String(list.reference)} · {String(list.ship_to)}
+        </p>
+        <Button intent="quiet" size="compact" onClick={onLeave}>
+          All pick lists
+        </Button>
+      </div>
     );
-  if (lines.isError)
-    return (
-      <p className="c-page-pick-walk-quiet" role="alert">
-        {lines.error?.message}
-      </p>
-    );
-  const all = lines.data ?? [];
-  const units = all.reduce((sum, line) => sum + Number(line.qty ?? 0), 0);
-  const head = (
-    <div className="c-page-pick-walk-head">
-      <p className="c-page-pick-walk-ref">
-        {String(list.reference)} · {String(list.ship_to)}
-      </p>
-      <Button intent="quiet" size="compact" onClick={onLeave}>
-        All pick lists
-      </Button>
-    </div>
-  );
-  if (step < all.length) {
-    const line = all[step];
+    if (step < all.length) {
+      const line = all[step];
+      return (
+        <div className="c-page-pick-walk">
+          {head}
+          <p className="c-page-pick-walk-progress" aria-live="polite">
+            Line {step + 1} of {all.length}
+          </p>
+          <div className="c-page-pick-walk-progressbar" aria-hidden="true">
+            <span style={{ width: `${(step / all.length) * 100}%` }} />
+          </div>
+          <Card>
+            <Stack gap="tight">
+              <p className="c-page-pick-walk-label">Bin</p>
+              <p className="c-page-pick-walk-bin">{String(line['bin_id.code'] ?? 'Any bin')}</p>
+              <p className="c-page-pick-walk-sku">{String(line['product_id.sku'] ?? '')}</p>
+              <p className="c-page-pick-walk-name">{String(line['product_id.name'] ?? '')}</p>
+              <p className="c-page-pick-walk-qty">
+                <span className="c-page-pick-walk-label">Take</span> <strong>{format.number(Number(line.qty))}</strong>
+              </p>
+            </Stack>
+          </Card>
+          <div className="c-page-pick-walk-actions">
+            <Button intent="primary" size="large" block onClick={() => onStep(step + 1)}>
+              Picked ✓
+            </Button>
+            {step > 0 && (
+              <Button intent="quiet" onClick={() => onStep(step - 1)}>
+                Back a line
+              </Button>
+            )}
+          </div>
+        </div>
+      );
+    }
+    const available = pick.available({ id: list.id });
+    const busy = pick.pending({ id: list.id });
     return (
       <div className="c-page-pick-walk">
         {head}
-        <p className="c-page-pick-walk-progress" aria-live="polite">
-          Line {step + 1} of {all.length}
-        </p>
-        <div className="c-page-pick-walk-progressbar" aria-hidden="true">
-          <span style={{ width: `${(step / all.length) * 100}%` }} />
-        </div>
-        <article className="c-page-pick-walk-card" aria-label={`Line ${step + 1}`}>
-          <p className="c-page-pick-walk-label">Bin</p>
-          <p className="c-page-pick-walk-bin">{String(line['bin_id.code'] ?? 'Any bin')}</p>
-          <p className="c-page-pick-walk-sku">{String(line['product_id.sku'] ?? '')}</p>
-          <p className="c-page-pick-walk-name">{String(line['product_id.name'] ?? '')}</p>
-          <p className="c-page-pick-walk-qty">
-            <span className="c-page-pick-walk-label">Take</span> <strong>{format.number(Number(line.qty))}</strong>
-          </p>
-        </article>
+        <Card className="c-page-pick-walk-done">
+          <Stack gap="tight">
+            <p className="c-page-pick-walk-bin">All {all.length} lines picked</p>
+            <p className="c-page-pick-walk-name">
+              {format.number(units)} units, in the tote. Pick takes them off the shelves and sends the list to packing.
+            </p>
+          </Stack>
+        </Card>
         <div className="c-page-pick-walk-actions">
-          <Button intent="primary" size="large" block onClick={() => onStep(step + 1)}>
-            Picked ✓
-          </Button>
-          {step > 0 && (
-            <Button intent="quiet" onClick={() => onStep(step - 1)}>
-              Back a line
+          {/* A reader who may not pick (a purchaser) walks the list and is offered no Pick. */}
+          {pick.granted && (
+            <Button
+              intent="primary"
+              size="large"
+              block
+              disabled={available !== true || busy}
+              busy={busy}
+              busyLabel="Picking…"
+              onClick={() => {
+                void pick.run({ id: list.id }, {}, { label: String(list.reference) }).then((outcome) => {
+                  if (outcome.status === 'applied') onDone(`${String(list.reference)} is picked. It waits in To pack.`);
+                });
+              }}
+            >
+              {pick.label}
             </Button>
           )}
+          {pick.granted && available === false && <p className="c-page-pick-walk-quiet">This list is no longer waiting to be picked.</p>}
+          <Button intent="quiet" onClick={() => onStep(Math.max(0, all.length - 1))}>
+            Back a line
+          </Button>
         </div>
       </div>
     );
-  }
-  const available = pick.available({ id: list.id });
-  const busy = pick.pending({ id: list.id });
+  };
   return (
-    <div className="c-page-pick-walk">
-      {head}
-      <article className="c-page-pick-walk-card c-page-pick-walk-done">
-        <p className="c-page-pick-walk-bin">All {all.length} lines picked</p>
-        <p className="c-page-pick-walk-name">
-          {format.number(units)} units, in the tote. Pick takes them off the shelves and sends the list to packing.
-        </p>
-      </article>
-      <div className="c-page-pick-walk-actions">
-        {/* A reader who may not pick (a purchaser) walks the list and is offered no Pick. */}
-        {pick.granted && (
-          <Button
-            intent="primary"
-            size="large"
-            block
-            disabled={available !== true || busy}
-            busy={busy}
-            busyLabel="Picking…"
-            onClick={() => {
-              void pick.run({ id: list.id }, {}, { label: String(list.reference) }).then((outcome) => {
-                if (outcome.status === 'applied') onDone(`${String(list.reference)} is picked. It waits in To pack.`);
-              });
-            }}
-          >
-            {pick.label}
-          </Button>
-        )}
-        {pick.granted && available === false && <p className="c-page-pick-walk-quiet">This list is no longer waiting to be picked.</p>}
-        <Button intent="quiet" onClick={() => onStep(Math.max(0, all.length - 1))}>
-          Back a line
-        </Button>
-      </div>
-    </div>
+    <Loaded
+      query={lines}
+      empty={
+        <Empty
+          title="This pick list has no lines"
+          action={
+            <Button intent="secondary" onClick={onLeave}>
+              All pick lists
+            </Button>
+          }
+        />
+      }
+    >
+      {body}
+    </Loaded>
   );
 }
 
@@ -206,34 +216,32 @@ function PickWalk({ data }: PageProps<'pickWalk'>): ReactNode {
       </div>
     );
   }
-  if (chosen.isPending)
-    return (
-      <p className="c-page-pick-walk-quiet" role="status">
-        Reading the pick list…
-      </p>
-    );
-  const list = chosen.data?.[0];
-  if (!list)
-    return (
-      <Empty
-        title="That pick list is not here"
-        action={
-          <Button intent="secondary" onClick={() => choose(undefined)}>
-            All pick lists
-          </Button>
-        }
-      />
-    );
   return (
-    <Walk
-      list={list}
-      step={Number(line ?? 0) || 0}
-      onStep={(next) => setLine(next)}
-      onLeave={() => choose(undefined)}
-      onDone={(message) => {
-        setSaid(message);
-        choose(undefined);
-      }}
-    />
+    <Loaded
+      query={chosen}
+      empty={
+        <Empty
+          title="That pick list is not here"
+          action={
+            <Button intent="secondary" onClick={() => choose(undefined)}>
+              All pick lists
+            </Button>
+          }
+        />
+      }
+    >
+      {([list]) => (
+        <Walk
+          list={list}
+          step={Number(line ?? 0) || 0}
+          onStep={(next) => setLine(next)}
+          onLeave={() => choose(undefined)}
+          onDone={(message) => {
+            setSaid(message);
+            choose(undefined);
+          }}
+        />
+      )}
+    </Loaded>
   );
 }

@@ -181,9 +181,9 @@ test('the scope dropdown supports keyboard selection and clears the selected fla
       selectFlag={selectFlag}
     />,
   );
-  const scope = await screen.findByRole('button', { name: 'Scope' });
+  const scope = await screen.findByRole('button', { name: /^Scope\b/ });
   await user.click(scope);
-  expect(await screen.findByRole('listbox', { name: 'Scope' })).toBeInTheDocument();
+  expect(await screen.findByRole('listbox', { name: /^Scope\b/ })).toBeInTheDocument();
   await user.keyboard('{End}{Enter}');
   expect(selectScope).toHaveBeenCalledWith('other');
   expect(selectFlag).toHaveBeenCalledWith(undefined);
@@ -195,9 +195,9 @@ test('boolean dropdown sends the exact selected value with the reviewed revision
     body ? { revision: 4, outcome: 'applied' } : { ...detail, type: 'boolean', value: true },
   );
   render(<FlagRecord request={request as ConsoleRequest} id="flag" />);
-  await user.click(await screen.findByRole('button', { name: 'Value' }));
+  await user.click(await screen.findByRole('button', { name: /^Value\b/ }));
   await user.keyboard('{End}{Enter}');
-  expect(screen.getByRole('button', { name: 'Value' })).toHaveTextContent('false');
+  expect(screen.getByRole('button', { name: /^Value\b/ })).toHaveTextContent('false');
   // Nothing is sent from the editor: the edit is staged, then reviewed with a reason.
   expect(screen.getByRole('region', { name: 'Staged changes' })).toHaveTextContent('1 change staged');
   await user.click(screen.getByRole('button', { name: 'Review changes' }));
@@ -237,8 +237,8 @@ test('narrow detail uses the shared dialog, contains its dropdown and returns fo
   const flag = await screen.findByRole('button', { name: 'finder' });
   await user.click(flag);
   const dialog = await screen.findByRole('dialog', { name: 'Flag details' });
-  await user.click(await screen.findByRole('button', { name: 'Value' }));
-  expect(dialog).toContainElement(await screen.findByRole('listbox', { name: 'Value' }));
+  await user.click(await screen.findByRole('button', { name: /^Value\b/ }));
+  expect(dialog).toContainElement(await screen.findByRole('listbox', { name: /^Value\b/ }));
   await user.keyboard('{Escape}');
   await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
   expect(screen.getAllByRole('tab', { name: 'Targeting' })).toHaveLength(1);
@@ -338,9 +338,9 @@ test('target switching survives navigation and rotating catalog handles and open
     );
   }
   const mounted = renderDom(<Room />);
-  await user.click(await screen.findByRole('button', { name: 'App' }));
+  await user.click(await screen.findByRole('button', { name: /^App\b/ }));
   await user.click(await screen.findByRole('option', { name: 'Marketplace' }));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'App' })).toHaveTextContent('Marketplace'));
+  await waitFor(() => expect(screen.getByRole('button', { name: /^App\b/ })).toHaveTextContent('Marketplace'));
   expect(address.has('flag')).toBe(false);
   expect(address.get('target')).toMatch(/^market-scope-/);
   // Marketplace has one scope, so the room opens it rather than asking.
@@ -348,7 +348,7 @@ test('target switching survives navigation and rotating catalog handles and open
   await screen.findByRole('searchbox', { name: 'Search flags' });
   mounted.unmount();
   renderDom(<Room />); // Reload starts with no local selection state.
-  await waitFor(() => expect(screen.getByRole('button', { name: 'App' })).toHaveTextContent('Marketplace'));
+  await waitFor(() => expect(screen.getByRole('button', { name: /^App\b/ })).toHaveTextContent('Marketplace'));
   await screen.findByRole('searchbox', { name: 'Search flags' });
   expect(address.get('scope')).toBe(address.get('target'));
   expect(fetch.mock.calls.some(([input]) => String(input).includes('/scopes/'))).toBe(true);
@@ -702,7 +702,7 @@ test('explicit experiment decision binds the displayed evidence and flag revisio
       revision={3}
     />,
   );
-  await user.click(screen.getByRole('button', { name: 'Winning variant' }));
+  await user.click(screen.getByRole('button', { name: /^Winning variant\b/ }));
   await user.click(screen.getByRole('option', { name: '"new"' }));
   fireEvent.change(screen.getByLabelText('Decision reason'), { target: { value: 'Final complete evidence reviewed' } });
   fireEvent.click(screen.getByRole('button', { name: 'Record and apply winner' }));

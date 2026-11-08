@@ -28,6 +28,10 @@ import { promiseOf } from '../packages/mistri/src/server/build/themeContract.js'
 import { codeRows } from '../packages/mistri/src/server/build/checkCodes.js';
 import type { Probe } from '../packages/mistri/src/server/build/gradeProbe.js';
 import { widestRole } from '../packages/mistri/src/server/build/shot.js';
+import { runGrade } from '../packages/mistri/src/server/build/grade.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { asRoleRefusal, shotsFor } from '../packages/mistri/src/server/build/shotRoles.js';
 
 const clean: Probe = { sideways: 0, clipped: [], overlaps: [], small: [], empty: [], figures: [], axes: [], shift: 0 };
@@ -589,5 +593,20 @@ describe('grade --as all: what each role reads', () => {
     assert.deepEqual(shotsFor(app, 'mechanic', shots), [{ view: 'orders' }, { page: 'today' }]);
     assert.deepEqual(shotsFor(app, 'manager', shots), shots);
     assert.deepEqual(shotsFor(app, 'signed-out', shots), [{ view: 'orders' }]);
+  });
+  test('--store is refused beside it: each role signs in a fresh account, so the store would be read by nothing', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'grade-as-all-'));
+    const heard: string[] = [];
+    try {
+      const code = await runGrade(
+        ['--app', dir, '--as', 'all', '--store', dir],
+        () => {},
+        (line) => heard.push(line),
+      );
+      assert.equal(code, 1);
+      assert.match(heard.join('\n'), /--as all makes a fresh account for each role; --store goes with --as <role\|email>/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

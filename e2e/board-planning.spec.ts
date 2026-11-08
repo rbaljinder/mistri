@@ -86,7 +86,7 @@ test.describe('Thread boards: limits, planning by cycle, drops and edits in plac
     const board = await open(page, sample.origin, 'Board');
     const lanes = board.locator('section.triage-lane');
     const nameOf = async (card: ReturnType<typeof lanes.locator>) =>
-      ((await card.getByRole('button').first().getAttribute('aria-label')) ?? '').split(',')[0];
+      (await card.locator('.triage-card-title').first().textContent())?.trim() ?? '';
     const mover = lanes.nth(1).locator('article.triage-card-wrap').first();
     const target = lanes.nth(2).locator('article.triage-card-wrap').first();
     const moverName = await nameOf(mover);
@@ -106,13 +106,13 @@ test.describe('Thread boards: limits, planning by cycle, drops and edits in plac
     const board = await open(page, sample.origin, 'Board');
     const name = String(value(sample.db, 'name', 1));
     const renamed = `${name} (renamed)`;
-    await board.getByRole('button', { name: `${name}, Urgent`, exact: true }).focus();
+    await board.getByRole('button', { name: `${name} Urgent`, exact: true }).focus();
     await page.keyboard.press('F2');
     const editor = board.locator('.triage-card-under').getByRole('textbox');
     await expect(editor).toBeFocused();
     await editor.fill(renamed);
     await page.keyboard.press('Enter');
     await expect.poll(() => value(sample.db, 'name', 1)).toBe(renamed);
-    await expect(board.getByRole('button', { name: `${renamed}, Urgent`, exact: true })).toBeVisible();
+    await expect(board.getByRole('button', { name: `${renamed} Urgent`, exact: true })).toBeVisible();
   });
 });

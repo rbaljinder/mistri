@@ -46,7 +46,13 @@ import { isProxy } from 'node:util/types';
 import { bindPlatformCommands, bindPlatformRequestRuntime } from './tenantPlatformCommands.js';
 import { bindPlatformWriteRuntime } from './tenantPlatformWriteRuntime.js';
 import { platformHeldColumns } from './tenantVisibleFields.js';
-import { bindTenantIntake, type TenantIntake, type TenantIntakeResume, type TenantIntakeSubmission } from './tenantIntake.js';
+import {
+  bindTenantIntake,
+  type TenantIntake,
+  type TenantIntakeHold,
+  type TenantIntakeResume,
+  type TenantIntakeSubmission,
+} from './tenantIntake.js';
 import { tenantPublicForms } from './tenantIntakeModel.js';
 import { createAdmissionCache } from './tenantAdmissionCache.js';
 import {
@@ -114,6 +120,10 @@ export function bindTenantDeploymentContext<Request>(input: TenantDeployment<Req
       deployment.execute(request, selectors, value, options, guard),
     status: (request: Request, selectors: readonly string[], value: unknown, options?: Parameters<typeof deployment.status>[3]) =>
       deployment.status(request, selectors, value, options, guard),
+    draft: (request: Request, selectors: readonly string[], value: unknown, options?: Parameters<typeof deployment.draft>[3]) =>
+      deployment.draft(request, selectors, value, options, guard),
+    stage: (request: Request, selectors: readonly string[], value: unknown, options?: Parameters<typeof deployment.stage>[3]) =>
+      deployment.stage(request, selectors, value, options, guard),
   });
 }
 
@@ -220,6 +230,12 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
           throw new BusinessCommandExecutionError('forbidden', 'unknown');
         },
         status: async () => {
+          throw new BusinessCommandExecutionError('forbidden', 'unknown');
+        },
+        draft: async () => {
+          throw new BusinessCommandExecutionError('forbidden', 'unknown');
+        },
+        stage: async () => {
           throw new BusinessCommandExecutionError('forbidden', 'unknown');
         },
       });
@@ -502,6 +518,11 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
       submitIntake: intake
         ? intake.submit
         : async (_request: TenantIntakeSubmission): Promise<never> => {
+            throw new BusinessCommandExecutionError('temporarily_unavailable');
+          },
+      holdIntake: intake
+        ? intake.hold
+        : async (_request: TenantIntakeHold): Promise<never> => {
             throw new BusinessCommandExecutionError('temporarily_unavailable');
           },
       resumeIntake: intake

@@ -1669,6 +1669,16 @@
               "pattern": "^[^.]+$",
               "description": "A text column the upload fills with the file's SHA-256 (hex), which tags it for caches. The server's alone: granted with content, named by no request."
             },
+            "stamps": {
+              "type": "object",
+              "additionalProperties": {
+                "enum": [
+                  "me",
+                  "now"
+                ]
+              },
+              "description": "Columns the server writes on every upload and a request never does: me is the signed-in person (as a New form's me default writes it), now the server's clock. A body that names one is overwritten. A tenant App writes them too, me as the member's row in its own tenant."
+            },
             "storage": {
               "enum": [
                 "database",
@@ -5939,6 +5949,11 @@
             "keep"
           ],
           "description": "An expired draft: 'purge' (the default) removes the root and the rows that point at it; 'keep' leaves them for follow-up."
+        },
+        "owner": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "description": "A signed-in form saved on every step: the root's column the server fills with the signed-in person (`me`) on the first step and finds the draft by on every other. Never an input and never asked on a step. A public form takes none."
         },
         "statusCheck": {
           "type": "object",

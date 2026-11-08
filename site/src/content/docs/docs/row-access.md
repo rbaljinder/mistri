@@ -104,13 +104,44 @@ the refusal names the bound, how far past it the scope went and what to do:
 `Invalid row scope: a list holds 5,000 values, 904 past the bound of 4,096 per list.`
 Never cap a list in the policy to fit, which would hide rows without a word.
 
-A list of ids grows with the person's rows; a column does not. Give each
-scoped table a column that holds its owner (an account, a household, a
-dealership) and compare it with `=`, one value however many rows it admits
-(`{ column: 'household_id', op: '=', value: householdId }`), or narrow the
-policy to fewer resources or a coarser parent. A policy that matches rows
-through a relationship rather than a list (an `EXISTS` over another table) is
-not available yet.
+A list of ids grows with the person's rows; a column does not. Scope a child
+through its parent with `via` rather than listing the parent's keys, or give the
+table a column that holds its owner and compare it with `=`.
+
+### Scope through a relationship
+
+`via('case_id', 'support_case')` shows a row when its `case_id` is among the
+`id`s of the `support_case` rows this person may see. It is one condition in a
+group, ANDed with the others, and it has no list to outgrow 4,096:
+
+```ts
+import { defineAppRowPolicy, via } from '@mistriwork/mistri/policy';
+
+export default defineAppRowPolicy({
+  appId: 'help',
+  resolveRows: (me) => ({
+    support_case: { groups: [[{ column: 'customer_id', op: '=', value: me.id }]] },
+    support_case_message: { groups: [[via('support_case_id', 'support_case')]] },
+    // A membership table decides which programs show, though the role cannot read it.
+    program_access: { groups: [[{ column: 'staff_id', op: '=', value: me.staffId }, { column: 'status', op: '=', value: 'active' }]] },
+    program: { groups: [[via('id', 'program_access', 'program_id')]] },
+  }),
+});
+```
+
+- **The target's own scope applies,** so a chain (message, case, customer) needs nothing more. A target the policy leaves out, or answers `false` for, shows nothing; `true` asks only that the parent exist.
+- **The key** defaults to `id`. Composite keys are arrays of equal length: `via(['tenant_id', 'case_no'], 'support_case', ['tenant_id', 'no'])`.
+- **`via.where`** narrows the target further and never widens it: `via('case_id', 'support_case', 'id', [[{ column: 'status', op: '=', value: 'open' }]])`. Literal conditions only; groups are ORed. A write is held to it too, so a message cannot be added to a closed case.
+- **Trees.** A table that names itself, `via('parent_id', 'folder')`, sees the rows beneath the ones its other groups admit: `[[{ column: 'owner_id', op: '=', value: me.id }], [via('parent_id', 'folder')]]` is the folders a person owns and everything under them. A self-`via` is the only `via` in its group, and at least one group has none (the base). A cycle in the data ends the query. On MySQL, `cte_max_recursion_depth` (1,000 by default) bounds the depth; a deeper tree fails loudly, so raise it where trees run deeper.
+- **Limits.** `in` only: a `notIn` through a relationship would turn a missing parent into access, so it is refused. A chain of tables is at most 8 deep, and a cycle across different tables (`a` through `b` through `a`) is refused, naming it. Each `via` counts as one condition.
+- **Writes.** A row is written only if its parent is one the person may see: a message on a case out of scope, or a node moved under a parent out of scope, is refused.
+- **Indexes.** Each row asks the other table, so index the target's key and the column that points at it. The server says once when a `via` has neither, at the first request that uses it; it is advice, not a refusal.
+- **Live sync.** A row that enters a `via` scope is announced by key. One that leaves it is not, because the earlier row cannot say what another table held; the next refresh drops it.
+- **Commands.** A command that writes to a `via`-scoped table must declare the target as read, or the write is refused: `"case_note" is scoped through "support_case", which is not in this write's footprint: declare it read by the command.`
+- **Tenant Apps.** A `via` reads the target's rows in the same tenant. A target the tenant does not own (a platform table) is refused.
+
+A grant held in rows is gone at the next statement; a grant held in a list is
+gone at the next request; no scope is resolved once and reused across requests.
 
 ### Triggers the App names
 
@@ -165,10 +196,12 @@ organizations from one App. Each feature's own page has the detail.
 | Capability | Unscoped App | Row policy | Tenant App |
 | --- | --- | --- | --- |
 | File fields of a signed-in command | Yes | Yes | Yes, 10 MB a file at most |
-| File fields of a public form ([files](/docs/commands/#files-and-a-signature)) | Yes | No | No |
+| File fields of a public form ([files](/docs/commands/#files-and-a-signature)) | Yes | Yes, into the fixed destination of a `publicForms` form (not a placed one) | Yes, held in the place its address names |
 | Tables of files (`resources.*.file`) | Yes | Yes: an upload is an insert the policy judges | Yes, 10 MB a file at most |
+| Stamps (`me`, `now`) on actions, New forms and uploads | Yes | Yes | Yes: `me` is the member's row in its tenant |
 | Public forms ([command forms](/docs/command-forms/)) | Yes | Only those `publicForms` enrolls, fixed or placed | Yes, placed with one tenant by its link |
-| Forms saved on every step (`resume`) | Yes | No: `mistri check` refuses one | Yes, without `statusCheck` or `link` |
+| Forms saved on every step (`resume`), public | Yes | No: `mistri check` refuses one | Yes, without `statusCheck` or `link` |
+| Forms saved on every step, signed in (`owner`) | Yes | Yes: every step runs under the person's grant and policy | Yes: the member's own draft, in its tenant |
 | Database triggers a command's write fires | Run as written | Validation-only ones run; any other refuses the write (`[command-trigger]`) unless [named](#triggers-the-app-names) (Preview) | Validation-only ones run; any other refuses the write; none can be named yet |
 | Commands over the [App API](/docs/app-api/) and its MCP | Yes | Yes, each token as its own account | Yes, each token bound to one membership |
 | The App API's generic writes | Yes, where every role reads all rows | No | No |

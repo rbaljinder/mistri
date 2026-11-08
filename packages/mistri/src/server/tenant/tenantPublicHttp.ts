@@ -47,7 +47,8 @@ import { secureRequest } from '../forms/savedForms.js';
 import { attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js';
 import { answerLanding, LANDING_PATH } from '../http/landingRoutes.js';
 import { clientAddress } from '@mistriwork/engine/server/http/rateLimit.js';
-import { send } from '@mistriwork/engine/server/http/reply.js';
+import { HttpError, readJson, send } from '@mistriwork/engine/server/http/reply.js';
+import { newVisitorToken, PUBLIC_STAGED_FILE_MOST, readVisitorToken, StageRefusal, visitorCookie } from '../commands/stagedFiles.js';
 import { doorRefusal, type Bound } from '@mistriwork/engine/server/http/trust.js';
 import type { TenantIntake } from './tenantIntake.js';
 import {
@@ -59,6 +60,9 @@ import {
 } from '../http/recordBranding.js';
 import { getTenantHostIntent } from '../http/tenantHosts.js';
 import { tenantPublicPlacement } from './tenantPublicPlacement.js';
+
+/** A public file's body: base64 of the largest file a public form holds, and room for the rest (commands/stagedFileHttp.ts). */
+const PUBLIC_FILE_BODY = Math.ceil(PUBLIC_STAGED_FILE_MOST / 3) * 4 + 64 * 1024;
 
 /** The paths this module answers: the landing and the public forms. */
 export function isTenantPublicPath(path: string): boolean {
@@ -84,6 +88,8 @@ interface TenantPublicHttpOptions {
   readonly submit?: TenantIntake['submit'];
   /** A saved form's resume on the same intake. */
   readonly resume?: TenantIntake['resume'];
+  /** A file held for a stock form's command, in the place its address resolves to. */
+  readonly hold?: TenantIntake['hold'];
   readonly bound: Bound;
   readonly basePath: string;
   readonly assertActive: () => void;
@@ -93,7 +99,39 @@ interface TenantPublicHttpOptions {
 }
 
 export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
-  const { app: base, submit, resume, bound, basePath, assertActive } = options;
+  /** One file, held for the visitor in the place the address resolves to: the cookie is set here where they have none,
+      and the answer is the ordinary host's (commands/stagedFileHttp.ts), a refusal said as it says it. */
+  const holdFile = async (req: IncomingMessage, res: ServerResponse, key: string, address: string | undefined) => {
+    const length = Number(req.headers['content-length']);
+    const refuse = (status: number, code: string, error: string) => send(res, status, { code, error });
+    if (Number.isFinite(length) && length > PUBLIC_FILE_BODY) {
+      // The rest of the body is left unread, so the connection carries nothing after the answer.
+      res.setHeader('connection', 'close');
+      return refuse(413, 'too_large', 'This file is too large.');
+    }
+    let body: Record<string, unknown>;
+    try {
+      body = await readJson(req, PUBLIC_FILE_BODY);
+    } catch (error) {
+      if (!(error instanceof HttpError)) throw error;
+      if (error.status === 413) res.setHeader('connection', 'close');
+      return refuse(error.status, error.status === 413 ? 'too_large' : 'invalid_input', error.message);
+    }
+    let visitor = readVisitorToken(req, key);
+    const fresh = !visitor;
+    visitor ??= newVisitorToken();
+    try {
+      const held = await options.hold!({ form: key, address, body, visitor });
+      assertActive();
+      if (fresh) res.setHeader('set-cookie', cookieUnder(basePath, visitorCookie(key, visitor, secureRequest(req, bound.trustedProxies))));
+      send(res, 200, held);
+    } catch (error) {
+      if (error instanceof StageRefusal) return refuse(error.status, error.code, error.message);
+      // Never what failed or where the file would have landed.
+      refuse(503, 'temporarily_unavailable', 'Files cannot be held just now.');
+    }
+  };
+  const { app: base, submit, resume, hold, bound, basePath, assertActive } = options;
   const forms = publicForms(base);
   const invalid = (res: ServerResponse) => send(res, 400, { code: 'invalid_input', error: 'This request is not valid.' });
   return async (req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> => {
@@ -147,16 +185,17 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
     }
     const reading = req.method === 'GET' || req.method === 'HEAD';
     const named = match.id === undefined ? undefined : forms.find(([key]) => key === match.id);
-    const action = named ? savedFormAction(named[1], match) : undefined;
+    const files = match.action === 'files';
+    const action = named && !files ? savedFormAction(named[1], match) : undefined;
     // A saved form's paths are served only on a form that has them.
-    if (match.action !== undefined && !action) {
+    if (match.action !== undefined && !files && !action) {
       send(res, 404, { code: 'no_such_form', error: 'No such form.' });
       return;
     }
     // Before any budget is taken, as on the ordinary host.
     if ((!reading || match.action !== undefined) && (req.method !== 'POST' || match.id === undefined)) {
       res.setHeader('allow', match.id === undefined ? 'GET, HEAD' : match.action !== undefined ? 'POST' : 'GET, HEAD, POST');
-      send(res, 405, { error: 'A public form takes GET to read it and POST to submit it.' });
+      send(res, 405, { error: files ? 'A file is held with POST.' : 'A public form takes GET to read it and POST to submit it.' });
       return;
     }
     // The list of forms says nothing in its URL; a form's read and a submission say at most its address, once: the
@@ -182,11 +221,11 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       return;
     }
     const address = clientAddress(req, bound.trustedProxies);
-    const budgets = publicFormBudget(reading, named?.[1], action, req, match.id);
+    const budgets = files ? (['file'] as const) : publicFormBudget(reading, named?.[1], action, req, match.id);
     /* In the ordinary host's order (formRoutes.ts): this client's budgets first, then — on a door that writes — the
        App's human check, and the ceiling every visitor shares only once the request has proved what it can, so a
        tokenless flood from many addresses never spends what a person's submission needs. */
-    if (await rateLimited(res, budgets, address, 'client')) return;
+    if (await rateLimited(res, [...budgets], address, 'client')) return;
     /* A key that names no form is answered from this visitor's own budget, before the check and the ceiling every
        visitor shares: a flood of mistyped or invented keys never spends what a person's submission needs. */
     if (match.id !== undefined && !named) {
@@ -229,7 +268,7 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
         return;
       }
     }
-    if (await rateLimited(res, budgets, address, 'all')) return;
+    if (await rateLimited(res, [...budgets], address, 'all')) return;
     assertActive();
     /* A placement that names no tenant sends the submission to triage. */
     const placing = () => placement.address();
@@ -243,6 +282,16 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       return;
     }
     const [key, form] = found;
+    /* A file held for the form's command (commands/stagedFiles.ts), for this visitor by their cookie. A form saved on
+       every step, or one this host cannot take, holds none: closed for good, as its submission is. */
+    if (files) {
+      if (!hold || !submit || isSavedForm(form)) {
+        send(res, 403, { code: 'forbidden', error: 'This form is not accepting submissions.' });
+        return;
+      }
+      await holdFile(req, res, key, await placing());
+      return;
+    }
     if (reading) {
       const components = publicFormComponents(app.id, options.components, form);
       /* The provider's widget the stock form draws: what the browser may be told, and nothing of the verifier's. */
@@ -308,7 +357,17 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       const placed = await placing();
       assertActive();
       const result = await attributeWrites({ via: 'form' }, () =>
-        submit({ form: key, address: placed, input, submission }, { signal: controller.signal }),
+        submit(
+          {
+            form: key,
+            address: placed,
+            input,
+            submission,
+            // Whose held files the submission may take: this visitor's, by their own cookie.
+            ...(readVisitorToken(req, key) ? { visitor: readVisitorToken(req, key) } : {}),
+          },
+          { signal: controller.signal },
+        ),
       );
       const reference = (result.result as { reference?: unknown } | null)?.reference;
       // The receipt is durable either way; a handler that returned no

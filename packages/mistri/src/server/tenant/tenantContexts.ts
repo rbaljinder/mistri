@@ -63,9 +63,14 @@ interface TenantContextResult<T> {
 }
 /* Availability is a command family as prepare is, with prepare's options and failure classes; it is named apart
    only because it acts on nothing, so a fenced answer needs no second admission (below). */
-type Family = 'read' | 'preview' | 'write' | 'availability' | 'prepare' | 'execute' | 'status';
+type Family = 'read' | 'preview' | 'write' | 'availability' | 'prepare' | 'execute' | 'status' | 'draft' | 'stage';
 const commandFamily = (family: Family): boolean =>
-  family === 'availability' || family === 'prepare' || family === 'execute' || family === 'status';
+  family === 'availability' ||
+  family === 'prepare' ||
+  family === 'execute' ||
+  family === 'status' ||
+  family === 'draft' ||
+  family === 'stage';
 /** A tab holds one lease: a tenant's, the platform realm's, or a support
  * session's inside one dealer. A support lease reads that dealer's rows through
  * its own read family, every read ledgered before a body is released; it acts
@@ -1399,6 +1404,43 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
         expected,
         value,
         (bound, selected, captured, options) => bound.status(request, selected, captured, options),
+        options,
+      );
+    },
+    /** A signed-in saved form's step, resume, review, submit or discard (forms/draftHttp.ts): a command family,
+     * since a step writes the draft through the command transaction under the actor's grant. */
+    draft(
+      request: Request,
+      selectors: readonly string[],
+      expected: TenantContextAssertion,
+      value: unknown,
+      options?: TenantCommandExecutionOptions,
+    ) {
+      return execute(
+        'draft',
+        request,
+        selectors,
+        expected,
+        value,
+        (bound, selected, captured, options) => bound.draft(request, selected, captured, options),
+        options,
+      );
+    },
+    /** A file held for a signed-in form's command (commands/stagedFiles.ts), in the tenant's own journal store. */
+    stage(
+      request: Request,
+      selectors: readonly string[],
+      expected: TenantContextAssertion,
+      value: unknown,
+      options?: TenantCommandExecutionOptions,
+    ) {
+      return execute(
+        'stage',
+        request,
+        selectors,
+        expected,
+        value,
+        (bound, selected, captured, options) => bound.stage(request, selected, captured, options),
         options,
       );
     },

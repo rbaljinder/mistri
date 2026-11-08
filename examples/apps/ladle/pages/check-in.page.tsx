@@ -7,7 +7,7 @@
  * page draws the block (Metric, Rows); the guest list with its Check in buttons is the page's own.
  */
 import type { ReactNode } from 'react';
-import { Button, Card, definePage, Empty, Grid, Metric, Panel, Row, Rows, Stack } from '@mistriwork/mistri/page';
+import { Button, Card, definePage, Empty, Grid, Loaded, Metric, Panel, Row, Rows, Stack } from '@mistriwork/mistri/page';
 import { useFormat, useState } from '@mistriwork/mistri/ui';
 
 const page = definePage({
@@ -26,21 +26,23 @@ export default page;
 function Classes({ chosen, onChoose }: { chosen: string | undefined; onChoose: (id: string) => void }): ReactNode {
   const format = useFormat();
   const classes = page.useRows('class_session', { query: 'upcoming', show: ['id', 'title', 'starts_at'], sort: 'starts_at', limit: 4 });
-  if (classes.isPending) return <p role="status">Reading the schedule…</p>;
-  if (!classes.data?.length) return <Empty title="No classes coming up" description="Add one under Classes." />;
   return (
-    <Row gap="tight">
-      {classes.data.map((lesson) => (
-        <Button
-          key={String(lesson.id)}
-          intent={String(lesson.id) === chosen ? 'primary' : 'secondary'}
-          aria-pressed={String(lesson.id) === chosen}
-          onClick={() => onChoose(String(lesson.id))}
-        >
-          {String(lesson.title)} · {format.dateTime(String(lesson.starts_at))}
-        </Button>
-      ))}
-    </Row>
+    <Loaded query={classes} empty={<Empty title="No classes coming up" description="Add one under Classes." />}>
+      {(lessons) => (
+        <Row gap="tight">
+          {lessons.map((lesson) => (
+            <Button
+              key={String(lesson.id)}
+              intent={String(lesson.id) === chosen ? 'primary' : 'secondary'}
+              aria-pressed={String(lesson.id) === chosen}
+              onClick={() => onChoose(String(lesson.id))}
+            >
+              {String(lesson.title)} · {format.dateTime(String(lesson.starts_at))}
+            </Button>
+          ))}
+        </Row>
+      )}
+    </Loaded>
   );
 }
 
@@ -57,42 +59,40 @@ function Door({ classId }: { classId: string }): ReactNode {
   return (
     <Stack gap="tight">
       {said ? <p role="status">{said}</p> : null}
-      {expected.isPending ? (
-        <p role="status">Reading the guest list…</p>
-      ) : !expected.data?.length ? (
-        <Empty title="Everyone is in" description="No party booked for this class is still expected." />
-      ) : (
-        <Stack as="ul" gap="tight">
-          {expected.data.map((booking) => (
-            <li key={String(booking.id)}>
-              <Row align="center">
-                <span>
-                  <strong>{String(booking.guest_name)}</strong>
-                  {Number(booking.party_size) > 1 ? ` · party of ${String(booking.party_size)}` : ''}
-                </span>
-                {/* A reader who may not run the command (one granted reads alone) sees the list and no button. */}
-                {checkIn.granted && (
-                  <Button
-                    intent="primary"
-                    size="compact"
-                    busy={checkIn.pending(booking)}
-                    busyLabel="Checking in…"
-                    disabled={checkIn.available(booking) === false}
-                    aria-label={`Check in ${String(booking.guest_name)}`}
-                    onClick={() => {
-                      void checkIn.run(booking, {}, { label: String(booking.guest_name) }).then((outcome) => {
-                        if (outcome.status === 'applied') setSaid(`${String(booking.guest_name)} is checked in.`);
-                      });
-                    }}
-                  >
-                    {checkIn.label}
-                  </Button>
-                )}
-              </Row>
-            </li>
-          ))}
-        </Stack>
-      )}
+      <Loaded query={expected} empty={<Empty title="Everyone is in" description="No party booked for this class is still expected." />}>
+        {(bookings) => (
+          <Stack as="ul" gap="tight">
+            {bookings.map((booking) => (
+              <li key={String(booking.id)}>
+                <Row align="center">
+                  <span>
+                    <strong>{String(booking.guest_name)}</strong>
+                    {Number(booking.party_size) > 1 ? ` · party of ${String(booking.party_size)}` : ''}
+                  </span>
+                  {/* A reader who may not run the command (one granted reads alone) sees the list and no button. */}
+                  {checkIn.granted && (
+                    <Button
+                      intent="primary"
+                      size="compact"
+                      busy={checkIn.pending(booking)}
+                      busyLabel="Checking in…"
+                      disabled={checkIn.available(booking) === false}
+                      aria-label={`Check in ${String(booking.guest_name)}`}
+                      onClick={() => {
+                        void checkIn.run(booking, {}, { label: String(booking.guest_name) }).then((outcome) => {
+                          if (outcome.status === 'applied') setSaid(`${String(booking.guest_name)} is checked in.`);
+                        });
+                      }}
+                    >
+                      {checkIn.label}
+                    </Button>
+                  )}
+                </Row>
+              </li>
+            ))}
+          </Stack>
+        )}
+      </Loaded>
     </Stack>
   );
 }

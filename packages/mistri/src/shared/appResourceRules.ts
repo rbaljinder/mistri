@@ -15,6 +15,8 @@ import {
   type TableMeta,
 } from '@mistriwork/engine/shared/schema.js';
 import { FILE_MAX_BYTES_DEFAULT, grantsByRole, type AppDef, type AppFileDef } from './appModel.js';
+import { personTable } from './appMe.js';
+import { referencedTable, stampColumn } from './appStamps.js';
 import type { AppTagRule } from '@mistriwork/engine/shared/servedApp.js';
 export type { AppTagRule } from '@mistriwork/engine/shared/servedApp.js';
 
@@ -91,6 +93,17 @@ export function appFileRules(
       if (!found && options.strict) problems.push(`resources "${name}": file ${role} "${column}" is not a column of ${table.name}.`);
       else if (found && (columnKind(found.type) !== 'text' || isBinaryType(found.type)))
         problems.push(`resources "${name}": file ${role} "${found.name}" is ${found.type || 'untyped'}; it holds text (text, varchar).`);
+    }
+    /* A stamp is written to a column that can hold it, by the one rule an action's `set` follows: `now` to a moment,
+       `me` to the person's row or the account's email. */
+    for (const [column, word] of Object.entries(file.stamps ?? {})) {
+      const found = table.columns.find((candidate) => candidate.name === column);
+      if (!found) {
+        problems.push(`resources "${name}": file stamps "${column}", which is not a column of ${table.name}.`);
+        continue;
+      }
+      const said = stampColumn(word, found, referencedTable(found, table, schema), personTable(app, schema).table?.id);
+      if ('problem' in said) problems.push(`resources "${name}": file stamps "${column}" with ${word}: ${said.problem}`);
     }
     if (file.bucket && content && !content.nullable)
       problems.push(

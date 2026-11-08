@@ -139,6 +139,10 @@ You import no CSS. mistri's styles are scoped to its own elements, in one
 cascade layer named `mistri`, so they never reach your page. Your styles
 in cascade layers (a reset, Tailwind's `base`) do not reach the App. Your
 unlayered element rules (`button { … }`) still do; put them in a layer.
+Data columns use IBM Plex Mono when your page imports
+`@mistriwork/kit/client/fonts/faces.css` (add `@mistriwork/kit` to your own
+dependencies, at the version mistri uses, so a strict package manager resolves
+it), and a metric-matched system monospace otherwise.
 `theme`, `mode` and `density` on the Provider choose the look. `theme` is a
 look's name, or your own made with `defineTheme`:
 

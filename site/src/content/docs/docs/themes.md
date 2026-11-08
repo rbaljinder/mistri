@@ -55,7 +55,7 @@ See it in the sample (`examples/apps/lintel/theme.ts:7`). That is the smallest t
 | `recipes` | Each part's treatment from a closed menu: `nav`, `bar`, `tabs`, `stat`, `table`, `buttons` and more, each value pictured in [Theme recipes](/docs/theme-recipes/) | the base's | Stable |
 | `shell.placement` | Where the menu goes, `'side'` or `'top'`, when this is the App's theme; `ui.shell.placement` wins | the App's | Stable |
 | `ui.theme.for` | A theme per audience: `public` for every page a signed-out visitor sees, worn whatever a reader picked, and `roles: { rider: 'cadence' }`, the first entry the account holds, over a tenant's saved theme; a reader's own pick still wins in the shell | none | Stable |
-| `branding.allow` | What a tenant may change: `logo`, `name`, `accent`, `palette`, `radius`, `density`, `theme` | required | Stable |
+| `branding.allow` | What a tenant may change (`logo` includes the dark logo and the tab icon): `logo`, `name`, `accent`, `palette`, `radius`, `density`, `theme` | required | Stable |
 | `branding.editors` | The tenant roles whose members may save it | required | Stable |
 | `branding.themes` | One to six themes a tenant picks from (`theme` needs two) | the App's own look | Stable |
 | `brandingForm()` | A dashboard section: the form beside a live preview | none | Stable |
@@ -68,6 +68,28 @@ views: { settings: { kind: 'dashboard', sections: [brandingForm('Branding')] } }
 A tenant App with `branding` needs its store, once: `provisionStores(<the database>, { app: { definition } })` from `@mistriwork/mistri/maintenance`, which makes every store the App declares (`only: ['branding']` names it alone, and is refused for an App without `branding`). An App's own message may say `{brand.name}`, `{brand.logo}` and `{brand.accent}`; each is filled for the tenant it is sent in.
 
 A tenant that may change `logo` may also add a second picture for a dark bar and for dark mode; the bar draws it there as it does an App's own `dark`, and the first logo stands where there is none. It is never a key of its own in `allow`.
+
+The same tenant may add a tab icon: a PNG, an ICO or an SVG up to 64 KB, set in the Branding form under **Tab icon** or sent as `favicon` with the save. It is checked by its bytes as the logo is (an SVG is rebuilt from an allowlist), stored beside the logo, and written into that tenant's pages as their `<link rel="icon">` from the first byte, on its sign-in page and public forms too. The App's own icon stands where a tenant sets none, then the platform's. Like the dark logo it is never a key of its own in `allow`: `logo` allows it, and it needs no logo beside it. One tenant's icon is never written into another tenant's page.
+
+## Sub-brands
+
+A tenant is the one level of brand mistri holds: its name, logo, tab icon, accent, palette, corners and density. A program or sub-brand below a tenant (a division, a campaign, a franchise location) is not part of 1.0; there is no `branding` beneath a tenant to declare. What an App can do today is draw the difference itself, in a [custom component](/docs/custom-components/), from what the page already wears:
+
+```tsx
+import { useLook, useToken } from '@mistriwork/mistri/ui';
+
+export function ProgramBadge({ program }: { program: { name: string; tone: 'primary' | 'quiet' } }) {
+  const { mode, density } = useLook(); // { look: string, mode: 'light' | 'dark', density: 'compact' | 'comfortable' | 'spacious' }
+  const accent = useToken('--accent'); // the tenant's accent, as branding set it
+  return (
+    <span style={{ borderColor: accent, padding: density === 'compact' ? '1px 6px' : '2px 8px' }} data-mode={mode}>
+      {program.name}
+    </span>
+  );
+}
+```
+
+`useLook()` returns the theme's id (`look`; `tenant` on a page a tenant's branding dresses), the mode and the density, and updates when any of them changes. The sub-brand's own name or color is data the App keeps in a table and draws; it never replaces the tenant's look.
 
 ## A brand in one block
 

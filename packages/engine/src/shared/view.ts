@@ -296,6 +296,8 @@ export function compileView(
   style: SqlStyle,
   offset: number | unknown = 0,
   scope?: RowScope,
+  /** The catalog a row scope's `via` targets resolve in, where the reader's own is pruned (rowScope.ts ScopedRelations). */
+  policy: DatabaseSchema = schema,
 ): CompiledView {
   // The App's soft keys, where this catalog is the database's own (declaredReferences.ts).
   schema = withViewReferences(schema, view.references);
@@ -304,7 +306,7 @@ export function compileView(
     throw new PathError(`No table called "${view.base}" in this database, so the view has nothing to start from.`, view.base, view.base, 0);
   }
 
-  const relations = new ScopedRelations(schema, style, scope);
+  const relations = new ScopedRelations(schema, style, scope, policy);
   const baseRelation = relations.table(base.id);
   const plan = new JoinPlan(schema, base, style, relations.table);
 
@@ -951,13 +953,20 @@ function anyRowsOf(
  * design rests on: a view never multiplies, so counting it is counting the
  * table it started from. With `limit`, it stops after that many.
  */
-export function compileViewCount(schema: DatabaseSchema, view: ViewDef, style: SqlStyle, scope?: RowScope, limit?: number): SqlFragment {
+export function compileViewCount(
+  schema: DatabaseSchema,
+  view: ViewDef,
+  style: SqlStyle,
+  scope?: RowScope,
+  limit?: number,
+  policy: DatabaseSchema = schema,
+): SqlFragment {
   schema = withViewReferences(schema, view.references);
   const base = findTable(schema, view.base);
   if (!base) {
     throw new PathError(`No table called "${view.base}" in this database, so the view has nothing to start from.`, view.base, view.base, 0);
   }
-  const relations = new ScopedRelations(schema, style, scope);
+  const relations = new ScopedRelations(schema, style, scope, policy);
   const baseRelation = relations.table(base.id);
   const plan = new JoinPlan(schema, base, style, relations.table);
   const { qualify, membership, exists, typeOf } = viewPaths(schema, view, plan, style, relations);

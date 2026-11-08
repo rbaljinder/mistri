@@ -79,8 +79,8 @@ const updates = () => mocks.api.mock.calls.filter(([path]) => path === '/api/upd
 const laneTitles = (lane: string) =>
   within(screen.getByRole('heading', { level: 2, name: lane }).closest('section')!)
     .getAllByRole('button')
-    .filter((button) => !button.getAttribute('aria-label')?.startsWith('Actions for'))
-    .map((button) => button.getAttribute('aria-label'));
+    .map((button) => button.querySelector('.triage-card-title')?.textContent ?? null)
+    .filter((title) => title !== null);
 /** Take a place from a card's ⋯ menu. */
 async function place(title: string, item: string) {
   await userEvent.click(screen.getByRole('button', { name: `Actions for ${title}` }));

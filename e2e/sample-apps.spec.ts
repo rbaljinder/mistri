@@ -49,7 +49,7 @@ for (const name of ['relay', 'thread'] as const) {
         // One field to a row on a phone, but a record's figures under its name two (docs/design.md); three at a desk.
         await expect(grid).toHaveCSS('grid-template-columns', width <= 600 ? /^[\d.]+px( [\d.]+px)?$/ : /^[\d.]+px [\d.]+px [\d.]+px$/);
         const original = String(scalar(sample.db, `SELECT name FROM ${table} WHERE id=1`));
-        await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+        await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
         const input = page.getByRole('textbox', { name: 'Name', exact: true });
         await input.fill(`${original} checked`);
         await page.getByRole('button', { name: 'Save changes', exact: true }).click();
@@ -92,7 +92,7 @@ for (const name of ['relay', 'thread'] as const) {
     if (name === 'thread')
       test('resizing the shell preserves an active draft and exposes every menu destination', async ({ page }) => {
         await page.goto(`${sample.origin}/@issue~2`);
-        await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+        await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
         const input = page.getByRole('textbox', { name: 'Name', exact: true });
         await input.fill('A draft across viewports');
         await page.setViewportSize({ width: 390, height: 844 });
@@ -115,7 +115,7 @@ for (const name of ['relay', 'thread'] as const) {
     if (name === 'thread')
       test('add a contextual discussion update while retaining a parent draft', async ({ page }) => {
         await page.goto(`${sample.origin}/@issue~2`);
-        await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+        await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
         await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Retained Thread draft');
         await page.getByRole('button', { name: '+ Add update', exact: true }).click();
         const form = page.locator('.newpanel');

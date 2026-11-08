@@ -64,34 +64,6 @@ const ALLOWED: Array<{ rule: string; target: string; why: string }> = [
       'A menu row is named by its label and says its count as its description (Sidebar.tsx, TableRow): named with the ' +
       'number it was "Website 1". The label starts the name and the visible words; the count after it is not label.',
   },
-  /* Five kinds of control still name themselves apart from the words they show. Each is held here by its class, so the
-     rule gates every other control in every room and a new mismatch fails. The fix is a name that starts with the
-     visible words, which moves the names about a hundred component tests and the e2e specs query by. */
-  {
-    rule: 'label-content-name-mismatch',
-    target: 'class="dd-button',
-    why: 'A dropdown is named by its field ("Rows per page") over the value it shows.',
-  },
-  {
-    rule: 'label-content-name-mismatch',
-    target: 'class="home-card',
-    why: 'A metric card is named "Label: figure", over a figure drawn before its label.',
-  },
-  {
-    rule: 'label-content-name-mismatch',
-    target: 'class="cell-edit-launch',
-    why: 'A grid cell\'s edit button is named "Edit {column}" over the value it shows.',
-  },
-  {
-    rule: 'label-content-name-mismatch',
-    target: 'class="inline-edit-value',
-    why: 'A record field\'s edit button is named "Edit {field}" over the value it shows.',
-  },
-  {
-    rule: 'label-content-name-mismatch',
-    target: 'class="triage-card-open',
-    why: 'A triage card is named by its title and facts joined by commas, over the words drawn on it.',
-  },
 ];
 
 interface Finding {

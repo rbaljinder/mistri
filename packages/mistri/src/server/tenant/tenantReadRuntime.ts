@@ -48,6 +48,20 @@ export const tenantReadCounters = { grants: 0 };
 const READ_GRANTS = 64;
 export const tenantLiveRowsOf = (context: object): RowScope | undefined => liveRows.get(context);
 
+/* What a draft's file is read against (forms/draftFiles.ts), by the context, as `liveRows` is: whether the row
+   beneath a signed-in draft has a root that is still a draft, and whose. It is asked under this tenant's rows and the
+   member's membership scope but not the App's authored scope or the member's grants: the person may have no grant on
+   the root at all, only on the form's commands, and a root the member cannot see must still hide its files. Made on
+   first use, so only a file read beneath a draft pays for it, and never handed to App code. A visitor's context
+   (tenantPublicReadRuntime.ts) keeps one too, under the tenant's rows alone: a visitor owns no draft. */
+type DraftReader = { readonly schema: DatabaseSchema; readonly reader: Pick<Adapter, 'query'> };
+const draftReads = new WeakMap<object, () => DraftReader>();
+export const tenantDraftReaderOf = (context: object): DraftReader | undefined => draftReads.get(context)?.();
+export function keepTenantDraftReader(context: object, make: () => DraftReader): void {
+  let made: DraftReader | undefined;
+  draftReads.set(context, () => (made ??= make()));
+}
+
 /* Set by the host around a request whose reads are all its context's own and bounded — a list, its counts, the inbox
    (tenantHttp.ts) — and claimed by the first context it opens; `live` while that context runs. */
 const boundedRequest = new AsyncLocalStorage<{ claimed: boolean; live: boolean }>();
@@ -513,6 +527,26 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                   ...(locale === undefined ? {} : { locale }),
                 });
                 liveRows.set(context, rows);
+                keepTenantDraftReader(context, () => {
+                  const every = Object.fromEntries(ownership.schema.tables.map((table) => [table.id, true] as const));
+                  const scope = composeTenantReadScope(ownership, principal, member, every);
+                  const reader = authorizeResources(
+                    resources,
+                    tenantVisibleFields(ownership, { readable: new Set(Object.keys(every)), writable: new Set<string>(), rows: scope }),
+                    assertActive,
+                  ).adapter;
+                  return {
+                    schema: ownership.schema,
+                    reader: {
+                      query: (input) =>
+                        track(
+                          input,
+                          async (value) => withoutDiagnostics(await reader.query(value)),
+                          (value) => assertStructuredReadFilter(value.filter, 'column'),
+                        ),
+                    },
+                  };
+                });
                 /* A flag's own fence would be a second snapshot beside the bounded one, and a session wait inside
                    it: refused there, as a context opened inside it is (withBoundedReads). No bounded route asks one. */
                 releaseFlags = bindTenantFlagOwner(request, principal, bounded ? async () => denyTenant() : revalidate, assertActive);

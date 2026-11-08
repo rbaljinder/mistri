@@ -14,7 +14,7 @@
 import { useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import { formatBytes } from '@mistriwork/kit/client/locale.js';
 import { served } from '@mistriwork/kit/client/addressMount.js';
-import { state } from '@mistriwork/kit/client/core.js';
+import { api, state } from '@mistriwork/kit/client/core.js';
 import { ownedBy, scopeApiRequest } from '@mistriwork/kit/client/requestIdentity.js';
 import { captureSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
@@ -48,6 +48,24 @@ function holdFile(target: HeldTarget, field: string, file: File, progress: (frac
   const xhr = new XMLHttpRequest();
   const done = (async (): Promise<Held> => {
     const sent = { field, file: { name: file.name || 'file', type: file.type, data: await base64Of(file) } };
+    /* A tenant's signed-in reader sends through the tenant transport, which carries the lease the server holds the file
+       under; its request has no byte-by-byte progress to watch. */
+    if ('command' in target && captureSessionIdentity().tenantRequired) {
+      try {
+        const data = (await api(COMMAND_ROUTES.files, { command: target.command, ...sent })) as Record<string, unknown>;
+        progress(1);
+        if (typeof data.id !== 'string') throw new NotHeld(say('couldNotSend'));
+        return {
+          id: data.id,
+          name: typeof data.name === 'string' ? data.name : file.name,
+          type: typeof data.type === 'string' ? data.type : file.type,
+          size: typeof data.size === 'number' ? data.size : file.size,
+          url: URL.createObjectURL(file),
+        };
+      } catch (error) {
+        throw error instanceof NotHeld ? error : new NotHeld(error instanceof Error && error.message ? error.message : say('couldNotSend'));
+      }
+    }
     let url: string;
     let body: Record<string, unknown>;
     const headers: Record<string, string> = { 'content-type': 'application/json' };

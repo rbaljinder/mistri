@@ -15,7 +15,7 @@ import type { CommandJournalAppScope } from '../../adapters/commands/commandJour
 import { bindBusinessCommands } from './businessCommandAccess.js';
 import { consumesValidation } from '../app/appValidation.js';
 import { effectiveTrack } from './commandTrack.js';
-import { publicFormProblems, publicFormsNeedKey } from '../forms/savedFormChecks.js';
+import { publicFormProblems, publicFormsNeedKey, signedInDraftProblems } from '../forms/savedFormChecks.js';
 import { assertFormKey, FormKeyMissing } from '../forms/formKey.js';
 import { BusinessCommandDefinitionError, callerRead, defineCommands, type BusinessCommandRegistry } from './businessCommands.js';
 import { moduleFailure } from '../moduleFailure.js';
@@ -169,7 +169,7 @@ export function validateBusinessCommandReferences(
   }
   /* A public form is write-only to whoever fills it in, and a saved one needs
      tables that can hold a draft (forms/savedFormChecks.ts). */
-  const problem = publicFormProblems(app, registry, resources.schema);
+  const problem = publicFormProblems(app, registry, resources.schema) ?? signedInDraftProblems(app, registry, resources.schema);
   if (problem) invalid(problem);
   // A keyed input is hashed under the deployment's form key: without one, refuse to start rather than keep a bare digest.
   if (publicFormsNeedKey(app, registry)) {

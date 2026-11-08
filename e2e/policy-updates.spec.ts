@@ -27,7 +27,7 @@ test.describe('scoped update', () => {
       ).ok(),
     ).toBe(true);
     await page.goto(`${app.origin}/@ticket~1`);
-    await page.getByRole('button', { name: 'Edit Name', exact: true }).click();
+    await page.getByRole('button', { name: /^Edit Name(?: |$)/ }).click();
     const input = page.getByRole('textbox', { name: 'Name', exact: true });
     await input.fill('Scoped edit');
     await input.press('Tab');
@@ -36,7 +36,7 @@ test.describe('scoped update', () => {
     // An App has no Undo.
     await expect(page.getByRole('button', { name: 'Undo', exact: true })).toHaveCount(0);
     await expect(input).toHaveValue('Scoped edit');
-    await expect(page.getByRole('button', { name: 'Edit Status', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Edit Status(?: |$)/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Delete/ })).toHaveCount(0);
     await page.goto(`${app.origin}/ticket`);
     await expect(page.getByRole('button', { name: '+ New ticket', exact: true })).toBeVisible();

@@ -8,6 +8,9 @@
 import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
+import { scopeFingerprint, viaClosure } from '../packages/mistri/src/server/live/liveFilter.js';
+import { tenantLiveAuthority } from '../packages/mistri/src/server/tenant/tenantLiveRoute.js';
+import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
 import { startTenantProof, type TenantProofFixture } from '../e2e/support/tenantProofServer.js';
 
 type Context = { appId: string; accountId: string; tenantId: string; tabId: string; context: string; revision: number };
@@ -182,3 +185,35 @@ test(
     assert.equal(again.response.status, 204, 'a write does not turn it on');
   },
 );
+
+/* Two members of one tenant whose scopes read alike (`bench_id in via bench_access`) and differ only in the target's
+   rule (`bench_access.who = <me>`). A hub shares one probe among streams of one fingerprint, so the target's rule is
+   in it: otherwise one member's probe answers the other's question. A scope with no via hashes as it always did. */
+test('tenant members whose via targets differ never share a live fingerprint', () => {
+  const job = { groups: [[{ column: 'bench_id', op: 'in' as const, via: { resource: 'bench_access', column: 'bench_id' } }]] };
+  const rows = (who: string): RowScope => ({ job, bench_access: { groups: [[{ column: 'who', op: '=', value: who }]] } });
+  const grants = (who: string) => {
+    const closure = viaClosure(job, rows(who));
+    assert.notEqual(closure, undefined);
+    return {
+      tenantId: 'northstar',
+      accountId: who,
+      tables: [{ id: 'job', physical: 'job', key: ['id'], columns: ['id'], scope: job, closure }],
+    };
+  };
+  const print = (who: string) => tenantLiveAuthority('app', grants(who), who, async () => []).tables.get('job')!.fingerprint;
+  assert.notEqual(print('alice'), print('bob'));
+  assert.equal(print('alice'), print('alice'));
+  // A chain is part of it: the target's own via, and its target's rule.
+  const deeper = {
+    ...rows('x'),
+    bench_access: { groups: [[{ column: 'who', op: 'in' as const, via: { resource: 'staff', column: 'id' } }]] },
+  };
+  assert.notEqual(
+    JSON.stringify(viaClosure(job, { ...deeper, staff: true })),
+    JSON.stringify(viaClosure(job, { ...deeper, staff: { groups: [[{ column: 'id', op: '=', value: 1 }]] } })),
+  );
+  const plain = { groups: [[{ column: 'owner', op: '=' as const, value: 'a' }]] };
+  assert.equal(viaClosure(plain, {}), undefined);
+  assert.equal(scopeFingerprint('o', 't', plain, viaClosure(plain, {})), scopeFingerprint('o', 't', plain));
+});
