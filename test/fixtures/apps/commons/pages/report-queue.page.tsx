@@ -15,7 +15,7 @@ const page = definePage({
   icon: 'flag',
   nav: { group: 'moderation', position: 2 },
   roles: ['moderator', 'admin'],
-  reads: ['report'],
+  reads: ['report', 'post'],
   params: { report: 'id' },
   component: ReportDesk,
 });

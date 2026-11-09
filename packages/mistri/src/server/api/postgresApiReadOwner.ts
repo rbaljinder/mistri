@@ -33,6 +33,9 @@ import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { storeTargetOf } from '../commands/appCommandEvents.js';
 import { eventFeedAudience, eventFeedSource, parseEventFeedQuery, readPostgresEventFeed } from './apiEventFeed.js';
 import { renderApiAsyncApi } from './apiAsyncApi.js';
+/* An agent's tool call reads through this owner too: its door is MCP, set where the session delivers (appMcpSession.ts). */
+import { currentReadRoute, withReadRoute } from '../readAudit.js';
+import { withReadAuditSink } from '../readAuditStore.js';
 
 const refuse = (): never => {
   throw new ApiReadFailure('temporarily_unavailable');
@@ -342,9 +345,17 @@ export async function createPostgresApiReadOwner(
                 // Ordinary grants use the existing resource authorizer. Native
                 // lifetime is enforced by the held bridge and handoff, not the
                 // policy-row-scope-only assertActive argument.
-                const scoped = authorizeResources(resources, resolveAppAccess(app, resources.schema, [...observed.roles]));
+                const scoped = authorizeResources(
+                  resources,
+                  withReadAuditSink(
+                    resolveAppAccess(app, resources.schema, [...observed.roles]),
+                    { app: app.id, tenant: '', actor: `api-token:${observed.tokenId}` },
+                    physicals.get(lane)!.physical,
+                    lane,
+                  ),
+                );
                 if (!scoped.adapter.runView) return refuse();
-                const rows = await scoped.adapter.runView(checked.view);
+                const rows = await withReadRoute(currentReadRoute() === 'mcp' ? 'mcp' : 'api', () => scoped.adapter.runView!(checked.view));
                 requestCurrent();
                 read.assertCurrent();
                 let count: number | undefined;

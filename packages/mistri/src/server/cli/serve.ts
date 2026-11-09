@@ -41,6 +41,7 @@ import { appLive } from '../app/appLive.js';
 import { policyStartupLines } from './policyStartup.js';
 import { validateBusinessCommandStartup } from '../commands/businessCommandLoader.js';
 import { ensureAppRecordHistory, historyRules } from '../recordHistory.js';
+import { auditedResources, ensureAppReadAudit } from '../readAuditStore.js';
 import { ensureAppLive, liveStartupLines, settleLiveStartup } from '../live/liveBinding.js';
 import { closeLiveStreams } from '../live/liveStream.js';
 import { appKeepsInbox, ensureAppInbox } from '../inbox.js';
@@ -106,6 +107,8 @@ export interface MountedServing {
   /** Never listened on: its `request` listeners are the whole pipeline, analytics' beacon included. */
   readonly server: Server;
   readonly mount: AddressMount;
+  /** The Apps served now, as a reload leaves them. Absent on a tenant App's server, which signs people in itself. */
+  readonly apps?: () => readonly AppHost[];
   /** The same shutdown a signal runs, short of exiting the process. */
   close(): Promise<void>;
 }
@@ -552,10 +555,13 @@ export async function startServing(
      records before any page is read. */
     for (const host of serving.apps) {
       const history = historyRules(host.app.app, host.app.pages).size > 0;
+      // The read audit likewise: an App that audits a resource's reads does not start where they could not be recorded.
+      const audit = auditedResources(host.app.app).length > 0;
       // Notifications likewise: a store provisioned once, attested and bound before the first write.
-      if (!history && !appKeepsInbox(host.app.app)) continue;
+      if (!history && !audit && !appKeepsInbox(host.app.app)) continue;
       try {
         if (history) await track(ensureAppRecordHistory(registry, host));
+        if (audit) await track(ensureAppReadAudit(registry, host));
         if (appKeepsInbox(host.app.app)) await track(ensureAppInbox(registry, host));
       } catch (error) {
         console.error(`App error: ${startupReport(error)}`);
@@ -1020,7 +1026,7 @@ export async function startServing(
       if (!startBackground()) throw new Error('Background workers could not start.');
       listening = true;
       for (const host of serving.apps) console.log(`  ${host.app.app.name}: mounted at ${appHome(mount, host.app.app.id)}`);
-      return { server: activeServer, mount, close: () => exit(0) };
+      return { server: activeServer, mount, apps: () => serving.apps, close: () => exit(0) };
     }
     /* A busy port is a normal thing, not a stack trace.
 

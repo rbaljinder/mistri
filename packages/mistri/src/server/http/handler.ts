@@ -98,6 +98,8 @@ import { getData, postData } from '@mistriwork/engine/server/http/dataRoutes.js'
 import { sessionRoles } from '../../shared/appViewRoles.js';
 import { assistantRoutes } from './assistantRoutes.js';
 import { ensureAppRecordHistory } from '../recordHistory.js';
+import { currentReadRoute, readRouteOf, withReadRoute } from '../readAudit.js';
+import { ensureAppReadAudit } from '../readAuditStore.js';
 import { ensureAppInbox } from '../inbox.js';
 import { ensureAppLive } from '../live/liveBinding.js';
 import { liveRoute } from '../live/liveRoute.js';
@@ -153,12 +155,17 @@ interface Admitted extends GatedContext {
  * do. Each table is tried in order and the first route that answers ends it.
  */
 export async function handle(req: IncomingMessage, res: ServerResponse, url: URL, serving: Serving): Promise<void> {
-  const admitted = await door(req, res, url, serving);
-  if (!admitted) return;
-  if (await route(admitted, OPEN_ROUTES)) return;
-  return underPolicy(admitted, async (policyContext) => {
-    await route<RequestContext>({ ...admitted, policyContext }, ROUTES);
-  });
+  /* The door a reader came in by, for the read audit (readAudit.ts): read off the address, once, where every route
+     starts. A loopback (an assistant's tool call, a first paint's reads) keeps the door its request came in by. */
+  const work = async () => {
+    const admitted = await door(req, res, url, serving);
+    if (!admitted) return;
+    if (await route(admitted, OPEN_ROUTES)) return;
+    return underPolicy(admitted, async (policyContext) => {
+      await route<RequestContext>({ ...admitted, policyContext }, ROUTES);
+    });
+  };
+  return currentReadRoute() === undefined ? withReadRoute(readRouteOf(url.pathname, req.headers), work) : work();
 }
 
 /**
@@ -295,6 +302,7 @@ const OPEN_ROUTES: readonly Route<Admitted>[] = [
     for (const host of ctx.appHosts ?? []) {
       await ensureAppRecordHistory(ctx.registry, host);
       await ensureAppInbox(ctx.registry, host);
+      await ensureAppReadAudit(ctx.registry, host);
       /* And the databases live sync announces their writes from (live/liveBinding.ts): marked only, nothing opened. */
       ensureAppLive(ctx.registry, host);
     }
@@ -669,6 +677,7 @@ async function serveShell(ctx: RequestContext): Promise<void> {
     ...(egress ? { egress } : {}),
     /* An opted-in App's install story (pwaRoutes.ts): its manifest and
        registration, said in the head, and nowhere else. */
+    ...(served?.ui?.microphone ? { microphone: true as const } : {}),
     ...(served?.ui?.pwa
       ? (() => {
           const urls = pwaUrls(ctx.mount, served.id);

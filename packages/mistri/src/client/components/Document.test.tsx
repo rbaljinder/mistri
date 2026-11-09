@@ -203,6 +203,17 @@ test('the lines are a table under a repeating header, figures to the right in ce
     calls.find((call) => call.path === '/api/view/run' && (call.body.view as HttpViewDefinition).base === 'order_line')?.body.view,
   ).toMatchObject({ limit: 500 });
   expect(container.querySelector('.doc-lines .doc-caption')?.textContent).toBe('Items');
+  // Three columns are no crowd: the tighter many-column type is for six and more.
+  expect(tableNode.hasAttribute('data-wide')).toBe(false);
+});
+
+test('on paper a table is held to the sheet: fixed layout, cells that wrap, tighter type for many columns', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync('packages/mistri/src/client/components/Document.css', 'utf8');
+  const print = css.slice(css.indexOf('@media print'));
+  expect(print).toMatch(/\.doc-table \{ table-layout: fixed; \}/);
+  expect(print).toMatch(/\.doc-table :is\(th, td\) \{ overflow-wrap: anywhere; \}/);
+  expect(print).toMatch(/\.doc-table\[data-wide\] :is\(th, td\)/);
 });
 
 test('the totals end on the sum owed, and a zero before it is left unsaid', async () => {

@@ -34,11 +34,18 @@ import { calendarDay, zonelessInstant } from '../../shared/appStamps.js';
 import { appZone } from '../../shared/appZone.js';
 import { wallClockText } from '../app/wallClock.js';
 import { assertScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
+import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { AppAccessDenied, type ResourceAccess } from '../app/appAccess.js';
 import { appResourceCatalog } from '../app/appResources.js';
 import { compileAppDefinitionValidation } from '../app/appValidation.js';
 import type { StoreTarget } from '../commands/appCommandEvents.js';
-import type { AuthorizedBusinessCommand, BusinessCommandBinding } from '../commands/businessCommandAccess.js';
+import {
+  registerTenantServiceEventBinding,
+  type AuthorizedBusinessCommand,
+  type BusinessCommandBinding,
+} from '../commands/businessCommandAccess.js';
+import { assertGlobalLookups, scopedLookupReader } from '../commands/commandLookup.js';
+import { brandTenantJobs } from './tenantJobsBrand.js';
 import { createBusinessCommandAuthorizer } from '../commands/businessCommandAuthorization.js';
 import { defineCommands, getCommandEvents, type BusinessCommandActor, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 import type { CommandResultReference } from '../commands/scopedBusinessCommandAccess.js';
@@ -133,13 +140,13 @@ export function tenantJobDeployment(
         );
       }
     }
-    /* The service's binding is no tenant event owner, and it reads no
-       lookup source: a job's command does neither here. Chaining jobs and
-       looking up stay refused rather than half-supported. */
-    if (getCommandEvents(runs))
-      refuse(`job "${job.id}" runs command "${job.command.id}", which declares events: a tenant App's job records none of its own.`);
-    if (typeof runs.lookup === 'function' || runs.sources !== undefined) {
-      refuse(`job "${job.id}" runs command "${job.command.id}", which looks up: a tenant App's job runs no lookup.`);
+    /* A tenant command records events and looks up through the service's binding (bind below); a platform one
+       runs outside any tenant, so it has no tenant's event store or rows to do either in. */
+    if (runs.realm === 'platform') {
+      if (getCommandEvents(runs))
+        refuse(`job "${job.id}" runs platform command "${job.command.id}", which declares events: ${PLATFORM_PLACE}.`);
+      if (typeof runs.lookup === 'function' || runs.sources !== undefined)
+        refuse(`job "${job.id}" runs platform command "${job.command.id}", which looks up: ${PLATFORM_PLACE}.`);
     }
   }
   for (const { what, id, record } of mailCommands(module)) {
@@ -149,10 +156,6 @@ export function tenantJobDeployment(
     if (runs!.realm === 'platform')
       refuse(`mail ${what} runs platform command "${id}"; mail is one tenant's, so it runs a tenant command.`);
     if (runs!.public) refuse(`mail ${what} runs command "${id}", which is public: only its public form runs it.`);
-    if (getCommandEvents(runs!))
-      refuse(`mail ${what} runs command "${id}", which declares events: a tenant App's service records none of its own.`);
-    if (typeof runs!.lookup === 'function' || runs!.sources !== undefined)
-      refuse(`mail ${what} runs command "${id}", which looks up: a tenant App's service runs no lookup.`);
     if (runs!.source !== owner.source.id)
       refuse(`mail ${what} runs command "${id}", which is not on the tenant App's source "${owner.source.id}".`);
     if (record ? runs!.targets === 'none' : runs!.targets !== 'none')
@@ -405,10 +408,6 @@ function assertTenantFlows(
         refuse(`${at}: step kind "${name}" runs platform command "${id}"; a flow is one tenant's, so it runs a tenant command.`);
       if (command.public === true)
         refuse(`${at}: step kind "${name}" runs command "${id}", which is public: only its public form runs it.`);
-      if (getCommandEvents(command))
-        refuse(`${at}: step kind "${name}" runs command "${id}", which declares events: a tenant App's service records none of its own.`);
-      if (typeof command.lookup === 'function' || command.sources !== undefined)
-        refuse(`${at}: step kind "${name}" runs command "${id}", which looks up: a tenant App's service runs no lookup.`);
     }
   }
   const commands = withFlowCommands(app, owned.schema, registry, runners);
@@ -462,6 +461,8 @@ interface TenantJobsOptions {
   readonly now: () => number;
 }
 type Anchors = Readonly<{ tenantVersion: string | null; platformVersion: string }>;
+/** Why a platform job's command may not record events or look up: the tenant's store and rows are not its. */
+const PLATFORM_PLACE = 'platform jobs run outside any tenant; events and lookups need one';
 /** Attempts admitted and not yet run: at most the runner's claims, whose ceiling is one. */
 const ADMITTED = 16;
 
@@ -515,6 +516,8 @@ export function bindTenantJobs(options: TenantJobsOptions) {
     commands: registry,
   });
   assertTenantJobs(module, app, registry, ownership, identity.source.connection);
+  // A service's lookup reads what a member's does: global rows only, whatever the App declares.
+  assertGlobalLookups(app, registry, ownership.ownership);
   /* A flows runner's reads and `set` steps are the platform's own command
      beside the App's (workflows/flowCommand.ts), granted to its runner alone. */
   const runners = flowRunnersOf(module.workflows);
@@ -588,9 +591,9 @@ export function bindTenantJobs(options: TenantJobsOptions) {
     );
   }
   /** A step's command, as a workflow's principal may run it here: a tenant
-   * command, never public, that records no event and looks nothing up (the
-   * service's binding is no event owner and reads no lookup source), and that
-   * the policy says how to read the result of. Anything else is refused.
+   * command, never public, that the policy says how to read the result of.
+   * Its events and lookup, if it has them, run through the service's binding.
+   * Anything else is refused.
    * A flows runner's own command is its runner's alone, and its result (the
    * plan, a condition's answer) names no record. */
   const stepExtract = (id: string, flowsOf?: string): ((result: unknown) => readonly CommandResultReference[]) => {
@@ -598,19 +601,12 @@ export function bindTenantJobs(options: TenantJobsOptions) {
       extract = Object.hasOwn(declarations, id) ? declarations[id] : undefined;
     const own = command && flowCommandOf(command);
     if (own) return own.resource === flowsOf ? noReferences : deny();
-    if (
-      !command ||
-      command.realm === 'platform' ||
-      command.public === true ||
-      getCommandEvents(command) ||
-      typeof command.lookup === 'function' ||
-      command.sources !== undefined ||
-      typeof extract !== 'function' ||
-      isProxy(extract)
-    )
+    if (!command || command.realm === 'platform' || command.public === true || typeof extract !== 'function' || isProxy(extract))
       return deny();
     return extract as (result: unknown) => readonly CommandResultReference[];
   };
+  // The runtime this function returns, for the event owner registration: set once it is built, before any attempt binds.
+  let self: object | undefined;
   const lifetimeMs = Math.min(deployment.attemptTimeoutMs, 300_000);
   let retired = false;
   const pending = new Set<Promise<void>>();
@@ -816,6 +812,17 @@ export function bindTenantJobs(options: TenantJobsOptions) {
       Array.isArray(actor.roles) &&
       actor.roles.length === roles.length &&
       actor.roles.every((role) => roles.includes(role));
+    /* What a command's lookup may read as this service: its declared sources' tables and, when it names a record, that
+       record's table (the lookup reads the target before the transaction). Never wider; the read source composes the
+       scope itself from the evidence, within the tenant, and fences it on the anchors as the writer does. */
+    const lookupFootprint = (authorization: ReturnType<typeof authorizer.authorize>): RowScope => {
+      const tables = authorization.lookupTables!;
+      const allowed = new Set<string>();
+      for (const [source, catalog] of Object.entries(tables.catalogs))
+        for (const local of Object.keys(catalog)) allowed.add(tables.logical(source, local));
+      if (authorization.command.targets !== 'none') allowed.add(authorization.resource);
+      return Object.freeze(Object.fromEntries(Object.keys(ownership.ownership).map((table) => [table, allowed.has(table)])));
+    };
     const binding = Object.freeze<BusinessCommandBinding>({
       scoped: true,
       // A command at times names no record (`targets: 'none'`): its envelope's key is empty, as on a single App.
@@ -836,6 +843,10 @@ export function bindTenantJobs(options: TenantJobsOptions) {
              transaction, scoped to the tenant's rows, and write nothing (decideReads.ts). Without it every tenant
              decision failed at its first read, as `deny` above, and no customer was ever asked about. */
           readsInCommand: true,
+          // Before the transaction, as a member's lookup is; the anchor fence inside it still holds.
+          ...(place === 'tenant' && authorization.lookupTables
+            ? { lookup: scopedLookupReader(authorization, () => reader.bindServiceReads(evidence, lookupFootprint(authorization))) }
+            : {}),
           ...(place === 'tenant'
             ? { receiptOwner: captureTenantData({ storeId: identity.storeId, sourceId: identity.source.id, tenantId: tenantId! }) }
             : {}),
@@ -874,6 +885,8 @@ export function bindTenantJobs(options: TenantJobsOptions) {
         });
       },
     });
+    // The jobs runtime's own binding records events in the tenant's store, as a member's does (a tenant's place only).
+    if (place === 'tenant') registerTenantServiceEventBinding(self!, evidence, binding);
     let finish!: () => void;
     const held = new Promise<void>((resolve) => {
       finish = resolve;
@@ -981,7 +994,7 @@ export function bindTenantJobs(options: TenantJobsOptions) {
     });
   };
 
-  return Object.freeze({
+  const runtime = Object.freeze({
     app,
     module,
     deployment,
@@ -1014,6 +1027,9 @@ export function bindTenantJobs(options: TenantJobsOptions) {
       return Promise.allSettled([...pending]).then(() => {});
     },
   });
+  brandTenantJobs(runtime);
+  self = runtime;
+  return runtime;
 }
 type TenantJobs = ReturnType<typeof bindTenantJobs>;
 

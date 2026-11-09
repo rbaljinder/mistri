@@ -7,6 +7,7 @@ import { signInOf } from '../../shared/app.js';
 import type { AppHost, LoadedApp } from '../app/apps.js';
 import { loadHttpAppPolicy, type HttpAppPolicy } from '../policy/appPolicyHttp.js';
 import { ensureAppRecordHistory, historyRules } from '../recordHistory.js';
+import { ensureAppReadAudit } from '../readAuditStore.js';
 import { ensureAppLive } from '../live/liveBinding.js';
 import { closeDevClientHmr, retireDevClient } from '@mistriwork/engine/server/devclient.js';
 import { apiReadLifetimes, commandOperations, createApp } from './server.js';
@@ -202,6 +203,7 @@ export async function openSuiteApp(
     }
     // Notifications as serve keeps them: the App's inbox store, attested before the first write, and its own outbox.
     if (appKeepsInbox(app.app)) await ensureAppInbox(registry, host);
+    await ensureAppReadAudit(registry, host);
     ensureAppLive(registry, host);
     if (appSendsEmail(app.app)) {
       const transport = emailOf(registry);

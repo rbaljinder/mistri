@@ -344,7 +344,7 @@ const TENANT_IMPORTERS = [
   'packages/mistri/src/server/cli/serve.ts',
   'packages/mistri/src/server/cli/tenant.ts',
   // `mistri tenant clone|import|clock` is an operator's entry point: it validates the deployment as a start
-  // does, and runs the sandbox steps of tenant maintenance.
+  // does, and runs the sandbox steps of tenant maintenance. A tenant App's `--export openapi` comes through it too.
   'packages/mistri/src/server/cli/tenantCommand.ts',
   'packages/mistri/src/server/cli/testInitTenant.ts',
   'packages/mistri/src/server/commands.ts',

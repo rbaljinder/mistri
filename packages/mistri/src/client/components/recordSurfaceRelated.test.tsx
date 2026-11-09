@@ -33,6 +33,9 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
   $: () => ({ addEventListener() {}, setAttribute() {}, textContent: '', title: '' }),
   state: model.state,
   api: model.api,
+  // Pickers' and related lists' reads say so (core.js pickerApi, relatedApi); here they are the same reads.
+  pickerApi: model.api,
+  relatedApi: model.api,
   go: model.go,
   openRecord: model.open,
   currentEntry: () => model.route,

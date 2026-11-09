@@ -1454,6 +1454,20 @@
   body.app-sidebar-shell .sidebar-account :is(.inbox-trigger, .icon-button) {
     color: var(--ink-muted);
   }
+  /* The workspace chooser docks here with the bar's other keys, outside the .topbar the dark bar's rule dresses
+     (brandLook.css), so it stood on the page's surface key in the menu's ink: pale on pale under a dark nav. The
+     sidebar's --ink and --line are the nav's (visualThemes.css), so a tint of its ink reads on any ground it wears. */
+  body.app-sidebar-shell .sidebar-account .tenant-control-trigger {
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    border-color: var(--line);
+    color: var(--ink);
+    box-shadow: none;
+  }
+  @media (hover: hover) {
+    body.app-sidebar-shell .sidebar-account .tenant-control-trigger:hover {
+      background: color-mix(in srgb, var(--ink) 14%, transparent);
+    }
+  }
   body.app-sidebar-shell .sidebar-account + #sidebar-app-footer .sidebar-identity {
     padding-top: var(--space-3);
   }

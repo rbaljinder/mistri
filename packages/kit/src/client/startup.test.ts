@@ -27,6 +27,14 @@ test('startup callbacks run only after reveal and can be canceled on unmount', a
   expect(ready).toHaveBeenCalledTimes(2);
 });
 
+test('a reveal the page has moved past leaves the veil to whoever holds it now', async () => {
+  let entering = false;
+  const pending = finishStartup(() => !entering);
+  entering = true;
+  await pending;
+  expect(document.documentElement.hasAttribute('data-starting')).toBe(true);
+});
+
 test('appearance caching cannot delay a successful boot when storage is blocked', async () => {
   vi.spyOn(sessionStorage, 'setItem').mockImplementation(() => {
     throw new Error('Denied');

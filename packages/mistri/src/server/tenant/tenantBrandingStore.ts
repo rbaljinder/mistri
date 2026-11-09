@@ -13,9 +13,9 @@ interface BrandingStoreAdapter {
 /* `adapter` is the deployment's writer: a dialect adapter, whose App stores answer (stores/appStores.ts), or a store that answers itself. */
 export async function bindTenantBrandingStore(adapter: object, dialect: 'sqlite' | 'postgres'): Promise<void> {
   if (await (storesOf(adapter) as BrandingStoreAdapter).brandingReady()) return;
-  const call = `provisionStores({ ${dialect === 'sqlite' ? 'sqlite: path' : 'postgres: url'} }, { only: ['branding'] })`;
   throw new BrandingUnavailable(
     `This tenant App declares branding, and its database holds no branding store. ` +
-      `It is provisioned once, never on startup: run ${call} from @mistriwork/mistri/maintenance against the App's own database, then start again.`,
+      `It is provisioned once, never on startup: run \`mistri migrate stores up --app <dir> --policy <file>\` (with the App's --config) while the server is stopped, then start again. ` +
+      `From code, provisionStores({ ${dialect === 'sqlite' ? 'sqlite: path' : 'postgres: url'} }, { only: ['branding'] }) in @mistriwork/mistri/maintenance does the same.`,
   );
 }

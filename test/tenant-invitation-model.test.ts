@@ -7,6 +7,7 @@ import {
   captureInvitationPolicy,
   invitationFingerprint,
   invitationGrant,
+  invitationOperatorGrant,
   type InvitationPolicy,
 } from '../packages/mistri/src/server/tenant/tenantInvitationModel.js';
 import { TenantContextError } from '../packages/engine/src/server/evidence.js';
@@ -154,6 +155,18 @@ test('redemption, membership and pending-count ceilings have independent inclusi
       denied(() => captureInvitationPolicy({ ...policy(), [field]: value }));
     }
   }
+});
+
+test("an invitation operator rule may name tenants: 'all'", () => {
+  const first = policy().operators[0];
+  const everyone = { ...first, accountId: 'platform', tenants: 'all' as const };
+  const captured = captureInvitationPolicy({ ...policy(), operators: [first, everyone] });
+  assert.equal(captured.operators[1].tenants, 'all');
+  for (const tenantId of ['north', 'west'])
+    assert.equal(invitationOperatorGrant(captured, 'platform', tenantId, 'issueInvitation')?.tenants, 'all');
+  assert.equal(invitationOperatorGrant(captured, 'operator', 'west', 'issueInvitation'), null);
+  denied(() => captureInvitationPolicy({ ...policy(), operators: [everyone, { ...everyone, tenants: ['north'] }] }));
+  for (const value of ['ALL', null]) denied(() => captureInvitationPolicy({ ...policy(), operators: [{ ...everyone, tenants: value }] }));
 });
 
 test('bounded nonempty unique role, tenant and operator lists refuse overflow', () => {

@@ -1,3 +1,4 @@
+import { operatorIds, operatorReaches } from './tenantOperatorReach.js';
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import { TransactionOutcomeUnknown } from '@mistriwork/engine/adapters/adapter.js';
@@ -363,7 +364,7 @@ export function createTenantInvitationOperations(owner: InvitationOwner): Tenant
       return await readOwned(request, value, async (transaction, active) => {
         const delegated = await delegatedTargets(transaction, value.expectedAccount);
         active();
-        const ids = [...new Set([...grants.flatMap((entry) => entry.tenants), ...delegated.keys()])]
+        const ids = [...new Set([...grants.flatMap((entry) => operatorIds(entry.tenants)), ...delegated.keys()])]
           .sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)))
           .filter((id) => value.after === undefined || Buffer.compare(Buffer.from(id), Buffer.from(value.after)) > 0)
           .slice(0, limit + 1);
@@ -377,7 +378,7 @@ export function createTenantInvitationOperations(owner: InvitationOwner): Tenant
             tenant,
             capabilities: INVITATION_ISSUER_OPERATIONS.flatMap((operation) => {
               // Where an operator grant covers the operation, it decides.
-              const grant = grants.find((entry) => entry.tenants.includes(tenantId) && entry.operations.includes(operation));
+              const grant = grants.find((entry) => operatorReaches(entry.tenants, tenantId) && entry.operations.includes(operation));
               const roles = grant?.roles ?? delegated.get(tenantId)?.find((found) => found.operation === operation)?.roles;
               return roles ? [{ operation, roles }] : [];
             }),

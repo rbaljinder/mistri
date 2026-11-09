@@ -713,9 +713,9 @@
   }
   /* A data column in Plex Mono, in every look and only there: the ids, codes and numbers a table's cells set apart
      (`td.mono`, Grid.tsx) and the figures, dates and keys of a record's fields and header facts. Words, headings and
-     a stat's hero figure keep their theme's faces. A theme whose data face reaches figures says its own, above. */
+     a stat's hero figure keep their theme's faces. A theme whose data face reaches figures says its own, above; one that names a figures face (`fonts.figures`, which follows its data face when it names none) wears it as `--figures-face`. */
   .app-mode {
-    --figures: 'IBM Plex Mono', 'IBM Plex Mono Fallback', var(--code);
+    --figures: var(--figures-face, 'IBM Plex Mono', 'IBM Plex Mono Fallback', var(--code));
   }
   .app-mode td.mono,
   .app-mode :is(.page-field > dd, .page-head-facts) :is(.num-value, .date-value, .id-value) {

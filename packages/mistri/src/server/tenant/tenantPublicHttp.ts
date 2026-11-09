@@ -26,6 +26,7 @@ import type { AppCommandField } from '../../../schema/command.js';
 import { wearing, type TenantLook } from './tenantLook.js';
 import { cookieUnder } from '@mistriwork/engine/shared/mount.js';
 import { TENANT_HTTP_HEADERS as headers } from '../../shared/tenantContext.js';
+import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { businessCommandHttpError, commandBody, holdCommandBody } from '../commands/businessCommandHttp.js';
 import { BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
 import { CommandInputError } from '../commands/commandPayload.js';
@@ -96,6 +97,10 @@ interface TenantPublicHttpOptions {
   /** Optional explicitly PUBLIC read owner. Native tenant membership is never
    * manufactured to serve a public page. Absent, the static base is served. */
   readonly branding?: (req: IncomingMessage, url: URL) => Promise<BrandingPresentation | undefined>;
+  /** The published look of the tenant a form link's intake address (`?via=`) places, for that form's read: a public
+      form reached through a tenant's own link wears that tenant's name, as one on its mapped host does. Absent, or
+      for an address that places no tenant, the App's own. */
+  readonly placedBranding?: (address: string, form: string) => Promise<BrandingPresentation | undefined>;
 }
 
 export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
@@ -147,6 +152,7 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       }
     }
     let branding = baseRecordBranding(app);
+    let hostDressed = false;
     if ((req.method === 'GET' || req.method === 'HEAD') && options.branding) {
       try {
         const resolved = await options.branding(req, url);
@@ -156,10 +162,24 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
           resolved.value.identity.app === app.id &&
           resolved.value.identity.tenant ===
             (recordBrandingSpec(app) ? brandingTenant(req, app, url) : (getTenantHostIntent(req)?.tenant ?? null))
-        )
+        ) {
           branding = resolved;
+          hostDressed = true;
+        }
       } catch {
         /* A public read that fails supplies only the base. */
+      }
+      /* No host named a tenant, but the link carries its intake address: the form wears that tenant's published look.
+         Only the form's own read — the sign-in page and the landing are dressed only when the host names the tenant. */
+      const via = url.searchParams.get('via');
+      const formId = publicFormPath(url.pathname)?.id;
+      if (!hostDressed && via && formId !== undefined && options.placedBranding) {
+        try {
+          const placed = await options.placedBranding(via, formId);
+          if (placed && !placed.private && placed.value.identity.app === app.id) branding = placed;
+        } catch {
+          /* An address that cannot be placed leaves the App's own name. */
+        }
       }
       assertActive();
     }
@@ -240,7 +260,7 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
         res.setHeader('connection', 'close');
         send(res, 413, { code: 'too_large', error: 'This submission is too large.' });
       };
-      if (Number.isFinite(length) && length > 65_536) {
+      if (Number.isFinite(length) && length > MAX_COMMAND_BYTES) {
         tooLarge();
         return;
       }

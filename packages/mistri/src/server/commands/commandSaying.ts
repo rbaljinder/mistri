@@ -18,6 +18,8 @@ export interface ColumnSaying {
   label(column: string): string;
   /** A stored value as the App shows it. */
   value(column: string, value: unknown, row: Readonly<Record<string, unknown>>): string;
+  /** The column holds a reference (a foreign key, or an `_id` name): a person is told whether it is set, never its raw id. */
+  reference?(column: string): boolean;
 }
 
 /** The catalog with how each table's columns are said; unchanged for a table the schema does not hold. */
@@ -41,6 +43,9 @@ export function withSaying(
         const locale = app.ui?.locale ?? 'en-US';
         const fallback = app.ui?.currency ?? 'USD';
         const saying: ColumnSaying = {
+          reference: (column) =>
+            meta.columns.some((c) => c.name === column && c.references !== undefined) ||
+            (/_id$/i.test(column) && meta.columns.some((c) => c.name === column && !c.primaryKey)),
           label: (column) => resource?.labels?.[column] ?? column,
           value(column, value, row) {
             if (value === null || value === undefined || value === '') return 'empty';
@@ -70,18 +75,32 @@ const NEEDS: Readonly<Record<string, string>> = { '=': '=', '!=': '≠', '<': '<
 /**
  * Why a record failed a command's declarative `when`, in one sentence about its first failing part:
  * `balance_cents is $108.99; needs ≤ $0.00`. Only a column the person may read is named with its value
- * (`mayRead`); otherwise undefined, and the refusal keeps its generic sentence.
+ * (`mayRead`); otherwise undefined, and the refusal keeps its generic sentence. A computed column is named by its
+ * label as a stored one is, and its value is what `whenHolds` judged (`derived`).
  */
 export function whenRefusalSentence(
   saying: ColumnSaying | undefined,
   condition: Condition | undefined,
   row: Readonly<Record<string, unknown>>,
   mayRead: (column: string) => boolean,
+  /** The value of a computed column the condition judged: the row does not carry it, `whenHolds` read it. */
+  derived?: { readonly value: unknown },
 ): string | undefined {
   if (!saying || !condition || !mayRead(condition.column)) return undefined;
   const name = saying.label(condition.column);
-  const is = `${name} is ${saying.value(condition.column, row[condition.column], row)}`;
+  const held = derived ? derived.value : row[condition.column];
+  const is = `${name} is ${saying.value(condition.column, held, row)}`;
   const say = (value: unknown) => saying.value(condition.column, value, row);
+  // A reference's value is an id nobody reads: say whether it is set, in the column's own noun.
+  if (saying.reference?.(condition.column) && (condition.op === 'isNull' || condition.op === 'isNotNull')) {
+    const noun = name
+      .replace(/\s+id$/i, '')
+      .replace(/_id$/i, '')
+      .replace(/_/g, ' ');
+    return condition.op === 'isNull'
+      ? `This record already has a ${noun}; it needs to be empty`
+      : `This record has no ${noun} yet; it needs one`;
+  }
   switch (condition.op) {
     case 'isNull':
       return `${is}; needs to be empty`;

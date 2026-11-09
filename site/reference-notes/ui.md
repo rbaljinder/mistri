@@ -27,7 +27,10 @@ both and `false` never draws it.
 `timezone` may instead be read per reader: `timezone: { column:
 'desk_setting.timezone', default: 'America/New_York' }` counts each reader's
 today and windows in the zone the first row of that column they may read
-names — their tenant's, their account's. Writes keep `default`.
+names — their tenant's, their account's. In a tenant App a command's
+`today()`, `now()` and its stamps count the day in the running tenant's own
+zone, read the same way; a name that is not an IANA zone falls to `default`
+(and is logged outside production). Elsewhere writes keep `default`.
 
 `locale` is also the App's own language, the one its `messages/` catalogs are
 written from, and may be read per reader the same way: `locale: { column:

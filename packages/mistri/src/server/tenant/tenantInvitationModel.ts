@@ -9,6 +9,7 @@ import {
   type InvitationIssuerOperation,
 } from '../../shared/tenantInvitations.js';
 import { nativeAccountEmail } from '../auth/authAccounts.js';
+import { OPERATOR_TENANTS_WORDS, operatorReaches, operatorsOverlap, type OperatorTenants } from './tenantOperatorReach.js';
 import { captureDelegates, type DelegateRule } from './tenantDelegation.js';
 
 export interface InvitationPolicy {
@@ -20,7 +21,7 @@ export interface InvitationPolicy {
   readonly maxPendingPerTenant: number;
   readonly operators: readonly {
     readonly accountId: string;
-    readonly tenants: readonly string[];
+    readonly tenants: OperatorTenants;
     readonly operations: readonly InvitationIssuerOperation[];
     readonly roles: readonly string[];
   }[];
@@ -88,16 +89,18 @@ function roles(value: unknown): asserts value is readonly string[] {
 function grant(value: unknown): asserts value is InvitationGrant {
   exact(value, ['accountId', 'tenants', 'operations', 'roles']);
   id(value.accountId, 1024);
-  if (
-    !Array.isArray(value.tenants) ||
-    !value.tenants.length ||
-    value.tenants.length > 256 ||
-    new Set(value.tenants).size !== value.tenants.length
-  )
-    return denyTenant();
-  for (const tenant of value.tenants) {
-    id(tenant, 128);
-    parseTenantSelector([tenant]);
+  if (value.tenants !== 'all') {
+    if (
+      !Array.isArray(value.tenants) ||
+      !value.tenants.length ||
+      value.tenants.length > 256 ||
+      new Set(value.tenants).size !== value.tenants.length
+    )
+      return policyRefusal(`operators ${OPERATOR_TENANTS_WORDS}`);
+    for (const tenant of value.tenants) {
+      id(tenant, 128);
+      parseTenantSelector([tenant]);
+    }
   }
   if (
     !Array.isArray(value.operations) ||
@@ -156,7 +159,7 @@ export function captureInvitationPolicy(input: unknown): InvitationPolicy {
       previous.some(
         (other) =>
           other.accountId === entry.accountId &&
-          other.tenants.some((tenant) => entry.tenants.includes(tenant)) &&
+          operatorsOverlap(other.tenants, entry.tenants) &&
           other.operations.some((op) => entry.operations.includes(op)),
       )
     )
@@ -216,7 +219,7 @@ export function invitationGrant(
   if (!INVITATION_ISSUER_OPERATIONS.includes(operation)) return denyTenant();
   return (
     captured.operators.find(
-      (entry) => entry.accountId === accountId && entry.tenants.includes(tenantId) && entry.operations.includes(operation),
+      (entry) => entry.accountId === accountId && operatorReaches(entry.tenants, tenantId) && entry.operations.includes(operation),
     ) ?? denyTenant()
   );
 }
@@ -234,7 +237,7 @@ export function invitationOperatorGrant(
   if (!INVITATION_ISSUER_OPERATIONS.includes(operation)) return denyTenant();
   return (
     captured.operators.find(
-      (entry) => entry.accountId === accountId && entry.tenants.includes(tenantId) && entry.operations.includes(operation),
+      (entry) => entry.accountId === accountId && operatorReaches(entry.tenants, tenantId) && entry.operations.includes(operation),
     ) ?? null
   );
 }

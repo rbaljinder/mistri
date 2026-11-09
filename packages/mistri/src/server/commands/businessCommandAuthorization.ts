@@ -102,6 +102,8 @@ export interface CommandMachine {
       /** The states besides `start` a command may insert a row in (the machine's `entry`). */
       entry: ReadonlySet<string>;
       moves: ReadonlyMap<string, ReadonlySet<string>>;
+      /** The states declared `final: { freeze: true }` → their words: a row in one takes no write, whatever the command. */
+      frozen: ReadonlyMap<string, string>;
       /** The moves no verb makes, by the service role that may make them (the machine's `by`). */
       by?: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>;
     }>
@@ -189,6 +191,7 @@ function commandMachine(
       start: string;
       entry: ReadonlySet<string>;
       moves: Map<string, Set<string>>;
+      frozen: ReadonlyMap<string, string>;
       by?: Map<string, Map<string, Set<string>>>;
     }
   >();
@@ -214,6 +217,7 @@ function commandMachine(
       start: machine.states[0].name,
       entry: new Set(machine.entry ?? []),
       moves,
+      frozen: new Map(machine.states.filter((state) => state.freeze).map((state) => [state.name, state.label])),
       ...(by.size ? { by } : {}),
     });
   }
@@ -739,8 +743,8 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           }),
         });
       }
-      /* A lookup that only calls integrations reads no source: its reader holds no table, only the target as it stands. */
-      if (!lookup && command.integrations)
+      /* A lookup that only calls integrations, or reads nothing but its input, reads no source: its reader holds no table, only the target as it stands. */
+      if (!lookup && (command.integrations || typeof command.lookup === 'function'))
         lookup = Object.freeze({
           tables: Object.freeze([]),
           reader: Object.freeze({

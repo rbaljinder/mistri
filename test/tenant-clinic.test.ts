@@ -67,7 +67,12 @@ async function evidence(t: TestContext, engine: Engine) {
   });
 
   await t.test("another clinic's record is not found, as one that does not exist", async () => {
-    assert.ok((await north.record('appointment', { id: 'ap-north-1' })).ok);
+    const mine = await north.record('appointment', { id: 'ap-north-1' });
+    assert.ok(mine.ok);
+    // The record's values as this member reads them: the row, without the ownership column they never see.
+    const values = (mine.value as { values: Record<string, unknown> | null }).values;
+    assert.equal(values?.id, 'ap-north-1');
+    assert.ok(values && !('clinic_id' in values));
     for (const id of ['ap-south-1', 'ap-nowhere']) {
       const read = await north.record('appointment', { id });
       assert.equal(read.ok, false);

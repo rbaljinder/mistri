@@ -177,6 +177,13 @@ export function renderApiReadOpenApi(
         'x-mistri-eligible-roles': [...operation.eligibleRoles],
         // The source this operation reads, when there is more than one to read.
         ...(several ? { 'x-mistri-source': operation.source } : {}),
+        // A client should know its reads are written down, and that an unrecordable read answers 503 (server/readAudit.ts).
+        ...(app.resources?.[operation.resource]?.audit?.reads === true
+          ? {
+              'x-mistri-read-audit': true,
+              description: `Reads of ${operation.resource} are audited: each request is recorded (who, the record or query, and the ids returned) before its rows are sent, and one that cannot be recorded is answered 503.`,
+            }
+          : {}),
         // Preserve authored predicates, not clock-evaluated dates. Labels and
         // other presentation stay out; tab IDs and default selection are API
         // addresses and therefore part of the standing operation contract.

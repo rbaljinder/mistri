@@ -301,7 +301,7 @@ test('policy lifetime, list counts and unique allowlists enforce both endpoints'
   for (const field of ['roles', 'tenants']) {
     const values = Array.from({ length: 256 }, (_, index) => `value-${index}`);
     captureAdministrationPolicy({ ...policy(), operators: [{ ...policy().operators[0], [field]: values }] });
-    for (const invalid of [[], [...values, 'overflow'], ['same', 'same'], 'all']) {
+    for (const invalid of [[], [...values, 'overflow'], ['same', 'same'], ...(field === 'roles' ? ['all'] : ['All', '*'])]) {
       denied(() => captureAdministrationPolicy({ ...policy(), operators: [{ ...policy().operators[0], [field]: invalid }] }));
     }
   }
@@ -362,6 +362,30 @@ test('grants require the exact operator, target and operation without combining 
   const grant = administrationGrant(split, 'operator', 'north', 'grantMembership');
   assert.deepEqual(grant.roles, ['reader']);
   denied(() => assertAdministrationRoles(split, grant, ['reader', 'manager'], 1500, 1000));
+});
+
+test("an operator rule may name tenants: 'all', which reaches every tenant and overlaps every rule", () => {
+  const first = policy().operators[0];
+  const everyone = { ...first, accountId: 'platform', tenants: 'all' as const, operations: ['createTenant', 'grantMembership'] };
+  const captured = captureAdministrationPolicy({ ...policy(), operators: [first, everyone] });
+  assert.equal(captured.operators[1].tenants, 'all');
+  // Any tenant, including one that does not exist yet, as a created tenant's id is named by the operator.
+  for (const tenantId of ['north', 'west', 'a-tenant-no-list-names']) {
+    assert.deepEqual(administrationGrant(captured, 'platform', tenantId, 'createTenant').roles, first.roles);
+  }
+  denied(() => administrationGrant(captured, 'platform', 'west', 'setTenantStatus'));
+  denied(() => administrationGrant(captured, 'operator', 'west', 'createTenant'));
+  // One account's rule on every tenant and another on one tenant do not collide; the same account's do.
+  denied(() => captureAdministrationPolicy({ ...policy(), operators: [everyone, { ...everyone, tenants: ['north'], roles: ['reader'] }] }));
+  denied(() => captureAdministrationPolicy({ ...policy(), operators: [{ ...everyone, tenants: ['north'] }, everyone] }));
+  captureAdministrationPolicy({ ...policy(), operators: [everyone, { ...everyone, accountId: 'other', tenants: ['north'] }] });
+  // The role ceiling a grant carries is the rule's own: 'all' is not any list.
+  const grant = administrationGrant(captured, 'platform', 'west', 'grantMembership');
+  assertAdministrationRoles(captured, grant, ['reader'], 1500, 1000);
+  denied(() => assertAdministrationRoles(captured, { ...grant, tenants: ['west'] } as typeof grant, ['reader'], 1500, 1000));
+  for (const value of ['ALL', ' all', null]) {
+    denied(() => captureAdministrationPolicy({ ...policy(), operators: [{ ...everyone, tenants: value }] }));
+  }
 });
 
 test('overlapping operator target/operation ceilings refuse regardless of order or roles', () => {

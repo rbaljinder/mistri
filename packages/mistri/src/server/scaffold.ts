@@ -71,6 +71,7 @@ import { withDeclaredDates } from '../shared/declaredDates.js';
 import type { DeclaredDate } from '../shared/appModel.js';
 import { moduleTypeProblem } from './cli/projectSetup.js';
 import { typesForSchema } from './typegen.js';
+import { recordTabWordsByView } from './app/recordTabWords.js';
 
 /* ---------- the plan: helper calls, rendered or evaluated ---------- */
 
@@ -1768,6 +1769,8 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
      chore for the caller. */
   const problems: string[] = [];
   let served = schema;
+  /* The record tab words `mistri check` types (RecordTabs): read off the parsed App, or the first check rewrites the file. */
+  let tabsOver: ((typed: DatabaseSchema) => Record<string, string[]>) | undefined;
   try {
     /* A brief's commands are written beside the App by the caller, which this check cannot load: it validates the
        App without their buttons, and `mistri check` validates them with the module. */
@@ -1781,10 +1784,12 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
     problems.push(...appFileRules(parsed, schema, { strict: true }).problems);
     problems.push(...appTagRules(parsed, schema).problems);
     problems.push(...resolveDisplay(parsed, served).warnings);
-    for (const page of parseAppPages(app, 'the scaffold')) {
+    const parsedPages = parseAppPages(app, 'the scaffold');
+    for (const page of parsedPages) {
       const checked = validatePage(served, page);
       if (checked.error) problems.push(`page "${page.name}": ${checked.error}`);
     }
+    tabsOver = (typed) => recordTabWordsByView(parsed, parsedPages, typed);
   } catch (err) {
     problems.push((err as Error).message);
   }
@@ -1812,6 +1817,7 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
       typed,
       connections: opts.connections,
       database: opts.database,
+      tabs: tabsOver?.(typed),
     }),
   };
 }
@@ -1840,6 +1846,7 @@ function projectFiles({
   typed,
   connections,
   database,
+  tabs,
 }: {
   recipe: Recipe;
   people?: { label: string; email: string };
@@ -1853,6 +1860,7 @@ function projectFiles({
   typed: DatabaseSchema;
   connections?: readonly string[];
   database?: ScaffoldOptions['database'];
+  tabs?: Readonly<Record<string, readonly string[]>>;
 }): Record<string, string> {
   const files: Record<string, string> = {};
   const exported = (binding: string, tree: unknown, satisfies?: string) => {
@@ -1928,7 +1936,7 @@ function projectFiles({
   }
 
   // The connections `mistri check` will find: the one mistri.json names, when the scaffold writes it.
-  files['mistri-schema.d.ts'] = typesForSchema(typed, name, database && 'sqlite' in database ? [id] : connections);
+  files['mistri-schema.d.ts'] = typesForSchema(typed, name, database && 'sqlite' in database ? [id] : connections, {}, tabs);
   files['tsconfig.json'] = `${JSON.stringify(
     {
       compilerOptions: {

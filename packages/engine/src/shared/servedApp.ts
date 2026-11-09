@@ -23,7 +23,12 @@ export interface ServedFlowDiagram {
 /** A machine as the browser reads it (appMachine.ts): the stepper, a board's lanes and a history line's words. */
 export interface ServedMachine {
   column: string;
-  states: { value: string; label: string; final?: true }[];
+  states: {
+    value: string;
+    label: string;
+    final?: true;
+    /** Final and frozen: no write changes a record here (the form draws read-only). */ freeze?: true;
+  }[];
   path: string[];
   /** Its named groups of states (`status is onBench`), which a menu count reads as it reads `is open`. */
   groups?: Record<string, string[]>;

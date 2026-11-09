@@ -451,7 +451,7 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
     across.push(
       `${where}: views "${ASSISTANT_ROOM}" takes the word the assistant's page is placed by (assistant placement 'page'). Give the view another key.`,
     );
-  const nav = gather(across, () => parseNav(a.nav, where, views, order, parsedKind, assistantPage));
+  const nav = gather(across, () => parseNav(a.nav, where, views, order, parsedKind, assistantPage, Object.keys(ctx.auth?.roles ?? {})));
   /* Workspaces stand in a band across the window (the header's switcher), which a header held in the sidebar's head cannot hold. */
   if (nav?.some((node) => 'group' in node && node.workspace) && isRecord(a.ui) && isRecord(a.ui.shell) && a.ui.shell.header === 'sidebar')
     across.push(

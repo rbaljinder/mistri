@@ -198,6 +198,7 @@ test('startup refuses a tenant App that declares branding when its database hold
   new DatabaseSync(path).close();
   const adapter = new SqliteAdapter(path);
   try {
+    await assert.rejects(bindTenantBrandingStore(adapter, 'sqlite'), /mistri migrate stores up --app/);
     await assert.rejects(bindTenantBrandingStore(adapter, 'sqlite'), /provisionStores\(\{ sqlite: path \}, \{ only: \['branding'\] \}\)/);
     provisionSqliteBranding(path);
     await bindTenantBrandingStore(adapter, 'sqlite');

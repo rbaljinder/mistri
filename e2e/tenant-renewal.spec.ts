@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { test, expect, type Page } from './support/harness.js';
 import { scalar } from './support/db.js';
 import { startTenantApp, type TenantAppFixture } from './support/tenantServer.js';
+import { expectEntered } from './support/tenantSelection.js';
 
 /* The App framework's tenant client lives in the mistri package, outside the kit's client root: Vite serves it by path. */
 const TENANT_BROWSER = `/@fs${fileURLToPath(new URL('../packages/mistri/src/client/tenantBrowser.ts', import.meta.url))}`;
@@ -30,8 +31,9 @@ test.describe('tenant renewal preserves mounted work', () => {
         })
       ).status(),
     ).toBe(200);
+    // The address names north, one of the account's: the page enters it as it loads.
     await page.goto(`${app.origin}/${app.appId}/item?tenant=north`);
-    await page.getByRole('list', { name: 'Available tenants' }).getByRole('button', { name: 'north', exact: true }).click();
+    await expectEntered(page, 'north');
     await expect(page.locator('#content')).toContainText('North item');
   }
   async function remember(page: Page) {

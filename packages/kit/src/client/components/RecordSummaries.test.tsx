@@ -12,7 +12,7 @@ vi.mock('../core.js', () => ({
   columnDisplay: () => null,
   // A link table has no name of its own: its label falls to its key.
   labelPath: (table: TableMeta) => (table.id === 'campaign_member' ? 'campaign_id' : table.id === 'ticket' ? '$label' : 'name'),
-  recordLabel: () => undefined,
+  recordLabel: (table: TableMeta) => (table.id === 'contact' ? '{first} {last}' : undefined),
   state: { schema: undefined },
   keyOf: (_table: TableMeta, row: Record<string, unknown>) => (row.id == null ? null : { tenant: row.tenant, id: row.id }),
   rowLabel: (_table: TableMeta, row: Record<string, unknown>) => row.name ?? row.title,
@@ -235,6 +235,23 @@ test('a column that is the title on every row is not said again under it', () =>
   expect(screen.getAllByText('Outlet not working')).toHaveLength(1);
   expect(screen.queryByText('Title')).not.toBeInTheDocument();
   expect(screen.getByText('Harbour')).toBeInTheDocument();
+});
+
+test('the columns a record label is built from are not said again under it', () => {
+  const contact: TableMeta = {
+    ...table,
+    id: 'contact',
+    columns: ['id', 'first', 'last', 'phone'].map((name) => ({ name, type: 'TEXT', nullable: false, primaryKey: name === 'id' })),
+  };
+  const rows = [{ id: 1, name: 'Ada Lane', first: 'Ada', last: 'Lane', phone: '555-0100' }];
+  expect(summaryColumns(contact, ['first', 'last', 'phone'])).toEqual(['first', 'last', 'phone']);
+  render(<RecordSummaries table={contact} data={{ rows }} columns={['first', 'last', 'phone']} />);
+  expect(screen.getByText('Ada Lane')).toBeInTheDocument();
+  expect(screen.queryByText('Ada')).not.toBeInTheDocument();
+  expect(screen.queryByText('Lane')).not.toBeInTheDocument();
+  expect(screen.getByText('555-0100')).toBeInTheDocument();
+  // Nothing the Table would add: its columns are the title and one fact.
+  expect(tableSaysMore(contact, ['first', 'last', 'phone'], rows)).toBe(false);
 });
 
 test('the Table is a choice only where it says more than the records: more than four facts, or one a title or a question hides', () => {

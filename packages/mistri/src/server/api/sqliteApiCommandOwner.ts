@@ -5,7 +5,7 @@ import { prepareApiCommand, apiCommandPreparation } from './apiCommandPrepare.js
 import { isProxy } from 'node:util/types';
 import { Registry } from '@mistriwork/engine/server/connections.js';
 import { isSqliteVerifiedCommandSource, type SqliteAdapter } from '@mistriwork/engine/adapters/sqlite.js';
-import { snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
+import { MAX_COMMAND_BYTES, snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { throwIfCancelled } from '@mistriwork/engine/adapters/statementControl.js';
 import { captureTenantData } from '@mistriwork/engine/server/evidence.js';
 import type { AppHost, LoadedApp } from '../app/apps.js';
@@ -258,7 +258,7 @@ export async function createSqliteApiCommandOwner(
           current();
           // A document or a tool listing carries no envelope.
           const listing = mode === 'spec' || mode === 'tools';
-          const captured = listing ? undefined : snapshot(request, 131072).value;
+          const captured = listing ? undefined : snapshot(request, MAX_COMMAND_BYTES).value;
           const named = captured && typeof captured === 'object' && !Array.isArray(captured) ? own(captured, 'command') : undefined;
           if (!listing && typeof named !== 'string') return refuse();
           const command = named as string;

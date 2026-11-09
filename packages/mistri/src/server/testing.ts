@@ -16,7 +16,16 @@ export type {
 export { assertApplied, assertPermissions } from './testing/permissions.js';
 export type { PermissionCase } from './testing/permissions.js';
 export { startTestApp, startTestSuite } from './testing/host.js';
-export type { TestHost, TestAppOptions, TestSuiteOptions, TestAssistantScript, TestDecisionScript, TestJobRun } from './testing/host.js';
+export type {
+  TestHost,
+  TestAppOptions,
+  TestSuiteOptions,
+  TestAssistantScript,
+  TestDecisionScript,
+  TestJobRun,
+  TestReadAudit,
+  TestReadAuditQuery,
+} from './testing/host.js';
 export type { TestTenantAccount, TestTenantClient, TestTenantLease, TestSupportVisit } from './testing/tenant.js';
 export { validateTestApp, createTestClock } from './testing/unit.js';
 export { createWorkflowDriver } from './testing/workflows.js';

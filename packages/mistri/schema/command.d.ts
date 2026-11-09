@@ -52,7 +52,7 @@ export interface CommandTextField extends FieldBase {
   type: 'text' | 'textarea';
   /** Fewest characters, after trimming. */
   min?: number;
-  /** Most characters, after trimming: at most 16384. */
+  /** Most characters, after trimming: at most 65536. */
   max?: number;
   /** An email address, a web address (http or https), or a phone number. Not with `as: 'color'`, which is its own format. */
   format?: CommandTextFormat;

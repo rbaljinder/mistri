@@ -1879,13 +1879,13 @@
               "min": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 16384,
+                "maximum": 65536,
                 "description": "Fewest characters, counted after trimming."
               },
               "max": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 16384,
+                "maximum": 65536,
                 "description": "Most characters."
               },
               "pattern": {
@@ -1986,10 +1986,12 @@
         "audit": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "redact"
-          ],
+          "minProperties": 1,
           "properties": {
+            "reads": {
+              "const": true,
+              "description": "Log every read of these rows in the read audit store (mistri audit reads): who, when, through which door, and the record or the query and the ids it returned, never a value. A read is not served when its row cannot be written."
+            },
             "redact": {
               "oneOf": [
                 {
@@ -2007,7 +2009,7 @@
               "description": "Columns the support write trail records as a keyed hash instead of their value, or 'values' for every column."
             }
           },
-          "description": "What the durable support write trail keeps of these rows."
+          "description": "What the durable write trails keep of these rows, and whether every read of them is logged."
         },
         "import": {
           "$ref": "#/$defs/importDecl"
@@ -2580,7 +2582,7 @@
           "pattern": "\\S"
         }
       },
-      "description": "Fixed actions the role runs without write, by resource and action id: { pay_run: ['submit'] }. Each resource is one the role reads, with access 'write', and does not write; each id is one of its fixed (set) actions. The server admits the update only as that action: its set, its reason column, its when on the stored row. Needs auth.rows 'all'."
+      "description": "Fixed actions the role runs without write, by resource and action id: { pay_run: ['submit'] }. Each resource is one the role reads, with access 'write', and does not write; each id is one of its fixed (set) actions. The server admits the update only as that action: its set, its reason column, its when on the stored row. Judged by the writer of whichever rows the App serves: all of them, a row policy's, or a tenant member's own tenant."
     },
     "featureGrant": {
       "type": "object",
@@ -6428,6 +6430,7 @@
           ],
           "description": "The realm it belongs to: a tenant's (the default) or the platform realm's, which needs auth.tenancy.platform."
         },
+        "roles": { "$ref": "#/$defs/navRoles" },
         "placement": {
           "const": "footer",
           "description": "footer holds a top-level group at the foot of the sidebar, apart from the rest."
@@ -6456,6 +6459,10 @@
         }
       }
     },
+    "navRoles": {
+      "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "\\S" },
+      "description": "The roles the menu offers the entry to, each declared in auth.roles. Arrangement only: grants alone decide who may open anything."
+    },
     "navColor": {
       "type": "integer", "minimum": 1, "maximum": 8,
       "description": "A dot in the entry's icon place, in one of the theme's eight chart colors (1-8)."
@@ -6483,7 +6490,8 @@
               "type": "string",
               "pattern": "\\S"
             },
-            "color": { "$ref": "#/$defs/navColor" }
+            "color": { "$ref": "#/$defs/navColor" },
+            "roles": { "$ref": "#/$defs/navRoles" }
           }
         },
         {
@@ -6491,7 +6499,8 @@
           "properties": {
             "label": { "$ref": "#/$defs/appMenuLabel" },
             "to": { "$ref": "#/$defs/appTargetStatic" },
-            "color": { "$ref": "#/$defs/navColor" }
+            "color": { "$ref": "#/$defs/navColor" },
+            "roles": { "$ref": "#/$defs/navRoles" }
           }
         },
         {
@@ -6908,7 +6917,11 @@
         },
         "headless": {
           "type": "boolean",
-          "description": "true serves the App headless: its front end is your own (a same-domain Next.js page using the hooks of @mistriwork/mistri/react), and every data request names one of its surfaces/*.surface.ts in the X-Mistri-Surface header; a request that names none is refused (403, code surface). Grants, row policy and field ceilings still apply inside a surface."
+          "description": "true serves the App headless: its front end is your own (a same-domain Next.js page using the hooks of @mistriwork/mistri/react/headless), and every data request names one of its surfaces/*.surface.ts in the X-Mistri-Surface header; a request that names none is refused (403, code surface). Grants, row policy and field ceilings still apply inside a surface."
+        },
+        "microphone": {
+          "type": "boolean",
+          "description": "true lets the App's pages ask for the microphone, from the App's own origin alone (a voice note, a dictated field in one of its custom components). Absent or false, every page's Permissions-Policy refuses it, as it always did; nothing else in that header changes."
         },
         "locale": {
           "description": "BCP 47 tag the App is said and written in: the language of its captions where it has messages/ catalogs, and every figure \u2014 numbers, money, percents, dates, times, relative days and counts (\"en-AU\"). Absent: the reader\u2019s browser decides the figures. { column, default } reads each reader's own tag from the first row of that text column they may read; a tenant's (branding allow locale) comes next, then default.",
@@ -7402,7 +7415,11 @@
                 "description": "Moves only a service role makes (auth.roles.<role>.service): the states a command running as it may move the record to. Drawn as no button."
               },
               "final": {
-                "const": true
+                "description": "A state nothing leaves. { freeze: true } also freezes the record: no role, form, import or command writes it once it is there.",
+                "oneOf": [
+                  { "const": true },
+                  { "type": "object", "additionalProperties": false, "required": ["freeze"], "properties": { "freeze": { "const": true } } }
+                ]
               }
             }
           }

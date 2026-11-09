@@ -149,7 +149,7 @@ export function holdCommandBody(req: IncomingMessage): Promise<'held' | 'too_lar
     const data = (part: Buffer | string) => {
       const chunk = Buffer.isBuffer(part) ? part : Buffer.from(part);
       bytes += chunk.length;
-      if (bytes > 65_536) {
+      if (bytes > MAX_COMMAND_BYTES) {
         req.pause();
         finish(() => resolve('too_large'));
         return;
@@ -186,7 +186,7 @@ export async function commandBody(req: IncomingMessage): Promise<unknown> {
     for await (const part of req) {
       const chunk = Buffer.isBuffer(part) ? part : Buffer.from(part);
       bytes += chunk.length;
-      if (bytes > 65_536) throw new CommandBodyTooLarge(); // The body as a whole, so no member is named.
+      if (bytes > MAX_COMMAND_BYTES) throw new CommandBodyTooLarge(); // The body as a whole, so no member is named.
       chunks.push(chunk);
     }
   // Preserve the original byte meaning: replacement decoding could turn a

@@ -286,7 +286,7 @@ function Fields({
   resolved: Resolved[];
   sections: FieldSection[];
 }) {
-  const editing = canEditRow(table, entry.key) as boolean;
+  const editing = canEditRow(table, entry.key, record) as boolean;
   const blocked = whyNotEditable(table) as string | null;
   /* Typing must not re-render the fields — that would destroy the input
      mid-keystroke and lose the caret. The pending bar reads the staging

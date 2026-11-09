@@ -119,8 +119,8 @@ async function enter(page: Page, app: Fixture, role: keyof Fixture['accounts'] =
         })
       ).status(),
     ).toBe(200);
-  // The viewer's one membership is entered without the chooser.
-  const entered = role === 'viewer' ? page.waitForResponse(isSelection) : undefined;
+  // The address names northstar, which every role here is a member of, so the page enters it as it loads.
+  const entered = page.waitForResponse(isSelection);
   await page.goto(`${app.origin}/${app.appId}/${app.model.work}?tenant=northstar`);
   if (nativeForm) {
     await expect(page.getByRole('heading', { name: `Sign in to ${app.appName}`, exact: true })).toBeVisible();
@@ -131,12 +131,12 @@ async function enter(page: Page, app: Fixture, role: keyof Fixture['accounts'] =
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     expect((await signedIn).status()).toBe(200);
   }
-  if (!entered) {
-    await expect(page.getByRole('heading', { name: 'Choose a tenant', exact: true })).toBeVisible();
-    await expect(page.locator('.tenant-chooser-app')).toHaveText(app.appName);
-    await expect(page.getByRole('list', { name: 'Available tenants' }).getByRole('button')).toHaveText(['northstar', 'riverview']);
-  }
+  // The address is northstar's work list: wait for its room, the walk ready. A navigation made while the entry is
+  // still booting is a fresh document by design (mistri client/tenantNavigation.ts), which would retire the
+  // identity choose() records.
+  await expect(recordName(page, 'Northstar work')).toBeVisible();
   const owner = await choose(page, app, 'northstar', false, entered);
+  await expect(page.getByRole('heading', { name: 'Choose a tenant', exact: true })).toHaveCount(0);
   expect(owner.accountId).toBe(account.id);
   await workList(page, app, 'northstar');
   return owner;

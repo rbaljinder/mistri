@@ -21,6 +21,7 @@ import { warnOnce } from '@mistriwork/engine/server/startupWarnings.js';
 import { captureScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { AppAccessDenied, authorizeResources } from '../app/appAccess.js';
+import { readAuditStoreOf } from '../readAuditStore.js';
 import { compileAppDefinitionValidation } from '../app/appValidation.js';
 import type { RuntimeResources } from '../app/appRuntimeResources.js';
 import type { AppRowPolicy, DeletedPolicyRecord } from './appRowPolicy.js';
@@ -452,6 +453,18 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
       {
         ...access,
         rows,
+        /* Who read, as the policy knows them: an account, `service:<name>`, or the public (server/readAudit.ts). */
+        ...(access.audited
+          ? {
+              readAudit: {
+                app: app.id,
+                tenant: '',
+                actor: principal.id || 'public',
+                append: (row, connection) =>
+                  readAuditStoreOf(options.resources.forConnection(connection), `connection "${connection}"`).appendReadAudit(row),
+              },
+            }
+          : {}),
         ...(validation ? { validation } : {}),
         ...(actions
           ? {

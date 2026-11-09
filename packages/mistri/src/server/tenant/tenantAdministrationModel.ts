@@ -8,6 +8,7 @@ import {
   type AdministrationIntent,
   type AdministrationOperation,
 } from '../../shared/tenantAdministration.js';
+import { OPERATOR_TENANTS_WORDS, operatorReaches, operatorsOverlap, type OperatorTenants } from './tenantOperatorReach.js';
 import { captureDelegates, type DelegateRule } from './tenantDelegation.js';
 
 export { ADMINISTRATION_OPERATIONS, type AdministrationIntent, type AdministrationOperation } from '../../shared/tenantAdministration.js';
@@ -40,7 +41,7 @@ export interface AdministrationPolicy {
   readonly maxMembershipLifetimeMs: number;
   readonly operators: readonly {
     readonly accountId: string;
-    readonly tenants: readonly string[];
+    readonly tenants: OperatorTenants;
     readonly operations: readonly AdministrationOperation[];
     readonly roles: readonly string[];
   }[];
@@ -85,10 +86,15 @@ function time(value: unknown): asserts value is number {
 function rule(value: unknown): asserts value is AdministrationGrant {
   exact(value, ruleFields);
   tenantIdentifier(value.accountId, 1024);
-  list(value.tenants, 256);
-  for (const tenantId of value.tenants) {
-    tenantIdentifier(tenantId, 128);
-    parseTenantSelector([tenantId]);
+  if (value.tenants !== 'all') {
+    // Recorded for the operator's console alone (evidence.ts), as the policy's other refusals.
+    if (!Array.isArray(value.tenants) || !value.tenants.length || value.tenants.length > 256)
+      return policyRefusal(`operators ${OPERATOR_TENANTS_WORDS}`);
+    list(value.tenants, 256);
+    for (const tenantId of value.tenants) {
+      tenantIdentifier(tenantId, 128);
+      parseTenantSelector([tenantId]);
+    }
   }
   list(value.operations, ADMINISTRATION_OPERATIONS.length);
   for (const entry of value.operations) operation(entry);
@@ -120,7 +126,9 @@ export function captureAdministrationPolicy(input: unknown): AdministrationPolic
     captureDelegates(value.delegates, DELEGABLE_ADMINISTRATION_OPERATIONS, ROLELESS_ADMINISTRATION_OPERATIONS);
   // With delegates, a policy may name no operator at all; without, it grants nothing and is refused.
   if (!Array.isArray(value.operators) || (!value.operators.length && !Object.hasOwn(value, 'delegates')) || value.operators.length > 256)
-    return policyRefusal('operators is a list of 1 to 256 { accountId, tenants, operations, roles }, or empty beside delegates.');
+    return policyRefusal(
+      `operators is a list of 1 to 256 { accountId, tenants, operations, roles }, or empty beside delegates; ${OPERATOR_TENANTS_WORDS}`,
+    );
   for (const entry of value.operators) rule(entry);
   // A target/operation must have one ceiling, independent of declaration order.
   const operators = value.operators as AdministrationGrant[];
@@ -131,7 +139,7 @@ export function captureAdministrationPolicy(input: unknown): AdministrationPolic
         .some(
           (previous) =>
             previous.accountId === entry.accountId &&
-            previous.tenants.some((tenantId) => entry.tenants.includes(tenantId)) &&
+            operatorsOverlap(previous.tenants, entry.tenants) &&
             previous.operations.some((operation) => entry.operations.includes(operation)),
         )
     )
@@ -206,7 +214,7 @@ export function administrationGrant(
   operation(requestedOperation);
   return (
     captured.operators.find(
-      (entry) => entry.accountId === accountId && entry.tenants.includes(tenantId) && entry.operations.includes(requestedOperation),
+      (entry) => entry.accountId === accountId && operatorReaches(entry.tenants, tenantId) && entry.operations.includes(requestedOperation),
     ) ?? denyTenant()
   );
 }
@@ -226,7 +234,7 @@ export function operatorGrant(
   if (requestedOperation === 'importTenant') return null;
   return (
     captured.operators.find(
-      (entry) => entry.accountId === accountId && entry.tenants.includes(tenantId) && entry.operations.includes(requestedOperation),
+      (entry) => entry.accountId === accountId && operatorReaches(entry.tenants, tenantId) && entry.operations.includes(requestedOperation),
     ) ?? null
   );
 }
@@ -275,7 +283,9 @@ export function assertAdministrationRoles(
     !captured.operators.some(
       (entry) =>
         entry.accountId === ceiling.accountId &&
-        sameSet(entry.tenants, ceiling.tenants) &&
+        (entry.tenants === 'all' || ceiling.tenants === 'all'
+          ? entry.tenants === ceiling.tenants
+          : sameSet(entry.tenants, ceiling.tenants)) &&
         sameSet(entry.operations, ceiling.operations) &&
         sameSet(entry.roles, ceiling.roles),
     )

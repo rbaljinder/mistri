@@ -1064,7 +1064,7 @@ written with `field.*` (or as the plain object it stands for): `text`,
 `textarea`, `email`, `phone`, `url`, `number`, `money`, `date`, `bool`,
 `choice`, `reference` and `group`. A field is required unless it says
 `optional: true`, and its label is read from its key unless it gives one.
-Text takes `min`/`max` characters (at most 16384), a `format`, a `pattern`
+Text takes `min`/`max` characters (at most 65536), a `format`, a `pattern`
 with its `message`, and a `case`. A number takes finite `min`/`max`,
 `integer` and a `step` it is rounded to (`money` is one from 0 in cents); a
 number or a date may be `below` or `above` a sibling. A date is `YYYY-MM-DD`

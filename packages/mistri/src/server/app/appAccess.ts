@@ -3,12 +3,14 @@ import {
   type QueryRequest,
   type QueryResult,
   type ScopedReads,
+  type ViewResult,
   type WriteTransaction,
   type InsertRequest,
   type UpdateRequest,
   type DeleteRequest,
 } from '@mistriwork/engine/adapters/adapter.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import type { ViewDef } from '@mistriwork/engine/shared/viewPaths.js';
 import type { QueryPerson } from '@mistriwork/engine/shared/query.js';
 import type { RuntimeResources } from './appRuntimeResources.js';
 import { snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
@@ -21,6 +23,7 @@ import type { AppValidationRules } from './appValidation.js';
 import type { AppTransitionRules } from './appTransitions.js';
 import type { AppUpdateAction } from '../../shared/app.js';
 import { consumesImage, consumesOf, moveConsumed } from './appConsumes.js';
+import { auditQueryRead, auditViewRead, type AuditedAccess } from '../readAudit.js';
 
 import {
   AppAccessDenied,
@@ -42,7 +45,7 @@ export {
 } from '@mistriwork/engine/server/columnGrants.js';
 
 /** A role's grant in an App: the columns it reads and writes (columnGrants.ts), and the App's rules over its writes. */
-export interface ResourceAccess extends ColumnGrant {
+export interface ResourceAccess extends ColumnGrant, AuditedAccess {
   /** App-level invariants, independent of a particular form or nav entry. */
   validation?: AppValidationRules;
   /** Declared transitions: columns that change only through the App's actions (appTransitions). */
@@ -158,8 +161,13 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
             granted.some((action) =>
               Object.keys(request.values).every((column) => Object.hasOwn(action.set, column) || column === action.reason),
             ),
-          ).then((ok) => {
+          ).then(async (ok) => {
             if (!ok) throw new AppAccessDenied();
+            // An undo is a write too: a frozen record is not put back.
+            if (operationAccess.transitions?.has(request.table))
+              await import('./appTransitions.js').then(({ assertNotFrozen }) =>
+                assertNotFrozen(writer, operationAccess.transitions, request),
+              );
           })
         : import('./appTransitions.js').then(async ({ assertGrantedAction, assertTransitions }) => {
             await assertGrantedAction(writer, full, granted, request, undefined, me, operationAccess.zone);
@@ -349,6 +357,15 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
     full,
     access,
   );
+  /* The read audit (../readAudit.ts): a row per read of an audited table, written before its rows are handed on.
+     Only `query` and `runView` hand rows out; a count, a breakdown and a sum say how many, never which. A grant
+     that audits nothing takes the plain path, with nothing to look up. */
+  const audits = Boolean(access.audited?.size);
+  const auditing: AuditedAccess = { audited: access.audited, readAudit: access.readAudit };
+  const audited = (owner: string | undefined, request: QueryRequest, result: QueryResult) =>
+    auditQueryRead(auditing, full, owner ?? resources.connectionFor(request.table), request, result);
+  const auditedView = (owner: string | undefined, view: ViewDef, offset: number | undefined, result: ViewResult) =>
+    auditViewRead(auditing, full, owner ?? resources.connectionFor(view.base), view, offset ?? 0, result);
   const wrap = (underlying: Adapter, owner?: string): Adapter => {
     if (rows !== undefined) {
       if (!underlying.scopeReads) throw new AppAccessDenied();
@@ -398,7 +415,7 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
         query: (request) =>
           read(
             () => queryFor(request),
-            (bound, checked) => bound.query(checked),
+            (bound, checked) => (audits ? bound.query(checked).then((result) => audited(owner, checked, result)) : bound.query(checked)),
           ),
         count: (table, filter, limit) =>
           read(
@@ -418,7 +435,10 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
         runView: (view, offset) =>
           read(
             () => viewFor(view),
-            (bound, checked) => bound.runView(checked, offset),
+            (bound, checked) =>
+              audits
+                ? bound.runView(checked, offset).then((result) => auditedView(owner, checked, offset, result))
+                : bound.runView(checked, offset),
           ),
         countView: (view, limit) =>
           read(
@@ -535,7 +555,10 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
       dialect: underlying.dialect,
       introspect: async () => schema,
       close: async () => {},
-      query: (request) => underlying.query(queryFor(request)),
+      query: (request) => {
+        const checked = queryFor(request);
+        return audits ? underlying.query(checked).then((result) => audited(owner, checked, result)) : underlying.query(checked);
+      },
       count: (table, filter, limit) => underlying.count(table, filterFor(table, filter), limit),
     };
     if (underlying.estimateCount)
@@ -548,7 +571,13 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
         assertAllFields(table);
         return underlying.profile!(table, limits);
       };
-    if (underlying.runView) guarded.runView = (view, offset) => underlying.runView!(viewFor(view), offset);
+    if (underlying.runView)
+      guarded.runView = (view, offset) => {
+        const checked = viewFor(view);
+        return audits
+          ? underlying.runView!(checked, offset).then((result) => auditedView(owner, checked, offset, result))
+          : underlying.runView!(checked, offset);
+      };
     if (underlying.countView) guarded.countView = (view, limit) => underlying.countView!(viewFor(view), limit);
     if (underlying.runBreakdown) guarded.runBreakdown = (def, offset) => underlying.runBreakdown!(breakdownFor(def), offset);
     if (underlying.countBreakdown) guarded.countBreakdown = (def, limit) => underlying.countBreakdown!(breakdownFor(def), limit);

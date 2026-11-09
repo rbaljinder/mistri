@@ -121,3 +121,55 @@ test('the API document describes the same command rather than refusing it', () =
   assert.equal(component.properties.name.maxLength, 80);
   assert.equal(component.properties.steps.items.type, 'object');
 });
+
+test("a form's command (targets: 'none') is a no-target tool: the creation envelope's input and an idempotency key, nothing else", () => {
+  const { evidence } = fixture();
+  const { reason: _record, ...formInput } = input;
+  const ref = { id: 'openFlow', version: 1, input: formInput };
+  const app = parseTestApp(
+    {
+      id: 'flows',
+      name: 'Flows',
+      sources: { business: { connection: 'private' } },
+      resources: { flow: { access: 'write' }, person: {} },
+      auth: { roles: { admin: { read: true, commands: ['openFlow'] } } },
+      views: { flows: { kind: 'list', from: 'flow' }, open: { kind: 'form', label: 'Open a flow', command: ref } },
+      home: 'flows',
+      nav: ['flows', 'open'],
+    },
+    'fixture',
+  );
+  app.api = parseTestApi({ version: 1, roles: ['admin'], commands: [ref] }, ['admin'])!;
+  const registry = defineCommands({
+    openFlow: defineCommand({
+      targets: 'none',
+      source: 'business',
+      target: 'flow',
+      read: ['flow', 'person'],
+      input: formInput,
+      output: shape({ ok: bool() }),
+      handle() {
+        return { ok: true };
+      },
+    }),
+  });
+  const listed = projectApiMcpCommandTools(
+    app,
+    schema,
+    registry,
+    evidence,
+    { integers: 'number' },
+    { operations: ['command:openFlow'], roles: ['admin'] },
+  );
+  // One tool: no prepare, no recover (a creation keeps no target to recover by), no key or version argument.
+  assert.equal(listed.tools.length, 1);
+  assert.equal(listed.bindings[0]!.kind, 'create');
+  const tool = listed.tools[0] as any;
+  assert.match(String(tool.name), /^run_openFlow_/);
+  assert.deepEqual(Object.keys(tool.inputSchema.properties).sort(), ['idempotencyKey', 'input']);
+  assert.deepEqual([...tool.inputSchema.required].sort(), ['idempotencyKey', 'input']);
+  assert.equal(tool.inputSchema.properties.input.properties.name.maxLength, 80);
+  // Without a grant on the token the tool is not offered.
+  const none = projectApiMcpCommandTools(app, schema, registry, evidence, { integers: 'number' }, { operations: [], roles: ['admin'] });
+  assert.equal(none.tools.length, 0);
+});

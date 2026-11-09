@@ -204,14 +204,15 @@ describe('mistri check --design', () => {
       name: 'Order',
       base: 'sales_order',
       sections: [
-        { kind: 'fields', title: 'Details', paths: ['status', 'total'] },
-        { kind: 'fields', title: 'Dates', paths: ['ordered_on'] },
-        { kind: 'fields', presentation: 'facts', paths: ['boxes'] },
         {
           kind: 'fields',
-          presentation: 'headline',
-          paths: ['total', 'boxes'],
-          subfigure: 'boxes',
+          title: 'Details',
+          paths: ['status', 'total'],
+        },
+        {
+          kind: 'fields',
+          title: 'Dates',
+          paths: ['ordered_on'],
           workflow: {
             field: 'status',
             steps: [
@@ -219,6 +220,13 @@ describe('mistri check --design', () => {
               { value: 'shipped', label: 'Shipped' },
             ],
           },
+        },
+        { kind: 'fields', presentation: 'facts', paths: ['boxes'] },
+        {
+          kind: 'fields',
+          presentation: 'headline',
+          paths: ['total', 'boxes'],
+          subfigure: 'boxes',
         },
         ...[1, 2, 3].map((n) => ({ kind: 'metric', title: `M${n}`, fn: 'count', from: 'line', path: 'order_id' })),
         lines('Lines', ['sku', 'qty', 'price', 'bin', 'note', 'id'], { create: { label: 'Add line', show: ['qty'] } }),
@@ -280,6 +288,44 @@ describe('mistri check --design', () => {
       'view "orders"',
       'view "today"',
     ]);
+  });
+
+  test('a thin workflow is said only where the strip is drawn, and not for a two-state flow that ends final', () => {
+    const flow = {
+      field: 'status',
+      steps: [
+        { value: 'new', label: 'New' },
+        { value: 'shipped', label: 'Shipped' },
+      ],
+    };
+    const thin = (resource: object, section: object) =>
+      designLint(
+        { ...composed, ui: {} as AppDef['ui'], resources: { customer: {}, line: {}, sales_order: resource } } as AppDef,
+        [
+          {
+            id: 'order',
+            name: 'Order',
+            base: 'sales_order',
+            sections: [{ kind: 'fields', paths: ['status', 'total'], workflow: flow, ...section }],
+          } as PageDef,
+        ],
+        {
+          ...schema,
+          tables: schema.tables.map((table) => ({
+            ...table,
+            columns: table.columns.map((c) => (c.name === 'status' ? { ...c, allowed: ['new', 'shipped'] } : c)),
+          })),
+        },
+      ).filter((finding) => finding.code === 'thin-workflow');
+    assert.equal(thin({}, {}).length, 1, 'a drawn two-step strip is thin');
+    assert.equal(thin({}, { presentation: 'headline' }).length, 0, 'a headline draws no strip');
+    const machine = (final: boolean) => ({
+      column: 'status',
+      states: [{ name: 'new' }, { name: 'shipped', final }],
+      edges: [],
+    });
+    assert.equal(thin({ access: 'write', machine: machine(true) }, {}).length, 0, 'draft to final is the whole flow');
+    assert.equal(thin({ access: 'write', machine: machine(false) }, {}).length, 1);
   });
 
   test('a header opens the page and puts destructive verbs last; its bare numbers and a one-row list are still said', () => {

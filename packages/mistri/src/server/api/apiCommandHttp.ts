@@ -251,7 +251,7 @@ export function createApiCommandHttp<
           if (route) {
             try {
               headers = readApiCommandHeaders(req.rawHeaders, route.kind);
-              // The browser command path's reader: 64 KiB, fatal UTF-8, BOM refusal.
+              // The browser command path's reader: 512 KiB, fatal UTF-8, BOM refusal.
               body = route.method === 'POST' ? await commandBody(req) : undefined;
             } catch (error) {
               refuseEarly(res, error instanceof ApiCommandRequestError ? error.code : 'invalid_request');

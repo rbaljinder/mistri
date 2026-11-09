@@ -36,7 +36,10 @@ both and `false` never draws it.
 `timezone` may instead be read per reader: `timezone: { column:
 'desk_setting.timezone', default: 'America/New_York' }` counts each reader's
 today and windows in the zone the first row of that column they may read
-names — their tenant's, their account's. Writes keep `default`.
+names — their tenant's, their account's. In a tenant App a command's
+`today()`, `now()` and its stamps count the day in the running tenant's own
+zone, read the same way; a name that is not an IANA zone falls to `default`
+(and is logged outside production). Elsewhere writes keep `default`.
 
 `locale` is also the App's own language, the one its `messages/` catalogs are
 written from, and may be read per reader the same way: `locale: { column:
@@ -418,6 +421,7 @@ tenant's own words over the catalogs. See [Languages](/docs/languages/).
 | `branding.themes[][kind=theme].type.font` | string \| object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.font.code` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.font.data` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
+| `branding.themes[][kind=theme].type.font.figures` | string | Stable | The face of the ids, codes, numbers and dates a table's cells and a record's fields set apart. Omitted, it follows data when the theme names one, and is the platform's Plex Mono when it names neither. |
 | `branding.themes[][kind=theme].type.font.heading` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `branding.themes[][kind=theme].type.font.ui` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `branding.themes[][kind=theme].type.icons` | `"regular"` · `"light"` · `"bold"` · `"fill"` | Stable | The icons’ weight, from Phosphor’s: regular (omitted), light, bold or fill. Thin and duotone are refused: a 1px stroke fades at an icon’s 16px, and a second tone is a color no role says. One of `bold`, `fill`, `light`, `regular`. Used in `examples/apps/lintel/resources.ts`. |
@@ -550,7 +554,7 @@ tenant's own words over the catalogs. See [Languages](/docs/languages/).
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `ui.headless` | boolean | Stable | true serves the App headless: its front end is your own (a same-domain Next.js page using the hooks of @mistriwork/mistri/react), and every data request names one of its surfaces/*.surface.ts in the X-Mistri-Surface header; a request that names none is refused (403, code surface). Grants, row policy and field ceilings still apply inside a surface. |
+| `ui.headless` | boolean | Stable | true serves the App headless: its front end is your own (a same-domain Next.js page using the hooks of @mistriwork/mistri/react/headless), and every data request names one of its surfaces/*.surface.ts in the X-Mistri-Surface header; a request that names none is refused (403, code surface). Grants, row policy and field ceilings still apply inside a surface. |
 
 ## `ui.locale`
 
@@ -582,6 +586,12 @@ tenant's own words over the catalogs. See [Languages](/docs/languages/).
 | `ui.messages.from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `ui.messages.kind` |  | Stable |  One of `fromRecord`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `ui.messages.tenantField` | string | Stable |  |
+
+## `ui.microphone`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `ui.microphone` | boolean | Stable | true lets the App's pages ask for the microphone, from the App's own origin alone (a voice note, a dictated field in one of its custom components). Absent or false, every page's Permissions-Policy refuses it, as it always did; nothing else in that header changes. |
 
 ## `ui.pwa`
 
@@ -1072,6 +1082,7 @@ tenant's own words over the catalogs. See [Languages](/docs/languages/).
 | `theme.type.font` | string \| object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `theme.type.font.code` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `theme.type.font.data` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
+| `theme.type.font.figures` | string | Stable | The face of the ids, codes, numbers and dates a table's cells and a record's fields set apart. Omitted, it follows data when the theme names one, and is the platform's Plex Mono when it names neither. |
 | `theme.type.font.heading` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `theme.type.font.ui` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 

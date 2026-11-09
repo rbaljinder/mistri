@@ -50,6 +50,7 @@ import { TenantAuthoringStartupError, TenantCommandStartupError, TenantStartupEr
 import { SUPPORT_AUDIT_KEY_VARIABLE, supportAuditKey } from './tenantSupportAuditContract.js';
 import { appIndexWarnings } from '../../shared/appIndexWarnings.js';
 import { tenantDeleteWarnings } from './tenantAdvice.js';
+import { intakeColumnProblem } from './tenantIntakeModel.js';
 import { unofferedCommandWarnings } from '../app/appCommandOfferChecks.js';
 import { sayTenantAuthoringProblems, tenantAuthoringProblems, type TenantAuthoringProblem } from './tenantAuthoring.js';
 import {
@@ -96,6 +97,8 @@ export async function prepareTenantStartup(
   readonly jobLines: readonly string[];
   /** What the App has that startup accepts and `mistri check` advises on: the indexes its reads lean on and the catalog lacks (appIndexWarnings.ts), a delete no policy callback allows (tenantAdvice.ts), a command nothing offers. */
   readonly adviceLines: readonly string[];
+  /** The policy's intake address column, when it cannot hold an address (a `varchar(20)`): `mistri tenant init` refuses it, and the advice says it too. */
+  readonly intakeColumnProblem?: string;
   /** Reuse the catalogs already validated by this startup owner. */
   readonly linkSurfaces: readonly SuiteLinkSurface[];
   /** What a clone of a tenant copies, where the App marks resources clone (tenantClonePlan.ts): `mistri tenant`'s. */
@@ -490,9 +493,18 @@ export async function prepareTenantStartup(
       : [];
     // Judged by the clone check above, so this cannot refuse here.
     const clone = validated && tenantClonePlan(app, validated.owned, policy);
+    const profileTable = app.auth?.tenancy?.profile;
+    const intakeColumn =
+      validated && policy.intake && profileTable
+        ? validated.catalog.schema.tables
+            .find((table) => table.id === profileTable)
+            ?.columns.find((column) => column.name === policy.intake!.address)
+        : undefined;
+    const intakeProblem = intakeColumn && profileTable ? intakeColumnProblem(profileTable, intakeColumn) : undefined;
     return Object.freeze({
       enrollment,
       ...(clone ? { clone } : {}),
+      ...(intakeProblem ? { intakeColumnProblem: intakeProblem } : {}),
       linkSurfaces: Object.freeze(linkSurfaces),
       ...(authStoreExclusion ? { authStoreExclusion } : {}),
       jobLines: Object.freeze(jobs ? describeJobs(jobs) : []),
@@ -513,6 +525,7 @@ export async function prepareTenantStartup(
       adviceLines: Object.freeze([
         ...(validated?.indexLines ?? []),
         ...(validated ? tenantDeleteWarnings(business, validated.catalog.schema, policy) : []),
+        ...(intakeProblem ? [intakeProblem] : []),
         // A jobs module's workflows and endpoints run commands no button offers; a tenant check cannot tell which, so it says nothing then.
         ...(jobs ? [] : unofferedCommandWarnings(app, registry)),
       ]),
@@ -557,7 +570,8 @@ export function watchTenantStartup(
     look?: (touched: string[]) => Promise<boolean>;
     debounceMs?: number;
   },
-  changed: () => void,
+  /** Told what the save touched, where the watcher knows (the App's own directory); a file it does not name is `undefined`. */
+  changed: (touched?: readonly string[]) => void,
 ): () => void {
   const watchers: FSWatcher[] = [];
   let closed = false;
@@ -567,10 +581,10 @@ export function watchTenantStartup(
     clearTimeout(timer);
     for (const watcher of watchers) watcher.close();
   };
-  const invalidate = () => {
+  const invalidate = (files?: readonly string[]) => {
     if (!closed) {
       close();
-      changed();
+      changed(files);
     }
   };
   /* Saves gathered while one is being judged wait for its answer, then are judged against what it left. */
@@ -587,7 +601,7 @@ export function watchTenantStartup(
       } catch {
         worn = false;
       }
-      if (!worn) invalidate();
+      if (!worn) invalidate(files);
     });
   };
   try {
@@ -603,13 +617,13 @@ export function watchTenantStartup(
         return invalidate();
       }
       if (filename !== null && !['.ts', '.mjs', '.js', '.json'].includes(extname(filename))) return;
-      if (filename === null || !options.look) return invalidate();
+      if (filename === null || !options.look) return invalidate(filename === null ? undefined : [join(root, filename)]);
       touched.add(join(root, filename));
       clearTimeout(timer);
       timer = setTimeout(judge, options.debounceMs ?? 150);
     });
     watchers.push(appWatcher);
-    appWatcher.on('error', invalidate);
+    appWatcher.on('error', () => invalidate());
     for (const file of [options.policyFile, options.commandsFile, options.jobsFile, options.configPath]) {
       if (!file) continue;
       const path = resolve(file);
@@ -617,7 +631,7 @@ export function watchTenantStartup(
         if (filename === null || filename === basename(path)) invalidate();
       });
       watchers.push(watcher);
-      watcher.on('error', invalidate);
+      watcher.on('error', () => invalidate());
     }
     return close;
   } catch {

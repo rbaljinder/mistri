@@ -81,7 +81,9 @@ export interface MachineState<State extends string = string, Column extends stri
   /** Not a state's: a timer at an instant is the resource's own `at`, with `when: "status = 'open'"`. */
   at?: never;
   by?: { readonly [role: string]: State | readonly State[] };
-  final?: true;
+  /** A state nothing leaves. `{ freeze: true }` also freezes the record: no role, form, import or command writes it
+      once it is there, and its page draws read-only. */
+  final?: true | { readonly freeze: true };
 }
 /** A timer at an instant (`AppResource.at`): the command it runs, and the conditions the record must meet then. */
 export interface AppAtTimer {
@@ -714,9 +716,9 @@ export interface AppRoleFieldAccess<Column extends string = string> {
 
 /** A text column's rule (`resources.<name>.text`). At least one of `min`, `max` and `pattern`. */
 export interface AppTextRule {
-  /** Fewest characters, counted after trimming. 1 to 16384. */
+  /** Fewest characters, counted after trimming. 1 to 65536. */
   min?: number;
-  /** Most characters. 1 to 16384, and not under `min`. */
+  /** Most characters. 1 to 65536, and not under `min`. */
   max?: number;
   /** A regular expression (JavaScript, `u` flag) the whole value matches: `'^[A-Z]{3}$'` and `'[A-Z]{3}'` say the same. */
   pattern?: string;
@@ -935,8 +937,10 @@ export interface AppResource<Column extends string = string, Page extends string
   /** What the durable write trails keep of these rows. Under a support session every Save, New, Delete, Undo and command appends one
       audit entry in the business write's own transaction; a column named in `redact` is recorded as a keyed hash instead of its value, in the
       change and in a delete's before image alike, and every other column keeps its value. A page's `history()` keeps no value of a column named
-      here at all, only that it changed. `'values'` marks every column. */
-  audit?: { redact: 'values' | readonly Column[] };
+      here at all, only that it changed. `'values'` marks every column.
+      `reads: true` logs every read of these rows in the read audit store (`mistri audit reads`): who, when, through which door, and
+      the record or the query and the ids it returned, never a value. A read is not served when its row cannot be written. */
+  audit?: { redact?: 'values' | readonly Column[]; reads?: true };
   /** `false`: on an App with `live: true`, a write to this table is not announced and no page follows it, for a hot or
       log-like table whose every write would set pages reading again; its pages refresh on focus and after their own
       saves. Absent, the App's choice. Means nothing on an App without `live: true`. */
@@ -2963,6 +2967,8 @@ export type AppIcon = AppIconName | Lowercase<string>;
 export type PageIcon = AppIconName | (Register extends { icons: infer I extends string } ? I : never);
 
 export type AppNavLink = { label: string | AppMessageRef; to: StaticAppTarget };
+/** The roles the menu offers an entry to (arrangement only: see `AppNavGroup.roles`). */
+type AppNavRoles = { roles?: readonly string[] };
 /** Type-only target manifest checking; the runtime helper returns its argument. */
 export declare function appLink<TargetManifest>(target: StaticAppTarget & {
   app: TargetManifest extends { id: infer Id extends string } ? Id : string;
@@ -2982,6 +2988,9 @@ export interface AppNavGroup<View extends string = Lowercase<string>, Placement 
   children: readonly AppNavNode<View, Placement>[];
   /** The realm it belongs to: a tenant's (the default) or the platform realm's, which needs `auth.tenancy.platform`. */
   realm?: 'tenant' | 'platform';
+  /** The roles the menu offers the group to, as a home rule's `roles` say whom it starts. Arrangement only: it hides a
+      section from a role the section was not made for, and grants alone decide who may open anything. Each must be in `auth.roles`. */
+  roles?: readonly string[];
   /** 'footer' holds a top-level group at the foot of the sidebar, apart from the rest. It folds as any section does,
       its heading kept at the foot and its rows opening above it. */
   placement?: 'footer';
@@ -3004,8 +3013,8 @@ export interface AppNavPlacement<Feature extends string = Lowercase<string>> { f
 export type AppNavColor = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export type AppNavNode<View extends string = Lowercase<string>, Placement = never> =
   | View
-  | { to: View; label: string | AppMessageRef; color?: AppNavColor }
-  | (AppNavLink & { color?: AppNavColor })
+  | ({ to: View; label: string | AppMessageRef; color?: AppNavColor } & AppNavRoles)
+  | (AppNavLink & { color?: AppNavColor } & AppNavRoles)
   | AppNavGroup<View, Placement>
   | Placement;
 
@@ -3208,10 +3217,12 @@ export interface AppUi {
       no connection the App opens to its offline page, and its lists, records and writes need the network. @preview */
   pwa?: boolean;
   /** true serves the App headless: its front end is your own (a same-domain Next.js page using the hooks of
-      `@mistriwork/mistri/react`), and every data request names one of its `surfaces/*.surface.ts` in the
+      `@mistriwork/mistri/react/headless`), and every data request names one of its `surfaces/*.surface.ts` in the
       `X-Mistri-Surface` header; a request that names none is refused (403, code `surface`). Grants, row policy and
       field ceilings still apply inside a surface. */
   headless?: boolean;
+  /** true lets the App's pages ask for the microphone, from the App's own origin alone (a voice note, a dictated field in one of its custom components). Absent or false, every page's Permissions-Policy refuses it, as it always did; nothing else in that header changes. */
+  microphone?: boolean;
   /** BCP 47 tag the App is said and written in: its captions' language where it has `messages/<locale>.ts` catalogs, and
       every figure — numbers, money, dates, counts ("en-AU"). Default: the reader's browser decides the figures.
       `{ column: 'person.locale', default: 'en-US' }` says each reader's in the tag the first row of that text column
@@ -4233,7 +4244,7 @@ export declare function customList<const C extends ComponentDecl<string, 'list'>
 ): { kind: 'custom'; readonly [madeBy]: 'customList'; component: C; show: S } & Authored<O>;
 /** Structural navigation parent; its children are view ids, `{ to, label }` or groups, kept as literals. */
 export declare function navGroup<const Children extends readonly AppNavNode<Lowercase<string>, AppNavPlacement>[]>(
-  id: string, label: string | AppMessageRef, children: Children, opts?: Pick<AppNavGroup, 'realm' | 'icon' | 'placement' | 'inline' | 'folded' | 'workspace'>,
+  id: string, label: string | AppMessageRef, children: Children, opts?: Pick<AppNavGroup, 'realm' | 'roles' | 'icon' | 'placement' | 'inline' | 'folded' | 'workspace'>,
 ): { id: string; label: string | AppMessageRef; children: Children; realm?: 'tenant' | 'platform'; icon?: AppIcon; placement?: 'footer'; inline?: true; folded?: true; workspace?: true };
 
 /* ---------- schema-typed names ----------
@@ -4344,7 +4355,7 @@ export type TypedResources<S extends SchemaShape, R extends SchemaReferences = n
       lines?: readonly { [F in TableOf<S>]: AppFormLines<F, ColumnOf<S, F>> }[TableOf<S>][];
     };
     actions?: Readonly<Record<string, TypedAppAction<S, T>>>;
-    audit?: { redact: 'values' | readonly GovernedOf<S, H, T>[] };
+    audit?: { redact?: 'values' | readonly GovernedOf<S, H, T>[]; reads?: true };
     rollups?: Record<string, TypedRollup<S, R>>;
     defined?: Partial<Record<ColumnOf<S, T>, { [F in TableOf<S>]: AppDefined<F, ColumnOf<S, T> & ColumnOf<S, F>> }[TableOf<S>]>>;
     import?: boolean | AppImport<ColumnOf<S, T>, CommandOn<T>>;

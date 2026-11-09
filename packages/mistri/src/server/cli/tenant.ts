@@ -6,6 +6,7 @@
  * change during startup is a restart rather than a half-read deployment.
  */
 import { setBuildIdSource } from '@mistriwork/engine/server/http/probes.js';
+import { authoringApp } from '@mistriwork/engine/server/http/refusalReport.js';
 import { readFile } from 'node:fs/promises';
 import { createAppAuth } from '../auth/auth.js';
 import { loadConfig, type Registry } from '@mistriwork/engine/server/connections.js';
@@ -23,6 +24,7 @@ import { unsweptBuckets } from '../files/fileStorage.js';
 import { embedIssuersOf, identityProvidersOf, oauthServerOf, scimDirectoriesOf } from '../serviceConnections.js';
 import { CONFIG_SECTIONS } from '../serviceConnections.js';
 import { testControlFrom } from '../http/testControl.js';
+import { DEV_CHANGED_EXIT, DEV_SUPERVISED_ENV } from './devSupervisor.js';
 
 export async function serveTenantApp(
   opts: Options,
@@ -74,16 +76,18 @@ export async function startTenantServing(
       );
     }
     const { prepareTenantStartup, watchTenantStartup } = await import('../tenant/tenantStartup.js');
-    const { lookOnlyChange } = await import('../tenant/tenantLook.js');
+    const { devChangeKind, lookOnlyChange } = await import('../tenant/tenantLook.js');
     const loaded = loadedApps[0];
     /* The build being served is what /readyz fingerprints (engine http/probes.ts), as in cli/serve.ts. */
     setBuildIdSource(() => loaded.build?.id ?? null);
+    // Its author, signed in on this machine, is told what a command's refusal was, as cli/serve.ts tells them.
+    if (!loaded.build) authoringApp(loaded.path);
     /* One App, so at the root unless --mount says otherwise, and under
        --base-path as every server is (shared/mount.ts): the rule the
        ordinary App server reads its addresses by. */
     const mount: AddressMount = settingsMount([loaded.app.id], opts, config);
     let changed = false;
-    let retireOnChange: (() => void) | undefined;
+    let retireOnChange: ((touched?: readonly string[]) => void) | undefined;
     /* Set once the host serves: before then a save of any kind is a restart, as a half-read deployment would be. */
     let restyle: ((touched: string[]) => Promise<boolean>) | undefined;
     // A build is served as built and watches nothing; a source App restarts on change, but for its look (tenantLook.ts).
@@ -98,9 +102,9 @@ export async function startTenantServing(
             ...(configPath ? { configPath } : {}),
             look: (touched) => restyle?.(touched) ?? Promise.resolve(false),
           },
-          () => {
+          (touched) => {
             changed = true;
-            retireOnChange?.();
+            retireOnChange?.(touched);
           },
         );
     // Close the load→watch gap. The original normalized definition and the
@@ -222,12 +226,22 @@ export async function startTenantServing(
       }
     }
     let owner: Awaited<ReturnType<typeof createTenantAuthenticatedHttpServer>>;
-    let made: { readonly jobs?: Pick<import('../jobs/jobHost.js').JobHost, 'runNow'> } | undefined;
+    let made:
+      | {
+          readonly jobs?: Pick<import('../jobs/jobHost.js').JobHost, 'runNow'>;
+          readonly readAudit: NonNullable<Parameters<typeof testControlFrom>[1]['tenantReadAudit']>;
+        }
+      | undefined;
     const withTestControl = (jobs: () => Pick<import('../jobs/jobHost.js').JobHost, 'runNow'> | undefined) => {
       const testControl = testControlFrom(process.env, {
         registry,
         apps: () => [{ app: loaded, auth, pages: loaded.pages }],
         policy: opts.policy,
+        /* Read on the deployment's database once the host is made; a test only asks after it serves. */
+        tenantReadAudit: async (tenant, query) => {
+          if (!made) throw new Error('The tenant host is not serving yet.');
+          return made.readAudit(tenant, query);
+        },
         get jobs() {
           return jobs();
         },
@@ -271,7 +285,7 @@ export async function startTenantServing(
       return (stopping ??= owner
         .retire()
         .catch(() => {
-          code = 1;
+          if (code !== DEV_CHANGED_EXIT) code = 1;
         })
         .then(async () => {
           await registry.closeAll();
@@ -297,8 +311,25 @@ export async function startTenantServing(
       console.error(`mistri: ${loaded.app.name}'s look changed; reloaded in place.`);
       return true;
     };
-    retireOnChange = () => {
-      console.error('Tenant deployment files changed. Requests are unavailable; restart with the new configuration.');
+    retireOnChange = (touched) => {
+      /* Under `mistri dev` this process is a child (devSupervisor.ts): it retires and says so by its exit code, and the
+         parent starts it again, so a page, a component or a policy is worn with the whole startup's checks. */
+      if (opts.dev && process.env[DEV_SUPERVISED_ENV] === '1') {
+        void stop(DEV_CHANGED_EXIT);
+        return;
+      }
+      /* Under dev without a parent (a mounted host), a save that only drew something is told apart from one that moved
+         authority: the host captured both kinds by value at startup, so each still ends in a restart, but the author is
+         told which and that nothing they granted moved. */
+      const drew =
+        opts.dev && touched?.length
+          ? devChangeKind(loaded, touched, [opts.policy, opts.commands, opts.jobs, configPath]) === 'reload'
+          : false;
+      console.error(
+        drew
+          ? 'Tenant deployment files changed: a page, component or look file, nothing that grants or runs. Requests are unavailable; restart `mistri dev` to wear it.'
+          : 'Tenant deployment files changed. Requests are unavailable; restart with the new configuration.',
+      );
       void stop(0);
     };
     if (changed) {
@@ -374,7 +405,9 @@ export async function startTenantServing(
     if (absent.length) console.error(`Stores this App needs are absent: ${absent.join(', ')}.\nMake them with: ${storesUpCommand(opts)}`);
     await registry.closeAll();
     if (opts.embedded) throw error;
-    process.exitCode = 1;
+    /* A save that landed while a supervised child was starting is not a failure: its parent starts it again. */
+    process.exitCode =
+      opts.dev && process.env[DEV_SUPERVISED_ENV] === '1' && /changed during/.test(refusalHeadline(error)) ? DEV_CHANGED_EXIT : 1;
     return undefined;
   }
 }

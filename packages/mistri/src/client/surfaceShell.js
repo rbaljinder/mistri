@@ -21,7 +21,13 @@ export const surfaceShell = {
   publicVisitor: isPublicVisitor,
   /** @param {string} path */
   publicRead: (path) => PUBLIC_READ_GETS.has(path) || PUBLIC_READ_POSTS.has(path),
-  tenant: { read: tenantReadApi, mutate: tenantMutationApi, isMutation: isTenantMutationPath, exportFile: tenantExport },
+  tenant: {
+    /** @type {(path: string, body: Record<string, unknown> | undefined, connection: string | null | undefined, headers?: Readonly<Record<string, string>>) => Promise<unknown>} */
+    read: (path, body, connection, headers) => tenantReadApi(path, body, connection, undefined, headers),
+    mutate: tenantMutationApi,
+    isMutation: isTenantMutationPath,
+    exportFile: tenantExport,
+  },
   mutations: tenantMutationState,
   accountBusy: () => hasUnresolvedAdministration() || hasUnresolvedInvitations(),
   components: appComponents,

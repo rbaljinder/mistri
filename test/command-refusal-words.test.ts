@@ -24,8 +24,8 @@ import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
 import { catalogOf } from './support/commandCatalog.js';
 
-const COMMANDS = ['collect', 'close', 'ship'];
-const LABELS: Record<string, string> = { collect: 'Collect payment', close: 'Close invoice', ship: 'Ship' };
+const COMMANDS = ['collect', 'close', 'ship', 'archive'];
+const LABELS: Record<string, string> = { collect: 'Collect payment', close: 'Close invoice', ship: 'Ship', archive: 'Archive' };
 const GENERIC = 'This record is not eligible for this command.';
 
 const command = (when: string) =>
@@ -56,7 +56,8 @@ async function fixture() {
       resources: {
         invoice: {
           access: 'write',
-          labels: { balance_cents: 'Balance owed' },
+          labels: { balance_cents: 'Balance owed', is_settled: 'Settled' },
+          computed: { is_settled: { type: 'boolean', value: 'balance_cents <= 0' } },
           display: { balance_cents: { format: 'money', minor: true } },
           actions: Object.fromEntries(COMMANDS.map((id) => [id, { label: LABELS[id], command: id }])),
         },
@@ -100,6 +101,7 @@ async function fixture() {
         collect: command('balance_cents <= 0'),
         close: command('status = open and balance_cents <= 0'),
         ship: command('note contains rush'),
+        archive: command('is_settled = true'),
       }),
     },
   });
@@ -162,6 +164,18 @@ test("a failing when says the part it failed and the record's value as the App s
   }
 });
 
+test('a when over a computed column names it by its label, with the value it was judged by', async () => {
+  const { run, close } = await fixture();
+  try {
+    // Invoice 1 owes 108.99, so it is not settled; the sentence is the stored columns' own, about the computed one.
+    const refused = await run('archive', 1);
+    assert.equal(refused.body.code, 'ineligible_state', JSON.stringify(refused.body));
+    assert.equal(refused.body.message, 'Settled is no; needs = yes', JSON.stringify(refused.body));
+  } finally {
+    await close();
+  }
+});
+
 test('a role the command is not granted to is told which command, by the label the App shows', async () => {
   const { run, control, close } = await fixture();
   try {
@@ -203,5 +217,22 @@ test('a value is named only to a person who reads the column, and a part no sent
   assert.equal(
     whenRefusalSentence(undefined, condition, row, () => true),
     undefined,
+  );
+});
+
+test('a reference column is said as set or not set, never as its raw id', () => {
+  const saying = {
+    label: (column: string) => column,
+    value: (_column: string, value: unknown) => String(value),
+    reference: (column: string) => column === 'customer_id',
+  };
+  const row = { customer_id: 42 };
+  assert.equal(
+    whenRefusalSentence(saying, { column: 'customer_id', op: 'isNull' }, row, () => true),
+    'This record already has a customer; it needs to be empty',
+  );
+  assert.equal(
+    whenRefusalSentence(saying, { column: 'customer_id', op: 'isNotNull' }, { customer_id: null }, () => true),
+    'This record has no customer yet; it needs one',
   );
 });

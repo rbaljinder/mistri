@@ -143,8 +143,8 @@ export function createTenantInverseImages(
   const policy = authorizeDeletedRecord;
   /* `validation`, `transitions`, `creatable`, `internal` (a file's object and
      hash), and `stamp` and `fill` (an action's and a New form's `me`/`now`) ride on
-     the access an App with write rules, a machine, per-role create, files or stamps
-     is given; an inverse image puts back a before-image and reads none of them. */
+     the access an App with write rules, a machine, per-role create, files, stamps or a role's granted
+     actions (`actions`, and the `me` they read) is given; an inverse image puts back a before-image and reads none of them. */
   const raw = tenantOptions(access, [
     'readable',
     'writable',
@@ -156,6 +156,8 @@ export function createTenantInverseImages(
     'internal',
     'stamp',
     'fill',
+    'actions',
+    'me',
   ]);
   const strings = (input: unknown): Set<string> => {
     try {

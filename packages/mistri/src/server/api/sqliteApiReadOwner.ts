@@ -32,6 +32,9 @@ import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { renderApiAsyncApi } from './apiAsyncApi.js';
 import { storeTargetOf } from '../commands/appCommandEvents.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
+/* An agent's tool call reads through this owner too: its door is MCP, set where the session delivers (appMcpSession.ts). */
+import { currentReadRoute, withReadRoute } from '../readAudit.js';
+import { withReadAuditSink } from '../readAuditStore.js';
 
 const refuse = (code: ApiReadFailureCode = 'temporarily_unavailable'): never => {
   throw new ApiReadFailure(code);
@@ -334,7 +337,15 @@ export async function createSqliteApiReadOwner(
                   view: cursor!.rows,
                 };
           failure = 'forbidden';
-          const scoped = authorizeResources(reads, resolveAppAccess(app, reads.schema, [...before.roles]));
+          const scoped = authorizeResources(
+            reads,
+            withReadAuditSink(
+              resolveAppAccess(app, reads.schema, [...before.roles]),
+              { app: app.id, tenant: '', actor: `api-token:${before.tokenId}` },
+              physical,
+              lane,
+            ),
+          );
           failure = 'temporarily_unavailable';
           if (!scoped.adapter.runView) return refuse();
           requestCurrent();
@@ -342,7 +353,9 @@ export async function createSqliteApiReadOwner(
           // node:sqlite statement already running is not interruptible here.
           // Never race abort against work: the lease remains held until the
           // underlying statement settles and this read's finally executes.
-          const result = await statement(() => scoped.adapter.runView!(checked.view));
+          const result = await withReadRoute(currentReadRoute() === 'mcp' ? 'mcp' : 'api', () =>
+            statement(() => scoped.adapter.runView!(checked.view)),
+          );
           requestCurrent();
           let count: number | undefined;
           if (cursor?.plan.count) {

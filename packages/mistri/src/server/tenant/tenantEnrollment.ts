@@ -56,6 +56,7 @@ import { keyId, supportAuditKey, type SupportAuditKey } from './tenantSupportAud
 import type { TenantWriteAudit } from './tenantWriteKindContract.js';
 import { membershipRole } from './tenantFeatureMembershipRoles.js';
 import { openPostgresTenantWriteSource, openSqliteTenantWriteSource, type TenantWriteSource } from './tenantWriteSource.js';
+import { auditsReads } from './tenantReadAudit.js';
 import { declareTenantAppLive } from './tenantLive.js';
 import type { TenantAdministrationOptions } from './tenantAdministration.js';
 import type { SupportPolicy } from './tenantSupportChange.js';
@@ -332,7 +333,7 @@ async function acquire<Request>(config: ReturnType<typeof capture<Request>>, pol
             redact: Object.freeze(
               Object.fromEntries(
                 Object.entries(app.resources ?? {}).flatMap(([name, resource]) =>
-                  resource.audit === undefined ? [] : [[name, resource.audit.redact] as const],
+                  resource.audit?.redact === undefined ? [] : [[name, resource.audit.redact] as const],
                 ),
               ),
             ),
@@ -385,6 +386,7 @@ async function acquire<Request>(config: ReturnType<typeof capture<Request>>, pol
         tenantHistoryBinding(app, pages, ownership),
         tenantNoticeBinding(app, ownership, members, tenantLocaleReader(app, reader)),
         app.branding !== undefined,
+        auditsReads(app),
       );
       closes.push(writer.close);
       discovery = openSqliteTenantReadSource(path, ownership, binding, now);
@@ -624,6 +626,7 @@ async function acquirePostgres(
     tenantHistoryBinding(app, pages, ownership),
     tenantNoticeBinding(app, ownership, members, tenantLocaleReader(app, reader)),
     app.branding !== undefined,
+    auditsReads(app),
   );
   closes.push(writer.close);
   const discovery = await openPostgresTenantReadSource(url, ownership, binding, now);

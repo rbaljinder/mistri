@@ -55,7 +55,7 @@ interface ShownTheme {
   palettes: Array<{ id: string; label: string }>;
   recipes: Record<string, Shown>;
   type: {
-    fonts: Record<'ui' | 'data' | 'heading' | 'code', Shown>;
+    fonts: Record<'ui' | 'data' | 'heading' | 'code' | 'figures', Shown>;
     faces: Array<{ family: string; src: string; weight: string; style: string }>;
     base: Shown;
     /** Each property a role says, as worn (the look's under the theme's), by `<role>.<property>`. */
@@ -137,7 +137,7 @@ export function showTheme(theme: ThemeDefinition): ShownTheme {
   );
   const font = said(spec, 'type.font');
   const fonts = Object.fromEntries(
-    (['ui', 'data', 'heading', 'code'] as const).map((part) => {
+    (['ui', 'data', 'heading', 'code', 'figures'] as const).map((part) => {
       const value = worn.fonts?.[part] ?? "the browser's";
       const own = typeof font === 'string' ? part !== 'code' : said(font, part) !== undefined;
       return [part, { value, from: own ? 'own' : base?.fonts?.[part] === value ? base.id : 'default' }];

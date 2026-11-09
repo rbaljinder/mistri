@@ -535,6 +535,8 @@ function formHandle(view: string): UiFormHandle {
       draft.clearKeys();
       // The page's reads of the draft (`useForm`) read it again.
       void queryClient.invalidateQueries({ queryKey: ['mistri-ui'] });
+      // A free-form page's loader may read the draft too (CustomSection.tsx).
+      void queryClient.invalidateQueries({ queryKey: ['mistri-page', 'load'] });
       return true;
     },
   };

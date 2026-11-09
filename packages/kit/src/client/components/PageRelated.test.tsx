@@ -25,34 +25,38 @@ const note: TableMeta = {
   ],
 };
 const mocks = vi.hoisted(() => ({ total: 5, reads: [] as Array<Record<string, unknown>>, perList: 2, groups: [] as number[] }));
-vi.mock('../core.js', () => ({
-  api: async (path: string, body: { view: { limit: number }; offset?: number }) => {
-    mocks.reads.push({ path, ...body });
-    if (path === '/api/breakdown')
+vi.mock('../core.js', () => {
+  const core = {
+    api: async (path: string, body: { view: { limit: number }; offset?: number }) => {
+      mocks.reads.push({ path, ...body });
+      if (path === '/api/breakdown')
+        return {
+          columns: ['note_id', 'group_rows'],
+          rows: mocks.groups.map((id) => ({ note_id: id, group_rows: 3 })),
+          total: mocks.groups.length,
+        };
+      const offset = body.offset ?? 0;
+      const ids = Array.from({ length: mocks.total }, (_, i) => i + 1).slice(offset, offset + body.view.limit);
       return {
-        columns: ['note_id', 'group_rows'],
-        rows: mocks.groups.map((id) => ({ note_id: id, group_rows: 3 })),
-        total: mocks.groups.length,
+        view: {},
+        columns: ['id', 'body'],
+        rows: ids.map((id) => ({ id, body: `note ${id}` })),
+        more: offset + body.view.limit < mocks.total,
+        total: mocks.total,
       };
-    const offset = body.offset ?? 0;
-    const ids = Array.from({ length: mocks.total }, (_, i) => i + 1).slice(offset, offset + body.view.limit);
-    return {
-      view: {},
-      columns: ['id', 'body'],
-      rows: ids.map((id) => ({ id, body: `note ${id}` })),
-      more: offset + body.view.limit < mocks.total,
-      total: mocks.total,
-    };
-  },
-  findTable: (id: string) => (id === 'note' ? note : undefined),
-  columnDisplay: () => null,
-  columnLabel: () => null,
-  labelPath: () => undefined,
-  recordLabel: () => undefined,
-  openRecord: () => {},
-  rowLabel: (_t: unknown, row: Record<string, unknown>) => `#${row.id}`,
-  state: { activeConnection: 'demo', schema: { tables: [note], foreignKeys: [] } },
-}));
+    },
+    findTable: (id: string) => (id === 'note' ? note : undefined),
+    columnDisplay: () => null,
+    columnLabel: () => null,
+    labelPath: () => undefined,
+    recordLabel: () => undefined,
+    openRecord: () => {},
+    rowLabel: (_t: unknown, row: Record<string, unknown>) => `#${row.id}`,
+    state: { activeConnection: 'demo', schema: { tables: [note], foreignKeys: [] } },
+  };
+  // A related list's reads say so (core.js relatedApi); here they are the same reads.
+  return { ...core, relatedApi: core.api };
+});
 vi.mock('../../../../mistri/src/client/appState.js', () => ({ activeApp: () => null, inAppMode: () => false }));
 /* The kit reads the App through the shell's answers (shellMode.ts), which the mock above gives it. */
 beforeEach(bridgeShell);

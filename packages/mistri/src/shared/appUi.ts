@@ -52,6 +52,7 @@ export const UI_KEYS = [
   'appSwitcher',
   'pwa',
   'headless',
+  'microphone',
 ] as const;
 export const SHELL_KEYS = [
   'menuSearch',
@@ -133,6 +134,9 @@ export function parseUi(raw: unknown, where: string): AppUi {
   }
   if (raw.headless !== undefined && typeof raw.headless !== 'boolean') {
     throw new Error(`${where}: "ui.headless" is not true or false.`);
+  }
+  if (raw.microphone !== undefined && typeof raw.microphone !== 'boolean') {
+    throw new Error(`${where}: "ui.microphone" is not true or false.`);
   }
   const parsedShell = raw.shell === undefined ? undefined : parseShell(raw.shell, where);
   const editing = raw.editing === undefined ? undefined : parseEditing(raw.editing, where);
@@ -218,6 +222,7 @@ export function parseUi(raw: unknown, where: string): AppUi {
     ...(raw.export === undefined ? {} : { export: raw.export as boolean }),
     ...(raw.pwa === undefined ? {} : { pwa: raw.pwa as boolean }),
     ...(raw.headless === undefined ? {} : { headless: raw.headless as boolean }),
+    ...(raw.microphone === undefined ? {} : { microphone: raw.microphone as boolean }),
     ...(locale?.tag === undefined ? {} : { locale: locale.tag }),
     ...(locale?.column === undefined ? {} : { localeColumn: locale.column }),
     ...(messages === undefined ? {} : { messages }),

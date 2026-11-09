@@ -128,6 +128,25 @@ export function composeServiceScope(owned: TenantOwnershipSnapshot, evidence: Te
   }
 }
 
+/** A service read's fence, as the writer's anchor fence is for a write: the
+ * tenant and `@platform` are still active at the versions the attempt read,
+ * and the attempt's window is open. `tenantVersion` and `platformVersion` are
+ * what the reader's own snapshot found just now (null when not active). */
+export function assertServiceReadCurrent(
+  evidence: TenantServiceEvidence,
+  found: Readonly<{ tenantVersion: string | null; platformVersion: string | null }>,
+  instant: number,
+): void {
+  if (
+    evidence.place !== 'tenant' ||
+    found.tenantVersion !== evidence.tenantVersion ||
+    found.platformVersion !== evidence.platformVersion ||
+    instant < evidence.verifiedAt ||
+    instant >= evidence.validUntil
+  )
+    denyTenant();
+}
+
 /** The anchors the writer fences, in public intake's terms, which fence the
  * same rows: the event's tenant and `@platform` for a tenant command,
  * `@platform` alone for a platform command. */

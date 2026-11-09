@@ -15,11 +15,13 @@ import { writeFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { type Registry } from '@mistriwork/engine/server/connections.js';
 import { labelColumn, primaryKey, tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import type { PageDef } from '@mistriwork/engine/shared/pageModel.js';
 import { isRuntimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 import {
   appRollupRules,
   homeSourceOf,
   grantsByRole,
+  isTenantApp,
   logicalResource,
   resolveAppAccess,
   withRollups,
@@ -29,11 +31,11 @@ import { appAdvisories, appProblems, type LoadedApp } from '../app/apps.js';
 import { appDestinationWarnings, appRoleReach, appRoleWarnings } from '../app/appRoleChecks.js';
 import { commandRestatedWarnings } from '../commands/commandRestated.js';
 import { snapshotCommandChecks } from '../app/appSnapshotChecks.js';
-import { consumesCommandWarnings, machineCommandWarnings } from '../app/appMachineChecks.js';
+import { consumesCommandWarnings, machineCommandWarnings, referenceReadWarnings } from '../app/appMachineChecks.js';
 import { appIndexWarnings } from '../../shared/appIndexWarnings.js';
 import { appSignUpProblems } from '../../shared/appWarnings.js';
 import { checkAuthorityLock } from '../app/authorityLock.js';
-import { recordTabCollisions } from '../app/recordTabWords.js';
+import { recordTabCollisions, recordTabWordsByView } from '../app/recordTabWords.js';
 import { CONTRACT_PREFIX, contractDigest, contractLines, lockedContracts } from '../commands/commandContracts.js';
 import { WORKFLOW_LINE_PREFIX, workflowLines } from '../workflows/workflowContracts.js';
 import {
@@ -80,6 +82,7 @@ export async function appTypes(registry: Registry, app: LoadedApp): Promise<stri
     app.app,
     whole,
     registry.list().map((connection) => connection.name),
+    app.pages,
   );
 }
 
@@ -94,7 +97,13 @@ export async function appTypes(registry: Registry, app: LoadedApp): Promise<stri
  * App's own `hidden` and access rules name it, and a handler's `Rows` read
  * it. The connection's whole schema is `--export types` without --app.
  */
-export async function typesOfApp(app: AppDef, whole: DatabaseSchema, connections: readonly string[]): Promise<string> {
+export async function typesOfApp(
+  app: AppDef,
+  whole: DatabaseSchema,
+  connections: readonly string[],
+  /** The App's free-form pages, which say a record's tabs with its views: left out, the tab words are not typed. */
+  pages?: readonly PageDef[],
+): Promise<string> {
   const access = resolveAppAccess(app, whole, grantsByRole(app) ? Object.keys(app.auth!.roles!) : []);
   const served = accessibleSchema(whole, access);
   const declared = new Set(
@@ -203,12 +212,24 @@ export async function typesOfApp(app: AppDef, whole: DatabaseSchema, connections
     }),
   };
   // An App binds connections by name; the standalone export is one connection's schema.
-  return (await import('../typegen.js')).typesForSchema(withTyped, app.name, connections, hidden);
+  return (await import('../typegen.js')).typesForSchema(
+    withTyped,
+    app.name,
+    connections,
+    hidden,
+    pages && recordTabWordsByView(app, pages, withTyped),
+  );
 }
 
 /** Local operator metadata only: neither a caller principal nor a served API.
  * The runtime loader enforces context/catalog refusals before rendering. */
-export async function appOpenApi(registry: Registry, loadedApps: LoadedApp[], integers?: string, commandsFile?: string): Promise<string> {
+export async function appOpenApi(
+  registry: Registry,
+  loadedApps: LoadedApp[],
+  integers?: string,
+  commandsFile?: string,
+  policyFile?: string,
+): Promise<string> {
   if (loadedApps.length !== 1 || !loadedApps[0].app.api) {
     throw new Error('--export openapi requires exactly one App with an explicit api declaration.');
   }
@@ -224,6 +245,13 @@ export async function appOpenApi(registry: Registry, loadedApps: LoadedApp[], in
     throw new Error(
       'This App exposes API commands: --export openapi needs its commands module, commands.ts beside the manifest or --commands <file>.',
     );
+  }
+  if (isTenantApp(loaded.app)) {
+    // A tenant App's document is judged against its policy's ownership, read for that shape alone (tenantApiExport.ts).
+    const { loadBusinessCommands } = await import('../commands/businessCommandLoader.js');
+    const commands = !exposed ? undefined : (loadedCommands ?? (await loadBusinessCommands(commandsFile!)));
+    const { tenantOpenApi } = await import('./tenantCommand.js');
+    return tenantOpenApi(registry, loaded, policyFile, integers, commands);
   }
   // The read foundation and catalog refuse command exposures; commands are
   // described separately below, so they check the App with commands projected
@@ -290,6 +318,7 @@ export async function exportSchema(
   integers?: string,
   commandsFile?: string,
   jobsFile?: string,
+  policyFile?: string,
 ): Promise<void> {
   const format = given.toLowerCase();
   try {
@@ -299,7 +328,7 @@ export async function exportSchema(
       return;
     }
     if (format === 'openapi') {
-      process.stdout.write(`${await appOpenApi(registry, loadedApps, integers, commandsFile)}\n`);
+      process.stdout.write(`${await appOpenApi(registry, loadedApps, integers, commandsFile, policyFile)}\n`);
       return;
     }
     if (format === 'types' && loadedApps.length > 1) {
@@ -734,6 +763,7 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
         ...appDestinationWarnings(app, schema, jobRoles),
         ...machineCommandWarnings(app.app, commandHosting?.registry ?? app.commands?.registry),
         ...consumesCommandWarnings(app.app, schema, commandHosting?.registry ?? app.commands?.registry),
+        ...referenceReadWarnings(app.app, schema, commandHosting?.registry ?? app.commands?.registry),
         // A targeted command nothing offers: prepare refuses it. Those a job, workflow or endpoint runs prepare nothing.
         ...unofferedCommandWarnings(
           app.app,

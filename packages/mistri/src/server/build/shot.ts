@@ -817,7 +817,9 @@ export async function openShot(page: Page, origin: string, path: string, choice?
     // By its place, not its name: an App that names its tenants ("Available dealers") says its own word.
     // By the id the choice sends: the button says the tenant's name. Enabled: a busy one is the page entering it.
     const offered = page.locator(`.tenant-chooser-list button[data-tenant="${choice.replace(/["\\]/g, '\\$&')}"]:enabled`);
-    const entered = page.locator('.tenant-control-host');
+    /* Entered is the shell's own state, never a visible chooser: that control is hidden at a phone's width and
+       absent on a bare page (layout: 'bare'), where waiting for it timed out on a tenant that was entered. */
+    const entered = page.locator('body.app-mode:not(.tenant-pending)');
     await offered.or(entered).first().waitFor({ timeout: 30_000 });
     if (await offered.isVisible()) await offered.click();
     await entered.waitFor({ timeout: 30_000 });

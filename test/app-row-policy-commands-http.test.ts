@@ -24,6 +24,7 @@ import { authoringApp } from '../packages/engine/src/server/http/refusalReport.j
 import { setFieldCeilings } from './support/appCeilings.js';
 import { parseTestApp } from './support/commandCatalog.js';
 import { commandsOf } from '../packages/mistri/src/server/stores/commandStores.js';
+import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 
 const appId = 'scoped-command-http';
 const owner = 'private-scoped-command-db';
@@ -506,7 +507,7 @@ test('strict scoped HTTP envelopes reject forged authority, keys, malformed JSON
       assert.equal(result.body.code, 'invalid_input');
       if (path !== 'prepare') assert.equal(result.body.outcome, 'unknown');
     }
-    for (const raw of ['{', JSON.stringify({ ...body, padding: 'é'.repeat(33_000) })]) {
+    for (const raw of ['{', JSON.stringify({ ...body, padding: 'é'.repeat(MAX_COMMAND_BYTES / 2 + 1) })]) {
       refused(await f.command(path, body, { raw }), 400, 'unknown', 'invalid_input');
     }
     // Which member, so a caller is not left bisecting a dozen of them — and

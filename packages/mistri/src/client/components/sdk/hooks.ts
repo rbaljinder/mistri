@@ -388,13 +388,19 @@ export function useNavigate(): {
   };
 }
 
+/** An address on this origin written as a path (`/leads/4?tab=open`): never an absolute or protocol-relative one, which a
+    sign-in's `then` must not be a way to follow (headlessLanding.js reads it, and sends a signed-in person there). */
+// A browser drops tabs and newlines from an address, so `/\t/evil` would be read as `//evil`: refuse control characters too.
+const inAppPath = (path: string): boolean =>
+  path.startsWith('/') && !path.startsWith('//') && ![...path].some((c) => c === '\\' || c <= '\u001f' || c === '\u007f');
+
 /**
  * The App's own addresses, as strings for an `<a href>` (and for an embedding app's navigator): `useHref().record('leads', { id: 4 })`.
  * Each is the one canonical address the router reads back (appAddress.ts). A view, page or record the App has no
  * address for is a mistake said here, not a link that goes nowhere.
  */
 export function useHref(): {
-  signIn(): string;
+  signIn(options?: { then?: string }): string;
   view(view: string, params?: Readonly<Record<string, string>>): string;
   record(view: string, key: Readonly<Record<string, unknown>>, options?: { tab?: string }): string;
   page(path: string, params?: Readonly<Record<string, string>>): string;
@@ -407,7 +413,11 @@ export function useHref(): {
       return address;
     };
     return {
-      signIn: () => said({ kind: 'signIn' }, 'the sign-in'),
+      signIn: (options) => {
+        const address = said({ kind: 'signIn' }, 'the sign-in');
+        const then = options?.then;
+        return then !== undefined && inAppPath(then) ? `${address}?then=${encodeURIComponent(then)}` : address;
+      },
       view: (view, params) => said({ kind: 'view', view, ...(params ? { params } : {}) }, say('addressView', { view })),
       record: (view, key, options) =>
         said({ kind: 'record', view, key, ...(options?.tab ? { tab: options.tab } : {}) }, say('addressRecord', { view })),

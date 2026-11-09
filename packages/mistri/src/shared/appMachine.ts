@@ -48,6 +48,8 @@ interface MachineStateDef {
   name: string;
   label: string;
   final?: true;
+  /** `final: { freeze: true }`: a record in this state takes no write, by any role, on any door (appTransitions.ts, the executor). */
+  freeze?: true;
   /** Timers: a command run through the jobs when the record has stayed this long (ms) in the state. */
   after?: { after: string; ms: number; command: string }[];
   /** Moves no verb makes: the states a service principal holding the role may move the record to from here. */
@@ -79,6 +81,10 @@ const firstCommand = (value: unknown) => {
   const command = isRecord(value) ? Object.values(value)[0] : undefined;
   return typeof command === 'string' ? command : undefined;
 };
+
+/** What a write to a record in a frozen state (`final: { freeze: true }`) is told, naming the state. */
+export const frozenWords = (state: string): string =>
+  `This record is in the "${state}" state, which is final and freezes it: nothing can change it now.`;
 
 /** The query language's words for "the column holds one of these states". */
 const inStates = (column: string, states: readonly string[]): string =>
@@ -121,9 +127,17 @@ export function parseMachine(raw: unknown, at: string, isCommand: (verb: string)
         );
       else if (!['on', 'after', 'by', 'final'].includes(key))
         throw new Error(`${where} has no "${key}". A state takes on, after, by and final.`);
-    if (state.final !== undefined && state.final !== true) throw new Error(`${where} has a "final" that is not true.`);
-    if (state.final === true && state.on !== undefined) throw new Error(`${where} is final, so no verb leaves it; drop "on", or "final".`);
-    const def: MachineStateDef = { name, label: fieldLabel(name), ...(state.final === true ? { final: true as const } : {}) };
+    const freezes = isRecord(state.final) && Object.keys(state.final).length === 1 && state.final.freeze === true;
+    if (state.final !== undefined && state.final !== true && !freezes)
+      throw new Error(`${where} has a "final" that is not true, or { freeze: true } for a state that also takes no write.`);
+    const final = state.final === true || freezes;
+    if (final && state.on !== undefined) throw new Error(`${where} is final, so no verb leaves it; drop "on", or "final".`);
+    const def: MachineStateDef = {
+      name,
+      label: fieldLabel(name),
+      ...(final ? { final: true as const } : {}),
+      ...(freezes ? { freeze: true as const } : {}),
+    };
     if (state.after !== undefined) {
       if (!isRecord(state.after) || !Object.keys(state.after).length)
         throw new Error(`${where} has an "after" that is not { '3 days': 'aCommand' }.`);
@@ -137,13 +151,13 @@ export function parseMachine(raw: unknown, at: string, isCommand: (verb: string)
         }
         return { after: wait.trim(), ms, command };
       });
-      if (state.final === true) throw new Error(`${where} is final, so it has no timer to leave it; drop "after", or "final".`);
+      if (final) throw new Error(`${where} is final, so it has no timer to leave it; drop "after", or "final".`);
     }
     /* A move no verb makes and no button offers: only a service principal holding the role takes it. */
     if (state.by !== undefined) {
       if (!isRecord(state.by) || !Object.keys(state.by).length)
         throw new Error(`${where} has a "by" that is not { a_service_role: ['next'] }.`);
-      if (state.final === true) throw new Error(`${where} is final, so nothing moves it; drop "by", or "final".`);
+      if (final) throw new Error(`${where} is final, so nothing moves it; drop "by", or "final".`);
       def.by = Object.entries(state.by).map(([role, target]) => {
         if (!ROLE.test(role)) throw new Error(`${where}, by "${role}" is not a role's name.`);
         const to = typeof target === 'string' ? [target] : Array.isArray(target) ? [...target] : [];

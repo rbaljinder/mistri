@@ -1,5 +1,5 @@
 /**
- * A free-form page's loader, held to what the page declares, as a source
+ * A free-form page's or a surface's loader, held to what it declares, as a source
  * load (apps.ts) and a build's (appBuild.ts) both judge it. Apart from the
  * loaders themselves, so neither load pulls the command runtime in to ask.
  */
@@ -9,7 +9,10 @@ import type { PageLoader } from '../commands/pageLoaders.js';
 /**
  * Each free-form page's loader, held to what the page declares: one the
  * commands module exports, reading only resources the page reads. The page
- * names it, so a loader no page names never runs.
+ * names it, so a loader no page names never runs. A surface's loader is held to
+ * the surface's reads the same way: the runtime limits the loader's db to its own
+ * `reads`, so a subset of the surface's is what keeps a surface from loading a
+ * table it may not read.
  */
 export function checkPageLoaders(app: AppDef, loaders: Readonly<Record<string, PageLoader>> | undefined, where: string): void {
   for (const [key, view] of Object.entries(app.views)) {
@@ -27,6 +30,23 @@ export function checkPageLoaders(app: AppDef, loaders: Readonly<Record<string, P
     if (stray) {
       throw new Error(
         `[page-loader] ${at}: its loader "${name}" reads "${stray}", which the page does not declare in its reads. A loader reads what its page reads.`,
+      );
+    }
+  }
+  for (const [key, surface] of Object.entries(app.surfaces ?? {})) {
+    const name = surface.loader;
+    if (!name) continue;
+    const at = `${where}: surfaces/${key}.surface.ts`;
+    const loader = loaders && Object.hasOwn(loaders, name) ? loaders[name] : undefined;
+    if (!loader) {
+      throw new Error(
+        `[page-loader] ${at} names the loader "${name}", which the commands module does not export: export const loaders = defineLoaders({ ${name}: defineLoader({ … }) }).`,
+      );
+    }
+    const stray = loader.reads.find((resource) => !surface.reads.includes(resource));
+    if (stray) {
+      throw new Error(
+        `[page-loader] ${at}: its loader "${name}" reads "${stray}", which the surface does not declare in its reads. A loader reads what its surface reads.`,
       );
     }
   }

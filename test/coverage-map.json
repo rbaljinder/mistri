@@ -717,8 +717,8 @@
     },
     {
       "id": "headless",
-      "surface": ["dsl: app: ui.headless"],
-      "tests": [{ "file": "test/app-surfaces.test.ts" }, { "file": "e2e/embed-headless.spec.ts" }]
+      "surface": ["dsl: app: ui.headless", "dsl: app: ui.microphone"],
+      "tests": [{ "file": "test/app-surfaces.test.ts" }, { "file": "e2e/embed-headless.spec.ts" }, { "file": "test/client-serving.test.ts" }]
     },
     { "id": "analytics", "surface": ["dsl: app: analytics"], "tests": [{ "file": "test/analytics-declarations.test.ts" }] },
     {
@@ -858,6 +858,11 @@
       "tests": [{ "file": "e2e/grade.spec.ts" }, { "file": "test/grade.test.ts" }]
     },
     { "id": "cli-command-jobs", "surface": ["cli: command jobs"], "tests": [{ "file": "test/jobs-run.test.ts" }] },
+    {
+      "id": "read-audit",
+      "surface": ["cli: command audit", "cli: flag --actor", "cli: flag --record", "cli: flag --resource", "cli: flag --since"],
+      "tests": [{ "file": "test/read-audit.test.ts" }]
+    },
     { "id": "cli-command-mail-dns", "surface": ["cli: command mail-dns"], "tests": [{ "file": "test/email-dkim.test.ts" }] },
     { "id": "cli-command-messages", "surface": ["cli: command messages"], "tests": [{ "file": "test/app-messages.test.ts" }] },
     {

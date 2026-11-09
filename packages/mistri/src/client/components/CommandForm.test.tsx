@@ -24,6 +24,8 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
           })),
         }))
       : api(path, body),
+  // A picker's reads say so (core.js pickerApi); here they are the same reads.
+  pickerApi: (path: string, body: unknown) => api(path, body),
   state,
   findTable: (id: string) => (readable.has(id) ? { id } : undefined),
   columnLabel: () => null,

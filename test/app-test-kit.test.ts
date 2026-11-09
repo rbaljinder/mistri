@@ -110,6 +110,26 @@ test('results are values: an applied step, and a refusal with its status and cod
   assert.ok(!missing.ok && missing.code === 'no_action');
 });
 
+test('rows({ show }) reads a rollup through the projection the list reads', async (t) => {
+  const directory = await exampleApp('payday');
+  const workspace = await createTestWorkspace();
+  t.after(() => workspace.close());
+  const config = await workspace.copyConfig(join(directory, 'mistri.json'));
+  const host = await startTestApp({ workspace, directory, config });
+  const admin = await host.as('admin');
+  const plain = await admin.rows('department', { limit: 5 });
+  assert.ok(plain.ok && plain.value.length > 0, JSON.stringify(plain));
+  const shown = await admin.rows('department', { show: ['name', 'headcount', 'annual_salaries'], limit: 5 });
+  assert.ok(shown.ok, JSON.stringify(shown));
+  assert.ok(shown.value.length > 0);
+  for (const row of shown.value) {
+    assert.equal(typeof row.headcount, 'number', JSON.stringify(row));
+    assert.ok('annual_salaries' in row, JSON.stringify(row));
+  }
+  // Asked for by name only: a plain read does not carry the rollup.
+  assert.ok(!('headcount' in plain.value[0]!), JSON.stringify(plain.value[0]));
+});
+
 /* Depot's receiving is a machine verb on the order whose command runs on one of its lines. */
 for (const name of ['tick', 'payday', 'depot'] as const) {
   test(`test init writes a suite that passes on ${name}`, async () => {

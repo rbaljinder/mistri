@@ -41,6 +41,7 @@ The first line of the help says it: *mistri — the App framework: a few lines o
 | `mistri test init [--app <dir>]` | a starter suite: a journey per role, a permissions matrix (see below) |
 | `mistri flows start <resource>` | start a resource's flows on records already there (see below) |
 | `mistri jobs run <name>` | run one of an App's jobs at times now, once (see below) |
+| `mistri audit reads` | who read an audited resource's rows, as JSON lines (see below) |
 | `mistri decide eval <name>` | measure a decision on settled records, and pin its model (see below) |
 | `mistri tenant init|grant` | a tenant App's first boot: its realms, tenants and first operators (see below) |
 | `mistri tenant clone|import|clock` | a tenant App's sandboxes: clone, import plan, dev clock (see below) |
@@ -80,7 +81,7 @@ The server's flags: where the data is, how it is served, and what an App adds.
 | `--no-config` | Ignore any config file |
 | `--no-live` | Turn live sync off, even for an App that asks for it (live: true): its open pages then refresh on focus and after their own saves. Nothing is written to the change store and /api/live answers 204. |
 | `--db-latency <ms>` | Development only: every database round trip waits this long before it is sent (a pipelined batch pays once), to feel a remote database on this machine; 20 is a typical cloud distance. Or set MISTRI_DEV_DB_LATENCY. Refused under NODE_ENV=production and when serving a build. |
-| `--app <dir>` | Serve an app: a directory whose app.ts (or app.mjs / app.json) declares its resources, views, navigation and pages. Repeatable; with more than one, every app names its connection. A save reloads it; a change to its grants, sources or sign-in needs a restart. mistri docs getting-started is where to begin. One App is served at the root (/leases/12); several each under its id (/lintel/leases/12). --app names the App on every command that takes one (check, build, shot, grade, dev, test init, flows, jobs, decide, tenant, deploy init, migrate files). Left out, the App is the current directory when it holds an app.ts (or app.mjs / app.json). seed, migrate, messages extract and theme show read it left out as no App. A directory typed where a database or route goes is refused, never read as the App. |
+| `--app <dir>` | Serve an app: a directory whose app.ts (or app.mjs / app.json) declares its resources, views, navigation and pages. Repeatable; with more than one, every app names its connection. A save reloads it; a change to its grants, sources or sign-in needs a restart. mistri docs getting-started is where to begin. One App is served at the root (/leases/12); several each under its id (/lintel/leases/12). --app names the App on every command that takes one (check, build, shot, grade, dev, test init, flows, jobs, audit, decide, tenant, deploy init, migrate files). Left out, the App is the current directory when it holds an app.ts (or app.mjs / app.json). seed, migrate, messages extract and theme show read it left out as no App. A directory typed where a database or route goes is refused, never read as the App. |
 | `--mount` | <app>=<path> Where an App is served, over that default: / makes it the main App at the root, /billing puts it there. Repeatable, one per App. Or "mount" in the config. |
 | `--base-path <path>` | The path a reverse proxy serves this server under, like /tools: every address, asset, API call, cookie and link carries it. Or "basePath" in the config, or set MISTRI_BASE_PATH. |
 | `--app-entry <file>` | With one --app: the manifest to read, when it is not the directory's own app.ts. The directory stays the App's root: its components, pages/, features/ and authority.lock. |
@@ -520,6 +521,26 @@ whose owner column its --policy names. Running it again starts nothing new.
 Exit codes: 1 could not run.
 ```
 
+## Reading the read audit
+
+Who read an audited resource's rows, and by which route.
+
+```text
+mistri audit reads [--app <dir>] [--resource <name>] [--record <id>] [--actor <who>]
+                [--tenant <id>] [--since <instant | 30m | 24h | 7d>] [--limit <n>]
+                [<db> | --db <target> | --config <path>]
+Prints the reads recorded for the App's resources with audit: { reads: true },
+newest first, one JSON object a line: when, the actor, the tenant, the
+resource, the route (page, api, mcp, assistant, export, picker, custom-page,
+related) and the one record read or the query with the count and ids it
+returned; never a field's value. Each flag narrows: --record by the record's
+key, --actor an account id, service:<principal>, support:<operator>,
+api-token:<id> or assistant:<account>, --since an ISO instant or an age,
+--limit at most n rows (default 1000). Read from the database, no server
+started; the store is made by mistri migrate stores up, never here.
+Exit codes: 1 could not run.
+```
+
 ## Running a job now
 
 One of an App's jobs at times, once, by hand.
@@ -811,7 +832,7 @@ already there is refused unless --force.
 Looked for in --config, then <--app dir>/mistri.json, ./mistri.json,
 ./.mistri.json, then $XDG_CONFIG_HOME/mistri/connections.json, with no
 walking up: the one rule a start, dev, check, build, migrate, seed, shot,
-grade, tenant, flows, jobs, decide and deploy read. Without --app, the app
+grade, tenant, flows, jobs, audit, decide and deploy read. Without --app, the app
 block's dir names the App. It takes dir, entry (--app-entry), commands,
 jobs and policy, as paths from the file's folder and nothing else: an
 unknown key, a \${NAME} or a missing file is refused. A flag beats it,
@@ -857,6 +878,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 
 | Flag | Said in |
 | --- | --- |
+| `--actor` | [Reading the read audit](#reading-the-read-audit) |
 | `--ahead` | [A tenant App's sandboxes](#a-tenant-apps-sandboxes) |
 | `--allow-contract` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--allow-dirty` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
@@ -867,7 +889,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--api-requests-per-minute` | [Options](#options) |
 | `--api-token-env` | [Options](#options) |
 | `--api-url` | [Options](#options) |
-| `--app` | [Options](#options), [Commands](#commands), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [A theme as it is worn](#a-theme-as-it-is-worn), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Bringing an App's source up to date](#bringing-an-apps-source-up-to-date), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once) |
+| `--app` | [Options](#options), [Commands](#commands), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [A theme as it is worn](#a-theme-as-it-is-worn), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Reading the read audit](#reading-the-read-audit), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Bringing an App's source up to date](#bringing-an-apps-source-up-to-date), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once) |
 | `--app-entry` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once) |
 | `--app-mcp` | [Options](#options) |
 | `--append` | [Rows to look at](#rows-to-look-at) |
@@ -884,13 +906,13 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--click` | [Looking at an App](#looking-at-an-app) |
 | `--commands` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--compare` | [Looking at an App](#looking-at-an-app) |
-| `--config` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once) |
+| `--config` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Reading the read audit](#reading-the-read-audit), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once) |
 | `--connection` | [Rows to look at](#rows-to-look-at), [Changing the schema](#changing-the-schema) |
 | `--connection-limit` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--cpus` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--dark` | [Looking at an App](#looking-at-an-app) |
 | `--days` | [A tenant App's first boot](#a-tenant-apps-first-boot) |
-| `--db` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
+| `--db` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Reading the read audit](#reading-the-read-audit), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
 | `--db-latency` | [Options](#options) |
 | `--defaults` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--demo` | [Options](#options) |
@@ -919,7 +941,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--jobs` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--json` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Grading an App](#grading-an-app), [A theme as it is worn](#a-theme-as-it-is-worn), [Changing the schema](#changing-the-schema), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once), [Watching what a --dev server did](#watching-what-a---dev-server-did) |
 | `--light` | [Looking at an App](#looking-at-an-app) |
-| `--limit` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies) |
+| `--limit` | [Reading the read audit](#reading-the-read-audit), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies) |
 | `--locale` | [Commands](#commands) |
 | `--lock-timeout` | [Options](#options) |
 | `--matrix` | [Looking at an App](#looking-at-an-app) |
@@ -951,9 +973,11 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--rate` | [A tenant App's sandboxes](#a-tenant-apps-sandboxes) |
 | `--read-pool` | [Options](#options) |
 | `--recipes` | [Looking at an App](#looking-at-an-app) |
+| `--record` | [Reading the read audit](#reading-the-read-audit) |
 | `--reindex` | [Options](#options) |
 | `--repeatable` | [Changing the schema](#changing-the-schema) |
 | `--replicas` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
+| `--resource` | [Reading the read audit](#reading-the-read-audit) |
 | `--roles` | [A tenant App's first boot](#a-tenant-apps-first-boot) |
 | `--roll` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--roll-timeout` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
@@ -967,12 +991,13 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--search` | [Reading the reference offline](#reading-the-reference-offline) |
 | `--seed` | [Rows to look at](#rows-to-look-at) |
 | `--shutdown-grace` | [Options](#options) |
+| `--since` | [Reading the read audit](#reading-the-read-audit) |
 | `--smoke` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--store` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app) |
 | `--strict-migrations` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--suite` | [Changing the schema](#changing-the-schema) |
 | `--template` | [Commands](#commands) |
-| `--tenant` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Starting flows on records already there](#starting-flows-on-records-already-there), [A tenant App's first boot](#a-tenant-apps-first-boot) |
+| `--tenant` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Starting flows on records already there](#starting-flows-on-records-already-there), [Reading the read audit](#reading-the-read-audit), [A tenant App's first boot](#a-tenant-apps-first-boot) |
 | `--text` | [Looking at an App](#looking-at-an-app) |
 | `--theme` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app) |
 | `--tool` | [Changing the schema](#changing-the-schema), [Giving a coding agent the App skill](#giving-a-coding-agent-the-app-skill) |

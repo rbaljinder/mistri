@@ -341,3 +341,45 @@ test("Split lists the rows beside the picked record's own page, and keeps the pi
   inPage(<Split from="task" row={{ primary: 'name' }} param="view" />);
   expect(await screen.findByText(/<Split> keeps its pick in "view", which is not one of the page's params/)).toBeTruthy();
 });
+
+test('Split says a refused read as a problem, never as an empty queue', async () => {
+  const { useRows } = await import('./hooks.js');
+  const refetch = vi.fn();
+  vi.mocked(useRows).mockReturnValueOnce({
+    data: undefined,
+    isError: true,
+    error: new Error('This page does not declare the post table it reaches.'),
+    refetch,
+  } as never);
+  inPage(<Split from="task" row={{ primary: 'name' }} label="Open reports" />);
+  expect(await screen.findByText(/does not declare the post table/)).toBeTruthy();
+  expect(screen.queryByRole('list', { name: 'Open reports' })).toBeNull();
+});
+
+test('a Split whose refresh fails keeps its rows and the record open beside them, with the problem above', async () => {
+  const { useRows } = await import('./hooks.js');
+  const original = vi.mocked(useRows).getMockImplementation();
+  const rows = [
+    { id: 1, name: 'Boiler', parent_id: 'A' },
+    { id: 2, name: 'Pump', parent_id: 'B' },
+  ];
+  const refetch = vi.fn();
+  try {
+    vi.mocked(useRows).mockImplementation(
+      () => ({ data: rows, isError: true, error: new Error('The queue could not be refreshed.'), refetch }) as never,
+    );
+    inPage(<Split from="task" row={{ primary: 'name' }} label="Open reports" param="pick" />);
+    expect(await screen.findByText(/could not be refreshed/)).toBeTruthy();
+    expect(screen.getByRole('list', { name: 'Open reports' })).toBeTruthy();
+    expect(await json('record')).toMatchObject({ recordKey: { id: 2 } });
+    cleanup();
+    // A refusal is the grant gone, not a stale list: the rows it had go with it.
+    const refused = Object.assign(new Error('You cannot read this queue.'), { status: 403 });
+    vi.mocked(useRows).mockImplementation(() => ({ data: rows, isError: true, error: refused, refetch }) as never);
+    inPage(<Split from="task" row={{ primary: 'name' }} label="Open reports" param="pick" />);
+    expect(await screen.findByText(/cannot read this queue/)).toBeTruthy();
+    expect(screen.queryByRole('list', { name: 'Open reports' })).toBeNull();
+  } finally {
+    if (original) vi.mocked(useRows).mockImplementation(original);
+  }
+});

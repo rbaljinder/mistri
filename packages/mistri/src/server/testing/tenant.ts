@@ -9,6 +9,7 @@
  * through the App's own doors, under the server's isolation, as a person's would.
  */
 import { randomBytes } from 'node:crypto';
+import { quoteValue } from '@mistriwork/engine/shared/query.js';
 import { PLATFORM_TENANT_ID, TENANT_HTTP_HEADERS } from '../../shared/tenantContext.js';
 import { SUPPORT_LOG_PATH, SUPPORT_SESSIONS_PATH } from '../../shared/tenantSupportLog.js';
 import { appRequests } from './appRequests.js';
@@ -45,7 +46,8 @@ export type TestTenantClient = TestClient & {
   /**
    * Whether this member reaches one record of the tenant it works in, as the record page's reads ask: ok when the
    * record is the tenant's, and a refusal with code `not_found` when it is another tenant's or none at all, the two
-   * never told apart.
+   * never told apart. The answer also carries `values`, the record's row as this member may read it (null when
+   * their grants and row scope give them none).
    */
   record(table: string, key: Record<string, string | number>): Promise<TestResult<unknown>>;
   /**
@@ -113,11 +115,16 @@ async function answered<T>(answer: Response): Promise<TestResult<T>> {
     /* Not JSON: said below as what it was. */
   }
   if (answer.ok) return { ok: true, status: answer.status, value: body as T };
+  /* The server tells a command's cause to the machine's own author only (refusalReport.ts), as the single-App kit
+     reads it (appRequests.ts): said first, since "This record is not eligible for this command." names nothing to fix. */
+  const cause = typeof body.cause === 'string' && body.cause ? body.cause : undefined;
+  const said = String(body.error ?? body.message ?? (text.slice(0, 500) || `HTTP ${answer.status}`));
   return {
     ok: false,
     status: answer.status,
     ...(typeof body.code === 'string' ? { code: body.code } : {}),
-    message: String(body.error ?? body.message ?? (text.slice(0, 500) || `HTTP ${answer.status}`)),
+    message: cause && answer.status >= 500 ? `${cause} (callers are told: ${said})` : said,
+    ...(cause ? { cause } : {}),
     body,
   };
 }
@@ -175,8 +182,18 @@ function leased(
     account,
     lease,
     enter: (other: string) => open(session, appId, account.accountId, other),
-    record: async (table: string, key: Record<string, string | number>) =>
-      answered<unknown>(await request('/api/references', { method: 'POST', json: { table, key } })),
+    record: async (table: string, key: Record<string, string | number>) => {
+      const reached = await answered<unknown>(await request('/api/references', { method: 'POST', json: { table, key } }));
+      if (!reached.ok) return reached;
+      // The values as this member may read them (their grants and row scope), beside what the page's reads answered.
+      const where = Object.entries(key)
+        .map(([column, value]) => `${column} = ${quoteValue(value)}`)
+        .join(' and ');
+      const row = await app.rows(table, { where, limit: 1 });
+      const held =
+        reached.value && typeof reached.value === 'object' && !Array.isArray(reached.value) ? reached.value : { references: reached.value };
+      return { ...reached, value: { ...held, values: row.ok ? (row.value[0] ?? null) : null } };
+    },
     async support(tenantId: string, visit: { role: string; reason: string }): Promise<TestResult<TestSupportVisit>> {
       const opened = await answered<{ receipt: { session: TestSupportVisit['visit'] }; context?: Record<string, unknown> }>(
         await own('/api/tenant/support/open', {

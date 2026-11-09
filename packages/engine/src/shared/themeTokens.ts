@@ -52,7 +52,15 @@ export const PALETTE_TOKENS = {
   chart7: '--chart-7',
   chart8: '--chart-8',
 } as const satisfies Record<keyof ThemePalette, string>;
-export const FONT_TOKENS = { ui: '--sans', data: '--mono', heading: '--heading-font', code: '--code' } as const;
+/** `figures` is not `--figures` itself: an App's sheet sets that on `.app-mode`, under the root these are written on, from
+    `--figures-face` when a theme names one (themeFamilies.css). */
+export const FONT_TOKENS = {
+  ui: '--sans',
+  data: '--mono',
+  heading: '--heading-font',
+  code: '--code',
+  figures: '--figures-face',
+} as const;
 export const RADIUS_TOKENS = { control: '--radius', field: '--field-radius', pill: '--pill-radius', panel: '--panel-radius' } as const;
 /** A panel's edge and the focus ring's width; a rule's and a control's ride in each mode's palette (`--rules-weight`). */
 const BORDER_TOKENS = { panel: '--panel-border-width', focus: '--focus-ring-width' } as const;

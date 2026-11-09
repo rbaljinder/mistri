@@ -543,7 +543,9 @@ for (const { dialect, skip } of [
       const tools = await f.ask((send) => f.owner.readTools(alice.token, send));
       assert.ok('body' in tools);
       const names = (tools.body.tools as { name: string }[]).map((tool) => tool.name.split('_')[0]).sort();
-      assert.deepEqual(names, ['get', 'list', 'prepare', 'run']);
+      // `stock` is a form command (`targets: 'none'`): one run tool takes its input alone, beside touch's run and prepare.
+      assert.deepEqual(names, ['get', 'list', 'prepare', 'run', 'run']);
+      assert.ok((tools.body.tools as { name: string }[]).some((tool) => tool.name.startsWith('run_stock_')));
       // Outside the token's scope: forbidden before any work.
       const reader = await f.issue('alice', 'north', { operations: ['item:item'] });
       assert.deepEqual(said(await touch(reader.token, 'north-1', 1)), problem(403, 'forbidden', 'not_applied'));

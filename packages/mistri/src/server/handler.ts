@@ -8,3 +8,5 @@ export type { Handler, HandlerOptions } from './embed/handler.js';
    signs with node:crypto and refuses to load in a browser. */
 export { mintEmbedAssertion } from './embed/mint.js';
 export type { EmbedAssertionInput } from './embed/mint.js';
+/* What `tokenFor` rejects with, for a host that tells "not signed in" from "no such surface" by `code`. */
+export { SurfaceTokenRefused } from './auth/surfaceToken.js';

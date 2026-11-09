@@ -97,7 +97,10 @@ export async function atlasBinary(
 
 async function download(url: string): Promise<Uint8Array> {
   const response = await fetch(url);
-  if (!response.ok) throw new Error(`could not fetch Atlas from ${url}: HTTP ${response.status}.`);
+  if (!response.ok)
+    throw new Error(
+      `could not fetch Atlas from ${url}: HTTP ${response.status}. To work offline, install Atlas ${ATLAS_VERSION} (community edition) and set ${envName('ATLAS')} to that binary.`,
+    );
   return new Uint8Array(await response.arrayBuffer());
 }
 

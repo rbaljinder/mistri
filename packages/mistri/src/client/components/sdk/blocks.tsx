@@ -449,41 +449,50 @@ function SplitBlock({ table, spec, query, sort, param, label, page }: SplitAsk) 
   });
   const list = rows.data ?? [];
   const row = picked === undefined ? undefined : list.find((each) => String(each[key]) === picked);
+  // A refused or failed read says so: an empty queue would tell a moderator there is nothing to do.
+  const problem = rows.isError ? <Problem text={(rows.error as Error).message} retry={() => void rows.refetch()} /> : null;
+  /* A refresh that fails keeps the rows it had, and the record open beside them, with the problem above: only a first
+     read that never answered, or a refusal (the grant is gone), takes the list away. */
+  const refused = [401, 403].includes((rows.error as { status?: number } | null)?.status ?? 0);
+  if (problem && (rows.data === undefined || refused)) return problem;
   return (
-    <SplitListDetail
-      listLabel={label}
-      detailLabel={say('blockSplitDetail')}
-      detailTitle={row ? String(row[primary] ?? '') : say('blockSplitDetail')}
-      selected={Boolean(row)}
-      onCloseDetail={() => pick(undefined)}
-      sentenceTitle
-      list={
-        <div className="queue queue-pick-list">
-          <ul className="queue-list" aria-label={label}>
-            {list.map((each) => {
-              const id = String(each[key]);
-              return (
-                <li key={id} className="queue-row">
-                  <button type="button" className="queue-pick" aria-current={id === picked ? 'true' : undefined} onClick={() => pick(id)}>
-                    <strong>
-                      <Value value={each[primary]} resource={table.id} column={primary} compact />
-                    </strong>
-                    {lines.map((line) => (
-                      <span key={line}>
-                        <Value value={each[line]} resource={table.id} column={line} compact />
-                      </span>
-                    ))}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      }
-      detail={
-        row ? <RecordBlock table={table} recordKey={{ [key]: row[key] }} {...(spec.detail ? { show: spec.detail } : {})} /> : undefined
-      }
-    />
+    <>
+      {problem}
+      <SplitListDetail
+        listLabel={label}
+        detailLabel={say('blockSplitDetail')}
+        detailTitle={row ? String(row[primary] ?? '') : say('blockSplitDetail')}
+        selected={Boolean(row)}
+        onCloseDetail={() => pick(undefined)}
+        sentenceTitle
+        list={
+          <div className="queue queue-pick-list">
+            <ul className="queue-list" aria-label={label}>
+              {list.map((each) => {
+                const id = String(each[key]);
+                return (
+                  <li key={id} className="queue-row">
+                    <button type="button" className="queue-pick" aria-current={id === picked ? 'true' : undefined} onClick={() => pick(id)}>
+                      <strong>
+                        <Value value={each[primary]} resource={table.id} column={primary} compact />
+                      </strong>
+                      {lines.map((line) => (
+                        <span key={line}>
+                          <Value value={each[line]} resource={table.id} column={line} compact />
+                        </span>
+                      ))}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        }
+        detail={
+          row ? <RecordBlock table={table} recordKey={{ [key]: row[key] }} {...(spec.detail ? { show: spec.detail } : {})} /> : undefined
+        }
+      />
+    </>
   );
 }
 

@@ -52,7 +52,7 @@ Expected ',', got 'ident'
 | Its sources, `connection` or sign-in: providers, sign-up, default role, the session store, the App's `id` | The same: bindings are authority. |
 | mistri.json: connections, `writable`, `apps` and their `env` | Unseen until a restart: the file is read once, at start. |
 | `--commands`, `--jobs`, `--policy` modules | Handlers keep the code they started with. A row-policy App whose policy or commands file changes refuses data, and says to restart, until you do. |
-| A tenant App's files, but for its look | Data requests stop until a restart. A save that changes only its themes (`ui.theme`, `customThemes`, their faces) is worn in place, on the next page. |
+| A tenant App's files, but for its look | Under `mistri dev` nothing waits: the host runs under a small parent that starts it again on any save of the App, its policy, commands, jobs or config, with the whole startup's checks, on the same port. Sessions are the auth store's and the cookie's, so they survive; a lease opened before the save is asked for again. A save that does not load leaves the parent watching until the next good save. Outside dev, data requests stop until a restart. A save that changes only its themes (`ui.theme`, `customThemes`, their faces) is worn in place, on the next page, either way. |
 
 With `--api-reads` the App API is restart-only: a save retires its reads
 until the server restarts. An App with an authority.lock starts only when the

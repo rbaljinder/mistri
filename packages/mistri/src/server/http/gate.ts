@@ -33,6 +33,9 @@ import { appLook } from '../../shared/appUi.js';
 import { withIconGlyphs } from '../app/iconPayload.js';
 import { arrivedUrls } from '@mistriwork/engine/server/http/context.js';
 import { getTenantHostIntent } from './tenantHosts.js';
+import { SURFACE_HEADER } from '../../shared/appSurfaces.js';
+import { SURFACE_TOKEN_PREFIX } from '../auth/surfaceToken.js';
+import { surfaceRouteOpen } from './surfaceGate.js';
 
 /**
  * The one API a signed-out person may reach on an App that signs people in,
@@ -217,6 +220,44 @@ async function appSession(
         throw new AppAccessDenied();
       }
     };
+    /* A surface token (auth/surfaceToken.ts) in the Authorization header: a server component's bearer for one surface of a
+       headless App, in place of a session cookie it does not have. It opens that surface's reads, loader, commands and
+       files and no other route — not the account's, sign-in's, the API's, MCP's or an administrator's — so it is judged
+       here, before any route that could read a session asks. Admitted, it is the request's session (auth.ts `session`)
+       and names its surface as the header would, which a header naming another is refused for. */
+    if (
+      !publicHost &&
+      signedIn.auth.surfaceTokens &&
+      String(req.headers.authorization ?? '').startsWith(`Bearer ${SURFACE_TOKEN_PREFIX}`)
+    ) {
+      const refuse = (status: number, body: Record<string, unknown>) => {
+        if (commandRequest) commandRefusal(status === 401 ? 'unauthenticated' : 'forbidden');
+        else {
+          res.setHeader('cache-control', 'no-store');
+          send(res, status, body);
+        }
+        return undefined;
+      };
+      if (!path.startsWith('/api/') || !surfaceRouteOpen(req.method, path)) {
+        return refuse(403, { error: "A surface token opens a surface's reads and commands, and nothing else.", code: 'surface' });
+      }
+      let admitted: Awaited<ReturnType<typeof signedIn.auth.surfaceTokens.admit>>;
+      try {
+        admitted = await signedIn.auth.surfaceTokens.admit(req);
+      } catch (error) {
+        // As a cookie session's lookup is answered: a store that did not answer decided nothing about who is asking.
+        if (databaseUnanswered(error)) throw new PoolBusy('read', 'queue_timeout', error);
+        throw new AppAccessDenied();
+      }
+      if (!admitted) return refuse(401, { error: 'This surface token is not valid: it expired, or its session ended. Ask for a new one.' });
+      const named = req.headers[SURFACE_HEADER];
+      if (named !== undefined && named !== admitted.surface) {
+        return refuse(403, { error: `This token is for the surface "${admitted.surface}".`, code: 'surface' });
+      }
+      req.headers[SURFACE_HEADER] = admitted.surface;
+      // Nothing else this request carries stands for anyone: the token is who is asking.
+      delete req.headers.cookie;
+    }
     if (path === '/api/auth' || path.startsWith('/api/auth/')) {
       /* Better Auth's writes are held to the door a tenant's native host
          holds them to (tenantAuthenticatedHttp.ts), not left to its own

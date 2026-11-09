@@ -199,6 +199,8 @@ export interface QueryRequest {
 export interface ViewResult extends QueryResult {
   resolved: CompiledColumn[];
   joins: CompiledJoin[];
+  /** Stitched references whose target could not be read (an adapter or transport error): the rows are whole, those labels are the raw keys. */
+  partial?: Array<{ reference: string; reason: string }>;
 }
 
 /**

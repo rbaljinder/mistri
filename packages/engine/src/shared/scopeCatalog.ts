@@ -136,6 +136,7 @@ export function captureScopeCatalog(schema: DatabaseSchema): DatabaseSchema {
         'insertable',
         'sourceDialect',
         'filterable',
+        'filterIn',
         'sortable',
         'countable',
       ]);
@@ -225,7 +226,7 @@ export function captureScopeCatalog(schema: DatabaseSchema): DatabaseSchema {
         return refuse();
       /* What an API can filter and sort by, and that it reports no totals (adapters/http): evidence for which boxes
          a list offers, never a grant, so it is carried and left out of the fingerprint. Only columns this table has. */
-      for (const names of [table.filterable, table.sortable])
+      for (const names of [table.filterable, table.filterIn, table.sortable])
         if (
           names !== undefined &&
           (!Array.isArray(names) ||

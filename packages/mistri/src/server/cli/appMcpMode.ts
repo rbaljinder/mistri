@@ -40,6 +40,7 @@ import { createSqliteApiCommandOwner } from '../api/sqliteApiCommandOwner.js';
 import { createPostgresApiCommandOwner } from '../api/postgresApiCommandOwner.js';
 import { hostCommands, type CommandHost } from './commandHost.js';
 import { ensureAppRecordHistory, historyRules } from '../recordHistory.js';
+import { ensureAppReadAudit } from '../readAuditStore.js';
 import { ensureAppLive } from '../live/liveBinding.js';
 import { appKeepsInbox, ensureAppInbox } from '../inbox.js';
 // The mode's own flags and its token are read in startupOptions.ts, before this loads.
@@ -65,6 +66,8 @@ async function bindWriteStores(registry: Registry, loadedApps: LoadedApp[]): Pro
     const host: AppHost = { app: loaded, pages: [] };
     if (historyRules(loaded.app, loaded.pages).size) await ensureAppRecordHistory(registry, host);
     if (appKeepsInbox(loaded.app)) await ensureAppInbox(registry, host);
+    // An agent's reads of an audited resource are recorded as a page's are: no store, no start.
+    await ensureAppReadAudit(registry, host);
     // And live sync's change row, so a page open on a server elsewhere hears what an agent changed.
     ensureAppLive(registry, host);
   }

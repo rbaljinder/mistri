@@ -85,8 +85,9 @@ auth: { roles: { admin: { actions: { timesheet: ['approve'] } }, payroll_manager
 The server then admits that role's update only as exactly one granted action:
 its `set`, its stamps and its reason, with its `when` judged on the stored row.
 Any other update is refused `403` with the code `forbidden`. The resource needs
-`access: 'write'`. Under a row policy it acts only on the principal's rows;
-tenant Apps refuse the grant.
+`access: 'write'`. Under a row policy it acts only on the principal's rows, and
+in a [tenant App](/docs/tenant-apps/#fixed-actions-without-write) only on the
+member's own tenant.
 
 ### A record's states: machine
 
@@ -119,6 +120,18 @@ A timer at an instant is the resource's, not a state's:
 matches `when`; a new time arms it again. `by: { automation:
 'escalated' }` is a move no verb makes and no button offers: only a command
 running as that service role (`service: true`) takes it.
+
+`final: { freeze: true }` is a final state that also freezes the record. Once a
+row is there, no write changes it, by any role, on any door: Save, a list's
+cell, an import, the App API, MCP and every command, the machine's own
+included, because nothing leaves a final state. The server refuses it in plain
+words naming the state (`This record is in the "Closed" state, which is final
+and freezes it: nothing can change it now.`), the record's page draws read-only, and the
+OpenAPI document says so on its commands.
+
+```ts
+closed: { final: { freeze: true } },
+```
 
 Name the sets of states people talk about with `groups`, and ask them as
 `is open` is asked, in a query, a segment, a tab, a nav count or a board, whose
@@ -163,8 +176,8 @@ not point at the command's (a purchase order, named by its line's
 ## Common mistakes
 
 - `[machine-dead-end]` or `[machine-unreachable]` → give the state a verb that leaves it or leads to it, or mark it `final: true`.
-- `[machine-verb-unrunnable]` → grant the verb's command to a role, or let a role write the table.
-- `[machine-command-outside]`: a command writes the machine's column and is not a verb → name it under the states it leaves.
+- `[machine-verb-unrunnable]` → grant the verb's command to a role, or let a role write the table; `[machine-command-outside]`, a command that writes the machine's column and is not a verb → name it under the states it leaves.
+- `[machine-freeze-timer]`: a timer at an instant runs a command on a record that may be frozen → add a `when` that leaves the frozen states out.
 - `[unknown-action]` in a header, a queue or a role's `actions` → use one of the ids the resource declares.
 
 ## Related

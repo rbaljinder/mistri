@@ -25,6 +25,7 @@ import { resolve } from 'node:path';
 import { parseBasePath, SERVER_SEGMENTS } from '@mistriwork/engine/shared/mount.js';
 import { embedOrigin } from './issuerConfig.js';
 import { bridgeFetch } from './fetchBridge.js';
+import { SurfaceTokenRefused } from '../auth/surfaceToken.js';
 import type { MountedServing } from '../cli/serve.js';
 import { CONFIG_SECTIONS } from '../serviceConnections.js';
 import { defaultServerSettings, withServerSettings, type ServerSettings } from '@mistriwork/engine/adapters/serverSettings.js';
@@ -70,6 +71,16 @@ export interface Handler {
   node(req: IncomingMessage, res: ServerResponse, next?: (error?: unknown) => void): void;
   /** Fetch handler: a Next route handler, a TanStack Start server route, Hono's `c.req.raw`. */
   fetch(request: Request, context?: { clientAddress?: string }): Promise<Response>;
+  /**
+   * A server component's credential for one surface of a headless App: reads the person the request's session cookie
+   * says is signed in (a server component has no browser, so give it the cookie: `new Request(url, { headers: await headers() })`
+   * in Next) and mints a bearer for them and `surface`, to send as `Authorization: Bearer …` to the App's API. It stands for
+   * that person on that surface alone, so a read or command outside it is refused as `X-Mistri-Surface` would refuse it,
+   * and the person's grants and row policy are read live; it ends with `ttl` seconds (at most 300, 60 by default), with the
+   * session, or with the account. Rejects with a `SurfaceTokenRefused` (`code`: `no_session`, `unknown_surface`, `bad_ttl`)
+   * where there is nothing to mint.
+   */
+  tokenFor(request: { headers: { get(name: string): string | null } }, input: { surface: string; ttl?: number }): Promise<string>;
   /** Settles when the Apps, sign-in and pools are loaded. Requests before it wait; past ten seconds they are answered 503 with Retry-After. */
   readonly ready: Promise<void>;
   /** Stops the jobs, drains what is in flight and closes the pools and sign-in stores. Requests after it are answered 503. */
@@ -373,6 +384,20 @@ export function createHandler(options: HandlerOptions): Handler {
       // Without the visitor's address the bridge names one peer for everyone (fetchBridge.ts), so they share one budget.
       if (!context?.clientAddress?.trim()) warnOnce('shared-rate-limit', SHARED_RATE_LIMIT_WARNING);
       return bridgeFetch(request, node, context);
+    },
+    async tokenFor(request, input) {
+      await ready;
+      const minter = served
+        ?.apps?.()
+        .find((host) => host.auth?.surfaceTokens && host.app.app.surfaces && Object.hasOwn(host.app.app.surfaces, input?.surface))
+        ?.auth?.surfaceTokens;
+      if (!minter) {
+        throw new SurfaceTokenRefused(
+          'unknown_surface',
+          `tokenFor: no signed-in App served here has a surface "${String(input?.surface)}" (a tenant App is not minted for here).`,
+        );
+      }
+      return minter.mint(request, input);
     },
     ready,
     close() {

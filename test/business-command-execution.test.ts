@@ -468,7 +468,11 @@ test('canonical validated input and reordered composite keys produce the same re
    still hears the one code; the operator reads the reason recorded on it. */
 for (const [name, note, reason] of [
   ['a binary value', new Uint8Array([1, 2, 3]), /wrote bytes to assignment_history\.note, which is not a file resource it writes/],
-  ['a change past the audit bound', 'x'.repeat(70_000), /changes to assignment_history are over the 64 KiB its audit keeps for one target/],
+  [
+    'a change past the audit bound',
+    'x'.repeat(4_200_000),
+    /changes to assignment_history are over the 4 MiB its audit keeps for one target/,
+  ],
 ] as const) {
   test(`${name} the audit cannot keep is invalid_result, with its reason recorded for the operator`, async () => {
     await fixture(
@@ -492,6 +496,22 @@ for (const [name, note, reason] of [
     );
   });
 }
+
+/* The longest text a command may take, in four-byte characters, is a change the audit keeps:
+   the bound sat at 64 KiB, below one such value, and refused a valid write. */
+test('a 65,536-character text of four-byte characters is a change the audit keeps', async () => {
+  const note = '\u{1F600}'.repeat(65_536);
+  await fixture(
+    async (f) => {
+      await executeBusinessCommand(f.binding, actor, request());
+      assert.equal(rows(f.db, 'assignment_history').length, 1);
+    },
+    async (context) => {
+      await context.tx.insert({ table: 'assignment_history', values: { tenant: 'retail', loan_id: 1, reviewer: 'Ada', note } });
+      return { version: 1 };
+    },
+  );
+});
 
 test('invalid input is rejected before the handler and invalid output rolls all writes back', async () => {
   await fixture(async (f) => {

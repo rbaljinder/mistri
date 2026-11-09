@@ -41,6 +41,8 @@ test('acknowledgement invalidates exact record/page keys and the current connect
     ['peekpanel', 'tick', 'task', [key.id]],
     ['peek', 'tick', 'task', 'id', key.id],
     ['picker-labels', 'tick', 'task', 'id', [key.id]],
+    // A free-form page's loader names no table: a write may have changed what it read.
+    ['mistri-page', 'load', ['tick'], 'board', { week: '3' }],
   ];
   const no = [
     ['record', 'task', { id: '9007199254740992' }, ['name']],

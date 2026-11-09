@@ -67,6 +67,7 @@ import {
   findTable,
   isFlagColumn,
   isJsonType,
+  primaryKey,
   tableNamed,
   type DatabaseSchema,
 } from '@mistriwork/engine/shared/schema.js';
@@ -95,7 +96,7 @@ import { BUILD_MANIFEST, loadBuiltApp, type AppBuildInfo } from './appBuild.js';
 import { overlayPresentation, type AppPresentation } from './appPresentation.js';
 import { iconGlyphsIn } from './iconPayload.js';
 import { accessibleSchema } from './appAccess.js';
-import { isTenantApp, type AppRealm } from '../../shared/appModel.js';
+import { crossSourceReferences, isTenantApp, type AppRealm } from '../../shared/appModel.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { appUsesCommands, appUsesCommandsOfItsOwn } from '../../shared/appCommandIds.js';
 import { appComponents } from '../../shared/appComponentPlaces.js';
@@ -1345,6 +1346,7 @@ export function appAdvisories(loaded: LoadedApp, schema: DatabaseSchema): string
     ...liveOffWarnings(loaded.app),
     ...shortNameWarnings(loaded.app),
     ...narrowedOverlapWarnings(loaded.app, schema),
+    ...stitchedFanOutWarnings(loaded.app, schema),
     ...subtitleUnseenWarnings(loaded.app, loaded.pages, schema),
     ...notifyAdvisories(loaded.app, schema),
     ...valueLabelFindings(loaded.app).warnings,
@@ -1624,6 +1626,22 @@ function narrowedOverlapWarnings(app: LoadedApp['app'], schema: DatabaseSchema):
       `resources "${b}" [narrowed-overlap]: its query and "${a}"'s may both hold of one row, which is then a record of each. ` +
       `If they are meant apart, say one column's values in each (kind = order, kind = conversation).`,
   );
+}
+
+/** `[stitched-fanout]`: a reference from another source onto an API that cannot take a list of keys, so a page's labels
+    are one request per distinct key (at most 50 a page, refused beyond). Said, not refused: it works, and the cost is
+    the author's to weigh against asking the API's owner for an `in` filter on the column. */
+function stitchedFanOutWarnings(app: LoadedApp['app'], schema: DatabaseSchema): string[] {
+  return crossSourceReferences(app).flatMap((reference) => {
+    const target = tableNamed(schema, reference.to);
+    if (!target || (target.sourceDialect ?? schema.dialect) !== 'http') return [];
+    const column = reference.toColumn ?? primaryKey(target)[0];
+    if (column === undefined || target.filterIn?.includes(column)) return [];
+    return [
+      `resources "${reference.table}" [stitched-fanout]: "${reference.column}" is looked up in ${reference.to}, an API that takes no list of ` +
+        `"${column}" values, so each page asks it once per distinct key. Ask for an \`in\` filter on "${column}" if pages grow.`,
+    ];
+  });
 }
 
 /** `[subtitle-unseen]`: a column whose display rule has a `subtitle`, shown where a card has one line for it (a

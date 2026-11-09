@@ -45,6 +45,7 @@ import { batchedRun } from '../breakdownBatch.js';
 import { useListHold } from '../liveState.js';
 import { laneWindow } from '@mistriwork/engine/shared/boardLanes.js';
 import { say } from '../copy/lists/components/TableRoom.js';
+import { PartialNote } from './PartialNote.js';
 
 /* The diagrams are a chunk of their own, loaded when the Diagram tab is first opened. */
 /**
@@ -466,6 +467,7 @@ function Rows({
   return (
     <>
       {held.held ? <LivePill held={held.held} show={held.show} /> : null}
+      {'partial' in data && data.partial?.length ? <PartialNote partial={data.partial} table={entry.table} /> : null}
       <TableView
         entry={entry}
         data={data}

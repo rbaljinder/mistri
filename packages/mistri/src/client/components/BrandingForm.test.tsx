@@ -5,6 +5,9 @@ import { themePreset } from '../../../../engine/src/shared/themePresets.js';
 const api = vi.hoisted(() => vi.fn());
 vi.mock('../../../../kit/src/client/core.js', () => ({ api }));
 
+const app = vi.hoisted(() => ({ name: 'Depot' }));
+vi.mock('../appState.js', async (original) => ({ ...(await original<typeof import('../appState.js')>()), activeApp: () => app }));
+
 import { BrandingForm } from './BrandingForm.js';
 
 const state = (editor: boolean, branding: Record<string, unknown> = {}) => ({
@@ -84,4 +87,13 @@ test('the dark logo is offered only beside a logo, and removing it sends null fo
   await vi.waitFor(() => expect(api).toHaveBeenCalledTimes(3));
   const [, body] = api.mock.calls[2]!;
   expect(body).toEqual({ branding: {}, darkLogo: null });
+});
+
+test("the preview's record is called by the App's own name, not a stock company", async () => {
+  api.mockResolvedValueOnce(state(true, {}));
+  render(<BrandingForm />);
+  await screen.findByRole('textbox', { name: /Name/ });
+  const preview = screen.getByRole('region', { name: 'Preview' });
+  expect(within(preview).getAllByText('Depot').length).toBeGreaterThan(1);
+  expect(within(preview).queryByText('Acme Corporation')).toBeNull();
 });

@@ -13,6 +13,7 @@ import { cookieUnder } from '@mistriwork/engine/shared/mount.js';
 import { captureHttpCommandFlags } from '../flags/httpRuntime.js';
 import { isPublicForm, isRowPolicyApp, isTenantApp, type AppDef, type AppFormView } from '../../shared/app.js';
 import { appEntrypoint } from '../app/appEntrypoint.js';
+import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { businessCommandHttpError, commandBody, holdCommandBody } from '../commands/businessCommandHttp.js';
 import { checkCommandStep } from '../commands/commandCheck.js';
 import {
@@ -236,7 +237,7 @@ export async function publicFormRoutes(ctx: RequestContext): Promise<boolean> {
       res.setHeader('connection', 'close');
       send(res, 413, { code: 'too_large', error: 'This submission is too large.' });
     };
-    if (Number.isFinite(length) && length > 65_536) {
+    if (Number.isFinite(length) && length > MAX_COMMAND_BYTES) {
       tooLarge();
       return true;
     }

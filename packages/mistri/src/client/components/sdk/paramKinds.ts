@@ -3,6 +3,8 @@
  * (page.tsx `useParam`, and the controls bound to a param: paramControls.tsx). Apart from both so neither imports the other.
  */
 
+import { columnKind } from '@mistriwork/engine/shared/schema.js';
+
 /** What a param holds (`params: { class: 'id' }`): an id, a day, a run of days, words as written, or one of a few. */
 export type ParamKind = 'id' | 'text' | 'date' | 'date-range' | readonly string[];
 export type ParamValue = string | number;
@@ -26,12 +28,26 @@ export function splitRange(raw: string | undefined): readonly [string, string] |
 
 export const joinRange = (from: string, to: string): string | undefined => (from || to ? `${from}..${to}` : undefined);
 
+/* What an `'id'` param holds follows the key of the table it names (a param named for a resource the page reads): a
+   tenant's tables carry opaque text ids, a count-up table integers. A param naming no table holds an integer, as it always did. */
+type IdKey = 'integer' | 'text';
+/* URL-safe text only, the characters an address carries unescaped (RFC 3986's unreserved): an id with a slash or a
+   space in it is no id a link can hold. */
+const TEXT_ID = /^[A-Za-z0-9._~-]{1,256}$/;
+
+/** How a resource's key reads an `'id'` param: text where its only key column is text (or a uuid), an integer otherwise. */
+export function idKeyOf(table: { columns: ReadonlyArray<{ type: string; primaryKey?: boolean }> } | undefined): IdKey {
+  const keys = table?.columns.filter((column) => column.primaryKey) ?? [];
+  return keys.length === 1 && columnKind(keys[0]!.type) === 'text' ? 'text' : 'integer';
+}
+
 /* An address is typed by hand and kept in bookmarks, so a value is checked before the page sees it: one that is not of
    its kind is no value, as a param the address lacks is. An id past 2^53 stays its digits: Number() would round it. */
-export function paramValue(raw: string | undefined, kind: ParamKind): ParamValue | undefined {
+export function paramValue(raw: string | undefined, kind: ParamKind, key: IdKey = 'integer'): ParamValue | undefined {
   if (raw === undefined) return undefined;
   if (Array.isArray(kind)) return kind.includes(raw) ? raw : undefined;
   if (kind === 'id') {
+    if (key === 'text') return TEXT_ID.test(raw) ? raw : undefined;
     if (!/^(0|[1-9]\d*)$/.test(raw)) return undefined;
     const id = Number(raw);
     return Number.isSafeInteger(id) ? id : raw;

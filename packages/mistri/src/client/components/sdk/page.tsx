@@ -37,7 +37,9 @@ import {
 } from './context.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { pageBlocks } from './pageBlocks.js';
-import { paramKinds, paramValue, type ParamValue } from './paramKinds.js';
+import { state } from '@mistriwork/kit/client/core.js';
+import { tableNamed } from '@mistriwork/engine/shared/schema.js';
+import { idKeyOf, paramKinds, paramValue, type ParamValue } from './paramKinds.js';
 import { say } from '../../copy/components/components/sdk/page.js';
 
 export * from './index.js';
@@ -220,7 +222,10 @@ export function definePage<D = unknown>(
   const Page = (props: PageProps<D>) => createElement(UiParamKindsContext.Provider, { value: kinds }, createElement(draw, props));
   function useParam(name: string) {
     const [raw, set] = useAddressState(name);
-    return [paramValue(raw, kinds[name] ?? 'text'), set] as [
+    const frame = useContext(UiPageContext);
+    /* An id param named for a resource the page reads is that resource's key: text for a tenant's opaque ids. */
+    const table = kinds[name] === 'id' && frame?.reads.includes(name) && state.schema ? tableNamed(state.schema, name) : undefined;
+    return [paramValue(raw, kinds[name] ?? 'text', idKeyOf(table)), set] as [
       ParamValue | undefined,
       (value: string | number | undefined, options?: { push?: boolean }) => void,
     ];

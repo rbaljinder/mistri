@@ -48,6 +48,10 @@ export function queryTouches(
       );
     case 'count':
       return query[1] === connection;
+    case 'mistri-page':
+      /* A free-form page's loader (CustomSection.tsx): its key names its view and place, never a table, and what it
+         reads is its own, so any write may have changed it. A command run from the page left its `data` stale. */
+      return query[1] === 'load';
     case 'page-list':
       return !!query[1] && typeof query[1] === 'object' && (query[1] as { base?: unknown }).base === table;
     case 'peek':

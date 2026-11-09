@@ -11,7 +11,7 @@ const page = definePage({
   description: 'The post this report is about, as its author wrote it.',
   icon: 'chat-circle',
   roles: ['moderator', 'admin'],
-  reads: ['report'],
+  reads: ['report', 'post'],
   component: ReportedPost,
 });
 export default page;

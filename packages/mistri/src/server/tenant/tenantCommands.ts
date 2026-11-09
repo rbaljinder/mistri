@@ -3,6 +3,7 @@ import { isProxy } from 'node:util/types';
 import type { WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
 import { AppAccessDenied } from '../app/appAccess.js';
+import { commandZone } from '../app/readerZone.js';
 import { sessionActorWords } from '../app/appStamps.js';
 import {
   registerTenantCommandEventBinding,
@@ -276,6 +277,8 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
             roles: actingPrincipal(request, scope.principal).roles,
             ...sessionActorWords({ id: scope.principal.accountId, who: scope.who() }),
           });
+          /* This tenant's zone for `today()` and `now()` (readerZone.ts), where `ui.timezone` names a column. */
+          const zone = mode === 'execute' || mode === 'draft' ? await commandZone(app.ui, () => scope.reads()) : undefined;
           const flags = commandFlagsOnce(async () => {
             await scope.session();
             const captured = await captureFlags?.(scope.principal, request);
@@ -353,6 +356,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                   const contexts = new WeakMap<WriteTransaction, TenantCommandRecords>();
                   return Object.freeze<AuthorizedBusinessCommand>({
                     ...authorization,
+                    ...(zone === undefined ? {} : { timezone: zone }),
                     transaction: deny,
                     /* No plain transaction here either: what a signed-in draft finds (the person's open draft, its
                        version) and a decision's inputs are read in this command's own fenced transaction, scoped to

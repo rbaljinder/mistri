@@ -33,6 +33,8 @@ import { tenantVisibleFields } from './tenantVisibleFields.js';
 import type { AdmissionCache } from './tenantAdmissionCache.js';
 import { bindTenantFlagOwner } from './tenantFlagRuntime.js';
 import { actingPrincipal } from './tenantApiRequest.js';
+import { withTenantReadAudit } from './tenantReadAudit.js';
+import type { ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
 import { readZone } from '../app/readerZone.js';
 import { readLocale } from '../app/readerLocale.js';
 
@@ -108,6 +110,8 @@ export interface TenantReadRuntimeOptions<Request> {
   readonly now?: () => number;
   /** The deployment's kept admissions (tenantAdmissionCache.ts). */
   readonly admissions?: AdmissionCache;
+  /** Where an audited resource's read is written (tenantReadAudit.ts): the deployment's writer, never this source. */
+  readonly readAudit?: (row: ReadAuditRow) => Promise<void>;
 }
 
 /** A callback's failure that is the request's and not the context's: the
@@ -182,6 +186,7 @@ const optionKeys = [
   'presentation',
   'now',
   'admissions',
+  'readAudit',
 ];
 /** Internal read admission/draining only; source closure belongs to the outer
  * owner after every read, write and history publication has settled. */
@@ -208,10 +213,12 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
     typeof raw.resolveRows !== 'function' ||
     typeof raw.resolveMembershipRows !== 'function' ||
     (raw.now !== undefined && typeof raw.now !== 'function') ||
-    (raw.presentation !== undefined && typeof raw.presentation !== 'function')
+    (raw.presentation !== undefined && typeof raw.presentation !== 'function') ||
+    (raw.readAudit !== undefined && typeof raw.readAudit !== 'function')
   )
     return denyTenant();
   const presentation = raw.presentation as TenantReadRuntimeOptions<Request>['presentation'];
+  const readAudit = raw.readAudit as TenantReadRuntimeOptions<Request>['readAudit'];
   /* A role set's read grant, resolved once for this runtime and kept: every
      request resolved and filtered it afresh, though its answer depends on
      nothing but the App, this catalog and the roles, all fixed here — a field
@@ -441,7 +448,15 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                   return adapter;
                 },
               };
-              const guarded = authorizeResources(resources, { ...readGrant([...acting.roles]), rows }, assertActive);
+              const guarded = authorizeResources(
+                resources,
+                withTenantReadAudit(
+                  { ...readGrant([...acting.roles]), rows },
+                  { app: app.id, tenant: principal.tenantId, actor: principal.accountId },
+                  readAudit,
+                ),
+                assertActive,
+              );
               const reader = guarded.adapter;
               const data = Object.freeze<ScopedReads>({
                 query: (input) =>

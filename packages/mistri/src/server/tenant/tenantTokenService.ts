@@ -24,6 +24,7 @@
  * the token again (tenantApiReadOwner.ts): a membership changed after issue
  * leaves the token without authority, never with more.
  */
+import { operatorReaches } from './tenantOperatorReach.js';
 import { DatabaseSync } from 'node:sqlite';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -165,7 +166,7 @@ export function createTenantTokenService(
         (operator) =>
           operator.accountId === principal.accountId &&
           operator.operations.includes('revokeMembership') &&
-          operator.tenants.includes(principal.tenantId),
+          operatorReaches(operator.tenants, principal.tenantId),
       ));
   /** A token this member may see and end: their own, or, for the tenant's
    * administrator, anyone's no wider than they are. */

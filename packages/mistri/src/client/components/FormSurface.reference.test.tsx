@@ -29,6 +29,8 @@ const { api, state, bank } = vi.hoisted(() => ({
 vi.mock('../../../../kit/src/client/core.js', async (original) => ({
   ...(await original<object>()),
   api,
+  // A picker's reads say so (core.js pickerApi); here they are the same reads.
+  pickerApi: api,
   state,
   columnDisplay: (table: string, column: string) =>
     bank.subtitle && table === 'account' && column === 'name' ? { subtitle: 'last4' } : null,

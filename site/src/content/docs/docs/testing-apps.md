@@ -86,13 +86,14 @@ node --import tsx --test tests/*.test.ts
 | `createTestWorkspace()` | A temporary directory that owns cleanup: `copy`, `write`, `database`, `own(close)`, `path` |
 | `startTestApp({ workspace, directory, database, config?, args?, environment?, assistant? })` | Starts the production CLI on the App, with your config, policy, commands and jobs. A relative `--policy`, `--commands` or `--jobs` in `args` is the App directory's. A `database` without a `config` is writable when the App writes, and a SQLite file from outside the workspace is served as a copy. `assistant` is a script the in-App assistant answers from instead of a model: `{ turns: [{ when, steps: [{ text, tools }] }] }` |
 | `host.seed(table, row \| rows)` | Inserts rows as a test's setup, past grants and the row policy, as a seed script would; the rows come back with their ids |
+| `host.readAudit({ resource, record, actor, tenant, since, limit })` | The [read audit](/docs/dsl-resources/#read-audit) of a resource with `audit: { reads: true }`, newest first: who read what, through which door. On a tenant App, `tenant` names the one tenant's log |
 | `host.runJob(name)` | Runs a job at times now, as its service, and waits for its attempt: `{ state, code }` |
 | `startTestSuite({ workspace, configuration, environment })` | The same for a [suite](/docs/suites/); `grant(...)` goes through the real grant path |
 | `host.client()` | A client with its own cookies: `signUp({ name, email, password })`, `signIn`, `signOut`, `request(path, { method, json, headers })`. `createTestClient(origin, { app, base })` makes one for a server you started; every call, sign-in included, goes under `base` |
 | `workspace.copyConfig(file)` | A copy of a `mistri.json` and every SQLite file it names, for `config` |
 | `host.as(role)` | A client signed in to an account holding that role, made through the App's accounts API. Its email is `<role>@example.test`: where a row policy or `auth.me` finds a person's row by email, seed that row first, `host.seed('vendor', { name: 'Probe Plumbing', email: 'vendor@example.test' })` |
 | `client.update(table, key, values)`, `client.command(name, key, input)`, `client.act(table, action)` | The request the browser sends; a result, never a throw: `{ ok: true, value }` or `{ ok: false, status, code, message }`. A command is sent at the version the session is served (`{ version }` names another). `act` runs the action on a record it is offered on — a command's own `when` asked of the server — trying the next where its handler refuses one, and answers `no_record` where none is |
-| `client.rows(table, { where })`, `client.open(view)`, `client.views()` | Rows as the query bar reads them; a page with its first reads; the role's home and menu |
+| `client.rows(table, { where, show })`, `client.open(view)`, `client.views()` | Rows as the query bar reads them (`show: ['name', 'headcount']` asks for columns by name, a rollup or computed column among them, as the App's own list reads it); a page with its first reads; the role's home and menu |
 | `assertPermissions(host, cases)` | Each case: `role`, `read`, `write` or `command` (`on` its table), and `allowed`. A refused read is answered as a table that is not there, so it does not say the table exists; a refused write or command, 403; signed out, 401 |
 | `assertAuthorizationMatrix(rows)` | Each row: `name`, `client`, `path`, expected `status`, optional `request` and `inspect` |
 | `validateTestApp(dir)` | Loads the App and checks `authority.lock`, without a database |
@@ -143,7 +144,7 @@ test('each clinic sees its own appointments, and never another clinic', async t 
 | --- | --- |
 | `host.tenant(id, { roles, email?, name? })` | A new member of tenant `id` with those roles, signed in, working in its lease. The roles are held to the tenant realm, as an operator's grant is |
 | `host.platform({ roles })` | A new member of the platform realm, working in it: the reads its policy's `resolvePlatformRows` allows and its platform commands |
-| `member.record(table, key)` | Whether the member reaches one record: `ok`, or `not_found` for another tenant's and for none at all, never told apart |
+| `member.record(table, key)` | Whether the member reaches one record: `ok`, or `not_found` for another tenant's and for none at all, never told apart. An `ok` answer also carries `values`, the row as this member may read it |
 | `member.enter(id)` | Asks for another tenant's lease (or `@platform`) under the same sign-in: what the server answers. The client keeps its own lease |
 | `member.support(id, { role, reason })` | A platform member's [support visit](/docs/tenant-apps/) into one tenant, read-only in the role assumed: a client on the visit's lease, with `visit` and `exit()` |
 | `member.account`, `member.lease` | The account made for the member (its email and password) and the lease the server granted |

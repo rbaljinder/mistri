@@ -24,6 +24,8 @@ const { api, state, tables } = vi.hoisted(() => ({
 }));
 vi.mock('../../../../kit/src/client/core.js', () => ({
   api,
+  // A picker's reads say so (core.js pickerApi); here they are the same reads.
+  pickerApi: api,
   state,
   findTable: (id: string) => tables[id] ?? { id: 'loan_application' },
   columnLabel: () => null,

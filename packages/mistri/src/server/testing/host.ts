@@ -15,6 +15,7 @@ import { runTestMaintenance } from './worker.js';
 import type { TestRow } from './appRequests.js';
 import type { AssistantScript } from '../assistant/assistantScripted.js';
 import type { DecisionScript } from '../decide/providers/scriptedDecisions.js';
+import type { StoredReadAudit } from '../../adapters/readAudit/readAudit.js';
 import { TEST_CONTROL_HEADER, TEST_CONTROL_PATHS } from './control.js';
 import { tenantTestClient, type TestTenantAccount, type TestTenantClient } from './tenant.js';
 import { PLATFORM_TENANT_ID } from '../../shared/tenantContext.js';
@@ -49,6 +50,20 @@ export interface TestAppOptions extends HostOptions {
 export type TestAssistantScript = AssistantScript;
 /** The answers scripted decision providers give (`startTestApp({ decisions })`), by decision name. */
 export type TestDecisionScript = DecisionScript;
+/** What `host.readAudit()` narrows by; every field optional. */
+export interface TestReadAuditQuery {
+  readonly tenant?: string;
+  readonly resource?: string;
+  readonly record?: string;
+  readonly actor?: string;
+  /** ISO instant: rows written at or after it. */
+  readonly since?: string;
+  readonly limit?: number;
+}
+
+/** One row of the read audit. Field values are never in it. */
+export type TestReadAudit = StoredReadAudit;
+
 /** How a job run now ended (`host.runJob`): `succeeded`, or the state its first attempt left it in and why. */
 export interface TestJobRun {
   state: string;
@@ -367,6 +382,12 @@ function setup(url: string, control: string) {
      */
     runJob: (job: string, options: { timeoutMs?: number } = {}): Promise<TestJobRun> =>
       ask<TestJobRun>(TEST_CONTROL_PATHS.job, { job, timeoutMs: options.timeoutMs ?? 30000 }, options.timeoutMs ?? 30000),
+    /**
+     * The read audit's rows (resources with `audit: { reads: true }`), newest first, as `mistri audit reads` prints
+     * them: who read, by which route, and the record or the query with the ids it returned. A tenant App's are read
+     * for the one tenant named, so a test sees what that tenant's log holds and nothing of another's.
+     */
+    readAudit: (query: TestReadAuditQuery = {}): Promise<TestReadAudit[]> => ask<TestReadAudit[]>(TEST_CONTROL_PATHS.readAudit, query),
   };
 }
 /** Starts the actual suite CLI, including shared login and App grants. */

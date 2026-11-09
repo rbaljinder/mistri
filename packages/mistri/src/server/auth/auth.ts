@@ -41,6 +41,9 @@ import {
 import { oidcProvider, type Jose, type SignInEvidence } from './identityProviders.js';
 import { identityHooks, namedProviders, roleClaimsOf, sessionRoles, signUpShut, type FederatedSignIn } from './identityRoles.js';
 import type { LogoutContext } from './backchannelLogout.js';
+import { surfaceFor } from '../../shared/appSurfaces.js';
+import { sessionRoles as readerRoles } from '../../shared/appViewRoles.js';
+import { isSurfaceToken, issueSurfaceToken, readSurfaceToken, surfaceTokenTtl, SurfaceTokenRefused } from './surfaceToken.js';
 import { LOADED_APP_KEYS, type LoadedApp } from '../app/apps.js';
 import { configLocations } from '@mistriwork/engine/server/config/locations.js';
 import { createAccountProfileHandler, type AccountProfileApi } from './accountProfile.js';
@@ -219,6 +222,14 @@ export interface AppAuthRuntime {
   store: string;
   /** Release the session store after requests have drained. Idempotent. */
   close: () => void;
+  /** Short-lived bearers for one surface of a headless App (surfaceToken.ts): minted from a request's session
+      cookie for a server component, and admitted at the door in place of that session. Absent where nothing signs in. */
+  surfaceTokens?: Readonly<{
+    mint(request: { headers: { get(name: string): string | null } }, input: { surface: string; ttl?: number }): Promise<string>;
+    /** The person and surface a request's surface token stands for, or `undefined` for one that does not hold (tampered, expired,
+        its session ended). Admitted, `session(req)` answers that person for this request and no other. */
+    admit(req: IncomingMessage): Promise<{ identity: Identity; surface: string } | undefined>;
+  }>;
   /** Hosts that sign people in for this App (embed/): the origins they are on, and a cross-origin
       bearer as the session cookie it stands for. Absent where the config file names none. */
   embed?: Readonly<{
@@ -1641,6 +1652,83 @@ export async function createAppAuth(
       const next = [...new Set([...rolesOf(role).filter((held) => !Object.hasOwn(mapping, held)), ...given])];
       return next.length ? next.join(',') : undefined;
     };
+    type SessionUser = { id: string; email?: string; name?: string; role?: string | null; emailVerified?: unknown };
+    /* Who an account is in this App for one session: its roles (a host's mapped ones, or an identity provider's, count for
+       that session alone), its name and whether its email is proven. Null when the session's roles cannot be told. */
+    const identityOf = async (user: SessionUser, sessionId: string | undefined): Promise<Identity | null> => {
+      const role = await embedRole(
+        sessionId,
+        federation ? federation.rolesFor(user.role, (await federation.stepUp.evidence(sessionId ?? ''))?.provider) : user.role,
+      );
+      if (role === null) return null;
+      const verified = (user.emailVerified === true || user.emailVerified === 1) && Boolean(user.email);
+      return {
+        id: user.id,
+        who: user.email ?? user.name ?? user.id,
+        ...(role ? { role } : {}),
+        ...(sayableName(user.name) ? { name: user.name } : {}),
+        ...(verified ? { emailVerified: true as const } : {}),
+        ...(spec.signUp === 'open' && !verified ? { emailUnproven: true as const } : {}),
+      };
+    };
+    const surfaceAdmitted = new WeakMap<IncomingMessage, Identity>();
+    const surfaceTokens: AppAuthRuntime['surfaceTokens'] = sessions
+      ? Object.freeze({
+          mint: async (request, input) => {
+            const seconds = surfaceTokenTtl(input.ttl);
+            if (typeof input.surface !== 'string' || !input.surface)
+              throw new SurfaceTokenRefused('unknown_surface', 'tokenFor: name the surface the token is for.');
+            const cookie = request.headers.get('cookie');
+            // The session as the cookie says it, never refreshed by asking: a render must not extend anyone's sign-in.
+            const got = cookie ? await sessionOf({ headers: { cookie } } as IncomingMessage, true) : null;
+            if (!got?.user || !got.session) {
+              throw new SurfaceTokenRefused(
+                'no_session',
+                'tokenFor: the request carries no signed-in session, so there is no one to mint a token for.',
+              );
+            }
+            const identity = await identityOf(got.user as SessionUser, got.session.id);
+            if (!identity) throw new SurfaceTokenRefused('no_session', 'tokenFor: this session has no roles in this App.');
+            if (!surfaceFor(loaded.app, readerRoles(identity.role), input.surface)) {
+              throw new SurfaceTokenRefused(
+                'unknown_surface',
+                `tokenFor: ${loaded.app.name} has no surface "${input.surface}" for this person.`,
+              );
+            }
+            // Never longer than the session it stands for.
+            const expires = Math.min(Date.now() + seconds * 1000, instantOf(got.session.expiresAt));
+            return issueSurfaceToken(secret, {
+              app: loaded.app.id,
+              person: identity.id,
+              session: got.session.id,
+              surface: input.surface,
+              expires,
+            });
+          },
+          admit: async (req) => {
+            const credential = /^Bearer (\S+)$/.exec(String(req.headers.authorization ?? ''))?.[1];
+            if (!credential || !isSurfaceToken(credential)) return undefined;
+            const claims = readSurfaceToken(secret, loaded.app.id, credential);
+            if (!claims) return undefined;
+            /* The session and its account are read as the cookie's are, on every request: signing out, a ban or a
+               role taken away ends the token before its time. */
+            const db = ((await auth.$context) as unknown as { adapter: LedgerAdapter }).adapter;
+            const row = await storeFailureBeneath(async () => {
+              const session = await db.findOne<{ userId?: unknown; expiresAt?: unknown }>({
+                model: 'session',
+                where: [{ field: 'id', value: claims.session }],
+              });
+              if (!session || session.userId !== claims.person || instantOf(session.expiresAt) <= Date.now()) return undefined;
+              return db.findOne<SessionUser & { banned?: unknown }>({ model: 'user', where: [{ field: 'id', value: claims.person }] });
+            });
+            if (!row || row.banned === true || row.banned === 1) return undefined;
+            const identity = await identityOf(row, claims.session);
+            if (!identity) return undefined;
+            surfaceAdmitted.set(req, identity);
+            return { identity: { ...identity }, surface: claims.surface };
+          },
+        })
+      : undefined;
     const runtime: AppAuthRuntime = {
       accountProfile: true,
       ...(sessions
@@ -1658,6 +1746,7 @@ export async function createAppAuth(
       store: handle.label,
       close,
       ...(embedExchange ? { embed: Object.freeze({ origins: embedExchange.origins, sessionCookie, bearer: embedExchange.bearer }) } : {}),
+      ...(surfaceTokens ? { surfaceTokens } : {}),
       handler: async (req, res) => {
         // Before anything reaches Better Auth, so no value the client sent under this name survives.
         req.headers[CLIENT_ADDRESS_HEADER] = clientAddress(req, opts.trustedProxies ?? []);
@@ -1719,6 +1808,9 @@ export async function createAppAuth(
          for the same request, and each ask was the session and its account
          read again from the store. One request is one answer. */
       session: (req) => {
+        // A surface token admitted at the door (surfaceTokens.admit) is this request's session, and only this request's.
+        const surfaced = surfaceAdmitted.get(req);
+        if (surfaced) return Promise.resolve({ ...surfaced });
         let asked = sessionsAsked.get(req);
         if (!asked)
           sessionsAsked.set(
@@ -1726,23 +1818,7 @@ export async function createAppAuth(
             (asked = (async () => {
               const got = await sessionOf(req, false);
               if (!got?.user) return null;
-              const user = got.user as { id: string; email?: string; name?: string; role?: string | null; emailVerified?: unknown };
-              const role = await embedRole(
-                got.session?.id,
-                federation
-                  ? federation.rolesFor(user.role, (await federation.stepUp.evidence(got.session?.id ?? ''))?.provider)
-                  : user.role,
-              );
-              if (role === null) return null;
-              const verified = (user.emailVerified === true || user.emailVerified === 1) && Boolean(user.email);
-              return {
-                id: user.id,
-                who: user.email ?? user.name ?? user.id,
-                ...(role ? { role } : {}),
-                ...(sayableName(user.name) ? { name: user.name } : {}),
-                ...(verified ? { emailVerified: true as const } : {}),
-                ...(spec.signUp === 'open' && !verified ? { emailUnproven: true as const } : {}),
-              };
+              return identityOf(got.user as SessionUser, got.session?.id);
             })()),
           );
         // A copy each time: a caller that changes what it was handed changes nothing another caller reads.

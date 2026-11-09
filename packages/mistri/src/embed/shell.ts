@@ -165,7 +165,7 @@ async function boot(): Promise<void> {
   await startShell(main)
     .then(lookSheetReady)
     .then(() => startupSettled())
-    .then(finishStartup)
+    .then(() => finishStartup())
     .catch(failStartup);
 }
 

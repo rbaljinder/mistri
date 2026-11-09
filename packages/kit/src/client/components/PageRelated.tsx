@@ -230,7 +230,7 @@ export function relatedDoor(
 
 /** Rows related to the root, a page at a time — the real list, not a sample of one. */
 function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counted }: SlotProps) {
-  const api = usePageApi();
+  const api = usePageApi('related');
   const { preview, isCurrent, openRelated, connection, recordName, onActionDone, actions: recordActions } = useContext(PageRenderContext);
   const counting = counted ? { base, recordKey } : undefined;
   const counts = useRelatedCounts(counted ? [section] : [], counting);

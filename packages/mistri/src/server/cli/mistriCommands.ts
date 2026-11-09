@@ -18,6 +18,8 @@ export const MISTRI_COMMANDS: Subcommands = {
   flows: { run: async (argv) => (await import('./flowsCommand.js')).runFlowsCommand(argv) },
   /* A decision measured on settled records, and its model pinned to apply. */
   decide: { run: async (argv) => (await import('./decideCommand.js')).runDecideCommand(argv) },
+  /* Who read an audited resource's rows (readAuditStore.ts). */
+  audit: { run: async (argv) => (await import('./auditCommand.js')).runAuditCommand(argv) },
   /* A job at times run now, by hand. */
   jobs: { run: async (argv) => (await import('./jobsCommand.js')).runJobsCommand(argv) },
   analytics: { run: async (argv) => (await import('./analyticsCommand.js')).runAnalyticsCommand(argv) },

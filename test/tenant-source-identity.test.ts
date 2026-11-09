@@ -97,6 +97,7 @@ test('genuine same-file read/write pair returns captured immutable namespace wit
     'bindPlatformReads',
     'bindPublicReads',
     'bindReads',
+    'bindServiceReads',
     'close',
     'ownership',
     'readActiveTenants',
@@ -126,6 +127,7 @@ test('genuine same-file read/write pair returns captured immutable namespace wit
     'withReads',
   ]);
   assert.deepEqual(Object.keys(write).sort(), [
+    'appendReadAudit',
     'close',
     'commandTransaction',
     'inboxMail',
@@ -135,6 +137,7 @@ test('genuine same-file read/write pair returns captured immutable namespace wit
     'platformCommandTransaction',
     'platformTenantCommandTransaction',
     'platformTransaction',
+    'readReadAudit',
     'serviceCommandTransaction',
     'supportCommandTransaction',
     'supportTransaction',

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { Readable } from 'node:stream';
 import type { IncomingMessage } from 'node:http';
 import { commandBody } from '../packages/mistri/src/server/commands/businessCommandHttp.js';
+import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { CommandInputError } from '../packages/mistri/src/server/commands/commandPayload.js';
 
 const request = (chunks: readonly Buffer[]) => Readable.from(chunks) as unknown as IncomingMessage;
@@ -40,12 +41,15 @@ test('command body preserves BOM and malformed JSON refusal without decoder deta
   }
 });
 
-test('command body enforces its existing 64 KiB byte limit', async () => {
-  const exact = Buffer.from(`"${'a'.repeat(65_534)}"`);
-  assert.equal(exact.length, 65_536);
-  assert.equal(await commandBody(request([exact])), 'a'.repeat(65_534));
+test('command body enforces its 512 KiB byte limit, which holds a 65,536-character text', async () => {
+  const exact = Buffer.from(`"${'a'.repeat(MAX_COMMAND_BYTES - 2)}"`);
+  assert.equal(exact.length, MAX_COMMAND_BYTES);
+  assert.equal(await commandBody(request([exact])), 'a'.repeat(MAX_COMMAND_BYTES - 2));
   await assert.rejects(commandBody(request([exact, Buffer.from(' ')])), CommandInputError);
-  const multibyte = Buffer.from(`"${'雪'.repeat(21_845)}"`);
-  assert.equal(multibyte.length, 65_537);
+  const multibyte = Buffer.from(`"${'雪'.repeat(Math.floor((MAX_COMMAND_BYTES - 2) / 3) + 1)}"`);
+  assert.ok(multibyte.length > MAX_COMMAND_BYTES);
   await assert.rejects(commandBody(request([multibyte])), CommandInputError);
+  // The longest text a command may declare, all four-byte characters, still fits whole.
+  const longest = '🙂'.repeat(65_536);
+  assert.ok(Buffer.byteLength(JSON.stringify({ input: longest })) <= MAX_COMMAND_BYTES);
 });

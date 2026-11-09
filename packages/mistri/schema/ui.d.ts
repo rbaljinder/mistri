@@ -72,6 +72,9 @@ export type LoaderData<L extends string> = [Loaders] extends [never]
 /** What a page's component is drawn with: the result of the loader it names (`PageProps<'pickWalk'>`), and its placement's props. */
 export interface PageProps<L extends string = never> {
   data: [L] extends [never] ? null : LoaderData<L>;
+  /** Runs the loader again and draws its new result as `data`. A command the page runs that commits does this itself;
+      this is for a change the page did not make (a timer, a scan that arrived, a save somewhere else). */
+  refresh: () => void;
   props: Readonly<Record<string, unknown>>;
 }
 
@@ -356,8 +359,8 @@ export declare function useNavigate(): {
  * where a link to nowhere would otherwise ship. `params` are the words an address says (`tab`, `search`, a filter's column).
  */
 export declare function useHref(): {
-  /** The sign-in's address. */
-  signIn(): string;
+  /** The sign-in's address. `then` is an in-App path to go on to once signed in (`/leads/4`): carried as `?then=`, which the sign-in reads; an absolute or protocol-relative address is dropped, not carried. */
+  signIn(options?: { then?: string }): string;
   /** A list or dashboard by its view key: `view('leads', { tab: 'working', search: 'stone' })` is `/leads?tab=working&search=stone`. */
   view(view: string, params?: Readonly<Record<string, string>>): string;
   /** A record by its key under the view that shows its table: `record('leads', { id: 127 })` is `/leads/127`, and `{ tab: 'map' }` adds the tab's word. */
@@ -632,6 +635,7 @@ export type Token =
   | '--mono'
   | '--heading-font'
   | '--code'
+  | '--figures-face'
   | '--radius'
   | '--field-radius'
   | '--pill-radius'

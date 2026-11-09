@@ -120,7 +120,7 @@ test('command inputs reject malformed identities, bounds, sparse inputs and dupl
   const badFields = [
     { type: 'unknown' },
     { type: 'text', min: 0 },
-    { type: 'text', max: 16385 },
+    { type: 'text', max: 65537 },
     { type: 'text', maxLength: 20 },
     { type: 'text', required: true },
     { type: 'text', optional: 'yes' },
@@ -138,6 +138,9 @@ test('command inputs reject malformed identities, bounds, sparse inputs and dupl
     { type: 'group', optional: true, fields: { a: { type: 'text' } } },
   ];
   for (const field of badFields) assert.throws(() => parse({ field: { label: 'Field', ...field } }));
+  // The ceiling is 65,536 characters (a field report asked for room past 16,384).
+  assert.doesNotThrow(() => parse({ notes: { label: 'Notes', type: 'textarea', max: 65536 } }));
+  assert.throws(() => parse({ notes: { label: 'Notes', type: 'textarea', max: 65537 } }), /from 1 to 65536/);
   // A field below or above another names a sibling of its own kind.
   assert.throws(
     () => parse({ when: { type: 'date' }, amount: { type: 'number', below: 'when' } }),

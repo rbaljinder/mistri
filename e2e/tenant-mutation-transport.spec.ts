@@ -2,6 +2,7 @@
 import { test, expect, type Page } from './support/harness.js';
 import { startTenantApp, type TenantAppFixture } from './support/tenantServer.js';
 import { TENANT_HTTP_HEADERS as names, type TenantContextReply } from '../packages/mistri/src/shared/tenantContext.js';
+import { isSelection, leaseOfSelection } from './support/tenantSelection.js';
 
 // Exercise the bundled client transport against genuine native-auth HTTP and
 // SQLite. Writable fixtures now advertise shared CRUD controls, while tenant
@@ -33,10 +34,11 @@ test.describe('private tenant bundled mutation transport', () => {
       data: { email: account.email, password: account.password },
     });
     expect(login.status()).toBe(200);
+    // The address names north, one of Alice's two: the page enters it as it loads.
+    const opened = page.waitForResponse(isSelection);
     await page.goto(`${app.origin}/${app.appId}/item?tenant=north`);
-    const opened = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/tenant/context/open');
-    await page.getByRole('list', { name: 'Available tenants' }).getByRole('button', { name: 'north', exact: true }).click();
-    owner = await (await opened).json();
+    owner = await leaseOfSelection(await opened);
+    expect(owner.tenantId).toBe('north');
     await expect(page.getByRole('button', { name: 'Tenant: north', exact: true })).toBeVisible();
     await expect(page.getByRole('row').filter({ hasText: 'North item' })).toBeVisible();
   });

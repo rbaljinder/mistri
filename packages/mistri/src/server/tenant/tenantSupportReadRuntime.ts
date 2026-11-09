@@ -54,6 +54,8 @@ import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { isSupportEvidence, type SupportMembershipEvidence } from './tenantSupportLease.js';
 import { supportAsMember } from './tenantSupportMembership.js';
 import { tenantVisibleFields } from './tenantVisibleFields.js';
+import { withTenantReadAudit } from './tenantReadAudit.js';
+import type { ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
 
 export interface SupportReadContext {
   readonly principal: SupportMembershipEvidence;
@@ -77,6 +79,8 @@ export interface SupportReadRuntimeOptions<Request> {
   readonly resolveRows: (principal: TenantMembershipEvidence) => RowScope | Promise<RowScope>;
   readonly presentation?: (principal: TenantMembershipEvidence, schema: DatabaseSchema) => TenantCapabilities;
   readonly now?: () => number;
+  /** Where an audited resource's read is written (tenantReadAudit.ts), as `support:<operator>` with the visit. */
+  readonly readAudit?: (row: ReadAuditRow) => Promise<void>;
 }
 
 function delivered<T>(value: T | Promise<T>): T | Promise<T> {
@@ -92,7 +96,17 @@ function delivered<T>(value: T | Promise<T>): T | Promise<T> {
 function withoutDiagnostics<T extends { sql: unknown }>(result: T): T {
   return { ...result, sql: { text: '', params: [] } };
 }
-const optionKeys = ['app', 'source', 'deployment', 'verifySession', 'resolveMembershipRows', 'resolveRows', 'presentation', 'now'];
+const optionKeys = [
+  'app',
+  'source',
+  'deployment',
+  'verifySession',
+  'resolveMembershipRows',
+  'resolveRows',
+  'presentation',
+  'now',
+  'readAudit',
+];
 
 /** Internal non-owning binding: its retire stops admission and drains requests,
  * and never closes the source it was handed. */
@@ -117,7 +131,8 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
     typeof raw.resolveMembershipRows !== 'function' ||
     typeof raw.resolveRows !== 'function' ||
     (raw.presentation !== undefined && typeof raw.presentation !== 'function') ||
-    (raw.now !== undefined && typeof raw.now !== 'function')
+    (raw.now !== undefined && typeof raw.now !== 'function') ||
+    (raw.readAudit !== undefined && typeof raw.readAudit !== 'function')
   )
     return denyTenant();
   tenantIdentifier(raw.deployment);
@@ -126,6 +141,7 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
   const membershipRows = raw.resolveMembershipRows as SupportReadRuntimeOptions<Request>['resolveMembershipRows'];
   const authoredRows = raw.resolveRows as SupportReadRuntimeOptions<Request>['resolveRows'];
   const presentation = raw.presentation as SupportReadRuntimeOptions<Request>['presentation'];
+  const readAudit = raw.readAudit as SupportReadRuntimeOptions<Request>['readAudit'];
   const now = tenantRuntimeClock((raw.now ?? Date.now) as () => number);
   let retired = false,
     retirement: Promise<void> | undefined;
@@ -304,7 +320,11 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
           const rows = composeTenantReadScope(ownership, view, member, authored);
           const guarded = authorizeResources(
             resources,
-            tenantVisibleFields(ownership, { ...access, rows, writable: new Set() }),
+            withTenantReadAudit(
+              tenantVisibleFields(ownership, { ...access, rows, writable: new Set() }),
+              { app: app.id, tenant: principal.tenantId, actor: `support:${principal.accountId}`, visit: principal.supportId },
+              readAudit,
+            ),
             assertActive,
           );
           const reader = guarded.adapter;

@@ -16,7 +16,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
-import { APP_PAGE_PERMISSIONS_POLICY, PERMISSIONS_POLICY } from '../packages/engine/src/server/http/baselineHeaders.js';
+import {
+  APP_PAGE_MICROPHONE_PERMISSIONS_POLICY,
+  APP_PAGE_PERMISSIONS_POLICY,
+  PERMISSIONS_POLICY,
+} from '../packages/engine/src/server/http/baselineHeaders.js';
 import { builtClient, shellPolicy } from '../packages/engine/src/server/clientHttp.js';
 
 const ENTRY = 'assets/index-AbC123_x.js';
@@ -86,11 +90,13 @@ before(async () => {
       ? { title: 'tablewalk', workbench: true as const }
       : url.startsWith('/shop/')
         ? { title: `${decodeURIComponent(url.slice(6))} · Shop`, canonical: url }
-        : url.startsWith('/lumen-app/')
-          ? { title: 'Lumen App', looks: ['lumen'], faces: ['lumen'] }
-          : url.startsWith('/borrowing-app/')
-            ? { title: "A theme on Sage with one of Lumen's recipes", looks: ['sage', 'lumen'] }
-            : undefined;
+        : url.startsWith('/voice-app/')
+          ? { title: 'Voice App', microphone: true as const }
+          : url.startsWith('/lumen-app/')
+            ? { title: 'Lumen App', looks: ['lumen'], faces: ['lumen'] }
+            : url.startsWith('/borrowing-app/')
+              ? { title: "A theme on Sage with one of Lumen's recipes", looks: ['sage', 'lumen'] }
+              : undefined;
   server = createServer((req, res) => {
     serve(req, res, req.method === 'HEAD', shellFor(req.url)).catch((error) => res.destroy(error));
   });
@@ -426,4 +432,13 @@ test("Lumen's face is served as a font and kept for a year, under its own name",
   assert.equal(reply.headers['cache-control'], 'public, max-age=31536000, immutable');
   assert.equal(reply.headers['content-encoding'], undefined, 'a woff2 is compressed already');
   assert.equal(reply.body.toString(), FONT);
+});
+
+test("an App that declares ui.microphone lets its own origin use the microphone; every other App's page still refuses it", async () => {
+  const voice = await ask('/voice-app/notes', { 'accept-encoding': 'br' });
+  assert.equal(voice.headers['permissions-policy'], APP_PAGE_MICROPHONE_PERMISSIONS_POLICY);
+  assert.match(APP_PAGE_MICROPHONE_PERMISSIONS_POLICY, /camera=\(self\).*microphone=\(self\)/);
+  // Only the microphone differs from the App page's policy.
+  assert.equal(APP_PAGE_MICROPHONE_PERMISSIONS_POLICY.replace('microphone=(self)', 'microphone=()'), APP_PAGE_PERMISSIONS_POLICY);
+  assert.match(String((await ask('/', { 'accept-encoding': 'br' })).headers['permissions-policy']), /microphone=\(\)/);
 });

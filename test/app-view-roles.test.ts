@@ -404,3 +404,32 @@ describe('refused at load', () => {
     );
   });
 });
+
+describe('`roles` on a menu group or entry arranges the menu and grants nothing', () => {
+  const menu = (nav: unknown[]) => parseAppConfig({ ...manifest, connection: undefined, pages: undefined, nav }, 'desk');
+  const shown = (app: AppDef, roles: string[]) =>
+    JSON.stringify(appForRoles(app, roles).nav)
+      .match(/"(?:view|group)":"[a-z-]+"/g)
+      ?.map((m) => m.split('"')[3]);
+
+  test('a group and a labelled entry are offered only to the roles they name', () => {
+    const app = menu([
+      { id: 'work', label: 'Work', roles: ['agent', 'lead'], children: ['queue', 'floor'] },
+      { to: 'mine', label: 'Mine', roles: ['employee', 'agent'] },
+    ]);
+    assert.deepEqual(shown(app, ['agent']), ['work', 'queue', 'floor', 'mine']);
+    assert.deepEqual(shown(app, ['lead']), ['work', 'queue']);
+    assert.deepEqual(shown(app, ['employee']), ['mine']);
+    // Arrangement only: the views stay whatever the grants and the views' own roles said.
+    assert.ok(Object.hasOwn(appForRoles(app, ['employee']).views, 'mine'));
+    assert.ok(!Object.hasOwn(appForRoles(app, ['employee']).views, 'queue'));
+  });
+
+  test('an unknown role is refused, as a home rule refuses it', () => {
+    assert.throws(
+      () => menu(['mine', { id: 'work', label: 'Work', roles: ['boss'], children: ['queue'] }]),
+      /names the role "boss", which auth\.roles does not declare\. It declares: agent, employee, lead\./,
+    );
+    assert.throws(() => menu([{ to: 'mine', label: 'Mine', roles: [] }]), /"roles" that are not a non-empty list of role names/);
+  });
+});

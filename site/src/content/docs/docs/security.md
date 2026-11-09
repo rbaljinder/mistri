@@ -36,8 +36,9 @@ does: connect as one that can do no more than the App needs.
   that action and nothing else.
 - **A public door holds what it is sent.** A public form, or a public page's
   command, runs as the public principal under per-client and App-wide rate
-  limits, a 64 KB body limit (held while the body arrives, for at most ten
-  seconds, before the human check), a submission key and a decoy field. A
+  limits, a 512 KB body limit (room for a 65,536-character text; held while
+  the body arrives, for at most ten seconds, before the human check), a
+  submission key and a decoy field. A
   public page's command also needs the page's own ticket, at least three
   seconds old, and comes from the page's own origin, never an embedding
   host's. `auth.challenge` adds a human check, asked before the App-wide

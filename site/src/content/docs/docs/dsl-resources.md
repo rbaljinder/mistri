@@ -275,6 +275,33 @@ A rule is a condition the record must meet on every write, optionally under
 `when`, which compares the record's own columns. At most 128 rules per
 resource.
 
+## Read audit
+
+```ts
+patient: { audit: { reads: true } },
+```
+
+Every read of the resource's rows is written down before those rows leave
+the server: when, who, the tenant, the resource, the door it came by, and
+either the one record read by its key or the query with the count and the
+first 500 ids it returned. Field values never are. The door is `page`,
+`api`, `mcp`, `assistant`, `export`, `picker`, `custom-page` or `related`;
+the reader is an account id, `service:<principal>`, `support:<operator>`
+with the visit's id, `api-token:<id>`, `assistant:<account>` for the
+assistant reading as the person it acts for, or `public` for a signed-out
+visitor. Counts, breakdowns and aggregates are not row reads and are not
+logged.
+
+It fails closed: a read whose row cannot be written is answered 503 with no
+body, and an App that audits a resource on a database without the store
+refuses to start, naming `mistri migrate stores up`. The store is append-only
+and never pruned. A request writes one row a read; the same read again
+within 60 seconds in one process (same reader, resource, door, and record or
+query and ids) is not written twice, while a new query, another page or
+another door always is. A second process writes its own row.
+`mistri audit reads` prints the log as JSON lines, and the test kit's
+`host.readAudit()` returns it.
+
 ## `resources`
 
 | Key | Type | Status | What it does |
@@ -324,7 +351,8 @@ resource.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `resources.*.audit` | object | Stable | What the durable support write trail keeps of these rows. |
+| `resources.*.audit` | object | Stable | What the durable write trails keep of these rows, and whether every read of them is logged. |
+| `resources.*.audit.reads` |  | Stable | Log every read of these rows in the read audit store (mistri audit reads): who, when, through which door, and the record or the query and the ids it returned, never a value. A read is not served when its row cannot be written. One of `true`. Used in `examples/apps/lintel/dashboards.ts`. |
 | `resources.*.audit.redact` | array | Stable | Columns the support write trail records as a keyed hash instead of their value, or 'values' for every column. One of `values`. |
 
 ## `resources.*.clone`
@@ -567,7 +595,8 @@ resource.
 | `resources.*.machine.states` | object | Stable |  |
 | `resources.*.machine.states.*.after` | object | Stable | How long the record may stay, and the command run through the jobs then. |
 | `resources.*.machine.states.*.by` | object | Stable | Moves only a service role makes (auth.roles.&lt;role>.service): the states a command running as it may move the record to. Drawn as no button. Used in `examples/apps/lintel/pages/resident.ts`. |
-| `resources.*.machine.states.*.final` |  | Stable |  One of `true`. Used in `examples/apps/lintel/resources.ts`. |
+| `resources.*.machine.states.*.final` | object | Stable | A state nothing leaves. { freeze: true } also freezes the record: no role, form, import or command writes it once it is there. One of `true`. Used in `examples/apps/lintel/resources.ts`. |
+| `resources.*.machine.states.*.final.freeze` |  | Stable |  One of `true`. |
 | `resources.*.machine.states.*.on` | object | Stable |  Used in `examples/apps/lintel/resources.ts`. |
 | `resources.*.machine.states.*.on.*.bulk` | boolean | Stable |  |
 | `resources.*.machine.states.*.on.*.confirm` | boolean | Stable | Ask before the move writes. A command verb that asks nothing asks first too; one with inputs asks them in its form, which is its confirmation, and is refused one. Used in `examples/apps/lintel/resources.ts`. |

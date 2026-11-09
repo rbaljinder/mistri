@@ -59,3 +59,35 @@ export function recordTabCollisions(app: AppDef, pages: readonly PageDef[], sche
   }
   return problems;
 }
+
+/**
+ * The tab words each list view's record can be opened on, by view key: what `useHref().record(view, key, { tab })` is
+ * typed by (typegen.ts, `RecordTabs`). A record's own tabs (its related lists, section tabs and history, as the
+ * declared page or the inferred one has them) and the page tabs filed under the view. A view over no table, or one
+ * whose records have no tabs, says none.
+ */
+export function recordTabWordsByView(app: AppDef, pages: readonly PageDef[], schema: DatabaseSchema): Record<string, string[]> {
+  const byTable = new Map<string, Set<string>>();
+  const wordsOf = (table: string) => {
+    let words = byTable.get(table);
+    if (!words) {
+      const page = pages.find((candidate) => candidate.base === table) ?? appDefaultPage(app, pages, schema, table);
+      byTable.set(table, (words = new Set(page ? pageWords(page, schema).keys() : [])));
+    }
+    return words;
+  };
+  const views = Object.entries(app.views ?? {});
+  const tabbed = new Map<string, string[]>();
+  for (const [, view] of views) {
+    const record = (view as { page?: { record?: { view: string; tab: string } } }).page?.record;
+    if (record) tabbed.set(record.view, [...(tabbed.get(record.view) ?? []), record.tab]);
+  }
+  const out: Record<string, string[]> = {};
+  for (const [key, view] of views) {
+    const table = (view as { table?: unknown }).table;
+    if ('sections' in view || typeof table !== 'string') continue;
+    const id = tableNamed(schema, table)?.id ?? table;
+    out[key] = [...new Set([...wordsOf(id), ...(tabbed.get(key) ?? [])])].sort();
+  }
+  return out;
+}

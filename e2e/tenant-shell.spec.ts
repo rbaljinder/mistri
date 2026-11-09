@@ -2,7 +2,7 @@ import { test, expect, type Page } from './support/harness.js';
 import { scalar } from './support/db.js';
 import { startTenantApp, type TenantAppFixture, type TenantAccount } from './support/tenantServer.js';
 import { TENANT_HTTP_HEADERS as headers, type TenantContextReply } from '../packages/mistri/src/shared/tenantContext.js';
-import { isSelection } from './support/tenantSelection.js';
+import { expectEntered, isSelection, leaseOfSelection } from './support/tenantSelection.js';
 
 // The tenant shell's own chrome, through genuine native sign-in: a sole
 // membership entered without the chooser, the header's New menu, and the bell
@@ -64,11 +64,14 @@ test.describe('the tenant shell', () => {
     await signIn(page, app.accounts.alice);
     const bar = page.locator('header.topbar');
     for (const look of ['lumen', 'mono', 'sage']) {
-      /* Each document chooses its tenant afresh; the look is the visitor's own, set before the page reads it. */
+      /* Each document enters north, the tenant of Alice's its address names, with no chooser; the look is the
+         visitor's own, set before the page reads it. */
       await page.addInitScript((l) => localStorage.setItem('mistri.visual-theme', l), look);
       await page.setViewportSize({ width: 390, height: 800 });
+      const entered = page.waitForResponse(isSelection);
       await page.goto(`${app.origin}/${app.appId}/items?tenant=north`);
-      await chooser(page).getByRole('button', { name: 'north', exact: true }).click();
+      expect((await entered).status()).toBe(200);
+      await expect(chooser(page)).toHaveCount(0);
       await expect(page.getByText('North item', { exact: true }).first()).toBeVisible();
       await expect(page.locator('html')).toHaveAttribute('data-visual-theme', look);
       for (const width of [320, 390, 430]) {
@@ -107,10 +110,12 @@ test.describe('the tenant shell', () => {
     app = await startTenantApp({ writable: true, shell: true });
     // Alice renames north's item, which tells Bob in north's inbox.
     await signIn(page, app.accounts.alice);
+    // The address names north, one of hers: she is in it as the page loads.
+    const opened = page.waitForResponse(isSelection);
     await page.goto(`${app.origin}/${app.appId}/item?tenant=north`);
-    const opened = page.waitForResponse((reply) => new URL(reply.url()).pathname === '/api/tenant/context/open');
-    await chooser(page).getByRole('button', { name: 'north', exact: true }).click();
-    const owner = (await (await opened).json()) as TenantContextReply;
+    const owner: TenantContextReply = await leaseOfSelection(await opened);
+    expect(owner.tenantId).toBe('north');
+    await expectEntered(page, 'north');
     const renamed = await page.request.post(`${app.origin}/api/update?${new URLSearchParams({ app: app.appId, tenant: owner.tenantId })}`, {
       headers: {
         origin: app.origin,

@@ -40,8 +40,11 @@ export function whenStartupReady(callback: () => void): () => void {
   return () => removeHostListener(window, 'mistri:ready', callback);
 }
 
-export async function finishStartup(): Promise<void> {
+/** `wanted` is asked after the frame: a reveal scheduled for one screen (a tenant chooser) is dropped when the
+    page has moved on to another that holds the veil itself, so the frame cannot lift it mid-load. */
+export async function finishStartup(wanted: () => boolean = () => true): Promise<void> {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  if (!wanted()) return;
   shellRoot().removeAttribute('data-starting');
   removeHostListener(window, 'keydown', guardStartupKeys, true);
   window.dispatchEvent(new Event('mistri:ready'));

@@ -17,6 +17,7 @@ import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/com
 import { Registry as ConnectionRegistry } from '../packages/engine/src/server/connections.js';
 import { namedCommands, parseTestApi, parseTestApp } from './support/commandCatalog.js';
 import { VALIDATE, validating } from './support/validation.js';
+import { DEPOT_TABLE, writeDepotApp } from './appApiCli.js';
 
 const definition = () => ({
   id: 'directory',
@@ -428,4 +429,21 @@ test('local comparison reports missing version increases without opening a serve
     assert.equal(refused.out, '');
     assert.doesNotMatch(refused.err, /Listening|ERR_MODULE_NOT_FOUND/);
   }
+});
+
+test('a tenant App exports its OpenAPI document with --policy, read for the ownership it needs and nothing else', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-api-export-tenant-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const business = join(directory, 'business.db');
+  const db = new DatabaseSync(business);
+  db.exec(DEPOT_TABLE('physical_item'));
+  db.close();
+  const written = writeDepotApp(directory, { business, authStore: join(directory, 'auth.db'), physical: 'physical_item' });
+  const base = ['--config', written.config, '--app', written.appDir, '--export', 'openapi', '--api-integers', 'decimal-string'];
+  const bare = await cli(directory, base);
+  assert.notEqual(bare.code, 0);
+  assert.match(bare.err, /--policy/);
+  const result = await cli(directory, [...base, '--policy', written.policy]);
+  assert.equal(result.code, 0, result.err);
+  assert.deepEqual(Object.keys(JSON.parse(result.out).paths), ['/item', '/item/{id}']);
 });

@@ -38,3 +38,33 @@ export function zoneColumnProblem(app: AppDef, schema: DatabaseSchema): string |
   if (columnKind(column.type) !== 'text') return `${where}, which is ${column.type}; a zone is text like "America/Chicago".`;
   return undefined;
 }
+
+/**
+ * A tenant command's zone: the tenant's own, read as `readZone` reads a reader's
+ * (the first row of the `ui.timezone` column, under the tenant's scope), so
+ * `today()`, `now()` and a stamp count this tenant's day, not the App's. Without a
+ * column form the App's zone stands (undefined here). A column the scope cannot
+ * read, or a value this runtime does not know as an IANA zone, falls to the App's
+ * zone as well, and says so outside production: a typo in a settings row must not
+ * fail the command, but must not pass unseen.
+ */
+export async function commandZone(
+  ui: AppUi | undefined,
+  reads: () => Promise<{ query(request: QueryRequest): Promise<QueryResult> }>,
+): Promise<string | undefined> {
+  const named = zoneColumn(ui);
+  if (!named) return undefined;
+  let value: unknown;
+  try {
+    const { rows } = await (await reads()).query({ table: named.resource, columns: [named.column], limit: 1, offset: 0 });
+    value = rows[0]?.[named.column];
+  } catch {
+    value = undefined;
+  }
+  const zone = readerZone(value);
+  if (zone === undefined && typeof value === 'string' && value.trim() && process.env.NODE_ENV !== 'production')
+    console.warn(
+      `"ui.timezone" reads "${named.resource}.${named.column}" = "${value}", which is not a time zone this runtime knows; the App's zone is used.`,
+    );
+  return zone;
+}

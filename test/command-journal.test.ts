@@ -200,7 +200,7 @@ test('body failures and caught journal validation errors roll back every earlier
     }
     for (const bad of [
       { ...audit, keyJson: JSON.stringify('x'.repeat(8192)) },
-      { ...audit, changesJson: JSON.stringify('x'.repeat(65536)) },
+      { ...audit, changesJson: JSON.stringify('x'.repeat(4_194_304)) },
     ]) {
       await assert.rejects(
         commandsOf(adapter).commandTransaction(async (tx, journal) => {

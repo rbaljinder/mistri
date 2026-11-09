@@ -395,6 +395,12 @@ export async function runGrade(
       const { loaded, origin, browser, session, choice } = opened;
       if (opened.as?.chosen)
         warn(`note: grade signed in as "${opened.as.role}", the role that reads the most. --as <role> grades another.`);
+      /* Grade reads every page as a person would, so on a database with the store its visits are in the read audit too. */
+      const audited = Object.entries(loaded.app.resources ?? {}).filter(([, resource]) => resource.audit?.reads === true);
+      if (audited.length)
+        warn(
+          `note: reads of ${audited.map(([name]) => name).join(', ')} are audited; grade's visits are written to the read audit as the account it signs in as.`,
+        );
       /* The App's home draws the view its first rule for everyone names: measured once, under that view's own address. */
       const home = loaded.app.home.find((rule) => !rule.roles?.length && !rule.signedOut)?.view;
       const shots = options.routes.length

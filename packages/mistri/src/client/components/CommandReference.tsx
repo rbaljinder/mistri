@@ -8,7 +8,7 @@
  */
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api, columnDisplay, state } from '@mistriwork/kit/client/core.js';
+import { columnDisplay, pickerApi, state } from '@mistriwork/kit/client/core.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import type { CommandValue } from '../commandState.js';
@@ -49,14 +49,14 @@ async function read(
   path: '/api/run' | '/api/breakdown',
   body: Record<string, unknown>,
 ): Promise<{ rows?: unknown; errors?: unknown[] }> {
-  if (typeof source === 'string') return api(path, { ...ownedBy(source), ...body } as Parameters<typeof api>[1]);
+  if (typeof source === 'string') return pickerApi(path, { ...ownedBy(source), ...body });
   const { app, via } = source.visitor;
   const query = new URLSearchParams({ app, ...(via ? { via } : {}) });
   const res = await fetchServer(`${path}?${query}`, {
     method: 'POST',
     credentials: 'same-origin',
     signal: AbortSignal.timeout(15_000),
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-mistri-read': 'picker' },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(say('choicesCouldNotBeLoaded'));

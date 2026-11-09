@@ -542,7 +542,7 @@ export function TableView({
       const key = keyOf(table, row) as Record<string, unknown> | null;
       const meta = column === undefined ? undefined : table.columns.find((c) => c.name === column);
       // A reference drawn by name is edited only when its key rode along with the row (appListModel's showClause).
-      if (!key || !meta || !Object.hasOwn(row, meta.name) || !canEditRow(table, key)) return undefined;
+      if (!key || !meta || !Object.hasOwn(row, meta.name) || !canEditRow(table, key, row)) return undefined;
       /* The name the cell already says — its label, or the path it draws by name — so the editor opens on it. */
       const named = drawn !== meta.name ? row[drawn] : drawnLabel;
       return (

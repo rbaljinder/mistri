@@ -730,6 +730,8 @@ const PREVIEW_FEATURE = 'preview-feature';
     refused load `invalid-app` names. */
 const AUTOMATION = 'automation';
 const NOT_LOADED = 'not-loaded';
+/** The resources whose reads the App writes down (`audit: { reads: true }`), said as information: the store it needs is the stores step's. */
+const READ_AUDIT = 'read-audit';
 /** The refusal to check with no database and no --schema-file named (runSteps), coded `catalog-missing`. */
 const NO_DATABASE = /^(?:mistri check: )?no database to check the App against/;
 
@@ -1463,6 +1465,19 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
           'info',
         )
       : undefined;
+    /* The resources whose every read is written to the read audit: information, since it costs each of their reads a statement. */
+    const audited = loaded
+      ? Object.entries(loaded.app.resources ?? {}).flatMap(([name, resource]) => (resource.audit?.reads === true ? [name] : []))
+      : [];
+    const auditFinding = audited.length
+      ? problem(
+          'validation',
+          READ_AUDIT,
+          `Reads of ${audited.join(', ')} are written to the read audit: one row a request, before its rows leave the server (mistri audit reads lists them).`,
+          { file: shown(loaded!.path) },
+          'info',
+        )
+      : undefined;
     /* A theme's value past its range refuses the load as the definition is read, so the App did not load and the
        sentence arrives as the load's: it is the themes step's finding, in its own words and place, not an `invalid-app`. */
     const refused = checked.code !== 0 && !tenantWaits;
@@ -1520,6 +1535,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
               problems: [
                 ...[...verdict.filter((_, i) => i !== said), ...stderr].flatMap((line) => found(line, false) ?? []),
                 ...(previewFinding ? [previewFinding] : []),
+                ...(auditFinding ? [auditFinding] : []),
               ],
             }
           : rangeProblems.length && rangeProblems.length === failure.length
@@ -1863,6 +1879,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     /* The Preview features the App uses: one line, not a step's, since it fails nothing (the finding is info). */
     const previewed = steps.flatMap((step) => step.problems ?? []).find((found) => found.code === PREVIEW_FEATURE);
     if (previewed) write(`  preview: ${previewed.message}`);
+    const auditing = steps.flatMap((step) => step.problems ?? []).find((found) => found.code === READ_AUDIT);
+    if (auditing) write(`  read audit: ${auditing.message}`);
     /* What the App declares that this run did not load (a jobs module, a policy beside it): said, so a pass is never
        read as a pass of the parts nobody loaded. */
     const notLoaded = loaded ? notLoadedFinding(loaded, opts, appDir) : undefined;

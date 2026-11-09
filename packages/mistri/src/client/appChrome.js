@@ -233,9 +233,13 @@ export async function chooseTenant(me, requestedApp, incomingLocation, kit) {
     { path: linkedQuery < 0 ? linked : linked.slice(0, linkedQuery), search: linkedQuery < 0 ? '' : linked.slice(linkedQuery) },
   );
   await showAccount(me, kit);
-  void lookSheetReady().then(finishStartup);
+  /* Entered directly (a link to one of the person's tenants), the selection can settle before this reveal's
+     frame: the chooser was never drawn, and the workspace below holds the veil until it is whole. */
+  let entering = false;
+  void lookSheetReady().then(() => finishStartup(() => !entering));
   const chosen = await selection;
   if (kit.retired() || sessionIdentity().mode === 'locked') return null;
+  entering = true;
   /* The chosen workspace is revealed whole, as a first page is (startupHold.ts,
      boot.js): its menu, bar and room arrived in parts, and each moved the
      page under the reader's eyes (test/built-client-vitals.mjs). */

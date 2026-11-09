@@ -31,14 +31,14 @@ const usageOf = (cli: string): string => {
 };
 
 describe('the prose agrees with the code it describes', () => {
-  test('the first line of the upgrade notes is the TypeScript peer, which stops npm install before anything else is read', () => {
+  test('the first line of the upgrade notes is the TypeScript minimum, which check and build refuse without', () => {
     const changelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
     const notes = /^### Upgrading from [^\n]*\n\n- ([^\n]*)/m.exec(changelog.slice(changelog.indexOf('## 0.9.5')))?.[1] ?? '';
     assert.match(notes, /TypeScript 7 first/);
-    const peer = JSON.parse(
-      readFileSync(new URL('../packages/mistri/package.json', import.meta.url), 'utf8'),
-    ).peerDependencies.typescript.split(' ')[0]; // the lower bound; the 0.9.5 entry predates the upper one
-    assert.match(changelog, new RegExp(`peer is \`${peer.replace(/[>=]/g, (c: string) => `\\${c}`)}\``));
+    // The minimum is no longer a declared peer (a Next.js host is on TypeScript 5): the dev dependency is the TypeScript mistri is built and tested on.
+    const pkg = JSON.parse(readFileSync(new URL('../packages/mistri/package.json', import.meta.url), 'utf8'));
+    assert.equal(pkg.peerDependencies.typescript, undefined);
+    assert.match(pkg.devDependencies.typescript, /^~7\./);
   });
 
   test('current-release prose names the latest completed changelog entry', () => {

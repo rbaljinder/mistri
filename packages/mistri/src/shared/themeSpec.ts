@@ -402,14 +402,14 @@ function bordersOf(raw: unknown, where: string): void {
   }
 }
 
-function fontsOf(raw: unknown, where: string): Partial<Record<'ui' | 'data' | 'heading' | 'code', string>> {
+function fontsOf(raw: unknown, where: string): Partial<Record<'ui' | 'data' | 'heading' | 'code' | 'figures', string>> {
   const ok = (font: unknown): font is string => typeof font === 'string' && font.length > 0 && font.length <= 200 && FONT.test(font);
   if (typeof raw === 'string') {
     if (!ok(raw)) throw new Error(`${where} must be a CSS font-family list (letters, digits, spaces, quotes, commas).`);
     return { ui: raw, data: raw, heading: raw };
   }
   const value = record(raw, where);
-  only(value, ['ui', 'data', 'heading', 'code'], where);
+  only(value, ['ui', 'data', 'heading', 'code', 'figures'], where);
   for (const [key, font] of Object.entries(value))
     if (!ok(font)) throw new Error(`${where}.${key} must be a CSS font-family list (letters, digits, spaces, quotes, commas).`);
   return value as Record<string, string>;

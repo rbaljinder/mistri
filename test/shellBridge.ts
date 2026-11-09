@@ -73,7 +73,12 @@ export async function bridgeShell(): Promise<void> {
   if (has(account, 'hasUnresolvedAdministration') && has(account, 'hasUnresolvedInvitations'))
     answers.accountBusy = () => account!.hasUnresolvedAdministration() || account!.hasUnresolvedInvitations();
   if (has(transport, 'tenantReadApi') && has(transport, 'tenantMutationApi') && has(transport, 'isTenantMutationPath'))
-    answers.tenant = { read: transport!.tenantReadApi, mutate: transport!.tenantMutationApi, isMutation: transport!.isTenantMutationPath };
+    answers.tenant = {
+      // As surfaceShell.js wires it: the fourth is the read's own headers, which tenantReadApi takes after its signal.
+      read: (path, body, connection, headers) => transport!.tenantReadApi(path, body, connection, undefined, headers),
+      mutate: transport!.tenantMutationApi,
+      isMutation: transport!.isTenantMutationPath,
+    };
   answers.undo = {
     refresh: () => (has(undo, 'refreshUndo') ? undo!.refreshUndo() : undefined),
     last: (id) => (has(undo, 'undoLast') ? undo!.undoLast(id as never) : undefined),

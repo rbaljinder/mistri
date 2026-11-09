@@ -231,6 +231,7 @@ export function tenantStoresNeeded(
     ...(commands.some((command) => getCommandEvents(command) || getCommandEffects(command)) ? ['command-events'] : []),
     ...(Object.values(loaded.app.resources ?? {}).some((resource) => resource.clone !== undefined) ? ['tenant-sandboxes'] : []),
     ...(history(loaded.app, loaded.pages).size ? ['record-history'] : []),
+    ...(Object.values(loaded.app.resources ?? {}).some((resource) => resource.audit?.reads) ? ['read-audit'] : []),
   ];
 }
 
@@ -340,6 +341,7 @@ const STORE_WORDS: Readonly<Record<string, string>> = {
   integrations: 'integrations store',
   inbox: 'notification store',
   'record-history': 'record history',
+  'read-audit': 'read audit',
   assistant: 'assistant store',
   'live-change': 'live sync',
   'tenant-sandboxes': 'sandbox store',
@@ -474,6 +476,11 @@ async function appStoreSteps(
     if (Object.values(app.resources ?? {}).some((resource) => resource.clone !== undefined))
       add(home, ['tenant-sandboxes'], unbound('tenant-sandboxes', 'sandbox store'));
     if (historyRules(app, loaded.pages).size) add(home, ['record-history'], unbound('record-history', 'record history'));
+    /* Every tenant's read audit, beside the tenant source, each row carrying its tenant (readAudit.ts). */
+    if (Object.values(app.resources ?? {}).some((resource) => resource.audit?.reads))
+      add(home, ['read-audit'], unbound('read-audit', 'read audit'));
+    /* The tenants' saved branding, beside the tenant source: its start attests the store and refuses without it (tenantBrandingStore.ts). */
+    if (app.branding) add(home, ['branding'], unbound('branding', 'branding store'));
     /* The assistant's conversations, beside the tenant source (tenantAssistant.ts), where its start looks for them. */
     if (app.assistant) add(home, ['assistant'], unbound('assistant', 'assistant store'));
     /* Live sync's change store, where every tenant's writes are told to the pages that show them. */
@@ -506,6 +513,12 @@ async function appStoreSteps(
     add(connection, ['integrations'], unbound('integrations', 'integrations store'));
   for (const connection of new Set([...historyRules(app, loaded.pages).keys()].map((id) => connectionOf(sourceOfResource(id)))))
     add(connection, ['record-history'], unbound('record-history', 'record history'));
+  /* The read audit, beside each audited resource's rows: a read is logged on the database it read. */
+  const audited = Object.entries(app.resources ?? {}).filter(([, resource]) => resource.audit?.reads);
+  for (const connection of new Set(audited.map(([id]) => connectionOf(sourceOfResource(id)))))
+    add(connection, ['read-audit'], unbound('read-audit', 'read audit'));
+  /* Branding's store, on the connection the App's entry point names, as the assistant's is. */
+  if (app.branding) add(connectionOf(undefined), ['branding'], unbound('branding', 'branding store'));
   /* The assistant's conversations, on the connection the App's entry point names (assistantStores.ts), where serving looks. */
   if (app.assistant) add(connectionOf(undefined), ['assistant'], unbound('assistant', 'assistant store'));
   /* Live sync's change store, on every database a resource is read from: a page showing any of them is told of its writes. */

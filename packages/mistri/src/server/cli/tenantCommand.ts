@@ -176,6 +176,8 @@ export async function runTenantCommand(
     const binding = { appId: loaded.app.id, source: { id: source.id, connection: source.connection }, storeId: policy.storeId };
     const { cloneTenantSandbox, readSandboxImport, setSandboxClock } = maintenance;
     if (command === 'init') {
+      // Refused before anything is opened: a public form placed by an address this column cannot hold would land in triage for good.
+      if (prepared.intakeColumnProblem) return fail(prepared.intakeColumnProblem);
       // A row already there is left as it is: a new row's step refuses one that exists (STALE), and nothing is written.
       const put = async (label: string, step: () => Promise<{ receiptId: string }>) => {
         try {
@@ -285,4 +287,11 @@ export async function runTenantCommand(
     console.log = log;
     await registry.closeAll().catch(() => {});
   }
+}
+
+/** `--export openapi` for a tenant App (oneShot.ts): another of the operator's one-offs, its document judged against the
+    policy's ownership (tenantApiExport.ts), loaded only when asked for. */
+export async function tenantOpenApi(...args: Parameters<typeof import('../tenant/tenantApiExport.js').tenantAppOpenApi>): Promise<string> {
+  const { tenantAppOpenApi } = await import('../tenant/tenantApiExport.js');
+  return tenantAppOpenApi(...args);
 }

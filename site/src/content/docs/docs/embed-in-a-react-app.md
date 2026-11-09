@@ -150,6 +150,26 @@ not name; the person's grants and row access still apply inside it.
 screens answer 404, and its sign-in still opens. Serve the App from its
 directory so its `surfaces/` are read.
 
+A server component has no browser session. Ask the mounted handler for a token with `tokenFor`: it reads the person
+from the request's session cookie and returns a bearer for them and one surface, for `ttl` seconds (60 by default, 300
+at most).
+
+```tsx
+import { headers } from 'next/headers';
+
+const token = await mistri.tokenFor({ headers: await headers() }, { surface: 'desk' });
+const response = await mistri.fetch(
+  new Request('https://example.com/api/mistri/api/view/run?app=loans', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ app: 'loans', view: { base: 'loan' }, count: 'none' }),
+  }),
+);
+```
+
+The token is held to its surface as `X-Mistri-Surface` is, reads the person's grants on every request, and ends when
+the session does. With no signed-in session, `tokenFor` rejects with a `SurfaceTokenRefused` (`code: 'no_session'`).
+
 ## Sign-in
 
 With `auth` left out, the App uses mistri's own session cookie. To sign

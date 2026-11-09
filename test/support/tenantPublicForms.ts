@@ -13,6 +13,7 @@ import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
+import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import type { TestContext } from 'node:test';
 import type { LoadedApp } from '../../packages/mistri/src/server/app/apps.js';
@@ -27,6 +28,7 @@ import { createTenantAuthenticatedHttpServer } from '../../packages/mistri/src/s
 import { parseTrustedProxies } from '../../packages/engine/src/server/http/trust.js';
 import { provisionPostgresLiveChange } from '../../packages/mistri/src/adapters/live/postgresLiveChange.js';
 import { provisionSqliteLiveChange } from '../../packages/mistri/src/adapters/live/sqliteLiveChange.js';
+import { provisionSqliteBranding, writeSqliteBranding } from '../../packages/mistri/src/adapters/branding/sqliteBranding.js';
 import { parseTestApp } from './commandCatalog.js';
 import { openTenantEngine, type TenantDialect, type TenantEngine } from './tenantDialects.js';
 
@@ -39,6 +41,8 @@ export const NORTH = 'north-intake-AAAAAAAAAAAAAAAA',
   SOUTH_PUBLIC = 'south-public-CCCCCCCCCCCCCCCC';
 /** The mapped host the operator gives north (tenantHosts.ts). */
 export const NORTH_HOST = 'north.example.test';
+/** What north saved as its name, where a suite turns `tenantBranding` on. */
+export const NORTH_BRAND = 'North Motors Co';
 export const via = (address: string) => `?via=${encodeURIComponent(address)}`;
 
 const draftColumns = 'more TEXT, status TEXT, resume_token_hash TEXT, resume_expires_at TEXT, resume_progress TEXT';
@@ -73,6 +77,8 @@ export interface TenantPublicFormOptions {
       whose choice reads it; live sync's change store is provisioned, so each dealer's choices are kept until a row of
       theirs changes. The App does not ask for live sync. */
   readonly publicReads?: true;
+  /** Each tenant may name itself (`branding.allow: ['name']`) and north has: "North Motors Co" (SQLite only). */
+  readonly tenantBranding?: true;
   /** `--trust-proxy`: the ranges whose X-Forwarded-For names a visitor on the public doors. */
   readonly trustedProxies?: readonly string[];
 }
@@ -145,6 +151,23 @@ export async function openTenantPublicForms(
     for (const tenantId of ['north', 'south']) await admin.putTenant({ tenantId, status: 'active', expectedVersion: null });
     await admin.putPlatform({ status: 'active', expectedVersion: null });
   });
+  if (options.tenantBranding) {
+    if (engine.dialect !== 'sqlite') throw new Error('The tenant branding fixture is SQLite.');
+    provisionSqliteBranding(engine.path);
+    const db = new DatabaseSync(engine.path);
+    try {
+      writeSqliteBranding(db, {
+        app: APP_ID,
+        tenant: 'north',
+        value: JSON.stringify({ name: NORTH_BRAND }),
+        logoHash: null,
+        by: 'north-owner',
+        at: new Date().toISOString(),
+      });
+    } finally {
+      db.close();
+    }
+  }
   const port = await portFor(),
     origin = `http://127.0.0.1:${port}`;
   const loaded: LoadedApp = {
@@ -162,6 +185,7 @@ export async function openTenantPublicForms(
           lead: { access: 'write', owner: 'tenant' },
           intake_submission: { access: 'write', owner: 'platform' },
         },
+        ...(options.tenantBranding ? { branding: { allow: ['name'], editors: ['staff'] } } : {}),
         auth: {
           store: join(directory, 'auth.db'),
           signUp: 'open',

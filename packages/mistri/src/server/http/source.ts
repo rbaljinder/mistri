@@ -40,6 +40,19 @@ import { consoleSourceOwners } from './appContext.js';
 import { resolveConnectionSource } from '@mistriwork/engine/server/http/connectionSource.js';
 import { pagesForRoles, sessionRoles } from '../../shared/appViewRoles.js';
 import { appZone } from '../../shared/appZone.js';
+import { withoutReadAudit, type ReadAuditSink } from '../readAudit.js';
+import { readAuditStoreOf } from '../readAuditStore.js';
+
+/* A plain App's read audit sink: one row on the database that holds the read rows (stores/appStores.ts). */
+function plainReadAudit(registry: RequestContext['registry'], app: string, actor: string): ReadAuditSink {
+  return {
+    app,
+    tenant: '',
+    actor,
+    append: async (row, connection) =>
+      readAuditStoreOf((await registry.open(connection)).adapter, `connection "${connection}"`).appendReadAudit(row),
+  };
+}
 
 /* A page judged against what a role is served, kept per page, per App catalog
    (stable while the App is loaded: appRuntimeResources.ts keeps it) and per
@@ -246,9 +259,9 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
     }
     if (policyContext) {
       ({ adapter, access } = httpPolicyReads(policyContext));
-      zone = await readZone(host.app.app.ui, policyContext.schema, (request) => adapter.query(request));
-      await learnValueLabels(host.app, policyContext.schema);
-      await sayFor(host, policyContext.schema, (request) => adapter.query(request));
+      zone = await withoutReadAudit(() => readZone(host.app.app.ui, policyContext.schema, (request) => adapter.query(request)));
+      await withoutReadAudit(() => learnValueLabels(host.app, policyContext.schema));
+      await withoutReadAudit(() => sayFor(host, policyContext.schema, (request) => adapter.query(request)));
       const writable = policy!.writableTables(policyContext);
       const policyTransitions = compileAppTransitions(policyContext.schema, host.app.app);
       schema = {
@@ -343,12 +356,15 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
               ...(granted ? { actions: granted, ...(appZone(app.ui) ? { zone: appZone(app.ui) } : {}) } : {}),
             }
           : grant;
+      /* The reader's sink, per request: the grant above is cached per role set (servedFor), the reader is not. */
+      if (grant.audited) access = { ...access, readAudit: plainReadAudit(registry, app.id, visitor ? 'public' : identity.id!) };
       wholeRowWrites = wholeWrites;
       resources = authorizeResources(resources, access);
       const reads = resources.adapter;
-      zone = await readZone(app.ui, resources.schema, (request) => reads.query(request));
-      await learnValueLabels(host.app, resources.schema);
-      await sayFor(host, resources.schema, (request) => reads.query(request));
+      /* The server's own reads (the reader's zone, labels, words) are not the reader's: not audited. */
+      zone = await withoutReadAudit(() => readZone(app.ui, resources!.schema, (request) => reads.query(request)));
+      await withoutReadAudit(() => learnValueLabels(host.app, resources!.schema));
+      await withoutReadAudit(() => sayFor(host, resources!.schema, (request) => reads.query(request)));
       // A page's fields may name a rollup this reader's catalog serves.
       const served = withRollups(host.app.app, resources.schema, clockNow(), signedInAs(identity) ?? null, zone);
       ctx.configPages = ctx.configPages.flatMap((page) =>

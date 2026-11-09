@@ -235,7 +235,7 @@ tenant whose rows they are, on the deployment's own writer:
   never wakes tenant A's instance of the same key. Each step runs a tenant
   command as the workflow's principal, which holds tenant-realm roles only,
   fenced on that tenant and `@platform` as a job's command is. A step's command
-  that declares events, looks up or is public is refused.
+  may declare events and look up, as a job's may (see the jobs section); one that is public is refused.
 - **Flows from rows** (`flows`, `flowRunner`). A run is one tenant's. The job
   host tails the deployment's record history across tenants, and each change's
   tenant is the owner its stored key holds, which the writer read off the row
@@ -1393,8 +1393,15 @@ it. Lists and the record page read `warn_at` and `due_at` as ordinary columns,
 so a sweep a minute late never shows a wrong state. This replaces a job at
 times that ticks every tenant every minute.
 
-Still refused: a job whose
-command declares events (no job starts another) or looks up; a principal
+A tenant job's command, a mail command and a flow or workflow step may
+declare events and look up: the event is recorded in that tenant's store as
+`service:<principal>`, and a lookup reads global rows (and the record the command
+targets, within the tenant) before the transaction, with the anchor fence still
+holding to commit. A platform job's command still refuses both: it runs outside
+any tenant, so it has no tenant store or rows to use. A job cycle through such
+events is refused at load.
+
+Still refused: a principal
 holding the other realm's roles; and `--jobs` with a row-policy App or
 `--app-mcp`. The tenant host serves no readiness route, so the job host's
 checks are read through maintenance inspection.

@@ -22,6 +22,8 @@ import { ApiReadFailure } from './apiReadFailure.js';
 import { ApiCommandRequestError } from './apiCommandHeaders.js';
 import type { ApiCommandRoute } from './apiCommandRoute.js';
 import { readApiApp } from './appApiValidation.js';
+/* An agent's reads are the MCP door's for the read audit, whichever owner answers them. */
+import { withReadRoute } from '../readAudit.js';
 import { ApiCommandUnauthenticated, type createSqliteApiCommandOwner } from './sqliteApiCommandOwner.js';
 import type { createSqliteApiReadOwner } from './sqliteApiReadOwner.js';
 import type { createPostgresApiReadOwner } from './postgresApiReadOwner.js';
@@ -52,100 +54,109 @@ type Json = Record<string, unknown>;
 /** SQLite: buffered handle, consumed (natively re-observed) and written on
  * one stack; a cancelled or unwritten handle is discarded. */
 export function sqliteAppMcpReads(reader: Awaited<ReturnType<typeof createSqliteApiReadOwner>>): Deliver {
-  return async (credential, request, signal, write) => {
-    const handle =
-      'tools' in request
-        ? await reader.readTools(credential, signal)
-        : 'key' in request
-          ? await reader.readItem(credential, request.operationId, request.key, signal)
-          : await reader.readList(credential, request.operationId, request.query, signal);
-    try {
-      if (signal.aborted) return;
-      write(reader.consumeResult(handle));
-    } finally {
-      reader.discardResult(handle);
-    }
-  };
+  return (credential, request, signal, write) =>
+    withReadRoute('mcp', async () => {
+      const handle =
+        'tools' in request
+          ? await reader.readTools(credential, signal)
+          : 'key' in request
+            ? await reader.readItem(credential, request.operationId, request.key, signal)
+            : await reader.readList(credential, request.operationId, request.query, signal);
+      try {
+        if (signal.aborted) return;
+        write(reader.consumeResult(handle));
+      } finally {
+        reader.discardResult(handle);
+      }
+    });
 }
 
 /** PostgreSQL: the answer is written inside the owner's native handoff. */
 export function postgresAppMcpReads(reader: Awaited<ReturnType<typeof createPostgresApiReadOwner>>): Deliver {
-  return async (credential, request, signal, write) => {
-    const send = (answer: Answer) => write(answer);
-    await ('tools' in request
-      ? reader.readTools(credential, send, signal)
-      : 'key' in request
-        ? reader.readItem(credential, request.operationId, request.key, send, signal)
-        : reader.readList(credential, request.operationId, request.query, send, signal));
-  };
+  return (credential, request, signal, write) =>
+    withReadRoute('mcp', async () => {
+      const send = (answer: Answer) => write(answer);
+      await ('tools' in request
+        ? reader.readTools(credential, send, signal)
+        : 'key' in request
+          ? reader.readItem(credential, request.operationId, request.key, send, signal)
+          : reader.readList(credential, request.operationId, request.query, send, signal));
+    });
 }
 
 /** SQLite command owner (api-v1): its own mapper builds the envelope, as for
  * HTTP; the answer is consumed and written on one stack. */
 export function sqliteAppMcpCommands(owner: Awaited<ReturnType<typeof createSqliteApiCommandOwner>>): CommandDeliver {
-  return async (credential, request, signal, write) => {
-    const handle =
-      'tools' in request
-        ? await owner.readTools(credential, signal)
-        : request.kind === 'prepare'
-          ? await owner.prepare(credential, owner.map(request.route, request.headers, request.body), signal)
-          : request.kind === 'recover'
-            ? await owner.recover(credential, owner.map(request.route, request.headers, request.body), signal)
-            : await owner.execute(credential, owner.map(request.route, request.headers, request.body), signal, 'mcp');
-    try {
-      if (signal.aborted) return;
-      write(owner.consumeResult(handle));
-    } finally {
-      owner.discardResult(handle);
-    }
-  };
+  /* A command's own reads of an audited resource come by the same door as the transport (server/readAudit.ts). */
+  return (credential, request, signal, write) =>
+    withReadRoute('mcp', async () => {
+      const handle =
+        'tools' in request
+          ? await owner.readTools(credential, signal)
+          : request.kind === 'prepare'
+            ? await owner.prepare(credential, owner.map(request.route, request.headers, request.body), signal)
+            : request.kind === 'recover'
+              ? await owner.recover(credential, owner.map(request.route, request.headers, request.body), signal)
+              : await owner.execute(credential, owner.map(request.route, request.headers, request.body), signal, 'mcp');
+      try {
+        if (signal.aborted) return;
+        write(owner.consumeResult(handle));
+      } finally {
+        owner.discardResult(handle);
+      }
+    });
 }
 
 /** PostgreSQL command owner (api-v1): written inside the native handoff. */
 export function postgresAppMcpCommands(owner: Awaited<ReturnType<typeof createPostgresApiCommandOwner>>): CommandDeliver {
-  return async (credential, request, signal, write) => {
-    const send = (answer: Answer) => write(answer);
-    if ('tools' in request) {
-      await owner.readTools(credential, send, signal);
-      return;
-    }
-    const envelope = owner.map(request.route, request.headers, request.body);
-    await (request.kind === 'prepare'
-      ? owner.prepare(credential, envelope, send, signal)
-      : request.kind === 'recover'
-        ? owner.recover(credential, envelope, send, signal)
-        : owner.execute(credential, envelope, send, signal, 'mcp'));
-  };
+  /* A command's own reads of an audited resource come by the same door as the transport (server/readAudit.ts). */
+  return (credential, request, signal, write) =>
+    withReadRoute('mcp', async () => {
+      const send = (answer: Answer) => write(answer);
+      if ('tools' in request) {
+        await owner.readTools(credential, send, signal);
+        return;
+      }
+      const envelope = owner.map(request.route, request.headers, request.body);
+      await (request.kind === 'prepare'
+        ? owner.prepare(credential, envelope, send, signal)
+        : request.kind === 'recover'
+          ? owner.recover(credential, envelope, send, signal)
+          : owner.execute(credential, envelope, send, signal, 'mcp'));
+    });
 }
 
 /** A tenant App's one owner, for reads and commands alike: it hands its
  * answer over through `send`, after its own final token check, on either
  * engine (SQLite on its stack, PostgreSQL inside the native handoff). */
 export function tenantAppMcpReads(owner: Awaited<ReturnType<typeof createTenantApiOwner>>): Deliver {
-  return async (credential, request, _signal, write) => {
-    const send = (answer: Answer) => write(answer);
-    await ('tools' in request
-      ? owner.readTools(credential, send)
-      : 'key' in request
-        ? owner.readItem(credential, request.operationId, request.key, send)
-        : owner.readList(credential, request.operationId, request.query, send));
-  };
+  return (credential, request, _signal, write) =>
+    withReadRoute('mcp', async () => {
+      const send = (answer: Answer) => write(answer);
+      await ('tools' in request
+        ? owner.readTools(credential, send)
+        : 'key' in request
+          ? owner.readItem(credential, request.operationId, request.key, send)
+          : owner.readList(credential, request.operationId, request.query, send));
+    });
 }
 
 export function tenantAppMcpCommands(owner: Awaited<ReturnType<typeof createTenantApiOwner>>): CommandDeliver {
-  return async (credential, request, signal, write) => {
-    const send = (answer: Answer) => write(answer);
-    if ('tools' in request) {
-      await owner.readTools(credential, send);
-      return;
-    }
-    const envelope = owner.map(request.route, request.headers, request.body);
-    await (request.kind === 'prepare'
-      ? owner.prepare(credential, envelope, send, signal)
-      : request.kind === 'recover'
-        ? owner.recover(credential, envelope, send, signal)
-        : owner.execute(credential, envelope, send, signal, 'mcp'));
-  };
+  /* A command's own reads of an audited resource come by the same door as the transport (server/readAudit.ts). */
+  return (credential, request, signal, write) =>
+    withReadRoute('mcp', async () => {
+      const send = (answer: Answer) => write(answer);
+      if ('tools' in request) {
+        await owner.readTools(credential, send);
+        return;
+      }
+      const envelope = owner.map(request.route, request.headers, request.body);
+      await (request.kind === 'prepare'
+        ? owner.prepare(credential, envelope, send, signal)
+        : request.kind === 'recover'
+          ? owner.recover(credential, envelope, send, signal)
+          : owner.execute(credential, envelope, send, signal, 'mcp'));
+    });
 }
 
 export function createAppMcpSession(options: {
@@ -302,7 +313,9 @@ export function createAppMcpSession(options: {
           ? ['key', 'version', 'idempotencyKey', 'input']
           : binding.kind === 'many'
             ? ['targets', 'idempotencyKey', 'input']
-            : ['idempotencyKey'];
+            : binding.kind === 'create'
+              ? ['idempotencyKey', 'input']
+              : ['idempotencyKey'];
     if (
       !value ||
       Object.keys(value).length !== wanted.length ||
@@ -338,6 +351,14 @@ export function createAppMcpSession(options: {
         kind: 'one',
         route: Object.freeze({ kind: 'one', method: 'POST', ...base, resource: binding.resource, rawKey }),
         headers: { expectedVersion: value.version, idempotencyKey: value.idempotencyKey },
+        body: value.input,
+      };
+    } else if (binding.kind === 'create') {
+      // As the HTTP route carries a form's command: the many-route, its body the input alone, no record named.
+      call = {
+        kind: 'many',
+        route: Object.freeze({ kind: 'many', method: 'POST', ...base, resource: binding.resource }),
+        headers: { idempotencyKey: value.idempotencyKey as string },
         body: value.input,
       };
     } else if (binding.kind === 'many') {

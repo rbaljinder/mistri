@@ -9,6 +9,7 @@ import {
 } from '../../shared/app.js';
 import { assertScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import type { ResourceAccess } from '../app/appAccess.js';
+import { appActionGrants } from '../../shared/appAccess.js';
 import { appResourceCatalog } from '../app/appResources.js';
 import { MAX_COMMAND_IDS } from '../commands/commandLimits.js';
 import { captureTenantData, denyTenant, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
@@ -40,6 +41,8 @@ export interface TenantCapabilities {
   readonly resources: Readonly<Record<string, TenantResourceCapabilities>>;
   readonly writable: readonly string[];
   readonly grantedCommands: readonly string[];
+  /** The fixed actions this member's roles run without write (`roles.<role>.actions`), by table: their ids. */
+  readonly grantedActions?: Readonly<Record<string, readonly string[]>>;
   readonly formCommands?: FormCommands;
 }
 export interface TenantCapabilityOptions {
@@ -192,10 +195,16 @@ export function projectTenantCapabilities(input: TenantCapabilityOptions): Tenan
       };
     }
     const grantedCommands = [...appCommandGrants(app, principal.roles)].filter((id) => registered.has(id)).sort();
+    const actionIds = Object.fromEntries(
+      [...appActionGrants(app, owned.schema, [...principal.roles])]
+        .filter(([table]) => owned.ownership[table]?.kind === 'tenant' && resources[table])
+        .map(([table, list]) => [table, list.map((action) => action.id)]),
+    );
     const projected = captureTenantData({
       resources,
       writable: [...writable].sort(),
       grantedCommands,
+      ...(Object.keys(actionIds).length ? { grantedActions: actionIds } : {}),
       ...formCommandsOf(services.formCommands, grantedCommands),
     });
     if (byInput.size >= PROJECTIONS) byInput.delete(byInput.keys().next().value!);

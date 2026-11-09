@@ -2,6 +2,7 @@ import { test, expect, type Page } from './support/harness.js';
 import { follow } from './support/app.js';
 import { startTenantAssignment, type TenantAssignmentFixture } from './support/tenantProofServer.js';
 import { SLOW_MS } from './support/budgets';
+import { expectEntered } from './support/tenantSelection.js';
 
 /*
  * What one command costs a tenant's record page once it lands (G173). A
@@ -76,9 +77,9 @@ test.describe('one tenant command on a record page', () => {
         })
       ).status(),
     ).toBe(200);
+    // The address names northstar, one of the manager's two: the page enters it as it loads, with no chooser.
     await page.goto(`${app.origin}/${app.appId}/${app.model.work}?tenant=northstar`);
-    await page.getByRole('list', { name: 'Available tenants' }).getByRole('button', { name: 'northstar', exact: true }).click();
-    await expect(page.locator('.tenant-control-host')).toContainText('Tenant: northstar');
+    await expectEntered(page, 'northstar');
     await follow(page, `/${app.appId}/${app.model.work}?tenant=northstar`);
     await recordName(page, 'Northstar work').click();
     await expect(page.getByRole('heading', { name: 'Northstar work', exact: true })).toBeVisible();
@@ -89,8 +90,8 @@ test.describe('one tenant command on a record page', () => {
     if (booted) {
       /* The record page as a first visit draws it: its reads carried in its boot (shared/tenantBoot.ts). */
       await page.reload();
-      /* A fresh visit by a person in two tenants chooses one: the boot rides the lease that choice opens. */
-      await page.getByRole('list', { name: 'Available tenants' }).getByRole('button', { name: 'northstar', exact: true }).click();
+      /* The tab was in northstar, so its reload enters northstar again with no chooser: the boot rides that lease. */
+      await expectEntered(page, 'northstar');
       await expect(page.getByRole('heading', { name: 'Northstar application', exact: true })).toBeVisible();
     }
 

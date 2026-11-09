@@ -11,7 +11,7 @@ import { join, resolve } from 'node:path';
 import { after, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { loadApp, type LoadedApp } from '../packages/mistri/src/server/app/apps.js';
-import { lookOnlyChange, wearing } from '../packages/mistri/src/server/tenant/tenantLook.js';
+import { devChangeKind, lookOnlyChange, wearing } from '../packages/mistri/src/server/tenant/tenantLook.js';
 import { watchTenantStartup } from '../packages/mistri/src/server/tenant/tenantStartup.js';
 
 const ROOT = resolve('.');
@@ -136,4 +136,34 @@ test('the tenant watcher restarts when the look says the save was more than the 
   await delay(600);
   assert.ok(w.offered.length >= 1);
   assert.equal(w.restarts(), 1);
+});
+
+test('under dev, a save of a page, a component or the look is a reload, and anything that grants or runs is a restart', () => {
+  const dir = join(work, 'classified');
+  const loaded = {
+    dir,
+    path: join(dir, 'app.ts'),
+    sources: { orders: 'catalogs/orders.ts' },
+    pageFiles: ['pages/pick.page.tsx'],
+    commands: { file: join(dir, 'commands.ts'), registry: {} as never },
+    components: { entries: { badge: { sources: ['components/badge.tsx'] } }, files: {} },
+    fonts: { sources: { Inter: 'fonts/inter.woff2' }, files: {} },
+  } as unknown as LoadedApp;
+  const kind = (...files: string[]) =>
+    devChangeKind(
+      loaded,
+      files.map((file) => join(dir, file)),
+      [join(work, 'policy.mjs')],
+    );
+  assert.equal(kind('pages/pick.page.tsx'), 'reload');
+  assert.equal(kind('components/badge.tsx'), 'reload');
+  assert.equal(kind('fonts/inter.woff2'), 'reload');
+  assert.equal(kind('pages/pick.page.tsx', 'components/badge.tsx'), 'reload');
+  // Authority: the manifest, a catalog it names, the commands module, and the policy beside the App.
+  for (const file of ['app.ts', 'catalogs/orders.ts', 'commands.ts']) assert.equal(kind(file), 'restart', file);
+  assert.equal(devChangeKind(loaded, [join(work, 'policy.mjs')], [join(work, 'policy.mjs')]), 'restart');
+  // One save of authority in a burst makes it a restart; so does a file nobody can place, and no file at all.
+  assert.equal(kind('pages/pick.page.tsx', 'commands.ts'), 'restart');
+  assert.equal(kind('lib/other.ts'), 'restart');
+  assert.equal(kind(), 'restart');
 });

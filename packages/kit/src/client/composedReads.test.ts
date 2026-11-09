@@ -91,6 +91,19 @@ test("a compose with no write across it answers the record's own read, once", as
   expect(asked('/api/view/run')).toBe(0);
 });
 
+test('two readers asking the same columns are each answered; the same reader asking again goes out', async () => {
+  const plan = composeRecordPage(APP, 'ticket', key);
+  await answer('/api/pages/compose', composed('open'));
+  await plan;
+  // A suggested page's header and properties section read the same fields under their own view ids.
+  const header = { ...rowBody, view: { ...rowBody.view, id: 'page:ticket:header' }, app: APP };
+  expect(((await api('/api/view/run', header as never)) as unknown as { rows: Array<{ status: string }> }).rows[0].status).toBe('open');
+  expect((await rowRead()).rows[0].status).toBe('open');
+  expect(asked('/api/view/run')).toBe(0);
+  await rowRead();
+  expect(asked('/api/view/run')).toBe(1);
+});
+
 test("an inferred page's related counts come with its compose, once", async () => {
   const counts = { items: ['comment ticket_id = 7', 'attachment ticket_id = 7'], countLimit: 10000 };
   const counted = { results: [{ total: 3 }, { total: 0 }] };

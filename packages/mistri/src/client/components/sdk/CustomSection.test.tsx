@@ -28,7 +28,11 @@ vi.mock('./componentLoader.js', async () => {
   function Summary(props: { figures: Record<string, unknown>; rows: Record<string, unknown[]> }) {
     return <p>{`${JSON.stringify(props.figures)} ${Object.keys(props.rows).length} rows reads`}</p>;
   }
-  const parts: Record<string, unknown> = { breaching: Breaching, summary: Summary };
+  /* A free-form page's component draws its loader's result and may ask for it again. */
+  function Refreshing(props: { data: { n: number }; refresh: () => void }) {
+    return <button onClick={props.refresh}>{`n ${props.data.n}`}</button>;
+  }
+  const parts: Record<string, unknown> = { breaching: Breaching, summary: Summary, refreshing: Refreshing };
   return { loadComponent: (id: string) => Promise.resolve(parts[id] ?? Authoring) };
 });
 vi.mock('../../../../../kit/src/client/core.js', () => ({
@@ -46,7 +50,8 @@ vi.mock('../../../../../kit/src/client/breakdownBatch.js', () => ({
   }),
 }));
 
-const { CustomDashSection, CustomPageSection } = await import('./CustomSection.js');
+const { CustomDashSection, CustomPageBody, CustomPageSection } = await import('./CustomSection.js');
+const { UiHostContext } = await import('./context.js');
 
 afterEach(() => {
   cleanup();
@@ -155,4 +160,21 @@ test("a record page's custom section is handed its aggregate reads, each the pag
   expect(await screen.findByText('{"all":1040,"groups":[{"key":"won","value":347}]} 0 rows reads')).toBeInTheDocument();
   expect(pageApi).toHaveBeenCalledWith('/api/breakdown', { def });
   expect(pageApi).toHaveBeenCalledWith('/api/breakdown', { def: groupsDef });
+});
+
+test("a free-form page's component is handed refresh() beside data, and calling it runs the loader again", async () => {
+  let n = 0;
+  const load = vi.fn(async () => ({ n: ++n }));
+  const frame = { view: 'tally', label: 'Tally', reads: [], commands: [], params: [], loader: 'tally', get: () => undefined, set: vi.fn() };
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <UiHostContext.Provider value={{ scope: ['probe'], load } as never}>
+        <CustomPageBody frame={frame as never} section={{ kind: 'custom', component: { id: 'refreshing' } } as never} />
+      </UiHostContext.Provider>
+    </QueryClientProvider>,
+  );
+  const button = await screen.findByRole('button', { name: 'n 1' });
+  act(() => button.click());
+  expect(await screen.findByRole('button', { name: 'n 2' })).toBeInTheDocument();
+  expect(load).toHaveBeenCalledTimes(2);
 });
