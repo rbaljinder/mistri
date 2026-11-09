@@ -18,6 +18,8 @@ const readFields = [
   'keyset',
   'ms',
   'errors',
+  // A stitched reference whose target could not be read: the page says its labels are its keys (appStitchedReads.ts).
+  'partial',
   // A breakdown's groups by the name of the record each is (breakdown.ts, withGroupNames).
   'names',
 ] as const;

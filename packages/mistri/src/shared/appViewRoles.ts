@@ -94,7 +94,9 @@ export function appForRoles<A extends Pick<AppDef, 'views' | 'nav'> & { ui?: App
   const placement = app.ui?.shell?.placement;
   const byRole = typeof placement === 'object' ? placement : undefined;
   const themed = app.ui?.theme?.for?.roles;
-  if (!byRole && !themed && !Object.values(app.views).some((view) => isRecord(view) && 'roles' in view)) return app;
+  const navRoles = (nodes: readonly AppNavNode[]): boolean =>
+    nodes.some((node) => ('roles' in node && node.roles !== undefined) || ('group' in node && navRoles(node.children)));
+  if (!byRole && !themed && !navRoles(app.nav) && !Object.values(app.views).some((view) => isRecord(view) && 'roles' in view)) return app;
   const key = [...new Set(roles)].sort().join(',');
   const held = projections.get(app) ?? new Map<string, unknown>();
   projections.set(app, held);
@@ -104,6 +106,8 @@ export function appForRoles<A extends Pick<AppDef, 'views' | 'nav'> & { ui?: App
   const prune = (nodes: readonly AppNavNode[]): AppNavNode[] =>
     nodes.flatMap((node): AppNavNode[] => {
       /* The assistant's page is no view: whether this person is offered it is the payload's to say (appProjection.ts). */
+      /* An entry or group the menu offers to other roles is not drawn for this one: its place in the menu only. */
+      if (!opensTo(node, roles, app.auth)) return [];
       if ('view' in node) return Object.hasOwn(views, node.view) || node.view === ASSISTANT_ROOM ? [node] : [];
       if (!('group' in node)) return [node];
       const children = prune(node.children);

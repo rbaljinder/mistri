@@ -80,7 +80,7 @@ export interface ThemeDefinition {
       ones, and nothing turns it light. Omitted, it follows the reader and their machine. */
   scheme?: 'dark' | 'dark-only';
   /** CSS font-family stacks, each over the machine's faces or the theme's own (`faces`). */
-  fonts?: { ui?: string; data?: string; heading?: string; code?: string };
+  fonts?: { ui?: string; data?: string; heading?: string; code?: string; figures?: string };
   /** The font files the theme ships, from the App's directory: each an `@font-face` the page declares. */
   faces?: readonly ThemeFaceDefinition[];
   /** Pixel lengths: a control's up to 16px, a field's and a pill's up to 12px, a panel's up to 20px; `999px` is a
@@ -538,8 +538,10 @@ interface ThemeSpecCommon {
     height?: { control?: ThemeControlHeight };
   };
   type?: {
-    /** CSS font-family stacks: the machine's faces, or the families `faces` ships. */
-    font?: string | { ui?: string; data?: string; heading?: string; code?: string };
+    /** CSS font-family stacks: the machine's faces, or the families `faces` ships. `figures` is the face of the ids,
+        codes, numbers and dates a table's cells and a record's fields set apart: omitted, it follows `data` when the
+        theme names one, and is the platform's Plex Mono when it names neither. */
+    font?: string | { ui?: string; data?: string; heading?: string; code?: string; figures?: string };
     /** Font files from the App's directory, each one `@font-face` (at most 12). The heading's face is preloaded. */
     faces?: readonly ThemeFace[];
     /** The size an App's text is drawn at, 13px to 16px; every size grows with it, the roles' too. Omitted, 13px. */

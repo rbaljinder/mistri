@@ -29,7 +29,7 @@ function gate() {
   });
   return { promise, release };
 }
-async function fixture(t: TestContext, enabled = true, launch = true) {
+async function fixture(t: TestContext, enabled = true, launch = true, operatorTenants: 'all' | string[] = ['north', 'south']) {
   const f = await tenantAdministrationFixture(t);
   f.db.exec(`CREATE TABLE tenant_item(id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL, name TEXT NOT NULL);
     INSERT INTO tenant_item VALUES ('one', 'north', 'Original')`);
@@ -79,7 +79,7 @@ async function fixture(t: TestContext, enabled = true, launch = true) {
                 operators: [
                   {
                     accountId: f.users.operator.accountId,
-                    tenants: ['north', 'south'],
+                    tenants: operatorTenants,
                     operations: ADMINISTRATION_OPERATIONS.filter((operation) => operation !== 'revokeMembership'),
                     roles: ['reader'],
                   },
@@ -242,6 +242,32 @@ test('configured WHOAMI is availability, while native open admits a zero-members
   assert.equal(outsider.answer.headers.get(headers.account), f.users.outsider.accountId);
   denied(await f.call(f.url('open'), {}, { ...f.identity(), cookie: '' }), 'not_applied');
   denied(await f.call(f.url('open'), {}, { ...f.identity(), cookie: f.users.outsider.cookie }), 'not_applied');
+});
+
+test("an operator rule naming tenants: 'all' administers a tenant no list names, and the journal records it as for a listed one", async (t) => {
+  const f = await fixture(t, true, true, 'all'),
+    a = await f.open();
+  assert.ok(a.session);
+  // 'north' is covered by the second rule's explicit revoke ceiling only where it names it; 'west' is named nowhere.
+  for (const tenantId of ['west', 'north']) {
+    const create: AdministrationAttempt = { idempotencyKey: `create-${tenantId}`, intent: { operation: 'createTenant', tenantId } };
+    const created = await f.call(f.url('execute'), create, a.owned);
+    owned(created, f, a.session.context);
+    assert.equal(created.body.outcome, 'applied');
+    assert.equal(created.body.result.change.after.tenant.tenantId, tenantId);
+  }
+  assert.equal(f.db.prepare(`SELECT count(*) AS n FROM "${ADMINISTRATION_JOURNAL_TABLES.receipt}"`).get()!.n, 2);
+  // A tenant the account may not administer is still refused: 'all' is the rule's reach, not the account's.
+  const other = await f.call(
+    f.url('execute'),
+    {
+      idempotencyKey: 'create-other',
+      intent: { operation: 'setTenantStatus', tenantId: 'west', expectedTenantVersion: '1', status: 'suspended' },
+    },
+    a.owned,
+  );
+  owned(other, f, a.session.context);
+  assert.equal(other.body.outcome, 'applied');
 });
 
 test('administration tenant/member pages, versioned execution and exact-intent status preserve independent ceilings', async (t) => {

@@ -31,6 +31,7 @@ import type { RequestContext } from '../packages/engine/src/server/http/context.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { parseTestApp } from './support/commandCatalog.js';
 import { authorityDiff, authorityReport } from '../packages/mistri/src/shared/appAuthority.js';
+import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 
 const enrolInput = { name: { label: 'Name', type: 'text', max: 20 } } as const;
 const component = (key: string) => ({ id: `page-${key}`, module: `./pages/${key}.page.tsx`, kind: 'page' });
@@ -293,11 +294,11 @@ test('the submit budget is the public form budget, shared: a page and a form spe
 });
 
 test(
-  'size and shape: a body past 64 KB is a 413; an undeclared member, a missing key or a non-JSON body writes nothing',
+  'size and shape: a body past 512 KiB is a 413; an undeclared member, a missing key or a non-JSON body writes nothing',
   { timeout: 15_000 },
   async () => {
     await fixture(async (f) => {
-      const huge = await submit(f, { name: 'x'.repeat(70_000) }, 40);
+      const huge = await submit(f, { name: 'x'.repeat(MAX_COMMAND_BYTES + 1) }, 40);
       assert.equal(huge.status, 413);
       assert.equal(huge.body.code, 'too_large');
       // A field the command does not declare: the public principal writes only what the command takes.
@@ -441,10 +442,10 @@ test(
   },
 );
 
-test('a declared body past 64 KB is a 413 before the human check calls out', { timeout: 15_000 }, async () => {
+test('a declared body past 512 KiB is a 413 before the human check calls out', { timeout: 15_000 }, async () => {
   await fixture(
     async (f) => {
-      const huge = { input: { name: 'x'.repeat(70_000) }, submission: key(950) };
+      const huge = { input: { name: 'x'.repeat(MAX_COMMAND_BYTES + 1) }, submission: key(950) };
       const page = await submit(f, huge.input, 950, { 'x-mistri-ticket': aged(), 'x-mistri-challenge': 'person-1' });
       assert.equal(page.status, 413);
       const form = await call(f.base, '/api/forms/apply', { ...huge, submission: key(951) }, { 'x-mistri-challenge': 'person-2' });

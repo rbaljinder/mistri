@@ -326,16 +326,8 @@ export function parseAuthGrants(
       const sessions = supportSessions(rawGrant.operations, realm);
       let actions: Record<string, string[]> | undefined;
       if (rawGrant.actions !== undefined) {
-        /* Judged inside the write against the one row being written. A row
-         policy's writer judges it there too, under the policy's rows; a
-         tenant's context writes through its own owner, which holds no fixed
-         action's grant yet, so a tenant App is refused. */
-        if (rows === 'tenant') {
-          throw new Error(
-            `${here}, "actions" grants fixed actions without write, which is not supported with "rows": "${rows}" yet. ` +
-              'Grant the command the action runs instead, or write on the resource.',
-          );
-        }
+        /* Judged inside the write against the one row being written: a row policy's writer and a
+         tenant's member writer both judge it there, under the rows each admits. */
         actions = actionGrants(
           rawGrant.actions,
           `${here}, "actions"`,
@@ -844,8 +836,6 @@ export function checkedGrants(app: Pick<AppDef, 'name' | 'resources' | 'auth' | 
       assertAccessSubset(readable, ceiling, `${here}, "read"`);
       assertAccessSubset(writable, writeCeiling, `${here}, "write"`);
       assertAccessSubset(writable, new Set(readable), `${here}, "write" requires read`);
-      if (rawGrant.actions !== undefined && app.auth?.rows === 'tenant')
-        throw new Error(`${here}, "actions" is not supported with "rows": "tenant".`);
       let create: false | string[] | undefined;
       if (rawGrant.create !== undefined) {
         if (rawGrant.create !== false && !Array.isArray(rawGrant.create))

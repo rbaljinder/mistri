@@ -433,6 +433,21 @@ export default definePage({ label: String(typeof process === 'object' && process
     assert.throws(() => checkPageLoaders(app, wide, 'desk'), /\[page-loader\].*reads "note", which the page does not declare/);
   });
 
+  test('page-loader: a surface names a loader the commands module does not export, or one that reads past the surface', () => {
+    const surfaced = (reads: string[]) =>
+      ({ ...parse(), views: {}, surfaces: { board: { key: 'board', label: 'Board', reads, commands: [], loader: 'board' } } }) as never;
+    // LOADERS' board reads ticket and desk: a surface that reads both holds it.
+    assert.doesNotThrow(() => checkPageLoaders(surfaced(['ticket', 'desk']), LOADERS, 'desk'));
+    assert.throws(
+      () => checkPageLoaders(surfaced(['ticket', 'desk']), undefined, 'desk'),
+      /\[page-loader\].*surfaces\/board\.surface\.ts names the loader "board", which the commands module does not export/,
+    );
+    assert.throws(
+      () => checkPageLoaders(surfaced(['ticket']), LOADERS, 'desk'),
+      /\[page-loader\].*surfaces\/board\.surface\.ts: its loader "board" reads "desk", which the surface does not declare/,
+    );
+  });
+
   test("page-undeclared: the page's module reads or runs what it does not declare", async () => {
     const source = `import { definePage } from '@mistriwork/mistri/page';
 const page = definePage({ label: 'Board', reads: ['ticket'], commands: ['settle'], component: Board });

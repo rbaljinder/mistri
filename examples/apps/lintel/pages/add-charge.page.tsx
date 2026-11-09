@@ -17,7 +17,7 @@ const page = definePage({
   icon: 'receipt',
   nav: { group: 'books', position: 3 },
   roles: ['manager', 'accountant'],
-  reads: ['lease'],
+  reads: ['lease', 'unit'],
   commands: ['addCharge'],
   params: { lease: 'id', step: ['what', 'amount'] },
   component: AddCharge,

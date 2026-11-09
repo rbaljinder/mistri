@@ -48,6 +48,7 @@ over your own database.
   mistri flows start <resource>
                                   start a resource's flows on records already there (see below)
   mistri jobs run <name>          run one of an App's jobs at times now, once (see below)
+  mistri audit reads              who read an audited resource's rows, as JSON lines (see below)
   mistri decide eval <name>       measure a decision on settled records, and pin its model (see below)
   mistri tenant init|grant        a tenant App's first boot: its realms, tenants and first operators (see below)
   mistri tenant clone|import|clock
@@ -176,12 +177,12 @@ Options:
                       each under its id (/lintel/leases/12).
                       --app names the App on every command that takes one
                       (check, build, shot, grade, dev, test init, flows, jobs,
-                      decide, tenant, deploy init, migrate files). Left out, the
-                      App is the current directory when it holds an app.ts (or
-                      app.mjs / app.json). seed, migrate, messages extract and
-                      theme show read it left out as no App. A directory typed
-                      where a database or route goes is refused, never read as
-                      the App.
+                      audit, decide, tenant, deploy init, migrate files). Left
+                      out, the App is the current directory when it holds an
+                      app.ts (or app.mjs / app.json). seed, migrate, messages
+                      extract and theme show read it left out as no App. A
+                      directory typed where a database or route goes is
+                      refused, never read as the App.
       --mount <app>=<path>
                       Where an App is served, over that default: / makes it
                       the main App at the root, /billing puts it there.
@@ -695,6 +696,21 @@ Starting flows on records already there — a backfill, run once beside the serv
   whose owner column its --policy names. Running it again starts nothing new.
   Exit codes: 1 could not run.
 
+Reading the read audit — who read an audited resource's rows, and by which route:
+  mistri audit reads [--app <dir>] [--resource <name>] [--record <id>] [--actor <who>]
+                  [--tenant <id>] [--since <instant | 30m | 24h | 7d>] [--limit <n>]
+                  [<db> | --db <target> | --config <path>]
+  Prints the reads recorded for the App's resources with audit: { reads: true },
+  newest first, one JSON object a line: when, the actor, the tenant, the
+  resource, the route (page, api, mcp, assistant, export, picker, custom-page,
+  related) and the one record read or the query with the count and ids it
+  returned; never a field's value. Each flag narrows: --record by the record's
+  key, --actor an account id, service:<principal>, support:<operator>,
+  api-token:<id> or assistant:<account>, --since an ISO instant or an age,
+  --limit at most n rows (default 1000). Read from the database, no server
+  started; the store is made by mistri migrate stores up, never here.
+  Exit codes: 1 could not run.
+
 Running a job now — one of an App's jobs at times, once, by hand:
   mistri jobs run <name> [--app <dir>] --jobs <file> [--wait <seconds>]
                   [<db> | --db <target> | --config <path>]
@@ -941,7 +957,7 @@ The project profile names an App and its modules once:
 Looked for in --config, then <--app dir>/mistri.json, ./mistri.json,
 ./.mistri.json, then $XDG_CONFIG_HOME/mistri/connections.json, with no
 walking up: the one rule a start, dev, check, build, migrate, seed, shot,
-grade, tenant, flows, jobs, decide and deploy read. Without --app, the app
+grade, tenant, flows, jobs, audit, decide and deploy read. Without --app, the app
 block's dir names the App. It takes dir, entry (--app-entry), commands,
 jobs and policy, as paths from the file's folder and nothing else: an
 unknown key, a \${NAME} or a missing file is refused. A flag beats it,
@@ -1018,7 +1034,7 @@ over your own database.
   mistri docs [topic]             the App reference, offline
   mistri explain <check-code>     what a check code means, with a fix example
   and: new, deploy, suite, virtual, flags, experiments, analytics, theme, schema, messages,
-       flows, jobs, decide, tenant, agent, upgrade, observe, compare-openapi, api client, api-token, mail-dns
+       flows, jobs, audit, decide, tenant, agent, upgrade, observe, compare-openapi, api client, api-token, mail-dns
 
 Common options:
   -d, --db <target>   SQLite file path or postgres:// URL (or set DATABASE_URL)

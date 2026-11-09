@@ -40,6 +40,17 @@ const PROBLEM = {
   },
 };
 
+/* A resource's frozen states (`final: { freeze: true }`): a record in one takes no write, which a caller reads here
+   rather than as a surprise refusal. */
+function frozenNote(app: AppDef, resource: string): { description: string } | Record<string, never> {
+  const frozen = (app.resources?.[resource]?.machine?.states ?? []).filter((state) => state.freeze).map((state) => `"${state.name}"`);
+  return frozen.length
+    ? {
+        description: `A ${resource} in ${frozen.join(', ')} is frozen: its machine declared the state final with freeze, so this is refused as ineligible_state, whoever asks.`,
+      }
+    : {};
+}
+
 export function renderApiCommandOpenApi(
   app: AppDef,
   schema: DatabaseSchema,
@@ -177,6 +188,7 @@ export function renderApiCommandOpenApi(
       post: {
         operationId: `command_${component}`,
         summary: `Run ${operation.command} on one ${operation.resource}`,
+        ...frozenNote(app, operation.resource),
         parameters: [
           { name: keyName, in: 'path', required: true, ...codec.parameter },
           {

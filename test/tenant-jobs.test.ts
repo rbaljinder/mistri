@@ -20,8 +20,8 @@
  * 5. Removing the grant stops the next attempt; revoking the emitting member
  *    stops nothing.
  * 6. The stores are attested, never created.
- * 7. Cycles, a job command with events or a lookup, a principal in the wrong
- *    realm and webhook effects stay refused.
+ * 7. Cycles, a platform job command with events or a lookup, a principal in the
+ *    wrong realm and webhook effects stay refused.
  * 8. The service principal, delivery routes and journal provenance, as units.
  */
 import assert from 'node:assert/strict';
@@ -1124,22 +1124,17 @@ describe("what a tenant App's jobs refuse", () => {
     assert.deepEqual(await lab.layout(), before, 'a refused provisioning changes nothing');
   };
 
-  test('a subscription cycle, and a job command that records events or looks up', async (t) => {
+  test('a subscription cycle, and a platform job command that looks up', async (t) => {
     await refusedWith(t, /cycle/, defineJobs({ loop: job({ command: 'advance' }) }, { principals }));
-    const { version: _flagVersion, ...flag } = commands.flag;
-    const chained = defineCommands({
-      ...commands,
-      flag: defineCommand({
-        ...flag,
-        events: { advanced: defineEventProjection(advanced, () => ({ taskId: 'n1', target: 'n1', version: 1 })) },
-      }),
-    });
-    await refusedWith(t, /declares events/, defineJobs({ flagTask: job({}) }, { principals }), chained);
+    // A tenant job's command may record events and look up (tenant-job-events-lookups.test.ts); a platform job's runs outside any tenant.
+    const { version: _reviewVersion, ...review } = commands.review;
+    const reviewJobs = defineJobs({ reviewTask: job({ runAs: 'lender-desk', command: 'review' }) }, { principals });
     const looking = defineCommands({
       ...commands,
-      flag: defineCommand({ ...flag, sources: { business: ['dealer'] }, lookup: async () => ({}) }),
+      review: defineCommand({ ...review, sources: { business: ['dealer'] }, lookup: async () => ({}) }),
     });
-    await refusedWith(t, /looks up/, defineJobs({ flagTask: job({}) }, { principals }), looking);
+    await refusedWith(t, /platform jobs run outside any tenant/, reviewJobs, looking);
+    // (A platform command that declares events is refused by defineCommand itself.)
   });
 
   test('an App that keeps a platform-only source still binds its jobs, through the App its own source sees', async (t) => {

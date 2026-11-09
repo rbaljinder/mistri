@@ -50,6 +50,8 @@ import {
 } from './tenantMembership.js';
 import { assertTenantOwnership, captureTenantOwnership, type TenantOwnershipSnapshot } from './tenantOwnership.js';
 import type { PlatformMembershipEvidence, PlatformMembershipLookup, PlatformMembershipRecord } from './tenantPlatform.js';
+import { assertServiceReadCurrent, captureServiceEvidence, composeServiceScope, type TenantServiceEvidence } from './tenantServiceModel.js';
+import { AppAccessDenied } from '../app/appAccess.js';
 import { composePlatformReadScope, composePublicReadScope, composeTenantReadScope, physicalRowScope } from './tenantReadScope.js';
 import {
   assertPublicResolved,
@@ -236,6 +238,11 @@ export interface TenantReadSource {
    * its own snapshot and requires the same tenant at the same versions before
    * its SQL, so a rotated address or a suspended tenant reads nothing more. */
   bindPublicReads(evidence: TenantPublicEvidence, rows: RowScope): Promise<ScopedReads>;
+  /** Reads under a tenant service's scope (tenantServiceModel.ts composeServiceScope), as `bindReads` is a
+   * member's: the source recomposes the scope from the evidence (never a caller's predicate), and every
+   * operation re-reads the service anchors in its own snapshot and requires the same tenant and platform at
+   * the same versions, inside the attempt's window. A platform place is refused: it runs outside any tenant. */
+  bindServiceReads(evidence: TenantServiceEvidence, rows: RowScope): Promise<ScopedReads>;
   /** What these tenants are called: each one's profile row said by the App's
    * template for that resource (tenantNames.ts), for the ids a caller already
    * holds. Reads the profile's key and the name's columns only; admits nobody. */
@@ -630,6 +637,17 @@ export function openSqliteTenantReadSource(
       const tenantId = value.address === null ? (value.tenant as string) : publicTenantOf(db.prepare(sql).all(value.address));
       return publicResolution(tenantId, (id) => readSqliteIntakeAnchor(db, owner, id));
     };
+    // A service's anchors as this snapshot finds them, against the versions its attempt read.
+    const currentService = (evidence: TenantServiceEvidence) => {
+      const found = {
+        tenantVersion: readSqliteIntakeAnchor(db, owner, evidence.tenantId!),
+        platformVersion: readSqliteIntakeAnchor(db, owner, PLATFORM_TENANT_ID),
+      };
+      const instant = now();
+      active();
+      assertServiceReadCurrent(evidence, found, instant);
+      active();
+    };
     const currentPublic = (evidence: TenantPublicEvidence) => {
       const value = capturePublicEvidence(evidence, owned);
       const resolved = resolvePublicIn(publicLookupOf(value));
@@ -785,6 +803,13 @@ export function openSqliteTenantReadSource(
         bindLater({ evidence, rows }, (captured) =>
           bind(composePublicReadScope(owned, captured.evidence, captured.rows), () => currentPublic(captured.evidence)),
         ),
+      // The source recomposes the service's scope itself, as it does a visitor's.
+      bindServiceReads: (evidence: TenantServiceEvidence, rows: RowScope) =>
+        bindLater({ evidence, rows }, (captured) => {
+          const value = captureServiceEvidence(captured.evidence, owned);
+          if (value.place !== 'tenant') throw new AppAccessDenied();
+          return bind(composeServiceScope(owned, value, captured.rows), () => currentService(value));
+        }),
       resolveIntake: (lookup: TenantIntakeLookup) =>
         invoke(lookup, (query) => {
           const value = captureIntakeLookup(query, owner),
@@ -1454,6 +1479,14 @@ export async function openPostgresTenantReadSource(
       for (const id of [PLATFORM_TENANT_ID, tenantId]) anchors.set(id, await readPostgresIntakeAnchor(lease.client, owner, id));
       return publicResolution(tenantId, (id) => anchors.get(id) ?? null);
     };
+    const currentService = async (lease: PostgresReadSnapshot, evidence: TenantServiceEvidence) => {
+      const found = {
+        tenantVersion: await readPostgresIntakeAnchor(lease.client, owner, evidence.tenantId!),
+        platformVersion: await readPostgresIntakeAnchor(lease.client, owner, PLATFORM_TENANT_ID),
+      };
+      assertServiceReadCurrent(evidence, found, clock());
+      active();
+    };
     const currentPublic = async (lease: PostgresReadSnapshot, evidence: TenantPublicEvidence) => {
       const value = capturePublicEvidence(evidence, owned);
       const resolved = await resolvePublicIn(lease, publicLookupOf(value));
@@ -1898,6 +1931,13 @@ export async function openPostgresTenantReadSource(
         bindLater({ evidence, rows }, (captured) =>
           bind(composePublicReadScope(owned, captured.evidence, captured.rows), (next) => currentPublic(next, captured.evidence)),
         ),
+      // The source recomposes the service's scope itself, as on SQLite.
+      bindServiceReads: (evidence: TenantServiceEvidence, rows: RowScope) =>
+        bindLater({ evidence, rows }, (captured) => {
+          const value = captureServiceEvidence(captured.evidence, owned);
+          if (value.place !== 'tenant') throw new AppAccessDenied();
+          return bind(composeServiceScope(owned, value, captured.rows), (next) => currentService(next, value));
+        }),
       resolveIntake: (lookup: TenantIntakeLookup) =>
         invoke(lookup, async (query, lease) => {
           const value = captureIntakeLookup(query, owner),

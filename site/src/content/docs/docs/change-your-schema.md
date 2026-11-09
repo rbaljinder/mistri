@@ -55,10 +55,10 @@ Names, checksums and the history layout are Flyway's. To take over from Flyway, 
 
 ## Common mistakes
 
-- `up`, `baseline` or `repair` says the connection "is not writable" → they write to the database, so a connection your config names needs `"writable": true` (without `--app`); `--dry-run` and a database named with `--db` are not asked.
-- `up` refuses a database that has tables and no history → run `migrate baseline` once; nothing in it is changed.
+- `up`, `baseline` or `repair` says the connection "is not writable", or `up` refuses a database that has tables and no history → they write to the database, so a connection your config names needs `"writable": true` (without `--app`; `--dry-run` and a database named with `--db` are not asked); a database with tables and no history needs `migrate baseline` once, which changes nothing in it.
 - `[pending-migration]` → a pending file failed on the scratch copy, or the files and their history disagree; fix the file, or `repair` after an edit you meant.
 - `[schema-types-stale]` → someone changed the database outside migrations; `mistri check` rewrites the types, and `status` lists the drift until a migration settles it (`ADD COLUMN IF NOT EXISTS note`).
+- Adding a value to a `CHECK (status IN (…))` list on SQLite means rebuilding the table, since SQLite cannot change a constraint in place → for a vocabulary that grows, keep the words in a small table (`status(code text primary key, label text)`) and point the column at it with a foreign key; a new word is then an `INSERT` in the next `V` file, on SQLite and PostgreSQL alike. Keep `CHECK` lists for values that never change.
 
 ## Related
 

@@ -62,6 +62,40 @@ export function lookOnlyChange(before: LoadedApp, after: LoadedApp, touched: rea
   return isDeepStrictEqual(unlooked(before), unlooked(after)) ? look : undefined;
 }
 
+/**
+ * What a save under `mistri dev` is, by the file it touched: `reload` for what a page, a component or the look is
+ * written in (they draw, and what they may read or run is declared where authority is), `restart` for everything that
+ * decides who may do what — the policy, the commands module, the jobs, the connection config, the App's manifest and
+ * the catalogs it names — and for a file this cannot place, since a doubt is a restart. A burst is a restart if any one
+ * save in it is.
+ */
+export function devChangeKind(
+  loaded: Pick<LoadedApp, 'dir' | 'path' | 'sources' | 'pageFiles' | 'commands' | 'components' | 'fonts'>,
+  touched: readonly string[],
+  authority: readonly (string | undefined)[] = [],
+): 'reload' | 'restart' {
+  if (!touched.length) return 'restart';
+  const home = loaded.dir ?? '';
+  const decides = new Set(
+    [loaded.path, ...Object.values(loaded.sources ?? {}), loaded.commands?.file, ...authority]
+      .filter((file): file is string => typeof file === 'string' && file !== '')
+      .map((file) => real(resolve(home, file))),
+  );
+  const draws = new Set(
+    [
+      ...(loaded.pageFiles ?? []),
+      ...Object.values(loaded.components?.entries ?? {}).flatMap((entry) => entry.sources),
+      ...Object.values(loaded.fonts?.sources ?? {}),
+    ].map((file) => real(resolve(home, file))),
+  );
+  return touched.every((file) => {
+    const known = real(resolve(home, file));
+    return !decides.has(known) && draws.has(known);
+  })
+    ? 'reload'
+    : 'restart';
+}
+
 /* The loader's graph is in real paths; a watcher names a file by the spelling it watched (a linked temp folder). */
 function real(file: string): string {
   try {

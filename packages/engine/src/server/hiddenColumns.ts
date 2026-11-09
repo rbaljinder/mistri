@@ -116,6 +116,7 @@ export function withoutHiddenColumns(schema: DatabaseSchema, rules: HiddenColumn
         ...(cut ? { [CONNECTION_HIDDEN]: [...cut] } : {}),
         ...(original.deletable !== undefined ? { deletable: original.deletable } : {}),
         ...(table.filterable ? { filterable: keep(table.id, table.filterable) } : {}),
+        ...(table.filterIn ? { filterIn: keep(table.id, table.filterIn) } : {}),
         ...(table.sortable ? { sortable: keep(table.id, table.sortable) } : {}),
       };
     }),

@@ -50,7 +50,13 @@ interface MutationGuard {
 
 /** A tenant session's requests: sent through the tenant's lease (tenantTransport.ts), or none. */
 interface TenantRequests {
-  read(path: string, body: Record<string, unknown> | undefined, connection: string | null | undefined): Promise<unknown>;
+  /** `headers` say what the read is (a picker's, a related list's, a free-form page's), as `api`'s do. */
+  read(
+    path: string,
+    body: Record<string, unknown> | undefined,
+    connection: string | null | undefined,
+    headers?: Readonly<Record<string, string>>,
+  ): Promise<unknown>;
   mutate(path: string, body: unknown, connection: string | null | undefined): Promise<unknown>;
   isMutation(path: string): boolean;
   /** The streamed export on the lease: the file, or the server's answer where it is not one. */

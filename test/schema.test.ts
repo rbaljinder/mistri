@@ -389,6 +389,7 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
         'label',
         'placement',
         'realm',
+        'roles',
       ] /* `icon` (0.4.0): the group's mark in a top bar; `placement`: the foot of the sidebar; `inline` (0.8.8): its items straight in the top bar;
            `folded` (0.8.9): a rarely used section starts as its heading. */,
     );
@@ -734,7 +735,12 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.23: `me.by`, a column that holds the account's id rather than its email (one entry, a name `by`
     // already counted): 1729/511.
     // 1.0.0-rc.25: `ui.headless`, an App with no screens of its own (one entry, one new name): 1730/512.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1730, names: 512 });
+    // 1.0.0-rc.27: a machine state's `final` may be `{ freeze: true }`, which also freezes the record (one entry, one
+    // new name `freeze`); `ui.microphone`, the nav `roles` of a group and its two entry shapes, `fonts.figures` (five
+    // entries, one new name `microphone`): 1736/514.
+    // `audit: { reads: true }` on a resource, its reads written to the read audit (`audit` was already counted;
+    // one entry, one new name `reads`): 1737/515.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1737, names: 515 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

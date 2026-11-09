@@ -177,6 +177,30 @@ export async function pageApi(page, path, body) {
 }
 
 /**
+ * A picker's read: `api`, saying it is one (`x-mistri-read`), so a resource
+ * that audits its reads records it as a choice offered rather than a list
+ * opened (readAudit.ts).
+ * @param {string} path
+ * @param {Record<string, unknown>} body
+ * @returns {Promise<any>}
+ */
+export async function pickerApi(path, body) {
+  return sent(path, body, { 'x-mistri-read': 'picker' });
+}
+
+/**
+ * A record page's related list: `api`, saying so (`x-mistri-read`), so a
+ * resource that audits its reads records its rows as read beside a record
+ * rather than as a list opened (readAudit.ts).
+ * @param {string} path
+ * @param {Record<string, unknown>} body
+ * @returns {Promise<any>}
+ */
+export async function relatedApi(path, body) {
+  return sent(path, body, { 'x-mistri-read': 'related' });
+}
+
+/**
  * @param {string} path
  * @param {Record<string, unknown> | undefined} body
  * @param {Record<string, string> | undefined} headers
@@ -233,7 +257,7 @@ async function request(path, body, headers) {
     const tenant = shell().tenant;
     if (!tenant) throw Object.assign(new Error(say('theTenantContextIsUnavailable')), { outcome: 'not_applied' });
     if (tenant.isMutation(parsedPath.pathname)) return await tenant.mutate(path, body, state.activeConnection);
-    return await tenant.read(path, body === undefined ? undefined : { ...body }, state.activeConnection);
+    return await tenant.read(path, body === undefined ? undefined : { ...body }, state.activeConnection, headers);
   }
   if (
     parsedPath.pathname === '/api/revert' &&

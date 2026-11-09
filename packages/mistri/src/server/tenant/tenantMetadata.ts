@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { documentSections, parseDocument } from '@mistriwork/engine/shared/appDocuments.js';
 import { parsePageLayout } from '@mistriwork/engine/shared/pageLayouts.js';
-import { homeSourceOf, type AppDef } from '../../shared/app.js';
+import { homeSourceOf, isFormView, type AppDef } from '../../shared/app.js';
 import type { AppRealm } from '../../shared/appModel.js';
 import { appSurfaceForRealm } from '../../shared/appTenancy.js';
 import { resolvePageEmbeds } from '../../shared/appPages.js';
@@ -20,8 +20,10 @@ import {
   type AppPayloadApp,
 } from '../../shared/appPayload.js';
 import { homeViews } from '../../shared/appHome.js';
-import { pageConfig, parsePageBody, suggestPage, type PageDef } from '@mistriwork/engine/shared/page.js';
+import { pageConfig, parsePageBody, type PageDef } from '@mistriwork/engine/shared/page.js';
+import { appDefaultPage } from '../http/appProjection.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { appActionGrants } from '../../shared/appAccess.js';
 import { fieldAccessibleApp, fieldAccessiblePage, readablePage } from '../app/appFieldProjection.js';
 import { captureTenantData, denyTenant, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import { catalogLocales } from '../app/readerLocale.js';
@@ -419,17 +421,34 @@ function projectAfresh(
   /* The member's roles in this tenant decide which views and pages that name roles are theirs, as on a single App (appViewRoles.ts). */
   const realmApp = appForRoles(surface.app, roles);
   const realmPages = pagesForRoles(surface.pages, roles, surface.app.auth);
-  const visible = fieldAccessibleApp(realmApp, schema);
+  /* The fixed actions this member's roles run without write: kept although their columns are not the member's to
+     write (appFieldProjection.ts), for the tables the capabilities say are theirs. */
+  const grantedByTable = capabilities?.grantedActions
+    ? new Map([...appActionGrants(app, schema, [...roles])].filter(([table]) => capabilities.grantedActions![table]))
+    : undefined;
+  const visible = fieldAccessibleApp(realmApp, schema, grantedByTable);
   const granted = new Set(capabilities?.grantedCommands ?? []);
   const permitted: AppDef = {
     ...visible,
+    /* A signed-in command form is offered only to a member whose role runs its command, as a plain App serves it
+       (commands/businessCommandLoader.ts): its room and, with it, its nav entry go with the grant. A public form
+       is left to its own route. Without the member's capabilities nothing is known to withhold. */
+    ...(capabilities
+      ? {
+          views: Object.fromEntries(
+            Object.entries(visible.views).filter(([, view]) => !isFormView(view) || view.public === true || granted.has(view.command.id)),
+          ),
+        }
+      : {}),
     ...(visible.resources
       ? {
           resources: Object.fromEntries(
             Object.entries(visible.resources).map(([name, resource]) => {
               const { actions, form, ...rest } = resource;
               const available = actions?.filter((action) =>
-                action.command ? granted.has(action.command.id) : capabilities?.writable.includes(name),
+                action.command
+                  ? granted.has(action.command.id)
+                  : capabilities?.writable.includes(name) || Boolean(capabilities?.grantedActions?.[name]?.includes(action.id)),
               );
               return [
                 name,
@@ -460,6 +479,9 @@ function projectAfresh(
     ui: { ...servedLanguages(servedLocale(servedZone(served.ui, zone), locale), catalogLocales(app)), export: false },
     writableTables: [...(capabilities?.writable ?? [])],
     grantedCommands: [...granted],
+    ...(capabilities?.grantedActions && Object.keys(capabilities.grantedActions).length
+      ? { grantedActions: Object.fromEntries(Object.entries(capabilities.grantedActions).map(([table, ids]) => [table, [...ids]])) }
+      : {}),
     ...(capabilities?.formCommands ? { formCommands: structuredClone(capabilities.formCommands) as AppPayloadApp['formCommands'] } : {}),
     ...(supportLog ? { supportLog: true as const } : {}),
   };
@@ -483,9 +505,11 @@ function projectAfresh(
   });
 }
 
-export function tenantSuggestedPage(schema: DatabaseSchema, table: string): PageDef {
+/** A table's page when nobody wrote one, as the App's own server draws it (appDefaultPage): the record anatomy in the
+    App's words. The Workbench's page of counts and lists named a related list by its raw table ("No ledger_entry yet."). */
+export function tenantSuggestedPage(app: AppDef, pages: readonly PageDef[], schema: DatabaseSchema, table: string): PageDef {
   tenantIdentifier(table);
-  const page = suggestPage(schema, table);
+  const page = appDefaultPage(app, pages, schema, table);
   if (!page || !fieldAccessiblePage(schema, page)) return denyTenant();
   return captureTenantData(page);
 }

@@ -26,7 +26,8 @@ import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schem
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { send } from '@mistriwork/engine/server/http/reply.js';
 import { SOURCE_CLIENT } from '@mistriwork/engine/server/devclient.js';
-import { PAGE_LOAD_PATH, tablesAsked } from './pageLoad.js';
+import { PAGE_LOAD_PATH } from './pageLoad.js';
+import { tablesReached } from './tablesReached.js';
 
 type Reply = { status: 403; body: { error: string; code: 'surface' } };
 
@@ -43,6 +44,10 @@ const SURFACE_POSTS: ReadonlySet<string> = new Set([
   COMMAND_ROUTES.check,
 ]);
 const SURFACE_GETS: ReadonlySet<string> = new Set(['/api/file']);
+
+/** Whether a surface's request may take this route (method and path): the one list `surfaceGateRoute` holds a request that names a surface to, and a surface token's door (gate.ts). */
+export const surfaceRouteOpen = (method: string | undefined, path: string): boolean =>
+  method === 'POST' ? SURFACE_POSTS.has(path) : method === 'GET' ? SURFACE_GETS.has(path) : false;
 
 const refuse = (error: string): Reply => ({ status: 403, body: { error, code: 'surface' } });
 
@@ -124,7 +129,7 @@ export function surfaceRefusal(options: {
       ? undefined
       : refuse(`The surface "${surface.key}" runs ${surface.commands.join(', ') || 'no commands'}; "${String(stray)}" is not one of them.`);
   }
-  const asked = options.table === undefined ? tablesAsked(path, body) : [options.table];
+  const asked = options.table === undefined ? tablesReached(options.schema, path, body) : [options.table];
   if (!asked) return undefined;
   const id = (name: string) => (options.schema && tableNamed(options.schema, name)?.id) ?? name;
   const declared = new Set(surface.reads.map(id));
@@ -220,8 +225,7 @@ export function surfaceGateRoute(ctx: RequestContext): boolean {
     send(ctx.res, named.status, named.body);
     return true;
   }
-  const routes = ctx.req.method === 'POST' ? SURFACE_POSTS : ctx.req.method === 'GET' ? SURFACE_GETS : undefined;
-  if (routes?.has(ctx.path)) return false;
+  if (surfaceRouteOpen(ctx.req.method, ctx.path)) return false;
   send(ctx.res, 403, refuse(`A surface's requests read, load and run; ${ctx.req.method} ${ctx.path} is none of them.`).body);
   return true;
 }

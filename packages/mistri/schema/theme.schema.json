@@ -282,6 +282,10 @@
                 },
                 "code": {
                   "$ref": "#/$defs/font"
+                },
+                "figures": {
+                  "$ref": "#/$defs/font",
+                  "description": "The face of the ids, codes, numbers and dates a table's cells and a record's fields set apart. Omitted, it follows data when the theme names one, and is the platform's Plex Mono when it names neither."
                 }
               }
             }

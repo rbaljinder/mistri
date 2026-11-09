@@ -157,7 +157,7 @@ test('malformed/mixed arguments refuse before any loader or clock', async () => 
     ['issue', ...common],
   ]) {
     const f = fixture();
-    await assert.rejects(runApiTokenMaintenance(argv, f.dependencies), { message: 'API token maintenance could not be completed.' });
+    await assert.rejects(runApiTokenMaintenance(argv, f.dependencies), { message: /^API token maintenance could not be completed: .+\.$/ });
     assert.deepEqual(f.calls, []);
   }
 });
@@ -293,7 +293,7 @@ test('schema/context/locator failure cannot issue; uncertain owner is attempted 
         announced++;
         if (stage === 'locator') throw Error('output');
       }),
-      { message: 'API token maintenance could not be completed.' },
+      { message: /^API token maintenance could not be completed: .+\.$/ },
     );
     assert.equal(issued, stage === 'issue' ? 1 : 0);
     assert.equal(announced, stage === 'issue' || stage === 'locator' ? 1 : 0);
@@ -319,7 +319,7 @@ test('issue takes --commands exactly when the App exposes commands, loading the 
     [fixture(), withCommands],
     [exposing(), issueArgs],
   ] as const) {
-    await assert.rejects(runApiTokenMaintenance(argv, f.dependencies), { message: 'API token maintenance could not be completed.' });
+    await assert.rejects(runApiTokenMaintenance(argv, f.dependencies), { message: /^API token maintenance could not be completed: .+\.$/ });
     assert.deepEqual(
       f.calls.map((call) => call[0]),
       ['config', 'app'],
@@ -385,7 +385,7 @@ test('issue binds a tenant App token through --tenant and --policy only, and an 
     [tenantApp(), [...issueArgs, '--tenant', 'north']],
     [tenantApp(), [...bound, '--commands', '/operator/commands.ts']],
   ] as const) {
-    await assert.rejects(runApiTokenMaintenance(argv, f.dependencies), { message: 'API token maintenance could not be completed.' });
+    await assert.rejects(runApiTokenMaintenance(argv, f.dependencies), { message: /^API token maintenance could not be completed: .+\.$/ });
     assert.deepEqual(
       f.calls.map((call) => call[0]),
       ['config', 'app'],
@@ -452,7 +452,8 @@ test('failed load/context/owner errors never expose credentials and never retry 
       throw new Error('secret postgres://password@host');
     };
     await assert.rejects(runApiTokenMaintenance(['provision', ...common], f.dependencies), (error) => {
-      assert.equal((error as Error).message, 'API token maintenance could not be completed.');
+      assert.match((error as Error).message, /^API token maintenance could not be completed: .+\.$/);
+      assert.doesNotMatch((error as Error).message, /secret|password/);
       assert.equal((error as Error).cause, undefined);
       return true;
     });
@@ -462,4 +463,11 @@ test('failed load/context/owner errors never expose credentials and never retry 
       false,
     );
   }
+});
+
+test('a refusal names the failed precondition, not the secret', async () => {
+  const f = fixture();
+  await assert.rejects(runApiTokenMaintenance(['provision', ...common, '--port', '1234'], f.dependencies), {
+    message: 'API token maintenance could not be completed: the verb or flags are malformed (see mistri api-token --help).',
+  });
 });

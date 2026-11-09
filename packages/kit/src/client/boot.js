@@ -34,5 +34,5 @@ import { lookSheetReady } from './visualTheme.js';
 void startShell()
   .then(lookSheetReady)
   .then(() => startupSettled())
-  .then(finishStartup)
+  .then(() => finishStartup())
   .catch(failStartup);

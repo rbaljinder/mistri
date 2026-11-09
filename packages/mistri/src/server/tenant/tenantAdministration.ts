@@ -1,3 +1,4 @@
+import { operatorIds, operatorReaches } from './tenantOperatorReach.js';
 import { randomUUID } from 'node:crypto';
 import { statSync, type Stats } from 'node:fs';
 import type { IncomingMessage } from 'node:http';
@@ -1251,7 +1252,7 @@ async function openAdministration(
           // database's global tenant table.
           const delegated = await delegatedTargets(session, captured.expectedAccount);
           active();
-          const ids = [...new Set([...grants.flatMap((entry) => entry.tenants), ...delegated.keys()])]
+          const ids = [...new Set([...grants.flatMap((entry) => operatorIds(entry.tenants)), ...delegated.keys()])]
             .sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)))
             .filter((id) => captured.after === undefined || Buffer.compare(Buffer.from(id), Buffer.from(captured.after)) > 0)
             .slice(0, limit + 1);
@@ -1263,7 +1264,7 @@ async function openAdministration(
               const grant =
                 operation === 'importTenant'
                   ? undefined
-                  : grants.find((entry) => entry.tenants.includes(tenantId) && entry.operations.includes(operation));
+                  : grants.find((entry) => operatorReaches(entry.tenants, tenantId) && entry.operations.includes(operation));
               const roles = grant?.roles ?? delegated.get(tenantId)?.find((found) => found.operation === operation)?.roles;
               return roles ? [{ operation, roles }] : [];
             });
@@ -1371,7 +1372,7 @@ async function openAdministration(
           ...new Set(
             (policy?.operators ?? [])
               .filter((entry) => entry.accountId === captured.expectedAccount && entry.operations.includes('setTenantAssistant'))
-              .flatMap((entry) => entry.tenants),
+              .flatMap((entry) => operatorIds(entry.tenants)),
           ),
         ];
         if (!tenants.length) return denyTenant();
@@ -1402,7 +1403,7 @@ async function openAdministration(
           ...new Set(
             (policy?.operators ?? [])
               .filter((entry) => entry.accountId === captured.expectedAccount && entry.operations.includes('setTenantDecisions'))
-              .flatMap((entry) => entry.tenants),
+              .flatMap((entry) => operatorIds(entry.tenants)),
           ),
         ];
         if (!tenants.length) return denyTenant();

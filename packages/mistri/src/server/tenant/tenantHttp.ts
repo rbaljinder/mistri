@@ -49,6 +49,7 @@ import {
 import type { ResourceHttpPath } from '@mistriwork/engine/shared/resourceHttp.js';
 import { TENANT_HTTP_HEADERS as headers, type TenantContextAssertion, type TenantContextReply } from '../../shared/tenantContext.js';
 import type { VerifiedSessionInstance } from '../auth/auth.js';
+import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { businessCommandHttpError } from '../commands/businessCommandHttp.js';
 import { BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
 import { doorRefusal, writes as changesSomething, type Bound } from '@mistriwork/engine/server/http/trust.js';
@@ -68,7 +69,7 @@ import {
   tenantOptions,
   tenantRecord,
 } from '@mistriwork/engine/server/evidence.js';
-import { reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
+import { noteAuthorRequest, reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
 import { databaseUnanswered, refusedWrite, unansweredWrite } from './tenantWriteFault.js';
 import { captureTenantEnrollment, type TenantEnrollment } from './tenantEnrollment.js';
 import { parseTenantSelector, type TenantMembershipEvidence } from './tenantMembership.js';
@@ -118,6 +119,7 @@ import { appForRoles } from '../../shared/appViewRoles.js';
 import { appSurfaceForRealm } from '../../shared/appTenancy.js';
 import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
 import { pageLoad } from '../http/pageLoad.js';
+import { currentReadRoute, readRouteOf, withReadRoute } from '../readAudit.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
 import { attributeAction, attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js';
 import { tenantHistoryStoreKey } from './tenantRecordHistoryStore.js';
@@ -236,6 +238,10 @@ interface TenantHttpOptions {
   /** Whether this request's login was made here in the last five minutes, by the rule opening a support session
       keeps (nativeSignInAge.ts): what issuing an API token asks. Absent, no token is issued. */
   readonly recentSignIn?: (req: IncomingMessage) => Promise<boolean>;
+  /** The path of the source App this host serves while its author works on it (cli/tenant.ts authoringApp): a command's
+      refusal then tells its cause to a reader on this machine, as the ordinary server's does (refusalReport.ts). Absent
+      for a build, which is served as built. */
+  readonly authoring?: string;
 }
 
 /** Private integration server, deliberately not mounted by the CLI/createApp.
@@ -258,6 +264,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     'readerName',
     'loaders',
     'recentSignIn',
+    'authoring',
   ]);
   const integrationSettings = raw.integrations as TenantHttpOptions['integrations'];
   const tokens = raw.tokens as TenantTokenService | undefined;
@@ -568,6 +575,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       if (path !== target.split('?')[0]) return invalid();
       const bound = binding();
       if (doorRefusal(req, bound, { writing: changesSomething(req) })) return invalid(403);
+      /* Every member of an authored App is its author's guest on this machine: the cause is for the one running it
+         (loopback, no proxy identity, never a build), whatever role they signed in as. */
+      if (raw.authoring) noteAuthorRequest(req, bound, true, [{ path: raw.authoring as string }]);
       // Reject duplicate ownership headers even on bootstrap/control requests.
       for (const name of Object.values(headers)) tenantHttpHeader(req, name);
       expectedAccounts.set(req, tenantHttpHeader(req, headers.account));
@@ -728,7 +738,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               path === '/api/commands/files'
                 ? TENANT_FILE_UPLOAD_BODY
                 : commands.has(path)
-                  ? 65536
+                  ? MAX_COMMAND_BYTES
                   : control
                     ? 16384
                     : path === '/api/import'
@@ -1135,7 +1145,10 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 apps: [{ id: app.id, name: app.name, writable: Boolean(context.capabilities?.writable.length) }],
               });
             if (path === '/api/pages/suggested')
-              return reply({ appId: app.id, page: tenantSuggestedPage(schema, (asked.query ?? url.searchParams).get('table')!) });
+              return reply({
+                appId: app.id,
+                page: tenantSuggestedPage(app, pages, schema, (asked.query ?? url.searchParams).get('table')!),
+              });
             if (path === '/api/app' || path === '/api/pages') {
               /* The member's words and figures (readerLocale.ts): their own row's locale (else their pick in this
                  browser), their tenant's, the App's;
@@ -1552,7 +1565,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
             );
             tenantIdentifier(input.page, 1024);
             const page = (input.page as string).startsWith('suggested:')
-              ? tenantSuggestedPage(schema, (input.page as string).slice('suggested:'.length))
+              ? tenantSuggestedPage(app, pages, schema, (input.page as string).slice('suggested:'.length))
               : metadata.pages.find((page) => page.id === input.page);
             if (!page) return denyTenant();
             const planned = await tenantPagePlan(
@@ -2021,7 +2034,11 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     /* One instant for the request: every catalog it is served and every statement it writes says the same `now`
        (tenantServedSchema.ts servedInstant). A request that lasts — the live stream, an import — gives each read and
        write inside it an instant of its own (above). */
-    void withRequestInstant(new Date(now()), work)
+    /* The door this request came in by, for an audited resource's read (readAudit.ts). The authenticated host
+       names it before dispatching here, and the assistant's own requests keep its `assistant`; a data server
+       reached directly names it from the address. */
+    const instant = () => withRequestInstant(new Date(now()), work);
+    void (currentReadRoute() === undefined ? withReadRoute(readRouteOf((req.url ?? '/').split('?')[0], req.headers), instant) : instant())
       .catch((error) => {
         // A support refusal: nothing ran, and the reply says which support rule
         // refused — business work not being available on this lease, or the
@@ -2067,8 +2084,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 ),
             path.endsWith('/status'),
           );
-          reportRefusal(req, failure.status, failure.body.code, failure.body.message, error);
-          return send(req, res, failure.status, failure.body, {}, error);
+          const cause = reportRefusal(req, failure.status, failure.body.code, failure.body.message, error);
+          return send(req, res, failure.status, cause ? { ...failure.body, cause } : failure.body, {}, error);
         }
         if (writes.has(path)) {
           const unknown = completedWrite || (error instanceof TenantWriteFailure && error.outcome === 'unknown');

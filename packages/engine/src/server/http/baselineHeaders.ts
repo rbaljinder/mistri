@@ -12,7 +12,8 @@
  *   own HTML (clientHttp.ts) replaces this with `APP_PAGE_PERMISSIONS_POLICY`,
  *   which lets its own origin ask for the camera: the scan input
  *   (`field.text({ as: 'scan' })`) reads a code through `getUserMedia`, and
- *   a form with one can be a signed-in page or a public one.
+ *   a form with one can be a signed-in page or a public one. An App that
+ *   declares `ui.microphone` gets `APP_PAGE_MICROPHONE_PERMISSIONS_POLICY`.
  * - `Strict-Transport-Security`, only on an answer that arrived over https
  *   (trust.ts `arrivedOverHttps`): the socket's own TLS, an https public
  *   address, or a proxy this server trusts saying it forwarded https. A
@@ -34,6 +35,14 @@ export const PERMISSIONS_POLICY =
  * the baseline — and a frame from another origin is still not granted it.
  */
 export const APP_PAGE_PERMISSIONS_POLICY = PERMISSIONS_POLICY.replace('camera=()', 'camera=(self)');
+/**
+ * An App that declares `ui.microphone: true` (a voice note, a dictated field in
+ * its own component): the App page's policy with the microphone allowed for
+ * this origin alone too. Opt-in per App because a microphone is a prompt the
+ * reader never expected from a page that does not record, so no page asks it
+ * by default.
+ */
+export const APP_PAGE_MICROPHONE_PERMISSIONS_POLICY = APP_PAGE_PERMISSIONS_POLICY.replace('microphone=()', 'microphone=(self)');
 /** A year, and the names under this one: the time browsers ask of a name kept on https. */
 export const STRICT_TRANSPORT = 'max-age=31536000; includeSubDomains';
 

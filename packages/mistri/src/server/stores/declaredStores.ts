@@ -1,7 +1,8 @@
 /**
  * The stores an App's own declaration asks for, so that provisioning follows
  * the App instead of a list someone keeps beside it: a resource that notifies
- * wants the inbox, one with a history page wants the record history, a
+ * wants the inbox, one with a history page wants the record history, one
+ * whose reads are audited wants the read audit, a
  * `branding` or `assistant` declaration wants theirs. `provisionStores` reads
  * it twice: to derive what to make when it is given the App and no `only`, and
  * to refuse an `only` that names a store the App never declared (a store made
@@ -14,6 +15,7 @@ import { capturedJobModule, type JobModule } from '../jobs/jobModule.js';
 /** The stores whose need an App's declaration decides. A store not listed (the command journal, the tenant stores) is bound by other means. */
 export const DECLARABLE_STORES: readonly string[] = [
   'record-history',
+  'read-audit',
   'inbox',
   'integrations',
   'branding',
@@ -36,6 +38,7 @@ export async function declaredStores(app: AppDef, pages: readonly PageDef[] = []
   const { historyRules } = await import('../recordHistory.js');
   const declared = new Set<string>();
   if (historyRules(app, pages).size) declared.add('record-history');
+  if (resources.some(([, resource]) => resource.audit?.reads)) declared.add('read-audit');
   if (notifying.length) declared.add('inbox');
   /* A rule that emails an address the record holds queues its mail in the integrations store, in the write's transaction. */
   if (notifying.some(([, resource]) => resource.notify!.some((rule) => rule.send?.channel === 'email')) || module?.integrations)

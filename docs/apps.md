@@ -230,6 +230,22 @@ it makes names its surface in `X-Mistri-Surface`, and the server holds it there 
 - A surface widens nothing: the reader's grants, row policy and field ceilings decide what a read returns and whether
   a command runs, as for any request. A surface is offered to the roles that read what it reads.
 
+A server component has no browser session, so it asks the mounted handler for a surface token
+(`mistri.tokenFor(request, { surface, ttl })`, `server/embed/handler.ts`) and sends it as `Authorization: Bearer …` to
+the App's API (`server/auth/surfaceToken.ts`):
+
+- The token is stateless and of its own kind: `mstsf1.<claims>.<signature>`, an HMAC-SHA-256 over the kind, the App's id,
+  the person, their session, the surface and the expiry, keyed from `BETTER_AUTH_SECRET` (HKDF), so every process of a
+  deployment checks it and no API token, session or other App's token is read as one. `ttl` is in seconds, 60 by
+  default, 300 at most (more is refused); a surface the App does not have, or one not offered to this person, is refused
+  at mint, and so is a request with no signed-in session (`SurfaceTokenRefused`).
+- The token is the surface header: a request with it takes that surface exactly as `X-Mistri-Surface` would, and a
+  header naming another is refused 403 `{ code: 'surface' }`. It opens only the routes a surface takes, and no other
+  (the account's, sign-in's, token issuance's, MCP's and the API's are refused 403 before they are read).
+- The person's session and account are read on every request (as a cookie's are), so signing out, a banned account or a
+  role taken away ends the token before its time, and grants and row policy are read live. Expired, tampered, another
+  App's and a token whose session has ended are 401. It is for an App that serves its own sign-in, not a tenant App.
+
 Surfaces are read only when the App is served from its directory (`--app <dir>`, `createHandler({ app: dir })`).
 `e2e/embed-headless.spec.ts` drives a headless App end to end: sign in, list, run, and a revoked grant refused.
 [`examples/embed`](../examples/embed/README.md) is the same in a Next.js app: a route handler mounts the App under

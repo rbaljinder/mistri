@@ -121,6 +121,8 @@ export function typesForSchema(
   appName?: string,
   connections?: readonly string[],
   hidden: Readonly<Record<string, readonly string[]>> = {},
+  /** The tab words a record opens on, by list view key (recordTabWords.ts): what `useHref().record(view, key, { tab })` is typed by. */
+  tabs?: Readonly<Record<string, readonly string[]>>,
 ): string {
   const tables = [...schema.tables].sort((a, b) => a.id.localeCompare(b.id));
   const keyed = tables.filter((t) => primaryKey(t).length);
@@ -271,6 +273,17 @@ export function typesForSchema(
           '',
         ]
       : []),
+    ...(tabs && Object.keys(tabs).length
+      ? [
+          "/** Each list view's record tabs by their address word (a related list, a section tab, its history, a page tab): what `useHref().record(view, key, { tab })` takes. */",
+          'export type RecordTabs = {',
+          ...Object.entries(tabs)
+            .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+            .map(([view, words]) => `  ${key(view)}: ${words.length ? words.map((word) => JSON.stringify(word)).join(' | ') : 'never'};`),
+          '};',
+          '',
+        ]
+      : []),
     ...(names.length
       ? [
           '/** The server connections this App may bind, by name: what `connection`',
@@ -304,7 +317,7 @@ export function typesForSchema(
     "declare module '@mistriwork/mistri/app' {",
     `  interface Register { schema(): { columns: Columns; references: References; rows: Rows${keyed.length ? '; keys: Keys' : ''}${
       tables.some((t) => t.segments && Object.keys(t.segments).length) ? '; segments: Segments' : ''
-    } } }`,
+    } }${tabs && Object.keys(tabs).length ? '; tabs: RecordTabs' : ''} }`,
     '}',
     '',
   ];

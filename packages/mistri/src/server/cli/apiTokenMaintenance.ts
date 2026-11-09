@@ -54,8 +54,11 @@ const production = {
   tenantIssue: issueSqliteApiTenantToken,
   pgTenantIssue: issuePostgresApiTenantToken,
 };
-const refuse = (): never => {
-  throw new Error('API token maintenance could not be completed.');
+/* Names the failed precondition and nothing else: never the token, a
+   connection string or the underlying driver message, which may carry them. */
+class MaintenanceRefusal extends Error {}
+const refuse = (reason: string): never => {
+  throw new MaintenanceRefusal(`API token maintenance could not be completed: ${reason}.`);
 };
 
 export async function runApiTokenMaintenance(
@@ -64,9 +67,14 @@ export async function runApiTokenMaintenance(
   onIssueLocator?: (tokenId: string) => void,
 ) {
   try {
-    const args = parseApiTokenArgs(rawArgv);
+    let args: ReturnType<typeof parseApiTokenArgs>;
+    try {
+      args = parseApiTokenArgs(rawArgv);
+    } catch {
+      return refuse('the verb or flags are malformed (see mistri api-token --help)');
+    }
     const config = await dependencies.loadConfig(args.config);
-    if (!config) return refuse();
+    if (!config) return refuse('no mistri.json configuration could be loaded (pass --config)');
     // Registry.add/configs only normalize identities; no adapter is opened.
     // Ignore any undeclared JSON id exactly as ordinary config startup does.
     const registry = new Registry();
@@ -84,7 +92,12 @@ export async function runApiTokenMaintenance(
        Provision, inspect and revoke never need it; revoke must still work
        after an exposure is removed. */
     const commandsFile = args.verb === 'issue' ? args.commands : undefined;
-    if (args.verb === 'issue' && apiExposesCommands(app.app.api) !== (commandsFile !== undefined)) return refuse();
+    if (args.verb === 'issue' && apiExposesCommands(app.app.api) !== (commandsFile !== undefined))
+      return refuse(
+        commandsFile === undefined
+          ? 'this App exposes commands through its API, so issuing needs --commands <file>'
+          : 'this App exposes no commands through its API, so --commands does not apply',
+      );
     /* A tenant App's token binds one tenant membership, read from its business
        store with its policy; an `all` App's never does. Its commands, when it
        exposes them, are checked against that deployment's attested ownership,
@@ -95,7 +108,11 @@ export async function runApiTokenMaintenance(
         ? { policyFile: args.policy, tenantId: args.tenant, accountId: args.subjectId }
         : undefined;
     if (args.verb === 'issue' && (tenantApp !== (tenantInput !== undefined) || (args.tenant === undefined) !== (args.policy === undefined)))
-      return refuse();
+      return refuse(
+        tenantApp
+          ? 'a tenant App needs both --tenant and --policy to issue a token'
+          : 'only a tenant App takes --tenant and --policy; this App is not one',
+      );
     let evidence: TokenCommandEvidence | undefined;
     const capture = (captured: TokenCommandEvidence) => {
       evidence = captured;
@@ -114,8 +131,8 @@ export async function runApiTokenMaintenance(
           current.appId !== pg.appId ||
           JSON.stringify(current.excludeConnections) !== JSON.stringify(pg.excludeConnections)
         )
-          return refuse();
-        if (declared && !tenant && !evidence) return refuse();
+          return refuse('the Postgres store or App identity changed while the token was being issued');
+        if (declared && !tenant && !evidence) return refuse('the command catalog could not be checked against the App');
         const tokenId = randomUUID();
         onIssueLocator?.(tokenId);
         const options = {
@@ -167,8 +184,8 @@ export async function runApiTokenMaintenance(
         current.appId !== context.appId ||
         JSON.stringify(current.exclusions) !== JSON.stringify(context.exclusions)
       )
-        return refuse();
-      if (declared && !tenant && !evidence) return refuse();
+        return refuse('the SQLite store or App identity changed while the token was being issued');
+      if (declared && !tenant && !evidence) return refuse('the command catalog could not be checked against the App');
       const tokenId = randomUUID();
       onIssueLocator?.(tokenId);
       const options = {
@@ -207,7 +224,8 @@ export async function runApiTokenMaintenance(
         dependencies.now(),
       ),
     });
-  } catch {
-    return refuse();
+  } catch (error) {
+    if (error instanceof MaintenanceRefusal) throw error;
+    return refuse('the configuration, App or store could not be read or written (check the --config, --app and store settings)');
   }
 }

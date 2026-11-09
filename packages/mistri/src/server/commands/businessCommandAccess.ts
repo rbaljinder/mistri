@@ -23,6 +23,7 @@ import {
 import { createBusinessCommandAuthorizer, type CommandFileRule } from './businessCommandAuthorization.js';
 import { keyFilter, type CommandCatalog } from './commandDb.js';
 import type { CommandLookupReader } from './commandLookup.js';
+import { captureTenantJobs } from '../tenant/tenantJobsBrand.js';
 import { captureTenantRequestRuntime, type TenantRequestRuntime } from '../tenant/tenantRequestRuntime.js';
 import { appResourceVerifiedCommandRunner } from '../app/appResources.js';
 import { appSourceVerifiedCommandRunner } from '../app/appSourceAdapter.js';
@@ -93,6 +94,19 @@ export function registerTenantCommandEventBinding<Request>(
   binding: BusinessCommandBinding,
 ): BusinessCommandBinding {
   captureTenantRequestRuntime(runtime);
+  eventOwners.add(binding);
+  return binding;
+}
+/** A tenant job's, mail's or flow step's command emits through the jobs runtime's own service binding: issued only
+ * for a genuinely bound jobs runtime (by its brand, not its shape) and for evidence in a tenant's place, since a
+ * platform job runs outside any tenant and has no tenant event store to write to. */
+export function registerTenantServiceEventBinding(
+  jobs: object,
+  evidence: Readonly<{ place: 'tenant' | 'platform' }>,
+  binding: BusinessCommandBinding,
+): BusinessCommandBinding {
+  captureTenantJobs(jobs);
+  if (evidence.place !== 'tenant') throw new AppAccessDenied();
   eventOwners.add(binding);
   return binding;
 }

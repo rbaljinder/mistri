@@ -96,6 +96,7 @@ beforeEach(async () => {
   vi.resetAllMocks();
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-09-08T12:00:00Z'));
+  sessionStorage.clear();
   document.body.innerHTML = '<main id="content"></main>';
   host = document.getElementById('content')!;
   identity = await import('../../../kit/src/client/sessionIdentity.js');
@@ -165,6 +166,44 @@ test('a sole membership the address names is entered; a link to another tenant k
   void browser.initialTenantSelection(host, 'Atlas', 'south');
   await settle();
   expect(props()).toMatchObject({ requestedTenant: 'south', tenantIds: ['north'], busy: false });
+  expect(mocks.choose).not.toHaveBeenCalled();
+});
+
+test('a link that names one of several tenants of theirs enters it directly', async () => {
+  mocks.discover.mockResolvedValueOnce(['north', 'south']);
+  mocks.choose.mockResolvedValueOnce(reply('south'));
+  await browser.initialTenantSelection(host, 'Atlas', 'south');
+  expect(mocks.choose).toHaveBeenCalledExactlyOnceWith('south');
+  expect(identity.sessionIdentity().tenant?.tenantId).toBe('south');
+  // Never drawn: they said which.
+  expect(mocks.mount).not.toHaveBeenCalled();
+});
+
+test("a reload remembers the tab's tenant, and a tenant they no longer have is not entered", async () => {
+  await selected(reply('south'));
+  // The page is read again: the same tab, the same account.
+  identity.lockSessionIdentity();
+  identity.establishSessionIdentity({ signedIn: true, appId: 'atlas', accountId: 'alice' });
+  mocks.discover.mockResolvedValueOnce(['north', 'south']);
+  mocks.choose.mockResolvedValueOnce(reply('south'));
+  await browser.initialTenantSelection(host, 'Atlas');
+  expect(mocks.choose).toHaveBeenCalledExactlyOnceWith('south');
+  // A link naming another of theirs wins over the memory; one that is not theirs keeps the chooser.
+  identity.lockSessionIdentity();
+  identity.establishSessionIdentity({ signedIn: true, appId: 'atlas', accountId: 'alice' });
+  mocks.choose.mockClear();
+  mocks.discover.mockResolvedValueOnce(['north', 'south']);
+  void browser.initialTenantSelection(host, 'Atlas', 'east');
+  await settle();
+  expect(props()).toMatchObject({ requestedTenant: 'east', busy: false });
+  expect(mocks.choose).not.toHaveBeenCalled();
+  // Membership gone since: the chooser.
+  identity.lockSessionIdentity();
+  identity.establishSessionIdentity({ signedIn: true, appId: 'atlas', accountId: 'alice' });
+  mocks.discover.mockResolvedValueOnce(['north', 'west']);
+  void browser.initialTenantSelection(host, 'Atlas');
+  await settle();
+  expect(props()).toMatchObject({ tenantIds: ['north', 'west'], busy: false });
   expect(mocks.choose).not.toHaveBeenCalled();
 });
 
@@ -259,11 +298,11 @@ test('late enrollment discovery cannot republish tenants after a native account 
   expect(mocks.choose).not.toHaveBeenCalled();
 });
 
-test('a link hint is shown without auto-selection and resolves only the actually confirmed choice', async () => {
+test('a link to a tenant that is not theirs is shown without auto-selection and resolves only the actually confirmed choice', async () => {
   mocks.discover.mockResolvedValueOnce(['north', 'south']);
-  const pending = browser.initialTenantSelection(host, 'Atlas', 'south');
+  const pending = browser.initialTenantSelection(host, 'Atlas', 'east');
   await settle();
-  expect(props().requestedTenant).toBe('south');
+  expect(props().requestedTenant).toBe('east');
   expect(mocks.choose).not.toHaveBeenCalled();
   const confirmed = reply('north');
   mocks.choose.mockResolvedValueOnce(confirmed);

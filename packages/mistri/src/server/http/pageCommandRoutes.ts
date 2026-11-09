@@ -12,10 +12,10 @@
  *   shared rather than a second allowance; a ticket's read spends the read budget;
  * - the page's own origin: an embed host's vouched-for request is refused (trust.ts `doorRefusal`, `'always'`);
  * - the ticket: issued by this door, at least 3 seconds and at most 24 hours old (forms/publicTicket.ts);
- * - a declared length past 64 KB (413), before the check calls out;
+ * - a declared length past MAX_COMMAND_BYTES, 512 KiB (413), before the check calls out;
  * - the App's human check, where `auth.challenge` names one (commands/challenges.ts);
  * - the App-wide ceiling (300 an hour), spent only by a request that got this far;
- * - the body: JSON, at most 64 KB (413), exactly `{ input, submission }`;
+ * - the body: JSON, at most 512 KiB (413), exactly `{ input, submission }`;
  * - the run: always as the public principal of this page, even with a session cookie, through the same executor,
  *   journal and audit as a public form; the submission key makes a retry the same receipt. Its answer is the
  *   public shape `{ reference, receipt }`, never the input; a refusal is a fixed sentence naming a field at most.
@@ -23,6 +23,7 @@
 import type { ServerResponse } from 'node:http';
 import { isPublicCommandPage, isRowPolicyApp, isTenantApp, type AppDef } from '../../shared/app.js';
 import { appEntrypoint } from '../app/appEntrypoint.js';
+import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { businessCommandHttpError, CommandBodyTooLarge } from '../commands/businessCommandHttp.js';
 import { dispatchPublicFormHttp } from '../commands/formHttp.js';
 import { captureHttpCommandFlags } from '../flags/httpRuntime.js';
@@ -105,7 +106,7 @@ export async function pageCommandRoutes(ctx: RequestContext): Promise<boolean> {
   if (refused) return refuse(res, refused === 'early' ? 425 : 403, 'ticket_refused', ticketMessage(refused));
   /* Said from the length before anything leaves this server: a body the run would refuse never costs a provider's call. */
   const length = Number(req.headers['content-length']);
-  if (Number.isFinite(length) && length > 65_536) return refuse(res, 413, 'too_large', 'This submission is too large.');
+  if (Number.isFinite(length) && length > MAX_COMMAND_BYTES) return refuse(res, 413, 'too_large', 'This submission is too large.');
   if (!(await challengeAnswered(signedIn, req, client))) return refuse(res, 403, 'challenge_failed', CHALLENGE_REFUSAL);
   if (rateLimited(res, await limiter.take(client, 'all'))) return true;
   /* As a public form's: only an ordinary App's commands run here; a row-policy or tenant App has no public writer. */

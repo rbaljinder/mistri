@@ -15,6 +15,7 @@ import { BODY_HOLD_MS } from '../packages/mistri/src/server/commands/businessCom
 import { turnstile, turnstileStub, type TurnstileStub } from '../packs/challenge-turnstile/src/index.js';
 import { dropDedicatedPostgresDatabase, TENANT_DIALECTS } from './support/tenantDialects.js';
 import { NORTH, NORTH_HOST, openTenantPublicForms, publicFormsDatabase, SOUTH, UNKNOWN, via } from './support/tenantPublicForms.js';
+import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 
 const SECRET = 'stand-in-secret-never-sent';
 const PEOPLE = Array.from({ length: 13 }, (_, i) => `person-${i}`);
@@ -140,11 +141,11 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
       assert.deepEqual((await written(f)).lead, [{ tenant_id: 'north', name: 'Eve' }]);
     });
 
-    test('a chunked body past 64 KB is refused 413 before the check is asked; a chunked one inside it is read as sent', async (t) => {
+    test('a chunked body past 512 KiB is refused 413 before the check is asked; a chunked one inside it is read as sent', async (t) => {
       const f = await open(t);
       const asked = stub.asked.length;
       const huge = await f.call(`/api/forms/apply${via(NORTH)}`, {
-        body: { input: { name: 'Hal' }, submission: randomUUID(), pad: 'x'.repeat(70_000) },
+        body: { input: { name: 'Hal' }, submission: randomUUID(), pad: 'x'.repeat(MAX_COMMAND_BYTES + 1) },
         headers: { 'x-mistri-challenge': 'person-2' },
         chunked: true,
       });

@@ -98,7 +98,7 @@ rewrite the lock.
 | --- | --- | --- | --- |
 | `features[].auth` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `features[].auth.roles` | object | Stable | Grants to roles the App declares in auth.roles; a feature never creates a role. |
-| `features[].auth.roles.*.actions` | object | Stable | Fixed actions the role runs without write, by resource and action id: { pay_run: ['submit'] }. Each resource is one the role reads, with access 'write', and does not write; each id is one of its fixed (set) actions. The server admits the update only as that action: its set, its reason column, its when on the stored row. Needs auth.rows 'all'. Used in `examples/apps/tick/app.ts`. |
+| `features[].auth.roles.*.actions` | object | Stable | Fixed actions the role runs without write, by resource and action id: { pay_run: ['submit'] }. Each resource is one the role reads, with access 'write', and does not write; each id is one of its fixed (set) actions. The server admits the update only as that action: its set, its reason column, its when on the stored row. Judged by the writer of whichever rows the App serves: all of them, a row policy's, or a tenant member's own tenant. Used in `examples/apps/tick/app.ts`. |
 | `features[].auth.roles.*.commands` | array | Stable | Explicit server command identifiers only. No wildcard grants or implied CRUD access. Used in `examples/apps/lintel/app.ts`. |
 | `features[].auth.roles.*.experiments` | array | Preview |  |
 | `features[].auth.roles.*.experiments[].actions` | array | Preview |  Used in `examples/apps/tick/app.ts`. |

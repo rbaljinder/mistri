@@ -65,10 +65,8 @@ describe('an optional read', () => {
   test('a 500 stays an error, and a read that is not optional is never refused', async () => {
     draw(refusedWith(500));
     for (const name of ['rows', 'record', 'groups'])
-      // The query client retries a server error before it gives up, so this answer comes late.
-      await waitFor(() => expect(states[name]).toEqual({ refused: false, isError: true, error: 'refused 500', data: undefined }), {
-        timeout: 15_000,
-      });
+      // The test host's query client never retries (fixtureClient), so the error is the first answer.
+      await waitFor(() => expect(states[name]).toEqual({ refused: false, isError: true, error: 'refused 500', data: undefined }));
     cleanup();
     const plain: Record<string, unknown> = {};
     function Plain() {
@@ -86,7 +84,7 @@ describe('an optional read', () => {
       </SectionFrame>,
     );
     await waitFor(() => expect(plain.state).toEqual({ refused: false, isError: true }));
-  }, 30_000);
+  });
 
   test('a page draws the refusal in its place, and a fixture refusal is the same refusal', async () => {
     function Desk(): ReactNode {
@@ -195,6 +193,34 @@ describe('useHref', () => {
     expect(href.record('leads', { id: 127 })).toBe('/leads/127');
     expect(href.record('leads', { id: 127 }, { tab: 'map' })).toBe('/leads/127/map');
     expect(href.page('forecast', { period: 'q3' })).toBe('/forecast?period=q3');
+  });
+
+  /* The sign-in screen reads `?then=` (headlessLanding.js) and follows it on this origin: the link must not be a way
+     to send a signed-in person elsewhere, so only a path in the App is carried. */
+  test('signIn carries where to go next, as an in-App path only', () => {
+    let href!: ReturnType<typeof useHref>;
+    function Links() {
+      href = useHref();
+      return null;
+    }
+    renderSection(Links, { component: { id: 'links' } });
+    // oxlint-disable-next-line unicorn/no-thenable -- `then` is the sign-in address's own parameter
+    const address = href.signIn({ then: '/leads/127?tab=open' });
+    expect(address).toBe('/sign-in?then=%2Fleads%2F127%3Ftab%3Dopen');
+    expect(new URL(address, 'http://app.test').searchParams.get('then')).toBe('/leads/127?tab=open');
+    for (const evil of [
+      'https://evil.example',
+      '//evil.example',
+      '/\\evil.example',
+      '/\t/evil.example',
+      '/\n/evil.example',
+      'javascript:alert(1)',
+      '',
+    ]) {
+      // oxlint-disable-next-line unicorn/no-thenable -- `then` is the sign-in address's own parameter
+      expect(href.signIn({ then: evil }), evil).toBe('/sign-in');
+    }
+    expect(href.signIn({})).toBe('/sign-in');
   });
 });
 

@@ -229,6 +229,12 @@ redrive is never forgotten, however old.
 | --- | --- | --- | --- |
 | `nav[].realm` | `"tenant"` · `"platform"` | Stable | The realm it belongs to: a tenant's (the default) or the platform realm's, which needs auth.tenancy.platform. One of `platform`, `tenant`. |
 
+## `nav[].roles`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `nav[].roles` | array | Stable | The roles the menu offers the entry to, each declared in auth.roles. Arrangement only: grants alone decide who may open anything. |
+
 ## `nav[].to`
 
 | Key | Type | Status | What it does |

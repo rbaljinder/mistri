@@ -188,11 +188,19 @@ test.describe('private tenant browser ownership', () => {
     expect((await page.request.post(app.origin + '/api/auth/sign-out', { headers: { origin: app.origin }, data: {} })).status()).toBe(200);
     await login(page);
     await denied(await data(page, old));
+    // The tab was in north, so its reload re-enters north with no chooser (tenantBrowser.ts `preferred`). It must do
+    // so on a new context: a /resume may offer the kept one (and be refused), but no read may carry it.
+    const carried: (string | undefined)[] = [];
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname;
+      if (path.startsWith('/api/') && path !== '/api/tenant/context/resume') carried.push(request.headers()[names.context]);
+    });
+    const selecting = page.waitForResponse(isSelection);
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Choose a tenant' })).toBeVisible();
-    await expect(page.locator('#content')).not.toContainText('North item');
-    const current = await choose(page, 'north');
+    const current = await choose(page, 'north', false, selecting);
+    await expect(page.getByRole('heading', { name: 'Choose a tenant' })).toHaveCount(0);
     await items(page, 'north');
+    expect(carried).not.toContain(old.context);
     expect(current.accountId).toBe(old.accountId);
     expect(current.context).not.toBe(old.context);
     await denied(await data(page, old));

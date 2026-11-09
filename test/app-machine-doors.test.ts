@@ -46,7 +46,7 @@ const APP = {
           review: { on: { finish: 'closed' } },
           done: { final: true },
           closed: { final: true },
-          escalated: { final: true },
+          escalated: { final: { freeze: true } },
         },
       },
       at: { due_at: { command: 'escalate', when: "status = 'working'" } },
@@ -365,6 +365,29 @@ test("a state's move no verb makes is taken by a service holding its role, and r
     await runAs('escalate', { id: 'service:clock', kind: 'service', appId: 'desk', roles: ['automation'] });
     assert.equal(state(1).status, 'escalated');
     assert.equal(typeof state(1).moved_at, 'string', 'the move stamps since like any other');
+  });
+});
+
+test('a frozen state (final: { freeze: true }) takes no write, by any role, on any door, and says why', async () => {
+  await fixture(async ({ db, post, runAs, state }) => {
+    db.prepare("UPDATE ticket SET status = 'escalated' WHERE id = 1").run();
+    const words = 'This record is in the "Escalated" state, which is final and freezes it: nothing can change it now.';
+    // Save, a list's cell and the App API's update are one door: even a column no machine moves is refused.
+    const note = await post('/api/update', { app: 'desk', table: 'ticket', key: { id: 1 }, values: { note: 'Late edit' } });
+    assert.notEqual(note.status, 200, refusedBody(note.body));
+    assert.equal(note.body.error, words);
+    const status = await post('/api/update', { app: 'desk', table: 'ticket', key: { id: 1 }, values: { status: 'open' } });
+    assert.equal(status.body.error, words);
+    assert.deepEqual(state(1), { status: 'escalated', moved_at: null, note: null });
+    // A final state that does not freeze still takes edits of its other columns; a record elsewhere is unaffected.
+    assert.equal((await post('/api/update', { app: 'desk', table: 'ticket', key: { id: 3 }, values: { note: 'Fine' } })).status, 200);
+    assert.equal((await post('/api/update', { app: 'desk', table: 'ticket', key: { id: 2 }, values: { note: 'Fine' } })).status, 200);
+    // A command, the machine's own or not, writes nothing to it, and the refusal names the state.
+    await assert.rejects(
+      runAs('escalate', { id: 'service:clock', kind: 'service', appId: 'desk', roles: ['automation'] }),
+      (error: { code?: string; reason?: string }) => error.code === 'ineligible_state' && error.reason === words,
+    );
+    assert.equal(state(1).status, 'escalated');
   });
 });
 

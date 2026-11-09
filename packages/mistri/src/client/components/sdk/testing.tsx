@@ -333,7 +333,8 @@ export const board = {
   card(title: string, scope?: HTMLElement): HTMLElement {
     return scoped(scope).getByRole('button', { name: exactly(title) });
   },
-  /** Drops the card titled `title` into the lane `toLane`, as a pointer does; the board asks the page's command to move it. */
+  /** Drops the card titled `title` into the lane `toLane`, as a pointer does; the board asks the page's command to move it. A card is movable once the board has read which
+      moves it offers, so wait for its menu (`await findByRole('button', { name: 'Actions for …' })`) before the move. */
   move(title: string, toLane: string, scope?: HTMLElement): void {
     dragOnto(board.card(title, scope), board.lane(toLane, scope));
   },

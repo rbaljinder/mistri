@@ -185,96 +185,100 @@ const lease: TableMeta = {
 };
 const tables: Record<string, TableMeta> = { customer, invoice, note, unit, lease };
 
-vi.mock('../core.js', () => ({
-  state: { activeConnection: 'demo', schema: { tables: Object.values(tables), foreignKeys: [] }, stack: [] },
-  subscribeWalk: () => () => {},
-  walkVersion: () => 0,
-  api: async (
-    path: string,
-    body: { q?: string; view?: HttpViewDefinition; def?: HttpBreakdownDefinition; conn?: string; limit?: number; offset?: number },
-  ) => {
-    calls.push({ path, body });
-    if (path === '/api/run') return { rows: matches[String(body.q)] ? [{ id: 4 }] : [] };
-    if (path === '/api/view/run') {
-      if (viewOverride) return viewOverride;
-      const view = body.view;
-      if (!view) throw new Error('Test request has no view.');
-      const pick = rowsByBase?.[view.base] ?? viewRows;
-      if (pick)
-        return viewResponse(view, {
-          rows: pick.map((row) =>
-            Object.fromEntries(
-              view.columns
-                .filter((column) => Object.hasOwn(row, column.path))
-                .map((column) => [column.alias ?? column.path, row[column.path]]),
+vi.mock('../core.js', () => {
+  const core = {
+    state: { activeConnection: 'demo', schema: { tables: Object.values(tables), foreignKeys: [] }, stack: [] },
+    subscribeWalk: () => () => {},
+    walkVersion: () => 0,
+    api: async (
+      path: string,
+      body: { q?: string; view?: HttpViewDefinition; def?: HttpBreakdownDefinition; conn?: string; limit?: number; offset?: number },
+    ) => {
+      calls.push({ path, body });
+      if (path === '/api/run') return { rows: matches[String(body.q)] ? [{ id: 4 }] : [] };
+      if (path === '/api/view/run') {
+        if (viewOverride) return viewOverride;
+        const view = body.view;
+        if (!view) throw new Error('Test request has no view.');
+        const pick = rowsByBase?.[view.base] ?? viewRows;
+        if (pick)
+          return viewResponse(view, {
+            rows: pick.map((row) =>
+              Object.fromEntries(
+                view.columns
+                  .filter((column) => Object.hasOwn(row, column.path))
+                  .map((column) => [column.alias ?? column.path, row[column.path]]),
+              ),
             ),
+            ...(viewTotal === undefined ? {} : { total: viewTotal, more: viewTotal > pick.length }),
+          });
+        if (view.id.endsWith(':fields'))
+          return viewResponse(view, {
+            rows: [
+              {
+                id: 4,
+                name: contextLabel && view.columns.some((column) => column.path === 'status') ? contextLabel : 'Harbour Freight',
+                status: 'active',
+              },
+            ],
+          });
+        if (view.id === 'count-invoices') return viewResponse(view, { rows: [{ id: 1 }], total: 7 });
+        if (view.id.endsWith('-invoices'))
+          return viewResponse(view, { columns: ['id', 'total'], rows: [{ id: 1001, total: 627.95 }], total: 1 });
+        if (view.id.endsWith('-notes'))
+          return viewResponse(view, { columns: ['id', 'body'], rows: [{ id: 9, body: 'Called back' }], total: 1 });
+        return viewResponse(view);
+      }
+      if (path === '/api/breakdown') return breakdownReply(body.def);
+      if (path === '/api/counts')
+        return {
+          results: (body as unknown as { items: string[] }).items.map((question) =>
+            question in relatedTotals ? { total: relatedTotals[question] } : { errors: [{ message: 'not counted' }] },
           ),
-          ...(viewTotal === undefined ? {} : { total: viewTotal, more: viewTotal > pick.length }),
-        });
-      if (view.id.endsWith(':fields'))
-        return viewResponse(view, {
-          rows: [
-            {
-              id: 4,
-              name: contextLabel && view.columns.some((column) => column.path === 'status') ? contextLabel : 'Harbour Freight',
-              status: 'active',
-            },
-          ],
-        });
-      if (view.id === 'count-invoices') return viewResponse(view, { rows: [{ id: 1 }], total: 7 });
-      if (view.id.endsWith('-invoices'))
-        return viewResponse(view, { columns: ['id', 'total'], rows: [{ id: 1001, total: 627.95 }], total: 1 });
-      if (view.id.endsWith('-notes'))
-        return viewResponse(view, { columns: ['id', 'body'], rows: [{ id: 9, body: 'Called back' }], total: 1 });
-      return viewResponse(view);
-    }
-    if (path === '/api/breakdown') return breakdownReply(body.def);
-    if (path === '/api/counts')
-      return {
-        results: (body as unknown as { items: string[] }).items.map((question) =>
-          question in relatedTotals ? { total: relatedTotals[question] } : { errors: [{ message: 'not counted' }] },
-        ),
-      };
-    if (path === '/api/record-history') return { entries: [], more: undefined };
-    // The page's figures together (breakdownBatch.ts): each item answered as it would be alone.
-    if (path === '/api/breakdowns') {
-      return {
-        results: (body as { items: Array<{ def?: HttpBreakdownDefinition }> }).items.map((item) => ({
-          status: 200,
-          body: breakdownReply(item.def),
-        })),
-      };
-    }
-    return {};
-  },
-  findTable: (id: string) => tables[id],
-  writeAllowed: () => false,
-  keyOf: (_t: TableMeta, row: Record<string, unknown>) => (row.id === undefined ? null : { id: row.id }),
-  rowLabel: (_t: TableMeta, row: Record<string, unknown>) => String(row.name ?? row.id),
-  labelPath: () => labelled,
-  recordLabel: () => undefined,
-  refsFrom: () => [],
-  labelColumn,
-  primaryKey,
-  columnKind,
-  columnDisplay: (_table: string, column: string) =>
-    displays[column] ?? (moneyDisplay && column === 'total' ? { format: 'money', currency: 'USD' } : null),
-  columnLabel: () => null,
-  emptyWord: () => 'null',
-  prefersPages: () => false,
-  currentEntry: () => ({ kind: 'page' }),
-  openRecord: (...a: unknown[]) => gone.push(['open', ...a]),
-  go: (e: unknown, mode?: string) => gone.push(['go', e, mode]),
-  tableView: (table: string, query: string, tab?: string) => ({ kind: 'table', table, query, tab }),
-  quote: (v: unknown) => String(v),
-  disclosure: (d: HTMLElement) => d,
-  toast: () => {},
-  loadJson: () => ({}),
-  saveJson: () => {},
-  el: (tag: string) => document.createElement(tag),
-  viewportBox: (n: Element) => n.getBoundingClientRect(),
-  viewportSize: () => ({ width: 1000, height: 800 }),
-}));
+        };
+      if (path === '/api/record-history') return { entries: [], more: undefined };
+      // The page's figures together (breakdownBatch.ts): each item answered as it would be alone.
+      if (path === '/api/breakdowns') {
+        return {
+          results: (body as { items: Array<{ def?: HttpBreakdownDefinition }> }).items.map((item) => ({
+            status: 200,
+            body: breakdownReply(item.def),
+          })),
+        };
+      }
+      return {};
+    },
+    findTable: (id: string) => tables[id],
+    writeAllowed: () => false,
+    keyOf: (_t: TableMeta, row: Record<string, unknown>) => (row.id === undefined ? null : { id: row.id }),
+    rowLabel: (_t: TableMeta, row: Record<string, unknown>) => String(row.name ?? row.id),
+    labelPath: () => labelled,
+    recordLabel: () => undefined,
+    refsFrom: () => [],
+    labelColumn,
+    primaryKey,
+    columnKind,
+    columnDisplay: (_table: string, column: string) =>
+      displays[column] ?? (moneyDisplay && column === 'total' ? { format: 'money', currency: 'USD' } : null),
+    columnLabel: () => null,
+    emptyWord: () => 'null',
+    prefersPages: () => false,
+    currentEntry: () => ({ kind: 'page' }),
+    openRecord: (...a: unknown[]) => gone.push(['open', ...a]),
+    go: (e: unknown, mode?: string) => gone.push(['go', e, mode]),
+    tableView: (table: string, query: string, tab?: string) => ({ kind: 'table', table, query, tab }),
+    quote: (v: unknown) => String(v),
+    disclosure: (d: HTMLElement) => d,
+    toast: () => {},
+    loadJson: () => ({}),
+    saveJson: () => {},
+    el: (tag: string) => document.createElement(tag),
+    viewportBox: (n: Element) => n.getBoundingClientRect(),
+    viewportSize: () => ({ width: 1000, height: 800 }),
+  };
+  // A related list's reads say so (core.js relatedApi); here they are the same reads.
+  return { ...core, relatedApi: core.api };
+});
 vi.mock('../../../../mistri/src/client/appState.js', () => ({
   inAppMode: () => appMode,
   activeApp: () => appResource,
@@ -786,9 +790,13 @@ describe('related list options', () => {
       ],
     });
     await waitFor(() => expect(calls.some((call) => call.path === '/api/breakdown' || call.path === '/api/breakdowns')).toBe(true));
-    await waitFor(() => expect(screen.queryByText('Loading')).toBeNull());
-    expect(screen.queryByRole('heading', { name: 'By status' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Mix' })).toBeNull();
+    // The heading is drawn before the reply lands, so wait for the hidden state itself rather than for
+    // "Loading" to go: that can pass before the section has started loading.
+    await waitFor(() => {
+      expect(screen.queryByText('Loading')).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'By status' })).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Mix' })).toBeNull();
+    });
     expect(screen.queryByText('Nothing to count yet.')).toBeNull();
     cleanup();
     breakdownOverride = reply([{ status: 'paid', value: 5 }]);

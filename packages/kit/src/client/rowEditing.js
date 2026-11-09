@@ -7,6 +7,7 @@
  */
 import { prefersPages, state, writeAllowed } from './core.js';
 import { planColumn } from './columns.js';
+import { pageBridge } from './uiBridge.js';
 
 const writableConnection = () => Boolean(state.connections?.find((c) => c.id === state.activeConnection)?.writable);
 
@@ -25,9 +26,27 @@ export function booleanChoices(column, row) {
   return /bool/i.test(column?.type ?? '') ? { yes: 'true', no: 'false' } : { yes: '1', no: '0' };
 }
 
-/** True when this row can be edited at all: write mode on, and a full key. */
-export function canEditRow(table, key) {
+/**
+ * Whether the row is in a state its machine freezes (`final: { freeze: true }`): the server refuses every write to it,
+ * so no editor is offered. Judged from the row's own state, which a row that does not carry the column cannot say.
+ */
+function frozenRow(tableId, row) {
+  if (!row) return false;
+  const app =
+    /** @type {{ resources?: Record<string, { machine?: import('@mistriwork/engine/shared/servedApp.js').ServedMachine }> } | null} */ (
+      pageBridge.activeApp()
+    );
+  const machine = app?.resources?.[tableId]?.machine;
+  const value = machine ? row[machine.column] : undefined;
+  return (
+    machine !== undefined && value !== undefined && value !== null && machine.states.some((s) => s.freeze && s.value === String(value))
+  );
+}
+
+/** True when this row can be edited at all: write mode on, and a full key; a frozen row (`row`, where the caller has it) is not. */
+export function canEditRow(table, key, row) {
   if (!state.canWrite || !table || table.isView) return false;
+  if (frozenRow(table.id, row)) return false;
   if (prefersPages() && !writableConnection()) return false;
   if (!writeAllowed(table.id)) return false;
   const pk = table.columns.filter((c) => c.primaryKey).map((c) => c.name);

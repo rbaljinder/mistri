@@ -45,6 +45,12 @@ export type Segments = {
   class_session: "upcoming" | "past" | "cancelled";
 };
 
+/** Each list view's record tabs by their address word (a related list, a section tab, its history, a page tab): what `useHref().record(view, key, { tab })` takes. */
+export type RecordTabs = {
+  bookings: never;
+  classes: "bookings" | "next-booking";
+};
+
 /** The server connections this App may bind, by name: what `connection`
     and `sources.*.connection` accept. */
 export type Connections = "ladle";
@@ -69,5 +75,5 @@ export type Flags<Manifest> = AppFlagValues<Manifest>;
 export type FlagName<Manifest> = keyof Flags<Manifest>;
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments } }
+  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments }; tabs: RecordTabs }
 }

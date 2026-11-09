@@ -59,6 +59,7 @@ import { materializeApiReadResult } from './apiReadResult.js';
 import { renderApiReadOpenApi } from './apiReadOpenApi.js';
 import { narrowApiReadOpenApi } from './apiNarrowedReadOpenApi.js';
 import { narrowApiOpenApi, renderApiOpenApi } from './apiOpenApiDocument.js';
+import { currentReadRoute, withReadRoute } from '../readAudit.js';
 import { previewApiMcpReadTools } from './apiMcpReadTools.js';
 import { projectApiMcpCommandTools } from './apiMcpCommandTools.js';
 import { createApiCommandRequestMapper } from './apiCommandRequest.js';
@@ -307,7 +308,13 @@ export async function createTenantApiOwner(input: {
               }
               const { checked, cursor } = planned!;
               if (!context.data.runView) return refuse();
-              const rows = await context.data.runView(checked.view);
+              const runView = context.data.runView;
+              /* The token is the reader the read audit names, under the door its transport set (server/readAudit.ts). */
+              const rows = await withReadRoute(
+                currentReadRoute() === 'mcp' ? 'mcp' : 'api',
+                () => runView(checked.view),
+                `api-token:${observed.tokenId}`,
+              );
               let count: number | undefined;
               if (cursor?.plan.count) {
                 if (!context.data.countView) return refuse();

@@ -11,7 +11,7 @@
  *
  * The record's own row is kept whole: every reader of it (the root probe,
  * each fields section, the header, a custom section's record fields) is
- * answered with exactly its columns, once per set of columns.
+ * answered with exactly its columns, once per reader and set of columns.
  *
  * It tells the request path of itself as it loads (composedHook.ts), so
  * the request path asks it only where a module that reads record pages is
@@ -171,7 +171,11 @@ export async function composedReply(path: string, body: Record<string, unknown> 
   const row = path === '/api/view/run' ? rowRead(given) : undefined;
   if (row) {
     await composeUnderway(connection);
-    const once = row.columns.slice().sort().join('\u0000');
+    /* Once per reader (its view's id) and set of columns: a reader asking again is refetching and goes out, but two
+       readers asking the same columns each have the answer. A page whose header and properties section show the same
+       fields in a different order (appDefaultPage's: status first in the header) asked twice, and keying on the
+       columns alone sent the second to the server, a request beside the compose that was meant to save it. */
+    const once = `${(given.view as { id: string }).id}\u0001${row.columns.slice().sort().join('\u0000')}`;
     for (const batch of live(connection)) {
       const found = batch.rows.find(
         (kept) =>

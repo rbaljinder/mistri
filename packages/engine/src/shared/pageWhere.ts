@@ -28,8 +28,22 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 /* The language's column token: a name outside it could not be read back as a column. */
 const COLUMN_NAME = /^[\w$]+$/;
 
-const plain = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
+/* By shape, not by identity: an object made in another realm (a worker, a bundle's own copy of Object, a test
+   sandbox) has a different Object.prototype, and one from Object.create(null) has none; both are plain data. A Date,
+   a Map or a class instance says its own tag. */
+const plain = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === null || prototype === Object.prototype || Object.prototype.toString.call(value) === '[object Object]';
+};
+
+/* What a refused value actually was, so the sentence names it instead of saying "object" of an object. */
+const described = (value: unknown): string => {
+  if (Array.isArray(value)) return 'an array';
+  if (typeof value !== 'object' || value === null) return `a ${typeof value}`;
+  const tag = Object.prototype.toString.call(value).slice(8, -1);
+  return /^[AEIOU]/.test(tag) ? `an ${tag}` : `a ${tag}`;
+};
 
 const kindOf = (column: ColumnMeta): Kind => (isFlagColumn(column) ? 'boolean' : columnKind(column.type));
 
@@ -131,7 +145,7 @@ export function compileWhere(where: unknown, table: Pick<TableMeta, 'name' | 'co
     }
     return { text: parts.join(' and ') };
   }
-  if (!plain(where)) return { error: `A where is an object of column names and values, not ${typeof where}.` };
+  if (!plain(where)) return { error: `A where is an object of column names and values, not ${described(where)}.` };
   const parts: string[] = [];
   for (const [key, value] of Object.entries(where)) {
     if (value === undefined) continue;

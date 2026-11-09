@@ -93,6 +93,11 @@ defaults. Leave out `--commands` when the App exposes none. Routes live under
 | `GET /$openapi` | The OpenAPI document, narrowed to this token; with `publicSpec`, the whole document to a request with no `Authorization` |
 | `GET /$asyncapi` | The AsyncAPI 3 document of the feed, narrowed to this token |
 
+A command's input is read as the form reads it. An amount from `field.money({ minor: true })` is sent in the
+currency's major unit as decimal text, `{ "price": "19.99" }`, never as minor units: the command receives `1999`,
+and a `1999` sent is read as 1999.00. A fraction finer than the currency's places is refused, not rounded. The
+rows a read returns keep the stored integer.
+
 A command answers `{ "receipt": { "id", "status", "replayed" }, "result" }`;
 the same `Idempotency-Key` replays the receipt instead of running again.
 Refusals are problem details with a `code` and an `outcome` (`not_applied`, or
@@ -126,7 +131,9 @@ it with `--trust-proxy` so each client's address is the one budgeted.
 
 `--app-mcp` speaks the same API as MCP tools over stdio. Reads are `get_…`,
 `list_…` and `view_…` tools; commands are `run_…` (`runMany_…`) and
-`recover_…`. The token comes from `MISTRI_API_TOKEN`, never the command line:
+`recover_…`. A form's command (`targets: 'none'`) is one `run_…` tool with no
+record to name: it takes `idempotencyKey` and `input`, as the HTTP route does,
+and a retry under the same key replays its receipt. The token comes from `MISTRI_API_TOKEN`, never the command line:
 
 ```sh
 claude mcp add ledger -e MISTRI_API_TOKEN=<token> -- \

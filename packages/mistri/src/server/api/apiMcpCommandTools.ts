@@ -66,7 +66,7 @@ export type ApiMcpCommandBinding = Readonly<{
   name: string;
   command: string;
   version: number;
-  kind: 'one' | 'many' | 'recover' | 'prepare';
+  kind: 'one' | 'many' | 'recover' | 'prepare' | 'create';
   resource: string;
 }>;
 
@@ -96,7 +96,7 @@ export function projectApiMcpCommandTools(
     bindings: ApiMcpCommandBinding[] = [],
     used = new Set<string>();
   const named = (kind: ApiMcpCommandBinding['kind'], command: string) => {
-    const prefix = kind === 'one' ? 'run' : kind === 'many' ? 'runMany' : kind === 'prepare' ? 'prepare' : 'recover';
+    const prefix = kind === 'one' || kind === 'create' ? 'run' : kind === 'many' ? 'runMany' : kind === 'prepare' ? 'prepare' : 'recover';
     const slug = command.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 24);
     const suffix = createHash('sha256')
       .update(JSON.stringify([app.id, kind, command]))
@@ -108,7 +108,6 @@ export function projectApiMcpCommandTools(
     return name;
   };
   for (const operation of catalog.operations) {
-    if (operation.targets === 'none') continue;
     if (!permitted.has(operation.id) || !operation.eligibleRoles.some((role) => roles.has(role))) continue;
     /* One command's tools are made whole or left out: a command this cannot describe takes its own tools from the
        list, with its cause written to the log, and never the session with it. */
@@ -123,8 +122,32 @@ export function projectApiMcpCommandTools(
       skipped(app.id, operation.command, error instanceof Error ? error.message : 'it could not be described');
     }
   }
+  /* A form's command (`targets: 'none'`) names no record: its tool takes the idempotency key and the input alone, the
+     creation envelope the HTTP route reads (apiCommandEnvelope.ts), and a retry under the same key replays. */
+  function projectCreation(operation: (typeof catalog.operations)[number], envelope: NonNullable<ReturnType<typeof envelopes.get>>) {
+    const rendered = renderApiInputSchema({ input: declarations[operation.command]!.input });
+    for (const open of rendered.undescribed) skipped(app.id, `${operation.command}.${open.path}`, open.cause, 'input');
+    const name = named('create', operation.command);
+    tools.push({
+      name,
+      title: `${app.name}: ${operation.command}`.slice(0, 256),
+      description: (
+        `Runs ${operation.command}, which creates ${operation.resource} records, through the App API, as this token allows; checked again on every call. ` +
+        `It names no record; a retry with the same idempotencyKey replays its receipt.` +
+        (several ? ` It runs on source "${operation.source}" alone; nothing is promised across calls.` : '')
+      ).slice(0, 1024),
+      inputSchema: closed({ idempotencyKey: IDEMPOTENCY, input: rendered.schema }),
+      outputSchema: closed({
+        receipt: closed({ id: envelope.receiptIdSchema, status: { const: 'applied' }, replayed: { type: 'boolean' } }),
+        result: operation.outputSchema,
+      }),
+      annotations: { readOnlyHint: false, idempotentHint: true },
+    });
+    bindings.push({ name, command: operation.command, version: operation.version, kind: 'create', resource: operation.resource });
+  }
   function project(operation: (typeof catalog.operations)[number]) {
     const envelope = envelopes.get(operation.id) ?? fail();
+    if (operation.targets === 'none') return projectCreation(operation, envelope);
     const table = schema.tables.find((value) => value.id === operation.resource) ?? fail();
     const key = primaryKey(table);
     const codec = createApiReadKeyCodec({ resource: operation.resource, primaryKey: key, fields: key }, schema, options);

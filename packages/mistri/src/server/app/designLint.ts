@@ -476,10 +476,19 @@ function pageFindings(catalog: Catalog, page: PageDef): DesignFinding[] {
     }
     // 12. A thin workflow.
     const flow = section.workflow;
-    if (flow && base) {
+    /* Only where the strip is drawn: a headline, facts, table or card returns before it (PageFields.tsx), so a
+       workflow written on one says nothing the reader sees. */
+    const stripDrawn = !['headline', 'facts', 'table', 'card'].includes(section.presentation ?? '');
+    if (flow && base && stripDrawn) {
       const allowed = catalog.resolve(base.id, flow.field)?.column.allowed ?? [];
       const outside = allowed.filter((value) => !flow.steps.some((step) => step.value === value));
-      if (flow.steps.length <= 2 || (allowed.length && outside.length > allowed.length / 2)) {
+      /* A two-state flow that ends in a final state (draft → final) is the whole story, not a thin pipeline. */
+      const machine = catalog.byTable.get(base.id)?.resource.machine;
+      const endsFinal =
+        flow.steps.length === 2 &&
+        machine?.column === flow.field &&
+        machine.states.some((state) => state.final && state.name === flow.steps[1]?.value);
+      if ((flow.steps.length <= 2 && !endsFinal) || (allowed.length && outside.length > allowed.length / 2)) {
         say(
           'thin-workflow',
           `the workflow over "${flow.field}" has ${flow.steps.length} step${flow.steps.length === 1 ? '' : 's'}${outside.length ? ` and leaves ${outside.length} of its ${allowed.length} values outside` : ''}: ` +

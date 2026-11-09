@@ -803,3 +803,44 @@ test('public experiment admission resolves native intake placement and rejects r
     }),
   );
 });
+
+test('under mistri dev, a submission placed in triage says why: the address shape, never the address', async (t) => {
+  const { mountObserver } = await import('../packages/mistri/src/server/observe/mount.js');
+  const { intakeAddressProblem, intakeColumnProblem } = await import('../packages/mistri/src/server/tenant/tenantIntakeModel.js');
+  const f = await enrolled(t, 'sqlite');
+  const said: string[] = [];
+  const warn = console.warn;
+  console.warn = (line: unknown) => said.push(String(line));
+  t.after(() => {
+    console.warn = warn;
+    mountObserver(undefined);
+  });
+  // Not under dev: a production start says nothing, whatever the address.
+  await f.submit('north', 'Ada');
+  assert.equal(said.length, 0);
+  mountObserver(() => {});
+  await f.submit('north', 'Ada');
+  await f.submit(`${'x'.repeat(10)}!${'y'.repeat(20)}`, 'Ada');
+  await f.submit(UNKNOWN, 'Ada');
+  // No address is the lender's own door, not a miss; a dealer's address places the dealer, quietly.
+  await f.submit(undefined, 'Ada');
+  await f.submit(NORTH, 'Ada');
+  assert.equal(said.length, 3, said.join('\n'));
+  assert.match(
+    said[0]!,
+    /"apply" submission was placed in the platform's triage.*it is 5 characters, short of 22; an intake address is 22 to 128 URL-safe characters/,
+  );
+  assert.match(said[1]!, /it has a character that is not URL-safe/);
+  assert.match(said[2]!, /of the right shape, but no active tenant's profile holds it/);
+  for (const line of said) for (const secret of ['north', UNKNOWN, 'xxxxxxxxxx']) assert.ok(!line.includes(secret), line);
+  assert.equal(intakeAddressProblem(NORTH), undefined);
+  assert.equal(intakeAddressProblem(undefined), undefined);
+  assert.match(intakeAddressProblem('a'.repeat(129))!, /129 characters, past 128/);
+  // A column that cannot hold an address is said at tenant init and in check.
+  assert.match(
+    intakeColumnProblem('dealer', { name: 'intake_address', type: 'character varying(20)' })!,
+    /\[tenant-intake-address\].*20 characters at most.*22 to 128/,
+  );
+  assert.equal(intakeColumnProblem('dealer', { name: 'intake_address', type: 'TEXT' }), undefined);
+  assert.equal(intakeColumnProblem('dealer', { name: 'intake_address', type: 'varchar(128)' }), undefined);
+});

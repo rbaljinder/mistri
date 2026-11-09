@@ -4,6 +4,7 @@ import { scalar } from './support/db.js';
 import { startTenantApp, type TenantAppFixture } from './support/tenantServer.js';
 import { TENANT_HTTP_HEADERS as headers, type TenantContextReply } from '../packages/mistri/src/shared/tenantContext.js';
 import { COMMAND_JOURNAL_TABLES } from '../packages/mistri/src/adapters/commands/commandJournal.js';
+import { expectEntered, isSelection, leaseOfSelection } from './support/tenantSelection.js';
 
 // Every mutation below goes through shared UI and genuine native authentication.
 // Response interception loses/holds actual committed replies, never invents
@@ -42,8 +43,14 @@ test.describe('private tenant membership-driven write UI', () => {
         })
       ).status(),
     ).toBe(200);
+    // The address names north, one of Alice's two: the page enters it as it loads.
+    const opened = page.waitForResponse(isSelection);
     await page.goto(`${app.origin}/${app.appId}/item?tenant=north`);
-    const owner = await choose(page, 'north');
+    const reply = await opened;
+    expect(reply.status()).toBe(200);
+    const owner = await leaseOfSelection(reply);
+    expect(owner.tenantId).toBe('north');
+    await expectEntered(page, 'north');
     await expect(page.getByRole('row').filter({ hasText: 'North item' })).toBeVisible();
     return owner;
   };

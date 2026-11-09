@@ -9,7 +9,7 @@
  */
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
 import { ownedBy } from '../requestIdentity.js';
-import { api as request, columnDisplay, findTable, labelPath, recordLabel, state } from '../core.js';
+import { api as request, columnDisplay, relatedApi, findTable, labelPath, recordLabel, state } from '../core.js';
 import type { AppAction } from '@mistriwork/engine/schema/model.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { shell } from '../shellMode.js';
@@ -106,13 +106,16 @@ export const PageRenderContext = createContext<{
   /** A verb ran from a row of one of the page's lists: the record and its lists are read again. */
   onActionDone?: () => void;
 }>({});
-export function usePageApi() {
+/* `read: 'related'` is a related list's rows, which a resource that audits its reads records as such (core.js relatedApi). */
+export function usePageApi(read?: 'related') {
   const { connection } = useContext(PageRenderContext);
   const scoped: typeof request = (path, ...args) => {
     // Add only routing identity; preserve the selected route/body tuple. No
     // operation fields are changed and no endpoint falls back to an untyped API.
     const owned = connection && args[0] ? ([{ ...args[0], ...ownedBy(connection) }] as typeof args) : args;
-    return request(path, ...owned);
+    return read === 'related'
+      ? (relatedApi(path, owned[0] as Record<string, unknown>) as ReturnType<typeof request>)
+      : request(path, ...owned);
   };
   return scoped;
 }

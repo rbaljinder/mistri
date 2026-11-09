@@ -743,6 +743,8 @@ interface AppTransitionRule {
   /** The machine's column and its `since`, stamped when the state changes. */
   column: string;
   since?: string;
+  /** The states declared `final: { freeze: true }` → their words: a row in one takes no write at all. */
+  frozen: ReadonlyMap<string, string>;
   /** The App's `ui.timezone`, the wall clock a zone-less `since` is written in (UTC when absent). */
   timezone?: string;
 }
@@ -817,6 +819,7 @@ export function appTransitionRules(app: AppDef, schema: DatabaseSchema): { rules
       starts: new Map([[column, machine.states[0].name]]),
       moves,
       column,
+      frozen: new Map(machine.states.filter((state) => state.freeze).map((state) => [state.name, state.label])),
       ...(machine.since === undefined ? {} : { since: machine.since }),
       ...(appZone(app.ui) ? { timezone: appZone(app.ui) } : {}),
     });
@@ -2003,6 +2006,7 @@ function servedMachine(machine: import('./appMachine.js').AppMachineDef, rule: A
       value: state.name,
       label: typeof words[state.name] === 'string' ? words[state.name] : state.label,
       ...(state.final ? { final: true as const } : {}),
+      ...(state.freeze ? { freeze: true as const } : {}),
     })),
     path: machinePath(machine),
     ...(machine.groups ? { groups: machine.groups } : {}),

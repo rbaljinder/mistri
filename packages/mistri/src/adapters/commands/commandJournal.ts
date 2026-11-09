@@ -335,7 +335,7 @@ function validateAudit(audit: CommandAudit): void {
   if (audit.owner !== undefined && typeof audit.owner !== 'string') return invalid();
   text(audit.target, 'audit target', 256);
   json(audit.keyJson, 'audit key', 8 * 1024);
-  json(audit.changesJson, 'audit changes', 64 * 1024);
+  json(audit.changesJson, 'audit changes', COMMAND_TARGET_BOUNDS.changes);
 }
 /** One audit or a list, one per target: at least one, at most BULK_LIMIT.
  * An event batch belongs to exactly one target. */

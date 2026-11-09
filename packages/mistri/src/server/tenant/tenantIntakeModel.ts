@@ -91,6 +91,35 @@ const FORM = /^[a-z0-9][a-z0-9-]{0,63}$/;
 export function intakeAddress(value: unknown): string | undefined {
   return typeof value === 'string' && ADDRESS.test(value) ? value : undefined;
 }
+/** The rule an intake address is held to, in the words every refusal and note about one uses. */
+const INTAKE_ADDRESS_RULE = 'an intake address is 22 to 128 URL-safe characters: letters, digits, "-" and "_"';
+/**
+ * What is wrong with a value that is not an intake address, said without the value: an address is the one secret a
+ * public form is placed by, so a log line or a refusal names its shape (how long, which kind of character), never it.
+ * Undefined for an address, and for nothing at all (no address is not a malformed one).
+ */
+export function intakeAddressProblem(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string') return `it is not text; ${INTAKE_ADDRESS_RULE}`;
+  if (ADDRESS.test(value)) return undefined;
+  const odd = /[^A-Za-z0-9_-]/.test(value);
+  const length =
+    value.length < 22
+      ? `it is ${value.length} characters, short of 22`
+      : value.length > 128
+        ? `it is ${value.length} characters, past 128`
+        : '';
+  return `${[length, odd ? 'it has a character that is not URL-safe' : ''].filter(Boolean).join(' and ')}; ${INTAKE_ADDRESS_RULE}`;
+}
+/** A column too short to hold an address, from the length its type declares (`varchar(20)`): the rule, as the column's words, or undefined. */
+export function intakeColumnProblem(table: string, column: { name: string; type: string }): string | undefined {
+  const limit = /\((\d+)\)/.exec(column.type)?.[1];
+  if (limit === undefined || Number(limit) >= 22) return undefined;
+  return (
+    `table "${table}" column "${column.name}" [tenant-intake-address]: the tenant policy's intake.address names it, and it holds ${limit} ` +
+    `characters at most (${column.type}); ${INTAKE_ADDRESS_RULE}. Widen it to text, or to at least varchar(128).`
+  );
+}
 
 export function intakePlace(evidence: Pick<TenantIntakeEvidence, 'tenantId'>): IntakePlace {
   return evidence.tenantId === PLATFORM_TENANT_ID ? 'platform' : 'tenant';

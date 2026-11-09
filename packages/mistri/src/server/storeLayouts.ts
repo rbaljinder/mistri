@@ -194,6 +194,22 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     },
   },
   {
+    id: 'read-audit',
+    title: "read audit: who read an audited resource's rows, append-only, never pruned",
+    tables: { prefix: '__mistri_read_audit_' },
+    current: both(1),
+    read: marked(everywhere('__mistri_read_audit_meta')),
+    upgrades: {},
+    provision: {
+      sqlite: async (path) => (await import('../adapters/readAudit/sqliteReadAudit.js')).provisionSqliteReadAudit(path),
+      postgres: async (url) => (await import('../adapters/readAudit/postgresReadAudit.js')).provisionPostgresReadAudit(url),
+    },
+    attest: {
+      sqlite: async (db) => (await import('../adapters/readAudit/sqliteReadAudit.js')).sqliteReadAuditReady(db),
+      postgres: async (client) => (await import('../adapters/readAudit/postgresReadAudit.js')).postgresReadAuditReady(client),
+    },
+  },
+  {
     id: 'live-change',
     title: 'live sync: what each write transaction changed, kept fifteen minutes',
     tables: { prefix: '__mistri_live_' },

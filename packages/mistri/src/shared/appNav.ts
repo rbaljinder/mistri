@@ -22,6 +22,8 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
   /* A parsed view's kind as a destination reads it (appDestinations.ts): the caller knows its own view shapes. */
   kindOf: (view: View) => DestinationKind | undefined,
   assistantPage = false,
+  /* `auth.roles`' names, which a menu entry's `roles` must come from, as a home rule's do. */
+  declaredRoles: readonly string[] = [],
 ): AppNavNode[] {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) throw new Error(`${where}: "nav" must be an array.`);
@@ -38,7 +40,20 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
     return true;
   };
   const visiting = new Set<object>();
-  const leaf = (key: unknown, label: string | undefined, at: string, color?: SeriesColor): AppNavNode => {
+  /* `roles` on an entry or a group says whom the menu offers it to, as a home rule's `roles` says whom it starts:
+     arrangement only. A view's own `roles` and the grants still decide who may open it. */
+  const rolesOf = (value: unknown, at: string): { roles?: string[] } => {
+    if (value === undefined) return {};
+    if (!Array.isArray(value) || !value.length || value.some((role) => typeof role !== 'string'))
+      throw new Error(`${at} has "roles" that are not a non-empty list of role names.`);
+    for (const role of value as string[])
+      if (!declaredRoles.includes(role))
+        throw new Error(
+          `${at} names the role "${role}", which auth.roles does not declare. ${declaredRoles.length ? `It declares: ${declaredRoles.join(', ')}.` : 'The App declares no roles.'}`,
+        );
+    return { roles: [...(value as string[])] };
+  };
+  const leaf = (key: unknown, label: string | undefined, at: string, color?: SeriesColor, roles: { roles?: string[] } = {}): AppNavNode => {
     const view = typeof key === 'string' ? views.get(key) : undefined;
     if (!view && key === ASSISTANT_ROOM && assistantPage) {
       if (!place(ASSISTANT_ROOM)) throw new Error(`${at} names the assistant a second time; it appears in nav at most once.`);
@@ -46,6 +61,7 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
         view: ASSISTANT_ROOM,
         ...(label === undefined ? {} : { label }),
         ...(color === undefined ? {} : { color }),
+        ...roles,
       };
     }
     if (!view) {
@@ -66,6 +82,7 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
       view: view.key,
       ...(label === undefined ? {} : { label }),
       ...(color === undefined ? {} : { color }),
+      ...roles,
     };
   };
   /* `depth` is the number of groups around these entries. */
@@ -79,7 +96,7 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
         if (depth >= 8) throw new Error(`${at} exceeds the maximum navigation group depth of 8.`);
         allowKeys(
           node,
-          ['id', 'label', 'icon', 'realm', 'placement', 'inline', 'folded', 'workspace', 'children'],
+          ['id', 'label', 'icon', 'realm', 'roles', 'placement', 'inline', 'folded', 'workspace', 'children'],
           `${at} (a navigation group)`,
         );
         if (typeof node.id !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(node.id)) {
@@ -118,6 +135,7 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
           throw new Error(
             `${at} (${node.id}) is a workspace with a "placement". A footer group stays at the sidebar's foot in every workspace; it is not one of them.`,
           );
+        const groupRoles = rolesOf(node.roles, `${at} (${node.id})`);
         groups.add(node.id);
         visiting.add(node);
         const outer = workspace;
@@ -130,6 +148,7 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
           label: node.label.trim(),
           ...(node.icon === undefined ? {} : { icon: parseIcon(node.icon, `${at} (${node.id})`) }),
           ...(node.realm === undefined ? {} : { realm: parseRealm(node.realm, `${at} (${node.id})`) }),
+          ...groupRoles,
           ...(node.placement === undefined ? {} : { placement: 'footer' as const }),
           ...(node.inline === undefined ? {} : { inline: true as const }),
           ...(node.folded === undefined ? {} : { folded: true as const }),
@@ -138,7 +157,7 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
         };
       }
       if (Object.hasOwn(node, 'to')) {
-        allowKeys(node, ['label', 'to', 'color'], at);
+        allowKeys(node, ['label', 'to', 'color', 'roles'], at);
         if (typeof node.label !== 'string' || !node.label.trim() || node.label.length > 120 || /[\p{Cc}\p{Cs}]/u.test(node.label)) {
           throw new Error(`${at}: { label, to } needs a non-blank label of at most 120 characters.`);
         }
@@ -149,11 +168,13 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
         )
           throw new Error(`${at} has a "color" of ${JSON.stringify(node.color)}: one of the theme's eight chart colors, 1 to 8.`);
         const color = node.color as SeriesColor | undefined;
-        if (typeof node.to === 'string') return leaf(node.to, node.label.trim(), at, color);
+        const roles = rolesOf(node.roles, at);
+        if (typeof node.to === 'string') return leaf(node.to, node.label.trim(), at, color, roles);
         return {
           label: node.label.trim(),
           to: parseAppTarget(node.to, `${at}.to`, false) as import('../../schema/app.js').StaticAppTarget,
           ...(color === undefined ? {} : { color }),
+          ...roles,
         };
       }
       throw new Error(`${at} is not a view id, a { label, to } or a navGroup.`);

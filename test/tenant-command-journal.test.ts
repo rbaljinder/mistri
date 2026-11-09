@@ -530,7 +530,7 @@ test('JSON byte and capture budgets refuse and poison receipt publication', asyn
   for (const [entry, change] of [
     [{ ...receipt(), resultJson: JSON.stringify('é'.repeat(8192)) }, audit],
     [receipt(), { ...audit, keyJson: JSON.stringify('x'.repeat(8192)) }],
-    [receipt(), { ...audit, changesJson: JSON.stringify('x'.repeat(65536)) }],
+    [receipt(), { ...audit, changesJson: JSON.stringify('x'.repeat(4_194_304)) }],
     [{ ...receipt(), extra: 'x'.repeat(1_048_577) }, audit],
   ] as Array<[StoredCommandReceipt, CommandAudit]>) {
     await assert.rejects(

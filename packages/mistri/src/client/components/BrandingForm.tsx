@@ -434,7 +434,7 @@ export function BrandingForm() {
         <figure>
           <figcaption>{say('previewRecord')}</figcaption>
           <div className="branding-preview-record">
-            <strong>{say('sampleRecord')}</strong>
+            <strong>{app?.name || say('sampleRecord')}</strong>
             <span className="branding-preview-pill">{say('sampleStatus')}</span>
             <span className="branding-preview-button">{say('sampleAction')}</span>
           </div>

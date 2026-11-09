@@ -110,7 +110,14 @@ export const MIGRATE_APPS: MigrateHost<MigrateAppRun> = {
             ...(jobs !== undefined ? { jobs } : {}),
             async check(rest, write) {
               const { runCheck } = await import('../build/check.js');
-              return runCheck(['--app', appDir, ...rest], write);
+              /* The check is a start of its own, and a tenant App's start refuses without its policy: the one this run
+                 resolved (a flag, or the `app` block of mistri.json) goes with it, so a check never judges the App
+                 beside a different answer than the migrations were run beside. */
+              const named = (flag: string) => rest.some((arg) => arg === flag || arg.startsWith(`${flag}=`));
+              return runCheck(
+                ['--app', appDir, ...rest, ...(opts.policy !== undefined && !named('--policy') ? ['--policy', opts.policy] : [])],
+                write,
+              );
             },
           },
           input,

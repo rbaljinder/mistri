@@ -47,6 +47,8 @@ import { composePlatformReadScope } from './tenantReadScope.js';
 import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { tenantVisibleFields } from './tenantVisibleFields.js';
+import { withTenantReadAudit } from './tenantReadAudit.js';
+import type { ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
 import type { AdmissionCache } from './tenantAdmissionCache.js';
 import { bindTenantFlagOwner } from './tenantFlagRuntime.js';
 
@@ -80,6 +82,8 @@ export interface PlatformReadRuntimeOptions<Request> {
   readonly now?: () => number;
   /** The deployment's kept admissions (tenantAdmissionCache.ts). */
   readonly admissions?: AdmissionCache;
+  /** Where an audited resource's read is written (tenantReadAudit.ts). The platform reads across tenants: its rows carry no tenant. */
+  readonly readAudit?: (row: ReadAuditRow) => Promise<void>;
 }
 
 /** Capture synchronous transfers immediately, asynchronous ones on native delivery. */
@@ -109,6 +113,7 @@ const optionKeys = [
   'presentation',
   'now',
   'admissions',
+  'readAudit',
 ];
 
 /**
@@ -149,9 +154,11 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
     typeof raw.verifySession !== 'function' ||
     typeof raw.resolvePlatformRows !== 'function' ||
     (raw.presentation !== undefined && typeof raw.presentation !== 'function') ||
-    (raw.now !== undefined && typeof raw.now !== 'function')
+    (raw.now !== undefined && typeof raw.now !== 'function') ||
+    (raw.readAudit !== undefined && typeof raw.readAudit !== 'function')
   )
     return denyTenant();
+  const readAudit = raw.readAudit as PlatformReadRuntimeOptions<Request>['readAudit'];
   const verify = raw.verifySession as PlatformReadRuntimeOptions<Request>['verifySession'];
   const platformRows = raw.resolvePlatformRows as PlatformReadRuntimeOptions<Request>['resolvePlatformRows'];
   const presentation = raw.presentation as PlatformReadRuntimeOptions<Request>['presentation'];
@@ -407,7 +414,11 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
                   write: new Set(),
                 });
               }
-              const guarded = authorizeResources(resources, { ...visible, fields }, assertActive);
+              const guarded = authorizeResources(
+                resources,
+                withTenantReadAudit({ ...visible, fields }, { app: app.id, tenant: '', actor: principal.accountId }, readAudit),
+                assertActive,
+              );
               const reader = guarded.adapter;
               const data = Object.freeze<ScopedReads>({
                 query: (input) =>

@@ -434,6 +434,14 @@ export const PROVISION: Readonly<Record<string, Provisioners>> = {
       ).provisionAnalyticsStore({ url, binding: { appId: 'layout', deploymentId: suite.deploymentId } });
     },
   },
+  'read-audit': {
+    sqlite: async (path) => {
+      (await import('../../packages/mistri/src/adapters/readAudit/sqliteReadAudit.js')).provisionSqliteReadAudit(path);
+    },
+    postgres: async (url) => {
+      await (await import('../../packages/mistri/src/adapters/readAudit/postgresReadAudit.js')).provisionPostgresReadAudit(url);
+    },
+  },
   experiments: {
     postgres: async (url) => {
       await (

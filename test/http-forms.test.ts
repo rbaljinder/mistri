@@ -28,6 +28,7 @@ import { PUBLIC_FORM_SUBMIT_TOTAL, publicFormLimiter, resetPublicFormLimits } fr
 import { publicFormRoute } from '../packages/mistri/src/server/http/gate.js';
 import { parseTrustedProxies } from '../packages/engine/src/server/http/trust.js';
 import { parseTestApp } from './support/commandCatalog.js';
+import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 
 /* Each form's input is declared once and read by the form and its command's registration alike. */
 const enrolInput = {
@@ -366,7 +367,10 @@ test(
         resetPublicFormLimits();
       }
       // Refused by its Content-Length before the human check or the body is read: 413, as the forms page says.
-      const huge = await call(f.base, '/api/forms/apply', { input: { name: 'a', pad: 'x'.repeat(70_000) }, submission: key(2) });
+      const huge = await call(f.base, '/api/forms/apply', {
+        input: { name: 'a', pad: 'x'.repeat(MAX_COMMAND_BYTES + 1) },
+        submission: key(2),
+      });
       assert.equal(huge.status, 413);
       const put = await call(f.base, '/api/forms/apply', { input: { name: 'a' }, submission: key(3) }, 'PUT');
       assert.equal(put.status, 405);

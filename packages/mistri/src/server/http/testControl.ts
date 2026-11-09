@@ -1,7 +1,8 @@
 /**
  * What a test host asks of the server it started, outside the App's own doors:
- * rows inserted as a test's setup, a job at times run now, and in a tenant App
- * an account with a membership of a tenant or of the platform. `startTestApp`
+ * rows inserted as a test's setup, a job at times run now, in a tenant App
+ * an account with a membership of a tenant or of the platform, and the read
+ * audit's rows, which no route of the App reads. `startTestApp`
  * (testing/host.ts) is the one caller. It starts the server with
  * NODE_ENV=test and a random MISTRI_TEST_CONTROL token, and sends that
  * token with each request; without both, or from beyond loopback, these
@@ -22,6 +23,7 @@ import { homeSourceOf, isTenantApp } from '../../shared/appModel.js';
 import { tableNamed } from '@mistriwork/engine/shared/schema.js';
 import { HttpError, readJson, send } from '@mistriwork/engine/server/http/reply.js';
 import { TEST_CONTROL_HEADER, TEST_CONTROL_PATHS } from '../testing/control.js';
+import type { ReadAuditQuery, StoredReadAudit } from '../../adapters/readAudit/readAudit.js';
 
 export interface TestControl {
   /** True when the request was one of these routes, answered here. */
@@ -35,7 +37,14 @@ const loopback = (address: string | undefined) => address === '127.0.0.1' || add
 /** The control a test host's server answers, or none: only under NODE_ENV=test with a token a test host set. */
 export function testControlFrom(
   env: NodeJS.ProcessEnv,
-  serving: { registry: Registry; apps: () => readonly AppHost[]; jobs?: Pick<JobHost, 'runNow'>; policy?: string },
+  serving: {
+    registry: Registry;
+    apps: () => readonly AppHost[];
+    jobs?: Pick<JobHost, 'runNow'>;
+    policy?: string;
+    /** A tenant App's read audit, read for one tenant at a time (tenantDeployment.ts `readAudit`). */
+    tenantReadAudit?: (tenant: string, query: Omit<ReadAuditQuery, 'tenant'>) => Promise<StoredReadAudit[]>;
+  },
 ): TestControl | undefined {
   const token = env.MISTRI_TEST_CONTROL;
   if (env.NODE_ENV !== 'test' || !token || token.length < 32) return undefined;
@@ -115,6 +124,28 @@ export function testControlFrom(
     return { appId: host.app.app.id, accountId, email, password };
   }
 
+  /** The read audit's rows, newest first: a tenant App's for the one tenant named, any other App's from its own databases. */
+  async function readAudit(body: Record<string, unknown>) {
+    const { tenant, resource, record, actor, since, limit } = body;
+    const query = {
+      ...(typeof resource === 'string' ? { resource } : {}),
+      ...(typeof record === 'string' ? { record } : {}),
+      ...(typeof actor === 'string' ? { actor } : {}),
+      ...(typeof since === 'string' ? { since } : {}),
+      limit: typeof limit === 'number' ? limit : 1000,
+    };
+    const apps = serving.apps();
+    if (apps.length !== 1) throw new HttpError(400, 'The read audit is read for the one App this server serves.');
+    if (isTenantApp(apps[0].app.app)) {
+      if (typeof tenant !== 'string' || !tenant)
+        throw new HttpError(400, "A tenant App's read audit is read one tenant at a time: name it.");
+      if (!serving.tenantReadAudit) throw new HttpError(400, 'This tenant App audits the reads of no resource.');
+      return serving.tenantReadAudit(tenant, query);
+    }
+    const { readAppReadAudit } = await import('../readAuditStore.js');
+    return readAppReadAudit(serving.registry, apps[0], query);
+  }
+
   return {
     async handle(req, res, url) {
       const route =
@@ -124,7 +155,9 @@ export function testControlFrom(
             ? job
             : url.pathname === TEST_CONTROL_PATHS.membership
               ? membership
-              : undefined;
+              : url.pathname === TEST_CONTROL_PATHS.readAudit
+                ? readAudit
+                : undefined;
       if (!route || !authorized(req)) return false;
       if (req.method !== 'POST') {
         send(res, 405, { error: 'POST' });

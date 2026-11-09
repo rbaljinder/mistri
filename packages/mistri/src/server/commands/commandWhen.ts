@@ -342,6 +342,12 @@ export async function whenPerson(
   return { email, person: { table: people.id, key: typeof key === 'string' || typeof key === 'number' ? key : null } };
 }
 
+/** A condition over a rollup or a computed column that a row did not meet, with the value it was judged by. */
+export interface DerivedFailure {
+  readonly condition: Condition;
+  readonly value: ComputedValue;
+}
+
 /**
  * Whether `when` holds of each row (normalized, each read by its key in this transaction). A group of conditions
  * holds when the target's row matches its stored conditions — one count by key, the row scope's as every read is —
@@ -354,6 +360,9 @@ export async function whenHolds(
   when: CompiledWhen,
   rows: readonly Readonly<Record<string, unknown>>[],
   now: Date,
+  /** Told, for a row that fails, the first derived condition it did not meet and the value judged — so a refusal can
+      say it (`derivedRefusalPart`) without the value being read a second time. */
+  onFailure?: (index: number, failure: DerivedFailure) => void,
 ): Promise<boolean[]> {
   const table = catalog[target];
   const derived = table.derived;
@@ -388,18 +397,18 @@ export async function whenHolds(
       );
     };
     let holds = !when.filter.groups.length;
+    let failure: DerivedFailure | undefined;
     for (const group of when.filter.groups) {
       const stored = group.filter((condition) => !here(condition));
       if (stored.length && !(await reader.count(target, { groups: [[...named, ...stored]] }))) continue;
       let all = true;
       for (const condition of group) {
         if (!here(condition)) continue;
-        const met =
-          condition.other === undefined
-            ? meets(condition, await value(condition.column))
-            : compares(condition.op, await value(condition.column), await value(condition.other));
+        const judged = await value(condition.column);
+        const met = condition.other === undefined ? meets(condition, judged) : compares(condition.op, judged, await value(condition.other));
         if (!met) {
           all = false;
+          if (condition.other === undefined) failure ??= { condition, value: judged };
           break;
         }
       }
@@ -408,6 +417,7 @@ export async function whenHolds(
         break;
       }
     }
+    if (!holds && failure) onFailure?.(held.length, failure);
     held.push(holds);
   }
   return held;

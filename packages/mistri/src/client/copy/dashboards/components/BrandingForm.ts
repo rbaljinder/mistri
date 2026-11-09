@@ -40,7 +40,8 @@ export const say = defineMessages({
   previewRecord: 'A record',
   previewStat: 'A figure',
   previewEmail: 'An email',
-  sampleRecord: 'Acme Corporation',
+  /* Only where the App has no name to lend: the preview's record is called by the App's own name (BrandingForm.tsx). */
+  sampleRecord: 'Sample record',
   sampleStatus: 'Active',
   sampleAction: 'Assign',
   sampleStat: 'Open requests',

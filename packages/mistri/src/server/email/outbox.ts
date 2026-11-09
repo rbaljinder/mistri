@@ -128,7 +128,8 @@ async function readerFor(
   lease: (owner: string) => void,
 ): Promise<{ adapter: Adapter; schema: DatabaseSchema }> {
   const resources = await loadAppRuntimeResources(registry, app, entry, lease);
-  const grant = resolveAppAccess(app, resources.schema, roles);
+  /* The server's own read (a notice's title, by the recipient's grants), not a reader's: never written to the read audit. */
+  const { audited: _unaudited, ...grant } = resolveAppAccess(app, resources.schema, roles);
   const scoped = grantsByRole(app) || grant.fields ? authorizeResources(resources, grant) : resources;
   return { adapter: scoped.adapter, schema: scoped.schema };
 }

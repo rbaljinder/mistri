@@ -6,6 +6,7 @@
  */
 import { describe, expect, test, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { state } from '@mistriwork/kit/client/core.js';
 import { PAGE_EXPORTS, UI_EXPORTS } from '../../../shared/uiSdk.js';
 import { UiPageContext, type UiPageFrame } from './context.js';
 import { fixtureHost, SectionFrame } from './fixture.js';
@@ -334,6 +335,36 @@ describe('typed params', () => {
     expect(await screen.findByText('{"q":""}')).toBeInTheDocument();
     renderPage(kinds, { address: { class: '-1', day: '11/08/2026' } });
     expect(await screen.findByText('{}')).toBeInTheDocument();
+  });
+
+  test("an id named for a resource the page reads follows that resource's key: text for a text key, a number for an integer one", async () => {
+    const before = state.schema;
+    state.schema = {
+      tables: [
+        { name: 'vehicle', id: 'vehicle', columns: [{ name: 'id', type: 'text', nullable: false, primaryKey: true }] },
+        { name: 'bay', id: 'bay', columns: [{ name: 'id', type: 'integer', nullable: false, primaryKey: true }] },
+      ],
+    } as unknown as typeof state.schema;
+    try {
+      const keyed = definePage({
+        label: 'Keyed',
+        reads: ['vehicle', 'bay'],
+        params: { vehicle: 'id', bay: 'id', other: 'id' },
+        component: () => {
+          const [vehicle] = keyed.useParam('vehicle');
+          const [bay] = keyed.useParam('bay');
+          const [other] = keyed.useParam('other');
+          return <p>{JSON.stringify({ vehicle, bay, other })}</p>;
+        },
+      });
+      renderPage(keyed, { address: { vehicle: 'ten_4fK-9.x', bay: '7', other: '12' } });
+      expect(await screen.findByText('{"vehicle":"ten_4fK-9.x","bay":7,"other":12}')).toBeInTheDocument();
+      // Text that is not URL-safe is no id; an integer key stays integer; a param naming no table keeps today's reading.
+      renderPage(keyed, { address: { vehicle: 'a b', bay: 'north', other: 'north' } });
+      expect(await screen.findByText('{}')).toBeInTheDocument();
+    } finally {
+      state.schema = before;
+    }
   });
 
   test('the list form still means text', async () => {

@@ -210,7 +210,10 @@ export function buildTheme(spec: ThemeSpec, base?: ThemeDefinition): ThemeDefini
     dark: rolesOf(variant.dark),
   }));
   const font = spec.type?.font;
-  const fonts = typeof font === 'string' ? { ui: font, data: font, heading: font } : font;
+  const named = typeof font === 'string' ? { ui: font, data: font, heading: font } : font;
+  /* A data column's figures follow the data face unless the theme says a face for them: a theme that names a data face
+     and no figures face would otherwise keep a base's figures (the platform's Plex Mono) under its own data face. */
+  const fonts = named?.data !== undefined && named.figures === undefined ? { ...named, figures: named.data } : named;
   const density = spec.density ?? base?.density;
   const motion = spec.motion ?? base?.motion;
   const rhythm = spec.rhythm ?? base?.rhythm;

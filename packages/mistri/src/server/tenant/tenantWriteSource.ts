@@ -73,6 +73,8 @@ import type { InboxMailStore } from '../../adapters/inbox/inboxMail.js';
 import { physicalRowScope } from './tenantReadScope.js';
 import { bindTenantInboxStore } from './tenantInbox.js';
 import { bindTenantBrandingStore } from './tenantBrandingStore.js';
+import { bindTenantReadAuditStore } from './tenantReadAudit.js';
+import type { ReadAuditQuery, ReadAuditRow, StoredReadAudit } from '../../adapters/readAudit/readAudit.js';
 import { assertBrandingWrite, type BrandingWrite } from '../../adapters/branding/branding.js';
 
 /* A writer an uncertain outcome closed is reopening itself (tenantWriterLifecycle.ts). What it turns away meanwhile
@@ -110,6 +112,10 @@ export interface TenantWriteSource extends TenantWriteMethods {
   /** Save one tenant's branding and the logo it names, on the writer's queue
    * and in one transaction; returns the new revision (adapters/branding). */
   writeBranding(write: BrandingWrite): Promise<number>;
+  /** One read audit row, its own statement on the writer's queue (tenantReadAudit.ts); the row names its tenant. */
+  appendReadAudit(row: ReadAuditRow): Promise<void>;
+  /** The read audit, as the host reads it for one tenant: the deployment names the tenant, never the caller. */
+  readReadAudit(query: ReadAuditQuery): Promise<StoredReadAudit[]>;
   close(): Promise<void>;
 }
 /** One record a committed transaction wrote: its logical table and its key; a removal also names the tenant the row belonged to, which can no longer be read from it. */
@@ -325,6 +331,7 @@ export async function openSqliteTenantWriteSource(
   history?: RecordHistoryBinding,
   notices?: NoticeBinding,
   branding = false,
+  readAudit = false,
 ): Promise<TenantWriteSource> {
   let adapter: SqliteAdapter | undefined;
   try {
@@ -392,6 +399,8 @@ export async function openSqliteTenantWriteSource(
       // And its notify rules, which tell people in the same transactions (tenantInbox.ts).
       if (notices) await bindTenantInboxStore(dbAdapter, notices, 'sqlite');
       if (branding) await bindTenantBrandingStore(dbAdapter, 'sqlite');
+      // And the read audit, where a resource audits its reads: refused here, never made (tenantReadAudit.ts).
+      if (readAudit) await bindTenantReadAuditStore(dbAdapter);
       // And live sync's change row, naming each write's tenant (tenantLive.ts); a reopen binds the new handle.
       await bindTenantLive(dbAdapter, owned);
       return committed;
@@ -618,12 +627,34 @@ export async function openSqliteTenantWriteSource(
       return queue.run(() => appStoresOf(life.handle()).writeBranding(captured));
     };
     const inboxMail = queuedInboxMail(mailOf(life.handle), (work) => queue.run(work), closing);
+    const appendReadAudit = (row: ReadAuditRow): Promise<void> => {
+      let captured: ReadAuditRow;
+      try {
+        if (closing()) return paused();
+        captured = captureTenantData(row);
+      } catch (error) {
+        return Promise.reject(tenantWriteFailed('not_applied', error));
+      }
+      return queue.run(() => appStoresOf(life.handle()).appendReadAudit(captured));
+    };
+    const readReadAudit = (query: ReadAuditQuery): Promise<StoredReadAudit[]> => {
+      let captured: ReadAuditQuery;
+      try {
+        if (closing()) return paused();
+        captured = captureTenantData(query);
+      } catch (error) {
+        return Promise.reject(tenantWriteFailed('not_applied', error));
+      }
+      return queue.run(() => appStoresOf(life.handle()).readReadAudit(captured));
+    };
     const source = Object.freeze<TenantWriteSource>({
       ownership: owned,
       ...tenantWriteMethods(transaction),
       markInboxRead,
       inboxMail,
       writeBranding,
+      appendReadAudit,
+      readReadAudit,
       close,
     });
     sources.add(source);
@@ -669,6 +700,7 @@ export async function openPostgresTenantWriteSource(
   history?: RecordHistoryBinding,
   notices?: NoticeBinding,
   branding = false,
+  readAudit = false,
 ): Promise<TenantWriteSource> {
   let adapter: PostgresAdapter | undefined;
   try {
@@ -747,6 +779,7 @@ export async function openPostgresTenantWriteSource(
       if (history) await bindTenantRecordHistoryStore(dbAdapter, history, 'postgres');
       if (notices) await bindTenantInboxStore(dbAdapter, notices, 'postgres');
       if (branding) await bindTenantBrandingStore(dbAdapter, 'postgres');
+      if (readAudit) await bindTenantReadAuditStore(dbAdapter);
       await bindTenantLive(dbAdapter, owned, url);
       return committed;
     };
@@ -1037,12 +1070,34 @@ export async function openPostgresTenantWriteSource(
       return queue.run([], () => appStoresOf(life.handle()).writeBranding(captured));
     };
     const inboxMail = queuedInboxMail(mailOf(life.handle), (work) => queue.run([], work), closing);
+    const appendReadAudit = (row: ReadAuditRow): Promise<void> => {
+      let captured: ReadAuditRow;
+      try {
+        if (closing()) return paused();
+        captured = captureTenantData(row);
+      } catch (error) {
+        return Promise.reject(tenantWriteFailed('not_applied', error));
+      }
+      return queue.run([], () => appStoresOf(life.handle()).appendReadAudit(captured));
+    };
+    const readReadAudit = (query: ReadAuditQuery): Promise<StoredReadAudit[]> => {
+      let captured: ReadAuditQuery;
+      try {
+        if (closing()) return paused();
+        captured = captureTenantData(query);
+      } catch (error) {
+        return Promise.reject(tenantWriteFailed('not_applied', error));
+      }
+      return queue.run([], () => appStoresOf(life.handle()).readReadAudit(captured));
+    };
     const source = Object.freeze<TenantWriteSource>({
       ownership: owned,
       ...tenantWriteMethods(transaction),
       markInboxRead,
       inboxMail,
       writeBranding,
+      appendReadAudit,
+      readReadAudit,
       close,
     });
     sources.add(source);

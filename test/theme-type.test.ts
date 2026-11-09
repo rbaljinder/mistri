@@ -1,6 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseThemes, themeTypeWarnings } from '../packages/engine/src/shared/theme.js';
+import { FONT_TOKENS, parseThemes, themeTypeWarnings } from '../packages/engine/src/shared/theme.js';
 import { compileAppTheme } from '../packages/mistri/src/shared/themeSpec.js';
 import { THEME_PRESETS, headingWeight, lookNavRole, themePreset } from '../packages/engine/src/shared/themePresets.js';
 import { recipeAttributes, typeAttributes } from '../packages/engine/src/shared/themeRecipes.js';
@@ -223,4 +224,24 @@ test("a role's code face is the theme's own monospace: fonts.code reaches it, th
   // The Mono look's labels, nav and figures are the same face, so a theme extending it moves all three with one stack.
   const mono = themePreset('mono')!.type?.roles;
   assert.deepEqual([mono?.label?.face, mono?.nav?.face, mono?.figure?.face], ['code', 'code', 'code']);
+});
+
+test("a theme's figures face: named, it is --figures-face; naming a data face alone, figures follow it; a built-in keeps Plex Mono", () => {
+  assert.equal(FONT_TOKENS.figures, '--figures-face');
+  const named = theme({ font: { data: "'Data Face', monospace", figures: "'Figures Face', monospace" } });
+  assert.equal(named.fonts?.figures, "'Figures Face', monospace");
+  assert.equal(named.fonts?.data, "'Data Face', monospace");
+  // The face survives the stored form a tenant's branding goes through.
+  assert.equal(parseThemes([named], 'probe')![0]!.fonts?.figures, "'Figures Face', monospace");
+  // A data face and no figures face: the figures follow the data, over the figures of the look it extends.
+  assert.equal(theme({ font: { data: "'Data Face', monospace" } }).fonts?.figures, "'Data Face', monospace");
+  assert.equal(theme({ font: 'Georgia, serif' }).fonts?.figures, 'Georgia, serif');
+  // Naming neither keeps the look's own.
+  assert.equal(theme({ roles: { title: { weight: 600 } } }).fonts?.figures, themePreset('sage')!.fonts?.figures);
+  assert.match(String(themePreset('sage')!.fonts?.figures), /^'IBM Plex Mono', 'IBM Plex Mono Fallback'/);
+  for (const preset of THEME_PRESETS) if (preset.fonts?.data) assert.match(String(preset.fonts.figures), /IBM Plex Mono/, preset.id);
+  assert.throws(() => theme({ font: { figures: 'x(' } }), /theme\.type\.font\.figures must be a CSS font-family list/);
+  // The App's sheet draws --figures from it, and from Plex Mono when a theme names none.
+  const sheet = readFileSync(new URL('../packages/kit/src/client/themeFamilies.css', import.meta.url), 'utf8');
+  assert.match(sheet, /\.app-mode \{\s*--figures: var\(--figures-face, 'IBM Plex Mono', 'IBM Plex Mono Fallback', var\(--code\)\);/);
 });

@@ -27,8 +27,8 @@ export class CommandInputError extends Error {
   }
 }
 
-/** The bound on one command request, envelope included. */
-export const MAX_COMMAND_BYTES = 65_536;
+/** The bound on one command request, envelope included. A text input may be 65,536 characters (up to four bytes each, and escaped), so the envelope holds eight times that. */
+export const MAX_COMMAND_BYTES = 524_288;
 const MAX_DEPTH = 16;
 const MAX_NODES = 10_000;
 /** Names that belong to Object.prototype, never to data. */

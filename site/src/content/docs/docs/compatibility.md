@@ -34,8 +34,9 @@ breaking.
 ## Supported environment
 
 Node 24 or newer (every package's `engines`; CI runs Node 24, and the container image pins a newer patch release for its security fixes: the floor is what mistri needs, not what it ships on). Optional peers
-are bounded to the majors mistri supports: TypeScript 7 (`>=7 <8`),
-React 19, Next.js 15.1 to 16 (the first to run React 19; Next 14 runs React 18), React Router 6.4 to 7, and TanStack Router 1.
+are bounded to the majors mistri supports: React 19, Next.js 15.1 to 16 (the first to run React 19; Next 14 runs React 18),
+React Router 6.4 to 7, and TanStack Router 1. TypeScript 7 is required for `mistri check` and `mistri build`, which say so when
+it is missing or older; it is not declared as a peer, so a host on TypeScript 5 (Next.js needs 5.x) installs cleanly.
 A new major of a peer is a mistri release's work to support, not a range you
 widen yourself.
 

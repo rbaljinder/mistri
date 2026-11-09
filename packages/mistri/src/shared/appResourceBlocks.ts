@@ -631,9 +631,16 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
          the resource, not about one writer. */
       if (raw.audit !== undefined) {
         const here = `${at}, "audit"`;
-        const declared = plainRecord(raw.audit, here, 'an object { redact }');
-        allowKeys(declared, ['redact'], here);
-        resource.audit = parseAudit(declared.redact, here);
+        const declared = plainRecord(raw.audit, here, 'an object { redact?, reads? }');
+        allowKeys(declared, ['redact', 'reads'], here);
+        if (declared.redact === undefined && declared.reads === undefined)
+          throw new Error(`${here} needs a "redact", a "reads: true", or both.`);
+        if (declared.reads !== undefined && declared.reads !== true)
+          throw new Error(`${here}: "reads" is true to log every read of these rows, or absent.`);
+        resource.audit = {
+          ...(declared.redact === undefined ? {} : parseAudit(declared.redact, here)),
+          ...(declared.reads === true ? { reads: true as const } : {}),
+        };
       }
       /* Rows from a CSV file (appImport.ts): opt-in, and a plain import writes
          records, so it needs the ceiling that allows it. */
@@ -898,7 +905,7 @@ function parseRollups(raw: unknown, here: string): Record<string, AppRollup> {
 
 /** Which of a resource's columns the support write trail keeps as a keyed hash
  * rather than as their value: every one (`'values'`), or the named ones. */
-function parseAudit(redact: unknown, here: string): AppAuditDef {
+function parseAudit(redact: unknown, here: string): Required<Pick<AppAuditDef, 'redact'>> {
   if (redact === 'values') return { redact: 'values' };
   if (
     !Array.isArray(redact) ||

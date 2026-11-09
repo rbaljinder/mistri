@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { startTenantProof, type TenantProofFixture } from '../e2e/support/tenantProofServer.js';
 import { COMMAND_JOURNAL_TABLES } from '../packages/mistri/src/adapters/commands/commandJournal.js';
 import { sqliteAuditRows } from './support/commandTargets.js';
@@ -226,7 +227,7 @@ test('UTF-8: real native tenant query and command input integrity', { timeout: 4
     const before = evidence(f);
     for (const [path, value, maximum, control] of [
       ['/api/tenant/context/open', {}, 16384, true],
-      ['/api/commands/prepare', prepare, 65536, false],
+      ['/api/commands/prepare', prepare, MAX_COMMAND_BYTES, false],
       ['/api/query', { table: f.model.event, filter: filter('body', text) }, 262144, false],
     ] as const) {
       const send = (bytes: Buffer) => (control ? c.raw(path, bytes) : c.data(path, bytes));

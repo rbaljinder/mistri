@@ -1,6 +1,7 @@
 import { Refusal, WriteConflict } from '@mistriwork/engine/adapters/adapter.js';
 import { PathError } from '@mistriwork/engine/shared/view.js';
 import { AppAccessDenied } from './appAccess.js';
+import { ReadAuditFailed } from '../readAudit.js';
 import { AppValidationDenied, ConsumesRefused } from './appValidationDenied.js';
 import { constraintColumns, dataException, wrongTypeValue } from '@mistriwork/engine/server/constraints.js';
 
@@ -37,6 +38,8 @@ export function appError(
   caption?: (column: string) => string,
 ): AppError {
   if (completed) return unconfirmed();
+  /* A read the audit could not record is no route's to answer: it leaves for the server's 503, empty (readAudit.ts). */
+  if (error instanceof ReadAuditFailed) throw error;
   if (error instanceof AppAccessDenied) return { code: 'forbidden', message: error.message };
   if (error instanceof WriteConflict) return { code: 'record_conflict', message: error.message };
   if (error instanceof Refusal || error instanceof PathError) {

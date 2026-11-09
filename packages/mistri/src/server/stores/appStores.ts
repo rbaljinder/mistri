@@ -1,6 +1,6 @@
 /**
  * The App stores a dialect adapter's database holds — the notification
- * inbox, branding, the record history — made over the StoreHost the adapter
+ * inbox, branding, the record history, the read audit — made over the StoreHost the adapter
  * lends (../storeHost.ts). The adapter is the engine's and has no store
  * methods; the App framework asks here instead.
  *
@@ -28,6 +28,15 @@ import {
 } from '../../adapters/history/recordHistory.js';
 import { readPostgresRecordActivity, readPostgresRecordHistory } from '../../adapters/history/postgresRecordHistory.js';
 import { readSqliteRecordActivity, readSqliteRecordHistory } from '../../adapters/history/sqliteRecordHistory.js';
+import {
+  READ_AUDIT_TABLES,
+  READ_AUDIT_VERSION,
+  type ReadAuditQuery,
+  type ReadAuditRow,
+  type StoredReadAudit,
+} from '../../adapters/readAudit/readAudit.js';
+import { appendPostgresReadAudit, readPostgresReadAudit } from '../../adapters/readAudit/postgresReadAudit.js';
+import { appendSqliteReadAudit, readSqliteReadAudit } from '../../adapters/readAudit/sqliteReadAudit.js';
 
 /* The meta rows the host's epoch read names; `name` keys the attestation as the adapters always did. */
 const INBOX: StoreMeta = Object.freeze({ name: 'inbox', table: INBOX_TABLES.meta, version: INBOX_VERSION });
@@ -37,6 +46,8 @@ const INBOX_ATTEST = storeDef('inbox').attest!,
   BRANDING_ATTEST = storeDef('branding').attest!,
   HISTORY_ATTEST = storeDef('record-history').attest!;
 const HISTORY: StoreMeta = Object.freeze({ name: 'history', table: RECORD_HISTORY_TABLES.meta, version: RECORD_HISTORY_VERSION });
+const READ_AUDIT: StoreMeta = Object.freeze({ name: 'read-audit', table: READ_AUDIT_TABLES.meta, version: READ_AUDIT_VERSION });
+const READ_AUDIT_ATTEST = storeDef('read-audit').attest!;
 
 /** Private runtime capabilities over one database, for the server to project for its readers; none is on the public Adapter. */
 interface AppStores {
@@ -54,6 +65,12 @@ interface AppStores {
   readRecordHistory(query: RecordHistoryQuery): Promise<StoredRecordChange[]>;
   /** The newest stored changes across resources, for a dashboard's activity. */
   readRecordActivity(query: RecordActivityQuery): Promise<StoredRecordChange[]>;
+  /** Whether the database holds the read audit store at this version. */
+  readAuditReady(): Promise<boolean>;
+  /** One read appended on a writer, its own statement: durable before the rows it names leave (server/readAudit.ts). */
+  appendReadAudit(row: ReadAuditRow): Promise<void>;
+  /** The stored reads, newest first. */
+  readReadAudit(query: ReadAuditQuery): Promise<StoredReadAudit[]>;
   /** Whether the database holds the branding store at this version. */
   brandingReady?(): Promise<boolean>;
   /** One tenant's branding saved, with its logo, in one transaction on a writer. */
@@ -77,6 +94,13 @@ function postgresStores(host: PostgresStoreHost): AppStores {
       host.withReadClient((client) =>
         host.attestedStore(client, HISTORY, (attested) => readPostgresRecordActivity(client, query, attested)),
       ),
+    readAuditReady: () => host.withReadClient((client) => READ_AUDIT_ATTEST.postgres!(client)),
+    appendReadAudit: (row) =>
+      host.withWriteClient((client) =>
+        host.attestedStore(client, READ_AUDIT, (attested) => appendPostgresReadAudit(client, row, attested)),
+      ),
+    readReadAudit: (query) =>
+      host.withReadClient((client) => host.attestedStore(client, READ_AUDIT, (attested) => readPostgresReadAudit(client, query, attested))),
     brandingReady: () => host.withReadClient((client) => BRANDING_ATTEST.postgres!(client)),
     /* The epoch is read before BEGIN: a failed read inside the transaction would abort the save with it. */
     writeBranding: (write) =>
@@ -111,6 +135,10 @@ function sqliteStores(host: SqliteStoreHost): AppStores {
     readRecordHistory: async (query) => host.attestedStore(HISTORY, (attested) => readSqliteRecordHistory(host.reader(), query, attested)),
     readRecordActivity: async (query) =>
       host.attestedStore(HISTORY, (attested) => readSqliteRecordActivity(host.reader(), query, attested)),
+    readAuditReady: () => READ_AUDIT_ATTEST.sqlite!(host.reader()),
+    // Its epoch rides in the insert itself (sqliteReadAudit.ts): one statement on every audited read.
+    appendReadAudit: (row) => host.queueWrite((write) => appendSqliteReadAudit(write, row)),
+    readReadAudit: async (query) => host.attestedStore(READ_AUDIT, (attested) => readSqliteReadAudit(host.reader(), query, attested)),
     brandingReady: () => BRANDING_ATTEST.sqlite!(host.reader()),
     writeBranding: (write) =>
       host.queueWrite((handle) => {

@@ -535,7 +535,7 @@ function PaperList({ section, plan, label }: { section: List; plan: SectionPlan 
   return (
     <section className="doc-lines">
       {title}
-      <table className="doc-table">
+      <table className="doc-table" data-wide={columns.length >= 6 || undefined}>
         <thead>
           <tr>
             {columns.map((column) => (

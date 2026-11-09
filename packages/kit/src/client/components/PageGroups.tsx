@@ -71,7 +71,7 @@ export function GroupedBody({
   /** How a row moves to another group or its place in one; absent, the rows stay where they are. */
   moves?: GroupMoves;
 }) {
-  const api = usePageApi();
+  const api = usePageApi('related');
   const group = section.group!;
   const heading = useId();
   const [open, setOpen] = useState<Record<string, true>>({});

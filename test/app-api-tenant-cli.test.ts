@@ -361,7 +361,9 @@ for (const { dialect, skip } of [
       await mcp.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' } });
       mcp.notify('notifications/initialized');
       const tools = (await mcp.request('tools/list')).result.tools as { name: string }[];
-      assert.deepEqual(tools.map((tool) => tool.name.split('_')[0]).sort(), ['get', 'list', 'prepare', 'run']);
+      // `stock` is a form command (`targets: 'none'`): one run tool takes its input alone, beside touch's run and prepare.
+      assert.deepEqual(tools.map((tool) => tool.name.split('_')[0]).sort(), ['get', 'list', 'prepare', 'run', 'run']);
+      assert.ok(tools.some((tool) => tool.name.startsWith('run_stock_')));
       const tool = (prefix: string) => tools.find((value) => value.name.startsWith(prefix))!.name;
       const call = (name: string, args: object) => mcp.request('tools/call', { name, arguments: args });
       const code = (reply: { result: { content: { text: string }[] } }) => {
@@ -378,7 +380,7 @@ for (const { dialect, skip } of [
         'north-2',
         'north-3',
       ]);
-      const ran = await call(tool('run_'), {
+      const ran = await call(tool('run_touch_'), {
         key: { id: 'north-2' },
         version: 0,
         idempotencyKey: `tenant-mcp-${dialect}-00000001`,

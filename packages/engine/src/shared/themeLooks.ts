@@ -24,6 +24,10 @@ const BARLOW_CONDENSED = `"Barlow Semi Condensed", "Barlow Semi Condensed Fallba
 /** Ledger's figures and labels: IBM Plex Mono, shipped with Ledger's sheet (ledgerLook.css) and fetched only by a page
     wearing it; the platform's monospace stands in until it arrives. */
 const PLEX_MONO = `'IBM Plex Mono', ui-monospace, Menlo, monospace`;
+/** A data column's figures in every built-in look (`fonts.figures`, drawn as `--figures`, themeFamilies.css): Plex Mono, with
+    the fallback cut to its measure while it arrives. A theme that names a data face and no figures face draws its figures
+    in that face, so each built-in that names a data face says this one, and its figures stay as they were. */
+const FIGURES = `'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, Menlo, monospace`;
 
 /** A look as written here: its own grounds, neutrals and meaning colors, and the palette (lookPalettes.ts) it wears
     until a reader or the App picks another. The hue's roles are the palette's, so a look never names them. */
@@ -188,7 +192,7 @@ const HOUSE: readonly HouseLook[] = [
       border: { panel: '1px', rule: '1px' },
     },
     type: {
-      font: { ui: BARLOW, data: BARLOW, heading: BARLOW_CONDENSED },
+      font: { ui: BARLOW, data: BARLOW, heading: BARLOW_CONDENSED, figures: FIGURES },
       base: '14px',
       roles: {
         // A page still names itself in the workshop's voice, the condensed bold, in sentence case.
@@ -316,7 +320,7 @@ const HOUSE: readonly HouseLook[] = [
     /* The page's name anchors it: 28px, tight; a list's name a step under, and a section's heading 16px, so the
        page reads title, section, row at a glance. On a flat page the type is the hierarchy the boxes used to be. */
     type: {
-      font: { ui: INTER, data: INTER, heading: INTER },
+      font: { ui: INTER, data: INTER, heading: INTER, figures: FIGURES },
       roles: {
         title: { size: '28px', weight: 600, tracking: '-0.02em' },
         heading: { size: '24px', tracking: '-0.018em' },
@@ -409,7 +413,7 @@ const HOUSE: readonly HouseLook[] = [
     /* Figures and the labels that make the look in the platform's monospace, the labels and the bar's entries in
        capitals: not data, which a reader who wants monospace picks in Preferences. */
     type: {
-      font: { ui: HELVETICA, data: HELVETICA, heading: HELVETICA },
+      font: { ui: HELVETICA, data: HELVETICA, heading: HELVETICA, figures: FIGURES },
       roles: {
         title: { size: '30px', weight: 700 },
         label: { face: 'code', case: 'upper' },
@@ -490,7 +494,7 @@ const HOUSE: readonly HouseLook[] = [
       },
     },
     shape: { radius: { control: '8px', field: '8px' }, elevation: 'soft' },
-    type: { font: { ui: SANS, data: SANS, heading: SANS }, roles: { title: { weight: 600 } } },
+    type: { font: { ui: SANS, data: SANS, heading: SANS, figures: FIGURES }, roles: { title: { weight: 600 } } },
     // Compact, as Mono and Lumen: see Mono's density.
     density: 'compact',
     recipes: {
@@ -587,7 +591,7 @@ const HOUSE: readonly HouseLook[] = [
       border: { panel: '1px', rule: '1px' },
     },
     type: {
-      font: { ui: INTER, data: PLEX_MONO, heading: INTER },
+      font: { ui: INTER, data: PLEX_MONO, heading: INTER, figures: FIGURES },
       roles: {
         title: { size: '26px', weight: 600, tracking: '-0.01em' },
         heading: { size: '20px', weight: 600, tracking: '-0.018em' },

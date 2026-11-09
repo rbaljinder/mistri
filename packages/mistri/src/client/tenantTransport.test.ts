@@ -275,6 +275,31 @@ test('selected reads carry canonical URL selectors and tab/context assertions, n
   expect(init.headers['x-mistri-context']).toBe('context-north');
 });
 
+test('a picker’s and a related list’s reads say what they are on the lease, as the server audits them (readAudit.ts)', async () => {
+  session.establishTenantSelection(proof());
+  const fetcher = vi.fn().mockImplementation(async () => reply({ rows: [] }));
+  vi.stubGlobal('fetch', fetcher);
+  const { installShell } = await import('../../../kit/src/client/shellMode.js');
+  installShell((await import('./surfaceShell.js')).surfaceShell);
+  const core = await import('../../../kit/src/client/core.js');
+  core.state.activeConnection = 'atlas';
+  await core.pickerApi('/api/query', { table: 'item' });
+  await core.relatedApi('/api/query', { table: 'item' });
+  await core.api('/api/query', { table: 'item' });
+  expect(fetcher.mock.calls.map(([url]) => url)).toEqual(Array(3).fill('/api/query?app=atlas&tenant=north'));
+  expect(fetcher.mock.calls.map(([, init]) => init.headers['x-mistri-read'])).toEqual(['picker', 'related', undefined]);
+  // What a read says it is never speaks for the lease: only those headers ride, and the lease's own win.
+  await transport.tenantReadApi('/api/query', { table: 'item' }, 'atlas', undefined, {
+    'x-mistri-read': 'picker',
+    'x-mistri-tenant': 'south',
+    'x-mistri-context': 'context-south',
+  });
+  const [, init] = fetcher.mock.calls.at(-1)!;
+  expect(init.headers['x-mistri-read']).toBe('picker');
+  expect(init.headers).not.toHaveProperty('x-mistri-tenant');
+  expect(init.headers['x-mistri-context']).toBe('context-north');
+});
+
 test('command availability is an owned tenant read, never an unscoped or mutation fallback', async () => {
   const payload = { checks: [{ command: 'assignReviewer', commandVersion: 1, keys: [{ id: 'same' }] }] };
   const result = { availability: [{ available: true }] };

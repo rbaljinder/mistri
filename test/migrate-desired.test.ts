@@ -376,6 +376,24 @@ describe('the pieces', () => {
   });
 });
 
+describe('a failed Atlas fetch', () => {
+  test('says how to work offline: the pinned version and MISTRI_ATLAS', async () => {
+    const saved = { atlas: process.env.MISTRI_ATLAS, fetch: globalThis.fetch };
+    delete process.env.MISTRI_ATLAS;
+    globalThis.fetch = (async () => new Response('no', { status: 503 })) as typeof fetch;
+    try {
+      await assert.rejects(
+        atlasBinary(join(work, 'offline'), () => {}, undefined, 'darwin-arm64', { 'darwin-arm64': 'a'.repeat(64) }),
+        new RegExp(`HTTP 503\\. To work offline, install Atlas ${ATLAS_VERSION} .* set MISTRI_ATLAS to that binary`),
+      );
+    } finally {
+      globalThis.fetch = saved.fetch;
+      if (saved.atlas === undefined) delete process.env.MISTRI_ATLAS;
+      else process.env.MISTRI_ATLAS = saved.atlas;
+    }
+  });
+});
+
 const REAL = process.env.TABLEWALK_TEST_ATLAS;
 describe('with the real Atlas', { skip: REAL ? false : 'set TABLEWALK_TEST_ATLAS=<atlas binary> to run this' }, () => {
   test('diff, then check, on SQLite', async () => {

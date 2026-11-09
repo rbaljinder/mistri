@@ -22,7 +22,7 @@ import { headingWeight, inheritThemePreset, lookNavRole } from '../shared/themeP
 import { typeTokens } from '../shared/themeType.js';
 import { fieldEdge } from '../shared/themeColor.js';
 import { recipeAttributes } from '../shared/themeRecipes.js';
-import { APP_PAGE_PERMISSIONS_POLICY } from './http/baselineHeaders.js';
+import { APP_PAGE_MICROPHONE_PERMISSIONS_POLICY, APP_PAGE_PERMISSIONS_POLICY } from './http/baselineHeaders.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -148,9 +148,12 @@ function withFrameAncestors(policy: string, origins: readonly string[] | undefin
 /**
  * An App's page may use the camera (the scan input); the database browser's
  * has no such input and keeps the baseline's refusal (http/baselineHeaders.ts).
+ * The microphone is the App's to ask for (`ui.microphone`), never the default.
  */
 const pagePermissions = (shell: ShellTitle | undefined): Record<string, string> =>
-  shell?.workbench ? {} : { 'permissions-policy': APP_PAGE_PERMISSIONS_POLICY };
+  shell?.workbench
+    ? {}
+    : { 'permissions-policy': shell?.microphone ? APP_PAGE_MICROPHONE_PERMISSIONS_POLICY : APP_PAGE_PERMISSIONS_POLICY };
 
 /** A page's whole policy: its own, the served Apps' egress, and who may frame it. */
 const pagePolicy = (policy: string, shell: ShellTitle | undefined) =>
@@ -193,6 +196,8 @@ interface ShellTitle {
    * script and no hash to keep. Absent, the page says nothing of the kind.
    */
   pwa?: { manifest: string; register: string };
+  /** The App declared `ui.microphone`: its pages may ask for the microphone, from this origin alone (`pagePermissions`). */
+  microphone?: true;
   /** The scheme that look says (clientSurface.ts lookSchemeFor), said in the page so it is dark from its first paint. */
   scheme?: 'dark' | 'dark-only';
   /** The page's colours in each mode (clientSurface.ts lookGroundsFor), written as `color-scheme` and `theme-color`. */

@@ -212,7 +212,8 @@ record's tabs), `data` (a table's cells, a record's values and its header's
 figures; `reach: 'figures'` keeps the data face to figures, keys and dates, so
 a name is read in the interface face), `figure` (a stat's figure) and
 `nav` (the menu's entries, in the bar and down the side). A role takes a `face` (`ui`, `heading`, `data`, or
-`code`, the theme's monospace: `fonts.code`, else the platform's), a `size` at the 13px base (only the roles
+`code`, the theme's monospace: `fonts.code`, else the platform's; `type.font.figures` is the face of the figures,
+keys and dates a data column sets apart, following `data` when a theme names one and none for figures, and Plex Mono otherwise), a `size` at the 13px base (only the roles
 that have one: body, data and nav follow the base; a label's is 11px to 14px, a step either side of it), `leading`,
 `tracking`, `weight`, `case` (`upper` or `small-caps`, each tracked unless
 the role says a tracking) and OpenType `features` (`tnum`, `lnum`, `zero`,

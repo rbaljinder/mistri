@@ -7,6 +7,8 @@
  *   answer not_found exactly as a record that does not exist;
  * - per command a tenant role runs on a tenant-owned record, another tenant's record is refused at prepare and at
  *   execute, before anything is written;
+ * - per fixed action a tenant role is granted without write, the same: its update on another tenant's record is
+ *   refused before anything is written;
  * - per platform role, the platform realm's reads are answered, and it is no member of a tenant.
  *
  * The tenants are two of the profile table's rows, read from the database the suite copies, or
@@ -24,6 +26,8 @@ import { sampleInput } from '../testing/appRequests.js';
 interface Grants {
   read: Set<string>;
   commands: Set<string>;
+  /** Fixed actions it runs by name without writing the table: `table label` (testInit.ts). */
+  actions?: Set<string>;
 }
 
 const q = (value: string) => `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
@@ -94,6 +98,22 @@ export async function tenantsModule(loaded: LoadedApp, grants: Map<string | null
       if (!table || !reader || commands.some(([name]) => name === command)) continue;
       const input = await inputOf(table, command);
       commands.push([command, declared.version ?? 1, table, role, reader, input ? JSON.stringify(input) : '']);
+    }
+  /* A fixed action a role runs without write, on a table a tenant owns: [table, its words as an update says them, the
+     role that runs it, one that reads the table]. A role's grant is the action alone, so the words are the whole body. */
+  const moves: Array<readonly [string, string, string, string, string]> = [];
+  for (const [role, held] of tenantRoles)
+    for (const named of [...(held.actions ?? [])].sort()) {
+      const space = named.indexOf(' '),
+        table = named.slice(0, space),
+        label = named.slice(space + 1);
+      const action = (app.resources?.[table]?.actions ?? []).find(
+        (each) => !each.command && (each.label === label || each.id === label),
+      ) as { id: string; label: string; set: Record<string, unknown>; reason?: string } | undefined;
+      const reader = owned.includes(table) ? readerOf(table) : undefined;
+      if (!action || !reader || moves.some(([t, , , , id]) => t === table && id === action.id)) continue;
+      const values = { ...action.set, ...(action.reason ? { [action.reason]: 'Checked by the suite' } : {}) };
+      moves.push([table, JSON.stringify(values), role, reader, action.id]);
     }
   const member = tenantRoles[0]?.[0];
   const fallback = tenants.length >= 2 ? q(`${tenants[0]},${tenants[1]}`) : undefined;
@@ -180,6 +200,24 @@ ${list(commands)}
         json: { command, commandVersion: version, key, expectedVersion: 0, idempotencyKey: randomBytes(18).toString('base64url'), input: JSON.parse(input) },
       });
       assert.equal(executed.status, 403, await executed.text());
+    });
+  }
+`
+      : ''
+  }${
+    moves.length
+      ? `
+  /* Each fixed action ${article(one)} ${one}'s role runs without write: [its table, its words, a role that runs it, one that reads
+     the table, its id]. Aimed at another ${one}'s record, the update is refused whatever the role may do in its own. */
+  for (const [table, words, role, reader, id] of [
+${list(moves.map(([table, words, role, reader, id]) => [table, words, role, reader, id]))}
+  ] as const) {
+    await t.test(\`\${table} \${id}: refused on another ${one}'s record\`, async (s) => {
+      const a = await host.tenant(A, { roles: [role] });
+      const [key] = await some(await host.tenant(B, { roles: [reader] }), table);
+      if (!key) return s.skip(\`\${B} has no \${table} row to aim at\`);
+      const moved = await a.request('/api/update', { method: 'POST', json: { table, key, values: JSON.parse(words) } });
+      assert.ok(moved.status === 403 || moved.status === 404, \`\${moved.status} \${await moved.text()}\`);
     });
   }
 `

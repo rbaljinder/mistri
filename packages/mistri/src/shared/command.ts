@@ -14,6 +14,7 @@ import { parseViewQuery } from '@mistriwork/engine/shared/view.js';
 import { unknownKey } from '@mistriwork/engine/shared/suggest.js';
 import { normalizeAppFlagGate } from './appFlagGates.js';
 import type { FlagCatalog } from './appFlags.js';
+import { TEXT_RULE_MOST as TEXT_INPUT_MOST } from '@mistriwork/engine/shared/textRules.js';
 import { RICH_TEXT_MOST } from '@mistriwork/engine/shared/richText.js';
 import { mentionLabelColumns } from '@mistriwork/engine/shared/mentionLabel.js';
 import { commandFieldsDeep, isIsoDate } from '@mistriwork/engine/shared/commandWire.js';
@@ -460,8 +461,8 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
       sensitive = { keep: said.keep as (typeof KEEPS)[number] };
     }
     for (const bound of ['min', 'max'] as const) {
-      if (f[bound] !== undefined && (!Number.isSafeInteger(f[bound]) || Number(f[bound]) < 1 || Number(f[bound]) > 16384)) {
-        return fail(where, `${bound} must be a number of characters from 1 to 16384`);
+      if (f[bound] !== undefined && (!Number.isSafeInteger(f[bound]) || Number(f[bound]) < 1 || Number(f[bound]) > TEXT_INPUT_MOST)) {
+        return fail(where, `${bound} must be a number of characters from 1 to ${TEXT_INPUT_MOST}`);
       }
     }
     if (f.min !== undefined && f.max !== undefined && Number(f.min) > Number(f.max)) return fail(where, 'min must not exceed max');

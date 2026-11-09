@@ -196,5 +196,16 @@
   .doc-room { display: block; }
   .doc-sheet { max-width: none; min-height: 0; padding: 0; border: 0; font-size: 10pt; }
   .doc-letterhead { flex-direction: row; }
+  /* A related list is as wide as its columns on screen, and a sheet is not: six columns ran past the margin, their
+     nowrap figures and codes pushing the table wider than the paper. Fixed layout holds it to the sheet; the
+     words column takes what the others leave, and every cell may break rather than overflow. */
+  .doc-table { table-layout: fixed; }
+  .doc-table :is(th, td) { overflow-wrap: anywhere; }
+  .doc-table .is-figure, .doc-table .is-fit { white-space: normal; width: 13%; }
+  .doc-table .is-fit { padding-right: var(--space-3); }
+  .doc-table .is-words { width: auto; }
+  /* Many columns: tighter type and padding, so a figure keeps to its column. */
+  .doc-table[data-wide] :is(th, td) { padding-inline: var(--space-2); font-size: 8.5pt; }
+  .doc-table[data-wide] th { font-size: 7.5pt; }
 }
 }

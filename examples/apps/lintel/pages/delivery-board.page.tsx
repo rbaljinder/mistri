@@ -36,7 +36,7 @@ const page = definePage({
   icon: 'truck',
   nav: { group: 'maintenance', position: 4 },
   roles: ['manager', 'admin', 'technician'],
-  reads: ['part_receipt', 'carrier.shipments'],
+  reads: ['part_receipt', 'part', 'carrier.shipments'],
   component: DeliveryBoard,
 });
 export default page;

@@ -13,6 +13,7 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
+import { COMMAND_TARGET_BOUNDS } from '../../adapters/commands/commandJournalSchema.js';
 import type { CommandEventBatch } from '../../adapters/events/commandEventTypes.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
 import { ScopeRefusal } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
@@ -34,13 +35,23 @@ import {
 } from './businessCommands.js';
 import { canonicalKey, createCommandDb, keyFilter, normalizeRow, type UntypedRow } from './commandDb.js';
 import { FLOW_TELL, flowCommandOf } from './flowCommandBrand.js';
-import { compileWhen, failingCondition, inputsWithheld, personMatch, whenHolds, whenPerson, type CommandPeople } from './commandWhen.js';
+import {
+  compileWhen,
+  failingCondition,
+  inputsWithheld,
+  type DerivedFailure,
+  personMatch,
+  whenHolds,
+  whenPerson,
+  type CommandPeople,
+} from './commandWhen.js';
 import { whenRefusalSentence } from './commandSaying.js';
 import { bindRecord, readsRecord, type BoundCondition } from '../../shared/commandDraft.js';
 import { mayReadTargetColumn } from './commandActorColumns.js';
 import { rowRevision } from './commandRevision.js';
 import { NO_OUTPUT } from './commandShapes.js';
 import { preparesInitial } from './commandPrepareNeeds.js';
+import { frozenWords } from '../../shared/appMachine.js';
 import { nowStamp, written, zoneDay } from '../app/appStamps.js';
 import { stampColumn } from '../../shared/appStamps.js';
 import { stateStampColumn } from '@mistriwork/engine/shared/schema.js';
@@ -751,10 +762,10 @@ async function executeUntraced(
             }
             try {
               // Redacted before the bound is measured: what is checked is what is stored.
-              const entry = JSON.parse(canonicalCommandJson(change, 65536)) as Record<string, unknown>;
+              const entry = JSON.parse(canonicalCommandJson(change, AUDIT_TARGET_BYTES)) as Record<string, unknown>;
               for (const side of ['before', 'after']) if (Object.hasOwn(entry, side)) entry[side] = image(entry[side]);
               list.push(entry);
-              canonicalCommandJson(list, 65536);
+              canonicalCommandJson(list, AUDIT_TARGET_BYTES);
             } catch {
               throw developerError(auditRefusal(request.command, change));
             }
@@ -998,7 +1009,17 @@ async function executeUntraced(
                   }
                 }
                 const row = normalizeRow(table, found!.rows[0]) as UntypedRow;
-                if (when !== undefined && derives) [eligible] = await whenHolds(tx, catalog!, command.target, when, [row], now());
+                let derivedFailure: DerivedFailure | undefined;
+                if (when !== undefined && derives)
+                  [eligible] = await whenHolds(
+                    tx,
+                    catalog!,
+                    command.target,
+                    when,
+                    [row],
+                    now(),
+                    (_row, failure) => (derivedFailure = failure),
+                  );
                 /* A timer's run is its stay's: still in the state it waited in, at the instant it was swept for, and,
                  for a resource's `at` (appAt.ts), still matching its when — judged in this transaction. */
                 if (options.timer) {
@@ -1030,8 +1051,20 @@ async function executeUntraced(
                 if (when !== undefined && !eligible) {
                   /* Say which part of the `when` the record fails, in the App's words for the column and only to a person
                    who reads it; the generic sentence stays where it cannot be said. */
-                  const why = whenRefusalSentence(catalog![command.target].saying, failingCondition(table, when, row), row, (column) =>
-                    mayReadTargetColumn(authorized.actor, column),
+                  const stored = failingCondition(table, when, row);
+                  /* A computed column is no column of the table: it may be said when everything it is computed from is
+                     the person's to read, and its value is the one the `when` was judged by. */
+                  const computed = derivedFailure && table.derived?.computed[derivedFailure.condition.column];
+                  const reads = typeof computed === 'object' ? computed.reads : undefined;
+                  const why = whenRefusalSentence(
+                    catalog![command.target].saying,
+                    stored ?? derivedFailure?.condition,
+                    row,
+                    (column) =>
+                      !stored && reads
+                        ? reads.every((read) => Object.hasOwn(table.kinds, read) && mayReadTargetColumn(authorized.actor, read))
+                        : mayReadTargetColumn(authorized.actor, column),
+                    stored ? undefined : derivedFailure,
                   );
                   throw why === undefined
                     ? refused('ineligible_state')
@@ -1332,7 +1365,7 @@ async function executeUntraced(
               keyJson: canonicalCommandJson(key, 8192),
               changesJson: canonicalCommandJson(
                 publicActor && eventBatch?.length ? commandVisitorAudit(flags, changes[index]) : changes[index],
-                65536,
+                AUDIT_TARGET_BYTES,
               ),
             }));
             const receipt = { ...scope, id, fingerprint, resultJson, requestId, completedAt };
@@ -1504,6 +1537,10 @@ export function lookupBusinessCommandStatus(
    the entry is JSON, so a binary value (a Buffer handed to db.insert) cannot
    be one, and each target's entries are bounded at 64 KiB. Said to the
    operator (refusalReport.ts); the caller hears invalid_result. */
+/* What one target's audit may hold is what the journal's column holds. It was 64 KiB, below a single text a
+   command may take (65,536 characters, up to 4 bytes each, before and after), so a valid write was refused. */
+const AUDIT_TARGET_BYTES = COMMAND_TARGET_BOUNDS.changes;
+
 function auditRefusal(command: string, change: Record<string, unknown>): string {
   const where = typeof change.resource === 'string' ? change.resource : 'a resource';
   for (const side of ['values', 'before', 'after']) {
@@ -1519,7 +1556,7 @@ function auditRefusal(command: string, change: Record<string, unknown>): string 
     }
   }
   return (
-    `Command "${command}"'s changes to ${where} are over the 64 KiB its audit keeps for one target; ` +
+    `Command "${command}"'s changes to ${where} are over the 4 MiB its audit keeps for one target; ` +
     'write smaller values, or fewer rows per command.'
   );
 }
@@ -1744,7 +1781,8 @@ async function machineUpdate<
   read?: (found: QueryResult) => void,
 ): Promise<T> {
   const graph = machine?.tables.get(request.table);
-  if (!graph || !Object.hasOwn(request.values, graph.column)) return request;
+  /* A frozen state takes no write, so a table that has one reads the state of every row it writes, not only a move. */
+  if (!graph || (!graph.frozen.size && !Object.hasOwn(request.values, graph.column))) return request;
   /* Each state's own stamp is read with the state: a guarded write is guarded at every column it writes. */
   const columns = catalog?.[request.table]?.meta.columns ?? [];
   const stamps = [...new Set([...graph.moves.values()].flatMap((next) => [...next]))].flatMap(
@@ -1761,6 +1799,10 @@ async function machineUpdate<
   });
   read?.(found);
   if (found.rows.length !== 1) return request;
+  const words = graph.frozen.get(String(found.rows[0][graph.column]));
+  if (words !== undefined)
+    throw new BusinessCommandExecutionError('ineligible_state', 'not_applied', undefined, undefined, frozenWords(words));
+  if (!Object.hasOwn(request.values, graph.column)) return request;
   const from = String(found.rows[0][graph.column]),
     to = String(request.values[graph.column]);
   if (from === to) return request;

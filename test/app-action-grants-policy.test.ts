@@ -59,12 +59,11 @@ const manifest = (rows: 'policy' | 'tenant' = 'policy', machine = false) => ({
   nav: ['runs'],
 });
 
-test('a fixed-action grant loads under a row policy and is still refused in a tenant App', () => {
+test('a fixed-action grant loads under a row policy and in a tenant App', () => {
   assert.doesNotThrow(() => parseAppConfig(manifest(), 'desk runs'));
-  assert.throws(
-    () => parseAppConfig(manifest('tenant'), 'desk runs'),
-    /"actions" grants fixed actions without write, which is not supported with "rows": "tenant"/,
-  );
+  // A tenant's member writer judges it too (tenant-fixed-actions.test.ts).
+  const tenant = manifest('tenant');
+  assert.doesNotThrow(() => parseAppConfig({ ...tenant, resources: { run: { ...tenant.resources.run, owner: 'tenant' } } }, 'desk runs'));
 });
 
 async function fixture(t: TestContext, machine = false) {

@@ -81,7 +81,13 @@ const FULL = {
     height: { control: '44px' },
   },
   type: {
-    font: { ui: 'Alpha, sans-serif', data: 'Beta, monospace', heading: 'Gamma, serif', code: 'Delta, monospace' },
+    font: {
+      ui: 'Alpha, sans-serif',
+      data: 'Beta, monospace',
+      heading: 'Gamma, serif',
+      code: 'Delta, monospace',
+      figures: 'Epsilon, monospace',
+    },
     faces: [{ family: 'Gamma', src: './fonts/gamma.woff2', weight: '700', style: 'italic', subset: false }],
     icons: 'bold',
     base: '15px',

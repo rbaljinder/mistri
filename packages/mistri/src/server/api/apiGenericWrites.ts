@@ -31,7 +31,7 @@ import { genericWriteEntitled, genericWriteOf, markGenericWrite } from '../comma
 import { AppAccessDenied, authorizeTransaction, type ResourceAccess } from '../app/appAccess.js';
 import { AppValidationDenied, ConsumesRefused } from '../app/appValidationDenied.js';
 import { compileAppDefinitionValidation } from '../app/appValidation.js';
-import { AppTransitionDenied, compileAppTransitions } from '../app/appTransitions.js';
+import { AppFrozenDenied, AppTransitionDenied, compileAppTransitions } from '../app/appTransitions.js';
 import { compileAppStamps, stampInsert, stampUpdate } from '../app/appStamps.js';
 import { lookupPerson, personKey } from '../app/appMe.js';
 
@@ -233,6 +233,8 @@ function synthesize(app: AppDef, schema: DatabaseSchema, write: ApiWrite): AnyBu
       if (error instanceof ConsumesRefused)
         throw new BusinessCommandExecutionError('consumes_refused', 'not_applied', undefined, undefined, error.sentence);
       if (error instanceof AppValidationDenied) refuse('invalid_input', error.fields[0]);
+      if (error instanceof AppFrozenDenied)
+        throw new BusinessCommandExecutionError('ineligible_state', 'not_applied', undefined, undefined, error.message);
       if (error instanceof AppTransitionDenied) refuse('ineligible_state');
       if (error instanceof AppAccessDenied) throw error;
       throw error;

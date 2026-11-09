@@ -84,6 +84,7 @@ import {
 import { INVITATION_HTTP_HEADER } from '../../shared/tenantInvitations.js';
 import { createTenantInvitationHttp, isTenantInvitationHttpRequest } from './tenantInvitationHttp.js';
 import { createTenantHttpServer, tenantHttpBinding, tenantHttpHeader } from './tenantHttp.js';
+import { readRouteOf, withReadRoute } from '../readAudit.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
 import { challengesOf, namedChallenge } from '../commands/challenges.js';
 import { tenantPublicChoices } from './tenantPublicChoices.js';
@@ -618,6 +619,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       readerName,
       recentSignIn,
       bound: raw.bound as Bound,
+      ...(loaded.build ? {} : { authoring: loaded.path }),
       ...(support ? { support } : {}),
       ...(components ? { components } : {}),
       ...(pageLoaders === undefined ? {} : { loaders: pageLoaders as Readonly<Record<string, PageLoader>> }),
@@ -855,6 +857,15 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         ? branding.presentation(host.tenant, { private: false, public: true })
         : undefined;
     };
+    /* A public form reached through a tenant's own intake address wears that tenant's published look: the address
+       places the tenant by the intake's one resolution and fence, and the platform's triage places none. */
+    const placedBranding =
+      branding && deployment.intake && deployment.withPublicFlagIntake
+        ? async (address: string, form: string) => {
+            const tenant = await deployment.withPublicFlagIntake!(form, address, async (owner) => owner.tenantId);
+            return tenant ? branding.presentation(tenant, { private: false, public: true }) : undefined;
+          }
+        : undefined;
     /* A tenant's own intake address, by which this App's mapped host places a public form and a page's flags. */
     const hostAddress = deployment.intake ? async (tenant: string) => ((await addressesOf(tenant)) as TenantAddresses).intake : undefined;
     const dispatchPublic = createTenantPublicHttp({
@@ -879,6 +890,8 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       ...(hostAddress ? { hostAddress } : {}),
       look: () => look,
       ...(branding ? { branding: (req: IncomingMessage) => hostBranding(req) } : {}),
+      /* A form reached through a tenant's own intake address wears that tenant's published look. */
+      ...(placedBranding ? { placedBranding } : {}),
       bound: publicBound,
       assertActive: active,
       basePath: mount.base,
@@ -1217,7 +1230,15 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
             )
           )
             return;
-          const hosted = await hostBranding(req);
+          /* The sign-in page and every other page wear a tenant's name only when the host names the tenant. A public
+             form reached through a tenant's own intake address (`?via=`) wears it too: whose form it is is not in doubt. */
+          let hosted = await hostBranding(req);
+          const via = url.searchParams.get('via');
+          const formPath = inside.startsWith(`/${loaded.app.id}/`) ? inside : `/${loaded.app.id}${inside}`;
+          if (!hosted && via && placedBranding && formHead(loaded.app, formPath, loaded.app.name)) {
+            const formKey = decodeURIComponent(formPath.split('/')[3] ?? '');
+            hosted = formKey ? await placedBranding(via, formKey).catch(() => undefined) : undefined;
+          }
           // An OAuth consent page is framed by nobody, this origin included (http/handler.ts): a click there gives a token.
           const consenting = url.searchParams.has('authorize');
           if (consenting) res.setHeader('x-frame-options', 'DENY');
@@ -1453,7 +1474,12 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       };
       /* Whether this browser (or token) wrote a moment ago, for every route
          below: a fresh one reads the primary (adapters/replicas.ts). */
-      void readsAs(readFreshness(req, res, mount.base), work)
+      /* The door this request came in by, for an audited resource's read (readAudit.ts): every route below, the
+         data server it dispatches to and the assistant's own requests to it included. Named before the base path
+         is taken off (routeAddress, inside work), so it is taken off here too. */
+      const arrived = (req.url ?? '/').split('?')[0];
+      const inBase = mount.base && arrived.startsWith(`${mount.base}/`) ? arrived.slice(mount.base.length) : arrived;
+      void withReadRoute(readRouteOf(inBase, req.headers), () => readsAs(readFreshness(req, res, mount.base), work))
         .catch((error) => {
           if (res.headersSent) {
             if (!res.writableEnded) res.destroy();
@@ -1562,8 +1588,11 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     );
     if (sourceClient) attachDevClient(server);
     const tenantNamesOf = enrollment.names;
+    const readAudit = enrollment.deployment.readAudit;
     return Object.freeze({
       server,
+      /* One tenant's read audit, for the test host's `readAudit()` (http/testControl.ts); no member's route reads it. */
+      readAudit: readAudit.read,
       /** Wear a look a save changed in place (tenantLook.ts): the next page and payload are dressed in it. */
       restyle(next: TenantLook): void {
         if (retired) return;

@@ -115,7 +115,8 @@ type Read = (sql: string) => Promise<Record<string, unknown> | undefined>;
  * The shop's narrowed `shelf` (items whose note is "shelf", item 2 the one seeded) written through the App API and
  * App MCP with `token`, an editor's: a create takes the query's value and refuses another, an update may not move
  * its row out and is rolled back when it would, and a row outside the query (item 1) answers as an id nothing holds.
- * App MCP lists no create (a command without a target is not a tool), so it is asked the update and delete.
+ * App MCP is asked the same: its create tool (a form's command, no record named) takes the query's value and refuses
+ * another, and its update and delete stay inside the query.
  */
 export async function shelfThroughApi(
   t: TestContext,
@@ -190,11 +191,19 @@ export async function shelfThroughApi(
     assert.ok(found, `${prefix}: ${tools.map((each) => each.name).join(', ')}`);
     return found.name;
   };
-  assert.ok(!tools.some((each) => each.name.includes('create-shelf')), 'a create has no target, so no tool');
   const call = async (name: string, args: object) => {
     const reply = (await mcp.request('tools/call', { name, arguments: args })).result as { isError: boolean; content: { text: string }[] };
     return { isError: reply.isError, text: reply.content.map((part) => part.text).join('\n') };
   };
+  // A create names no record, so its tool takes the idempotency key and the input alone; the query still holds it.
+  const counted = await count();
+  const made = await call(tool('run_create-shelf'), { idempotencyKey: 'mcp-shelf-create-0001', input: { name: 'Tin' } });
+  assert.equal(made.isError, false, made.text);
+  assert.deepEqual({ ...(await read(`SELECT note FROM item WHERE name = 'Tin'`)) }, { note: 'shelf' });
+  const strayed = await call(tool('run_create-shelf'), { idempotencyKey: 'mcp-shelf-create-0002', input: { name: 'Jar', note: 'attic' } });
+  assert.equal(strayed.isError, true, strayed.text);
+  assert.match(strayed.text, /ineligible_state/);
+  assert.equal(await count(), counted + 1);
   const version = async (key: string) => {
     const prepared = await call(tool('prepare_update-shelf'), { key: { id: key } });
     assert.equal(prepared.isError, false, prepared.text);

@@ -46,7 +46,7 @@ type SectionComponentProps =
       /** On a dashboard: the window its reads are over, in the query grammar's words. */
       period?: string;
     }
-  | { props: Record<string, unknown>; data: unknown };
+  | { props: Record<string, unknown>; data: unknown; refresh: () => void };
 
 /* One loader per build of a component (componentKey.ts), kept for the page's
    life: a part that has arrived draws at once on its next mount, one that
@@ -211,7 +211,10 @@ export function CustomPageSection({ page, section, index, plan, base, recordKey,
 /**
  * A free-form page's component, drawn inside its frame (definePage): with
  * its loader's result as `data` once the server has run it for this reader,
- * asked again as the page's place in the address changes. Loading and a
+ * asked again as the page's place in the address changes, and when the component
+ * calls `refresh()`, which runs the loader again where a command the page runs
+ * is not what changed the data (commands.tsx asks it itself when one commits).
+ * Loading and a
  * refusal are said here, in the words every section says them, so the
  * component is drawn once its data is here.
  */
@@ -229,7 +232,13 @@ export function CustomPageBody({ frame, section }: { frame: UiPageFrame; section
     if (loaded.isError) return <Problem text={loaded.error.message} retry={() => void loaded.refetch()} />;
     if (loaded.data === undefined) return <div className="sk-bar" role="status" aria-label={say('common.loading')} />;
   }
-  return <CustomBody id={section.component.id} className="custom-room" given={{ props: section.props ?? {}, data: loaded.data ?? null }} />;
+  return (
+    <CustomBody
+      id={section.component.id}
+      className="custom-room"
+      given={{ props: section.props ?? {}, data: loaded.data ?? null, refresh: () => void loaded.refetch() }}
+    />
+  );
 }
 
 /** The ops-board clock, as the dashboard's own sections keep it. */

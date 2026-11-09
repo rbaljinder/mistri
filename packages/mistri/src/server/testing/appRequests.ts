@@ -322,10 +322,16 @@ export function appRequests(send: Send, options: { app?: string; base?: string }
     return Object.fromEntries(columns.map((column) => [column, row[column] as string | number]));
   }
 
-  /** Rows of one of the App's tables, through the query language (`where`, as a list tab says it). */
-  async function rows(table: string, options: { where?: string; limit?: number } = {}): Promise<TestResult<TestRow[]>> {
+  /** Rows of one of the App's tables, through the query language (`where`, as a list tab says it). `show` names the
+   * columns asked for, a rollup or a computed column among them: read through the projection the App's own list
+   * reads, so the figure is what a member sees, not a recomputation. */
+  async function rows(
+    table: string,
+    options: { where?: string; limit?: number; show?: readonly string[] } = {},
+  ): Promise<TestResult<TestRow[]>> {
     const id = await app();
-    const q = options.where?.trim() ? `${table} ${options.where.trim()}` : table;
+    const shown = options.show?.length ? ` show ${options.show.join(', ')}` : '';
+    const q = `${options.where?.trim() ? `${table} ${options.where.trim()}` : table}${shown}`;
     const result = await readResult<ResourceHttpSuccess<'/api/run', 'app'>>(
       await send('/api/run', {
         method: 'POST',

@@ -208,6 +208,29 @@ test('a reader whose catalog leaves out a table is not judged on verbs no one th
   assert.deepEqual(machineChecks(parsed, clerks), []);
 });
 
+test('final: { freeze: true } is a final state the transition rules and the served machine both say is frozen', () => {
+  const parsed = app({
+    machine: machine('status', {
+      open: { on: { close: 'closed', void: 'voided' } },
+      closed: { final: { freeze: true } },
+      voided: { final: true },
+    }),
+  });
+  const states = parsed.resources!.application.machine!.states;
+  assert.deepEqual(
+    states.map((state) => [state.name, state.final ?? false, state.freeze ?? false]),
+    [
+      ['open', false, false],
+      ['closed', true, true],
+      ['voided', true, false],
+    ],
+  );
+  const rule = appTransitionRules(parsed, schema as DatabaseSchema).rules.get('application')!;
+  assert.deepEqual([...rule.frozen], [['closed', 'Closed']]);
+  // Frozen is final: the query language's `is open` still leaves it out, and a final state still cannot be left.
+  assert.deepEqual(rule.moves.get('closed'), undefined);
+});
+
 test('a machine refuses what it cannot mean, naming the fix', () => {
   const refused: Array<[unknown, RegExp]> = [
     [{ column: 'status', states: { a: { on: { go: 'nowhere' } } } }, /goes to "nowhere", which is not one of the states/],
@@ -239,6 +262,18 @@ test('a machine refuses what it cannot mean, naming the fix', () => {
       /timer "assign" needs an on edge/,
     ],
     [{ column: 'status', states: { a: { colour: 'red' } } }, /has no "colour". A state takes on, after, by and final/],
+    [
+      { column: 'status', states: { a: { on: { go: 'b' } }, b: { final: { freeze: false } } } },
+      /"final" that is not true, or \{ freeze: true \}/,
+    ],
+    [
+      { column: 'status', states: { a: { on: { go: 'b' } }, b: { final: { freeze: true, more: 1 } } } },
+      /"final" that is not true, or \{ freeze: true \}/,
+    ],
+    [
+      { column: 'status', states: { a: { on: { go: 'b' } }, b: { final: { freeze: true }, on: { go: 'a' } } } },
+      /is final, so no verb leaves it/,
+    ],
     [
       { column: 'status', states: { a: { at: { moved_at: 'assign' } } } },
       /has an "at": a timer at an instant is the resource's own, not a state's\. Say it on the resource with a when/,

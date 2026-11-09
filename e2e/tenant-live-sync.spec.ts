@@ -14,6 +14,7 @@ import { expect, test } from './support/harness.js';
 import { startTenantApp } from './support/tenantServer.js';
 import { tenantProofModel, tenantProofRows } from '../test/support/tenantProofModel.js';
 import { TENANT_HTTP_HEADERS as headers, type TenantContextReply } from '../packages/mistri/src/shared/tenantContext.js';
+import { expectEntered, isSelection } from './support/tenantSelection.js';
 
 const APP_ID = 'tenant-thread-notes';
 const TARGET = tenantProofRows.north.target;
@@ -39,10 +40,11 @@ test.describe('live sync in a tenant App', () => {
     });
     expect(signed.ok()).toBe(true);
     const page = await context.newPage();
+    /* The address names Northstar, one of theirs: the page enters it as it loads. */
+    const opened = page.waitForResponse(isSelection);
     await page.goto(`${app.origin}/${APP_ID}/discussions/${TARGET}?tenant=northstar`);
-    const opened = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/tenant/context/open');
-    await page.getByRole('list', { name: 'Available tenants' }).getByRole('button', { name: 'northstar', exact: true }).click();
     expect((await opened).status()).toBe(200);
+    await expectEntered(page, 'northstar');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Northstar target', { timeout: 30_000 });
     /* A reload would lose this; a refresh in place keeps it. */
     await page.evaluate(() => ((window as unknown as { __sameDocument: boolean }).__sameDocument = true));

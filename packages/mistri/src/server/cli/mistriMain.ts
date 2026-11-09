@@ -10,6 +10,7 @@
  * opened — and hands it to the one mode asked for. Each mode is imported where the main reaches it:
  * test/cli-startup.test.ts counts what each start loads.
  */
+import { dirname } from 'node:path';
 import type { apiStartupEngine } from './api-read-startup-options.js';
 import type { StartupApps } from './apps.js';
 import { MISTRI_COMMANDS } from './mistriCommands.js';
@@ -168,6 +169,8 @@ export const main: Main = async () => {
       return undefined;
     }
   };
+  /* What the person's own command was, before `dev` settles an environment: a supervised tenant host starts from it (devSupervisor.ts). */
+  const typed = { argv: process.argv.slice(2), env: { ...process.env } };
   if (process.argv[2] === 'dev') {
     const { prepareDev, DevRefusal } = await import('./devMode.js');
     const argv = await profiled(process.argv.slice(3), true);
@@ -283,7 +286,9 @@ export const main: Main = async () => {
     console.error('mistri: --bump <command> works with mistri check (mistri check --bump <command>), naming a command of the App.');
     process.exit(1);
   }
-  const nonPolicyMode = opts.export || opts.scaffoldApp;
+  /* `--export openapi` reads a tenant App's policy for its ownership, the shape its document is judged against, and serves nothing. */
+  const exportsOpenApi = opts.export?.toLowerCase() === 'openapi';
+  const nonPolicyMode = (opts.export && !exportsOpenApi) || opts.scaffoldApp;
   if (opts.policy !== undefined && (!opts.policy || opts.policy.startsWith('-') || nonPolicyMode)) {
     console.error('mistri: --policy requires a file and the HTTP App runtime (or mistri check).');
     process.exit(1);
@@ -428,8 +433,21 @@ export const main: Main = async () => {
   }
   // A tenant App has a dedicated owner, never the ordinary registry adapter or
   // createApp fallback below. Refuse incompatible modes before data acquisition.
-  if (loadedApps.some((loaded) => isTenantApp(loaded.app))) {
+  if (!exportsOpenApi && loadedApps.some((loaded) => isTenantApp(loaded.app))) {
     const { serveTenantApp } = await import('./tenant.js');
+    /* `mistri dev` on a tenant App is a thin parent: the host captures its App by value, so a save is worn by starting
+       it again (devSupervisor.ts). A build is never watched, and a mounted host is its embedder's. */
+    const { DEV_SUPERVISED_ENV, superviseDev, watchForSave } = await import('./devSupervisor.js');
+    if (opts.dev && !opts.embedded && !loadedApps[0].build && process.env[DEV_SUPERVISED_ENV] !== '1') {
+      await registry.closeAll();
+      const first = loadedApps[0];
+      const code = await superviseDev({
+        ...typed,
+        watch: (changed) =>
+          watchForSave(first.dir ?? dirname(first.path), [opts.policy, opts.commands, opts.jobs, config.configPath], changed),
+      });
+      process.exit(code);
+    }
     // `mistri dev`: once it answers, a sign-in per role, each a member where it works (cli/devMode.ts).
     dev?.serving(opts, loadedApps, registry);
     await serveTenantApp(opts, registry, config, apps, Boolean(nonPolicyMode));
@@ -444,7 +462,9 @@ export const main: Main = async () => {
          command module or auth store, so this one offline authoring step can
          describe a row-policy App without opening its private runtime. */
       const offlineTypes =
-        opts.export?.toLowerCase() === 'types' && opts.policy === undefined && opts.apps?.length === 1 && loadedApps.length === 1;
+        ((opts.export?.toLowerCase() === 'types' && opts.policy === undefined) || exportsOpenApi) &&
+        opts.apps?.length === 1 &&
+        loadedApps.length === 1;
       if (!offlineTypes && (!opts.policy || opts.apps?.length !== 1 || loadedApps.length !== 1 || nonPolicyMode)) {
         throw new Error('Row policies require --policy <file> and exactly one explicit --app in the HTTP runtime (or mistri check).');
       }
@@ -595,7 +615,7 @@ export const main: Main = async () => {
   /* The print-and-exit modes, in the order they always took precedence. */
   if (opts.export) {
     const { exportSchema } = await import('./oneShot.js');
-    await exportSchema(opts.export, registry, loadedApps, opts.apiIntegers, opts.commands, opts.jobs);
+    await exportSchema(opts.export, registry, loadedApps, opts.apiIntegers, opts.commands, opts.jobs, opts.policy);
     return;
   }
   if (opts.scaffoldApp) {

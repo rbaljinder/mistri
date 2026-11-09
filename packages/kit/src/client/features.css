@@ -9,6 +9,7 @@
 @import './components/ListFilterBar.css';
 @import './components/JsonPreview.css';
 @import './components/ListEmpty.css';
+@import './components/PartialNote.css';
 @import './components/Notes.css';
 /* The tool's own rules: the first layer (style.css names the order). */
 @layer base {

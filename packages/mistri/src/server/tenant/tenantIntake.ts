@@ -72,7 +72,15 @@ import {
   refusalCause,
   recordRefusalCause,
 } from '@mistriwork/engine/server/evidence.js';
-import { assertIntakeColumn, captureIntakeEvidence, intakeAddress, intakePlace, tenantPublicForms } from './tenantIntakeModel.js';
+import {
+  assertIntakeColumn,
+  captureIntakeEvidence,
+  intakeAddress,
+  intakeAddressProblem,
+  intakePlace,
+  tenantPublicForms,
+} from './tenantIntakeModel.js';
+import { observerMounted } from '../observe/mount.js';
 import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { assertTenantSourcePair } from './tenantSourceIdentity.js';
@@ -279,6 +287,17 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
     const address = intakeAddress(raw) ?? null;
     const resolved = captureTenantData(await reader.resolveIntake({ appId: app.id, source: identity.source, deployment, column, address }));
     if (retired) throw new BusinessCommandExecutionError('temporarily_unavailable');
+    /* `mistri dev` (the observer is mounted under --dev alone) says why a submission went to triage: the usual reason is an
+       address no tenant holds, and a visitor's page cannot say it. The shape's problem is named, never the address. */
+    if (observerMounted() && intakePlace(resolved) === 'platform') {
+      const shape = address === null ? intakeAddressProblem(raw) : undefined;
+      if (shape !== undefined || (address !== null && raw !== undefined))
+        console.warn(
+          `mistri: a "${form}" submission was placed in the platform's triage because no tenant matched its address: ` +
+            (shape ?? "it is of the right shape, but no active tenant's profile holds it") +
+            '.',
+        );
+    }
     const evidence = captureIntakeEvidence(
       {
         realm: 'intake',

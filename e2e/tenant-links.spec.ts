@@ -3,11 +3,14 @@ import { test, expect, type Page } from './support/harness.js';
 import { follow } from './support/app.js';
 import { startTenantApp, type TenantAppFixture } from './support/tenantServer.js';
 import { TENANT_HTTP_HEADERS as names, type TenantContextReply } from '../packages/mistri/src/shared/tenantContext.js';
+import { expectEntered, isSelection, leaseOfSelection } from './support/tenantSelection.js';
 
 // This spec controls API responses; exercise boot through its fetch fallback.
 test.use({ carryFirstPaint: false });
 
+// `/api/boot` is a tenant's first page and its batched reads, on the lease (shared/tenantBoot.ts): data like the rest.
 const resourcePaths = new Set([
+  '/api/boot',
   '/api/schema',
   '/api/runtime',
   '/api/app',
@@ -49,6 +52,8 @@ const selector = (tenant: string) => `?${new URLSearchParams({ tenant })}`;
 const home = (app: TenantAppFixture, tenant: string) => `${app.origin}/${app.appId}${selector(tenant)}`;
 const list = (app: TenantAppFixture, tenant: string) => `${app.origin}/${app.appId}/item${selector(tenant)}`;
 const record = (app: TenantAppFixture, tenant: string) => `${app.origin}/${app.appId}/item/~${tenant}-1${selector(tenant)}`;
+/** Where `record` settles once the page has entered: the record's canonical address, its tenant still named. */
+const recordSettled = (app: TenantAppFixture, tenant: string) => `${app.origin}/${app.appId}/items/${tenant}-1${selector(tenant)}`;
 
 async function chooser(page: Page) {
   await expect(page.getByRole('heading', { name: 'Choose a tenant', exact: true })).toBeVisible();
@@ -69,6 +74,38 @@ async function choose(page: Page, tenant: string, switching = false): Promise<Te
   await expect(page.getByRole('button', { name: `Tenant: ${tenant}`, exact: true })).toBeVisible();
   return owner;
 }
+/**
+ * Alice belongs to north and south: a page whose address names one of hers, or whose tab was in one before a
+ * reload, enters it with no chooser drawn (tenantBrowser.ts `preferred`). `go` is what loads the page. No tenant
+ * resource is read before the lease is answered, and the lease is the tenant the page names.
+ */
+async function arrive(page: Page, tenant: string, go: () => Promise<unknown>, seen = requests(page)): Promise<TenantContextReply> {
+  const before = seen.resources.length;
+  let readFirst: string[] | undefined;
+  const pending = page.waitForResponse(async (response) => {
+    if (!(await isSelection(response))) return false;
+    readFirst = seen.resources.slice(before);
+    return true;
+  });
+  await go();
+  const response = await pending;
+  expect(readFirst).toEqual([]);
+  expect(response.status()).toBe(200);
+  const owner = await leaseOfSelection(response);
+  expect(owner.tenantId).toBe(tenant);
+  expect(owner.accountId).toBe(alice);
+  expect(response.headers()[names.context]).toBe(owner.context);
+  await expectEntered(page, tenant);
+  await expect(page.getByRole('heading', { name: 'Choose a tenant', exact: true })).toHaveCount(0);
+  return owner;
+}
+/** Every tenant read from `from` on was asked under `tenant`'s selector, and none under another's. */
+function readUnder(seen: ReturnType<typeof requests>, from: number, tenant: string) {
+  const asked = seen.resources.slice(from);
+  expect(asked.length).toBeGreaterThan(0);
+  for (const url of asked) expect(new URL(url).searchParams.getAll('tenant')).toEqual([tenant]);
+}
+let alice = '';
 async function unchangedAccount(page: Page, app: TenantAppFixture) {
   const response = await page.request.get(`${app.origin}/api/whoami?${new URLSearchParams({ app: app.appId })}`);
   expect(response.status()).toBe(200);
@@ -95,6 +132,7 @@ test.describe('private tenant browser links', () => {
   let app: TenantAppFixture;
   test.beforeEach(async ({ page }) => {
     app = await startTenantApp();
+    alice = app.accounts.alice.id;
     await page.addInitScript(() => localStorage.setItem('mistri.tour', 'done'));
     await login(page, app);
   });
@@ -129,13 +167,11 @@ test.describe('private tenant browser links', () => {
     });
   }
 
-  test('a real record walk produces a tenant-qualified copyable URL; a same-account second tab still chooses explicitly', async ({
+  test('a real record walk produces a tenant-qualified copyable URL; a same-account second tab following it enters that tenant on a context of its own', async ({
     page,
     context,
   }) => {
-    await page.goto(list(app, 'north'));
-    await chooser(page);
-    const first = await choose(page, 'north');
+    const first = await arrive(page, 'north', () => page.goto(list(app, 'north')));
     await expect(page.locator('#content')).toContainText('North item');
     await page.getByRole('row').filter({ hasText: 'North item' }).click();
     await expect(page.getByRole('heading', { name: 'North item', exact: true })).toBeVisible();
@@ -155,13 +191,13 @@ test.describe('private tenant browser links', () => {
       await other.addInitScript(() => localStorage.setItem('mistri.tour', 'done'));
       const seen = requests(other),
         session = await nativeSession(context, app);
-      await other.goto(copied);
-      await chooser(other);
-      expect(seen.resources).toEqual([]);
-      expect(seen.opens).toBe(0);
+      // The copied address names north, one of Alice's: the tab enters it, on a lease it opens for itself.
+      const second = await arrive(other, 'north', () => other.goto(copied), seen);
+      expect(seen.opens).toBe(1);
+      expect(seen.switches).toBe(0);
+      readUnder(seen, 0, 'north');
       await unchangedAccount(other, app);
       expect((await nativeSession(context, app)) === session).toBe(true);
-      const second = await choose(other, 'north');
       expect(second.accountId).toBe(first.accountId);
       expect(second.tabId).not.toBe(first.tabId);
       expect(second.context).not.toBe(first.context);
@@ -176,7 +212,7 @@ test.describe('private tenant browser links', () => {
     }
   });
 
-  test('native sign-in retains a cold record hint but still requires explicit tenant selection', async ({ page, context }) => {
+  test('native sign-in retains a cold record hint and then enters the hinted tenant of the account’s own', async ({ page, context }) => {
     await context.clearCookies();
     const target = record(app, 'north'),
       seen = requests(page);
@@ -186,34 +222,42 @@ test.describe('private tenant browser links', () => {
     expect(seen.opens).toBe(0);
     await page.getByLabel('Email', { exact: true }).fill(app.accounts.alice.email);
     await page.getByLabel('Password', { exact: true }).fill(app.accounts.alice.password);
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await chooser(page);
-    await expect(page).toHaveURL(target);
-    expect(seen.resources).toEqual([]);
-    expect(seen.opens).toBe(0);
-    await choose(page, 'north');
+    // Signing in is not entering: the session it makes is the account's, and the hint is only then followed.
+    await arrive(page, 'north', () => page.getByRole('button', { name: 'Sign in', exact: true }).click(), seen);
     await expect(page.getByRole('heading', { name: 'North item', exact: true })).toBeVisible();
-    expect(new URL(page.url()).searchParams.get('tenant')).toBe('north');
+    await expect(page).toHaveURL(recordSettled(app, 'north'));
+    expect(seen.opens).toBe(1);
+    readUnder(seen, 0, 'north');
+    await unchangedAccount(page, app);
+    await expect(page.locator('body')).not.toContainText('South item');
   });
 
-  test('choosing a different tenant from a cold hinted record discards the old record path', async ({ page }) => {
-    const seen = requests(page);
-    await page.goto(record(app, 'north'));
-    await chooser(page);
-    await expect(page.locator('.tenant-chooser')).toContainText('This link belongs to north.');
-    expect(seen.resources).toEqual([]);
-    const south = await choose(page, 'south');
-    await expect(page).toHaveURL(home(app, 'south'));
-    await expect(page.getByRole('heading', { name: 'North item', exact: true })).toHaveCount(0);
-    await expect(page.locator('body')).not.toContainText('North item');
-    const response = await data(page, app, south);
+  test('a cold hinted record of the account’s own tenant opens in that tenant alone, its lease reading nothing of another', async ({
+    page,
+    context,
+  }) => {
+    const seen = requests(page),
+      session = await nativeSession(context, app);
+    const target = record(app, 'north');
+    const north = await arrive(page, 'north', () => page.goto(target), seen);
+    await expect(page).toHaveURL(recordSettled(app, 'north'));
+    await expect(page.getByRole('heading', { name: 'North item', exact: true })).toBeVisible();
+    await expect(page.locator('.tenant-chooser')).toHaveCount(0);
+    await expect(page.locator('body')).not.toContainText('South item');
+    readUnder(seen, 0, 'north');
+    await unchangedAccount(page, app);
+    expect((await nativeSession(context, app)) === session).toBe(true);
+    const response = await data(page, app, north);
     expect(response.status()).toBe(200);
-    expect((await response.json()).rows.map((row: { id: string }) => row.id).sort()).toEqual(['south-1', 'south-2']);
+    expect((await response.json()).rows.map((row: { id: string }) => row.id).sort()).toEqual(['north-1', 'north-2']);
+    // The lease is north's alone: asking south's rows on it is refused, not answered.
+    const borrowed = await data(page, app, { ...north, tenantId: 'south' });
+    expect([400, 403, 404, 409]).toContain(borrowed.status());
+    expect(await borrowed.text()).not.toMatch(/South item/);
   });
 
   test('same-tenant Back and Forward restore the walk without replacing its selected context', async ({ page }) => {
-    await page.goto(list(app, 'north'));
-    const owner = await choose(page, 'north');
+    const owner = await arrive(page, 'north', () => page.goto(list(app, 'north')));
     await expect(page.getByRole('row').filter({ hasText: 'North item' })).toBeVisible();
     const northList = page.url(),
       seen = requests(page);
@@ -249,8 +293,7 @@ test.describe('private tenant browser links', () => {
   });
 
   test('header switch replaces the old record with the new tenant-qualified home in the same document', async ({ page, context }) => {
-    await page.goto(record(app, 'north'));
-    await choose(page, 'north');
+    await arrive(page, 'north', () => page.goto(record(app, 'north')));
     await expect(page.getByRole('heading', { name: 'North item', exact: true })).toBeVisible();
     const session = await nativeSession(context, app);
     await page.evaluate(() => {
@@ -265,14 +308,13 @@ test.describe('private tenant browser links', () => {
     expect((await nativeSession(context, app)) === session).toBe(true);
   });
 
-  test('cross-tenant Back and Forward reload into explicit choosers without changing the native account session', async ({
+  test('cross-tenant Back and Forward reload into the address’s tenant on a fresh context, never showing the other tenant or changing the native account session', async ({
     page,
     context,
   }) => {
     const seen = requests(page),
       session = await nativeSession(context, app);
-    await page.goto(list(app, 'north'));
-    const original = await choose(page, 'north');
+    const original = await arrive(page, 'north', () => page.goto(list(app, 'north')), seen);
     await expect(page.locator('#content')).toContainText('North item');
     const northList = page.url();
     // A real row click leaves the north list behind in browser history. The
@@ -287,33 +329,34 @@ test.describe('private tenant browser links', () => {
     });
     let reads = seen.resources.length,
       opens = seen.opens;
-    await page.goBack();
-    await chooser(page);
+    // Back crosses tenants, so it loads the north document again: it enters north, the tenant its address names,
+    // on a lease of its own (not south's, which the tab last held, nor the north one it switched away from).
+    const fresh = await arrive(page, 'north', () => page.goBack(), seen);
     await expect(page).toHaveURL(northList);
     expect(await page.evaluate(() => Reflect.get(window, 'tenantHistoryDocument'))).toBeUndefined();
-    expect(seen.resources.length).toBe(reads);
-    expect(seen.opens).toBe(opens);
+    expect(seen.opens).toBe(opens + 1);
+    expect(fresh.context).not.toBe(original.context);
+    expect(fresh.context).not.toBe(south.context);
+    await expect(page.locator('#content')).toContainText('North item');
+    await expect(page.locator('body')).not.toContainText('South item');
+    readUnder(seen, reads, 'north');
     await unchangedAccount(page, app);
     expect((await nativeSession(context, app)) === session).toBe(true);
-    const fresh = await choose(page, 'north');
-    expect(fresh.context).not.toBe(original.context);
-    await expect(page.locator('#content')).toContainText('North item');
     await page.evaluate(() => {
       Object.assign(window, { tenantHistoryDocument: 'new-north-document' });
     });
     reads = seen.resources.length;
     opens = seen.opens;
-    await page.goForward();
-    await chooser(page);
+    const freshSouth = await arrive(page, 'south', () => page.goForward(), seen);
     await expect(page).toHaveURL(home(app, 'south'));
     expect(await page.evaluate(() => Reflect.get(window, 'tenantHistoryDocument'))).toBeUndefined();
-    expect(seen.resources.length).toBe(reads);
-    expect(seen.opens).toBe(opens);
+    expect(seen.opens).toBe(opens + 1);
+    expect(freshSouth.context).not.toBe(south.context);
+    expect(freshSouth.context).not.toBe(fresh.context);
+    await expect(page.locator('body')).not.toContainText('North item');
+    readUnder(seen, reads, 'south');
     await unchangedAccount(page, app);
     expect((await nativeSession(context, app)) === session).toBe(true);
-    const freshSouth = await choose(page, 'south');
-    expect(freshSouth.context).not.toBe(south.context);
-    await expect(page).toHaveURL(home(app, 'south'));
   });
 
   test('tenant switching stays unavailable while real boot App metadata is held, then the confirmed record becomes ready', async ({
@@ -345,12 +388,11 @@ test.describe('private tenant browser links', () => {
       delivered = true;
     });
     try {
-      await page.goto(record(app, 'north'));
-      await chooser(page);
+      // The record names north, one of Alice's: the page opens its lease as it loads. Do not use arrive():
+      // waiting for the switch control here would deadlock the very readiness boundary whose absence the test
+      // needs to observe.
       const opening = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/tenant/context/open');
-      // Do not use choose(): waiting for a switch control here would deadlock
-      // the very readiness boundary whose absence the test needs to observe.
-      await page.getByRole('list', { name: 'Available tenants' }).getByRole('button', { name: 'north', exact: true }).click();
+      await page.goto(record(app, 'north'));
       const opened = await opening;
       expect(opened.status()).toBe(200);
       const owner = (await opened.json()) as TenantContextReply;
@@ -384,9 +426,10 @@ test.describe('private tenant browser links', () => {
   test('real Back during the cold chooser reloads a fresh chooser before any context or data is acquired', async ({ page, context }) => {
     const seen = requests(page),
       session = await nativeSession(context, app);
-    await page.goto(list(app, 'north'));
+    // An address naming no tenant, in a tab that was never in one: the chooser is the only way in.
+    await page.goto(`${app.origin}/${app.appId}/item`);
     await chooser(page);
-    const northTarget = page.url();
+    const coldTarget = page.url();
     // Seed another same-document history entry without dispatching an event.
     // Only native Back below triggers navigation; no synthetic popstate or
     // structural context is substituted for the cold-boot listener.
@@ -399,9 +442,9 @@ test.describe('private tenant browser links', () => {
     );
     await Promise.all([page.waitForEvent('load'), page.goBack()]);
     await chooser(page);
-    await expect(page).toHaveURL(northTarget);
+    await expect(page).toHaveURL(coldTarget);
     expect(await page.evaluate(() => Reflect.get(window, 'coldChooserDocument'))).toBeUndefined();
-    await expect(page.locator('.tenant-chooser')).toContainText('This link belongs to north.');
+    await expect(page.locator('.tenant-chooser')).not.toContainText('This link belongs to');
     expect(seen.resources).toEqual([]);
     expect(seen.opens).toBe(0);
     expect(seen.switches).toBe(0);
@@ -412,13 +455,12 @@ test.describe('private tenant browser links', () => {
     expect(seen.opens).toBe(1);
   });
 
-  test('Back after a committed south switch loses its acknowledgement enters fresh north discovery, not switch recovery', async ({
+  test('Back after a committed south switch loses its acknowledgement enters north afresh on a new context, not switch recovery', async ({
     page,
     context,
   }) => {
     const session = await nativeSession(context, app);
-    await page.goto(list(app, 'north'));
-    const north = await choose(page, 'north');
+    const north = await arrive(page, 'north', () => page.goto(list(app, 'north')));
     await expect(page.getByRole('row').filter({ hasText: 'North item' })).toBeVisible();
     const northList = page.url();
     await page.getByRole('row').filter({ hasText: 'North item' }).click();
@@ -460,27 +502,23 @@ test.describe('private tenant browser links', () => {
       await page.evaluate(() => {
         Object.assign(window, { lostSwitchDocument: 'must-retire' });
       });
-      await Promise.all([page.waitForEvent('load'), page.goBack()]);
-      await chooser(page);
+      // The address names north, Alice's own: the reloaded document enters it as it loads, on a lease of its own;
+      // neither the lost switch's south nor north's retired context is taken up, and nothing is read before it.
+      const fresh = await arrive(page, 'north', () => Promise.all([page.waitForEvent('load'), page.goBack()]), seen);
       await expect(page).toHaveURL(northList);
       expect(await page.evaluate(() => Reflect.get(window, 'lostSwitchDocument'))).toBeUndefined();
-      await expect(page.locator('.tenant-chooser')).toContainText('This link belongs to north.');
+      expect(fresh.context).not.toBe(north.context);
+      expect(fresh.context).not.toBe(committed!.context);
+      await expect(page.getByRole('row').filter({ hasText: 'North item' })).toBeVisible();
+      await expect(page.locator('body')).not.toContainText('South item');
       await expect(page.getByRole('alert').filter({ hasText: /\S/ })).toHaveCount(0);
-      expect(seen.resources.length).toBe(reads);
-      expect(seen.opens).toBe(0);
+      readUnder(seen, reads, 'north');
       expect(seen.switches).toBe(1);
       expect(recoveries).toBe(0);
+      expect((await data(page, app, north)).status()).toBe(403);
+      expect((await data(page, app, fresh)).status()).toBe(200);
       await unchangedAccount(page, app);
       expect((await nativeSession(context, app)) === session).toBe(true);
-      const fresh = await choose(page, 'north');
-      expect(fresh.tabId).not.toBe(north.tabId);
-      expect(fresh.context).not.toBe(north.context);
-      await expect(page.getByRole('row').filter({ hasText: 'North item' })).toBeVisible();
-      await expect(page).toHaveURL(northList);
-      expect(seen.opens).toBe(1);
-      expect(seen.switches).toBe(1);
-      expect(recoveries).toBe(0);
-      await expect(page.locator('body')).not.toContainText('South item');
     } finally {
       await page.unrouteAll({ behavior: 'wait' });
     }
@@ -503,8 +541,7 @@ test.describe('private tenant browser links', () => {
   }
 
   test('invalid or foreign-App in-place targets restore the current qualified URL without new resource reads', async ({ page }) => {
-    await page.goto(record(app, 'north'));
-    const owner = await choose(page, 'north');
+    const owner = await arrive(page, 'north', () => page.goto(record(app, 'north')));
     await expect(page.getByRole('heading', { name: 'North item', exact: true })).toBeVisible();
     const current = page.url(),
       seen = requests(page);
@@ -535,10 +572,10 @@ test.describe('private tenant browser links', () => {
     try {
       await other.addInitScript(() => localStorage.setItem('mistri.tour', 'done'));
       await login(other, otherApp);
-      await page.goto(list(app, 'north'));
-      const first = await choose(page, 'north');
-      await other.goto(list(otherApp, 'south'));
-      const second = await choose(other, 'south');
+      const first = await arrive(page, 'north', () => page.goto(list(app, 'north')));
+      alice = otherApp.accounts.alice.id;
+      const second = await arrive(other, 'south', () => other.goto(list(otherApp, 'south')));
+      alice = app.accounts.alice.id;
       expect(first.accountId).toBe(app.accounts.alice.id);
       expect(second.accountId).toBe(otherApp.accounts.alice.id);
       // Separate native stores have separately issued accounts. Do not make

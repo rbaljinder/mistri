@@ -32,7 +32,7 @@ export interface TextRule {
 
 const TEXT_RULE_KEYS = ['min', 'max', 'pattern', 'message'] as const;
 /** The most characters a rule may name, as a command's text input. */
-const TEXT_RULE_MOST = 16384;
+export const TEXT_RULE_MOST = 65536;
 const MESSAGE_MOST = 200;
 const PATTERN_MOST = 500;
 

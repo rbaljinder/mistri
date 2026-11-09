@@ -15,7 +15,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/commands/commandJournal.js';
 import type { AppHost } from '../packages/mistri/src/server/app/apps.js';
-import { consumesCommandWarnings } from '../packages/mistri/src/server/app/appMachineChecks.js';
+import { consumesCommandWarnings, referenceReadWarnings } from '../packages/mistri/src/server/app/appMachineChecks.js';
 import { moveConsumed } from '../packages/mistri/src/server/app/appConsumes.js';
 import type { Identity } from '../packages/mistri/src/server/auth/auth.js';
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
@@ -584,4 +584,29 @@ test('under a row policy a take past zero answers 422 as well (DM9)', async () =
     await registry.closeAll();
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('check names a command that sets a reference whose table it does not read, and not one that reads it', () => {
+  const app = parseAppConfig(APP, 'consumes', {
+    commands: catalogOf({ addLine: { target: 'work_order' }, addLineRead: { target: 'work_order' } }),
+  });
+  const handle = async ({ tx, record }: { tx: { insert: (request: unknown) => Promise<unknown> }; record: { id: unknown } }) => {
+    await tx.insert({ table: 'work_order_part', values: { work_order_id: Number(record.id), part_id: 1, quantity: 1 } });
+  };
+  const commands = defineCommands({
+    addLine: defineCommand({ source: 'shop', target: 'work_order', write: ['work_order_part'], read: ['work_order'], handle } as never),
+    addLineRead: defineCommand({
+      source: 'shop',
+      target: 'work_order',
+      write: ['work_order_part'],
+      read: ['work_order', 'part'],
+      handle,
+    } as never),
+  });
+  const warnings = referenceReadWarnings(app, catalog(SCHEMA), commands);
+  assert.equal(warnings.length, 1, warnings.join('\n'));
+  assert.match(
+    warnings[0],
+    /^command "addLine" sets work_order_part\.part_id, which points at a "part" row.*\[command-reference-unread\].*add "part" to read/,
+  );
 });

@@ -39,11 +39,26 @@ import { checkedGrants, realmResources } from './appAuthGrants.js';
  * and writes nothing here and is named by appCeilingWarnings rather than refused.
  */
 export function resolveAppAccess(app: AppDef, schema: DatabaseSchema, roles: readonly string[], visitor?: 'public'): ResolvedAccess {
-  return withFileColumns(
+  return withAudited(
     app,
     schema,
-    withMachineColumns(app, schema, withoutHidden(app, schema, grantedAccess(app, schema, roles, visitor))),
+    withFileColumns(app, schema, withMachineColumns(app, schema, withoutHidden(app, schema, grantedAccess(app, schema, roles, visitor)))),
   );
+}
+
+/**
+ * The readable resources whose reads are audited (`audit: { reads: true }`),
+ * by table id to the resource's name: what authorizeResources writes a read audit row for. Absent
+ * where none is, so an App that audits nothing carries nothing to look up.
+ */
+function withAudited(app: AppDef, schema: DatabaseSchema, access: ResolvedAccess): ResolvedAccess {
+  const audited = new Map<string, string>();
+  for (const [name, resource] of Object.entries(app.resources ?? {})) {
+    if (!resource.audit?.reads) continue;
+    const table = findTable(schema, name) ?? tableNamed(schema, name);
+    if (table && access.readable.has(table.id)) audited.set(table.id, name);
+  }
+  return audited.size ? { ...access, audited } : access;
 }
 
 interface ResolvedAccess {
@@ -56,6 +71,8 @@ interface ResolvedAccess {
   fields?: ReadonlyMap<string, { read: ReadonlySet<string>; write: ReadonlySet<string> }>;
   /** Columns the server reads and writes for its own work, by table id: never in a served catalog, named by no request but its own. */
   internal?: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Of `readable`, the tables whose reads are written to the read audit (server/readAudit.ts). */
+  audited?: ReadonlyMap<string, string>;
 }
 
 /**

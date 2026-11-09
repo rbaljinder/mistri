@@ -248,6 +248,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
        every row it changes in the same transaction. `platformTenantCommandTransaction`
        (1.0, G1): a platform command acting in one named tenant, on its own kind. */
       assert.deepEqual(Reflect.ownKeys(source).sort(), [
+        'appendReadAudit',
         'close',
         'commandTransaction',
         // The notice-mail outbox (claim, settle, a recipient's switch): a queue, not a writer of tenant rows.
@@ -258,6 +259,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         'platformCommandTransaction',
         'platformTenantCommandTransaction',
         'platformTransaction',
+        'readReadAudit',
         'serviceCommandTransaction',
         'supportCommandTransaction',
         'supportTransaction',

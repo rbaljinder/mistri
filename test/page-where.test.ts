@@ -97,3 +97,21 @@ test('the text it writes parses as the condition typed by hand would', () => {
   assert.deepEqual(filter(text({ status: 'booked', party_size: { gt: 1 } })), filter('status = booked and party_size > 1'));
   assert.deepEqual(filter(text({ status: ['booked', 'waiting'] })), filter('(status = booked or status = waiting)'));
 });
+
+test('a plain object is read by shape: another realm, no prototype', async () => {
+  const { runInNewContext } = await import('node:vm');
+  assert.equal(text(runInNewContext("({ status: 'open' })")), 'status = "open"');
+  assert.equal(text(Object.assign(Object.create(null), { status: 'open' })), 'status = "open"');
+});
+
+test('a refused value says what it was', () => {
+  const said = (where: unknown) => {
+    const got = compileWhere(where, booking);
+    assert.ok('error' in got);
+    return got.error;
+  };
+  assert.match(said(new Date()), /not a Date\./);
+  assert.match(said(new Map()), /not a Map\./);
+  assert.match(said('open'), /not a string\./);
+  assert.match(said(7), /not a number\./);
+});

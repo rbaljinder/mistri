@@ -278,6 +278,8 @@ type: {
 
 Each file is cut to Latin as the App loads — the letters, digits, accents and punctuation of English and the Western European languages — so a foundry's whole file can be dropped in as it comes; a face for an App written in another script says `subset: false` and ships whole. `mistri check` refuses a file that is missing, outside the App or not WOFF2, fails faces past 150 KB together as served, warns on one face past 80 KB and on a stack with no generic family to fall back to, and says what it serves: `2 faces, 61 KB, heading preloaded`. `mistri build` ships the files as served.
 
+`type.font` takes `ui`, `data`, `heading`, `code` and `figures`. `figures` is the face of the ids, codes, numbers and dates a table's cells and a record's fields set apart. Name it to choose that face; leave it out and the figures follow `data` when the theme names one, and are the platform's IBM Plex Mono when it names neither.
+
 ## A logo of your own
 
 `ui.logo` is an App icon's name, or the App's own picture: a PNG, JPEG, WebP, GIF or SVG file in its directory, served from the App's own address and never fetched from anywhere else.

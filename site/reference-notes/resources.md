@@ -265,3 +265,30 @@ validation: [
 A rule is a condition the record must meet on every write, optionally under
 `when`, which compares the record's own columns. At most 128 rules per
 resource.
+
+## Read audit
+
+```ts
+patient: { audit: { reads: true } },
+```
+
+Every read of the resource's rows is written down before those rows leave
+the server: when, who, the tenant, the resource, the door it came by, and
+either the one record read by its key or the query with the count and the
+first 500 ids it returned. Field values never are. The door is `page`,
+`api`, `mcp`, `assistant`, `export`, `picker`, `custom-page` or `related`;
+the reader is an account id, `service:<principal>`, `support:<operator>`
+with the visit's id, `api-token:<id>`, `assistant:<account>` for the
+assistant reading as the person it acts for, or `public` for a signed-out
+visitor. Counts, breakdowns and aggregates are not row reads and are not
+logged.
+
+It fails closed: a read whose row cannot be written is answered 503 with no
+body, and an App that audits a resource on a database without the store
+refuses to start, naming `mistri migrate stores up`. The store is append-only
+and never pruned. A request writes one row a read; the same read again
+within 60 seconds in one process (same reader, resource, door, and record or
+query and ids) is not written twice, while a new query, another page or
+another door always is. A second process writes its own row.
+`mistri audit reads` prints the log as JSON lines, and the test kit's
+`host.readAudit()` returns it.

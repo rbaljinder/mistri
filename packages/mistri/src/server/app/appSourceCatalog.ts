@@ -1,6 +1,6 @@
 import { qualifyResource } from '../../shared/app.js';
 import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
-import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { primaryKey, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { appResourceCatalog, type AppResourceCatalog } from './appResources.js';
 import { declaredEdge, withDeclaredEdges, type DeclaredReference } from '@mistriwork/engine/shared/declaredReferences.js';
 import type { DeclaredDate } from '../../shared/appModel.js';
@@ -62,18 +62,24 @@ function crossSourceEdge(
   dialectOf: (group: string) => string,
 ): DatabaseSchema['foreignKeys'][number] {
   const at = `App resource "${reference.table}", references "${reference.column}"`;
+  /* An API answers the second step by its item path (its key) or by a filter it documents on the column: a list of keys
+     where it takes `in`, a request per key where it does not (httpAdapter.ts fanOut). With neither, nothing can be asked. */
+  const far = targets.get(reference.to);
+  const farTable = schema.tables.find((table) => table.id === reference.to);
+  if (far && farTable && reference.toColumn && dialectOf(far.group) === 'http' && targets.get(reference.table)?.group !== far.group) {
+    const key = primaryKey(farTable);
+    if (!(key.length === 1 && key[0] === reference.toColumn) && !farTable.filterable?.includes(reference.toColumn)) {
+      throw new Error(
+        `${at}: ${reference.to} is read from an API that documents no filter on "${reference.toColumn}", so the page's keys cannot be looked up there. ` +
+          `Declare a ${reference.toColumn} filter on \`${reference.to}\` in the API's description.`,
+      );
+    }
+  }
   const edge = declaredEdge(schema, reference, at);
   const name = edge.name.replace(/[^A-Za-z0-9_]+/g, '_');
   const from = targets.get(edge.from.table)!,
     to = targets.get(edge.to.table)!;
   if (from.group === to.group) return { ...edge, name };
-  /* An API is asked for one record at a time, by its key; the second step is
-     one read of every key a page names, which it cannot answer. */
-  if (dialectOf(to.group) === 'http') {
-    throw new Error(
-      `${at}: ${edge.to.table} is read from an API, which looks records up one at a time; a reference from another source needs a database there.`,
-    );
-  }
   return { ...edge, name, stitched: true };
 }
 

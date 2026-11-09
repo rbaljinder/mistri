@@ -194,7 +194,7 @@ function scalarSchema(
   if (field.type === 'money' && field.minor) {
     // The amount in major units as exact decimal text (a float would round it); the command receives the minor units.
     notes.push(
-      `An amount of money in ${field.currency ?? 'the App currency'}'s major unit, as decimal text with at most the currency's own decimal places ("19.99").`,
+      `An amount of money in ${field.currency ?? 'the App currency'}'s major unit, as decimal text with at most the currency's own decimal places ("19.99"), never minor units: "19.99" is stored as 1999, and "1999" would be 1999.00. A finer fraction is refused, not rounded.`,
     );
     if (field.min !== undefined) notes.push(`At least ${field.min}.`);
     if (field.max !== undefined) notes.push(`At most ${field.max}.`);

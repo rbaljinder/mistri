@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import {
   canonicalCommandJson,
   CommandInputError,
@@ -159,8 +160,8 @@ test('command payload: depth, expanded node count and UTF-8 byte limits are exac
   rejected(() => canonicalCommandJson('é', 3));
   assert.equal(canonicalCommandJson('\n', 4), '"\\n"');
   rejected(() => canonicalCommandJson('\n', 3));
-  assert.equal(canonicalCommandJson('x'.repeat(65_534)).length, 65_536);
-  rejected(() => canonicalCommandJson('x'.repeat(65_535)));
+  assert.equal(canonicalCommandJson('x'.repeat(MAX_COMMAND_BYTES - 2)).length, MAX_COMMAND_BYTES);
+  rejected(() => canonicalCommandJson('x'.repeat(MAX_COMMAND_BYTES - 1)));
   for (const limit of [-1, Infinity, 1.5, NaN]) rejected(() => canonicalCommandJson(null, limit));
 });
 
@@ -254,10 +255,10 @@ test('command payload: record keys have bounded safe identifiers and scalar valu
 test('command payload: total envelope bound includes input, keys and escaping overhead', () => {
   const base = { ...payload(), input: '' };
   const overhead = Buffer.byteLength(canonicalCommandJson(base));
-  const full = { ...base, input: 'x'.repeat(65_536 - overhead) };
-  assert.equal(Buffer.byteLength(canonicalCommandJson(parseCommandRequest(full))), 65_536);
+  const full = { ...base, input: 'x'.repeat(MAX_COMMAND_BYTES - overhead) };
+  assert.equal(Buffer.byteLength(canonicalCommandJson(parseCommandRequest(full))), MAX_COMMAND_BYTES);
   rejected(() => parseCommandRequest({ ...full, input: full.input + 'x' }));
-  rejected(() => parseCommandRequest({ ...base, input: '\n'.repeat(40_000) }));
+  rejected(() => parseCommandRequest({ ...base, input: '\n'.repeat(MAX_COMMAND_BYTES / 2) }));
   let touched = false;
   const accessor = Object.defineProperty(payload(), 'input', {
     enumerable: true,

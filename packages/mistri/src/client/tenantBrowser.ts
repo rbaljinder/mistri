@@ -208,12 +208,21 @@ export async function initialTenantSelection(
     shown = false;
   const sole = (): string | undefined =>
     error === undefined
-      ? soleTenant(
+      ? (soleTenant(
           tenantIds.filter((tenantId) => tenantId !== PLATFORM_TENANT_ID),
           tenantIds.includes(PLATFORM_TENANT_ID),
           requestedTenant,
-        )
+        ) ?? preferred())
       : undefined;
+  /* With several memberships, the chooser is for a person who has not said which: a link that names a tenant of
+     theirs has said, and so has this tab by the tenant it was in before a reload. A link that names a tenant that is
+     not theirs is no answer, and does not fall back on the last one: the chooser stays, saying whose link it is. */
+  const preferred = (): string | undefined => {
+    if (requestedTenant !== undefined)
+      return requestedTenant !== PLATFORM_TENANT_ID && tenantIds.includes(requestedTenant) ? requestedTenant : undefined;
+    const before = keptHere(owner)?.tenantId;
+    return before !== undefined && tenantIds.includes(before) ? before : undefined;
+  };
   const draw = () => {
     if (!current() || held) return;
     shown = true;

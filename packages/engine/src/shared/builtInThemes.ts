@@ -97,7 +97,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     "fonts": {
       "ui": "Barlow, \"Barlow Fallback\", \"Helvetica Neue\", Arial, sans-serif",
       "data": "Barlow, \"Barlow Fallback\", \"Helvetica Neue\", Arial, sans-serif",
-      "heading": "\"Barlow Semi Condensed\", \"Barlow Semi Condensed Fallback\", Barlow, \"Arial Narrow\", sans-serif"
+      "heading": "\"Barlow Semi Condensed\", \"Barlow Semi Condensed Fallback\", Barlow, \"Arial Narrow\", sans-serif",
+      "figures": "'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, Menlo, monospace"
     },
     "radius": {
       "control": "2px",
@@ -279,7 +280,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     "fonts": {
       "ui": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
       "data": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
-      "heading": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif"
+      "heading": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "figures": "'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, Menlo, monospace"
     },
     "radius": {
       "control": "8px",
@@ -417,7 +419,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     "fonts": {
       "ui": "\"Helvetica Neue\", Helvetica, Arial, ui-sans-serif, sans-serif",
       "data": "\"Helvetica Neue\", Helvetica, Arial, ui-sans-serif, sans-serif",
-      "heading": "\"Helvetica Neue\", Helvetica, Arial, ui-sans-serif, sans-serif"
+      "heading": "\"Helvetica Neue\", Helvetica, Arial, ui-sans-serif, sans-serif",
+      "figures": "'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, Menlo, monospace"
     },
     "radius": {
       "control": "0px",
@@ -557,7 +560,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     "fonts": {
       "ui": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
       "data": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
-      "heading": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif"
+      "heading": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "figures": "'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, Menlo, monospace"
     },
     "radius": {
       "control": "8px",
@@ -684,7 +688,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     "fonts": {
       "ui": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
       "data": "'IBM Plex Mono', ui-monospace, Menlo, monospace",
-      "heading": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif"
+      "heading": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "figures": "'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, Menlo, monospace"
     },
     "radius": {
       "control": "2px",

@@ -52,7 +52,9 @@ The database browser, in its own repository
   a script from sending what the reader sees anywhere else.
   Every answer also carries `Referrer-Policy: strict-origin-when-cross-origin`
   and a `Permissions-Policy` that grants no camera, microphone, location or
-  payment sheet, and an answer that arrived over https (TLS, or a trusted
+  payment sheet (an App's own pages may use the camera for the scan input, and
+  the microphone only when the App opts in with `ui.microphone: true`, for its
+  own origin alone; nothing else in the header changes), and an answer that arrived over https (TLS, or a trusted
   proxy's `X-Forwarded-Proto`) carries `Strict-Transport-Security`.
 - **A custom component is deployment code.** An App may draw part of a page
   with its own React module (`component()` in the App directory). It is
@@ -91,6 +93,28 @@ The database browser, in its own repository
   address is not kept at all. A signed-out
   visitor never exports or reads a history; an export is refused inside a
   row-policy App and a tenant host.
+- **A resource may log every read of its rows, and fails closed when it
+  cannot.** `audit: { reads: true }` writes one row of the read audit store
+  for each read of the resource's rows (a list, a record, an export, a
+  picker, a related list, a free-form page, the App API, MCP, the
+  assistant), at the authorized reader every one of them goes through, and
+  before the rows leave the server. A row names when, who (the account,
+  `service:<principal>`, `api-token:<id>`, `support:<operator>` with the
+  visit, or `assistant:<account>`), the tenant, the resource, the door, and
+  the one record read or the query with its count and up to 500 ids; it
+  never holds a field value. A read whose row cannot be written is answered
+  503 with no body, and a read of an audited table that came by no door the
+  server knows is refused, so a route added later cannot read quietly. An
+  App whose audited resource sits on a database without the store refuses
+  to start and names `mistri migrate stores up`; startup never makes it. In
+  a tenant App a row carries the tenant and is written through that
+  tenant's fenced writer, and a tenant reads only its own rows. The table is
+  append-only — triggers on SQLite, rules on PostgreSQL — and the stores'
+  exact-layout checks count them. **Retention: none.** Within one process
+  the same read again inside 60 seconds (same reader, resource, door, and
+  record or query and ids) is one row; a new query or door always writes.
+  Counts, breakdowns and aggregates are not logged, nor are the server's own
+  reads (a label, a notification's record). `mistri audit reads` prints it.
 - **A hidden column is never served.** A resource's `hidden` (with sign-in
   or without) and a connection's `"hidden"` in the config cut columns
   from the catalog the server answers with, at the choke point every read

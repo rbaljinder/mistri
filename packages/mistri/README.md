@@ -30,7 +30,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.25; the
+These App features ship in mistri 1.0.0-rc.27; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -199,6 +199,7 @@ mistri test init [--app <dir>]
 mistri flows start <resource>
                               start a resource's flows on records already there (below)
 mistri jobs run <name>        run one of an App's jobs at times now, once (below)
+mistri audit reads            who read an audited resource's rows, as JSON lines (below)
 mistri decide eval <name>     measure a decision on settled records, and pin its model (below)
 mistri tenant init|grant      a tenant App's first boot: its realms, tenants and first operators (below)
 mistri tenant clone|import|clock
@@ -300,7 +301,8 @@ mistri mail-dns [<config>]    the SPF, DKIM and DMARC records tenant mail is sen
                               restart (mistri docs reload-and-restart).
                               --app names the App on every command that takes one
                               (check, build, shot, grade, dev, test init, flows,
-                              jobs, decide, tenant, deploy init, migrate files);
+                              jobs, audit, decide, tenant, deploy init, migrate
+                              files);
                               left out, the App is the current directory when it
                               holds an app.ts (or app.mjs / app.json). seed,
                               migrate, messages extract and theme show read it
@@ -599,6 +601,20 @@ store, which the server started with --jobs runs. Each flow's condition
 still decides. --where narrows the records (the query language over their
 own columns), --flow to one flow; a tenant App runs one --tenant at a time,
 whose owner column its --policy names. Running it again starts nothing new.
+Exit codes: 1 could not run.
+
+mistri audit reads [--app <dir>] [--resource <name>] [--record <id>] [--actor <who>]
+                [--tenant <id>] [--since <instant | 30m | 24h | 7d>] [--limit <n>]
+                [<db> | --db <target> | --config <path>]
+Prints the reads recorded for the App's resources with audit: { reads: true },
+newest first, one JSON object a line: when, the actor, the tenant, the
+resource, the route (page, api, mcp, assistant, export, picker, custom-page,
+related) and the one record read or the query with the count and ids it
+returned; never a field's value. Each flag narrows: --record by the record's
+key, --actor an account id, service:<principal>, support:<operator>,
+api-token:<id> or assistant:<account>, --since an ISO instant or an age,
+--limit at most n rows (default 1000). Read from the database, no server
+started; the store is made by mistri migrate stores up, never here.
 Exit codes: 1 could not run.
 
 mistri jobs run <name> [--app <dir>] --jobs <file> [--wait <seconds>]

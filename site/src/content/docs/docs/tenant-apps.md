@@ -31,7 +31,7 @@ auth: {
 
 ## What you'll see
 
-- After sign-in, a chooser of the tenants the person is a member of; their roles come from that membership, not the account. A person with one membership goes straight in, unless the address names another tenant.
+- After sign-in, a chooser of the tenants the person is a member of; their roles come from that membership, not the account. A person with one membership goes straight in, unless the address names another tenant. A link that names a tenant of theirs (`?tenant=north`) enters it directly, and a reload in the same tab re-enters the tenant it was in; a link to a tenant that is not theirs keeps the chooser.
 - Every list, record and form inside the chosen tenant: the server gives a new row the tenant's ownership column, and no reply carries it. The bar's bell holds that tenant's notices.
 - Platform staff in a realm of their own, and a short, audited, read-only support visit into one tenant when the policy allows it.
 
@@ -145,13 +145,13 @@ export default defineAppTenantPolicy({
 | `resultReferences` | per command id, `(result) => [{ table, key }]` | none | one per command under `--commands`; 4096 |
 | `administration.id`, `.version` | text | required | 256 characters |
 | `administration.maxMembershipLifetimeMs` | milliseconds | required | 1 to 366 days |
-| `administration.operators` | `[{ accountId, tenants, operations, roles }]` | required | 256 rules, each 1 to 256 tenants; empty only beside `delegates` |
+| `administration.operators` | `[{ accountId, tenants, operations, roles }]` | required | 256 rules, each `'all'` or 1 to 256 tenants (`'all'` reaches every tenant, audited like a listed one); empty only beside `delegates` |
 | `administration.delegates` | `[{ role, operations, roles }]` | none | each operation in one rule |
 | `invitations.id`, `.version` | text | required | 256 bytes |
 | `invitations.maxMembershipLifetimeMs` | milliseconds | required | 1 to 366 days |
 | `invitations.maxRedemptionLifetimeMs` | milliseconds | required | 1 to 7 days |
 | `invitations.maxPendingPerTenant` | count | required | 1 to 10000 |
-| `invitations.operators` | `[{ accountId, tenants, operations, roles }]` | required | 256 rules, each 1 to 256 tenants; empty only beside `delegates` |
+| `invitations.operators` | `[{ accountId, tenants, operations, roles }]` | required | 256 rules, each `'all'` or 1 to 256 tenants (`'all'` reaches every tenant, audited like a listed one); empty only beside `delegates` |
 | `invitations.delegates` | `[{ role, operations, roles }]` | none | each operation in one rule |
 | `support.id`, `.version` | text | required | 256 bytes |
 | `support.grants` | `[{ platformRole, tenants: 'all' or [ids], dealerRoles }]` | required | 1 to 256, one per platform role; 1024 tenants; 256 roles |
@@ -202,6 +202,14 @@ prints a sign-in per role: each account is a member of the first two tenants of
 the profile table, or of the platform realm for a platform role. In tests,
 `host.tenant(id, { roles })` makes a member the same way
 ([Test an App](/docs/testing-apps/#tenant-apps)).
+
+A resource with `audit: { reads: true }` adds the read audit store to the same
+command, and a start without it is refused. Each row carries the tenant whose
+rows were read and is written through that tenant's fenced writer before the
+rows leave; a row that cannot be written is the tenant unavailable (503), not
+a denial. A support visit's reads name the operator and the visit. A tenant
+reads only its own rows: `mistri audit reads --tenant north --since 7d`
+([read audit](/docs/dsl-resources/#read-audit)).
 
 ### Keys in a tenant App
 
@@ -299,6 +307,41 @@ record's tenant inbox, and only while they hold an active membership of that
 tenant, so a notice never crosses tenants. `mistri check` warns when the `me`
 column looks like an email, since every such recipient would be dropped.
 
+### Fixed actions without write
+
+A role can run a fixed action in a tenant without being able to edit the table.
+Grant the action by id instead of `write`; the member's writer admits exactly
+that update, on the member's own tenant's rows, and nothing else:
+
+```ts
+auth: {
+  rows: 'tenant',
+  me: { from: 'person', column: 'account_id' },
+  roles: {
+    clerk: { read: true, actions: { invoice: ['send'] } },
+    lead: { read: true, write: ['invoice'] },
+  },
+},
+resources: {
+  invoice: {
+    owner: 'tenant',
+    access: 'write',
+    machine: machine('state', {
+      draft: { on: { send: { to: 'sent', set: { sent_by: me }, when: 'amount > 0' } } },
+      sent: { final: true },
+    }, { since: 'sent_at' }),
+  },
+},
+```
+
+A clerk's `send` moves a draft to `sent`, stamping `sent_by` with the clerk's
+own row of the tenant's people table and `sent_at` with the server's clock. The
+clerk cannot change the title, the amount or the owner column, and another
+tenant's invoice is not found. When `amount > 0` is false the update is refused
+`403`. The button is drawn for the clerk and not for a role without the grant,
+and the move is in the record's history like any other write. A platform
+member's or a support visit's writes get no fixed actions: it is a member's verb.
+
 ### Public intake
 
 A tenant App's [public form](/docs/command-forms/#public-forms) lands in
@@ -309,10 +352,16 @@ form needs no address: the host places it with the address that tenant holds,
 and an address there is refused (`400`). One rule places a form's read, its
 submission and every saved step. An unknown address, no address on the shared
 host, a tenant that holds no address, or a suspended tenant lands with the
-platform for triage. Placed with a tenant, the form's
+platform for triage. An address is 22 to 128 URL-safe characters (letters, digits, `-` and `_`); a shorter or odder value is no address, and its submission lands in triage too. `mistri tenant init` refuses an `intake.address` column that cannot hold one (`varchar(20)`), `mistri check` says so as `[tenant-intake-address]`, and under `mistri dev` the server logs one line when a submission lands in triage because no tenant matched its address, naming the shape problem and never the address. Placed with a tenant, the form's
 command inserts and may update that tenant's rows of the tables it declares
 under `write`; it never removes one, and triage only inserts. A form saved on
 every step keeps its draft in the tenant where its first step landed.
+
+Where the App lets tenants name themselves (`branding.allow: ['name']`), a public
+form reached through a tenant's intake address (`?via=`) wears that tenant's saved
+name, as one on its mapped host does. The sign-in page and every other page wear
+it only when the host names the tenant; an address that places nobody leaves the
+App's own name.
 
 Where the App names a human check (`auth.challenge`), every tenant's public
 forms ask it, on the shared host and on a mapped one, in the order an ordinary

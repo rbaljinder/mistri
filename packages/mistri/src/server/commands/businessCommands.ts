@@ -387,7 +387,8 @@ export interface CommandDefinition<
    * provisional; handlers must retain their authorization checks. */
   availability?(context: CommandAvailabilityContext<Src, Target, Read, Write>): readonly boolean[] | Promise<readonly boolean[]>;
   /**
-   * Reads `sources` after `validate`, before the transaction opens; what it
+   * Reads `sources` (when it names any: a lookup that reads none declares
+   * none) after `validate`, before the transaction opens; what it
    * returns (JSON, at most 64 KiB) reaches `handle` as `lookup`. A failure
    * refuses a first attempt, temporarily_unavailable; a replay still answers.
    */
@@ -1009,11 +1010,13 @@ export function defineCommand<
   const sources = Object.hasOwn(value, 'sources') ? sourcesOption(value.sources) : undefined;
   const integrations = Object.hasOwn(value, 'integrations') ? integrationsOption(value.integrations) : undefined;
   if (Object.hasOwn(value, 'lookup') && typeof value.lookup !== 'function') fail('Command lookup must be a function.');
-  if ((sources !== undefined || integrations !== undefined) !== Object.hasOwn(value, 'lookup')) {
+  /* A lookup may read no source (it computes from the input, or calls an integration), so it needs none declared;
+     a declared source or integration is read or called only from a lookup, so those need one. */
+  if ((sources !== undefined || integrations !== undefined) && !Object.hasOwn(value, 'lookup')) {
     fail(
       integrations !== undefined
         ? 'Command integrations are called from its lookup, before the transaction opens: declare a lookup beside them.'
-        : 'Command lookup reads its "sources", and only a lookup reads them: declare both, or neither.',
+        : 'Command sources are read from its lookup, before the transaction opens: declare a lookup beside them, or drop sources.',
     );
   }
   // A call is made once per request and recorded; the command's own transaction stays the database's alone.

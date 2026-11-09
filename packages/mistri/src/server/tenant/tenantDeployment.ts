@@ -5,6 +5,8 @@ import { isCapturedScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.j
 import { bindTenantReadRuntime, type TenantReadRuntimeOptions } from './tenantReadRuntime.js';
 import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
 import { bindTenantRecordHistory } from './tenantRecordHistory.js';
+import { auditsReads } from './tenantReadAudit.js';
+import type { ReadAuditQuery, ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
 import type { RecordActivityQuery, RecordHistoryQuery } from '../../adapters/history/recordHistory.js';
 import type { InboxMark, InboxQuery } from '../../adapters/inbox/inbox.js';
 import type { BrandingLogoQuery, BrandingQuery, BrandingWrite } from '../../adapters/branding/branding.js';
@@ -303,6 +305,10 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
         },
       });
     };
+    /* An audited read's row goes through the writer, the tenant's fenced source: the reader is a snapshot and cannot write.
+       An App that audits nothing hands its owners no sink at all. */
+    const readAudit = auditsReads(requests.app) ? { readAudit: (row: ReadAuditRow) => writer.appendReadAudit(row) } : {};
+    Object.assign(readOptions, readAudit);
     const reads = bindTenantReadRuntime(readOptions as unknown as TenantReadRuntimeOptions<Request>);
     /* The profile's columns no generic platform write reaches: its identity and
        the addresses the policy reads off it (platformHeldColumns). The served
@@ -328,6 +334,7 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
             maxLifetimeMs: raw.maxLifetimeMs as number,
             verifySession: raw.verifySession as PlatformReadRuntimeOptions<Request>['verifySession'],
             resolvePlatformRows: raw.resolvePlatformRows as PlatformReadRuntimeOptions<Request>['resolvePlatformRows'],
+            ...readAudit,
             now,
             presentation: (principal: PlatformMembershipEvidence, schema: PlatformReadContext['schema']) =>
               projectPlatformCapabilities({
@@ -361,6 +368,7 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
       verifySession: raw.verifySession as SupportReadRuntimeOptions<Request>['verifySession'],
       resolveMembershipRows: raw.resolveMembershipRows as SupportReadRuntimeOptions<Request>['resolveMembershipRows'],
       resolveRows: raw.resolveRows as SupportReadRuntimeOptions<Request>['resolveRows'],
+      ...readAudit,
       presentation: (principal) =>
         projectTenantCapabilities({
           app: requests.app,
@@ -457,6 +465,7 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
         resolvePublicRows: declared.resolvePublicRows as PublicReadRuntimeOptions['resolvePublicRows'],
         maxLifetimeMs: raw.maxLifetimeMs as number,
         now,
+        ...readAudit,
       });
     } else if (requests.app.auth?.public) throw new Error();
     const retire = tenantRetirement(
@@ -559,6 +568,13 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
         read: (query: BrandingQuery) => reader.readBranding(query),
         logo: (query: BrandingLogoQuery) => reader.readBrandingLogo(query),
         write: (write: BrandingWrite) => writer.writeBranding(write),
+      }),
+      /* One tenant's read audit, for the operator's host (the test kit, an
+         operator's own tooling): the tenant is the caller's argument and wins
+         over anything the query says, so a read for one tenant never returns
+         another's rows. No member's route reads it. */
+      readAudit: Object.freeze({
+        read: (tenant: string, query: Omit<ReadAuditQuery, 'tenant'>) => writer.readReadAudit({ ...query, tenant }),
       }),
       platform: platform !== undefined,
       intake: intake !== undefined,

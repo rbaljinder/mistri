@@ -9,6 +9,7 @@ import {
   tenantSuggestedPage,
 } from '../packages/mistri/src/server/tenant/tenantMetadata.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
+import { parseTestApp } from './support/commandCatalog.js';
 import { parsePageBody, parsePagesConfig, type PageDef, type PageSection } from '../packages/engine/src/shared/page.js';
 import { resolvePageEmbeds } from '../packages/mistri/src/shared/appPages.js';
 import type { ColumnMeta, DatabaseSchema } from '../packages/engine/src/shared/schema.js';
@@ -1114,7 +1115,7 @@ test('unknown configured pages disappear without publishing their validation dia
 test('suggested pages retain logical relationships, config independence and readonly presentation', () => {
   const catalog = schema(),
     before = structuredClone(catalog),
-    result = tenantSuggestedPage(catalog, 'item');
+    result = tenantSuggestedPage(app(), [], catalog, 'item');
   assert.equal(result.id, 'suggested:item');
   assert.equal(result.source, 'suggested');
   assert.equal(result.base, 'item');
@@ -1127,9 +1128,21 @@ test('suggested pages retain logical relationships, config independence and read
   assert.deepEqual(plain(result), held);
 });
 
+test("a suggested page's related list is called what the App's resource calls its rows, not the raw table (field report: 'No ledger_entry yet.')", () => {
+  const catalog = schema(),
+    said = app({ resources: { ...resources, note: { ...resources.note, noun: { one: 'field note', many: 'field notes' } } } }),
+    result = tenantSuggestedPage(said, [], catalog, 'item'),
+    list = result.sections.find((section) => section.kind === 'list' && section.from === 'note');
+  assert.equal(list?.title?.toLowerCase(), 'field notes');
+  const plain = tenantSuggestedPage(app(), [], catalog, 'item').sections.find(
+    (section) => section.kind === 'list' && section.from === 'note',
+  );
+  assert.notEqual(plain?.title, 'note');
+});
+
 for (const table of ['hidden_secret', 'physical_item', '', ' item', 'item\n']) {
   test(`suggested page safely refuses ${JSON.stringify(table)}`, () => {
-    assert.throws(() => tenantSuggestedPage(schema(), table), safeFailure);
+    assert.throws(() => tenantSuggestedPage(app(), [], schema(), table), safeFailure);
   });
 }
 test('suggested page refuses a root without a primary key', () => {
@@ -1137,5 +1150,40 @@ test('suggested page refuses a root without a primary key', () => {
   catalog.tables[0].columns.forEach((column) => {
     column.primaryKey = false;
   });
-  assert.throws(() => tenantSuggestedPage(catalog, 'item'), safeFailure);
+  assert.throws(() => tenantSuggestedPage(app(), [], catalog, 'item'), safeFailure);
+});
+
+test('a signed-in command form is offered, with its nav entry, only to a member whose role is granted its command', () => {
+  forgetTenantProjections();
+  const definition = parseTestApp(
+    {
+      id: 'tenant-metadata',
+      name: 'Tenant metadata',
+      sources: { business: { connection: 'PRIVATE_CONNECTION' } },
+      resources,
+      auth: { rows: 'tenant', roles: { operator: { read: true, write: true, commands: ['closeItem'] } } },
+      views: {
+        items: { kind: 'list', from: 'item', show: ['name', 'status'] },
+        'close-item': { kind: 'form', label: 'Close an item', command: { id: 'closeItem', input: { reason: { type: 'text' } } } },
+        'ask-item': {
+          kind: 'form',
+          label: 'Ask about an item',
+          public: true,
+          command: { id: 'askItem', input: { question: { type: 'text' } } },
+        },
+      },
+      home: 'items',
+      nav: ['items', 'close-item'],
+    },
+    'PRIVATE_APP_FILE',
+  );
+  const pages = captureTenantPages(definition, []);
+  const as = (grantedCommands: string[]): TenantCapabilities => ({ resources: {}, writable: [], grantedCommands });
+  const granted = projectTenantMetadata(definition, pages, schema(), as(['closeItem']), ['operator']);
+  assert.ok(Object.hasOwn(granted.app!.views, 'close-item'));
+  assert.ok(JSON.stringify(granted.app!.nav).includes('close-item'));
+  const without = projectTenantMetadata(definition, pages, schema(), as([]), ['operator']);
+  assert.ok(!Object.hasOwn(without.app!.views, 'close-item'));
+  assert.ok(Object.hasOwn(without.app!.views, 'items'));
+  assert.ok(!JSON.stringify(without.app!.nav).includes('close-item'));
 });

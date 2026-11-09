@@ -460,3 +460,12 @@ test('optional boolean, number and choice schemas match exact raw blank omission
       }
     }
 });
+
+test('a minor-unit money input says it takes the major figure as text, never minor units', () => {
+  const { schema } = renderApiInputSchema({ input: { price: { type: 'money', minor: true } } });
+  const price = (schema as unknown as { properties: { price: { type: string; description: string } } }).properties.price;
+  assert.equal(price.type, 'string');
+  assert.match(price.description, /major unit/);
+  assert.match(price.description, /"19\.99" is stored as 1999/);
+  assert.match(price.description, /never minor units/);
+});

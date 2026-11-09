@@ -31,7 +31,7 @@
 import { apiCommandPreparation } from './apiCommandPrepare.js';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { isAsyncFunction, isGeneratorFunction, isPromise, isProxy } from 'node:util/types';
-import { snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
+import { MAX_COMMAND_BYTES, snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { homeSourceOf, isRowPolicyApp, type AppDef } from '../../shared/app.js';
 import { apiWrites } from '../../shared/appApi.js';
 import { commandKeyText } from '../../shared/command.js';
@@ -61,6 +61,7 @@ import { materializeApiReadResult } from './apiReadResult.js';
 import { renderApiReadOpenApi } from './apiReadOpenApi.js';
 import { narrowApiReadOpenApi } from './apiNarrowedReadOpenApi.js';
 import { narrowApiOpenApi, renderApiOpenApi } from './apiOpenApiDocument.js';
+import { currentReadRoute, withReadRoute } from '../readAudit.js';
 import { previewApiMcpReadTools } from './apiMcpReadTools.js';
 import { projectApiMcpCommandTools } from './apiMcpCommandTools.js';
 import { createApiCommandRequestMapper } from './apiCommandRequest.js';
@@ -321,8 +322,14 @@ export async function createPolicyApiOwner(input: {
               const source = catalog.operations.find((operation) => operation.id === operationId)?.source;
               if (lanes && source === undefined) return refuse();
               const reads = lanes ? context.readsAt(source!) : context.data;
-              if (!reads.runView) return refuse();
-              const rows = await reads.runView(checked.view);
+              const runView = reads.runView;
+              if (!runView) return refuse();
+              /* The token is the reader the read audit names, under the door its transport set (server/readAudit.ts). */
+              const rows = await withReadRoute(
+                currentReadRoute() === 'mcp' ? 'mcp' : 'api',
+                () => runView(checked.view),
+                `api-token:${observed.tokenId}`,
+              );
               let count: number | undefined;
               if (cursor?.plan.count) {
                 if (!reads.countView) return refuse();
@@ -382,7 +389,7 @@ export async function createPolicyApiOwner(input: {
       return track(
         (async (): Promise<'sent' | 'uncertain'> => {
           if (retired || !commands) return unknown();
-          const captured = snapshot(request, 131072).value;
+          const captured = snapshot(request, MAX_COMMAND_BYTES).value;
           const named =
             captured && typeof captured === 'object' && !Array.isArray(captured) ? (captured as { command?: unknown }).command : undefined;
           if (typeof named !== 'string') return unknown();

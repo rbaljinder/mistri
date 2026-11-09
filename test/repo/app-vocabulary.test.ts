@@ -68,6 +68,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'localeColumn',
       'logo',
       'messages',
+      'microphone',
       'pwa',
       'shell',
       'theme',

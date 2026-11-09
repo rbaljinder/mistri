@@ -5,6 +5,7 @@ import type { AppDef } from '../../shared/app.js';
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { captureScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
+import { appActionGrants } from '../../shared/appAccess.js';
 import { accessibleSchema, authorizeTransaction, type ResourceAccess } from '../app/appAccess.js';
 import { compileAppTransitions } from '../app/appTransitions.js';
 import { compileAppStamps, stampInsert, stampUpdate, type StampMoment } from '../app/appStamps.js';
@@ -148,6 +149,11 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
               (await lookupTenantPerson(runtime.app, ownership.schema, scope.who(), peopleOwned ? principal.accountId : undefined, reader))
                 .person?.key ?? null,
           });
+          /* A fixed action a member's role is granted without write: the member's verb, so only this writer kind
+             holds it. The facade admits exactly the action (its `when` read through the tenant's rows, its stamps
+             the server's clock and this member's person); the tenant column stays out of every write set. */
+          const granted = appActionGrants(runtime.app, ownership.schema, [...principal.roles]);
+          const actions = granted.size ? granted : undefined;
           // Visible, not granted: a platform-owned table is no tenant resource.
           const access: ResourceAccess = {
             readable: visibleGrants.readable,
@@ -158,6 +164,13 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
             ...(grants.internal ? { internal: grants.internal } : {}),
             ...(validation ? { validation } : {}),
             ...(transitions ? { transitions } : {}),
+            ...(actions
+              ? {
+                  actions,
+                  me: (reader) =>
+                    lookupTenantPerson(runtime.app, ownership.schema, scope.who(), peopleOwned ? principal.accountId : undefined, reader),
+                }
+              : {}),
             ...(stamps?.rules.size ? { stamp: (request, reader) => stampUpdate(stamps, request, moment(reader)) } : {}),
             ...(stamps?.defaults ? { fill: (request, reader) => stampInsert(stamps, request, moment(reader)) } : {}),
           };

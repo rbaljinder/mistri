@@ -3,6 +3,7 @@ import { useMessageLanguage } from './useMessageLanguage.js';
 import { columnLabel, keyOf, labelPath, openRecord, recordLabel, rowLabel, state } from '../core.js';
 import { opensRecord } from '../recordIntent.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
+import { isLabelTemplate, parseLabelTemplate } from '@mistriwork/engine/shared/recordLabel.js';
 import { primaryKey, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { TAGS_TYPE, tagChips } from '@mistriwork/engine/shared/tagLists.js';
 import type { TrailList } from '../recordTrail.js';
@@ -77,6 +78,18 @@ function shownValue(row: Record<string, unknown>, name: string, referenceLabels?
   return String((label ? row[label] : row[name]) ?? '');
 }
 
+/**
+ * The columns the record's label is built from (`recordLabel: '{first_name} {last_name}'`): the title already says
+ * them, so a line under it that says "Ada · Lane" again spends a fact on nothing. A reference path
+ * (`{customer_id.name}`) names the reference column too, which is drawn as that name.
+ */
+function labelColumns(table: TableMeta): string[] {
+  const template = recordLabel(table);
+  const parsed = isLabelTemplate(template) ? parseLabelTemplate(template) : undefined;
+  if (!parsed || 'problem' in parsed) return [];
+  return parsed.paths.flatMap((path: string) => (path.includes('.') ? [path, path.split('.')[0]] : [path]));
+}
+
 function summaryFacts(
   table: TableMeta,
   columns: string[],
@@ -86,9 +99,10 @@ function summaryFacts(
   referenceLabels?: Record<string, string>,
 ): string[] {
   const echoes = (name: string) => rows.length > 0 && rows.every((row, i) => shownValue(row, name, referenceLabels) === titles[i]);
+  const named = labelColumns(table);
   return summaryColumns(
     table,
-    columns.filter((name) => !skip.includes(name) && !echoes(name)),
+    columns.filter((name) => !skip.includes(name) && !named.includes(name) && !echoes(name)),
   );
 }
 
@@ -113,6 +127,7 @@ export function tableSaysMore(
     (name) =>
       !said.includes(name) &&
       !fixed.includes(name) &&
+      !labelColumns(table).includes(name) &&
       !keys.includes(name) &&
       name !== naming &&
       !rows.every((row, i) => shownValue(row, name, referenceLabels) === titles[i]),

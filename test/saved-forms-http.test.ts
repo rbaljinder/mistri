@@ -41,6 +41,7 @@ import type { PageDef } from '../packages/engine/src/shared/page.js';
 import { loadAppRuntimeResources } from '../packages/mistri/src/server/app/appRuntimeResources.js';
 import { parseTestApp } from './support/commandCatalog.js';
 import { defineChallenges } from '../packages/mistri/src/server/commands/challenges.js';
+import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 
 process.env.MISTRI_FORM_KEY ??= 'saved-forms-test-key-of-at-least-thirty-two-bytes';
 
@@ -992,7 +993,7 @@ test(
 );
 
 test(
-  'a chunked body past 64 KB is refused 413 before the human check is asked; a chunked one inside it is read as sent',
+  'a chunked body past 512 KiB is refused 413 before the human check is asked; a chunked one inside it is read as sent',
   { timeout: 15_000 },
   async () => {
     await fixture(
@@ -1002,7 +1003,7 @@ test(
         const huge = await chunkedPost(
           f.base,
           path,
-          { input: ABOUT, submission: 'chunked-submission-000900', pad: 'x'.repeat(70_000) },
+          { input: ABOUT, submission: 'chunked-submission-000900', pad: 'x'.repeat(MAX_COMMAND_BYTES + 1) },
           { 'x-mistri-challenge': 'person-big' },
         );
         assert.equal(huge.status, 413);

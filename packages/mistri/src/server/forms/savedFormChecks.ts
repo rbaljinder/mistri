@@ -359,7 +359,10 @@ export function savedFormProblem(
       if (problem) return problem;
     }
     // Only the move to submitted notifies anyone: a step is a draft being written.
-    if (role === 'step' && (getCommandEvents(command!) !== undefined || command!.sources !== undefined)) {
+    if (
+      role === 'step' &&
+      (getCommandEvents(command!) !== undefined || command!.sources !== undefined || typeof command!.lookup === 'function')
+    ) {
       return `command "${id}" saves a step and declares events, effects or a lookup; only the submit, which finishes the application, may.`;
     }
     const catalog = footprintCatalog(app, command!, schema);

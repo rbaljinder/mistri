@@ -43,6 +43,8 @@ import { keepTenantDraftReader } from './tenantReadRuntime.js';
 import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { tenantVisibleFields } from './tenantVisibleFields.js';
+import { withTenantReadAudit } from './tenantReadAudit.js';
+import type { ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
 
 /** What a visitor's read is handed: the placed tenant, its permitted catalog and its scoped reader. Holds no role. */
 export interface PublicReadContext {
@@ -79,6 +81,8 @@ export interface PublicReadRuntimeOptions {
   /** How long one placement is good for: the window a request's reads must finish in. */
   readonly maxLifetimeMs: number;
   readonly now?: () => number;
+  /** Where an audited resource's read is written (tenantReadAudit.ts): a signed-out visitor's, as `public`. */
+  readonly readAudit?: (row: ReadAuditRow) => Promise<void>;
 }
 
 /** Capture synchronous transfers immediately, asynchronous ones on native delivery. */
@@ -104,7 +108,7 @@ function requestFault(error: unknown): TenantRequestFault | undefined {
   return undefined;
 }
 
-const optionKeys = ['app', 'source', 'deployment', 'column', 'resolvePublicRows', 'maxLifetimeMs', 'now'];
+const optionKeys = ['app', 'source', 'deployment', 'column', 'resolvePublicRows', 'maxLifetimeMs', 'now', 'readAudit'];
 
 export function bindPublicReadRuntime(options: PublicReadRuntimeOptions) {
   const raw = tenantOptions(options, optionKeys);
@@ -128,12 +132,14 @@ export function bindPublicReadRuntime(options: PublicReadRuntimeOptions) {
   if (
     typeof raw.resolvePublicRows !== 'function' ||
     (raw.now !== undefined && typeof raw.now !== 'function') ||
+    (raw.readAudit !== undefined && typeof raw.readAudit !== 'function') ||
     typeof raw.maxLifetimeMs !== 'number' ||
     !Number.isSafeInteger(raw.maxLifetimeMs) ||
     raw.maxLifetimeMs < 1
   )
     return denyTenant();
   const publicRows = raw.resolvePublicRows as PublicReadRuntimeOptions['resolvePublicRows'];
+  const readAudit = raw.readAudit as PublicReadRuntimeOptions['readAudit'];
   const now = tenantRuntimeClock((raw.now ?? Date.now) as () => number);
   const lifetime = raw.maxLifetimeMs as number;
   // A visitor's grant, as the App resolves one: the same for every visitor.
@@ -283,7 +289,11 @@ export function bindPublicReadRuntime(options: PublicReadRuntimeOptions) {
           };
           const guarded = authorizeResources(
             resources,
-            tenantVisibleFields(ownership, { ...access, rows, writable: new Set(), creatable: new Set() }),
+            withTenantReadAudit(
+              tenantVisibleFields(ownership, { ...access, rows, writable: new Set(), creatable: new Set() }),
+              { app: app.id, tenant: principal.tenantId, actor: 'public' },
+              readAudit,
+            ),
             assertActive,
           );
           const reader = guarded.adapter;

@@ -77,7 +77,7 @@ test('a grant names a fixed action of a resource the role reads and does not wri
   assert.throws(load({ manager: { read: true, actions: { run: [] } } }), /must be a nonempty list/);
   assert.throws(load({ manager: { read: true, actions: { run: ['reopen', 'reopen'] } } }), /names an action twice/);
   assert.throws(load({ manager: { read: true, actions: [] } }), /must be an object of resource → action ids/);
-  // A row policy judges the grant in its own writer (app-action-grants-policy.test.ts); a tenant's owner holds none yet.
+  // A row policy judges the grant in its own writer (app-action-grants-policy.test.ts); a tenant's member writer judges it too (tenant-fixed-actions.test.ts).
   assert.doesNotThrow(() =>
     parseTestApp(
       { ...manifest(MANAGER, { rows: 'policy' }), connection: undefined, sources: { main: { connection, default: true } } },

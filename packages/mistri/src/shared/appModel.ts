@@ -208,13 +208,15 @@ export type InferredListPart = 'show' | 'sort' | 'tabs' | 'filters';
  * views it names are `AppDef.views`.
  */
 export type AppNavNode =
-  | { view: string; label?: string; color?: SeriesColor }
-  | { label: string; to: import('../../schema/app.js').StaticAppTarget; color?: SeriesColor }
+  | { view: string; label?: string; color?: SeriesColor; roles?: string[] }
+  | { label: string; to: import('../../schema/app.js').StaticAppTarget; color?: SeriesColor; roles?: string[] }
   | {
       group: string;
       label: string;
       icon?: AppIconName;
       realm?: AppRealm;
+      /** Who the menu offers it to: arrangement only, access stays with the grants. */
+      roles?: string[];
       placement?: 'footer';
       inline?: true;
       folded?: true;
@@ -916,7 +918,14 @@ export interface AppSearchDef {
  * its value. `'values'` marks every column of the resource.
  */
 export interface AppAuditDef {
-  redact: 'values' | string[];
+  redact?: 'values' | string[];
+  /**
+   * Every read of these rows is logged in the read audit store: who, when,
+   * through which door, and which record or which query found which ids,
+   * never a value (server/readAudit.ts). Opt-in, because each audited read
+   * costs one statement and a log nothing prunes.
+   */
+  reads?: true;
 }
 
 export interface ResourceDef {
@@ -1153,9 +1162,11 @@ export interface AppUi {
   export?: boolean;
   /** true makes the App an installable PWA (app/appPwa.ts): its pages carry its manifest and worker registration, and it serves its worker, icons and offline page. Preview: the shape may change in any 1.x release. Absent or false, it serves none of those. */
   pwa?: boolean;
-  /** true serves the App headless: its front end is another's (a same-domain Next.js page using `@mistriwork/mistri/react`'s
+  /** true serves the App headless: its front end is another's (a same-domain Next.js page using `@mistriwork/mistri/react/headless`'s
       hooks), so every data request names a surface in `X-Mistri-Surface` and one that names none is refused (http/surfaceGate.ts). */
   headless?: boolean;
+  /** true lets the App's pages ask for the microphone, from the App's own origin alone (a voice note, a dictated field in one of its custom components). Absent or false, every page's Permissions-Policy refuses it, as it always did; nothing else in that header changes. */
+  microphone?: boolean;
   /** App shell visibility and spacing; omitted settings keep the existing UI. */
   shell?: AppShell;
   /** Omission keeps explicit Save. Workbench always uses explicit review/apply. */

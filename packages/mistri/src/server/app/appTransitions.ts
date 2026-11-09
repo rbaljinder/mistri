@@ -28,6 +28,7 @@ import { compares } from '@mistriwork/engine/shared/computedValue.js';
 import { readMeSets, textsMentionMe } from './appMe.js';
 import { nowStamp } from './appStamps.js';
 import { stateStampColumn } from '@mistriwork/engine/shared/schema.js';
+import { frozenWords } from '../../shared/appMachine.js';
 import { AppAccessDenied } from './appAccessDenied.js';
 import { sayRefusal } from '@mistriwork/engine/shared/refusal.js';
 import type { ColumnMeta, DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
@@ -41,6 +42,14 @@ export class AppTransitionDenied extends Refusal {
     super(message);
     this.name = 'AppTransitionDenied';
     sayRefusal(this, said);
+  }
+}
+
+/** A write to a record in a frozen state (`final: { freeze: true }`): the doors that say a refusal in their own vocabulary read this one apart. */
+export class AppFrozenDenied extends AppTransitionDenied {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AppFrozenDenied';
   }
 }
 
@@ -118,6 +127,36 @@ async function holds(
 }
 
 /**
+ * Refuse any update to a record in a state declared `final: { freeze: true }` (appMachine.ts): a final state nothing
+ * leaves, so the record is as it was when it got there. By Save, a list's cell, an import, the App API, a fixed verb
+ * and an undo alike; a command is held to the same by the executor.
+ */
+export async function assertNotFrozen(
+  reader: Reader,
+  rules: AppTransitionRules | undefined,
+  request: UpdateRequest,
+  stored?: Record<string, unknown>,
+): Promise<void> {
+  const rule = rules?.get(request.table);
+  if (!rule?.frozen.size) return;
+  let row = stored;
+  if (!row || !Object.hasOwn(row, rule.column)) {
+    const read = await reader.query({
+      table: request.table,
+      columns: [rule.column],
+      limit: 2,
+      offset: 0,
+      filter: { groups: [exactly(request.key)] },
+    });
+    if (read.rows.length !== 1) return; // The write's own lookup says the record is not there.
+    row = read.rows[0];
+  }
+  const state = row[rule.column];
+  const words = state === null || state === undefined ? undefined : rule.frozen.get(String(state));
+  if (words !== undefined) throw new AppFrozenDenied(frozenWords(words));
+}
+
+/**
  * Refuse an update that moves a machine's column other than along an edge of
  * its graph. `stored` is the locked row when the caller already has it. What
  * it answers is written beside the move: the machine's `since`, stamped
@@ -133,7 +172,10 @@ export async function assertTransitions(
   me?: () => Promise<QueryPerson>,
 ): Promise<Record<string, string> | undefined> {
   const rule = rules?.get(request.table);
-  if (!rule || request.restore === true) return undefined;
+  if (!rule) return undefined;
+  /* A frozen record takes no write: judged before anything else, on the stored state, for every door and every role. */
+  await assertNotFrozen(reader, rules, request, stored);
+  if (request.restore === true) return undefined;
   const columns = schema.tables.find((table) => table.id === request.table)?.columns ?? [];
   const touched = [...rule.fields.keys()].filter((column) => Object.hasOwn(request.values, column));
   const clocked = machineClocks(rule, columns).filter((column) => Object.hasOwn(request.values, column));

@@ -117,6 +117,13 @@ type ViewKeyName = [Registered<'views'>] extends [never] ? string : Extract<Regi
 /** A free-form page by its path, as the generated types list them; any text before there are any. */
 type PagePathName = [Registered<'pagePaths'>] extends [never] ? string : Extract<Registered<'pagePaths'>, string>;
 
+/** The tab words a record of one view opens on, as the generated types list them (`RecordTabs`); any text before there are any. */
+type RecordTabName<V extends string> = [Registered<'tabs'>] extends [never]
+  ? string
+  : V extends keyof Registered<'tabs'>
+    ? Extract<Registered<'tabs'>[V], string>
+    : never;
+
 /** The key that names one record of a resource, by its primary-key columns (`{ id: number }`); any object before the
     generated types say which columns those are. */
 export type RecordKey<T extends string> = [SchemaKeys] extends [never]
@@ -218,15 +225,35 @@ export type Where<T extends string> = [SchemaColumns] extends [never]
 /** What a page param holds: an id, any text, a day (`2026-11-08`), a run of days (`2026-11-01..2026-11-08`, either end
     open: `..2026-11-08`), or one of a few words. */
 export type ParamKind = 'id' | 'text' | 'date' | 'date-range' | readonly [string, ...string[]];
-/** A param's value as `useParam` gives it, already checked: an id is a number (its digits past 2^53), a day is
-    `YYYY-MM-DD`, a list of words one of them. An address that does not fit reads as undefined. */
-export type ParamValue<K> = K extends 'id'
-  ? number | `${bigint}`
+/** A param's value as `useParam` gives it, already checked: an id is a number (its digits past 2^53), or, where the
+    param is named for a resource the page reads and that resource's key is text, URL-safe text (`TextKey` true; either
+    while the generated types do not say); a day is `YYYY-MM-DD`, a list of words one of them. An address that does not
+    fit reads as undefined. */
+export type ParamValue<K, TextKey extends boolean = false> = K extends 'id'
+  ? [TextKey] extends [true]
+    ? string
+    : [TextKey] extends [false]
+      ? number | `${bigint}`
+      : number | string
   : K extends readonly (infer Word extends string)[]
     ? Word
     : string;
 /* What a param's setter takes: its kind, and a text param a number as well. */
-type ParamInput<K> = K extends 'id' | readonly string[] ? ParamValue<K> : string | number;
+type ParamInput<K, TextKey extends boolean = false> = K extends 'id' | readonly string[] ? ParamValue<K, TextKey> : string | number;
+/* A resource's key column when it has exactly one, as the runtime reads an id param by it (paramKinds.ts `idKeyOf`). */
+type KeyColumns<T> = T extends keyof SchemaKeys ? Extract<SchemaKeys[T], string> : never;
+type OnlyKey<T, C extends string = KeyColumns<T>> = [{ [X in C]: Exclude<C, X> }[C]] extends [never] ? C : never;
+/* Whether an id param holds text: only one named for a resource the page reads whose one key column is text; a count-up
+   table, or a param naming no table, holds an integer. Before the generated types say, it could be either. */
+type TextKeyed<N, R> = N extends R
+  ? [SchemaKeys] extends [never]
+    ? boolean
+    : [OnlyKey<N>] extends [never]
+      ? false
+      : [KindAt<N, OnlyKey<N>>] extends ['text']
+        ? true
+        : false
+  : false;
 type ParamsDeclared = readonly Lowercase<string>[] | { readonly [name: string]: ParamKind };
 /* An address's parameters are lower case (the server refuses others): a declared name that is not says so where it is written. */
 type LowercaseNames<PD> = PD extends readonly string[] ? unknown : { readonly [N in keyof PD]: N extends Lowercase<N & string> ? ParamKind : never };
@@ -367,8 +394,8 @@ export interface PageDefinition<
   useParam<N extends P>(
     name: N,
   ): [
-    ParamValue<N extends keyof K ? K[N] : 'text'> | undefined,
-    (value: ParamInput<N extends keyof K ? K[N] : 'text'> | undefined, options?: { push?: boolean }) => void,
+    ParamValue<N extends keyof K ? K[N] : 'text', TextKeyed<N, R>> | undefined,
+    (value: ParamInput<N extends keyof K ? K[N] : 'text', TextKeyed<N, R>> | undefined, options?: { push?: boolean }) => void,
   ];
   /** `Choose` held to this page: `param` is one of its params (one of a few words, when no `from` is named), `from` one of its
       reads, `value`, `label` and `sort` columns of that read. A type error otherwise. */
@@ -519,12 +546,12 @@ export declare function defineSurface<
  * the App's, or a page path that is not a page's, is a type error. `params` are the words an address says (`tab`, `search`, a filter's column).
  */
 export declare function useHref(): {
-  /** The sign-in's address. */
-  signIn(): string;
+  /** The sign-in's address. `then` is an in-App path to go on to once signed in (`/leads/4`): carried as `?then=`, which the sign-in reads; an absolute or protocol-relative address is dropped, not carried. */
+  signIn(options?: { then?: string }): string;
   /** A list or dashboard by its view key: `view('leads', { tab: 'working', search: 'stone' })` is `/leads?tab=working&search=stone`. */
   view(view: ViewKeyName, params?: Readonly<Record<string, string>>): string;
   /** A record by its key under the view that shows its table: `record('leads', { id: 127 })` is `/leads/127`; `{ tab: 'map' }` adds the tab's word. */
-  record(view: ViewKeyName, key: Readonly<Record<string, unknown>>, options?: { tab?: string }): string;
+  record<V extends ViewKeyName>(view: V, key: Readonly<Record<string, unknown>>, options?: { tab?: RecordTabName<V> }): string;
   /** A free-form page by its path, with the parameters it keeps in its address. */
   page(path: PagePathName, params?: Readonly<Record<string, string>>): string;
 };

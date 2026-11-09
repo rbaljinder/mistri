@@ -85,7 +85,8 @@ async function enter(page: Page, app: Fixture, role: keyof Fixture['accounts'] =
         })
       ).status(),
     ).toBe(200);
-  // The selection: a click on the chooser, or for the viewer's one membership, made as the page loads.
+  // The selection, made as the page loads: the address names northstar, which every role here is a member of
+  // (the viewer of it alone, the others of riverview too), so none of them is asked.
   const selected = page.waitForResponse(isSelection);
   await page.goto(`${app.origin}/${app.appId}/${app.inventory.vehicle}?tenant=northstar`);
   if (nativeForm) {
@@ -97,17 +98,11 @@ async function enter(page: Page, app: Fixture, role: keyof Fixture['accounts'] =
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     expect((await signedIn).status()).toBe(200);
   }
-  if (role !== 'viewer') {
-    await expect(page.getByRole('heading', { name: 'Choose a tenant', exact: true })).toBeVisible();
-    await expect(page.locator('.tenant-chooser-app')).toHaveText(app.appName);
-    const tenants = page.getByRole('list', { name: 'Available tenants' });
-    await expect(tenants.getByRole('button')).toHaveText(['northstar', 'riverview']);
-    await tenants.getByRole('button', { name: 'northstar', exact: true }).click();
-  }
   const response = await selected;
   expect(response.status()).toBe(200);
   const owner = await leaseOfSelection(response);
   expect(owner).toMatchObject({ appId: app.appId, accountId: account.id, tenantId: 'northstar' });
+  await expect(page.getByRole('heading', { name: 'Choose a tenant', exact: true })).toHaveCount(0);
   // The bar's control on a desk, the account menu's first item on a phone: its words are the same either way.
   await expect(page.locator('.tenant-control-host')).toContainText('Tenant: northstar');
   await page.evaluate(async () => {

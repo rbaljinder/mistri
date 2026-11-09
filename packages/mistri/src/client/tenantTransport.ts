@@ -33,6 +33,7 @@ import {
 } from '../shared/tenantBoot.js';
 import { readKey } from '@mistriwork/engine/shared/firstPaint.js';
 import { gatheringReads } from '@mistriwork/kit/client/readGathering.js';
+import { PAGE_HEADER } from '@mistriwork/engine/shared/pageRoutes.js';
 
 /* The file travels as JSON text, where a quote or a line break is two characters (server/http/importRoutes.ts). */
 const IMPORT_BODY = IMPORT_LIMITS.bytes * 2 + 64 * 1024;
@@ -182,6 +183,15 @@ function publishable(snapshot: SessionIdentitySnapshot, lease: TenantContextRepl
   if (!Number.isFinite(now) || now >= lease.expiresAt) throw unavailable();
 }
 
+/* What a read says it is (the kit's pickerApi, relatedApi, pageApi), so the server audits it by its door
+   (readAudit.ts) and holds a free-form page to its declared reads: those headers alone, never the lease's own. */
+const SAID = ['x-mistri-read', PAGE_HEADER] as const;
+function sayingWhatItIs(said: Readonly<Record<string, string>> | undefined): Record<string, string> {
+  const kept: Record<string, string> = {};
+  for (const name of SAID) if (typeof said?.[name] === 'string') kept[name] = said[name];
+  return kept;
+}
+
 async function request(
   snapshot: SessionIdentitySnapshot,
   path: string,
@@ -190,6 +200,7 @@ async function request(
   signal?: AbortSignal,
   deferFailure = false,
   failureOwner = tenant,
+  said?: Readonly<Record<string, string>>,
 ) {
   account(snapshot);
   let response: Response;
@@ -200,6 +211,7 @@ async function request(
       ...(signal ? { signal } : {}),
       method: body === undefined ? 'GET' : 'POST',
       headers: {
+        ...sayingWhatItIs(said),
         [names.account]: snapshot.accountId!,
         [names.app]: snapshot.appId!,
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
@@ -591,6 +603,7 @@ export async function tenantReadApi(
   body?: Record<string, unknown>,
   active?: string | null,
   signal?: AbortSignal,
+  said?: Readonly<Record<string, string>>,
 ): Promise<Record<string, unknown>> {
   const snapshot = captureSessionIdentity();
   let owner = selected(snapshot);
@@ -647,7 +660,7 @@ export async function tenantReadApi(
   let delivered: Awaited<ReturnType<typeof request>>;
   for (let attempt = 0; ; attempt++) {
     try {
-      delivered = await request(snapshot, address, payload, owner, signal);
+      delivered = await request(snapshot, address, payload, owner, signal, false, owner, said);
       break;
     } catch (error) {
       // An old revision's slow answer is that revision's alone: no retry, no fence (as for any of its answers).
