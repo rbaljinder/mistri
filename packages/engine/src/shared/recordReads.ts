@@ -158,6 +158,8 @@ export function timelineReads<V extends ReadView>(
 export interface ReadAsk {
   readonly path: string;
   readonly body: Record<string, unknown>;
+  /** What the read is where it is not a page's own: a related list's (the `x-mistri-read` a list asking alone would carry), so a read audit says so. */
+  readonly kind?: 'related';
 }
 
 /** Where a table's rows are named, as a view path. */
@@ -541,10 +543,13 @@ export function recordPageReads(
   const parts = [{ part: 'root', columns: probeColumns(names, base) }];
   const reads: ReadAsk[] = [];
   const planOf = (index: number) => plans.find((plan) => plan.index === index);
-  const view = (body: Record<string, unknown>) => reads.push({ path: '/api/view/run', body });
-  const breakdown = (def: HttpBreakdownDefinition) => reads.push({ path: '/api/breakdown', body: { def } });
+  /* A list section is a related list: what it asks, it asks as one (a read audit names the door `related`). */
+  let kind: ReadAsk['kind'];
+  const view = (body: Record<string, unknown>) => reads.push({ path: '/api/view/run', body, ...(kind && { kind }) });
+  const breakdown = (def: HttpBreakdownDefinition) => reads.push({ path: '/api/breakdown', body: { def }, ...(kind && { kind }) });
   page.sections.forEach((section, index) => {
     if (section.hidden || !drawn.has(index)) return;
+    kind = section.kind === 'list' ? 'related' : undefined;
     if (section.when) reads.push({ path: '/api/run', body: whenBody(base, key, section.when) });
     const plan = planOf(index);
     if (section.kind === 'fields') {
@@ -599,7 +604,7 @@ export function recordPageReads(
       case 'list': {
         /* A grouped list asks its groups first; each group's rows are asked of the keys that come back. */
         if (section.group && plan.groups) {
-          reads.push({ path: '/api/breakdown', body: groupsBody(plan.groups, 0) });
+          reads.push({ path: '/api/breakdown', body: groupsBody(plan.groups, 0), kind: 'related' });
           if (plan.totals) breakdown(plan.totals);
           return;
         }
@@ -621,7 +626,7 @@ export function recordPageReads(
         base,
         key,
       );
-      if (body) reads.push({ path: '/api/counts', body });
+      if (body) reads.push({ path: '/api/counts', body, kind: 'related' });
     }
   return { row: [...new Set(parts.flatMap((part) => part.columns))], parts, reads };
 }

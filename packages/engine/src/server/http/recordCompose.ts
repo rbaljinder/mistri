@@ -74,6 +74,10 @@ export interface ComposeHooks {
   resources(ctx: RequestContext, source: ResolvedSource): ComposeResources;
   /** A table's suggested page (`suggested:<table>`). */
   suggested(source: ResolvedSource, table: string): PageDef | null;
+  /** An error that refuses the whole page rather than leaving the part out (a read the audit could not record). */
+  fatal?(error: unknown): boolean;
+  /** Runs a part's read as the door its `kind` names (a related list's), for a read audit; where none is kept, as it is. */
+  asking?<T>(path: string, kind: ReadAsk['kind'], work: () => T): T;
   /** Which of the record's commands are available to this reader: the availability route's answer, or none. */
   availability?(ctx: RequestContext, checks: CommandCheck[]): Promise<{ status: number; body: unknown } | undefined>;
 }
@@ -123,12 +127,14 @@ export async function composeRecordPage({
   /* A part asked on the page's behalf: through the route its section's own
      request reaches, answered into memory. What that route would refuse, or
      throw, leaves the part out. */
-  const ask = async (path: string, given: Record<string, unknown>) => {
+  const ask = async (path: string, given: Record<string, unknown>, kind?: ReadAsk['kind']) => {
     if (!hooks.mayAsk(ctx, path)) return undefined;
     const reply = new CapturedReply();
     try {
-      await post(reply.asResponse(), path, given);
-    } catch {
+      const posting = () => post(reply.asResponse(), path, given);
+      await (hooks.asking ? hooks.asking(path, kind, posting) : posting());
+    } catch (error) {
+      if (hooks.fatal?.(error)) throw error;
       return undefined;
     }
     return reply.answer();
@@ -152,7 +158,7 @@ export async function composeRecordPage({
   const reading = (page: PlannedPage, base: TableMeta, plans: readonly ReadPlan[], started: Array<[ReadAsk, Promise<Answer>]> = []) => {
     const answered: ComposedRead[] = [];
     const keep = (asked: ReadAsk, answer: { status: number; body: unknown } | undefined) => {
-      if (!failed(answer)) answered.push({ ...asked, status: answer!.status, reply: answer!.body });
+      if (!failed(answer)) answered.push({ path: asked.path, body: asked.body, status: answer!.status, reply: answer!.body });
     };
     const { row, parts, reads } = recordPageReads(names, page, base, plans, record, options);
     /* The record's fixed edits ask their `when` of the row, as a section does. */
@@ -185,7 +191,7 @@ export async function composeRecordPage({
     /* The page's own row first, its verbs last: they are advice, and wait behind what is shown. */
     const done = Promise.all([
       whole(),
-      ...reads.map(async (asked) => keep(asked, await (begun.get(readKey(asked)) ?? ask(asked.path, asked.body)))),
+      ...reads.map(async (asked) => keep(asked, await (begun.get(readKey(asked)) ?? ask(asked.path, asked.body, asked.kind)))),
       availability(),
     ]);
     return { reads: new Set(reads.map((asked) => readKey(asked))), done: done.then(() => answered) };
@@ -200,10 +206,13 @@ export async function composeRecordPage({
     expected && expectedBase
       ? recordPageReads(names, expected, expectedBase, [], record, options)
           .reads.filter((asked) => asked.path === '/api/record-history')
-          .map((asked) => [asked, ask(asked.path, asked.body)] as [ReadAsk, Promise<Answer>])
+          .map((asked) => [asked, ask(asked.path, asked.body, asked.kind)] as [ReadAsk, Promise<Answer>])
       : [];
   const planning = ask('/api/pages/plan', { page: body.page, key });
   const early = expected && expectedBase ? reading(expected, expectedBase, [], history) : undefined;
+  /* A part that refuses the page ends it where it is awaited; what was started beside it settles unobserved otherwise. */
+  for (const [, started] of history) started.catch(() => {});
+  early?.done.catch(() => {});
   const plan = await planning;
   const planned = failed(plan) ? undefined : (plan!.body as { page: PlannedPage; plans: ReadPlan[] });
   const base = planned && (findTable(source.schema, planned.page.base) as TableMeta | undefined);
@@ -222,10 +231,12 @@ export async function composeRecordPage({
     /* Only what the plan adds: its lists, figures, timelines and custom reads. */
     const { reads } = recordPageReads(names, planned.page, base, planned.plans, record, options);
     const later = reads.filter((asked) => !kept.reads.has(readKey(asked)));
-    const more = await Promise.all(later.map(async (asked) => ({ asked, answer: await ask(asked.path, asked.body) })));
+    const more = await Promise.all(later.map(async (asked) => ({ asked, answer: await ask(asked.path, asked.body, asked.kind) })));
     answered = [
       ...(await kept.done),
-      ...more.flatMap(({ asked, answer }) => (failed(answer) ? [] : [{ ...asked, status: answer!.status, reply: answer!.body }])),
+      ...more.flatMap(({ asked, answer }) =>
+        failed(answer) ? [] : [{ path: asked.path, body: asked.body, status: answer!.status, reply: answer!.body }],
+      ),
     ];
   } else answered = await reading(planned.page, base, planned.plans).done;
   send(res, 200, { planned: true, page: planned.page, plans: planned.plans, reads: answered });

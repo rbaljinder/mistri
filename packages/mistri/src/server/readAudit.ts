@@ -15,7 +15,7 @@
  * all) or under a grant without a sink is refused, so a path nobody wired
  * cannot read quietly; the server's own reads (a label, a zone, a mail it
  * sends) say so with `withoutReadAudit`. A row that cannot be written stops
- * the request: ReadAuditFailed is answered 503 with no body, and the rows it
+ * the request: ReadAuditFailed is answered 503 (READ_NOT_RECORDED), and the rows it
  * read never leave.
  *
  * What a row costs: one insert, its own statement, on the audited table's
@@ -55,13 +55,22 @@ interface ReadDoor {
   readonly actor?: string;
 }
 
-/** A read audit row could not be written, or an audited read came by no door: the request is answered 503, empty. */
+/** A read audit row could not be written, or an audited read came by no door: the request is answered 503 (READ_NOT_RECORDED). */
 export class ReadAuditFailed extends Error {
   /* `cause` is what failed beneath: a tenant's unavailable writer (tenant/tenantReadAudit.ts), which the tenant host answers 503. */
   constructor(message = 'The read could not be recorded in the read audit.', options?: ErrorOptions) {
     super(message, options);
     this.name = 'ReadAuditFailed';
   }
+}
+
+/** What both hosts answer (503) when a read's row could not be written: fixed words, never why, and none of what was read. */
+export const READ_NOT_RECORDED = Object.freeze({ error: 'The read could not be recorded. Try again.', code: 'read_not_recorded' });
+
+/** Whether `error` is a read the audit could not record, directly or beneath what wrapped it. */
+export function readNotRecorded(error: unknown): boolean {
+  for (let at = error, depth = 0; at instanceof Error && depth < 8; at = at.cause, depth++) if (at instanceof ReadAuditFailed) return true;
+  return false;
 }
 
 /* `null` is the server's own read, never audited; no store at all is a read by no door, refused. */
@@ -180,6 +189,8 @@ interface Read {
   readonly rows: ReadonlyArray<Record<string, unknown>>;
   /** The result's names of the table's key columns, in key order; empty where the read did not return them. */
   readonly keys: readonly string[];
+  /** What the read was, where it was no query of the table (the event feed's `$events`); never a record. */
+  readonly said?: string;
 }
 
 /**
@@ -191,7 +202,7 @@ async function record(read: Read, sink: ReadAuditSink | undefined): Promise<void
   if (door === null) return;
   if (door === undefined || !sink) throw new ReadAuditFailed('An audited resource was read outside any audited door.');
   const ids = read.rows.flatMap((row) => keyText(row, read.keys) ?? []);
-  const named = namedRecord(read.groups, read.rows.length <= 1 ? ids[0] : undefined, read.keys);
+  const named = read.said === undefined ? namedRecord(read.groups, read.rows.length <= 1 ? ids[0] : undefined, read.keys) : undefined;
   /* The assistant reads as the person it acts for, and says so. */
   const actor = door.actor ?? (door.route === 'assistant' ? `assistant:${sink.actor}` : sink.actor);
   const base = {
@@ -209,7 +220,9 @@ async function record(read: Read, sink: ReadAuditSink | undefined): Promise<void
     const kept = ids.slice(0, READ_AUDIT_LIMITS.idCount);
     row = {
       ...base,
-      query: canonicalCommandJson({ where: read.groups ?? [], sort: read.sort ?? [], offset: read.offset }, READ_AUDIT_LIMITS.query),
+      query:
+        read.said ??
+        canonicalCommandJson({ where: read.groups ?? [], sort: read.sort ?? [], offset: read.offset }, READ_AUDIT_LIMITS.query),
       count: read.rows.length,
       ids: JSON.stringify(kept),
     };
@@ -296,4 +309,47 @@ export async function auditViewRead(
     access.readAudit,
   );
   return result;
+}
+
+/* A row's query is JSON (its store checks it), so the feed's is the JSON string. */
+const EVENT_FEED_QUERY = JSON.stringify('$events');
+
+/**
+ * An event feed's page (api/apiEventFeed.ts), its rows written before it is handed on: an event says which record it
+ * is about and what happened to it, so the page is a read of those records. One row per audited resource it names, each
+ * the query `$events` with the distinct keys the page carried; events about a resource that does not audit its reads write
+ * nothing, and an App that audits none pays no statement. Each resource's row goes to the database that holds it. Always the API's door, whatever the request's.
+ */
+export async function auditEventFeed(
+  access: AuditedAccess,
+  schema: DatabaseSchema,
+  connectionOf: (resource: string) => string,
+  items: ReadonlyArray<{ readonly resource: string; readonly key: Readonly<Record<string, unknown>> }>,
+): Promise<void> {
+  if (!access.audited?.size) return;
+  /* A record is read once however many of its events the page holds. */
+  const about = new Map<string, Map<string, Readonly<Record<string, unknown>>>>();
+  for (const { resource, key } of items)
+    if (access.audited.has(resource)) about.set(resource, (about.get(resource) ?? new Map()).set(canonicalCommandJson(key), key));
+  /* The sink takes a row at a time: one statement per resource, which a page seldom spans more than a few of. */
+  await withReadRoute('api', () =>
+    Promise.all(
+      [...about].map(([table, rows]) =>
+        record(
+          {
+            table,
+            resource: access.audited!.get(table)!,
+            connection: connectionOf(access.audited!.get(table)!),
+            groups: undefined,
+            sort: undefined,
+            offset: 0,
+            rows: [...rows.values()],
+            keys: keyColumns(schema, table),
+            said: EVENT_FEED_QUERY,
+          },
+          access.readAudit,
+        ),
+      ),
+    ),
+  );
 }

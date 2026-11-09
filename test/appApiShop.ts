@@ -14,7 +14,15 @@ import { ROOT, mcpEnv, startAppMcp } from './appApiCli.js';
  * `vault.flagged`, both on the feed. */
 export function writeShopApp(
   directory: string,
-  options: { business: string; authStore: string; events?: readonly string[]; physical?: boolean; narrowed?: boolean },
+  options: {
+    business: string;
+    authStore: string;
+    events?: readonly string[];
+    physical?: boolean;
+    narrowed?: boolean;
+    /** Resources that audit their reads (`audit: { reads: true }`). */
+    audited?: readonly string[];
+  },
 ) {
   /* `shelf`: the items whose note is "shelf", a narrowed resource the editor writes through the API's generic writes
      (narrowed-writes.test.ts holds the rules; this is their door on the API and App MCP). */
@@ -34,7 +42,14 @@ export function writeShopApp(
       resources: {
         ...Object.fromEntries(
           Object.entries({ item: { access: 'write', delete: true }, ticket: { access: 'write' }, vault: { access: 'write' } }).map(
-            ([name, resource]) => [name, options.physical ? { ...resource, physical: `public.${name}` } : resource],
+            ([name, resource]) => [
+              name,
+              {
+                ...resource,
+                ...(options.physical ? { physical: `public.${name}` } : {}),
+                ...(options.audited?.includes(name) ? { audit: { reads: true } } : {}),
+              },
+            ],
           ),
         ),
         ...shelf,

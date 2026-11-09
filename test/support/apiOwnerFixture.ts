@@ -53,7 +53,7 @@ export interface OwnerFixtureInput {
   /** The App literal; `store` is the auth store to name in `auth.store`. Inline command contracts are lifted (parseTestApp). */
   app: (store: string) => Record<string, unknown>;
   /** Each business connection, by registry id: its tables and rows (this engine's SQL), whether it writes, and its stores. */
-  connections: Record<string, { sql: string; writable?: boolean; journal?: boolean; events?: { sourceId: string } }>;
+  connections: Record<string, { sql: string; writable?: boolean; journal?: boolean; events?: { sourceId: string }; readAudit?: boolean }>;
   commands?: BusinessCommandRegistry;
   /** Native accounts: id → role list as stored (`a,b`). */
   accounts: Record<string, string>;
@@ -96,6 +96,7 @@ export async function apiOwnerFixture(t: TestContext, input: OwnerFixtureInput) 
       }
       if (connection.journal || connection.events) await migratePostgresCommandJournal(url);
       if (connection.events) await provisionStores({ postgres: url }, { app: { id: appIdOf(input), source: connection.events.sourceId } });
+      if (connection.readAudit) await provisionStores({ postgres: url }, { only: ['read-audit'] });
     } else {
       const db = new DatabaseSync(url);
       try {
@@ -105,6 +106,7 @@ export async function apiOwnerFixture(t: TestContext, input: OwnerFixtureInput) 
       }
       if (connection.journal || connection.events) migrateSqliteCommandJournal(url);
       if (connection.events) await provisionStores({ sqlite: url }, { app: { id: appIdOf(input), source: connection.events.sourceId } });
+      if (connection.readAudit) await provisionStores({ sqlite: url }, { only: ['read-audit'] });
     }
   }
   const store = await database('auth');

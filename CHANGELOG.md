@@ -5,6 +5,10 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.30
+
+- **The read audit covers the event feed and composed related lists (a field report).** A page of the App API's event feed (`GET …/$events`) is now a read of the records its events are about: for each audited resource it names, one row (the API door, the token, the query `"$events"` and the record keys) is written before the page is sent, and a page whose row cannot be written is answered 503 with no events. Events about a resource that does not audit its reads write nothing. A related list that arrives inside a composed record page is now logged as `related`, as it is when the list asks alone, instead of as `page`. A custom page's reads were already logged as `custom-page`; that is now covered by a request-level test. A single-database App's 503 for a read that could not be recorded and a tenant App's, now carry the same JSON error (`read_not_recorded`, "The read could not be recorded. Try again.") instead of an empty body or a tenant-context message, and still none of the data. A composed record page whose related list cannot be recorded is refused whole rather than answered without it.
+
 ## 1.0.0-rc.29
 
 - **Tenant Apps hold a free-form page's reads to its declared reads, as single-database Apps do (a field report).**

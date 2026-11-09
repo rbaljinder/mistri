@@ -34,8 +34,8 @@ import { storeTargetOf } from '../commands/appCommandEvents.js';
 import { eventFeedAudience, eventFeedSource, parseEventFeedQuery, readPostgresEventFeed } from './apiEventFeed.js';
 import { renderApiAsyncApi } from './apiAsyncApi.js';
 /* An agent's tool call reads through this owner too: its door is MCP, set where the session delivers (appMcpSession.ts). */
-import { currentReadRoute, withReadRoute } from '../readAudit.js';
-import { withReadAuditSink } from '../readAuditStore.js';
+import { auditEventFeed, currentReadRoute, withReadRoute } from '../readAudit.js';
+import { withReadAuditSink, withReadAuditSinkPer } from '../readAuditStore.js';
 
 const refuse = (): never => {
   throw new ApiReadFailure('temporarily_unavailable');
@@ -297,6 +297,30 @@ export async function createPostgresApiReadOwner(
                   const page = await events.withReadClient((client) =>
                     readPostgresEventFeed(client, initial.app, query!, admit, integers, feedSource.sourceId),
                   );
+                  requestCurrent();
+                  // Events about records of an audited resource are reads of them: written before the page leaves (readAudit.ts).
+                  // Leases taken for a row's connection are held until its append lands.
+                  const leased: Array<() => void> = [];
+                  try {
+                    await auditEventFeed(
+                      withReadAuditSinkPer(
+                        resolveAppAccess(app, resources.schema, [...observed.roles]),
+                        { app: app.id, tenant: '', actor: `api-token:${observed.tokenId}` },
+                        // Each row goes to the database that holds its resource, which is not always the feed's lane.
+                        async (c) => {
+                          const open = physicals.get(c);
+                          if (open) return open.physical;
+                          leased.push(registry.lease(c));
+                          return (await registry.open(c)).adapter;
+                        },
+                      ),
+                      resources.schema,
+                      (resource) => discovery.connectionFor(resource),
+                      page.items,
+                    );
+                  } finally {
+                    for (const release of leased) release();
+                  }
                   requestCurrent();
                   return Object.freeze({ status: 200 as const, body: JSON.stringify(page) });
                 }

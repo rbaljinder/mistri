@@ -22,6 +22,7 @@ import {
   type ReadPlan,
   type ReadSection,
 } from '@mistriwork/engine/shared/recordReads.js';
+import { withReadKind } from '../readAudit.js';
 
 /** One part of the page and its answer, as the ordinary App's compose carries them. */
 interface ComposedRead extends ReadAsk {
@@ -108,7 +109,7 @@ export async function composeTenantRecordPage(options: {
     reads.push({ path: '/api/run', body: whenBody(base, key, when) });
   }
   /* The history first: its store is attested and then read, the longest chain. */
-  const ordered = [
+  const ordered: ReadAsk[] = [
     ...reads.filter((asked) => asked.path === '/api/record-history'),
     { path: '/api/view/run', body: rowBody(page.id, base, key, row, 'row') },
     ...reads.filter((asked) => asked.path !== '/api/record-history'),
@@ -116,8 +117,8 @@ export async function composeTenantRecordPage(options: {
   const answered: ComposedRead[] = [];
   await Promise.all(
     ordered.map(async (asked) => {
-      const answer = await options.ask(asked.path, asked.body);
-      if (!failed(answer)) answered.push({ ...asked, status: answer.status, reply: answer.body });
+      const answer = await withReadKind(asked.path, asked.kind, () => options.ask(asked.path, asked.body));
+      if (!failed(answer)) answered.push({ path: asked.path, body: asked.body, status: answer.status, reply: answer.body });
     }),
   );
   const commands = actions.flatMap((action) => (action.command && action.command.target === base.id ? [action.command] : []));
