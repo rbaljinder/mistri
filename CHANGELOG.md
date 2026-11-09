@@ -5,6 +5,10 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.29
+
+- **Tenant Apps hold a free-form page's reads to its declared reads, as single-database Apps do (a field report).**
+
 ## 1.0.0-rc.28
 
 - **A page command in a tenant App is held to its page.** A free-form page's command now carries the page's name in a tenant App as it does elsewhere, and the host refuses one the page does not declare (`page_undeclared`), the same as in a single-database App. The grants still decide who may run it.
