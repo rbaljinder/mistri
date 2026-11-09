@@ -38,7 +38,7 @@ import { shownWrite } from '../http/fileRows.js';
 import { fileStoreTrouble, placeFile, writePlaced } from '../files/fileStorage.js';
 import { judgeLines } from '../http/formLinesWrite.js';
 import type { LineCollection } from '@mistriwork/engine/server/recordWriteOperations.js';
-import { findTable } from '@mistriwork/engine/shared/schema.js';
+import { findTable, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import {
   FILE_READ_PATH,
   FILE_UPLOAD_PATH,
@@ -1643,6 +1643,19 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           return result;
         };
         if (path === '/api/pages/compose' && !composeInputValid(input)) return invalid();
+        /* A free-form page's read (x-mistri-page) is held to the page's declared reads, as in a single-database
+           App (http/appData.ts): the roles are the lease's own, the tables those of the catalog this reader sees. */
+        const pageRefusal = (context: ReadContext, schema: DatabaseSchema, at: string, body: Record<string, unknown>) =>
+          req.headers[PAGE_HEADER] === undefined
+            ? undefined
+            : pageManifestRefusal({
+                app: appSurfaceForRealm(app, pages, platform ? 'platform' : 'tenant').app,
+                roles: context.principal.roles,
+                header: req.headers[PAGE_HEADER],
+                path: at,
+                body,
+                schema,
+              });
         /* A member's list, count, breakdown or inbox reads its context alone, each read bounded: on one snapshot, its
            release fence riding that snapshot's end (withBoundedReads). Not where a search engine filters the rows —
            the snapshot would be held across its answer — nor on another realm's lease. */
@@ -1726,6 +1739,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 } catch {
                   return undefined;
                 }
+                /* A page's header on the boot judges each item it carries: one outside the manifest is not carried,
+                   and the page asks it itself and hears the refusal. */
+                if (pageRefusal(context, schema, at, given)) return undefined;
                 const told = new ReadsTold();
                 try {
                   const reply = await withReadKind(at, kind, () => route(context, schema, at, given, { query, told }));
@@ -1817,7 +1833,10 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           return send(req, res, 200, boot, ownerHeaders(booted.context));
         }
         const answer = () =>
-          within(async (context) => route(context, tenantServedSchema(context, app, new Date(now()), readerEmail), path, input));
+          within(async (context) => {
+            const schema = tenantServedSchema(context, app, new Date(now()), readerEmail);
+            return pageRefusal(context, schema, path, input) ?? route(context, schema, path, input);
+          });
         const result = await (bounded ? withBoundedReads(answer) : answer());
         let value = result.value.body;
         if (path === '/api/pages/compose') value = await withVerbs(value);

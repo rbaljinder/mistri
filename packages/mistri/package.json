@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/mistri",
-  "version": "1.0.0-rc.28",
+  "version": "1.0.0-rc.29",
   "description": "The App framework: a few lines of TypeScript, a complete App, served from your own database.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -150,9 +150,9 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "dependencies": {
-    "@mistriwork/engine": "1.0.0-rc.28",
-    "@mistriwork/kit": "1.0.0-rc.28",
-    "@mistriwork/ui": "1.0.0-rc.28",
+    "@mistriwork/engine": "1.0.0-rc.29",
+    "@mistriwork/kit": "1.0.0-rc.29",
+    "@mistriwork/ui": "1.0.0-rc.29",
     "intl-messageformat": "12.1.2",
     "marked": "^18.1.0",
     "sanitize-html": "^2.18.0",

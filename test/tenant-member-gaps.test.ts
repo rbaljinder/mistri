@@ -40,7 +40,10 @@ const object = (value: unknown): Record<string, unknown> => {
   return value as Record<string, unknown>;
 };
 
-async function fixture(t: TestContext) {
+/** What `peek` found for each id it was given, thrown or returned: a command's typed get, seen from outside. */
+const peeked: Record<string, unknown> = {};
+
+async function fixture(t: TestContext, memberRoles: string[] = ['employee']) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-gaps-')),
     path = join(directory, 'business.db');
   const db = new DatabaseSync(path);
@@ -81,7 +84,7 @@ async function fixture(t: TestContext) {
       accountId: 'eve',
       membershipId: `${tenantId}-eve`,
       status: 'active',
-      roles: ['employee'],
+      roles: memberRoles,
       validUntil: 10000,
       expectedVersion: null,
     });
@@ -92,7 +95,14 @@ async function fixture(t: TestContext) {
     {
       id: appId,
       name: 'Desk',
-      auth: { rows: 'tenant', roles: { employee: { read: true, commands: ['raise', 'retitle'] } } },
+      auth: {
+        rows: 'tenant',
+        roles: {
+          employee: { read: true, commands: ['raise', 'retitle', 'peek'] },
+          // May run `audit`, which reads person, though the role itself reads tickets alone.
+          clerk: { read: ['ticket'], commands: ['audit'] },
+        },
+      },
       sources: { business: { connection: binding.source.connection } },
       resources: {
         person: { owner: 'tenant', recordLabel: '{first} {last}' },
@@ -174,6 +184,35 @@ async function fixture(t: TestContext) {
         return { id };
       },
     }),
+    audit: defineCommand({
+      source: 'business',
+      target: 'ticket',
+      targets: 'none',
+      read: ['ticket', 'person'],
+      input: {},
+      output: { parse: (value: unknown) => value },
+      handle: () => ({}),
+    }),
+    /* Gets a ticket of the caller's tenant, one of another's, and one that is nowhere, and says what each did. */
+    peek: defineCommand({
+      source: 'business',
+      target: 'ticket',
+      targets: 'none',
+      read: ['ticket'],
+      input: {},
+      output: { parse: (value: unknown) => value },
+      async handle({ db: records }) {
+        for (const id of ['north-1', 'south-1', 'no-such-ticket']) {
+          try {
+            peeked[id] = { returned: await records.ticket.get(id) };
+          } catch (error) {
+            const { code, message, outcome, field, key } = error as Record<string, unknown>;
+            peeked[id] = { thrown: { name: (error as Error).constructor.name, code, message, outcome, field, key } };
+          }
+        }
+        return {};
+      },
+    }),
     retitle: defineCommand({
       source: 'business',
       target: 'ticket',
@@ -195,6 +234,8 @@ async function fixture(t: TestContext) {
     resultReferences: {
       raise: (result) => [{ table: 'ticket', key: { id: String(object(result).id) } }],
       retitle: (result) => [{ table: 'ticket', key: { id: String(object(result).id) } }],
+      audit: () => [],
+      peek: () => [],
     },
   });
   enrollment = await createTenantEnrollment<IncomingMessage>({
@@ -203,7 +244,7 @@ async function fixture(t: TestContext) {
     policy,
     source: { ...binding.source, existingPath: path },
     deployment: 'desk-deployment',
-    roles: ['employee'],
+    roles: ['employee', 'clerk'],
     maxLifetimeMs: 300000,
     now: () => 1000,
     commands: { registry },
@@ -454,4 +495,80 @@ test("a natural key unique within its tenant addresses the tenant's own record (
   } finally {
     await adapter.close();
   }
+});
+
+const readsOf = (title: string) => ({ view: { base: title } });
+
+/* A read a free-form page sends says so (x-mistri-page), and is held to the page's declared reads as a
+   single-database App's is (http/appData.ts), judged on the catalog this reader is served. */
+test("a tenant page's read of a table its page does not declare is refused, as in a single-database App", async (t) => {
+  const f = await fixture(t),
+    north = await f.open();
+  const page = { 'x-mistri-page': 'browse' };
+  // browse declares ticket: its read is answered.
+  ok(await f.data('/api/view/run', north, readsOf('ticket'), page));
+  // person is readable by the member but not declared by the page.
+  const stray = await f.data('/api/view/run', north, readsOf('person'), page);
+  assert.equal(stray.status, 403, stray.text);
+  assert.equal(stray.body.code, 'page_undeclared');
+  assert.doesNotMatch(stray.text, /Lovelace/);
+  // A page that is none the role may open.
+  const nowhere = await f.data('/api/view/run', north, readsOf('ticket'), { 'x-mistri-page': 'nowhere' });
+  assert.equal(nowhere.status, 403, nowhere.text);
+  assert.equal(nowhere.body.code, 'page_undeclared');
+  // A path the page walks to another table counts as a read of it.
+  const walked = await f.data('/api/view/run', north, { text: 'ticket\n  show assignee.last' }, page);
+  assert.equal(walked.status, 403, walked.text);
+  // No header: held to the grants alone.
+  assert.ok(Array.isArray(object(ok(await f.data('/api/view/run', north, readsOf('person')))).rows));
+  // A boot item cannot carry a page's read past the check: the stray is not carried, and its own request is refused.
+  const boot = await f.data(
+    '/api/boot',
+    north,
+    {
+      reads: [
+        { method: 'POST', path: '/api/view/run', body: readsOf('ticket') },
+        { method: 'POST', path: '/api/view/run', body: readsOf('person') },
+      ],
+    },
+    page,
+  );
+  const carried = Object.entries(object(ok(boot).reads));
+  assert.equal(carried.length, 1, boot.text);
+  assert.doesNotMatch(boot.text, /Lovelace/);
+});
+
+test('a role granted a command that reads a table it cannot read is told which table, in a tenant App', async (t) => {
+  const f = await fixture(t, ['clerk']),
+    north = await f.open();
+  const refused = await f.data('/api/commands/execute', north, {
+    command: 'audit',
+    commandVersion: 1,
+    key: {},
+    expectedVersion: 0,
+    idempotencyKey: 'audit-attempt-0001',
+    input: {},
+  });
+  assert.ok(refused.status >= 400, refused.text);
+  assert.equal(refused.body.message, 'Your role cannot read person records, which "Audit" needs.');
+});
+
+test("a typed get of another tenant's row is the very refusal a key that does not exist gets", async (t) => {
+  const f = await fixture(t),
+    north = await f.open();
+  for (const key of Object.keys(peeked)) delete peeked[key];
+  const receipt = ok(
+    await f.data('/api/commands/execute', north, {
+      command: 'peek',
+      commandVersion: 1,
+      key: {},
+      expectedVersion: 0,
+      idempotencyKey: 'peek-attempt-0001',
+      input: {},
+    }),
+  );
+  assert.equal(receipt.status, 'applied', JSON.stringify(receipt));
+  assert.ok(Object.hasOwn(peeked, 'north-1') && 'returned' in object(peeked['north-1']), 'the tenant reads its own row');
+  assert.deepEqual(peeked['south-1'], peeked['no-such-ticket']);
+  assert.equal(object(object(peeked['south-1']).thrown).message, 'The record was not found.');
 });
