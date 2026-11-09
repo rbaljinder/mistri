@@ -261,6 +261,9 @@ export function describedSchema(description: HttpDescription, label: string, rea
     ...(resource.comment ? { comment: resource.comment } : {}),
     // What the API documents a filter for; the explorer offers boxes for these alone.
     filterable: Object.keys(resource.filters),
+    filterIn: Object.entries(resource.filters)
+      .filter(([, filter]) => filter.ops.includes('in'))
+      .map(([column]) => column),
     // The columns its documented sort values name ("-shipped_at" sorts by shipped_at), in the spellings the adapter reads.
     sortable: [
       ...new Set((resource.sort?.values ?? []).map((value) => value.replace(/^[-+]/, '').replace(/(?::| |_)(?:asc|desc)$/, ''))),

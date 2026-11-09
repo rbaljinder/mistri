@@ -117,6 +117,13 @@ type ViewKeyName = [Registered<'views'>] extends [never] ? string : Extract<Regi
 /** A free-form page by its path, as the generated types list them; any text before there are any. */
 type PagePathName = [Registered<'pagePaths'>] extends [never] ? string : Extract<Registered<'pagePaths'>, string>;
 
+/** The tab words a record of one view opens on, as the generated types list them (`RecordTabs`); any text before there are any. */
+type RecordTabName<V extends string> = [Registered<'tabs'>] extends [never]
+  ? string
+  : V extends keyof Registered<'tabs'>
+    ? Extract<Registered<'tabs'>[V], string>
+    : never;
+
 /** The key that names one record of a resource, by its primary-key columns (`{ id: number }`); any object before the
     generated types say which columns those are. */
 export type RecordKey<T extends string> = [SchemaKeys] extends [never]
@@ -519,12 +526,12 @@ export declare function defineSurface<
  * the App's, or a page path that is not a page's, is a type error. `params` are the words an address says (`tab`, `search`, a filter's column).
  */
 export declare function useHref(): {
-  /** The sign-in's address. */
-  signIn(): string;
+  /** The sign-in's address. `then` is an in-App path to go on to once signed in (`/leads/4`): carried as `?then=`, which the sign-in reads; an absolute or protocol-relative address is dropped, not carried. */
+  signIn(options?: { then?: string }): string;
   /** A list or dashboard by its view key: `view('leads', { tab: 'working', search: 'stone' })` is `/leads?tab=working&search=stone`. */
   view(view: ViewKeyName, params?: Readonly<Record<string, string>>): string;
   /** A record by its key under the view that shows its table: `record('leads', { id: 127 })` is `/leads/127`; `{ tab: 'map' }` adds the tab's word. */
-  record(view: ViewKeyName, key: Readonly<Record<string, unknown>>, options?: { tab?: string }): string;
+  record<V extends ViewKeyName>(view: V, key: Readonly<Record<string, unknown>>, options?: { tab?: RecordTabName<V> }): string;
   /** A free-form page by its path, with the parameters it keeps in its address. */
   page(path: PagePathName, params?: Readonly<Record<string, string>>): string;
 };

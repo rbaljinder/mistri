@@ -379,9 +379,51 @@ export class HttpAdapter implements Adapter {
     return { rows: found, ...(values.length ? { read: `GET ${target.item} for ${values.length} ${target.name}` } : {}) };
   }
 
+  /* A list of keys the API cannot take as one list (`in` undeclared) is asked a key at a time, as a followed reference
+     is: each from its item path, in the same bounded batches. The stitched read of another source's reference
+     (appStitchedReads.ts) is the caller. */
+  private async fanOut(request: QueryRequest, resource: HttpResource): Promise<QueryResult | undefined> {
+    if (request.filter?.groups.length !== 1) return undefined;
+    const [group] = request.filter.groups;
+    const many = group.find((condition) => condition.op === 'in' && Array.isArray(condition.value));
+    if (!many || resource.filters[many.column]?.ops.includes('in')) return undefined;
+    /* Only the key: its rows are one each, so a request per value loses nothing. Another column's rows are many, and
+       a page of each would be cut short; that stays a refusal naming what the API can do. */
+    if (many.column !== resource.key) return undefined;
+    const started = performance.now();
+    const values = [...new Set((many.value as unknown[]).map(String))];
+    if (values.length > MAX_LOOKUPS_PER_READ) {
+      throw new Refusal(
+        `${resource.name} is asked for ${values.length} different ${many.column} at once, more than the ${MAX_LOOKUPS_PER_READ} an API is asked for ` +
+          `(it takes one ${many.column} per request). Show fewer rows.`,
+        { columns: [many.column] },
+      );
+    }
+    const asked = new Map<string, QueryResult>();
+    for (let start = 0; start < values.length; start += LOOKUP_BATCH) {
+      await Promise.all(
+        values.slice(start, start + LOOKUP_BATCH).map(async (value) => {
+          const each = group.map((condition) => (condition === many ? { column: many.column, op: '=' as const, value } : condition));
+          // Two rows at most per key: a key the API holds twice is seen as shared.
+          asked.set(value, await this.query({ ...request, filter: { groups: [each] }, limit: Math.min(request.limit, 2), offset: 0 }));
+        }),
+      );
+    }
+    const results = values.map((value) => asked.get(value)!);
+    return this.result(
+      this.columns(resource, request.columns),
+      results.flatMap((result) => result.rows).slice(request.offset, request.offset + request.limit),
+      started,
+      resource.list,
+      new URLSearchParams(),
+    );
+  }
+
   async query(request: QueryRequest): Promise<QueryResult> {
     const started = performance.now();
     const resource = this.resource(request.table);
+    const fanned = await this.fanOut(request, resource);
+    if (fanned) return fanned;
     const columns = this.columns(resource, request.columns);
     const conditions = this.conditions(resource, request.filter);
     const byKey = conditions.length === 1 && conditions[0].column === resource.key && conditions[0].op === '=' ? conditions[0] : undefined;

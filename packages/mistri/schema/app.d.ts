@@ -3208,7 +3208,7 @@ export interface AppUi {
       no connection the App opens to its offline page, and its lists, records and writes need the network. @preview */
   pwa?: boolean;
   /** true serves the App headless: its front end is your own (a same-domain Next.js page using the hooks of
-      `@mistriwork/mistri/react`), and every data request names one of its `surfaces/*.surface.ts` in the
+      `@mistriwork/mistri/react/headless`), and every data request names one of its `surfaces/*.surface.ts` in the
       `X-Mistri-Surface` header; a request that names none is refused (403, code `surface`). Grants, row policy and
       field ceilings still apply inside a surface. */
   headless?: boolean;

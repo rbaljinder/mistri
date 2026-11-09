@@ -75,6 +75,19 @@ export type Segments = {
   vehicle: "listed" | "for_sale" | "over_30_days" | "reserved" | "sold";
 };
 
+/** Each list view's record tabs by their address word (a related list, a section tab, its history, a page tab): what `useHref().record(view, key, { tab })` takes. */
+export type RecordTabs = {
+  arrivals: "inquiries" | "similar-cars";
+  dealers: "for-sale";
+  featured: "inquiries" | "similar-cars";
+  inquiries: never;
+  "my-inquiries": never;
+  pipeline: never;
+  saved: never;
+  stock: "inquiries" | "similar-cars";
+  vehicles: "inquiries" | "similar-cars";
+};
+
 /** The server connections this App may bind, by name: what `connection`
     and `sources.*.connection` accept. */
 export type Connections = "forecourt";
@@ -99,5 +112,5 @@ export type Flags<Manifest> = AppFlagValues<Manifest>;
 export type FlagName<Manifest> = keyof Flags<Manifest>;
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments } }
+  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments }; tabs: RecordTabs }
 }

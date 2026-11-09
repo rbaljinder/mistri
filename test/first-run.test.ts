@@ -126,8 +126,9 @@ describe('a fresh project, as check meets it', () => {
     assert.match(ran.out, /typecheck {5}failed {2}TypeScript 5\.9\.3 is older than 7, which mistri check needs; npm i -D typescript\n/);
     assert.match(ran.out, /validation {4}passed/);
     const pkg = JSON.parse(readFileSync(join(ROOT, 'packages/mistri/package.json'), 'utf8'));
-    assert.equal(pkg.peerDependencies.typescript, '>=7 <8', 'TypeScript 7 is the minimum, not a matrix');
-    assert.equal(pkg.peerDependenciesMeta.typescript.optional, true);
+    /* Checked when check and build run, not declared: a host on TypeScript 5 (Next.js) would fail npm install on an optional peer at the wrong version. */
+    assert.equal(pkg.peerDependencies.typescript, undefined);
+    assert.equal(pkg.peerDependenciesMeta.typescript, undefined);
   });
 
   test('a commands module without its default defineCommands registry says so', async () => {

@@ -23,6 +23,7 @@ import { appForRoles } from '../../shared/appViewRoles.js';
 import { appZone } from '../../shared/appUi.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
+import { tablesReached } from './tablesReached.js';
 import { PageLoaderRefused, runPageLoader } from '../commands/pageLoaderRun.js';
 import { clockNow } from '@mistriwork/engine/server/http/clock.js';
 
@@ -104,18 +105,6 @@ export async function pageLoad(options: {
   }
 }
 
-/* The tables a read request names: a view's base, a breakdown's leading word. */
-export function tablesAsked(path: string, body: Record<string, unknown>): string[] | undefined {
-  const leading = (text: unknown) => (typeof text === 'string' ? (text.trim().split(/\s+/)[0] ?? '') : '');
-  if (path === '/api/view/run') {
-    const view = body.view as { base?: unknown } | undefined;
-    return [typeof view?.base === 'string' ? view.base : leading(body.text)];
-  }
-  if (path === '/api/breakdown') return [leading(body.text)];
-  if (path === '/api/breakdowns' && Array.isArray(body.items)) return body.items.map((item) => leading((item as { text?: unknown })?.text));
-  return undefined;
-}
-
 /**
  * The refusal for a request a page sent outside its manifest, or undefined.
  * Only reads a page makes and the commands it runs are judged; a header
@@ -146,7 +135,7 @@ export function pageManifestRefusal(options: {
       ? undefined
       : refuse(`The page "${key}" runs ${view.page.commands.join(', ') || 'no commands'}; "${String(stray)}" is not one of them.`);
   }
-  const asked = tablesAsked(path, body);
+  const asked = tablesReached(options.schema, path, body);
   if (!asked) return undefined;
   const id = (name: string) => (options.schema && tableNamed(options.schema, name)?.id) ?? name;
   const declared = new Set(view.page.reads.map(id));

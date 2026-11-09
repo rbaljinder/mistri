@@ -185,6 +185,8 @@ export interface TableMeta {
    * Absent means any column, as for every database.
    */
   filterable?: string[];
+  /** Of those, the columns an API also takes a list of values for (`in`): a stitched reference onto one of the others is read a key at a time. */
+  filterIn?: string[];
   /**
    * The columns the source can sort by, when it cannot sort by every one: an
    * API sorts by the values it documents (adapters/http). Absent means the

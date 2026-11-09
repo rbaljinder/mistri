@@ -356,8 +356,8 @@ export declare function useNavigate(): {
  * where a link to nowhere would otherwise ship. `params` are the words an address says (`tab`, `search`, a filter's column).
  */
 export declare function useHref(): {
-  /** The sign-in's address. */
-  signIn(): string;
+  /** The sign-in's address. `then` is an in-App path to go on to once signed in (`/leads/4`): carried as `?then=`, which the sign-in reads; an absolute or protocol-relative address is dropped, not carried. */
+  signIn(options?: { then?: string }): string;
   /** A list or dashboard by its view key: `view('leads', { tab: 'working', search: 'stone' })` is `/leads?tab=working&search=stone`. */
   view(view: string, params?: Readonly<Record<string, string>>): string;
   /** A record by its key under the view that shows its table: `record('leads', { id: 127 })` is `/leads/127`, and `{ tab: 'map' }` adds the tab's word. */

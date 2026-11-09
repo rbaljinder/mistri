@@ -786,9 +786,13 @@ describe('related list options', () => {
       ],
     });
     await waitFor(() => expect(calls.some((call) => call.path === '/api/breakdown' || call.path === '/api/breakdowns')).toBe(true));
-    await waitFor(() => expect(screen.queryByText('Loading')).toBeNull());
-    expect(screen.queryByRole('heading', { name: 'By status' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Mix' })).toBeNull();
+    // The heading is drawn before the reply lands, so wait for the hidden state itself rather than for
+    // "Loading" to go: that can pass before the section has started loading.
+    await waitFor(() => {
+      expect(screen.queryByText('Loading')).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'By status' })).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Mix' })).toBeNull();
+    });
     expect(screen.queryByText('Nothing to count yet.')).toBeNull();
     cleanup();
     breakdownOverride = reply([{ status: 'paid', value: 5 }]);

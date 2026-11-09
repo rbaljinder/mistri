@@ -1,0 +1,5 @@
+/* Imported by features.css: part of the tool's own rules (style.css names the order). */
+@layer base {
+/* One muted line on the list's inset, over the grid: no banner colour, nothing reserved while the labels are read. */
+.grid-partial { margin: 0; padding: var(--space-2) var(--space-4h); font: var(--text-sm) var(--sans); color: var(--ink-muted); }
+}

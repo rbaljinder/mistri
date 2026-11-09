@@ -149,6 +149,9 @@ export interface HttpReadFailure {
 }
 
 type HttpRows = Pick<QueryResult, 'columns' | 'rows' | 'ms'>;
+/** A stitched reference whose target source could not be read: its labels are the raw keys. `reference` is the column
+    that holds the key; `reason` is a short word (`timeout`, `network`, `unavailable`), never the operator's message. */
+type HttpPartial = Array<{ reference: string; reason: string }>;
 export type HttpSql = QueryResult['sql'];
 interface HttpResolvedOrder {
   order: Order[];
@@ -183,6 +186,7 @@ type RunViewSuccess = HttpRows &
     total?: number;
     limit: number;
     offset: number;
+    partial?: HttpPartial;
     errors: [];
   };
 type ViewSuccess = HttpRows & {
@@ -192,6 +196,7 @@ type ViewSuccess = HttpRows & {
   more: boolean;
   limit: number;
   offset: number;
+  partial?: HttpPartial;
   errors: [];
 };
 type BreakdownSuccess = HttpRows & {

@@ -118,6 +118,26 @@ export type Segments = {
   viewing: "upcoming" | "past";
 };
 
+/** Each list view's record tabs by their address word (a related list, a section tab, its history, a page tab): what `useHref().record(view, key, { tab })` takes. */
+export type RecordTabs = {
+  deliveries: never;
+  leases: "charges" | "payments";
+  ledger: "latest-payment" | "payments";
+  listings: "leases" | "more-homes-here" | "repairs";
+  "my-charges": "latest-payment" | "payments";
+  "my-repairs": "parts-used";
+  "my-requests": "parts-used";
+  occupancy: "charges" | "payments";
+  parts: "deliveries" | "latest-delivery" | "part-useds";
+  payments: never;
+  "repair-board": "parts-used";
+  repairs: "parts-used";
+  residents: "charges" | "leases" | "repairs";
+  shipments: never;
+  units: "leases" | "more-homes-here" | "repairs";
+  viewings: never;
+};
+
 /** The server connections this App may bind, by name: what `connection`
     and `sources.*.connection` accept. */
 export type Connections = "carrier" | "lintel";
@@ -142,5 +162,5 @@ export type Flags<Manifest> = AppFlagValues<Manifest>;
 export type FlagName<Manifest> = keyof Flags<Manifest>;
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments } }
+  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments }; tabs: RecordTabs }
 }

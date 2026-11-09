@@ -449,6 +449,8 @@ function SplitBlock({ table, spec, query, sort, param, label, page }: SplitAsk) 
   });
   const list = rows.data ?? [];
   const row = picked === undefined ? undefined : list.find((each) => String(each[key]) === picked);
+  // A refused or failed read says so: an empty queue would tell a moderator there is nothing to do.
+  if (rows.isError) return <Problem text={(rows.error as Error).message} retry={() => void rows.refetch()} />;
   return (
     <SplitListDetail
       listLabel={label}

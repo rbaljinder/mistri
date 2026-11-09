@@ -341,3 +341,17 @@ test("Split lists the rows beside the picked record's own page, and keeps the pi
   inPage(<Split from="task" row={{ primary: 'name' }} param="view" />);
   expect(await screen.findByText(/<Split> keeps its pick in "view", which is not one of the page's params/)).toBeTruthy();
 });
+
+test('Split says a refused read as a problem, never as an empty queue', async () => {
+  const { useRows } = await import('./hooks.js');
+  const refetch = vi.fn();
+  vi.mocked(useRows).mockReturnValueOnce({
+    data: undefined,
+    isError: true,
+    error: new Error('This page does not declare the post table it reaches.'),
+    refetch,
+  } as never);
+  inPage(<Split from="task" row={{ primary: 'name' }} label="Open reports" />);
+  expect(await screen.findByText(/does not declare the post table/)).toBeTruthy();
+  expect(screen.queryByRole('list', { name: 'Open reports' })).toBeNull();
+});

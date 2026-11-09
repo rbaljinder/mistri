@@ -1153,7 +1153,7 @@ export interface AppUi {
   export?: boolean;
   /** true makes the App an installable PWA (app/appPwa.ts): its pages carry its manifest and worker registration, and it serves its worker, icons and offline page. Preview: the shape may change in any 1.x release. Absent or false, it serves none of those. */
   pwa?: boolean;
-  /** true serves the App headless: its front end is another's (a same-domain Next.js page using `@mistriwork/mistri/react`'s
+  /** true serves the App headless: its front end is another's (a same-domain Next.js page using `@mistriwork/mistri/react/headless`'s
       hooks), so every data request names a surface in `X-Mistri-Surface` and one that names none is refused (http/surfaceGate.ts). */
   headless?: boolean;
   /** App shell visibility and spacing; omitted settings keep the existing UI. */

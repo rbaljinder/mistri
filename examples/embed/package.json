@@ -10,7 +10,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "@mistriwork/mistri": "^1.0.0-rc.25",
+    "@mistriwork/mistri": "^1.0.0-rc.26",
     "next": "^16.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

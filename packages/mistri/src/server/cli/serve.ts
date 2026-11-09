@@ -106,6 +106,8 @@ export interface MountedServing {
   /** Never listened on: its `request` listeners are the whole pipeline, analytics' beacon included. */
   readonly server: Server;
   readonly mount: AddressMount;
+  /** The Apps served now, as a reload leaves them. Absent on a tenant App's server, which signs people in itself. */
+  readonly apps?: () => readonly AppHost[];
   /** The same shutdown a signal runs, short of exiting the process. */
   close(): Promise<void>;
 }
@@ -1020,7 +1022,7 @@ export async function startServing(
       if (!startBackground()) throw new Error('Background workers could not start.');
       listening = true;
       for (const host of serving.apps) console.log(`  ${host.app.app.name}: mounted at ${appHome(mount, host.app.app.id)}`);
-      return { server: activeServer, mount, close: () => exit(0) };
+      return { server: activeServer, mount, apps: () => serving.apps, close: () => exit(0) };
     }
     /* A busy port is a normal thing, not a stack trace.
 

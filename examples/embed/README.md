@@ -12,13 +12,18 @@ A Next.js app that draws everything itself and uses a mistri App as its back end
 - `mistri/surfaces/applications.surface.ts` is the one surface the page is in. It reads the applications and the
   reviewers and runs `assignReviewer`, and nothing else gets through.
 - `app/page.tsx` is the front end: a `Provider` naming that surface, `useRows` and `useCommand`.
+- `lib/mistri.ts` makes the handler once, for the route handler and for `app/server/page.tsx`: the same list drawn by a
+  server component, at `/server`. It has no browser session, so it calls `mistri.tokenFor({ headers: await headers() },
+  { surface: 'applications' })`, which reads the person from the cookie the request carried and returns a bearer for them
+  and that surface, for 30 seconds here (300 at most). It reads the rows through the App's API with
+  `Authorization: Bearer …`; a read outside the surface, or by someone whose grant is gone, is refused as for the browser.
 
 The example borrows the fixture from this checkout, so run it from a clone of the repository. It is not part of the
 repository's install: it has its own `package.json`, and Next.js is a dependency only here.
 
 ## Run it
 
-Headless mode ships in `@mistriwork/mistri` 1.0.0-rc.25.
+Headless mode ships in `@mistriwork/mistri` 1.0.0-rc.25, and `tokenFor` (the `/server` page) in 1.0.0-rc.26.
 
 ```sh
 npm ci                      # at the repository root: the seed and the fixture use it
@@ -44,6 +49,8 @@ echo '{"<your accountId>": 1}' > .data/staff.json
 
 Restart `npm run dev`, since the map is read when the commands load. **Assign Robin Bell** now assigns reviewer 3 to
 the first application, and the list shows it.
+
+Open http://localhost:3000/server for the same list drawn on the server, from a token.
 
 `PUBLIC_ORIGIN` sets the origin the handler expects, if you serve the app anywhere other than
 `http://localhost:3000`.

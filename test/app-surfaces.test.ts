@@ -72,10 +72,10 @@ async function serve(t: TestContext, options: { second?: boolean } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-surfaces-'));
   const file = join(directory, 'loans.db');
   const seed = new DatabaseSync(file);
-  seed.exec(`CREATE TABLE loan(id INTEGER PRIMARY KEY, version INTEGER NOT NULL DEFAULT 0, reviewer INTEGER);
-    CREATE TABLE reviewer(id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+  seed.exec(`CREATE TABLE reviewer(id INTEGER PRIMARY KEY, name TEXT NOT NULL);
     CREATE TABLE hidden(id INTEGER PRIMARY KEY, name TEXT);
-    INSERT INTO loan VALUES (1,0,NULL), (2,0,NULL); INSERT INTO reviewer VALUES (1,'Ada'); INSERT INTO hidden VALUES (1,'secret');`);
+    CREATE TABLE loan(id INTEGER PRIMARY KEY, version INTEGER NOT NULL DEFAULT 0, reviewer INTEGER REFERENCES reviewer(id), hidden_id INTEGER REFERENCES hidden(id));
+    INSERT INTO reviewer VALUES (1,'Ada'); INSERT INTO hidden VALUES (1,'secret'); INSERT INTO loan VALUES (1,0,NULL,1), (2,0,NULL,NULL);`);
   seed.close();
   migrateSqliteCommandJournal(file);
   const registry = new Registry();
@@ -192,7 +192,9 @@ async function serve(t: TestContext, options: { second?: boolean } = {}) {
     const response = await fetch(`${base}${path}`, { headers: { 'x-mistri-account': manager.id }, signal: AbortSignal.timeout(5000) });
     return { status: response.status, text: await response.text() };
   };
-  return { base, headers, reply, control, read, run, status, whoami, page };
+  /* Any read route, with the body as given. */
+  const post = async (path: string, body: Record<string, unknown>, surface: string | null = 'desk') => command(path, body, surface);
+  return { base, headers, reply, control, read, post, run, status, whoami, page };
 }
 
 test('a read the surface names is answered; one it does not name is refused, and so is a request naming no surface', async (t) => {
@@ -217,6 +219,39 @@ test('a read the surface names is answered; one it does not name is refused, and
   const unknown = await read('loan', 'elsewhere');
   assert.equal(unknown.status, 403);
   assert.equal(unknown.body.code, 'surface');
+});
+
+test('a read is held to every table it reaches, not only its base: a path into a table the surface does not read is refused', async (t) => {
+  const { post } = await serve(t);
+  const refused = async (path: string, body: Record<string, unknown>, label: string) => {
+    const result = await post(path, body);
+    assert.equal(result.status, 403, `${label}: ${JSON.stringify(result.body)}`);
+    assert.equal(result.body.code, 'surface', label);
+    assert.match(String(result.body.error), /"hidden" is not one of them/, label);
+    assert.doesNotMatch(JSON.stringify(result.body), /secret/, label);
+  };
+  const allowed = async (path: string, body: Record<string, unknown>, label: string) => {
+    const result = await post(path, body);
+    assert.equal(result.status, 200, `${label}: ${JSON.stringify(result.body)}`);
+    assert.ok(!(result.body.errors as unknown[] | undefined)?.length, `${label}: ${JSON.stringify(result.body)}`);
+  };
+  const view = (fields: Record<string, unknown>) => ({ view: { base: 'loan', columns: [], ...fields }, count: 'none' });
+
+  // A column path, a filter on a path and an order by a path each reach the table the foreign key lands on.
+  await refused('/api/view/run', view({ columns: [{ path: 'hidden_id.name' }] }), 'column path');
+  await refused('/api/view/run', view({ filter: { groups: [[{ path: 'hidden_id.name', op: '=', value: 'secret' }]] } }), 'filter path');
+  await refused('/api/view/run', view({ orderBy: [{ path: 'hidden_id.name', direction: 'asc' }] }), 'order path');
+  await refused('/api/view/run', { text: 'loan show id, hidden_id.name', count: 'none' }, 'text column path');
+  await refused('/api/breakdown', { text: 'loan count by hidden_id.name' }, 'breakdown group');
+  await refused('/api/breakdowns', { items: [{ text: 'loan count by reviewer.name' }, { text: 'loan count by hidden_id.name' }] }, 'batch');
+
+  // The same walks into a table the surface does read pass, and so does the base's own reference column.
+  await allowed('/api/view/run', view({ columns: [{ path: 'reviewer.name' }] }), 'column path');
+  await allowed('/api/view/run', view({ filter: { groups: [[{ path: 'reviewer.name', op: '=', value: 'Ada' }]] } }), 'filter path');
+  await allowed('/api/view/run', view({ orderBy: [{ path: 'reviewer.name', direction: 'asc' }] }), 'order path');
+  await allowed('/api/view/run', view({ columns: [{ path: 'hidden_id' }] }), 'a reference column of the base itself');
+  await allowed('/api/breakdown', { text: 'loan count by reviewer.name' }, 'breakdown group');
+  await allowed('/api/breakdowns', { items: [{ text: 'loan count by reviewer.name' }] }, 'batch');
 });
 
 test('a command the surface runs goes through; one it does not run is refused before its handler', async (t) => {

@@ -21,6 +21,7 @@ import { primaryKey, type DatabaseSchema, type ForeignKey } from '@mistriwork/en
 import { compileView, resolveAggregate, type ViewDef } from '@mistriwork/engine/shared/view.js';
 import { stitchedFarProblem, stitchedHop, type StitchedHop } from '@mistriwork/engine/shared/stitchedPaths.js';
 import type { ViewCondition } from '@mistriwork/engine/shared/viewPaths.js';
+import { HttpSourceError } from '@mistriwork/engine/adapters/http/egress.js';
 import { ANSI_STYLE } from '@mistriwork/engine/shared/filter.js';
 import { filterPaths, measureConditions, measurePaths, type BreakdownDef } from '@mistriwork/engine/shared/breakdown.js';
 
@@ -169,6 +170,9 @@ export async function runStitchedView(
   const nameOf = (result: ViewResult, path: string) =>
     result.resolved.find((column) => column.path === path && column.aggregate === undefined)?.name ?? path;
   const reads: string[] = [];
+  /* A target that could not be read: its edge's labels are the raw keys, and the page says so (`partial`). */
+  const partial: NonNullable<ViewResult['partial']> = [];
+  const failed = new Set<string>();
   const found = new Map<string, { rows: Map<string, Record<string, unknown> | null>; names: Map<string, string> }>();
   for (const stitch of stitches) {
     const { edge, prefix } = stitch;
@@ -199,24 +203,32 @@ export async function runStitchedView(
     const rows = new Map<string, Record<string, unknown> | null>();
     const names = new Map<string, string>();
     if (values.length) {
-      const far = await readFar(edge)({
-        id: `${view.id}:${prefix}`,
-        name: view.name,
-        base: edge.to.table,
-        columns: paths.map((path) => ({ path })),
-        filter: { groups: [[{ path: toColumn, op: 'in', value: values as Array<string | number> }]] },
-        // One past each key, so a key two rows share is seen as shared.
-        limit: values.length * 2,
-        ...(labels ? { labels } : {}),
-        ...(computed ? { computed } : {}),
-      });
-      for (const path of paths) names.set(path, nameOf(far, path));
-      for (const row of far.rows) {
-        const value = String(row[names.get(toColumn)!]);
-        // A key the target holds twice names no one record: no label, rather than whichever came first.
-        rows.set(value, rows.has(value) ? null : row);
+      try {
+        const far = await readFar(edge)({
+          id: `${view.id}:${prefix}`,
+          name: view.name,
+          base: edge.to.table,
+          columns: paths.map((path) => ({ path })),
+          filter: { groups: [[{ path: toColumn, op: 'in', value: values as Array<string | number> }]] },
+          // One past each key, so a key two rows share is seen as shared.
+          limit: values.length * 2,
+          ...(labels ? { labels } : {}),
+          ...(computed ? { computed } : {}),
+        });
+        for (const path of paths) names.set(path, nameOf(far, path));
+        for (const row of far.rows) {
+          const value = String(row[names.get(toColumn)!]);
+          // A key the target holds twice names no one record: no label, rather than whichever came first.
+          rows.set(value, rows.has(value) ? null : row);
+        }
+        reads.push(far.sql.text);
+      } catch (error) {
+        /* A Refusal is a declaration or a grant speaking, and stays loud; a source that is down is not this list's
+           fault, so the rows stand with the keys where the labels would be. */
+        if (error instanceof Refusal) throw error;
+        partial.push({ reference: edge.from.columns[0], reason: error instanceof HttpSourceError ? error.reason : 'unavailable' });
+        failed.add(prefix);
       }
-      reads.push(far.sql.text);
     }
     found.set(prefix, { rows, names });
   }
@@ -231,6 +243,7 @@ export async function runStitchedView(
           if (!stitch) return [column.name, row[column.name] ?? null];
           const { rows, names } = found.get(stitch.prefix)!;
           const value = row[nameOf(near, stitch.edge.from.columns[0])];
+          if (failed.has(stitch.prefix)) return [column.name, value ?? null];
           const target = value === null || value === undefined ? undefined : rows.get(String(value));
           return [column.name, target?.[names.get(column.path.slice(stitch.prefix.length + 1))!] ?? null];
         }),
@@ -240,6 +253,7 @@ export async function runStitchedView(
     sql: { text: [near.sql.text, ...reads].join('\n'), params: near.sql.params },
     resolved: columns,
     joins: whole.joins,
+    ...(partial.length ? { partial } : {}),
   };
 }
 

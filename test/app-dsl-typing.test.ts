@@ -767,6 +767,38 @@ test("a page's command run is typed by the command's declared output, and a form
   }
 });
 
+test('useHref().record takes the tab words of its view, and signIn takes a then', () => {
+  const schema = typesForSchema(SCHEMA, undefined, undefined, {}, { tickets: ['history', 'tasks'], notes: [] });
+  assert.match(schema, /export type RecordTabs = \{\n {2}notes: never;\n {2}tickets: "history" \| "tasks";\n\};/);
+  assert.match(schema, /\}; tabs: RecordTabs \}/);
+  const commands = commandTypes(undefined, 'Desk', undefined, ['board'], [], [], { views: ['notes', 'overview', 'tickets'] });
+  const files = { 'mistri-schema.d.ts': schema, 'mistri-commands.d.ts': commands };
+  const page = (body: string) => `
+    import './mistri-commands.d.ts';
+    import type {} from './mistri-schema.js';
+    import { useHref } from '@mistriwork/mistri/page';
+    export function use() { const href = useHref(); ${body} }
+  `;
+  const fine = compile(
+    page(
+      `href.record('tickets', { id: 1 }); href.record('tickets', { id: 1 }, { tab: 'tasks' }); href.signIn({ then: '/tickets/1' }); href.signIn();`,
+    ),
+    {},
+    files,
+  );
+  assert.equal(fine.status, 0, fine.stdout + fine.stderr);
+  const mistakes: Record<string, [string, RegExp]> = {
+    'a tab word the view does not have': [`href.record('tickets', { id: 1 }, { tab: 'taks' });`, /"taks"/],
+    'a tab on a view whose records have none': [`href.record('notes', { id: 1 }, { tab: 'history' });`, /TS2322/],
+    'a tab on a view that is no record list': [`href.record('overview', { id: 1 }, { tab: 'history' });`, /TS2322/],
+  };
+  for (const [why, [body, error]] of Object.entries(mistakes)) {
+    const compiled = compile(page(body), {}, files);
+    assert.notEqual(compiled.status, 0, why);
+    assert.match(compiled.stdout, error, why);
+  }
+});
+
 test('defineSurface is held to the App as definePage is: an undeclared resource or command does not compile', () => {
   const types = commandTypes({ assign: { target: 'ticket', targets: 'one', input: ['owner_id'], output: false } }, 'Helpdesk');
   const surface = (fields: string) => `
