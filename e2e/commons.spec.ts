@@ -349,4 +349,36 @@ test.describe('Commons', () => {
     await form.getByRole('button', { name: 'Done', exact: true }).click();
     await expect(queue.getByRole('row', { name: /Great build!! Get 80%/ })).toHaveCount(0);
   });
+
+  test("a feature's list view hosts a page as a tab of its record, and the palette offers it only with the record open", async ({
+    page,
+  }) => {
+    const signIn = await page.request.post(`${sample.origin}/api/auth/sign-in/email`, {
+      headers: { origin: sample.origin },
+      data: COMMONS_ADMIN,
+    });
+    expect(signIn.ok(), await signIn.text()).toBe(true);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const report = Number(scalar(sample.db, 'SELECT id FROM report ORDER BY id LIMIT 1'));
+    // Reports is contributed by the moderation feature; its folder is pages/reports/[id]/.
+    await page.goto(`${sample.origin}/reports/${report}`);
+    // The report has no strip of its own, so the tab stands alone in a one-tab strip and is the open one.
+    const tab = page.getByRole('tab', { name: 'Reported post', exact: true });
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tabpanel', { name: 'Reported post' }).getByRole('row')).toHaveCount(2);
+    await expect(page.locator('[data-section-error]')).toHaveCount(0);
+    // A link to the tab opens it.
+    await page.goto(`${sample.origin}/reports/${report}/reported-post`);
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+    // The palette names the tab beside the record, and never lists it with the record closed.
+    await page.keyboard.press('ControlOrMeta+k');
+    await page.getByRole('combobox', { name: 'Search' }).fill('Reported post');
+    await expect(page.locator('.palette-item', { hasText: /Reported post —/ })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.goto(`${sample.origin}/reports`);
+    await expect(page.getByRole('heading', { name: 'Reports', level: 1 })).toBeVisible();
+    await page.keyboard.press('ControlOrMeta+k');
+    await page.getByRole('combobox', { name: 'Search' }).fill('Reported post');
+    await expect(page.locator('.palette-item', { hasText: /Reported post/ })).toHaveCount(0);
+  });
 });

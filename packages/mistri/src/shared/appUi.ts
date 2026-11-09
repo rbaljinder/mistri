@@ -51,6 +51,7 @@ export const UI_KEYS = [
   'csp',
   'appSwitcher',
   'pwa',
+  'headless',
 ] as const;
 export const SHELL_KEYS = [
   'menuSearch',
@@ -129,6 +130,9 @@ export function parseUi(raw: unknown, where: string): AppUi {
      or false, the App serves no manifest, no worker and no registration. */
   if (raw.pwa !== undefined && typeof raw.pwa !== 'boolean') {
     throw new Error(`${where}: "ui.pwa" is not true or false.`);
+  }
+  if (raw.headless !== undefined && typeof raw.headless !== 'boolean') {
+    throw new Error(`${where}: "ui.headless" is not true or false.`);
   }
   const parsedShell = raw.shell === undefined ? undefined : parseShell(raw.shell, where);
   const editing = raw.editing === undefined ? undefined : parseEditing(raw.editing, where);
@@ -213,6 +217,7 @@ export function parseUi(raw: unknown, where: string): AppUi {
     ...(editing === undefined ? {} : { editing }),
     ...(raw.export === undefined ? {} : { export: raw.export as boolean }),
     ...(raw.pwa === undefined ? {} : { pwa: raw.pwa as boolean }),
+    ...(raw.headless === undefined ? {} : { headless: raw.headless as boolean }),
     ...(locale?.tag === undefined ? {} : { locale: locale.tag }),
     ...(locale?.column === undefined ? {} : { localeColumn: locale.column }),
     ...(messages === undefined ? {} : { messages }),

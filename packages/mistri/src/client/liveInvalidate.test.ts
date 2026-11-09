@@ -1,5 +1,5 @@
 /** What a change asks the page to read again: the tables a read answered from, the rate, the held list. */
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, onTestFinished, test, vi } from 'vitest';
 import { QueryCache, QueryClient, QueryObserver } from '@tanstack/react-query';
 import { state } from '../../../kit/src/client/core.js';
 import { fileQueryReads, fileReads } from '../../../kit/src/client/liveReads.js';
@@ -7,6 +7,7 @@ import { addChange, emptyBatch, forgetLive, invalidateLive } from './liveInvalid
 import { liveKeyText, resetLiveState } from '../../../kit/src/client/liveState.js';
 import { forgetOwnWrites, ownWriteSent } from '../../../kit/src/client/ownWrites.js';
 import { liveMark, refreshRecordInPlace } from '../../../kit/src/client/recordWriteRefresh.js';
+import { holdReview, resetReviews, reviewFresh } from './commandReviews.js';
 
 let client: QueryClient;
 let unsubscribe: Array<() => void> = [];
@@ -276,4 +277,23 @@ test('a change pushed to the record on screen leaves the lists of other tables a
   await refreshRecordInPlace(client, { connection: 'spoke', table: 'job', key: { id: 1 } }, true, true, liveMark(client));
   await vi.advanceTimersByTimeAsync(10);
   expect(ledger).toHaveBeenCalledTimes(1);
+});
+
+/* A review shown before a run reads its record as it was: a change to that record, or to every row of its table, or a
+   reset, is the page's cue to show it again, before anyone presses Run. Another record's change leaves it standing. */
+test('a change that reaches a reviewed record makes its review stale; one to another record does not', () => {
+  onTestFinished(resetReviews);
+  const review = (key: Record<string, unknown>) => holdReview('owner', 'deal', key, 4);
+  const seven = review({ id: 7 });
+  const eight = review({ id: 8 });
+  invalidateLive(change({ deal: { keys: [{ id: 8 }], kinds: ['update'] } }), client);
+  expect([reviewFresh(seven), reviewFresh(eight)]).toEqual([true, false]);
+  invalidateLive(change({ ticket: { keys: 'many', kinds: ['update'] } }), client);
+  expect(reviewFresh(seven)).toBe(true);
+  invalidateLive(change({ deal: { keys: 'many', kinds: ['update'] } }), client);
+  expect(reviewFresh(seven)).toBe(false);
+  const nine = review({ id: 9 });
+  invalidateLive({ ...emptyBatch(), reset: true }, client);
+  expect(reviewFresh(nine)).toBe(false);
+  expect(reviewFresh(undefined)).toBe(false);
 });

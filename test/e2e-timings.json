@@ -49,6 +49,7 @@
  "e2e/editing-mode.spec.ts": 7.6,
  "e2e/embed-built.spec.ts": 44.2,
  "e2e/embed-handler.spec.ts": 16,
+ "e2e/embed-headless.spec.ts": 30,
  "e2e/embed-react-signin.spec.ts": 20,
  "e2e/embed-react.spec.ts": 30,
  "e2e/embed-signin.spec.ts": 14,

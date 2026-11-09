@@ -60,6 +60,7 @@ import {
   type AppFormView,
   type AppHomeRule,
   type AppLanding,
+  type AppSurface,
   type AppListView,
   type AppNavNode,
   DEFAULT_WINDOWS,
@@ -112,6 +113,7 @@ import { autoKeyOf } from '@mistriwork/engine/shared/autoBucket.js';
 import { parseOpenRoles } from './appViewRoles.js';
 import { parseNav } from './appNav.js';
 import { favoriteFlag, parseHead, parsePageView } from './appPageViews.js';
+import { parseSurfaces, type SurfaceFile } from './appSurfaces.js';
 
 /* Each view as parsed: the AppDef view itself, beside what only parsing
    needs — its key and where it was written, and a dashboard's tables and
@@ -154,12 +156,15 @@ export interface ContentContext {
   name: string;
   auth?: AppAuth;
   api?: import('./appApi.js').AppApiDef;
+  /** The App's surfaces/ files, judged once the views are (appSurfaces.ts). */
+  surfaces?: readonly SurfaceFile[];
 }
 interface ParsedContent {
   views: Record<string, AppListView | AppDashboardView | AppFormView>;
   nav: AppNavNode[];
   home: AppHomeRule[];
   landing?: { view: string; content: AppLanding };
+  surfaces?: Record<string, AppSurface>;
 }
 
 /* Spellings renamed before 1.0, refused with the word that replaced them (allowKeys' `refused`). */
@@ -588,7 +593,9 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
   /* Then the public forms, which no menu names: each is served at its own address. */
   for (const view of forms) if (view.form.public) served[view.key] = view.form;
   const [landing] = landings;
+  const surfaces = ctx.surfaces?.length ? parseSurfaces(ctx.surfaces, ctx, views) : undefined;
   return {
+    ...(surfaces ? { surfaces } : {}),
     views: served,
     nav,
     home: rules.map(({ at: _at, ...rule }) => rule),

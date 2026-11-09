@@ -93,9 +93,13 @@ export const BUDGET = {
    shell 514,833 / 80,881. Its shell has since taken the served shell's growth (the Lumen refresh, theme waves, the
    states and phone passes, rc.11's fixes) and rc.15's scoping class, `.mistri-root` named twice in every rule
    (scripts/embed-css.mjs: about 31 KB raw, 368 bytes in brotli, raw text a host's bundler compresses).
-   Set at rc.16, measured: provider 14,413 / 5,157, adapter 3,475 / 1,368, shell 629,214 / 88,746. */
+   Set at rc.16, measured: provider 14,413 / 5,157, adapter 3,475 / 1,368, shell 629,214 / 88,746.
+   `headless` is @mistriwork/mistri/react/headless, built apart (`--mode headless`) and imported only by a front end
+   that draws its own pages: its Provider, the SDK's hooks, TanStack Query and the host they read through. */
 export const EMBED_BUDGET = {
   provider: { raw: 15_000, br: 5_300 },
+  /* The headless embed entry, new in rc.25: measured 127,890 / 33,995, its ceiling about 10% above. */
+  headless: { raw: 140_000, br: 37_500 },
   adapter: { raw: 3_600, br: 1_400 },
   shell: { raw: 650_000, br: 91_500 },
 };
@@ -134,7 +138,7 @@ function staticClosure(roots) {
   return [...files];
 }
 
-/** @mistriwork/mistri/react's three measures, raw and in brotli. */
+/** @mistriwork/mistri/react's four measures, raw and in brotli. */
 export function embedSizes(embed = EMBED) {
   const measure = (files) =>
     files.reduce(
@@ -149,6 +153,7 @@ export function embedSizes(embed = EMBED) {
   const adapters = ['next', 'react-router', 'tanstack-router'].map((name) => measure(staticClosure([join(embed, `${name}.js`)])));
   return {
     provider: measure(staticClosure([join(embed, 'index.js')])),
+    headless: measure(staticClosure([join(embed, 'headless.js')])),
     adapter: adapters.reduce((largest, next) => (next.br > largest.br ? next : largest)),
     shell: measure(staticClosure([join(embed, 'chunks', shell)])),
   };

@@ -20,7 +20,11 @@ const READY_MS = 10_000;
 const ready = new Map<string, { at: number; version: Promise<number> }>();
 const readyKey = (owner: CommandOwner) => JSON.stringify([owner.connection, owner.command, owner.commandVersion, owner.key]);
 
-async function prepare(owner: CommandOwner): Promise<number> {
+/**
+ * The record's revision for this command, and the values its form would start from: what a page shows a person to
+ * review (`useCommand(...).prepare`), and what every send is judged against.
+ */
+export async function prepareCommand(owner: CommandOwner): Promise<{ expectedVersion: number; initial?: Record<string, unknown> }> {
   const prepared = await api('/api/commands/prepare', {
     ...ownedBy(owner.connection),
     command: owner.command,
@@ -29,8 +33,11 @@ async function prepare(owner: CommandOwner): Promise<number> {
   });
   if (!Number.isSafeInteger(prepared?.expectedVersion) || prepared.expectedVersion < 0)
     throw new Error(say('common.theRecordVersionIsUnavailable'));
-  return prepared.expectedVersion as number;
+  const initial = prepared.initial && typeof prepared.initial === 'object' ? (prepared.initial as Record<string, unknown>) : undefined;
+  return { expectedVersion: prepared.expectedVersion as number, ...(initial ? { initial } : {}) };
 }
+
+const prepare = async (owner: CommandOwner): Promise<number> => (await prepareCommand(owner)).expectedVersion;
 
 /**
  * Ask the record's revision for a command that runs on one click, before the click: the pointer coming to its button,
@@ -51,8 +58,15 @@ export async function sendCommand(
   action: AppCommandAction,
   owner: CommandOwner,
   input: Record<string, unknown>,
-  options: { headless: boolean; current?: () => boolean; refresh: () => void },
+  options: { headless: boolean; current?: () => boolean; refresh: () => void; pinned?: number },
 ): Promise<CommandSent> {
+  /* A revision a person reviewed is sent as it is, once: a record that moved since is refused `stale_record`, and
+     preparing again here would run the command over a revision nobody saw. */
+  if (options.pinned !== undefined) {
+    const sent = await execute(action, owner, input, options.pinned, options);
+    if ('operation' in sent && sent.operation.phase === 'success') ready.clear();
+    return sent;
+  }
   const key = readyKey(owner);
   const kept = ready.get(key);
   ready.delete(key);

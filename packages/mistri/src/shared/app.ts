@@ -108,6 +108,7 @@ import { appFileRules, appTagRules } from './appResourceRules.js';
 import { appSearchProblem } from './appSearch.js';
 import { checkImports, importProblem } from './appImport.js';
 import { metricCohortQuery, parseContent } from './appViews.js';
+import type { SurfaceFile } from './appSurfaces.js';
 import { cardsProblem, cardsTitled } from '@mistriwork/engine/shared/appCards.js';
 import type { InferenceResource } from '@mistriwork/engine/shared/listInference.js';
 import { inferredList } from './appInferredList.js';
@@ -217,10 +218,15 @@ const listTable = (view: object): string | undefined =>
  * Read an App manifest. `pages` is validated here and read again by the
  * loader, which joins the pages/ files onto the manifest's (loadApp).
  */
-export function parseAppConfig(raw: unknown, where: string, options: { commands?: CommandCatalog } = {}): AppDef {
+export function parseAppConfig(
+  raw: unknown,
+  where: string,
+  options: { commands?: CommandCatalog; surfaces?: readonly SurfaceFile[] } = {},
+): AppDef {
   /* The App names its commands; the loader hands the server's registrations
      in, and every name is resolved from them (shared/command.ts). */
-  if (options.commands) return withCommandCatalog(options.commands, () => parseAppConfig(raw, where));
+  if (options.commands)
+    return withCommandCatalog(options.commands, () => parseAppConfig(raw, where, options.surfaces ? { surfaces: options.surfaces } : {}));
   /* Composition (appFeatures.ts): the root's `features` merge into one flat
      root first, everything below reads that, and a refusal about what a
      feature wrote names the feature (appProvenance.ts). It parses the api
@@ -229,7 +235,7 @@ export function parseAppConfig(raw: unknown, where: string, options: { commands?
      Without features there is nothing to merge: the root still carries it
      raw, and parseRoot parses it. */
   const { root, origins, api } = composeFeatures(raw, where);
-  const app = withProvenance(origins, where, () => parseRoot(root, where, api));
+  const app = withProvenance(origins, where, () => parseRoot(root, where, api, options.surfaces));
   /* A deprecated key still parses; `check` says what replaces it (deprecations.ts). Read off the raw App, where a
      feature slice still says which keys it wrote. */
   noteDeprecated(app, raw);
@@ -261,7 +267,7 @@ function dataHalfOf(a: Record<string, unknown>, id: string, name: string, ui: ()
   return { id, name, connection: a.connection, resources, views: {}, nav: [], home: [], ui: ui() } as unknown as AppDef;
 }
 
-function parseRoot(raw: unknown, where: string, composed?: AppApiDef): AppDef {
+function parseRoot(raw: unknown, where: string, composed?: AppApiDef, surfaces?: readonly SurfaceFile[]): AppDef {
   const a = plainRecord(raw, where, 'an object');
   allowKeys(a, ROOT_KEYS, where);
   if (typeof a.name !== 'string' || !a.name.trim()) throw new Error(`${where} has no "name". An app is named after what it is for.`);
@@ -329,6 +335,7 @@ function parseRoot(raw: unknown, where: string, composed?: AppApiDef): AppDef {
         name,
         ...(auth ? { auth } : {}),
         ...(api ? { api } : {}),
+        ...(surfaces?.length ? { surfaces } : {}),
       });
       const placement = parsedUi?.value.shell?.placement;
       if (typeof placement === 'object') placement.top = parseOpenRoles(placement.top, `${where}: ui.shell.placement`, auth, 'top')!;
@@ -468,6 +475,7 @@ function parseRoot(raw: unknown, where: string, composed?: AppApiDef): AppDef {
     ...(auth ? { auth } : {}),
     ...(api ? { api } : {}),
     ...(content.landing ? { landing: content.landing } : {}),
+    ...(content.surfaces ? { surfaces: content.surfaces } : {}),
     ...(a.track === undefined ? {} : { track: a.track as NonNullable<AppDef['track']> }),
     ...(a.live === true ? { live: true as const } : {}),
     ...(a.branding === undefined

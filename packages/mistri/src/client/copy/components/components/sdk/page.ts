@@ -5,6 +5,9 @@ export const say = defineMessages({
   definePageTakes: 'definePage takes the page: its label, reads and component.',
   definePageHasNo:
     'definePage has no "{name}". It takes path, label, icon, nav, roles, reads, commands, forms, params, loader, public, description, favorite, head, layout and component.',
+  defineSurfaceTakes: 'defineSurface takes the surface: its label and reads.',
+  defineSurfaceHasNo:
+    'defineSurface has no "{name}". It takes label, icon, description, favorite, roles, reads, commands, actions, forms and loader.',
   commandDone: '{label} done.',
   listNotYours: 'This list is not available to your role.',
   listForMembers: 'This list is for signed-in members.',

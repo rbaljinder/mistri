@@ -46,10 +46,12 @@ import { isTenantApp } from '../../shared/appModel.js';
 import { appRealms } from '../../shared/appTenancy.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { getCommandEvents, type BusinessCommandRegistry } from '../commands/businessCommands.js';
+import { NO_OUTPUT } from '../commands/commandShapes.js';
 import {
   AppProblems,
   appCommandGrants,
   homeSourceOf,
+  isFormView,
   logicalResource,
   resolveAppAccess,
   withRollups,
@@ -189,10 +191,14 @@ const TYPES = 'mistri-schema.d.ts';
 const COMMAND_TYPES = 'mistri-commands.d.ts';
 
 /** mistri-commands.d.ts as the App's commands module and its pages say it now, or undefined for an App with neither. */
-function appCommandTypes(loaded: LoadedApp): string | undefined {
+function appCommandTypes(loaded: LoadedApp, appDir: string): string | undefined {
   const registry = loaded.commands?.registry;
   const pages = Object.entries(loaded.app.views).flatMap(([key, view]) => ('sections' in view && view.page ? [key] : []));
   if (!registry && !pages.length) return undefined;
+  /* From beside the generated file, so a module that is not commands.ts beside the manifest is still found. */
+  const file = loaded.commands?.file;
+  const from = file ? relative(appDir, file).split('\\').join('/') : undefined;
+  const commandsFrom = from && (from.startsWith('../') ? from : `./${from}`);
   return commandTypes(
     registry &&
       Object.fromEntries(
@@ -203,11 +209,12 @@ function appCommandTypes(loaded: LoadedApp): string | undefined {
             targets: command.targets ?? 'one',
             input: command.fields.map((field) => field.name),
             ...(command.public ? { public: true as const } : {}),
+            output: command.output !== NO_OUTPUT,
           },
         ]),
       ),
     loaded.app.name,
-    loaded.loaders ? `./${basename(loaded.commands!.file)}` : undefined,
+    loaded.loaders && commandsFrom ? commandsFrom : undefined,
     pages,
     [
       ...new Set(
@@ -217,12 +224,19 @@ function appCommandTypes(loaded: LoadedApp): string | undefined {
       ),
     ],
     Object.entries(loaded.app.views).flatMap(([key, view]) => ('sections' in view && view.page?.record ? [key] : [])),
+    {
+      commandsFrom,
+      forms: Object.fromEntries(
+        Object.entries(loaded.app.views).flatMap(([key, view]) => (isFormView(view) ? [[key, view.command.id]] : [])),
+      ),
+      views: Object.entries(loaded.app.views).flatMap(([key, view]) => ('sections' in view && view.page ? [] : [key])),
+    },
   );
 }
 
 /** The commands half of step 1: mistri-commands.d.ts rewritten when the commands module says otherwise. */
 async function commandTypesFile(loaded: LoadedApp | undefined, appDir: string, write: boolean): Promise<string | undefined> {
-  const types = loaded && appCommandTypes(loaded);
+  const types = loaded && appCommandTypes(loaded, appDir);
   if (!types) return undefined;
   const file = join(appDir, COMMAND_TYPES);
   const existing = await readFile(file, 'utf8').catch(() => undefined);
@@ -269,7 +283,7 @@ async function componentTypesFile(loaded: LoadedApp | undefined, appDir: string,
 }
 
 /* What the App's directory holds that no file lists: record pages (pages/<key>.ts or .json), free-form pages
-   (pages/<path>.page.tsx) and catalogs (messages/<locale>.ts), each beside what it became. Said so an author who
+   (pages/<path>.page.tsx), surfaces (surfaces/<key>.surface.ts) and catalogs (messages/<locale>.ts), each beside what it became. Said so an author who
    adds a file sees it was read, and one who forgot a default export sees it was not. */
 function foundByFile(loaded: LoadedApp, appDir: string): string[] {
   const pagesDir = join(resolve(appDir), 'pages');
@@ -283,8 +297,12 @@ function foundByFile(loaded: LoadedApp, appDir: string): string[] {
       const tab = /^([^/]+)\/\[id\]\/([^/]+)$/.exec(path);
       return [file, tab ? `record tab "${tab[2]}" of "${tab[1]}"` : `page "${path}"`] as const;
     });
+  const surfaces = (loaded.pageFiles ?? [])
+    .map((file) => [file, /^surfaces\/(.+)\.surface\.[jt]s$/.exec(file)?.[1]] as const)
+    .filter((entry): entry is readonly [string, string] => entry[1] !== undefined)
+    .map(([file, key]) => [file, `surface "${key}"`] as const);
   const catalogs = (loaded.messageFiles ?? []).map((file) => [file, `catalog "${basename(file).replace(/\.[^.]+$/, '')}"`] as const);
-  const found = [...records, ...free, ...catalogs].sort(([a], [b]) => a.localeCompare(b));
+  const found = [...records, ...free, ...surfaces, ...catalogs].sort(([a], [b]) => a.localeCompare(b));
   const width = Math.max(0, ...found.map(([file]) => file.length));
   return found.map(([file, what]) => `${file.padEnd(width)}  ${what}`);
 }

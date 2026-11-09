@@ -4,9 +4,12 @@
 /** Each free-form page by its path (pages/<path>.page.tsx): what the App's `home` may name beside its views. */
 export type PagePaths = never;
 
+/** Each view of the App by its key (a list, a dashboard, a form): what `useHref().view` and `.record` take. */
+export type ViewKeys = "account-tree" | "accounts" | "activities" | "campaign-schedule" | "campaigns" | "contacts" | "deals-by-stage" | "leads" | "opportunities" | "pipeline" | "pipeline-layout" | "products" | "sales-dashboard" | "sales-team" | "task-calendar" | "tasks";
+
 /** The App's fixed actions by id (a resource's machine verbs and `action(label, { set })`): what a page's `actions` may name. */
 export type ActionNames = "markDone" | "markLost" | "markQualified" | "markWon" | "negotiate" | "qualify" | "sendProposal" | "startWorking";
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { pagePaths: PagePaths; actions: ActionNames }
+  interface Register { pagePaths: PagePaths; actions: ActionNames; views: ViewKeys }
 }

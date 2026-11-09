@@ -21,6 +21,7 @@ import {
   api,
   columnDisplay,
   columnLabel,
+  labelPath,
   openRecord,
   pageApi,
   primaryKey,
@@ -39,12 +40,12 @@ import { tableNamed, type TableMeta } from '@mistriwork/engine/shared/schema.js'
 import { HOST_GLOBAL } from '../../../shared/uiSdk.js';
 import { pageBridge } from '@mistriwork/kit/client/uiBridge.js';
 import type { DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
-import { setPageHost, type UiDeployment, type UiHost, type UiLook, type UiRow } from './context.js';
+import { setPageHost, type UiDeployment, type UiHost, type UiLook, type UiOption, type UiResourceChoices, type UiRow } from './context.js';
 import { rowsByPath } from './rows.js';
 import { sayAppMessage } from './appMessage.js';
 import { say } from '../../copy/components/components/sdk/host.js';
 import { served, shownUnplaced } from '@mistriwork/kit/client/addressMount.js';
-import { viewPath } from '../../publicAddress.js';
+import { hrefFor, viewPath } from '../../publicAddress.js';
 import { createPageAppFlags } from '../../appFlags.js';
 import { pageAnalyticsBeacon } from '../../analyticsBeacon.js';
 import { shellRoot } from '@mistriwork/kit/client/shellHost.js';
@@ -79,6 +80,44 @@ async function viewRows(
   };
   const got = page ? await pageApi(page, '/api/view/run', body) : await api('/api/view/run', body);
   return rowsByPath(paths, got, say('theRowsOfCould', { name: table.name }), { schema: state.schema, base: table.id });
+}
+
+/* A resource's own records as a picker's choices (`useOptions('country')`): the ordinary read of the resource — the
+   page's own when a free-form page asks, so the server holds it to the manifest — labelled by the title column the
+   catalog names, which a record page's breadcrumb uses. Row policy and field projection are the server's, as for any read. */
+function choiceShape(resource: string): { table: TableMeta; by: string; label: string } {
+  const table = tableOf(resource);
+  const by = (primaryKey(table) as string[])[0];
+  const label = (labelPath(table) as string | undefined) ?? by;
+  return { table, by, label };
+}
+async function resourceChoices(
+  field: UiResourceChoices,
+  text: string,
+  offset: number,
+  limit: number,
+): Promise<{ options: UiOption[]; more: boolean }> {
+  const { table, by, label } = choiceShape(field.resource);
+  const search = text.trim() ? `${label} contains ${quote(text.trim())}` : '';
+  const got = await viewRows(
+    table,
+    [...new Set([by, label])],
+    [search, `sort ${label}`].join(' '),
+    limit + 1,
+    field.page,
+    field.where,
+    offset,
+  );
+  const options = got.slice(0, limit).flatMap((row) => {
+    const key = row[by];
+    return typeof key === 'string' || typeof key === 'number' ? [{ key, label: String(rowLabel(table, row)) }] : [];
+  });
+  return { options, more: got.length > limit };
+}
+async function resourceChoiceName(field: UiResourceChoices, key: string | number): Promise<UiOption | null> {
+  const { table, by, label } = choiceShape(field.resource);
+  const [row] = await viewRows(table, [...new Set([by, label])], `${by} = ${quote(String(key))}`, 1, field.page, field.where);
+  return row ? { key, label: String(rowLabel(table, row)) } : null;
 }
 
 const root = () => shellRoot();
@@ -187,6 +226,7 @@ const pageHost: UiHost = {
     if (!address || !path) return undefined;
     return `${window.location.origin}${shownUnplaced(path)}?via=${encodeURIComponent(address)}`;
   },
+  href: (to) => hrefFor(to),
   fillComposer(text, mode) {
     return fillPageComposer(text, mode);
   },
@@ -221,6 +261,7 @@ const pageHost: UiHost = {
   /* The platform's own picker reads (CommandReference.tsx), through the reader's connection: loaded where a component
      first asks, so a page that draws no picker never carries it. */
   async choices(field, text, { offset, limit }) {
+    if ('resource' in field) return resourceChoices(field, text, offset, limit);
     const { commandChoicePage } = await import('../CommandReference.js');
     const page = await commandChoicePage(field, text, state.activeConnection ?? '', offset, limit);
     return {
@@ -229,6 +270,7 @@ const pageHost: UiHost = {
     };
   },
   async choiceName(field, key) {
+    if ('resource' in field) return resourceChoiceName(field, key);
     const { readReferenceName } = await import('../CommandReference.js');
     const named = await readReferenceName(field, key, state.activeConnection ?? '');
     return named && { key, ...named };

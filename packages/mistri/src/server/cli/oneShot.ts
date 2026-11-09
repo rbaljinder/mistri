@@ -33,6 +33,7 @@ import { consumesCommandWarnings, machineCommandWarnings } from '../app/appMachi
 import { appIndexWarnings } from '../../shared/appIndexWarnings.js';
 import { appSignUpProblems } from '../../shared/appWarnings.js';
 import { checkAuthorityLock } from '../app/authorityLock.js';
+import { recordTabCollisions } from '../app/recordTabWords.js';
 import { CONTRACT_PREFIX, contractDigest, contractLines, lockedContracts } from '../commands/commandContracts.js';
 import { WORKFLOW_LINE_PREFIX, workflowLines } from '../workflows/workflowContracts.js';
 import {
@@ -570,10 +571,10 @@ async function commandContractCheck(
   jobCommands: ReadonlySet<string>,
   bump: readonly string[],
   workflows: readonly WorkflowShape[] = [],
-): Promise<{ problems: string[]; lines: string[] }> {
-  if (!loaded.commands || !loaded.authority) return { problems: [], lines: [] };
+): Promise<{ problems: string[]; lines: string[]; missing: number }> {
+  if (!loaded.commands || !loaded.authority) return { problems: [], lines: [], missing: 0 };
   const unknown = bump.find((id) => !Object.hasOwn(loaded.commands!.registry, id));
-  if (unknown) return { problems: [`--bump names "${unknown}", which the commands module does not register.`], lines: [] };
+  if (unknown) return { problems: [`--bump names "${unknown}", which the commands module does not register.`], lines: [], missing: 0 };
   const durable = await durableDependents(loaded, registry, jobCommands);
   const { lines, changes } = contractLines(loaded.app, loaded.commands.registry, loaded.authority.lock, durable, bump);
   const owned = workflowLines(workflows, loaded.authority.lock);
@@ -589,7 +590,11 @@ async function commandContractCheck(
       ),
     ...owned.problems,
   ];
-  return { problems, lines: [...lines, ...owned.lines] };
+  /* A lock that exists is the App's record of its authority, and a contract change is an authority change a reviewer
+     should see: one that lacks a registered command's line is stale, as one lacking a role's grant is. */
+  const locked = lockedContracts(loaded.authority.lock);
+  const missing = loaded.authority.lock === undefined ? 0 : Object.keys(loaded.commands.registry).filter((id) => !locked.has(id)).length;
+  return { problems, lines: [...lines, ...owned.lines], missing };
 }
 
 export async function checkApps(opts: Options, registry: Registry, loadedApps: LoadedApp[], hosted: CommandHost): Promise<void> {
@@ -702,6 +707,7 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
       });
       lines = [
         ...appProblems(app, schema),
+        ...recordTabCollisions(app.app, app.pages, schema),
         ...reach.problems,
         ...snapshots.problems,
         // Open sign-up the config gives nothing to prove an address with.
@@ -812,6 +818,10 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
     /* A breaking change the lock was not bumped for fails the check; writing the lock cannot accept it. */
     if (!bump.length) lines.push(...contracts.problems);
     else if (contracts.problems.some((problem) => problem.startsWith('--bump'))) lines.push(...contracts.problems);
+    if (contracts.missing && !opts.writeAuthority && !bump.length)
+      lines.push(
+        `[authority-lock] authority.lock is missing ${contracts.missing} command contract line${contracts.missing === 1 ? '' : 's'}. Run mistri check --write-authority and review the diff.`,
+      );
     bad += lines.length;
     /* Advice follows the verdict and never changes it or the exit code: a
        literal the database never holds, a button no role may press. */

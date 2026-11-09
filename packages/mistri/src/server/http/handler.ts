@@ -72,6 +72,19 @@ import { operationsRoutes } from './operationsRoutes.js';
 import { commandRoutes } from './commandRoutes.js';
 import { challengeOf, publicFormRoutes } from './formRoutes.js';
 import { pageCommandRoutes } from './pageCommandRoutes.js';
+import {
+  addressedApp,
+  HEADLESS_SCREEN,
+  headlessHeld,
+  headlessScreen,
+  isSurfaceRefusal,
+  namedSurface,
+  surfaceBootAsks,
+  surfaceCommands,
+  surfaceGateRoute,
+  surfaceRefusal,
+} from './surfaceGate.js';
+import { SURFACE_HEADER } from '../../shared/appSurfaces.js';
 import { landingRoute, LANDING_PATH } from './landingRoutes.js';
 import { seoRoutes } from './sitemap.js';
 import { recordBrandingSpec, requestRecordBranding, publicBrandingSurface, type BrandingPresentation } from './recordBranding.js';
@@ -305,6 +318,17 @@ const OPEN_ROUTES: readonly Route<Admitted>[] = [
         carries: (asked) =>
           !placedPublicFormPage(asked, ctx.policy?.publicPlacement?.isPlacedForm) &&
           !ctx.appHosts?.some((host) => recordBrandingSpec(host.app.app)),
+        surface: (key) => {
+          const app = addressedApp(ctx);
+          if (!app) return { status: 404, body: { error: 'No App is served here.' } };
+          const roles = sessionRoles(ctx.identity.role);
+          const named = namedSurface(app, roles, key);
+          if (named === undefined || isSurfaceRefusal(named))
+            return named ?? { status: 403, body: { error: 'Name a surface.', code: 'surface' } };
+          const registry = ctx.commands?.appId === app.id ? ctx.commands.registry : undefined;
+          return { surface: named, commands: surfaceCommands(app, named, registry, roles) };
+        },
+        surfaceLoop: () => loopback(ctx, ctx.configPages, surfaceBootAsks),
       },
       () => loopback(ctx, ctx.configPages),
     )),
@@ -317,23 +341,32 @@ const OPEN_ROUTES: readonly Route<Admitted>[] = [
 
 /** The routes under the row policy, when the deployment has one. The last answers whatever is left. */
 const ROUTES: readonly Route<RequestContext>[] = [
+  /* A headless front end's request is held to the surface it names, and a headless App answers no other (surfaceGate.ts). */
+  (ctx) => surfaceGateRoute(ctx),
   (ctx) => scopedWriteRoutes(ctx),
   (ctx) => operationsRoutes(ctx),
   /* Live sync's stream: the reader's authority, resolved here under the row policy where there is one. */
   (ctx) => liveRoute(ctx),
-  /* A command a free-form page runs says so (x-mistri-page): one its page does not declare is refused (pageLoad.ts). */
+  /* A command a free-form page runs says so (x-mistri-page): one its page does not declare is refused (pageLoad.ts).
+     So is one a surface does not run (x-mistri-surface, surfaceGate.ts). */
   async (ctx) => {
     let pageCommand: unknown;
     const pageHeader = ctx.req.headers[PAGE_HEADER];
-    if (ctx.commandRequest && pageHeader !== undefined && ctx.signedIn?.app) {
+    const surfaceHeader = ctx.req.headers[SURFACE_HEADER];
+    /* A command runs in the App its catalog belongs to (commandRoutes.ts), whatever `?app=` names: that is the
+       App a headless front end is held to and its surface is judged against. */
+    const app = ctx.appHosts?.find((host) => host.app.app.id === ctx.commands?.appId)?.app.app ?? addressedApp(ctx);
+    if (ctx.commandRequest) headlessHeld(ctx, app);
+    if (ctx.commandRequest && (pageHeader !== undefined || surfaceHeader !== undefined) && app) {
       pageCommand = await commandBody(ctx.req);
-      const refused = pageManifestRefusal({
-        app: ctx.signedIn.app.app,
-        roles: sessionRoles(ctx.identity.role),
-        header: pageHeader,
-        path: ctx.path,
-        body: pageCommand && typeof pageCommand === 'object' ? (pageCommand as Record<string, unknown>) : {},
-      });
+      const body = pageCommand && typeof pageCommand === 'object' ? (pageCommand as Record<string, unknown>) : {};
+      const roles = sessionRoles(ctx.identity.role);
+      const surface = namedSurface(app, roles, surfaceHeader);
+      const refused = isSurfaceRefusal(surface)
+        ? surface
+        : surface
+          ? surfaceRefusal({ surface, path: ctx.path, body })
+          : ctx.signedIn?.app && pageManifestRefusal({ app, roles, header: pageHeader, path: ctx.path, body });
       if (refused) {
         send(ctx.res, refused.status, refused.body);
         return true;
@@ -365,6 +398,10 @@ const ROUTES: readonly Route<RequestContext>[] = [
   (ctx) => !ctx.path.startsWith('/api/') && pwaRoute(ctx, ctx.path, (id) => ctx.appHosts?.find((host) => host.app.app.id === id)?.app.app),
   async (ctx) => {
     if (ctx.path.startsWith('/api/')) return false;
+    if (headlessScreen(ctx)) {
+      send(ctx.res, 404, { error: HEADLESS_SCREEN });
+      return true;
+    }
     await serveShell(ctx);
     return true;
   },
@@ -772,12 +809,13 @@ async function shareCardRoute(ctx: GatedContext): Promise<void> {
  * the whole of `handle` — the gate, the row policy, the routes — for the
  * request a fetch from that page would make, answered into memory.
  */
-function loopback(ctx: GatedContext, pages: PageDef[]): Loop {
+function loopback(ctx: GatedContext, pages: PageDef[], mark?: WeakSet<IncomingMessage>): Loop {
   return async (method, target, body, signal) => {
     if (signal?.aborted || ctx.res.destroyed) return undefined;
     const form = /^\/api\/forms\/([a-z0-9][a-z0-9-]{0,63})(?:\?|$)/.exec(target);
     if (method === 'GET' && form && ctx.policy?.publicPlacement?.isPlacedForm(form[1])) return undefined;
     const request = loopbackRequest(ctx.req, method, target, body);
+    mark?.add(request);
     inheritTenantHostIntent(ctx.req, request);
     const reply = new CapturedReply();
     // Routes cancel their reads on response close, just as for a disconnected fetch.

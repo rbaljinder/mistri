@@ -231,8 +231,9 @@ function pageRecord(
 
 /**
  * `forms: ['apply']`: the App's form views a page opens (`page.useForm('apply')`). Each is a form view the App
- * declares; a public page, which a signed-out visitor reads, opens only a public one, which needs no session. A
- * signed-in form a page names is reached from that page, so it needs no menu entry of its own (the walk below).
+ * declares. A public page may name a signed-in one too, for the members who read it: a visitor is not served that
+ * form's view, so `useForm` reads it as not granted and the page draws no door, and the server checks the grant on
+ * every submit. A signed-in form a page names is reached from that page, so it needs no menu entry of its own.
  */
 function pageForms(v: Record<string, unknown>, at: string, views: ReadonlyMap<string, ParsedView>): FormView[] {
   if (v.forms === undefined) return [];
@@ -246,10 +247,6 @@ function pageForms(v: Record<string, unknown>, at: string, views: ReadonlyMap<st
         `[page-forms] ${at} opens the form "${name}", which is not a form view this App declares. Its form views: ${declared.join(', ') || 'none'}.`,
       );
     }
-    if (v.public === true && !view.form.public)
-      throw new Error(
-        `[page-forms] ${at} is public and opens "${name}", a signed-in form: a signed-out visitor holds no session to submit it.`,
-      );
     return view;
   });
 }

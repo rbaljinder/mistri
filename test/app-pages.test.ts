@@ -126,7 +126,45 @@ export default definePage({ label: String(typeof process === 'object' && process
       /\[page-path\].*"api" is not a page's path/,
     );
     const page = { key: 'tickets', module: './pages/tickets.page.tsx', fields: { label: 'T', reads: ['desk'] } };
-    assert.throws(() => placePages(APP, [page], 'desk'), /\[page-path\].*already has a view "tickets"/);
+    assert.throws(
+      () => placePages(APP, [page], 'desk'),
+      /\[page-path\] desk: pages\/tickets\.page\.tsx: the App already has a view "tickets", and a page's path is its address\. Rename the file \(pages\/<another path>\.page\.tsx\), or remove the view from the App's views and let the page take its place\.$/,
+    );
+  });
+
+  test('page-tab: a tab whose key is also a page is refused, in either order', () => {
+    const tab = {
+      key: 'tickets-map',
+      module: './pages/tickets/[id]/map.page.tsx',
+      fields: { label: 'Map', reads: ['desk'] },
+      record: { view: 'tickets', tab: 'map' },
+    };
+    const top = { key: 'tickets-map', module: './pages/tickets-map.page.tsx', fields: { label: 'Map', reads: ['desk'], nav: false } };
+    const said =
+      /\[page-tab\] desk: pages\/tickets\/\[id\]\/map\.page\.tsx: its key "tickets-map" is also the page pages\/tickets-map\.page\.tsx\. Rename one of them\.$/;
+    assert.throws(() => placePages(APP, [tab, top], 'desk'), said);
+    assert.throws(() => placePages(APP, [top, tab], 'desk'), said);
+  });
+
+  test('page-nav: nav.group is an id or a list of them, and a page stands in each group it names', async (t) => {
+    const page = (nav: unknown) => ({ key: 'walk', module: './pages/walk.page.tsx', fields: { label: 'Walk', reads: ['desk'], nav } });
+    const two = {
+      ...APP,
+      nav: [
+        { id: 'floor', label: 'Floor', children: ['tickets'] },
+        { id: 'yard', label: 'Yard', children: [] },
+      ],
+    };
+    const placed = placePages(two, [page({ group: ['floor', 'yard'] })], 'desk').nav as Array<{ children: string[] }>;
+    assert.deepEqual(
+      placed.map((group) => group.children),
+      [['tickets', 'walk'], ['walk']],
+    );
+    assert.throws(() => placePages(two, [page({ group: ['floor', 'attic'] })], 'desk'), /\[page-nav\].*nav has no group "attic"/);
+    await assert.rejects(
+      readFiles(t, { 'inbox.page.tsx': pageSource("label: 'Inbox', reads: ['desk'], nav: { group: ['support', 'support'] }") }),
+      /\[page-nav\] pages\/inbox\.page\.tsx: nav\.group names "support" twice\.$/,
+    );
   });
 
   test('page-nav: a page placed where nav has no group, or named in nav as well as placing itself', () => {
@@ -327,10 +365,13 @@ export default definePage({ label: String(typeof process === 'object' && process
       () => withForms({ settle: { ...APP.views.settle, forms: 'apply' } }, roles),
       /\[page-forms\].*not a list of form view keys/,
     );
-    /* A public page opens only a public form: a visitor holds no session to submit a signed-in one. */
-    assert.throws(
-      () => withForms({ settle: { ...APP.views.settle, forms: ['apply'] }, lobby: { ...APP.views.lobby, forms: ['apply'] } }, roles),
-      /\[page-forms\].*"lobby" is public and opens "apply", a signed-in form/,
+    /* A public page may name a signed-in form for its members: a visitor is not served the form, and the server checks the grant on submit. */
+    assert.deepEqual(
+      (
+        withForms({ settle: { ...APP.views.settle, forms: ['apply'] }, lobby: { ...APP.views.lobby, forms: ['apply'] } }, roles).views
+          .lobby as { page?: { forms?: string[] } }
+      ).page?.forms,
+      ['apply'],
     );
     assert.deepEqual(
       (

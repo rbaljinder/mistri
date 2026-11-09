@@ -61,3 +61,10 @@ public fields dealer read id — the App
 public fields dealer read name — the App
 public fields dealer read phone — the App
 public form inquire runs command inquireAboutVehicle version 1 — features "inquiries"
+
+contract closeInquiry v1 f5866355fca9
+contract inquireAboutVehicle v1 6e3a92e28c62
+contract recordInquiryReply v1 959f60c8868f
+contract removeSavedVehicle v1 aec013167d82
+contract saveVehicle v1 4a919aa52a28
+contract sendVehicleInquiry v1 113b826107fb

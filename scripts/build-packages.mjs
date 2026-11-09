@@ -72,14 +72,16 @@ for (const name of readdirSync(join(ROOT, 'packages/ui/src')))
 
 node('scripts/package-docs.mjs');
 node('--conditions=mistri-built', 'scripts/package-console.mjs');
-for (const config of [
-  'config/vite.mistri.config.ts',
-  'config/vite.ui.config.ts',
-  'config/vite.observe.config.ts',
-  'config/vite.embed.config.ts',
-  'config/vite.ssr.config.ts',
+for (const args of [
+  ['-c', 'config/vite.mistri.config.ts'],
+  ['-c', 'config/vite.ui.config.ts'],
+  ['-c', 'config/vite.observe.config.ts'],
+  ['-c', 'config/vite.embed.config.ts'],
+  /* After the embed build, which empties dist/embed: @mistriwork/mistri/react/headless is built apart (the config says why). */
+  ['-c', 'config/vite.embed.config.ts', '--mode', 'headless'],
+  ['-c', 'config/vite.ssr.config.ts'],
 ])
-  run(bin('vite'), ['build', '-c', config]);
+  run(bin('vite'), ['build', ...args]);
 
 const expected = [
   'packages/ui/dist/index.js',
@@ -100,6 +102,7 @@ const expected = [
   'packages/mistri/dist/ui/index.js',
   'packages/mistri/dist/observe/observe/index.html',
   'packages/mistri/dist/embed/react/index.js',
+  'packages/mistri/dist/embed/react/headless.js',
   'packages/mistri/dist/server/index.js',
 ];
 const missing = expected.filter((file) => !existsSync(join(ROOT, file)));

@@ -39,6 +39,7 @@ import {
 } from '@mistriwork/kit/client/recordWriteRefresh.js';
 import { queryReads } from '@mistriwork/kit/client/liveReads.js';
 import { ownWriteMark } from '@mistriwork/kit/client/ownWrites.js';
+import { staleReviews } from './commandReviews.js';
 import {
   announcePulse,
   clearHold,
@@ -259,6 +260,9 @@ export function invalidateLive(batch: LiveBatch, client: QueryClient = queryClie
   /* A refetch is the reader's own read, not a composed page's answer from before the change. */
   if (own === undefined) composedReads()?.forget();
   const held = drafts();
+  /* A review a page showed (commandReviews.ts) no longer reads its record once a change reached it: the page shows it again. */
+  if (batch.reset) staleReviews();
+  else for (const [table, change] of batch.tables) staleReviews(table, change.keys === 'many' ? 'many' : change.keys.keys());
   if (!batch.reset) {
     announcePulse({
       id: Date.now(),

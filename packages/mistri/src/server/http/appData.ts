@@ -38,6 +38,8 @@ import { httpOperationRoutes } from '@mistriwork/engine/server/http/httpOperatio
 import { inboxRoutes } from './inboxRoutes.js';
 import { integrationRoutes } from './integrationRoutes.js';
 import { PAGE_HEADER, PAGE_LOAD_PATH, pageLoad, pageManifestRefusal } from './pageLoad.js';
+import { headlessHeld, isSurfaceRefusal, namedSurface, surfaceRefusal } from './surfaceGate.js';
+import { SURFACE_HEADER } from '../../shared/appSurfaces.js';
 import type { ComposeResources } from '@mistriwork/engine/server/http/recordCompose.js';
 import { recordHistoryRoutes } from './recordHistoryRoutes.js';
 import { decisionRoutes } from './decisionRoutes.js';
@@ -67,7 +69,12 @@ function mayAsk(ctx: RequestContext, path: string): boolean {
 }
 
 export const APP_DATA: DataHooks = {
-  source: resolveSource,
+  /* A headless App answers nothing but its surfaces, however a request named it (surfaceGate.ts). */
+  source: async (ctx, id) => {
+    const source = await resolveSource(ctx, id);
+    headlessHeld(ctx, source.selectedHost?.app.app);
+    return source;
+  },
   appReads: APP_READS,
   gates: {
     /* A signed-out visitor asking past `auth.public` is asked to sign in, alike for a private table and for none
@@ -133,9 +140,26 @@ export const APP_DATA: DataHooks = {
   },
   page: async (ctx, source, body) => {
     const app = source.selectedHost?.app.app;
-    if (!app) return false;
+    if (!app) {
+      /* A surface reads its App's own data, never another connection's. */
+      if (ctx.req.headers[SURFACE_HEADER] === undefined) return false;
+      send(ctx.res, 403, { error: 'A surface reads only its App.', code: 'surface' });
+      return true;
+    }
     const { identity, res, req, path } = ctx;
     const roles = sessionRoles(identity.role);
+    /* A headless front end's read or load is held to the surface it names (surfaceGate.ts), and its loader is the surface's. */
+    const named = namedSurface(app, roles, req.headers[SURFACE_HEADER]);
+    const surface = isSurfaceRefusal(named) ? undefined : named;
+    const surfaceRefused = isSurfaceRefusal(named)
+      ? named
+      : surface && path !== PAGE_LOAD_PATH
+        ? surfaceRefusal({ surface, path, body, schema: source.schema })
+        : undefined;
+    if (surfaceRefused) {
+      send(res, surfaceRefused.status, surfaceRefused.body);
+      return true;
+    }
     if (path === PAGE_LOAD_PATH) {
       const reply = await pageLoad({
         app,
@@ -147,10 +171,12 @@ export const APP_DATA: DataHooks = {
         reader: source.adapter,
         schema: source.schema,
         ...(source.zone === undefined ? {} : { zone: source.zone }),
+        ...(surface ? { surface } : {}),
       });
       send(res, reply.status, reply.body);
       return true;
     }
+    if (surface) return false;
     const refused = pageManifestRefusal({ app, roles, header: req.headers[PAGE_HEADER], path, body, schema: source.schema });
     if (!refused) return false;
     send(res, refused.status, refused.body);

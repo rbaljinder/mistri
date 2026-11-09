@@ -500,6 +500,8 @@ export function sayCoverage(input: {
   look: string;
   asked: boolean;
   as?: string;
+  /** The App's surfaces (surfaces/*.surface.ts): what a front end of its own draws, so nothing here can open them. */
+  surfaces?: number;
 }): string[] {
   const { shots, skipped, windows, look, asked } = input;
   const kinds = KINDS.map((kind) => [shots.filter((shot) => shot.kind === kind).length, kind] as const)
@@ -513,6 +515,7 @@ export function sayCoverage(input: {
   if (asked) lines.push('skipped: every address not asked for; without routes grade opens them all');
   else if (skipped.length)
     lines.push(`skipped: ${count(skipped.length, 'address', 'addresses')}`, ...skipped.map((unshot) => `  ${unshot.what}: ${unshot.why}`));
+  if (input.surfaces) lines.push(`not graded: ${count(input.surfaces, 'surface')}, drawn by a front end of the App's own`);
   lines.push('not graded here: the other looks (--theme all) and roles (--as all)');
   return lines;
 }

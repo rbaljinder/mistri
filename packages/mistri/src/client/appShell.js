@@ -111,6 +111,12 @@ export async function start() {
     await (await import('./oauthConsent.js')).showConsent(authorize);
     return;
   }
+  /* A headless App's sign-in, signed in: back to the front end that sent the person, or a note saying they may go
+     back. Its root is not a page to land on (headlessLanding.js). */
+  if (landingAt?.kind === 'sign-in' && me.signedIn && me.headless === true) {
+    (await import('./headlessLanding.js')).landHeadless();
+    return;
+  }
   /* The kit's shell and the App's chrome, two chunks the page preloads together (vite.config.ts, `surfaces`). */
   const [{ boot }, { appChrome }] = await Promise.all([import('@mistriwork/kit/client/app.js'), import('./appnav.js')]);
   await boot(me, landingAt, { chrome: appChrome });

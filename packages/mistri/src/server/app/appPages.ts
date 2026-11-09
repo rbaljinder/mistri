@@ -61,6 +61,8 @@ const RENAMED: Readonly<Record<string, string>> = {
 const NAV_RENAMED: Readonly<Record<string, string>> = { icon: 'the page\'s own "icon", beside its "label"', order: 'nav.position' };
 /** The key `definePage` keeps its fields under, for the worker to find them on the default export. */
 const FIELDS = 'mistri.page';
+/** The key `defineSurface` keeps its fields under (appSurfaces.ts). */
+const SURFACE_FIELDS = 'mistri.surface';
 
 /** One page file, read. */
 interface PageFile {
@@ -155,8 +157,16 @@ function checkedFields(raw: unknown, key: string, at: string, tab = false): Reco
     if (renamed) throw new Error(`[page-nav] ${at}: nav.${renamed} is now ${NAV_RENAMED[renamed]}.`);
     if (!isRecord(raw.nav) || Object.keys(raw.nav).some((name) => !NAV_KEYS.includes(name)))
       throw new Error(`[page-nav] ${at} has a "nav" that is not false or { group?, position? }.`);
-    if (raw.nav.group !== undefined && typeof raw.nav.group !== 'string')
-      throw new Error(`[page-nav] ${at}: nav.group is a nav group's id.`);
+    const { group } = raw.nav;
+    if (
+      group !== undefined &&
+      !(typeof group === 'string' || (Array.isArray(group) && group.length && group.every((id) => typeof id === 'string')))
+    )
+      throw new Error(`[page-nav] ${at}: nav.group is a nav group's id, or a list of them.`);
+    if (Array.isArray(group)) {
+      const twice = group.find((id, i) => group.indexOf(id) !== i);
+      if (twice !== undefined) throw new Error(`[page-nav] ${at}: nav.group names "${twice}" twice.`);
+    }
     if (raw.nav.position !== undefined && (!Number.isSafeInteger(raw.nav.position) || (raw.nav.position as number) < 0))
       throw new Error(`[page-nav] ${at}: nav.position is the page's place among its neighbors, from 0.`);
   }
@@ -176,8 +186,22 @@ export function placePages(raw: Record<string, unknown>, pages: readonly PageFil
   for (const page of pages) {
     const at = `${where}: pages/${page.module.slice('./pages/'.length)}`;
     const { fields } = page;
-    if (Object.hasOwn(views, page.key))
-      throw new Error(`[page-path] ${at}: the App already has a view "${page.key}". A path is one view's.`);
+    if (Object.hasOwn(views, page.key)) {
+      /* A page never replaces a view's address: one key would mean two things in nav, the palette, the canonical
+         address and the lock. */
+      const other = pages.find((each) => each !== page && each.key === page.key);
+      if (other && (other.record || page.record)) {
+        const [tab, top] = page.record ? [page, other] : [other, page];
+        throw new Error(
+          `[page-tab] ${where}: pages/${tab.record!.view}/[id]/${tab.record!.tab}.page.tsx: its key "${tab.key}" is also the page ` +
+            `${top.module.replace('./', '')}. Rename one of them.`,
+        );
+      }
+      throw new Error(
+        `[page-path] ${at}: the App already has a view "${page.key}", and a page's path is its address. ` +
+          `Rename the file (pages/<another path>.page.tsx), or remove the view from the App's views and let the page take its place.`,
+      );
+    }
     if (named.has(page.key)) {
       throw new Error(
         `[page-nav] ${where}: nav names "${page.key}", a free-form page. A page places itself: definePage({ nav: { group: '…' } }).`,
@@ -215,10 +239,14 @@ export function placePages(raw: Record<string, unknown>, pages: readonly PageFil
           `definePage({ nav: { group: '${spaces[0]}' } }), or nav: false. The workspaces: ${spaces.join(', ')}.`,
       );
     }
-    const siblings = placing.group === undefined ? nav : groupChildren(nav, placing.group as string);
-    if (!siblings) throw new Error(`[page-nav] ${at}: nav has no group "${String(placing.group)}".`);
-    const position = typeof placing.position === 'number' ? Math.min(placing.position, siblings.length) : siblings.length;
-    siblings.splice(position, 0, page.key);
+    /* A page can stand in several workspaces, as a view can: its key is spliced into each group it names. */
+    const groups = placing.group === undefined ? [undefined] : ([] as string[]).concat(placing.group as string | string[]);
+    for (const group of groups) {
+      const siblings = group === undefined ? nav : groupChildren(nav, group);
+      if (!siblings) throw new Error(`[page-nav] ${at}: nav has no group "${String(group)}".`);
+      const position = typeof placing.position === 'number' ? Math.min(placing.position, siblings.length) : siblings.length;
+      siblings.splice(position, 0, page.key);
+    }
   }
   return { ...raw, views, ...(nav ? { nav } : {}) };
 }
@@ -261,7 +289,7 @@ export default inert;`;
 
 function standIn(module: HostModule): string {
   if (module === '@mistriwork/mistri/page') {
-    const others = PAGE_EXPORTS.filter((name) => name !== 'definePage');
+    const others = PAGE_EXPORTS.filter((name) => name !== 'definePage' && name !== 'defineSurface');
     return [
       INERT,
       `export const ${others.map((name) => `${name} = inert`).join(', ')};`,
@@ -270,6 +298,10 @@ function standIn(module: HostModule): string {
   const { component, ...fields } = definition;
   if (typeof component !== 'function') throw new Error('definePage has no "component": the function that draws the page.');
   return { [Symbol.for(${JSON.stringify(FIELDS)})]: fields, component };
+}`,
+      `export function defineSurface(definition) {
+  if (!definition || typeof definition !== 'object') throw new Error('defineSurface takes the surface: defineSurface({ label, reads }).');
+  return { [Symbol.for(${JSON.stringify(SURFACE_FIELDS)})]: { ...definition } };
 }`,
     ].join('\n');
   }
@@ -318,16 +350,19 @@ export function withStandIns(parseAst: Parse, code: string): string {
   return out;
 }
 
-/** The fields `definePage` was given, read in a worker with no environment; the component is never called. */
-function evaluate(code: string): Promise<unknown> {
+/** The fields `definePage` (or, for a surface, `defineSurface`) was given, read in a worker with no environment; the
+    component is never called. */
+export function evaluate(code: string, kind: 'page' | 'surface' = 'page'): Promise<unknown> {
+  const symbol = kind === 'page' ? FIELDS : SURFACE_FIELDS;
+  const maker = kind === 'page' ? 'definePage' : 'defineSurface';
   return new Promise((resolveValue, reject) => {
     const worker = new Worker(
       `const { parentPort, workerData } = require('node:worker_threads');
        import(workerData.href).then(
          (mod) => {
            const page = mod.default;
-           const fields = page && typeof page === 'object' ? page[Symbol.for(${JSON.stringify(FIELDS)})] : undefined;
-           if (!fields) return parentPort.postMessage({ ok: false, message: 'has no default export made by definePage: export default definePage({ … }).' });
+           const fields = page && typeof page === 'object' ? page[Symbol.for(${JSON.stringify(symbol)})] : undefined;
+           if (!fields) return parentPort.postMessage({ ok: false, message: 'has no default export made by ${maker}: export default ${maker}({ … }).' });
            try { parentPort.postMessage({ ok: true, value: fields }); } catch (err) {
              parentPort.postMessage({ ok: false, message: "a page's definition is data beside its component — " + err.message });
            }
@@ -344,7 +379,7 @@ function evaluate(code: string): Promise<unknown> {
       done(() => (m.ok ? resolveValue(m.value) : reject(new Error(m.message)))),
     );
     worker.once('error', (err) => done(() => reject(err)));
-    const timer = setTimeout(() => done(() => reject(new Error('the page module did not finish loading within 10s'))), 10_000);
+    const timer = setTimeout(() => done(() => reject(new Error(`the ${kind} module did not finish loading within 10s`))), 10_000);
     timer.unref();
   });
 }

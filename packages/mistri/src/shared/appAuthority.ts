@@ -180,6 +180,14 @@ export function authorityReport(app: AppDef, origins?: AppOrigins, env: readonly
     if (view.page.loader) lines.push(`page ${key} loads ${view.page.loader}${by}`);
     if (view.page.public) lines.push(`page ${key} public${by}`);
   }
+  /* A surface is the whole of what a front end the App does not draw may ask of it: what it reads, runs and loads is
+     the door that front end has, so each is named. The reader's grants still decide each request inside it. */
+  for (const key of sorted(Object.keys(app.surfaces ?? {}))) {
+    const surface = app.surfaces![key];
+    for (const resource of sorted(surface.reads)) lines.push(`surface ${key} reads ${resource}${SEPARATOR}${THE_APP}`);
+    for (const command of sorted(surface.commands)) lines.push(`surface ${key} runs ${command}${SEPARATOR}${THE_APP}`);
+    if (surface.loader) lines.push(`surface ${key} loads ${surface.loader}${SEPARATOR}${THE_APP}`);
+  }
   /* A way out of the page for the App's components: the policy opens exactly these origins beside its own. */
   for (const origin of app.ui.csp?.connect ?? []) fact(`egress connect ${origin}`);
   for (const origin of app.ui.csp?.images ?? []) fact(`egress images ${origin}`);

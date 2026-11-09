@@ -104,6 +104,52 @@ does not change. `Page` draws one of the App's
 [free-form pages](/docs/custom-components/#free-form-pages) by its path. `onOpenRecord` hands you the record a list opens; without
 it, the record opens in place. A page shows one mistri element at a time.
 
+## Your own screens (headless)
+
+To draw every element yourself and use the App only as your backend, declare
+what your screens may read and run with `defineSurface`, one file under the
+App's `surfaces/`:
+
+```ts title="surfaces/desk.surface.ts"
+import { defineSurface } from '@mistriwork/mistri/page';
+
+export default defineSurface({ label: 'Desk', reads: ['loan', 'reviewer'], commands: ['assign'] });
+```
+
+```tsx
+'use client';
+import { Provider, useCommand, useRows } from '@mistriwork/mistri/react/headless';
+
+function Loans() {
+  const loans = useRows('loan', { show: ['id', 'reference'] });
+  const assign = useCommand('assign');
+  return (
+    <ul>
+      {loans.data?.map((loan) => (
+        <li key={String(loan.id)}>
+          {String(loan.reference)} <button onClick={() => assign.run({ id: loan.id }, { reviewer: 3 })}>Assign</button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export default function Desk() {
+  return (
+    <Provider endpoint="/api/mistri" app="loans" surface="desk" fallback={<p>Opening…</p>}>
+      <Loans />
+    </Provider>
+  );
+}
+```
+
+The headless `Provider` draws nothing and imports no CSS. Every request names
+its surface, and the server refuses (403) a read or command the surface does
+not name; the person's grants and row access still apply inside it.
+`ui: { headless: true }` makes the surfaces the App's only door: its own
+screens answer 404, and its sign-in still opens. Serve the App from its
+directory so its `surfaces/` are read.
+
 ## Sign-in
 
 With `auth` left out, the App uses mistri's own session cookie. To sign

@@ -196,6 +196,54 @@ offers the change beside theirs), and a list being worked in holds still behind 
 therefore takes no `refresh`. See [live sync](../site/src/content/docs/docs/live-sync.md); the rules the pages follow
 are in [the design system](design.md), rule 11.
 
+## Surfaces: a front end of your own
+
+An App can be the backend of screens it does not draw, a Next.js page on the same domain, say. What that front end
+may read and run is a surface, one file each under `surfaces/`, keyed by the file's name:
+
+```ts
+// surfaces/desk.surface.ts
+import { defineSurface } from '@mistriwork/mistri/page';
+
+export default defineSurface({ label: 'Desk', reads: ['loan', 'reviewer'], commands: ['assign'] });
+```
+
+A surface is a free-form page with nothing to draw: its `reads`, `commands`, `forms`, `loader` and `roles` are judged
+by a page's rules and codes, and a key only a drawn page has (`component`, `nav`, `layout`, `head`, `params`,
+`public`, `actions`) is refused with the page's code for it. The catalog lists each as `kind: 'surface'`, the grade
+counts them, and `authority.lock` carries a line for each read, command and loader.
+
+The front end uses `@mistriwork/mistri/react/headless`: a `Provider` with no shell and no styles, and the page hooks
+(`useRows`, `useRecord`, `useBreakdown`, `useOptions`, `useCommand`, `useAction`, `useForm`, `useHref`). Every request
+it makes names its surface in `X-Mistri-Surface`, and the server holds it there (`server/http/surfaceGate.ts`):
+
+- A surface's requests take only the routes a headless host calls: view/run, the breakdowns, the page loader, the
+  command routes and `GET /api/file`. Any other `/api/` route is refused.
+- A read of a resource the surface does not read, or a command it does not run, is refused 403 `{ code: 'surface' }`
+  before anything is read or run. So is a header naming a surface the App does not have, or one offered only to
+  other roles.
+- `ui: { headless: true }` makes the surfaces the App's only door: an `/api/` request with no header is refused, and
+  the App's own screens answer 404 ("this App is headless; it is served through its embed surfaces"). Its sign-in,
+  OAuth consent and auth routes still open, and so do who-am-I and sign-out. Signed in, the sign-in page goes to its
+  `?then=` address when that is on the same origin (`/sign-in?then=/applications`), and otherwise says the person is
+  signed in and may close the tab or go back.
+- A surface widens nothing: the reader's grants, row policy and field ceilings decide what a read returns and whether
+  a command runs, as for any request. A surface is offered to the roles that read what it reads.
+
+Surfaces are read only when the App is served from its directory (`--app <dir>`, `createHandler({ app: dir })`).
+`e2e/embed-headless.spec.ts` drives a headless App end to end: sign in, list, run, and a revoked grant refused.
+[`examples/embed`](../examples/embed/README.md) is the same in a Next.js app: a route handler mounts the App under
+`/api/mistri`, and a page lists its rows and runs its command with plain elements.
+
+Not yet; these are planned for rc.26:
+
+- `useForm` and `useAction` refuse under the headless Provider; run a command with `useCommand`.
+- No live sync: a surface's reads are not refreshed by other people's changes.
+- A command that names no record (`target: 'none'`) is refused from a surface.
+- `useHref` writes `<basePath>/<view>/<key>` and `<basePath>/<view>`, not the App's canonical addresses.
+- A person who signs in after the Provider has opened is not seen until the page reloads; the Provider does not
+  boot again.
+
 ## What each kind of App can do
 
 An unscoped App's roles read whole tables; a row-policy App narrows them per person; a tenant App serves several

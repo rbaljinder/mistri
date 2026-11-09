@@ -62,6 +62,7 @@ export const UI_EXPORTS = [
   'useRecord',
   'useBreakdown',
   'useNavigate',
+  'useHref',
   'useComposer',
   'useFormat',
   'useLook',
@@ -83,11 +84,12 @@ export const UI_EXPORTS = [
 ] as const;
 
 /**
- * What `@mistriwork/mistri/page` adds to the SDK: `definePage`, the platform's command form and per-row buttons,
+ * What `@mistriwork/mistri/page` adds to the SDK: `definePage` and `defineSurface`, the platform's command form and per-row buttons,
  * `Scope` and `List`, the platform's sections as blocks (components/sdk/page.tsx) and the house controls.
  */
 const PAGE_ONLY = [
   'definePage',
+  'defineSurface',
   'useAddressState',
   'CommandForm',
   'CommandButton',
@@ -96,6 +98,7 @@ const PAGE_ONLY = [
   'List',
   'Grid',
   'Panel',
+  'Text',
   'Tabs',
   'Rows',
   'RecordCard',

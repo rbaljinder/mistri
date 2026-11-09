@@ -5,8 +5,8 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { useCommandHandle, useViewer } from './hooks.js';
-import { useUiHost, type UiCommandRef, type UiOption, type UiReferenceInput } from './context.js';
+import { useCommandHandle, useDeclared, useViewer } from './hooks.js';
+import { useUiHost, type UiCommandRef, type UiOption, type UiReferenceInput, type UiResourceChoices } from './context.js';
 import { say } from '../../copy/components/components/sdk/options.js';
 
 const LIMIT = 20;
@@ -15,6 +15,11 @@ const SETTLE_MS = 150;
 
 /** The record a picker holds, named: `available` is false when the reader cannot see it, which is never "not found". */
 type UiResolvedOption = UiOption & { available: boolean };
+
+/** What `useOptions(resource, …)` is asked beside the resource: a condition on its rows, as `useRows`' `where`. */
+interface UiResourceOptions {
+  where?: unknown;
+}
 
 /** A reference input's choices, searched and paged, and the one picked (`useOptions`). */
 export interface UiOptions {
@@ -43,14 +48,46 @@ export interface UiOptions {
  * too. A reader who has lost access to the resource is told the pick is not available, never that it does not exist.
  * A reader not granted the command is offered nothing. Draw the list with `Typeahead` from `@mistriwork/ui`, which
  * keeps the keyboard.
+ *
+ * `useOptions('country', { where: { active: true } })` offers a resource's own records instead, with no command
+ * behind them: a declared read (a free-form page must list the resource in `reads`), labelled by the resource's title
+ * column, under the reader's grants and row policy: the reader is offered only the rows they may read.
  */
-export function useOptions(command: UiCommandRef, name: string): UiOptions {
-  const host = useUiHost();
+export function useOptions(command: UiCommandRef, name: string): UiOptions;
+export function useOptions(resource: string, options?: UiResourceOptions): UiOptions;
+export function useOptions(first: string, second?: string | UiResourceOptions): UiOptions {
+  /* Which form is the call's own shape, the same on every render of one call site: a hook is never added or dropped. */
+  const source = typeof second === 'string' ? useCommandSource(first, second) : useResourceSource(first, second);
+  return usePicker(source);
+}
+
+/** Where a picker's choices come from: the field to read them by, and what its cache keys on. */
+interface PickerSource {
+  field: UiReferenceInput | UiResourceChoices | undefined;
+  key: readonly unknown[];
+}
+
+function useCommandSource(command: UiCommandRef, name: string): PickerSource {
   const viewer = useViewer();
   const handle = useCommandHandle(command, viewer);
   const declared = handle.input?.(name);
   if (handle.granted && declared?.type !== 'reference') throw new Error(say('notAReference', { command, name }));
   const reference = handle.granted && declared?.type === 'reference' ? (declared as UiReferenceInput) : undefined;
+  return { field: reference, key: [command, name] };
+}
+
+function useResourceSource(resource: string, options: UiResourceOptions = {}): PickerSource {
+  /* A declared read: a page that does not list the resource is refused here, as `useRows` refuses it. */
+  const page = useDeclared(resource);
+  const where = options.where;
+  return {
+    field: { resource, ...(where === undefined ? {} : { where }), ...(page ? { page } : {}) },
+    key: [resource, where, page],
+  };
+}
+
+function usePicker({ field: reference, key: source }: PickerSource): UiOptions {
+  const host = useUiHost();
   const [query, setQuery] = useState('');
   const [asked, setAsked] = useState('');
   const [selected, setSelected] = useState<string | number | undefined>(undefined);
@@ -62,7 +99,7 @@ export function useOptions(command: UiCommandRef, name: string): UiOptions {
   }, [query, asked]);
   const read = useInfiniteQuery({
     /* The text is in the key, so each query has its own answer and only the latest one's is drawn. */
-    queryKey: ['mistri-ui', 'options', ...host.scope, command, name, asked],
+    queryKey: ['mistri-ui', 'options', ...host.scope, ...source, asked],
     queryFn: ({ pageParam }) => host.choices(reference!, asked, { offset: pageParam, limit: LIMIT }),
     initialPageParam: 0,
     getNextPageParam: (last, pages) => (last.more ? pages.length * LIMIT : undefined),
@@ -76,7 +113,7 @@ export function useOptions(command: UiCommandRef, name: string): UiOptions {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
   const onPage = useMemo(() => pages.flat().find((option) => option.key === selected), [pages, selected]);
   const named = useQuery({
-    queryKey: ['mistri-ui', 'option', ...host.scope, command, name, selected],
+    queryKey: ['mistri-ui', 'option', ...host.scope, ...source, selected],
     /* A key the reader cannot read is answered as unavailable, as an access loss is: the picker never says it is gone. */
     queryFn: async (): Promise<UiResolvedOption> => {
       const found = await host.choiceName(reference!, selected!).catch(() => null);

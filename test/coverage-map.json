@@ -655,6 +655,16 @@
       "tests": [{ "file": "packages/mistri/src/embed/index.test.tsx" }]
     },
     {
+      "id": "react-headless",
+      "surface": ["package: export ./react/headless"],
+      "tests": [
+        { "file": "packages/mistri/src/embed/headless.test.tsx" },
+        { "file": "test/app-surfaces.test.ts" },
+        { "file": "e2e/embed-headless.spec.ts" }
+      ],
+      "browser": true
+    },
+    {
       "id": "maintenance",
       "surface": ["package: export ./maintenance"],
       "tests": [{ "file": "test/store-upgrades.test.ts" }, { "file": "test/assistant-context.test.ts" }]
@@ -704,6 +714,11 @@
       "id": "experiments",
       "surface": ["dsl: app: experiments", "dsl: app: audiences"],
       "tests": [{ "file": "test/experiment-decisions.test.ts" }, { "file": "test/flag-audiences.test.ts" }]
+    },
+    {
+      "id": "headless",
+      "surface": ["dsl: app: ui.headless"],
+      "tests": [{ "file": "test/app-surfaces.test.ts" }, { "file": "e2e/embed-headless.spec.ts" }]
     },
     { "id": "analytics", "surface": ["dsl: app: analytics"], "tests": [{ "file": "test/analytics-declarations.test.ts" }] },
     {

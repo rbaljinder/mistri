@@ -79,6 +79,11 @@
       "source": "packages/mistri/src/embed/tanstack-router.ts",
       "types": "packages/mistri/schema/react-tanstack-router.d.ts"
     },
+    "@mistriwork/mistri/react/headless": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/embed/headless.tsx",
+      "types": "packages/mistri/schema/react-headless.d.ts"
+    },
     "@mistriwork/mistri/testing": {
       "layer": "mistri",
       "source": "packages/mistri/src/server/testing.ts",

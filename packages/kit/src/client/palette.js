@@ -27,7 +27,7 @@ import { mount, unmount } from './components/mount.js';
 import { surfaceOf } from './surfaces.js';
 import { shell } from './shellMode.js';
 import { appListQuery } from './components/appListModel.js';
-import { appMenu, appRooms, isListRoom, roomPageId } from './components/appRooms.js';
+import { appMenu, appRooms, isListRoom, recordTabs, roomPageId } from './components/appRooms.js';
 import { navigationPaths } from './components/navigationTree.js';
 import { plural } from './locale.js';
 import { say } from './copy/shell/palette.js';
@@ -81,6 +81,22 @@ export function entries() {
           'reset',
         ),
     });
+  }
+
+  /* A record's tab page has no address without a record, so it is a place to go only while one is open: "Map — Acme Corp",
+     never a top-level entry. Every list's record page for the table draws the tab, so the open record's table is the key. */
+  const here = app ? currentEntry() : undefined;
+  if (app && here?.key && here.table) {
+    const name = here.label ? String(here.label) : '';
+    for (const tab of recordTabs(app, here.table)) {
+      items.push({
+        kind: 'page',
+        label: name ? say('recordTab', { tab: tab.label, record: name }) : tab.label,
+        search: `${tab.label} ${name}`.trim(),
+        icon: tab.icon,
+        run: () => go({ ...here, tab: tab.page.record.tab }),
+      });
+    }
   }
 
   for (const table of workbench ? (state.schema?.tables ?? []) : []) {

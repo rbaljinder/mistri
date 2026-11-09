@@ -1,6 +1,7 @@
 /**
  * Commons' front door as a visitor and a member see it: what is busy and what has the most to read, each a way into
- * its thread; the boards; a way to join for the one and the boards for the other; and a new forum, said in words.
+ * its thread; the boards; a way to join for the one and the boards, and a thread started in one, for the other; and a
+ * new forum, said in words.
  */
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, waitFor } from '@testing-library/react';
@@ -48,13 +49,16 @@ test('a visitor sees what is busy, what has the most to read, every board, and a
   expect(list(view, 'Most to read').querySelector('li')).toHaveTextContent('7 replies');
   expect((await view.findByText('Electronics', { selector: 'strong' })).closest('button')).toHaveTextContent('2 threads · 9 replies');
   expect(view.getByText('Woodshop', { selector: 'button > strong' }).closest('button')).toHaveTextContent('1 thread · 1 reply');
-  expect(view.getByText('Join or sign in')).toHaveAttribute('href', 'sign-in');
-  expect(view.getByText('Sign in')).toHaveAttribute('href', 'sign-in');
+  expect(view.getByText('Join or sign in')).toHaveAttribute('href', '/sign-in');
+  expect(view.getByText('Sign in')).toHaveAttribute('href', '/sign-in');
 });
 
 test('a thread and a board open where they live, and the latest threads are one press away', async () => {
   const view = renderPage(page, { viewer: visitor, data: data() });
-  await press(view, 'Reflowing with a skillet');
+  // A thread is in both lists once both have answered: the busy one is pressed.
+  fireEvent.click(
+    (await view.findByText('Reflowing with a skillet', { selector: 'ul[aria-label="Busy right now"] strong' })).closest('button')!,
+  );
   expect(view.navigations.at(-1)).toMatchObject({ kind: 'record', resource: 'thread', key: { id: 2 } });
   fireEvent.click((await view.findByText('Woodshop', { selector: 'button > strong' })).closest('button')!);
   expect(view.navigations.at(-1)).toMatchObject({ kind: 'record', resource: 'board', key: { id: 2 } });
@@ -66,6 +70,17 @@ test('a member is offered the boards instead of the sign-in', async () => {
   const view = renderPage(page, { viewer: { signedIn: true, account: 'rosa' }, data: data() });
   expect(await view.findByText('Browse the boards')).toBeInTheDocument();
   expect(view.queryByText(/sign in/i)).toBeNull();
+});
+
+test('a member starts a thread from a board, with that board already chosen; a visitor is not offered it', async () => {
+  const member = renderPage(page, { viewer: { signedIn: true, account: 'rosa' }, data: data(), forms: { 'start-thread': {} } });
+  await waitFor(() => expect(member.getAllByText('Start a thread here')).toHaveLength(2));
+  fireEvent.click(member.getAllByText('Start a thread here')[1]!.closest('button')!);
+  await waitFor(() => expect(member.navigations.at(-1)).toEqual({ kind: 'form', view: 'start-thread', prefill: { board: 2 } }));
+  member.unmount();
+  const visitorView = renderPage(page, { viewer: visitor, data: data(), forms: { 'start-thread': {} } });
+  await visitorView.findByText('Woodshop', { selector: 'button > strong' });
+  expect(visitorView.queryByText('Start a thread here')).toBeNull();
 });
 
 test('a forum with nothing in it yet says so', async () => {

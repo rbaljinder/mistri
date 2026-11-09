@@ -11,5 +11,7 @@ export const say = defineMessages({
   confirmBody: 'Run {label} on this record?',
   actionDone: '{label} done.',
   formProcessing: '{label} was received and is still being processed.',
+  reviewStale: 'The record changed after you reviewed {label}. Review it again before you run it.',
+  reviewNotOffered: '{label} has no record revision to review; run it as it is.',
   notConfirmed: '{label} was sent, and its result is not confirmed. Check the record before you send it again.',
 });

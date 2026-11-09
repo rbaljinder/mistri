@@ -4,7 +4,8 @@
  * every way in is one of its own: the latest threads, a board, a thread, and Join or sign in.
  *
  * Public: a forum is read signed out (`auth.public` already grants every table it reads), and a signed-in member who
- * lands here is offered the boards instead of the sign-in. It reads only what the welcome page reads, and runs nothing.
+ * lands here is offered the boards instead of the sign-in. It reads only what the welcome page reads, and runs nothing
+ * itself: a member starts a thread from a board's card, in the Start a thread form with that board already chosen.
  */
 import type { ReactNode } from 'react';
 import {
@@ -21,6 +22,7 @@ import {
   useDeployment,
   useFile,
   useFormat,
+  useHref,
   useNavigate,
   useViewer,
 } from '@mistriwork/mistri/page';
@@ -35,6 +37,7 @@ const page = definePage({
   public: true,
   layout: 'bare',
   reads: ['board', 'thread', 'member', 'site_image'],
+  forms: ['start-thread'],
   component: StartHere,
 });
 export default page;
@@ -43,7 +46,9 @@ function StartHere(): ReactNode {
   const { name } = useDeployment();
   const { signedIn } = useViewer();
   const nav = useNavigate();
+  const href = useHref();
   const photo = useFile('site_image')({ id: 1 });
+  const start = page.useForm('start-thread');
   const boards = page.useRows('board', { show: ['id', 'name', 'description', 'threads', 'replies'], sort: 'position', limit: 12 });
   return (
     <div className="c-page-start-here">
@@ -51,8 +56,7 @@ function StartHere(): ReactNode {
         <p className="c-page-start-here-name">
           <Icon name="wrench" /> {name}
         </p>
-        {/* No public address for the sign-in: relative to this page, it is the App's own `sign-in`, at the root or under a prefix. */}
-        {signedIn ? null : <a href="sign-in">Sign in</a>}
+        {signedIn ? null : <a href={href.signIn()}>Sign in</a>}
       </header>
       <section className="c-page-start-here-hero">
         <div className="c-page-start-here-intro">
@@ -70,7 +74,7 @@ function StartHere(): ReactNode {
                 Browse the boards
               </Button>
             ) : (
-              <a className="c-page-start-here-join" href="sign-in">
+              <a className="c-page-start-here-join" href={href.signIn()}>
                 Join or sign in
               </a>
             )}
@@ -90,18 +94,21 @@ function StartHere(): ReactNode {
             {(rows) => (
               <Cluster min="15rem">
                 {rows.map((board) => (
-                  <button
-                    key={board.id}
-                    type="button"
-                    className="c-page-start-here-board"
-                    onClick={() => nav.openRecord('board', { id: board.id })}
-                  >
-                    <strong>{board.name}</strong>
-                    <span>{board.description}</span>
-                    <small>
-                      {count(board.threads, 'thread')} · {count(board.replies, 'reply', 'replies')}
-                    </small>
-                  </button>
+                  <div key={board.id} className="c-page-start-here-board-cell">
+                    <button type="button" className="c-page-start-here-board" onClick={() => nav.openRecord('board', { id: board.id })}>
+                      <strong>{board.name}</strong>
+                      <span>{board.description}</span>
+                      <small>
+                        {count(board.threads, 'thread')} · {count(board.replies, 'reply', 'replies')}
+                      </small>
+                    </button>
+                    {/* Signed out, the form is not served: the hero's Join is the way in, so the card stays a way to read. */}
+                    {signedIn && start.granted && (
+                      <Button intent="quiet" size="compact" onClick={() => void start.open({ board: board.id })}>
+                        Start a thread here
+                      </Button>
+                    )}
+                  </div>
                 ))}
               </Cluster>
             )}
