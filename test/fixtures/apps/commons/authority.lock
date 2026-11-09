@@ -140,3 +140,22 @@ public fields member read version — the App
 public fields member read website — the App
 public form report-post runs command reportPost version 1 — features "posting"
 page start-here public — the App
+
+contract approvePost v1 21ef8af19092
+contract dismissReport v1 d6bfeed9b630
+contract editPost v1 eae112858210
+contract editProfile v1 b597f8c767c7
+contract hidePost v1 06e3b00acf12
+contract joinCommunity v1 fd9d93c175df
+contract lockThread v1 eeceb60178ae
+contract moveThread v1 6ee068ec7063
+contract pinThread v1 7f23deec9386
+contract reactToPost v1 42ec6f032faf
+contract removeReportedPost v1 12f0013456a0
+contract replyToThread v1 e08b791f37ef
+contract reportPost v1 5213697906f9
+contract restorePost v1 a664688e8393
+contract startThread v1 e1dd4a1683e6
+contract unlockThread v1 fe08308cc52e
+contract unpinThread v1 d1fc11817af8
+contract warnMember v1 3a2689e26655

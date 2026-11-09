@@ -104,6 +104,27 @@ export function Grid({ children }: { children?: ReactNode }) {
   return <div className="page-body">{children}</div>;
 }
 
+/**
+ * A line of words: `<Text tone="muted" size="sm">Not shared with your role.</Text>`. The default is the page's ink; `muted`
+ * is its secondary ink, for a note or a caption; `danger` is the status colour for a refusal or a failure. It stands
+ * in a Card or on the page and sets no layout of its own.
+ */
+export function Text({
+  tone = 'default',
+  size = 'md',
+  children,
+}: {
+  tone?: 'default' | 'muted' | 'danger';
+  size?: 'sm' | 'md';
+  children?: ReactNode;
+}) {
+  return (
+    <p className={['kit-text', tone === 'default' ? '' : `kit-text-${tone}`, size === 'sm' ? 'kit-text-sm' : ''].filter(Boolean).join(' ')}>
+      {children}
+    </p>
+  );
+}
+
 /** A titled region of the grid, a dashboard section's box: `<Panel title="Open lines" width="half">…</Panel>`. */
 export function Panel({
   title,
@@ -145,6 +166,24 @@ const FIELDS = [
   'head',
   'layout',
 ];
+
+/** The keys `defineSurface` takes: a free-form page's, but what only something drawn by mistri has (server/app/appSurfaces.ts). */
+const SURFACE_FIELDS = ['label', 'icon', 'description', 'favorite', 'roles', 'reads', 'commands', 'forms', 'loader'];
+
+/** A surface as `defineSurface` makes it: its definition, for the server to read and a front end's types to follow. */
+export interface SurfaceDefinition {
+  readonly definition: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * What a front end the App draws itself may read and run (`surfaces/<key>.surface.ts`): a free-form page's manifest
+ * with nothing to draw. The server reads it from the file; this is the same check where a front end imports it.
+ */
+export function defineSurface(definition: Record<string, unknown>): SurfaceDefinition {
+  if (!definition || typeof definition !== 'object') throw new TypeError(say('defineSurfaceTakes'));
+  for (const name of Object.keys(definition)) if (!SURFACE_FIELDS.includes(name)) throw new TypeError(say('defineSurfaceHasNo', { name }));
+  return { definition: Object.freeze({ ...definition }) };
+}
 
 /** A page as `definePage` makes it: the component that draws it, its definition and its hooks. */
 export interface PageDefinition<D = unknown> {

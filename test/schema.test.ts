@@ -733,7 +733,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.18: a dashboard's `head`, compact or none (one entry, no new name: `head` is a theme's already): 1726/510.
     // 1.0.0-rc.23: `me.by`, a column that holds the account's id rather than its email (one entry, a name `by`
     // already counted): 1729/511.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1729, names: 511 });
+    // 1.0.0-rc.25: `ui.headless`, an App with no screens of its own (one entry, one new name): 1730/512.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1730, names: 512 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

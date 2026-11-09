@@ -16,6 +16,7 @@ import * as mistriReact from '@mistriwork/mistri/react';
 import * as mistriReactNext from '@mistriwork/mistri/react/next';
 import * as mistriReactReactRouter from '@mistriwork/mistri/react/react-router';
 import * as mistriReactTanstackRouter from '@mistriwork/mistri/react/tanstack-router';
+import * as mistriReactHeadless from '@mistriwork/mistri/react/headless';
 import * as mistriTesting from '@mistriwork/mistri/testing';
 import * as mistriMaintenance from '@mistriwork/mistri/maintenance';
 import * as mistriOpenfeature from '@mistriwork/mistri/openfeature';
@@ -44,6 +45,7 @@ export const entries = {
   '@mistriwork/mistri/react/next': some<keyof typeof mistriReactNext>(true),
   '@mistriwork/mistri/react/react-router': some<keyof typeof mistriReactReactRouter>(true),
   '@mistriwork/mistri/react/tanstack-router': some<keyof typeof mistriReactTanstackRouter>(true),
+  '@mistriwork/mistri/react/headless': some<keyof typeof mistriReactHeadless>(true),
   '@mistriwork/mistri/testing': some<keyof typeof mistriTesting>(true),
   '@mistriwork/mistri/maintenance': some<keyof typeof mistriMaintenance>(true),
   '@mistriwork/mistri/openfeature': some<keyof typeof mistriOpenfeature>(true),

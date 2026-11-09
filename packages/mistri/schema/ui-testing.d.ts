@@ -37,11 +37,23 @@ export type Navigation =
 export interface CommandCall { command: string; mode: 'run' | 'open'; key: Readonly<Record<string, unknown>>; input?: Readonly<Record<string, unknown>> }
 export type CommandOutcome =
   | { status: 'applied'; message?: string; output?: unknown }
-  | { status: 'refused'; message: string; fields?: Readonly<Record<string, string>> }
+  | { status: 'refused'; message: string; code?: 'stale'; fields?: Readonly<Record<string, string>> }
   | { status: 'closed' }
   | { status: 'unknown'; message: string; check(options?: { challenge?: string }): Promise<CommandOutcome> };
 
+/** The App's catalog as a test holds it: its tables, each with its columns (the shape of the schema the App serves). A row is
+    then titled as the App titles it (the table's name column, else its key), and a `useOptions(resource)` picker keys by the table's own key. */
+export interface FixtureCatalog {
+  tables: ReadonlyArray<{
+    name: string;
+    id?: string;
+    columns: ReadonlyArray<{ name: string; type: string; primaryKey?: boolean; nullable?: boolean; references?: unknown; allowed?: readonly string[] }>;
+  }>;
+}
+
 export interface RenderOptions {
+  /** The App's catalog: what a row is titled by (a record button's name, a breadcrumb) and a resource's picker keys by. Without it the host guesses: `title`, `name`, `label`, `subject`, then `id`. */
+  catalog?: FixtureCatalog;
   /** Evaluated values only; these fixtures never grant access or record exposure. */
   flags?: Readonly<Record<string, FlagValue>>;
   data?: Fixtures;
@@ -70,6 +82,8 @@ export interface RenderOptions {
       label?: string;
       available?: (key: Readonly<Record<string, unknown>>) => boolean;
       outcome?: CommandOutcome;
+      /** The resource the command writes: a `refresh` that changes it makes a review of it (`prepare`) stale, as live sync does. */
+      resource?: string;
       /** Its inputs, by name, as the command declares them, for `useField`: a kind and the rules it is judged by. */
       input?: Record<string, FixtureInput>;
       /** What the server's check of a step answers (`<Steps>`): each named input's problem, by path; none unless said. */
@@ -139,8 +153,12 @@ type Drawn = RenderResult & {
   navigations: Navigation[];
   commands: CommandCall[];
   /** The server changed under the drawn page and every read was asked again, as a live update asks; resolves once they answered.
-      A read that fails now keeps its last good rows (`isStale`, `refreshError`); one never answered shows its refused state. */
+      A read that fails now keeps its last good rows (`isStale`, `refreshError`); one never answered shows its refused state.
+      A resource it changes makes every review of it (`prepare`) stale. */
   refresh(change?: FixtureChange): Promise<void>;
+  /** Queries over one region of the page, so a test never runs `getByRole` over the whole of it: a section, group or list whose
+      `aria-label` is `name`, or the section a `<Panel title={name}>` draws. Throws when none, or more than one, has the name. */
+  region(name: string): import('@testing-library/react').BoundFunctions<typeof import('@testing-library/react').queries>;
 };
 
 /** Draw a custom section's component: its declared reads answered from `data`, its record from `record`, its props with their defaults. */
@@ -174,3 +192,20 @@ export declare function examples(component: ComponentType<never>, declaration: o
 export declare function renderExample(meta: ReturnType<typeof examples>, story: Example, options?: RenderOptions): Drawn;
 
 export type { ToneName };
+
+/** A `<Board>`, or a list view's board presentation, as a person meets it: cards in lanes. Each answers the element and throws when it is missing or ambiguous. `scope` narrows the search (`view.region('Work').getByRole…` is the other way in). */
+export declare const board: {
+  /** The lane titled `name`. */
+  lane(name: string, scope?: HTMLElement): HTMLElement;
+  /** The card titled `title`. */
+  card(title: string, scope?: HTMLElement): HTMLElement;
+  /** Drops the card titled `title` into the lane `toLane`, as a pointer does; the board runs the move the page declared. */
+  move(title: string, toLane: string, scope?: HTMLElement): void;
+};
+/** A `<Calendar>`, or a list view's calendar presentation: events on days. */
+export declare const calendar: {
+  /** The event titled `title`. */
+  event(title: string, scope?: HTMLElement): HTMLElement;
+  /** The day `date` (`YYYY-MM-DD`): the grid's cell, or the agenda's entry on a phone. */
+  day(date: string, scope?: HTMLElement): HTMLElement;
+};

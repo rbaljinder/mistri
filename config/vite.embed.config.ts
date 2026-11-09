@@ -213,44 +213,76 @@ export function embedPlugins(): Plugin[] {
 /* The routers are the host's, each imported only by its own adapter; React is the host's. */
 const EXTERNAL = [/^react(\/|$)/, /^react-dom(\/|$)/, /^next(\/|$)/, /^react-router(\/|$)/, /^@tanstack\/react-router(\/|$)/];
 
-export default defineConfig({
+/*
+ * The plugin is what makes these external, and the only thing that may:
+ * Base UI's CommonJS helpers (use-sync-external-store) `require("react")`,
+ * and the plugin turns each such call into an import of the host's React.
+ * Naming the same specifiers in `external` as well resolves them before
+ * the plugin sees them, and the require() is left to rolldown's runtime,
+ * which throws in a browser — the built embed did not start from 0.9.0 to
+ * 0.9.8 that way. scripts/bundle-budget.mjs refuses any require() left in
+ * dist/embed; e2e/embed-built.spec.ts starts the built library in a page.
+ */
+const REQUIRES = () => [esmExternalRequirePlugin({ external: EXTERNAL })];
+/* Every entry is a client module to a host that renders on the server (Next's App Router). */
+const USE_CLIENT = (chunk: { isEntry: boolean }) => (chunk.isEntry ? "'use client';" : '');
+
+/*
+ * `--mode headless` builds @mistriwork/mistri/react/headless on its own, after the build above, into the same folder:
+ * the SDK's hooks, TanStack Query and the host they read through. In the build above it would share those with the
+ * shell, and either the shell would import them as a chunk of their own (compressed apart, a kilobyte more on every
+ * shell's first load) or the headless entry would import the whole shell. Built apart, each carries what it uses and
+ * neither pays for the other; a page with both Providers holds two copies of the hooks, which no host needs.
+ */
+const HEADLESS = defineConfig({
   root: HERE,
   configFile: false,
-  plugins: [...embedPlugins(), CHUNKS.plugin, ownSourcesOnly(resolve(HERE, 'packages/mistri/dist/embed'))],
+  plugins: [...embedPlugins(), ownSourcesOnly(resolve(HERE, 'packages/mistri/dist/embed'))],
   build: {
     outDir: resolve(HERE, 'packages/mistri/dist/embed'),
-    emptyOutDir: true,
+    emptyOutDir: false,
     target: 'es2023',
     minify: true,
     sourcemap: true,
-    lib: {
-      entry: {
-        'react/index': resolve(EMBED, 'index.tsx'),
-        'react/next': resolve(EMBED, 'next.ts'),
-        'react/react-router': resolve(EMBED, 'react-router.ts'),
-        'react/tanstack-router': resolve(EMBED, 'tanstack-router.ts'),
-      },
-      formats: ['es'],
-    },
+    lib: { entry: { 'react/headless': resolve(EMBED, 'headless.tsx') }, formats: ['es'] },
     rolldownOptions: {
-      /*
-       * The plugin is what makes these external, and the only thing that may:
-       * Base UI's CommonJS helpers (use-sync-external-store) `require("react")`,
-       * and the plugin turns each such call into an import of the host's React.
-       * Naming the same specifiers in `external` as well resolves them before
-       * the plugin sees them, and the require() is left to rolldown's runtime,
-       * which throws in a browser — the built embed did not start from 0.9.0 to
-       * 0.9.8 that way. scripts/bundle-budget.mjs refuses any require() left in
-       * dist/embed; e2e/embed-built.spec.ts starts the built library in a page.
-       */
-      plugins: [esmExternalRequirePlugin({ external: EXTERNAL })],
-      output: {
-        entryFileNames: '[name].js',
-        chunkFileNames: 'react/chunks/[name]-[hash].js',
-        /* Every entry is a client module to a host that renders on the server (Next's App Router). */
-        banner: (chunk) => (chunk.isEntry ? "'use client';" : ''),
-        codeSplitting: { groups: CHUNKS.groups },
-      },
+      plugins: REQUIRES(),
+      output: { entryFileNames: '[name].js', chunkFileNames: 'react/headless/[name]-[hash].js', banner: USE_CLIENT },
     },
   },
 });
+
+export default defineConfig(({ mode }) =>
+  mode === 'headless'
+    ? HEADLESS
+    : {
+        root: HERE,
+        configFile: false,
+        plugins: [...embedPlugins(), CHUNKS.plugin, ownSourcesOnly(resolve(HERE, 'packages/mistri/dist/embed'))],
+        build: {
+          outDir: resolve(HERE, 'packages/mistri/dist/embed'),
+          emptyOutDir: true,
+          target: 'es2023',
+          minify: true,
+          sourcemap: true,
+          lib: {
+            entry: {
+              'react/index': resolve(EMBED, 'index.tsx'),
+              'react/next': resolve(EMBED, 'next.ts'),
+              'react/react-router': resolve(EMBED, 'react-router.ts'),
+              'react/tanstack-router': resolve(EMBED, 'tanstack-router.ts'),
+            },
+            formats: ['es'],
+          },
+          rolldownOptions: {
+            plugins: REQUIRES(),
+            output: {
+              entryFileNames: '[name].js',
+              chunkFileNames: 'react/chunks/[name]-[hash].js',
+              banner: USE_CLIENT,
+              codeSplitting: { groups: CHUNKS.groups },
+            },
+          },
+        },
+      },
+);

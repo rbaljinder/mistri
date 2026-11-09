@@ -86,6 +86,8 @@ import {
   type RouteTarget,
 } from '../shared/appAddress.js';
 import { viewOrder } from '../shared/appModel.js';
+import { shownUnplaced } from '@mistriwork/kit/client/addressMount.js';
+import type { UiAddress } from './components/sdk/context.js';
 import { say } from './copy/public/publicAddress.js';
 
 const NUMBER = /^-?\d+(?:\.\d+)?$/;
@@ -578,6 +580,31 @@ export function viewPath(view: string): string | undefined {
     app = activeApp();
   const segment = book?.views.get(view);
   return app && segment ? `/${encodeURIComponent(app.id)}/${encodeURIComponent(segment)}` : undefined;
+}
+
+/**
+ * An address a component links to (`useHref`): the one canonical address the router reads back, through the same book
+ * the walk writes its own with. Undefined for a view, page or record the App has no room for.
+ */
+export function hrefFor(to: UiAddress): string | undefined {
+  const book = addressBook(),
+    app = activeApp();
+  if (!app) return undefined;
+  const root = `/${encodeURIComponent(app.id)}`;
+  const withParams = (path: string, params: Readonly<Record<string, string>> | undefined) => {
+    const query = params ? new URLSearchParams(params).toString() : '';
+    return shownUnplaced(query ? `${path}?${query}` : path);
+  };
+  if (to.kind === 'signIn') return shownUnplaced(`${root}/sign-in`);
+  if (!book) return undefined;
+  if (to.kind === 'view' || to.kind === 'page') {
+    const segment = book.views.get(to.kind === 'view' ? to.view : to.path);
+    return segment ? withParams(`${root}/${encodeURIComponent(segment)}`, to.params) : undefined;
+  }
+  const target = book.routes.get(book.views.get(to.view) ?? '');
+  if (target?.kind !== 'list') return undefined;
+  const segments = recordSegments(book, target.table, { key: to.key, ...(to.tab ? { tab: to.tab } : {}) });
+  return segments && shownUnplaced(`${root}/${segments.join('/')}`);
 }
 
 /** Whether a walk entry is a record whose natural key is not known yet. */

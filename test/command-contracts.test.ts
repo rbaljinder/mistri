@@ -199,6 +199,20 @@ export default defineCommands({ change: defineCommand({ source: 'desk', target: 
     const clean = await check();
     assert.equal(clean.code, 0, clean.err + clean.out);
 
+    // A lock that lacks a registered command's line is stale: the contract is part of the authority a reviewer reads.
+    const whole = lockOf();
+    writeFileSync(join(dir, 'authority.lock'), whole.replace(/^contract .*\n?/m, ''));
+    const missing = await check();
+    assert.equal(missing.code, 1, missing.out);
+    assert.match(
+      missing.err + missing.out,
+      /\[authority-lock\] authority\.lock is missing 1 command contract line\. Run mistri check --write-authority and review the diff\./,
+    );
+    assert.equal((await check('--write-authority')).code, 0);
+    assert.match(lockOf(), /^contract change v1 [0-9a-f]{12}$/m);
+    writeFileSync(join(dir, 'authority.lock'), whole);
+    assert.equal((await check()).code, 0);
+
     // The published route carries the lock's version.
     const openapi = await tablewalk(['--config', config, '--app', dir, '--export', 'openapi', '--api-integers', 'number'], env);
     assert.equal(openapi.code, 0, openapi.err);

@@ -143,6 +143,8 @@ const installDesk = () =>
   });
 type UiCommandOutcome = import('./context.js').UiCommandOutcome;
 const handle = (ref: string) => pageBridge.commands!.command(ref);
+/* The bridge says the handle without its React half's review; the host hands out the whole of it (context.ts). */
+const reviewing = (ref: string) => handle(ref) as unknown as import('./context.js').UiCommandHandle;
 
 beforeEach(() => {
   installDesk();
@@ -490,6 +492,55 @@ test("a record that keeps changing is refused in the server's words after a few 
     message: 'The record has changed. Reload it before trying again.',
   });
   expect(calls.filter((call) => call.path === '/api/commands/execute')).toHaveLength(3);
+});
+
+/* A review pins the run to what the person saw (D6): the record moved since is a refusal the page shows the review
+   again for, never a quiet prepare and a run over a revision nobody judged. */
+test('a run confirmed from a review is sent for the revision shown, once, and refused stale when the record moved', async () => {
+  await onDesk();
+  let version = 4;
+  answer = async () => {
+    const call = calls.at(-1)!;
+    if (call.path === '/api/commands/prepare') return { expectedVersion: version, initial: { step: 'Draft the proposal' } };
+    if (call.body.expectedVersion !== version)
+      throw Object.assign(new Error('The record has changed. Reload it before trying again.'), {
+        status: 409,
+        code: 'stale_record',
+        outcome: 'not_applied',
+      });
+    return applied(version);
+  };
+  const steps = reviewing('checkStep');
+  const review = await steps.prepare!({ id: 7 });
+  if (!('token' in review)) throw new Error(review.message);
+  expect(review).toMatchObject({ values: { step: 'Draft the proposal' }, fresh: true });
+  version = 5;
+  const stale = await steps.run({ id: 7 }, review.values, { review });
+  expect(stale).toMatchObject({ status: 'refused', code: 'stale' });
+  expect(calls.map((call) => call.path)).toEqual(['/api/commands/prepare', '/api/commands/execute']);
+  expect(calls[1].body.expectedVersion).toBe(4);
+  expect(review.fresh).toBe(false);
+  // Spent, it is not sent again; shown again, the new review runs at the revision it read.
+  calls.length = 0;
+  expect(await steps.run({ id: 7 }, review.values, { review })).toMatchObject({ status: 'refused', code: 'stale' });
+  expect(calls).toEqual([]);
+  const again = await steps.prepare!({ id: 7 }, { step: 'Send the proposal' });
+  if (!('token' in again)) throw new Error(again.message);
+  expect(again.values).toEqual({ step: 'Send the proposal' });
+  expect(await steps.run({ id: 7 }, again.values, { review: again })).toMatchObject({ status: 'applied' });
+  expect(calls.map((call) => call.path)).toEqual(['/api/commands/prepare', '/api/commands/execute']);
+  expect(calls[1].body.expectedVersion).toBe(5);
+});
+
+test('a review for another record is not a pin for this one', async () => {
+  await onDesk();
+  answer = async () => (calls.at(-1)!.path === '/api/commands/prepare' ? { expectedVersion: 4 } : applied(4));
+  const steps = reviewing('checkStep');
+  const review = await steps.prepare!({ id: 8 });
+  if (!('token' in review)) throw new Error(review.message);
+  calls.length = 0;
+  expect(await steps.run({ id: 7 }, { step: 'x' }, { review })).toMatchObject({ status: 'refused', code: 'stale' });
+  expect(calls).toEqual([]);
 });
 
 /* An answer that never came opens the form to check it; when the tab's session is taken again under it (a tenant

@@ -29,6 +29,7 @@ import { minorFigure } from '@mistriwork/engine/shared/money.js';
 import {
   UiPageContext,
   UiSizeContext,
+  type UiAddress,
   useUiHost,
   type OpenMode,
   type UiOpenViewOptions,
@@ -38,6 +39,7 @@ import {
   type UiCommandOptions,
   type UiCommandOutcome,
   type UiCommandRef,
+  type UiCommandReview,
   type UiFormOutcome,
   type UiFormState,
   type UiLook,
@@ -47,6 +49,7 @@ import {
   type UiViewer,
 } from './context.js';
 import { say } from '../../copy/components/components/sdk/hooks.js';
+import { reviewFresh, subscribeReviews } from '../../commandReviews.js';
 import { messageLanguage, subscribeMessages } from '@mistriwork/kit/client/messages.js';
 import type { AppFlagReader, AppFlagValue } from '../../../shared/appFlagValues.js';
 
@@ -108,7 +111,7 @@ export function useAnalytics(): { emit(name: string, fields?: Readonly<Record<st
    for a reader who cannot read it — and it is the page's read, so the
    request says which page asks. Outside a page a component may name any
    resource. */
-function useDeclared(resource: string): string | undefined {
+export function useDeclared(resource: string): string | undefined {
   const page = useContext(UiPageContext);
   if (page && !page.reads.includes(resource)) {
     throw new Error(say('thePageReadsIsNotOne', { label: page.label, map: page.reads.map((name) => `"${name}"`).join(', '), resource }));
@@ -142,6 +145,14 @@ interface UiRowsPaging {
   total?: number;
 }
 
+/* A refusal is the reader's grant, not a failure: the read answered 401 (signed out) or 403 (not this reader's). */
+const refusedRead = (error: unknown) => [401, 403].includes((error as { status?: number } | null)?.status ?? 0);
+
+/** What an `optional: true` read adds: the reader was refused it (401 or 403), which is neither an error nor an empty result. */
+export interface UiRefusable {
+  refused: boolean;
+}
+
 /** What `useRows` holds: the rows read so far, the read's state, and `more()` for the next page. */
 export interface UiRowsQuery extends UiReadState {
   data: UiRow[] | undefined;
@@ -160,10 +171,15 @@ const ROWS_LIMIT = 20;
  * Rows of one App resource: `useRows('pay_run', { query: 'status = review', show: ['title', 'net_total'], sort: 'pay_date desc', limit: 12 })`.
  * The first `limit` rows (20 unless said); `page.hasMore` says whether the server holds more, and `more()` reads them.
  */
-export function useRows(resource: string, options: UiRowsOptions & { enabled?: boolean } = {}): UiRowsQuery {
+export function useRows(resource: string, options: UiRowsOptions & { enabled?: boolean; optional: true }): UiRowsQuery & UiRefusable;
+export function useRows(resource: string, options?: UiRowsOptions & { enabled?: boolean; optional?: false }): UiRowsQuery;
+export function useRows(
+  resource: string,
+  options: UiRowsOptions & { enabled?: boolean; optional?: boolean } = {},
+): UiRowsQuery & UiRefusable {
   const host = useUiHost();
   const declared = useDeclared(resource);
-  const { enabled = true, offset: _offset, ...rest } = options;
+  const { enabled = true, optional = false, offset: _offset, ...rest } = options;
   const asked = declared ? { ...rest, page: declared } : rest;
   const limit = rest.limit ?? ROWS_LIMIT;
   const query = useInfiniteQuery({
@@ -182,34 +198,72 @@ export function useRows(resource: string, options: UiRowsOptions & { enabled?: b
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
   const failedOver = query.isRefetchError || query.isFetchNextPageError;
+  /* Under `optional` a refusal is a state to draw, never a failure: no error, no rows kept from before the grant went. */
+  const refused = optional && query.isError && refusedRead(query.error);
   return {
-    data,
+    data: refused ? undefined : data,
+    refused,
     isPending: query.isPending,
     isFetching: query.isFetching,
-    isError: query.isError,
-    error: query.error,
-    isStale: query.isRefetchError,
-    refreshError: failedOver ? query.error : null,
+    isError: query.isError && !refused,
+    error: refused ? null : query.error,
+    isStale: query.isRefetchError && !refused,
+    refreshError: failedOver && !refused ? query.error : null,
     refetch: query.refetch,
     page: { limit, hasMore: hasNextPage, ...(total === undefined ? {} : { total }) },
     more,
   };
 }
 
-/** One record of an App resource by its key: `useRecord('employee', { id: 4 }, ['name', 'title'])`. */
+/* A read that may be refused, as `optional: true` says it: a 401 or 403 is `refused`, never an error, and keeps no data. */
+function optionally<T>(result: UseQueryResult<T> & UiReadState, optional: boolean): UseQueryResult<T> & UiReadState & UiRefusable {
+  const refused = optional && result.isError && refusedRead(result.error);
+  if (!refused) return { ...result, refused: false };
+  return {
+    ...result,
+    refused,
+    data: undefined,
+    isError: false,
+    isRefetchError: false,
+    error: null,
+    isStale: false,
+    refreshError: null,
+  } as unknown as UseQueryResult<T> & UiReadState & UiRefusable;
+}
+
+/**
+ * One record of an App resource by its key: `useRecord('employee', { id: 4 }, ['name', 'title'])`. With
+ * `{ optional: true }` a refusal (401, 403) is `refused: true`, not an error: `useRecord('employee', key, undefined, { optional: true })`.
+ */
+export function useRecord(
+  resource: string,
+  key: Readonly<Record<string, unknown>> | undefined,
+  show: readonly string[] | undefined,
+  options: { optional: true },
+): UseQueryResult<UiRow | null> & UiReadState & UiRefusable;
 export function useRecord(
   resource: string,
   key: Readonly<Record<string, unknown>> | undefined,
   show?: readonly string[],
-): UseQueryResult<UiRow | null> & UiReadState {
+  options?: { optional?: false },
+): UseQueryResult<UiRow | null> & UiReadState;
+export function useRecord(
+  resource: string,
+  key: Readonly<Record<string, unknown>> | undefined,
+  show?: readonly string[],
+  options: { optional?: boolean } = {},
+): UseQueryResult<UiRow | null> & UiReadState & UiRefusable {
   const host = useUiHost();
   const page = useDeclared(resource);
-  return withReadState(
-    useQuery({
-      queryKey: ['mistri-ui', 'record', ...host.scope, resource, key, show, page],
-      queryFn: async () => (await host.record(resource, key!, show, page ? { page } : {})) ?? null,
-      enabled: key !== undefined,
-    }),
+  return optionally(
+    withReadState(
+      useQuery({
+        queryKey: ['mistri-ui', 'record', ...host.scope, resource, key, show, page],
+        queryFn: async () => (await host.record(resource, key!, show, page ? { page } : {})) ?? null,
+        enabled: key !== undefined,
+      }),
+    ),
+    options.optional === true,
   );
 }
 
@@ -218,15 +272,27 @@ export function useRecord(
  * Each row is keyed as the server names its columns: the groups by their paths (`status`, `day(moved_at)`),
  * the measure as written (`count`, `sum(net)`, `max(on_hand_after)`).
  */
-export function useBreakdown(resource: string, options: UiBreakdownOptions): UseQueryResult<UiRow[]> & UiReadState {
+export function useBreakdown(
+  resource: string,
+  options: UiBreakdownOptions & { optional: true },
+): UseQueryResult<UiRow[]> & UiReadState & UiRefusable;
+export function useBreakdown(resource: string, options: UiBreakdownOptions & { optional?: false }): UseQueryResult<UiRow[]> & UiReadState;
+export function useBreakdown(
+  resource: string,
+  options: UiBreakdownOptions & { optional?: boolean },
+): UseQueryResult<UiRow[]> & UiReadState & UiRefusable {
   const host = useUiHost();
   const page = useDeclared(resource);
-  const asked = page ? { ...options, page } : options;
-  return withReadState(
-    useQuery({
-      queryKey: ['mistri-ui', 'breakdown', ...host.scope, resource, asked],
-      queryFn: () => host.breakdown(resource, asked),
-    }),
+  const { optional = false, ...rest } = options;
+  const asked = page ? { ...rest, page } : rest;
+  return optionally(
+    withReadState(
+      useQuery({
+        queryKey: ['mistri-ui', 'breakdown', ...host.scope, resource, asked],
+        queryFn: () => host.breakdown(resource, asked),
+      }),
+    ),
+    optional,
   );
 }
 
@@ -250,8 +316,9 @@ interface UiForm extends UiReadState {
   outcome: UiFormOutcome | null;
   isPending: boolean;
   error: Error | null;
-  /** The form over the page, filled with what was given; resolves as it closes, and the draft is read again. */
-  open(input?: Readonly<Record<string, unknown>>): Promise<UiFormOutcome>;
+  /** The form over the page, filled with what was given (`at` a step its draft has reached); resolves as it closes, and
+      the draft is read again. */
+  open(input?: Readonly<Record<string, unknown>>, options?: { at?: string }): Promise<UiFormOutcome>;
   /** The form opened at a step its draft has reached (never past the first not saved). */
   goTo(step: string): Promise<UiFormOutcome>;
   /** The draft discarded, as the form's Start over does: false while a submit is pending, or without a draft. */
@@ -295,7 +362,7 @@ export function useForm(view: string): UiForm {
     isFetching: read.isFetching,
     isStale: read.isStale,
     refreshError: read.refreshError,
-    open: (input) => opened(input),
+    open: (input, options) => opened(input, options?.at),
     goTo: (step) => opened(undefined, step),
     startOver: async () => {
       const gone = await handle.startOver();
@@ -319,6 +386,34 @@ export function useNavigate(): {
     openForm: (view, prefill) => host.openForm(view, prefill),
     publicLink: (view) => host.publicLink(view),
   };
+}
+
+/**
+ * The App's own addresses, as strings for an `<a href>` (and for an embedding app's navigator): `useHref().record('leads', { id: 4 })`.
+ * Each is the one canonical address the router reads back (appAddress.ts). A view, page or record the App has no
+ * address for is a mistake said here, not a link that goes nowhere.
+ */
+export function useHref(): {
+  signIn(): string;
+  view(view: string, params?: Readonly<Record<string, string>>): string;
+  record(view: string, key: Readonly<Record<string, unknown>>, options?: { tab?: string }): string;
+  page(path: string, params?: Readonly<Record<string, string>>): string;
+} {
+  const host = useUiHost();
+  return useMemo(() => {
+    const said = (to: UiAddress, what: string) => {
+      const address = host.href(to);
+      if (address === undefined) throw new Error(say('noAddressFor', { what }));
+      return address;
+    };
+    return {
+      signIn: () => said({ kind: 'signIn' }, 'the sign-in'),
+      view: (view, params) => said({ kind: 'view', view, ...(params ? { params } : {}) }, say('addressView', { view })),
+      record: (view, key, options) =>
+        said({ kind: 'record', view, key, ...(options?.tab ? { tab: options.tab } : {}) }, say('addressRecord', { view })),
+      page: (path, params) => said({ kind: 'page', path, ...(params ? { params } : {}) }, say('addressPage', { path })),
+    };
+  }, [host]);
 }
 
 /** The page's timeline composer, from a custom section beside it: `fill` puts a template's words in the box (and
@@ -386,6 +481,13 @@ interface UiCommand {
     input?: Readonly<Record<string, unknown>>,
     options?: UiCommandOptions,
   ): Promise<UiCommandOutcome>;
+  /** What a review shows before the person confirms, and the token `run(record, input, { review })` pins it with. */
+  prepare(
+    record?: Readonly<Record<string, unknown>>,
+    input?: Readonly<Record<string, unknown>>,
+  ): Promise<UiCommandReview | Extract<UiCommandOutcome, { status: 'refused' }>>;
+  /** Whether the last review `prepare` gave still stands; true before any. */
+  reviewFresh: boolean;
   /**
    * The choices one of its inputs offers, as they were served with the command: a choice's declared options, or a
    * table's rows (`field.choice({ from })`) where they come with it — on a public page, read as the public reads them
@@ -512,6 +614,13 @@ function useHandle(handle: UiCommandHandle, viewer: UiViewer): UiCommand {
     });
   };
   void round;
+  /* The last review this component prepared, read from the tab's reviews so a live change to its record draws again. */
+  const [review, setReview] = useState<string | undefined>(undefined);
+  const fresh = useSyncExternalStore(
+    subscribeReviews,
+    () => review === undefined || reviewFresh(review),
+    () => true,
+  );
   const available = (record: Readonly<Record<string, unknown>>) => {
     const text = keyText(record);
     if (!asked.current.has(text)) wanted.current.set(text, record);
@@ -531,6 +640,13 @@ function useHandle(handle: UiCommandHandle, viewer: UiViewer): UiCommand {
     pending: (record) => running.has(keyText(record)),
     run: (record, input, options) => track(keyText(record), handle.run(record, input, options)),
     open: (record, input, options) => track(keyText(record), handle.open(record, input, options)),
+    prepare: async (record = {}, input) => {
+      if (!handle.prepare) return { status: 'refused', message: say('reviewNotOffered', { label: handle.label }) };
+      const prepared = await handle.prepare(record, input);
+      if (!('status' in prepared) && current.current === handle) setReview(prepared.token);
+      return prepared;
+    },
+    reviewFresh: fresh,
     choices: (field) => handle.choices?.(field),
   };
 }

@@ -98,8 +98,16 @@ export function publicPageCommand(page: string, id: string, reference: AppFormCo
       // Sent, and no answer came: whether it ran is not known, and only the same submission asked again can say.
       return unknown();
     }
-    if (answer.status === 200 && typeof answer.body.reference === 'string')
-      return { status: 'applied', output: { reference: answer.body.reference, receipt: answer.body.receipt } };
+    /* Applied, the page has what a public form's done screen says: the reference to keep, in a thank-you it may show as
+       it is, or follow with a navigation of its own. */
+    if (answer.status === 200 && typeof answer.body.reference === 'string') {
+      const reference = answer.body.reference;
+      return {
+        status: 'applied',
+        message: say('publicReceived', { label: said, reference }),
+        output: { reference, receipt: answer.body.receipt },
+      };
+    }
     // No ticket, so nothing was sent this time: on a first run that is a refusal, on a check the first is still not known.
     if (answer.status === 0) return checking ? unknown() : { status: 'refused', message: say('publicNotSent', { label: said }) };
     if (answer.status >= 500) return unknown();

@@ -23,6 +23,7 @@ import {
   Stack,
   Stat,
   Table,
+  Text,
   useFormat,
   useSectionSize,
   Value,
@@ -48,10 +49,6 @@ const day = (value: unknown) => String(value ?? '').slice(0, 10);
 
 const MOVING = ['in_transit', 'out_for_delivery'];
 
-/** The reader was refused the read itself (not a failure of it): the carrier's API is granted whole or not at all. */
-const refusedBy = (query: { data: unknown; error: unknown }) =>
-  query.data === undefined && [401, 403].includes((query.error as { status?: number } | null)?.status ?? 0);
-
 function DeliveryBoard(): ReactNode {
   const format = useFormat();
   // A phone has room for one column: each row then says all of itself in its first cell, and nothing scrolls sideways.
@@ -60,6 +57,8 @@ function DeliveryBoard(): ReactNode {
     show: ['tracking_number', 'status', 'eta', 'last_scan_location', 'last_scan_at', 'delivered_at', 'exception_reason'],
     sort: 'eta',
     limit: 100,
+    /* The carrier's API is granted whole or not at all: a refusal is a state this page draws, not a failure of the read. */
+    optional: true,
   });
   const receipts = page.useRows('part_receipt', {
     show: ['part_id.name', 'quantity', 'vendor', 'received_on', 'tracking_number'],
@@ -71,7 +70,7 @@ function DeliveryBoard(): ReactNode {
 
   const today = dayKey(new Date(), format.timezone);
   const since = dayKey(new Date(Date.parse(`${today}T00:00:00Z`) - 30 * DAY), format.timezone);
-  const refused = refusedBy(shipments);
+  const refused = shipments.refused;
   const parcels = shipments.data ?? [];
   const received = receipts.data ?? [];
   const byTracking = new Map(parcels.map((parcel) => [parcel.tracking_number, parcel]));
@@ -240,7 +239,10 @@ function DeliveryBoard(): ReactNode {
 function CarrierRefused(): ReactNode {
   return (
     <Card>
-      <Empty title="The carrier’s tracking is not open to you" description="Deliveries booked in are still listed below." />
+      <Text>The carrier’s tracking is not open to you</Text>
+      <Text tone="muted" size="sm">
+        Deliveries booked in are still listed below.
+      </Text>
     </Card>
   );
 }

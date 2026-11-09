@@ -200,6 +200,7 @@ function buildClient() {
     stamp &&
     existsSync(join(ROOT, 'packages/mistri/dist/ssr/render.js')) &&
     existsSync(join(ROOT, 'packages/mistri/dist/embed/react/index.js')) &&
+    existsSync(join(ROOT, 'packages/mistri/dist/embed/react/headless.js')) &&
     stamp >
       newest([
         ...globSync('packages/*/src/{client,shared,embed}', { cwd: ROOT }),
@@ -222,6 +223,7 @@ function buildClient() {
     ['-c', 'config/vite.mistri.config.ts'],
     ['-c', 'config/vite.ssr.config.ts'],
     ['-c', 'config/vite.embed.config.ts'],
+    ['-c', 'config/vite.embed.config.ts', '--mode', 'headless'],
   ]) {
     const result = spawnSync('npx', ['vite', 'build', ...config, '--logLevel', 'warn'], { cwd: ROOT, stdio: 'inherit' });
     if (result.status !== 0) {

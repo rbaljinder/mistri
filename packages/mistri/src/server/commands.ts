@@ -11,6 +11,7 @@ export type {
   BusinessCommandValidationContext,
   CommandDefinition,
   CommandFile,
+  CommandOutput,
   StandardSchema,
 } from './commands/businessCommands.js';
 /* A command's input: `field.*` writes each field, the declaration is fields

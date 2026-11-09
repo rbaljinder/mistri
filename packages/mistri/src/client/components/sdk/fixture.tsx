@@ -33,16 +33,21 @@ import {
   type UiHost,
   type UiLook,
   type UiPageFrame,
+  type UiAddress,
+  type UiReferenceInput,
+  type UiResourceChoices,
   type UiRow,
   type UiViewer,
 } from './context.js';
 import { say } from '../../copy/components/components/sdk/fixture.js';
+import { heldReview, holdReview, reviewFresh, reviewOwner, staleReview } from '../../commandReviews.js';
 import { captureAppFlagValues, type AppFlagValue } from '../../../shared/appFlagValues.js';
 import { registerPageBlocks } from './pageBlocks.js';
 import { sayAppMessage } from './appMessage.js';
 import { totalFigure, totalGroups } from '../../../shared/customTotals.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import type { AppCommandField } from '../../../shared/command.js';
+import { labelColumn, primaryKey, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 
 /* A page drawn here draws its blocks as an App's does (CustomPage.tsx): the platform's, loaded when one is first drawn. */
 registerPageBlocks(() => import('./blocks.js'));
@@ -75,7 +80,29 @@ export interface CommandCall {
   input?: Readonly<Record<string, unknown>>;
 }
 
+/**
+ * The App's catalog as a test holds it: the tables a resource names, each with its columns, so a row is titled as the
+ * App titles it (its name column, `labelTemplate` aside) and a `useOptions(resource)` picker keys by the table's own
+ * key. The shape of the schema the App serves; a column needs its `name` and `type`, and `primaryKey` where it is one.
+ */
+export interface FixtureCatalog {
+  tables: ReadonlyArray<{
+    name: string;
+    id?: string;
+    columns: ReadonlyArray<{
+      name: string;
+      type: string;
+      primaryKey?: boolean;
+      nullable?: boolean;
+      references?: unknown;
+      allowed?: readonly string[];
+    }>;
+  }>;
+}
+
 export interface RenderOptions {
+  /** The App's catalog: what a row is titled by (`rowTitle`) and a resource's picker keys by. Without it, a guess: `title`, `name`, `label`, `subject`, then `id`. */
+  catalog?: FixtureCatalog;
   /** Evaluated values only; omitted fixtures leave the flags reader unready. */
   flags?: Readonly<Record<string, AppFlagValue>>;
   /** Where `useAnalytics().emit` calls are collected, for a test to read. */
@@ -108,6 +135,8 @@ export interface RenderOptions {
       label?: string;
       available?: (key: Readonly<Record<string, unknown>>) => boolean;
       outcome?: UiCommandOutcome;
+      /** The resource the command writes: a `refresh` that changes it makes a review of it (`prepare`) stale, as live sync does. */
+      resource?: string;
       /** Its inputs, by name, as the command declares them, for `useField`: a kind and the rules it is judged by. */
       input?: Record<string, FixtureInput>;
       /** What the server's check of a step answers (`<Steps>`): each named input's problem, by path; none unless said. */
@@ -342,6 +371,51 @@ function breakdown(data: Fixtures, resource: string, by: string, measure: string
     .map(({ keys, values }) => ({ ...Object.fromEntries(groups.map((group, i) => [group.name, keys[i]])), [name]: measured(values) }));
 }
 
+/* A row's name as the App's catalog titles it: the table's name column, else its key. Undefined without the table, and the
+   caller guesses as a test without a catalog always has. */
+function catalogTitle(catalog: FixtureCatalog | undefined, resource: string): ((row: UiRow) => string | undefined) | undefined {
+  const found = catalog?.tables.find((candidate) => candidate.id === resource || candidate.name === resource);
+  if (!found) return undefined;
+  const table = found as unknown as TableMeta;
+  const column = labelColumn(table);
+  const keys = primaryKey(table);
+  return (row) => {
+    const named = column === undefined ? undefined : row[column];
+    if (named !== null && named !== undefined && String(named) !== '') return String(named);
+    const parts = keys.map((key) => row[key]).filter((part) => part !== null && part !== undefined);
+    return parts.length ? parts.join('/') : undefined;
+  };
+}
+const catalogKey = (catalog: FixtureCatalog | undefined, resource: string): string => {
+  const found = catalog?.tables.find((candidate) => candidate.id === resource || candidate.name === resource);
+  return (found && primaryKey(found as unknown as TableMeta)[0]) || 'id';
+};
+const guessedTitle = (row: UiRow): string | undefined => {
+  for (const name of ['title', 'name', 'label', 'subject']) {
+    if (row[name] !== null && row[name] !== undefined && String(row[name]) !== '') return String(row[name]);
+  }
+  const text = Object.entries(row).find(([name, value]) => name.endsWith('name') && typeof value === 'string' && value)?.[1];
+  return typeof text === 'string' ? text : row.id === undefined || row.id === null ? undefined : String(row.id);
+};
+
+/* An address as the router says it for a table keyed by one column, or by several named: `/leads/127`, `/leads/127/map`;
+   a view with a search and a tab is `/leads?tab=working&search=stone`. The App's own book writes the real ones (appAddress.ts). */
+function fixtureHref(to: UiAddress): string {
+  const query = (params: Readonly<Record<string, string>> | undefined) => {
+    const text = params ? new URLSearchParams(params).toString() : '';
+    return text ? `?${text}` : '';
+  };
+  if (to.kind === 'signIn') return '/sign-in';
+  if (to.kind === 'view') return `/${encodeURIComponent(to.view)}${query(to.params)}`;
+  if (to.kind === 'page') return `/${encodeURIComponent(to.path)}${query(to.params)}`;
+  const entries = Object.entries(to.key);
+  const id =
+    entries.length === 1
+      ? encodeURIComponent(String(entries[0][1]))
+      : entries.map(([name, value]) => `${name}=${encodeURIComponent(String(value))}`).join(',');
+  return `/${encodeURIComponent(to.view)}/${id}${to.tab ? `/${encodeURIComponent(to.tab)}` : ''}`;
+}
+
 export function fixtureHost(data: Fixtures, options: RenderOptions, navigations: Navigation[], commands: CommandCall[] = []): UiHost {
   /* Read at every call, not once: a test's `refresh` takes a grant away from a page already drawn. */
   const refuse = (resource: string) => {
@@ -383,6 +457,14 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
           host.announce(message, 'error');
           return { status: 'refused', message };
         }
+        /* A review handed back is judged as the page judges it (commands.tsx): one gone stale is refused and never recorded as a run. */
+        const review = options.review && heldReview(options.review.token);
+        if (options.review && (!review?.fresh || review.owner !== reviewOwner('fixture', id, 0, key))) {
+          const message = say('reviewStale', { label });
+          if (!options.quiet) host.announce(message, 'error');
+          return { status: 'refused', code: 'stale', message };
+        }
+        if (options.review) staleReview(options.review.token);
         commands.push({ command: id, mode, key, ...(input ? { input } : {}) });
         const outcome =
           entry!.outcome ?? (mode === 'open' && kind === 'command' ? { status: 'closed' as const } : { status: 'applied' as const });
@@ -397,6 +479,21 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
       available: async (key) => granted && (entry!.available?.(key) ?? true),
       run: call('run'),
       open: call('open'),
+      ...(kind === 'command'
+        ? {
+            prepare: async (key: Readonly<Record<string, unknown>>, input?: Readonly<Record<string, unknown>>) => {
+              if (!granted) return { status: 'refused' as const, message: viewer.signedIn ? say('notGranted') : say('signInToDo') };
+              const token = holdReview(reviewOwner('fixture', id, 0, key), entry!.resource ?? '', key, 0);
+              return Object.freeze({
+                token,
+                values: { ...input },
+                get fresh() {
+                  return reviewFresh(token);
+                },
+              });
+            },
+          }
+        : {}),
       /* Served as the page serves it: a field with its label, the name said as words where the fixture gives none. */
       input: (name) => {
         const declared = entry?.input && Object.hasOwn(entry.input, name) ? entry.input[name] : undefined;
@@ -406,6 +503,22 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
       check: async (input, names) => (granted ? { ...entry!.check?.(input, names) } : undefined),
     };
   };
+  /* A reference input is read by its own key and label columns; a resource, by its catalog's key and title. */
+  const choiceArm = (field: UiReferenceInput | UiResourceChoices) =>
+    'resource' in field
+      ? {
+          from: field.resource,
+          by: catalogKey(options.catalog, field.resource),
+          where: field.where,
+          label: (row: UiRow, key: string | number): string => title(field.resource, row) ?? String(key),
+        }
+      : {
+          from: field.from,
+          by: field.by,
+          where: undefined,
+          label: (row: UiRow, key: string | number): string => String(row[field.labelColumn] ?? key),
+        };
+  const title = (resource: string, row: UiRow) => (catalogTitle(options.catalog, resource) ?? guessedTitle)(row);
   const host: UiHost = {
     flags: { ...flags, snapshot: () => flags, subscribe: () => () => {}, load: async () => {} },
     analytics: {
@@ -488,22 +601,26 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
     /* A reference's choices are its resource's fixture rows by their label, as the picker reads them; a refused
        resource is refused here too, so a test takes the reader's access away from a choice already made. */
     choices: async (field, text, { offset, limit }) => {
-      refuse(field.from);
+      const arm = choiceArm(field);
+      refuse(arm.from);
       const wanted = text.trim().toLowerCase();
-      const named = (data.tables[field.from] ?? [])
+      const named = (data.tables[arm.from] ?? [])
+        .filter((row) => matches(row, arm.where))
         .flatMap((row) => {
-          const key = row[field.by];
-          return typeof key === 'string' || typeof key === 'number' ? [{ key, label: String(row[field.labelColumn] ?? key) }] : [];
+          const key = row[arm.by];
+          return typeof key === 'string' || typeof key === 'number' ? [{ key, label: arm.label(row, key) }] : [];
         })
         .filter((option) => option.label.toLowerCase().includes(wanted))
         .sort((one, other) => one.label.localeCompare(other.label));
       return { options: named.slice(offset, offset + limit), more: named.length > offset + limit };
     },
     choiceName: async (field, key) => {
-      refuse(field.from);
-      const row = (data.tables[field.from] ?? []).find((candidate) => candidate[field.by] === key);
-      return row ? { key, label: String(row[field.labelColumn] ?? key) } : null;
+      const arm = choiceArm(field);
+      refuse(arm.from);
+      const row = (data.tables[arm.from] ?? []).find((candidate) => candidate[arm.by] === key && matches(candidate, arm.where));
+      return row ? { key, label: arm.label(row, key) } : null;
     },
+    href: (to) => fixtureHref(to),
     viewer: () => viewer,
     subscribeViewer: () => () => {},
     column: (resource, name) => {
@@ -532,13 +649,7 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
       }
       region.textContent = text;
     },
-    rowTitle: (_resource, row) => {
-      for (const name of ['title', 'name', 'label', 'subject']) {
-        if (row[name] !== null && row[name] !== undefined && String(row[name]) !== '') return String(row[name]);
-      }
-      const text = Object.entries(row).find(([name, value]) => name.endsWith('name') && typeof value === 'string' && value)?.[1];
-      return typeof text === 'string' ? text : row.id === undefined || row.id === null ? undefined : String(row.id);
-    },
+    rowTitle: (resource, row) => title(resource, row),
   };
   return host;
 }

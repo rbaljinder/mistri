@@ -33,7 +33,8 @@ import { applyBulk, bulkKey, matchingKeys } from '@mistriwork/kit/client/bulkAct
 import { confirmFor } from '@mistriwork/kit/client/prompt.js';
 import { expectedValues, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { commandOperations, type CommandOperation, type CommandOwner } from '../../commandState.js';
-import { sendCommand } from '../../commandSend.js';
+import { prepareCommand, sendCommand } from '../../commandSend.js';
+import { heldReview, holdReview, reviewFresh, reviewOwner, staleReview } from '../../commandReviews.js';
 import { checkCommandStep } from '../commandStepCheck.js';
 import { commandAvailable, useCommandAvailability } from '../../commandAvailability.js';
 import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
@@ -52,6 +53,7 @@ import type {
   UiCommandOptions,
   UiCommandOutcome,
   UiCommandRef,
+  UiCommandReview,
   UiFormHandle,
   UiFormOutcome,
   UiFormState,
@@ -189,7 +191,7 @@ function outcomeOf(operation: CommandOperation | undefined, fields?: Readonly<Re
     return {
       status: 'applied',
       ...(operation.said ? { message: operation.said } : {}),
-      ...(operation.output !== undefined ? { output: operation.output } : {}),
+      output: operation.output,
     };
   if (operation?.phase === 'error') return { status: 'refused', message: operation.message, ...(fields ? { fields } : {}) };
   return { status: 'closed' };
@@ -245,6 +247,47 @@ function openForm(
 
 const STALE_TRIES = 3;
 
+const reviewOf = (token: string, values: Readonly<Record<string, unknown>>): UiCommandReview =>
+  Object.freeze({
+    token,
+    values: Object.freeze({ ...values }),
+    get fresh() {
+      return reviewFresh(token);
+    },
+  });
+
+/**
+ * What a review shows before the person confirms: the record prepared at its revision now, the values the command
+ * starts from with `input` over them, held under a token (commandReviews.ts) that pins the run to that revision.
+ */
+async function prepareReview(
+  action: AppCommandAction,
+  key: Record<string, string | number>,
+  input: Readonly<Record<string, unknown>> | undefined,
+): Promise<UiCommandReview | Extract<UiCommandOutcome, { status: 'refused' }>> {
+  const owner = ownerFor(action, key);
+  let prepared: Awaited<ReturnType<typeof prepareCommand>>;
+  try {
+    prepared = await prepareCommand(owner);
+  } catch (error) {
+    return { status: 'refused', message: (error as Error).message || say('isNotAvailableOnThisRecord', { label: action.label }) };
+  }
+  const token = holdReview(
+    reviewOwner(owner.connection, owner.command, owner.commandVersion, key),
+    action.command.target,
+    key,
+    prepared.expectedVersion,
+  );
+  return reviewOf(token, { ...prepared.initial, ...input });
+}
+
+/* A review that cannot be run as it was shown: the page shows it again, so nothing is sent. */
+function staleRefusal(action: AppCommandAction, options: UiCommandOptions): UiCommandOutcome {
+  const message = say('reviewStale', { label: options.label || action.label });
+  if (!options.quiet) toast(message, 'error');
+  return { status: 'refused', code: 'stale', message };
+}
+
 /**
  * Send it with this input, as the form's submit would: prepared for the
  * record's revision, checked by the form's own rules (an incomplete or
@@ -271,6 +314,13 @@ async function runCommand(
   const before = commandOperations.get(owner);
   if (before?.phase === 'pending' || before?.phase === 'unknown') return openForm(action, key, input, options);
   if (before) commandOperations.forget(owner);
+  /* A run the person confirmed from a review is sent for that revision alone, never prepared again (D6): a record
+     that moved since is refused `stale` and shown again, where a plain run below quietly prepares once more. */
+  const review = options.review && heldReview(options.review.token);
+  if (options.review) {
+    if (!review?.fresh || review.owner !== reviewOwner(owner.connection, owner.command, owner.commandVersion, key))
+      return staleRefusal(action, options);
+  }
   /* The record is prepared here, not shown: a change another person made between this prepare and the send (live
      sync keeps a busy record changing) refused a reply nobody had judged against either revision. Prepared again and
      sent again, a few times: the refusal was definite, so nothing ran twice. */
@@ -281,7 +331,9 @@ async function runCommand(
       refresh: () => {
         void queryClient.invalidateQueries();
       },
+      ...(review ? { pinned: review.expectedVersion } : {}),
     });
+    if (review) break;
     if ('refused' in sent || sent.operation.phase !== 'error' || sent.operation.code !== 'stale_record' || tries === STALE_TRIES) break;
     commandOperations.forget(owner);
   }
@@ -292,6 +344,12 @@ async function runCommand(
   }
   const { operation } = sent;
   if (operation.phase === 'unknown' || operation.phase === 'pending') return openForm(action, key, input, options);
+  // A review is spent once it ran, and moot once the server found its record moved.
+  if (options.review) staleReview(options.review.token);
+  if (review && operation.phase === 'error' && operation.code === 'stale_record') {
+    commandOperations.forget(owner);
+    return staleRefusal(action, options);
+  }
   const outcome = outcomeOf(operation, refusedFields(operation.field, operation.message, fields, values as CommandValues));
   commandOperations.forget(owner);
   if (outcome.status === 'refused' && !options.quiet) toast(outcome.message, 'error');
@@ -505,6 +563,8 @@ function publicPageHandle(page: string, id: string, reference: AppFormCommandRef
     available: async () => true,
     run: (record, input, options) => door.then((handle) => handle.run(record, input, options)),
     open: (record, input, options) => door.then((handle) => handle.open(record, input, options)),
+    // A public door names no record: there is no revision to pin, and its run is judged as it lands.
+    prepare: async () => ({ status: 'refused', message: say('reviewNotOffered', { label: humanName(id) }) }),
     choices: (field) => servedChoices(reference.input, field),
     input: (name) => servedInput(reference.input, name),
   };
@@ -537,6 +597,14 @@ export function commandHandle(ref: UiCommandRef, page?: string): UiCommandHandle
           ? formRun().then(({ runFormCommand }) => runFormCommand(labelled(served, options), input, options, openFormCommand))
           : refuse(),
       open: (_record, input, options) => (granted ? openFormCommand(labelled(served, options), input) : refuse()),
+      /* No record, so no revision to go stale: the review is what will be sent, and a run with it runs as any other. */
+      prepare: async (_record, input) =>
+        granted
+          ? reviewOf(holdReview(reviewOwner(state.activeConnection ?? '', ref, served.form.command.version, {}), '', {}, 0), input ?? {})
+          : {
+              status: 'refused',
+              message: identity.mode === 'authenticated' ? say('isNotSomethingYouCanDo', { label: served.form.label }) : say('signInToDo'),
+            },
       choices: (field) => servedChoices(served.form.command.input, field),
       input: (name) => servedInput(served.form.command.input, name),
       check: async (input, names) =>
@@ -571,6 +639,15 @@ export function commandHandle(ref: UiCommandRef, page?: string): UiCommandHandle
     },
     run: (record, input, options = {}) => (granted ? runCommand(action!, keyFor(action!, record), input, options) : refuse()),
     open: (record, input, options = {}) => (granted ? openForm(action!, keyFor(action!, record), input, options) : refuse()),
+    prepare: async (record, input) => {
+      if (!granted)
+        return {
+          status: 'refused',
+          message:
+            identity.mode === 'authenticated' ? say('isNotSomethingYouCanDo', { label: action?.label ?? say('this') }) : say('signInToDo'),
+        };
+      return prepareReview(action!, keyFor(action!, record), input);
+    },
     choices: (field) => servedChoices(action?.command.input, field),
     input: (name) => servedInput(action?.command.input, name),
     check: async (input, names) => (granted ? checkCommandStep(state.activeConnection ?? null, action!.command, names, input) : undefined),
@@ -688,6 +765,8 @@ function actionHandle(id: UiCommandRef, reads?: readonly string[]): UiCommandHan
     run: (record, input, options) => run(record, input, options),
     // A fixed action has no form of its own: opening it is running it, asking first as the record page does.
     open: (record, input, options) => run(record, input, options),
+    // Its update carries the values it expects (`expectedValues`), which is the pin a review would add.
+    prepare: async () => ({ status: 'refused', message: say('reviewNotOffered', { label }) }),
   };
 }
 

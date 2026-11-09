@@ -14,7 +14,7 @@ import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react
 import { userEvent } from '@testing-library/user-event';
 import { refreshViewportScale } from '@mistriwork/ui/internal/ruler.js';
 import { React, useCommand, useLook, useSectionSize, useState } from './index.js';
-import type { UiCommandOutcome } from './context.js';
+import type { UiCommandOutcome, UiCommandReview } from './context.js';
 import { definePage, List, Modal, Popover, TextField, Tooltip } from './page.js';
 import { fixtures, renderPage, renderSection } from './testing.js';
 
@@ -234,6 +234,34 @@ describe('the states a page meets, as fixtures', () => {
     expect(await screen.findByText('Settled.')).toBeInTheDocument();
     expect(checks).toBe(1);
     expect(view.commands).toHaveLength(1);
+  });
+
+  test('a review the record moved past is refused stale and shown again, never run over what nobody saw', async () => {
+    function Approve() {
+      const approve = useCommand('approve');
+      const [review, setReview] = useState<UiCommandReview | null>(null);
+      const [said, setSaid] = useState<UiCommandOutcome | null>(null);
+      return (
+        <>
+          <button onClick={() => void approve.prepare({ id: 1 }).then((got) => 'token' in got && setReview(got))}>Review</button>
+          {review ? <p>{approve.reviewFresh ? 'As reviewed.' : 'Changed since.'}</p> : null}
+          {review ? <button onClick={() => void approve.run({ id: 1 }, review.values, { review }).then(setSaid)}>Approve</button> : null}
+          {said?.status === 'refused' && said.code === 'stale' ? <p>Review it again.</p> : null}
+        </>
+      );
+    }
+    const view = renderSection(
+      Approve,
+      { component: { id: 'approve' } },
+      { viewer: SIGNED_IN, data: BOOKINGS, commands: { approve: { label: 'Approve', resource: 'booking' } } },
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+    expect(await screen.findByText('As reviewed.')).toBeInTheDocument();
+    await view.refresh({ data: { booking: [{ id: 1, guest_name: 'Morgan Lee', status: 'cancelled' }] } });
+    expect(await screen.findByText('Changed since.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(await screen.findByText('Review it again.')).toBeInTheDocument();
+    expect(view.commands).toHaveLength(0);
   });
 
   test('a form resumed from its draft is read as the form resumes it', async () => {

@@ -67,6 +67,8 @@ export function appConnectionRoutes(ctx: RequestContext): boolean {
       ...(signedIn?.auth ? keepsRoles(signedIn.app.app.auth) : {}),
       ...(signedIn?.auth?.suite ? { suite: signedIn.auth.suite } : {}),
       ...(signedIn?.auth?.accountProfile === true ? { accountProfile: true } : {}),
+      // A headless App draws no screen of its own: its sign-in lands on a note, not the App's root (headlessLanding.js).
+      ...(signedIn?.auth && signedIn.app.app.ui?.headless ? { headless: true } : {}),
       // Whether the account menu offers Accounts: the route asks the same question again.
       ...(accountAdministrator(ctx) ? { accountAdministration: true } : {}),
       // A bell only where there is an inbox to ring for (inbox.ts): a signed-in account in an App that notifies.

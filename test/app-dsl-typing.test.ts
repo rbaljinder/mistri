@@ -87,8 +87,9 @@ function compile(source: string, hidden: Record<string, string[]> = {}, files: R
         // installed package answers from its built declarations, and a page file is TSX anyway.
         '--jsx',
         'react-jsx',
+        // As an App's own tsconfig says: the generated types reach the commands entry, which a checkout reads as source.
         '--target',
-        'es2022',
+        'es2023',
         '--pretty',
         'false',
         join(dir, 'app.ts'),
@@ -667,4 +668,128 @@ test('`now` and the date phrases read the same in a segment and in a metric quer
     DATED,
   );
   assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+});
+
+test("a page's command run is typed by the command's declared output, and a form opens with its command's inputs", () => {
+  const types = commandTypes(
+    {
+      assign: { target: 'ticket', targets: 'one', input: ['owner_id'], output: true },
+      close: { target: 'ticket', targets: 'one', input: [], output: false },
+      report: { target: 'ticket', targets: 'none', input: ['subject', 'priority'], public: true, output: true },
+    },
+    'Helpdesk',
+    undefined,
+    ['board'],
+    [],
+    [],
+    { commandsFrom: './commands.ts', forms: { 'new-ticket': 'report' } },
+  );
+  /* The generated file names each command's output from the module's default export, so its declared type is here. */
+  assert.match(
+    types,
+    /assign: \{ target: "ticket"; targets: "one"; input: "owner_id"; output: CommandOutput<CommandModule\["assign"\]> \};/,
+  );
+  assert.match(types, /close: \{ target: "ticket"; targets: "one"; input: never; output: undefined \};/);
+  assert.match(types, /type CommandModule = typeof import\("\.\/commands\.ts"\)\.default;/);
+  assert.match(types, /export type FormCommands = \{\n {2}"new-ticket": "report";\n\};/);
+  assert.match(types, /interface Register \{ commands: Commands; pagePaths: PagePaths; forms: FormCommands \}/);
+  /* Without the module, a declared output is unknown rather than a guess, and nothing is imported for it. */
+  const unnamed = commandTypes({ assign: { target: 'ticket', targets: 'one', input: [], output: true } }, 'Helpdesk');
+  assert.match(unnamed, /output: unknown/);
+  assert.doesNotMatch(unnamed, /CommandModule|FormCommands/);
+
+  const commands = `
+    import type { BusinessCommand } from '@mistriwork/mistri/commands';
+    declare const registry: {
+      assign: BusinessCommand<{ owner_id: number }, { assigned: number; owner: string }>;
+      close: BusinessCommand<Record<string, never>, unknown>;
+      report: BusinessCommand<{ subject: string; priority: string }, { id: number }>;
+    };
+    export default registry;
+  `;
+  const page = (body: string) => `
+    import './mistri-commands.d.ts';
+    import type {} from './mistri-schema.js';
+    import { definePage } from '@mistriwork/mistri/page';
+    const page = definePage({ label: 'Board', reads: ['ticket'], commands: ['assign', 'close', 'report'], forms: ['new-ticket'],
+      component: () => null });
+    export default page;
+    export async function use() { ${body} }
+  `;
+  const files = { 'mistri-commands.d.ts': types, 'commands.ts': commands };
+  const fine = compile(
+    page(`
+      const assign = page.useCommand('assign');
+      const done = await assign.run({ id: 1 }, { owner_id: 2 });
+      // What the handler returns, with no cast.
+      if (done.status === 'applied') { const n: number = done.output.assigned; const s: string = done.output.owner; void n; void s; }
+      // A public command answers a public page with its receipt, whatever its handler returns.
+      const sent = await page.useCommand('report').run({}, { subject: 'Hi' });
+      if (sent.status === 'applied') { const r: string = sent.output.reference; void r; }
+      // A review pins the run to what was shown; a stale one is refused with its code.
+      const review = await assign.prepare({ id: 1 }, { owner_id: 3 });
+      if ('token' in review) {
+        const again = await assign.run({ id: 1 }, review.values, { review });
+        if (again.status === 'refused' && again.code === 'stale') void assign.reviewFresh;
+      }
+      await page.useForm('new-ticket').open({ subject: 'Printer', priority: 'high' }, { at: 'details' });
+    `),
+    {},
+    files,
+  );
+  assert.equal(fine.status, 0, fine.stdout + fine.stderr);
+  const mistakes: Record<string, [string, RegExp]> = {
+    'a command that declares no output has none to read': [
+      `const done = await page.useCommand('close').run({ id: 1 });
+       if (done.status === 'applied') void done.output.closed;`,
+      /'done\.output' is possibly 'undefined'/,
+    ],
+    'a field the output does not have': [
+      `const done = await page.useCommand('assign').run({ id: 1 });
+       if (done.status === 'applied') void done.output.asigned;`,
+      /'asigned' does not exist/,
+    ],
+    "a public command's output is its receipt, not the handler's": [
+      `const sent = await page.useCommand('report').run({});
+       if (sent.status === 'applied') void sent.output.id;`,
+      /'id' does not exist on type 'PublicCommandReceipt'/,
+    ],
+    "an input the form's command does not declare": [
+      `await page.useForm('new-ticket').open({ subjcet: 'Printer' });`,
+      /'subjcet' does not exist/,
+    ],
+    'an input the command does not declare': [`await page.useCommand('assign').run({ id: 1 }, { owner: 2 });`, /'owner' does not exist/],
+  };
+  for (const [why, [body, error]] of Object.entries(mistakes)) {
+    const compiled = compile(page(body), {}, files);
+    assert.notEqual(compiled.status, 0, why);
+    assert.match(compiled.stdout, error, why);
+  }
+});
+
+test('defineSurface is held to the App as definePage is: an undeclared resource or command does not compile', () => {
+  const types = commandTypes({ assign: { target: 'ticket', targets: 'one', input: ['owner_id'], output: false } }, 'Helpdesk');
+  const surface = (fields: string) => `
+    import './mistri-commands.d.ts';
+    import type {} from './mistri-schema.js';
+    import { defineSurface } from '@mistriwork/mistri/page';
+    const surface = defineSurface({ label: 'Front desk', ${fields} });
+    export default surface;
+    const reads: readonly ('ticket' | 'person')[] = surface.definition.reads;
+    void reads;
+  `;
+  const files = { 'mistri-commands.d.ts': types };
+  const fine = compile(surface(`reads: ['ticket', 'person'], commands: ['assign']`), {}, files);
+  assert.equal(fine.status, 0, fine.stdout + fine.stderr);
+  const mistakes: Record<string, [string, RegExp]> = {
+    'a resource the App does not have': [`reads: ['tickets'], commands: ['assign']`, /"tickets"/],
+    'a command the App does not have': [`reads: ['ticket'], commands: ['asign']`, /"asign"/],
+    'a component, which only a page has': [`reads: ['ticket'], component: () => null`, /'component' does not exist/],
+    'params, which only a page keeps': [`reads: ['ticket'], params: ['q']`, /'params' does not exist/],
+  };
+  for (const [why, [fields, error]] of Object.entries(mistakes)) {
+    const compiled = compile(surface(fields), {}, files);
+    assert.notEqual(compiled.status, 0, why);
+    assert.match(compiled.stdout, error, why);
+  }
 });

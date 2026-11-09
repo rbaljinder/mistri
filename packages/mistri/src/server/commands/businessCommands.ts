@@ -559,6 +559,22 @@ export const commandRestatements = (command: object): readonly string[] => resta
 
 export type BusinessCommandRegistry = Readonly<Record<string, AnyBusinessCommand>>;
 
+/**
+ * What a command's applied outcome carries to the browser: its declared
+ * `output`, or undefined for a command that declares none. A command without
+ * `output` infers it as unknown, and the executor sends nothing for it, so
+ * unknown here means "no output", not "anything" (mistri-commands.d.ts).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type CommandOutput<C> =
+  C extends BusinessCommand<any, infer Output, any>
+    ? unknown extends Output
+      ? undefined
+      : [Output] extends [void]
+        ? undefined
+        : Output
+    : unknown;
+
 export class BusinessCommandDefinitionError extends Error {
   readonly code = 'invalid-command-definition';
   constructor(message: string) {

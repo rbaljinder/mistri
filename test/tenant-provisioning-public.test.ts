@@ -343,6 +343,7 @@ test('published declarations type the provisioning steps without exposing privat
       'CommandFile',
       'CommandInput',
       'CommandInputOf',
+      'CommandOutput',
       'CommandSource',
       'EffectPayload',
       'ExperimentConversion',

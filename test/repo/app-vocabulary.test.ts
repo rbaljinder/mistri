@@ -44,6 +44,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       // rc.12: what a phone's bar and a home screen's icon label say when the name is too long (shared/appModel.ts).
       'shortName',
       'sources',
+      'surfaces',
       'track',
       'ui',
       'unions',
@@ -62,6 +63,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'editing',
       'export',
       'footer',
+      'headless',
       'locale',
       'localeColumn',
       'logo',

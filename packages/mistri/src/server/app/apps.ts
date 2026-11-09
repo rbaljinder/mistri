@@ -109,6 +109,8 @@ import { appNotifyRules, notifyAdvisories } from '../../shared/appNotify.js';
 import { compileComponents, componentHrefs, type CompiledComponents } from './appComponents.js';
 import { lintComponents, pageManifestsOf } from './componentLint.js';
 import { pageFiles, placePages, readPageFiles } from './appPages.js';
+import { readSurfaceFiles, surfaceFiles } from './appSurfaces.js';
+import type { SurfaceFile } from '../../shared/appSurfaces.js';
 import { valueLabelFindings, valueLabelHolder } from './valueLabels.js';
 import { embeddedOnlyViews } from '@mistriwork/engine/shared/appEmbeds.js';
 import { homeViews } from '../../shared/appHome.js';
@@ -275,7 +277,8 @@ export interface LoadedApp {
   /** Its human checks, by name: the commands module's `challenges` export, one of which `auth.challenge` names
       (commands/challenges.ts). */
   challenges?: Readonly<Record<string, HumanCheck>>;
-  /** Its page modules, from the App directory (`pages/<path>.page.tsx`, `pages/<key>.ts`): what check typechecks. */
+  /** Its page modules, from the App directory (`pages/<path>.page.tsx`, `pages/<key>.ts`), and its surfaces
+      (`surfaces/<key>.surface.ts`): what check typechecks. */
   pageFiles?: string[];
   /** Its catalogs' files, from the App directory (`messages/<locale>.ts`): what check typechecks. */
   messageFiles?: string[];
@@ -561,6 +564,9 @@ export async function loadApp(
       throw new Error(`${path}: ${(err as Error).message}`, { cause: err });
     }
   }
+  /* Its surfaces (appSurfaces.ts): each read from its file as a page is, and judged with the views once the App is parsed. */
+  const surfaceList = dir ? await surfaceFiles(dir) : [];
+  const surfaces = surfaceList.length ? await readSurfaceFiles(dir!, surfaceList, path) : [];
   /* Its words (appMessages.ts): messages/<locale>.ts, read in one worker as the manifest is. Every msg() is said
      before anything is parsed, in the source language here and in a reader's own where one is asked for. */
   const catalogList = dir ? await catalogFiles(dir) : [];
@@ -588,6 +594,7 @@ export async function loadApp(
     path,
     ...(catalog ? { catalog } : {}),
     filePages: recordPages.pages,
+    ...(surfaces.length ? { surfaces } : {}),
   };
   options.definition?.(definition);
   const { app, pages, sources, origins } = parseDefinition(definition, sourceSayer);
@@ -668,8 +675,13 @@ export async function loadApp(
     ...(commands ? { commands } : {}),
     ...(loaders ? { loaders } : {}),
     ...(challenges ? { challenges } : {}),
-    ...(pageList.length || recordPages.modules.length
-      ? { pageFiles: [...pageList, ...recordPages.modules].sort().map((file) => join('pages', file)) }
+    ...(pageList.length || recordPages.modules.length || surfaceList.length
+      ? {
+          pageFiles: [
+            ...[...pageList, ...recordPages.modules].sort().map((file) => join('pages', file)),
+            ...surfaceList.map((file) => join('surfaces', file)),
+          ],
+        }
       : {}),
     ...(catalogList.length ? { messageFiles: catalogList.map((file) => join('messages', file)) } : {}),
     ...(graph.size ? { modules: [...graph].sort() } : {}),
@@ -691,6 +703,8 @@ export interface DefinitionInput {
   /** The commands its names resolve to (commandContracts.ts). */
   catalog?: ReturnType<typeof import('../commands/commandContracts.js').appCommandCatalog>;
   filePages: readonly FilePage[];
+  /** Its surfaces/ files, read (appSurfaces.ts). */
+  surfaces?: readonly SurfaceFile[];
 }
 
 /* A record page is found by its file, as a free-form page and a catalog are: pages/<key>.json, or pages/<key>.ts
@@ -760,7 +774,12 @@ function parseDefinition(input: DefinitionInput, sayer: MessageSayer | undefined
     catalog && sayer
       ? new Map([...catalog].map(([id, entry]) => [id, localizeDefinition(entry, sayer, `${path}: commands "${id}"`)]))
       : catalog;
-  const parsed = parseAppConfig(raw, path, commandCatalog ? { commands: commandCatalog } : {});
+  /* A surface's label is said in the reader's words, as a page's is. */
+  const surfaces = input.surfaces?.map((file) => ({ ...file, fields: localizeDefinition(file.fields, sayer, file.at) }));
+  const parsed = parseAppConfig(raw, path, {
+    ...(commandCatalog ? { commands: commandCatalog } : {}),
+    ...(surfaces?.length ? { surfaces } : {}),
+  });
   /* A tenant's words are held to the source catalog on write and on read, wherever the definition goes (recordMessages.ts). */
   const words = parsed.ui.messages;
   if (words && !sayer)

@@ -310,6 +310,9 @@ export interface UiQuery<T> {
   refreshError: Error | null;
   refetch(): unknown;
 }
+/** What an `optional: true` read adds to its result: the reader was refused it (a 401 or 403). That is neither an error
+    (`isError` stays false, no toast, no error boundary) nor an empty result (`data` is undefined): draw the refusal in its place. A 500 stays an error. */
+export interface UiRefusable { refused: boolean }
 /** How far a `useRows` read has paged: the page size, whether the server holds more, and `total` only where the server counted. */
 export interface UiRowsPage { limit: number; hasMore: boolean; total?: number }
 /** `useRows`' read: the rows read so far, with `page` and `more()`, which reads the next `limit` rows onto the end. */
@@ -324,12 +327,15 @@ export interface OpenViewOptions { tab?: string; search?: string; filters?: Read
 
 /** Rows of one App resource, by the resource's name: `useRows('pay_run', { where: { status: 'review' }, show: ['title'], sort: 'pay_date desc', limit: 12 })`. `where` is a condition as an object, joined to `query` by "and".
     `enabled: false` asks nothing yet. On a free-form page, a resource is one of the page's `reads`. The first `limit` rows (20 unless said); `page.hasMore` and `more()` read on. */
-export declare function useRows(resource: string, options?: { query?: string; where?: Readonly<Record<string, unknown>>; show?: readonly string[]; sort?: string; limit?: number; enabled?: boolean }): UiRowsQuery;
+export declare function useRows(resource: string, options: { query?: string; where?: Readonly<Record<string, unknown>>; show?: readonly string[]; sort?: string; limit?: number; enabled?: boolean; optional: true }): UiRowsQuery & UiRefusable;
+export declare function useRows(resource: string, options?: { query?: string; where?: Readonly<Record<string, unknown>>; show?: readonly string[]; sort?: string; limit?: number; enabled?: boolean; optional?: false }): UiRowsQuery;
 /** One record by its key: `useRecord('employee', { id: 4 }, ['name', 'title'])`. Null when there is none; not asked while the key is undefined. */
-export declare function useRecord(resource: string, key: Readonly<Record<string, unknown>> | undefined, show?: readonly string[]): UiQuery<UiRow | null>;
+export declare function useRecord(resource: string, key: Readonly<Record<string, unknown>> | undefined, show: readonly string[] | undefined, options: { optional: true }): UiQuery<UiRow | null> & UiRefusable;
+export declare function useRecord(resource: string, key: Readonly<Record<string, unknown>> | undefined, show?: readonly string[], options?: { optional?: false }): UiQuery<UiRow | null>;
 /** A resource's rows grouped and measured: `useBreakdown('pay_stub', { by: 'status', measure: 'sum net' })`. Each row is keyed as the
     server names its columns: the groups by their paths (`status`, `day(moved_at)`), the measure as written (`count`, `sum(net)`). */
-export declare function useBreakdown(resource: string, options: { by: string; measure?: string; query?: string; limit?: number }): UiQuery<UiRow[]>;
+export declare function useBreakdown(resource: string, options: { by: string; measure?: string; query?: string; limit?: number; optional: true }): UiQuery<UiRow[]> & UiRefusable;
+export declare function useBreakdown(resource: string, options: { by: string; measure?: string; query?: string; limit?: number; optional?: false }): UiQuery<UiRow[]>;
 /** Where a component may send the reader: a record, as a page, a peek or a dialog, or one of the App's views. */
 export declare function useNavigate(): {
   openRecord(resource: string, key: Readonly<Record<string, unknown>>, options?: { mode?: OpenMode; label?: string }): void;
@@ -342,6 +348,22 @@ export declare function useNavigate(): {
       address, a public form by its intake address — `?via=` and all, to hand out. Undefined when the tenant has no
       such address, outside a tenant's own lease, or for a view no visitor opens. */
   publicLink(view: string): string | undefined;
+};
+/**
+ * The App's own addresses as strings, for an `<a href>` and for an embedding app's navigator: `useHref().record('leads', { id: 4 })`.
+ * Each is the one canonical address the router reads back, built through the App's own address rules, so
+ * a link never drifts from a typed-in address. A view, page or record the App has no address for throws, as `openView` does,
+ * where a link to nowhere would otherwise ship. `params` are the words an address says (`tab`, `search`, a filter's column).
+ */
+export declare function useHref(): {
+  /** The sign-in's address. */
+  signIn(): string;
+  /** A list or dashboard by its view key: `view('leads', { tab: 'working', search: 'stone' })` is `/leads?tab=working&search=stone`. */
+  view(view: string, params?: Readonly<Record<string, string>>): string;
+  /** A record by its key under the view that shows its table: `record('leads', { id: 127 })` is `/leads/127`, and `{ tab: 'map' }` adds the tab's word. */
+  record(view: string, key: Readonly<Record<string, unknown>>, options?: { tab?: string }): string;
+  /** A free-form page by its path, with the parameters it keeps in its address. */
+  page(path: string, params?: Readonly<Record<string, string>>): string;
 };
 /** The page's timeline composer, from a custom section beside it: `fill` puts a template's words in the box (and chooses
     Reply or Internal note, where the page offers it) for the reader to edit and send. It never sends; it answers false
@@ -364,22 +386,36 @@ export declare function useDeployment(): {
   /** The path a reverse proxy serves the server under (`/tools`), or '' at the root. */
   readonly basePath: string;
 };
-/** How a command a component ran ended: applied, with what its handler returned as `output` (the new record's id, the
-    ticket it opened: read it as the shape your command returns), refused in the server's words, a form closed with
+/** How a command a component ran ended: applied, with what its handler returned as `output`, typed from the command's
+    declared `output` (`undefined` for a command that declares none), refused in the server's words, a form closed with
     nothing sent, or `unknown`: it was sent and no answer said whether it ran (the connection dropped, the server could
     not say). Never send it again under a new key: `check()` asks under the same one, so it cannot run twice, and
     resolves as the run would have. A public page with a human check hands `check` a fresh token. A refusal about one
     input names it in `fields`, by its path, where the command declares it and the values sent leave it shown: say it
-    beside the field you draw; `message` always holds the words. */
-export type CommandOutcome =
-  | { status: 'applied'; message?: string; output?: unknown }
-  | { status: 'refused'; message: string; fields?: Readonly<Record<string, string>> }
+    beside the field you draw; `message` always holds the words. `code: 'stale'` is a run pinned to a review
+    (`{ review }`) that the record has moved past: show the review again rather than run what was not seen. */
+export type CommandOutcome<O = unknown> =
+  | { status: 'applied'; message?: string; output: O }
+  | { status: 'refused'; message: string; code?: 'stale'; fields?: Readonly<Record<string, string>> }
   | { status: 'closed' }
-  | { status: 'unknown'; message: string; check(options?: { challenge?: string }): Promise<CommandOutcome> };
-/** How a run is sent: the word its form says it by, a public page's human-check token, and the key a run that names no
-    record is sent under. `attempt` is a UUID the component makes once per intent and keeps (in its address, say): a
-    run sent again with it, after a reload, is the same run. A fresh key per run when not given. */
-export interface CommandRunOptions { label?: string; challenge?: string; attempt?: string }
+  | { status: 'unknown'; message: string; check(options?: { challenge?: string }): Promise<CommandOutcome<O>> };
+/** A command refused before or as it ran: the server's words, and the input they are about. */
+export type CommandRefusal = Extract<CommandOutcome, { status: 'refused' }>;
+/**
+ * What a person was shown before they confirmed a run (`prepare`): the values the command starts from on that record
+ * at its revision then, and a token that pins the run to that revision. `run(record, input, { review })` sends exactly
+ * that revision, never retries, and is refused `code: 'stale'` when the record has changed since, where a run without a
+ * review quietly prepares again. `fresh` turns false once a change to the record reaches the page.
+ */
+export interface CommandReview<Input extends string = string> {
+  readonly token: string;
+  readonly values: Readonly<Partial<Record<Input, unknown>>>;
+  readonly fresh: boolean;
+}
+/** How a run is sent: the word its form says it by, a public page's human-check token, the key a run that names no
+    record is sent under, and the review it confirms. `attempt` is a UUID the component makes once per intent and keeps
+    (in its address, say): a run sent again with it, after a reload, is the same run. A fresh key per run when not given. */
+export interface CommandRunOptions { label?: string; challenge?: string; attempt?: string; review?: CommandReview }
 /** Why a command cannot be run on a record: signed out, the reader's role not granted it, or its `when` not holding for the record now. */
 export type CommandUnavailable = 'signed-out' | 'not-granted' | 'unavailable';
 /** What a component hands a command's run: any of its declared inputs, by name (every name where the App is not typed). */
@@ -393,8 +429,11 @@ export type CommandInput<N extends string> = Readonly<Partial<Record<import('./a
  * precondition only the command's handler checks ("join first") is the App's to say: the page cannot know it before the run. A
  * command that names no record (`targets: 'none'`) is reached the same way, through its form or, when no form runs it, by name; pass
  * `{}` as its record: `markAllRead.run({}, {})`. An applied run resolves with what the command returned as `output`:
- * `const done = await raise.run({}, input); if (done.status === 'applied') nav.openRecord('ticket', { id: (done.output as { id: number }).id })`.
- * Its input is typed by the command's declared inputs (`CommandInputName`), so a misspelled one is a type error.
+ * `const done = await raise.run({}, input); if (done.status === 'applied') nav.openRecord('ticket', { id: done.output.id })`,
+ * typed from the command's `output`. Its input is typed by the command's declared inputs (`CommandInputName`), so a
+ * misspelled one is a type error. `prepare(record, input)` reads what a review shows before the person confirms, and
+ * `run(record, input, { review })` runs exactly that revision or is refused `stale`; `reviewFresh` is whether the last
+ * review still stands.
  */
 export declare function useCommand<const N extends import('./app.js').CommandName>(command: N): {
   label: string;
@@ -403,8 +442,13 @@ export declare function useCommand<const N extends import('./app.js').CommandNam
   /** Why it cannot be run on this record; undefined while it can be, and until the server has said. */
   reason(record: Readonly<Record<string, unknown>>): CommandUnavailable | undefined;
   pending(record: Readonly<Record<string, unknown>>): boolean;
-  run(record: Readonly<Record<string, unknown>>, input?: CommandInput<N>, options?: CommandRunOptions): Promise<CommandOutcome>;
-  open(record: Readonly<Record<string, unknown>>, input?: CommandInput<N>, options?: CommandRunOptions): Promise<CommandOutcome>;
+  run(record: Readonly<Record<string, unknown>>, input?: CommandInput<N>, options?: CommandRunOptions): Promise<CommandOutcome<import('./app.js').CommandOutputOf<N>>>;
+  open(record: Readonly<Record<string, unknown>>, input?: CommandInput<N>, options?: CommandRunOptions): Promise<CommandOutcome<import('./app.js').CommandOutputOf<N>>>;
+  /** What a review shows before the person confirms: the values the command starts from on the record now, with
+      `input` over them, and the token that pins a run to this revision. Refused where it cannot be run on it. */
+  prepare(record?: Readonly<Record<string, unknown>>, input?: CommandInput<N>): Promise<CommandReview<import('./app.js').CommandInputName<N>> | CommandRefusal>;
+  /** Whether the last review `prepare` gave still stands: false once a change to its record reaches the page; true without one. */
+  reviewFresh: boolean;
   /** The choices one of its inputs offers, as served with the command: a choice's options, or a table's rows
       (`field.choice({ from })`) where they come with it. Undefined for an input that offers none, or whose rows its own
       form reads. */
@@ -482,6 +526,12 @@ export interface Options {
  * the keyboard.
  */
 export declare function useOptions<const N extends import('./app.js').CommandName>(command: N, name: import('./app.js').CommandInputName<N>): Options;
+/**
+ * A resource's own records as a picker's options, with no command behind them: `useOptions('country', { where: { active: true } })`.
+ * It is a declared read: a free-form page must list the resource in its `reads`, as `useRows` requires. Each option is labelled by
+ * the resource's title column, and the reader is offered only the rows they may read (grants, row policy).
+ */
+export declare function useOptions(resource: string, options?: { where?: Readonly<Record<string, unknown>> }): Options;
 /**
  * One of the App's fixed actions, a machine's verb or `action(label, { set })`, by its id: `const start = useAction('startVisit')`. Held
  * as a command is (`granted`, `available`, `reason`, `pending`, `run`, `open`, the same outcome), but it is the record page's own

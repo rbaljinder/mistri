@@ -50,6 +50,7 @@ import { runtimeVersion } from '@mistriwork/engine/server/packageVersion.js';
 import { apiExposesCommands } from '../../shared/appApi.js';
 import { appMounts, NO_MOUNT, type AddressMount } from '@mistriwork/engine/shared/mount.js';
 import { consoleDispatchOwners } from './appContext.js';
+import { SurfaceRefused } from './surfaceGate.js';
 import { listen } from '@mistriwork/engine/server/http/serverCore.js';
 import { embedBoot } from '../embed/boot.js';
 import { embedDoorFor } from '../embed/crossOrigin.js';
@@ -406,6 +407,11 @@ export function createApp(options: {
     /* A command's outcome is its own record: it keeps its report even when
        its client left, in the shape its client reads. */
     failed: (err, req, res, url) => {
+      /* A headless App's request that named no surface, found where its App was resolved (surfaceGate.ts). */
+      if (err instanceof SurfaceRefused) {
+        send(res, 403, { error: err.message, code: err.code });
+        return true;
+      }
       if (!isBusinessCommandPath(url.pathname)) return false;
       const failure = businessCommandHttpError(err, url.pathname === '/api/commands/status');
       if (failure.retryAfter !== undefined && !res.headersSent) res.setHeader('retry-after', String(failure.retryAfter));

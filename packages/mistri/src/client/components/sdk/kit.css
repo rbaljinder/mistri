@@ -27,6 +27,22 @@
     font-size: var(--text-base);
     color: var(--ink-muted);
   }
+  /* A line of words: the page's secondary ink for a note, the status colour for a refusal. Tokens only. */
+  .kit-text {
+    margin: 0;
+    font-size: var(--text-base);
+    line-height: 1.45;
+    color: var(--ink);
+  }
+  .kit-text-sm {
+    font-size: var(--text-sm);
+  }
+  .kit-text-muted {
+    color: var(--ink-muted);
+  }
+  .kit-text-danger {
+    color: var(--status-critical);
+  }
   .kit-stack {
     display: flex;
     flex-direction: column;

@@ -600,6 +600,8 @@ export async function runGrade(
         windows: WINDOWS.map((window) => window.label),
         look: look?.label ?? wornLabel,
         skipped: asked ? [] : opened.skipped,
+        /* A surface draws nothing of the App's (a front end of its own does), so it is counted, never captured. */
+        surfaces: Object.keys(loaded.app.surfaces ?? {}).length,
       };
       if (options.json) {
         write(
@@ -632,6 +634,7 @@ export async function runGrade(
           windows: coverage.windows,
           look: coverage.look,
           asked,
+          surfaces: coverage.surfaces,
           ...(opened.as ? { as: opened.as.role } : session ? { as: 'a signed-in person' } : {}),
         }))
           write(line);

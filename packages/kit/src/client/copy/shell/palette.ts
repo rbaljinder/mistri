@@ -5,5 +5,6 @@ export const say = defineMessages({
   hideTheTableList: 'Hide the table list',
   hideTheTableListB: 'Hide the table list (⌘B)',
   showTheTableList: 'Show the table list',
+  recordTab: '{tab} — {record}',
   showTheTableListB: 'Show the table list (⌘B)',
 });

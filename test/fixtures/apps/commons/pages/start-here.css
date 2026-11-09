@@ -33,6 +33,9 @@ li:first-child > .c-page-start-here-thread { border-top: 0; padding-top: 0; }
 .c-page-start-here-thread span, .c-page-start-here-board small { font-size: var(--text-sm, 13px); color: var(--ink-muted); }
 .c-page-start-here-board { align-content: start; padding: 12px 0 4px; border-top: 2px solid var(--ink); }
 .c-page-start-here-board span { color: var(--ink-muted); line-height: 1.45; }
+/* A member's Start a thread here sits under the card, left on its text, so the card stays one target. */
+.c-page-start-here-board-cell { display: grid; align-content: start; justify-items: start; gap: 4px; }
+.c-page-start-here-board-cell > .c-page-start-here-board { justify-self: stretch; }
 .c-page-start-here-thread:focus-visible, .c-page-start-here-board:focus-visible { outline: var(--focus-width, 2px) solid var(--focus); outline-offset: 2px; }
 
 @media (max-width: 720px) {

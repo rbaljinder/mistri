@@ -142,8 +142,10 @@ export declare function machine<const Column extends string, const States extend
 /** Filled in by the generated mistri-commands.d.ts: `declare module '@mistriwork/mistri/app' { interface Register { commands: Commands } }`. */
 export interface Register {}
 /** One command as the generated file describes it: the table it acts on, how many existing records a request names,
-    its input names, and whether a public form runs it. */
-export interface RegisteredCommand { target: string; targets: 'one' | 'many' | 'none'; input: string; public?: true }
+    its input names, whether a public form runs it, and what an applied run returns: its declared `output`, or
+    `undefined` for a command that declares none. A file `mistri check` wrote before outputs were typed says nothing of
+    it, and its commands return `unknown`. */
+export interface RegisteredCommand { target: string; targets: 'one' | 'many' | 'none'; input: string; public?: true; output?: unknown }
 type Registered = Register extends { commands: infer C extends Record<string, RegisteredCommand> } ? C : never;
 type Unregistered = [Registered] extends [never] ? true : false;
 type NamesWhere<Test> = Unregistered extends true ? string
@@ -161,6 +163,12 @@ export type CommandOn<Table extends string = string> = NamesWhere<{ target: Tabl
 export type FormCommandName<Public extends boolean = boolean> = NamesWhere<{ targets: 'none' } & (boolean extends Public ? unknown : Public extends true ? { public: true } : { public?: undefined })>;
 /** A command's input names, or any text without generated types. */
 export type CommandInputName<Name extends string> = Unregistered extends true ? string : Name extends keyof Registered ? Registered[Name]['input'] : never;
+/** What a command's applied run returns (`done.output`), typed from its declared `output`: `undefined` for a command
+    that declares none, so reading a field of it is a type error, and `unknown` without generated types. */
+export type CommandOutputOf<Name extends string> = Unregistered extends true ? unknown
+  : Name extends keyof Registered ? Registered[Name] extends { output: infer O } ? O : unknown : unknown;
+/** The command a form view runs, by the view's key (`forms` in the generated file); never without one. */
+export type FormViewCommand<View extends string> = Register extends { forms: infer F } ? View extends keyof F ? F[View] & string : never : never;
 type TakesMany<Name extends string> = Unregistered extends true ? true : Name extends keyof Registered ? Registered[Name] extends { targets: 'many' } ? true : false : false;
 
 /* ---------- one spelling: the helpers ----------
@@ -2950,6 +2958,10 @@ export type AppIconName =
     word so a misspelled name is reported at the icon by `check`, not by a failed overload of the helper it sits in. */
 export type AppIcon = AppIconName | Lowercase<string>;
 
+/** An icon a free-form page names: a built-in's, or one the App registers (`Register['icons']`, empty unless the App
+    declares its own). A page is a file of its own, so a misspelled name is reported there as a type error. */
+export type PageIcon = AppIconName | (Register extends { icons: infer I extends string } ? I : never);
+
 export type AppNavLink = { label: string | AppMessageRef; to: StaticAppTarget };
 /** Type-only target manifest checking; the runtime helper returns its argument. */
 export declare function appLink<TargetManifest>(target: StaticAppTarget & {
@@ -3195,6 +3207,11 @@ export interface AppUi {
       its worker, its painted icons and an offline page for failed navigations. Offline data is not part of it: with
       no connection the App opens to its offline page, and its lists, records and writes need the network. @preview */
   pwa?: boolean;
+  /** true serves the App headless: its front end is your own (a same-domain Next.js page using the hooks of
+      `@mistriwork/mistri/react`), and every data request names one of its `surfaces/*.surface.ts` in the
+      `X-Mistri-Surface` header; a request that names none is refused (403, code `surface`). Grants, row policy and
+      field ceilings still apply inside a surface. */
+  headless?: boolean;
   /** BCP 47 tag the App is said and written in: its captions' language where it has `messages/<locale>.ts` catalogs, and
       every figure — numbers, money, dates, counts ("en-AU"). Default: the reader's browser decides the figures.
       `{ column: 'person.locale', default: 'en-US' }` says each reader's in the tag the first row of that text column

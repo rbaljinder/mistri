@@ -33,7 +33,12 @@ test('the ticket is asked at once, and the run waits until it is old enough, the
   expect(fetchServer).toHaveBeenCalledTimes(1);
   await vi.advanceTimersByTimeAsync(300);
   const outcome = await running;
-  expect(outcome).toEqual({ status: 'applied', output: { reference: 'ENR-0001', receipt: { id: 'r1' } } });
+  // Applied, it carries the thank-you a public form's done screen says: the reference to keep, for the page to show.
+  expect(outcome).toEqual({
+    status: 'applied',
+    message: 'Thank you. Enrol is received; your reference is ENR-0001.',
+    output: { reference: 'ENR-0001', receipt: { id: 'r1' } },
+  });
   const [url, init] = fetchServer.mock.calls[1] as [string, RequestInit];
   expect(url).toBe('/api/pages/lobby/commands/enrol');
   expect(init.headers).toMatchObject({ 'x-mistri-ticket': 'ticket-1', 'x-mistri-challenge': 'token-1' });
@@ -104,7 +109,7 @@ test('an answer that never came is not known, never refused; check sends the sam
   const outcome = await running;
   expect(outcome.status).toBe('unknown');
   const checked = await (outcome as Extract<typeof outcome, { status: 'unknown' }>).check();
-  expect(checked).toEqual({ status: 'applied', output: { reference: 'ENR-0003', receipt: undefined } });
+  expect(checked).toMatchObject({ status: 'applied', output: { reference: 'ENR-0003', receipt: undefined } });
   const keys = sentKeys();
   expect(keys).toHaveLength(2);
   expect(keys[0]).toBe(keys[1]);

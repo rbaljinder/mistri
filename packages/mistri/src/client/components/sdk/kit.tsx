@@ -186,6 +186,8 @@ interface LoadedQuery<T> {
   isError: boolean;
   error: Error | null;
   refetch(): unknown;
+  /** An `optional: true` read the reader was refused: drawn as `empty`, never as a failure or a wait. */
+  refused?: boolean;
 }
 
 /**
@@ -221,6 +223,7 @@ export function Loaded<T>({
         <Problem text={query.error?.message || sayKit('notRead')} retry={() => void query.refetch()} />
       </div>
     );
+  if (query.data === undefined && query.refused) return <>{empty ?? <Empty title={sayKit('nothingHereYet')} />}</>;
   if (query.data === undefined)
     return (
       <div

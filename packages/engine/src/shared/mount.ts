@@ -37,7 +37,7 @@ export interface AddressMount {
 }
 
 /** No Apps and no prefix: every address is its own. */
-export const NO_MOUNT: AddressMount = Object.freeze({ base: '', apps: Object.freeze({}) });
+export const NO_MOUNT: AddressMount = /* @__PURE__ */ Object.freeze({ base: '', apps: /* @__PURE__ */ Object.freeze({}) });
 
 /**
  * First segments the server answers at its root whatever it serves: the API,

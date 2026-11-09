@@ -374,8 +374,12 @@ function projected(base: AppDef, schema: DatabaseSchema, shape: unknown[], build
 
 /** A table's page when nobody wrote one: in an App, the record anatomy; in the Workbench, its counts and lists. */
 export function defaultPage(host: AppHost | undefined, schema: DatabaseSchema, table: string): PageDef | null {
-  return host ? anatomyPage(schema, table, anatomyHints(host.app.app, host.pages, table)) : suggestPage(schema, table);
+  return host ? appDefaultPage(host.app.app, host.pages, schema, table) : suggestPage(schema, table);
 }
+
+/** The record anatomy of one table of an App: `defaultPage` without the host, for what judges an App before it serves. */
+export const appDefaultPage = (app: AppDef, pages: readonly PageDef[], schema: DatabaseSchema, table: string): PageDef | null =>
+  anatomyPage(schema, table, anatomyHints(app, pages, table));
 
 /** What an App says that the anatomy reads: which columns are money, whether this resource keeps a history, what
     names its records, the second line under a name, how its form groups its fields, what its machine moves and what it

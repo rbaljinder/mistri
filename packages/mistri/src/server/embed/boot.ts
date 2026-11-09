@@ -18,9 +18,23 @@
  * it reads nothing itself, and every answer it carries was asked through the
  * whole dispatcher with this request's own headers, so every gate, grant and
  * row policy applies exactly as it would to the fetch it stands for.
+ *
+ * With `?app=` and `?surface=` it is a headless front end's (`<Provider headless surface>`): no page and no first
+ * room, only the surface as this reader may use it (`EmbedSurface`) — its tables in the reader's own catalog, asked
+ * through the same loop, and its commands with this reader's grants. A surface no one by that key may use is refused
+ * as its requests would be, 403 `{ code: 'surface' }`.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { EMBED_BOOT_PATH, EMBED_PROTOCOL, minorVersion, type EmbedBoot } from '../../shared/embedProtocol.js';
+import {
+  EMBED_BOOT_PATH,
+  EMBED_PROTOCOL,
+  minorVersion,
+  type EmbedBoot,
+  type EmbedSurface,
+  type EmbedSurfaceCommand,
+} from '../../shared/embedProtocol.js';
+import type { AppSurface } from '../../shared/appModel.js';
+import { labelColumn, labelPath, primaryKey, tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { FirstPaintData } from '@mistriwork/engine/shared/firstPaint.js';
 import { runtimeVersion } from '@mistriwork/engine/server/packageVersion.js';
 import { corsHeaders } from './crossOrigin.js';
@@ -69,7 +83,18 @@ const INSIDE = /^\/[^/]/;
  * past its budget — and the shell then asks for itself.
  */
 export async function embedBootRoute(
-  ctx: { req: IncomingMessage; res: ServerResponse; url: URL; path: string; signedIn: boolean; carries: (path: string) => boolean },
+  ctx: {
+    req: IncomingMessage;
+    res: ServerResponse;
+    url: URL;
+    path: string;
+    signedIn: boolean;
+    carries: (path: string) => boolean;
+    /** The surface `key` names, as this reader may use it, or the refusal its requests would get. */
+    surface?: (key: string) => SurfaceAnswer;
+    /** The loop a surface's catalog is asked through: past the surface's own gate (surfaceGate.ts). */
+    surfaceLoop?: () => Loop;
+  },
   loop: () => Loop,
 ): Promise<boolean> {
   const { req, res, url } = ctx;
@@ -89,6 +114,7 @@ export async function embedBootRoute(
     send(res, 400, { error: 'Ask the boot for an App: ?app=<id>, and the inside address it shows as path= and search=.' });
     return true;
   }
+  if (url.searchParams.has('surface')) return surfaceBoot(ctx, app, url.searchParams.get('surface') ?? '');
   /* The address must be the App's: the room reads are planned from it, and they are another App's otherwise. */
   const first = asked.split('/')[1] ?? '';
   let named = '';
@@ -109,4 +135,71 @@ export async function embedBootRoute(
     ...(page.json ? { data: JSON.parse(page.json) as FirstPaintData } : {}),
   } satisfies EmbedBoot);
   return true;
+}
+
+type SurfaceAnswer =
+  | { surface: AppSurface; commands: Omit<EmbedSurfaceCommand, 'key'>[] }
+  | { status: number; body: { error: string; code?: string } };
+
+/** A headless front end's boot: the surface, its tables in the reader's catalog, and its commands. */
+async function surfaceBoot(ctx: Parameters<typeof embedBootRoute>[0], app: string, key: string): Promise<boolean> {
+  const { res } = ctx;
+  /* Signed out there is nothing a surface may read: the front end signs the person in first. */
+  if (!ctx.signedIn) {
+    send(res, 200, { ...bare(), signedIn: false } satisfies EmbedBoot);
+    return true;
+  }
+  const answer = ctx.surface?.(key) ?? { status: 403, body: { error: 'This server serves no surfaces.', code: 'surface' } };
+  if ('status' in answer) {
+    send(res, answer.status, answer.body);
+    return true;
+  }
+  const asked = await ctx.surfaceLoop?.()('GET', `/api/schema?${new URLSearchParams({ app })}`);
+  if (res.destroyed || res.writableEnded) return true;
+  if (!asked || asked.status !== 200 || !asked.body || typeof asked.body !== 'object') {
+    send(res, asked?.status && asked.status >= 400 ? asked.status : 502, {
+      error: "The App's catalog could not be read for this surface.",
+    });
+    return true;
+  }
+  send(res, 200, {
+    ...bare(),
+    signedIn: true,
+    surface: surfaceFrame(app, answer.surface, answer.commands, asked.body as DatabaseSchema),
+  } satisfies EmbedBoot);
+  return true;
+}
+
+/** The surface in the reader's catalog: only its own tables, each keyed and titled as a kit host would key and title it. */
+function surfaceFrame(
+  app: string,
+  surface: AppSurface,
+  commands: readonly Omit<EmbedSurfaceCommand, 'key'>[],
+  readable: DatabaseSchema,
+): EmbedSurface {
+  const tables = surface.reads.flatMap((name) => {
+    const table = tableNamed(readable, name);
+    return table ? [table] : [];
+  });
+  return {
+    key: surface.key,
+    label: surface.label,
+    app,
+    loader: Boolean(surface.loader),
+    declared: [...surface.reads],
+    schema: { ...readable, tables },
+    reads: tables.map((table) => {
+      const key = primaryKey(table);
+      return {
+        id: table.id,
+        name: table.name,
+        key,
+        title: labelPath(readable, table) ?? labelColumn(table) ?? key[0] ?? '',
+      };
+    }),
+    commands: commands.map((command) => {
+      const target = command.target === undefined ? undefined : tableNamed(readable, command.target);
+      return target ? { ...command, target: target.id, key: primaryKey(target) } : command;
+    }),
+  };
 }

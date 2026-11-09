@@ -23,6 +23,9 @@ import {
 import { readFileRow, sharedVariantsOf } from './fileRows.js';
 import { bucketDownload, bucketFailure, byteRange } from './bucketReplies.js';
 import { send, sendBytes } from '@mistriwork/engine/server/http/reply.js';
+import { headlessHeld, isSurfaceRefusal, namedSurface, surfaceRefusal } from './surfaceGate.js';
+import { SURFACE_HEADER } from '../../shared/appSurfaces.js';
+import { sessionRoles } from '../../shared/appViewRoles.js';
 import type { RequestContext, ResolvedSource } from '@mistriwork/engine/server/http/context.js';
 
 /** False where the resource holds no files: the read route says so. */
@@ -33,6 +36,21 @@ export async function appFileRoute(ctx: RequestContext, source: ResolvedSource):
     source.selectedHost ?? appForConnection(ctx.appHosts ?? [], connectionId, registry.list().find((c) => c.id === connectionId)?.name);
   const table = findTable(schema!, url.searchParams.get('table') ?? '');
   const rule = host && table ? appFileRules(host.app.app, schema!).rules.get(table.id) : undefined;
+  /* A headless front end's file is one of its surface's reads (surfaceGate.ts), and only its App's. The App is
+     the one whose connection holds the file, however the request named it. */
+  headlessHeld(ctx, host?.app.app);
+  if (ctx.req.headers[SURFACE_HEADER] !== undefined) {
+    const surface = host ? namedSurface(host.app.app, sessionRoles(ctx.identity.role), ctx.req.headers[SURFACE_HEADER]) : undefined;
+    const refused = !surface
+      ? { status: 403, body: { error: 'A surface reads only its App.', code: 'surface' } }
+      : isSurfaceRefusal(surface)
+        ? surface
+        : surfaceRefusal({ surface, path: '/api/file', body: {}, table: table?.id ?? url.searchParams.get('table') ?? '', schema });
+    if (refused) {
+      send(res, refused.status, refused.body);
+      return true;
+    }
+  }
   if (!table || !rule) return false;
   /* A width is one of the fixed set, refused before anything is read (imageVariants.ts). */
   const width = imageWidth(url.searchParams.get('w'));

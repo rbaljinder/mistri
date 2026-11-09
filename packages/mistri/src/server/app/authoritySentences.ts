@@ -224,6 +224,18 @@ const RULES: ReadonlyArray<[RegExp, (...parts: string[]) => Read]> = [
   ],
   [/^page (\S+) runs (\S+)$/, (page, command) => ({ group: 'data', can: { who: `Page ${code(page)}`, does: `run ${code(command)}` } })],
   [/^page (\S+) loads (\S+)$/, (page, loader) => ({ group: 'data', can: { who: `Page ${code(page)}`, does: `load ${code(loader)}` } })],
+  [
+    /^surface (\S+) reads (\S+)$/,
+    (surface, resource) => ({ group: 'data', can: { who: `Surface ${code(surface)}`, does: `read ${code(resource)}` } }),
+  ],
+  [
+    /^surface (\S+) runs (\S+)$/,
+    (surface, command) => ({ group: 'data', can: { who: `Surface ${code(surface)}`, does: `run ${code(command)}` } }),
+  ],
+  [
+    /^surface (\S+) loads (\S+)$/,
+    (surface, loader) => ({ group: 'data', can: { who: `Surface ${code(surface)}`, does: `load ${code(loader)}` } }),
+  ],
   [/^page (\S+) public$/, (page) => ({ group: 'public', can: { who: 'Anyone', does: `open the page ${code(page)}` } })],
   [/^egress connect (\S+)$/, (origin) => ({ group: 'environment', can: { who: "The App's pages", does: `connect to ${origin}` } })],
   [/^egress images (\S+)$/, (origin) => ({ group: 'environment', can: { who: "The App's pages", does: `load images from ${origin}` } })],

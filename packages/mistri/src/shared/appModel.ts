@@ -1153,6 +1153,9 @@ export interface AppUi {
   export?: boolean;
   /** true makes the App an installable PWA (app/appPwa.ts): its pages carry its manifest and worker registration, and it serves its worker, icons and offline page. Preview: the shape may change in any 1.x release. Absent or false, it serves none of those. */
   pwa?: boolean;
+  /** true serves the App headless: its front end is another's (a same-domain Next.js page using `@mistriwork/mistri/react`'s
+      hooks), so every data request names a surface in `X-Mistri-Surface` and one that names none is refused (http/surfaceGate.ts). */
+  headless?: boolean;
   /** App shell visibility and spacing; omitted settings keep the existing UI. */
   shell?: AppShell;
   /** Omission keeps explicit Save. Workbench always uses explicit review/apply. */
@@ -1190,7 +1193,26 @@ export interface AppUi {
   };
 }
 
+/**
+ * A surface (`surfaces/<key>.surface.ts`, server/app/appSurfaces.ts): what a front end of the App's own — not
+ * mistri's — may read and run, declared as a free-form page's reads and commands are, with nothing to draw. A request
+ * that names it in `X-Mistri-Surface` is held to it; grants, row policy and field ceilings still decide the rest.
+ */
+export interface AppSurface {
+  key: string;
+  label: string;
+  description?: string;
+  reads: string[];
+  commands: string[];
+  loader?: string;
+  forms?: string[];
+  /** The roles it is offered to, as a page's are; absent in an App with no roles. */
+  roles?: string[];
+}
+
 export interface AppDef {
+  /** The App's surfaces by key, read from its surfaces/ files by the loader; never authored in the definition. */
+  surfaces?: Record<string, AppSurface>;
   /** The words a value component's `label` gave its column's vocabulary, by "resource.column" (server/app/valueLabels.ts):
       learned against the catalog the App is served on, never authored, and shared by reference with the definition
       said in a reader's other words so one learning serves every reader. */

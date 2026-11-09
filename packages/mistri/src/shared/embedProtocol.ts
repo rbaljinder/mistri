@@ -18,6 +18,8 @@
  * Pure, so the server, the client and their tests read one rule.
  */
 import type { FirstPaintData } from '@mistriwork/engine/shared/firstPaint.js';
+import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import type { AppCommandField } from './command.js';
 
 /** Bumped when a client built before it could not work against a server after it. */
 export const EMBED_PROTOCOL = 1;
@@ -36,6 +38,47 @@ export interface EmbedBoot {
   version: string;
   signedIn?: boolean;
   data?: FirstPaintData;
+  /** Asked with `?surface=` by a headless Provider: the surface, as this reader may use it (absent signed out). */
+  surface?: EmbedSurface;
+}
+
+/** One resource a surface reads, by the reader's catalog: what its rows are keyed and titled by. */
+export interface EmbedSurfaceRead {
+  id: string;
+  name: string;
+  key: string[];
+  /** The path a row is named by: the resource's record label, else its label column, else its first key. */
+  title: string;
+}
+
+/** One command a surface runs, as this reader may run it. */
+export interface EmbedSurfaceCommand {
+  id: string;
+  label: string;
+  version: number;
+  /** The resource whose records it runs on (a table id), and that record's key columns; absent for a command over no record. */
+  target?: string;
+  key?: string[];
+  /** Signed in and granted it: a handle that is not refuses every run. */
+  granted: boolean;
+  input: readonly AppCommandField[];
+}
+
+/**
+ * A surface (shared/appSurfaces.ts), as a headless front end's host (src/embed/host.ts) needs it: what it reads, in
+ * the reader's own catalog (`schema`, only the surface's tables), and what it runs. Everything is the reader's: a
+ * table they may not read is not here, and a command they are not granted says so.
+ */
+export interface EmbedSurface {
+  key: string;
+  label: string;
+  app: string;
+  loader: boolean;
+  /** The resources the surface declares it reads, as it names them: what a hook may name, readable or not. */
+  declared: string[];
+  schema: DatabaseSchema;
+  reads: EmbedSurfaceRead[];
+  commands: EmbedSurfaceCommand[];
 }
 
 /** `0.8.14` → `0.8`. */

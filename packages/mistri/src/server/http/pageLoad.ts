@@ -18,6 +18,7 @@
  */
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
 import { logicalResource, zonedNow, type AppDef, type AppDashboardView } from '../../shared/app.js';
+import type { AppSurface } from '../../shared/appModel.js';
 import { appForRoles } from '../../shared/appViewRoles.js';
 import { appZone } from '../../shared/appUi.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
@@ -56,14 +57,21 @@ export async function pageLoad(options: {
   schema: DatabaseSchema;
   /** The reader's zone, where `ui.timezone` reads one (readerZone.ts). */
   zone?: string;
+  /* The surface a headless request names (surfaceGate.ts): its loader is run in place of a page's, and it keeps no
+     parameters, so a front end passes none. */
+  surface?: AppSurface;
 }): Promise<Reply> {
-  const { app, body, schema } = options;
-  if (typeof body.page !== 'string' || body.page.length > 64) return { status: 400, body: { error: 'Name the page: { page }.' } };
-  const view = pageFor(app, options.roles, body.page);
+  const { app, body, schema, surface } = options;
+  if (!surface && (typeof body.page !== 'string' || body.page.length > 64))
+    return { status: 400, body: { error: 'Name the page: { page }.' } };
+  const view = surface
+    ? { page: { reads: surface.reads, loader: surface.loader, params: [] as string[], public: false } }
+    : pageFor(app, options.roles, body.page as string);
+  const named = surface ? `The surface "${surface.key}"` : `The page "${String(body.page)}"`;
   if (!view || (!options.signedIn && !view.page.public)) return notFound;
   if (!view.page.reads.every((resource) => tableNamed(schema, resource))) return notFound;
   const name = view.page.loader;
-  if (!name) return { status: 400, body: { error: `The page "${body.page}" declares no loader.`, code: 'page_undeclared' } };
+  if (!name) return { status: 400, body: { error: `${named} declares no loader.`, code: 'page_undeclared' } };
   const loader = options.loaders && Object.hasOwn(options.loaders, name) ? options.loaders[name] : undefined;
   if (!loader) return notFound;
   const given = body.params ?? {};
@@ -72,7 +80,7 @@ export async function pageLoad(options: {
   const params: Record<string, string> = {};
   for (const [param, value] of Object.entries(given)) {
     if (!view.page.params.includes(param)) {
-      return { status: 400, body: { error: `The page "${body.page}" keeps no "${param}" in its address.`, code: 'page_undeclared' } };
+      return { status: 400, body: { error: `${named} keeps no "${param}" in its address.`, code: 'page_undeclared' } };
     }
     if (typeof value !== 'string' || value.length > PARAM_MOST)
       return { status: 400, body: { error: `"${param}" is not a parameter's text.` } };
@@ -97,7 +105,7 @@ export async function pageLoad(options: {
 }
 
 /* The tables a read request names: a view's base, a breakdown's leading word. */
-function tablesAsked(path: string, body: Record<string, unknown>): string[] | undefined {
+export function tablesAsked(path: string, body: Record<string, unknown>): string[] | undefined {
   const leading = (text: unknown) => (typeof text === 'string' ? (text.trim().split(/\s+/)[0] ?? '') : '');
   if (path === '/api/view/run') {
     const view = body.view as { base?: unknown } | undefined;

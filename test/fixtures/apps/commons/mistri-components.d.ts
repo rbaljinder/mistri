@@ -7,6 +7,9 @@ import type { Rows } from './mistri-schema.d.ts';
 /** The props of the page "page-report-queue". */
 export type PageReportQueueProps = PageProps;
 
+/** The props of the page "page-reports-reported-post". */
+export type PageReportsReportedPostProps = PageProps;
+
 /** The props of the page "page-start-here". */
 export type PageStartHereProps = PageProps;
 

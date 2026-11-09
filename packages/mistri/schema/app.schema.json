@@ -6906,6 +6906,10 @@
           "type": "boolean",
           "description": "true makes the App an installable PWA: its pages carry its manifest and worker registration, and it serves its worker, its painted icons and an offline page for failed navigations. Offline data is not part of it: with no connection the App opens to its offline page, and its lists, records and writes need the network."
         },
+        "headless": {
+          "type": "boolean",
+          "description": "true serves the App headless: its front end is your own (a same-domain Next.js page using the hooks of @mistriwork/mistri/react), and every data request names one of its surfaces/*.surface.ts in the X-Mistri-Surface header; a request that names none is refused (403, code surface). Grants, row policy and field ceilings still apply inside a surface."
+        },
         "locale": {
           "description": "BCP 47 tag the App is said and written in: the language of its captions where it has messages/ catalogs, and every figure \u2014 numbers, money, percents, dates, times, relative days and counts (\"en-AU\"). Absent: the reader\u2019s browser decides the figures. { column, default } reads each reader's own tag from the first row of that text column they may read; a tenant's (branding allow locale) comes next, then default.",
           "anyOf": [

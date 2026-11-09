@@ -237,6 +237,30 @@ test('HTTP prepare, execute and exact status use safe versioned DTOs and persist
   });
 });
 
+/* What a review token pins (sdk/commands.tsx): the run is sent for the revision the person was shown, so another
+   writer's change in between is the server's refusal, before the handler runs, never a run over a revision unseen. */
+test(
+  'HTTP execute at a prepared revision another writer moved past is refused stale_record before the handler',
+  { timeout: 8000 },
+  async () => {
+    await fixture(async (f) => {
+      const prepare = await post(f.base, 'prepare', { command: 'assign', commandVersion: 1, key: { id: 1 } });
+      assert.deepEqual(prepare.body, { expectedVersion: 0 });
+      f.db.exec('UPDATE loan SET version = version + 1, reviewer = 1 WHERE id = 1');
+      const stale = await post(f.base, 'execute', request({ expectedVersion: prepare.body.expectedVersion }));
+      assert.equal(stale.status, 409, JSON.stringify(stale.body));
+      assert.equal(stale.body.code, 'stale_record');
+      assert.equal(f.control.calls, 0);
+      /* Prepared again, the same run goes through at the revision now shown. */
+      const again = await post(f.base, 'prepare', { command: 'assign', commandVersion: 1, key: { id: 1 } });
+      assert.deepEqual(again.body, { expectedVersion: 1 });
+      const applied = await post(f.base, 'execute', request({ expectedVersion: 1, idempotencyKey: 'assignment-request-0002' }));
+      assert.equal(applied.status, 200, JSON.stringify(applied.body));
+      assert.equal(f.control.calls, 1);
+    });
+  },
+);
+
 test('HTTP command authentication and stale-account guards precede data work and reject forged identities', { timeout: 8000 }, async () => {
   await fixture(async (f) => {
     let opens = 0;

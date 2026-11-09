@@ -1,6 +1,6 @@
 {
   "name": "mistri-workspace",
-  "version": "1.0.0-rc.23",
+  "version": "1.0.0-rc.25",
   "private": true,
   "description": "The workspace root: the packages under packages/ (mistri, create-mistri, @mistriwork/cloudflare, @mistriwork/kit, @mistriwork/ui, @mistriwork/engine), their tests, the site and the tools. Nothing here is published.",
   "license": "MIT",
@@ -112,6 +112,7 @@
           "test/fixtures/theme-package/theme.js",
           "e2e/**/*.{ts,mjs}",
           "e2e/support/embed-react-host/main.tsx",
+          "e2e/support/embed-headless-host/main.tsx",
           "e2e/support/uiMarkup.tsx",
           "examples/**/*.{ts,tsx,mjs,d.mts}",
           "packs/*/src/index.ts",
@@ -119,6 +120,9 @@
           "site/astro.config.mjs",
           "vite*.config.ts",
           "config/vite*.config.ts"
+        ],
+        "ignore": [
+          "examples/embed/**"
         ],
         "project": [
           "scripts/**",

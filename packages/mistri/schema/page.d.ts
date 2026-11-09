@@ -36,14 +36,27 @@ import type {
   AppBoardList,
   AppCalendarList,
   AppCardsList,
-  AppIcon,
+  PageIcon,
   AppMessageRef,
   AppSplitListDetail,
   CommandInputName,
   CommandName,
+  CommandOutputOf,
+  FormViewCommand,
   Register,
 } from './app.js';
-import type { CommandOutcome, CommandRunOptions, CommandUnavailable, PageProps, UiQuery, UiRow, UiRowsQuery } from './ui.js';
+import type {
+  CommandOutcome,
+  CommandRefusal,
+  CommandReview,
+  CommandRunOptions,
+  CommandUnavailable,
+  PageProps,
+  UiQuery,
+  UiRefusable,
+  UiRow,
+  UiRowsQuery,
+} from './ui.js';
 /* Everything a custom component imports, so a page has one import path; `useRows` and `useRecord` are declared again
    below, typed from the schema, and a module's own declaration stands over the one `export *` brings. */
 export * from './ui.js';
@@ -98,6 +111,11 @@ type TableName = Extract<keyof SchemaColumns, string>;
 type KindsOf<T> = T extends keyof SchemaColumns ? SchemaColumns[T] : {};
 type RowsOf<T> = T extends keyof SchemaRows ? SchemaRows[T] : {};
 type RefsOf<T> = T extends keyof SchemaReferences ? SchemaReferences[T] : {};
+
+/** A view of the App by its key, as the generated types list them; any text before there are any. */
+type ViewKeyName = [Registered<'views'>] extends [never] ? string : Extract<Registered<'views'>, string>;
+/** A free-form page by its path, as the generated types list them; any text before there are any. */
+type PagePathName = [Registered<'pagePaths'>] extends [never] ? string : Extract<Registered<'pagePaths'>, string>;
 
 /** The key that names one record of a resource, by its primary-key columns (`{ id: number }`); any object before the
     generated types say which columns those are. */
@@ -214,11 +232,20 @@ type ParamsDeclared = readonly Lowercase<string>[] | { readonly [name: string]: 
 type LowercaseNames<PD> = PD extends readonly string[] ? unknown : { readonly [N in keyof PD]: N extends Lowercase<N & string> ? ParamKind : never };
 type ParamNames<PD> = PD extends readonly (infer Name extends string)[] ? Name : Extract<keyof PD, string>;
 type ParamKinds<PD> = PD extends readonly string[] ? { readonly [N in PD[number]]: 'text' } : PD;
+/** What a public command answers a public page (`run({}, input)`): the reference to quote and the receipt, never the input. */
+export interface PublicCommandReceipt { reference: string; receipt: { id: string; status: 'applied' } }
+/* A public command runs only through a public page's door, which answers its receipt; any other, its declared `output`. */
+type PageCommandOutput<N extends string> = Register extends { commands: infer C }
+  ? N extends keyof C ? C[N] extends { public: true } ? PublicCommandReceipt : CommandOutputOf<N> : CommandOutputOf<N>
+  : CommandOutputOf<N>;
+/* A form's input names, by its view's command; any text where the generated file does not name the view. */
+type FormInput<View extends string> = [FormViewCommand<View>] extends [never] ? string : CommandInputName<FormViewCommand<View>>;
 /** A page loader of the App, by its name: the commands module's `loaders`. */
 export type LoaderName = [Loaders] extends [never] ? string : Extract<keyof Loaders, string>;
 
-/** A command as a page holds it (`page.useCommand`): the one command pipeline, never a write of its own. */
-export interface PageCommand<Input extends string = string> {
+/** A command as a page holds it (`page.useCommand`): the one command pipeline, never a write of its own. `Output` is
+    what an applied run returns, typed from the command's declared `output`. */
+export interface PageCommand<Input extends string = string, Output = unknown> {
   label: string;
   /** Whether this reader may run it at all: signed in, granted it, and offered it. */
   granted: boolean;
@@ -227,10 +254,17 @@ export interface PageCommand<Input extends string = string> {
   reason(record: Readonly<Record<string, unknown>>): CommandUnavailable | undefined;
   pending(record: Readonly<Record<string, unknown>>): boolean;
   /** Run it. On a public page, a public command is run through the page's own door as the public principal, whoever
-      is signed in: `run({}, input)` — its `output` is `{ reference, receipt }` — and `challenge` carries the token the
-      page's human check gave, where the App names one (`auth.challenge`). */
-  run(record: Readonly<Record<string, unknown>>, input?: Readonly<Partial<Record<Input, unknown>>>, options?: CommandRunOptions): Promise<CommandOutcome>;
-  open(record: Readonly<Record<string, unknown>>, input?: Readonly<Partial<Record<Input, unknown>>>, options?: CommandRunOptions): Promise<CommandOutcome>;
+      is signed in: `run({}, input)` — applied, its `output` is `{ reference, receipt }` and its `message` a thank-you
+      naming the reference, for the page to show or to follow with `useNavigate()` — and `challenge` carries the token
+      the page's human check gave, where the App names one (`auth.challenge`). */
+  run(record: Readonly<Record<string, unknown>>, input?: Readonly<Partial<Record<Input, unknown>>>, options?: CommandRunOptions): Promise<CommandOutcome<Output>>;
+  open(record: Readonly<Record<string, unknown>>, input?: Readonly<Partial<Record<Input, unknown>>>, options?: CommandRunOptions): Promise<CommandOutcome<Output>>;
+  /** What a review shows before the person confirms (`{}` for a command that names no record): the values it starts
+      from, `input` over them, and a token pinning a run to this revision. `run(record, input, { review })` then runs
+      exactly that or is refused `code: 'stale'`, never retried; a run without one prepares again quietly. */
+  prepare(record?: Readonly<Record<string, unknown>>, input?: Readonly<Partial<Record<Input, unknown>>>): Promise<CommandReview<Input> | CommandRefusal>;
+  /** Whether the last review `prepare` gave still stands: false once a change to its record reaches the page; true without one. */
+  reviewFresh: boolean;
   /** The choices one of its inputs offers, as served with the command. On a public page a choice from a table
       (`field.choice({ from })`) comes with its rows, read as the public reads them and kept until one changes, so the
       page draws its own select with no read of its own: `enrol.choices('make')`. Undefined for an input that offers none. */
@@ -248,7 +282,7 @@ export type PageFormOutcome =
 
 /** A form view as a page holds it (`page.useForm`): its draft, read as the form's own layout resumes it, and the form
     itself. Every submit is still granted by the server. */
-export interface PageForm {
+export interface PageForm<Input extends string = string> {
   label: string;
   /** Whether this reader is served the form; one that is not (or a public form) opens as `openForm` does. */
   granted: boolean;
@@ -270,8 +304,9 @@ export interface PageForm {
   isFetching: boolean;
   isStale: boolean;
   refreshError: Error | null;
-  /** The form over the page, filled with `input`; resolves as it closes. */
-  open(input?: Readonly<Record<string, unknown>>): Promise<PageFormOutcome>;
+  /** The form over the page, filled with `input` (its command's inputs, by name); `at` opens a draft at a step it has
+      reached, as `goTo` does. Resolves as it closes. */
+  open(input?: Readonly<Partial<Record<Input, unknown>>>, options?: { at?: string }): Promise<PageFormOutcome>;
   /** The form opened at a step its draft has reached; never past the first not saved. */
   goTo(step: string): Promise<PageFormOutcome>;
   /** The draft discarded, as the form's Start over does; false while a submit is pending, or without a draft. */
@@ -293,30 +328,39 @@ export interface PageDefinition<
     readonly actions?: readonly A[]; readonly forms?: readonly F[]; readonly params?: readonly P[] | K; readonly loader?: L };
   /** Rows of one of the page's reads, each typed by what `show` names:
       `page.useRows('pick_list', { show: ['id', 'reference'], where: { status: 'to_pick' }, sort: 'reference' })`. */
-  useRows<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(resource: T, options?: RowsOptions<T, S>): UiRowsQuery<PageRow<T, S>>;
+  useRows<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(resource: T, options: RowsOptions<T, S> & { optional: true }): UiRowsQuery<PageRow<T, S>> & UiRefusable;
+  useRows<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(resource: T, options?: RowsOptions<T, S> & { optional?: false }): UiRowsQuery<PageRow<T, S>>;
   /** One record of one of the page's reads, by its key; null when there is none, not asked while the key is undefined. */
   useRecord<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(
     resource: T,
     key: Readonly<Record<string, unknown>> | undefined,
+    show: S | undefined,
+    options: { optional: true },
+  ): UiQuery<PageRow<T, S> | null> & UiRefusable;
+  useRecord<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(
+    resource: T,
+    key: Readonly<Record<string, unknown>> | undefined,
     show?: S,
+    options?: { optional?: false },
   ): UiQuery<PageRow<T, S> | null>;
   /** The key of the record a page is a tab of (`pages/accounts/[id]/map.page.tsx` at `/compass/accounts/13/map` is
       `{ id: 13 }`), typed by the resource's primary key: `page.useRecord('account', page.useRecordKey('account'))`.
       The resource is the record's own; any other, or a page that is not a record's tab, throws. */
   useRecordKey<T extends R>(resource: T): RecordKey<T>;
   /** One of the page's reads grouped and measured: `page.useBreakdown('pick_list', { by: 'status' })`. */
-  useBreakdown<T extends R>(resource: T, options: { by: ColumnPath<T>; measure?: string; query?: string; limit?: number }): UiQuery<UiRow[]>;
+  useBreakdown<T extends R>(resource: T, options: { by: ColumnPath<T>; measure?: string; query?: string; limit?: number; optional: true }): UiQuery<UiRow[]> & UiRefusable;
+  useBreakdown<T extends R>(resource: T, options: { by: ColumnPath<T>; measure?: string; query?: string; limit?: number; optional?: false }): UiQuery<UiRow[]>;
   /** Where one of the page's file resources serves a row, for an `<img>`. */
   useFile<T extends R>(resource: T): (key: Readonly<Record<string, unknown>>, options?: { thumbnail?: boolean }) => string | undefined;
   /** One of the page's commands: `page.useCommand('pickList')`, its input typed by the command's declared inputs. */
-  useCommand<const N extends C>(command: N): PageCommand<CommandInputName<N>>;
+  useCommand<const N extends C>(command: N): PageCommand<CommandInputName<N>, PageCommandOutput<N>>;
   /** One of the page's fixed actions, a machine's verb or `action(label, { set })` on a resource it reads: `page.useAction('startVisit')`.
       The record page's own button, run on a record of the resource by its key: `run(record)` asks first when the action says
       `confirm`, is refused when the record's state does not allow it, and takes no input. */
   useAction(action: A): PageCommand;
   /** One of the form views the page opens (`forms`): `page.useForm('apply')` — "Continue your application" from the
       draft the form itself resumes, `open()`, `goTo(step)`, `startOver()`, and how the last opening ended. */
-  useForm(form: F): PageForm;
+  useForm<const N extends F>(form: N): PageForm<FormInput<N>>;
   /** One of the page's address parameters, read as its declared kind and written: `/{app}/pick-walk?list=12` is `12` for
       `params: { list: 'id' }`, and an address that does not fit the kind reads as undefined. A change refines the place
       the reader is on, unless `{ push: true }` makes it a step Back returns from. */
@@ -409,9 +453,10 @@ export declare function definePage<
   const F extends string = never,
 >(definition: {
   label: string | AppMessageRef;
-  icon?: AppIcon;
+  icon?: PageIcon;
   description?: string | AppMessageRef;
-  nav?: false | { group?: string; position?: number };
+  /** `group` is the nav group the page stands in, or several (a page can stand in more than one workspace). */
+  nav?: false | { group?: string | readonly string[]; position?: number };
   roles?: readonly string[];
   public?: true;
   favorite?: boolean;
@@ -436,16 +481,75 @@ export declare function definePage<
   component: (props: PageProps<L>) => ReactTypes.ReactNode;
 }): PageDefinition<R, C, ParamNames<PD>, L, A, ParamKinds<PD>, F>;
 
+/** A surface as `defineSurface` makes it: its declaration, typed to the App, for the server to read and a front end's types to follow. */
+export interface SurfaceDefinition<R extends string, C extends string = never, L extends string = never, F extends string = never> {
+  readonly definition: { readonly label: string | AppMessageRef; readonly reads: readonly R[]; readonly commands?: readonly C[];
+    readonly forms?: readonly F[]; readonly loader?: L };
+}
+
+/**
+ * A surface: `export default defineSurface({ label, reads, commands })` in `surfaces/<key>.surface.ts`. What a front end the
+ * App draws itself (a Next.js page on the same domain) may read and run, named on each of its requests in `X-Mistri-Surface`;
+ * the server refuses anything else with 403 `{ code: 'surface' }`. A free-form page's manifest with nothing to draw, so it
+ * takes no `component`, `nav`, `layout`, `head`, `params` or `public`, nor `actions`: a fixed action writes through the
+ * record page's update route, which a surface does not open, so a front end runs a command. `roles` narrows who may use it,
+ * as a page's does. With the generated types a resource, command, loader or form the App does not have is a type error.
+ */
+export declare function defineSurface<
+  const R extends ResourceName,
+  const C extends CommandName = never,
+  const L extends LoaderName = never,
+  const F extends string = never,
+>(definition: {
+  label: string | AppMessageRef;
+  icon?: PageIcon;
+  description?: string | AppMessageRef;
+  roles?: readonly string[];
+  favorite?: boolean;
+  reads: readonly R[];
+  commands?: readonly C[];
+  forms?: readonly F[];
+  loader?: L;
+}): SurfaceDefinition<R, C, L, F>;
+
+/**
+ * The App's own addresses as strings, for an `<a href>` and for an embedding app's navigator: `useHref().record('leads', { id: 4 })`.
+ * Each is the one canonical address the router reads back, so a link never drifts from a typed-in address. A view, page or record
+ * the App has no address for throws, where a link to nowhere would otherwise ship. With the generated types a view that is not
+ * the App's, or a page path that is not a page's, is a type error. `params` are the words an address says (`tab`, `search`, a filter's column).
+ */
+export declare function useHref(): {
+  /** The sign-in's address. */
+  signIn(): string;
+  /** A list or dashboard by its view key: `view('leads', { tab: 'working', search: 'stone' })` is `/leads?tab=working&search=stone`. */
+  view(view: ViewKeyName, params?: Readonly<Record<string, string>>): string;
+  /** A record by its key under the view that shows its table: `record('leads', { id: 127 })` is `/leads/127`; `{ tab: 'map' }` adds the tab's word. */
+  record(view: ViewKeyName, key: Readonly<Record<string, unknown>>, options?: { tab?: string }): string;
+  /** A free-form page by its path, with the parameters it keeps in its address. */
+  page(path: PagePathName, params?: Readonly<Record<string, string>>): string;
+};
+
 /** Rows of one of the page's reads, typed by what `show` names; `page.useRows` is this hook held to the page's `reads`. */
 export declare function useRows<T extends ResourceName, const S extends readonly ColumnPath<T>[] = readonly []>(
   resource: T,
-  options?: RowsOptions<T, S>,
+  options: RowsOptions<T, S> & { optional: true },
+): UiRowsQuery<PageRow<T, S>> & UiRefusable;
+export declare function useRows<T extends ResourceName, const S extends readonly ColumnPath<T>[] = readonly []>(
+  resource: T,
+  options?: RowsOptions<T, S> & { optional?: false },
 ): UiRowsQuery<PageRow<T, S>>;
 /** One record by its key, typed by what `show` names; null when there is none, not asked while the key is undefined. */
 export declare function useRecord<T extends ResourceName, const S extends readonly ColumnPath<T>[] = readonly []>(
   resource: T,
   key: Readonly<Record<string, unknown>> | undefined,
+  show: S | undefined,
+  options: { optional: true },
+): UiQuery<PageRow<T, S> | null> & UiRefusable;
+export declare function useRecord<T extends ResourceName, const S extends readonly ColumnPath<T>[] = readonly []>(
+  resource: T,
+  key: Readonly<Record<string, unknown>> | undefined,
   show?: S,
+  options?: { optional?: false },
 ): UiQuery<PageRow<T, S> | null>;
 
 /** A free-form page's place, kept in its address: `const [list, setList] = useAddressState('list')` for `/{app}/pick-walk?list=12`. The name
@@ -574,6 +678,9 @@ export type BlockWidth = 'full' | 'half' | 'third' | 'two-thirds';
 
 /** The page's grid: blocks and panels side by side by their `width`, wrapping as a dashboard's sections do. */
 export declare function Grid(props: { children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
+/** A line of words: `<Text tone="muted" size="sm">Not open to your role.</Text>`. The default is the page's ink, `muted` its secondary ink
+    (a note, a caption), `danger` the status colour of a refusal or a failure. It sets no layout of its own. */
+export declare function Text(props: { tone?: 'default' | 'muted' | 'danger'; size?: 'sm' | 'md'; children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
 /** A titled region of the grid: `<Panel title="Open lines" width="half">…</Panel>`. */
 export declare function Panel(props: { title?: ReactTypes.ReactNode; width?: BlockWidth; children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
 /** Tabs, each panel drawn the first time it is opened; `param` (one of the page's `params`) keeps the open tab in the

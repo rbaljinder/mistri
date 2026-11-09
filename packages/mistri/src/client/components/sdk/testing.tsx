@@ -12,11 +12,13 @@
  * never followed or sent. The App's locale and currency are the test's to
  * say; en-US and USD unless it does.
  */
-import { act, cleanup, render, type RenderResult } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, within, type BoundFunctions, type queries, type RenderResult } from '@testing-library/react';
 import { createElement, useState, type ComponentType, type ReactNode } from 'react';
 import { installShell } from '@mistriwork/kit/client/shellMode.js';
 import type { QueryClient } from '@tanstack/react-query';
 import type { UiRow } from './context.js';
+import { resetReviews, staleReviews } from '../../commandReviews.js';
+import { say } from '../../copy/components/components/sdk/testing.js';
 import {
   FixtureComponent,
   SectionFrame,
@@ -39,6 +41,7 @@ export {
   fixtures,
   type CommandCall,
   type Example,
+  type FixtureCatalog,
   type Fixtures,
   type Navigation,
   type RenderOptions,
@@ -60,6 +63,12 @@ type Drawn = RenderResult & {
    * page's does; a read never answered shows its refused or failed state.
    */
   refresh(change?: FixtureChange): Promise<void>;
+  /**
+   * Queries over one region of the page, so a test never runs `getByRole` over the whole of it: the region is a
+   * landmark or group with that accessible name (`aria-label`), or the section a `<Panel title>` draws. It throws
+   * when no region, or more than one, has the name.
+   */
+  region(name: string): BoundFunctions<typeof queries>;
 };
 
 /* The test's options with fixture tables of their own: a refresh changes this drawing's server, never the test's
@@ -74,15 +83,37 @@ function refresher(options: RenderOptions, client: QueryClient) {
   return async (change: FixtureChange = {}) => {
     for (const [resource, rows] of Object.entries(change.data ?? {})) options.data!.tables[resource] = rows;
     if (change.refused) options.refused = change.refused;
-    await act(() => client.invalidateQueries({ queryKey: ['mistri-ui'] }));
+    /* A table that changed stales every review of it, as live sync does a record's (liveInvalidate.ts). */
+    await act(() => {
+      for (const resource of Object.keys(change.data ?? {})) staleReviews(resource, 'many');
+      return client.invalidateQueries({ queryKey: ['mistri-ui'] });
+    });
   };
 }
+
+const HEADING = 'h1, h2, h3, h4, h5, h6';
+/* The region a name says: `aria-label`, `aria-labelledby`, or the first heading a section opens with (a `<Panel title>`). */
+function regionNamed(container: HTMLElement, name: string): HTMLElement {
+  const found = [
+    ...container.querySelectorAll<HTMLElement>('section, [role="region"], [role="group"], [role="list"], [role="grid"]'),
+  ].filter((candidate) => {
+    if (candidate.getAttribute('aria-label') === name) return true;
+    const labelled = candidate.getAttribute('aria-labelledby');
+    if (labelled && labelled.split(/\s+/).some((id) => document.getElementById(id)?.textContent?.trim() === name)) return true;
+    const heading = candidate.querySelector<HTMLElement>(HEADING);
+    return candidate.tagName === 'SECTION' && heading?.closest('section') === candidate && heading.textContent?.trim() === name;
+  });
+  if (found.length !== 1) throw new Error(say('regionNamed', { name, count: found.length }));
+  return found[0];
+}
+const regioned = (view: RenderResult) => (name: string) => within(regionNamed(view.container, name));
 
 function prepare(options: RenderOptions): void {
   /* One drawing at a time: Testing Library unmounts after each test only
      where the runner has globals, and an author's Vitest may not, so the
      last drawing is taken down before the next rather than piling up. */
   cleanup();
+  resetReviews();
   installShell({
     format: () => ({
       locale: options.locale ?? 'en-US',
@@ -114,7 +145,7 @@ function drawn(
       client={client}
     />,
   );
-  return Object.assign(view, { navigations, commands, refresh: refresher(served, client) });
+  return Object.assign(view, { navigations, commands, refresh: refresher(served, client), region: regioned(view) });
 }
 
 /** One component in the frame its placement gives it, over this drawing's own fixture server. */
@@ -135,7 +166,7 @@ function framed(options: RenderOptions, id: string, className: string | undefine
       {body(served)}
     </SectionFrame>,
   );
-  return Object.assign(view, { navigations, commands, refresh: refresher(served, client) });
+  return Object.assign(view, { navigations, commands, refresh: refresher(served, client), region: regioned(view) });
 }
 
 /**
@@ -265,3 +296,59 @@ export function renderExample(
     ...options,
   });
 }
+
+/* A drag as the pointer engine hears it: a press on the card, a move past the slop over the lane, a release. happy-dom
+   lays nothing out, so the page's hit test is stood in by the lane itself. */
+function dragOnto(source: Element, target: Element): void {
+  const original = document.elementFromPoint;
+  const originals = document.elementsFromPoint;
+  document.elementFromPoint = () => target;
+  document.elementsFromPoint = () => [target];
+  const pointer = (x: number) => ({ pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, clientX: x, clientY: x });
+  try {
+    fireEvent.pointerDown(source, pointer(0));
+    fireEvent.pointerMove(window, pointer(10));
+    fireEvent.pointerUp(window, pointer(10));
+  } finally {
+    document.elementFromPoint = original;
+    document.elementsFromPoint = originals;
+  }
+}
+
+const exactly = (text: string) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`);
+/* The scope a helper looks in: the whole document unless a test narrows it (`view.region('Next week')`'s container, say). */
+const scoped = (scope?: HTMLElement) => within(scope ?? document.body);
+
+/**
+ * A `<Board>` (or a list view's board presentation) as a person meets it: cards in lanes. Each helper answers the
+ * element, throwing when it is not there or is there twice, so a test reads `board.card('Broken login')`.
+ */
+export const board = {
+  /** The lane titled `name`: the section a lane's heading opens. */
+  lane(name: string, scope?: HTMLElement): HTMLElement {
+    const heading = scoped(scope).getByRole('heading', { level: 2, name });
+    return heading.closest('section') ?? heading;
+  },
+  /** The card titled `title`, wherever it stands. */
+  card(title: string, scope?: HTMLElement): HTMLElement {
+    return scoped(scope).getByRole('button', { name: exactly(title) });
+  },
+  /** Drops the card titled `title` into the lane `toLane`, as a pointer does; the board asks the page's command to move it. */
+  move(title: string, toLane: string, scope?: HTMLElement): void {
+    dragOnto(board.card(title, scope), board.lane(toLane, scope));
+  },
+};
+
+/** A `<Calendar>` (or a list view's calendar presentation): events on days. */
+export const calendar = {
+  /** The event titled `title`, wherever it falls. */
+  event(title: string, scope?: HTMLElement): HTMLElement {
+    return scoped(scope).getByRole('button', { name: exactly(title) });
+  },
+  /** The day `date` (`YYYY-MM-DD`): the grid's cell, or the agenda's entry on a phone. Where an event is dropped to move it. */
+  day(date: string, scope?: HTMLElement): HTMLElement {
+    const day = (scope ?? document.body).querySelector<HTMLElement>(`[data-date="${date}"]`);
+    if (!day) throw new Error(say('noDay', { date }));
+    return day;
+  },
+};

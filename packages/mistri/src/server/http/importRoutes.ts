@@ -29,6 +29,7 @@ import { recordedWrites } from '@mistriwork/engine/server/http/recordWrites.js';
 import { writeRefusal } from '@mistriwork/engine/server/http/writeRefusal.js';
 import { readJson, send } from '@mistriwork/engine/server/http/reply.js';
 import { resolveSource } from './source.js';
+import { headlessHeld } from './surfaceGate.js';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { captureHttpCommandFlags } from '../flags/httpRuntime.js';
 
@@ -76,6 +77,7 @@ export async function importRoutes(ctx: RequestContext): Promise<boolean> {
     const source = await resolveSource(ctx, inBody ?? inQuery);
     if (res.destroyed) return true;
     const host = source.selectedHost!;
+    headlessHeld(ctx, host.app.app);
     // Signed out, nobody imports: a public grant is reads alone.
     if (grantsByRole(host.app.app) && !identity.id) throw new AppAccessDenied();
     if (source.access && !source.access.readable.has(request.table)) throw new AppAccessDenied();

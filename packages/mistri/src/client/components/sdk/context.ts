@@ -97,7 +97,7 @@ export type UiCommandOutcome =
   | { status: 'applied'; message?: string; output?: unknown }
   /** `fields`: the server's words for an input the refusal named, by its path, where the command declares it and the
       values sent leave it shown; what no field can hold stays in `message`. */
-  | { status: 'refused'; message: string; fields?: Readonly<Record<string, string>> }
+  | { status: 'refused'; message: string; code?: 'stale'; fields?: Readonly<Record<string, string>> }
   | { status: 'closed' }
   | {
       status: 'unknown';
@@ -117,10 +117,33 @@ export interface UiCommandOptions {
   /** A refusal or an answer not known is the caller's to say, not a toast's: a form that says it beside its field and
       on its own line (`<Steps>`) would otherwise have it read out twice. */
   quiet?: boolean;
+  /** The review the person confirmed (`prepare`): the run is sent for its revision only, never prepared again, and is
+      refused `code: 'stale'` when the record has moved past it. */
+  review?: UiCommandReview;
+}
+
+/** What `prepare` read for a review: the values the command starts from, `input` over them, and the token pinning a run. */
+export interface UiCommandReview {
+  readonly token: string;
+  readonly values: Readonly<Record<string, unknown>>;
+  /** False once a change to the record reached the page, or the server refused the review. */
+  readonly fresh: boolean;
 }
 
 /** A command's input that names a record of another resource, as it was served with the command. */
 export type UiReferenceInput = Extract<AppCommandField, { type: 'reference' }>;
+
+/**
+ * The records of an App resource, offered as a picker's choices without a command's input behind them
+ * (`useOptions('country')`): named by the resource's own title column, read under the reader's grants and row policy.
+ * `page` is the free-form page asking, so the server holds the read to what the page declared.
+ */
+export interface UiResourceChoices {
+  readonly resource: string;
+  /** A condition written as an object, as `UiRowsOptions.where`: sent as written, judged by the server. */
+  readonly where?: unknown;
+  readonly page?: string;
+}
 
 /** One record a reference input offers: the key it is sent as, its name, and the line that tells two of one name apart. */
 export interface UiOption {
@@ -157,6 +180,12 @@ export interface UiCommandHandle {
     input?: Readonly<Record<string, unknown>>,
     options?: UiCommandOptions,
   ): Promise<UiCommandOutcome>;
+  /** What a review shows before the person confirms, read at the record's revision now. A handle that names no record
+      revision (a form, a public page, a fixed action) answers it with a refusal. */
+  prepare?(
+    key: Readonly<Record<string, unknown>>,
+    input?: Readonly<Record<string, unknown>>,
+  ): Promise<UiCommandReview | Extract<UiCommandOutcome, { status: 'refused' }>>;
   /** The choices one of its inputs offers, as they were served with it (`useCommand(...).choices(name)`). */
   choices?(field: string): readonly UiChoice[] | undefined;
   /** One of its inputs as it was served with it, what the platform's own form draws and judges it from (`useField`). */
@@ -216,12 +245,21 @@ export interface UiViewer {
   account?: string;
 }
 
+/** What `useHref` asks a host to address: the sign-in, a list or dashboard by its key, a record under a list view, a page by its path. */
+export type UiAddress =
+  | { kind: 'signIn' }
+  | { kind: 'view'; view: string; params?: Readonly<Record<string, string>> }
+  | { kind: 'record'; view: string; key: Readonly<Record<string, unknown>>; tab?: string }
+  | { kind: 'page'; path: string; params?: Readonly<Record<string, string>> };
+
 export interface UiHost {
   readonly flags: AppFlagsSource;
   /** Behavior events a component emits; the App's `analytics.events` names what the server keeps. */
   readonly analytics: { emit(name: string, fields?: Readonly<Record<string, string | number | boolean>>): void };
   /** The identity the query cache keys on, so one reader's rows are never another's. */
   scope: readonly unknown[];
+  /* A read the reader may not make rejects with an error carrying `status` 401 or 403: that is all `optional: true`
+     reads to say `refused` (hooks.ts), so a host surfaces a refusal as it always has and adds nothing. */
   rows(resource: string, options: UiRowsOptions): Promise<UiRowsPage>;
   record(resource: string, key: Readonly<Record<string, unknown>>, show?: readonly string[], asking?: UiAsking): Promise<UiRow | undefined>;
   /** A free-form page's loader, run on the server for this reader: what the page is drawn with. */
@@ -246,10 +284,18 @@ export interface UiHost {
       (the free-form page's) or any resource without them; run on a record by its key, as the record page's button runs it. */
   action(ref: UiCommandRef, reads?: readonly string[]): UiCommandHandle;
   /** A reference input's choices as the platform's own picker reads them — the reader's door, the input's filter, by
-      its label — a page at a time (`useOptions`). */
-  choices(field: UiReferenceInput, text: string, page: { offset: number; limit: number }): Promise<{ options: UiOption[]; more: boolean }>;
+      its label — a page at a time (`useOptions`). The `{ resource }` arm is a resource's own records, labelled by its
+      title column and read under the reader's grants and row policy, with no command behind them. */
+  choices(
+    field: UiReferenceInput | UiResourceChoices,
+    text: string,
+    page: { offset: number; limit: number },
+  ): Promise<{ options: UiOption[]; more: boolean }>;
   /** The record a reference holds, read by its key as its picker reads it; null where this reader is not offered it. */
-  choiceName(field: UiReferenceInput, key: string | number): Promise<UiOption | null>;
+  choiceName(field: UiReferenceInput | UiResourceChoices, key: string | number): Promise<UiOption | null>;
+  /** The canonical address of a thing in the App, as `appAddress.ts` says it and a link carries it (`useHref`); undefined
+      where the App has no such room or the key is not enough to say a record. */
+  href(to: UiAddress): string | undefined;
   viewer(): UiViewer;
   /** Called when the reader signs in, out or as someone else; returns the unsubscribe. */
   subscribeViewer(listener: () => void): () => void;
