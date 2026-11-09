@@ -377,10 +377,20 @@ export function useNavigate(): {
   openRecord(resource: string, key: Readonly<Record<string, unknown>>, options?: { mode?: OpenMode; label?: string }): void;
   openView(view: string, options?: UiOpenViewOptions): void;
   openForm(view: string, prefill?: Readonly<Record<string, string | number>>): void;
+  openPage(name: string, params?: Readonly<Record<string, string>>): void;
+  pageHref(name: string, params?: Readonly<Record<string, string>>): string;
   publicLink(view: string): string | undefined;
 } {
   const host = useUiHost();
+  /* One answer for both: the page's canonical address through the App's own rules, or a mistake said in words. */
+  const pageHref = (name: string, params?: Readonly<Record<string, string>>): string => {
+    const address = host.href({ kind: 'page', path: name, ...(params ? { params } : {}) });
+    if (address === undefined) throw new Error(say('noAddressFor', { what: say('addressPage', { path: name }) }));
+    return address;
+  };
   return {
+    openPage: (name, params) => host.follow(pageHref(name, params)),
+    pageHref,
     openRecord: (resource, key, options) => host.openRecord(resource, key, options),
     openView: (view, options) => host.openView(view, options),
     openForm: (view, prefill) => host.openForm(view, prefill),

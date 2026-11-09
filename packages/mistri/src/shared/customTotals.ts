@@ -32,11 +32,20 @@ export function totalFigure(rows: readonly Row[] | undefined): TotalValue {
   return row ? figure(row[Object.keys(row)[0]]) : null;
 }
 
-/** Each group of a grouped total, in the order the server gave. */
-export function totalGroups(rows: readonly Row[] | undefined): TotalGroup[] {
+/**
+ * Each group of a grouped total, in the order the server gave. A reference key's name arrives beside the rows
+ * (`names`: key column → key as text → name, the server's withGroupNames), lifted out of them so a reader going by
+ * position does not take it for the figure; a row that still carries its own `label` column says it too.
+ */
+export function totalGroups(
+  rows: readonly Row[] | undefined,
+  names?: Readonly<Record<string, Readonly<Record<string, string>>>>,
+): TotalGroup[] {
   return (rows ?? []).map((row) => {
     const columns = Object.keys(row);
-    const label = row.label;
-    return { key: row[columns[0]], value: figure(row[columns[1]]), ...(typeof label === 'string' && label ? { label } : {}) };
+    const key = row[columns[0]];
+    const said = key === null || key === undefined ? undefined : names?.[columns[0]]?.[String(key)];
+    const label = typeof said === 'string' && said ? said : row.label;
+    return { key, value: figure(row[columns[1]]), ...(typeof label === 'string' && label ? { label } : {}) };
   });
 }

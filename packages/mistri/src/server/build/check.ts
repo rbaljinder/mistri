@@ -45,7 +45,9 @@ import { appHome, segmentsTakenFrom, settingsMount, type AddressMount } from '@m
 import { isTenantApp } from '../../shared/appModel.js';
 import { appRealms } from '../../shared/appTenancy.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { getCommandEvents, type BusinessCommandRegistry } from '../commands/businessCommands.js';
+import { genericWriteOf } from '../commands/genericWriteBrand.js';
+import { flowCommandOf } from '../commands/flowCommandBrand.js';
+import { callerRead, getCommandEvents, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { NO_OUTPUT } from '../commands/commandShapes.js';
 import {
   AppProblems,
@@ -1570,6 +1572,22 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       }
     }
 
+    /* A role granted a command whose `read` names a table that role cannot read is refused on every run, as "not
+       available to this account" (businessCommandAuthorization.ts), while everything above passed: said here, naming
+       each role, command and table. Judged against the App's own catalog, so a tenant App whose stores are not made
+       yet, or a database that cannot be read, leaves it to the run. */
+    if (loaded?.commands?.registry && Object.keys(loaded.commands.registry).length && !tenantWaits) {
+      const { schema } = await catalogOf(loaded);
+      const unreadable = schema ? commandUnreadable(loaded.app, loaded.commands.registry, schema) : [];
+      const judged = steps.findLast((step) => step.name === 'validation');
+      if (judged && unreadable.length) {
+        const found = unreadable.map((said) => problem('validation', 'command-reads-unreadable', said));
+        judged.lines = [...judged.lines, ...unreadable.map((said) => `error: ${said}`)];
+        judged.problems = [...(judged.problems ?? []), ...found];
+        judged.status = 'failed';
+      }
+    }
+
     /* An HTTP connection's description against the spec it pins: the adapter reads the description alone, so a spec that
        moved on is said here. A warning (a spec file that is gone) does not fail. */
     const specFindings = await httpSpecFindings(registry.configs());
@@ -2140,6 +2158,34 @@ export function commandElevations(app: AppDef, commands: BusinessCommandRegistry
         (blind.length ? `, for role${blind.length === 1 ? '' : 's'} ${blind.map((role) => `"${role}"`).join(', ')}` : '')
       );
     });
+}
+
+/**
+ * Each role granted a command that cannot read a table the command's caller must (`read`, less what it `elevate`s):
+ * every run is refused for that role, so each is named with its command and table. Public, flow and generic-write
+ * commands are no role's grant.
+ */
+export function commandUnreadable(app: AppDef, commands: BusinessCommandRegistry, schema: DatabaseSchema): string[] {
+  const out: string[] = [];
+  for (const [id, command] of Object.entries(commands)) {
+    if (command.public === true || genericWriteOf(command) !== undefined || flowCommandOf(command) !== undefined) continue;
+    const tables = callerRead(command).map((local) => logicalResource(app, command.source, local));
+    for (const role of Object.keys(app.auth?.roles ?? {})) {
+      if (!appCommandGrants(app, [role]).has(id)) continue;
+      let readable: ReadonlySet<string>;
+      try {
+        readable = resolveAppAccess(app, schema, [role]).readable;
+      } catch {
+        continue;
+      }
+      for (const table of tables.filter((each) => !readable.has(each)))
+        out.push(
+          `command "${id}" is granted to role "${role}", which cannot read "${table}" its read names, so every run is refused [command-reads-unreadable]. ` +
+            `Let "${role}" read "${table}", drop it from the command's read, or elevate its read.`,
+        );
+    }
+  }
+  return out;
 }
 
 /** What the App and its jobs module declare that makes a served App build more hosts (servedHosts.ts). */

@@ -113,12 +113,15 @@ test.describe('Ignition says names', () => {
     await expect(context).not.toContainText(DEALERS.north);
     await page.keyboard.press('Escape');
 
-    // A dealership's tab and search are its list's parameters, its selector after them, and a reload opens the same.
+    /* A dealership's tab and search are its list's parameters, its selector after them, and a reload opens the same:
+       the address names a dealership of this person's, so it is entered again with no chooser (tenantBrowser.ts
+       `preferred`), even for someone who may choose between several. */
     await openRoom(page, 'loan_application');
     await page.getByRole('tab', { name: /^Decided/ }).click();
     await expect(page).toHaveURL(/\/applications\?tab=decided&tenant=north-motors$/);
     await page.reload();
-    await page.getByRole('list', { name: 'Available dealers' }).locator(`button[data-tenant="${DEALERS.north}"]`).click();
+    await expect(page.locator('.tenant-control-trigger')).toHaveText(/Dealer: Demo North Motors/, { timeout: 30_000 });
+    await expect(page.getByRole('list', { name: 'Available dealers' })).toHaveCount(0);
     await expect(page.getByRole('tab', { name: /^Decided/ })).toHaveAttribute('aria-selected', 'true', { timeout: 30_000 });
     await expect(page).toHaveURL(/\/applications\?tab=decided&tenant=north-motors$/);
 

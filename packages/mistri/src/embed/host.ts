@@ -373,6 +373,7 @@ export function embedHost({ surface, endpoint, authorization, navigator, basePat
         null,
       );
     },
+    follow: (href) => navigator.push(href, null),
     openForm(view, prefill = {}) {
       navigator.push(
         withParams(

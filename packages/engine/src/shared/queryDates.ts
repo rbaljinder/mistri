@@ -117,3 +117,41 @@ export function dateWindow(phrase: string, now: Date): DateWindow | undefined {
   }
   return undefined;
 }
+
+/* ---------- a tone key's date comparison ----------
+
+   A display rule's `tone` keys name a comparison: `>= 90` for a figure, and for a date the same phrases a list's
+   conditions take (`< today`, `<= next 7 days`). It is read here, by `dateWindow`, so a phrase means one thing in a
+   segment and in a tone, and each edge is the one the query compiler binds: `<` and `>=` the window's start, `>` and
+   `<=` its end. A tone colors a day, so a phrase that is a span of the clock (`last 2 hours`) is refused. */
+
+interface DateComparison {
+  op: '<' | '<=' | '>' | '>=';
+  phrase: string;
+}
+
+/** A tone key that is a date comparison — `<= today`, `< next 7 days` — or undefined where it is not one. */
+export function dateComparison(key: string): DateComparison | undefined {
+  const m = /^(>=|<=|>|<)\s*([a-z][a-z0-9 ]*)$/i.exec(key.trim());
+  if (!m) return undefined;
+  const phrase = m[2].trim().replace(/\s+/g, ' ').toLowerCase();
+  if (/\b(?:hour|minute)s?$/.test(phrase) || !dateWindow(phrase, new Date())) return undefined;
+  return { op: m[1] as DateComparison['op'], phrase };
+}
+
+/**
+ * Whether a day satisfies a date comparison. `offset` is the day's distance from `today` in whole days (negative
+ * before it), `today` the App's today as a Date whose local fields read it (what `dateWindow` computes with).
+ */
+export function dateComparisonHolds(cmp: DateComparison, offset: number, today: Date): boolean {
+  const window = dateWindow(cmp.phrase, today);
+  if (!window) return false;
+  const base = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  const from = (d: Date) => Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - base) / 86_400_000);
+  const start = from(window.start);
+  const end = from(window.end);
+  if (cmp.op === '<') return offset < start;
+  if (cmp.op === '>=') return offset >= start;
+  if (cmp.op === '>') return offset >= end;
+  return offset < end;
+}

@@ -118,8 +118,8 @@ import { readRecordActivityFor } from '../recordActivity.js';
 import { appForRoles } from '../../shared/appViewRoles.js';
 import { appSurfaceForRealm } from '../../shared/appTenancy.js';
 import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
-import { pageLoad } from '../http/pageLoad.js';
-import { currentReadRoute, readRouteOf, withReadRoute } from '../readAudit.js';
+import { PAGE_HEADER, pageLoad, pageManifestRefusal } from '../http/pageLoad.js';
+import { currentReadRoute, readRouteOf, withReadKind, withReadRoute } from '../readAudit.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
 import { attributeAction, attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js';
 import { tenantHistoryStoreKey } from './tenantRecordHistoryStore.js';
@@ -1700,12 +1700,12 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               /* One read, as its own request would be gated and answered; a request fault (a bad question, a
                record not found) is that read's alone and leaves the context standing. */
               /* Each timed as a part of the request where server timing is on (serverTiming.ts), by its route alone. */
-              const one = (target: string, body: Record<string, unknown> | undefined) =>
+              const one = (target: string, body: Record<string, unknown> | undefined, kind?: string) =>
                 timedPart(
                   `read.${new URL(target, 'http://mistri.invalid').pathname.replace(/^\/api\//, '').replace(/[^a-z0-9-]+/gi, '.')}`,
-                  () => answerOne(target, body),
+                  () => answerOne(target, body, kind),
                 );
-              const answerOne = async (target: string, body: Record<string, unknown> | undefined) => {
+              const answerOne = async (target: string, body: Record<string, unknown> | undefined, kind?: string) => {
                 const address = new URL(target, 'http://mistri.invalid');
                 const at = address.pathname;
                 const given = tenantReadBody(body) ?? {};
@@ -1728,7 +1728,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 }
                 const told = new ReadsTold();
                 try {
-                  const reply = await route(context, schema, at, given, { query, told });
+                  const reply = await withReadKind(at, kind, () => route(context, schema, at, given, { query, told }));
                   return carriable(reply) ? { body: reply.body, reads: following ? told.value : undefined } : undefined;
                 } catch (error) {
                   /* A refusal in the read's own words is the read's: the page asks it and hears them. One that is
@@ -1743,14 +1743,14 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               };
               /* Each read asked once, however many plans name it: the room is planned twice below. */
               const asking = new Map<string, Promise<unknown>>();
-              const ask = (method: 'GET' | 'POST', target: string, body?: Record<string, unknown>) => {
+              const ask = (method: 'GET' | 'POST', target: string, body?: Record<string, unknown>, kind?: string) => {
                 const key = keyOf(method, target, body);
                 let answer = asking.get(key);
-                if (!answer) asking.set(key, (answer = one(target, body).then((read) => carry(key, read))));
+                if (!answer) asking.set(key, (answer = one(target, body, kind).then((read) => carry(key, read))));
                 return answer;
               };
               if (batch) {
-                await Promise.all(batch.map((read) => ask(read.method, read.path, read.body)));
+                await Promise.all(batch.map((read) => ask(read.method, read.path, read.body, read.read)));
                 return { reads: answers, items: itemAnswers };
               }
               const plannedRoom = bootRoom(ask, one, (kind, key, body) => {
@@ -1861,7 +1861,27 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         attributeWrites({ via: 'app', ...(session ? { actor: session.identity.who, ...(name ? { name } : {}) } : {}) }, () =>
           attributeAction(action, work),
         );
+      const writeContext = <T>(run: (context: TenantReadContext | PlatformReadContext) => T | Promise<T>) =>
+        platform
+          ? contexts.withPlatformContext(req, expected, (context: PlatformReadContext) => run(context))
+          : contexts.withContext(req, selectors, expected, (context: TenantReadContext) => run(context));
       if (commands.has(path)) {
+        /* A command a free-form page runs says so (x-mistri-page), and is held to the page's declared commands as a
+           single-database App's is (http/handler.ts): the roles are the lease's own, the page found in its realm. */
+        if (req.headers[PAGE_HEADER] !== undefined) {
+          const refused = (
+            await writeContext((context) =>
+              pageManifestRefusal({
+                app: appSurfaceForRealm(app, pages, platform ? 'platform' : 'tenant').app,
+                roles: context.principal.roles,
+                header: req.headers[PAGE_HEADER],
+                path,
+                body: input,
+              }),
+            )
+          ).value;
+          if (refused) return send(req, res, refused.status, refused.body);
+        }
         const execution = { signal: controller.signal };
         const result = await attributed(
           () => tenantCommandRoute(contexts, { path, platform, req, selectors, expected, input, execution }),
@@ -1879,10 +1899,6 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
          lease's own catalog and grants. Import, Undo and an upload are not part of it: a bulk load, a replay
          across tenants and a file under a tenant's prefix each have no platform answer, so they are refused. */
       if (platform && (path === '/api/import' || path === '/api/revert' || path === FILE_UPLOAD_PATH)) return invalid(403);
-      const writeContext = <T>(run: (context: TenantReadContext | PlatformReadContext) => T | Promise<T>) =>
-        platform
-          ? contexts.withPlatformContext(req, expected, (context: PlatformReadContext) => run(context))
-          : contexts.withContext(req, selectors, expected, (context: TenantReadContext) => run(context));
       if (path === '/api/import') {
         const imported = await tenantImport(req, selectors, expected, input, attributed, controller.signal);
         if (imported.refused) return send(req, res, imported.refused.status, { error: imported.refused.message });

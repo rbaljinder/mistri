@@ -517,6 +517,31 @@ describe('dashboards in the nav', () => {
       () => parseAppConfig({ ...START, name: 'x', resources: { t: { display: { c: { tone: { '>= high': 'bad' } } } } } }, WHERE),
       /tone key ">= high" that is not a comparison/,
     );
+    // A date phrase a list's conditions take is a tone key, on a plain date column and on the `date` and `datetime` formats.
+    const dated = parseAppConfig(
+      {
+        ...START,
+        name: 'x',
+        resources: {
+          work_order: {
+            display: {
+              c: { format: 'date', tone: { '< today': 'bad', '<= next 7 days': 'warn' } },
+              d: { tone: { '>= last 30 days': 'good' } },
+            },
+          },
+        },
+      },
+      WHERE,
+    );
+    assert.equal(dated.resources?.work_order.display?.c.tone?.['<= next 7 days'], 'warn');
+    assert.equal(dated.resources?.work_order.display?.d.tone?.['>= last 30 days'], 'good');
+    for (const key of ['< someday', '<= next 7 fortnights', '< last 2 hours', '>> today']) {
+      assert.throws(
+        () =>
+          parseAppConfig({ ...START, name: 'x', resources: { t: { display: { c: { format: 'date', tone: { [key]: 'bad' } } } } } }, WHERE),
+        /tone key ".*" that is not a comparison like ">= 90" or a date comparison like "< today"/,
+      );
+    }
   });
 
   test('pick-filters: a column that reaches no section is refused at startup', () => {

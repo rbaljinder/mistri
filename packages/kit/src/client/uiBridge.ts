@@ -29,7 +29,7 @@ interface CommandHandle {
   run(
     key: Readonly<Record<string, unknown>>,
     input?: Readonly<Record<string, unknown>>,
-    options?: { label?: string; challenge?: string; attempt?: string },
+    options?: { label?: string; challenge?: string; attempt?: string; quiet?: boolean },
   ): Promise<CommandOutcome>;
   open(
     key: Readonly<Record<string, unknown>>,

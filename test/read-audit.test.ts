@@ -30,10 +30,12 @@ import {
 import type { ReadAuditRow } from '../packages/mistri/src/adapters/readAudit/readAudit.js';
 import {
   auditQueryRead,
+  currentReadRoute,
   forgetReadAuditCoalescing,
   readRouteOf,
   ReadAuditFailed,
   withoutReadAudit,
+  withReadKind,
   withReadRoute,
   type AuditedAccess,
   type ReadAuditSink,
@@ -42,6 +44,7 @@ import { ensureAppReadAudit, readAppReadAudit, withReadAuditSink } from '../pack
 import { withTenantReadAudit } from '../packages/mistri/src/server/tenant/tenantReadAudit.js';
 import { runAuditCommand, sinceInstant } from '../packages/mistri/src/server/cli/auditCommand.js';
 import { renderApiReadOpenApi } from '../packages/mistri/src/server/api/apiReadOpenApi.js';
+import { tenantBatchRequest } from '../packages/mistri/src/shared/tenantBoot.js';
 import { createApp } from './support/createApp.js';
 import { statementsOf } from './support/statements.js';
 
@@ -343,6 +346,30 @@ test('the doors: api, mcp and assistant actors, every address, and a read by no 
   assert.equal(readRouteOf('/api/assistant/turn'), 'assistant');
   assert.equal(readRouteOf('/mcp'), 'mcp');
   assert.equal(readRouteOf('/api/v1/incidents'), 'api');
+  /* `/api/view/run` is the shell's own list/related read, not the versioned API: it is a page read the header refines. */
+  assert.equal(readRouteOf('/api/view/run'), 'page');
+  assert.equal(readRouteOf('/api/view/run', { 'x-mistri-read': 'related' }), 'related');
+  assert.equal(readRouteOf('/api/v1'), 'api');
+
+  /* A batched read says what it is on its item (`POST /api/boot` with `reads`): audited by that door, the same vocabulary,
+     and only a page's read is refined, as a header refines it. */
+  const doorOf = (path: string, kind: string | undefined, route: Parameters<typeof withReadRoute>[0] = 'page') =>
+    withReadRoute(route, () => withReadKind(path, kind, () => currentReadRoute()));
+  assert.equal(doorOf('/api/query', 'picker'), 'picker');
+  assert.equal(doorOf('/api/query', 'related'), 'related');
+  assert.equal(doorOf('/api/query', undefined), 'page');
+  assert.equal(doorOf('/api/query', 'export'), 'page', 'a word the header does not know says nothing');
+  assert.equal(doorOf('/api/export', 'picker'), 'export');
+  assert.equal(doorOf('/api/query', 'picker', 'assistant'), 'assistant', 'a request that came by another door keeps it');
+});
+
+test('a batch item says only what a picker or related read would have said', () => {
+  const item = { method: 'POST', path: '/api/query', body: { table: 'item' } };
+  assert.equal(tenantBatchRequest({ reads: [{ ...item, read: 'picker' }] })?.[0].read, 'picker');
+  assert.equal(tenantBatchRequest({ reads: [{ ...item, read: 'related' }] })?.[0].read, 'related');
+  assert.equal(tenantBatchRequest({ reads: [item] })?.[0].read, undefined);
+  for (const read of ['export', 'custom-page', 'page', '', 1, null])
+    assert.equal(tenantBatchRequest({ reads: [{ ...item, read }] }), undefined);
 });
 
 test('a tenant row carries its tenant, a support visit its operator, and one tenant never reads another', async () => {

@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/kit",
-  "version": "1.0.0-rc.27",
+  "version": "1.0.0-rc.28",
   "description": "The shared React client both shells are drawn with: the walk and the address, Grid, Value, the record page, lists, filters and charts.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -765,8 +765,8 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "dependencies": {
-    "@mistriwork/engine": "1.0.0-rc.27",
-    "@mistriwork/ui": "1.0.0-rc.27",
+    "@mistriwork/engine": "1.0.0-rc.28",
+    "@mistriwork/ui": "1.0.0-rc.28",
     "intl-messageformat": "12.1.2",
     "qrcode-generator": "^2.0.4"
   },

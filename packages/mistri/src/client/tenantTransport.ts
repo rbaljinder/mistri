@@ -185,7 +185,8 @@ function publishable(snapshot: SessionIdentitySnapshot, lease: TenantContextRepl
 
 /* What a read says it is (the kit's pickerApi, relatedApi, pageApi), so the server audits it by its door
    (readAudit.ts) and holds a free-form page to its declared reads: those headers alone, never the lease's own. */
-const SAID = ['x-mistri-read', PAGE_HEADER] as const;
+const READ_HEADER = 'x-mistri-read';
+const SAID = [READ_HEADER, PAGE_HEADER] as const;
 function sayingWhatItIs(said: Readonly<Record<string, string>> | undefined): Record<string, string> {
   const kept: Record<string, string> = {};
   for (const name of SAID) if (typeof said?.[name] === 'string') kept[name] = said[name];
@@ -643,15 +644,22 @@ export async function tenantReadApi(
   }
   /* Asked in the same moment as other reads of this lease — a write's refresh, a room's reads — it goes with them. */
   /* Outside such a moment a read goes at once, as ever: not even a turn later. */
-  const together = gatheringReads()
-    ? await batched(
-        snapshot,
-        owner,
-        payload === undefined ? { method: 'GET', path: bare } : { method: 'POST', path: bare, body: payload },
-        address,
-        signal,
-      )
-    : undefined;
+  /* A page's own read (x-mistri-page) goes alone: the server audits and judges it by that header, which a batch has no item for. */
+  const kind = said?.[READ_HEADER];
+  const together =
+    gatheringReads() && said?.[PAGE_HEADER] === undefined
+      ? await batched(
+          snapshot,
+          owner,
+          {
+            ...(payload === undefined ? { method: 'GET', path: bare } : { method: 'POST', path: bare, body: payload }),
+            /* What the read is rides on its item: the batch is one request, and one header cannot say it for each. */
+            ...(kind === 'picker' || kind === 'related' ? { read: kind } : {}),
+          },
+          address,
+          signal,
+        )
+      : undefined;
   if (together && currentLease(snapshot, owner)) {
     publishable(snapshot, owner);
     fileReads(together.body, together.reads);
@@ -877,6 +885,7 @@ export async function tenantMutationApi(
   body: unknown,
   active?: string | null,
   signal?: AbortSignal,
+  said?: Readonly<Record<string, string>>,
 ): Promise<Record<string, unknown>> {
   const snapshot = captureSessionIdentity();
   let owner: TenantContextReply, target: string, payload: Record<string, unknown>;
@@ -925,7 +934,7 @@ export async function tenantMutationApi(
 
   let delivered: Awaited<ReturnType<typeof request>>;
   try {
-    delivered = await request(snapshot, target, payload, owner, signal, true);
+    delivered = await request(snapshot, target, payload, owner, signal, true, owner, said);
   } catch (error) {
     if (isTransientTenantFailure(error)) fence(snapshot, owner);
     throw mutationError(error instanceof Error ? error.message : say('theChangeCouldNotBeConfirmed'), 'unknown');

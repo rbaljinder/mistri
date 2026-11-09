@@ -80,6 +80,7 @@ export const UI_EXPORTS = [
   'useDeployment',
   'useField',
   'parseMoney',
+  'layoutPoint',
   'useOptions',
 ] as const;
 

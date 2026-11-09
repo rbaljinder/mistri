@@ -73,7 +73,7 @@ const SCRIPT_PROBLEMS: Array<[RegExp, string]> = [
 const SCRIPT_WARNINGS: Array<[RegExp, string]> = [
   [
     /\bgetBoundingClientRect\s*\(/,
-    "places something by the window's ruler, which the density zoom does not match; draw popups with the kit, which anchors them on the zoom-aware ruler",
+    "places something by the window's ruler, which the density zoom does not match; draw popups with the kit, which anchors them on the zoom-aware ruler, and read a pointer's place in an element with layoutPoint(event, element)",
   ],
   [
     /['"`]#[0-9a-fA-F]{3,8}['"`]|\b(rgb|rgba|hsl|hsla)\s*\(/,
@@ -144,10 +144,17 @@ function iconFindings(text: string, warn: (line: number, message: string) => voi
 const millis = (value: string, unit: string) => Number(value) * (unit.toLowerCase() === 's' ? 1000 : 1);
 
 /** Each `var(--name` in a source whose name no look defines and the component did not declare itself: a misspelt or borrowed token resolves to nothing, so the declaration silently does not apply. */
-function tokenFindings(text: string, own: ReadonlySet<string>, warn: (line: number, message: string) => void): void {
+function tokenFindings(
+  text: string,
+  own: ReadonlySet<string>,
+  ids: readonly string[],
+  warn: (line: number, message: string) => void,
+): void {
   for (const match of text.matchAll(/var\(\s*(--[A-Za-z][\w-]*)|useToken\(\s*['"`](--[A-Za-z][\w-]*)/g)) {
     const name = (match[1] ?? match[2])!;
-    if (UI_TOKENS.includes(name) || own.has(name)) continue;
+    /* `--c-<id>-*` is the component's own name-space, the way `.c-<id>` is for classes: a data-driven color handed to its stylesheet
+       (`style.setProperty`, a spread style object) is declared where no `--x:` can be read. */
+    if (UI_TOKENS.includes(name) || own.has(name) || ids.some((id) => name.startsWith(`--c-${id}-`))) continue;
     const near = nearestToken(name);
     warn(
       text.slice(0, match.index).split('\n').length,
@@ -307,11 +314,11 @@ export async function lintComponents(dir: string, compiled: CompiledComponents, 
       const warn = (line: number, message: string) => warnings.push({ component: id, file, line, text: message });
       if (css) {
         const ids = sharers.get(file)!;
-        tokenFindings(text, new Set(ids.flatMap((sharer) => [...own.get(sharer)!])), warn);
+        tokenFindings(text, new Set(ids.flatMap((sharer) => [...own.get(sharer)!])), ids, warn);
         cssFindings(ids, text, warn, await packagePrefixes(dir, file));
         continue;
       }
-      tokenFindings(text, own.get(id)!, warn);
+      tokenFindings(text, own.get(id)!, [id], warn);
       iconFindings(text, (line, message) => problems.push({ component: id, file, line, text: message }));
       const manifest = pages.get(id);
       const lang = /\.(tsx?|jsx?)$/.exec(file)?.[1] as 'ts' | 'tsx' | 'js' | 'jsx' | undefined;

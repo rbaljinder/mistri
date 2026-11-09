@@ -349,8 +349,9 @@ export function FormSurface({
   again?: boolean;
   /** Drawn in a dialog over the page the reader came from: Cancel beside the submit, and Done once received, each back to it. */
   onDismiss?: () => void;
-  /** A public page's way back once received: the App's home, said as a quiet "Back to <App>" under the receipt. */
-  homeHref?: string;
+  /** A public page's way back once received: the App's home, said as a quiet "Back to <App>" under the receipt. A function
+      is asked once the form is received, and a link is drawn only if it answers one (publicHomeLink.ts). */
+  homeHref?: string | (() => Promise<string | undefined>);
 }) {
   const id = useId();
   const fields = form.input;
@@ -369,6 +370,15 @@ export function FormSurface({
   const guarded = useRef<GuardHandle | undefined>(undefined);
   const [pending, setPending] = useState(false);
   const [submittedReceipt, setReceipt] = useState<FormReceipt | null>(null);
+  const [home, setHome] = useState<string | undefined>(typeof homeHref === 'string' ? homeHref : undefined);
+  useEffect(() => {
+    if (typeof homeHref !== 'function' || !submittedReceipt) return;
+    let live = true;
+    void homeHref().then((href) => live && setHome(href));
+    return () => {
+      live = false;
+    };
+  }, [submittedReceipt]);
   const receipt = attempt?.receipt ?? submittedReceipt;
   const surface = useRef<HTMLElement>(null);
   const focusIntent = useRef<'invalid' | 'first' | null>(null);
@@ -556,9 +566,9 @@ export function FormSurface({
           </div>
         )}
         {/* A page has nowhere to be dismissed to: the receipt ends in a quiet way back, never a dead end. */}
-        {!onDismiss && homeHref && (
+        {!onDismiss && home && (
           <p className="form-page-done-home">
-            <a href={homeHref}>{say('backToApp', { name: appName })}</a>
+            <a href={home}>{say('backToApp', { name: appName })}</a>
           </p>
         )}
       </section>

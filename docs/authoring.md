@@ -574,9 +574,9 @@ reply: field.richText({ max: 20_000, mentions: { from: 'agent', by: 'handle' } }
   whose command input is rich text draw it. Pictures are kept as rows of the
   `images` file resource that point at the record, so a New form (no record
   yet) takes none; a public command form takes neither pictures nor mentions.
-- **Mentions.** `mentions: { from, by, label? }` is whom an @ offers: the
+- **Mentions.** `mentions: { from, by, labelColumn? }` is whom an @ offers: the
   people resource, the column stored as the handle, the column shown. With
-  `groups: { from, by, label?, through? }` an @ names a team as well; `through`
+  `groups: { from, by, labelColumn?, through? }` an @ names a team as well; `through`
   is the resource of link rows that puts a person in a team (absent, the
   people resource's own reference to the team). A mention is stored as a
   `span` carrying its handle, so the column's own HTML says whom it names. A

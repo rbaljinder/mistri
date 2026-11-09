@@ -484,7 +484,7 @@ export interface AppDisplayRule {
       year: a year, said without separators — each edited in the matching native picker.
       json: a JSON document as a tree to open level by level, one line of it in a list; edited as text whose parse
       problem is said while it is typed, and a write that is not JSON is refused by its field.
-      qr: the value as a QR code to scan — an asset tag, a link — with the value under it; the text in a list.
+      qr: the value as a QR code to scan — an asset tag, a link — always dark on light with its quiet zone, sized to fit; the value is its accessible name and tooltip, not printed under it; the text in a list.
       address: a postal address, one part per line as typed, drawn on its lines as a link that opens a map search
       for it beside the App; nothing is fetched to draw it, and a list says it on one line. A New form asks it in a
       box of several lines. (`address` is @preview.)
@@ -577,7 +577,10 @@ export interface AppDisplayRule {
       without a space: "$242/mo"). At most 12 characters. */
   unit?: string | AppMessageRef;
   /** Value → tone pills. Keys may be exact values or numeric thresholds
-      (">= 90"); for numbers, the first satisfied threshold wins. The key
+      (">= 90"); for numbers, the first satisfied threshold wins. On a date
+      (the `date` and `datetime` formats too) a key may be a date comparison
+      with a phrase a list's conditions take ("< today", "<= next 7 days"),
+      judged by the App's today and the day's own date. The key
       "*" is the fallback for every value no other key names; without it
       those wear `neutral`, so a vocabulary is all pills rather than pills
       beside bare text. */

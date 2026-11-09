@@ -1,6 +1,7 @@
 /**
- * A value as a QR code to scan — an asset tag, a link to a portal — with the
- * value under it, so a reader without a camera reads the same thing.
+ * A value as a QR code to scan — an asset tag, a link to a portal. The value is
+ * the code's accessible name and its tooltip, not printed under it: a raw link
+ * beside the code is noise on a record page, and a screen reader says it.
  *
  * A part on demand (Dressed.tsx): the encoder is a library of its own, and
  * only a record or a card that shows a `format: 'qr'` value fetches it. The
@@ -52,19 +53,13 @@ function pathOf(text: string): { size: number; d: string } | null {
 export const QrCode = memo(function QrCode({ text }: { text: string }) {
   const drawn = pathOf(text);
   if (!drawn) return <span className="qr-value-text">{text}</span>;
+  const name = say('qrOf', { text });
   return (
-    <figure className="qr-value">
-      <svg
-        className="qr-value-code"
-        viewBox={`0 0 ${drawn.size} ${drawn.size}`}
-        role="img"
-        aria-label={say('qrOf', { text })}
-        shapeRendering="crispEdges"
-      >
+    <figure className="qr-value" title={text}>
+      <svg className="qr-value-code" viewBox={`0 0 ${drawn.size} ${drawn.size}`} role="img" aria-label={name} shapeRendering="crispEdges">
         <rect width={drawn.size} height={drawn.size} className="qr-value-ground" />
         <path d={drawn.d} className="qr-value-ink" />
       </svg>
-      <figcaption className="qr-value-text">{text}</figcaption>
     </figure>
   );
 });

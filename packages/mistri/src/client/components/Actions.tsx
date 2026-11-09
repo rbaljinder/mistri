@@ -11,6 +11,7 @@
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useId } from 'react';
 import { Modal } from '@mistriwork/ui/Modal.js';
+import { dismissLabel } from './verbDialog.js';
 import { RecordKeys } from '@mistriwork/kit/client/components/recordKeys.js';
 import { takesSingleKeys } from '@mistriwork/kit/client/components/RecordTrailNav.js';
 import { Button } from '@mistriwork/ui/Button.js';
@@ -634,7 +635,7 @@ function Confirm({
       </table>
       <div className="confirm-actions">
         <Button intent="secondary" onClick={() => answer(false)}>
-          {say('common.cancel')}
+          {dismissLabel(action.label)}
         </Button>
         <Button intent="primary" onClick={() => answer(true)}>
           {action.label}
@@ -697,7 +698,7 @@ export function ReasonForm({
         />
         <div className="confirm-actions">
           <Button intent="secondary" onClick={() => answer(null)}>
-            {say('common.cancel')}
+            {dismissLabel(action.label)}
           </Button>
           <Button intent="primary" type="submit" disabled={!text.trim()}>
             {action.label}

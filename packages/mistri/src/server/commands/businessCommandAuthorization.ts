@@ -15,6 +15,7 @@ import {
 import { appCommandOccurrences } from '../../shared/appCommandOccurrences.js';
 import { FILE_MAX_BYTES_DEFAULT, isTenantApp, type AppFileDef } from '../../shared/appModel.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
+import { recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import { TENANT_FILE_MOST } from '@mistriwork/engine/server/http/reply.js';
 import { plainImportTargets } from '../../shared/appImport.js';
 import { findTable, primaryKey, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
@@ -916,7 +917,16 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
            members are unaffected. */
         if (identity.support === true && binding.command.support === 'refuse') throw new AppAccessDenied();
         const access = accessOf(identity.roles);
-        if (binding.callerReads.some((table) => !access.readable.has(table))) throw new AppAccessDenied();
+        /* A signed-in caller is told which table: the refusal is theirs to act on, and the fixed sentence sent them to
+           the command's author. (A public caller never reaches here, and keeps the generic message.) */
+        const unread = binding.callerReads.find((table) => !access.readable.has(table));
+        if (unread !== undefined) {
+          const noun = app.resources?.[unread]?.noun;
+          throw sayRefusal(
+            new AppAccessDenied(),
+            `Your role cannot read ${recordNoun(noun, unread)} records, which "${commandLabel(app, id)}" needs.`,
+          );
+        }
         if (binding.lookup?.tables.some((table) => !access.readable.has(table))) throw new AppAccessDenied();
         // A job's service principal prepares no form and presses no button.
         const seen = access.fields?.get(binding.resource)?.read;

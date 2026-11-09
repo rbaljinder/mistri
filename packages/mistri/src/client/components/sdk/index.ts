@@ -59,4 +59,5 @@ export {
 /* What the deployment presents the App as (its own module: deployment.ts). */
 export { useDeployment } from './deployment.js';
 export { parseMoney, useField } from './fields.js';
+export { layoutPoint } from './layout.js';
 export { useOptions } from './options.js';

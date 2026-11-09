@@ -819,3 +819,38 @@ test('check --design lists every elevation, with the granted roles that would no
   ]);
   assert.deepEqual(commandElevations(f.app, defineCommands({ 'approve-loan': f.definition() }), f.schema), []);
 });
+
+test('a role granted a command that reads a table the role cannot read: check names role, command and table; the run names the table to a signed-in caller', async () => {
+  const f = fixture();
+  const { commandUnreadable } = await import('../packages/mistri/src/server/build/check.js');
+  const { refusalSaid } = await import('../packages/engine/src/shared/refusal.js');
+  const registry = defineCommands({ 'approve-loan': f.definition() });
+  assert.deepEqual(commandUnreadable(f.app, registry, f.schema), [
+    'command "approve-loan" is granted to role "incomplete", which cannot read "reference" its read names, so every run is refused [command-reads-unreadable]. ' +
+      'Let "incomplete" read "reference", drop it from the command\'s read, or elevate its read.',
+  ]);
+  // Elevating the read, or a role that reads it, leaves nothing to say.
+  const elevated = defineCommands({
+    'approve-loan': defineCommand({
+      targets: 'none',
+      source: 'operations',
+      target: 'loan',
+      read: ['loan', 'reference'],
+      write: ['loan'],
+      elevate: { read: ['reference'] },
+      input: {},
+      output: { parse: (value: unknown) => value },
+      handle: () => undefined,
+    }),
+  });
+  assert.deepEqual(commandUnreadable(f.app, elevated, f.schema), []);
+  // The run, for a signed-in role, says which table; the fixed sentence is for a caller who may not be told more.
+  let refused: unknown;
+  try {
+    f.bind().authorize('approve-loan', { ...actor, roles: ['incomplete'] });
+  } catch (error) {
+    refused = error;
+  }
+  assert.ok(refused instanceof AppAccessDenied);
+  assert.equal(refusalSaid(refused), 'Your role cannot read reference records, which "Approve-loan" needs.');
+});

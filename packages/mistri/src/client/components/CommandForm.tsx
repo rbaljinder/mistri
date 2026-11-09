@@ -26,11 +26,13 @@ import {
 } from './CommandFields.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Modal } from '@mistriwork/ui/Modal.js';
+import { headingOf } from '@mistriwork/engine/shared/appNoun.js';
 import { say } from '../copy/forms/components/CommandForm.js';
 import { liveKeyText, registerEditing, releaseEditNotice, useEditNotice } from '@mistriwork/kit/client/liveState.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { CommandOutcome } from './CommandOutcome.js';
 import { outcomeOfOperation } from './outcomeModel.js';
+import { dismissLabel, recordNounOf, repeatsTitle, theRecord } from './verbDialog.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 
 const LiveEditNotice = onDemand(() => import('@mistriwork/kit/client/components/LiveNotices.js'), 'LiveEditNotice', { quiet: true });
@@ -365,16 +367,20 @@ export function CommandForm({
   const here = state.stack?.at(-1) as { table?: string; key?: Record<string, unknown> } | undefined;
   const single = !group && Object.keys(owner.key).length > 0;
   const elsewhere = single && !(here?.table === owner.target && here.key && commandKeyText(here.key) === commandKeyText(owner.key));
+  /* A component's `open` hands the verb's own label as the record's: no subtitle repeats the title, and a link
+     leads to the record by its noun ("Open the booking"), not to "Open Cancel". */
+  const named = repeatsTitle(label, verb) || repeatsTitle(label, action.label) ? undefined : label;
+  const recordWord = named ?? theRecord(owner.target);
   const openChanged = () => {
     close();
-    go(rowView(owner.target, owner.key, label));
+    go(rowView(owner.target, owner.key, named ?? headingOf(recordNounOf(owner.target))));
   };
   const fieldLabel = operation?.field ? action.command.input.find((field) => field.name === operation.field)?.label : undefined;
   const outcome =
     operation &&
     outcomeOfOperation(
       refused && operation.phase === 'error' ? { ...operation, message: `${operation.message} (${refused.label})` } : operation,
-      { ...(single ? { record: { label } } : {}), untracked, ...(fieldLabel ? { fieldLabel } : {}) },
+      { ...(single ? { record: { label: recordWord } } : {}), untracked, ...(fieldLabel ? { fieldLabel } : {}) },
     );
   const feedback =
     problem ||
@@ -392,7 +398,7 @@ export function CommandForm({
   return (
     <Modal className="confirm command-form" ariaLabel={verb} onClose={close} closeDisabled={locked} finalFocus={finalFocus}>
       <h2>{verb}</h2>
-      <p className="insert-lede">{label}</p>
+      {named && <p className="insert-lede">{named}</p>}
       {group && ineligible.length > 0 && !operation && (
         <div className="command-ineligible" role="alert">
           <p>{ineligible.length === 1 ? say('oneIneligible') : say('manyIneligible', { count: ineligible.length })}</p>
@@ -475,7 +481,7 @@ export function CommandForm({
         </div>
         <div className="confirm-actions">
           <Button intent="secondary" disabled={locked} onClick={close}>
-            {success ? say('common.done') : say('common.cancel')}
+            {success ? say('common.done') : dismissLabel(verb)}
           </Button>
           {unknown && !untracked ? (
             <>

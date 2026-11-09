@@ -2,8 +2,11 @@
    on white in every look and mode — an inverted, light-on-dark code is one many scanners refuse — at a size a phone
    reads from a screen. The two fixed colors are the code's, not the theme's (docs/design.md). */
 @layer components {
-.qr-value { display: inline-grid; justify-items: start; gap: var(--space-2h); margin: 0; }
-.qr-value-code { width: 128px; height: 128px; border-radius: var(--radius); }
+/* Fits its container between a size a phone reads from a screen and one that does not crowd a record: a card's narrow
+   column gets the least, a record page's field the most. The quiet zone is inside the picture, so the ground's edge is
+   the code's and the size below is the whole of it. */
+.qr-value { display: block; width: 100%; min-width: 128px; max-width: 208px; margin: 0; }
+.qr-value-code { display: block; width: 100%; height: auto; aspect-ratio: 1; border-radius: var(--radius); }
 .qr-value-ground { fill: #ffffff; }
 .qr-value-ink { fill: #111111; }
 .qr-value-code { box-shadow: 0 0 0 1px var(--line); }

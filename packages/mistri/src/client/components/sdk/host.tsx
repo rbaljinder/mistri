@@ -48,7 +48,7 @@ import { served, shownUnplaced } from '@mistriwork/kit/client/addressMount.js';
 import { hrefFor, viewPath } from '../../publicAddress.js';
 import { createPageAppFlags } from '../../appFlags.js';
 import { pageAnalyticsBeacon } from '../../analyticsBeacon.js';
-import { shellRoot } from '@mistriwork/kit/client/shellHost.js';
+import { navFollow, shellRoot } from '@mistriwork/kit/client/shellHost.js';
 
 function tableOf(resource: string): TableMeta {
   const table = state.schema ? (tableNamed(state.schema, resource) as TableMeta | undefined) : undefined;
@@ -198,6 +198,8 @@ const pageHost: UiHost = {
   openView(view, options) {
     if (!pageBridge.openView?.(view, options)) throw new Error(say('isNotAList', { view }));
   },
+  /* The shell's own listener reads the address again (navFollow), so no entry is made by hand and no App is reloaded. */
+  follow: (href) => navFollow(href),
   /* The page's command pipeline and forms, registered by sdk/commands.tsx (uiBridge.ts says why). */
   openForm(view, prefill = {}) {
     if (!pageBridge.commands) throw new Error(say('thePageCannotOpen'));

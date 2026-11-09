@@ -267,6 +267,8 @@ export interface UiHost {
   breakdown(resource: string, options: UiBreakdownOptions): Promise<UiRow[]>;
   openRecord(resource: string, key: Readonly<Record<string, unknown>>, options?: { mode?: OpenMode; label?: string }): void;
   openView(view: string, options?: UiOpenViewOptions): void;
+  /** Follow an address `href` wrote, in place: a new history entry the shell paints, never a page load. */
+  follow(href: string): void;
   /** One of the App's form views, in a dialog over the page, its prefillable inputs filled. */
   openForm(view: string, prefill?: Readonly<Record<string, string | number>>): void;
   /** One of the form views a page declares, with its draft (`page.useForm`). */

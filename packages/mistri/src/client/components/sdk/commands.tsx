@@ -583,9 +583,9 @@ export function commandHandle(ref: UiCommandRef, page?: string): UiCommandHandle
   if (served) {
     const granted =
       identity.mode === 'authenticated' && ((pageBridge.activeApp() as ServedApp | null)?.grantedCommands ?? []).includes(ref);
-    const refuse = (): Promise<UiCommandOutcome> => {
+    const refuse = (options?: UiCommandOptions): Promise<UiCommandOutcome> => {
       const message = identity.mode === 'authenticated' ? say('isNotSomethingYouCanDo', { label: served.form.label }) : say('signInToDo');
-      toast(message, 'error');
+      if (!options?.quiet) toast(message, 'error');
       return Promise.resolve({ status: 'refused', message });
     };
     if (granted) void formRun();
@@ -597,8 +597,8 @@ export function commandHandle(ref: UiCommandRef, page?: string): UiCommandHandle
       run: (_record, input, options) =>
         granted
           ? formRun().then(({ runFormCommand }) => runFormCommand(labelled(served, options), input, options, openFormCommand))
-          : refuse(),
-      open: (_record, input, options) => (granted ? openFormCommand(labelled(served, options), input) : refuse()),
+          : refuse(options),
+      open: (_record, input, options) => (granted ? openFormCommand(labelled(served, options), input) : refuse(options)),
       /* No record, so no revision to go stale: the review is what will be sent, and a run with it runs as any other. */
       prepare: async (_record, input) =>
         granted
@@ -617,10 +617,10 @@ export function commandHandle(ref: UiCommandRef, page?: string): UiCommandHandle
     Boolean(action) &&
     identity.mode === 'authenticated' &&
     ((pageBridge.activeApp() as ServedApp | null)?.grantedCommands ?? []).includes(action!.command.id);
-  const refuse = (): Promise<UiCommandOutcome> => {
+  const refuse = (options?: UiCommandOptions): Promise<UiCommandOutcome> => {
     const message =
       identity.mode === 'authenticated' ? say('isNotSomethingYouCanDo', { label: action?.label ?? say('this') }) : say('signInToDo');
-    toast(message, 'error');
+    if (!options?.quiet) toast(message, 'error');
     return Promise.resolve({ status: 'refused', message });
   };
   return {
@@ -639,8 +639,8 @@ export function commandHandle(ref: UiCommandRef, page?: string): UiCommandHandle
         return false;
       }
     },
-    run: (record, input, options = {}) => (granted ? runCommand(action!, keyFor(action!, record), input, options) : refuse()),
-    open: (record, input, options = {}) => (granted ? openForm(action!, keyFor(action!, record), input, options) : refuse()),
+    run: (record, input, options = {}) => (granted ? runCommand(action!, keyFor(action!, record), input, options) : refuse(options)),
+    open: (record, input, options = {}) => (granted ? openForm(action!, keyFor(action!, record), input, options) : refuse(options)),
     prepare: async (record, input) => {
       if (!granted)
         return {
@@ -685,12 +685,12 @@ function actionHandle(id: UiCommandRef, reads?: readonly string[]): UiCommandHan
   const app = pageBridge.activeApp() as ServedApp | null;
   const granted = Boolean(found) && mayRunAny(app, found!.table, [found!.action]);
   const label = found?.action.label ?? id;
-  const refuse = (message: string): Promise<UiCommandOutcome> => {
-    toast(message, 'error');
+  const refuse = (message: string, quiet = false): Promise<UiCommandOutcome> => {
+    if (!quiet) toast(message, 'error');
     return Promise.resolve({ status: 'refused', message });
   };
-  const refusedFor = () =>
-    refuse(sessionIdentity().mode === 'authenticated' ? say('isNotSomethingYouCanDo', { label }) : say('signInToDo'));
+  const refusedFor = (quiet = false) =>
+    refuse(sessionIdentity().mode === 'authenticated' ? say('isNotSomethingYouCanDo', { label }) : say('signInToDo'), quiet);
   const keyOf = (table: TableMeta, record: Readonly<Record<string, unknown>>): Record<string, string | number> => {
     const key: Record<string, string | number> = {};
     for (const column of primaryKey(table) as string[]) {
@@ -712,15 +712,15 @@ function actionHandle(id: UiCommandRef, reads?: readonly string[]): UiCommandHan
     input?: Readonly<Record<string, unknown>>,
     options: UiCommandOptions = {},
   ): Promise<UiCommandOutcome> => {
-    if (!found || !granted) return refusedFor();
+    if (!found || !granted) return refusedFor(options.quiet);
     const { table: tableId, action } = found;
     const table = findTable(tableId) as TableMeta | undefined;
-    if (!table) return refusedFor();
+    if (!table) return refusedFor(options.quiet);
     const key = keyOf(table, record);
     /* A reason is data the action asks for and writes with its set (a record never moves this way unexplained). */
     const reason = typeof input?.reason === 'string' ? input.reason.trim() : '';
-    if (action.reason && !reason) return refuse(say('asksAReason', { label }));
-    if (!(await matches(record))) return refuse(say('isNotAvailableOnThisRecord', { label }));
+    if (action.reason && !reason) return refuse(say('asksAReason', { label }), options.quiet);
+    if (!(await matches(record))) return refuse(say('isNotAvailableOnThisRecord', { label }), options.quiet);
     if (action.confirm && !(await confirmFor({ title: `${label}?`, body: say('confirmBody', { label }), confirmLabel: label })))
       return { status: 'closed' };
     const opened = sessionIdentity();
@@ -739,7 +739,7 @@ function actionHandle(id: UiCommandRef, reads?: readonly string[]): UiCommandHan
       return { status: 'applied' };
     }
     if (outcome.kind === 'uncertain') {
-      toast(outcome.message, 'error');
+      if (!options.quiet) toast(outcome.message, 'error');
       const unknown: UiCommandOutcome = {
         status: 'unknown',
         message: outcome.message,
@@ -750,7 +750,7 @@ function actionHandle(id: UiCommandRef, reads?: readonly string[]): UiCommandHan
       };
       return unknown;
     }
-    return refuse(outcome.message);
+    return refuse(outcome.message, options.quiet);
   };
   return {
     label,

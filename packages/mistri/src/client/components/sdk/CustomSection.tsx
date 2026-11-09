@@ -114,11 +114,11 @@ export function CustomBody({
 }
 
 /** What `/api/breakdown` answers, as far as a total reads it. */
-type Reply = { rows?: Array<Record<string, unknown>> };
+type Reply = { rows?: Array<Record<string, unknown>>; names?: Record<string, Record<string, string>> };
 
 /** A total's answer as its component receives it: the one figure, or each group (customTotals.ts). */
 const figures = (reply: Reply, grouped: boolean): TotalValue | TotalGroup[] =>
-  grouped ? totalGroups(reply.rows) : totalFigure(reply.rows);
+  grouped ? totalGroups(reply.rows, reply.names) : totalFigure(reply.rows);
 
 const stateOf = (record: UiRow | undefined, rows: Record<string, UiRow[]>, declaredRecord: boolean): 'ready' | 'empty' => {
   const reads = Object.values(rows);
