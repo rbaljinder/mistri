@@ -942,6 +942,44 @@ test('reads asked in one moment go as one request on the lease, each taking its 
   expect(fetcher.mock.calls[4][0]).toBe('/api/counts?app=atlas&tenant=north');
 });
 
+/* A picker's and a related list's read can be gathered with a write's refresh, and a batch is one request: what each
+   read is rides on its item, and a free-form page's own read, which says it by a header, is asked alone. */
+test('a gathered picker or related read says what it is on its item, and a page read is not gathered', async () => {
+  session.establishTenantSelection(proof());
+  const { readKey } = await import('@mistriwork/engine/shared/firstPaint.js');
+  const fetcher = vi.fn().mockImplementation(async (url: string, init: { body?: string }) =>
+    url.startsWith('/api/boot')
+      ? reply({
+          reads: Object.fromEntries(
+            JSON.parse(init.body!).reads.map((read: { path: string; body: object }) => [
+              readKey('POST', `${read.path}?app=atlas&tenant=north`, read.body),
+              { body: { rows: [] } },
+            ]),
+          ),
+          items: {},
+        })
+      : reply({ rows: [] }),
+  );
+  vi.stubGlobal('fetch', fetcher);
+  const { gatherReads } = await import('../../../kit/src/client/readGathering.js');
+  gatherReads();
+  await Promise.all([
+    transport.tenantReadApi('/api/view/run', { view: { base: 'item' } }, 'atlas', undefined, { 'x-mistri-read': 'picker' }),
+    transport.tenantReadApi('/api/view/run', { view: { base: 'note' } }, 'atlas', undefined, { 'x-mistri-read': 'related' }),
+    transport.tenantReadApi('/api/run', { q: 'item' }, 'atlas'),
+    transport.tenantReadApi('/api/view/run', { view: { base: 'page' } }, 'atlas', undefined, { 'x-mistri-page': 'board' }),
+  ]);
+  const boots = fetcher.mock.calls.filter(([url]) => url.startsWith('/api/boot'));
+  expect(boots).toHaveLength(1);
+  expect(JSON.parse(boots[0][1].body).reads).toEqual([
+    { method: 'POST', path: '/api/view/run', body: { view: { base: 'item' } }, read: 'picker' },
+    { method: 'POST', path: '/api/view/run', body: { view: { base: 'note' } }, read: 'related' },
+    { method: 'POST', path: '/api/run', body: { q: 'item' } },
+  ]);
+  const alone = fetcher.mock.calls.find(([url]) => !url.startsWith('/api/boot'))!;
+  expect(alone[1].headers['x-mistri-page']).toBe('board');
+});
+
 test('a host that will not batch for a lease is asked read by read from then on', async () => {
   session.establishTenantSelection(proof());
   const fetcher = vi.fn(async (url: string) =>

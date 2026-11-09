@@ -20,6 +20,7 @@
  * record page's related lists are the access ceiling's to govern, not this.
  */
 import { authoredValue } from '@mistriwork/engine/shared/autoValues.js';
+import { dateComparison } from '@mistriwork/engine/shared/queryDates.js';
 import { SET_EXPRESSION, setExpression } from './appStamps.js';
 import { isComponentDecl, parseComponentDecl, parseInputs, commandInputAt } from '@mistriwork/engine/shared/appComponents.js';
 import {
@@ -1355,9 +1356,13 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
         throw new Error(`${at} gives "${v}" the tone "${String(t)}". Use ${DISPLAY_TONES.join(', ')}.`);
       }
       /* A key that starts like a comparison must BE one: ">= 90" is a
-         threshold, ">= high" is a typo pretending to be a value. */
-      if (/^[<>]/.test(v) && !/^(>=|<=|>|<)\s*-?\d+(\.\d+)?$/.test(v)) {
-        throw new Error(`${at} has a tone key "${v}" that is not a comparison like ">= 90".`);
+         threshold, ">= high" is a typo pretending to be a value. A date column's comparison takes the phrases a
+         list's conditions do ("< today", "<= next 7 days"), read by the same parser (queryDates.ts). */
+      if (/^[<>]/.test(v) && !/^(>=|<=|>|<)\s*-?\d+(\.\d+)?$/.test(v) && !dateComparison(v)) {
+        throw new Error(
+          `${at} has a tone key "${v}" that is not a comparison like ">= 90" or a date comparison like "< today" or ` +
+            `"<= next 7 days" (a day, week, month, quarter or year phrase; not hours or minutes).`,
+        );
       }
     }
   }
@@ -1409,11 +1414,21 @@ function parseOwnDrawing(
 ): Pick<AppDisplayRule, 'outOf' | 'ring' | 'slider' | 'scan' | 'signature' | 'timezone'> {
   const format = r.format as string | undefined;
   if (format && OWN_DRAWINGS.includes(format)) {
-    const extra = DRESSINGS.filter((key) => r[key] !== undefined && !(format === 'rating' && key === 'tone'));
+    const extra = DRESSINGS.filter(
+      (key) => r[key] !== undefined && !(key === 'tone' && (format === 'rating' || format === 'date' || format === 'datetime')),
+    );
     if (extra.length)
       throw new Error(
         `${at} has format "${format}", which draws the value its own way; it takes no ${extra.map((key) => `"${key}"`).join(', ')}.`,
       );
+    /* A day or a moment has no words to colour: its tone says when, so every key is a date comparison. */
+    if ((format === 'date' || format === 'datetime') && r.tone && typeof r.tone === 'object' && !Array.isArray(r.tone)) {
+      const junk = Object.keys(r.tone).find((key) => !/^[<>]/.test(key) && !dateComparison(key)); // a comparison's typo is judged below
+      if (junk !== undefined)
+        throw new Error(
+          `${at} has format "${format}" and a tone key "${junk}" that is not a date comparison like "< today" or "<= next 7 days".`,
+        );
+    }
   }
   const out: Pick<AppDisplayRule, 'outOf' | 'ring' | 'slider' | 'scan' | 'signature' | 'timezone'> = {};
   /* Two inputs of their own for a plain column: a code read by the camera into a text, and a signature drawn and

@@ -69,6 +69,7 @@ export function fixtures<R = Record<string, UiRow>>(
 export type Navigation =
   | { kind: 'record'; resource: string; key: Readonly<Record<string, unknown>>; mode: OpenMode }
   | { kind: 'view'; view: string; tab?: string; search?: string; filters?: Readonly<Record<string, string>> }
+  | { kind: 'address'; href: string }
   | { kind: 'form'; view: string; prefill: Readonly<Record<string, string | number>>; at?: string }
   | { kind: 'composer'; text: string; mode?: 'reply' | 'note' };
 
@@ -552,6 +553,9 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
     },
     openView: (view, { tab, search, filters } = {}) => {
       navigations.push({ kind: 'view', view, ...(tab ? { tab } : {}), ...(search ? { search } : {}), ...(filters ? { filters } : {}) });
+    },
+    follow: (href) => {
+      navigations.push({ kind: 'address', href });
     },
     openForm: (view, prefill = {}) => {
       navigations.push({ kind: 'form', view, prefill });

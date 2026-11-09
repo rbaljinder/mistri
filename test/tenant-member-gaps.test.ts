@@ -110,8 +110,22 @@ async function fixture(t: TestContext) {
         tickets: { kind: 'list', from: 'ticket' },
         // A signed-in form over a command that names no record.
         raise: { kind: 'form', label: 'Raise a ticket', command: { id: 'raise', version: 1, input: { title: { type: 'text' } } } },
+        // Free-form pages: one declares the command, one declares none.
+        intake: {
+          kind: 'page',
+          label: 'Intake',
+          component: { id: 'page-intake', module: './pages/intake.page.tsx', kind: 'page' },
+          reads: ['ticket'],
+          commands: ['raise'],
+        },
+        browse: {
+          kind: 'page',
+          label: 'Browse',
+          component: { id: 'page-browse', module: './pages/browse.page.tsx', kind: 'page' },
+          reads: ['ticket'],
+        },
       },
-      nav: ['tickets', 'raise'],
+      nav: ['tickets', 'raise', 'intake', 'browse'],
       home: 'tickets',
     },
     'desk fixture',
@@ -219,8 +233,9 @@ async function fixture(t: TestContext) {
     assert.equal(reply.status, 200, reply.text);
     return reply.body as Context;
   };
-  const data = (path: string, value: Context, body: unknown) =>
+  const data = (path: string, value: Context, body: unknown, extra: Record<string, string> = {}) =>
     call(select(path, value.tenantId), body, {
+      ...extra,
       'x-mistri-tab': value.tabId,
       'x-mistri-context': value.context,
       'x-mistri-lease-revision': String(value.revision),
@@ -264,6 +279,36 @@ test("a signed-in form whose command names no record is offered and runs in the 
       .all()
       .map((row) => ({ ...row })),
     [{ tenant_id: 'north', title: 'Mouse missing' }],
+  );
+});
+
+/* A free-form page's command says which page runs it (x-mistri-page), and the tenant host holds it to the page's
+   declared commands as a single-database App does: drift protection, with the member's grants still the boundary. */
+test("a tenant page's command its page does not declare is refused, as in a single-database App", async (t) => {
+  const f = await fixture(t),
+    north = await f.open();
+  const raise = (key: string) => ({
+    command: 'raise',
+    commandVersion: 1,
+    key: {},
+    expectedVersion: 0,
+    idempotencyKey: key,
+    input: { title: key },
+  });
+  const refused = await f.data('/api/commands/execute', north, raise('raise-from-browse-1'), { 'x-mistri-page': 'browse' });
+  assert.equal(refused.status, 403, refused.text);
+  assert.equal(refused.body.code, 'page_undeclared');
+  const nowhere = await f.data('/api/commands/execute', north, raise('raise-from-nowhere-1'), { 'x-mistri-page': 'nowhere' });
+  assert.equal(nowhere.status, 403, nowhere.text);
+  assert.equal(f.db.prepare("SELECT count(*) AS n FROM ticket WHERE title LIKE 'raise-from-%'").get()?.n, 0, 'nothing was written');
+  assert.equal(
+    ok(await f.data('/api/commands/execute', north, raise('raise-from-intake-1'), { 'x-mistri-page': 'intake' })).status,
+    'applied',
+  );
+  assert.equal(
+    ok(await f.data('/api/commands/execute', north, raise('raise-from-nowhere-2'))).status,
+    'applied',
+    'a request that names no page is held to the grants alone',
   );
 });
 

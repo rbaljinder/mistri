@@ -347,6 +347,12 @@ export declare function useNavigate(): {
   openView(view: string, options?: OpenViewOptions): void;
   /** One of the App's forms: a public form in a dialog over the page, its `prefillable` inputs filled; a signed-in form opened as its room. */
   openForm(view: string, prefill?: Readonly<Record<string, string | number>>): void;
+  /** One of the App's custom pages, by its path, in place: the shell's router follows its canonical address with `params`
+      (the words the page keeps in its address), with no reload, so a member of several tenants is not asked to choose again.
+      A page the App has no address for throws. */
+  openPage(name: string, params?: Readonly<Record<string, string>>): void;
+  /** The same address as a string, for an `<a href>` whose click calls `openPage` (a plain click only: a modified one is the browser's). */
+  pageHref(name: string, params?: Readonly<Record<string, string>>): string;
   /** In a tenant App, the link a visitor opens by, placed with the reader's own tenant: a view by the tenant's public
       address, a public form by its intake address — `?via=` and all, to hand out. Undefined when the tenant has no
       such address, outside a tenant's own lease, or for a view no visitor opens. */
@@ -372,6 +378,10 @@ export declare function useHref(): {
     Reply or Internal note, where the page offers it) for the reader to edit and send. It never sends; it answers false
     when the page draws no composer. */
 export declare function useComposer(): { fill(text: string, options?: { mode?: 'reply' | 'note' }): boolean };
+/** A pointer event's position inside an element, in layout pixels, from the element's top-left: `layoutPoint(event, column)`.
+    The density zoom makes client coordinates and a drawn box differ from the pixels a page styles in; this is the one ruler the shell
+    measures with, so hit-testing and dragging place what they find where the pointer is. */
+export declare function layoutPoint(event: { clientX: number; clientY: number }, element: Element): { x: number; y: number };
 /** Where a file resource's row is served, for an `<img>`: `const file = useFile('member_avatar'); file({ id: 4 }, { thumbnail: true })`. */
 export declare function useFile(resource: string): (key: Readonly<Record<string, unknown>>, options?: { thumbnail?: boolean }) => string | undefined;
 /** Who is reading: signed in or not, and the signed-in account's id. What a component knows of the reader; the server decides every request. */
@@ -417,8 +427,9 @@ export interface CommandReview<Input extends string = string> {
 }
 /** How a run is sent: the word its form says it by, a public page's human-check token, the key a run that names no
     record is sent under, and the review it confirms. `attempt` is a UUID the component makes once per intent and keeps
-    (in its address, say): a run sent again with it, after a reload, is the same run. A fresh key per run when not given. */
-export interface CommandRunOptions { label?: string; challenge?: string; attempt?: string; review?: CommandReview }
+    (in its address, say): a run sent again with it, after a reload, is the same run. A fresh key per run when not given.
+    `quiet: true` returns a refusal as ever but shows no notice in the shell, for a page that says it in place itself. */
+export interface CommandRunOptions { label?: string; challenge?: string; attempt?: string; review?: CommandReview; quiet?: boolean }
 /** Why a command cannot be run on a record: signed out, the reader's role not granted it, or its `when` not holding for the record now. */
 export type CommandUnavailable = 'signed-out' | 'not-granted' | 'unavailable';
 /** What a component hands a command's run: any of its declared inputs, by name (every name where the App is not typed). */

@@ -216,3 +216,29 @@ test('a relative date column says one way: from today only where every value is 
   expect(new Set(apart).size).toBe(2);
   expect(datesAmong(rule, mixed)).toBe(datesAmong(rule, [day(-90)]));
 });
+
+test("a date column wears a tone by the same date phrases a list takes, on the App's today", () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(new Date(2026, 5, 15, 9, 0, 0));
+    const tone = { '< today': 'bad', '<= next 7 days': 'warn' };
+    const rule = { format: 'date', tone };
+    // Before today: overdue. Today and the next 7 days (today and the six after it, as the query language reads the phrase): soon.
+    expect(dressFor(rule, '2026-06-14')).toMatchObject({ kind: 'tone', tone: 'bad' });
+    expect(dressFor(rule, '2026-06-15')).toMatchObject({ kind: 'tone', tone: 'warn' });
+    expect(dressFor(rule, '2026-06-21')).toMatchObject({ kind: 'tone', tone: 'warn' });
+    expect(dressFor(rule, '2026-06-22')).toMatchObject({ kind: 'date' });
+    // A day past every key keeps the plain date, said as itself.
+    expect(dressFor(rule, '2026-06-30')).toMatchObject({ kind: 'date' });
+    // A toned date still says the date, and keeps the stored text.
+    expect(dressFor(rule, '2026-06-14')).toMatchObject({ text: '2026-06-14', label: expect.stringContaining('2026') });
+    // `<= today` takes the day itself, `> today` starts tomorrow.
+    expect(dressFor({ format: 'date', tone: { '<= today': 'bad' } }, '2026-06-15')).toMatchObject({ tone: 'bad' });
+    expect(dressFor({ format: 'date', tone: { '> today': 'good' } }, '2026-06-15')).toMatchObject({ kind: 'date' });
+    expect(dressFor({ format: 'date', tone: { '> today': 'good' } }, '2026-06-16')).toMatchObject({ tone: 'good' });
+    // A moment is judged by its day.
+    expect(dressFor({ format: 'datetime', tone: { '< today': 'bad' } }, '2026-06-14 23:00:00')).toMatchObject({ tone: 'bad' });
+  } finally {
+    vi.useRealTimers();
+  }
+});

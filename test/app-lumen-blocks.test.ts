@@ -186,7 +186,11 @@ test('a day and a moment said absolutely are display rules, with the zone a mome
   assert.deepEqual([display.closed?.format, display.closed?.timezone], ['datetime', 'America/New_York']);
   assert.throws(() => withDisplay({ closed: { format: 'datetime', timezone: 'Mars/Olympus' } }), /no IANA zone/);
   assert.throws(() => withDisplay({ closed: { format: 'relative', timezone: 'UTC' } }), /add format: 'datetime'/);
-  assert.throws(() => withDisplay({ closed: { format: 'date', tone: { x: 'bad' } } }), /draws the value its own way; it takes no "tone"/);
+  assert.throws(
+    () => withDisplay({ closed: { format: 'date', tone: { x: 'bad' } } }),
+    /tone key "x" that is not a date comparison like "< today"/,
+  );
+  assert.equal(withDisplay({ closed: { format: 'date', tone: { '< today': 'bad' } } }).closed?.tone?.['< today'], 'bad');
 });
 
 test('a code read by the camera and a signature are inputs of a plain column: true, and nothing else dressing it', () => {

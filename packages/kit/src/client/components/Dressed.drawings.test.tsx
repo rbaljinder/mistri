@@ -79,7 +79,7 @@ describe('own drawings', () => {
     expect(container.textContent).toContain('CDK');
   });
 
-  test('a QR value is its text in a list and, in a record, a code fetched on demand with the text under it', async () => {
+  test('a QR value is its text in a list and, in a record, a code fetched on demand named by its text, with no raw text printed under it', async () => {
     const dress = dressFor({ format: 'qr' }, 'STK-0042')!;
     expect(dress).toEqual({ kind: 'qr', text: 'STK-0042' });
     expect(dressFor({ format: 'qr' }, '  ')).toBeNull();
@@ -91,7 +91,10 @@ describe('own drawings', () => {
     await waitFor(() => expect(container.querySelector('svg.qr-value-code')).not.toBeNull());
     expect(container.querySelector('svg')!.getAttribute('aria-label')).toBe('QR code: STK-0042');
     expect(container.querySelector('.qr-value-ink')!.getAttribute('d')).toMatch(/^M4 4h/);
-    expect(container.querySelector('figcaption')!.textContent).toBe('STK-0042');
+    // The text is the code's name and tooltip, not a caption: nothing prints the raw value beside the code.
+    expect(container.querySelector('figcaption')).toBeNull();
+    expect(container.querySelector('figure')!.getAttribute('title')).toBe('STK-0042');
+    expect(container.textContent).toBe('');
   });
 
   test("a percent's ring fills to its figure, held inside 0 to 100", () => {

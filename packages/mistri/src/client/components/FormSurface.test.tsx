@@ -1,3 +1,4 @@
+import { homeIsReachable } from '../publicHomeLink.js';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -399,4 +400,34 @@ test("a public form's reference input is drawn as a picker over what the App ope
   await waitFor(() =>
     expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/api\/run\?app=lintel$/), expect.objectContaining({ method: 'POST' })),
   );
+});
+
+test('a public receipt links back to the App only where a visitor can go: signed in, or a public landing; never to staff sign-in', async () => {
+  const note: FormPresentation = {
+    id: 'note',
+    label: 'Leave a note',
+    input: [{ name: 'text', label: 'Note', type: 'text', required: true }],
+  };
+  const submit = vi.fn(async () => ({ reference: 'REF-1', receipt: { id: 'r1', status: 'applied' } }));
+  const answer = (me: Record<string, unknown>) => async () => (homeIsReachable(me) ? '/' : undefined);
+  const cases: Array<[string, Record<string, unknown>, boolean]> = [
+    ['signed out, no public landing', { signedIn: false, signIn: { id: 'x' } }, false],
+    ['signed out, a public landing', { signedIn: false, signIn: { id: 'x' }, home: 'welcome', landingView: 'welcome' }, true],
+    ['signed out, a public App', { signedIn: false, signIn: { id: 'x' }, public: true }, true],
+    ['signed in', { signedIn: true }, true],
+  ];
+  for (const [said, me, linked] of cases) {
+    render(<FormSurface form={note} appName="Example Home Energy" submit={submit} homeHref={answer(me)} />);
+    fireEvent.change(screen.getByLabelText('Note (required)'), { target: { value: 'Hello' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    await screen.findByText('REF-1');
+    if (linked) expect(await screen.findByRole('link', { name: 'Back to Example Home Energy' }), said).toHaveAttribute('href', '/');
+    else {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(screen.queryByRole('link', { name: /Back to/ }), said).toBeNull();
+    }
+    // The reference stays, whatever the link does.
+    expect(screen.getByText('Your reference')).toBeTruthy();
+    cleanup();
+  }
 });

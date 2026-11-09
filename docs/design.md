@@ -689,7 +689,10 @@ the lead icon square and the nav dot are drawn alike in every look
 (tokens only), so they are not exceptions. One thing is the same
 everywhere and on purpose: a QR code is near-black on white with its
 quiet zone, in every look and by night, because an inverted code is
-one many scanners refuse. A signature pad is the same: dark ink on white paper in
+one many scanners refuse (its colors are a scanning requirement, so they
+live in the kit and no look may change them). It fits its container
+between 128 and 208 pixels and prints nothing under it: the value is its
+accessible name and tooltip. A signature pad is the same: dark ink on white paper in
 every look, so the picture it keeps reads on whatever page shows it.
 
 ## Standing layout rules

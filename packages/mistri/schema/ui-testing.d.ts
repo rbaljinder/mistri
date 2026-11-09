@@ -31,6 +31,7 @@ export type Navigation =
   | { kind: 'record'; resource: string; key: Readonly<Record<string, unknown>>; mode: OpenMode }
   | { kind: 'view'; view: string; tab?: string }
   | { kind: 'form'; view: string; prefill: Readonly<Record<string, string | number>>; at?: string }
+  | { kind: 'address'; href: string }
   | { kind: 'composer'; text: string; mode?: 'reply' | 'note' };
 
 /** A command a component ran or opened, recorded instead of sent. */

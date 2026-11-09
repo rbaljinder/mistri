@@ -863,3 +863,44 @@ test('an open form with typed input is held: a change to its record is said in i
   expect(editingRecords()).toEqual([]);
   resetLiveState();
 });
+
+/* A verb named "Cancel" would dismiss with "Cancel", repeat itself under its title and lead to "Open Cancel": a component's
+   `open` hands the verb's own label as the record's (sdk/commands.tsx), which the dialog must not say twice. */
+test('a verb labeled Cancel dismisses with Close, repeats no subtitle, and links to the record by its noun', async () => {
+  const cancel: AppCommandAction = {
+    ...action,
+    id: 'cancelBooking',
+    label: 'Cancel',
+    command: { ...action.command, id: 'cancelBooking' },
+  };
+  // The receipt names the command that ran, or the form cannot tell it was this one.
+  api.mockImplementation(async (path: string) =>
+    path.endsWith('/prepare') ? { expectedVersion: 3 } : { ...success, command: 'cancelBooking' },
+  );
+  const { CommandForm } = await import('./CommandForm.js');
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  clients.push(client);
+  render(
+    <QueryClientProvider client={client}>
+      <CommandForm
+        action={cancel}
+        owner={{ ...owner, command: 'cancelBooking' }}
+        label="Cancel"
+        headless
+        onClose={vi.fn()}
+        onDone={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  const dialog = await screen.findByRole('dialog', { name: 'Cancel' });
+  await vi.waitFor(() => expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled());
+  expect(within(dialog).getAllByRole('button', { name: 'Cancel' })).toHaveLength(1);
+  expect(within(dialog).getByRole('button', { name: 'Close' })).toBeEnabled();
+  expect(dialog.querySelector('.insert-lede')).toBeNull();
+  const user = userEvent.setup();
+  await user.type(within(dialog).getByLabelText('Reason (required)'), 'Guest asked');
+  await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  await vi.waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent('Assigned.'));
+  expect(within(dialog).getByRole('button', { name: 'Open the loan application' })).toBeVisible();
+  expect(within(dialog).queryByRole('button', { name: /Open Cancel/ })).toBeNull();
+});

@@ -202,6 +202,19 @@ test("a refusal is said in the server's words", async () => {
   expect(toasts).toEqual(['The desk is closed.']);
 });
 
+/* A page that explains a refusal in place asks for no notice: the outcome is the same, the shell says nothing. */
+test('a quiet run returns the refusal and shows no notice, whether the server or the grant refused it', async () => {
+  answer = async () => {
+    throw Object.assign(new Error('The desk is closed.'), { status: 409, code: 'ineligible_state', outcome: 'not_applied' });
+  };
+  expect(await handle('raise').run({}, { title: 'Late' }, { quiet: true })).toEqual({ status: 'refused', message: 'The desk is closed.' });
+  expect(toasts).toEqual([]);
+  granted = [];
+  const outcome = await handle('raise').run({}, { title: 'Late' }, { quiet: true });
+  expect(outcome.status).toBe('refused');
+  expect(toasts).toEqual([]);
+});
+
 /* A component that draws its own fields places the server's words beside one; only a field the command declares and
    the values sent leave shown is named, so a refusal about a hidden or made-up input stays in the message. */
 test('a refusal about an input names that field, when the command declares it and it is shown', async () => {

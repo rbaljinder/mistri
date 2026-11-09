@@ -14,6 +14,7 @@ import { pageBridge } from '@mistriwork/kit/client/uiBridge.js';
 import './host.js';
 import { say } from '../../copy/components/components/sdk/componentLoader.js';
 import { appFile } from '@mistriwork/kit/client/addressMount.js';
+import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 
 interface Served {
   kind: 'section' | 'value';
@@ -48,7 +49,26 @@ function linkStylesheet(href: string, id: string): void {
 
 /** The component the App declares under `id`, its default export; rejects when it is not served or will not load. */
 export function loadComponent(id: string): Promise<ComponentType<never>> {
-  return loadEntry(id, served(id));
+  const entry = served(id);
+  if (entry || !tenantPending()) return loadEntry(id, entry);
+  return afterTenantContext(id).then(() => loadEntry(id, served(id)));
+}
+
+/* A tenant App's payload lists its components only for a chosen tenant, so a section drawn before the choice (or in the
+   moment after it, before the payload is replaced) finds none: that is not a refusal, the answer has not arrived. */
+const tenantPending = () => sessionIdentity().tenantRequired === true;
+
+/** Resolves once the tenant is chosen and the payload names the part, looking a few times as it follows; a part still absent then is the App's own gap. */
+async function afterTenantContext(id: string): Promise<void> {
+  await new Promise<void>((resolve) => {
+    if (sessionIdentity().tenant) return resolve();
+    const stop = subscribeSessionIdentity(() => {
+      if (!sessionIdentity().tenant) return;
+      stop();
+      resolve();
+    });
+  });
+  for (let look = 0; look < 10 && !served(id); look++) await new Promise((resolve) => setTimeout(resolve, 100));
 }
 
 /**

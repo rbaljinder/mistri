@@ -6,10 +6,10 @@
 import { afterEach, describe, expect, test } from 'vitest';
 import type { ReactNode } from 'react';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
-import { fixtureHost, SectionFrame, type FixtureCatalog } from './fixture.js';
+import { fixtureHost, SectionFrame, type FixtureCatalog, type Navigation } from './fixture.js';
 import { board, calendar, fixtures, renderPage, renderSection } from './testing.js';
 import { definePage, Text } from './page.js';
-import { useBreakdown, useHref, useRecord, useRows } from './index.js';
+import { useBreakdown, useHref, useNavigate, useRecord, useRows } from './index.js';
 import { useOptions, type UiOptions } from './options.js';
 
 afterEach(cleanup);
@@ -177,6 +177,43 @@ describe('useOptions on a resource', () => {
     renderSection(Picker, { component: { id: 'picker' } }, { data: COUNTRIES, catalog, refused: { country: 403 } });
     await waitFor(() => expect(options().error).toBeTruthy());
     expect(options().pages.flat()).toEqual([]);
+  });
+});
+
+describe('openPage and pageHref', () => {
+  test('a page is opened in place by its canonical address, and the same address is an anchor’s href', () => {
+    let go!: ReturnType<typeof useNavigate>;
+    function Links() {
+      go = useNavigate();
+      return null;
+    }
+    const view = renderSection(Links, { component: { id: 'links' } });
+    expect(go.pageHref('forecast', { period: 'q3' })).toBe('/forecast?period=q3');
+    go.openPage('forecast', { period: 'q3' });
+    go.openPage('forecast');
+    expect(view.navigations).toEqual([
+      { kind: 'address', href: '/forecast?period=q3' },
+      { kind: 'address', href: '/forecast' },
+    ]);
+  });
+
+  test('a page the App has no address for throws in words, and moves nowhere', () => {
+    let go!: ReturnType<typeof useNavigate>;
+    function Links() {
+      go = useNavigate();
+      return null;
+    }
+    const navigations: Navigation[] = [];
+    const host = fixtureHost(BOOKINGS, {}, navigations);
+    host.href = () => undefined;
+    render(
+      <SectionFrame host={host} id="nowhere" width={960}>
+        <Links />
+      </SectionFrame>,
+    );
+    expect(() => go.openPage('missing')).toThrow(/no address for the page "missing"/);
+    expect(() => go.pageHref('missing')).toThrow(/no address for the page "missing"/);
+    expect(navigations).toEqual([]);
   });
 });
 

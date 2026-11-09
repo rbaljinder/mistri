@@ -30,6 +30,17 @@ test('an unknown var(--…) warns with the token it was meant to be; a real or o
   assert.equal(componentCode(said[0]!), 'component-token');
 });
 
+test("a component's own --c-<id>-* property is allowed however it is set; another component's or an unprefixed one still warns", async () => {
+  const { warnings } = await lint({
+    'tile.css': '.c-tile { color: var(--c-tile-hue); border-color: var(--c-other-hue); outline-color: var(--hue); }',
+    'tile.tsx': "export default (p) => <b ref={(el) => el?.style.setProperty('--c-tile-hue', p.hue)} />;",
+  });
+  const said = warnings.map((w) => w.text);
+  assert.equal(said.length, 2);
+  assert.match(said[0]!, /"--c-other-hue"/);
+  assert.match(said[1]!, /"--hue"/);
+});
+
 async function lintShared(files: Record<string, string>, entries: Record<string, string[]>) {
   const dir = await mkdtemp(join(tmpdir(), 'tw-shared-'));
   made.push(dir);

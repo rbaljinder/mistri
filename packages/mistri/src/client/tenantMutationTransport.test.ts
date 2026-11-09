@@ -160,6 +160,19 @@ test('a command that names no record is sent with its empty key, and an unusable
   }
 });
 
+/* A free-form page's command says which page runs it (x-mistri-page), so the host can hold it to the page's
+   declared commands; only the headers that say what a request is are forwarded, never the lease's own. */
+test('a mutation forwards the page and read headers it is given, and none of the lease headers', async () => {
+  const fetcher = fetchReply(response({ status: 'succeeded', receiptId: 'opaque-page-receipt', result: { id: 'new' } }));
+  await transport.tenantMutationApi('/api/commands/execute', command(), 'atlas', undefined, {
+    'x-mistri-page': 'board',
+    [names.context]: 'forged',
+  });
+  const sent = new Headers(fetcher.mock.calls[0][1].headers);
+  expect(sent.get('x-mistri-page')).toBe('board');
+  expect(sent.get(names.context)).toBe('context-north');
+});
+
 test('matching ordinary App transport claims are stripped but not forwarded as alternate authority', async () => {
   const fetcher = fetchReply(response(applied()));
   await transport.tenantMutationApi('/api/update?app=atlas', { ...update(), app: 'atlas' }, 'atlas');

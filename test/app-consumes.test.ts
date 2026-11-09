@@ -610,3 +610,22 @@ test('check names a command that sets a reference whose table it does not read, 
     /^command "addLine" sets work_order_part\.part_id, which points at a "part" row.*\[command-reference-unread\].*add "part" to read/,
   );
 });
+
+test('check names the same unread reference when the handler inserts through db.<table>', () => {
+  const app = parseAppConfig(APP, 'consumes', { commands: catalogOf({ addLine: { target: 'work_order' } }) });
+  const handle = async ({
+    db,
+    record,
+  }: {
+    db: { work_order_part: { insert: (row: unknown) => Promise<unknown> } };
+    record: { id: unknown };
+  }) => {
+    await db.work_order_part.insert({ work_order_id: Number(record.id), part_id: 1, quantity: 1 });
+  };
+  const commands = defineCommands({
+    addLine: defineCommand({ source: 'shop', target: 'work_order', write: ['work_order_part'], read: ['work_order'], handle } as never),
+  });
+  const warnings = referenceReadWarnings(app, catalog(SCHEMA), commands);
+  assert.equal(warnings.length, 1, warnings.join('\n'));
+  assert.match(warnings[0], /sets work_order_part\.part_id, which points at a "part" row.*\[command-reference-unread\]/);
+});

@@ -679,3 +679,28 @@ for (const nested of [false, true]) {
     assert.equal(f.audits().length, 0);
   });
 }
+
+test("a typed get of a row outside the caller's scope is the very refusal a key that does not exist gets", async (t) => {
+  const f = fixture(t);
+  const binding = await f.realBinding();
+  const outcomes: Record<string, unknown> = {};
+  f.control.handle = async (context) => {
+    /* Reviewer 2 exists but is hidden by the row scope; 99 is not a row at all. */
+    for (const [name, key] of [
+      ['hidden', 2],
+      ['missing', 99],
+    ] as const) {
+      try {
+        outcomes[name] = { returned: await context.db.reviewer.get(key) };
+      } catch (error) {
+        const { code, message, outcome, field, key: said } = error as Record<string, unknown>;
+        outcomes[name] = { thrown: { name: (error as Error).constructor.name, code, message, outcome, field, key: said } };
+      }
+    }
+    return { reviewerId: 1, version: 1, detail: { message: 'Done.' } };
+  };
+  await executeBusinessCommand(binding, actor, request()).catch(() => undefined);
+  assert.ok(outcomes.hidden && outcomes.missing, 'both reads ran');
+  assert.deepEqual(outcomes.hidden, outcomes.missing);
+  assert.equal((outcomes.hidden as { thrown: { message: string } }).thrown.message, 'The record was not found.');
+});

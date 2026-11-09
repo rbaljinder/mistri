@@ -5,6 +5,26 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.28
+
+- **A page command in a tenant App is held to its page.** A free-form page's command now carries the page's name in a tenant App as it does elsewhere, and the host refuses one the page does not declare (`page_undeclared`), the same as in a single-database App. The grants still decide who may run it.
+- **`layoutPoint(event, element)`.** The page kit answers where the pointer is inside an element, in the layout pixels the page styles in, however the reader's density zoom is set. Use it in place of `getBoundingClientRect`; `mistri check`'s `component-ruler` warning now points to it.
+- **Quiet runs.** `run(record, input, { quiet: true })` returns a refusal as ever but shows no notice in the shell, for a page that says it in place.
+- **Opening a page.** `useNavigate().openPage(name, params)` moves to one of the App's pages in place, and `pageHref(name, params)` gives its canonical address for a link.
+- **A verb's dialog says less twice.** A verb labeled "Cancel" dismisses with "Close", a subtitle that only repeats the verb's label is not drawn, and a link to the record says "Open the booking" by the resource's noun, not "Open Cancel".
+- **`component-token` knows a component's own names.** A custom component may use `--c-<id>-*` custom properties, the way `.c-<id>` is its own for classes, for a color it hands to its stylesheet from data.
+- **A tenant App's custom components load after the tenant is chosen.** Their code is requested only once the tenant's context is set, so a section drawn before the choice waits for it instead of failing to find its component.
+- **A grouped total over a reference names its groups.** A dashboard group's `by` over a reference column is labeled with the record's name, not its key.
+- **Batched reads keep their kind.** In a tenant App, a picker's or a related list's read that goes with others in one request is audited by its own door, and a free-form page's read is asked on its own so the host can judge it by its page.
+- **The repeat cap is documented.** A `field.group` repeat holds at most 50 rows, and 10 on a public form; a larger `repeat.max` fails to load.
+- **A typed `get` outside the caller's scope answers as a missing key does.** In a command's `db`, `get` of a row the caller's tenant or row scope hides refuses with the same `not_found` and message as a key that is no row at all, so a caller cannot tell another tenant's key from a wrong one (a field report).
+- **A date column can carry a tone.** A display `tone` key takes the date phrases a list's conditions take (`'< today'`, `'<= next 7 days'`, `'>= last 30 days'`), read by the same parser and judged by the App's today, and `format: 'date'` and `'datetime'` accept `tone`. A key that is neither a figure comparison nor a date one is refused with both examples, and on a `date` or `datetime` format every key must be a date comparison (a field report).
+- **`mistri check` names a command a granted role cannot run.** A role granted a command whose `read` names a table the role cannot read is reported as `command-reads-unreadable`, naming the role, command and table, where it passed check and was refused on every run. A signed-in caller's refusal now names the table; a public caller keeps the fixed sentence (a field report).
+- **`mentions` documents `labelColumn`.** The commands reference listed `mentions: { from, by, label?, groups? }`; the key is `labelColumn`, as the loader reads it (a field report).
+- **Shell list and related reads are audited as pages.** `/api/view/run` was matched as the versioned API (`/api/v…`), so with `audit: { reads: true }` its reads were logged as `api` and a picker or related read was not refined; only `/api/v<number>` is the API now.
+- **A QR code always scans.** The `qr` format draws dark modules on a light ground with its quiet zone in every look and by night, fits its container between 128 and 208 pixels, and no longer prints the raw value under it: the value is its accessible name and tooltip (a field report).
+- **A public form's receipt never leads to staff sign-in.** "Back to <App>" is drawn only where it goes somewhere the visitor can: they are signed in, or the App's root is a public landing, a public form or public lists. A signed-out visitor to a sign-in App with none sees "Your reference" alone (a field report).
+
 ## 1.0.0-rc.27
 
 - **Fixed actions in tenant Apps.** A role's `actions` grant (`roles: { clerk: { read: true, actions: { invoice: ['send'] } } }`) now loads and runs in a tenant App. The member's writer admits exactly that update, on the member's own tenant's rows; the button is drawn only for granted roles, and `mistri test init`'s tenant suite aims each granted action at another tenant's record. A platform member's or a support visit's writes get no fixed actions.

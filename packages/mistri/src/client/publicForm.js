@@ -18,6 +18,7 @@ import { served, shown } from '@mistriwork/kit/client/addressMount.js';
 import { firstPaintRead } from '@mistriwork/kit/client/firstPaint.js';
 import { setTabTitle, shellBody, shellQuery } from '@mistriwork/kit/client/shellHost.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
+import { homeHrefFor } from './publicHomeLink.js';
 
 /* Fetched when one is shown: FormDialog brings this module into the App
    shell, whose first paint no saved form is ever on. */
@@ -210,8 +211,8 @@ export function showPublicForm(prepared, page, options = {}) {
       // A files input's files are held for this form as they are sent (components/HeldFiles.tsx).
       held: { form: form.id, ...(via ? { via } : {}) },
       submit: (submission, input, guard) => submitPublicForm(form.id, submission, input, via, guard),
-      // Once received, a quiet way back to the App's home; none where this form is that home (the way back is itself).
-      ...(options.signIn ? {} : { homeHref: shown(`/${encodeURIComponent(app.id)}`) }),
+      // Once received, a quiet way back to the App's home where a visitor can go to it (publicHomeLink.ts); none where this form is that home (the way back is itself).
+      ...(options.signIn ? {} : { homeHref: homeHrefFor(app.id, shown(`/${encodeURIComponent(app.id)}`)) }),
     }),
     // The server drew the form as it opens (server/publicRender.ts): taken over where it stands.
     takeServerDrawing(host, 'form'),

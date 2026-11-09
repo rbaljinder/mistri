@@ -57,7 +57,14 @@ interface TenantRequests {
     connection: string | null | undefined,
     headers?: Readonly<Record<string, string>>,
   ): Promise<unknown>;
-  mutate(path: string, body: unknown, connection: string | null | undefined): Promise<unknown>;
+  /** `headers` say which page runs the command (`x-mistri-page`), as a read's do. */
+  mutate(
+    path: string,
+    body: unknown,
+    connection: string | null | undefined,
+    signal?: AbortSignal,
+    headers?: Readonly<Record<string, string>>,
+  ): Promise<unknown>;
   isMutation(path: string): boolean;
   /** The streamed export on the lease: the file, or the server's answer where it is not one. */
   exportFile?(body: { q: string; format: string; columns: readonly string[] }): Promise<Response>;

@@ -14,7 +14,7 @@ import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
 import { MAX_CUSTOM_FIGURES } from '../packages/engine/src/shared/appComponents.js';
 import { parseAppConfig, resolveViews, type AppDashboardView } from '../packages/mistri/src/shared/app.js';
 import { totalFigure, totalGroups } from '../packages/mistri/src/shared/customTotals.js';
-import { withBreakdownComputed } from '../packages/engine/src/shared/breakdown.js';
+import { withBreakdownComputed, withGroupNames } from '../packages/engine/src/shared/breakdown.js';
 import { parsePagesConfig, validatePage, type PageDef } from '../packages/engine/src/shared/page.js';
 import { planPageSections } from '../packages/engine/src/shared/pagePlans.js';
 
@@ -140,6 +140,30 @@ test('an answer is read by position: one figure, or each group with its key, fig
     ],
   );
   assert.deepEqual(totalGroups([{ status: 'open', count: 7 }]), [{ key: 'open', value: 7 }]);
+  // A reference key's name arrives beside the rows, not in them.
+  assert.deepEqual(
+    totalGroups(
+      [
+        { account_id: 2, count: 3 },
+        { account_id: 9, count: 1 },
+      ],
+      { account_id: { '2': 'Grace' } },
+    ),
+    [
+      { key: 2, value: 3, label: 'Grace' },
+      { key: 9, value: 1 },
+    ],
+  );
+});
+
+test('a figure grouped by a reference names each group by the record it points at', async (t) => {
+  const { adapter, schema } = await database(t, 10);
+  const def = { base: 'sale', by: [{ path: 'account_id' }], measures: [{ fn: 'count' }], limit: 10 } as Parameters<
+    typeof withBreakdownComputed
+  >[1];
+  const answered = withGroupNames(await adapter.runBreakdown!(withBreakdownComputed(schema, def)));
+  const groups = totalGroups(answered.rows, answered.names);
+  assert.deepEqual(groups.map((group) => group.label).sort(), ['Ada', 'Grace']);
 });
 
 const base = {

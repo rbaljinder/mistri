@@ -256,7 +256,7 @@ async function request(path, body, headers) {
     /* The tenant's lease is the shell's (shellMode.ts): a shell that installed none has no tenant to send through. */
     const tenant = shell().tenant;
     if (!tenant) throw Object.assign(new Error(say('theTenantContextIsUnavailable')), { outcome: 'not_applied' });
-    if (tenant.isMutation(parsedPath.pathname)) return await tenant.mutate(path, body, state.activeConnection);
+    if (tenant.isMutation(parsedPath.pathname)) return await tenant.mutate(path, body, state.activeConnection, undefined, headers);
     return await tenant.read(path, body === undefined ? undefined : { ...body }, state.activeConnection, headers);
   }
   if (

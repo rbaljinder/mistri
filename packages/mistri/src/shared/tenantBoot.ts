@@ -166,11 +166,19 @@ const TENANT_BATCH_GETS: ReadonlySet<string> = new Set(['/api/schema', '/api/run
 /** The most reads one batch carries: past it the transport sends another. */
 export const TENANT_BATCH_MOST = 24;
 
-/** One read of a batch: its method, its address as the tenant transport has it before the lease is named in it, its body. */
+/** What a read says it is, where it is not a list's (the kit's `pickerApi`, `relatedApi`): the vocabulary of the `x-mistri-read` header (server/readAudit.ts). */
+const TENANT_BATCH_READ_KINDS: ReadonlySet<string> = new Set(['picker', 'related']);
+type TenantBatchReadKind = 'picker' | 'related';
+
+/**
+ * One read of a batch: its method, its address as the tenant transport has it before the lease is named in it, its body.
+ * `read` is the header it would have carried alone: a batch is one request, so what each read is has to ride on its item.
+ */
 export interface TenantBatchRead {
   readonly method: 'GET' | 'POST';
   readonly path: string;
   readonly body?: Record<string, unknown>;
+  readonly read?: TenantBatchReadKind;
 }
 
 /** Whether a boot request is a batch whose every read is one a batch may carry, as each would be sent alone. */
@@ -180,7 +188,7 @@ export function tenantBatchRequest(input: Readonly<Record<string, unknown>>): re
   const asked: TenantBatchRead[] = [];
   for (const read of reads as unknown[]) {
     if (!read || typeof read !== 'object' || Array.isArray(read)) return undefined;
-    const { method, path, body, ...other } = read as Record<string, unknown>;
+    const { method, path, body, read: kind, ...other } = read as Record<string, unknown>;
     if (
       Object.keys(other).length ||
       (method !== 'GET' && method !== 'POST') ||
@@ -192,7 +200,13 @@ export function tenantBatchRequest(input: Readonly<Record<string, unknown>>): re
     const at = path.split('?')[0];
     if (!TENANT_BATCH_READS.has(at) || (method === 'GET') !== TENANT_BATCH_GETS.has(at)) return undefined;
     if (method === 'GET' ? body !== undefined : !body || typeof body !== 'object' || Array.isArray(body)) return undefined;
-    asked.push(method === 'GET' ? { method, path } : { method, path, body: body as Record<string, unknown> });
+    if (kind !== undefined && (typeof kind !== 'string' || !TENANT_BATCH_READ_KINDS.has(kind))) return undefined;
+    asked.push({
+      method,
+      path,
+      ...(method === 'GET' ? {} : { body: body as Record<string, unknown> }),
+      ...(kind === undefined ? {} : { read: kind as TenantBatchReadKind }),
+    });
   }
   return asked;
 }

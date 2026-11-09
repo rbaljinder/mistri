@@ -85,6 +85,18 @@ export function currentReadRoute(): ReadRoute | undefined {
 /** The header a picker's read (the kit's `pickerApi`) and a related list's (`relatedApi`) carry: the same reads a list makes, said for what they are. */
 const READ_HEADER = 'x-mistri-read';
 
+/**
+ * A batched read's own door: the batch (`POST /api/boot` with `reads`) is one request, so the `x-mistri-read` a picker's
+ * or a related list's read would have carried alone rides on its item, and is read here as the header is. The address
+ * still decides first, and only a page's read is refined, as `readRouteOf` has it.
+ */
+export function withReadKind<T>(path: string, kind: string | undefined, work: () => T): T {
+  const door = doors.getStore();
+  if (!door || door.route !== 'page' || kind === undefined) return work();
+  const route = readRouteOf(path, { [READ_HEADER]: kind });
+  return route === door.route ? work() : doors.run({ ...door, route }, work);
+}
+
 /** How a request's address (and the two headers that say more) names its door; `page` unless it says otherwise. */
 export function readRouteOf(pathname: string, headers: Readonly<Record<string, string | string[] | undefined>> = {}): ReadRoute {
   /* The address decides first: a header only refines a page's read, so no request can relabel an export or an API
@@ -104,7 +116,7 @@ function routeOfPath(pathname: string): ReadRoute {
   if (pathname === '/api/references') return 'picker';
   if (pathname.startsWith('/api/assistant')) return 'assistant';
   if (pathname === '/api/mcp' || pathname.startsWith('/mcp')) return 'mcp';
-  if (pathname.startsWith('/api/v')) return 'api';
+  if (/^\/api\/v\d+(\/|$)/.test(pathname)) return 'api';
   return 'page';
 }
 

@@ -19,12 +19,14 @@ import {
   formatNumber,
   formatPercent,
   formatRelativeDay,
+  appToday,
   daysFromToday,
   NEAR_DAYS,
   sayNearDay,
   withPercentSign,
 } from '../locale.js';
 import { minorFigure } from '@mistriwork/engine/shared/money.js';
+import { dateComparison, dateComparisonHolds } from '@mistriwork/engine/shared/queryDates.js';
 export { yesNoRule } from '../yesNoRule.js';
 import { unitWord } from '@mistriwork/engine/shared/unitWord.js';
 import { planColumn } from '../columns.js';
@@ -211,7 +213,7 @@ function toneFor(rule: DisplayRule, value: unknown, text: string): string | null
   if (exact) return exact;
   const rest = Object.hasOwn(rule.tone, '*') ? rule.tone['*'] : text.trim() ? 'neutral' : null;
   const n = Number(value);
-  if (!Number.isFinite(n)) return rest;
+  if (!Number.isFinite(n)) return dateTone(rule.tone, text) ?? rest;
   for (const [key, tone] of Object.entries(rule.tone)) {
     const m = /^(>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)$/.exec(key);
     if (!m) continue;
@@ -220,6 +222,20 @@ function toneFor(rule: DisplayRule, value: unknown, text: string): string | null
     if (hit) return tone;
   }
   return rest;
+}
+
+/** The first date comparison a day satisfies ("< today", "<= next 7 days"), by the App's today; null for a text that is no day. */
+function dateTone(tones: Record<string, string>, text: string): string | null {
+  const keys = Object.keys(tones).filter((key) => /^[<>]/.test(key));
+  if (!keys.length) return null;
+  const offset = daysFromToday(text);
+  if (offset === null) return null;
+  const today = appToday();
+  for (const key of keys) {
+    const cmp = dateComparison(key);
+    if (cmp && dateComparisonHolds(cmp, offset, today)) return tones[key];
+  }
+  return null;
 }
 
 /** What a display rule makes of a value, or null when the rule does not reach it. */
@@ -525,7 +541,11 @@ function ownDrawing(rule: DisplayRule, value: unknown, text: string): Dress | nu
     case 'datetime': {
       if (typeof value !== 'string' || !text.trim()) return null;
       const said = formatAbsolute(text, { time: rule.format === 'datetime', zone: rule.timezone });
-      return said === text ? null : { kind: 'date', text: said, title: text };
+      if (said === text) return null;
+      /* A day that satisfies a comparison ("<= today": overdue) wears its tone; the date is still said as itself. */
+      const tone = rule.tone ? toneFor(rule, value, text) : null;
+      if (tone && tone !== 'neutral') return { kind: 'tone', tone, text, label: said };
+      return { kind: 'date', text: said, title: text };
     }
     /* A year is a name, not a quantity: 2026, never "2,026". */
     case 'year':
