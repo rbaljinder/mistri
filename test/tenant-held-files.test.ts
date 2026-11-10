@@ -24,6 +24,7 @@ import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/com
 import type { LoadedApp } from '../packages/mistri/src/server/app/apps.js';
 import { createAppAuth, type AppAuthRuntime, type VerifiedSessionInstance } from '../packages/mistri/src/server/auth/auth.js';
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
+import { defineChallenges } from '../packages/mistri/src/server/commands/challenges.js';
 import { field } from '../packages/mistri/src/server/commands/commandFields.js';
 import { literal, shape, text } from '../packages/mistri/src/server/commands/commandShapes.js';
 import { resetPublicFormLimits } from '../packages/engine/src/server/http/rateLimit.js';
@@ -81,7 +82,7 @@ async function maintain(path: string, run: (admin: TenantStoreAdministration) =>
   }
 }
 
-async function publicFixture(t: TestContext) {
+async function publicFixture(t: TestContext, options: { challenge?: boolean } = {}) {
   resetPublicFormLimits();
   const directory = mkdtempSync(join(tmpdir(), 'mistri-held-http-'));
   const business = join(directory, 'business.db');
@@ -120,6 +121,9 @@ async function publicFixture(t: TestContext) {
     path: join(directory, 'app.ts'),
     pages: [],
     sources: {},
+    ...(options.challenge
+      ? { challenges: defineChallenges({ verifyHuman: { verify: async (token: string) => token === 'person' } }) }
+      : {}),
     app: parseTestApp(
       {
         id: appId,
@@ -141,6 +145,7 @@ async function publicFixture(t: TestContext) {
           rows: 'tenant',
           tenancy: { label: 'Dealer', profile: 'dealer', platform: { label: 'Lender' } },
           roles: { staff: { realm: 'tenant', read: true }, manager: { realm: 'platform', read: true } },
+          ...(options.challenge ? { challenge: 'verifyHuman' } : {}),
         },
         views: {
           leads: { kind: 'list', from: 'lead' },
@@ -289,10 +294,10 @@ async function publicFixture(t: TestContext) {
   owner.server.listen(port, '127.0.0.1');
   await once(owner.server, 'listening');
   const request = (path: string, init: RequestInit = {}) => fetch(origin + path, { ...init, signal: AbortSignal.timeout(20000) });
-  const post = (path: string, body: unknown, cookie?: string) =>
+  const post = (path: string, body: unknown, cookie?: string, headers: Record<string, string> = {}) =>
     request(path, {
       method: 'POST',
-      headers: { origin, 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
+      headers: { origin, 'content-type': 'application/json', ...(cookie ? { cookie } : {}), ...headers },
       body: JSON.stringify(body),
     });
   /** Holds a file for the form's field; the visitor's cookie is the one given, or the one this answer sets. */
@@ -400,6 +405,21 @@ test('a visitor holds at most ten files, 25 MB and 10 MB a file', async (t) => {
   const huge = await f.hold(NORTH, file('huge.bin', 10 * MIB + 1));
   assert.equal(huge.response.status, 413, JSON.stringify(huge.body));
   assert.equal(huge.body.code, 'too_large');
+});
+
+test("a tenant App's human check is asked of a file hold as of the submission: no answer, no file held", async (t) => {
+  const f = await publicFixture(t, { challenge: true });
+  const hold = (headers: Record<string, string>) =>
+    f.post(`/api/forms/claim/files${via(NORTH)}`, { field: 'docs', file: file() }, undefined, headers);
+  for (const headers of [{}, { 'x-mistri-challenge': 'robot' }] as Record<string, string>[]) {
+    const refused = await hold(headers);
+    assert.equal(refused.status, 403);
+    assert.equal(object(await refused.json()).code, 'challenge_failed');
+  }
+  assert.equal(f.held(), 0);
+  const passed = await hold({ 'x-mistri-challenge': 'person' });
+  assert.equal(passed.status, 200, await passed.text());
+  assert.equal(f.held(), 1);
 });
 
 test('a tenant form saved on every step takes no public files, and a key that names no form holds none', async (t) => {

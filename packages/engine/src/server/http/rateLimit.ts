@@ -42,7 +42,8 @@ export type RatePart = 'both' | 'client' | 'all';
 
 /** A limiter that decides now (in memory) or once the shared cache has counted. */
 interface WindowLimiter {
-  take(address: string, part?: RatePart): RateDecision | Promise<RateDecision>;
+  /** `weight` is what this request counts for: one, or its size where a window counts bytes. */
+  take(address: string, part?: RatePart, weight?: number): RateDecision | Promise<RateDecision>;
   /** Forget this process's own counts; tests and a policy reload use it. A shared cache's windows expire on their own. */
   reset(): void;
 }
@@ -61,6 +62,10 @@ interface LimiterOptions {
 
 const MAX_CLIENTS = 10_000;
 
+function assertWeight(weight: number): void {
+  if (!Number.isSafeInteger(weight) || weight < 1) throw new Error('A request counts for a positive whole number.');
+}
+
 function assertWindows(windows: readonly RateWindow[]): void {
   if (!windows.length || windows.some((w) => !Number.isSafeInteger(w.limit) || w.limit < 1 || !Number.isFinite(w.ms) || w.ms <= 0)) {
     throw new Error('A rate limiter needs at least one window of a positive limit over a positive span.');
@@ -78,24 +83,24 @@ class Budget {
     this.seen = now;
   }
 
-  /** Roll over the windows that have elapsed; the seconds until the longest exceeded one reopens, or 0. */
-  wait(windows: readonly RateWindow[], now: number): number {
+  /** Roll over the windows that have elapsed; the seconds until the longest one `weight` more would exceed reopens, or 0. */
+  wait(windows: readonly RateWindow[], now: number, weight = 1): number {
     let wait = 0;
     windows.forEach((window, i) => {
       if (now - this.starts[i] >= window.ms) {
         this.starts[i] = now;
         this.counts[i] = 0;
       }
-      if (this.counts[i] >= window.limit) wait = Math.max(wait, Math.ceil((this.starts[i] + window.ms - now) / 1000), 1);
+      if (this.counts[i] + weight > window.limit) wait = Math.max(wait, Math.ceil((this.starts[i] + window.ms - now) / 1000), 1);
     });
     return wait;
   }
 
-  /** Count one request; what is left in the tightest window. */
-  count(windows: readonly RateWindow[]): number {
+  /** Count one request, for `weight`; what is left in the tightest window. */
+  count(windows: readonly RateWindow[], weight = 1): number {
     let remaining = Infinity;
     windows.forEach((window, i) => {
-      this.counts[i]++;
+      this.counts[i] += weight;
       remaining = Math.min(remaining, window.limit - this.counts[i]);
     });
     return remaining;
@@ -148,10 +153,11 @@ export class FixedWindowLimiter implements WindowLimiter {
   }
 
   /** Count one request for the client, or say how long it waits. */
-  take(address: string, part: RatePart = 'both'): RateDecision {
+  take(address: string, part: RatePart = 'both', weight = 1): RateDecision {
+    assertWeight(weight);
     const now = this.now();
     this.expire(now);
-    if (part === 'all') return this.takeShared(now) ?? { ok: true, remaining: Infinity };
+    if (part === 'all') return this.takeShared(now, weight) ?? { ok: true, remaining: Infinity };
     const key = limitKey(address);
     const entry = this.hits.get(key);
     if (entry) {
@@ -159,11 +165,15 @@ export class FixedWindowLimiter implements WindowLimiter {
       this.hits.delete(key);
       this.hits.set(key, entry);
       entry.seen = now;
-      const wait = entry.wait(this.windows, now);
+      const wait = entry.wait(this.windows, now, weight);
+      if (wait > 0) return { ok: false, retryAfterSeconds: wait, scope: 'client' };
+    } else {
+      // A first request heavier than a whole window could never be counted: refused, and nothing tracked for it.
+      const wait = new Budget(this.windows, now).wait(this.windows, now, weight);
       if (wait > 0) return { ok: false, retryAfterSeconds: wait, scope: 'client' };
     }
     const shared = part === 'both' && this.totalWindows ? (this.total ??= new Budget(this.totalWindows, now)) : undefined;
-    const sharedWait = shared ? shared.wait(this.totalWindows!, now) : 0;
+    const sharedWait = shared ? shared.wait(this.totalWindows!, now, weight) : 0;
     if (sharedWait > 0) return { ok: false, retryAfterSeconds: sharedWait, scope: 'all' };
     let budget = entry;
     if (!budget) {
@@ -189,18 +199,18 @@ export class FixedWindowLimiter implements WindowLimiter {
       budget = new Budget(this.windows, now);
       this.hits.set(key, budget);
     }
-    const remaining = budget.count(this.windows);
-    shared?.count(this.totalWindows!);
+    const remaining = budget.count(this.windows, weight);
+    shared?.count(this.totalWindows!, weight);
     return { ok: true, remaining };
   }
 
   /* The shared ceiling alone: a refusal, or undefined once counted (or where there is none). */
-  private takeShared(now: number): RateDecision | undefined {
+  private takeShared(now: number, weight: number): RateDecision | undefined {
     if (!this.totalWindows) return undefined;
     const shared = (this.total ??= new Budget(this.totalWindows, now));
-    const wait = shared.wait(this.totalWindows, now);
+    const wait = shared.wait(this.totalWindows, now, weight);
     if (wait > 0) return { ok: false, retryAfterSeconds: wait, scope: 'all' };
-    shared.count(this.totalWindows);
+    shared.count(this.totalWindows, weight);
     return undefined;
   }
 
@@ -250,22 +260,23 @@ export class SharedWindowLimiter implements WindowLimiter {
     if (totalWindows) assertWindows(totalWindows);
   }
 
-  async take(address: string, part: RatePart = 'both'): Promise<RateDecision> {
+  async take(address: string, part: RatePart = 'both', weight = 1): Promise<RateDecision> {
+    assertWeight(weight);
     try {
       let remaining = Infinity;
       if (part !== 'all') {
-        const client = await this.count(this.windows, `${this.name}:${limitKey(address)}`);
+        const client = await this.count(this.windows, `${this.name}:${limitKey(address)}`, weight);
         if (client.wait > 0) return { ok: false, retryAfterSeconds: client.wait, scope: 'client' };
         remaining = client.remaining;
       }
       if (part !== 'client' && this.totalWindows) {
-        const all = await this.count(this.totalWindows, `${this.name}:*`);
+        const all = await this.count(this.totalWindows, `${this.name}:*`, weight);
         if (all.wait > 0) return { ok: false, retryAfterSeconds: all.wait, scope: 'all' };
       }
       return { ok: true, remaining };
     } catch (error) {
       if (!(error instanceof CacheUnavailable)) throw error;
-      return this.fallback.take(address, part);
+      return this.fallback.take(address, part, weight);
     }
   }
 
@@ -273,11 +284,11 @@ export class SharedWindowLimiter implements WindowLimiter {
     this.fallback.reset();
   }
 
-  private async count(windows: readonly RateWindow[], key: string): Promise<{ wait: number; remaining: number }> {
+  private async count(windows: readonly RateWindow[], key: string, weight: number): Promise<{ wait: number; remaining: number }> {
     let wait = 0;
     let remaining = Infinity;
     for (const [i, window] of windows.entries()) {
-      const { count, ttlMs } = await this.cache.incr(`${key}:${i}`, window.ms);
+      const { count, ttlMs } = await this.cache.incr(`${key}:${i}`, window.ms, weight);
       if (count > window.limit) wait = Math.max(wait, Math.max(1, Math.ceil(ttlMs / 1000)));
       else remaining = Math.min(remaining, window.limit - count);
     }
@@ -351,9 +362,17 @@ const FILE_WINDOWS: readonly RateWindow[] = Object.freeze([
   { limit: 60, ms: 3_600_000 },
 ]);
 const FILE_TOTAL: readonly RateWindow[] = Object.freeze([{ limit: 1_200, ms: 3_600_000 }]);
+/* And the bytes those files carry, counted per client across a day, charged before a file reaches the share every
+   visitor of the App's forms holds together (stagedFiles.ts): without it one client (one cookie per request) could fill
+   that share alone and refuse every other visitor's files. Fifty megabytes is a few applications' worth of documents
+   from one address; a filled share then needs several addresses, each of which the windows above also count. */
+export const PUBLIC_FILE_BYTE_WINDOWS: readonly RateWindow[] = Object.freeze([{ limit: 50 * 1024 * 1024, ms: 86_400_000 }]);
 
 const check = new FixedWindowLimiter(CHECK_WINDOWS, Date.now, { total: CHECK_TOTAL, whenFull: 'evict' });
 const file = new FixedWindowLimiter(FILE_WINDOWS, Date.now, { total: FILE_TOTAL, whenFull: 'refuse' });
+/* `evict`: a day's window, so refusing newcomers once every slot is taken would close the files to everyone for up to a
+   day; a forgotten budget is bounded by the file windows' shared ceiling and the share's own cap. */
+const fileBytes = new FixedWindowLimiter(PUBLIC_FILE_BYTE_WINDOWS, Date.now, { whenFull: 'evict' });
 const submit = new FixedWindowLimiter(PUBLIC_FORM_SUBMIT_WINDOWS, Date.now, { total: PUBLIC_FORM_SUBMIT_TOTAL, whenFull: 'refuse' });
 const read = new FixedWindowLimiter(PUBLIC_FORM_READ_WINDOWS, Date.now, { whenFull: 'evict' });
 const claim = new FixedWindowLimiter(INVITATION_CLAIM_WINDOWS, Date.now, { total: INVITATION_CLAIM_TOTAL, whenFull: 'refuse' });
@@ -372,6 +391,7 @@ let shared:
       code: SharedWindowLimiter;
       check: SharedWindowLimiter;
       file: SharedWindowLimiter;
+      fileBytes: SharedWindowLimiter;
     }
   | undefined;
 
@@ -392,6 +412,11 @@ export function publicFormLimiter(
           : kind === 'code'
             ? code
             : status;
+}
+
+/** The bytes one client may send a public form's files in a day; `take(address, 'client', size)`. */
+export function publicFileByteLimiter(): FixedWindowLimiter | SharedWindowLimiter {
+  return shared ? shared.fileBytes : fileBytes;
 }
 
 /** The invitation claims' own budget (tenantInvitationHttp.ts), never the forms'. */
@@ -421,6 +446,7 @@ export function configurePublicFormLimits(cache: CacheStore | undefined, namespa
     code: new SharedWindowLimiter('code', CODE_WINDOWS, scoped, code, CODE_TOTAL),
     check: new SharedWindowLimiter('check', CHECK_WINDOWS, scoped, check, CHECK_TOTAL),
     file: new SharedWindowLimiter('file', FILE_WINDOWS, scoped, file, FILE_TOTAL),
+    fileBytes: new SharedWindowLimiter('file-bytes', PUBLIC_FILE_BYTE_WINDOWS, scoped, fileBytes),
   };
 }
 
@@ -435,4 +461,5 @@ export function resetPublicFormLimits(): void {
   code.reset();
   check.reset();
   file.reset();
+  fileBytes.reset();
 }

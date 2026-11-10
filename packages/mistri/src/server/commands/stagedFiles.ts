@@ -13,9 +13,11 @@
  *   form's path), so one person's id is no use to another;
  * - by an id of 32 random bytes the sender alone is told; the store keeps its
  *   hash, so the id is never guessable and never read back out;
- * - for a day, within a count and a size per sender, and on a public form
- *   within the form's own share of every visitor's together: what is held is
- *   never readable back, so it is no place to keep anything.
+ * - for a day signed in and an hour on a public form, within a count and a
+ *   size per sender, and on a public form within the bytes one client
+ *   address may send in a day and the App's share of every visitor's
+ *   together: what is held is never readable back, so it is no place to keep
+ *   anything.
  *
  * The command takes them in its own transaction (adapters/commands/
  * commandStaging.ts): deleted as the handler is handed the files, so a
@@ -36,6 +38,9 @@ import type { BusinessCommandActor, CommandFile } from './businessCommands.js';
 
 /** How long a held file waits for its command. */
 const STAGED_FILE_TTL_MS = 24 * 60 * 60 * 1000;
+/** How long a public form's held file waits: a visitor attaches and sends in one sitting, and what a visitor never sent
+    stops counting against the share every visitor holds together within the hour rather than the day. */
+export const PUBLIC_STAGED_FILE_TTL_MS = 60 * 60 * 1000;
 /** What a signed-in person may hold at once. */
 const STAGED_MOST: StagedLimits = Object.freeze({ files: 40, bytes: 200 * 1024 * 1024 });
 /** The most bytes one file sent to a public form may be, whatever its resource takes. */
@@ -98,14 +103,14 @@ export function readVisitorToken(req: Pick<IncomingMessage, 'headers'>, form: st
 /** A new visitor token. */
 export const newVisitorToken = (): string => randomBytes(32).toString('base64url');
 
-/** The Set-Cookie value: HttpOnly, SameSite=Strict, for the form's own API paths, for as long as a held file waits. */
+/** The Set-Cookie value: HttpOnly, SameSite=Strict, for the form's own API paths, for as long as a public held file waits. */
 export function visitorCookie(form: string, token: string, secure: boolean): string {
   const parts = [
     `${visitorCookieName(form)}=${token}`,
     `Path=/api/forms/${form}`,
     'HttpOnly',
     'SameSite=Strict',
-    `Max-Age=${STAGED_FILE_TTL_MS / 1000}`,
+    `Max-Age=${PUBLIC_STAGED_FILE_TTL_MS / 1000}`,
   ];
   if (secure) parts.push('Secure');
   return parts.join('; ');
@@ -198,7 +203,7 @@ export async function stageCommandFile(
           type: media,
           size: bytes.byteLength,
           data: bytes,
-          expiresAt: now + STAGED_FILE_TTL_MS,
+          expiresAt: now + (publicActor ? PUBLIC_STAGED_FILE_TTL_MS : STAGED_FILE_TTL_MS),
         },
         publicActor ? PUBLIC_STAGED_MOST : STAGED_MOST,
         now,

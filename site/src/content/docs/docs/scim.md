@@ -39,7 +39,7 @@ That entry goes in `mistri.json` beside the [identity provider](/docs/identity-p
 - **Accounts.** A verified address is linked to its account; an unverified one loses its earlier sign-in methods first; anyone else gets an account with no password, who signs in through the provider.
 - **Leavers.** A deactivated or deleted person is banned, their sessions end, and their API tokens and OAuth grants are revoked. Reactivating lifts only that ban; revoked tokens stay revoked.
 - **A tenant's own.** With a tenant's provider, the directory makes and ends that tenant's memberships, never the global account; a membership it ends or changes ends the API tokens and OAuth grants made for it. The tenant policy needs `administration` or `invitations`.
-- **Limits.** Each directory gets 600 requests a minute.
+- **Limits.** Each directory gets 600 requests a minute. A caller without a directory's token is counted by its address, and a change it sends is a 401 before its body is read.
 
 ## Common mistakes
 

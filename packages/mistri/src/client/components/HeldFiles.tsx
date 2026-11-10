@@ -30,8 +30,14 @@ import './HeldFiles.css';
 
 const FilePreview = onDemand(() => import('@mistriwork/kit/client/components/FilePreview.js'), 'FilePreview', { quiet: true });
 
-/** Where a form's files are held: a signed-in reader's command, on its connection; or a public form's, by its key. */
-export type HeldTarget = { command: string; connection?: string } | { form: string; via?: string };
+/**
+ * Where a form's files are held: a signed-in reader's command, on its connection; or a public form's, by its key. A
+ * public form whose App asks a human check asks it of every file held as of the submission, so it hands its guard
+ * here: a token answers one request, so each file takes one and asks the widget for the next.
+ */
+export type HeldTarget =
+  | { command: string; connection?: string }
+  | { form: string; via?: string; guard?: { take(): Promise<string | undefined>; reset(): void } };
 
 interface Held extends HeldFileInfo {
   id: string;
@@ -72,6 +78,10 @@ function holdFile(target: HeldTarget, field: string, file: File, progress: (frac
     if ('form' in target) {
       url = `/api/forms/${encodeURIComponent(target.form)}/files${target.via ? `?via=${encodeURIComponent(target.via)}` : ''}`;
       body = sent;
+      if (target.guard) {
+        const token = await target.guard.take();
+        if (token) headers['x-mistri-challenge'] = token;
+      }
     } else {
       const scoped = scopeApiRequest(
         COMMAND_ROUTES.files,
@@ -113,6 +123,11 @@ function holdFile(target: HeldTarget, field: string, file: File, progress: (frac
       xhr.send(JSON.stringify(body));
     });
   })();
+  // Spent or not, the token went with this request: the widget is asked for a fresh one for the next.
+  if ('form' in target && target.guard) {
+    const { reset } = target.guard;
+    void done.then(reset, reset);
+  }
   return { done, abort: () => xhr.abort() };
 }
 

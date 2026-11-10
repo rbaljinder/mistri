@@ -58,7 +58,7 @@ A starter about the open record belongs on that record only:
 starters: ['Which tickets are mine?', { text: 'Summarize this ticket', records: ['incident'] }, { text: 'Find stale deals', views: ['pipeline'] }],
 ```
 
-It reads and proposes only what the signed-in person may: their roles, fields and verbs. The server needs
+It reads and proposes only what the signed-in person may: their roles, fields and verbs. A proposed new record fills only the fields its New form shows. The server needs
 `ANTHROPIC_API_KEY` in its environment, never in the App, and the database needs its store
 (its conversations, turns and token counts, in the database beside the App's records; a tenant App's, beside its tenant source). Serving never creates or alters it. `mistri migrate stores up --app <dir>` makes it, `mistri migrate stores status` lists it, and a script can call `provisionStores(<the database>, { app: { definition } })` from `@mistriwork/mistri/maintenance` instead (`only: ['assistant']` names it alone and is refused for an App with no `assistant`).
 What it reads to answer (rows, fields, the open record) is sent to the model provider (Anthropic) with each turn;

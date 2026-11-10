@@ -47,6 +47,16 @@ test('two instances over one cache spend one budget per client', async () => {
   assert.equal((await a.take('2001:db8::3')).ok, false);
 });
 
+test('a weighted take is counted by its weight across instances', async () => {
+  const bytes = [{ limit: 100, ms: 60_000 }];
+  const a = new SharedWindowLimiter('t-bytes', bytes, cache(), new FixedWindowLimiter(bytes));
+  const b = new SharedWindowLimiter('t-bytes', bytes, cache(), new FixedWindowLimiter(bytes));
+  assert.deepEqual(await a.take('192.0.2.9', 'client', 60), { ok: true, remaining: 40 });
+  assert.deepEqual(await b.take('192.0.2.9', 'client', 40), { ok: true, remaining: 0 });
+  assert.equal((await a.take('192.0.2.9', 'client', 1)).ok, false);
+  assert.equal((await b.take('192.0.2.10', 'client', 100)).ok, true);
+});
+
 test('the shared ceiling holds across clients and instances', async () => {
   const total = [{ limit: 3, ms: 60_000 }];
   const a = new SharedWindowLimiter('t2', WINDOWS, cache(), new FixedWindowLimiter(WINDOWS), total);

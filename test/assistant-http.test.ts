@@ -76,7 +76,13 @@ function recording(script: AssistantScript, requests: ModelRequest[], usage?: nu
 
 async function fixture(
   run: (f: Fixture) => Promise<void>,
-  options: { script?: AssistantScript; assistant?: Record<string, unknown>; usage?: number | ModelUsage; model?: false } = {},
+  options: {
+    script?: AssistantScript;
+    assistant?: Record<string, unknown>;
+    usage?: number | ModelUsage;
+    model?: false;
+    leadForm?: Record<string, unknown>;
+  } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-assistant-http-'));
   const file = join(directory, 'fixture.db');
@@ -97,6 +103,7 @@ async function fixture(
         person: {},
         lead: {
           access: 'write',
+          ...(options.leadForm ? { form: options.leadForm } : {}),
           actions: {
             startWorking: { label: 'Start working', set: { status: 'working' }, when: 'status = new' },
             markLost: { label: 'Mark lost', set: { status: 'lost' } },
@@ -242,6 +249,37 @@ test('a role without the verb can neither describe nor run it, whatever the mode
               { tools: [{ name: 'describe', input: { action: 'lead.startWorking' } }] },
               { tools: [{ name: 'run', input: { action: 'lead.startWorking', id: 1 } }] },
               { text: 'I could not.' },
+            ],
+          },
+        ],
+      },
+    },
+  );
+});
+
+test('a proposed New record fills only the fields its form asks: a field the form does not show is refused', async () => {
+  await fixture(
+    async ({ turn, db }) => {
+      const first = await turn({ text: 'add a lead' });
+      const steps = of(first.events, 'step').filter((step) => step.tool === 'run');
+      assert.equal(steps.length, 2);
+      assert.equal(steps[0].failed, true);
+      assert.match(steps[0].label, /The New lead form has no field "notes"/);
+      const [proposal] = of(first.events, 'proposal');
+      assert.equal(proposal.proposal.kind, 'new');
+      assert.deepEqual(proposal.proposal.values, { name: 'Initech', status: 'new' });
+      assert.equal((db.prepare('SELECT count(*) AS n FROM lead').get() as { n: number }).n, 2, 'nothing written');
+    },
+    {
+      leadForm: { show: ['name', 'status'] },
+      script: {
+        turns: [
+          {
+            when: 'add a lead',
+            steps: [
+              { tools: [{ name: 'run', input: { action: 'lead.new', values: { name: 'Initech', notes: 'hidden from the form' } } }] },
+              { tools: [{ name: 'run', input: { action: 'lead.new', values: { name: 'Initech', status: 'new' } } }] },
+              { text: 'Proposed.' },
             ],
           },
         ],

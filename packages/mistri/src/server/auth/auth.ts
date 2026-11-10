@@ -1770,7 +1770,8 @@ export async function createAppAuth(
             .end(JSON.stringify({ error: 'not_found' }));
           return;
         }
-        if (provisioning && path.startsWith(`${under}/api/auth/scim/`)) return provisioning.serve(req, res);
+        if (provisioning && path.startsWith(`${under}/api/auth/scim/`))
+          return provisioning.serve(req, res, String(req.headers[CLIENT_ADDRESS_HEADER]));
         if (embedExchange && path === `${under}/api/auth/embed/exchange`) return embedExchange.exchange(req, res);
         if (embedExchange && path === `${under}/api/auth/embed/sign-out`) return embedExchange.signOut(req, res);
         /* Better Auth's own admin endpoints judge the role the account has

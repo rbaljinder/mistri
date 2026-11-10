@@ -30,7 +30,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { Server } from 'node:http';
+import { request, type IncomingMessage, type Server } from 'node:http';
 import { createApp } from './support/createApp.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { loadApp, type AppHost, type LoadedApp } from '../packages/mistri/src/server/app/apps.js';
@@ -410,6 +410,15 @@ describe('SCIM provisioning', () => {
     assert.equal(made.status, 201, made.text);
     assert.equal((await scim(`/Users/${made.json.id}`, { token: OKTA_TOKEN })).status, 404);
     assert.equal((await scim('/Users', { token: OKTA_TOKEN })).json.totalResults, 0);
+    /* Nor change or end them: the plugin finds a user only among the acting connection's own (findSCIMUser). */
+    const target = `/Users/${made.json.id}`;
+    const deactivate = { schemas: [PATCH], Operations: [{ op: 'Replace', path: 'active', value: 'False' }] };
+    assert.equal((await scim(target, { method: 'PATCH', body: deactivate, token: OKTA_TOKEN })).status, 404);
+    const replaced = entraUser('rae@crew.example', 'e-rae', false);
+    assert.equal((await scim(target, { method: 'PUT', body: replaced, token: OKTA_TOKEN })).status, 404);
+    assert.equal((await scim(target, { method: 'DELETE', token: OKTA_TOKEN })).status, 404);
+    assert.equal(user('rae@crew.example')!.banned, 0);
+    assert.equal((await scim(target)).json.active, true);
   });
 
   test('a new person gets an account with no password; a verified one is linked; an unverified one loses what it held', async () => {
@@ -573,6 +582,35 @@ describe('SCIM provisioning', () => {
     const limited = await scim('/Users', { token: OKTA_TOKEN });
     assert.equal(limited.status, 429);
     assert.ok(limited.headers.get('retry-after'));
+    assert.equal((await scim('/Users')).status, 200);
+  });
+
+  test('a change with no known bearer is refused before its body is read, and strangers are counted by address', async () => {
+    /* A megabyte promised and a few bytes sent: an answer before the rest arrives is one that never read it. */
+    for (const authorization of [undefined, 'Bearer not-the-token-0123456789abcdefghijklmn']) {
+      const answered = await new Promise<IncomingMessage>((resolve, reject) => {
+        const req = request(`${origin}/api/auth/scim/v2/Users`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/scim+json',
+            'content-length': String(1024 * 1024),
+            ...(authorization ? { authorization } : {}),
+          },
+        });
+        req.once('response', resolve);
+        req.once('error', reject);
+        req.write('{"schemas":');
+      });
+      assert.equal(answered.statusCode, 401, authorization ?? 'no bearer');
+      assert.equal(answered.headers['www-authenticate'], 'Bearer');
+      answered.resume();
+      answered.socket.destroy();
+    }
+    /* The old shared key spends no one's minute now; this address's own one does, and never a directory's. */
+    for (let i = 0; i < 600; i++) await signInState.consume('scim:-', { window: 60, max: 600 });
+    assert.equal((await scim('/Users', { token: null })).status, 401);
+    for (let i = 0; i < 600; i++) await signInState.consume('scim-address:127.0.0.1', { window: 60, max: 600 });
+    assert.equal((await scim('/Users', { token: null })).status, 429);
     assert.equal((await scim('/Users')).status, 200);
   });
 });

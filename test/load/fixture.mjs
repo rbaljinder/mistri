@@ -127,6 +127,8 @@ export async function startOwnedServer(directory, fixture, signal, production = 
   }
   env.MISTRI_OPEN = '0';
   env.MISTRI_CLOCK = '2026-09-08T12:00:00Z';
+  /* The pin is a test's: a server refuses it outside mistri dev and NODE_ENV=test (http/clock.ts). */
+  env.NODE_ENV = 'test';
   const args = [
     ...launch.entry,
     '--config',

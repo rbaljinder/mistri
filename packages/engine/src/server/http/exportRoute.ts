@@ -8,8 +8,12 @@
  * and 175 ms of a blocked event loop at the ceiling), with a total counted
  * beside it that the file never used. Here a batch is read, written, and let
  * go, so memory stays flat whatever the size, the first byte leaves after
- * the first batch, and nothing is counted. There is no row ceiling: a file
- * holds every row the question matches, or as many as its own `limit` says.
+ * the first batch, and nothing is counted. A file paged by key has no row
+ * ceiling: it holds every row the question matches, or as many as its own
+ * `limit` says. A file paged by offset does (`EXPORT_OFFSET_ROWS`): each of
+ * its batches reads past every row before it, so its cost grows with the
+ * square of its length, and one past the ceiling is refused before a byte is
+ * written. A person has at most `EXPORTS_IN_FLIGHT` files streaming at once.
  *
  * The next batch is read only once the last has been handed on: a write the
  * connection cannot take yet waits for it to drain (backpressure), so a slow
@@ -64,6 +68,13 @@ const EXPORT_PATH = '/api/export';
  * large enough that a million-row file is a thousand reads, small enough that
  * one batch is never a memory event. */
 export const EXPORT_BATCH = 1000;
+/** The most rows a file paged by offset holds, as many as the old one-read export did: past it the database reads
+ * every row before each batch again, so a deeper file is refused (`export_too_large`) rather than ground out. */
+export const EXPORT_OFFSET_ROWS = 100_000;
+/** Files one person streams at once. Each holds a connection and a statement at a time for as long as its client
+ * reads, so a few clients that read slowly could otherwise hold every connection the pool has. */
+export const EXPORTS_IN_FLIGHT = 2;
+const inFlight = new Map<string, number>();
 const FORMATS = {
   csv: { type: 'text/csv', extension: 'csv' },
   json: { type: 'application/json', extension: 'json' },
@@ -100,6 +111,8 @@ interface ExportAsked {
   headers?: Record<string, string>;
   /** A reply that is not the file (a refusal, the question's errors), sent the host's way. */
   answer?: (status: number, body: unknown) => void;
+  /** Who is exporting, counted against `EXPORTS_IN_FLIGHT`; the client's address where no one is named. */
+  who?: string;
 }
 
 export async function exportRoute(post: PostContext, hooks: ExportHooks): Promise<boolean> {
@@ -112,6 +125,7 @@ export async function exportRoute(post: PostContext, hooks: ExportHooks): Promis
     schema: post.schema,
     now: post.appNow,
     may: hooks.may(post),
+    ...(post.who ? { who: post.who } : {}),
     ...(person ? { person: (text: string) => person(post, text) } : {}),
     ...(amounts ? { amounts: (tableId: string) => amounts(post, tableId) } : {}),
   });
@@ -137,6 +151,19 @@ export async function exportFile(asked: ExportAsked): Promise<(() => void) | und
     answer(403, { error: 'Export is not available to this person.' });
     return undefined;
   }
+  /* Counted until the response closes, whichever way it ends: a refusal, the file, or a client that left. */
+  const who = asked.who ?? `address:${res.req?.socket?.remoteAddress ?? ''}`;
+  const running = inFlight.get(who) ?? 0;
+  if (running >= EXPORTS_IN_FLIGHT) {
+    answer(429, { code: 'too_many_exports', error: `At most ${EXPORTS_IN_FLIGHT} exports run at once. Wait for one to finish.` });
+    return undefined;
+  }
+  inFlight.set(who, running + 1);
+  res.once('close', () => {
+    const left = (inFlight.get(who) ?? 1) - 1;
+    if (left > 0) inFlight.set(who, left);
+    else inFlight.delete(who);
+  });
   const format = body.format ?? 'csv';
   if (typeof format !== 'string' || !Object.hasOwn(FORMATS, format)) {
     answer(400, { error: 'format must be "csv", "json" or "ndjson".' });
@@ -168,6 +195,7 @@ export async function exportFile(asked: ExportAsked): Promise<(() => void) | und
       const base = findTable(schema, view.base);
       /* A union pages by offset: its rows have no one key order across branches (unionReads.ts), as the list's. */
       const keyed = base && !base.union ? base : undefined;
+      const byOffset = !keyed || !viewPaging(schema, keyed, view, undefined);
       let step: PageStep | undefined;
       const read = async (offset: number, size: number) => {
         const paging = keyed && viewPaging(schema, keyed, view, step);
@@ -198,6 +226,7 @@ export async function exportFile(asked: ExportAsked): Promise<(() => void) | und
         requested(body) ?? undefined,
         amountsOf(view.base),
         asked.headers,
+        byOffset ? answer : undefined,
       );
     }
   }
@@ -218,6 +247,7 @@ export async function exportFile(asked: ExportAsked): Promise<(() => void) | und
     if (!may(reached)) return refuseTable(answer, reached === UNKNOWN_TABLE ? table.id : reached);
   /* The order the list reads in, made total with the key; an offset batch reads in it too. */
   const order = tableDialect(schema, table) === 'http' && !query.orderBy?.length ? undefined : resolveOrder(table, query.orderBy).order;
+  const byOffset = table.union || !recordsPaging(table, tableDialect(schema, table), query.orderBy, wanted, query.filter, undefined);
   let step: PageStep | undefined;
   const read = async (offset: number, size: number) => {
     /* A union pages by offset: its rows have no one key order across branches (unionReads.ts), as the list's. */
@@ -248,7 +278,17 @@ export async function exportFile(asked: ExportAsked): Promise<(() => void) | und
     step = settled.bounds ? { after: settled.bounds.last } : undefined;
     return { columns: settled.columns, rows: settled.rows };
   };
-  return stream(res, format as Format, table.id, rowsWanted(query.limit), read, wanted, amountsOf(table.id), asked.headers);
+  return stream(
+    res,
+    format as Format,
+    table.id,
+    rowsWanted(query.limit),
+    read,
+    wanted,
+    amountsOf(table.id),
+    asked.headers,
+    byOffset ? answer : undefined,
+  );
 }
 
 function refuseTable(answer: (status: number, body: unknown) => void, tableId: string): undefined {
@@ -365,6 +405,8 @@ async function stream(
   wanted: string[] | undefined,
   amounts?: (row: Record<string, unknown>) => Record<string, unknown>,
   headers: Record<string, string> = {},
+  /** Where the file pages by offset: how a file past `EXPORT_OFFSET_ROWS` is refused. */
+  byOffset?: (status: number, body: unknown) => void,
 ): Promise<(() => void) | undefined> {
   /* A client that leaves stops the read in flight (the adapters watch this signal) and every one after it. */
   const stop = new AbortController();
@@ -374,6 +416,19 @@ async function stream(
   res.once('close', left);
   const reading = (offset: number) => withCancellation(stop.signal, () => read(offset, Math.min(EXPORT_BATCH, total - offset)));
   try {
+    /* One row read past the ceiling says, before a byte is written, whether the file would go deeper than an offset
+       read should: one read as deep as the ceiling, rather than a file that reads deeper with every batch. */
+    if (byOffset && total > EXPORT_OFFSET_ROWS) {
+      const beyond = await withCancellation(stop.signal, () => read(EXPORT_OFFSET_ROWS, 1));
+      if (stop.signal.aborted) return undefined;
+      if (beyond.rows.length) {
+        byOffset(422, {
+          code: 'export_too_large',
+          error: `This export is more than ${EXPORT_OFFSET_ROWS.toLocaleString('en-US')} rows, and its rows are read by position. Narrow the question, or give it a limit.`,
+        });
+        return undefined;
+      }
+    }
     /* The first batch is read before a byte is written: a refusal, a column
        that does not exist, a database that is down all still answer as the
        ordinary error they are, through the handler's own mapping. */

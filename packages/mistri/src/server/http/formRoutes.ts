@@ -415,8 +415,9 @@ export async function publicFormRoutes(ctx: RequestContext): Promise<boolean> {
 /**
  * A file sent to be held for a public form's command: only a stock form an ordinary App serves, only for a files or
  * signature field its command declares (stagedFiles.ts says no to any other), within its own budget per client and
- * across every visitor, and for this visitor alone, by their cookie. The human check is the submission's: a
- * provider's token answers one request, and a form's files are several.
+ * across every visitor, within the bytes one client may send in a day, and for this visitor alone, by their cookie.
+ * The App's human check is asked here as on the submission: a hold writes, and unasked it was the one public door a
+ * script could fill without answering. A provider's token answers one request, so each file asks the check again.
  */
 async function publicFileHold(ctx: RequestContext, named: [string, AppFormView] | undefined): Promise<true> {
   const { req, res, registry, commands, signedIn, policy, policyUnavailable, bound } = ctx;
@@ -439,10 +440,15 @@ async function publicFileHold(ctx: RequestContext, named: [string, AppFormView] 
   // ordinary App through its entry connection. A saved or placed form, and a tenant App's, are closed for now.
   const held = policy?.holdPublicFile;
   if (isSavedForm(form) || isTenantApp(app)) return closed(res);
+  // Read from its header, before the body: a refused hold costs no upload and spends no budget every visitor shares.
+  if (!(await challengeAnswered(signedIn, req, address))) {
+    send(res, 403, { code: 'challenge_failed', error: CHALLENGE_REFUSAL });
+    return true;
+  }
   if (policy || isRowPolicyApp(app)) {
     if (!held || !isRowPolicyApp(app) || policy?.publicPlacement?.isPlacedForm(key)) return closed(res);
     if (await rateLimited(res, ['file'], address, 'all')) return true;
-    await holdPolicyFileHttp(ctx, key, held, secureRequest(req, bound.trustedProxies));
+    await holdPolicyFileHttp(ctx, key, held, secureRequest(req, bound.trustedProxies), address);
     return true;
   }
   if (!commands || commands.appId !== app.id) return closed(res);
@@ -458,6 +464,7 @@ async function publicFileHold(ctx: RequestContext, named: [string, AppFormView] 
     key,
     command: form.command.id,
     secure: secureRequest(req, bound.trustedProxies),
+    address,
   });
   return true;
 }

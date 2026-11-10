@@ -71,7 +71,11 @@ menu, and a file that reaches another table through a reference
 (`incident show id, service_id.name`), a rollup or a computed column needs the
 grant for that table too. A list of a table the person may not export reads at
 most 2,000 rows at a time. `ui.export: false` refuses every file, over any
-grant, and in an App without role grants it is the one switch.
+grant, and in an App without role grants it is the one switch. A person streams
+at most two files at once; a third is a 429 until one ends. A file whose rows
+are read by position (a table with no key, a union, or an order its key cannot
+continue) stops at 100,000 rows: past that it is a 422 before a byte is sent,
+and a filter or a `limit` brings it back within.
 
 A role cannot widen a resource's ceiling. All keys:
 [the generated reference](/docs/dsl-auth/). Every grant is a line of

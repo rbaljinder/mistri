@@ -62,6 +62,8 @@ const PINNED = {
   LINTEL_TODAY: TODAY,
   TABLEWALK_CLOCK: CLOCK,
   MISTRI_CLOCK: CLOCK,
+  /* The pin is a test's: a server refuses it outside mistri dev and NODE_ENV=test (http/clock.ts). */
+  NODE_ENV: 'test',
 };
 
 /** How each sample App's database is made. Each seeder writes `<db>.json` (or this does), naming the connection. */

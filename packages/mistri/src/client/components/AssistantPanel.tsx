@@ -69,6 +69,7 @@ import { ASSISTANT_PAGE, dashViewKey, formViewKey, resourceOf } from '@mistriwor
 import { startersHere } from '../../shared/appAssistant.js';
 import { rootMatches } from '@mistriwork/kit/client/components/pageModel.js';
 import { formProps } from '@mistriwork/kit/client/insert.js';
+import { formShownFields } from '@mistriwork/engine/shared/form.js';
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import { pathEqualityFilter, recordKey as checkedRecordKey } from '@mistriwork/kit/client/resourceRequests.js';
 import { updateAttempts } from '@mistriwork/kit/client/updateAttempts.js';
@@ -415,7 +416,14 @@ function ProposalCard({ proposal, outcome, live, onResolve, onFollow }: CardProp
     const view = Object.values(app?.views ?? {}).find(
       (each) => (each as { table?: string; form?: unknown }).table === proposal.resource && (each as { form?: unknown }).form,
     ) as { form?: { defaults?: Record<string, unknown> } } | undefined;
-    const form = { ...(view?.form ?? {}), defaults: { ...(view?.form?.defaults ?? {}), ...proposal.values } };
+    /* A proposal fills only the fields the form shows. Its values ride in as defaults, and a default for a column the
+       form does not show is still written (insertValues): one the model named outside the form would be written
+       unseen. The server refuses those (assistantTools.ts propose); this holds for a proposal that predates it. */
+    const asked = new Set(
+      formShownFields(view?.form as never) ?? table.columns.filter((column) => !column.primaryKey).map((column) => column.name),
+    );
+    const proposed = Object.fromEntries(Object.entries(proposal.values).filter(([name]) => asked.has(name)));
+    const form = { ...(view?.form ?? {}), defaults: { ...(view?.form?.defaults ?? {}), ...proposed } };
     const host = document.createElement('div');
     host.className = 'insert-host';
     portalRoot().append(host);

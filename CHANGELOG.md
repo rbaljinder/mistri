@@ -5,6 +5,18 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.36
+
+Security fixes from a review of rc.5 to rc.35.
+
+- **Public file holds are bounded per address.** A signed-out visitor's held files were bounded per visitor cookie (10 files, 25 MB) and by one App-wide quota (256 MB), so one address minting cookies could fill the shared quota for everyone. An address may now hold 50 MB a day, checked before the shared quota, and is refused with 429 `too_many_files` past it. A held file lives one hour, and holding one needs the form's human check, as the submission does: each file takes its own token.
+- **The App clock cannot be pinned in production.** `MISTRI_CLOCK` and `--as-of` are ignored when `NODE_ENV` is `production`, and refused by a served build or a process that is neither `mistri dev` nor `NODE_ENV=test`.
+- **A public form's `via` address says nothing about what exists.** An unknown address and one that is not public get the same answer.
+- **Exports are bounded.** A person (or, signed out, an address) has at most two exports in flight; a third gets 429 `too_many_exports`. An export paged by offset past 100,000 rows is refused with 422 `export_too_large` before the file starts, since each page costs more the deeper it reads.
+- **The assistant proposes only fields the New form shows.** A proposed record naming a field the form hides is refused by the server, and the panel draws only the shown fields.
+- **Cloudflare mail sends attachments as base64.** `@mistriwork/cloudflare` encoded attachment content as text by default, which corrupted binary files.
+- **SCIM refuses before it reads.** A write with no known bearer token gets 401 before its body is read, and the rate limit counts per directory, or per address when no token is known. One directory cannot change or delete another's users (404).
+
 ## 1.0.0-rc.35
 
 Faster reads and commands in tenant Apps on SQLite.

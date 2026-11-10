@@ -68,11 +68,11 @@ export async function startFakeValkey(options: { password?: string; port?: numbe
       case 'DEL':
         return encode(rest.filter((key) => store.delete(key)).length);
       case 'EVAL': {
-        const [, , key, ttl] = rest;
+        const [, , key, ttl, by = '1'] = rest;
         const entry = live(key);
         const next = entry
-          ? { value: String(Number(entry.value) + 1), expires: entry.expires }
-          : { value: '1', expires: Date.now() + Number(ttl) };
+          ? { value: String(Number(entry.value) + Number(by)), expires: entry.expires }
+          : { value: by, expires: Date.now() + Number(ttl) };
         store.set(key, next);
         return encode([Number(next.value), next.expires - Date.now()]);
       }

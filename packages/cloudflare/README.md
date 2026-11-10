@@ -33,7 +33,8 @@ and `scheduled` (a once-a-minute `/readyz` that starts the instance if a host re
 
 `forwardEmail(message, env, { binding, instance, secretEnv, parse })` signs an inbound message (HMAC-SHA-256 over
 `<timestamp>.<body>`) and posts it to the App's `/api/mail/inbound` through the Durable Object. Hand it the parser:
-`parse: (raw) => PostalMime.parse(raw, { attachmentEncoding: 'base64' })`; this package carries none. A 2xx or a replayed delivery (409) is done; a 404, 413, 400 or 422 rejects the message with
+`parse: (raw) => PostalMime.parse(raw)`; this package carries none. An attachment's bytes are sent as base64
+whichever way the parser hands them (an `ArrayBuffer`, a typed array, or base64 text already). A 2xx or a replayed delivery (409) is done; a 404, 413, 400 or 422 rejects the message with
 a reason; anything else (401, 403, 429, 5xx) throws, so a signing or configuration fault is retried and logged rather
 than finishing as if the mail were forwarded.
 

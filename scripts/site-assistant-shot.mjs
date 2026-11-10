@@ -60,6 +60,8 @@ const server = spawn(
       ANTHROPIC_API_KEY: '',
       MISTRI_ASSISTANT_SCRIPT: join(ROOT, 'scripts/site-assistant-shot.json'),
       MISTRI_CLOCK: CLOCK,
+      /* The pin is a test's: a server refuses it outside mistri dev and NODE_ENV=test (http/clock.ts). */
+      NODE_ENV: 'test',
       MISTRI_OPEN: '0',
       XDG_CONFIG_HOME: join(work, 'config'),
     },
