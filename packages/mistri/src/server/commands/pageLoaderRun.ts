@@ -111,7 +111,7 @@ export async function runPageLoader(options: {
             db: db as never,
             params: Object.freeze({ ...options.params }),
             viewer: options.viewer,
-            now: options.now,
+            now: () => options.now,
             signal: controller.signal,
           }),
         ),

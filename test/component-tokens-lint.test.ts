@@ -139,3 +139,18 @@ test("a shared package's declared cssPrefix owns its classes; the App's own pack
   const classes = warnings.map((w) => /"\.([\w-]+)"/.exec(w.text)?.[1]).sort();
   assert.deepEqual(classes, ['acmes', 'app-card'], 'only a class outside every declared name-space warns');
 });
+
+test("the looks' own shadow tokens and a blur-free inset stripe are not a shadow warning; any other shadow still is", async () => {
+  const fine = await lint({
+    'tile.css':
+      '.c-tile { box-shadow: var(--shadow-panel); } .c-tile:hover { box-shadow: var(--shadow-pop), var(--shadow-modal); } .c-tile[aria-selected] { box-shadow: inset 3px 0 0 var(--accent); }',
+  });
+  assert.deepEqual(
+    fine.warnings.map((w) => w.text),
+    [],
+  );
+  const odd = await lint({
+    'tile.css': '.c-tile { box-shadow: 0 8px 24px rgba(0,0,0,.3); } .c-tile b { box-shadow: var(--shadow-nope); }',
+  });
+  assert.ok(odd.warnings.some((w) => /a shadow/.test(w.text)));
+});

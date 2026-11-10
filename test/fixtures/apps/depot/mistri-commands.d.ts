@@ -30,6 +30,13 @@ export type Commands = {
 /** Each free-form page's loader by its name, as the commands module exports them: what a page's `data` is typed from. */
 export type Loaders = typeof import("./commands.ts").loaders;
 
+/** Each free-form page's loader, by the page's path (null: it names none): what `PageProps<'<path>'>` types its `data` from. */
+export type PageLoaders = {
+  "pick-board": null;
+  "pick-walk": "pickWalk";
+  "product-gallery": null;
+};
+
 /** Each free-form page by its path (pages/<path>.page.tsx): what the App's `home` may name beside its views. */
 export type PagePaths = "pick-board" | "pick-walk" | "product-gallery";
 
@@ -47,5 +54,5 @@ export type ViewKeys = "bins" | "catalog" | "count-sheet" | "customers" | "cycle
 export type ActionNames = "discontinue" | "reactivate";
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { commands: Commands; loaders: Loaders; pagePaths: PagePaths; actions: ActionNames; forms: FormCommands; views: ViewKeys }
+  interface Register { commands: Commands; loaders: Loaders; pagePaths: PagePaths; pageLoaders: PageLoaders; actions: ActionNames; forms: FormCommands; views: ViewKeys }
 }

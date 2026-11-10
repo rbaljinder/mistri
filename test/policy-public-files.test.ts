@@ -170,7 +170,7 @@ test('a public upload under row policy is held and taken into the fixed destinat
   const sent = await f.submit(held.cookie, [id], 'public-submission-0001');
   assert.equal(sent.status, 200);
   const receipt = JSON.parse(sent.text) as Record<string, unknown>;
-  assert.deepEqual(Object.keys(receipt).sort(), ['receipt', 'reference']);
+  assert.deepEqual(Object.keys(receipt).sort(), ['message', 'receipt', 'reference']);
   assert.ok(!sent.text.includes(id));
   const rows = f.db.prepare('SELECT desk, file_name, byte_size, data FROM inbox_file').all() as Array<{
     desk: number;

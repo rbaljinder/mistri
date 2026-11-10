@@ -47,7 +47,7 @@ async function askTicket(page: string): Promise<Ticket | undefined> {
 /** The public command `id` of the public page `page`, served as `reference`. */
 export function publicPageCommand(page: string, id: string, reference: AppFormCommandReference): UiCommandHandle {
   let ticket: Promise<Ticket | undefined> = askTicket(page);
-  const label = humanName(id);
+  const label = reference.label ?? humanName(id);
 
   const send = async (input: Record<string, unknown>, submission: string, options: UiCommandOptions) => {
     let held = await ticket;
@@ -102,9 +102,11 @@ export function publicPageCommand(page: string, id: string, reference: AppFormCo
        it is, or follow with a navigation of its own. */
     if (answer.status === 200 && typeof answer.body.reference === 'string') {
       const reference = answer.body.reference;
+      /* The command's own words, where its handler returned a `message`; else the platform's, built from its name. */
+      const own = typeof answer.body.message === 'string' && answer.body.message.trim() ? answer.body.message : undefined;
       return {
         status: 'applied',
-        message: say('publicReceived', { label: said, reference }),
+        message: own ?? say('publicReceived', { label: said, reference }),
         output: { reference, receipt: answer.body.receipt },
       };
     }

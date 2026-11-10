@@ -143,6 +143,20 @@ function iconFindings(text: string, warn: (line: number, message: string) => voi
 /** A duration in ms from a CSS time (`150ms`, `.3s`). */
 const millis = (value: string, unit: string) => Number(value) * (unit.toLowerCase() === 's' ? 1000 : 1);
 
+/**
+ * A shadow the looks themselves draw: made of their `--shadow-*` tokens (each look decides what depth is, so a
+ * component asking for one stays inside it), or an inset line with no blur, which is a stripe (a selected row's edge)
+ * and not depth. Anything else is a look's to decide, not the component's.
+ */
+function sanctionedShadow(value: string): boolean {
+  const parts = value.trim().split(/,(?![^(]*\))/);
+  return parts.every((part) => {
+    const token = /^\s*var\(\s*(--shadow-[a-z-]+)\s*\)\s*$/.exec(part)?.[1];
+    if (token) return UI_TOKENS.includes(token);
+    return /^\s*inset\s+-?[\d.]+(?:px)?\s+-?[\d.]+(?:px)?\s+0(?:px)?(?:\s+-?[\d.]+(?:px)?)?\s+\S.*$/.test(part);
+  });
+}
+
 /** Each `var(--name` in a source whose name no look defines and the component did not declare itself: a misspelt or borrowed token resolves to nothing, so the declaration silently does not apply. */
 function tokenFindings(
   text: string,
@@ -242,8 +256,11 @@ function cssFindings(
       );
   }
   for (const match of text.matchAll(/\bbox-shadow\s*:\s*([^;}]+)/g)) {
-    if (!/^\s*none\b/.test(match[1]))
-      warn(lineAt(match.index), 'a shadow: the looks draw depth with a hairline, and only Sage uses shadows; use var(--line)');
+    if (!/^\s*none\b/.test(match[1]) && !sanctionedShadow(match[1]))
+      warn(
+        lineAt(match.index),
+        "a shadow: the looks draw depth with a hairline, and only Sage uses shadows; use var(--line), or the looks' own var(--shadow-panel), var(--shadow-pop) or var(--shadow-modal)",
+      );
   }
   /* A class that is not the component's own name-space would collide with the
      platform's or another component's once a look reaches it; the kit's own

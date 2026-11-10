@@ -6391,7 +6391,16 @@
         "code",
         "terminal",
         "users-three",
-        "user-plus"
+        "user-plus",
+        "caret-left",
+        "caret-right",
+        "caret-up",
+        "caret-down",
+        "arrow-left",
+        "arrow-right",
+        "x",
+        "plus",
+        "dots-three"
       ]
     },
     "navGroup": {

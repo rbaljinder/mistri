@@ -28,6 +28,14 @@ export async function loadBusinessCommands(file: string): Promise<BusinessComman
   try {
     module = await import(pathToFileURL(resolve(file)).href);
   } catch (error) {
+    /* A declaration the DSL refused while the module ran (a field's unknown key, a bad label) is the author's own
+       line, not a module that failed to load: said as a command error, the file and line first. It carries only text
+       the DSL wrote about the author's declaration, so it is safe to say whole. */
+    if (error instanceof BusinessCommandDefinitionError) {
+      const said = moduleFailure(resolve(file), error).replace(/^BusinessCommandDefinitionError: /, '');
+      const at = / \(([^()\s]+:\d+)\)$/.exec(said)?.[1];
+      throw new BusinessCommandDefinitionError(`${at ?? basename(file)}: ${at ? said.slice(0, said.lastIndexOf(' (')) : said}`);
+    }
     /* Module errors can contain private environment values or identity
        mapping data, so the sentence is fixed; what failed, and on which line,
        is recorded for the operator's console alone (`because:`), as a row

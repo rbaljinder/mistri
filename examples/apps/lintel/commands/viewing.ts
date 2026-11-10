@@ -3,7 +3,7 @@
    and contact details land. A public submission is unverified input from
    anyone, so it holds nothing scarce and its answer never depends on what the
    database holds: a code that names no listed home is kept as typed. */
-import { defineCommand, field, literal, publicReference, publicReferencePattern, shape, text } from '@mistriwork/mistri/commands';
+import { defineCommand, field, publicReference, publicReferencePattern, shape, text } from '@mistriwork/mistri/commands';
 import { day, lintel, stamp } from '../source.ts';
 
 export const requestViewing = defineCommand({
@@ -26,7 +26,7 @@ export const requestViewing = defineCommand({
     preferred_on: field.date({ label: 'Day you would like to visit' }),
     message: field.textarea({ label: 'Anything we should know?', max: 1000, optional: true }),
   },
-  output: shape({ reference: text({ pattern: publicReferencePattern('VW') }), message: literal('Viewing requested.') }),
+  output: shape({ reference: text({ pattern: publicReferencePattern('VW') }) }),
   async handle({ db, now }, input) {
     const reference = publicReference('VW');
     const home = await db.unit.find({ code: input.code, listed: true });
@@ -43,6 +43,6 @@ export const requestViewing = defineCommand({
       status: 'requested',
       received_at: stamp(now),
     });
-    return { reference, message: 'Viewing requested.' as const };
+    return { reference };
   },
 });

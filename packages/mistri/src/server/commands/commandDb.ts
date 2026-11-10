@@ -26,6 +26,7 @@ import {
 import { declaredScale, exactAverage, formatDecimal, parseDecimal } from '@mistriwork/engine/shared/decimals.js';
 import { continueGroups, keysetAfter, keysetOrder } from '@mistriwork/engine/shared/keysetPage.js';
 import { FORBIDDEN_ANSWER_NAMES } from '@mistriwork/engine/shared/aggregate.js';
+import { compileWhere as compilePageWhere } from '@mistriwork/engine/shared/pageWhere.js';
 import { authorFault } from '@mistriwork/engine/shared/refusal.js';
 import { asksAboutRows, type DateUnit } from '@mistriwork/engine/shared/filter.js';
 import { ANY_CONDITION, anyConditions, parseQuery, splitClauseTail, type QueryPerson } from '@mistriwork/engine/shared/query.js';
@@ -91,8 +92,22 @@ export type SourceTables<Src, Target extends string> =
 export type LocalName<Name extends string> = Name extends `${string}.${infer L}` ? L : Name;
 type RowIn<Scope, T> = T extends keyof Scope ? Readonly<Scope[T]> : UntypedRow;
 
-/** Every entry must hold: a value, a list meaning one of them, `null` meaning empty. */
-export type Where<Row> = { readonly [C in keyof Row]?: Row[C] | readonly Exclude<Row[C], null | undefined>[] };
+/** A column's operators, the page-side `Where`'s own: ranges on anything ordered, matches on text, and `not`. */
+type Operators<V> = {
+  readonly not?: V | null | readonly V[];
+  readonly gt?: V;
+  readonly gte?: V;
+  readonly lt?: V;
+  readonly lte?: V;
+  readonly contains?: string;
+  readonly startsWith?: string;
+  readonly endsWith?: string;
+};
+/** Every entry must hold: a value, a list meaning one of them, `null` meaning empty, or operators
+    (`{ day: { gte: from, lte: to } }`) as a page's `where` says them. */
+export type Where<Row> = {
+  readonly [C in keyof Row]?: Row[C] | readonly Exclude<Row[C], null | undefined>[] | Operators<Exclude<Row[C], null | undefined>>;
+};
 /** A where: an object, or the query language (`'status = new and year >= 2018'`). */
 type WhereInput<Row> = Where<Row> | string;
 
@@ -407,6 +422,22 @@ export function compileWhere(
   }
   if (!where || typeof where !== 'object' || Array.isArray(where))
     throw new TypeError(`${table.name}: a where is an object or the query language.`);
+  /* An operator object is the page-side condition (engine/shared/pageWhere.ts), compiled by the one compiler into the
+     language's text and read as text is: one vocabulary, the same refusals. */
+  if (Object.values(where).some((value) => value !== null && typeof value === 'object' && !Array.isArray(value))) {
+    // An empty list matches nothing here too, as it does without an operator beside it; the rest is still read first,
+    // so a column or operator that is not there is refused all the same.
+    const empty = Object.entries(where).filter(([, value]) => Array.isArray(value) && !value.length);
+    const compiled = compilePageWhere(
+      empty.length ? Object.fromEntries(Object.entries(where).filter(([, value]) => !(Array.isArray(value) && !value.length))) : where,
+      table.meta,
+    );
+    if ('error' in compiled) throw new Error(`${table.name}: ${compiled.error}`);
+    for (const [column] of empty)
+      if (!Object.hasOwn(table.kinds, column)) throw new Error(`${table.name}: "${column}" is not one of its columns.`);
+    if (empty.length) return { filter: { groups: [] }, none: true, orderBy: [] };
+    return compileWhere(table, compiled.text, now, [], me, options);
+  }
   const conditions: Condition[] = [];
   let none = false;
   for (const [column, value] of Object.entries(where)) {

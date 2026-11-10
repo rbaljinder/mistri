@@ -106,7 +106,7 @@ function formOf(id: UiCommandRef): { form: ServedForm; appName: string } | undef
 function unformedOf(id: UiCommandRef): { form: ServedForm; appName: string } | undefined {
   const app = pageBridge.activeApp() as (ServedApp & { name?: string }) | null;
   const command = app?.formCommands && Object.hasOwn(app.formCommands, id) ? app.formCommands[id] : undefined;
-  return command && { form: { id, label: humanName(id), command } as ServedForm, appName: app?.name ?? '' };
+  return command && { form: { id, label: command.label ?? humanName(id), command } as ServedForm, appName: app?.name ?? '' };
 }
 
 /* A served form under the word the component gives it, where it gives one. */
@@ -555,18 +555,24 @@ function servedInput(input: readonly AppCommandField[] | undefined, name: string
   return input?.find((each) => each.name === name);
 }
 
+function reread<T extends { status: string } | undefined>(outcome: T): T {
+  if (outcome?.status === 'applied') void queryClient.invalidateQueries();
+  return outcome;
+}
+
 /* A public page's command, its module fetched as the handle is made (publicPageCommand.ts): the App's first paint does
    not carry the door, and the page's ticket is still asked at once, so it has aged by the time a person submits. */
 function publicPageHandle(page: string, id: string, reference: AppFormCommandReference): UiCommandHandle {
   const door = import('./publicPageCommand.js').then(({ publicPageCommand }) => publicPageCommand(page, id, reference));
   return {
-    label: humanName(id),
+    label: reference.label ?? humanName(id),
     granted: true,
     available: async () => true,
-    run: (record, input, options) => door.then((handle) => handle.run(record, input, options)),
-    open: (record, input, options) => door.then((handle) => handle.open(record, input, options)),
+    // An applied run reads the page again, as a signed-in command's does: its loader and reads may hold what it wrote.
+    run: (record, input, options) => door.then((handle) => handle.run(record, input, options)).then(reread),
+    open: (record, input, options) => door.then((handle) => handle.open(record, input, options)).then(reread),
     // A public door names no record: there is no revision to pin, and its run is judged as it lands.
-    prepare: async () => ({ status: 'refused', message: say('reviewNotOffered', { label: humanName(id) }) }),
+    prepare: async () => ({ status: 'refused', message: say('reviewNotOffered', { label: reference.label ?? humanName(id) }) }),
     choices: (field) => servedChoices(reference.input, field),
     input: (name) => servedInput(reference.input, name),
   };

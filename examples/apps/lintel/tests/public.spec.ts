@@ -21,7 +21,8 @@ test('a visitor finds a home and asks to see it', async ({ page, lintel, isMobil
   const day = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
   await form.getByRole('textbox', { name: /^Day you would like to visit/ }).fill(day);
   await form.getByRole('button', { name: 'Ask for a viewing' }).click();
-  await expect(page.getByText('Viewing requested')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Viewing requested' })).toBeVisible();
+  await expect(page.getByText('Keep this reference: the office quotes it when it writes back.')).toBeVisible();
 
   const asked = lintel.rows<{ unit_id: number; reference: string; status: string }>(
     `SELECT unit_id, reference, status FROM viewing WHERE name = ?`,

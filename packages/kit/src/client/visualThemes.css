@@ -413,6 +413,13 @@ body.type-mono { --mono: var(--code); --data-face: var(--code); }
   background: var(--surface); color: var(--ink);
   border: 1px solid var(--line-control); border-radius: var(--field-radius, var(--radius));
 }
+/* A finger's 44px, as forms.css asks of every field on a coarse pointer: the rule above sits in a later layer than that
+   one and held the box at 36px on a phone (grade's small-target on the kit's own Search and TextField). */
+@media (pointer: coarse) {
+  :root[data-visual-theme] :is(.modal, .form-page, .insert-form, .command-field, .insert-field, .signin-form, .front-search-form, .account-profile-field, .confirm, .form-field)
+    :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"], [type="color"], [type="file"], .picker-input), select, .dd-button, .record-picker-trigger),
+  :root[data-visual-theme] .field-control:not(textarea) { min-height: max(36px, calc(44px / var(--density-zoom, 1))); }
+}
 /* One height whatever the family's own padding said: 7 + 20 + 7 and the edge
    is 36px, so a text box, a date and a Select stand level in a row (a form
    page's text box was 36px and its date 41px). */

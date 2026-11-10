@@ -90,7 +90,7 @@ export function FreePage({
     <>
       <DashHead dashboard={dashboard} />
       {/* The page's one component, on the page's own body: it is not a dashboard's tile, so no look's tray frames it. */}
-      <div className={`page-body free-page-body${bare ? ' is-bare' : ''}`}>
+      <div className={`page-body free-page-body${bare ? ' is-bare' : ''}${dashboard.head === 'own' ? ' is-own' : ''}`}>
         <section className="page-section width-full">
           <ErrorBoundary>
             <UiPageContext.Provider value={frame}>{section ? <CustomPage frame={frame} section={section} /> : null}</UiPageContext.Provider>

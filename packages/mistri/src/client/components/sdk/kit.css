@@ -70,6 +70,11 @@
   .kit-gap-section {
     gap: var(--section-seam);
   }
+  /* A field keeps its problem's line in the flow (reserve), so a problem that arrives moves nothing: that line is the gap
+     under it, not a second one on top of the stack's own. */
+  .kit-stack.kit-gap-field > .form-field-reserve:not(:last-child) {
+    margin-block-end: calc(var(--space-2h) - var(--field-gap));
+  }
   .kit-row.kit-gap-field {
     gap: var(--space-4) var(--field-gap);
   }
@@ -150,6 +155,15 @@
       font-size: var(--text-sm);
     }
   }
+  /* A finger's 44px at a phone's width or under any coarse pointer (a tablet is wider than a phone), compact or not:
+     the box itself, since the row clips (overflow) whatever a hit area would reach past it, and grade measures what the
+     finger gets (gradeProbe.ts). */
+  @media (max-width: 760px), (pointer: coarse) {
+    .kit-segmented .kit-segment {
+      min-width: 44px;
+      min-height: 44px;
+    }
+  }
   .kit-segment-count {
     min-width: 2ch;
     padding: 1px var(--space-2h);
@@ -174,6 +188,12 @@
     border: 1px solid var(--line);
     border-radius: var(--radius-panel, var(--radius-lg, var(--radius)));
     background: var(--surface);
+  }
+  .kit-stat.kit-stat-plain {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
   }
   .kit-stat-label {
     color: var(--ink-muted);

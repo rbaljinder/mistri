@@ -2845,7 +2845,8 @@ export interface AppPage<Base extends string = string> {
       when there is one; a page's own address is for a base no list shows, or a second page over one. */
   path?: string;
   /** true draws each run of adjacent related lists as one tab strip. Absent or false, the sections stand as
-      written, each at its own `width`; a list with a `width` never joins a strip. Tabs of other sections are `tab`. */
+      written, each at its own `width`; a list with a `width` never joins a strip. Absent on a record that has a
+      free-form page as a tab, the lists are a strip (the tab joins it); false keeps them stacked. Tabs of other sections are `tab`. */
   listTabs?: boolean;
   /** What a related list that says nothing of its own `empty` does while it has no rows: `'hide'` leaves it out,
       `'collapse'` says it in one line with the other empty lists beside it ("No charges, payments or notes yet", each
@@ -2959,7 +2960,8 @@ export type AppIconName =
   | 'bus' | 'train' | 'boat' | 'hammer' | 'toolbox' | 'plug' | 'lightbulb' | 'cube' | 'camera' | 'image'
   | 'trophy' | 'gift' | 'coffee' | 'fork-knife' | 'shopping-bag' | 'basket' | 'barcode' | 'qr-code'
   | 'scales' | 'gavel' | 'certificate' | 'identification-card' | 'fingerprint' | 'eye' | 'link'
-  | 'paperclip' | 'scissors' | 'palette' | 'code' | 'terminal' | 'users-three' | 'user-plus';
+  | 'paperclip' | 'scissors' | 'palette' | 'code' | 'terminal' | 'users-three' | 'user-plus'
+  | 'caret-left' | 'caret-right' | 'caret-up' | 'caret-down' | 'arrow-left' | 'arrow-right' | 'x' | 'plus' | 'dots-three';
 
 /** A menu icon: one of `AppIconName` (`mistri docs icons` lists them), checked by `mistri check`. The types take any lowercase
     word so a misspelled name is reported at the icon by `check`, not by a failed overload of the helper it sits in. */
@@ -3735,7 +3737,12 @@ export type AppRefs<C> = {
   experiments?: ExperimentRefs<C, C>;
   api?: ApiRefs<C, C>;
   ui?: ThemeRefs<C> & ShellRefs<C>;
-  nav?: C extends { nav: infer L extends readonly unknown[] } ? (Wide<NavLeaf<L[number]>> extends true ? unknown : Same<L, readonly NavRef<C>[]>) : unknown;
+  nav?: C extends { nav: infer L extends readonly unknown[] }
+    ? [Extract<NavLeaf<L[number]>, PagePath>] extends [never]
+      ? (Wide<NavLeaf<L[number]>> extends true ? unknown : Same<L, readonly NavRef<C>[]>)
+      /* A free-form page places itself (`definePage({ nav })`); the loader refuses it here, and so does the type, in words. */
+      : readonly { readonly 'a free-form page places itself: definePage({ nav: { group } }), it is not named in the App nav': never }[]
+    : unknown;
   home?: HomeRefs<C, C>;
   views?: { [I in Keys<ViewsOf<C>>]: ViewRefs<C, ViewsOf<C>[I]> };
   pages?: { [I in Keys<PagesOf<C>>]: PageRefs<C, PagesOf<C>[I]> };

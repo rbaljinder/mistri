@@ -1003,6 +1003,8 @@ export interface CommandCatalogEntry {
   readonly rules?: readonly DraftRule[];
   /** A form's command whose form prepares its starting values (`initial`, or `default: me`). */
   readonly prepares?: true;
+  /** What the command's form and button are called (`defineCommand({ label })`); left out, its name said as words. */
+  readonly label?: string;
 }
 export type CommandCatalog = ReadonlyMap<string, CommandCatalogEntry>;
 

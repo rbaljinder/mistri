@@ -124,7 +124,10 @@ export function publicPrincipal(appId: string, form: string): BusinessCommandAct
 }
 
 /** What a public door answers a submission with: the reference the applicant quotes, and the receipt. */
-type PublicSubmissionReply = { reference: string; receipt: { id: string; status: 'applied' } };
+type PublicSubmissionReply = { reference: string; receipt: { id: string; status: 'applied' }; message?: string };
+
+/** The longest thank-you a handler may return for its visitor: a sentence, not a page. */
+const PUBLIC_MESSAGE_MOST = 280;
 
 /**
  * What a door asks of a submission before it runs, with its extra members: undefined to go on, `'decoy'` to answer it
@@ -236,7 +239,18 @@ export async function dispatchPublicFormSubmissionHttp(options: {
     // reference has left the applicant nothing to quote, which is its bug.
     if (typeof reference !== 'string' || !reference.trim() || reference.length > 64)
       throw new BusinessCommandExecutionError('invalid_result', 'unknown');
-    return { reference, receipt: { id: result.receiptId, status: result.status } };
+    /* A public command's `message` is a literal its output declares (savedFormChecks.ts), so it is the author's fixed
+       words, never input echoed back, and the visitor is told them. A door with an admission (a public form's
+       honeypot) answers a decoy that cannot know them, so it leaves them out and the decoy stays shaped like a real
+       answer. */
+    const message = (result.result as { message?: unknown } | null)?.message;
+    return {
+      reference,
+      receipt: { id: result.receiptId, status: result.status },
+      ...(!options.admit && typeof message === 'string' && message.trim() && message.length <= PUBLIC_MESSAGE_MOST
+        ? { message: message.trim() }
+        : {}),
+    };
   } catch (error) {
     if (error instanceof CommandBodyTooLarge && options.tooLarge === 'thrown') throw error;
     if (error instanceof CommandInputError) throw new BusinessCommandExecutionError('invalid_input', 'not_applied', error.field);

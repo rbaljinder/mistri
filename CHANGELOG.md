@@ -5,6 +5,27 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.31
+
+Fixes from a field report on free-form pages.
+
+- **A page's layers are drawn as the page draws.** A Drawer, Popover or Tooltip opened from a free-form page carries the page's scope, so the page's stylesheet reaches it; the page body is its own stacking context, so a layer paints above any `z-index` inside it. A Drawer has a backdrop and a Close button (`closeLabel` renames it). A link inside a page takes the look's link color, by day and by night.
+- **`layout: 'bare'` and `head: false` mean it.** A bare page has no content padding and no head band; a page without a head starts at the top edge. The page title stays as a hidden heading for assistive technology.
+- **Kit controls are big enough to tap.** Segmented, Choose and Search meet the 44-pixel target on a coarse pointer, and Pagination stays on one row.
+- **More icons.** caret-left/right/up/down, arrow-left/right, x, plus and dots-three.
+- **Kit details.** Choose says a list param's words as the DSL says a vocabulary ("lanes" → "Lanes"). A Value or Table column over a reference shows the record's name, as lists do. A Stat inside a Card draws as a plain group. A TextField above a Select keeps the form's gap. A record with a page tab puts its related lists in the same tab strip.
+- **A command a page lists is offered by the page.** A targeted command named in a page's `commands` runs from that page without an action of its own, and `command-unoffered` stays quiet; the role's grants still decide who may run it.
+- **Command labels and public messages.** `label` on `defineCommand` titles its form and button, and a public command's returned `message` is what the visitor sees after it runs.
+- **Typed commands and pages.** A handler's object `where` takes `gt`, `gte`, `lt`, `lte`, `contains`, `startsWith`, `endsWith` and `not`, as a page's does. A reference input is typed by the referenced key's type. A loader's `now` is a function, `now()`, as in a command. `PageProps<'<page path>'>` is keyed by the page's path, and a path with no loader is a type error. `mistri-commands.d.ts` is regenerated even when `app.ts` does not load.
+- **Nav.** A page named in `nav` is a type error with a readable message; `position` is documented as an index among siblings in path order; a `public: true` page with no `nav` stays off the signed-in menu.
+- **A broken public App shows its own error.** An App whose payload cannot be read shows the App's unavailable screen, never the database browser's.
+- **`mistri check` refuses a public field list without the complete primary key.**
+- **Clearer errors.** A command input the DSL refuses is reported as a command error with its `file:line`, and `required` suggests `optional: true`. `migrate up` names a typecheck failure as one, with its first error. `check`, `shot`, `dev` and `grade` describe the commands module the same way. `migrate diff` says it downloads Atlas up front, and a failed download names the URL and `MISTRI_ATLAS`.
+- **`mistri dev` restarts a single App on an authority change**, as it does a tenant App, instead of answering 503.
+- **The component lint accepts the looks' shadow tokens** (`--shadow-panel`, `--shadow-pop`, `--shadow-modal`).
+- **Docs.** Where a page is first shown, the guide says that pages are bundled with rolldown; `shot --click` writes to the App's own database; a page that must stay current needs `live: true`.
+- **The event feed's read audit waits for every write.** Every audit row a page of the event feed writes settles before a failure is reported.
+
 ## 1.0.0-rc.30
 
 - **The read audit covers the event feed and composed related lists (a field report).** A page of the App API's event feed (`GET …/$events`) is now a read of the records its events are about: for each audited resource it names, one row (the API door, the token, the query `"$events"` and the record keys) is written before the page is sent, and a page whose row cannot be written is answered 503 with no events. Events about a resource that does not audit its reads write nothing. A related list that arrives inside a composed record page is now logged as `related`, as it is when the list asks alone, instead of as `page`. A custom page's reads were already logged as `custom-page`; that is now covered by a request-level test. A single-database App's 503 for a read that could not be recorded and a tenant App's, now carry the same JSON error (`read_not_recorded`, "The read could not be recorded. Try again.") instead of an empty body or a tenant-context message, and still none of the data. A composed record page whose related list cannot be recorded is refused whole rather than answered without it.

@@ -49,7 +49,7 @@ interface Found {
   decl: ComponentDecl;
   /** Every distinct way it is placed, in the order met. */
   placements: Map<string, Placement>;
-  /** The loader a free-form page names, for `PageProps<'loader'>`. */
+  /** The path of a free-form page that has a loader, for `PageProps<'path'>`. */
   loader?: string;
 }
 
@@ -116,13 +116,13 @@ function found(app: AppDef, pages: readonly PageDef[]): Map<string, Found> {
       });
     }
   }
-  for (const view of Object.values(app.views)) {
+  for (const [pagePath, view] of Object.entries(app.views)) {
     if ('sections' in view) {
       for (const section of [...view.sections, ...(view.aside ?? [])]) {
         if (section.kind !== 'custom' || !section.component) continue;
-        /* A free-form page is drawn whole by its one component, handed its loader's result. */
+        /* A free-form page is drawn whole by its one component, handed its loader's result: named by the page's path. */
         if (view.page) {
-          place(section.component, { declaration: '' }, view.page.loader);
+          place(section.component, { declaration: '' }, view.page.loader ? pagePath : undefined);
           continue;
         }
         place(section.component, {

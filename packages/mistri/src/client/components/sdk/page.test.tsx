@@ -11,6 +11,7 @@ import { PAGE_EXPORTS, UI_EXPORTS } from '../../../shared/uiSdk.js';
 import { UiPageContext, type UiPageFrame } from './context.js';
 import { fixtureHost, SectionFrame } from './fixture.js';
 import { fixtures, renderPage } from './testing.js';
+import { useRows } from './hooks.js';
 import { ActionButton, CommandButton, definePage, List, Scope } from './page.js';
 
 const BOOKINGS = fixtures({
@@ -59,6 +60,27 @@ describe('a command on one row', () => {
     renderPage(desk, { data: BOOKINGS, commands: { checkIn: { label: 'Check in' } } });
     await vi.waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2));
     expect(screen.queryAllByRole('button')).toHaveLength(0);
+  });
+
+  test("is named with its row from a plain read's rows, and a label of its own keeps the row's title", async () => {
+    function Arrivals() {
+      const rows = useRows('booking', { where: { class_session_id: 4, status: 'booked' }, show: ['guest_name'], sort: 'guest_name' });
+      return (
+        <ul>
+          {rows.data?.map((row) => (
+            <li key={String(row.guest_name)}>
+              <CommandButton command="checkIn" label="Arrive" row={row} />
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    renderPage(definePage({ label: 'Arrivals', reads: ['booking'], commands: ['checkIn'], component: Arrivals }), {
+      data: BOOKINGS,
+      viewer: SIGNED_IN,
+      commands: { checkIn: { label: 'Check in' } },
+    });
+    expect(await screen.findByRole('button', { name: 'Arrive Kai Moss' })).toBeInTheDocument();
   });
 
   test("is held where the row's state does not allow it", async () => {

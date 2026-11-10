@@ -41,17 +41,25 @@ function pageWith(params: Record<string, unknown>, body: () => ReactNode) {
 }
 
 describe('Choose over the next words', () => {
+  test('the words are said as a vocabulary is, and the address keeps the stored word', async () => {
+    const page = pageWith({ view: ['lanes', 'needs_review'] }, () => <Choose param="view" />);
+    renderPage(page, { address: {} });
+    await screen.findByRole('radiogroup', { name: 'View' });
+    fireEvent.click(screen.getByRole('radio', { name: 'Needs review' }));
+    await waitFor(() => expect(screen.getByLabelText('address')).toHaveTextContent('{"view":"needs_review"}'));
+  });
+
   test('a few short words are a row of segments; the arrows move the choice and the address follows', async () => {
     const page = pageWith({ view: ['list', 'board', 'map'] }, () => <Choose param="view" />);
     renderPage(page, { address: { view: 'board' } });
     const group = await screen.findByRole('radiogroup', { name: 'View' });
     expect(group).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'board' })).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByRole('radio', { name: 'list' })).toHaveAttribute('aria-checked', 'false');
-    screen.getByRole('radio', { name: 'board' }).focus();
-    fireEvent.keyDown(screen.getByRole('radio', { name: 'board' }), { key: 'ArrowRight' });
+    expect(screen.getByRole('radio', { name: 'Board' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: 'List' })).toHaveAttribute('aria-checked', 'false');
+    screen.getByRole('radio', { name: 'Board' }).focus();
+    fireEvent.keyDown(screen.getByRole('radio', { name: 'Board' }), { key: 'ArrowRight' });
     await waitFor(() => expect(screen.getByLabelText('address')).toHaveTextContent('{"view":"map"}'));
-    expect(screen.getByRole('radio', { name: 'map' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: 'Map' })).toHaveAttribute('aria-checked', 'true');
   });
 
   test('an address with no choice leaves every segment unchosen, and the first is still the way in', async () => {
@@ -59,7 +67,7 @@ describe('Choose over the next words', () => {
     renderPage(page);
     await screen.findByRole('radiogroup');
     expect(screen.queryAllByRole('radio', { checked: true })).toHaveLength(0);
-    expect(screen.getByRole('radio', { name: 'list' })).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('radio', { name: 'List' })).toHaveAttribute('tabindex', '0');
   });
 
   test('more than five options, or more words than a phone holds, is the listbox', async () => {

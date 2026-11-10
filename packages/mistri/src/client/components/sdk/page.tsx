@@ -24,7 +24,7 @@
  */
 import { createContext, createElement, useContext, useMemo, type ComponentType, type ReactNode } from 'react';
 import { Refused } from '@mistriwork/kit/client/components/Notes.js';
-import { useAction, useAddressState, useBreakdown, useCommand, useFile, useForm, useRecord, useRows } from './hooks.js';
+import { resourceOfRow, useAction, useAddressState, useBreakdown, useCommand, useFile, useForm, useRecord, useRows } from './hooks.js';
 import { Button, Loaded } from './kit.js';
 import {
   scopedCondition,
@@ -325,7 +325,7 @@ function RowButton({
   const listed = useContext(ListResource);
   if (!handle.granted) return null;
   const said = label ?? handle.label;
-  const resource = handle.resource ?? listed ?? scope?.from;
+  const resource = handle.resource ?? resourceOfRow(row) ?? listed ?? scope?.from;
   const title = resource ? host.rowTitle(resource, row) : undefined;
   const busy = handle.pending(row);
   return (

@@ -252,6 +252,8 @@ A record under any list over its table opens at the table's canonical address
                     settled (requests done, nothing busy) before the first
                     and after each, and a name that matches nothing in 15
                     seconds is refused with the step and the address
+                    (a click that runs a command writes to the App's own
+                    database, not a copy: shoot a database you may change)
     --matrix        every built-in look and the App's own, light and dark, at a
                     desk and on a phone, for the routes: <page>-<look>-
                     <light|dark>-<desk|phone>.png and an index.html laying
@@ -433,8 +435,10 @@ applied to a scratch database, do not build schema.sql. squash folds the V
 files into one V1__baseline.sql, before a database worth keeping exists.
 mistri's own __mistri_* tables are left out. The comparison is Atlas's
 community build, pinned and checked by sha256, fetched on first use into
-.mistri/bin with its update check off (MISTRI_ATLAS names your own);
-serving never fetches it. PostgreSQL and SQLite.
+.mistri/bin with its update check off (about 40 MB from release.ariga.io;
+the first diff needs none, later ones and check and squash do; where
+there is no network, download Atlas v1.3.0 elsewhere and set
+MISTRI_ATLAS=<path to it>); serving never fetches it. PostgreSQL and SQLite.
     --migrations <dir>
                     where the files are (default: migrations/ in the App, or
                     the connection's "migrations": { "dir": … } in

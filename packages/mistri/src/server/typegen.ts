@@ -364,6 +364,8 @@ export function commandTypes(
     forms?: Readonly<Record<string, string>>;
     /** The App's views by key, the lists, dashboards and forms (never a free-form page, which `pagePaths` names): what `useHref().view` and `.record` are typed by. */
     views?: readonly string[];
+    /** Each free-form page's loader by the page's path: what `PageProps<'<path>'>` types `data` from. */
+    pageLoaders?: Readonly<Record<string, string>>;
   } = {},
 ): string {
   const forms = Object.entries(options.forms ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
@@ -379,6 +381,7 @@ export function commandTypes(
     ...(commands ? ['commands: Commands'] : []),
     ...(loadersFrom ? ['loaders: Loaders'] : []),
     ...(pages.length ? ['pagePaths: PagePaths'] : []),
+    ...(pages.length ? ['pageLoaders: PageLoaders'] : []),
     ...(pages.length && actions.length ? ['actions: ActionNames'] : []),
     ...(commands && forms.length ? ['forms: FormCommands'] : []),
     ...(options.views?.length ? ['views: ViewKeys'] : []),
@@ -415,6 +418,19 @@ export function commandTypes(
       ? [
           "/** Each free-form page's loader by its name, as the commands module exports them: what a page's `data` is typed from. */",
           `export type Loaders = typeof import(${JSON.stringify(loadersFrom)}).loaders;`,
+          '',
+        ]
+      : []),
+    /* Every page, a record's tab too, so `PageProps<'<path>'>` names any of them: one with no loader is `null`, which
+       draws its `data` as null rather than refusing the page's own name. */
+    ...(pages.length
+      ? [
+          "/** Each free-form page's loader, by the page's path (null: it names none): what `PageProps<'<path>'>` types its `data` from. */",
+          'export type PageLoaders = {',
+          ...[...pages]
+            .sort()
+            .map((page) => `  ${key(page)}: ${options.pageLoaders?.[page] ? JSON.stringify(options.pageLoaders[page]) : 'null'};`),
+          '};',
           '',
         ]
       : []),

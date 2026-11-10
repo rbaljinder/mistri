@@ -184,6 +184,16 @@ export const APP_ICONS = [
   'terminal',
   'users-three',
   'user-plus',
+  // Direction and dismissal: what a page's own previous, next, close, add and more are drawn with
+  'caret-left',
+  'caret-right',
+  'caret-up',
+  'caret-down',
+  'arrow-left',
+  'arrow-right',
+  'x',
+  'plus',
+  'dots-three',
 ] as const;
 
 export type AppIconName = (typeof APP_ICONS)[number];

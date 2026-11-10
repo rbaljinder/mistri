@@ -28,6 +28,12 @@ export type Commands = {
   signLease: { target: "lease"; targets: "one"; input: never; output: CommandOutput<CommandModule["signLease"]> };
 };
 
+/** Each free-form page's loader, by the page's path (null: it names none): what `PageProps<'<path>'>` types its `data` from. */
+export type PageLoaders = {
+  "add-charge": null;
+  "delivery-board": null;
+};
+
 /** Each free-form page by its path (pages/<path>.page.tsx): what the App's `home` may name beside its views. */
 export type PagePaths = "add-charge" | "delivery-board";
 
@@ -45,5 +51,5 @@ export type ViewKeys = "deliveries" | "leases" | "ledger" | "listings" | "my-cha
 export type ActionNames = "cancelViewing" | "close" | "confirm" | "hold" | "markShown" | "resume" | "start" | "triage" | "waive";
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { commands: Commands; pagePaths: PagePaths; actions: ActionNames; forms: FormCommands; views: ViewKeys }
+  interface Register { commands: Commands; pagePaths: PagePaths; pageLoaders: PageLoaders; actions: ActionNames; forms: FormCommands; views: ViewKeys }
 }

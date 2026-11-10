@@ -331,10 +331,12 @@ export async function auditEventFeed(
   const about = new Map<string, Map<string, Readonly<Record<string, unknown>>>>();
   for (const { resource, key } of items)
     if (access.audited.has(resource)) about.set(resource, (about.get(resource) ?? new Map()).set(canonicalCommandJson(key), key));
-  /* The sink takes a row at a time: one statement per resource, which a page seldom spans more than a few of. */
-  await withReadRoute('api', () =>
-    Promise.all(
-      [...about].map(([table, rows]) =>
+  /* The sink takes a row at a time: one statement per resource, which a page seldom spans more than a few of.
+     Every append settles before the first failure is thrown: the caller releases the connections it leased
+     for these writes as soon as this returns, and one must not go idle under a sibling still writing. */
+  const settled = await withReadRoute('api', () =>
+    Promise.allSettled(
+      [...about].map(async ([table, rows]) =>
         record(
           {
             table,
@@ -352,4 +354,6 @@ export async function auditEventFeed(
       ),
     ),
   );
+  const failed = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
+  if (failed) throw failed.reason;
 }

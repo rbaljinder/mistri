@@ -3,12 +3,19 @@
    that does gets them before its first control paints (page.tsx loads each control through here). */
 import '@mistriwork/kit/client/formControls.css';
 import './pageControls.css';
+import { createElement, type ComponentProps } from 'react';
+import { Drawer as UiDrawer } from '@mistriwork/ui/Drawer.js';
+import { message } from '@mistriwork/kit/client/messages.js';
 
 /* By module, as the kit's Button is reached (kit.tsx): the package's index carries every primitive, these only the page's. */
 export { Avatar } from '@mistriwork/ui/Avatar.js';
 export { CheckCards, Checkbox, ChoiceCards, YesNo } from '@mistriwork/ui/Choices.js';
 export { DateField } from '@mistriwork/ui/DateField.js';
-export { Drawer } from '@mistriwork/ui/Drawer.js';
+/* The primitive says its close control in English unless told; a page's Drawer says it in the reader's language, as
+   the shell's own panels do, and a page that names it keeps its word. */
+export function Drawer(props: ComponentProps<typeof UiDrawer>) {
+  return createElement(UiDrawer, { ...props, closeLabel: props.closeLabel ?? message('common.close') });
+}
 export { Modal } from '@mistriwork/ui/Modal.js';
 export { Pagination } from '@mistriwork/ui/Pagination.js';
 export { Popover } from '@mistriwork/ui/Popover.js';

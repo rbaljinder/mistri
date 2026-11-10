@@ -126,7 +126,7 @@ test('enrolled policy public forms execute anonymously and signed in with identi
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');
   const first = await response.json();
-  assert.deepEqual(Object.keys(first).sort(), ['receipt', 'reference']);
+  assert.deepEqual(Object.keys(first).sort(), ['message', 'receipt', 'reference']);
   assert.equal(first.reference, 'CONTACT-1');
   f.state.identity = { id: 'staff-identity', who: 'staff@example.test', role: 'staff' };
   const replay = await f.post(body);

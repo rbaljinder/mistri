@@ -18,9 +18,10 @@
  * Placed as Popover.tsx places its layer: on the zoom-aware ruler, fixed to
  * the viewport, and inside an enclosing dialog.
  */
-import { cloneElement, isValidElement, useId, useRef, useState, type ReactNode } from 'react';
+import { cloneElement, isValidElement, useContext, useId, useRef, useState, type ReactNode } from 'react';
 import { Tooltip as BaseTooltip } from '@base-ui/react/tooltip';
 import { layoutViewport, zoomAnchor } from './internal/anchor.js';
+import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { popupContainer, useDialogContainer } from './internal/popups.js';
 
 export interface TooltipProps {
@@ -48,6 +49,8 @@ export function Tooltip({ trigger, children, open, defaultOpen, onOpenChange, cl
     : base;
   const anchor = useRef<HTMLButtonElement>(null);
   const container = useDialogContainer(anchor);
+  /* The layer is drawn outside the page that opened it; the page's scope goes with it (Modal.tsx). */
+  const componentScope = useContext(ComponentStyleScope);
   return (
     <BaseTooltip.Root
       open={open}
@@ -67,7 +70,12 @@ export function Tooltip({ trigger, children, open, defaultOpen, onOpenChange, cl
           collisionBoundary={layoutViewport()}
           collisionPadding={8}
         >
-          <BaseTooltip.Popup id={tooltipId} role="tooltip" className={['ui-tooltip', className].filter(Boolean).join(' ')}>
+          <BaseTooltip.Popup
+            data-component={componentScope}
+            id={tooltipId}
+            role="tooltip"
+            className={['ui-tooltip', className].filter(Boolean).join(' ')}
+          >
             {children}
           </BaseTooltip.Popup>
         </BaseTooltip.Positioner>

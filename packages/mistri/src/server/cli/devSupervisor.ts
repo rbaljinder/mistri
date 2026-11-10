@@ -63,6 +63,8 @@ interface DevSupervision {
   readonly env: NodeJS.ProcessEnv;
   /** Starts watching; calls back on a save; returns the stop. */
   readonly watch: (changed: () => void) => () => void;
+  /** An ordinary App's dev (not a tenant's): the child retires only for the one change a reload cannot wear, and any other exit is the person's to see, as it was before there was a parent. */
+  readonly onlyOnChange?: boolean;
 }
 
 /** Runs the child until the person stops it; resolves to the exit code the parent should leave with. */
@@ -94,6 +96,7 @@ export async function superviseDev(options: DevSupervision): Promise<number> {
         console.error('mistri dev: the App changed; starting it again…');
         continue;
       }
+      if (options.onlyOnChange) return exit.code ?? 1;
       console.error(
         `mistri dev: the host ${exit.signal ? `was stopped by ${exit.signal}` : `exited with code ${exit.code}`}; waiting for the next save to start it again.`,
       );

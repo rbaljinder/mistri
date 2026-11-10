@@ -20,7 +20,7 @@ import type { AppHost } from '../packages/mistri/src/server/app/apps.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { createApp } from './support/createApp.js';
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
-import { shape, text } from '../packages/mistri/src/server/commands/commandShapes.js';
+import { literal, shape, text } from '../packages/mistri/src/server/commands/commandShapes.js';
 import { defineChallenges } from '../packages/mistri/src/server/commands/challenges.js';
 import { resetPublicFormLimits } from '../packages/engine/src/server/http/rateLimit.js';
 import { parseTrustedProxies } from '../packages/engine/src/server/http/trust.js';
@@ -30,6 +30,7 @@ import { vouchForOrigin } from '../packages/engine/src/server/http/trust.js';
 import type { RequestContext } from '../packages/engine/src/server/http/context.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { parseTestApp } from './support/commandCatalog.js';
+import { publicFormProblems } from '../packages/mistri/src/server/forms/savedFormChecks.js';
 import { authorityDiff, authorityReport } from '../packages/mistri/src/shared/appAuthority.js';
 import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 
@@ -102,12 +103,12 @@ async function fixture(run: (f: Fixture) => Promise<void>, options: { challenge?
       write: ['enrolment'],
       public: true,
       input: enrolInput,
-      output: shape({ reference: text() }),
+      output: shape({ reference: text(), message: literal('You are enrolled. Please take a seat.') }),
       async handle(context, input) {
         actors.push(context.actor.id);
         const reference = `ENR-${actors.length.toString().padStart(4, '0')}`;
         await context.tx.insert({ table: 'enrolment', values: { name: input.name, reference } });
-        return { reference };
+        return { reference, message: 'You are enrolled. Please take a seat.' };
       },
     }),
     logEnrolment: defineCommand({
@@ -210,6 +211,31 @@ test('check: a public page runs only public commands that make their record, and
   assert.ok(parseTestApp(RAW, 'x', CONTRACTS));
 });
 
+test("check: a public page's command answers as a public form's does, a reference and fixed words only", () => {
+  // The page alone: the App's public form runs the same command and would answer first.
+  const { apply: _form, ...views } = RAW.views;
+  const app = parseTestApp({ ...RAW, views }, 'x', CONTRACTS);
+  const schema = { label: 'x', dialect: 'sqlite' as const, tables: [], foreignKeys: [], readAt: '' };
+  const enrol = (output: ReturnType<typeof shape>) =>
+    defineCommands({
+      enrol: defineCommand({
+        targets: 'none',
+        source: 'main',
+        target: 'enrolment',
+        read: ['enrolment'],
+        write: ['enrolment'],
+        public: true,
+        input: enrolInput,
+        output,
+        handle: async () => ({ reference: 'ENR-1', message: 'stored words' }),
+      }),
+    });
+  assert.equal(publicFormProblems(app, enrol(shape({ reference: text(), message: literal('Thanks.') })), schema), undefined);
+  // A typed message could carry a stored value back to a signed-out visitor.
+  assert.match(publicFormProblems(app, enrol(shape({ reference: text(), message: text() })), schema) ?? '', /^Page "lobby":.*public form/);
+  assert.match(publicFormProblems(app, enrol(shape({ message: literal('Thanks.') })), schema) ?? '', /\[public-form-reference\]/);
+});
+
 test('signed out, the door and its ticket open for a public page and its named command only', { timeout: 15_000 }, async () => {
   await fixture(async (f) => {
     const ticket = await call(f.base, '/api/pages/lobby/ticket');
@@ -230,8 +256,10 @@ test('signed out, the door and its ticket open for a public page and its named c
     }
     const applied = await submit(f, { name: 'Ada' }, 2);
     assert.equal(applied.status, 200, applied.text);
-    assert.deepEqual(Object.keys(applied.body).sort(), ['receipt', 'reference']);
+    assert.deepEqual(Object.keys(applied.body).sort(), ['message', 'receipt', 'reference']);
     assert.equal(applied.body.reference, 'ENR-0001');
+    // The handler's own words are what the visitor is told, not a sentence built from the command's name.
+    assert.equal(applied.body.message, 'You are enrolled. Please take a seat.');
     assert.doesNotMatch(applied.text, /Ada/, 'the answer never echoes the input');
     assert.deepEqual(f.actors, ['public:lobby']);
     assert.equal(rows(f), 1);

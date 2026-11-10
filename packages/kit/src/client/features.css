@@ -800,10 +800,15 @@ body.first-run #db-label {
 .dash-body { padding: 0 var(--space-4h) var(--space-4h); }
 /* A free-form page (definePage) is its component on the page body, in a dashboard's gutters. */
 .free-page-body { padding: 0 var(--space-4h) 56px; }
+/* The page's own z-indexes stay inside it: a positioned child at `z-index: 9` must not reach over a layer the kit draws
+   in a portal (a Popover has no z-index of its own), whatever the page says. */
+.free-page-body { isolation: isolate; }
 /* A bare page (definePage layout: 'bare'): the room owns the window. The sidebar, its reveal, the bars and the menu leave the
    flow; the skip link, the pane and its focus are the shell's still. */
 body.page-bare :is(.topbar, .sidebar, .sidebar-reveal, #topnav, #explain-pane) { display: none; }
 .free-page-body.is-bare { padding: 0; }
+/* The pane's own gutter goes too: a full-bleed root reaches the window's edges. */
+body.app-mode.page-bare .content { padding-inline: 0; }
 /* The title shares the body's centered 76rem column — a head pinned to
    the pane edge over a centered grid read as two different screens. */
 .dash-head { margin-top: var(--space-2h); margin-bottom: var(--space-6); width: 100%; }

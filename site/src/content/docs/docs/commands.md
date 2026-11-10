@@ -188,7 +188,8 @@ declaration off.
 
 A `where` is an object (`{ status: 'available' }`), the query language, or a
 tagged template whose values are always quoted:
-``db.vehicle.where`make = ${input.make}` ``. More than 1,000 rows without
+``db.vehicle.where`make = ${input.make}` ``. The object form takes the page-side operators too: `{ day: { gte: from, lte: to }, name: { contains: 'a' } }` (`gt`, `gte`, `lt`, `lte`, `contains`, `startsWith`, `endsWith`, `not`).
+ More than 1,000 rows without
 `.limit` is refused. Ids past 2^53 arrive as strings; never pass one through
 `Number()`.
 `get(key)` refuses `not_found` for a key that does not exist and for a row the
@@ -308,6 +309,9 @@ answer is `temporarily_unavailable`.
 - A granted command with `targets: 'none'` that no form runs (Mark all read) is a button: `useCommand('markAllRead').run({}, {})` sends it with an empty key.
 - `run` resolves with `{ status: 'applied', output }`, `output` being what the handler returned, so a component acts on what it made (opens the ticket by `output.id`) instead of looking it up; otherwise `{ status: 'refused', message }`, or `{ status: 'closed' }` when its form closed with nothing sent. `open` (the command's own form over the page) resolves when the form closes, with how its last submission ended: `applied` with the same `output`, `refused` with the server's words, `unknown` (an answer that never came; its `check()` asks again under the same key), or `closed` only when nothing was sent. A form left behind by a changed session lets go the same way.
 - A command on a record that only a component runs (a playbook's tick) is still the resource's action, in no menu: `checkStep: action('Mark a step done', { command: 'checkStep', header: false })`. `useCommand('checkStep')` runs it under the same grant, revision check and audit.
+- A command a free-form page lists in `commands` is offered by that declaration, with no action beside it and nothing added to a menu; the grant still decides who may run it. A section's component (not a page) still reaches a record's command through an action.
+- `label: 'Book an appointment'` on `defineCommand` is the title of the command's dialog and its buttons; without it they say the command's key as words (`book` is "Book"). It is text of 1 to 120 characters.
+- A public command's `output` may carry `message` only as `literal('…')`; that sentence is what the public page's outcome says in place of the platform's thank-you (at most 280 characters), beside the receipt's reference. A public form's reply stays the platform's.
 - `lookup({ sources, record }, input)` runs before the transaction opens and hands its JSON to the handler as `lookup`; a failure is `temporarily_unavailable`. It reads the other sources (a database or an HTTP connection) its `sources` names, `{ valuations: ['estimate'] }`. A lookup that reads none, one that works from its input or the record alone, declares no `sources`; `sources` without a `lookup` is refused.
 - `effects: { notify: post('dealer-hooks', output => ({ id: output.applicationId })) }` posts to a `"kind": "webhook"` connection after commit, with retries; nothing is sent on rollback. `{ envelope: false, headers }` sends your own body shape; a delivery whose headers name one the request owns, the connection's `auth.header` among them, is rejected for an operator, not sent. On a tenant App each delivery carries its tenant.
 - `effects: { text: send('sms', output => ({ to: output.phone, text: 'Shipped.', consent: true })) }` sends on an [integration's](/docs/integrations/) channel after commit.

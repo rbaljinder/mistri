@@ -665,6 +665,16 @@ export const main: Main = async () => {
     });
     return;
   }
+  /* `mistri dev` on an App: a save is worn in place, except a change of what the App grants. That one is refused a
+     live swap (app/authorityLock.ts), so its requests stopped until someone restarted by hand; here the child retires
+     with DEV_CHANGED_EXIT (serve.ts) and this parent starts it again, as a tenant App's dev does. */
+  if (opts.dev && !opts.embedded && !opts.checkApp && !loadedApps.some((loaded) => loaded.build)) {
+    const { DEV_SUPERVISED_ENV, superviseDev } = await import('./devSupervisor.js');
+    if (process.env[DEV_SUPERVISED_ENV] !== '1') {
+      await registry.closeAll();
+      process.exit(await superviseDev({ ...typed, onlyOnChange: true, watch: () => () => {} }));
+    }
+  }
   const { hostCommands } = await import('./commandHost.js');
   const hosted = await hostCommands(opts, registry, loadedApps);
 

@@ -357,6 +357,11 @@ export interface CommandRule { must: string; when?: string; message: string }
 /** A command's input: its fields keyed by name, in the order the form asks them. */
 export type CommandInput = { readonly [name: string]: CommandField };
 
+/** What a reference input is as the handler gets it: the referenced table's key column typed as that column is (a
+    number for an integer key, text for a text one), or either where no schema is registered. */
+type ReferenceKey<R extends string, B extends string> = [Extract<ColumnValue<R, B>, string | number>] extends [never]
+  ? string | number : Extract<ColumnValue<R, B>, string | number>;
+
 type FieldValue<F> =
   F extends { type: 'lines'; from: infer R extends string; show: readonly (infer C extends string)[] } ? { [K in C]: ColumnValue<R, K> }[]
   : F extends { type: 'group'; fields: infer G extends CommandInput; repeat: object } ? CommandInputOf<G>[]
@@ -370,6 +375,7 @@ type FieldValue<F> =
   : F extends { type: 'choice' } ? string | number
   : F extends { type: 'choices'; options: readonly (infer O)[] } ? (O extends { value: infer V } ? V : never)[]
   : F extends { type: 'choices' } ? (string | number)[]
+  : F extends { type: 'reference'; from: infer R extends string; by: infer B extends string } ? ReferenceKey<R, B>
   : F extends { type: 'reference' } ? string | number
   : F extends { type: 'defined' } ? Record<string, string | number | boolean | string[]>
   : F extends { type: 'files' } ? CommandFile[]

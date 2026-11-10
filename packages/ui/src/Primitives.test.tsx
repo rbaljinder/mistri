@@ -67,6 +67,17 @@ test('a drawer mounts only while open and closes on Escape', async () => {
   expect(screen.queryByRole('dialog')).not.toHaveAttribute('data-open');
 });
 
+test("a drawer has a close control, named in the caller's words, that asks to close it", async () => {
+  const onOpenChange = vi.fn();
+  render(
+    <Drawer open title="Filters" closeLabel="Fermer" onOpenChange={onOpenChange}>
+      <p>Body</p>
+    </Drawer>,
+  );
+  await userEvent.click(screen.getByRole('button', { name: 'Fermer' }));
+  expect(onOpenChange.mock.calls[0]?.[0]).toBe(false);
+});
+
 test('a popover opens from its trigger and shows its layer', async () => {
   render(
     <Popover trigger={<button>Open</button>}>

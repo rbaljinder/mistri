@@ -29,6 +29,8 @@ export async function startSessionApp(
     stamps?: boolean;
     viewRoles?: boolean;
     portal?: boolean;
+    /** A public field list that leaves out the primary key: every signed-out request fails, as it does for an App check never judged. */
+    brokenPublic?: boolean;
     /** Provision live sync's change store, as `migrate stores up` would: the page then follows other people's changes. */
     live?: boolean;
     /** The ticket page shows its history, and the store that keeps it is provisioned: live sync names who changed a ticket. */
@@ -121,7 +123,7 @@ export async function startSessionApp(
 export default defineApp({
   id: '${SESSION_APP_ID}', name: 'Session workspace',${options.live ? ' live: true,' : ''}
   ${options.rowPolicy || options.notes ? "sources:{operations:{connection:'private-session-data'}}," : "connection:'private-session-data',"}
-  auth: { providers: ['email'], signUp: 'open', defaultRole: 'agent', store: ${JSON.stringify(join(directory, 'sessions.db'))},
+  auth: { providers: ['email'], signUp: 'open', defaultRole: 'agent',${options.brokenPublic ? " public: { read: ['ticket'], fields: { ticket: { read: ['name'] } } }," : ''} store: ${JSON.stringify(join(directory, 'sessions.db'))},
     ${options.rowPolicy ? "rows:'policy'," : ''} roles: { agent: { read: true, write: true${options.notes ? ", commands: ['addNote', 'closeTicket']" : ''}${options.notes && !options.fieldPolicy ? ", fields: {ticket: {read:['id','name','status'],write:['name','status']}, ticket_note: {read:['id','ticket_id','body','at'],write:[]}}" : ''}${options.fieldPolicy ? ", fields: {ticket: {read:['id','name','status'],write:['name']}}" : ''} }${options.viewRoles ? `, requester: { read: ${options.portal ? "['article']" : 'true'} }` : ''} } },
   resources: {${options.portal ? ' article: {},' : ''}${options.notes ? " ticket_note: { access: 'write' }," : ''} ticket: { access: 'write', delete: true, favorite: true${
     options.notes

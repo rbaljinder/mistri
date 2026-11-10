@@ -55,8 +55,8 @@ export interface PageLoaderContext<Src = string, R extends string = string> {
   /** The page's address parameters it keeps, as the address says them now. */
   readonly params: Readonly<Record<string, string | undefined>>;
   readonly viewer: PageLoaderViewer;
-  /** The App's now, in its timezone. */
-  readonly now: Date;
+  /** The App's now, in its timezone: called as a command's is (`now()`), so a line moves between them unchanged. */
+  readonly now: () => Date;
   /** Aborted when its time is up. */
   readonly signal: AbortSignal;
 }

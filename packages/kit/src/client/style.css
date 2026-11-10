@@ -23,6 +23,10 @@
 /* A picture's <source>s (imageWidths.ts imageSources) choose the file; the <img> inside is what is laid out and styled. */
 picture { display: contents; }
 
+/* A plain link a free-form page writes (`<a href={useHref().page(…)}>`) is the look's link ink, as the platform's own links
+   are, not the browser's blue. In base, so any rule the page or a component brings (a later layer) still wins. */
+.free-page-body a { color: var(--link); }
+
 body {
   margin: 0;
   background: var(--ground);
