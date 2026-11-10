@@ -14,7 +14,7 @@ import { WriteLanes } from '@mistriwork/engine/adapters/writeLanes.js';
 import { isPoolBusy } from '@mistriwork/engine/adapters/poolMetrics.js';
 import { renamedWriteAhead, withWriteAhead, writeAhead } from '@mistriwork/engine/adapters/writeAhead.js';
 import { commandsOf } from '../stores/commandStores.js';
-import { SqliteAdapter } from '@mistriwork/engine/adapters/sqlite.js';
+import { cachedStatement, SqliteAdapter } from '@mistriwork/engine/adapters/sqlite.js';
 import type { PostgresAdapter, PostgresTransactionVerifier } from '@mistriwork/engine/adapters/postgres.js';
 import { tenantAdapter } from './tenantConnections.js';
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
@@ -293,13 +293,12 @@ function assertUniqueKeys(db: DatabaseSync, ownership: TenantOwnershipSnapshot):
       /CHAR|CLOB|TEXT/i.test(primary[0].type);
     if (!primary.length || (!primary.some((column) => column.name === rule.column) && !opaque))
       return denyTenant(tenantKeyRefusal(logical, rule.column, primary));
-    const indexes = db.prepare(`PRAGMA main.index_list(${ANSI_STYLE.quote(id)})`).all();
+    const indexes = cachedStatement(db, `PRAGMA main.index_list(${ANSI_STYLE.quote(id)})`).all();
     let primarySeen = false;
     for (const index of indexes) {
       if (typeof index.name !== 'string' || ![0, 1].includes(index.unique as number)) return denyTenant();
       if (index.unique !== 1) continue;
-      const keys = db
-        .prepare(`PRAGMA main.index_xinfo(${ANSI_STYLE.quote(index.name)})`)
+      const keys = cachedStatement(db, `PRAGMA main.index_xinfo(${ANSI_STYLE.quote(index.name)})`)
         .all()
         .filter((column) => column.key === 1);
       if (
@@ -373,8 +372,7 @@ export async function openSqliteTenantWriteSource(
       // Re-read eligibility as well as DDL: TEMP triggers/shadows must not become
       // invisible merely because the outer engine captured its catalog earlier.
       const writable = readSqliteScopeCatalog(db).writable;
-      const definitions = db
-        .prepare('SELECT type, name, tbl_name, sql FROM main.sqlite_schema ORDER BY type, name')
+      const definitions = cachedStatement(db, 'SELECT type, name, tbl_name, sql FROM main.sqlite_schema ORDER BY type, name')
         .all()
         .filter((row) => typeof row.tbl_name === 'string' && ids.has(row.tbl_name));
       const state = JSON.stringify({ definitions, writable: [...ids].filter((id) => writable.has(id)).sort() });

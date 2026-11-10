@@ -29,7 +29,7 @@ import {
 } from '@mistriwork/engine/adapters/replicas.js';
 import { StatementStopped } from '@mistriwork/engine/adapters/statementControl.js';
 import { createScopedReads } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
-import { sqliteParams, toJsonSafe, withBytes } from '@mistriwork/engine/adapters/sqlite.js';
+import { schemaFingerprint, sqliteParams, toJsonSafe, withBytes } from '@mistriwork/engine/adapters/sqlite.js';
 import { readSqliteReadCatalog } from '@mistriwork/engine/adapters/scoped/sqliteScopeCatalog.js';
 import { assertScopeCatalog, captureScopeCatalog, isFixedScopeCatalog, mapScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import { isRowScopeSnapshot, snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
@@ -512,7 +512,7 @@ export function openSqliteTenantReadSource(
     // A snapshot, so every read's composition with it is kept (tenantReadScope.ts).
     const allTrue: RowScope = snapshotRowScope(owned.schema, Object.fromEntries([...logicalIds.keys()].map((id) => [id, true])));
     let definitions: Map<string, string> | undefined;
-    const assertCatalog = () => {
+    const attestCatalog = () => {
       const actual = readSqliteReadCatalog(db);
       if ([...physicalIds.keys()].some((id) => !actual.readable.has(id))) return denyTenant();
       assertTenantOwnership(owned, { ...owned, physicalSchema: actual.schema });
@@ -527,6 +527,21 @@ export function openSqliteTenantReadSource(
       }
       if (ddl.size !== physicalIds.size || (definitions && [...definitions].some(([id, sql]) => ddl.get(id) !== sql))) return denyTenant();
       definitions ??= ddl;
+    };
+    /* A field report measured a whole catalog scan inside every read. Any DDL
+       on either schema moves its schema_version, so while the pair is the one
+       the last full pass judged, nothing it judged can have changed: the scan
+       is skipped. Read first, inside the read transaction, it names the
+       snapshot the read sees. A refused pass records nothing, so it refuses
+       again on every read until the schema moves back to a passing shape. */
+    const fingerprint = schemaFingerprint(db);
+    let attested: string | undefined;
+    const assertCatalog = () => {
+      const seen = fingerprint();
+      if (seen === attested) return;
+      attested = undefined;
+      attestCatalog();
+      attested = seen;
     };
 
     // Construction must fail before publishing a capability, and close its

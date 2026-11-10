@@ -6,6 +6,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
 import { layoutRefusal, sqliteLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
+import { cachedStatement } from '@mistriwork/engine/adapters/sqlite.js';
 import { registerPrune } from '../retention/pruner.js';
 
 export class CommandJournalUnavailable extends Refusal {
@@ -111,10 +112,11 @@ interface CatalogEntry {
   sql: string | null;
 }
 export function catalog(db: DatabaseSync): CatalogEntry[] {
-  return db
-    .prepare(`SELECT type, name, tbl_name, sql FROM main.sqlite_schema
-    WHERE substr(name, 1, ?) = ? COLLATE NOCASE OR substr(tbl_name, 1, ?) = ? COLLATE NOCASE`)
-    .all(PREFIX.length, PREFIX, PREFIX.length, PREFIX) as unknown as CatalogEntry[];
+  return cachedStatement(
+    db,
+    `SELECT type, name, tbl_name, sql FROM main.sqlite_schema
+    WHERE substr(name, 1, ?) = ? COLLATE NOCASE OR substr(tbl_name, 1, ?) = ? COLLATE NOCASE`,
+  ).all(PREFIX.length, PREFIX, PREFIX.length, PREFIX) as unknown as CatalogEntry[];
 }
 
 /** Whether the reserved tables are exactly this layout at this version: every
@@ -123,10 +125,11 @@ export function catalog(db: DatabaseSync): CatalogEntry[] {
 function isLayout(db: DatabaseSync, layout: ReadonlyMap<string, string>, version: number): boolean {
   // TEMP triggers can attach to main tables even without a reserved name.
   if (
-    db
-      .prepare(`SELECT 1 FROM temp.sqlite_schema
-    WHERE substr(name, 1, ?) = ? COLLATE NOCASE OR substr(tbl_name, 1, ?) = ? COLLATE NOCASE LIMIT 1`)
-      .get(PREFIX.length, PREFIX, PREFIX.length, PREFIX)
+    cachedStatement(
+      db,
+      `SELECT 1 FROM temp.sqlite_schema
+    WHERE substr(name, 1, ?) = ? COLLATE NOCASE OR substr(tbl_name, 1, ?) = ? COLLATE NOCASE LIMIT 1`,
+    ).get(PREFIX.length, PREFIX, PREFIX.length, PREFIX)
   )
     return false;
   const entries = catalog(db);
@@ -138,13 +141,15 @@ function isLayout(db: DatabaseSync, layout: ReadonlyMap<string, string>, version
   ) {
     return false;
   }
-  const rows = db.prepare(`SELECT singleton, version FROM main."${COMMAND_JOURNAL_TABLES.meta}"`).all();
+  const rows = cachedStatement(db, `SELECT singleton, version FROM main."${COMMAND_JOURNAL_TABLES.meta}"`).all();
   return rows.length === 1 && rows[0].singleton === 1 && rows[0].version === version;
 }
 
 /** Exact schema attestation rejects unrelated tables, altered constraints, triggers and an older version. */
 export function assertSqliteCommandJournal(db: DatabaseSync): void {
-  if (!isLayout(db, definitions, JOURNAL_VERSION) || db.prepare('PRAGMA foreign_keys').get()?.foreign_keys !== 1)
+  /* Asked on every command a tenant writer runs (tenantWriteSource.ts): its statements are kept per handle, as a
+     catalog scan's are (sqliteHandles.ts `cachedStatement`), and answer afresh each time. */
+  if (!isLayout(db, definitions, JOURNAL_VERSION) || cachedStatement(db, 'PRAGMA foreign_keys').get()?.foreign_keys !== 1)
     throw new CommandJournalUnavailable(
       layoutRefusal('The command journal', sqliteLayoutVersion(db, COMMAND_JOURNAL_TABLES.meta), JOURNAL_VERSION),
     );

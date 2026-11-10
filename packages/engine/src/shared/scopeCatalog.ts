@@ -21,6 +21,13 @@ const frozenDerived = new WeakSet<object>();
 const derivedCaptures = new WeakMap<object, DatabaseSchema>();
 /** Test-only: how many catalogs were copied and checked in full. */
 export const scopeCatalogCounters = { captured: 0 };
+/* Every object inside a catalog captured below, with what copying it would
+   count. A catalog made from a captured one (a mapping, a pruning) shares its
+   frozen parts, and copying those again for each write was most of a capture's
+   work (a field report). They are detached plain data that nothing can change,
+   so copyData keeps them; the checks after it still read every one. Only seal()
+   adds to it, so a caller's object, frozen or not, is always copied. */
+const sealed = new WeakMap<object, { nodes: number; characters: number; height: number }>();
 
 /** Validate descriptors before reading values, including non-authoritative metadata. */
 function copyData(input: unknown): unknown {
@@ -36,6 +43,11 @@ function copyData(input: unknown): unknown {
     }
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (typeof value !== 'object' || ancestors.has(value)) return refuse();
+    const kept = sealed.get(value);
+    if (kept) {
+      if ((nodes += kept.nodes - 1) > 262_144 || depth + kept.height > 16 || (characters += kept.characters) > 16_777_216) return refuse();
+      return value;
+    }
     const array = Array.isArray(value);
     const proto = Object.getPrototypeOf(value);
     if (array ? proto !== Array.prototype : proto !== Object.prototype && proto !== null) return refuse();
@@ -79,6 +91,23 @@ function freeze<T>(value: T): T {
     Object.freeze(value);
   }
   return value;
+}
+/** Freeze a checked catalog all the way down and remember each part's size for copyData. */
+function seal(value: unknown): { nodes: number; characters: number; height: number } {
+  if (typeof value === 'string') return { nodes: 1, characters: value.length, height: 0 };
+  if (!value || typeof value !== 'object') return { nodes: 1, characters: 0, height: 0 };
+  const known = sealed.get(value);
+  if (known) return known;
+  const size = { nodes: 1, characters: 0, height: 0 };
+  for (const [key, child] of Object.entries(value)) {
+    const inner = seal(child);
+    size.nodes += inner.nodes;
+    size.characters += inner.characters + (Array.isArray(value) ? 0 : key.length);
+    size.height = Math.max(size.height, inner.height + 1);
+  }
+  Object.freeze(value);
+  sealed.set(value, size);
+  return size;
 }
 const fkOrder = (a: ForeignKey, b: ForeignKey): number => order(a.from.table, b.from.table) || order(a.name, b.name);
 
@@ -285,7 +314,8 @@ export function captureScopeCatalog(schema: DatabaseSchema): DatabaseSchema {
         if (column.references) endpoint(column.references.table, [column.references.column]);
       }
     }
-    const frozen = freeze(captured);
+    seal(captured);
+    const frozen = captured;
     capturedCatalogs.add(frozen);
     if (frozenDerived.has(schema)) derivedCaptures.set(schema, frozen);
     return frozen;

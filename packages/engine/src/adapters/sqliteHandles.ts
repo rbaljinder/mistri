@@ -145,9 +145,25 @@ export function transactionEpoch(db: DatabaseSync, journal?: { table: string; ve
  * this contract, as it is for captureSchemaLifetime: no business operation can send one.
  */
 export function schemaFingerprint(db: DatabaseSync): () => string {
-  const main = db.prepare('PRAGMA main.schema_version'),
-    temp = db.prepare('PRAGMA temp.schema_version');
+  const main = cachedStatement(db, 'PRAGMA main.schema_version'),
+    temp = cachedStatement(db, 'PRAGMA temp.schema_version');
   return () => `${main.get()?.schema_version}.${temp.get()?.schema_version}`;
+}
+
+/* A catalog scan asks the same few hundred questions every time it runs, and preparing them was most of its cost (a
+   field report); a store's layout check asks its few on every command. Each handle keeps its own, by text: a statement is bound to its connection, and SQLite prepares one
+   again by itself when the schema under it has moved. A catalog of more tables than the bound starts the map over. */
+const statements = new WeakMap<DatabaseSync, Map<string, StatementSync>>();
+/** `db.prepare(sql)`, kept per handle: for the catalog's and a store layout's questions, asked again and again. */
+export function cachedStatement(db: DatabaseSync, sql: string): StatementSync {
+  let kept = statements.get(db);
+  if (!kept) statements.set(db, (kept = new Map()));
+  let statement = kept.get(sql);
+  if (!statement) {
+    if (kept.size >= 2048) kept.clear();
+    kept.set(sql, (statement = db.prepare(sql)));
+  }
+  return statement;
 }
 
 /** The schema and whether a store's meta row says its version, in one statement; undefined when the store is not there. */

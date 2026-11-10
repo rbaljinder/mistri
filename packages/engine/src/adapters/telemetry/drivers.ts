@@ -41,6 +41,10 @@ export async function explainStatement(spanId: string): Promise<string[] | undef
 }
 
 const EXPLAINABLE = new Set(['SELECT', 'WITH']);
+/* A catalog read or a PRAGMA: the engine's own checks, which run by the dozen
+   around every command, and each span cost two random ids even in a trace the
+   exporter drops (a field report). They are spans only in a sampled trace. */
+const INTERNAL = /^\s*PRAGMA\b|\b(?:sqlite_schema|sqlite_master|sqlite_temp_schema|sqlite_temp_master|pg_catalog|information_schema)\b/i;
 
 /** A statement's span, begun but not made current: a statement has no children. The caller ends it. */
 function beginStatement(
@@ -53,6 +57,7 @@ function beginStatement(
   const span = startSpan(summary, {
     kind: 'client',
     childOnly: true,
+    sampledOnly: INTERNAL.test(text),
     attributes: {
       'db.system.name': dialect,
       'db.operation.name': operation,
