@@ -62,9 +62,7 @@ import {
   captureTenantData,
   denyTenant,
   denyTenantFor,
-  TenantContextError,
   TenantRequestFault,
-  TenantUnavailableError,
   tenantIdentifier,
   tenantOptions,
   tenantRecord,
@@ -120,6 +118,7 @@ import { appSurfaceForRealm } from '../../shared/appTenancy.js';
 import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
 import { PAGE_HEADER, pageLoad, pageManifestRefusal } from '../http/pageLoad.js';
 import { currentReadRoute, readRouteOf, withReadKind, withReadRoute } from '../readAudit.js';
+import { tenantReadRefusal } from './tenantReadRefusal.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
 import { attributeAction, attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js';
 import { tenantHistoryStoreKey } from './tenantRecordHistoryStore.js';
@@ -2191,11 +2190,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           reportRefusal(req, error.status, error.code, error.message, error);
           return send(req, res, error.status, { error: error.message, code: error.code });
         }
-        const unavailable = databaseUnanswered(error);
-        const failure = unavailable ? new TenantUnavailableError() : new TenantContextError();
-        const status = error instanceof InvalidRequest ? error.status : unavailable ? 503 : 403;
-        reportRefusal(req, status, failure.code, failure.message, error, !(error instanceof TenantContextError));
-        return send(req, res, status, { error: failure.message, code: failure.code }, {}, error);
+        const { status, code, message, said } = tenantReadRefusal(error);
+        reportRefusal(req, status, code, message, error, said);
+        return send(req, res, status, { error: message, code }, {}, error);
       })
       .catch(() => {
         if (!res.destroyed) res.destroy();

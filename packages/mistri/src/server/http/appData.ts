@@ -44,6 +44,7 @@ import type { ComposeResources } from '@mistriwork/engine/server/http/recordComp
 import { recordHistoryRoutes } from './recordHistoryRoutes.js';
 import { decisionRoutes } from './decisionRoutes.js';
 import { send } from '@mistriwork/engine/server/http/reply.js';
+import { readNotRecorded, withReadKind } from '../readAudit.js';
 import { resolveSource } from './source.js';
 import { asksOutside } from './visitorTables.js';
 
@@ -200,6 +201,8 @@ export const APP_DATA: DataHooks = {
   pages: APP_PAGES,
   compose: {
     mayAsk,
+    asking: withReadKind,
+    fatal: readNotRecorded,
     resources: (ctx, source) => (browserApp(ctx, source).app?.resources ?? {}) as ComposeResources,
     suggested: (source, table) => defaultPage(source.selectedHost, source.schema, table),
     availability: async (ctx, checks) => {

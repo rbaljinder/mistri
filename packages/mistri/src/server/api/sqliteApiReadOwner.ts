@@ -33,8 +33,8 @@ import { renderApiAsyncApi } from './apiAsyncApi.js';
 import { storeTargetOf } from '../commands/appCommandEvents.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
 /* An agent's tool call reads through this owner too: its door is MCP, set where the session delivers (appMcpSession.ts). */
-import { currentReadRoute, withReadRoute } from '../readAudit.js';
-import { withReadAuditSink } from '../readAuditStore.js';
+import { auditEventFeed, currentReadRoute, withReadRoute } from '../readAudit.js';
+import { withReadAuditSink, withReadAuditSinkPer } from '../readAuditStore.js';
 
 const refuse = (code: ApiReadFailureCode = 'temporarily_unavailable'): never => {
   throw new ApiReadFailure(code);
@@ -279,16 +279,38 @@ export async function createSqliteApiReadOwner(
               );
             }
             if (!before.operations.some((id) => id.startsWith('event:'))) return refuse('forbidden');
-            const body = JSON.stringify(
-              readSqliteEventFeed(
-                target.sqlite,
-                initial.app,
-                query,
-                eventFeedAudience(initial.app, resources.schema, before),
-                integers,
-                feedSource.sourceId,
-              ),
+            const page = readSqliteEventFeed(
+              target.sqlite,
+              initial.app,
+              query,
+              eventFeedAudience(initial.app, resources.schema, before),
+              integers,
+              feedSource.sourceId,
             );
+            // Events about records of an audited resource are reads of them: written before the page leaves (readAudit.ts).
+            // Leases taken for a row's connection are held until its append lands.
+            const leased: Array<() => void> = [];
+            try {
+              await auditEventFeed(
+                withReadAuditSinkPer(
+                  resolveAppAccess(app, resources.schema, [...before.roles]),
+                  { app: app.id, tenant: '', actor: `api-token:${before.tokenId}` },
+                  // Each row goes to the database that holds its resource, which is not always the feed's lane.
+                  async (c) => {
+                    const open = physicals.get(c);
+                    if (open) return open;
+                    leased.push(registry.lease(c));
+                    return (await registry.open(c)).adapter;
+                  },
+                ),
+                resources.schema,
+                (resource) => resources.connectionFor(resource),
+                page.items,
+              );
+            } finally {
+              for (const release of leased) release();
+            }
+            const body = JSON.stringify(page);
             requestCurrent();
             return buffer(credential, before, 200, body, signal);
           }

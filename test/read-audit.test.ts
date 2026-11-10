@@ -16,6 +16,7 @@ import { Registry } from '../packages/engine/src/server/connections.js';
 import { TenantUnavailableError } from '../packages/engine/src/server/evidence.js';
 import type { AppHost } from '../packages/mistri/src/server/app/apps.js';
 import type { Identity } from '../packages/mistri/src/server/auth/auth.js';
+import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { resolveAppAccess } from '../packages/mistri/src/shared/appAccess.js';
 import { authorizeResources } from '../packages/mistri/src/server/app/appAccess.js';
@@ -29,6 +30,8 @@ import {
 } from '../packages/mistri/src/adapters/readAudit/sqliteReadAudit.js';
 import type { ReadAuditRow } from '../packages/mistri/src/adapters/readAudit/readAudit.js';
 import {
+  auditEventFeed,
+  READ_NOT_RECORDED,
   auditQueryRead,
   currentReadRoute,
   forgetReadAuditCoalescing,
@@ -45,6 +48,9 @@ import { withTenantReadAudit } from '../packages/mistri/src/server/tenant/tenant
 import { runAuditCommand, sinceInstant } from '../packages/mistri/src/server/cli/auditCommand.js';
 import { renderApiReadOpenApi } from '../packages/mistri/src/server/api/apiReadOpenApi.js';
 import { tenantBatchRequest } from '../packages/mistri/src/shared/tenantBoot.js';
+import { defineLoader, defineLoaders } from '../packages/mistri/src/server/commands/pageLoaders.js';
+import { tenantReadRefusal } from '../packages/mistri/src/server/tenant/tenantReadRefusal.js';
+import { composeTenantRecordPage } from '../packages/mistri/src/server/tenant/tenantCompose.js';
 import { createApp } from './support/createApp.js';
 import { statementsOf } from './support/statements.js';
 
@@ -95,17 +101,27 @@ interface Context {
   post: (path: string, body: Record<string, unknown>, headers?: Record<string, string>) => Promise<{ status: number; text: string }>;
 }
 
-async function fixture(run: (context: Context) => Promise<void>, provision = true) {
+async function fixture(
+  run: (context: Context) => Promise<void>,
+  provision = true,
+  served: { app?: typeof manifest; loaders?: object; pages?: ReturnType<typeof parsePagesConfig> } = {},
+) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-read-audit-'));
   const path = database(directory);
   if (provision) await provisionStores({ sqlite: path }, { only: ['read-audit'] });
   const registry = new Registry();
   registry.add({ id: connection, name: 'Audited database', url: path, source: 'config' });
   const host: AppHost = {
-    app: { path: join(directory, 'app.ts'), app: manifest, pages: [], sources: {} },
-    pages: [],
+    app: {
+      path: join(directory, 'app.ts'),
+      app: served.app ?? manifest,
+      pages: served.pages ?? [],
+      sources: {},
+      ...(served.loaders ? { loaders: served.loaders as never } : {}),
+    },
+    pages: served.pages ?? [],
     auth: {
-      spec: manifest.auth!,
+      spec: (served.app ?? manifest).auth!,
       store: join(directory, 'sessions.db'),
       handler: async () => {},
       close: async () => {},
@@ -113,7 +129,7 @@ async function fixture(run: (context: Context) => Promise<void>, provision = tru
     },
   };
   const bound = { host: '127.0.0.1', port: 0 };
-  const server = createApp({ registry, bound, apps: [host], pages: [], views: [] });
+  const server = createApp({ registry, bound, apps: [host], pages: served.pages ?? [], views: [] });
   const reader = new DatabaseSync(path);
   forgetReadAuditCoalescing();
   try {
@@ -270,7 +286,169 @@ test('each door writes one row before its rows leave, and an unaudited resource 
   });
 });
 
-test('a row that cannot be written stops the read: 503 and no body', async () => {
+test('a composed record page asks its related lists as related reads, not as the page', async () => {
+  const pages = parsePagesConfig(
+    {
+      pages: [
+        {
+          id: 'service-page',
+          label: 'Service',
+          base: 'service',
+          sections: [{ kind: 'fields' }, { kind: 'list', from: 'incident', whose: 'service_id' }],
+        },
+      ],
+    },
+    'read audit pages',
+  );
+  await fixture(
+    async ({ registry, host, post, rows }) => {
+      await ensureAppReadAudit(registry, host);
+      const composed = await post('/api/pages/compose', { page: 'service-page', key: { id: 1 }, rows: 10 });
+      assert.equal(composed.status, 200, composed.text);
+      assert.equal(JSON.parse(composed.text).planned, true);
+      const written = rows();
+      assert.ok(written.length >= 1, 'the related list read an audited resource');
+      assert.ok(
+        written.every((row) => row.resource === 'incident' && row.route === 'related'),
+        JSON.stringify(written.map((row) => [row.resource, row.route])),
+      );
+      assert.deepEqual(JSON.parse(written[0].ids!).sort(), ['1', '3']);
+    },
+    true,
+    { pages },
+  );
+});
+
+test('a composed record page whose related-list audit write fails is refused whole: 503, no record data', async () => {
+  const pages = parsePagesConfig(
+    {
+      pages: [
+        {
+          id: 'service-page',
+          label: 'Service',
+          base: 'service',
+          sections: [{ kind: 'fields' }, { kind: 'list', from: 'incident', whose: 'service_id' }],
+        },
+      ],
+    },
+    'read audit pages',
+  );
+  await fixture(
+    async ({ registry, host, path, post }) => {
+      await ensureAppReadAudit(registry, host);
+      const db = new DatabaseSync(path);
+      db.exec('DROP TABLE "__mistri_read_audit_row"');
+      db.close();
+      const refused = await post('/api/pages/compose', { page: 'service-page', key: { id: 1 }, rows: 10 });
+      assert.equal(refused.status, 503, refused.text);
+      assert.deepEqual(JSON.parse(refused.text), READ_NOT_RECORDED);
+      assert.ok(!refused.text.includes('Identity') && !refused.text.includes('Sign-in'), 'no record data');
+    },
+    true,
+    { pages },
+  );
+});
+
+test('the tenant host says a read the audit could not record in the same words, however it was wrapped', () => {
+  const failed = new ReadAuditFailed('x', { cause: new TenantUnavailableError() });
+  for (const error of [failed, new Error('wrapped', { cause: failed })])
+    assert.deepEqual(tenantReadRefusal(error), { status: 503, code: 'read_not_recorded', message: READ_NOT_RECORDED.error, said: true });
+  assert.equal(tenantReadRefusal(new TenantUnavailableError()).code, 'tenant_temporarily_unavailable');
+});
+
+test("a tenant App's composed record page asks its related lists through the related door too", async () => {
+  const column = (name: string, primaryKey = false) => ({ name, type: 'INTEGER', nullable: false, primaryKey });
+  const schema = {
+    label: 'Desk',
+    dialect: 'sqlite',
+    readAt: '',
+    foreignKeys: [{ from: { table: 'incident', columns: ['service_id'] }, to: { table: 'service', columns: ['id'] } }],
+    tables: [
+      { id: 'service', name: 'service', schema: '', isView: false, columns: [column('id', true)] },
+      { id: 'incident', name: 'incident', schema: '', isView: false, columns: [column('id', true), column('service_id')] },
+    ],
+  } as unknown as DatabaseSchema;
+  const doors: Array<[string, string | undefined]> = [];
+  const view = { base: 'incident', filter: { groups: [[{ column: 'service_id', op: '=', value: 1 }]] } };
+  await withReadRoute('page', () =>
+    composeTenantRecordPage({
+      schema,
+      planned: {
+        page: {
+          id: 'service-page',
+          base: 'service',
+          sections: [{ kind: 'fields' }, { kind: 'list', from: 'incident', whose: 'service_id' }],
+        },
+        plans: [{ index: 1, view }],
+      },
+      key: { id: 1 },
+      rows: 10,
+      tab: undefined,
+      app: { resources: {} },
+      ask: async (path, body) => {
+        doors.push([`${path} ${(body.view as { base?: string } | undefined)?.base ?? ''}`.trim(), currentReadRoute()]);
+        return { status: 200, body: { rows: [] } };
+      },
+    }),
+  );
+  assert.deepEqual(
+    doors.find(([ask]) => ask === '/api/view/run incident'),
+    ['/api/view/run incident', 'related'],
+  );
+  assert.deepEqual(
+    doors.find(([ask]) => ask === '/api/view/run service'),
+    ['/api/view/run service', 'page'],
+    "the record's own row is the page's",
+  );
+});
+
+test("a custom page's loader reads an audited resource: one row, by the custom-page door, for the right actor", async () => {
+  const app = parseAppConfig(
+    {
+      id: appId,
+      name: 'Audited desk',
+      connection,
+      resources: { incident: { audit: { reads: true } }, service: {} },
+      auth: { providers: ['email'], defaultRole: 'viewer', roles: { viewer: { read: ['incident', 'service'] } } },
+      views: {
+        board: {
+          kind: 'page',
+          label: 'Board',
+          component: { id: 'page-board', module: './pages/board.page.tsx', kind: 'page' },
+          reads: ['incident'],
+          loader: 'board',
+        },
+      },
+      home: 'board',
+      nav: ['board'],
+    },
+    'read audit custom page fixture',
+  );
+  const loaders = defineLoaders({
+    board: defineLoader({
+      reads: ['incident'],
+      load: async ({ db }) => ({ names: (await db.incident.where({}).orderBy('id')).map((row) => String(row.name)) }),
+    }),
+  });
+  await fixture(
+    async ({ registry, host, post, rows }) => {
+      await ensureAppReadAudit(registry, host);
+      const loaded = await post('/api/pages/load', { page: 'board' });
+      assert.equal(loaded.status, 200, loaded.text);
+      assert.equal(JSON.parse(loaded.text).data.names.length, 3);
+      const written = rows();
+      assert.equal(written.length, 1, JSON.stringify(written));
+      assert.equal(written[0].route, 'custom-page');
+      assert.equal(written[0].actor, 'account-viewer');
+      assert.equal(written[0].resource, 'incident');
+      assert.deepEqual(JSON.parse(written[0].ids!).sort(), ['1', '2', '3']);
+    },
+    true,
+    { app, loaders },
+  );
+});
+
+test('a row that cannot be written stops the read: 503, the fixed JSON refusal both hosts send, and no data', async () => {
   await fixture(async ({ registry, host, path, post }) => {
     await ensureAppReadAudit(registry, host);
     const db = new DatabaseSync(path);
@@ -278,7 +456,9 @@ test('a row that cannot be written stops the read: 503 and no body', async () =>
     db.close();
     const refused = await post('/api/query', { table: 'incident', limit: 50 });
     assert.equal(refused.status, 503);
-    assert.equal(refused.text, '');
+    assert.deepEqual(JSON.parse(refused.text), READ_NOT_RECORDED);
+    assert.equal(READ_NOT_RECORDED.code, 'read_not_recorded');
+    assert.ok(!refused.text.includes('Sign-in'), 'no audited data in the body');
     const unaudited = await post('/api/query', { table: 'service', limit: 50 });
     assert.equal(unaudited.status, 200, 'an unaudited resource is not held hostage by the audit store');
   });
@@ -361,6 +541,49 @@ test('the doors: api, mcp and assistant actors, every address, and a read by no 
   assert.equal(doorOf('/api/query', 'export'), 'page', 'a word the header does not know says nothing');
   assert.equal(doorOf('/api/export', 'picker'), 'export');
   assert.equal(doorOf('/api/query', 'picker', 'assistant'), 'assistant', 'a request that came by another door keeps it');
+});
+
+test('an event feed page: one row per audited resource it names, the api door, a failed write refuses the page', async () => {
+  const table = (id: string) => ({ id, columns: [{ name: 'id', primaryKey: true }, { name: 'name' }] });
+  const schema = { tables: [table('incident'), table('service'), table('note')] } as unknown as DatabaseSchema;
+  const appended: ReadAuditRow[] = [];
+  const sink: ReadAuditSink = { app: appId, tenant: '', actor: 'api-token:7', append: async (row) => void appended.push(row) };
+  const audited = new Map([
+    ['incident', 'incident'],
+    ['service', 'service'],
+  ]);
+  const items = [
+    { resource: 'incident', key: { id: '1' } },
+    { resource: 'incident', key: { id: '1' } },
+    { resource: 'incident', key: { id: '2' } },
+    { resource: 'service', key: { id: 9 } },
+    { resource: 'note', key: { id: 5 } },
+  ];
+  forgetReadAuditCoalescing();
+  await auditEventFeed({ audited, readAudit: sink }, schema, () => connection, items);
+  assert.deepEqual(
+    appended.map((row) => [row.resource, row.route, row.actor, row.count, row.ids, row.record, row.query]).sort(),
+    [
+      ['incident', 'api', 'api-token:7', 2, '["1","2"]', undefined, '"$events"'],
+      ['service', 'api', 'api-token:7', 1, '["9"]', undefined, '"$events"'],
+    ],
+    'the unaudited note is not in the log',
+  );
+  const before = appended.length;
+  await auditEventFeed({ audited }, schema, () => connection, []);
+  await auditEventFeed({}, schema, () => connection, items);
+  assert.equal(appended.length, before, 'an empty page, and an App that audits nothing, write nothing');
+  await assert.rejects(
+    auditEventFeed({ audited }, schema, () => connection, items),
+    ReadAuditFailed,
+    'a grant nobody gave a sink is refused',
+  );
+  forgetReadAuditCoalescing();
+  const failing: ReadAuditSink = { ...sink, append: async () => Promise.reject(new Error('disk full')) };
+  await assert.rejects(
+    auditEventFeed({ audited, readAudit: failing }, schema, () => connection, items),
+    ReadAuditFailed,
+  );
 });
 
 test('a batch item says only what a picker or related read would have said', () => {

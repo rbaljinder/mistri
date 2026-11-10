@@ -55,6 +55,22 @@ export function withReadAuditSink<T extends AuditedAccess>(
   };
 }
 
+/** As `withReadAuditSink`, for rows that belong on several databases: each row goes to the source of the connection it names. */
+export function withReadAuditSinkPer<T extends AuditedAccess>(
+  access: T,
+  sink: Omit<ReadAuditSink, 'append'>,
+  sourceOf: (connection: string) => unknown | Promise<unknown>,
+): T {
+  if (!access.audited?.size) return access;
+  return {
+    ...access,
+    readAudit: {
+      ...sink,
+      append: async (row, connection) => readAuditStoreOf(await sourceOf(connection), `connection "${connection}"`).appendReadAudit(row),
+    },
+  };
+}
+
 /** The resources whose reads an App audits. */
 export const auditedResources = (app: Pick<AppDef, 'resources'>): string[] =>
   Object.entries(app.resources ?? {})
