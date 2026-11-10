@@ -16,6 +16,7 @@ export { DateField } from '@mistriwork/ui/DateField.js';
 export function Drawer(props: ComponentProps<typeof UiDrawer>) {
   return createElement(UiDrawer, { ...props, closeLabel: props.closeLabel ?? message('common.close') });
 }
+export { FileField } from '@mistriwork/ui/FileField.js';
 export { Modal } from '@mistriwork/ui/Modal.js';
 export { Pagination } from '@mistriwork/ui/Pagination.js';
 export { Popover } from '@mistriwork/ui/Popover.js';

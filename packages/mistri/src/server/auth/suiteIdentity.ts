@@ -491,7 +491,7 @@ function sqliteLedger(identity: SuiteIdentityConfiguration, exclusions: readonly
     freshPreferences = freshFile(preferencePath),
     freshAuthority = freshFile(authorityPath);
   separate();
-  const db = new DatabaseSync(identity.grants);
+  const db = new DatabaseSync(identity.grants, { timeout: 5000 });
   let preferencesDb: DatabaseSync | undefined;
   let authorityDb: DatabaseSync | undefined;
   const close = () => {
@@ -502,10 +502,10 @@ function sqliteLedger(identity: SuiteIdentityConfiguration, exclusions: readonly
   try {
     if (fresh) provisionSuiteGrantStore(db, identity.id);
     const grants = openSuiteGrantStore(db, identity.id);
-    preferencesDb = new DatabaseSync(preferencePath);
+    preferencesDb = new DatabaseSync(preferencePath, { timeout: 5000 });
     if (freshPreferences) provisionSuitePreferencesStore(preferencesDb, identity.id);
     const preferences = openSuitePreferencesStore(preferencesDb, identity.id);
-    authorityDb = new DatabaseSync(authorityPath);
+    authorityDb = new DatabaseSync(authorityPath, { timeout: 5000 });
     if (freshAuthority) provisionSuiteAuthorityStore(authorityDb, identity.id);
     const authority = openSuiteAuthorityStore(authorityDb, identity.id);
     let closed = false;

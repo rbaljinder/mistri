@@ -57,7 +57,7 @@ import { doorRefusal, writes as changesSomething, type Bound } from '@mistriwork
 import { frontDoor } from '@mistriwork/engine/server/http/frontDoor.js';
 import { dispatchResourceReadHttp } from '@mistriwork/engine/server/resourceReadHttp.js';
 import { APP_READS } from '../app/appReads.js';
-import { createTenantContexts, TenantContextsBusy, tenantLeaseFailureCode } from './tenantContexts.js';
+import { createTenantContexts, lostContext, refusedWriteBody, TenantContextsBusy, tenantLeaseFailureCode } from './tenantContexts.js';
 import { arrivalGate, arrivalWidth } from './tenantArrivals.js';
 import {
   captureTenantData,
@@ -2081,15 +2081,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         // refused — business work not being available on this lease, or the
         // account being inside a dealer while another tab asked to act as the
         // platform. Both are plain, and neither says anything private.
-        if (tenantSupportRefused(error)) {
-          const refusal = tenantSupportRefusal(error);
-          return send(req, res, 403, {
-            error: refusal.message,
-            code: refusal.code,
-            outcome: 'not_applied',
-            ...(path === '/api/delete' ? { deleted: false } : path === '/api/revert' ? { reverted: false } : {}),
-          });
-        }
+        if (tenantSupportRefused(error)) return send(req, res, 403, refusedWriteBody(path, tenantSupportRefusal(error), 'not_applied'));
         const leaseCode = tenantLeaseFailureCode(error);
         if (leaseCode) {
           // Keep a post-commit/receipt-uncertain result uncertain. Renewing access
@@ -2110,6 +2102,11 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 ? { reverted: false }
                 : {}),
           });
+        }
+        const lost = lostContext(error, path);
+        if (lost) {
+          reportRefusal(req, 403, lost.code, lost.error, error);
+          return send(req, res, 403, lost, {}, error);
         }
         if (commands.has(path) || path.startsWith('/api/commands/')) {
           const failure = businessCommandHttpError(

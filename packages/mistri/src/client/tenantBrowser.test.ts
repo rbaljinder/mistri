@@ -24,6 +24,7 @@ vi.mock('./tenantTransport.js', () => ({
   chooseTenant: mocks.choose,
   recoverTenant: mocks.recover,
   renewTenant: mocks.renew,
+  registerTenantRenewer: () => () => {},
 }));
 vi.mock('../../../kit/src/client/sessionLifecycle.js', () => ({
   invalidateSession: mocks.invalidate,

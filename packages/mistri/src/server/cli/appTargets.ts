@@ -20,6 +20,7 @@ import { stateStampColumn, type TableMeta } from '@mistriwork/engine/shared/sche
 import type { Options } from '@mistriwork/engine/server/cli/args.js';
 import { appEntries } from '@mistriwork/engine/server/config/profile.js';
 import { appBinding } from './appBinding.js';
+import { isTenantApp } from '../../shared/appModel.js';
 import type { StartupConfig } from '@mistriwork/engine/server/cli/config.js';
 import type { MigrateApp, MigrateHost } from '@mistriwork/engine/server/migrate/cli.js';
 import type { SeedLife, SeedResource } from '@mistriwork/engine/server/seed/seed.js';
@@ -108,12 +109,20 @@ export const MIGRATE_APPS: MigrateHost<MigrateAppRun> = {
             appDir,
             config,
             ...(jobs !== undefined ? { jobs } : {}),
-            async check(rest, write) {
+            async check(given, write) {
+              let rest = given;
               const { runCheck } = await import('../build/check.js');
               /* The check is a start of its own, and a tenant App's start refuses without its policy: the one this run
                  resolved (a flag, or the `app` block of mistri.json) goes with it, so a check never judges the App
                  beside a different answer than the migrations were run beside. */
               const named = (flag: string) => rest.some((arg) => arg === flag || arg.startsWith(`${flag}=`));
+              /* A tenant App's start refuses a database named on the command line (its connections are the config's), so
+                 the file `migrate up <db>` ran against is not passed on: the check reads the connection the App binds,
+                 which is the one the migrations were run on (a field report: the migration applied, then exit 4). */
+              if (isTenantApp(loaded.app) && opts.target !== undefined) {
+                const at = rest.indexOf(opts.target);
+                if (at >= 0) rest = rest.filter((_, index) => index !== at && !(index === at - 1 && rest[index] === '--db'));
+              }
               return runCheck(
                 ['--app', appDir, ...rest, ...(opts.policy !== undefined && !named('--policy') ? ['--policy', opts.policy] : [])],
                 write,

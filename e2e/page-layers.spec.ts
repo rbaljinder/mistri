@@ -82,6 +82,19 @@ test.describe('A free-form page and what it draws around itself', () => {
     expect(first!.y).toBeCloseTo(pane!.y, 0);
   });
 
+  /* A field report: openPage loaded the App again, so a marker on the window was lost and the context ran once more. */
+  test('openPage moves to another page in place: the document, and a marker on its window, are kept', async ({ page }) => {
+    await page.goto(`${app.origin}/hero`);
+    await settled(page);
+    await page.evaluate(() => {
+      (window as unknown as { marker: string }).marker = 'kept';
+    });
+    await page.getByRole('button', { name: 'Open the wall' }).click();
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/wall');
+    await settled(page);
+    expect(await page.evaluate(() => (window as unknown as { marker?: string }).marker)).toBe('kept');
+  });
+
   test('a plain link in a page takes the look’s link color', async ({ page }) => {
     await page.goto(`${app.origin}/kit`);
     await settled(page);

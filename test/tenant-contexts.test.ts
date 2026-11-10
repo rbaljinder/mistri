@@ -418,9 +418,13 @@ for (const code of ['tenant_lease_stale', 'tenant_lease_expired'] as const) {
       assert.equal(tenantLeaseFailureCode(error), code);
       return true;
     });
-    for (const method of [manager.execute, manager.status]) {
+    // An execute refused at the door ran nothing; a status check answers for a command that may have run before.
+    for (const [method, outcome] of [
+      [manager.execute, 'not_applied'],
+      [manager.status, 'unknown'],
+    ] as const) {
       await assert.rejects(method(request, north, assertion(a), f.body()), (error) => {
-        commandFailure('unknown')(error);
+        commandFailure(outcome)(error);
         assert.equal(tenantLeaseFailureCode(error), code);
         return true;
       });

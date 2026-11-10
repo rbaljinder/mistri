@@ -278,7 +278,10 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
             ...sessionActorWords({ id: scope.principal.accountId, who: scope.who() }),
           });
           /* This tenant's zone for `today()` and `now()` (readerZone.ts), where `ui.timezone` names a column. */
-          const zone = mode === 'execute' || mode === 'draft' ? await commandZone(app.ui, () => scope.reads()) : undefined;
+          const zone =
+            mode === 'execute' || mode === 'draft'
+              ? await commandZone(app.ui, () => scope.reads(), { resource: ownership.profile, read: scope.profileZone })
+              : undefined;
           const flags = commandFlagsOnce(async () => {
             await scope.session();
             const captured = await captureFlags?.(scope.principal, request);

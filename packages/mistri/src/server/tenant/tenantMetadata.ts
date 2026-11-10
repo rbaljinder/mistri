@@ -23,7 +23,7 @@ import { homeViews } from '../../shared/appHome.js';
 import { pageConfig, parsePageBody, type PageDef } from '@mistriwork/engine/shared/page.js';
 import { appDefaultPage } from '../http/appProjection.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { appActionGrants } from '../../shared/appAccess.js';
+import type { AppUpdateAction } from '../../shared/appModel.js';
 import { fieldAccessibleApp, fieldAccessiblePage, readablePage } from '../app/appFieldProjection.js';
 import { captureTenantData, denyTenant, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import { catalogLocales } from '../app/readerLocale.js';
@@ -423,8 +423,17 @@ function projectAfresh(
   const realmPages = pagesForRoles(surface.pages, roles, surface.app.auth);
   /* The fixed actions this member's roles run without write: kept although their columns are not the member's to
      write (appFieldProjection.ts), for the tables the capabilities say are theirs. */
+  /* Read off the capabilities, which resolved them against the tenant's own catalog: resolving them again here against
+     the scope catalog throws for the platform-owned profile resource, which that catalog does not hold (a field report). */
   const grantedByTable = capabilities?.grantedActions
-    ? new Map([...appActionGrants(app, schema, [...roles])].filter(([table]) => capabilities.grantedActions![table]))
+    ? new Map(
+        Object.entries(capabilities.grantedActions).flatMap(([table, ids]) => {
+          const list = (app.resources?.[table]?.actions ?? []).filter(
+            (action): action is AppUpdateAction => action.command === undefined && ids.includes(action.id),
+          );
+          return list.length ? [[table, list] as const] : [];
+        }),
+      )
     : undefined;
   const visible = fieldAccessibleApp(realmApp, schema, grantedByTable);
   const granted = new Set(capabilities?.grantedCommands ?? []);

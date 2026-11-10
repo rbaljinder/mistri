@@ -425,6 +425,16 @@ const BLOCK_NAMES: Readonly<
   command: { what: 'commands', on: new Set(['CommandForm', 'CommandButton', 'Steps']) },
   action: { what: 'actions', on: new Set(['ActionButton']) },
 };
+/* The blocks that take a `show`, `query` or `sort` the host sends as one read of the resource they name. */
+const PATH_BLOCKS = new Set(['Rows', 'List', 'RecordCard']);
+/** What a JSX attribute is given: the expression inside its braces, or its quoted text. */
+function jsxAttribute(opening: AstNode, name: string): AstNode | undefined {
+  const attribute = ((opening.attributes as AstNode[]) ?? []).find(
+    (each) => each.type === 'JSXAttribute' && (each.name as AstNode).name === name,
+  );
+  const value = attribute?.value as AstNode | undefined;
+  return value?.type === 'JSXExpressionContainer' ? (value.expression as AstNode) : value;
+}
 const SDK = new Set(['@mistriwork/mistri/ui', '@mistriwork/mistri/page', '@mistriwork/mistri/ui', '@mistriwork/mistri/page']);
 
 /** What a page's sources ask of its manifest, by file and line: what it does not declare, and what check cannot read. */
@@ -499,7 +509,13 @@ export function scanPageSource(
   };
   /* The pieces of a literal read the host sends as one request (shared/uiSdk.ts), each asked alone, so a finding names
      the path that crossed into a table the page does not read. A piece written as an expression is the types' to judge. */
-  const crossings = (hook: string, resource: string | undefined, args: AstNode[], at: number | undefined) => {
+  const crossings = (
+    hook: string,
+    resource: string | undefined,
+    args: AstNode[],
+    at: number | undefined,
+    as = `${hook}("${resource}")`,
+  ) => {
     const table = schema && resource !== undefined && manifest.reads.includes(resource) ? tableNamed(schema, resource) : undefined;
     if (!table) return;
     const option = (node: AstNode | undefined, key: string) =>
@@ -538,10 +554,22 @@ export function scanPageSource(
       said.add(stray);
       scan.undeclared.push({
         line: lineOf(at),
-        text: `[page-undeclared] ${hook}("${resource}") reads "${stray}" through its ${piece}, which the page "${manifest.key}" does not declare in its reads`,
+        text: `[page-undeclared] ${as} reads "${stray}" through its ${piece}, which the page "${manifest.key}" does not declare in its reads`,
       });
     }
   };
+  /* A `<Scope from>` held where it names its resource; a block with none of its own reads the innermost one around it. */
+  const scopes: Array<{ from: string; start: number; end: number }> = [];
+  walk(program, (node) => {
+    if (node.type !== 'JSXElement') return;
+    const opening = node.openingElement as AstNode;
+    const tag = opening.name as AstNode;
+    if (tag.type !== 'JSXIdentifier' || imported.get(tag.name as string) !== 'Scope') return;
+    const from = jsxAttribute(opening, 'from');
+    const name = literal(from);
+    if (name !== undefined && typeof node.start === 'number' && typeof node.end === 'number')
+      scopes.push({ from: name, start: node.start, end: node.end });
+  });
   walk(program, (node) => {
     if (node.type === 'CallExpression') {
       const callee = node.callee as AstNode;
@@ -572,6 +600,26 @@ export function scanPageSource(
         const value = attribute.value as AstNode | undefined;
         const given = value?.type === 'JSXExpressionContainer' ? (value.expression as AstNode) : value;
         hold(named.what, `<${block} ${prop}>`, given, attribute.start);
+      }
+      /* A literal `show`, `query` or `sort` of a block that reads rows is held as `useRows` holds it: a path across a
+         reference reads the table it lands on (the same server refusal), and check said ok to it (a field report). */
+      if (PATH_BLOCKS.has(block)) {
+        const value = (name: string) => jsxAttribute(node, name);
+        const own = literal(value('from'));
+        const at = typeof node.start === 'number' ? node.start : -1;
+        const around = scopes.filter((scope) => scope.start <= at && at < scope.end).sort((a, b) => b.start - a.start)[0];
+        const properties = ['show', 'query', 'sort'].flatMap((key) => {
+          const each = value(key);
+          return each ? [{ type: 'Property', computed: false, key: { name: key }, value: each } as AstNode] : [];
+        });
+        if (properties.length)
+          crossings(
+            'useRows',
+            own ?? around?.from,
+            [{} as AstNode, { type: 'ObjectExpression', properties } as AstNode],
+            node.start,
+            `<${block} from="${own ?? around?.from}">`,
+          );
       }
     }
   });

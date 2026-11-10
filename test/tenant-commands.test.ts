@@ -337,6 +337,62 @@ test('command-only membership prepares, executes and replays with no generic CRU
   await assert.rejects(f.control.seen!.tx.count('item'));
 });
 
+/* The writer's whole attestation (tenantWriteSource.ts attest) ends in this read of the schema; counted as the
+   attestations a command makes. A field report found a handler of 20 database calls spending 2 to 3 seconds in them. */
+const ATTEST = 'FROM main.sqlite_schema ORDER BY type, name';
+function countAttests(t: TestContext) {
+  const original = DatabaseSync.prototype.prepare;
+  const seen = { count: 0, writer: undefined as DatabaseSync | undefined };
+  DatabaseSync.prototype.prepare = function (this: DatabaseSync, sql: string, ...rest: unknown[]) {
+    if (sql.includes(ATTEST)) {
+      seen.count++;
+      seen.writer = this;
+    }
+    return (original as (this: DatabaseSync, ...args: unknown[]) => ReturnType<typeof original>).call(this, sql, ...rest);
+  } as typeof original;
+  t.after(() => {
+    DatabaseSync.prototype.prepare = original;
+  });
+  return seen;
+}
+
+test('a tenant command attests its writer when it opens and before it commits, however many calls its handler makes', async (t) => {
+  const f = await fixture(t),
+    service = await f.issue(),
+    seen = countAttests(t);
+  f.control.handle = async (context, input) => {
+    for (let i = 0; i < 20; i++) await context.tx.query({ table: 'reviewer', limit: 5, offset: 0 });
+    await context.tx.update({ table: 'item', key: recordKey(context), expected: { version: 0 }, values: { version: 1 } });
+    return { ...input, version: 1 };
+  };
+  seen.count = 0;
+  const result = await service.execute(request, north, f.body());
+  assert.equal(result.status, 'applied');
+  assert.equal(f.version(), 1);
+  // Each verification attests twice (before and after the kind's fence): once when the transaction opens, once before COMMIT.
+  assert.equal(seen.count, 4);
+});
+
+test('a schema moved during a tenant command is attested again at the next call and refused before commit', async (t) => {
+  const f = await fixture(t),
+    service = await f.issue(),
+    seen = countAttests(t);
+  f.control.handle = async (context, input) => {
+    await context.tx.query({ table: 'reviewer', limit: 5, offset: 0 });
+    // A stand-in for any schema change on the writer mid-command: no handler can send one.
+    seen.writer!.exec('CREATE INDEX main.db_item_moved ON db_item(name)');
+    await context.tx.query({ table: 'reviewer', limit: 5, offset: 0 });
+    await context.tx.update({ table: 'item', key: recordKey(context), expected: { version: 0 }, values: { version: 1 } });
+    return { ...input, version: 1 };
+  };
+  seen.count = 0;
+  await assert.rejects(service.execute(request, north, f.body()), (error) => error instanceof BusinessCommandExecutionError);
+  // Twice when it opened; then the call after the move verifies whole again, and its first attestation refuses.
+  assert.equal(seen.count, 3);
+  assert.equal(f.version(), 0);
+  assert.equal(f.db.prepare("SELECT count(*) AS n FROM sqlite_schema WHERE name = 'db_item_moved'").get()!.n, 0);
+});
+
 test("a tenant command's handler is told its door: the screen's, or the API's or App MCP's when the host says so, never a caller's word", async (t) => {
   const f = await fixture(t),
     service = await f.issue();

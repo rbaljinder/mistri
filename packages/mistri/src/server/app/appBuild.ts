@@ -47,6 +47,8 @@ export interface BuildManifest {
   /** The Node that made it: informational, since the JSON and ESM it wrote are Node's to read on any 24+. */
   node: string;
   app: { id: string; name: string; manifest: string };
+  /** The `ui.theme.preset` the build resolved, where the App names one: a start whose own reading differs says so (themeDriftWarning). */
+  theme?: { preset: string };
   bundler: { name: 'rolldown'; version: string } | { name: 'strip-types'; node: string } | { name: 'none' };
   checks: {
     typecheck: { status: 'passed' | 'skipped' | 'none'; detail: string };
@@ -296,6 +298,19 @@ async function builtFonts(app: LoadedApp['app'], dir: string): Promise<Pick<Load
 
 const withoutLogo = ({ logo: _logo, ...rest }: AppPresentation): AppPresentation => rest;
 
+/**
+ * What a start says when the preset it resolves is not the one the build recorded (an environment reading, or a
+ * deployment's presentation, differs from the build's): the build's pin holds, so the page is not the one built and
+ * checked. Said, never refused; a build that recorded none (an older one) says nothing.
+ */
+export function themeDriftWarning(recorded: string | undefined, served: string | undefined): string | undefined {
+  if (recorded === undefined || served === recorded) return undefined;
+  return (
+    `ui.theme.preset: the build recorded "${recorded}" and this start resolves ${served === undefined ? 'none' : `"${served}"`}. ` +
+    'Rebuild, or drop the env override.'
+  );
+}
+
 const rebuild = 'Rebuild it with `mistri build`; a build is not edited in place.';
 
 /** The manifest, once its format and version say this runtime may serve it. */
@@ -362,6 +377,8 @@ export async function loadBuiltApp(
         id: decoded.app.id,
       })
     : decoded.app;
+  const drift = themeDriftWarning(manifest.theme?.preset, typeof app.ui?.theme?.preset === 'string' ? app.ui.theme.preset : undefined);
+  if (drift) console.error(`mistri: warning: ${dir}: ${drift}`);
   const lockPath = join(dir, AUTHORITY_LOCK);
   const lock = Object.hasOwn(manifest.sha256, AUTHORITY_LOCK) ? await readFile(lockPath, 'utf8') : undefined;
   const authority: AppAuthority = { report, lockPath, ...(lock === undefined ? {} : { lock }) };

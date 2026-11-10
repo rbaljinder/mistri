@@ -62,6 +62,7 @@ import {
   type SqlStyle,
   type AggregateRequest,
   type AggregateResult,
+  refuseUpdateMatches,
 } from './adapter.js';
 import { compileAggregate } from '../shared/aggregate.js';
 import { coerceForColumn } from '../shared/schema.js';
@@ -93,6 +94,7 @@ import type { ScopeTrigger } from './scoped/scopeTriggers.js';
 import type { TriggerKeyFacts } from './scoped/triggerEffects.js';
 import { captureScopeCatalog, mapScopeCatalog } from '../shared/scopeCatalog.js';
 import { createPinnedPostgresReadOwner, type PinnedPostgresReadOwner, type PostgresReadDependency } from './postgresReadCatalog.js';
+import { batchesThrough, gatheredBatches, insertPlanned, updatePlanned, type InsertPlan, type UpdatePlan } from './postgresBatchWrites.js';
 import { isRuntimeRelation, qualified, redact, valueSafe, withBytes, toJsonSafe } from './postgresValues.js';
 import { beginWriteCapture, capturesWrites, committedWriteCapture, finishWriteCapture } from './writeCapture.js';
 import {
@@ -1093,9 +1095,8 @@ export class PostgresAdapter implements Adapter {
     return this.watched(this.writes.run(lane, () => this.connections.withWriteClient((write) => this.updateNow(request, write))));
   }
 
-  private async updateNow(request: UpdateRequest, write: PgQuery, read?: PgQuery): Promise<UpdateResult> {
-    const transactional = read !== undefined;
-    read ??= await this.conn();
+  /** What `update` refuses before it writes, and the values it writes, coerced to their columns. */
+  private async updatePlan(request: UpdateRequest, read: PgQuery) {
     const found = await this.assertTable(request.table, read);
     const id = `${found.schema}.${found.name}`;
     /* Postgres updates through a simple view, and the update lands on the
@@ -1135,6 +1136,15 @@ export class PostgresAdapter implements Adapter {
       }
     }
 
+    return { found, meta, pk, applied };
+  }
+
+  private async updateNow(request: UpdateRequest, write: PgQuery, read?: PgQuery): Promise<UpdateResult> {
+    const transactional = read !== undefined;
+    read ??= await this.conn();
+    const { found, meta, pk, applied } = await this.updatePlan(request, read);
+    const id = `${found.schema}.${found.name}`;
+
     const filter: Filter = {
       groups: [pk.map((column) => ({ column, op: '=' as const, value: request.key[column] }))],
     };
@@ -1142,12 +1152,7 @@ export class PostgresAdapter implements Adapter {
        one the UPDATE's own row count is the check: the key is the whole
        primary key, so it matches one row or none, and a refusal rolls the
        transaction back. */
-    const refuseMatches = (matches: number): never => {
-      if (request.expected !== undefined && matches === 0) throw new WriteConflict();
-      throw new Refusal(
-        `Refused: that key matches ${matches} rows, not 1. An update is only allowed when it is certain which row it changes.`,
-      );
-    };
+    const refuseMatches = (matches: number): never => refuseUpdateMatches(request, matches);
     const matches = transactional ? 1 : await this.count(id, filter);
     if (matches !== 1) refuseMatches(matches);
 
@@ -1197,17 +1202,15 @@ export class PostgresAdapter implements Adapter {
     return this.watched(this.writes.run([], () => this.connections.withWriteClient((write) => this.insertNow(request, write))));
   }
 
-  private async insertNow(request: InsertRequest, write: PgQuery, read?: PgQuery, scoped = false): Promise<InsertResult> {
-    read ??= await this.conn();
+  /** What `insert` refuses before it writes, and the values it writes, coerced to their columns. */
+  private async insertPlan(request: InsertRequest, read: PgQuery) {
     const found = await this.assertTable(request.table, read);
     const id = `${found.schema}.${found.name}`;
     if (found.isView) throw new Refusal(`${id} is a view. Insert into the table underneath it.`);
 
     const meta = await this.columnsOf(found.schema, found.name, read);
-    const entries = Object.entries(request.values ?? {});
-
     const applied: Record<string, string | number | boolean | null> = {};
-    for (const [column, raw] of entries) {
+    for (const [column, raw] of Object.entries(request.values ?? {})) {
       const declared = meta.find((c) => c.name === column);
       if (!declared) throw new Refusal(`${id} has no column called "${column}".`);
       applied[column] = coerceForColumn(declared.written || declared.type || '', raw);
@@ -1215,6 +1218,26 @@ export class PostgresAdapter implements Adapter {
         throw new Refusal(`"${column}" is NOT NULL and cannot be null. Leave it out to use its default, if it has one.`);
       }
     }
+    return { found, meta, applied };
+  }
+
+  /** Several rows of one table added by one statement inside a transaction, each refused as `insert` refuses one (postgresBatchWrites). */
+  private async insertManyNow(requests: readonly InsertRequest[], write: PgQuery): Promise<InsertResult[]> {
+    const plans: InsertPlan[] = [];
+    for (const request of requests) plans.push(await this.insertPlan(request, write));
+    return insertPlanned(plans, write);
+  }
+
+  /** Several rows of one table changed by one statement inside a transaction, each refused as `update` refuses one. */
+  private async updateManyNow(requests: readonly UpdateRequest[], write: PgQuery): Promise<UpdateResult[]> {
+    const plans: UpdatePlan[] = [];
+    for (const request of requests) plans.push({ request, ...(await this.updatePlan(request, write)) });
+    return updatePlanned(plans, write);
+  }
+
+  private async insertNow(request: InsertRequest, write: PgQuery, read?: PgQuery, scoped = false): Promise<InsertResult> {
+    read ??= await this.conn();
+    const { found, meta, applied } = await this.insertPlan(request, read);
 
     const columns = Object.keys(applied);
     const text =
@@ -1273,11 +1296,11 @@ export class PostgresAdapter implements Adapter {
      replaces. */
   private historyWrites(
     write: PgQuery,
-    base: Pick<WriteTransaction, 'insert' | 'update' | 'remove'>,
+    base: Pick<WriteTransaction, 'insert' | 'update' | 'remove' | 'insertMany' | 'updateMany'>,
     /* The capture's read of the row it keeps a before image of: an unscoped transaction's reads by key, which a row
        sent ahead may answer (plainReads). */
     query: (request: QueryRequest) => Promise<QueryResult> = (request) => this.queryOn(request, write),
-  ): Pick<WriteTransaction, 'insert' | 'update' | 'remove' | 'tell'> & {
+  ): Pick<WriteTransaction, 'insert' | 'update' | 'remove' | 'tell' | 'insertMany' | 'updateMany'> & {
     finish(): Promise<void>;
     committed(): void;
     /** A row an accepted trigger changed (writeCapture.ts). */
@@ -1320,6 +1343,7 @@ export class PostgresAdapter implements Adapter {
       insert: (r) => history.insert(r, base.insert),
       update: (r) => history.update(r, base.update),
       remove: (r) => history.remove(r, base.remove),
+      ...gatheredBatches(base, history),
       tell: (r) => history.tell(r),
       finish: () => finishWriteCapture(history),
       committed: () => committedWriteCapture(history),
@@ -1408,6 +1432,8 @@ export class PostgresAdapter implements Adapter {
                 insert: (r) => this.insertNow(r, write, write),
                 remove: (r) => this.removeNow(r, write, write),
                 update: (r) => this.updateNow(r, write, write),
+                insertMany: (rs) => this.insertManyNow(rs, write),
+                updateMany: (rs) => this.updateManyNow(rs, write),
               },
               reads,
             );
@@ -1422,6 +1448,7 @@ export class PostgresAdapter implements Adapter {
                   insert: (r) => operations.run(() => writes.insert(r)),
                   remove: (r) => operations.run(() => writes.remove(r)),
                   update: (r) => operations.run(() => writes.update(r)),
+                  ...batchesThrough(writes, (work) => operations.run(work)),
                   ...(writes.tell ? { tell: (r: TellRequest) => operations.run(() => writes.tell!(r)) } : {}),
                 }),
               ),
@@ -1608,6 +1635,8 @@ export class PostgresAdapter implements Adapter {
                 insert: (r) => this.insertNow(r, write, write),
                 remove: (r) => this.removeNow(r, write, write),
                 update: (r) => this.updateNow(r, write, write),
+                insertMany: (rs) => this.insertManyNow(rs, write),
+                updateMany: (rs) => this.updateManyNow(rs, write),
               },
               reads,
             );
@@ -1619,6 +1648,7 @@ export class PostgresAdapter implements Adapter {
               insert: (r) => operations.run(() => writes.insert(r)),
               remove: (r) => operations.run(() => writes.remove(r)),
               update: (r) => operations.run(() => writes.update(r)),
+              ...batchesThrough(writes, (work) => operations.run(work)),
               ...(writes.tell ? { tell: (r: TellRequest) => operations.run(() => writes.tell!(r)) } : {}),
             };
             // The transaction's own work runs without the hint: a transaction it opens is not this one.

@@ -3,7 +3,10 @@ import { Refusal, type TransactionOperations } from '../adapter.js';
 import { snapshotScopedData } from './scopedReads.js';
 
 /** Shared adapter queue boundary: capture before waiting; caught malformed or
- * failed operations still poison the transaction. No writer escapes here. */
+ * failed operations still poison the transaction. No writer escapes here.
+ * `verify` runs around each operation: the adapter's step check, which verifies
+ * whole only when the schema moved (sqlite.ts verifiedStep), never its full
+ * opening or pre-COMMIT verification. */
 export function scopedCommandInvoker(
   operations: TransactionOperations,
   scoped: boolean,

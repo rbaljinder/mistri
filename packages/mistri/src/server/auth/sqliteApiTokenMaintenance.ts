@@ -84,7 +84,7 @@ function transaction<T>(
     fence();
     const uri = pathToFileURL(path);
     uri.searchParams.set('mode', 'rw');
-    db = new DatabaseSync(uri.href, { enableForeignKeyConstraints: true });
+    db = new DatabaseSync(uri.href, { enableForeignKeyConstraints: true, timeout: 5000 });
     fence();
     db.exec('BEGIN IMMEDIATE');
     const current = () => {

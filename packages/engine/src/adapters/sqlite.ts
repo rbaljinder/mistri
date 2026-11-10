@@ -8,7 +8,15 @@
  * works for both is unlikely to be accidentally Postgres-shaped.
  */
 import { statSync } from 'node:fs';
-import { waitForLocks, assertIndependentWrite, writeToFile, prepareGuarded, transactionEpoch, storeEpoch } from './sqliteHandles.js';
+import {
+  waitForLocks,
+  assertIndependentWrite,
+  writeToFile,
+  prepareGuarded,
+  transactionEpoch,
+  storeEpoch,
+  schemaFingerprint,
+} from './sqliteHandles.js';
 import { captureScopeCatalog, mapScopeCatalog } from '../shared/scopeCatalog.js';
 import { inlineRows } from '../shared/anyRows.js';
 import { asksAboutRows } from '../shared/filter.js';
@@ -66,6 +74,12 @@ import {
   type CountItem,
   type AggregateRequest,
   type AggregateResult,
+  batchedRows,
+  chunked,
+  gathered,
+  refuseUpdateMatches,
+  runsOfColumns,
+  sameTable,
 } from './adapter.js';
 import { compileAggregate } from '../shared/aggregate.js';
 import { readExactly, summed } from '../shared/decimals.js';
@@ -956,6 +970,104 @@ export class SqliteAdapter implements Adapter {
   }
 
   private async updateNow(request: UpdateRequest, read = this.db, scoped = false): Promise<UpdateResult> {
+    const { table, meta, pk, applied } = this.updatePlan(request, read);
+
+    const filter: Filter = {
+      groups: [pk.map((column) => ({ column, op: '=' as const, value: request.key[column] }))],
+    };
+
+    /* Outside a transaction the count runs first, on the read handle, so the
+       check that decides whether to write cannot itself write. Inside one it
+       is the UPDATE's own count: the key is the whole primary key, so it
+       matches one row or none, and a refusal rolls the transaction back. */
+    const transactional = read !== this.db;
+    const matches = transactional ? 1 : await this.count(table, filter);
+    if (matches !== 1) refuseUpdateMatches(request, matches);
+
+    const where = buildWhere(filter, ANSI_STYLE);
+    const assignments = Object.keys(applied)
+      .map((c) => `${ANSI_STYLE.quote(c)} = ?`)
+      .join(', ');
+    const guard = buildUpdateGuard(request, Object.fromEntries(meta.map((column) => [column.name, column.type])), ANSI_STYLE, 'sqlite', 1);
+    const text = `UPDATE ${scoped ? 'OR ABORT ' : ''}${ANSI_STYLE.quote(table)} SET ${assignments}${where.text}${guard.text}`;
+    const params = [...Object.values(applied), ...where.params, ...guard.params];
+
+    const write = read === this.db ? this.writeHandle() : read;
+    const result = write.prepare(text).run(...sqliteParams(params));
+    if (request.expected !== undefined && Number(result.changes) === 0) throw new WriteConflict();
+    if (transactional && Number(result.changes) !== 1) refuseUpdateMatches(request, Number(result.changes));
+    return { affected: Number(result.changes), applied, sql: { text, params } };
+  }
+
+  /**
+   * Several rows of one table changed by one statement inside a transaction, each as `updateNow` changes one: the
+   * same refusals before it, each row's own values and `expected`, one row a key. A `CASE` a column picks each
+   * row's value, the WHERE matches each key with its own guard, and RETURNING says which requests matched, so a
+   * row whose key or guard missed refuses the batch as it would have refused alone.
+   */
+  private updateManyNow(requests: readonly UpdateRequest[], handle: DatabaseSync): UpdateResult[] {
+    const plans = requests.map((request) => ({ request, ...this.updatePlan(request, handle) }));
+    const table = sameTable(plans.map((plan) => plan.table));
+    const pk = plans[0]!.pk;
+    const types = Object.fromEntries(plans[0]!.meta.map((column) => [column.name, column.type]));
+    const keys = new Set<string>();
+    for (const { request } of plans) {
+      const key = JSON.stringify(pk.map((column) => String(request.key[column])));
+      if (keys.has(key)) throw new Refusal(`A batch changes each row of ${table} once; that key appears twice.`);
+      keys.add(key);
+    }
+    const results: UpdateResult[] = [];
+    for (const chunk of chunked(
+      plans,
+      (plan) => pk.length * (Object.keys(plan.applied).length + 3) + 2 * Object.keys(plan.applied).length,
+    )) {
+      const match = (request: UpdateRequest) => {
+        const where = buildWhere({ groups: [pk.map((column) => ({ column, op: '=' as const, value: request.key[column] }))] }, ANSI_STYLE);
+        return { text: where.text.replace(/^ WHERE /, ''), params: where.params };
+      };
+      const params: unknown[] = [];
+      const columns = [...new Set(chunk.flatMap((plan) => Object.keys(plan.applied)))];
+      const assignments = columns.map((column) => {
+        const cases = chunk
+          .filter((plan) => Object.hasOwn(plan.applied, column))
+          .map((plan) => {
+            const key = match(plan.request);
+            params.push(...key.params, plan.applied[column]);
+            return `WHEN ${key.text} THEN ?`;
+          });
+        const quoted = ANSI_STYLE.quote(column);
+        return `${quoted} = CASE ${cases.join(' ')} ELSE ${quoted} END`;
+      });
+      const wheres = chunk.map((plan) => {
+        const key = match(plan.request);
+        const guard = buildUpdateGuard(plan.request, types, ANSI_STYLE, 'sqlite', 1);
+        params.push(...key.params, ...guard.params);
+        return `(${key.text}${guard.text})`;
+      });
+      const which = chunk.map((plan, index) => {
+        const key = match(plan.request);
+        params.push(...key.params);
+        return `WHEN ${key.text} THEN ${index}`;
+      });
+      const text =
+        `UPDATE ${ANSI_STYLE.quote(table)} SET ${assignments.join(', ')} WHERE ${wheres.join(' OR ')}` +
+        ` RETURNING CASE ${which.join(' ')} END AS ${ANSI_STYLE.quote('mistri_batch_row')}`;
+      const matched = new Set(
+        (handle.prepare(text).all(...sqliteParams(params)) as Array<Record<string, unknown>>).map((row) => Number(row.mistri_batch_row)),
+      );
+      chunk.forEach((plan, index) => {
+        if (!matched.has(index)) {
+          if (plan.request.expected !== undefined) throw new WriteConflict();
+          refuseUpdateMatches(plan.request, 0);
+        }
+        results.push({ affected: 1, applied: plan.applied, sql: { text, params } });
+      });
+    }
+    return results;
+  }
+
+  /** What `update` refuses before it writes, and the values it writes, coerced to their columns. */
+  private updatePlan(request: UpdateRequest, read: DatabaseSync) {
     const table = this.assertTable(request.table, read);
     /* A view with an INSTEAD OF trigger takes an UPDATE, and the trigger
        decides what changes. Refused as the other dialects refuse it: what the
@@ -997,37 +1109,7 @@ export class SqliteAdapter implements Adapter {
       }
     }
 
-    const filter: Filter = {
-      groups: [pk.map((column) => ({ column, op: '=' as const, value: request.key[column] }))],
-    };
-
-    /* Outside a transaction the count runs first, on the read handle, so the
-       check that decides whether to write cannot itself write. Inside one it
-       is the UPDATE's own count: the key is the whole primary key, so it
-       matches one row or none, and a refusal rolls the transaction back. */
-    const transactional = read !== this.db;
-    const matches = transactional ? 1 : await this.count(table, filter);
-    const refuseMatches = (count: number) => {
-      if (request.expected !== undefined && count === 0) throw new WriteConflict();
-      throw new Refusal(
-        `Refused: that key matches ${count} rows, not 1. An update is only allowed when it is certain which row it changes.`,
-      );
-    };
-    if (matches !== 1) refuseMatches(matches);
-
-    const where = buildWhere(filter, ANSI_STYLE);
-    const assignments = Object.keys(applied)
-      .map((c) => `${ANSI_STYLE.quote(c)} = ?`)
-      .join(', ');
-    const guard = buildUpdateGuard(request, Object.fromEntries(meta.map((column) => [column.name, column.type])), ANSI_STYLE, 'sqlite', 1);
-    const text = `UPDATE ${scoped ? 'OR ABORT ' : ''}${ANSI_STYLE.quote(table)} SET ${assignments}${where.text}${guard.text}`;
-    const params = [...Object.values(applied), ...where.params, ...guard.params];
-
-    const write = read === this.db ? this.writeHandle() : read;
-    const result = write.prepare(text).run(...sqliteParams(params));
-    if (request.expected !== undefined && Number(result.changes) === 0) throw new WriteConflict();
-    if (transactional && Number(result.changes) !== 1) refuseMatches(Number(result.changes));
-    return { affected: Number(result.changes), applied, sql: { text, params } };
+    return { table, meta, pk, applied };
   }
 
   /**
@@ -1051,21 +1133,7 @@ export class SqliteAdapter implements Adapter {
   }
 
   private async insertNow(request: InsertRequest, read = this.db, scoped = false): Promise<InsertResult> {
-    const table = this.assertTable(request.table, read);
-    const meta = this.tableInfo(table, read);
-
-    const entries = Object.entries(request.values ?? {});
-
-    const applied: Record<string, string | number | boolean | null> = {};
-    for (const [column, raw] of entries) {
-      const declared = meta.find((c) => c.name === column);
-      if (!declared) throw new Refusal(`${table} has no column called "${column}".`);
-      if (generated(declared)) throw new Refusal(`"${column}" is generated by the database and cannot be written.`);
-      applied[column] = coerceForColumn(declared.type || '', raw);
-      if (applied[column] === null && declared.notnull === 1) {
-        throw new Refusal(`"${column}" is NOT NULL and cannot be null. Leave it out to use its default, if it has one.`);
-      }
-    }
+    const { table, meta, applied } = this.insertPlan(request, read);
 
     const columns = Object.keys(applied);
     // A schema-level ON CONFLICT REPLACE must never turn creation/restoration
@@ -1109,6 +1177,88 @@ export class SqliteAdapter implements Adapter {
     )
       throw new Refusal('The stored key cannot be checked in this row scope.');
     const key = Object.fromEntries(pk.map((c) => [c, (scoped ? raw : safe)[c] as string | number]));
+    return { key, row: safe, applied, sql: { text, params } };
+  }
+
+  /** What `insert` refuses before it writes, and the values it writes, coerced to their columns. */
+  private insertPlan(request: InsertRequest, read: DatabaseSync) {
+    const table = this.assertTable(request.table, read);
+    const meta = this.tableInfo(table, read);
+    const applied: Record<string, string | number | boolean | null> = {};
+    for (const [column, raw] of Object.entries(request.values ?? {})) {
+      const declared = meta.find((c) => c.name === column);
+      if (!declared) throw new Refusal(`${table} has no column called "${column}".`);
+      if (generated(declared)) throw new Refusal(`"${column}" is generated by the database and cannot be written.`);
+      applied[column] = coerceForColumn(declared.type || '', raw);
+      if (applied[column] === null && declared.notnull === 1) {
+        throw new Refusal(`"${column}" is NOT NULL and cannot be null. Leave it out to use its default, if it has one.`);
+      }
+    }
+    return { table, meta, applied };
+  }
+
+  /**
+   * Several rows of one table added by one statement inside a transaction, each as `insertNow` adds one: one
+   * multi-row `INSERT OR ABORT … RETURNING *` for each run of rows naming the same columns. SQLite does not promise
+   * the order RETURNING answers in, so each row is matched back to the request whose values it holds (batchedRows).
+   */
+  private insertManyNow(requests: readonly InsertRequest[], handle: DatabaseSync): InsertResult[] {
+    const plans = requests.map((request) => this.insertPlan(request, handle));
+    const table = sameTable(plans.map((plan) => plan.table));
+    const pk = plans[0]!.meta.filter((c) => c.pk > 0).map((c) => c.name);
+    const results: InsertResult[] = [];
+    for (const run of runsOfColumns(plans)) {
+      const columns = Object.keys(run[0]!.applied);
+      for (const chunk of chunked(run, () => Math.max(1, columns.length))) {
+        const params = chunk.flatMap((plan) => Object.values(plan.applied));
+        const text =
+          `INSERT OR ABORT INTO ${ANSI_STYLE.quote(table)}` +
+          (columns.length
+            ? ` (${columns.map((c) => ANSI_STYLE.quote(c)).join(', ')}) VALUES ${chunk.map(() => `(${columns.map(() => '?').join(', ')})`).join(', ')}`
+            : ` DEFAULT VALUES`) +
+          ' RETURNING *';
+        if (!columns.length && chunk.length > 1) {
+          /* DEFAULT VALUES is one row; rows that name no column are added one statement each. */
+          for (const plan of chunk) results.push(this.insertOne(pk, text, [], plan.applied, handle));
+          continue;
+        }
+        const inserted = handle.prepare(text);
+        inserted.setReadBigInts(true);
+        const described = inserted.columns();
+        const stored = inserted.all(...sqliteParams(params)) as Array<Record<string, unknown>>;
+        const rows = batchedRows(
+          chunk.map((plan) => plan.applied),
+          stored,
+        );
+        rows.forEach((row, index) => {
+          const safe = toJsonSafe(
+            scaleRows(
+              [{ ...row }],
+              described.map((c) => c.name),
+              scalesOf(described),
+            )[0],
+          );
+          const key = Object.fromEntries(pk.map((c) => [c, (safe as Record<string, unknown>)[c] as string | number]));
+          results.push({ key, row: safe, applied: chunk[index]!.applied, sql: { text, params } });
+        });
+      }
+    }
+    return results;
+  }
+
+  private insertOne(pk: string[], text: string, params: unknown[], applied: InsertResult['applied'], handle: DatabaseSync): InsertResult {
+    const inserted = handle.prepare(text);
+    inserted.setReadBigInts(true);
+    const described = inserted.columns();
+    const stored = inserted.get(...sqliteParams(params)) as Record<string, unknown>;
+    const safe = toJsonSafe(
+      scaleRows(
+        [{ ...stored }],
+        described.map((c) => c.name),
+        scalesOf(described),
+      )[0],
+    );
+    const key = Object.fromEntries(pk.map((c) => [c, (safe as Record<string, unknown>)[c] as string | number]));
     return { key, row: safe, applied, sql: { text, params } };
   }
 
@@ -1555,15 +1705,49 @@ export class SqliteAdapter implements Adapter {
           insert: history ? (r) => history.insert(r, insert) : insert,
           remove: history ? (r) => history.remove(r, remove) : remove,
           update: history ? (r) => history.update(r, update) : update,
+          /* A batch only beneath the plain facade: a row scope proves each row's statement on its own. History still
+             records each row, around the one statement (gathered). */
+          ...(scope === undefined
+            ? {
+                insertMany: (rs: readonly InsertRequest[]) => {
+                  const many = async (rs: readonly InsertRequest[]) => this.insertManyNow(rs, handle);
+                  return history ? gathered(rs, (r, write) => history.insert(r, write), many) : many(rs);
+                },
+                updateMany: (rs: readonly UpdateRequest[]) => {
+                  const many = async (rs: readonly UpdateRequest[]) => this.updateManyNow(rs, handle);
+                  return history ? gathered(rs, (r, write) => history.update(r, write), many) : many(rs);
+                },
+              }
+            : {}),
         };
         let evidence: DatabaseSchema | undefined;
         let physicalCatalog: SqliteScopeCatalog | undefined;
+        /* The schema the last whole verification saw (schemaFingerprint). Unset until one passes, and again while one
+           runs, so a verification that threw is never taken as passed. */
+        let settled: string | undefined;
+        const fingerprint = verify ? schemaFingerprint(handle) : undefined;
         const verified = () => {
           if (!verify) return;
           if (!handle.isTransaction || !physicalCatalog) throw new Refusal('The verified transaction is no longer active.');
+          settled = undefined;
           const result = verify(handle, physicalCatalog);
           if (isPromise(result)) void Promise.prototype.then.call(result, undefined, () => {});
           if (result !== undefined || !handle.isTransaction) throw new Refusal('Transaction verification must be synchronous.');
+          settled = fingerprint!();
+        };
+        /* Around each operation, the whole verification only when the schema moved since the last one passed. It runs
+           whole when the transaction opens and again before COMMIT, which is what decides; between, nothing a handler can
+           ask for changes what it attests. BEGIN IMMEDIATE holds the write lock, so no other connection changes the main
+           schema; an operation runs no DDL; and the attested rows (a store's meta row, a membership) are runtime tables a
+           handler cannot write. A schema change on this handle all the same (a TEMP shadow, an index, a trigger) moves the
+           fingerprint, and the next operation verifies whole and refuses before anything reaches COMMIT. Verifying whole
+           around every operation read the catalog twice a call: with forty tables, 100 to 150 ms of a command's every
+           database call (a field report). */
+        const verifiedStep = () => {
+          if (!verify) return;
+          if (!handle.isTransaction || !physicalCatalog) throw new Refusal('The verified transaction is no longer active.');
+          if (settled !== undefined && fingerprint!() === settled) return;
+          verified();
         };
         if (scope !== undefined) {
           const catalog = this.catalogCache.throughSync(epoch, 'scope', () =>
@@ -1687,7 +1871,7 @@ export class SqliteAdapter implements Adapter {
         }
         verified();
         verifyOrdinary();
-        const invoke = scopedCommandInvoker(operations, scope !== undefined, journal !== undefined, isRuntimeTable, verified);
+        const invoke = scopedCommandInvoker(operations, scope !== undefined, journal !== undefined, isRuntimeTable, verifiedStep);
         const out = maintenance
           ? await maintenance(handle, operations, verified)
           : await run(
@@ -1702,10 +1886,16 @@ export class SqliteAdapter implements Adapter {
                 insert: (r: InsertRequest) => invoke(r, (r) => records.insert(r)),
                 remove: (r: DeleteRequest) => invoke(r, (r) => records.remove(r)),
                 update: (r: UpdateRequest) => invoke(r, (r) => records.update(r)),
+                ...(scope === undefined && records.insertMany && records.updateMany
+                  ? {
+                      insertMany: (rs: readonly InsertRequest[]) => invoke(rs, (rs) => records.insertMany!(rs)),
+                      updateMany: (rs: readonly UpdateRequest[]) => invoke(rs, (rs) => records.updateMany!(rs)),
+                    }
+                  : {}),
                 // Beneath the row scope: the flows' command tells only of its own target, which it read through the scope.
                 ...(history ? { tell: (r: TellRequest) => invoke(r, (r) => history.tell(r)) } : {}),
               }),
-              journal?.open(handle, operations, verify ? verified : undefined),
+              journal?.open(handle, operations, verify ? verifiedStep : undefined),
               evidence,
             );
         await operations.finish();

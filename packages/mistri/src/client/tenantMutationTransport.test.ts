@@ -581,7 +581,7 @@ test.each(['tenant_lease_stale', 'tenant_lease_expired'])(
   },
 );
 
-test.each(['tenant_lease_stale', 'tenant_lease_expired', 'tenant_context_unavailable', '401', '503', 'network', 'wrong-revision'])(
+test.each(['tenant_context_unavailable', '401', '503', 'network', 'wrong-revision'])(
   'old-revision mutation %s cannot retire or suspend a renewed owner',
   async (kind) => {
     const owner = session.captureSessionIdentity(),
@@ -602,6 +602,121 @@ test.each(['tenant_lease_stale', 'tenant_lease_expired', 'tenant_context_unavail
     expect(session.tenantLeaseActive()).toBe(true);
     expect(lock).not.toHaveBeenCalled();
     expect(fetcher).toHaveBeenCalledOnce();
+  },
+);
+
+test.each(['tenant_lease_stale', 'tenant_lease_expired'])(
+  'a mutation refused %s at the door is sent once more, byte for byte, under the lease renewed meanwhile',
+  async (code) => {
+    const owner = session.captureSessionIdentity(),
+      lease = session.captureTenantLease()!,
+      renewed = { ...lease, revision: 2 },
+      wire = deferred<Response>(),
+      result = {
+        status: 'applied',
+        command: 'advance',
+        commandVersion: 1,
+        resource: 'item',
+        key: { id: 'same' },
+        receiptId: 'opaque-command-receipt',
+        result: { id: 'same' },
+      };
+    const fetcher = vi
+      .fn()
+      .mockImplementationOnce(() => wire.promise)
+      .mockResolvedValueOnce(response(result, renewed));
+    vi.stubGlobal('fetch', fetcher);
+    const pending = transport.tenantMutationApi('/api/commands/execute', command());
+    session.acceptTenantRenewal(owner, 1, renewed);
+    wire.resolve(response({ code, error: 'Renew required', outcome: 'not_applied' }, null, 409));
+    expect(await pending).toEqual(result);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const [first, second] = fetcher.mock.calls.map(([, init]) => init as RequestInit);
+    expect(second.body).toBe(first.body);
+    expect(JSON.parse(String(second.body))).toMatchObject({ idempotencyKey: 'attempt-exact-001' });
+    expect(new Headers(first.headers).get(names.revision)).toBe('1');
+    expect(new Headers(second.headers).get(names.revision)).toBe('2');
+    expect(session.tenantLeaseActive()).toBe(true);
+    expect(lock).not.toHaveBeenCalled();
+  },
+);
+
+test.each(['tenant_lease_stale', 'tenant_lease_expired'])(
+  'a mutation refused %s whose outcome is unknown is never sent again, even under a renewed lease',
+  async (code) => {
+    const owner = session.captureSessionIdentity(),
+      lease = session.captureTenantLease()!,
+      wire = deferred<Response>();
+    const fetcher = vi.fn(() => wire.promise);
+    vi.stubGlobal('fetch', fetcher);
+    const pending = transport.tenantMutationApi('/api/commands/execute', command());
+    session.acceptTenantRenewal(owner, 1, { ...lease, revision: 2 });
+    wire.resolve(response({ code, error: 'Commit not confirmed', outcome: 'unknown' }, null, 409));
+    await expect(pending).rejects.toMatchObject({ outcome: 'unknown' });
+    expect(fetcher).toHaveBeenCalledOnce();
+  },
+);
+
+/* A host that restarted (mistri dev respawning) forgot the context and refused the request before anything ran. */
+const forgotten = (outcome = 'not_applied') =>
+  response({ code: 'tenant_context_unavailable', error: 'The tenant context could not be verified.', outcome }, null, 403);
+const receipt = () => ({
+  status: 'applied',
+  command: 'advance',
+  commandVersion: 1,
+  resource: 'item',
+  key: { id: 'same' },
+  receiptId: 'opaque-command-receipt',
+  result: { id: 'same' },
+});
+
+test('a command refused because the server forgot the context enters the same tenant once and is sent again, byte for byte', async () => {
+  const owner = session.captureSessionIdentity(),
+    lease = session.captureTenantLease()!,
+    entered = { ...lease, tabId: 'tab-two', context: 'context-entered' },
+    result = receipt();
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(forgotten())
+    .mockResolvedValueOnce(response(entered, entered))
+    .mockResolvedValueOnce(response(result, entered));
+  vi.stubGlobal('fetch', fetcher);
+  expect(await transport.tenantMutationApi('/api/commands/execute', command())).toEqual(result);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  expect(fetcher.mock.calls[1][0]).toBe('/api/tenant/context/open?app=atlas&tenant=north');
+  const [first, , second] = fetcher.mock.calls.map(([, init]) => init as RequestInit);
+  expect(second.body).toBe(first.body);
+  expect(JSON.parse(String(second.body))).toMatchObject({ idempotencyKey: 'attempt-exact-001' });
+  expect(new Headers(first.headers).get(names.context)).toBe('context-north');
+  expect(new Headers(second.headers).get(names.context)).toBe('context-entered');
+  expect(new Headers(second.headers).get(names.tab)).toBe('tab-two');
+  expect(session.captureSessionIdentity()).toBe(owner);
+  expect(session.captureTenantLease()).toEqual(entered);
+  expect(session.tenantLeaseActive()).toBe(true);
+  expect(lock).not.toHaveBeenCalled();
+});
+
+test('a write refused for a forgotten context whose outcome is not not_applied is never sent again, nor entered for', async () => {
+  const fetcher = fetchReply(forgotten('unknown'));
+  await expect(transport.tenantMutationApi('/api/update', update())).rejects.toMatchObject({ outcome: 'unknown' });
+  expect(fetcher).toHaveBeenCalledOnce();
+});
+
+test.each(['refused again', 'entry refused'])(
+  'a command whose context cannot be entered again (%s) is sent at most twice and says the page needs a reload',
+  async (kind) => {
+    const lease = session.captureTenantLease()!,
+      entered = { ...lease, tabId: 'tab-two', context: 'context-entered' };
+    const fetcher = vi.fn().mockResolvedValueOnce(forgotten());
+    if (kind === 'refused again') fetcher.mockResolvedValueOnce(response(entered, entered)).mockResolvedValue(forgotten());
+    else fetcher.mockResolvedValueOnce(response({ code: 'forbidden', error: 'No' }, null, 403)).mockResolvedValue(response(receipt()));
+    vi.stubGlobal('fetch', fetcher);
+    const refused = transport.tenantMutationApi('/api/commands/execute', command());
+    await expect(refused).rejects.toMatchObject({ outcome: 'not_applied', status: 403, code: 'tenant_context_unavailable' });
+    await expect(refused).rejects.toThrow(/Reload the page/);
+    expect(fetcher).toHaveBeenCalledTimes(kind === 'refused again' ? 3 : 2);
+    expect(String((await refused.catch((error: Error) => error)).message)).not.toMatch(/role/i);
+    expect(lock).toHaveBeenCalled();
   },
 );
 
@@ -652,4 +767,77 @@ test("a record's decisions are read on the lease, addressed to its tenant, and n
     await expect(transport.tenantReadApi(path, { ...body, tenant: 'south' })).rejects.toThrow();
     await expect(transport.tenantReadApi(path, { ...body, tenantId: 'south' })).rejects.toThrow();
   }
+});
+
+/* A renewal in flight moves the server's revision under any request sent meanwhile, and the server refuses that
+   request at the door: so it waits for the renewal, and goes under the new lease (a field report). */
+test('a read and a command sent while a renewal is in flight wait for it, and go under the renewed lease', async () => {
+  const owner = session.captureSessionIdentity(),
+    lease = session.captureTenantLease()!,
+    renewed = { ...lease, revision: 2 },
+    renewal = deferred<void>(),
+    receipt = {
+      status: 'applied',
+      command: 'advance',
+      commandVersion: 1,
+      resource: 'item',
+      key: { id: 'same' },
+      receiptId: 'opaque-command-receipt',
+      result: { id: 'same' },
+    };
+  const unregister = transport.registerTenantRenewer(owner, { inFlight: () => renewal.promise, renew: () => renewal.promise });
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(response({ tables: [] }, renewed))
+    .mockResolvedValueOnce(response(receipt, renewed));
+  vi.stubGlobal('fetch', fetcher);
+  const read = transport.tenantReadApi('/api/schema');
+  const sent = transport.tenantMutationApi('/api/commands/execute', command());
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(fetcher).not.toHaveBeenCalled();
+  session.acceptTenantRenewal(owner, 1, renewed);
+  renewal.resolve();
+  expect(await read).toEqual({ tables: [] });
+  expect(await sent).toEqual(receipt);
+  expect(fetcher.mock.calls.map(([, init]) => new Headers((init as RequestInit).headers).get(names.revision))).toEqual(['2', '2']);
+  unregister();
+});
+
+test('a command refused stale before any renewal renews once, then goes under the new lease with the same key', async () => {
+  const owner = session.captureSessionIdentity(),
+    lease = session.captureTenantLease()!,
+    renewed = { ...lease, revision: 2 };
+  const renew = vi.fn(async () => {
+    session.acceptTenantRenewal(owner, 1, renewed);
+  });
+  const unregister = transport.registerTenantRenewer(owner, { inFlight: () => undefined, renew });
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(response({ code: 'tenant_lease_stale', error: 'Renew required', outcome: 'not_applied' }, null, 409))
+    .mockResolvedValueOnce(response({ code: 'tenant_lease_stale', error: 'Renew required', outcome: 'not_applied' }, null, 409));
+  vi.stubGlobal('fetch', fetcher);
+  // Refused again under the renewed lease, it is not sent a third time: it settles, as refused, at once.
+  await expect(transport.tenantMutationApi('/api/commands/execute', command())).rejects.toMatchObject({
+    status: 409,
+    code: 'tenant_lease_stale',
+    outcome: 'not_applied',
+  });
+  expect(renew).toHaveBeenCalledOnce();
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(JSON.parse(fetcher.mock.calls[1][1].body).idempotencyKey).toBe('attempt-exact-001');
+  expect(new Headers(fetcher.mock.calls[1][1].headers).get(names.revision)).toBe('2');
+  unregister();
+});
+
+test('a renewal that fails leaves the refused command refused, sent once', async () => {
+  const owner = session.captureSessionIdentity();
+  const renew = vi.fn(async () => {
+    throw new Error('Renewal refused');
+  });
+  const unregister = transport.registerTenantRenewer(owner, { inFlight: () => undefined, renew });
+  const fetcher = fetchReply(response({ code: 'tenant_lease_stale', error: 'Renew required', outcome: 'not_applied' }, null, 409));
+  await expect(transport.tenantMutationApi('/api/commands/execute', command())).rejects.toMatchObject({ outcome: 'not_applied' });
+  expect(renew).toHaveBeenCalledOnce();
+  expect(fetcher).toHaveBeenCalledOnce();
+  unregister();
 });

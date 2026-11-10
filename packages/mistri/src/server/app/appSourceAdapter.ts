@@ -4,8 +4,10 @@ import {
   type CountItem,
   type AggregateRequest,
   type DeleteRequest,
+  type InsertRequest,
   type TellRequest,
   type ScopedReads,
+  type UpdateRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import type { ViewDef } from '@mistriwork/engine/shared/view.js';
@@ -302,6 +304,12 @@ export function createAppSourceAdapter(
         ...(transaction.aggregate ? { aggregate: (request: AggregateRequest) => transaction.aggregate!(check(request, false)) } : {}),
         insert: (request) => transaction.insert(check(request)),
         update: (request) => transaction.update(check(request)),
+        ...(transaction.insertMany
+          ? { insertMany: (requests: readonly InsertRequest[]) => transaction.insertMany!(requests.map((request) => check(request))) }
+          : {}),
+        ...(transaction.updateMany
+          ? { updateMany: (requests: readonly UpdateRequest[]) => transaction.updateMany!(requests.map((request) => check(request))) }
+          : {}),
         remove: (request) => transaction.remove(check(request)),
         ...(transaction.tell ? { tell: (request: TellRequest) => transaction.tell!(check(request, false)) } : {}),
       };

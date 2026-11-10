@@ -11,6 +11,9 @@ const decimalText = new RegExp(DECIMAL_PATTERN);
 /* pg's own text for a timestamptz (the adapter hands it through unparsed): `2026-10-04 07:21:00.5+05:30`. */
 const instantText =
   /^([0-9]{4}-[0-9]{2}-[0-9]{2})[ T]([01][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])(\.[0-9]{1,9})?(?:(Z)|([+-])([01][0-9]|2[0-3])(?::?([0-5][0-9]))?(?::?[0-5][0-9])?)$(?![\s\S])/;
+/* The same, with the zone optional: a column that declares none. */
+const naiveInstantText =
+  /^([0-9]{4}-[0-9]{2}-[0-9]{2})[ T]([01][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])(\.[0-9]{1,9})?(?:(Z)|([+-])([01][0-9]|2[0-3])(?::?([0-5][0-9]))?(?::?[0-5][0-9])?)?$(?![\s\S])/;
 const INSTANT_PATTERN = '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$(?![\\s\\S])';
 const fail = (): never => {
   throw new TypeError('The API scalar cannot be represented by this codec.');
@@ -49,6 +52,22 @@ function scalar(type: string, dialect: Dialect, integers: 'number' | 'decimal-st
         apiDateCodec().encode(parts[1]);
         const [, day, hh, mm, ss, fraction = '', zulu, sign, oh, om = '00'] = parts;
         const offset = zulu || (oh === '00' && om === '00') ? 'Z' : `${sign}${oh}:${om}`;
+        return `${day}T${hh}:${mm}:${ss}${fraction}${offset}`;
+      },
+    });
+  /* A timestamp with no zone (a field report: the API refused `timestamp` outright): said as an instant, read as UTC, as
+     the database keeps it when no zone is declared. Its wire shape is the same date-time string as timestamptz's. */
+  if (dialect === 'postgres' ? /^timestamp(?: without time zone)?(?:\([0-6]\))?$/.test(normalized) : normalized === 'timestamp')
+    return Object.freeze({
+      kind: 'timestamp' as const,
+      schema: Object.freeze({ type: 'string', format: 'date-time', pattern: INSTANT_PATTERN }),
+      encode(value: unknown): string {
+        if (value instanceof Date) return Number.isNaN(value.getTime()) ? fail() : value.toISOString();
+        const parts = typeof value === 'string' ? naiveInstantText.exec(value) : null;
+        if (!parts) return fail();
+        apiDateCodec().encode(parts[1]);
+        const [, day, hh, mm, ss, fraction = '', zulu, sign, oh, om = '00'] = parts;
+        const offset = !zulu && !sign ? 'Z' : zulu || (oh === '00' && om === '00') ? 'Z' : `${sign}${oh}:${om}`;
         return `${day}T${hh}:${mm}:${ss}${fraction}${offset}`;
       },
     });

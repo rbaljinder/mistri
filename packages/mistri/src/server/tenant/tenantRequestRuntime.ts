@@ -56,6 +56,9 @@ export interface TenantRequestScope {
   advisoryReads<T>(run: (records: WriteTransaction) => T | Promise<T>, read: readonly string[]): Promise<T>;
   /** The tenant's own scoped reads, outside any transaction: what a command's lookup reads through. */
   reads(): ReturnType<TenantReadSource['scopeReads']>;
+  /** One text column of this tenant's platform-owned profile row, as the source reads it for the person's zone
+   * (`readTenantZone`): no resource read, no grant, that column alone. */
+  profileZone(column: string): Promise<string | undefined>;
 }
 function delivered<T>(value: T | Promise<T>): T | Promise<T> {
   return isPromise(value)
@@ -419,6 +422,10 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
               active();
               outside = true;
               return (scoped ??= reader.scopeReads(admitted, rows));
+            },
+            profileZone: (column) => {
+              active();
+              return reader.readTenantZone({ tenantId: admitted.tenantId, column });
             },
           });
           let result!: T;

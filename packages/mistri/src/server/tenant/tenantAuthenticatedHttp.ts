@@ -988,6 +988,8 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       mount: { base: mount.base, json: mountJson(mount) },
       path,
       tenant: true as const,
+      /* `ui.microphone` is the App's, whichever host serves it (http/handler.ts says the same of an ordinary App). */
+      ...(loaded.app.ui.microphone ? { microphone: true as const } : {}),
       looks: lookSheetsFor(worn().ui),
       faces: lookFacesFor(worn().ui),
       appFaces: appFaceHead(worn().ui, (href) => outward(mount, href)),

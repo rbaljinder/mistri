@@ -30,7 +30,14 @@ today and windows in the zone the first row of that column they may read
 names — their tenant's, their account's. In a tenant App a command's
 `today()`, `now()` and its stamps count the day in the running tenant's own
 zone, read the same way; a name that is not an IANA zone falls to `default`
-(and is logged outside production). Elsewhere writes keep `default`.
+(and is logged outside production). Elsewhere writes keep `default`. In a tenant
+App the column may be on the platform-owned tenant profile
+(`auth.tenancy.profile`, say `customer.timezone`): each tenant's people count
+their days in the zone their tenant's profile row holds, read by the platform
+itself, so no role needs a grant on the profile and no other profile column
+becomes readable. An empty, null or unknown value is `default`, and `mistri
+check` refuses a column the profile does not have. A tenant command's `today()`
+counts the same day.
 
 `locale` is also the App's own language, the one its `messages/` catalogs are
 written from, and may be read per reader the same way: `locale: { column:

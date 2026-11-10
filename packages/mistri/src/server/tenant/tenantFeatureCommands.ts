@@ -5,6 +5,7 @@
  */
 import { assertSqliteCommandJournal } from '../../adapters/commands/commandJournal.js';
 import { assertPostgresCommandJournal } from '../../adapters/commands/postgresCommandJournal.js';
+import { referenceReadWarnings } from '../app/appMachineChecks.js';
 import { appCommandOccurrences } from '../../shared/appCommandOccurrences.js';
 import { createBusinessCommandAuthorizer } from '../commands/businessCommandAuthorization.js';
 import { validateBusinessCommandReferences } from '../commands/businessCommandLoader.js';
@@ -31,7 +32,7 @@ export const commandLookupCheck = Object.freeze<TenantStartupCheck>({
 export const commandReferencesCheck = Object.freeze<TenantStartupCheck>({
   phase: 'commands',
   catalog: true,
-  run: ({ app, policy, registry, owned, configured, connection }) => {
+  run: ({ app, policy, registry, owned, configured, connection, checking }) => {
     /* What the App asks of a registry, said before enrollment's opaque
        boundary: an action or a form that references a command, and a role that
        grants one, are authoring mistakes worth a sentence — not a refusal an
@@ -112,6 +113,14 @@ export const commandReferencesCheck = Object.freeze<TenantStartupCheck>({
       }
       const problem = platformTenantParentProblem(registry, owned);
       if (problem) throw new TenantCommandStartupError(problem);
+      /* A reference a command's write sets, to a table it does not read, is refused on every run as invalid_result (the
+         footprint rule, businessCommandExecution.ts) and passed this check (a field report). The finding is a pattern over
+         the handler's source, so it can be wrong: `mistri check` refuses on it, and a start only says it, in the same words. */
+      const unread = referenceReadWarnings(app, owned.schema, registry);
+      if (unread.length) {
+        if (checking) throw new TenantCommandStartupError(unread.join('\n'));
+        for (const line of unread) console.error(`mistri: warning: ${line}`);
+      }
     }
   },
 });

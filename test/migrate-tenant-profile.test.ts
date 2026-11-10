@@ -48,3 +48,41 @@ test('migrate up on a tenant App named by mistri.json ends with a clean follow-u
     assert.match(result.out, /5 check\s+passed/);
   }
 });
+
+// A field report: the form that names the database file passed it on to the follow-up check as a second target,
+// and a tenant App's start refused it after the migration was applied.
+test('migrate up <db file> on a tenant App ends with a clean follow-up check', async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-migrate-tenant-file-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const business = join(directory, 'business.db');
+  const written = writeDepotApp(directory, { business, authStore: join(directory, 'auth.db'), physical: 'physical_item' });
+  mkdirSync(join(written.appDir, 'migrations'));
+  writeFileSync(join(written.appDir, 'migrations', 'V1__item.sql'), `${DEPOT_TABLE('physical_item')};`);
+  const result = await new Promise<{ code: number; out: string }>((done) => {
+    execFile(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        resolve('packages/mistri/src/server/index.ts'),
+        'migrate',
+        'up',
+        business,
+        '--config',
+        written.config,
+        '--app',
+        written.appDir,
+        '--policy',
+        written.policy,
+      ],
+      {
+        timeout: 60_000,
+        env: { ...process.env, XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0', BETTER_AUTH_SECRET: 'x'.repeat(40) },
+      },
+      (error, out, err) => done({ code: Number(error?.code ?? 0), out: `${out}${err}` }),
+    );
+  });
+  assert.doesNotMatch(result.out, /Tenant startup requires/);
+  assert.equal(result.code, 0, result.out);
+  assert.match(result.out, /5 check\s+passed/);
+});

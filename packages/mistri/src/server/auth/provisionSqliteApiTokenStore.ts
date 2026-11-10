@@ -45,7 +45,7 @@ export function provisionSqliteApiTokenStore(existingPath: string, rawOptions: P
     // The encoded URI retains spaces, Unicode and literal ?/# in file names.
     const uri = pathToFileURL(path);
     uri.searchParams.set('mode', 'rw');
-    db = new DatabaseSync(uri.href, { enableForeignKeyConstraints: true });
+    db = new DatabaseSync(uri.href, { enableForeignKeyConstraints: true, timeout: 5000 });
     fence();
     db.exec('BEGIN IMMEDIATE');
     fence();

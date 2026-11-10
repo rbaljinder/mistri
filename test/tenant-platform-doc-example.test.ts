@@ -69,7 +69,11 @@ export default defineAppTenantPolicy({
 `;
 
 /** `provisioned: false` leaves the stores to `mistri migrate stores up`, which finds the commands beside the App. */
-function fixture(t: TestContext, commands = COMMANDS(), { provisioned = true } = {}) {
+function fixture(
+  t: TestContext,
+  commands = COMMANDS(),
+  { provisioned = true, policy = POLICY, ui = undefined as Record<string, unknown> | undefined } = {},
+) {
   const { directory, stopping } = scratch(t, 'mistri-tenant-platform-doc-');
   const appDir = join(directory, 'app');
   mkdirSync(appDir);
@@ -103,6 +107,7 @@ function fixture(t: TestContext, commands = COMMANDS(), { provisioned = true } =
         },
       },
       sources: { business: { connection: binding.source.connection } },
+      ...(ui ? { ui } : {}),
       resources: { customer: { owner: 'platform' }, desk_setting: { owner: 'tenant', access: 'write' } },
       views: {
         settings: { kind: 'list', from: 'desk_setting', label: 'Settings' },
@@ -117,7 +122,7 @@ function fixture(t: TestContext, commands = COMMANDS(), { provisioned = true } =
     }),
   );
   writeFileSync(provisioned ? join(directory, 'commands.mts') : join(appDir, 'commands.mjs'), commands);
-  writeFileSync(join(directory, 'tenant-policy.mjs'), POLICY);
+  writeFileSync(join(directory, 'tenant-policy.mjs'), policy);
   writeFileSync(config, JSON.stringify({ connections: [{ name: binding.source.connection, url: data, writable: true }] }));
   const env = {
     ...process.env,
@@ -285,6 +290,68 @@ test('mistri check names the read a tenant-named platform command is missing, an
   );
 });
 
+// A field report: a write that sets a reference to a table the command does not read passed check, and every run of it was
+// refused as invalid_result. The command here is a tenant's own, setting the ownership column that points at the profile.
+const UNREAD_COMMANDS = `import { defineCommand, defineCommands } from '${source('packages/mistri/src/server/commands/businessCommands.ts')}';
+
+export default defineCommands({
+  seedDesk: defineCommand({
+    realm: 'platform',
+    tenant: 'customer_id',
+    source: 'business',
+    target: 'desk_setting',
+    targets: 'none',
+    read: ['customer'],
+    input: { customer_id: { label: 'Customer', type: 'text' } },
+    async handle({ db }) {
+      await db.desk_setting.insert({ id: 'default', timezone: 'UTC' });
+    },
+  }),
+  touchDesk: defineCommand({
+    source: 'business',
+    target: 'desk_setting',
+    targets: 'none',
+    read: ['desk_setting'],
+    write: ['desk_setting'],
+    input: {},
+    async handle({ db }) {
+      await db.desk_setting.insert({ id: 'x', timezone: 'UTC', tenant_id: 'acme' });
+    },
+  }),
+});
+`;
+const UNREAD_POLICY = POLICY.replace(
+  'resultReferences: { seedDesk: () => [] }',
+  'resultReferences: { seedDesk: () => [], touchDesk: () => [] }',
+);
+
+test(
+  'mistri check refuses a command that sets a reference to a table it does not read, naming the table and the fix',
+  { timeout: 60000 },
+  async (t) => {
+    const result = await check(fixture(t, UNREAD_COMMANDS, { policy: UNREAD_POLICY }));
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.match(
+      result.stderr,
+      /command "touchDesk" sets desk_setting\.tenant_id, which points at a "customer" row, and "customer" is not in its read.*add "customer" to read/,
+    );
+  },
+);
+
+// The finding is a pattern over the handler's source, so it may be wrong: a start says it and goes on serving.
+test(
+  'a start with a command that sets a reference to a table it does not read warns in the same words and serves',
+  { timeout: 60000 },
+  async (t) => {
+    const live = await launch(fixture(t, UNREAD_COMMANDS, { policy: UNREAD_POLICY }));
+    assert.match(
+      live.output(),
+      /mistri: warning: .*command "touchDesk" sets desk_setting\.tenant_id, which points at a "customer" row, and "customer" is not in its read.*add "customer" to read/,
+    );
+    assert.match(live.output(), /Listening on/);
+  },
+);
+
 /* The ritual the tenant docs give: check names the absent stores and the one command that makes them, that command
    makes them, a second run finds them, and check then passes. */
 test('migrate stores up --policy provisions what a tenant App needs, and check names it when absent', { timeout: 90000 }, async (t) => {
@@ -410,4 +477,11 @@ test('mistri dev serves the tenant App and does not restart over its own state',
   await delay(1500);
   assert.equal(child.exitCode, null, output);
   assert.doesNotMatch(output, /restart with the new configuration/);
+});
+
+// ui.timezone may name the platform-owned profile; a column the profile does not have is refused by check, naming it.
+test('mistri check refuses a ui.timezone column the platform-owned profile does not have', { timeout: 60000 }, async (t) => {
+  const result = await check(fixture(t, COMMANDS(), { ui: { timezone: { column: 'customer.timezone', default: 'UTC' } } }));
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stderr + result.stdout, /"ui.timezone" reads "customer.timezone", and "customer" has no column "timezone"/);
 });

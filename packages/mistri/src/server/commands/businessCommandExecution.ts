@@ -6,11 +6,16 @@ import { inWriteLanes, recordLane } from '@mistriwork/engine/adapters/writeLanes
 import { isSnapshotConflict, withSnapshotRead } from '@mistriwork/engine/adapters/snapshotRead.js';
 import { withWriteAhead, type WriteAhead } from '@mistriwork/engine/adapters/writeAhead.js';
 import {
+  gathered,
   isWriteConflict,
   Refusal,
   TransactionOperations,
   type AggregateRequest,
+  type InsertRequest,
+  type InsertResult,
   type QueryResult,
+  type UpdateRequest,
+  type UpdateResult,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
@@ -782,6 +787,122 @@ async function executeUntraced(
           const guardTarget = (key: Record<string, string | number>) => {
             if (owed.delete(commandKeyText(key))) throw new BusinessCommandExecutionError('stale_record', 'not_applied', undefined, key);
           };
+          /* One insert as the handler asked it, written through `write`: the store's own insert for one row, one row of
+             one statement for a batch (adapter.ts gathered), with the same stamps, footprint and audit either way. */
+          const insertVia = async (
+            request: InsertRequest,
+            write: (request: InsertRequest) => Promise<InsertResult>,
+          ): Promise<InsertResult> => {
+            checkCancelled();
+            request = machineInsert(authorized.machine, request, now(), authorized.catalog, authorized.timezone);
+            request = bindMoments(authorized, request);
+            const file = fileInsert(commandId, authorized, request);
+            let result: InsertResult;
+            try {
+              result = await write(request);
+            } catch (error) {
+              if (unproved(error)) footprintFault ??= footprintFailure(commandId, authorized, request);
+              throw error;
+            }
+            if (auditing)
+              recordChange({
+                operation: 'insert',
+                resource: request.table,
+                key: result.key,
+                after: file ? { ...result.applied, ...file } : result.applied,
+              });
+            return result;
+          };
+          /* One update, likewise. `read` is the audit's before image where a batch read them all in one statement:
+             a row it lacks a column of (a machine's `since`, added here) is read on its own, as a single update's is. */
+          const updateVia = async (
+            request: UpdateRequest,
+            write: (request: UpdateRequest) => Promise<UpdateResult>,
+            read?: (request: UpdateRequest) => QueryResult | undefined,
+          ): Promise<UpdateResult> => {
+            checkCancelled();
+            if (request.table === command.target) guardTarget(request.key);
+            /* A machine's column moves along an edge of its graph, and its `since` with it. The audit's before image
+               is read with the state, in its one read, where the machine reads one. */
+            let seen: QueryResult | undefined;
+            request = await machineUpdate(
+              authorized.machine,
+              request,
+              store,
+              now(),
+              authorized.catalog,
+              authorized.timezone,
+              auditing ? Object.keys(request.values) : [],
+              (found) => (seen = found),
+            );
+            request = bindMoments(authorized, request);
+            seen ??= auditing ? read?.(request) : undefined;
+            // The before image is the audit's; a command that keeps none does not read it.
+            const audited = Object.keys(request.values);
+            const before = !auditing
+              ? undefined
+              : seen && seen.rows.every((row) => audited.every((column) => Object.hasOwn(row, column)))
+                ? { rows: seen.rows.map((row) => Object.fromEntries(audited.map((column) => [column, row[column]]))) }
+                : await store.query({
+                    table: request.table,
+                    columns: audited,
+                    limit: 2,
+                    offset: 0,
+                    filter: { groups: [Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value }))] },
+                  });
+            let result: UpdateResult;
+            try {
+              result = await write(request);
+            } catch (error) {
+              if (isWriteConflict(error) && request.table === command.target) conflictKey = request.key;
+              else if (unproved(error)) footprintFault ??= footprintFailure(commandId, authorized, request);
+              throw error;
+            }
+            if (before && before.rows.length !== 1) {
+              throw recordRefusalCause(
+                new BusinessCommandExecutionError('invalid_result'),
+                `Command "${commandId}" updated ${request.table} by a key that ` +
+                  `matched ${before.rows.length} rows; an update names exactly one row by its primary key.`,
+              );
+            }
+            if (auditing)
+              recordChange({
+                operation: 'update',
+                resource: request.table,
+                key: request.key,
+                before: before!.rows[0],
+                after: result.applied,
+              });
+            else if (request.table === command.target) attribute(request.key);
+            if (scoped && request.table === command.target) {
+              const at = heldKey(request.key);
+              if (at) held.add(at);
+            }
+            return result;
+          };
+          /* A batch update's before images, read in one statement: every row it names, by its key. */
+          const beforeImages = async (requests: readonly UpdateRequest[]) => {
+            if (!auditing || !requests.length) return undefined;
+            const keyColumns = Object.keys(requests[0]!.key);
+            const columns = [...new Set([...keyColumns, ...requests.flatMap((request) => Object.keys(request.values))])];
+            const found = await store.query({
+              table: requests[0]!.table,
+              columns,
+              limit: requests.length * 2,
+              offset: 0,
+              filter: {
+                groups: requests.map((request) =>
+                  Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value })),
+                ),
+              },
+            });
+            return (request: UpdateRequest): QueryResult => ({
+              ...found,
+              rows: found.rows.filter((row) =>
+                Object.entries(request.key).every(([column, value]) => String(row[column]) === String(value)),
+              ),
+            });
+          };
           // Audit explicit write intent, not trigger/default after-images. Deletions
           // retain identity, not potentially sensitive fields from the deleted row.
           const tx = Object.freeze<WriteTransaction>({
@@ -818,89 +939,8 @@ async function executeUntraced(
                     ),
                 }
               : {}),
-            insert: (request) =>
-              accept(request, async (request) => {
-                checkCancelled();
-                request = machineInsert(authorized.machine, request, now(), authorized.catalog, authorized.timezone);
-                request = bindMoments(authorized, request);
-                const file = fileInsert(commandId, authorized, request);
-                let result: Awaited<ReturnType<typeof store.insert>>;
-                try {
-                  result = await store.insert(request);
-                } catch (error) {
-                  if (unproved(error)) footprintFault ??= footprintFailure(commandId, authorized, request);
-                  throw error;
-                }
-                if (auditing)
-                  recordChange({
-                    operation: 'insert',
-                    resource: request.table,
-                    key: result.key,
-                    after: file ? { ...result.applied, ...file } : result.applied,
-                  });
-                return result;
-              }),
-            update: (request) =>
-              accept(request, async (request) => {
-                checkCancelled();
-                if (request.table === command.target) guardTarget(request.key);
-                /* A machine's column moves along an edge of its graph, and its `since` with it. The audit's before image
-                   is read with the state, in its one read, where the machine reads one. */
-                let seen: QueryResult | undefined;
-                request = await machineUpdate(
-                  authorized.machine,
-                  request,
-                  store,
-                  now(),
-                  authorized.catalog,
-                  authorized.timezone,
-                  auditing ? Object.keys(request.values) : [],
-                  (found) => (seen = found),
-                );
-                request = bindMoments(authorized, request);
-                // The before image is the audit's; a command that keeps none does not read it.
-                const audited = Object.keys(request.values);
-                const before = !auditing
-                  ? undefined
-                  : seen && seen.rows.every((row) => audited.every((column) => Object.hasOwn(row, column)))
-                    ? { rows: seen.rows.map((row) => Object.fromEntries(audited.map((column) => [column, row[column]]))) }
-                    : await store.query({
-                        table: request.table,
-                        columns: audited,
-                        limit: 2,
-                        offset: 0,
-                        filter: { groups: [Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value }))] },
-                      });
-                let result: Awaited<ReturnType<WriteTransaction['update']>>;
-                try {
-                  result = await store.update(request);
-                } catch (error) {
-                  if (isWriteConflict(error) && request.table === command.target) conflictKey = request.key;
-                  else if (unproved(error)) footprintFault ??= footprintFailure(commandId, authorized, request);
-                  throw error;
-                }
-                if (before && before.rows.length !== 1) {
-                  throw recordRefusalCause(
-                    new BusinessCommandExecutionError('invalid_result'),
-                    `Command "${commandId}" updated ${request.table} by a key that ` +
-                      `matched ${before.rows.length} rows; an update names exactly one row by its primary key.`,
-                  );
-                }
-                if (auditing)
-                  recordChange({
-                    operation: 'update',
-                    resource: request.table,
-                    key: request.key,
-                    before: before!.rows[0],
-                    after: result.applied,
-                  });
-                else if (request.table === command.target) attribute(request.key);
-                if (scoped && request.table === command.target) {
-                  const at = heldKey(request.key);
-                  if (at) held.add(at);
-                }
-                return result;
-              }),
+            insert: (request) => accept(request, (request) => insertVia(request, (request) => store.insert(request))),
+            update: (request) => accept(request, (request) => updateVia(request, (request) => store.update(request))),
             remove: (request) =>
               accept(request, async (request) => {
                 checkCancelled();
@@ -915,6 +955,31 @@ async function executeUntraced(
                 if (auditing) recordChange({ operation: 'delete', resource: request.table, key: request.key });
                 return result;
               }),
+          });
+          /* The handler's `db` has a transaction with batches beside it; `context.tx`, the escape hatch, keeps its
+             one-row surface. A batch: each row through everything above, its write one row of one statement. A store
+             that carries none (a draft, a scoped or tenant writer) leaves these out, and the db writes a row at a time. */
+          const batched = Object.freeze<WriteTransaction>({
+            ...tx,
+            ...(store.insertMany
+              ? {
+                  insertMany: (requests: readonly InsertRequest[]) =>
+                    accept(requests, (requests) => gathered(requests, insertVia, (rows) => store.insertMany!(rows))),
+                }
+              : {}),
+            ...(store.updateMany
+              ? {
+                  updateMany: (requests: readonly UpdateRequest[]) =>
+                    accept(requests, async (requests) => {
+                      const read = await beforeImages(requests);
+                      return gathered(
+                        requests,
+                        (request, write) => updateVia(request, write, read),
+                        (rows) => store.updateMany!(rows),
+                      );
+                    }),
+                }
+              : {}),
           });
           try {
             // A command that names a record gets it read here, in this transaction,
@@ -1146,7 +1211,7 @@ async function executeUntraced(
             const denied = available.findIndex((value) => !value);
             if (denied >= 0) throw new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, list.keys[denied]);
             const db = createCommandDb({
-              tx,
+              tx: batched,
               catalog,
               read: command.read,
               write: command.write,

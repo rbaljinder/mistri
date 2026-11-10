@@ -27,6 +27,7 @@ import {
   issuePostgresApiCommandToken,
 } from '../auth/postgresApiTokenMaintenance.js';
 import { loadPostgresTokenSchema } from './postgresApiTokenSchema.js';
+import { MaintenanceRefusal } from './apiTokenRefusal.js';
 import { readTenantIssuance } from './apiTokenTenant.js';
 import { issueSqliteApiTenantToken } from '../auth/sqliteApiTokenMaintenance.js';
 import { issuePostgresApiTenantToken } from '../auth/postgresApiTokenMaintenance.js';
@@ -54,9 +55,9 @@ const production = {
   tenantIssue: issueSqliteApiTenantToken,
   pgTenantIssue: issuePostgresApiTenantToken,
 };
-/* Names the failed precondition and nothing else: never the token, a
-   connection string or the underlying driver message, which may carry them. */
-class MaintenanceRefusal extends Error {}
+/* The last step reaches the store itself: a commit may have happened, so it says so (apiTokenCommand.ts prints a Token ID). */
+const WRITING =
+  "the token store could not be opened or written: its file or server is unreachable or not provisioned (mistri api-token provision), or its layout is not this version's; a commit may have happened, so inspect before retrying";
 const refuse = (reason: string): never => {
   throw new MaintenanceRefusal(`API token maintenance could not be completed: ${reason}.`);
 };
@@ -66,6 +67,8 @@ export async function runApiTokenMaintenance(
   dependencies: typeof production = production,
   onIssueLocator?: (tokenId: string) => void,
 ) {
+  /* Where the run was when it failed, said in the refusal below: a fixed phrase per step, never the error's own text. */
+  let step = 'the configuration, App or store could not be read or written (check the --config, --app and store settings)';
   try {
     let args: ReturnType<typeof parseApiTokenArgs>;
     try {
@@ -73,6 +76,7 @@ export async function runApiTokenMaintenance(
     } catch {
       return refuse('the verb or flags are malformed (see mistri api-token --help)');
     }
+    step = 'the configuration file could not be read (check --config)';
     const config = await dependencies.loadConfig(args.config);
     if (!config) return refuse('no mistri.json configuration could be loaded (pass --config)');
     // Registry.add/configs only normalize identities; no adapter is opened.
@@ -85,6 +89,8 @@ export async function runApiTokenMaintenance(
     } finally {
       await registry.closeAll();
     }
+    step =
+      'the App could not be loaded (check --app, and that its commands module, policy and files load: mistri check --app <dir> says what does not)';
     const app = await dependencies.loadApp(args.app, { lock: 'enforce' });
     /* A command-exposing App's catalog includes its commands, which only its
        registry can check: issuance takes --commands exactly then, and loads
@@ -117,9 +123,12 @@ export async function runApiTokenMaintenance(
     const capture = (captured: TokenCommandEvidence) => {
       evidence = captured;
     };
+    step = "the App's sign-in store could not be resolved: its connection or path is missing, or it is shared with a business database";
     if (/^postgres(?:ql)?:\/\//i.test(appAuthStore(app))) {
       const pg = await dependencies.pgContext([app], connections);
       if (args.verb === 'issue') {
+        step =
+          "the --commands module could not be loaded, or the tenant membership (--tenant, --policy) or the App's database schema could not be read";
         const declared = commandsFile === undefined ? undefined : await dependencies.commands(commandsFile);
         const tenant = tenantInput && (await dependencies.tenant(app, connections, tenantInput, declared));
         const schema = tenant
@@ -133,6 +142,7 @@ export async function runApiTokenMaintenance(
         )
           return refuse('the Postgres store or App identity changed while the token was being issued');
         if (declared && !tenant && !evidence) return refuse('the command catalog could not be checked against the App');
+        step = WRITING;
         const tokenId = randomUUID();
         onIssueLocator?.(tokenId);
         const options = {
@@ -156,6 +166,7 @@ export async function runApiTokenMaintenance(
               : await dependencies.pgIssue(current.url, app.app, schema!, options, dependencies.now),
         });
       }
+      step = WRITING;
       const owner = { appId: pg.appId, storeId: args.storeId, excludeConnections: pg.excludeConnections };
       if (args.verb === 'provision') return Object.freeze({ verb: args.verb, result: await dependencies.pgProvision(pg.url, owner) });
       if (args.verb === 'inspect')
@@ -173,6 +184,8 @@ export async function runApiTokenMaintenance(
     if (args.verb === 'issue') {
       // Command code is trusted operator code, loaded before the catalog read
       // so nothing it does can land between that read and the context recheck.
+      step =
+        "the --commands module could not be loaded, or the tenant membership (--tenant, --policy) or the App's database schema could not be read";
       const declared = commandsFile === undefined ? undefined : await dependencies.commands(commandsFile);
       const tenant = tenantInput && (await dependencies.tenant(app, connections, tenantInput, declared));
       // The schema loader closes its registry before returning. No awaited
@@ -186,6 +199,7 @@ export async function runApiTokenMaintenance(
       )
         return refuse('the SQLite store or App identity changed while the token was being issued');
       if (declared && !tenant && !evidence) return refuse('the command catalog could not be checked against the App');
+      step = WRITING;
       const tokenId = randomUUID();
       onIssueLocator?.(tokenId);
       const options = {
@@ -209,6 +223,7 @@ export async function runApiTokenMaintenance(
             : dependencies.issue(current.path, app.app, schema!, options, dependencies.now()),
       });
     }
+    step = WRITING;
     const owner = { appId: context.appId, storeId: args.storeId, exclusions: context.exclusions };
     if (args.verb === 'provision') {
       return Object.freeze({ verb: args.verb, result: dependencies.provision(context.path, owner) });
@@ -226,6 +241,6 @@ export async function runApiTokenMaintenance(
     });
   } catch (error) {
     if (error instanceof MaintenanceRefusal) throw error;
-    return refuse('the configuration, App or store could not be read or written (check the --config, --app and store settings)');
+    return refuse(step);
   }
 }

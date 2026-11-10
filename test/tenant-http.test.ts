@@ -1922,6 +1922,66 @@ test('same account in two tenant contexts gets separate rows and command receipt
   );
 });
 
+/* A renewal landing between a page's prepare and its execute refused the execute at the door, and the page that
+   awaited run() in a loop stalled (a field report). The page now renews and sends the same envelope once more: the
+   effect happens once, and a third send under the same key replays its receipt. */
+test('a command refused stale at the door ran nothing; sent again under the renewed lease it runs once, and replays after', async (t) => {
+  const f = await fixture(t),
+    a = await f.open();
+  f.setTime(1500);
+  const b = context(await f.call(f.select('/api/tenant/context/renew'), assertion(a)));
+  assert.equal(b.revision, a.revision + 1);
+  const refused = await f.data('/api/commands/execute', a, f.command());
+  denied(refused);
+  assert.equal(refused.status, 409);
+  assert.equal(refused.body.code, 'tenant_lease_stale');
+  assert.equal(refused.body.outcome, 'not_applied');
+  assert.equal(f.control.commands, 0);
+  assert.equal(f.version(), 0);
+  assert.deepEqual(f.counts(), [0, 0]);
+  const sent = await f.data('/api/commands/execute', b, f.command());
+  owned(sent, b);
+  assert.equal(sent.body.status, 'applied');
+  const again = await f.data('/api/commands/execute', b, f.command());
+  owned(again, b);
+  assert.equal(again.body.replayed, true);
+  assert.equal(again.body.receiptId, sent.body.receiptId);
+  assert.equal(f.control.commands, 1);
+  assert.equal(f.version(), 1);
+  assert.deepEqual(f.counts(), [1, 1]);
+});
+
+/* A `mistri dev` respawn forgets every tab's context; the page's next execute names one this server never held. It is
+   refused at the door and ran nothing, so it says not_applied: the page may enter again and send the same envelope
+   once. A status check under a forgotten context still answers unknown, as a stale one does. */
+test('an execute or write under a context this server does not hold ran nothing; under a held context it runs once', async (t) => {
+  const f = await fixture(t),
+    a = await f.open();
+  const forgotten = { ...a, tabId: crypto.randomUUID(), context: crypto.randomUUID() };
+  for (const [route, outcome] of [
+    ['/api/commands/execute', 'not_applied'],
+    ['/api/commands/status', 'unknown'],
+  ] as const) {
+    const refused = await f.data(route, forgotten, f.command());
+    denied(refused);
+    assert.equal(refused.status, 403);
+    assert.equal(refused.body.code, 'tenant_context_unavailable');
+    assert.equal(refused.body.outcome, outcome);
+  }
+  const write = await f.data('/api/update', forgotten, { table: 'item', key: { id: 'north-item' }, values: { name: 'Lost' } });
+  denied(write);
+  assert.equal(write.status, 403);
+  assert.equal(write.body.code, 'tenant_context_unavailable');
+  assert.equal(write.body.outcome, 'not_applied');
+  assert.equal(f.row().name, 'North item');
+  assert.equal(f.control.commands, 0);
+  assert.equal(f.version(), 0);
+  const sent = await f.data('/api/commands/execute', a, f.command());
+  owned(sent, a);
+  assert.equal(sent.body.status, 'applied');
+  assert.equal(f.control.commands, 1);
+});
+
 test('switch rejects old-context data without authority headers; recovery returns only the settled selected context', async (t) => {
   const f = await fixture(t),
     a = await f.open(),
@@ -2071,12 +2131,16 @@ test('HTTP renewal returns exact ownership and a replayable receipt; delayed old
   assert.equal(staleWrite.status, 409);
   assert.equal(staleWrite.body.code, 'tenant_lease_stale');
   assert.equal(staleWrite.body.outcome, 'not_applied');
-  for (const route of ['/api/commands/execute', '/api/commands/status']) {
+  // An execute refused at the door ran nothing; a status check still answers for a command that may have run.
+  for (const [route, outcome] of [
+    ['/api/commands/execute', 'not_applied'],
+    ['/api/commands/status', 'unknown'],
+  ] as const) {
     const refused = await f.data(route, a, f.command());
     denied(refused);
     assert.equal(refused.status, 409);
     assert.equal(refused.body.code, 'tenant_lease_stale');
-    assert.equal(refused.body.outcome, 'unknown');
+    assert.equal(refused.body.outcome, outcome);
   }
   owned(await f.data('/api/query', b, { table: 'item' }), b);
   const switched = await f.call(f.select('/api/tenant/context/switch', 'south'), assertion(b)),

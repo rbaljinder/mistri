@@ -58,6 +58,12 @@ export async function runScopedTransactionFacade<T>(records: WriteTransaction, r
         ...(records.aggregate ? { aggregate: (r: AggregateRequest) => invoke(r, (request) => records.aggregate!(request)) } : {}),
         insert: (r: InsertRequest) => invoke(r, (request) => records.insert(request)),
         update: (r: UpdateRequest) => invoke(r, (request) => records.update(request)),
+        ...(records.insertMany
+          ? { insertMany: (r: readonly InsertRequest[]) => invoke(r, (requests) => records.insertMany!(requests)) }
+          : {}),
+        ...(records.updateMany
+          ? { updateMany: (r: readonly UpdateRequest[]) => invoke(r, (requests) => records.updateMany!(requests)) }
+          : {}),
         remove: (r: DeleteRequest) => invoke(r, (request) => records.remove(request)),
         ...(records.tell ? { tell: (r: TellRequest) => invoke(r, (request) => records.tell!(request)) } : {}),
       }),

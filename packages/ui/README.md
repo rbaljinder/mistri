@@ -8,7 +8,7 @@ DateField over [Base UI](https://base-ui.com), the tokens and stylesheet they
 are drawn with, and the zoom-aware ruler their popups are placed by.
 
 The form controls are built on them (**Preview**: @mistriwork/ui is Preview at 1.0): `TextField`, `MaskedField`,
-`MoneyField`, `SensitiveField`, `Select`, `MultiSelect`, `YesNo`, `ChoiceCards`, `Checkbox`, `Consent`, `Slider`,
+`MoneyField`, `SensitiveField`, `FileField`, `Select`, `MultiSelect`, `YesNo`, `ChoiceCards`, `Checkbox`, `Consent`, `Slider`,
 `HelpTip`, `ProgressBar`, `StepHeader`, `ActionBar`, `Columns` and `ReviewList`, with the `masks` they take
 (`phone`, `date`, `month`, `ssn`, `zip`, `money`). Each takes a value and an `onChange` and draws what it is told. A
 typed MM/DD/YYYY date is `MaskedField` with `masks.date` (and `isoDay` to read it); the calendar field is `DateField`.

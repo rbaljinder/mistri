@@ -145,11 +145,11 @@ export async function startTenantServing(
     );
     let prepared: Awaited<ReturnType<typeof prepareTenantStartup>>;
     try {
-      prepared = await prepareTenantStartup(startup, process.env, record ? { record } : {});
+      prepared = await prepareTenantStartup(startup, process.env, { ...(record ? { record } : {}), checking: Boolean(opts.checkApp) });
     } catch (error) {
       if (!(error instanceof ValidationRecordFallback)) throw error;
       console.error(`mistri: validation record: ${error.check} reads the catalog the record let this start skip; checking in full.`);
-      prepared = await prepareTenantStartup(startup);
+      prepared = await prepareTenantStartup(startup, process.env, { checking: Boolean(opts.checkApp) });
     }
     const { enrollment, authStoreExclusion, jobLines, adviceLines, validation } = prepared;
     if (validation) console.error(`mistri: validation record: ${validation.say}.`);

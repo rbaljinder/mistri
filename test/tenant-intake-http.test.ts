@@ -106,6 +106,7 @@ async function fixture(t: TestContext, mount = '') {
       {
         id: appId,
         name: 'Lending',
+        ui: { microphone: true },
         sources: { business: { connection: binding.source.connection } },
         resources: {
           dealer: { owner: 'platform' },
@@ -517,4 +518,12 @@ test('a public form page on a tenant host is titled by its form, not the tenant'
     const title = (await response.text()).match(/<title>([^<]*)<\/title>/)?.[1];
     assert.match(title ?? '', /^Apply for financing · /, path);
   }
+});
+
+// A field report: `ui.microphone` was read on the ordinary host's shell only, and a tenant App's pages kept `microphone=()`.
+test('a tenant host sends the microphone policy its App asked for in ui.microphone', async (t) => {
+  const f = await fixture(t);
+  const response = await f.request('/form/apply', { headers: { accept: 'text/html' } });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('permissions-policy') ?? '', /microphone=\(self\)/);
 });

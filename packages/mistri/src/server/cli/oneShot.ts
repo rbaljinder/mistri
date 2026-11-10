@@ -742,6 +742,10 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
         ...recordTabCollisions(app.app, app.pages, schema),
         ...reach.problems,
         ...snapshots.problems,
+        /* A reference a command's write sets to a table it does not read is refused on every run (invalid_result): a problem, not advice. */
+        ...referenceReadWarnings(app.app, schema, commandHosting?.registry ?? app.commands?.registry).map(
+          (problem) => `${app.path}: ${problem}`,
+        ),
         // Open sign-up the config gives nothing to prove an address with.
         ...appSignUpProblems(app.app, Boolean(emailConfigOf(registry))).map((problem) => `${app.path}: ${problem}`),
         // The identity providers it names are the config file's: named and none of them a tenant's.
@@ -766,7 +770,6 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
         ...appDestinationWarnings(app, schema, jobRoles),
         ...machineCommandWarnings(app.app, commandHosting?.registry ?? app.commands?.registry),
         ...consumesCommandWarnings(app.app, schema, commandHosting?.registry ?? app.commands?.registry),
-        ...referenceReadWarnings(app.app, schema, commandHosting?.registry ?? app.commands?.registry),
         // A targeted command nothing offers: prepare refuses it. Those a job, workflow or endpoint runs prepare nothing.
         ...unofferedCommandWarnings(
           app.app,

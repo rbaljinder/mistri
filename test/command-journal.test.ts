@@ -99,7 +99,17 @@ test('unmigrated command store refuses before callback while ordinary transactio
     assert.equal(called, false);
     await adapter.transaction(async function (tx) {
       assert.equal(arguments.length, 1);
-      assert.deepEqual(Object.keys(tx).sort(), ['aggregate', 'count', 'insert', 'lockRecord', 'query', 'remove', 'update']);
+      assert.deepEqual(Object.keys(tx).sort(), [
+        'aggregate',
+        'count',
+        'insert',
+        'insertMany',
+        'lockRecord',
+        'query',
+        'remove',
+        'update',
+        'updateMany',
+      ]);
       await tx.update(update);
     });
     assert.equal(name(db), 'Updated');
@@ -116,7 +126,17 @@ test('unmigrated command store refuses before callback while ordinary transactio
 test('records, receipt and paired audit commit together and receipt survives reopening', async () => {
   await fixture(async (adapter, db, path) => {
     await commandsOf(adapter).commandTransaction(async (tx, journal) => {
-      assert.deepEqual(Object.keys(tx).sort(), ['aggregate', 'count', 'insert', 'lockRecord', 'query', 'remove', 'update']);
+      assert.deepEqual(Object.keys(tx).sort(), [
+        'aggregate',
+        'count',
+        'insert',
+        'insertMany',
+        'lockRecord',
+        'query',
+        'remove',
+        'update',
+        'updateMany',
+      ]);
       assert.equal(await journal.find(receipt), undefined);
       await tx.update(update);
       await journal.commit(receipt, audit);

@@ -49,6 +49,19 @@ import { hrefFor, viewPath } from '../../publicAddress.js';
 import { createPageAppFlags } from '../../appFlags.js';
 import { pageAnalyticsBeacon } from '../../analyticsBeacon.js';
 import { navFollow, shellRoot } from '@mistriwork/kit/client/shellHost.js';
+import { shell } from '@mistriwork/kit/client/shellMode.js';
+
+/** An in-App address as the shell writes it for this session: a tenant's carries its selector. Anything it cannot read stays as given. */
+function tenantQualified(href: string): string {
+  const { tenant } = sessionIdentity();
+  const qualify = shell().tenantLinks?.qualify;
+  if (!tenant || !qualify) return href;
+  try {
+    return qualify(href, tenant.appId, tenant.tenantId);
+  } catch {
+    return href;
+  }
+}
 
 function tableOf(resource: string): TableMeta {
   const table = state.schema ? (tableNamed(state.schema, resource) as TableMeta | undefined) : undefined;
@@ -200,8 +213,10 @@ const pageHost: UiHost = {
   openView(view, options) {
     if (!pageBridge.openView?.(view, options)) throw new Error(say('isNotAList', { view }));
   },
-  /* The shell's own listener reads the address again (navFollow), so no entry is made by hand and no App is reloaded. */
-  follow: (href) => navFollow(href),
+  /* The shell's own listener reads the address again (navFollow), so no entry is made by hand and no App is reloaded.
+     A tenant's session reads an address with no selector as a link to some other tenant, and that is a fresh document
+     (tenantNavigation.ts): so the address goes in the form the shell writes it, with this tenant's selector. */
+  follow: (href) => navFollow(tenantQualified(href)),
   /* The page's command pipeline and forms, registered by sdk/commands.tsx (uiBridge.ts says why). */
   openForm(view, prefill = {}) {
     if (!pageBridge.commands) throw new Error(say('thePageCannotOpen'));

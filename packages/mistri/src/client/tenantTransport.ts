@@ -5,6 +5,7 @@ import {
   type TenantContextRecovery,
 } from '../shared/tenantContext.js';
 import {
+  adoptTenantReentry,
   assertSessionCurrent,
   captureSessionIdentity,
   captureTenantLease,
@@ -176,6 +177,99 @@ export const isTransientTenantFailure = (error: unknown): boolean =>
 const fence = (snapshot: SessionIdentitySnapshot, lease: TenantContextReply | undefined) => {
   if (lease && currentLease(snapshot, lease)) suspendTenantLease(snapshot);
 };
+/* The page's renewal, as tenantRenewal.ts registers it for its owner. A renewal that lands between a
+   command's prepare and execute moved the server's revision while the request was on its way, and the
+   server refused it at the door, before anything ran (tenantContexts.ts): a field report's page awaiting
+   run() in a loop stalled there. So a request is held while a renewal is in flight, and one refused as
+   stale or expired, having done nothing, is sent once more under the renewed lease. */
+interface TenantRenewer {
+  inFlight(): Promise<void> | undefined;
+  renew(): Promise<void>;
+}
+const renewers = new Map<SessionIdentitySnapshot, TenantRenewer>();
+export function registerTenantRenewer(owner: SessionIdentitySnapshot, renewer: TenantRenewer): () => void {
+  renewers.set(owner, renewer);
+  return () => {
+    if (renewers.get(owner) === renewer) renewers.delete(owner);
+  };
+}
+/** A renewal in flight, if there is one: sent now, the request would carry the revision it is replacing. */
+function renewalInFlight(snapshot: SessionIdentitySnapshot): Promise<void> | undefined {
+  return renewers
+    .get(snapshot)
+    ?.inFlight()
+    ?.catch(() => {});
+}
+const leaseRefusal = (status: unknown, code: unknown): boolean =>
+  status === 409 && (code === 'tenant_lease_stale' || code === 'tenant_lease_expired');
+/** The same context renewed past `refused`, renewing it once if no renewal already has: or none. */
+async function renewedLease(snapshot: SessionIdentitySnapshot, refused: TenantContextReply): Promise<TenantContextReply | undefined> {
+  const advanced = () => {
+    const lease = snapshot === captureSessionIdentity() ? captureTenantLease(snapshot) : undefined;
+    return lease &&
+      lease.revision > refused.revision &&
+      lease.tabId === refused.tabId &&
+      lease.context === refused.context &&
+      lease.tenantId === refused.tenantId &&
+      tenantLeaseActive(snapshot)
+      ? lease
+      : undefined;
+  };
+  const renewer = renewers.get(snapshot);
+  if (advanced() || !renewer) return advanced();
+  try {
+    await (renewer.inFlight() ?? renewer.renew());
+  } catch {
+    return undefined;
+  }
+  return advanced();
+}
+/* A host that restarted (mistri dev respawning, a deploy) forgot every context it had opened, so it refuses this page's
+   lease as unavailable (403 tenant_context_unavailable) before anything runs (tenantContexts.ts). The page said so as a
+   denial of the person's role. A renewal cannot help, since the server holds nothing to renew, so the page enters the
+   same tenant again, once for every request refused together, and sends the refused request once more under it. */
+const contextUnavailable = (status: unknown, code: unknown): boolean => status === 403 && code === 'tenant_context_unavailable';
+const reentering = new WeakMap<SessionIdentitySnapshot, Promise<TenantContextReply | undefined>>();
+/** A fresh context for the tenant `refused` named, entered once however many requests were refused: or none. */
+async function reenteredLease(snapshot: SessionIdentitySnapshot, refused: TenantContextReply): Promise<TenantContextReply | undefined> {
+  const entered = () => {
+    const lease = snapshot === captureSessionIdentity() ? captureTenantLease(snapshot) : undefined;
+    return lease &&
+      lease.tenantId === refused.tenantId &&
+      (lease.tabId !== refused.tabId || lease.context !== refused.context) &&
+      tenantLeaseActive(snapshot)
+      ? lease
+      : undefined;
+  };
+  if (entered()) return entered();
+  let pending = reentering.get(snapshot);
+  if (!pending) {
+    pending = (async () => {
+      try {
+        account(snapshot);
+        const { value, response } = await request(
+          snapshot,
+          `/api/tenant/context/open?${new URLSearchParams({ app: snapshot.appId!, ...selector(refused.tenantId) })}`,
+          {},
+        );
+        const reply = context(value, snapshot, response);
+        adoptTenantReentry(snapshot, refused, reply);
+        return reply;
+      } catch {
+        return undefined;
+      } finally {
+        reentering.delete(snapshot);
+      }
+    })();
+    reentering.set(snapshot, pending);
+  }
+  await pending;
+  return entered();
+}
+/* Said when entering again could not stand in for the context the server forgot: the page, not the person's role. */
+const reloadNeeded = (error: Error, code: unknown): Error =>
+  code === 'tenant_context_unavailable' ? Object.assign(error, { message: say('thisPageNeedsAReload') }) : error;
+
 /** Renewal cannot extend an invocation already on the wire. */
 function publishable(snapshot: SessionIdentitySnapshot, lease: TenantContextReply): void {
   selected(snapshot);
@@ -202,6 +296,8 @@ async function request(
   deferFailure = false,
   failureOwner = tenant,
   said?: Readonly<Record<string, string>>,
+  /* The caller renews, or enters again, and asks once more on a lease refusal, so it is not fenced here (tenantReadApi). */
+  renewing = false,
 ) {
   account(snapshot);
   let response: Response;
@@ -245,7 +341,8 @@ async function request(
     throw unavailable();
   }
   if (!response.ok && !deferFailure) {
-    refused(snapshot, failureOwner, response, value);
+    if (!(renewing && (leaseRefusal(response.status, value.code) || contextUnavailable(response.status, value.code))))
+      refused(snapshot, failureOwner, response, value);
     const failure = Object.assign(new Error(typeof value.error === 'string' ? value.error : say('theTenantRequestWasRefused')), {
       status: response.status,
       ...(typeof value.code === 'string' ? { code: value.code } : {}),
@@ -607,6 +704,8 @@ export async function tenantReadApi(
   said?: Readonly<Record<string, string>>,
 ): Promise<Record<string, unknown>> {
   const snapshot = captureSessionIdentity();
+  const renewal = renewalInFlight(snapshot);
+  if (renewal) await renewal;
   let owner = selected(snapshot);
   const url = new URL(path, 'http://mistri.invalid');
   if (!path.startsWith('/api/') || url.hash || url.pathname !== path.split('?')[0] || !reads.has(url.pathname))
@@ -666,11 +765,38 @@ export async function tenantReadApi(
     return together.body;
   }
   let delivered: Awaited<ReturnType<typeof request>>;
+  let renewed = false;
   for (let attempt = 0; ; attempt++) {
     try {
-      delivered = await request(snapshot, address, payload, owner, signal, false, owner, said);
+      delivered = await request(snapshot, address, payload, owner, signal, false, owner, said, !renewed);
       break;
     } catch (error) {
+      const { status, code } = error as { status?: unknown; code?: unknown };
+      if (!renewed && leaseRefusal(status, code)) {
+        // Refused at the door, so asked once more under the renewed lease; not renewed, fenced as before.
+        renewed = true;
+        const next = await renewedLease(snapshot, owner);
+        if (!next) {
+          fence(snapshot, owner);
+          throw error;
+        }
+        owner = next;
+        attempt--;
+        continue;
+      }
+      if (!renewed && contextUnavailable(status, code)) {
+        // A context the server forgot: entered again and asked once more; not entered, refused as before.
+        renewed = true;
+        const next = await reenteredLease(snapshot, owner);
+        if (!next) {
+          if (currentLease(snapshot, owner)) invalidateTenantContext(snapshot);
+          throw reloadNeeded(error as Error, code);
+        }
+        owner = next;
+        attempt--;
+        continue;
+      }
+      if (renewed && contextUnavailable(status, code)) throw reloadNeeded(error as Error, code);
       // An old revision's slow answer is that revision's alone: no retry, no fence (as for any of its answers).
       if (!isTransientTenantFailure(error) || !currentLease(snapshot, owner)) throw error;
       // Out of patience: fence as before, and renewal decides whether the context stands.
@@ -888,6 +1014,8 @@ export async function tenantMutationApi(
   said?: Readonly<Record<string, string>>,
 ): Promise<Record<string, unknown>> {
   const snapshot = captureSessionIdentity();
+  const renewal = renewalInFlight(snapshot);
+  if (renewal) await renewal;
   let owner: TenantContextReply, target: string, payload: Record<string, unknown>;
   try {
     owner = selected(snapshot);
@@ -933,11 +1061,23 @@ export async function tenantMutationApi(
   }
 
   let delivered: Awaited<ReturnType<typeof request>>;
-  try {
-    delivered = await request(snapshot, target, payload, owner, signal, true, owner, said);
-  } catch (error) {
-    if (isTransientTenantFailure(error)) fence(snapshot, owner);
-    throw mutationError(error instanceof Error ? error.message : say('theChangeCouldNotBeConfirmed'), 'unknown');
+  for (let renewed = false; ; renewed = true) {
+    try {
+      delivered = await request(snapshot, target, payload, owner, signal, true, owner, said);
+    } catch (error) {
+      if (isTransientTenantFailure(error)) fence(snapshot, owner);
+      throw mutationError(error instanceof Error ? error.message : say('theChangeCouldNotBeConfirmed'), 'unknown');
+    }
+    /* Refused at the door, before anything ran: the same payload goes once more under the renewed lease. A
+       command carries its idempotency key, so even a resend the server had somehow run would replay its
+       receipt, never act twice (businessCommandExecution.ts). An unknown outcome is never sent again. */
+    const { status } = delivered.response;
+    const { code } = delivered.value;
+    if (renewed || !(leaseRefusal(status, code) || contextUnavailable(status, code)) || delivered.value.outcome !== 'not_applied') break;
+    // A context the server forgot is entered again (reenteredLease); a stale or expired one is renewed.
+    const next = contextUnavailable(status, code) ? await reenteredLease(snapshot, owner) : await renewedLease(snapshot, owner);
+    if (!next) break;
+    owner = next;
   }
   const { response, value } = delivered;
   // Failure-only replies may omit ownership; a contradictory ownership claim
@@ -969,11 +1109,14 @@ export async function tenantMutationApi(
     // Accept only their failure envelope, never attached rows or success fields.
     const outcome = value.outcome === 'not_applied' || value.outcome === 'rejected' ? value.outcome : 'unknown';
     const message =
-      typeof value.error === 'string'
-        ? value.error
-        : typeof value.message === 'string'
-          ? value.message
-          : say('theChangeCouldNotBeConfirmed');
+      /* Still refused after entering again, or entering failed: the page needs a reload, not another role. */
+      contextUnavailable(response.status, value.code)
+        ? say('thisPageNeedsAReload')
+        : typeof value.error === 'string'
+          ? value.error
+          : typeof value.message === 'string'
+            ? value.message
+            : say('theChangeCouldNotBeConfirmed');
     const diagnostics = Array.isArray(value.errors)
       ? value.errors
           .filter(object)

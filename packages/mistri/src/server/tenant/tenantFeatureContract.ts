@@ -30,6 +30,8 @@ export interface TenantStartupPolicy {
   readonly policy: AppTenantPolicy;
   /** The host's captured environment; direct standalone checks default to process.env. */
   readonly environment?: Readonly<NodeJS.ProcessEnv>;
+  /** Set by `mistri check`: a finding that is a guess at a handler's source refuses here, and is only said when serving. */
+  readonly checking?: boolean;
   /** The platform-only sources (`realm: 'platform'`) and the connections startup
    * matched to them, in the App's order: none for most Apps. */
   readonly platformSources: readonly { readonly name: string; readonly connection: ConnectionConfig }[];

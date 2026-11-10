@@ -132,7 +132,12 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
   /* The action's own columns are the write's authority, not the role's field
      grants; the row, its key and what the action's `when` reads must still be
      the principal's to read, and every other check an update gets still runs. */
-  const grantedUpdate = (request: UpdateRequest, granted: readonly AppUpdateAction[], operationAccess: ResourceAccess) => {
+  const grantedUpdate = (
+    request: UpdateRequest,
+    granted: readonly AppUpdateAction[],
+    operationAccess: ResourceAccess,
+    write: WriteTransaction['update'] = (stamped) => writer.update(stamped),
+  ) => {
     assertRead(request.table);
     keyFields(request.table, request.key);
     const declared = full.tables.find((item) => item.id === request.table);
@@ -181,9 +186,7 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
     };
     return judged
       .then(async (since) =>
-        consumedUpdate(operationAccess, request, async () =>
-          writer.update(await stamped(since, await richTextCleaned(operationAccess, request))),
-        ),
+        consumedUpdate(operationAccess, request, async () => write(await stamped(since, await richTextCleaned(operationAccess, request)))),
       )
       .then(async (result) => {
         if (result.affected === 1 && operationAccess.validation?.has(request.table)) {
@@ -204,9 +207,9 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
     capture: captureAccess,
     // A recorded update locks its row first, a granted action's included.
     locksUnwritable: (table, access) => access.actions?.has(table) ?? false,
-    insert: (request, operationAccess, server) => {
+    insert: (request, operationAccess, server, write = (filled) => writer.insert(filled)) => {
       const insert = (cleaned: InsertRequest, initial?: InsertRequest['values']) =>
-        writer.insert(initial ? { ...cleaned, values: { ...cleaned.values, ...initial } } : cleaned);
+        write(initial ? { ...cleaned, values: { ...cleaned.values, ...initial } } : cleaned);
       /* A value the form takes from a referenced record (`{ from: 'service_id.price' }`), left out, is read here. */
       const filledIn = richTextCleaned(operationAccess, request).then(async (said) => {
         const cleaned = operationAccess.fill && !server ? await operationAccess.fill(said, writer) : said;
@@ -241,11 +244,11 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
     },
     /* A table this principal does not write, where a role runs some of its
        fixed actions: the update is one of those actions or nothing. */
-    unwritable: (request, operationAccess) => {
+    unwritable: (request, operationAccess, write) => {
       const granted = operationAccess.actions?.get(request.table);
-      return granted ? grantedUpdate(request, granted, operationAccess) : undefined;
+      return granted ? grantedUpdate(request, granted, operationAccess, write) : undefined;
     },
-    update: (request, operationAccess) => {
+    update: (request, operationAccess, write = (stamped) => writer.update(stamped)) => {
       /* Judged on the row before it is written: a declared column moves only through an action. */
       const judged = operationAccess.transitions?.has(request.table)
         ? import('./appTransitions.js').then(({ assertTransitions }) =>
@@ -268,7 +271,7 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
       return judged
         .then(async (since) =>
           consumedUpdate(operationAccess, request, async () =>
-            writer.update(await stamped(since, await richTextCleaned(operationAccess, request))),
+            write(await stamped(since, await richTextCleaned(operationAccess, request))),
           ),
         )
         .then(async (result) => {

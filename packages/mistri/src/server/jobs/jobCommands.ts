@@ -85,8 +85,9 @@ function jobInput(value: unknown): JobInput {
 /** The job store's key for one slot of a job at times: the same in every process, so the slot runs once. */
 export const everySlotKey = (slot: number): string => `every-${String(slot).padStart(16, '0')}`;
 /** One tenant's run of a slot, on a tenant App: the slot's key and the tenant, hashed (a key cannot carry every tenant id's length). */
-export const everyTenantSlotKey = (slot: number, tenantId: string): string =>
-  `${everySlotKey(slot)}-${createHash('sha256').update(tenantId).digest('hex').slice(0, 40)}`;
+export const everyTenantSlotKey = (slot: number, tenantId: string): string => `${everySlotKey(slot)}-${tenantKeyHash(tenantId)}`;
+/** A tenant as a key carries it: its slot's and its manual runs' keys end in the same hash (jobStoreRules.ts leaseGroup). */
+export const tenantKeyHash = (tenantId: string): string => createHash('sha256').update(tenantId).digest('hex').slice(0, 40);
 function dueAt(value: unknown): number | undefined {
   if (value === undefined) return undefined;
   const at = value instanceof Date ? value.getTime() : typeof value === 'string' ? Date.parse(value) : value;

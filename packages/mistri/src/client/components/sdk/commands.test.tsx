@@ -567,23 +567,34 @@ test('a review for another record is not a pin for this one', async () => {
   expect(calls).toEqual([]);
 });
 
-/* An answer that never came opens the form to check it; when the tab's session is taken again under it (a tenant
-   context chosen again after a cut request), that form can never be drawn, and the run waited on it for good: the
-   composer said Sending… with no word. */
-test('a run whose form the session left behind lets go, and says the result is not confirmed', async () => {
+/* An answer that never came used to open the form to check it: when the tab's session was taken again under it (a
+   tenant context chosen again after a cut request), that form could never be drawn, and the run waited on it for
+   good: the composer said Sending… with no word. A run now settles unknown at once, opening nothing, and a page
+   awaiting it in a loop goes on (a field report). */
+test('a run whose answer never came settles unknown at once, opens no form, and says the result is not confirmed', async () => {
   await onDesk();
   answer = async () => {
     if (calls.at(-1)!.path === '/api/commands/prepare') return { expectedVersion: 4 };
     throw Object.assign(new Error('The request was cancelled.'), { status: 503, code: 'cancelled', outcome: 'unknown' });
   };
   const run = handle('checkStep').run({ id: 7 }, { step: 'Send the proposal' });
-  await vi.waitFor(() => expect(document.querySelector('.custom-command-host')).not.toBeNull());
-  session.now = { ...eve, epoch: 2 };
-  for (const listener of [...session.listeners]) listener();
   const outcome = await Promise.race([run, new Promise((resolve) => setTimeout(() => resolve('still waiting'), 1_000))]);
-  expect(outcome).toMatchObject({ status: 'closed' });
+  expect(outcome).toMatchObject({ status: 'unknown', message: expect.stringMatching(/not confirmed/i) });
   expect(document.querySelector('.custom-command-host')).toBeNull();
+  expect(document.querySelector('.form-dialog')).toBeNull();
   expect(toasts.join(' ')).toMatch(/not confirmed/i);
+  // A second run while the first is not known sends nothing: it is the same unknown, and its check asks the receipt.
+  const sent = calls.length;
+  const again = (await handle('checkStep').run({ id: 7 }, { step: 'Send the proposal' })) as Extract<
+    UiCommandOutcome,
+    { status: 'unknown' }
+  >;
+  expect(again.status).toBe('unknown');
+  expect(calls).toHaveLength(sent);
+  answer = async () => applied(4);
+  expect(await again.check()).toMatchObject({ status: 'applied' });
+  const execute = calls.filter((call) => call.path === '/api/commands/execute');
+  expect(execute.at(-1)!.body.idempotencyKey).toBe(execute[0].body.idempotencyKey);
 });
 
 test("a public page's command says the choices served with it: a table's rows, and nothing for an input that offers none", () => {

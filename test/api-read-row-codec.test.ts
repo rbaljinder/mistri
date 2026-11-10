@@ -192,7 +192,6 @@ test('unsupported database representations refuse construction instead of guessi
       'bigint unsigned',
       'blob',
       'bytea',
-      'timestamp',
       'time',
       'custom_type',
     ]) {
@@ -343,9 +342,30 @@ test('the check refuses a column the API cannot say, and a filter or sort by an 
   assert.doesNotThrow(() => catalog('timestamptz', {}));
   // A JSON column is said as an object (row-defined fields), never filtered or sorted by.
   assert.doesNotThrow(() => catalog('jsonb', {}));
-  assert.throws(() => catalog('timestamp', {}), /cannot represent/);
-  for (const type of ['numeric(12,2)', 'timestamptz', 'jsonb']) {
+  // A field report: a column with no zone is said as an instant (read as UTC), not refused.
+  assert.doesNotThrow(() => catalog('timestamp', {}));
+  assert.throws(() => catalog('time', {}), /cannot represent/);
+  for (const type of ['numeric(12,2)', 'timestamp', 'timestamptz', 'jsonb']) {
     assert.throws(() => catalog(type, { filters: ['amount'] }), /does not filter or sort/);
     assert.throws(() => catalog(type, { sorts: ['id', 'amount'] }), /does not filter or sort/);
+  }
+});
+
+test('a timestamp with no zone is a date-time string read as UTC', () => {
+  const formats = new Ajv2020({ strict: true });
+  formats.addFormat('date-time', true);
+  for (const [dialect, type] of [
+    ['postgres', 'timestamp'],
+    ['postgres', 'timestamp without time zone'],
+    ['sqlite', 'timestamp'],
+  ] as const) {
+    const codec = apiValueCodec({ type }, dialect, 'decimal-string');
+    assert.equal(codec.kind, 'timestamp');
+    assert.equal((codec.schema as unknown as { format: string }).format, 'date-time');
+    assert.equal(codec.encode('2026-10-04 07:21:00.5'), '2026-10-04T07:21:00.5Z');
+    assert.equal(codec.encode('2026-10-04T07:21:00'), '2026-10-04T07:21:00Z');
+    assert.equal(codec.encode('2026-10-04 07:21:00+05:30'), '2026-10-04T07:21:00+05:30');
+    assert.equal(formats.compile(codec.schema)(codec.encode('2026-10-04 07:21:00')), true);
+    for (const bad of ['yesterday', '2026-13-04 07:21:00', 5, null]) assert.throws(() => codec.encode(bad), String(bad));
   }
 });

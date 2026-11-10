@@ -116,6 +116,9 @@ import {
   ownAddressResolution,
   type TenantAddresses,
   type TenantAddressesLookup,
+  type TenantZoneLookup,
+  captureZoneLookup,
+  heldZone,
   type TenantIntakeLookup,
   type TenantIntakeResolution,
 } from './tenantIntakeModel.js';
@@ -252,6 +255,10 @@ export interface TenantReadSource {
    * address's shape that resolves back to this tenant alone. For the tenant's
    * own lease to show; admits nobody. */
   readTenantAddresses(lookup: TenantAddressesLookup): Promise<TenantAddresses>;
+  /** One text column of a tenant's profile row, for the person's zone where `ui.timezone: { column }` names the
+   * profile: the platform's own read of the row (as the names and addresses are), no App resource read and no grant.
+   * That column and nothing else of the row; admits nobody. */
+  readTenantZone(lookup: TenantZoneLookup): Promise<string | undefined>;
   /** A job attempt's anchors, in one snapshot: the named tenant's row and
    * `@platform`, each its version while active, else null. With no tenant
    * (the platform's own time job), `@platform` alone. Admits nobody. */
@@ -837,6 +844,11 @@ export function openSqliteTenantReadSource(
           return Object.freeze(found) as TenantAddresses;
         }),
       // Always a tenant's: `@platform` fails the selector.
+      readTenantZone: (lookup: TenantZoneLookup) =>
+        invoke(lookup, (query) => {
+          const { tenantId, column } = captureZoneLookup(owned, query);
+          return heldZone(db.prepare(tenantAddressQuery(owned, column)).all(tenantId) as Record<string, unknown>[]);
+        }),
       readServiceAnchors: (tenantId: string | null) =>
         invoke(tenantId, (id) =>
           Object.freeze({
@@ -1969,6 +1981,11 @@ export async function openPostgresTenantReadSource(
             if (own) found[kind] = own;
           }
           return Object.freeze(found) as TenantAddresses;
+        }),
+      readTenantZone: (lookup: TenantZoneLookup) =>
+        invoke(lookup, async (query, lease) => {
+          const { tenantId, column } = captureZoneLookup(owned, query);
+          return heldZone((await lease.client.query(tenantAddressQuery(owned, column), [tenantId])).rows);
         }),
       readServiceAnchors: (tenantId: string | null) =>
         invoke(tenantId, async (id, lease) =>

@@ -180,7 +180,7 @@ declaration off.
 | Context                                                       | What                                                                                                                                                                                                                                                      |
 | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `record`, `records`                                           | The target as this transaction reads it; every target, in request order, for `targets: 'many'`                                                                                                                                                            |
-| `db.<table>`                                                  | The footprint, typed from `Rows`: `get`, `find`, `where(…).orderBy().limit()`, `count`, [sums, groups and pages](#sums-groups-and-pages), `insert`, `update(row, changes)`, `remove(row)`; on a file resource, `insertFile({ name, type, data }, values)` |
+| `db.<table>`                                                  | The footprint, typed from `Rows`: `get`, `find`, `where(…).orderBy().limit()`, `count`, [sums, groups and pages](#sums-groups-and-pages), `insert`, `update(row, changes)`, `remove(row)`, [`insertMany(rows)` and `updateWhere(where, changes)`](#many-rows-at-once); on a file resource, `insertFile({ name, type, data }, values)` |
 | `files`                                                       | The parts a mail intake received, `[{ name, type, size, data }]` (tenant mail)                                                                                                                                                                            |
 | `actor`                                                       | The verified principal: `id`, `roles`, and for an account `email` and `name`; `kind` is `'public'` or `'service'` for a public form or a job                                                                                                              |
 | `door`                                                        | Where the request came in: `'ui'` (a screen or a form), `'api'` (the App API), `'mcp'` (App MCP), `'job'` or `'workflow'`. The host says it, never the request                                                                                            |
@@ -197,6 +197,27 @@ reader may not see (another tenant's, or outside a row scope) alike, in the same
 words; a handler that answers a wrong key with its own refusal should read with
 `where` or `find`, which return nothing for both, so every caller gets one answer.
 A handler's `where` reads that table's own columns, and `any`/`no` over a child table the command declares in `read` or `write` (``db.invoice.where`any line where qty > 5` ``); a reference path, or a child it does not declare, is refused. [Where the query language works](/docs/query/#where-the-query-language-works) lists what each place reads.
+
+### Many rows at once
+
+`db.<table>.insertMany(rows)` adds rows and returns them in the order given;
+`db.<table>.updateWhere(where, changes)` changes every row the `where` matches
+and returns them. Each row meets the checks one `insert` or `update` would meet:
+the footprint, the constants and stamps, the scopes and ownership, the policy,
+one audit change per row, and the effects. The rows are written in one statement
+on SQLite and PostgreSQL (one per set of columns the rows name); a tenant App, a row scope and a draft write them one at
+a time, with the same outcome.
+
+```ts
+await db.bin.insertMany(lines.map((line) => ({ shelf_id: record.id, sku: line.sku, qty: line.qty })));
+await db.bin.updateWhere({ shelf_id: record.id }, { qty: 0, counted_by: { auto: 'me' } });
+```
+
+`updateWhere` reads the rows, then updates each one guarded by what it read, so
+a row another writer changed in between refuses the command `stale_record`. A
+`where` here takes no sort and no limit. Either call takes at most 1,000 rows; a
+row the database refuses keeps none of them. Rows of one `insertMany` cannot
+point at each other: insert the parent first.
 
 Bytes go into a row only through `insertFile`, under the file resource's
 rules: its name, type and size columns are filled, and a file over its

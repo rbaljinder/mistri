@@ -689,10 +689,197 @@ export interface WriteTransaction {
   insert(request: InsertRequest): Promise<InsertResult>;
   remove(request: DeleteRequest): Promise<DeleteResult>;
   update(request: UpdateRequest): Promise<UpdateResult>;
+  /** Several rows of one table created in one statement, each under `insert`'s contract; results in request order.
+   * Optional: a layer that cannot carry a batch through its own checks leaves it out, and `insertAll` falls back to
+   * `insert` a row at a time, so every check still runs per row. */
+  insertMany?(requests: readonly InsertRequest[]): Promise<InsertResult[]>;
+  /** Several rows of one table changed in one statement, each under `update`'s contract (its key, its own values,
+   * its own `expected`); results in request order. Optional, like `insertMany`, and `updateAll` falls back the same way. */
+  updateMany?(requests: readonly UpdateRequest[]): Promise<UpdateResult[]>;
   /** Internal: a flow's notify step (appFlows.ts). The record's `notify` rules on `{ flow: audience }` tell their people
    * in this transaction, as a write's rules do, with the step's words. Writes nothing to the record. Only the flows'
    * own command reaches it, about its own target; a facade that cannot carry it omits it. */
   tell?(request: TellRequest): Promise<void>;
+}
+
+/** Several inserts of one table: one statement where the transaction carries a batch, else one at a time, in order. */
+export function insertAll(tx: WriteTransaction, requests: readonly InsertRequest[]): Promise<InsertResult[]> {
+  return tx.insertMany && requests.length > 1 ? tx.insertMany(requests) : oneAtATime(requests, (request) => tx.insert(request));
+}
+
+/** Several updates of one table: one statement where the transaction carries a batch, else one at a time, in order. */
+export function updateAll(tx: WriteTransaction, requests: readonly UpdateRequest[]): Promise<UpdateResult[]> {
+  return tx.updateMany && requests.length > 1 ? tx.updateMany(requests) : oneAtATime(requests, (request) => tx.update(request));
+}
+
+/** Each request written in turn, each waiting for the one before it. */
+export async function oneAtATime<Q, R>(requests: readonly Q[], write: (request: Q) => Promise<R>): Promise<R[]> {
+  const results: R[] = [];
+  for (const request of requests) results.push(await write(request));
+  return results;
+}
+
+/**
+ * A batch carried through a layer whose single write is `through(request, write)`: the layer's own checks before and
+ * after its write, around a write it is handed. Each row runs its checks in order up to its write and waits there;
+ * the rows that reached their write are written by `many` in one statement; then each row hears its own result and
+ * finishes its checks after it, one row at a time, in order. So a layer that offers a batch runs exactly the checks
+ * it runs for one row, and its inner layer sees one call.
+ *
+ * What differs from a row at a time, and is the price of one statement: a row's checks before its write run before
+ * the rows ahead of it are written (rows of one batch cannot depend on each other), and a check after a write sees
+ * the whole batch written. A row whose checks answer without writing keeps its own answer. Any row refused before
+ * the statement refuses the batch and nothing is written; a statement that fails, or a row refused after it, fails
+ * the batch, and the transaction it runs in rolls back.
+ */
+export async function gathered<Q, R>(
+  requests: readonly Q[],
+  through: (request: Q, write: (request: Q) => Promise<R>) => Promise<R>,
+  many: (requests: readonly Q[]) => Promise<R[]>,
+): Promise<R[]> {
+  interface Row {
+    outcome: Promise<R>;
+    /** Where this row's request sits in what `many` writes; absent when it answered without writing. */
+    at?: number;
+    settle?: (result: R) => void;
+    fail?: (error: unknown) => void;
+  }
+  const rows: Row[] = [];
+  const collected: Q[] = [];
+  /* Unblock every row still waiting at its write and let it run its own failure path, so nothing is left pending. */
+  const abandon = async (error: unknown, from = 0): Promise<unknown> => {
+    let first: { error: unknown } | undefined;
+    for (const row of rows.slice(from)) {
+      row.fail?.(error);
+      try {
+        await row.outcome;
+      } catch (rowError) {
+        first ??= { error: rowError };
+      }
+    }
+    return first ? first.error : error;
+  };
+  for (const request of requests) {
+    const row: Row = { outcome: undefined as unknown as Promise<R> };
+    let reached!: () => void;
+    const reachedWrite = new Promise<void>((resolve) => (reached = resolve));
+    const answer = new Promise<R>((resolve, reject) => {
+      row.settle = resolve;
+      row.fail = reject;
+    });
+    row.outcome = Promise.resolve().then(() =>
+      through(request, (written) => {
+        if (row.at !== undefined) return Promise.reject(new Error('A gathered row may write once.'));
+        row.at = collected.push(written) - 1;
+        reached();
+        return answer;
+      }),
+    );
+    rows.push(row);
+    const ended = row.outcome.then(
+      () => undefined,
+      (error: unknown) => ({ error }),
+    );
+    const early = await Promise.race([reachedWrite.then(() => undefined), ended]);
+    if (row.at === undefined && early) {
+      /* Refused before its write: nothing is written; the rows waiting at theirs hear the refusal. */
+      rows.pop();
+      await abandon(early.error);
+      throw early.error;
+    }
+    if (row.at === undefined) {
+      delete row.settle;
+      delete row.fail;
+    }
+  }
+  if (collected.length) {
+    let written: R[];
+    try {
+      written = await many(collected);
+    } catch (error) {
+      throw await abandon(error);
+    }
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index]!;
+      if (row.at !== undefined) row.settle!(written[row.at]!);
+      try {
+        await row.outcome;
+      } catch (error) {
+        await abandon(error, index + 1);
+        throw error;
+      }
+    }
+  }
+  return Promise.all(rows.map((row) => row.outcome));
+}
+
+/** A batch is one table's: its rows' own table names, which must agree. */
+export function sameTable(tables: readonly string[]): string {
+  const table = tables[0];
+  if (table === undefined || tables.some((name) => name !== table)) throw new Refusal('A batch writes one table.');
+  return table;
+}
+
+/** Consecutive rows naming the same columns, so each run is one multi-row VALUES list. */
+export function runsOfColumns<T extends { applied: Record<string, unknown> }>(plans: readonly T[]): T[][] {
+  const runs: T[][] = [];
+  let shape: string | undefined;
+  for (const plan of plans) {
+    const next = JSON.stringify(Object.keys(plan.applied));
+    if (next === shape) runs.at(-1)!.push(plan);
+    else runs.push([plan]);
+    shape = next;
+  }
+  return runs;
+}
+
+/* Under SQLite's bound-parameter ceiling (32766 since 3.32) and PostgreSQL's (65535), with room to spare. */
+const BATCH_PARAMETERS = 30_000;
+
+/** Rows split so no statement binds more parameters than a database takes; most batches are one chunk. */
+export function chunked<T>(rows: readonly T[], weight: (row: T) => number): T[][] {
+  const chunks: T[][] = [];
+  let size = 0;
+  for (const row of rows) {
+    const cost = weight(row);
+    if (!chunks.length || size + cost > BATCH_PARAMETERS) {
+      chunks.push([]);
+      size = 0;
+    }
+    chunks.at(-1)!.push(row);
+    size += cost;
+  }
+  return chunks;
+}
+
+/**
+ * RETURNING's rows put back in the order of the requests that wrote them. Neither SQLite nor PostgreSQL promises
+ * the order of a multi-row INSERT's RETURNING, though both answer in VALUES order: each request takes the row in
+ * its own place when that row holds its values, else the first unclaimed row that does. Two requests whose values
+ * agree wrote rows a caller cannot tell apart by what it asked, so either is a right answer.
+ */
+export function batchedRows(applied: ReadonlyArray<Record<string, unknown>>, stored: ReadonlyArray<Record<string, unknown>>) {
+  if (stored.length !== applied.length) throw new Error(`A batch of ${applied.length} rows returned ${stored.length}.`);
+  const same = (a: unknown, b: unknown) =>
+    a === null || b === null || a === undefined || b === undefined
+      ? (a ?? null) === (b ?? null)
+      : String(typeof a === 'boolean' ? Number(a) : a) === String(typeof b === 'boolean' ? Number(b) : b);
+  const holds = (values: Record<string, unknown>, row: Record<string, unknown>) =>
+    Object.keys(values).every((c) => same(values[c], row[c]));
+  const claimed = new Set<number>();
+  return applied.map((values, index) => {
+    const at =
+      holds(values, stored[index]!) && !claimed.has(index) ? index : stored.findIndex((row, i) => !claimed.has(i) && holds(values, row));
+    const take = at >= 0 ? at : stored.findIndex((_, i) => !claimed.has(i));
+    claimed.add(take);
+    return stored[take]!;
+  });
+}
+
+/** A key that matched no row, or more than one: a guarded update's miss is a conflict, any other a refusal. */
+export function refuseUpdateMatches(request: UpdateRequest, count: number): never {
+  if (request.expected !== undefined && count === 0) throw new WriteConflict();
+  throw new Refusal(`Refused: that key matches ${count} rows, not 1. An update is only allowed when it is certain which row it changes.`);
 }
 
 /** What a flow's notify step tells: whom (an audience a `notify` rule names `on: { flow }`), about which record, and its words. */
