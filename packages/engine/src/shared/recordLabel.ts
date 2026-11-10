@@ -156,7 +156,9 @@ export const writesMask = (template: string): boolean => template.includes(MASK_
 export const writesDay = (template: string): boolean => /\|date\s*[}?]/.test(template);
 
 /** A template field for a date path said as its day, as the server writes it into a template it composes. */
-export const datedField = (path: string): string => `{${path}${DATE_MARK}}`;
+export const datedField = (path: string): string => `{${datedPath(path)}}`;
+/** The same inside a fallback chain, without its braces. */
+export const datedPath = (path: string): string => `${path}${DATE_MARK}`;
 
 /**
  * The name a record with no name of its own is given: its noun and its key,

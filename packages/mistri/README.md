@@ -30,7 +30,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.32; the
+These App features ship in mistri 1.0.0-rc.33; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -201,7 +201,8 @@ mistri flows start <resource>
 mistri jobs run <name>        run one of an App's jobs at times now, once (below)
 mistri audit reads            who read an audited resource's rows, as JSON lines (below)
 mistri decide eval <name>     measure a decision on settled records, and pin its model (below)
-mistri tenant init|grant      a tenant App's first boot: its realms, tenants and first operators (below)
+mistri tenant init|grant|brand
+                              a tenant App's first boot: its realms, tenants, first operators and branding (below)
 mistri tenant clone|import|clock
                               a tenant App's sandboxes: clone, import plan, dev clock (below)
 mistri docs [topic]           the App reference, offline (below)
@@ -288,6 +289,13 @@ mistri mail-dns [<config>]    the SPF, DKIM and DMARC records tenant mail is sen
                               batch pays once), to feel a remote database on
                               this machine; 20 is a typical cloud distance. Or
                               set MISTRI_DEV_DB_LATENCY. Refused under
+                              NODE_ENV=production and when serving a build
+      --as-of <date>          development and tests only: App logic's clock
+                              starts at this moment and moves on in real time
+                              (2026-01-05 is midnight in the App's zone), so
+                              seed data dated for one day reads as it did.
+                              Sign-in, sessions and receipts keep the real
+                              clock. Or set MISTRI_AS_OF. Refused under
                               NODE_ENV=production and when serving a build
       --app <dir>             serve an app: a directory whose app.ts (or
                               app.mjs / app.json) declares its resources,
@@ -618,7 +626,7 @@ started; the store is made by mistri migrate stores up, never here.
 Exit codes: 1 could not run.
 
 mistri jobs run <name> [--app <dir>] --jobs <file> [--wait <seconds>]
-                [<db> | --db <target> | --config <path>]
+                [--policy <file> [--tenant <id>]] [<db> | --db <target> | --config <path>]
 Enqueues one run of the job in the App's job store, marked manual beside
 the slots the schedule enqueues, for the server started with --jobs to run
 as the job's principal, journaled as a slot's run is; waits --wait seconds
@@ -626,7 +634,10 @@ as the job's principal, journaled as a slot's run is; waits --wait seconds
 one at a time: a manual run waits while the schedule's run of the job holds
 its lease. A name that is not one of the App's jobs at times is refused with
 the names that are. A job store with no run of a job yet starts at its next
-slot: a first start never runs a missed one.
+slot: a first start never runs a missed one. On a tenant App, --policy names
+its policy, as its server's start does: a job per tenant runs for the tenant
+--tenant names, or once for each tenant active now, one run at a time; a
+job on the platform runs once and takes no --tenant.
 Exit codes: 1 could not run, 2 still waiting when --wait ran out, 3 the run
 did not succeed.
 
@@ -651,6 +662,8 @@ Exit codes: 1 could not run, 2 not spent (no --yes, or over --max-cost),
 mistri tenant init [<tenant>...] [--app <dir>] --policy <file>
 mistri tenant grant <email> --roles <role,...> [--tenant <id>] [--name <name>] [--days <n>]
                 [--app <dir>] --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
+mistri tenant brand <tenant> [--name <name>] [--preset <theme>] [--file <branding.json>]
+                [--app <dir>] --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
 A tenant App's first boot, after `mistri migrate stores up --policy`, from
 a shell or a deployment's one-off job. init opens the platform realm (when the App declares one) and puts each named
 tenant, active; one already there is left as it is, so it runs again after a
@@ -659,8 +672,12 @@ with --tenant of that tenant, with that realm's --roles, for --days (default
 180, at most 366). An address with no account gets one in the App's auth
 store, its password read from MISTRI_ACCOUNT_PASSWORD, never the command
 line: the store the App names, else mistri dev's once dev has started the
-App there, else a plain start's; grant says which. Exit codes: 1 could
-not run.
+App there, else a plain start's; grant says which. brand saves a tenant's
+branding, checked as a tenant admin's save is against the App's branding:
+--file names the whole value (JSON), else the saved one is kept, and
+--name and --preset are laid over either; the stored logo is kept. A
+server sharing the cache connection reads it on its next page, one with
+its own cache within five minutes. Exit codes: 1 could not run.
 
 mistri tenant clone <source> <sandbox> [--app <dir>] --policy <file> [--samples]
 mistri tenant import <sandbox> [--app <dir>] --policy <file>

@@ -650,11 +650,12 @@ export declare function Steps<const N extends CommandName>(props: StepsProps<N>)
  * may not run it, disabled while the row's state does not allow it, busy while it runs. Its accessible name is its
  * label and the row's title ("Check in Morgan Lee"), so a list of them reads apart. Its outcome is said in the
  * platform's live region — `done` says it in the page's words — and a refusal is said there too. The row needs its
- * key (a `List`'s and a `useRows` read's rows both carry it). `page.useCommand` stays for what a button cannot say.
+ * key (a `List`'s and a `useRows` read's rows both carry it); a command that names no row (`targets: 'none'`) takes
+ * none: `<CommandButton command="postRent" />`. `page.useCommand` stays for what a button cannot say.
  */
 export declare function CommandButton(props: {
   command: CommandName;
-  row: Readonly<Record<string, unknown>>;
+  row?: Readonly<Record<string, unknown>>;
   label?: string;
   intent?: 'primary' | 'secondary' | 'quiet' | 'danger';
   size?: 'compact' | 'default' | 'large';

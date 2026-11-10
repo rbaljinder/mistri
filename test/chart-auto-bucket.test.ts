@@ -10,6 +10,7 @@ import {
   bucketKey,
   chooseUnit,
   coarsen,
+  partialPeriods,
   planMeasure,
   readUnit,
   spanDaysBetween,
@@ -312,5 +313,23 @@ describe('the check', () => {
       [],
     );
     assert.deepEqual(appIndexWarnings(app({ by: 'day created_at' }), [], SCHEMA), [], 'no window narrows a section with no over');
+  });
+});
+
+describe('the buckets a window cuts through are partial', () => {
+  const window = dateWindow('last 30 days', new Date(2026, 9, 16, 12))!;
+  test('a week that starts before the window, or runs past its end, is partial; a whole one is not', () => {
+    // Oct 16 2026 is a Friday: the window runs Sep 16 to Oct 17, so Sep 14's week starts before it and Oct 12's runs past.
+    const weeks = ['2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12'];
+    assert.deepEqual([...partialPeriods(weeks, 'week', window)], ['2026-09-14', '2026-10-12']);
+  });
+  test('months and quarters are cut the same way, and a day never is', () => {
+    assert.deepEqual([...partialPeriods(['2026-09', '2026-10'], 'month', window)], ['2026-09', '2026-10']);
+    assert.deepEqual([...partialPeriods(['2026-Q3', '2026-Q4'], 'quarter', dateWindow('this year', new Date(2026, 9, 16))!)], []);
+    assert.deepEqual([...partialPeriods(['2026-10-12'], 'day', window)], []);
+  });
+  test('a window that holds whole weeks leaves them whole', () => {
+    const exact = { start: new Date(2026, 9, 5), end: new Date(2026, 9, 19) };
+    assert.deepEqual([...partialPeriods(['2026-10-05', '2026-10-12'], 'week', exact)], []);
   });
 });

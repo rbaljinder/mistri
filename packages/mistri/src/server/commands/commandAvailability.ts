@@ -2,6 +2,7 @@
  * target rows and a read transaction under the command's footprint/row scope.
  * This helper neither authorizes a principal nor executes a handler. */
 import type { AggregateRequest, WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
 import { BULK_LIMIT } from '../../shared/command.js';
@@ -93,7 +94,7 @@ export async function readCommandAvailability(options: {
     return none();
   const keys = check.keys.map((key) => canonicalKey(table, key));
   if (keys.some((key) => !key)) return none();
-  const now = options.now ?? (() => new Date());
+  const now = options.now ?? (() => appTime());
   let groups = keys.map((key) => keyFilter(key!).groups[0]);
   // A `when` over a rollup or a computed column is judged of each row once read (commandWhen.ts).
   const me = await whenPerson(reader, options.actor, options.people, [command.when]);

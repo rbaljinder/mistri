@@ -93,7 +93,18 @@ function paletteStrings(raw: unknown, where: string): Record<string, string> {
   return result;
 }
 
-export function parseThemes(raw: unknown, where: string, key = 'themes'): ThemeDefinition[] | undefined {
+/**
+ * `platform` says the themes are the platform's own, derived from a built-in look (a tenant's branding is the App's
+ * chosen look with the tenant's accent over it): only those may carry `startedFrom`, which `useLook().preset` reads.
+ * An authored theme names its look with `extends`; one that sets `startedFrom` is refused, so no App can pass itself
+ * off as a built-in preset.
+ */
+export function parseThemes(
+  raw: unknown,
+  where: string,
+  key = 'themes',
+  { platform = false }: { platform?: boolean } = {},
+): ThemeDefinition[] | undefined {
   if (raw === undefined) return undefined;
   if (!Array.isArray(raw) || raw.length > 20) throw new Error(`${where}.${key} must be an array of at most 20 themes.`);
   const used = new Set<string>(['default', ...THEME_BASES]);
@@ -101,11 +112,16 @@ export function parseThemes(raw: unknown, where: string, key = 'themes'): ThemeD
     const path = `${where}.${key}[${index}]`;
     const theme = object(value, path);
     for (const key of Object.keys(theme)) {
+      if (key === 'startedFrom' && !platform)
+        throw new Error(
+          `${path}.startedFrom is set by the platform when a theme starts from a built-in look; name the look with "extends" instead.`,
+        );
       if (key === 'scale' || key === 'headingWeight') throw new Error(`${path}.${key} is now ${path}.${TYPE_MOVED[`type.${key}`]}.`);
       if (
         ![
           'id',
           'label',
+          'startedFrom',
           'base',
           'light',
           'dark',
@@ -127,6 +143,8 @@ export function parseThemes(raw: unknown, where: string, key = 'themes'): ThemeD
     used.add(theme.id);
     if (typeof theme.label !== 'string' || !theme.label.trim() || theme.label.trim().length > 60)
       throw new Error(`${path}.label must have 1 to 60 characters.`);
+    if (theme.startedFrom !== undefined && (typeof theme.startedFrom !== 'string' || !/^[a-z][a-z0-9-]{0,47}$/.test(theme.startedFrom)))
+      throw new Error(`${path}.startedFrom must be a slug.`);
     if (theme.base !== undefined && (typeof theme.base !== 'string' || !(THEME_BASES as readonly string[]).includes(theme.base)))
       throw new Error(`${path}.base must be one of ${THEME_BASES.join(', ')}.`);
     const palette = (mode: 'light' | 'dark'): ThemePalette => {
@@ -153,6 +171,7 @@ export function parseThemes(raw: unknown, where: string, key = 'themes'): ThemeD
     return {
       id: theme.id,
       label: theme.label.trim(),
+      ...(theme.startedFrom !== undefined && { startedFrom: theme.startedFrom as string }),
       base: (theme.base ?? 'mono') as ThemeDefinition['base'],
       light,
       dark,

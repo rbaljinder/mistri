@@ -22,12 +22,12 @@ import { commandActionLabel } from '../recordHistory.js';
 import { SURFACE_HEADER, surfaceFor } from '../../shared/appSurfaces.js';
 import { sessionRoles } from '../../shared/appViewRoles.js';
 import { COMMAND_ROUTES } from '../../shared/commandRoutes.js';
-import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { send } from '@mistriwork/engine/server/http/reply.js';
 import { SOURCE_CLIENT } from '@mistriwork/engine/server/devclient.js';
 import { PAGE_LOAD_PATH } from './pageLoad.js';
-import { tablesReached } from './tablesReached.js';
+import { strayTable, tablesReached } from './tablesReached.js';
 
 type Reply = { status: 403; body: { error: string; code: 'surface' } };
 
@@ -131,9 +131,7 @@ export function surfaceRefusal(options: {
   }
   const asked = options.table === undefined ? tablesReached(options.schema, path, body) : [options.table];
   if (!asked) return undefined;
-  const id = (name: string) => (options.schema && tableNamed(options.schema, name)?.id) ?? name;
-  const declared = new Set(surface.reads.map(id));
-  const stray = asked.find((table) => !declared.has(id(table)));
+  const stray = strayTable(options.schema, surface.reads, asked);
   return stray === undefined
     ? undefined
     : refuse(`The surface "${surface.key}" reads ${surface.reads.join(', ')}; "${stray}" is not one of them.`);

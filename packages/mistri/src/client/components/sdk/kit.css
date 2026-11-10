@@ -1,6 +1,41 @@
 /* The public kit's own rules (kit.tsx), brought with it: after the base, before any look (style.css names the order).
    Tokens only, so every look dresses them; no motion. */
 @layer components {
+  /* The kit's blocks on the look's navigation ground. A container marked data-ground="nav" (a Card's `ground="nav"`)
+     paints that ground and rebinds the inks, hairlines and surfaces the kit reads to the nav's own, so a Stat, a Value,
+     a Meter, a Table, Items, a Card's title, a Segmented and an Empty inside it are legible on it in every look, light
+     and dark (test/contrast.test.ts measures the pairs). The tones are the page's own at 35% over the nav's ink: a
+     status colour chosen for a light page is not legible on a dark one. Tokens only; the scope names no colour. */
+  :root {
+    --kit-nav-good: color-mix(in srgb, var(--status-good) 35%, var(--nav-ink));
+    --kit-nav-warning: color-mix(in srgb, var(--status-warning) 35%, var(--nav-ink));
+    --kit-nav-critical: color-mix(in srgb, var(--status-critical) 35%, var(--nav-ink));
+    --kit-nav-info: color-mix(in srgb, var(--status-info) 35%, var(--nav-ink));
+  }
+  [data-ground='nav'] {
+    --ground: var(--nav-ground);
+    --surface: var(--nav-ground);
+    --raised: color-mix(in srgb, var(--nav-ink) 8%, var(--nav-ground));
+    --accent-soft: color-mix(in srgb, var(--nav-ink) 8%, var(--nav-ground));
+    --ink: var(--nav-ink);
+    --ink-muted: var(--nav-muted);
+    --ink-subtle: var(--nav-muted);
+    --line: var(--nav-line);
+    --line-strong: var(--nav-line);
+    --line-control: color-mix(in srgb, var(--nav-ink) 55%, var(--nav-ground));
+    --link: var(--nav-accent);
+    --accent-ink: var(--nav-accent);
+    --focus: var(--nav-accent);
+    /* A filled thing (the chosen segment) is the ink on the ground, as the nav draws its own current item. */
+    --accent: var(--nav-ink);
+    --on-accent: var(--nav-ground);
+    --status-good: var(--kit-nav-good);
+    --status-warning: var(--kit-nav-warning);
+    --status-critical: var(--kit-nav-critical);
+    --status-info: var(--kit-nav-info);
+    background: var(--nav-ground);
+    color: var(--nav-ink);
+  }
   .kit-card {
     padding: var(--space-4h) var(--space-5);
     border: 1px solid var(--line);
@@ -17,6 +52,35 @@
     font: var(--heading-weight, 600) calc(15px * var(--type-k))/1.3 var(--heading-font, var(--sans));
     letter-spacing: var(--track-title, -0.012em);
     color: var(--ink);
+  }
+  /* A title row with a count or an action: it wraps rather than push a phone's box wider, the action keeps the row's end. */
+  .kit-card-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2h) var(--space-3);
+    min-width: 0;
+    margin: 0 0 var(--space-3h);
+  }
+  .kit-card-head > .kit-card-title {
+    margin: 0;
+    min-width: 0;
+  }
+  .kit-card-count {
+    padding: 1px var(--space-2h);
+    border-radius: 999px;
+    background: var(--raised);
+    color: var(--ink-muted);
+    font: 600 var(--text-xs)/1.4 var(--sans);
+    font-variant-numeric: tabular-nums;
+  }
+  .kit-card-action {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-inline-start: auto;
+    min-width: 0;
   }
   .kit-heading {
     margin: 0;
@@ -60,6 +124,44 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--kit-cluster-min, 16rem)), 1fr));
     min-width: 0;
+  }
+  /* A main beside a rail. The host is the container the stacking asks about; the rail is never past half the box. */
+  .kit-beside-host {
+    container: kit-beside / inline-size;
+    min-width: 0;
+  }
+  .kit-beside {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) min(var(--kit-beside-rail, 20rem), 50%);
+    gap: var(--section-seam);
+    align-items: start;
+    min-width: 0;
+  }
+  .kit-beside-start {
+    grid-template-columns: min(var(--kit-beside-rail, 20rem), 50%) minmax(0, 1fr);
+  }
+  .kit-beside-start > .kit-beside-main {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .kit-beside-start > .kit-beside-rail {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .kit-beside-main,
+  .kit-beside-rail {
+    min-width: 0;
+  }
+  @container kit-beside (max-width: 40rem) {
+    .kit-beside,
+    .kit-beside-start {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .kit-beside-start > .kit-beside-main,
+    .kit-beside-start > .kit-beside-rail {
+      grid-column: auto;
+      grid-row: auto;
+    }
   }
   .kit-gap-tight {
     gap: var(--space-2h);
@@ -236,6 +338,93 @@
   }
   .kit-columns {
     min-width: 0;
+  }
+  /* Items: a list with no head row. Hairlines as a table's rows have them, the hover a clickable row's. The title is the
+     one target; the action holds its own width and the note wraps, so a phone never scrolls sideways. */
+  .kit-items {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    min-width: 0;
+  }
+  .kit-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+    padding: var(--space-3) var(--space-3h);
+    border-bottom: 1px solid var(--line);
+    color: var(--ink);
+  }
+  .kit-items-flush > .kit-item {
+    padding-inline: 0;
+  }
+  .kit-items-flush > .kit-item:last-child {
+    border-bottom: 0;
+  }
+  .kit-item-clickable {
+    cursor: pointer;
+  }
+  .kit-item-lead {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+  }
+  .kit-item-body {
+    display: grid;
+    flex: 1 1 0;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  .kit-item-title {
+    font: 500 var(--text-base)/1.4 var(--sans);
+    overflow-wrap: anywhere;
+  }
+  .kit-item-note {
+    color: var(--ink-muted);
+    font-size: var(--text-sm);
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+  .kit-item-action {
+    display: inline-flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    min-width: 0;
+    max-width: 60%;
+    cursor: default;
+  }
+  .kit-item-target {
+    display: inline;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: inherit;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+  @media (hover: hover) {
+    .kit-item-clickable:hover {
+      background: var(--accent-soft);
+    }
+    .kit-item-clickable:hover .kit-item-target {
+      color: var(--accent-ink);
+      text-decoration: underline;
+    }
+  }
+  .kit-item-target:focus-visible {
+    outline: var(--focus-width, 2px) solid var(--focus);
+    outline-offset: 2px;
+  }
+  .kit-items-empty {
+    padding: var(--space-4) var(--space-4h);
+    color: var(--ink-muted);
   }
   /* A kit table is the look's table (style.css): only its row link and its empty note are the kit's own. The link reads as
    the cell's text, ruled on hover, so a row does not become a column of accent-coloured words. */

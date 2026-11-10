@@ -41,6 +41,7 @@ export const UI_EXPORTS = [
   'useReducer',
   'useContext',
   'Card',
+  'Beside',
   'Stack',
   'Row',
   'Cluster',
@@ -58,6 +59,8 @@ export const UI_EXPORTS = [
   'Stat',
   'Columns',
   'Table',
+  'Items',
+  'Item',
   'useRows',
   'useRecord',
   'useBreakdown',
@@ -143,3 +146,24 @@ export const PAGE_EXPORTS = [...UI_EXPORTS, ...PAGE_ONLY] as const;
 
 /** Where an App's compiled components are served: `/{app}/_components/<file>`. */
 export const COMPONENTS_SEGMENT = '_components';
+
+/**
+ * The reads a page's hooks send, as both sides need them: the host sends them (client/components/sdk/host.tsx), and
+ * `mistri check` builds the same requests from a page's literal `show`, `query` and `sort` and holds them to the
+ * page's reads by the rule the server refuses them with (http/tablesReached.ts strayRead). A path that crosses a
+ * reference reads the table it lands on, so a check that only read the hook's first argument would pass a page the
+ * browser is refused.
+ */
+export function uiViewRunBody(base: string, name: string, paths: readonly string[], query: string, limit: number) {
+  return {
+    count: 'none' as const,
+    ...(query.trim() ? { query: query.trim() } : {}),
+    view: { id: `ui:${base}`, name, base, columns: paths.map((path) => ({ path })), limit },
+  };
+}
+/** The query box's text a `useRows` read runs: its conditions, then its order. */
+export const uiRowsQuery = (query: string | undefined, sort: string | undefined): string =>
+  [query ?? '', sort ? `sort ${sort}` : ''].join(' ');
+/** The text a `useBreakdown` read is asked as (`/api/breakdown`). */
+export const uiBreakdownText = (base: string, query: string | undefined, measure: string | undefined, by: string): string =>
+  [base, query ?? '', `${measure ?? 'count'} by ${by}`].filter(Boolean).join(' ');

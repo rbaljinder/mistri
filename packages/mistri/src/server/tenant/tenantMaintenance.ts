@@ -31,7 +31,11 @@ import { TransactionOutcomeUnknown, type TransactionOperations } from '@mistriwo
 import { PostgresAdapter } from '@mistriwork/engine/adapters/postgres.js';
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { SqliteAdapter } from '@mistriwork/engine/adapters/sqlite.js';
-import { signInOf } from '../../shared/app.js';
+import { signInOf, type AppDef } from '../../shared/app.js';
+import { MemoryCacheStore, type CacheStore } from '@mistriwork/engine/adapters/cache/cacheStore.js';
+import type { TenantBrandingValue } from '../../shared/tenantBranding.js';
+import { appStoresOf } from '../stores/appStores.js';
+import { createTenantBrandingService } from './tenantBranding.js';
 import { loadApp, type LoadedApp } from '../app/apps.js';
 import { captureAppAuthRuntime, createAppAuth, type AppAuthRuntime } from '../auth/auth.js';
 import {
@@ -64,9 +68,15 @@ import {
 } from './tenantMaintenanceChange.js';
 import { parseTenantSelector } from './tenantMembership.js';
 import { PLATFORM_TENANT_ID } from './tenantPlatform.js';
-import { createSqliteTenantAdministration, TENANT_TABLES, type TenantStoreAdministration, type TenantStoreBinding } from './tenantStore.js';
+import {
+  createSqliteTenantAdministration,
+  readSqliteActiveTenants,
+  TENANT_TABLES,
+  type TenantStoreAdministration,
+  type TenantStoreBinding,
+} from './tenantStore.js';
 import { binding as storeBinding } from './tenantStoreContract.js';
-import { createPostgresTenantAdministration } from './tenantStorePostgres.js';
+import { createPostgresTenantAdministration, readPostgresActiveTenants } from './tenantStorePostgres.js';
 import { assertSqliteSupportAudit, createSqliteSupportAuditOwner } from './tenantSupportAudit.js';
 import { SUPPORT_AUDIT_KEY_VARIABLE, SUPPORT_AUDIT_PREFIX, supportAuditKey, type SupportAuditOwner } from './tenantSupportAuditContract.js';
 import { assertPostgresSupportAudit, createPostgresSupportAuditOwner } from './tenantSupportAuditPostgres.js';
@@ -281,6 +291,8 @@ interface Step {
   readonly journal: TenantAdministrationJournal;
   /** The anchor row of this kind, locked FOR UPDATE on PostgreSQL, or null. */
   anchor(id: string, kind: 'tenant' | 'platform'): Promise<MaintenanceAnchorImage | null>;
+  /** The active tenants by id, in byte order, as the server reads them at a job's slot. */
+  activeTenants(): Promise<readonly string[]>;
   /** One ordinary membership by id, locked FOR UPDATE on PostgreSQL, or null. */
   member(id: string): Promise<MaintenanceMemberImage | null>;
   /** Whether the account holds a live (active or invited) membership under the anchor. */
@@ -333,6 +345,10 @@ function sqliteStep(db: DatabaseSync, operations: TransactionOperations, owner: 
     rows: sqliteSandboxSession(db, assertCurrent),
     store: createSqliteTenantAdministration(db, operations, owner, assertCurrent),
     journal: createSqliteTenantAdministrationJournal(db, operations, owner, assertCurrent),
+    activeTenants: async () => {
+      assertCurrent();
+      return readSqliteActiveTenants(db, owner);
+    },
     anchor: async (id, kind) =>
       anchorImage(
         get(
@@ -418,6 +434,12 @@ function postgresStep(client: PgQuery, operations: TransactionOperations, owner:
     rows: postgresSandboxSession(client, assertCurrent),
     store: createPostgresTenantAdministration(client, operations, owner, assertCurrent),
     journal: createPostgresTenantAdministrationJournal(client, operations, owner, assertCurrent),
+    activeTenants: async () => {
+      assertCurrent();
+      const active = await readPostgresActiveTenants(client, owner);
+      assertCurrent();
+      return active;
+    },
     anchor: async (id, kind) =>
       anchorImage(
         await get(
@@ -943,6 +965,81 @@ export async function setSandboxClock(
     );
     return Object.freeze({ clock, receiptId });
   });
+}
+
+/**
+ * Save a tenant's branding from the operator's shell or a deployment's one-off
+ * job, through the same door a tenant admin's save goes through
+ * (tenantBranding.ts): checked field by field against the App's `branding`,
+ * the stored logo kept, the shared cache's copy dropped. `value` is the whole
+ * value to save; without one, the saved value is the base. `name` and `preset`
+ * are laid over either. A tenant that is not in the store is refused.
+ */
+export async function saveTenantBranding(
+  where: TenantMaintenanceTarget,
+  binding: TenantStoreBinding,
+  input: Readonly<{
+    app: AppDef;
+    tenantId: string;
+    value?: unknown;
+    name?: string;
+    preset?: string;
+    operator: string;
+    /** The deployment's shared cache, so every running instance reads the save on its next page (default: none shared). */
+    cache?: CacheStore;
+  }>,
+): Promise<Readonly<{ value: TenantBrandingValue; revision: number }>> {
+  const owner = bindingOf(binding),
+    operator = operatorOf(input?.operator),
+    tenantId = tenantOf(input?.tenantId),
+    app = input.app;
+  if (!app?.branding) return refuse(`${app?.id ?? 'The App'} declares no branding: there is nothing a tenant could save.`);
+  if (app.id !== owner.appId) return refuse('The App is not the one the binding names.');
+  const at = targetOf(where);
+  // Read in its own maintenance transaction: the branding save below takes the database's writer.
+  await transact(at, owner, async (step) => {
+    if (!(await step.anchor(tenantId, 'tenant'))) refuse(`"${tenantId}" is not a tenant of ${app.id}.`);
+  });
+  const writer = 'sqlite' in at ? new SqliteAdapter(at.sqlite, 'Tenant branding') : new PostgresAdapter(at.postgres, 'Tenant branding');
+  try {
+    const stores = appStoresOf(writer);
+    if (!(await stores.brandingReady()))
+      return refuse(
+        `${app.id} declares branding, and its database holds no branding store: provision it first (\`mistri migrate stores up\`).`,
+      );
+    const service = createTenantBrandingService({
+      app,
+      store: {
+        read: (query) => stores.readBranding(query),
+        // A save never serves a logo; it keeps the stored one by its hash.
+        logo: async () => null,
+        write: (write) => stores.writeBranding(write),
+      },
+      cache: input.cache ?? new MemoryCacheStore(),
+    });
+    const base = input.value !== undefined ? input.value : (await service.state(tenantId)).value;
+    const value =
+      base && typeof base === 'object' && !Array.isArray(base)
+        ? {
+            ...(base as Record<string, unknown>),
+            ...(input.name !== undefined ? { name: input.name } : {}),
+            ...(input.preset !== undefined ? { preset: input.preset } : {}),
+          }
+        : base;
+    return Object.freeze(await service.save(tenantId, { value }, `maintenance:${operator}`));
+  } finally {
+    await writer.close().catch(() => {});
+  }
+}
+
+/**
+ * The tenants active now, by id in byte order: whom a job at times per tenant
+ * runs for at its next slot, and so whom `mistri jobs run` runs it for. A
+ * plan, as the server's read is: each run is admitted again on its own
+ * tenant's row when it starts.
+ */
+export async function readActiveTenants(where: TenantMaintenanceTarget, binding: TenantStoreBinding): Promise<readonly string[]> {
+  return transact(where, bindingOf(binding), (step) => step.activeTenants());
 }
 
 /** Create the platform's `@platform` row (`expectedVersion: null`, active) or

@@ -183,7 +183,15 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       }
       assertActive();
     }
-    const visible = withRecordBranding(app, branding);
+    /* A tenant's saved look dresses the page and never decides whether it is served: a presentation that cannot be
+       worn leaves the App's own, as a read that failed does above (a field report: a saved name closed every form). */
+    let visible: typeof app;
+    try {
+      visible = withRecordBranding(app, branding);
+    } catch {
+      branding = baseRecordBranding(app);
+      visible = withRecordBranding(app, branding);
+    }
     const presentation = {
       app: {
         id: visible.id,

@@ -27,7 +27,7 @@ import './CalendarList.css';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, columnLabel, findTable, keyOf, openRecord, refsFrom, state, toast, writeAllowed } from '@mistriwork/kit/client/core.js';
-import { formatDateTime, formatLocale, formatNumber } from '@mistriwork/kit/client/locale.js';
+import { appNow, formatDateTime, formatLocale, formatNumber } from '@mistriwork/kit/client/locale.js';
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import { sessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { applyBulk, bulkKey } from '@mistriwork/kit/client/bulkActions.js';
@@ -218,11 +218,11 @@ interface CalendarListProps {
 }
 
 export function CalendarList({ table, spec, entry, interactive = true, label, referenceLabels }: CalendarListProps) {
-  const [month, setMonth] = useState(() => monthStart(new Date()));
+  const [month, setMonth] = useState(() => monthStart(appNow()));
   /* A week or a day: the time grid's period, by a day in it. */
   const span = spec.span ?? 'month';
   const timed = span !== 'month';
-  const [periodDay, setPeriodDay] = useState(() => iso(new Date()));
+  const [periodDay, setPeriodDay] = useState(() => iso(appNow()));
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const [over, setOver] = useState<string>();
   /* The grid's one Tab stop, and a day the keyboard asked for that is not drawn yet (the month is turning). */
@@ -412,7 +412,7 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
         : new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(month);
   const shortDate = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' });
   const spanned = (card: CalendarCard) => shortDate.formatRange(at(card.day), at(card.last));
-  const today = iso(new Date());
+  const today = iso(appNow());
 
   // Every gate the ordinary update route applies, asked here so a card that
   // cannot move does not offer to; a date the App moves only through its
@@ -877,11 +877,7 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
           >
             <Icon name="caret-left" size={16} />
           </button>
-          <button
-            type="button"
-            className="ghost"
-            onClick={() => (timed ? setPeriodDay(iso(new Date())) : setMonth(monthStart(new Date())))}
-          >
+          <button type="button" className="ghost" onClick={() => (timed ? setPeriodDay(iso(appNow())) : setMonth(monthStart(appNow())))}>
             {sayCopy('common.today')}
           </button>
           <button

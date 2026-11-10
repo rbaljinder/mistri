@@ -16,9 +16,15 @@ import { INBOX_VERSION, type InboxMark, type InboxQuery, type StoredNotice } fro
 import type { InboxMailStore } from '../../adapters/inbox/inboxMail.js';
 import { markPostgresInboxRead, postgresInboxMail, readPostgresInbox } from '../../adapters/inbox/postgresInbox.js';
 import { markSqliteInboxRead, readSqliteInbox, sqliteInboxMail } from '../../adapters/inbox/sqliteInbox.js';
-import { BRANDING_TABLES, BRANDING_VERSION, type BrandingWrite } from '../../adapters/branding/branding.js';
-import { writePostgresBranding } from '../../adapters/branding/postgresBranding.js';
-import { writeSqliteBranding } from '../../adapters/branding/sqliteBranding.js';
+import {
+  BRANDING_TABLES,
+  BRANDING_VERSION,
+  type BrandingQuery,
+  type BrandingWrite,
+  type StoredBranding,
+} from '../../adapters/branding/branding.js';
+import { readPostgresBranding, writePostgresBranding } from '../../adapters/branding/postgresBranding.js';
+import { readSqliteBranding, writeSqliteBranding } from '../../adapters/branding/sqliteBranding.js';
 import {
   RECORD_HISTORY_TABLES,
   RECORD_HISTORY_VERSION,
@@ -77,6 +83,8 @@ interface AppStores {
   readReadAudit(query: ReadAuditQuery): Promise<StoredReadAudit[]>;
   /** Whether the database holds the branding store at this version. */
   brandingReady?(): Promise<boolean>;
+  /** One tenant's saved branding, for a save made outside a server (tenantMaintenance.ts saveTenantBranding). */
+  readBranding?(query: BrandingQuery): Promise<StoredBranding | null>;
   /** One tenant's branding saved, with its logo, in one transaction on a writer. */
   writeBranding?(write: BrandingWrite): Promise<number>;
 }
@@ -122,6 +130,8 @@ function postgresStores(host: PostgresStoreHost): AppStores {
     readReadAudit: (query) =>
       host.withReadClient((client) => host.attestedStore(client, READ_AUDIT, (attested) => readPostgresReadAudit(client, query, attested))),
     brandingReady: () => host.withReadClient((client) => BRANDING_ATTEST.postgres!(client)),
+    readBranding: (query) =>
+      host.withReadClient((client) => host.attestedStore(client, BRANDING, (attested) => readPostgresBranding(client, query, attested))),
     /* The epoch is read before BEGIN: a failed read inside the transaction would abort the save with it. */
     writeBranding: (write) =>
       host.withWriteClient((client) =>
@@ -163,6 +173,7 @@ function sqliteStores(host: SqliteStoreHost): AppStores {
     ),
     readReadAudit: async (query) => host.attestedStore(READ_AUDIT, (attested) => readSqliteReadAudit(host.reader(), query, attested)),
     brandingReady: () => BRANDING_ATTEST.sqlite!(host.reader()),
+    readBranding: async (query) => host.attestedStore(BRANDING, (attested) => readSqliteBranding(host.reader(), query, attested)),
     writeBranding: (write) =>
       host.queueWrite((handle) => {
         handle.exec('BEGIN IMMEDIATE');
@@ -185,7 +196,7 @@ function sqliteStores(host: SqliteStoreHost): AppStores {
 const made = new WeakMap<object, AppStores>();
 
 /** Branding is kept on SQLite and PostgreSQL. */
-type BrandedAppStores = AppStores & Required<Pick<AppStores, 'brandingReady' | 'writeBranding'>>;
+type BrandedAppStores = AppStores & Required<Pick<AppStores, 'brandingReady' | 'readBranding' | 'writeBranding'>>;
 
 /** The App stores over a constructed dialect adapter, or undefined for anything that lends none. */
 export function appStoresOf(adapter: SqliteAdapter | PostgresAdapter): BrandedAppStores;

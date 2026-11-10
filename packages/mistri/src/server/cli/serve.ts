@@ -10,7 +10,7 @@ import { setBuildIdSource } from '@mistriwork/engine/server/http/probes.js';
 import { startupReport } from '@mistriwork/engine/shared/refusal.js';
 import { readFileSync } from 'node:fs';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
-import { basename, dirname, relative } from 'node:path';
+import { basename, dirname, relative, resolve as resolvePath } from 'node:path';
 import { captureAppAuthRuntime, createAppAuth, ignoredAdminEnvironment } from '../auth/auth.js';
 import { expandEnvReferences } from '@mistriwork/engine/server/auth/credentials.js';
 import { testControlFrom } from '../http/testControl.js';
@@ -286,11 +286,19 @@ export async function startServing(
   const stopWatchers: Array<() => void> = [];
   const background = new Set<Promise<unknown>>();
   const retiredPolicies = new WeakSet<HttpAppPolicy>();
-  /* The row policy's and the commands' own files, as the policy started with
+  /* The row policy's and the commands' own files, as the server started with
      them. Node imports a module once, so an App reload starts its policy again
-     from the code already loaded: a save that changed either file cannot take
-     effect without a restart, and is told so rather than half-applied. */
-  const moduleFiles = [opts.policy, opts.commands].filter((file): file is string => typeof file === 'string');
+     from the code already loaded, and a reload of any App reads its commands
+     from it: a save that changed either file cannot take effect without a
+     restart, and is told so rather than half-applied. The commands may be the
+     commands.ts beside the manifest, which no flag names (commandHost.ts). */
+  const moduleFiles = [
+    ...new Set(
+      [opts.policy, opts.commands, ...loadedApps.map((loaded) => loaded.commands?.file)]
+        .filter((file): file is string => Boolean(file))
+        .map((file) => resolvePath(file)),
+    ),
+  ];
   const moduleTexts = () =>
     moduleFiles.map((file) => {
       try {
@@ -299,7 +307,20 @@ export async function startServing(
         return null;
       }
     });
-  let startedModules: Array<string | null> = [];
+  let startedModules = moduleTexts();
+  const movedModules = () => {
+    const now = moduleTexts();
+    return moduleFiles.filter((_file, index) => now[index] !== startedModules[index]);
+  };
+  /* Under `mistri dev` this process is a child (devSupervisor.ts): what only a
+     restart applies, it retires for and its parent starts it again, where a
+     person would otherwise restart it by hand. Says why first. */
+  const restartsForDev = (why: string): boolean => {
+    if (!opts.dev || process.env[DEV_SUPERVISED_ENV] !== '1') return false;
+    console.error(`mistri dev: ${why}; starting it again…`);
+    void exit(DEV_CHANGED_EXIT);
+    return true;
+  };
   const retirePolicy = () => {
     const policy = serving.policy;
     if (!policy || retiredPolicies.has(policy)) return;
@@ -809,8 +830,9 @@ export async function startServing(
                       host.loadError = operator[0];
                       for (const [index, line] of operator.entries()) console.error(index ? `  ${line}` : `App error: ${line}`);
                     };
-                    const moved = moduleFiles.filter((_file, index) => moduleTexts()[index] !== startedModules[index]);
+                    const moved = movedModules();
                     if (moved.length) {
+                      if (restartsForDev(`${moved.map((file) => basename(file)).join(' and ')} changed`)) return;
                       return refuse(
                         "The App's row policy or commands changed. They are read once, at startup: restart the server to apply the change.",
                         [
@@ -823,6 +845,7 @@ export async function startServing(
                     if (!(await reloadApp(candidate, appTarget, pagesBeforeApp, configPath))) {
                       host.loadFailure = candidate.loadFailure;
                       if (candidate.unavailable) host.unavailable = candidate.unavailable;
+                      if (candidate.unavailable && restartsForDev("the App's authority changed")) return;
                       return refuse(
                         candidate.unavailable
                           ? "The App's access or sign-in changed. Restart the server to apply the change."
@@ -833,6 +856,8 @@ export async function startServing(
                       );
                     }
                     if (!isRowPolicyApp(candidate.app.app)) {
+                      /* Not restarted under dev: it was started with --policy, and starting it again with the flag
+                         would be refused at once. */
                       return refuse('The App changed how it scopes rows. Restart the server to apply the change.', [
                         "The App no longer declares auth.rows: 'policy'. Restart the server without --policy to serve it.",
                       ]);
@@ -894,6 +919,18 @@ export async function startServing(
                 .then(async () => {
                   await retiringReads;
                   if (stopping) return;
+                  /* The commands are the module the server started with: a reload reads that one again (Node
+                     imports a module once), so a save to it is a restart's to apply, and said so rather than served
+                     quietly stale. The rest of the save still reloads. */
+                  const moved = movedModules();
+                  if (moved.length) {
+                    const names = moved.map((file) => basename(file)).join(' and ');
+                    if (restartsForDev(`${names} changed`)) return;
+                    console.error(
+                      `App error: ${names} changed. Commands are read once, at startup: restart the server to apply the change. ` +
+                        'Until then it runs the commands it started with.',
+                    );
+                  }
                   const before = { app: host.app, pages: host.pages };
                   // Database-backed command checks await: keep the candidate private until
                   // validation completes so generic routes cannot observe an invalid policy.
@@ -908,12 +945,7 @@ export async function startServing(
                (reloadApp), rather than serving either authority. */
                       host.unavailable = candidate.unavailable;
                       console.error(`App error: ${host.loadError}`);
-                      /* Under `mistri dev` this process is a child (devSupervisor.ts): it retires and its parent starts
-                         it again with the new authority, where a person would otherwise restart it by hand. */
-                      if (opts.dev && process.env[DEV_SUPERVISED_ENV] === '1') {
-                        console.error("mistri dev: the App's authority changed; starting it again…");
-                        void exit(DEV_CHANGED_EXIT);
-                      }
+                      restartsForDev("the App's authority changed");
                       return;
                     }
                     // The loader's own message names the file and the fix.
@@ -931,8 +963,10 @@ export async function startServing(
                       throw new Error('Row policies require restarting with --policy <file>.');
                     }
                     if (serving.commands) {
-                      if (candidate.app.app.id !== serving.commands.appId)
+                      if (candidate.app.app.id !== serving.commands.appId) {
+                        if (restartsForDev("the App's id changed, and its commands are hosted under the old one")) return;
                         throw new Error('A command application ID requires a server restart to change.');
+                      }
                       const owner = appEntrypoint(candidate, registry);
                       if (!owner) throw new Error('The command application has no entry point.');
                       const releases: Array<() => void> = [];
@@ -968,9 +1002,11 @@ export async function startServing(
                     host.pages = candidate.pages;
                     host.loadError = candidate.loadError;
                     collision = rebuildServedPages();
-                  } catch {
+                  } catch (error) {
+                    // Which one it was is the operator's to read: "restart" alone did not say what with.
                     collision =
-                      'The reloaded app is incompatible with the registered commands or row policy. New access restrictions have NOT been activated. Stop the server and restart with a valid configuration.';
+                      `The reloaded app is incompatible with the registered commands or row policy: ${(error as Error).message} ` +
+                      'New access restrictions have NOT been activated. Stop the server and restart with a valid configuration.';
                   }
                   if (collision) {
                     /* The swap and the served pages move together or not at all. A

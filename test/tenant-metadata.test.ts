@@ -1140,6 +1140,17 @@ test("a suggested page's related list is called what the App's resource calls it
   assert.notEqual(plain?.title, 'note');
 });
 
+test('a suggested page leaves out a related list the role cannot follow instead of refusing the record (field report)', () => {
+  const catalog = schema();
+  // The role reads note, but not the column that ties a note to its item.
+  catalog.tables[1].columns = catalog.tables[1].columns.filter((column) => column.name !== 'item_id');
+  const result = tenantSuggestedPage(app(), [], catalog, 'item');
+  assert.equal(result.base, 'item');
+  assert.ok(result.sections.length > 0);
+  assert.ok(!result.sections.some((section) => section.kind === 'list' && section.from === 'note'));
+  noPrivate(result);
+});
+
 for (const table of ['hidden_secret', 'physical_item', '', ' item', 'item\n']) {
   test(`suggested page safely refuses ${JSON.stringify(table)}`, () => {
     assert.throws(() => tenantSuggestedPage(app(), [], schema(), table), safeFailure);

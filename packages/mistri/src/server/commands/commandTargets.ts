@@ -7,6 +7,7 @@
  * handler still checks each revision conditionally.
  */
 import type { Condition, QueryRequest, QueryResult } from '@mistriwork/engine/adapters/adapter.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { parseQuery, type QueryPerson } from '@mistriwork/engine/shared/query.js';
 import { zonedNow } from '../../shared/appZone.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
@@ -69,7 +70,7 @@ export async function prepareCommandTargets(options: {
     const me = await options.me?.();
     const parsed = parseQuery(`${table} ${options.when}`, {
       schema: options.schema,
-      now: zonedNow(options.zone, options.now ?? new Date()),
+      now: zonedNow(options.zone, options.now ?? appTime()),
       ...(me ? { me } : {}),
     });
     if (!parsed.query || parsed.errors.length) eligible = new Set();

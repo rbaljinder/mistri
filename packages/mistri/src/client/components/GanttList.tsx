@@ -15,7 +15,7 @@ import './GanttList.css';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, keyOf, openRecord, state } from '@mistriwork/kit/client/core.js';
-import { formatLocale, formatNumber } from '@mistriwork/kit/client/locale.js';
+import { appNow, formatLocale, formatNumber } from '@mistriwork/kit/client/locale.js';
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import { splitQuery } from '@mistriwork/kit/client/clauses.js';
 import { primaryKey, type TableMeta } from '@mistriwork/engine/shared/schema.js';
@@ -210,7 +210,7 @@ export function GanttList({ table, spec, entry, interactive = true, label, refer
     }
     return out;
   }, [rows]);
-  const now = today ?? Math.floor(Date.now() / DAY);
+  const now = today ?? Math.floor(appNow().getTime() / DAY);
   const { from, to } = windowOf(Math.min(...bars.map((bar) => bar.first)), Math.max(...bars.map((bar) => bar.last)), now);
   const span = Math.max(1, to - from);
   const at = (day: number) => `${(((day - from) / span) * 100).toFixed(3)}%`;

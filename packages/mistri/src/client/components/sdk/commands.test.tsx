@@ -37,6 +37,7 @@ const raise = {
   id: 'raise',
   kind: 'form',
   label: 'Raise a ticket',
+  prefillable: ['title'],
   command: { id: 'raise', version: 1, input: [{ name: 'title', type: 'text', label: 'Title', required: true }] },
 };
 vi.mock('../../../../../kit/src/client/components/appRooms.js', async (importOriginal) => ({
@@ -330,6 +331,16 @@ test('a form whose answer never came settles unknown, and check asks again under
   answer = async () => ({ status: 'applied', receiptId: 'r-1', result: { ticketId: 41 } });
   expect(await outcome.check()).toEqual({ status: 'applied', output: { ticketId: 41 } });
   expect(calls[1].body.idempotencyKey).toBe(calls[0].body.idempotencyKey);
+});
+
+test('openForm carries the values given into the signed-in form it opens, for the inputs it names prefillable', async () => {
+  pageBridge.commands!.openForm('raise', { title: 'Mouse missing', other: 'x' });
+  const title = await vi.waitFor(() => {
+    const found = document.querySelector<HTMLInputElement>('.form-dialog input[type="text"]');
+    expect(found).not.toBeNull();
+    return found!;
+  });
+  expect(title.value).toBe('Mouse missing');
 });
 
 test('a form the session leaves behind lets go instead of waiting on a dialog that cannot close', async () => {

@@ -64,6 +64,8 @@ export interface RenderOptions {
   /** Props over the declaration's own. */
   props?: Record<string, unknown>;
   look?: string;
+  /** The theme the look started from, where `look` is `'tenant'`; the look itself when unsaid. */
+  preset?: string;
   mode?: 'light' | 'dark';
   /** The section's width in pixels; below 420 it is compact, as on a phone. */
   width?: number;

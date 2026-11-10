@@ -39,7 +39,7 @@ import { Dropdown, readsAsName } from './Dropdown.js';
 import { RecordPicker } from './RecordPicker.js';
 import { DateField } from './DateField.js';
 import { isPickerDate } from '@mistriwork/ui/internal/datePickerModel.js';
-import { formatClockZone, formatLocale, formatTimezone } from '../locale.js';
+import { appNow, formatClockZone, formatLocale, formatTimezone } from '../locale.js';
 import { InputSlot, columnInput } from './inputRenderers.js';
 import { autoKey, enteredNow, isRequired, platformWritten } from '@mistriwork/engine/shared/form.js';
 import { columnTextRule, textRuleBreak, type TextRule } from '@mistriwork/engine/shared/textRules.js';
@@ -1186,6 +1186,7 @@ export function PlatformControl({
         placeholder={said || (kind === 'datetime' ? say('yyyyMmDdHh') : undefined)}
         locale={formatLocale()}
         timezone={formatTimezone()}
+        now={appNow()}
       />
     );
   }

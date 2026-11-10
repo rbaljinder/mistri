@@ -36,6 +36,8 @@ import { say } from '../copy/record/components/valueModel.js';
 import { shellBody } from '../shellHost.js';
 
 export interface DisplayRule {
+  /** What a missing value is said as where the dash would stand (`display: { resolved_at: { empty: 'Open' } }`). */
+  empty?: string;
   /** The face the column's values are set in (`display: { vin: { face: 'code' } }`). */
   face?: 'data' | 'ui' | 'code';
   format?: 'money' | 'percent' | 'number' | 'relative' | 'date' | 'datetime' | string;

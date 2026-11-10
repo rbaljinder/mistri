@@ -25,7 +25,7 @@ import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from 're
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { api, columnDisplay, findTable, labelColumn, state } from '../core.js';
 import { batchedBreakdown } from '../breakdownBatch.js';
-import { defaultCurrency, formatLocale, formatNumber, formatTimezone } from '../locale.js';
+import { appNow, defaultCurrency, formatLocale, formatNumber, formatTimezone } from '../locale.js';
 import { DateField } from './DateField.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Field } from '@mistriwork/ui/Field.js';
@@ -697,6 +697,7 @@ function DateFacet({ box, tail, table, set, onEnter, more }: FacetProps) {
             max={isPickerDate(to) ? to : undefined}
             locale={formatLocale()}
             timezone={formatTimezone()}
+            now={appNow()}
             onChange={setFrom}
             onBlur={commit}
             onKeyDown={onKey}
@@ -712,6 +713,7 @@ function DateFacet({ box, tail, table, set, onEnter, more }: FacetProps) {
             min={isPickerDate(from) ? from : undefined}
             locale={formatLocale()}
             timezone={formatTimezone()}
+            now={appNow()}
             onChange={setTo}
             onBlur={commit}
             onKeyDown={onKey}

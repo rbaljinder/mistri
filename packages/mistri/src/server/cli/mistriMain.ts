@@ -359,6 +359,16 @@ export const main: Main = async () => {
   const { loadedApps } = apps;
   try {
     if (loadedApps.some((loaded) => loaded.build)) latency.refuseForBuild();
+    /* App logic's clock as of another moment (http/clock.ts), once the Apps are read: a date alone is midnight in
+       the App's zone, so it needs the one zone the served Apps agree on (the server's own when they name none or
+       differ, as a query's today is). */
+    const { appZone } = await import('../../shared/appZone.js');
+    const zones = new Set(loadedApps.map((loaded) => appZone(loaded.app.ui)));
+    (await import('@mistriwork/engine/server/http/clock.js')).configureAsOf(opts.asOf, {
+      dev: Boolean(opts.dev),
+      build: loadedApps.some((loaded) => loaded.build),
+      zone: zones.size === 1 ? [...zones][0] : undefined,
+    });
   } catch (error) {
     console.error(`mistri: ${(error as Error).message}`);
     await registry.closeAll();
@@ -665,14 +675,26 @@ export const main: Main = async () => {
     });
     return;
   }
-  /* `mistri dev` on an App: a save is worn in place, except a change of what the App grants. That one is refused a
-     live swap (app/authorityLock.ts), so its requests stopped until someone restarted by hand; here the child retires
-     with DEV_CHANGED_EXIT (serve.ts) and this parent starts it again, as a tenant App's dev does. */
+  /* `mistri dev` on an App: a save is worn in place, except what a reload cannot wear: a change of what the App grants,
+     which is refused a live swap (app/authorityLock.ts), or a save to its row policy or commands module, which Node
+     imported once. Its requests stopped, or ran the old code, until someone restarted by hand; here the child retires
+     with DEV_CHANGED_EXIT (serve.ts) and this parent starts it again, as a tenant App's dev does. A start after a save
+     that fails waits for the next save (devSupervisor.ts). */
   if (opts.dev && !opts.embedded && !opts.checkApp && !loadedApps.some((loaded) => loaded.build)) {
-    const { DEV_SUPERVISED_ENV, superviseDev } = await import('./devSupervisor.js');
+    const { DEV_SUPERVISED_ENV, superviseDev, watchForSave } = await import('./devSupervisor.js');
     if (process.env[DEV_SUPERVISED_ENV] !== '1') {
       await registry.closeAll();
-      process.exit(await superviseDev({ ...typed, onlyOnChange: true, watch: () => () => {} }));
+      const first = loadedApps[0];
+      process.exit(
+        await superviseDev({
+          ...typed,
+          onlyOnChange: true,
+          watch: (changed) =>
+            first
+              ? watchForSave(first.dir ?? dirname(first.path), [opts.policy, opts.commands, opts.jobs, config.configPath], changed)
+              : () => {},
+        }),
+      );
     }
   }
   const { hostCommands } = await import('./commandHost.js');

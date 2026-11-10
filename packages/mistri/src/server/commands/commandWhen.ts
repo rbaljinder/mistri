@@ -620,7 +620,7 @@ function meets(condition: Condition, value: ComputedValue): boolean {
 
 /**
  * The first condition of a `when` the row does not meet, where it is one of the target's own stored columns judged
- * by a plain comparison: what a refusal names so a person can see why (`balance_cents is $108.99; needs <= 0`).
+ * by a plain comparison: what a refusal names so a person can see why (`Balance owed is $108.99; needs to be at most $0.00`).
  * For a compound `when` it is the first part that fails, in the order it was written; undefined where the failing
  * part is a rollup, a comparison of two columns or anything else a sentence about one value cannot say.
  */

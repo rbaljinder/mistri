@@ -83,6 +83,19 @@ describe('a command on one row', () => {
     expect(await screen.findByRole('button', { name: 'Arrive Kai Moss' })).toBeInTheDocument();
   });
 
+  test('a command that names no row is a button with none, enabled and named by its label alone', async () => {
+    renderPage(
+      definePage({ label: 'Desk', reads: ['booking'], commands: ['checkIn'], component: () => <CommandButton command="checkIn" /> }),
+      {
+        data: BOOKINGS,
+        viewer: SIGNED_IN,
+        commands: { checkIn: { label: 'Check in' } },
+      },
+    );
+    const button = await screen.findByRole('button', { name: 'Check in' });
+    await vi.waitFor(() => expect(button).not.toBeDisabled());
+  });
+
   test("is held where the row's state does not allow it", async () => {
     const available = (key: Readonly<Record<string, unknown>>) => key.id !== 4;
     renderPage(desk, { data: BOOKINGS, viewer: SIGNED_IN, commands: { checkIn: { label: 'Check in', available } } });

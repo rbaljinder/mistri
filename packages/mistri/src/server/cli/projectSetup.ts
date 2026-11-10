@@ -5,27 +5,12 @@
  * a project that already has a package.json — and refused where it is
  * checked, each with the one command that fixes it.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
-import { meetsMinimum, TYPESCRIPT_FIX } from '../build/typecheck.js';
+import { meetsMinimum, nearestPackage, TYPESCRIPT_FIX } from '../build/typecheck.js';
 
 const MODULE_FIX = 'npm pkg set type=module';
-
-/** The package.json a directory's modules are read under, and the type it says; undefined above every one. */
-function nearestPackage(dir: string): { path: string; type?: unknown } | undefined {
-  for (let at = resolve(dir); ; at = dirname(at)) {
-    const path = join(at, 'package.json');
-    if (existsSync(path)) {
-      try {
-        return { path, type: (JSON.parse(readFileSync(path, 'utf8')) as { type?: unknown }).type };
-      } catch {
-        return { path };
-      }
-    }
-    if (dirname(at) === at) return undefined;
-  }
-}
 
 /** One sentence when the package.json over `dir` does not make its modules ES modules. */
 export function moduleTypeProblem(dir: string, name: (path: string) => string = (path) => path): string | undefined {

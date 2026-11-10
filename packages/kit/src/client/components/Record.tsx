@@ -28,6 +28,7 @@ import { equalityFilter, pathEqualityFilter, recordKey } from '../resourceReques
 import {
   api,
   beginNavigation,
+  columnDisplay,
   emptyWord,
   findTable,
   go,
@@ -415,7 +416,7 @@ function FieldRow({
   } else if (isNull) {
     dd = (
       <dd className="null" title="null">
-        {emptyWord()}
+        {(columnDisplay(table.id, col.name) as { empty?: string } | null)?.empty ?? emptyWord()}
       </dd>
     );
   } else if (col.references && String(value) !== '') {

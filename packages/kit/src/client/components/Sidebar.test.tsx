@@ -531,6 +531,22 @@ test('the workbench lists every table with its count, marks views, and lights th
   expect(api).not.toHaveBeenCalled();
 });
 
+test("the room the walk is on is scrolled clear of the menu's foot fade, so it never reads as greyed out", () => {
+  const scrolled: string[] = [];
+  const was = HTMLElement.prototype.scrollIntoView;
+  HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+    scrolled.push(this.dataset.table ?? '');
+  };
+  try {
+    walk.stack = [{ kind: 'table', table: 'invoice', query: 'invoice status = paid' }];
+    tickWalk();
+    draw();
+    expect(scrolled).toContain('invoice');
+  } finally {
+    HTMLElement.prototype.scrollIntoView = was;
+  }
+});
+
 for (const mode of ['workbench', 'app'] as const)
   test(`${mode} omits unknown row counts without hiding a known zero`, async () => {
     const previous = walk.schema;

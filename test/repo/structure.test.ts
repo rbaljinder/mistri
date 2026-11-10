@@ -346,6 +346,8 @@ const TENANT_IMPORTERS = [
   // `mistri tenant clone|import|clock` is an operator's entry point: it validates the deployment as a start
   // does, and runs the sandbox steps of tenant maintenance. A tenant App's `--export openapi` comes through it too.
   'packages/mistri/src/server/cli/tenantCommand.ts',
+  // `mistri jobs run <name> --tenant <id>` is an operator's entry point: it runs one tenant's job as the schedule does.
+  'packages/mistri/src/server/cli/jobsCommand.ts',
   'packages/mistri/src/server/cli/testInitTenant.ts',
   'packages/mistri/src/server/commands.ts',
   'packages/mistri/src/server/commands/businessCommandAccess.ts',
@@ -401,6 +403,8 @@ const CLIENT_CROSSINGS = [
   'AppReloadProblem',
   // A call to action into another App of the suite, installed as the shell's slots by appnav.js.
   'AppTargetAction',
+  // The bar's as-of chip: a development server started `--as-of` another moment, fetched on demand behind it.
+  'AsOfChip',
   // The assistant's page, named as the shell's `rooms` by appnav.js and fetched on demand.
   'AssistantPanel',
   // The bar's assistant button: a few lines in the shell, its panel fetched on demand behind it.

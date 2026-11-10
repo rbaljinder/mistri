@@ -26,7 +26,9 @@ import { isRecord, VIEW_KEY } from '@mistriwork/engine/shared/model.js';
 import { COMPONENT_ID, type ComponentDecl } from '@mistriwork/engine/shared/appComponents.js';
 import { isMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import { RESERVED_PATHS } from '../../shared/appAddress.js';
-import { HOST_MODULES, PAGE_EXPORTS, type HostModule } from '../../shared/uiSdk.js';
+import { HOST_MODULES, PAGE_EXPORTS, uiBreakdownText, uiRowsQuery, uiViewRunBody, type HostModule } from '../../shared/uiSdk.js';
+import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { strayRead } from '../http/tablesReached.js';
 import { compilePageModule } from './appComponents.js';
 import { exportNames } from './componentSdk.js';
 
@@ -440,12 +442,18 @@ interface PageScan {
  * warning, with its line: check cannot read it, and the browser still
  * refuses it if it is not declared. Types catch most of this; this is for
  * a widget the page draws and JavaScript without types.
+ *
+ * With the App's catalog, a literal `show`, `query` or `sort` of `useRows`,
+ * `useRecord` or `useBreakdown` is held to the page's reads as well: a path
+ * across a reference reads the table it lands on, which the types allow and
+ * the server refuses (http/tablesReached.ts strayRead).
  */
 export function scanPageSource(
   parseAst: Parse,
   code: string,
   lang: 'ts' | 'tsx' | 'js' | 'jsx',
   manifest: { key: string; reads: readonly string[]; commands: readonly string[]; actions?: readonly string[] },
+  schema?: DatabaseSchema,
 ): PageScan {
   const scan: PageScan = { undeclared: [], unread: [] };
   let program: unknown;
@@ -489,6 +497,51 @@ export function scanPageSource(
       });
     }
   };
+  /* The pieces of a literal read the host sends as one request (shared/uiSdk.ts), each asked alone, so a finding names
+     the path that crossed into a table the page does not read. A piece written as an expression is the types' to judge. */
+  const crossings = (hook: string, resource: string | undefined, args: AstNode[], at: number | undefined) => {
+    const table = schema && resource !== undefined && manifest.reads.includes(resource) ? tableNamed(schema, resource) : undefined;
+    if (!table) return;
+    const option = (node: AstNode | undefined, key: string) =>
+      node?.type === 'ObjectExpression'
+        ? ((node.properties as AstNode[]).find(
+            (prop) =>
+              prop.type === 'Property' && !prop.computed && ((prop.key as AstNode).name === key || (prop.key as AstNode).value === key),
+          )?.value as AstNode | undefined)
+        : undefined;
+    const paths = (node: AstNode | undefined) =>
+      node?.type === 'ArrayExpression' ? (node.elements as AstNode[]).flatMap((each) => literal(each) ?? []) : [];
+    const view = (paths: string[], query: string) => ['/api/view/run', uiViewRunBody(table.id, table.name, paths, query, 1)] as const;
+    const pieces: Array<[string, readonly [string, Record<string, unknown>]]> = [];
+    if (hook === 'useBreakdown') {
+      const by = literal(option(args[1], 'by'));
+      if (by === undefined) return;
+      const asked = (query?: string, measure?: string) =>
+        ['/api/breakdown', { text: uiBreakdownText(table.id, query, measure, by) }] as const;
+      pieces.push([`by "${by}"`, asked()]);
+      const measure = literal(option(args[1], 'measure'));
+      if (measure !== undefined) pieces.push([`measure "${measure}"`, asked(undefined, measure)]);
+      const query = literal(option(args[1], 'query'));
+      if (query !== undefined) pieces.push([`query "${query}"`, asked(query)]);
+    } else {
+      const options = hook === 'useRows' ? args[1] : undefined;
+      for (const path of paths(hook === 'useRecord' ? args[2] : option(options, 'show'))) pieces.push([`show "${path}"`, view([path], '')]);
+      const query = literal(option(options, 'query'));
+      if (query !== undefined) pieces.push([`query "${query}"`, view([], uiRowsQuery(query, undefined))]);
+      const sort = literal(option(options, 'sort'));
+      if (sort !== undefined) pieces.push([`sort "${sort}"`, view([], uiRowsQuery(undefined, sort))]);
+    }
+    const said = new Set<string>();
+    for (const [piece, [path, body]] of pieces) {
+      const stray = strayRead(schema, manifest.reads, path, body);
+      if (stray === undefined || said.has(stray)) continue;
+      said.add(stray);
+      scan.undeclared.push({
+        line: lineOf(at),
+        text: `[page-undeclared] ${hook}("${resource}") reads "${stray}" through its ${piece}, which the page "${manifest.key}" does not declare in its reads`,
+      });
+    }
+  };
   walk(program, (node) => {
     if (node.type === 'CallExpression') {
       const callee = node.callee as AstNode;
@@ -500,8 +553,10 @@ export function scanPageSource(
             : undefined;
       if (!name) return;
       const first = (node.arguments as AstNode[])[0];
-      if (READ_HOOKS.has(name)) hold('reads', `${name}(…)`, first, node.start);
-      else if (COMMAND_HOOKS.has(name)) hold('commands', `${name}(…)`, first, node.start);
+      if (READ_HOOKS.has(name)) {
+        hold('reads', `${name}(…)`, first, node.start);
+        crossings(name, literal(first), node.arguments as AstNode[], node.start);
+      } else if (COMMAND_HOOKS.has(name)) hold('commands', `${name}(…)`, first, node.start);
       else if (ACTION_HOOKS.has(name)) hold('actions', `${name}(…)`, first, node.start);
       return;
     }

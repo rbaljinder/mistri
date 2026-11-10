@@ -9,6 +9,7 @@
  * receipt is kept.
  */
 import { bindRecord, boundText } from '../../shared/commandDraft.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import type { WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import { readCommandInput } from '../../shared/commandInput.js';
 import { BULK_LIMIT, boundRecordQuery, type AppCommandField } from '../../shared/command.js';
@@ -74,7 +75,7 @@ export async function readPreparedTargetAvailability(
   if (!commandFlagEnabled(command, flags)) return options.targets.map((target) => ({ ...target, eligible: false }));
   if (!registeredAvailability(command)) return [...options.targets];
   const signal = options.signal ?? new AbortController().signal,
-    now = options.now ?? (() => new Date());
+    now = options.now ?? (() => appTime());
   const checkCancelled = () => {
     if (signal.aborted) throw new BusinessCommandExecutionError('cancelled');
   };
@@ -170,7 +171,7 @@ export async function readPreparedRecord(
   const { command, key, catalog } = options;
   const flags = commandFlagsReader(options.flags);
   const signal = options.signal ?? new AbortController().signal;
-  const now = options.now ?? (() => new Date());
+  const now = options.now ?? (() => appTime());
   const checkCancelled = () => {
     if (signal.aborted) throw new BusinessCommandExecutionError('cancelled');
   };

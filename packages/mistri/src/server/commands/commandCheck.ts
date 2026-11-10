@@ -10,6 +10,7 @@
  * The run judges every answer again whatever a check said.
  */
 import type { AppCommandField } from '../../shared/command.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { commandInputProblems, type CommandInputReason } from '../../shared/commandInput.js';
 import { brokenRules, draftHolds, readsRecord } from '../../shared/commandDraft.js';
 import type { AnyBusinessCommand } from './businessCommands.js';
@@ -55,7 +56,7 @@ export function checkCommandStep(
   command: AnyBusinessCommand,
   raw: unknown,
   asked: readonly string[],
-  now = new Date(),
+  now = appTime(),
 ): Record<string, string> {
   const names = new Set(asked);
   const fields = command.fields.filter((field) => names.has(field.name));

@@ -5,7 +5,17 @@
  * tenant.
  */
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+import { MemoryCacheStore } from '../packages/engine/src/adapters/cache/cacheStore.js';
+import {
+  readSqliteBranding,
+  readSqliteBrandingLogo,
+  writeSqliteBranding,
+} from '../packages/mistri/src/adapters/branding/sqliteBranding.js';
+import type { AppDef } from '../packages/mistri/src/shared/app.js';
+import { createTenantBrandingService } from '../packages/mistri/src/server/tenant/tenantBranding.js';
 import {
   NORTH,
   NORTH_BRAND,
@@ -47,4 +57,44 @@ test('the sign-in page is dressed only when the host names the tenant', async (t
   assert.equal(mapped.body.app.name, NORTH_BRAND);
   const mappedPage = await f.call('/yard/leads', { host: `${NORTH_HOST}:${f.port}` });
   assert.match(mappedPage.text, new RegExp(NORTH_BRAND));
+});
+
+/* A field report: once a tenant saved a name, every public form of that tenant answered a signed-out visitor 403
+   auth_unavailable. The save goes through the branding service, as Branding's own save does, and the visitor then
+   opens the form's page, reads the form and submits it, carrying no session at all. */
+test("a tenant's saved name never asks a signed-out visitor for a session: its forms still open and take a submission", async (t) => {
+  const f = await open(t);
+  const handle = () => new DatabaseSync(f.engine.path!);
+  const at = <T>(work: (db: DatabaseSync) => T) => {
+    const db = handle();
+    try {
+      return work(db);
+    } finally {
+      db.close();
+    }
+  };
+  const service = createTenantBrandingService({
+    app: { id: 'yard', name: 'Yard', branding: { allow: ['name'], editors: ['staff'] } } as unknown as AppDef,
+    store: {
+      read: async (query) => at((db) => readSqliteBranding(db, query)),
+      logo: async (query) => at((db) => readSqliteBrandingLogo(db, query)),
+      write: async (write) => at((db) => writeSqliteBranding(db, write)),
+    },
+    cache: new MemoryCacheStore(),
+  });
+  await service.save('south', { value: { name: 'South Wheels Co' } }, 'south-owner');
+  for (const [address, name] of [
+    [SOUTH, 'South Wheels Co'],
+    [NORTH, NORTH_BRAND],
+  ] as const) {
+    const page = await f.call(`/yard/form/apply${via(address)}`);
+    assert.equal(page.status, 200, page.text);
+    assert.match(page.text, new RegExp(name));
+    const form = await f.call(`/api/forms/apply${via(address)}`);
+    assert.equal(form.status, 200, form.text);
+    assert.equal(form.body.app.name, name);
+    const sent = await f.call(`/api/forms/apply${via(address)}`, { body: { input: { name: 'Avery' }, submission: randomUUID() } });
+    assert.equal(sent.status, 200, sent.text);
+    assert.deepEqual(Object.keys(sent.body).sort(), ['receipt', 'reference']);
+  }
 });

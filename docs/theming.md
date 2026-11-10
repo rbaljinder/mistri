@@ -595,7 +595,7 @@ branding: { allow: ['logo', 'name', 'accent', 'density'], editors: ['admin'], th
 ```
 
 `allow` is a closed list: `logo`, `name`, `accent`, `palette`, `radius`,
-`density`, and `theme` (only with two or more `themes`; omitted, the one theme
+`density`, and `preset` (only with two or more `themes`; omitted, the one theme
 is the App's own look with its accent). Grounds, ink and recipes are never a
 tenant's: what a tenant changes is a brand, not a design. `editors` are tenant
 roles; only their members save, never a support operator and never the

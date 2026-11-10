@@ -21,6 +21,7 @@ import {
   type QueryResult,
   type UpdateRequest,
 } from '@mistriwork/engine/adapters/adapter.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { appTransitionRules, zonedNow, type AppDef, type AppTransitionRules, type AppUpdateAction } from '../../shared/app.js';
 import { parseQuery, type QueryPerson } from '@mistriwork/engine/shared/query.js';
 import { typedValue } from '../../shared/formLines.js';
@@ -168,7 +169,7 @@ export async function assertTransitions(
   rules: AppTransitionRules | undefined,
   request: UpdateRequest,
   stored?: Record<string, unknown>,
-  now: Date = new Date(),
+  now: Date = appTime(),
   me?: () => Promise<QueryPerson>,
 ): Promise<Record<string, string> | undefined> {
   const rule = rules?.get(request.table);
@@ -267,7 +268,7 @@ export function assertTransitionInsert(
   rules: AppTransitionRules | undefined,
   request: InsertRequest,
   schema?: DatabaseSchema,
-  now: Date = new Date(),
+  now: Date = appTime(),
 ): InsertRequest['values'] | undefined {
   const rule = rules?.get(request.table);
   if (!rule) return;
@@ -321,7 +322,7 @@ export async function assertGrantedAction(
   schema: DatabaseSchema,
   granted: readonly AppUpdateAction[],
   request: UpdateRequest,
-  now: Date = new Date(),
+  now: Date = appTime(),
   me?: () => Promise<QueryPerson>,
   /** The App's zone: `now` is an instant, and a `when`'s date phrase reads the App's wall clock, as its list does. */
   zone?: string,

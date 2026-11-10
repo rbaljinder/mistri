@@ -1,5 +1,6 @@
 import { isProxy } from 'node:util/types';
 import { inSpan } from '@mistriwork/engine/adapters/telemetry/trace.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import type { JobStore } from '../../adapters/jobs/jobStoreContract.js';
 import {
   JOB_ID,
@@ -178,7 +179,9 @@ export function createJobRunner(options: {
       version: claim.version,
       provenance: claim.provenance,
       signal: controller.signal,
-      now: () => now(),
+      /* A handler's now is App logic's (http/clock.ts), so one deciding "overdue" sees what a command sees; the
+         runner's leases, deadlines and outcomes below keep the real clock. */
+      now: () => appTime(now()).getTime(),
       grant,
       cancelRequested: () => store.cancelRequested(id, fence),
     });

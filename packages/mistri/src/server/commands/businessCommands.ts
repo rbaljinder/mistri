@@ -12,6 +12,7 @@
  * App's grants.
  */
 import { parseComputed } from '@mistriwork/engine/shared/computedParse.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import type { WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import {
   commandFieldsDeep,
@@ -721,7 +722,7 @@ function rulesOption(value: unknown, fields: readonly AppCommandField[]): readon
 }
 
 /** Internal: the command's rules a parsed input breaks, at their fields. */
-function registeredRuleBreaks(command: AnyBusinessCommand, input: unknown, now = new Date()): Array<{ field: string; message: string }> {
+function registeredRuleBreaks(command: AnyBusinessCommand, input: unknown, now = appTime()): Array<{ field: string; message: string }> {
   if (!command.rules?.length || !input || typeof input !== 'object') return [];
   return brokenRules(command.rules, input as Record<string, unknown>, command.fields, now);
 }
@@ -1338,7 +1339,7 @@ export function judgeDraft(
   command: AnyBusinessCommand,
   input: Readonly<Record<string, unknown>>,
   bound?: Readonly<Record<string, BoundCondition>>,
-  now = new Date(),
+  now = appTime(),
 ): void {
   for (const field of command.fields) {
     if (field.type === 'group' || field.type === 'lines' || field.when === undefined) continue;

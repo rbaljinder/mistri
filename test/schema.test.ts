@@ -740,7 +740,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // entries, one new name `microphone`): 1736/514.
     // `audit: { reads: true }` on a resource, its reads written to the read audit (`audit` was already counted;
     // one entry, one new name `reads`): 1737/515.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1737, names: 515 });
+    // A display rule's `empty` word, what a missing value is said as (one entry; `empty` was already a name): 1738/515.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1738, names: 515 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

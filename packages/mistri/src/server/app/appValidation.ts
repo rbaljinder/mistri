@@ -1,4 +1,5 @@
 import type { RecordMessagesSpec } from '../../shared/branding.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { messageRowProblem } from './recordMessages.js';
 import { type Filter, type QueryRequest, type WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import {
@@ -555,7 +556,7 @@ function workedRow(
   if (!worked || !named) return row;
   const own = referencedRuleFields(rules).filter((path) => !path.includes('.') && Object.hasOwn(named, path));
   if (!own.length) return row;
-  const constants = worked.constants(new Date());
+  const constants = worked.constants(appTime());
   return { ...row, ...Object.fromEntries(own.map((name) => [name, workedOut(named, table, name, row, constants)])) };
 }
 
@@ -604,7 +605,7 @@ async function throughReferences(
           })
         : undefined;
     const record = read?.rows[0];
-    const constants = worked?.constants(new Date());
+    const constants = worked?.constants(appTime());
     const storedTarget = stored.tables.find((each) => each.id === target.id) ?? target;
     for (const [path, source] of found)
       judged[path] =
@@ -751,7 +752,7 @@ export async function fillDerived<V extends Readonly<Record<string, unknown>>>(
     });
     const row = found.rows[0];
     const value =
-      worked && row ? workedOut(worked.named, worked.target, rule.column, row, worked.constants(new Date())) : row?.[rule.column];
+      worked && row ? workedOut(worked.named, worked.target, rule.column, row, worked.constants(appTime())) : row?.[rule.column];
     if (value !== undefined && value !== null) (filled ??= { ...values })[rule.field] = value;
   }
   return (filled ?? values) as V;

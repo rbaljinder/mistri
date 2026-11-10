@@ -223,6 +223,13 @@ test('a value to copy says copy: true, beside any drawing but a placeholder or a
   assert.throws(() => withDisplay({ signed: { copy: true, signature: true } }), /a signature is a picture/);
 });
 
+test('a column says what a missing value means with an `empty` word, kept short and never blank', () => {
+  const withDisplay = (rule: Record<string, unknown>) => app({}, {}, { task: { display: rule } }).resources?.task?.display ?? {};
+  assert.equal(withDisplay({ done_at: { empty: ' Open ' } }).done_at?.empty, 'Open');
+  assert.throws(() => withDisplay({ done_at: { empty: '' } }), /"empty" that is not a word/);
+  assert.throws(() => withDisplay({ done_at: { empty: 'x'.repeat(41) } }), /"empty" that is not a word/);
+});
+
 test('a tree hangs records under their parent column; a gantt chart runs them between two dates', () => {
   const list = (presentation: Record<string, unknown>) =>
     (app({ plan: { kind: 'list', from: 'task', show: ['title'], presentation } }).views.plan as AppListView).presentation;

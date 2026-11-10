@@ -608,6 +608,19 @@ test('the theme words renamed before 1.0 are refused with the new ones: recipes.
   );
 });
 
+test("startedFrom is the platform's to set: an authored theme that names it is refused, the platform's own path keeps it", () => {
+  const derived = {
+    id: 'tenant',
+    label: 'Acme',
+    startedFrom: 'sage',
+    base: 'sage',
+    light: { surface: '#ffffff', ink: '#111111', accent: '#1d4ed8' },
+  };
+  const theme = { ...derived, dark: derived.light };
+  assert.throws(() => parseThemes([theme], 'app'), /app\.themes\[0\]\.startedFrom is set by the platform/);
+  assert.equal(parseThemes([theme], 'Request branding', 'themes', { platform: true })![0]!.startedFrom, 'sage');
+});
+
 test('a theme that extends a look and names an accent but no chart wears the accent as its first series; its own chart wins; the look is untouched', () => {
   const plum = (colors: Record<string, unknown>) =>
     compileAppTheme({ kind: 'theme', id: 'plum', label: 'Plum', extends: 'mono', colors: { light: colors } } as never, 'probe');

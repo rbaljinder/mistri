@@ -182,6 +182,12 @@ export function Sidebar({ host, footerHost: suppliedFooterHost, onSelect, tabNav
   useLayoutEffect(() => {
     host.classList.toggle('skimming', skimming);
   }, [host, skimming]);
+  /* The current row is brought clear of the foot's fade (features.css `scroll-padding-bottom`): a page you are on that
+     sits under the fade reads as greyed out, as if disabled. */
+  useLayoutEffect(() => {
+    if (current < 0) return;
+    host.querySelector<HTMLElement>(':scope > li > [aria-current="true"]')?.scrollIntoView?.({ block: 'nearest' });
+  }, [host, current, dashView, formView]);
   const rail = !tabNavigation && railed();
   const folded = useSyncExternalStore(subscribeFold, foldedNow, () => false);
   const hover = (label: string) => (rail && folded ? label : undefined);

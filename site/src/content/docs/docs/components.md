@@ -87,7 +87,7 @@ A record page is a list of sections. See [record pages](/docs/pages/).
 
 ![A workflow strip: Submitted, In review (current), Approved, Issued.](../../../assets/components/record-workflow.webp)
 
-<figcaption><strong>Workflow</strong>: where the record stands. a resource's <code>machine('status', { … })</code>, drawn over its summary · <a href="/components/?path=/story/records-workflow-status--in-review">Open in the library</a></figcaption>
+<figcaption><strong>Workflow</strong>: where the record stands, drawn from three states up (with one or two, the head's chip says it). a resource's <code>machine('status', { … })</code>, drawn over its summary · <a href="/components/?path=/story/records-workflow-status--in-review">Open in the library</a></figcaption>
 </figure>
 </div>
 

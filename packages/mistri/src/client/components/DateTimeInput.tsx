@@ -9,7 +9,7 @@
  */
 import { useState, type AriaAttributes } from 'react';
 import { DateField } from '@mistriwork/kit/client/components/DateField.js';
-import { formatLocale, formatTimezone } from '@mistriwork/kit/client/locale.js';
+import { appNow, formatLocale, formatTimezone } from '@mistriwork/kit/client/locale.js';
 import { instantWallTime, wallTimeInstant } from './wallTime.js';
 
 interface DateTimeInputProps {
@@ -46,6 +46,7 @@ export function DateTimeInput({ value, onChange, min, max, ...rest }: DateTimeIn
       max={wall(max)}
       locale={formatLocale()}
       timezone={zone}
+      now={appNow()}
       value={draft}
       onChange={(next) => {
         setDraft(next);

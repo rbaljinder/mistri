@@ -7,6 +7,7 @@
 .chart-bar { fill: color-mix(in srgb, var(--chart-1, var(--accent)) 26%, var(--surface)); rx: min(4px, var(--radius)); }
 .chart-bar.is-active { fill: var(--chart-1, var(--accent)); }
 /* A bar of a state wears its tone, as the state's dot does. */
+.chart-bar.is-partial { fill-opacity: 0.55; stroke: var(--chart-1, var(--accent)); stroke-width: 1; stroke-dasharray: 3 2; }
 .chart-bar.is-toned { fill: color-mix(in srgb, var(--bar-ink) 40%, var(--surface)); }
 .chart-bar.is-toned.is-active { fill: var(--bar-ink); }
 .chart-bar-guide { stroke: var(--ink-muted); stroke-width: 1; stroke-dasharray: 3 3; }
@@ -78,6 +79,8 @@
 .chart-wait-donut { aspect-ratio: auto; border-bottom: 0; background: none; }
 .chart-line { display: block; width: 100%; height: auto; }
 .chart-stroke { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.chart-stroke.is-partial { stroke-dasharray: 4 4; }
+.chart-dot.is-partial { fill: var(--surface); stroke-dasharray: 2 2; }
 .chart-area { fill: var(--accent); opacity: 0.08; }
 .chart-dot { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5; }
 .chart-dot-solid { fill: var(--accent); }

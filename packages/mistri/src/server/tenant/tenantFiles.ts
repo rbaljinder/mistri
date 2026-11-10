@@ -4,6 +4,7 @@
  * them (tenantHttp.ts), which hand each its lease's reader and context.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
 import { exportFile } from '@mistriwork/engine/server/http/exportRoute.js';
 import type { QueryPerson } from '@mistriwork/engine/shared/query.js';
@@ -109,7 +110,7 @@ export async function tenantExport<C extends ExportingContext>(asked: {
         body: asked.body,
         adapter: reader,
         schema,
-        now: () => zonedNow(appZone(app.ui, context.zone), new Date(asked.now())),
+        now: () => zonedNow(appZone(app.ui, context.zone), appTime(asked.now())),
         may: appExportsTable(app, schema, context.principal.roles, true),
         person: async (text) =>
           textsMentionMe([text], schema) ? readMeSets(await asked.person(context, schema), [text], schema, reader) : undefined,

@@ -9,6 +9,9 @@
  * An ordered strip reads as a way travelled: a passed step's mark is filled
  * in the ink, the current one in the accent, the steps ahead hollow, and a
  * hairline joins each step to the next — in the ink where it has been walked.
+ *
+ * With one or two states there is no way to show: the head's chip already says where the record is, so the strip is
+ * drawn from three states up and a shorter one is left out.
  */
 import { useLayoutEffect, useRef } from 'react';
 import { workflowLabel, type ResolvedWorkflowStatus as WorkflowDefinition } from '@mistriwork/engine/shared/pageModel.js';
@@ -38,6 +41,7 @@ export function WorkflowStatus({
     ol.scrollLeft = Math.max(0, from.offsetLeft - ol.offsetLeft);
     edges(ol);
   }, [current]);
+  if (definition.steps.length < 3) return null;
   return (
     <div className="workflow-status">
       <ol

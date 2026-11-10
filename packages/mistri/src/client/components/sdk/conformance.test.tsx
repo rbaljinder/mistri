@@ -144,6 +144,14 @@ describe('slots, widths and looks', () => {
     expect(drawn[0]).toBe(drawn[1]);
   });
 
+  test('useLook exposes the preset a tenant started from, not only the tenant theme id', async () => {
+    function Preset() {
+      return <p>{`preset ${useLook().preset}`}</p>;
+    }
+    renderSection(Preset, { component: { id: 'preset' } }, { preset: 'sage' });
+    expect(await screen.findByText('preset sage')).toBeInTheDocument();
+  });
+
   test('there is one React: the one the entry hands out, which the kit’s controls and a page’s hooks share', async () => {
     expect(React).toBe(react);
     const kit = JSON.parse(readFileSync(join(cwd(), 'packages/ui/package.json'), 'utf8')) as {

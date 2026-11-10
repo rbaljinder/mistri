@@ -60,6 +60,16 @@ describe('a plain value', () => {
     expect(screen.getByTitle('null').textContent).toBe('Empty');
   });
 
+  test("a column's `empty` word says what a missing value means, where the dash would stand", () => {
+    display = { empty: 'Open' };
+    render(<Value col={col('resolved_at', 'TIMESTAMP')} value={null} tableId="ticket" />);
+    expect(screen.getByTitle('null').textContent).toBe('Open');
+    cleanup();
+    // A value that is there is drawn as it is.
+    render(<Value col={col('resolved_at', 'TIMESTAMP')} value="2026-10-23" tableId="ticket" />);
+    expect(screen.queryByTitle('null')).toBeNull();
+  });
+
   test('null and missing values never become zero, false or literal null text', () => {
     render(
       <>

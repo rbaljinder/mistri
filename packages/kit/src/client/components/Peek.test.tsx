@@ -24,14 +24,19 @@ const employee: TableMeta = {
 };
 const calls: unknown[] = [];
 let dressed = false;
+let labelled = false;
 vi.mock('../core.js', () => ({
   state: { activeConnection: 'demo' },
   api: async (_path: string, body: unknown) => {
     calls.push(body);
-    return { rows: [{ id: 4, name: 'Nia Andersen', email: 'nia@example.org', phone: null, quota: 12500, active: true }] };
+    return {
+      rows: [
+        { $label: 'Nia Andersen (4)', id: 4, name: 'Nia Andersen', email: 'nia@example.org', phone: null, quota: 12500, active: true },
+      ],
+    };
   },
   findTable: (id: string) => (id === 'employee' ? employee : undefined),
-  labelPath: () => 'name',
+  labelPath: () => (labelled ? '$label' : 'name'),
   columnKind,
   columnDisplay: (_t: string, name: string) => (dressed && name === 'quota' ? { format: 'money' } : null),
   columnLabel: (_t: string, name: string) => (name === 'email' ? 'E-mail' : null),
@@ -59,6 +64,7 @@ afterEach(() => {
   cleanup();
   calls.length = 0;
   dressed = false;
+  labelled = false;
   employee.columns = employee.columns.slice(0, 4);
 });
 
@@ -114,4 +120,13 @@ test('a pointer passing through fires nothing', async () => {
   await new Promise((r) => setTimeout(r, 400));
   expect(calls).toHaveLength(0);
   expect(screen.queryByRole('tooltip')).toBeNull();
+});
+
+test('a record named by its computed label says that name and its fields, never the internal row or its key', async () => {
+  labelled = true;
+  fireEvent.mouseOver(draw());
+  const card = await screen.findByRole('tooltip', {}, { timeout: 2000 });
+  expect(card.querySelector('.peek-key')).toHaveTextContent('Nia Andersen (4)');
+  expect([...card.querySelectorAll('.peek-name')].map((n) => n.textContent)).toEqual(['name', 'E-mail', 'phone']);
+  expect(card).not.toHaveTextContent('$label');
 });

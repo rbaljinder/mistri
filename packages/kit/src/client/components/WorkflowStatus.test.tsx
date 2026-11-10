@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, it, expect } from 'vitest';
 import { WorkflowStatus } from './WorkflowStatus.js';
 
 const definition = {
@@ -10,6 +10,8 @@ const definition = {
     { value: 'closed', label: 'Closed' },
   ],
 };
+afterEach(cleanup);
+
 describe('workflow status', () => {
   it('marks only the current state without inventing completion history or actions', () => {
     const { container } = render(<WorkflowStatus definition={definition} value="active" />);
@@ -43,5 +45,15 @@ describe('workflow status', () => {
     expect(container.querySelector('[aria-current]')).toBeNull();
     rerender(<WorkflowStatus definition={definition} value={null} />);
     expect(screen.getByRole('status').textContent).toContain('Not set');
+  });
+  it('is left out under three states, where the head chip already says it all', () => {
+    const { container, rerender } = render(
+      <WorkflowStatus definition={{ ...definition, steps: definition.steps.slice(0, 2) }} value="new" />,
+    );
+    expect(container.firstChild).toBeNull();
+    rerender(<WorkflowStatus definition={{ ...definition, steps: definition.steps.slice(0, 1) }} value="canceled" />);
+    expect(container.firstChild).toBeNull();
+    rerender(<WorkflowStatus definition={definition} value="new" />);
+    expect(screen.getByRole('list', { name: 'Workflow status' })).toBeTruthy();
   });
 });

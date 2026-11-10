@@ -17,6 +17,7 @@ export { React };
 export { UI_TOKENS as tokens } from '@mistriwork/kit/shared/uiTokens.js';
 export { Fragment, useCallback, useContext, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
 export {
+  Beside,
   Button,
   Card,
   Cluster,
@@ -25,6 +26,8 @@ export {
   Empty,
   Heading,
   Icon,
+  Item,
+  Items,
   Loaded,
   Meter,
   Row,

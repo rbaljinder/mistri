@@ -70,7 +70,7 @@ export default function BinMap({ rows }: SectionProps<typeof warehouseBins, Rows
 
 `@mistriwork/mistri/ui` is the only mistri module a component imports. It holds:
 
-- **The kit**: `Card`, `Stack`, `Row`, `Cluster`, `Heading`, `Button`, `Value`, `Tone`, `Meter`, `Stat`, `Columns`, `Table`, `Dropdown`, `Segmented`, `SplitListDetail`, `Empty`, `Loaded`, `Icon`, `Text` (`<Text tone="muted" size="sm">`: a line of secondary ink, `tone` `default`, `muted` or `danger`). `Table` draws each cell as a `Value`, dressed as the App dresses that column; sorting stays yours (`sort`, `onSort`), and `onRowClick` makes the first cell a link. A free-form page's row of verbs at the screen's foot is `<Row foot>`: on a phone a notice stands above it instead of covering it. `<Cluster min="14rem">` lays its children in equal columns at least that wide, as many across as fit and one on a phone, and never scrolls sideways: `<Cluster>{teams.map((team) => <Card key={team.id} title={team.name}>…</Card>)}</Cluster>`.
+- **The kit**: `Card`, `Stack`, `Row`, `Cluster`, `Beside`, `Heading`, `Button`, `Value`, `Tone`, `Meter`, `Stat`, `Columns`, `Table`, `Items`, `Item`, `Dropdown`, `Segmented`, `SplitListDetail`, `Empty`, `Loaded`, `Icon`, `Text` (`<Text tone="muted" size="sm">`: a line of secondary ink, `tone` `default`, `muted` or `danger`). `Table` draws each cell as a `Value`, dressed as the App dresses that column; sorting stays yours (`sort`, `onSort`), and `onRowClick` makes the first cell a link. A free-form page's row of verbs at the screen's foot is `<Row foot>`: on a phone a notice stands above it instead of covering it. `<Cluster min="14rem">` lays its children in equal columns at least that wide, as many across as fit and one on a phone, and never scrolls sideways: `<Cluster>{teams.map((team) => <Card key={team.id} title={team.name}>…</Card>)}</Cluster>`.
 - **Reads**: `useRows`, `useRecord`, `useBreakdown`, `useFile`, all under the reader's grants, row policy and tenant.
   Each read answers `isPending` until its first answer and `isFetching` while any answer is on its way. A refresh that fails keeps the last good rows and says so: `isStale` is true and `refreshError` holds the failure. `useRows` reads `limit` rows (20 unless said), and its `page` says `{ limit, hasMore }`; `more()` reads the next page onto the end. `page.total` is there only when the server counted one, never guessed from the rows. Each read is consistent on its own: two reads on one page are two answers, possibly a moment apart, never one snapshot.
 - **Commands**: `useCommand(cmd)` with `available`, `reason`, `run` and `open`; an applied run resolves with the command's `output`. `useAction(id)` is the same handle for a fixed action (a machine's verb, `action(label, { set })`).
@@ -139,6 +139,24 @@ Without `by`, a figure is one value: a number, a string (a sum or id past 2^53) 
 
 `useBreakdown(resource, { by, measure?, query?, limit? })` asks the same from the module, for a figure that follows a control. On a page it may ask only for the page's `reads`. Rows are keyed as the server names its columns (`sum(net)`), so prefer declared `figures` when the question is known; figures are checked at load, `useBreakdown` only when it runs.
 
+### Rows, a rail and the dark ground
+
+`Items` is a list of rows with no head row, where `Table` always draws one. Each `Item` has a `title`, and may have a `lead` (an icon, an avatar, a `Value`), one quiet `note` under the title and an `action` at the row's end. With `href` or `onClick` the title is the row's one link or button, the whole row answers a pointer as a table's rows do, and a click inside `action` never opens it. On a phone the action stays on the row and the note wraps. `empty` is drawn when there are no rows.
+
+```tsx
+<Items label="Open work" empty={<Empty title="Nothing open" />}>
+  {tasks.map((task) => (
+    <Item key={task.id} title={task.title} note={task.due} onClick={() => open(task)} action={<Button intent="quiet">Done</Button>} />
+  ))}
+</Items>
+```
+
+A `Card` takes a `count` (a quiet number beside the title) and an `action` (right-aligned in the title row): `<Card title="Open work" count={tasks.length} action={<Button intent="quiet">Add</Button>}>`. With neither, the title is the heading alone.
+
+`Beside` is a main column beside a rail. The rail is `railWidth` wide (`'20rem'` by default, never past half the box) on the `side` you name (`'end'` by default). Where its own box is under 40rem wide it stacks, the main first, and it never scrolls sideways: `<Beside rail={<Card title="Facts">…</Card>}>…</Beside>`.
+
+`<Card ground="nav">`, or any element with `data-ground="nav"`, puts what is inside on the look's navigation ground: the kit's inks, hairlines and surfaces take the nav's own, so a `Stat`, `Value`, `Meter`, `Table`, `Items`, `Segmented` or `Empty` there reads in every look, light and dark, with no recipe of its own.
+
 ### Types, values and styles
 
 - `mistri check` writes `mistri-components.d.ts`: a props type per component, named from its id (`sales-summary` is `SalesSummaryProps`), from its declared props, reads, figures and record fields.
@@ -181,7 +199,7 @@ See it in the sample (`examples/apps/ladle/pages/check-in.page.tsx:24`).
 - A read's rows (`useRows`, and a `List`'s) are typed from its `show` and the schema, plus the resource's key column or columns, which both always carry: a key column (`row.id` where the key is `id`) is there, and typed, without `show` naming it. Any other column `show` leaves out is a type error. Name the key in `show` only to draw it. A `List` that takes its resource from an enclosing `Scope` still carries the key, but its type cannot name the resource, so the key is not typed there: give the `List` its own `from` to type it. `where` is its condition as an object keyed by the columns (`{ status: ['booked', 'waiting'], party_size: { gt: 1 }, paid_on: null }`), the same condition the query language says; the server refuses a column or operator it does not know. `query` still takes the language's text or a segment's name.
 - `<Scope from where>` says a condition once: every block inside reads under it, and a Scope inside another narrows it. `<List from where show sort limit empty>{(row) => …}</List>` draws a row each, says its loading, empty, failed and refused states, and "Showing the first 20." when its `limit` cut the rows short.
 - `forms` names the form views the page opens (a view whose `command` makes it a form). `page.useForm('apply')` reads the form's draft as the form itself resumes it (`dirty`, `saved`, `step`, `expiresAt`), so the page can say "Continue your application"; `open(input, { at })` opens it filled with its command's inputs (typed by name) and, for a draft, at a step it has reached; `goTo(step)` and `startOver()` drive the form itself, and `outcome` says how it last closed. The server still judges every submit.
-- `<CommandButton command row />` and `<ActionButton action row />` are hidden where the reader is not granted them, held where the row's state does not allow them, busy while they run, named with the row's title ("Check in Morgan Lee"), and say the outcome aloud; `done` words it.
+- `<CommandButton command row />` and `<ActionButton action row />` (a command that names no row, `targets: 'none'`, takes none: `<CommandButton command />`) are hidden where the reader is not granted them, held where the row's state does not allow them, busy while they run, named with the row's title ("Check in Morgan Lee"), and say the outcome aloud; `done` words it.
 - `@mistriwork/mistri/page` holds everything `@mistriwork/mistri/ui` does, and the shell's own `Modal`, `Drawer`, `Popover`, `Tooltip`, `TextField`, `DateField`, `Select`, `Choices`, `Switch`, `Slider`, `Pagination` and `Avatar`, so a page needs one import.
 - A role is offered the page when it is granted every read (`roles` narrows it; `public: true` opens it within `auth.public`). `useCommand(…).granted` is false for a command the role lacks; draw its button where `available(record)` is not false. A service role is offered a page only where the page names it.
 - A `public: true` page may name `public: true` commands, and a signed-out visitor runs them through the page's own door. That door asks for the page's ticket, takes a request from the page's own origin only (never from a host that embeds it), and holds the run to the public form's rules. `run(record, input, { challenge })` passes a human check's token where `auth.challenge` names one. The applied answer's `output` is `{ reference, receipt }`, never the input, and its `message` the command's own words or else a thank-you naming the reference: show it, and `output.reference` beside it where the visitor needs it and the command's words leave it out, or go on with `useNavigate()` to a page of your own. A lost answer is `unknown`, and `check({ challenge })` asks again under the same submission.
@@ -349,7 +367,7 @@ const page = definePage({
 
 - Type by role, not by weight: `var(--type-display)`, `var(--type-list-title)` and `var(--type-record-title)` for the page's headings, `var(--heading-weight)`, and the `--text-xs` to `--text-xl` steps. Each look sets them, so the component follows it.
 - Check it in grayscale in two distinct looks. Hierarchy should hold without hue.
-- An App's own composition variants follow `useLook()` (`look`, `mode`, `density`), not a prop of your own.
+- An App's own composition variants follow `useLook()` (`look`, `preset`, `mode`, `density`), not a prop of your own.
 - A button waiting on the server is `busy`, never `disabled`.
 
 ## Security

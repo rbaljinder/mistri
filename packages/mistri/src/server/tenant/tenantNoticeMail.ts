@@ -23,6 +23,7 @@
  * grant. Retries, failures and the loop are the outbox's.
  */
 import { tenantInbox } from '../../adapters/inbox/inbox.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import type { InboxMailStore, MailOutcome, QueuedMail } from '../../adapters/inbox/inboxMail.js';
 import { INBOX_SEGMENT, recordSegments } from '../../shared/appAddress.js';
 import { NO_MOUNT, outward, type AddressMount } from '@mistriwork/engine/shared/mount.js';
@@ -89,9 +90,9 @@ export function openTenantNoticeMail<Request>(options: TenantNoticeMailOptions<R
         }, roles) as Request;
         const realm = tenantId === undefined ? 'platform' : 'tenant';
         /* Each mail is its own unit of work, at its own instant: a statement it writes for a computed `now` reads it. */
-        const tell = (context: TenantReadContext | PlatformReadContext) => withRequestInstant(new Date(now()), () => telling(context));
+        const tell = (context: TenantReadContext | PlatformReadContext) => withRequestInstant(appTime(now()), () => telling(context));
         const telling = async (context: TenantReadContext | PlatformReadContext) => {
-          const schema = tenantServedSchema(context, app, new Date(now()), mail.recipient);
+          const schema = tenantServedSchema(context, app, appTime(now()), mail.recipient);
           const told = await noticeForReader(app, readAdapter(context), schema, {
             id: mail.notice,
             resource: mail.resource,

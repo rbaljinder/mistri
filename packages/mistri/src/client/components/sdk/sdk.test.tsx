@@ -438,3 +438,157 @@ test('a cluster asks each column for its minimum width, 16rem unless told, and t
   expect(narrow).toHaveClass('kit-gap-tight', 'mine');
   expect(plain.textContent).toBe('OneTwo');
 });
+
+describe('a Card with a count or an action, Items, Beside and the nav ground', () => {
+  afterEach(cleanup);
+
+  test('a Card is a header row only when it has a count or an action; 0 is a count', () => {
+    const { container, rerender } = render(<ui.Card title="Plain">x</ui.Card>);
+    expect(container.querySelector('.kit-card-head')).toBeNull();
+    expect(container.querySelector('h3.kit-card-title')?.textContent).toBe('Plain');
+    rerender(
+      <ui.Card title="Leads" count={0} action={<button type="button">Add</button>}>
+        x
+      </ui.Card>,
+    );
+    const head = container.querySelector('.kit-card-head')!;
+    expect(head.querySelector('h3')?.textContent).toBe('Leads');
+    expect(head.querySelector('.kit-card-count')?.textContent).toBe('0');
+    expect(head.querySelector('.kit-card-action button')?.textContent).toBe('Add');
+    // A nested card (a plain group) gets the same header.
+    rerender(
+      <ui.Card title="Outer">
+        <ui.Card title="Inner" count={3}>
+          y
+        </ui.Card>
+      </ui.Card>,
+    );
+    expect(container.querySelector('.kit-group > .kit-card-head .kit-card-count')?.textContent).toBe('3');
+    expect(container.querySelectorAll('.kit-card > .kit-card-head')).toHaveLength(0);
+  });
+
+  test('ground="nav" marks the box as the nav ground', () => {
+    const { container } = render(<ui.Card ground="nav" title="Dark" />);
+    expect(container.querySelector('.kit-card')).toHaveAttribute('data-ground', 'nav');
+    cleanup();
+    expect(render(<ui.Card title="Light" />).container.querySelector('[data-ground]')).toBeNull();
+  });
+
+  test('Items is a named list of rows with no head, and says `empty` when it has none', () => {
+    const { container, rerender } = render(
+      <ui.Items label="Open work" empty={<span>Nothing open</span>}>
+        <ui.Item lead={<i>!</i>} title="Call Ana" note="Due today" action={<button type="button">Done</button>} />
+        {null}
+        <ui.Item title="Send quote" />
+      </ui.Items>,
+    );
+    expect(screen.getByRole('list', { name: 'Open work' })).toBeInTheDocument();
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(container.querySelector('thead')).toBeNull();
+    expect(container.querySelector('.kit-item-note')?.textContent).toBe('Due today');
+    expect(container.querySelector('.kit-item-lead')?.textContent).toBe('!');
+    rerender(
+      <ui.Items label="Open work" empty={<span>Nothing open</span>}>
+        {false}
+      </ui.Items>,
+    );
+    expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.getByText('Nothing open')).toBeInTheDocument();
+  });
+
+  test('Items in a Card sit flush, as a Stat does', () => {
+    const { container } = render(
+      <>
+        <ui.Card title="In">
+          <ui.Items label="a">
+            <ui.Item title="One" />
+          </ui.Items>
+        </ui.Card>
+        <ui.Items label="b">
+          <ui.Item title="Two" />
+        </ui.Items>
+      </>,
+    );
+    const [inside, alone] = container.querySelectorAll('.kit-items');
+    expect(inside).toHaveClass('kit-items-flush');
+    expect(alone).not.toHaveClass('kit-items-flush');
+  });
+
+  test('an Item with onClick has one keyboard target, the whole row answers a pointer, and its action does not', () => {
+    const open = vi.fn();
+    const act = vi.fn();
+    const { container } = render(
+      <ui.Items label="Rows">
+        <ui.Item title="Ana Ruiz" note="note" onClick={open} action={<button onClick={act}>Archive</button>} />
+      </ui.Items>,
+    );
+    // The title is the one target; the action's button is its own.
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Ana Ruiz', 'Archive']);
+    fireEvent.click(screen.getByRole('button', { name: 'Ana Ruiz' }));
+    expect(open).toHaveBeenCalledTimes(1);
+    fireEvent.click(container.querySelector('.kit-item-note')!);
+    expect(open).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    expect(act).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('.kit-item')).toHaveClass('kit-item-clickable');
+  });
+
+  test('an Item with href is one link, and a plain Item is no target at all', () => {
+    render(
+      <ui.Items label="Rows">
+        <ui.Item title="Lead 4" href="/leads/4" />
+        <ui.Item title="Plain" />
+      </ui.Items>,
+    );
+    expect(screen.getByRole('link', { name: 'Lead 4' })).toHaveAttribute('href', '/leads/4');
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.getByText('Plain').closest('li')).not.toHaveClass('kit-item-clickable');
+  });
+
+  test("an Item's in-App href is followed in place; a modified click, another origin and no host keep the browser's", () => {
+    const follow = vi.fn();
+    const host = { follow } as unknown as UiHost;
+    render(
+      <UiHostContext.Provider value={host}>
+        <ui.Items label="Rows">
+          <ui.Item title="Lead 4" note="note" href="/leads/4" />
+          <ui.Item title="Docs" href="https://example.com/docs" />
+        </ui.Items>
+      </UiHostContext.Provider>,
+    );
+    const lead = screen.getByRole('link', { name: 'Lead 4' });
+    expect(fireEvent.click(lead)).toBe(false);
+    expect(follow).toHaveBeenCalledWith('/leads/4');
+    // The row's pointer click is the link's own.
+    fireEvent.click(screen.getByText('note'));
+    expect(follow).toHaveBeenCalledTimes(2);
+    expect(fireEvent.click(lead, { metaKey: true })).toBe(true);
+    expect(fireEvent.click(screen.getByRole('link', { name: 'Docs' }))).toBe(true);
+    expect(follow).toHaveBeenCalledTimes(2);
+    cleanup();
+    render(<ui.Item title="Bare" href="/leads/5" />);
+    expect(fireEvent.click(screen.getByRole('link', { name: 'Bare' }))).toBe(true);
+  });
+
+  test('Beside puts the main first and the rail at the asked width and edge', () => {
+    const { container } = render(
+      <>
+        <ui.Beside rail={<span>Rail</span>}>
+          <span>Main</span>
+        </ui.Beside>
+        <ui.Beside rail={<span>Left</span>} railWidth="14rem" side="start" className="mine">
+          <span>Body</span>
+        </ui.Beside>
+      </>,
+    );
+    const [end, start] = container.querySelectorAll<HTMLElement>('.kit-beside');
+    expect(end.style.getPropertyValue('--kit-beside-rail')).toBe('20rem');
+    expect(end).not.toHaveClass('kit-beside-start');
+    expect([...end.children].map((c) => c.textContent)).toEqual(['Main', 'Rail']);
+    expect(start.style.getPropertyValue('--kit-beside-rail')).toBe('14rem');
+    expect(start).toHaveClass('kit-beside-start', 'mine');
+    expect([...start.children].map((c) => c.textContent)).toEqual(['Body', 'Left']);
+  });
+});

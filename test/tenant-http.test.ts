@@ -287,6 +287,21 @@ test('metadata uses membership grants and cannot borrow a privileged global logi
   assert.ok(!JSON.stringify(pages).includes(privateValue));
 });
 
+test('a role that reads a record but not a table its page lists still opens the record, without that list (field report)', async (t) => {
+  const f = await fixture(t, { metadata: true, foreignKey: true, pages: metadataPages() });
+  await f.maintenance((admin) => admin.putMembership({ ...f.grant, roles: ['viewer'], expectedVersion: '1' }).then(() => {}));
+  const a = await f.open();
+  const suggested = await f.call(f.select('/api/pages/suggested') + '&table=item', undefined, f.headers(a));
+  assert.equal(suggested.status, 200, suggested.text);
+  assert.ok(!suggested.text.includes('"note"'), suggested.text);
+  for (const page of ['suggested:item', 'items']) {
+    const composed = await f.data('/api/pages/compose', a, { page, key: { id: 'north-item' }, rows: 10 });
+    assert.equal(composed.status, 200, composed.text);
+    noPrivate(composed);
+    assert.ok(!composed.text.includes('"note"'), composed.text);
+  }
+});
+
 test("batched tab counts and a count-free run pass the tenant allowlist and stay the tenant's own", async (t) => {
   const f = await fixture(t),
     a = await f.open();

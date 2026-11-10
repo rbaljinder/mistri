@@ -31,6 +31,7 @@
  * stores; the caller then closes the adapters.
  */
 import type { EventDeliveryStore } from '../../adapters/events/eventDeliveryContract.js';
+import { appClockOffset } from '@mistriwork/engine/server/http/clock.js';
 import type { FlagRequestRuntime } from '../flags/requestRuntime.js';
 import { onCommandEvents } from '../../adapters/events/commandEventSignal.js';
 import { listenForCommandEvents, wakeListenUrl, type CommandEventListener } from '../../adapters/events/postgresCommandEventWake.js';
@@ -586,7 +587,8 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
     for (const job of timers) {
       let due: Awaited<ReturnType<NonNullable<typeof options.sweep>>>;
       try {
-        due = await options.sweep!(job.timer!, new Date(at - job.timer!.ms), job.runAs);
+        /* Which rows are due is App logic, as of its clock (http/clock.ts); when to sweep stays real. */
+        due = await options.sweep!(job.timer!, new Date(at + appClockOffset() - job.timer!.ms), job.runAs);
       } catch {
         continue;
       }

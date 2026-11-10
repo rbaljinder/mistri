@@ -16,7 +16,22 @@
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
+
+/** The package.json a directory's modules are read under, and the type it says; undefined above every one. */
+export function nearestPackage(dir: string): { path: string; type?: unknown } | undefined {
+  for (let at = resolve(dir); ; at = dirname(at)) {
+    const path = join(at, 'package.json');
+    if (existsSync(path)) {
+      try {
+        return { path, type: (JSON.parse(readFileSync(path, 'utf8')) as { type?: unknown }).type };
+      } catch {
+        return { path };
+      }
+    }
+    if (dirname(at) === at) return undefined;
+  }
+}
 
 interface TypecheckResult {
   status: 'passed' | 'failed' | 'skipped' | 'none';
@@ -171,8 +186,13 @@ export function parseTsc(output: string): TscError[] {
 /** A long quoted type cut to its start: `'{ name: string; views: …'`. */
 export const shorten = (text: string) => text.replace(/'([^']{90,})'/g, (_, inner: string) => `'${inner.slice(0, 70)}…'`);
 
-/** One line saying what to do about the commonest DSL mistakes, or nothing. */
-export function hint(error: TscError, columns: ReadonlySet<string>, hidden: ReadonlyMap<string, ReadonlySet<string>>): string | undefined {
+/** One line saying what to do about the commonest DSL mistakes, or nothing. `appDir` is where tsc ran: its paths are from there. */
+export function hint(
+  error: TscError,
+  columns: ReadonlySet<string>,
+  hidden: ReadonlyMap<string, ReadonlySet<string>>,
+  appDir?: string,
+): string | undefined {
   const all = [error.message, ...error.detail].join('\n');
   /* A column no reader is served, named where a column is shown: not a typo,
      and the fix is the other place, not the spelling. */
@@ -197,6 +217,15 @@ export function hint(error: TscError, columns: ReadonlySet<string>, hidden: Read
     return "the schema types are missing: mistri check writes mistri-schema.d.ts when it can reach the App's database.";
   }
   if (/^TS(1295|1286|1287|1479)$/.test(error.code) || /CommonJS/.test(all)) {
+    /* A workspace package the App imports (one sharing a stylesheet under mistri.cssPrefix, say) is read under its own
+       package.json, and a field report was sent to the App's, which already said "module". The one to change is the
+       one over the file tsc named. */
+    const over = appDir && error.file ? nearestPackage(dirname(resolve(appDir, error.file))) : undefined;
+    if (appDir && over && over.type !== 'module' && over.path !== nearestPackage(appDir)?.path) {
+      const said = over.type === undefined ? 'has no "type"' : `says "type": ${JSON.stringify(over.type)}`;
+      const shown = relative(appDir, over.path);
+      return `${error.file} is read as CommonJS: ${shown} ${said}, and it is not the App's package.json. Set "type": "module" in it (npm pkg set type=module, in ${dirname(shown)}).`;
+    }
     return 'the App is read as CommonJS: its package.json needs "type": "module".';
   }
   if (error.code === 'TS5097' || error.code === 'TS2691') {
@@ -277,6 +306,7 @@ export function readableTypeErrors(
   columns: ReadonlySet<string> = new Set(),
   stale = false,
   hidden: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
+  appDir?: string,
 ): string[] {
   const parsed = parseTsc(output);
   if (!parsed.length) return output.trim() ? output.trim().split('\n') : [];
@@ -304,7 +334,7 @@ export function readableTypeErrors(
        assignable to '"subject" | …'"); the ones between are the path to it. */
     const inner = error.detail.at(-1);
     if (inner && inner !== error.message) lines.push(`    ${shorten(inner)}`);
-    const help = hint(error, columns, hidden);
+    const help = hint(error, columns, hidden, appDir);
     if (help) lines.push(`    hint: ${help}`);
   }
   if (errors.length > limit) lines.push(`…and ${errors.length - limit} more; run tsc for all of them.`);

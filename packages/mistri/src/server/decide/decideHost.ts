@@ -24,6 +24,7 @@
  * does (writeLanes.ts).
  */
 import { createHash } from 'node:crypto';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { asBackgroundWork } from '@mistriwork/engine/adapters/writeLanes.js';
 import { attributeAction, attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
@@ -182,7 +183,7 @@ async function sweep(
   const decision = options.module.decisions!.get(job.decide![0])!;
   const slotKey = context.provenance.causationId;
   if (!slotKey) throw new JobRejected('The sweep names no slot.');
-  const keys = await readDue(authorized, decision.where, decision.limit, new Date(context.now()));
+  const keys = await readDue(authorized, decision.where, decision.limit, appTime(context.now()));
   for (const key of keys)
     await options.jobs.enqueue(
       {
@@ -497,7 +498,7 @@ async function act(
           {
             signal: context.signal,
             requestId: `decide:${context.jobId}:${context.attempt}`,
-            now: () => new Date(context.now()),
+            now: () => appTime(context.now()),
             flags,
             door: 'job',
           },

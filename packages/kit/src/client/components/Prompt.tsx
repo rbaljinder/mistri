@@ -9,7 +9,7 @@ import { DateField } from './DateField.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Field } from '@mistriwork/ui/Field.js';
 import { isPickerDate, isPickerDateTime } from '@mistriwork/ui/internal/datePickerModel.js';
-import { formatLocale, formatTimezone } from '../locale.js';
+import { appNow, formatLocale, formatTimezone } from '../locale.js';
 import { say } from '../copy/shell/components/Prompt.js';
 
 interface Common {
@@ -111,6 +111,7 @@ export function PromptDialog({
               placeholder={dateTime ? undefined : placeholder}
               locale={formatLocale()}
               timezone={formatTimezone()}
+              now={appNow()}
             />
           ) : (
             <input
@@ -200,6 +201,7 @@ export function RangeDialog({ title, fromLabel, toLabel, hint, type = 'text', pl
                 placeholder={type === 'date' ? placeholder : undefined}
                 locale={formatLocale()}
                 timezone={formatTimezone()}
+                now={appNow()}
               />
             ) : (
               <input ref={from} type={type} className="field-control" placeholder={placeholder ?? ''} />
@@ -218,6 +220,7 @@ export function RangeDialog({ title, fromLabel, toLabel, hint, type = 'text', pl
                 placeholder={type === 'date' ? placeholder : undefined}
                 locale={formatLocale()}
                 timezone={formatTimezone()}
+                now={appNow()}
               />
             ) : (
               <input ref={to} type={type} className="field-control" placeholder={placeholder ?? ''} />

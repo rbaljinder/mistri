@@ -469,6 +469,17 @@ signature_id: { signature: true }
 
 A warehouse App takes proof of delivery on a pick list this way. The pad is in the edit form, so there is no picture.
 
+### Empty
+
+What a missing value means, said where the dash would stand: a list's cell, a record's field and a value drawn alone. A ticket not yet resolved has no `resolved_at`, and "Open" is the answer.
+
+```ts
+resolved_at: { empty: 'Open' },
+last_seen: { empty: 'Never' },
+```
+
+The row keeps its null, so the column still sorts, filters and exports as null. At most 40 characters.
+
 ### Copy
 
 A copy button after the value on a record, for a value a reader pastes somewhere else: a tracking number, an account number. The toast says it was copied.

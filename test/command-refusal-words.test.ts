@@ -1,7 +1,7 @@
 /**
  * A refused command says why, in words (field report G6). A role the command is not granted to is told which command;
  * and a declarative `when` that fails says which part and what the record holds, in the App's own words for
- * the column (its caption, an amount kept in cents as money) — `Balance owed is $108.99; needs ≤ $0.00` — instead
+ * the column (its caption, an amount kept in cents as money) — `Balance owed is $108.99; needs to be at most $0.00` — instead
  * of "This record is not eligible for this command". It names a value only to a person whose grants read the
  * column; for anyone else, and for a part no sentence about one value can say, the generic sentence stays.
  */
@@ -148,13 +148,13 @@ test("a failing when says the part it failed and the record's value as the App s
     const refused = await run('collect', 1);
     assert.equal(refused.body.code, 'ineligible_state', JSON.stringify(refused.body));
     assert.equal(refused.status, 409);
-    assert.equal(refused.body.message, 'Balance owed is $108.99; needs ≤ $0.00', JSON.stringify(refused.body));
+    assert.equal(refused.body.message, 'Balance owed is $108.99; needs to be at most $0.00', JSON.stringify(refused.body));
     // A compound when names the first part that fails: invoice 3 is closed, its balance is nothing.
     const compound = await run('close', 3);
-    assert.equal(compound.body.message, 'status is closed; needs = open', JSON.stringify(compound.body));
+    assert.equal(compound.body.message, 'status is closed; needs to be open', JSON.stringify(compound.body));
     // The same refusal on the first part of a compound.
     const balance = await run('close', 1);
-    assert.equal(balance.body.message, 'Balance owed is $108.99; needs ≤ $0.00', JSON.stringify(balance.body));
+    assert.equal(balance.body.message, 'Balance owed is $108.99; needs to be at most $0.00', JSON.stringify(balance.body));
     // A part no sentence about one value can say keeps the generic sentence.
     const unsaid = await run('ship', 2);
     assert.equal(unsaid.body.code, 'ineligible_state');
@@ -170,7 +170,7 @@ test('a when over a computed column names it by its label, with the value it was
     // Invoice 1 owes 108.99, so it is not settled; the sentence is the stored columns' own, about the computed one.
     const refused = await run('archive', 1);
     assert.equal(refused.body.code, 'ineligible_state', JSON.stringify(refused.body));
-    assert.equal(refused.body.message, 'Settled is no; needs = yes', JSON.stringify(refused.body));
+    assert.equal(refused.body.message, 'Settled is no; needs to be yes', JSON.stringify(refused.body));
   } finally {
     await close();
   }
@@ -204,7 +204,16 @@ test('a value is named only to a person who reads the column, and a part no sent
   );
   assert.equal(
     whenRefusalSentence(saying, condition, row, () => true),
-    'balance_cents is 10899; needs ≤ 0',
+    'balance_cents is 10899; needs to be at most 0',
+  );
+  // Equality is said in words too, never as `needs = no`.
+  assert.equal(
+    whenRefusalSentence(saying, { column: 'balance_cents', op: '=', value: 0 }, row, () => true),
+    'balance_cents is 10899; needs to be 0',
+  );
+  assert.equal(
+    whenRefusalSentence(saying, { column: 'balance_cents', op: '!=', value: 5 }, row, () => true),
+    'balance_cents is 10899; needs to be anything but 5',
   );
   assert.equal(
     whenRefusalSentence(saying, { column: 'note', op: 'contains', value: 'rush' }, row, () => true),

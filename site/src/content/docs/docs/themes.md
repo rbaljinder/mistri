@@ -55,7 +55,7 @@ See it in the sample (`examples/apps/lintel/theme.ts:7`). That is the smallest t
 | `recipes` | Each part's treatment from a closed menu: `nav`, `bar`, `tabs`, `stat`, `table`, `buttons` and more, each value pictured in [Theme recipes](/docs/theme-recipes/) | the base's | Stable |
 | `shell.placement` | Where the menu goes, `'side'` or `'top'`, when this is the App's theme; `ui.shell.placement` wins | the App's | Stable |
 | `ui.theme.for` | A theme per audience: `public` for every page a signed-out visitor sees, worn whatever a reader picked, and `roles: { rider: 'cadence' }`, the first entry the account holds, over a tenant's saved theme; a reader's own pick still wins in the shell | none | Stable |
-| `branding.allow` | What a tenant may change (`logo` includes the dark logo and the tab icon): `logo`, `name`, `accent`, `palette`, `radius`, `density`, `theme` | required | Stable |
+| `branding.allow` | What a tenant may change (`logo` includes the dark logo and the tab icon): `logo`, `name`, `accent`, `palette`, `radius`, `density`, `preset`, `locale` | required | Stable |
 | `branding.editors` | The tenant roles whose members may save it | required | Stable |
 | `branding.themes` | One to six themes a tenant picks from (`theme` needs two) | the App's own look | Stable |
 | `brandingForm()` | A dashboard section: the form beside a live preview | none | Stable |
@@ -79,7 +79,7 @@ A tenant is the one level of brand mistri holds: its name, logo, tab icon, accen
 import { useLook, useToken } from '@mistriwork/mistri/ui';
 
 export function ProgramBadge({ program }: { program: { name: string; tone: 'primary' | 'quiet' } }) {
-  const { mode, density } = useLook(); // { look: string, mode: 'light' | 'dark', density: 'compact' | 'comfortable' | 'spacious' }
+  const { mode, density } = useLook(); // { look: string, preset: string, mode: 'light' | 'dark', density: 'compact' | 'comfortable' | 'spacious' }
   const accent = useToken('--accent'); // the tenant's accent, as branding set it
   return (
     <span style={{ borderColor: accent, padding: density === 'compact' ? '1px 6px' : '2px 8px' }} data-mode={mode}>
@@ -89,7 +89,7 @@ export function ProgramBadge({ program }: { program: { name: string; tone: 'prim
 }
 ```
 
-`useLook()` returns the theme's id (`look`; `tenant` on a page a tenant's branding dresses), the mode and the density, and updates when any of them changes. The sub-brand's own name or color is data the App keeps in a table and draws; it never replaces the tenant's look.
+`useLook()` returns the theme's id (`look`; `tenant` on a page a tenant's branding dresses), the theme it started from (`preset`: the App's own theme there, such as `workshop`, and the same as `look` everywhere else), the mode and the density, and updates when any of them changes. The sub-brand's own name or color is data the App keeps in a table and draws; it never replaces the tenant's look.
 
 ## A brand in one block
 

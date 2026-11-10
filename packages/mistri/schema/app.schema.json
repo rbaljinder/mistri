@@ -1325,6 +1325,7 @@
         },
         "scan": { "const": true, "description": "A code typed or read by the camera where the browser can read codes; takes no format." },
         "signature": { "const": true, "description": "On a column that points at a file resource: a signature drawn or typed, kept as a PNG row of it and drawn as the picture; takes no format." },
+        "empty": { "type": "string", "minLength": 1, "maxLength": 40, "description": "What a missing value is said as where the dash would stand (\"Open\", \"Never\"): a list's cell, a record's field and a value drawn alone. The stored null still sorts, filters and exports as null." },
         "copy": { "const": true, "description": "A copy button beside the value on a record: the stored value copied, a toast saying so. Not with masked: true or signature." },
         "icon": {
           "description": "A small tinted square before the value in a list's cell: an App icon, or { mark, toneOf } where toneOf names another column of the record whose tone rule tints each row's square.",

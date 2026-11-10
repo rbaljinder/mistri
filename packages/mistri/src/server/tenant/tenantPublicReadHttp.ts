@@ -15,6 +15,7 @@
  * resource the grant does not name all answer as the same missing page.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import type { ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
 import { zonedNow, type AppDef } from '../../shared/app.js';
 import { appSurfaceForRealm } from '../../shared/appTenancy.js';
@@ -178,9 +179,9 @@ export function createTenantPublicReadHttp(options: TenantPublicReadHttpOptions)
       const locale = requestLocale(app, { visitor: true, req, res });
       /* One instant for the read, as for a member's request (tenantHttp.ts): the catalog and every statement it writes. */
       const answer = await withPublicContext(placement, (context) =>
-        withRequestInstant(new Date(now()), () => {
-          const instant = () => zonedNow(appZone(app.ui), new Date(now()));
-          const schema = tenantServedSchema(context, app, new Date(now()));
+        withRequestInstant(appTime(now()), () => {
+          const instant = () => zonedNow(appZone(app.ui), appTime(now()));
+          const schema = tenantServedSchema(context, app, appTime(now()));
           return route(context, schema, path, input, instant, locale);
         }),
       );

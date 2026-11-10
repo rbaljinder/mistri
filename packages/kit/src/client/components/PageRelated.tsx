@@ -988,6 +988,7 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
                             table={table!}
                             rows={gridRows}
                             actions={rowVerbs}
+                            labelOf={(row) => recordForRow(row).label}
                             onDone={() => {
                               refreshLists();
                               onActionDone?.();
