@@ -725,6 +725,9 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
       const resources = await loadAppRuntimeResources(registry, app.app, match?.id ?? registry.active!);
       const { schema } = resources;
       resolveAppAccess(app.app, schema, []);
+      /* A signed-out visitor's reach is a fact of app.ts and the catalog too: a public field list that leaves out a
+         key column was a 500 on every public request, and check passed it. */
+      if (app.app.auth?.public) resolveAppAccess(app.app, schema, [], 'public');
       await learnValueLabels(app, schema);
       /* What a role meets only when it signs in, judged once per role over
          the catalog it is served: here, where every role's reach is known. */

@@ -373,7 +373,7 @@ test(
     assert.equal(submit.status, 200);
     const receipt = await submit.json();
     assert.equal(receipt.reference, 'CONTACT-1');
-    assert.deepEqual(Object.keys(receipt).sort(), ['receipt', 'reference']);
+    assert.deepEqual(Object.keys(receipt).sort(), ['message', 'receipt', 'reference']);
 
     const replay = await fetch(`${origin}/api/forms/contact`, {
       method: 'POST',

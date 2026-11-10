@@ -24,6 +24,10 @@ export function DashHead({
   const favorite = star && dashboard.favorite && dashboard.head !== 'own' && (
     <FavoriteStar favorite={{ kind: 'view', view: dashboard.id, label: dashboard.label }} name={dashboard.label} />
   );
+  /* Nothing to see: only the title a screen reader keeps. It stands alone rather than in the head's box, which would
+     hold its minimum height and its rule over a page that draws its own head, and the pane starts at the page. */
+  if (hidden && !favorite && !(dashboard.description && dashboard.head !== 'own'))
+    return <h1 className="applist-title visually-hidden">{title}</h1>;
   if (dashboard.head === 'compact' && !hidden)
     return (
       <div className="applist-head applist-head-row dash-head-compact">

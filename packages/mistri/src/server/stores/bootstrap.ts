@@ -153,7 +153,12 @@ export async function bootstrapPhases(
     };
   else {
     write('');
-    const code = await app.check(input.rest, write);
+    // The check's lines are kept so a failure can be named by what it said, not by the one sentence for a schema.
+    const said: string[] = [];
+    const code = await app.check(input.rest, (line) => {
+      said.push(line);
+      write(line);
+    });
     if (code === 0) check = { phase: 'check', status: 'passed', detail: 'the App fits the schema and the stores this run left', items: [] };
     else if (code === 8) {
       /* The check found a store still absent: a store this run could not make, never a schema the App misfits. */
@@ -166,6 +171,16 @@ export async function bootstrapPhases(
       };
       write(
         `The migrations are applied, and the App waits on stores this database does not have: ${left.join(', ') || 'see the check above'}. ${next} makes them.`,
+      );
+    } else if (code === 3 && !said.some((line) => /^\s*validation\s+failed\b/.test(line))) {
+      /* A type error in the App's own files (a page, the commands module) says nothing of the schema: said as the
+         type error it is, with its first line (a field report: it was blamed on migrations that were fine). When
+         validation failed beside it, the schema moved under the App (a dropped column fails both), so it is the
+         misfit below, not the App's own type error. */
+      const first = said.map((line) => line.trim()).find((line) => /^\S+\.[cm]?[jt]sx?:\d+:\d+\s+TS\d+/.test(line));
+      check = { phase: 'check', status: 'failed', detail: `the App's typecheck failed${first ? `: ${first}` : ''}`, items: [] };
+      write(
+        `The migrations are applied, and the App's typecheck failed${first ? ` (first error: ${first})` : ''}. That is a type error in the App's own files, not the schema: fix it and run mistri check --app ${shown(appDir)}.`,
       );
     } else {
       check = {

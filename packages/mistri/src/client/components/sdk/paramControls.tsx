@@ -12,6 +12,7 @@
  * holds a control's height, so their arrival moves nothing.
  */
 import { useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { vocabularyWord } from '@mistriwork/engine/shared/model.js';
 import { DateField } from '@mistriwork/kit/client/components/DateField.js';
 import { UiParamKindsContext } from './context.js';
 import { useAddressState, useRows } from './hooks.js';
@@ -103,7 +104,8 @@ function ChooseWords({ param, name, all }: { param: string; name: string; all?: 
   const [chosen, set] = useAddressState(param);
   const words = kinds[param];
   if (!Array.isArray(words)) throw new Error(say('chooseNeedsOptions', { param }));
-  const options = (words as string[]).map((word) => ({ value: word, label: word }));
+  // The words as the platform says a vocabulary everywhere (`lanes` is "Lanes", `needs_review` "Needs review"); the address keeps the stored word.
+  const options = (words as string[]).map((word) => ({ value: word, label: vocabularyWord(word) }));
   return <Pick name={name} options={options} chosen={chosen} all={all} onPick={(next) => set(next)} />;
 }
 

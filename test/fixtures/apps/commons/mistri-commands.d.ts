@@ -29,6 +29,13 @@ export type Commands = {
   warnMember: { target: "member"; targets: "one"; input: "reason" | "note"; output: CommandOutput<CommandModule["warnMember"]> };
 };
 
+/** Each free-form page's loader, by the page's path (null: it names none): what `PageProps<'<path>'>` types its `data` from. */
+export type PageLoaders = {
+  "report-queue": null;
+  "reports-reported-post": null;
+  "start-here": null;
+};
+
 /** Each free-form page by its path (pages/<path>.page.tsx): what the App's `home` may name beside its views. */
 export type PagePaths = "report-queue" | "start-here";
 
@@ -43,5 +50,5 @@ export type FormCommands = {
 export type ViewKeys = "active" | "board-settings" | "board-threads" | "boards" | "conversation" | "health" | "held" | "join" | "latest" | "members" | "posts" | "queue" | "removals" | "report-post" | "reports" | "shelves" | "showcase" | "standing" | "start-thread" | "tags" | "thread-posts" | "warnings";
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { commands: Commands; pagePaths: PagePaths; forms: FormCommands; views: ViewKeys }
+  interface Register { commands: Commands; pagePaths: PagePaths; pageLoaders: PageLoaders; forms: FormCommands; views: ViewKeys }
 }

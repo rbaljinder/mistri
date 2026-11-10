@@ -1,0 +1,6 @@
+.c-page-kit { position: relative; }
+.c-page-kit-raised { position: relative; z-index: 9; padding: 8px; background: var(--accent-soft); }
+.c-page-kit-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
+.c-page-kit-facts dt, .c-page-kit-facts dd { margin: 0; }
+.c-page-kit-open { min-height: 44px; min-width: 44px; }
+.c-page-kit-narrow { width: 240px; }

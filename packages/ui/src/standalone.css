@@ -109,14 +109,21 @@
 }
 
 /* The Drawer primitive (Drawer.tsx): a sheet from an edge, at most
-   420px, full width on a phone, on the modal's scrim. */
+   420px, full width on a phone, over a scrim that covers the window. It
+   stands where a Modal does (z-index 400, the scrim beneath the sheet), so
+   a page's own stacking cannot reach over it. */
 .ui-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
   background: var(--scrim);
 }
 .ui-drawer-viewport {
   position: fixed;
   inset: 0;
+  z-index: 401;
   display: flex;
+  pointer-events: none;
 }
 .ui-drawer-right {
   justify-content: flex-end;
@@ -125,6 +132,7 @@
   justify-content: flex-start;
 }
 .ui-drawer {
+  box-sizing: border-box;
   width: min(420px, 100vw);
   max-height: 100dvh;
   overflow-y: auto;
@@ -132,11 +140,51 @@
   background: var(--surface);
   color: var(--ink);
   box-shadow: var(--shadow-pop);
+  pointer-events: auto;
+}
+.ui-drawer-right .ui-drawer {
+  border-left: 1px solid var(--line);
+}
+.ui-drawer-left .ui-drawer {
+  border-right: 1px solid var(--line);
+}
+.ui-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
 }
 .ui-drawer-title {
-  margin: 0 0 var(--space-4);
+  flex: 1;
+  min-width: 0;
+  margin: 0;
   font-size: var(--text-md);
   font-weight: 600;
+}
+.ui-drawer-close {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  margin-block: calc(-1 * var(--space-2h));
+  margin-inline-end: calc(-1 * var(--space-2h));
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .ui-drawer-close:hover {
+    background: var(--raised);
+    color: var(--ink);
+  }
+}
+.ui-drawer-close:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: -2px;
 }
 
 /* The Popover primitive (Popover.tsx): a layer on the surface, with
@@ -195,12 +243,22 @@
 }
 
 /* The Pagination primitive (Pagination.tsx): page buttons on one
-   row, the current page in the accent's tint, steps disabled at the ends. */
+   row, the current page in the accent's tint, steps disabled at the ends.
+   Where the room is too narrow for the whole run (a card on a phone) the row
+   keeps the steps and the current page, rather than wrapping its tail onto a
+   second line of its own ("… 9 Next"). */
 .ui-pagination {
+  container-type: inline-size;
   display: flex;
   align-items: center;
   gap: var(--space-1h);
   flex-wrap: wrap;
+}
+@container (max-width: 36rem) {
+  .ui-pagination > .ui-page:not(.ui-page-step, [aria-current='page']),
+  .ui-pagination > .ui-page-gap {
+    display: none;
+  }
 }
 .ui-page {
   min-width: 36px;
@@ -234,6 +292,13 @@
 .ui-page-gap {
   padding: 0 var(--space-1);
   color: var(--ink-subtle);
+}
+/* A finger's 44px at a phone's width. */
+@media (max-width: 760px) {
+  .ui-page {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* The Carousel primitive (Carousel.tsx): one slide in a viewport, the

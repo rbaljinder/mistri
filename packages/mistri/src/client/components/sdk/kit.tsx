@@ -25,6 +25,7 @@ import { Icon as PlatformIcon } from '@mistriwork/kit/client/components/Icon.js'
 import { Empty as PlatformEmpty, Problem } from '@mistriwork/kit/client/components/Notes.js';
 import { Dressed, Said } from '@mistriwork/kit/client/components/Dressed.js';
 import { authoredDisplay, dressFor, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
+import { useQuery } from '@tanstack/react-query';
 import { useUiHost } from './context.js';
 /* Named apart: `say` is also Sparkline's prop below, a figure's speaker. */
 import { say as sayKit } from '../../copy/components/components/sdk/kit.js';
@@ -151,7 +152,29 @@ export function Value({
   const rule = authoredDisplay(display) ?? known?.rule ?? null;
   const dress = dressFor(rule, value);
   if (dress) return <Dressed dress={dress} compact={compact} />;
+  /* A reference holds its record's key; the lists say the record's name, so a column named here does too. */
+  const target = known?.meta?.references?.table;
+  if (target && display === undefined && (typeof value === 'string' || typeof value === 'number'))
+    return (
+      <ReferenceName resource={target} value={value} fallback={<Said col={known?.meta} value={value} compact={compact} app={host.app} />} />
+    );
   return <Said col={known?.meta} value={value} compact={compact} app={host.app} />;
+}
+
+/**
+ * The name of the record a reference column holds, read as the platform's pickers read one (the host's `choiceName`:
+ * under the reader's grants), kept in the page's cache so a column of one record is one read. It holds the key's place
+ * while it arrives, so the row does not move, and says the key where the record is not the reader's to read.
+ */
+function ReferenceName({ resource, value, fallback }: { resource: string; value: string | number; fallback: ReactNode }) {
+  const host = useUiHost();
+  const named = useQuery({
+    queryKey: ['mistri-ui', 'reference-name', ...host.scope, resource, value],
+    queryFn: () => host.choiceName({ resource }, value).catch(() => null),
+    retry: false,
+  });
+  if (named.isPending) return <span style={{ opacity: 0 }}>{fallback}</span>;
+  return named.data ? <span className="prose">{named.data.label}</span> : fallback;
 }
 
 /** A share of a whole as a bar and its figure: `value` against `max` (100 by default), in a tone when it means something. */
@@ -328,8 +351,10 @@ export function Stat({
   say?: (value: unknown) => string;
 }) {
   const points = (trend ?? []).map((point, index) => (typeof point === 'number' ? { key: String(index), value: point } : point));
+  /* In a Card it is a figure in that box, not a box in a box (as a Card in a Card is a plain group). */
+  const nested = useContext(InCard);
   return (
-    <div className="kit-stat">
+    <div className={nested ? 'kit-stat kit-stat-plain' : 'kit-stat'}>
       <span className="kit-stat-label">{label}</span>
       {/* The trend rides beside the figure, so a Stat with none is the same height as one with. */}
       <span className="kit-stat-row">

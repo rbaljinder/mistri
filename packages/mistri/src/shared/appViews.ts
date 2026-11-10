@@ -527,6 +527,12 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
     const view = views.get(key);
     return view?.kind === 'dashboard' ? (view.view.page?.forms ?? []) : [];
   });
+  /* A public page is the signed-out door's: opened at its address, never from the signed-in menu, which leaves it out
+     unless it says `nav` (appPages.ts). Its address is its reference. */
+  const publicPageKeys = order.filter((key) => {
+    const view = views.get(key);
+    return view?.kind === 'dashboard' && view.view.page?.public === true;
+  });
   const reachable = new Set([
     ...navKeys,
     ...rules.map((rule) => rule.view),
@@ -535,6 +541,7 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
     ...pageEmbeds,
     ...newKeys,
     ...pageFormKeys,
+    ...publicPageKeys,
     ...recordTabKeys,
   ]);
   for (const key of reachable) {

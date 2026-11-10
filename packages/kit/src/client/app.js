@@ -699,7 +699,11 @@ export async function boot(me, landingAt, installed) {
       showUnopened((await offeredTools?.listConnections()) ?? []);
       return;
     }
-    $('content').replaceChildren(el('p', { class: 'note', text: say('couldNotReadTheSchema', { message: err.message }) }));
+    /* An App's page never draws the database browser's chrome around an error (the query bar, the filter, the
+       vendor's mark): its own unavailable screen says why, in the App's name. A shell that offers the Workbench's
+       tools keeps the note. */
+    if (!offeredTools) chrome.unavailable(undefined, err.message);
+    else $('content').replaceChildren(el('p', { class: 'note', text: say('couldNotReadTheSchema', { message: err.message }) }));
     return;
   }
   const content = $('content');

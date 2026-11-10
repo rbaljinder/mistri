@@ -428,6 +428,8 @@ export default definePage({ label: { message: 'ticket.plural' }, description: { 
       'model.d.ts AppCommandGroup.label',
       'model.d.ts AppCommandGroup.help',
       'model.d.ts AppCommandAction.label',
+      /* A form's command as the App serves it: said already, in the reader's words, like the action's. */
+      'model.d.ts AppFormCommandReference.label',
       /* The reference's own key, which is how a caption is told from a sentence. */
       'model.d.ts AppMessageRef.message',
       /* A command's input rules are parsed when defineCommand runs, before any catalog is read. */

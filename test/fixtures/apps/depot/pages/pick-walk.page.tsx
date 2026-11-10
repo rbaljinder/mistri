@@ -32,7 +32,7 @@ const page = definePage({
 export default page;
 
 type Row = Readonly<Record<string, unknown>>;
-type Waiting = PageProps<'pickWalk'>['data']['lists'][number];
+type Waiting = PageProps<'pick-walk'>['data']['lists'][number];
 
 function Choose({ lists, onChoose }: { lists: readonly Waiting[]; onChoose: (list: Waiting) => void }): ReactNode {
   const format = useFormat();
@@ -183,7 +183,7 @@ function Walk({
   );
 }
 
-function PickWalk({ data }: PageProps<'pickWalk'>): ReactNode {
+function PickWalk({ data }: PageProps<'pick-walk'>): ReactNode {
   const [listId, setList] = page.useParam('list');
   const [line, setLine] = page.useParam('line');
   const chosen = page.useRows('pick_list', {

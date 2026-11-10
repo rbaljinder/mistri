@@ -29,7 +29,7 @@
         },
         "listTabs": {
           "type": "boolean",
-          "description": "Draw each run of adjacent list sections (none with a width) as one tab strip. An App's page is off unless true; a Workbench page is on unless false."
+          "description": "Draw each run of adjacent list sections (none with a width) as one tab strip. An App's page is off unless true, except that a record with a free-form page as a tab draws its lists as a strip unless this says false; a Workbench page is on unless false."
         },
         "empty": {
           "enum": [
@@ -1986,7 +1986,7 @@
         },
         "listTabs": {
           "type": "boolean",
-          "description": "Draw each run of adjacent list sections (none with a width) as one tab strip. An App's page is off unless true; a Workbench page is on unless false."
+          "description": "Draw each run of adjacent list sections (none with a width) as one tab strip. An App's page is off unless true, except that a record with a free-form page as a tab draws its lists as a strip unless this says false; a Workbench page is on unless false."
         },
         "empty": {
           "enum": [

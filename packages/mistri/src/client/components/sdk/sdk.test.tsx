@@ -7,12 +7,13 @@
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as ui from './index.js';
 import type * as PublicUi from '../../../../schema/ui.js';
 import { Dropdown } from '../../../../../kit/src/client/components/Dropdown.js';
 import { SplitListDetail } from '../SplitListDetail.js';
 import { UI_EXPORTS } from '../../../shared/uiSdk.js';
-import { Card, Meter, Table, Value } from './kit.js';
+import { Card, Meter, Stat, Table, Value } from './kit.js';
 import { UiHostContext, type UiHost } from './context.js';
 import { fixtures, renderSection, renderValue } from './testing.js';
 import { FixtureSection } from './fixture.js';
@@ -54,6 +55,20 @@ describe('the kit', () => {
     expect(container.querySelectorAll('.kit-group')).toHaveLength(1);
   });
 
+  test('a stat inside a card is a figure in that box, and a stat on its own keeps its own', () => {
+    const { container } = withHost(
+      <>
+        <Card title="Totals">
+          <Stat label="Things" value="17" />
+        </Card>
+        <Stat label="Alone" value="1" />
+      </>,
+    );
+    const stats = container.querySelectorAll('.kit-stat');
+    expect(stats[0]).toHaveClass('kit-stat-plain');
+    expect(stats[1]).not.toHaveClass('kit-stat-plain');
+  });
+
   test("a value keeps every digit of an id past 2^53, and says a display rule's tone as the looks do", () => {
     withHost(
       <>
@@ -63,6 +78,31 @@ describe('the kit', () => {
     );
     expect(screen.getByText('9007199254740993')).toBeInTheDocument();
     expect(screen.getByText('Review')).toHaveClass('tone', 'tone-warn');
+  });
+
+  test("a column that references a record says the record's name, as the lists do, and its key where the name is not the reader's", async () => {
+    const column = {
+      meta: { name: 'provider_id', type: 'integer', references: { table: 'provider', column: 'id' } },
+      rule: null,
+      label: 'Provider',
+    };
+    const refs = {
+      column: () => column,
+      app: true,
+      scope: [],
+      choiceName: async (_field: unknown, key: string | number) => (key === 2 ? { key, label: 'Dr. Leo Martinez' } : null),
+    } as unknown as UiHost;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <UiHostContext.Provider value={refs}>
+          <Value value={2} resource="appointment" column="provider_id" />
+          <Value value={3} resource="appointment" column="provider_id" />
+        </UiHostContext.Provider>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('Dr. Leo Martinez')).toBeInTheDocument();
+    expect(await screen.findByText('3')).toBeVisible();
+    expect(screen.queryByText('2')).toBeNull();
   });
 
   describe('a table', () => {

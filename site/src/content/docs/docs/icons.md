@@ -28,6 +28,7 @@ Every `icon` and `ui.logo` is one of these Phosphor names ([phosphoricons.com](h
 - **Learning, land and buildings**: `graduation-cap`, `book-open`, `student`, `chalkboard-teacher`, `factory`, `warehouse`, `house-line`, `plant`, `leaf`, `sun`, `cloud`, `drop`
 - **Travel**: `airplane`, `bicycle`, `bus`, `train`, `boat`
 - **Things, tools and records**: `hammer`, `toolbox`, `plug`, `lightbulb`, `cube`, `camera`, `image`, `trophy`, `gift`, `coffee`, `fork-knife`, `shopping-bag`, `basket`, `barcode`, `qr-code`, `scales`, `gavel`, `certificate`, `identification-card`, `fingerprint`, `eye`, `link`, `paperclip`, `scissors`, `palette`, `code`, `terminal`, `users-three`, `user-plus`
+- **Direction and dismissal**: `caret-left`, `caret-right`, `caret-up`, `caret-down`, `arrow-left`, `arrow-right`, `x`, `plus`, `dots-three`
 
 ## Using one
 

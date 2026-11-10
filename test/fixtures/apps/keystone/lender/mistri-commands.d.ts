@@ -32,6 +32,11 @@ export type Commands = {
   waiveStipulation: { target: "stipulation"; targets: "one"; input: "reason"; output: CommandOutput<CommandModule["waiveStipulation"]> };
 };
 
+/** Each free-form page's loader, by the page's path (null: it names none): what `PageProps<'<path>'>` types its `data` from. */
+export type PageLoaders = {
+  workflows: null;
+};
+
 /** Each free-form page by its path (pages/<path>.page.tsx): what the App's `home` may name beside its views. */
 export type PagePaths = "workflows";
 
@@ -42,5 +47,5 @@ export type ViewKeys = "applications" | "collections" | "customers" | "dealers" 
 export type ActionNames = "markFollowedUp" | "reinstateProgram" | "retireProgram";
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { commands: Commands; pagePaths: PagePaths; actions: ActionNames; views: ViewKeys }
+  interface Register { commands: Commands; pagePaths: PagePaths; pageLoaders: PageLoaders; actions: ActionNames; views: ViewKeys }
 }

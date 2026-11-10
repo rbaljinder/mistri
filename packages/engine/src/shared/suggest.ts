@@ -53,7 +53,10 @@ export function unknownKey(key: string, takes: readonly string[], homes: readonl
   const near = found !== undefined && (d <= 1 || d < Math.min(key.length, found.length) / 2) ? found : undefined;
   const slip = near !== undefined && d <= 1;
   const where = homes.length > 1 ? `${homes.slice(0, -1).join(', ')} or ${homes[homes.length - 1]}` : homes[0];
-  const hint = where && !slip ? ` "${key}" belongs ${where}.` : near ? ` Did you mean "${near}"?` : '';
+  /* `required` is the word reached for where the word is `optional`: a field is asked unless it says otherwise. */
+  const opposite =
+    key === 'required' && takes.includes('optional') ? ' Did you mean "optional: true"? A field is required unless it says so.' : '';
+  const hint = opposite ? opposite : where && !slip ? ` "${key}" belongs ${where}.` : near ? ` Did you mean "${near}"?` : '';
   return `has no "${key}".${hint} It takes: ${takes.join(', ')}`;
 }
 

@@ -262,6 +262,20 @@ export function appEntries(
 }
 
 /**
+ * The commands module the App keeps beside its manifest, for a run that has not loaded the App (shot, dev, grade):
+ * the same file a load would find, so every command says one thing about it (`check` knows it from the loaded App).
+ */
+function conventionEntries(
+  context: ProjectContext,
+  more: Partial<Record<ProfileEntry, { path: string; from: EntryFrom }>>,
+): Partial<Record<ProfileEntry, { path: string; from: EntryFrom }>> {
+  if (more.commands || context.entries.commands || !context.app) return more;
+  const home = resolve(context.app.path);
+  const file = ['commands.ts', 'commands.mjs', 'commands.js'].map((name) => join(home, name)).find((path) => existsSync(path));
+  return file ? { ...more, commands: { path: file, from: 'convention' } } : more;
+}
+
+/**
  * The context as the run prints it, one line an entry: where it came from, and a flag that overrode the profile.
  * `convention` and `build` are the App's to say (the loaded App's commands.ts beside it, a build's own bundles).
  */
@@ -270,6 +284,7 @@ export function contextLines(
   more: Partial<Record<ProfileEntry, { path: string; from: EntryFrom }>> = {},
 ): string[] {
   if (!context) return [];
+  more = conventionEntries(context, more);
   const where = context.config
     ? `${shown(context.config.path)} (${{ flag: '--config', app: 'beside the App', cwd: 'the working directory', user: "the person's own" }[context.config.from]})`
     : 'no config file';
@@ -307,8 +322,9 @@ export function contextJson(
   app: { path: string; from: string } | null;
   entries: Record<ProfileEntry, { path: string; from: EntryFrom; over?: string } | null>;
 } {
+  const beside = context ? conventionEntries(context, more) : more;
   const entry = (key: ProfileEntry) => {
-    const own = context?.entries[key] ?? more[key];
+    const own = context?.entries[key] ?? beside[key];
     if (!own) return null;
     const said = context?.over[key];
     return { path: own.path, from: own.from, ...(said !== undefined ? { over: said } : {}) };

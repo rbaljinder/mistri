@@ -207,7 +207,15 @@ export function placePages(raw: Record<string, unknown>, pages: readonly PageFil
         `[page-nav] ${where}: nav names "${page.key}", a free-form page. A page places itself: definePage({ nav: { group: '…' } }).`,
       );
     }
-    const placing = page.record ? undefined : isRecord(fields.nav) ? fields.nav : fields.nav === false ? undefined : {};
+    /* A public page that says nothing of nav is the signed-out door's: the signed-in menu is not where it belongs
+       (a field report: a kiosk's check-in page showed in the staff sidebar). Saying `nav` still places it. */
+    const placing = page.record
+      ? undefined
+      : isRecord(fields.nav)
+        ? fields.nav
+        : fields.nav === false || (fields.nav === undefined && fields.public === true)
+          ? undefined
+          : {};
     views[page.key] = {
       kind: 'page',
       label: fields.label,

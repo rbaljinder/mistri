@@ -60,7 +60,10 @@ export function showAppUnavailable(unknown = undefined, unavailable = undefined)
      is the Workbench's alone. The three lines are the ones startup.ts draws when the page cannot start at all. */
   const app = activeApp();
   shellBody().classList.add('app-bound');
-  const name = app?.name ?? say('application');
+  /* An App whose payload failed has no name yet; the page's title is the one the server wrote for it.
+     host-global: a read of that title; setTabTitle only writes. */
+  const titled = document.title.trim().replace(/\s+[-\u2013\u2014|]\s+tablewalk$/i, '');
+  const name = app?.name ?? (titled && titled !== 'tablewalk' ? titled : say('application'));
   const brand = shellQuery('.brand-name');
   if (brand) brand.textContent = name;
   applyBrandLogo(

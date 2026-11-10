@@ -327,7 +327,7 @@ const everyLoadedAppKey: Exclude<keyof LoadedApp, (typeof LOADED_APP_KEYS)[numbe
 void everyLoadedAppKey;
 
 /** The commands module an App keeps beside its manifest, when `--commands` names none. */
-function besideCommands(home: string): string | undefined {
+export function besideCommands(home: string): string | undefined {
   return ['commands.ts', 'commands.mjs', 'commands.js']
     .map((name) => join(home, name))
     .find((file) => {
@@ -344,7 +344,7 @@ function besideCommands(home: string): string | undefined {
  * them, and each name is resolved from the registration (shared/command.ts).
  * Versions come from the lock's contract lines (commandContracts.ts).
  */
-async function loadAppCommands(
+export async function loadAppCommands(
   given: string | BusinessCommandRegistry | undefined,
   home: string,
 ): Promise<(LoadedApp['commands'] & { loaders?: LoadedApp['loaders']; challenges?: LoadedApp['challenges'] }) | undefined> {

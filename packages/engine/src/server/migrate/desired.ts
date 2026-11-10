@@ -96,7 +96,14 @@ export async function atlasBinary(
 }
 
 async function download(url: string): Promise<Uint8Array> {
-  const response = await fetch(url);
+  /* A closed network (a sandboxed agent, a build box) fails here as a bare "fetch failed": said with where it was
+     going and the way round it, since nothing else in the message names either. */
+  const response = await fetch(url).catch((error: unknown) => {
+    throw new Error(
+      `could not fetch Atlas from ${url}: ${error instanceof Error ? error.message : String(error)}. The first diff needs no download; the next ones do. Where there is no network route, download that file elsewhere, make it executable, and set ${envName('ATLAS')} to its path.`,
+      { cause: error },
+    );
+  });
   if (!response.ok)
     throw new Error(
       `could not fetch Atlas from ${url}: HTTP ${response.status}. To work offline, install Atlas ${ATLAS_VERSION} (community edition) and set ${envName('ATLAS')} to that binary.`,

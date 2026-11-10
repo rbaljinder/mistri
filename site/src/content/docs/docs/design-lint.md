@@ -115,7 +115,7 @@ npx @mistriwork/mistri grade --config mistri.json --theme all --palette all --as
 | `header-wrap` | A record's name takes more than two lines on a phone 390 wide (warning) | a shorter `recordLabel`, the rest as header facts |
 | `color-only` | A toned mark, a dot or a swatch, with no word, name or label beside it (warning) | a status as its dot and word, or an `aria-label` on a mark that stands alone |
 | `long-measure` | At 1280, prose runs past 80 characters a line (warning) | a narrower column, not smaller type |
-| `unsafe-motion` | At 1280, a part moves under reduced motion, or takes past 200ms otherwise; a spinner loops only while it waits (warning) | the platform's motion; report a part that moves |
+| `unsafe-motion` | At 1280, a part moves under reduced motion, or takes past 200ms otherwise; a spinner loops only while it waits (warning) | the platform's motion; a `prefers-reduced-motion` guard around your own is what satisfies it (only a part that still moves under reduced motion is reported); report a part that moves |
 | `heavy-theme` | The theme's own faces and logo pass 200 KB on a cold visit (warning) | fewer weights, a variable face, a smaller or SVG logo |
 
 ## What it does not check

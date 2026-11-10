@@ -692,7 +692,7 @@ test("a page's command run is typed by the command's declared output, and a form
   assert.match(types, /close: \{ target: "ticket"; targets: "one"; input: never; output: undefined \};/);
   assert.match(types, /type CommandModule = typeof import\("\.\/commands\.ts"\)\.default;/);
   assert.match(types, /export type FormCommands = \{\n {2}"new-ticket": "report";\n\};/);
-  assert.match(types, /interface Register \{ commands: Commands; pagePaths: PagePaths; forms: FormCommands \}/);
+  assert.match(types, /interface Register \{ commands: Commands; pagePaths: PagePaths; pageLoaders: PageLoaders; forms: FormCommands \}/);
   /* Without the module, a declared output is unknown rather than a guess, and nothing is imported for it. */
   const unnamed = commandTypes({ assign: { target: 'ticket', targets: 'one', input: [], output: true } }, 'Helpdesk');
   assert.match(unnamed, /output: unknown/);
@@ -824,4 +824,94 @@ test('defineSurface is held to the App as definePage is: an undeclared resource 
     assert.notEqual(compiled.status, 0, why);
     assert.match(compiled.stdout, error, why);
   }
+});
+
+test("PageProps is keyed by the page's path, so a loader may be named anything", () => {
+  const types = commandTypes({}, 'Helpdesk', './commands.ts', ['pick-walk'], [], [], { pageLoaders: { 'pick-walk': 'pickWalk' } });
+  assert.match(types, /export type PageLoaders = \{\n {2}"pick-walk": "pickWalk";\n\};/);
+  assert.match(types, /pageLoaders: PageLoaders/);
+  const commands = `
+    export const loaders = { pickWalk: { load: async () => ({ stops: 3 }) } } as const;
+    export default {};
+  `;
+  const files = { 'mistri-commands.d.ts': types, 'commands.ts': commands };
+  const page = (body: string) => `
+    import './mistri-commands.d.ts';
+    import type { PageProps } from '@mistriwork/mistri/ui';
+    export const walk = (p: PageProps<'pick-walk'>) => { ${body} };
+  `;
+  const fine = compile(page('const n: number = p.data.stops; return n;'), {}, files);
+  assert.equal(fine.status, 0, fine.stdout + fine.stderr);
+  const wrong = compile(page('return p.data.stopz;'), {}, files);
+  assert.notEqual(wrong.status, 0);
+  assert.match(wrong.stdout, /'stopz' does not exist/);
+  // The loader's name is not a key: only the page's path is.
+  const named = compile(
+    `
+    import './mistri-commands.d.ts';
+    import type { PageProps } from '@mistriwork/mistri/ui';
+    export const walk = (p: PageProps<'pickWalk'>) => p.data;
+  `,
+    {},
+    files,
+  );
+  assert.notEqual(named.status, 0);
+});
+
+test('PageProps names a page that has no loader, its data null', () => {
+  const types = commandTypes({}, 'Helpdesk', './commands.ts', ['pick-walk', 'about'], [], [], {
+    pageLoaders: { 'pick-walk': 'pickWalk' },
+  });
+  assert.match(types, /about"?: null;/);
+  const commands = `
+    export const loaders = { pickWalk: { load: async () => ({ stops: 3 }) } } as const;
+    export default {};
+  `;
+  const files = { 'mistri-commands.d.ts': types, 'commands.ts': commands };
+  const page = (body: string) => `
+    import './mistri-commands.d.ts';
+    import type { PageProps } from '@mistriwork/mistri/ui';
+    export const about = (p: PageProps<'about'>) => { ${body} };
+  `;
+  const fine = compile(page('const nothing: null = p.data; return nothing;'), {}, files);
+  assert.equal(fine.status, 0, fine.stdout + fine.stderr);
+  const typo = compile(page('return p.data;').replace("PageProps<'about'>", "PageProps<'abut'>"), {}, files);
+  assert.notEqual(typo.status, 0);
+  // With no commands module, the pages are still named: none of them has a loader to type data from.
+  const bare = commandTypes(undefined, 'Helpdesk', undefined, ['about']);
+  assert.match(bare, /pageLoaders: PageLoaders/);
+  const plain = compile(page('const nothing: null = p.data; return nothing;'), {}, { 'mistri-commands.d.ts': bare });
+  assert.equal(plain.status, 0, plain.stdout + plain.stderr);
+});
+
+test('a reference input is typed by the key it points at', () => {
+  const source = `
+    import './mistri-schema.d.ts';
+    import type { CommandInputOf } from '../../packages/mistri/schema/command.js';
+    type In = CommandInputOf<{ owner: { type: 'reference'; from: 'person'; by: 'id'; labelColumn: 'name' } }>;
+    export const owner = (value: In['owner']): string => value;
+  `;
+  // The helpdesk's person key is text: it is read as text, not as the loose number-or-text a reference was.
+  const fine = compile(source);
+  assert.equal(fine.status, 0, fine.stdout + fine.stderr);
+  const wrong = compile(source.replace('): string', '): number'));
+  assert.notEqual(wrong.status, 0);
+});
+
+test('nav names views, not a free-form page: the page places itself', () => {
+  const types = commandTypes({}, 'Helpdesk', undefined, ['book']);
+  const app = (nav: string) => `
+    import './mistri-commands.d.ts';
+    import './mistri-schema.d.ts';
+    import { defineApp, listView } from '@mistriwork/mistri/app';
+    export default defineApp({ id: 'desk', name: 'Desk', connection: 'main', resources: { ticket: {} },
+      auth: { roles: { staff: { read: true } } },
+      views: { tickets: listView('Tickets', 'ticket') }, home: 'tickets', nav: [${nav}] });
+  `;
+  const files = { 'mistri-commands.d.ts': types };
+  const fine = compile(app("'tickets'"), {}, files);
+  assert.equal(fine.status, 0, fine.stdout + fine.stderr);
+  const page = compile(app("'tickets', 'book'"), {}, files);
+  assert.notEqual(page.status, 0, 'a page named in nav compiles');
+  assert.match(page.stdout, /a free-form page places itself/);
 });

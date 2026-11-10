@@ -1186,6 +1186,11 @@
   .dash-area[hidden] {
     display: none;
   }
+  /* A free-form page that draws its own head (`head: false`, or bare) starts at the top of the pane: the gap a head
+     leaves above its section is the page's to make, and no look puts one back. */
+  .free-page-body.is-own > .page-section {
+    padding-top: 0;
+  }
   /* A section's page-row basis (100%) is a width in a row and would be a height in a column. */
   .dash-area > .page-section {
     flex: 0 0 auto;

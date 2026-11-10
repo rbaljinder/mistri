@@ -167,6 +167,43 @@ export default definePage({ label: String(typeof process === 'object' && process
     );
   });
 
+  test('page-nav: a public page that says nothing of nav stays off the signed-in menu; nav still places it', () => {
+    const page = (fields: Record<string, unknown>) => ({
+      key: 'kiosk',
+      module: './pages/kiosk.page.tsx',
+      fields: { label: 'Kiosk', reads: ['desk'], public: true, ...fields },
+    });
+    const nav = { ...APP, nav: ['tickets'] };
+    assert.deepEqual(placePages(nav, [page({})], 'desk').nav, ['tickets']);
+    // With no nav at all, the page is not refused for having nowhere to stand.
+    const { nav: _nav, ...noNav } = APP as Record<string, unknown>;
+    assert.equal(placePages(noNav, [page({})], 'desk').nav, undefined);
+    assert.deepEqual(placePages(nav, [page({ nav: {} })], 'desk').nav, ['tickets', 'kiosk']);
+    // A page that is not public is placed as it was.
+    assert.deepEqual(placePages(nav, [page({ public: undefined })], 'desk').nav, ['tickets', 'kiosk']);
+  });
+
+  test('page-nav: position is an index into the siblings as they stand when the page is placed, in path order', () => {
+    const at = (key: string, position: number) => ({
+      key,
+      module: `./pages/${key}.page.tsx`,
+      fields: { label: key, reads: ['desk'], nav: { position } },
+    });
+    const groups = {
+      ...APP,
+      nav: [
+        { id: 'a', label: 'A', children: [] },
+        { id: 'b', label: 'B', children: [] },
+      ],
+    };
+    // Each group is one sibling; a page placed before another counts among the siblings of the next.
+    const placed = placePages(groups, [at('one', 0), at('two', 1), at('three', 9)], 'desk').nav as Array<string | { id: string }>;
+    assert.deepEqual(
+      placed.map((node) => (typeof node === 'string' ? node : node.id)),
+      ['one', 'two', 'a', 'b', 'three'],
+    );
+  });
+
   test('page-nav: a page placed where nav has no group, or named in nav as well as placing itself', () => {
     const page = (nav: unknown) => ({
       key: 'walk',
@@ -521,7 +558,7 @@ describe('what the App records of its pages', () => {
     const text = commandTypes({}, 'Desk', './commands.ts', ['board', 'lobby']);
     assert.match(text, /export type Loaders = typeof import\("\.\/commands\.ts"\)\.loaders;/);
     assert.match(text, /export type PagePaths = "board" \| "lobby";/);
-    assert.match(text, /interface Register { commands: Commands; loaders: Loaders; pagePaths: PagePaths }/);
+    assert.match(text, /interface Register { commands: Commands; loaders: Loaders; pagePaths: PagePaths; pageLoaders: PageLoaders }/);
     assert.doesNotMatch(commandTypes({}, 'Desk'), /Loaders|PagePaths/);
     /* A record's tab is a page path no link names: it is opened on its record, never as a place of its own. */
     assert.match(
@@ -529,7 +566,10 @@ describe('what the App records of its pages', () => {
       /export type PagePaths = "board";/,
     );
     /* An App with pages and no commands module names its pages alone, so its command names stay unjudged rather than none. */
-    assert.match(commandTypes(undefined, 'Desk', undefined, ['board']), /interface Register { pagePaths: PagePaths }/);
+    assert.match(
+      commandTypes(undefined, 'Desk', undefined, ['board']),
+      /interface Register { pagePaths: PagePaths; pageLoaders: PageLoaders }/,
+    );
   });
 });
 

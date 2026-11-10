@@ -39,7 +39,8 @@ export function unofferedCommandWarnings(
     return [
       `command "${id}" names a record and no action, form, import or API exposure offers it [command-unoffered]: ` +
         `preparing it is refused with 403 forbidden. Offer it on "${command.target}" ` +
-        `(actions: [action('…', { command: '${id}' })]), expose it in api.commands, or take it out of the registry.`,
+        `(actions: [action('…', { command: '${id}', header: false })] keeps it off the record's bar), list it in a page's commands, ` +
+        `expose it in api.commands, or take it out of the registry.`,
     ];
   });
 }

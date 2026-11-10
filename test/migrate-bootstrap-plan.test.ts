@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { bootstrapApp, mistri } from './support/bootstrapApp.js';
@@ -111,4 +111,16 @@ test('--json is for the plan alone', (t) => {
   const run = mistri(['migrate', 'status', '--json'], app, quiet(dir));
   assert.equal(run.code, 1);
   assert.match(run.stderr, /--json is for status, up and validate with --app/);
+});
+
+test('a type error in the App is said as one, with its first line, not as a schema the App no longer fits', (t) => {
+  const { dir, app } = bootstrapApp(t);
+  // The project installs TypeScript, as the quickstart does: the typecheck reads only the project's.
+  mkdirSync(join(app, 'node_modules'));
+  symlinkSync(join(process.cwd(), 'node_modules', 'typescript'), join(app, 'node_modules', 'typescript'), 'dir');
+  writeFileSync(join(app, 'broken.ts'), "export const wrong: number = 'x';\n");
+  const run = mistri(['migrate', 'up', '--app', '.', '--jobs', 'jobs.mjs'], app, quiet(dir));
+  assert.notEqual(run.code, 0, run.said);
+  assert.match(run.said, /the App's typecheck failed \(first error: \S+:\d+:\d+\s+TS\d+/);
+  assert.doesNotMatch(run.said, /no longer fits the schema/);
 });

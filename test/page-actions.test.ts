@@ -145,7 +145,7 @@ describe('what a page declares of its actions, held to the App', () => {
 
   test("the generated types name the App's fixed actions for a page", () => {
     const text = commandTypes(undefined, 'Repairs', undefined, ['board'], ['startVisit', 'finishJob']);
-    assert.match(text, /interface Register { pagePaths: PagePaths; actions: ActionNames }/);
+    assert.match(text, /interface Register { pagePaths: PagePaths; pageLoaders: PageLoaders; actions: ActionNames }/);
     assert.match(text, /export type ActionNames = "finishJob" \| "startVisit";/);
     // An App with no page has nothing to name them for.
     assert.doesNotMatch(commandTypes(undefined, 'Repairs', undefined, [], ['startVisit']), /ActionNames/);

@@ -29,7 +29,7 @@ import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { Registry, redact } from '@mistriwork/engine/server/connections.js';
 import { presentationOf } from '../cli/apps.js';
-import { appRoutes, appThemeProblems, loadApp, saidByMessage, type LoadedApp } from '../app/apps.js';
+import { appRoutes, appThemeProblems, besideCommands, loadApp, loadAppCommands, saidByMessage, type LoadedApp } from '../app/apps.js';
 import { BUILD_MANIFEST } from '../app/appBuild.js';
 import { authorityLockProblem } from '../app/authorityLock.js';
 import { staleSkillWarning } from '../cli/agentInit.js';
@@ -232,9 +232,20 @@ function appCommandTypes(loaded: LoadedApp, appDir: string): string | undefined 
         Object.entries(loaded.app.views).flatMap(([key, view]) => (isFormView(view) ? [[key, view.command.id]] : [])),
       ),
       views: Object.entries(loaded.app.views).flatMap(([key, view]) => ('sections' in view && view.page ? [] : [key])),
+      pageLoaders: Object.fromEntries(
+        Object.entries(loaded.app.views).flatMap(([key, view]) =>
+          'sections' in view && view.page?.loader ? [[key, view.page.loader]] : [],
+        ),
+      ),
     },
   );
 }
+
+/** Apps read for their data half only, their views refused (`partial` in the check run): their views are not known. */
+const partialApps = new WeakSet<LoadedApp>();
+/** What a generated file registers: `commands`, `pagePaths`, `views`… */
+const registered = (text: string): string[] =>
+  [...(/interface Register \{([^}]*)\}/.exec(text)?.[1] ?? '').matchAll(/(\w+):/g)].map((match) => match[1]);
 
 /** The commands half of step 1: mistri-commands.d.ts rewritten when the commands module says otherwise. */
 async function commandTypesFile(loaded: LoadedApp | undefined, appDir: string, write: boolean): Promise<string | undefined> {
@@ -243,6 +254,12 @@ async function commandTypesFile(loaded: LoadedApp | undefined, appDir: string, w
   const file = join(appDir, COMMAND_TYPES);
   const existing = await readFile(file, 'utf8').catch(() => undefined);
   if (existing === types) return `${COMMAND_TYPES} matches the commands module`;
+  /* An App whose views were refused is read without them, so its pages, views and forms are not known: what the
+     file says of them stands until the App loads, rather than being written away with the commands refreshed. */
+  if (existing !== undefined && partialApps.has(loaded)) {
+    const kept = new Set(registered(types));
+    if (registered(existing).some((name) => !kept.has(name))) return `${COMMAND_TYPES} is left as it is until the App's views load`;
+  }
   if (!write) return existing === undefined ? `the App has no ${COMMAND_TYPES} yet` : `${COMMAND_TYPES} is older than the commands module`;
   await writeFile(file, types);
   return existing === undefined
@@ -1167,6 +1184,17 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
         // Said once, by the validation step, in mistri check's own words.
         if (error instanceof AppProblems && error.partial && manifest) {
           partial = { path: manifest, dir: appDir, app: error.partial as AppDef, pages: [], sources: {} };
+          partialApps.add(partial);
+          /* The commands module is its own file, read whether or not the definition parses: an unrelated refusal
+             (a page, a nav entry) must not leave mistri-commands.d.ts stale and turn the next typecheck into a
+             screen of errors about commands that exist. */
+          try {
+            const given = opts.commands ?? besideCommands(appDir);
+            const read = await loadAppCommands(given, appDir);
+            if (read) partial.commands = { file: read.file, registry: read.registry };
+          } catch {
+            // A commands module that does not load is the validation step's to say.
+          }
         }
       }
     };

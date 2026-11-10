@@ -69,14 +69,20 @@ export type LoaderData<L extends string> = [Loaders] extends [never]
 /* A page's props live here rather than beside definePage: @mistriwork/mistri/page types its house controls from
    @mistriwork/ui, which in a checkout is .tsx source, so the generated mistri-components.d.ts importing from there
    failed the typecheck (TS6142) of an App whose tsconfig sets no jsx. ui.d.ts reaches only react. */
-/** What a page's component is drawn with: the result of the loader it names (`PageProps<'pickWalk'>`), and its placement's props. */
-export interface PageProps<L extends string = never> {
+/** What a page's component is drawn with, by the loader it names: the shape `definePage` holds a component to. */
+export interface LoaderPageProps<L extends string = never> {
   data: [L] extends [never] ? null : LoaderData<L>;
   /** Runs the loader again and draws its new result as `data`. A command the page runs that commits does this itself;
       this is for a change the page did not make (a timer, a scan that arrived, a save somewhere else). */
   refresh: () => void;
   props: Readonly<Record<string, unknown>>;
 }
+
+type PageLoaders = Register extends { pageLoaders: infer V } ? V : never;
+type LoaderOf<N extends string> = [PageLoaders] extends [never] ? string : N extends keyof PageLoaders ? Extract<PageLoaders[N], string> : never;
+/** What a page's component is drawn with, keyed by the page's own path (`pages/pick-walk.page.tsx` is
+    `PageProps<'pick-walk'>`): its loader's result as `data`, whatever the loader is called, and its placement's props. */
+export type PageProps<N extends ([PageLoaders] extends [never] ? string : keyof PageLoaders & string) = never> = LoaderPageProps<[N] extends [never] ? never : LoaderOf<N>>;
 
 /** One row as a component receives it: keyed by the paths it declared, each typed from the generated rows where the path is a column. */
 type Cell<Row, P> = Row extends object ? (P extends keyof Row ? Row[P] : unknown) : unknown;
@@ -195,7 +201,7 @@ export type ToneName = 'good' | 'warn' | 'bad' | 'info' | 'neutral';
     writes it (`bar: 5` fills against 5). */
 export type ValueDisplay = import('./app.js').Plain<import('./app.js').AppDisplayRule>;
 
-/** One box: a hairline and the surface. A card inside a card draws as a plain group. */
+/** One box: a hairline and the surface. A card inside a card, or a Stat inside one, draws as a plain group. */
 export declare function Card(props: Children & { title?: ReactTypes.ReactNode; className?: string }): ReactTypes.ReactElement;
 /** Children one under another: a field's 20px apart (default), a section's 40px, or tight. */
 export declare function Stack(props: Children & { gap?: Gap; as?: 'div' | 'ul' | 'ol'; className?: string }): ReactTypes.ReactElement;

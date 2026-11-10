@@ -141,7 +141,10 @@ export function publicFormProblems(app: AppDef, registry: BusinessCommandRegistr
     if (!isPublicCommandPage(view)) continue;
     for (const id of view.page.commands) {
       const command = Object.hasOwn(registry, id) ? registry[id] : undefined;
-      const problem = command?.public === true && publicPickerProblem(app, id, command, schema, 'a public page');
+      if (command?.public !== true) continue;
+      /* Its reply reaches a signed-out visitor through the same door as a form's (formHttp.ts), so it answers the
+         same: a reference and, at most, fixed words. */
+      const problem = publicPickerProblem(app, id, command, schema, 'a public page') || publicOutputProblem(id, command, 'submit');
       if (problem) return `Page "${key}": ${problem}`;
     }
   }

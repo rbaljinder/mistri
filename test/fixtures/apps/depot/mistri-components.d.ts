@@ -13,7 +13,7 @@ export type BinMapProps = SectionProps<{ component: { props: {  } }; rows: { bin
 export type PagePickBoardProps = PageProps;
 
 /** The props of the page "page-pick-walk". */
-export type PagePickWalkProps = PageProps<"pickWalk">;
+export type PagePickWalkProps = PageProps<"pick-walk">;
 
 /** The props of the page "page-product-gallery". */
 export type PageProductGalleryProps = PageProps;

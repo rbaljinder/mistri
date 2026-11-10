@@ -167,6 +167,16 @@ export interface UiRowsQuery extends UiReadState {
 
 const ROWS_LIMIT = 20;
 
+/* A row remembers the resource it was read from, out of sight (not a key, never in a spread or a JSON), so a button on
+   it names its row by that resource's title whether or not the page wraps the row in a List or a Scope. */
+const ROW_RESOURCE = Symbol.for('mistri.row.resource');
+function rowOf<R extends object>(resource: string, row: R): R {
+  if (!Object.hasOwn(row, ROW_RESOURCE)) Object.defineProperty(row, ROW_RESOURCE, { value: resource });
+  return row;
+}
+/** The resource a row was read from (`useRows`), where it was read that way. */
+export const resourceOfRow = (row: object): string | undefined => (row as { [ROW_RESOURCE]?: string })[ROW_RESOURCE];
+
 /**
  * Rows of one App resource: `useRows('pay_run', { query: 'status = review', show: ['title', 'net_total'], sort: 'pay_date desc', limit: 12 })`.
  * The first `limit` rows (20 unless said); `page.hasMore` says whether the server holds more, and `more()` reads them.
@@ -191,7 +201,7 @@ export function useRows(
     enabled,
   });
   const pages = query.data?.pages;
-  const data = useMemo(() => pages?.flatMap((one) => one.rows), [pages]);
+  const data = useMemo(() => pages?.flatMap((one) => one.rows).map((row) => rowOf(resource, row)), [pages, resource]);
   const total = pages?.[pages.length - 1]?.total;
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
   const more = useCallback(() => {

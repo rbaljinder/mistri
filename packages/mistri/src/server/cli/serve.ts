@@ -57,6 +57,7 @@ import { apiReadLifetimes, commandOperations, createApp } from '../http/server.j
 import type { StartupApps } from './apps.js';
 import { unsweptBuckets } from '../files/fileStorage.js';
 import { openBrowser } from '@mistriwork/engine/server/cli/browser.js';
+import { DEV_CHANGED_EXIT, DEV_SUPERVISED_ENV } from './devSupervisor.js';
 import { DEFAULT_SHUTDOWN_TIMINGS, shutdownTimings, type Options } from '@mistriwork/engine/server/cli/args.js';
 import type { StartupConfig } from '@mistriwork/engine/server/cli/config.js';
 import { readinessOf, type CommandHost } from './commandHost.js';
@@ -907,6 +908,12 @@ export async function startServing(
                (reloadApp), rather than serving either authority. */
                       host.unavailable = candidate.unavailable;
                       console.error(`App error: ${host.loadError}`);
+                      /* Under `mistri dev` this process is a child (devSupervisor.ts): it retires and its parent starts
+                         it again with the new authority, where a person would otherwise restart it by hand. */
+                      if (opts.dev && process.env[DEV_SUPERVISED_ENV] === '1') {
+                        console.error("mistri dev: the App's authority changed; starting it again…");
+                        void exit(DEV_CHANGED_EXIT);
+                      }
                       return;
                     }
                     // The loader's own message names the file and the fix.

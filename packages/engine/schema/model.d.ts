@@ -216,6 +216,8 @@ export interface AppFormCommandReference {
   /** Its signed-in form prepares its starting values as it opens: the command declares `initial`, or an input starts
       as the reader (`default: me`). */
   prepares?: true;
+  /** What its form and button are called (`defineCommand({ label })`); left out, the client says the command's name as words. */
+  label?: string;
 }
 
 export interface AppUpdateAction<Label extends string | AppMessageRef = string> {

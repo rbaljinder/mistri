@@ -374,6 +374,9 @@ export interface CommandDefinition<
   readonly rules?: readonly { readonly must: string; readonly when?: string; readonly message: string }[];
   /** A feature condition, additional to all ordinary command and row permissions. */
   readonly enabledBy?: CommandFlagGate;
+  /** What its form and button are called, where the name said as words is not it (`reschedule` is "Reschedule"): the
+      same `label` an action and a view carry. A public command's returned `message` is what its visitor is told. */
+  readonly label?: string;
   /**
    * The rule the declaration cannot state, over the parsed input, before any
    * transaction: a synchronous function (`refuse('invalid_input', 'field')`,
@@ -458,6 +461,7 @@ export interface BusinessCommand<Input, Output, I extends CommandInput = Command
   /** Rules over the whole draft, judged after the input's own and before `validate` (CommandRule). */
   readonly rules?: readonly DraftRule[];
   readonly enabledBy?: CommandFlagGate;
+  readonly label?: string;
   readonly validate?: CommandValidate<I, Input>;
   initial?(context: BusinessCommandInitialContext): CommandInitialOf<I> | Promise<CommandInitialOf<I>>;
   availability?(context: BusinessCommandAvailabilityContext): readonly boolean[] | Promise<readonly boolean[]>;
@@ -640,6 +644,7 @@ const definitionKeys = new Set([
   'handle',
   'availability',
   'enabledBy',
+  'label',
 ]);
 const fail = (message: string): never => {
   throw new BusinessCommandDefinitionError(message);
@@ -1124,6 +1129,8 @@ export function defineCommand<
   if (Object.hasOwn(value, 'snapshot') && value.snapshot !== true)
     fail('Command snapshot is true, or left out: a command reads one snapshot only when it asks to.');
   const when = Object.hasOwn(value, 'when') ? whenOption(value.when) : undefined;
+  if (Object.hasOwn(value, 'label') && (typeof value.label !== 'string' || !value.label.trim() || value.label.length > 120))
+    fail('Command label is text of 1 to 120 characters: what its form and button are called.');
   let enabledBy: CommandFlagGate | undefined;
   if (Object.hasOwn(value, 'enabledBy')) {
     try {
@@ -1177,6 +1184,7 @@ export function defineCommand<
     ...(when === undefined ? {} : { when }),
     ...(rules === undefined ? {} : { rules }),
     ...(enabledBy === undefined ? {} : { enabledBy }),
+    ...(typeof value.label === 'string' ? { label: value.label.trim() } : {}),
     ...(Object.hasOwn(value, 'validate') ? { validate: value.validate as BusinessCommand<Input, Output, I>['validate'] } : {}),
     ...(Object.hasOwn(value, 'initial') ? { initial: value.initial as BusinessCommand<Input, Output, I>['initial'] } : {}),
     ...(Object.hasOwn(value, 'availability')

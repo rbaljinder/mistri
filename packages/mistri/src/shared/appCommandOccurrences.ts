@@ -60,3 +60,18 @@ export function appCommandOccurrences(app: Pick<AppDef, 'resources' | 'views'>):
   }
   return Object.freeze(occurrences);
 }
+
+/**
+ * The commands a free-form page (or a surface) declares it runs. A page's declaration is an offer of its own: the
+ * page draws the button, so a targeted command it names needs no action to be prepared, and the role grants still
+ * decide who may run it.
+ */
+export function pageCommandIds(app: Pick<AppDef, 'views' | 'surfaces'>): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const view of Object.values(app.views ?? {})) {
+    const commands = (view as { page?: { commands?: readonly string[] } }).page?.commands;
+    for (const id of commands ?? []) ids.add(id);
+  }
+  for (const surface of Object.values(app.surfaces ?? {})) for (const id of surface.commands ?? []) ids.add(id);
+  return ids;
+}

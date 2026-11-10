@@ -103,6 +103,7 @@ export function appCommandCatalog(registry: BusinessCommandRegistry, app: Pick<A
         input: command.fields,
         ...(command.rules?.length ? { rules: command.rules } : {}),
         ...(formPrepares(command) ? { prepares: true as const } : {}),
+        ...(command.label === undefined ? {} : { label: command.label }),
       }),
     ]),
   );
@@ -144,6 +145,7 @@ export function unformedCommands(
       ...(command.enabledBy ? { enabledBy: { flag: command.enabledBy.flag, is: command.enabledBy.is } } : {}),
       input: structuredClone(command.fields) as AppFormCommandReference['input'],
       ...(formPrepares(command) ? { prepares: true as const } : {}),
+      ...(command.label === undefined ? {} : { label: command.label }),
     };
   }
   return served;
@@ -167,6 +169,7 @@ export function publicPageCommands(
         id,
         version: command.version,
         input: structuredClone(command.fields) as AppFormCommandReference['input'],
+        ...(command.label === undefined ? {} : { label: command.label }),
         ...(command.rules?.length ? { rules: structuredClone(command.rules) as AppFormCommandReference['rules'] } : {}),
       };
     }

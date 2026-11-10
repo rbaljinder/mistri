@@ -117,6 +117,25 @@ test('one discovery rule: dev <dir> and check --app <dir> find the same file, an
   ]);
 });
 
+test('the commands module beside the App is one line whichever command says the context (check, shot, dev, grade)', (t) => {
+  const folder = scratch(t);
+  const app = join(folder, 'beside');
+  mkdirSync(app);
+  writeFileSync(join(app, 'commands.ts'), '');
+  writeFileSync(join(app, 'mistri.json'), JSON.stringify({ app: { jobs: 'jobs.ts' }, connections: [] }));
+  writeFileSync(join(app, 'jobs.ts'), '');
+  const here = process.cwd();
+  process.chdir(folder);
+  t.after(() => process.chdir(here));
+  applyProfile(['--app', 'beside'], { entries: ['commands', 'jobs', 'policy'] }, { XDG_CONFIG_HOME: join(folder, '.config') });
+  const lines = contextLines(projectContext());
+  assert.ok(
+    lines.some((line) => /^ {2}commands {2}\S*commands\.ts\s+convention$/.test(line)),
+    lines.join('\n'),
+  );
+  assert.ok(!lines.some((line) => /commands.*not named/.test(line)), lines.join('\n'));
+});
+
 test("a tenant App's policy named in the profile is its enrollment, and a profile without one is refused as before", (t) => {
   const folder = scratch(t);
   const without = join(folder, 'without');

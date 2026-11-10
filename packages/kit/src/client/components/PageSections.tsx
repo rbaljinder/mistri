@@ -546,8 +546,10 @@ export function Sections({
      become a tab strip only where the page says `listTabs: true` (or names
      tabs). A strip made on its own put two half-width lists in one
      full-width box. The Workbench's pages, built from the schema or by
-     drag, keep the strip unless they say `listTabs: false`. */
-  const autoTabs = inAppPage() ? page.listTabs === true : page.listTabs !== false;
+     drag, keep the strip unless they say `listTabs: false`. A record that has a page of the App's as a tab is the other
+     case: that tab joins the first strip, so with no word from the page its lists make one, rather than stack above a
+     tab standing alone at the bottom. */
+  const autoTabs = inAppPage() ? page.listTabs === true || (page.listTabs === undefined && pageTabs.length > 0) : page.listTabs !== false;
   /* The page an App infers for a record counts its tabs and ends them with the history (pageAnatomy.ts); a page an
      author wrote is drawn as written. */
   const inferred = isInferredPage(page, inAppPage());
@@ -591,7 +593,7 @@ export function Sections({
         return;
       }
       run = null;
-      if (listTabs && autoTabs && listRuns.has(i) && (listRuns.get(i) ?? 0) > 1) {
+      if (listTabs && autoTabs && listRuns.has(i) && (listRuns.get(i) ?? 0) >= (pageTabs.length ? 1 : 2)) {
         if (!strip) {
           strip = [];
           laid.push(

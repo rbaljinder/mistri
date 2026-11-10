@@ -12,9 +12,10 @@
  * dialog, so the density zoom cannot throw it a room away from its trigger
  * and a dialog's focus trap keeps it as its own.
  */
-import { isValidElement, useRef, type ReactNode } from 'react';
+import { isValidElement, useContext, useRef, type ReactNode } from 'react';
 import { Popover as BasePopover } from '@base-ui/react/popover';
 import { layoutViewport, zoomAnchor } from './internal/anchor.js';
+import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { popupContainer, useDialogContainer } from './internal/popups.js';
 
 export interface PopoverProps {
@@ -36,6 +37,8 @@ export function Popover({ trigger, children, open, defaultOpen, onOpenChange, cl
   const triggerElement = isValidElement(trigger) ? trigger : <button type="button">{trigger}</button>;
   const anchor = useRef<HTMLButtonElement>(null);
   const container = useDialogContainer(anchor);
+  /* The layer is drawn outside the page that opened it; the page's scope goes with it (Modal.tsx). */
+  const componentScope = useContext(ComponentStyleScope);
   return (
     <BasePopover.Root open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
       <BasePopover.Trigger className="ui-popover-trigger" render={triggerElement} ref={anchor} />
@@ -47,7 +50,11 @@ export function Popover({ trigger, children, open, defaultOpen, onOpenChange, cl
           collisionBoundary={layoutViewport()}
           collisionPadding={8}
         >
-          <BasePopover.Popup className={['ui-popover', className].filter(Boolean).join(' ')} aria-label={ariaLabel}>
+          <BasePopover.Popup
+            data-component={componentScope}
+            className={['ui-popover', className].filter(Boolean).join(' ')}
+            aria-label={ariaLabel}
+          >
             {children}
           </BasePopover.Popup>
         </BasePopover.Positioner>

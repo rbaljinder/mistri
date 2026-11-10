@@ -8,7 +8,7 @@
  *     component: PickWalk,
  *   });
  *   export default page;
- *   function PickWalk({ data }: PageProps<'pickWalk'>): ReactNode {
+ *   function PickWalk({ data }: PageProps<'pick-walk'>): ReactNode {
  *     const [list, setList] = page.useParam('list');
  *     const lists = page.useRows('pick_list', { show: ['id', 'reference'], where: { status: 'to_pick' } });
  *     …
@@ -51,6 +51,7 @@ import type {
   CommandReview,
   CommandRunOptions,
   CommandUnavailable,
+  LoaderPageProps,
   PageProps,
   UiQuery,
   UiRefusable,
@@ -350,7 +351,7 @@ export interface PageDefinition<
   K extends { readonly [N in P]?: ParamKind } = { readonly [N in P]: 'text' },
   F extends string = never,
 > {
-  (props: PageProps<L>): ReactTypes.ReactNode;
+  (props: LoaderPageProps<L>): ReactTypes.ReactNode;
   readonly definition: { readonly label: string | AppMessageRef; readonly reads: readonly R[]; readonly commands?: readonly C[];
     readonly actions?: readonly A[]; readonly forms?: readonly F[]; readonly params?: readonly P[] | K; readonly loader?: L };
   /** Rows of one of the page's reads, each typed by what `show` names:
@@ -505,7 +506,7 @@ export declare function definePage<
       `{ class: 'id', day: 'date', view: ['list', 'board'] }`. */
   params?: PD & LowercaseNames<PD>;
   loader?: L;
-  component: (props: PageProps<L>) => ReactTypes.ReactNode;
+  component: (props: LoaderPageProps<L>) => ReactTypes.ReactNode;
 }): PageDefinition<R, C, ParamNames<PD>, L, A, ParamKinds<PD>, F>;
 
 /** A surface as `defineSurface` makes it: its declaration, typed to the App, for the server to read and a front end's types to follow. */
