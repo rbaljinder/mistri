@@ -74,7 +74,8 @@ import { physicalRowScope } from './tenantReadScope.js';
 import { bindTenantInboxStore } from './tenantInbox.js';
 import { bindTenantBrandingStore } from './tenantBrandingStore.js';
 import { bindTenantReadAuditStore } from './tenantReadAudit.js';
-import type { ReadAuditQuery, ReadAuditRow, StoredReadAudit } from '../../adapters/readAudit/readAudit.js';
+import { assertReadAuditRow, type ReadAuditQuery, type ReadAuditRow, type StoredReadAudit } from '../../adapters/readAudit/readAudit.js';
+import { groupCommit } from '../../adapters/readAudit/groupCommit.js';
 import { assertBrandingWrite, type BrandingWrite } from '../../adapters/branding/branding.js';
 
 /* A writer an uncertain outcome closed is reopening itself (tenantWriterLifecycle.ts). What it turns away meanwhile
@@ -112,7 +113,7 @@ export interface TenantWriteSource extends TenantWriteMethods {
   /** Save one tenant's branding and the logo it names, on the writer's queue
    * and in one transaction; returns the new revision (adapters/branding). */
   writeBranding(write: BrandingWrite): Promise<number>;
-  /** One read audit row, its own statement on the writer's queue (tenantReadAudit.ts); the row names its tenant. */
+  /** One read audit row, durable once the batch it joined is written on the writer's queue (tenantReadAudit.ts); the row names its tenant. */
   appendReadAudit(row: ReadAuditRow): Promise<void>;
   /** The read audit, as the host reads it for one tenant: the deployment names the tenant, never the caller. */
   readReadAudit(query: ReadAuditQuery): Promise<StoredReadAudit[]>;
@@ -627,15 +628,18 @@ export async function openSqliteTenantWriteSource(
       return queue.run(() => appStoresOf(life.handle()).writeBranding(captured));
     };
     const inboxMail = queuedInboxMail(mailOf(life.handle), (work) => queue.run(work), closing);
+    /* A batch of rows is one place in the queue (../../adapters/readAudit/groupCommit.ts): a page's reads wait
+       behind the writes ahead of them once, not once each. */
+    const auditBatch = groupCommit<ReadAuditRow>((rows) => queue.run(() => appStoresOf(life.handle()).appendReadAudits(rows)));
     const appendReadAudit = (row: ReadAuditRow): Promise<void> => {
       let captured: ReadAuditRow;
       try {
         if (closing()) return paused();
-        captured = captureTenantData(row);
+        captured = assertReadAuditRow(captureTenantData(row));
       } catch (error) {
         return Promise.reject(tenantWriteFailed('not_applied', error));
       }
-      return queue.run(() => appStoresOf(life.handle()).appendReadAudit(captured));
+      return auditBatch(captured);
     };
     const readReadAudit = (query: ReadAuditQuery): Promise<StoredReadAudit[]> => {
       let captured: ReadAuditQuery;
@@ -1070,15 +1074,17 @@ export async function openPostgresTenantWriteSource(
       return queue.run([], () => appStoresOf(life.handle()).writeBranding(captured));
     };
     const inboxMail = queuedInboxMail(mailOf(life.handle), (work) => queue.run([], work), closing);
+    /* One writer checkout for a batch of rows (../../adapters/readAudit/groupCommit.ts), not one for each read. */
+    const auditBatch = groupCommit<ReadAuditRow>((rows) => queue.run([], () => appStoresOf(life.handle()).appendReadAudits(rows)));
     const appendReadAudit = (row: ReadAuditRow): Promise<void> => {
       let captured: ReadAuditRow;
       try {
         if (closing()) return paused();
-        captured = captureTenantData(row);
+        captured = assertReadAuditRow(captureTenantData(row));
       } catch (error) {
         return Promise.reject(tenantWriteFailed('not_applied', error));
       }
-      return queue.run([], () => appStoresOf(life.handle()).appendReadAudit(captured));
+      return auditBatch(captured);
     };
     const readReadAudit = (query: ReadAuditQuery): Promise<StoredReadAudit[]> => {
       let captured: ReadAuditQuery;

@@ -31,7 +31,7 @@ import { createPostgresApiCommandHttp } from '../api/postgresApiCommandHttp.js';
 import { apiAdmission } from '../api/apiHttpAdmission.js';
 import { createApiPublicSpec, renderAppApiOpenApi } from '../api/apiPublicSpec.js';
 import { createAppMcpHttp } from '../api/appMcpHttp.js';
-import { READ_NOT_RECORDED, ReadAuditFailed } from '../readAudit.js';
+import { ReadAuditFailed, readAuditRefusal } from '../readAudit.js';
 import {
   postgresAppMcpCommands,
   postgresAppMcpReads,
@@ -408,11 +408,16 @@ export function createApp(options: {
     /* A command's outcome is its own record: it keeps its report even when
        its client left, in the shape its client reads. */
     failed: (err, req, res, url) => {
-      /* A read of an audited resource whose row could not be written: nothing it read leaves, and the same fixed words
-         leave as the tenant host's (tenantHttp.ts), never why (readAudit.ts). */
+      /* A read of an audited resource whose row could not be written: nothing it read leaves, and the same words
+         leave as the tenant host's (tenantHttp.ts), never why: busy with Retry-After when the pool lent the row no
+         writer, else read_not_recorded (readAudit.ts readAuditRefusal). */
       if (err instanceof ReadAuditFailed) {
-        if (!res.headersSent) res.setHeader('cache-control', 'no-store');
-        send(res, 503, READ_NOT_RECORDED);
+        const refusal = readAuditRefusal(err);
+        if (!res.headersSent) {
+          res.setHeader('cache-control', 'no-store');
+          if (refusal.retryAfter !== undefined) res.setHeader('retry-after', String(refusal.retryAfter));
+        }
+        send(res, 503, refusal.body);
         return true;
       }
       /* A headless App's request that named no surface, found where its App was resolved (surfaceGate.ts). */

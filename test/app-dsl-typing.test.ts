@@ -552,6 +552,37 @@ test("a page's controls are held to its params and reads, and layout is 'bare' o
   assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
 });
 
+test("a List's and a useRows read's rows carry the resource's key beside what show names", () => {
+  const compiled = compile(`
+    import type {} from './mistri-schema.js';
+    import { definePage, List } from '@mistriwork/mistri/page';
+    const page = definePage({ label: 'Board', reads: ['ticket'], component: () => null });
+    export default page;
+    export function Rows() {
+      const rows = page.useRows('ticket', { show: ['subject'] });
+      const first = rows.data?.[0];
+      if (first) {
+        const id: unknown = first.id;
+        const subject: string | null = first.subject;
+        // @ts-expect-error A column neither shown nor the key is not there.
+        first.status;
+        return [id, subject];
+      }
+      return List({
+        from: 'ticket',
+        show: ['subject'],
+        children: (row) => {
+          const id: unknown = row.id;
+          // @ts-expect-error A column neither shown nor the key is not there.
+          row.status;
+          return String(id) + row.subject;
+        },
+      });
+    }
+  `);
+  assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+});
+
 test("a page's label and description take msg(), as a view's caption does", () => {
   const compiled = compile(`
     import type {} from './mistri-schema.js';

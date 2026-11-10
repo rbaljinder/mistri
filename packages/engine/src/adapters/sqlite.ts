@@ -201,6 +201,7 @@ export class SqliteAdapter implements Adapter {
       file: () => this.file,
       closed: () => this.closed,
       assertWriteIdentity: () => this.assertWriteIdentity(),
+      assertIndependentWrite: () => assertIndependentWrite(),
       journalTransaction: (journal, run, options) => this.journalTransaction(journal, run, options),
     });
   }

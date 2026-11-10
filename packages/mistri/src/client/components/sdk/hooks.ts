@@ -179,7 +179,7 @@ export const resourceOfRow = (row: object): string | undefined => (row as { [ROW
 
 /**
  * Rows of one App resource: `useRows('pay_run', { query: 'status = review', show: ['title', 'net_total'], sort: 'pay_date desc', limit: 12 })`.
- * The first `limit` rows (20 unless said); `page.hasMore` says whether the server holds more, and `more()` reads them.
+ * Each row carries its resource's key columns beside `show`. The first `limit` rows (20 unless said); `page.hasMore` says whether the server holds more, and `more()` reads them.
  */
 export function useRows(resource: string, options: UiRowsOptions & { enabled?: boolean; optional: true }): UiRowsQuery & UiRefusable;
 export function useRows(resource: string, options?: UiRowsOptions & { enabled?: boolean; optional?: false }): UiRowsQuery;
@@ -190,7 +190,9 @@ export function useRows(
   const host = useUiHost();
   const declared = useDeclared(resource);
   const { enabled = true, optional = false, offset: _offset, ...rest } = options;
-  const asked = declared ? { ...rest, page: declared } : rest;
+  /* A row always carries its key columns beside `show`, as a `List`'s do: whether `row.id` is there never depends on
+     what `show` happened to name. The read is the reader's own, so no column is widened past what `show` could name. */
+  const asked = declared ? { ...rest, keys: true, page: declared } : { ...rest, keys: true };
   const limit = rest.limit ?? ROWS_LIMIT;
   const query = useInfiniteQuery({
     queryKey: ['mistri-ui', 'rows', ...host.scope, resource, asked],

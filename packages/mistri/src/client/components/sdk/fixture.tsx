@@ -541,7 +541,7 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
       const row = (data.tables[resource] ?? []).find((candidate) =>
         Object.entries(key).every(([column, value]) => candidate[column] === value),
       );
-      return row && pick(row, show);
+      return row && pick(row, show?.length ? [...new Set([...show, ...Object.keys(key)])] : show);
     },
     breakdown: async (resource, { by, measure, limit }) => {
       refuse(resource);

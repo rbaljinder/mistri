@@ -170,8 +170,11 @@ const pageHost: UiHost = {
   },
   async record(resource, key, show, asking = {}) {
     const table = tableOf(resource);
-    const where = (primaryKey(table) as string[]).map((column) => `${column} = ${quote(String(key[column]))}`).join(' and ');
-    return (await viewRows(table, show, where, 1, asking.page))[0];
+    const keyed = primaryKey(table) as string[];
+    const where = keyed.map((column) => `${column} = ${quote(String(key[column]))}`).join(' and ');
+    /* The key rides beside `show`, as a read's rows carry it: the record's type says it is there. */
+    const paths = show?.length ? [...new Set([...show, ...keyed])] : show;
+    return (await viewRows(table, paths, where, 1, asking.page))[0];
   },
   async breakdown(resource, { by, measure, query, limit, page }) {
     const table = tableOf(resource);

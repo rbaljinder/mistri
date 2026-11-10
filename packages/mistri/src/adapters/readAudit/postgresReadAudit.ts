@@ -180,17 +180,22 @@ export async function provisionPostgresReadAudit(url: string): Promise<{ version
   });
 }
 
+const COLUMNS = 11;
+
 /**
- * One row, on its own statement: a read has no transaction to ride, and the
- * row must be durable before the rows it names leave the server.
+ * Rows gathered by a group commit (groupCommit.ts), in one INSERT: one
+ * statement, so they are written together or not at all, and every read they
+ * name is answered alike.
  */
-export async function appendPostgresReadAudit(client: PgQuery, row: ReadAuditRow, attested = false): Promise<void> {
-  assertReadAuditRow(row);
+export async function appendPostgresReadAudits(client: PgQuery, rows: readonly ReadAuditRow[], attested = false): Promise<void> {
+  for (const row of rows) assertReadAuditRow(row);
+  if (!rows.length) return;
   if (!attested && !(await postgresReadAuditReady(client))) throw new ReadAuditUnavailable(await layoutMessage(client));
+  const places = rows.map((_, at) => `(${Array.from({ length: COLUMNS }, (_, column) => `$${at * COLUMNS + column + 1}`).join(', ')})`);
   await client.query(
     `INSERT INTO ${q(log)} (at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-    [
+    VALUES ${places.join(', ')}`,
+    rows.flatMap((row) => [
       row.at,
       row.app,
       row.tenant,
@@ -202,7 +207,7 @@ export async function appendPostgresReadAudit(client: PgQuery, row: ReadAuditRow
       row.query ?? null,
       row.count ?? null,
       row.ids ?? null,
-    ],
+    ]),
   );
 }
 

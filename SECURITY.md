@@ -104,7 +104,9 @@ The database browser, in its own repository
   the one record read or the query with its count and up to 500 ids; it
   never holds a field value. A read whose row cannot be written is answered
   503 with the fixed `read_not_recorded` error (the same words in a single App
-  and a tenant App, no data and no cause), and a read of an audited table that came by no door the
+  and a tenant App, no data and no cause), or, when the pool lent the row no
+  writer in time, 503 `server_busy` with `Retry-After`, as any busy refusal is,
+  so a client asks again; either way nothing read leaves. A read of an audited table that came by no door the
   server knows is refused, so a route added later cannot read quietly. An
   App whose audited resource sits on a database without the store refuses
   to start and names `mistri migrate stores up`; startup never makes it. In

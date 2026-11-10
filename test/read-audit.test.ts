@@ -13,6 +13,7 @@ import { test } from 'node:test';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import type { QueryResult } from '../packages/engine/src/shared/reads.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
+import { POOL_BUSY_MESSAGE, PoolBusy } from '../packages/engine/src/adapters/poolMetrics.js';
 import { TenantUnavailableError } from '../packages/engine/src/server/evidence.js';
 import type { AppHost } from '../packages/mistri/src/server/app/apps.js';
 import type { Identity } from '../packages/mistri/src/server/auth/auth.js';
@@ -356,6 +357,25 @@ test('the tenant host says a read the audit could not record in the same words, 
   assert.equal(tenantReadRefusal(new TenantUnavailableError()).code, 'tenant_temporarily_unavailable');
 });
 
+test('the tenant host says a read whose row the pool lent no writer is the server busy, with when to ask again', () => {
+  const busy = new ReadAuditFailed('x', { cause: new Error('flush', { cause: new PoolBusy('write', 'queue_timeout') }) });
+  for (const error of [busy, new Error('wrapped', { cause: busy })]) {
+    const refusal = tenantReadRefusal(error);
+    assert.deepEqual(
+      { ...refusal, retryAfter: undefined },
+      { status: 503, code: 'server_busy', message: POOL_BUSY_MESSAGE, said: true, retryAfter: undefined },
+    );
+    assert.ok(Number(refusal.retryAfter) > 0, 'Retry-After is said');
+  }
+  /* A store error is still the fixed refusal, and says no Retry-After of its own. */
+  assert.deepEqual(tenantReadRefusal(new ReadAuditFailed('x', { cause: new Error('no such table') })), {
+    status: 503,
+    code: 'read_not_recorded',
+    message: READ_NOT_RECORDED.error,
+    said: true,
+  });
+});
+
 test("a tenant App's composed record page asks its related lists through the related door too", async () => {
   const column = (name: string, primaryKey = false) => ({ name, type: 'INTEGER', nullable: false, primaryKey });
   const schema = {
@@ -461,6 +481,31 @@ test('a row that cannot be written stops the read: 503, the fixed JSON refusal b
     assert.ok(!refused.text.includes('Sign-in'), 'no audited data in the body');
     const unaudited = await post('/api/query', { table: 'service', limit: 50 });
     assert.equal(unaudited.status, 200, 'an unaudited resource is not held hostage by the audit store');
+  });
+});
+
+test('a row the pool lent no writer is the server busy: 503 server_busy with Retry-After, which the client retries, and no data', async () => {
+  await fixture(async ({ registry, host, base }) => {
+    await ensureAppReadAudit(registry, host);
+    const { adapter } = await registry.open(connection);
+    /* The writer queue refuses as a full pool does (poolMetrics.ts), for the audit row's flush only: nothing else writes here. */
+    const own = adapter as unknown as { queueWrite: unknown };
+    own.queueWrite = () => Promise.reject(new PoolBusy('write', 'queue_timeout'));
+    try {
+      const refused = await fetch(`${base}/api/query`, {
+        method: 'POST',
+        headers: { Cookie: 'session=viewer', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ app: appId, table: 'incident', limit: 50 }),
+      });
+      const text = await refused.text();
+      assert.equal(refused.status, 503, text);
+      assert.deepEqual(JSON.parse(text), { error: POOL_BUSY_MESSAGE, code: 'server_busy' });
+      assert.ok(Number(refused.headers.get('retry-after')) > 0, 'Retry-After is said');
+      assert.equal(refused.headers.get('cache-control'), 'no-store');
+      assert.ok(!text.includes('Sign-in'), 'no audited data in the body');
+    } finally {
+      delete (own as { queueWrite?: unknown }).queueWrite;
+    }
   });
 });
 
@@ -704,6 +749,71 @@ test('what it costs: one statement for an audited read, none for an unaudited on
       assert.ok(!plain.statements.some((sql) => /__mistri_read_audit/.test(sql)));
     } finally {
       for (const release of releases.reverse()) release();
+    }
+  });
+});
+
+/** The writes an audited burst committed: a write transaction (BEGIN IMMEDIATE … COMMIT) that holds audit rows, or an audit row committed on its own. */
+function auditCommits(statements: readonly string[]): { inserts: number; commits: number } {
+  let inserts = 0;
+  let commits = 0;
+  let open: { rows: number } | undefined;
+  for (const sql of statements) {
+    if (/^\s*BEGIN IMMEDIATE\b/i.test(sql)) open = { rows: 0 };
+    else if (/^\s*(COMMIT|ROLLBACK)\b/i.test(sql)) {
+      if (open?.rows && /^\s*COMMIT/i.test(sql)) commits += 1;
+      open = undefined;
+    } else if (/INSERT INTO main\."__mistri_read_audit_row"/.test(sql)) {
+      inserts += 1;
+      if (open) open.rows += 1;
+      else commits += 1;
+    }
+  }
+  return { inserts, commits };
+}
+
+test('what a burst costs: eight audited reads at once share one or two writes, not eight', async () => {
+  await fixture(async ({ registry, host, rows }) => {
+    const releases: Array<() => void> = [];
+    try {
+      const resources = await loadAppRuntimeResources(registry, manifest, appEntrypoint(host, registry)!, (owner) =>
+        releases.push(registry.lease(owner)),
+      );
+      const { adapter } = await registry.open(connection);
+      const access = withReadAuditSink(
+        resolveAppAccess(manifest, resources.schema, ['viewer']),
+        { app: appId, tenant: '', actor: 'account-viewer' },
+        adapter,
+        connection,
+      );
+      const facade = authorizeResources(resources, access);
+      const read = (offset: number) => withReadRoute('page', () => facade.adapter.query({ table: 'incident', limit: 50, offset } as never));
+      await read(0);
+      /* A page's boot: eight reads sent together, each its own query, so none is coalesced into another. */
+      const burst = await statementsOf(() => Promise.all(Array.from({ length: 8 }, (_, i) => read(i + 1))));
+      const { inserts, commits } = auditCommits(burst.statements);
+      assert.equal(inserts, 8, 'every read keeps its own row');
+      assert.ok(commits <= 2, `eight audited reads took ${commits} writes:\n${burst.statements.join('\n')}`);
+      assert.equal(rows().length, 9);
+    } finally {
+      for (const release of releases.reverse()) release();
+    }
+  });
+});
+
+test('a burst whose write fails is refused whole: every read in it answers 503 and none hands out rows', async () => {
+  await fixture(async ({ registry, host, path, post }) => {
+    await ensureAppReadAudit(registry, host);
+    const warm = await post('/api/query', { table: 'incident', limit: 1 });
+    assert.equal(warm.status, 200, warm.text);
+    const db = new DatabaseSync(path);
+    db.exec('DROP TABLE "__mistri_read_audit_row"');
+    db.close();
+    const answers = await Promise.all(Array.from({ length: 6 }, (_, i) => post('/api/query', { table: 'incident', limit: 50, offset: i })));
+    for (const answer of answers) {
+      assert.equal(answer.status, 503, answer.text);
+      assert.deepEqual(JSON.parse(answer.text), READ_NOT_RECORDED);
+      assert.ok(!answer.text.includes('Sign-in'), 'no audited data in the body');
     }
   });
 });

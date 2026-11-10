@@ -198,6 +198,31 @@ export function appendSqliteReadAudit(db: DatabaseSync, row: ReadAuditRow): void
   attestedEpochs.set(db, { main: Number(epoch.main), temp: String(epoch.temp) });
 }
 
+/**
+ * Rows gathered by a group commit (groupCommit.ts), in one transaction: one
+ * commit, so one sync to disk, and all of them kept or none. A batch of one is
+ * the one statement it always was.
+ */
+export function appendSqliteReadAudits(db: DatabaseSync, rows: readonly ReadAuditRow[]): void {
+  for (const row of rows) assertReadAuditRow(row);
+  if (rows.length <= 1) {
+    if (rows.length) appendSqliteReadAudit(db, rows[0]!);
+    return;
+  }
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (const row of rows) appendSqliteReadAudit(db, row);
+    db.exec('COMMIT');
+  } catch (error) {
+    try {
+      if (db.isTransaction) db.exec('ROLLBACK');
+    } catch {
+      /* Preserve the append's failure. */
+    }
+    throw error;
+  }
+}
+
 /* `attested`: the adapter holds an attestation under the schema epoch it just read (sqlite.ts, storeEpoch). */
 export function readSqliteReadAudit(db: DatabaseSync, query: ReadAuditQuery, attested = false): StoredReadAudit[] {
   assertReadAuditQuery(query);

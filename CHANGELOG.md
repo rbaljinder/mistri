@@ -5,6 +5,14 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.32
+
+Read audit speed, from a field report, and the row types a page reads.
+
+- **The read audit no longer queues behind itself.** Audited reads that arrive while a flush is on its way leave together: one multi-row insert on PostgreSQL, one transaction on SQLite, one entry for a tenant, at most 256 rows a batch and two batches in flight per store. Each read still waits for its own row to be written before it is answered, and a failed batch refuses every read in it. With four writers and six people reading over a 25 ms link, an audited page read went from about 370 ms to about 117 ms.
+- **A busy audit asks the client to retry.** A read refused because no writer was free in time is answered `503 server_busy` with `Retry-After`, and the App retries it; any other audit failure is still `read_not_recorded`.
+- **A page's rows carry their key.** A `List`'s rows and a `useRows` read's rows both carry the resource's key columns beside `show`, and the row type says so: a key column such as `id` is there whether `show` names it or not, in a `useRecord`'s row too (a `List` typed by its own `from`; one inside a `Scope` carries the key untyped).
+
 ## 1.0.0-rc.31
 
 Fixes from a field report on free-form pages.
