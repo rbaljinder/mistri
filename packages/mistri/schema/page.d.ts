@@ -175,9 +175,10 @@ type ValueIn<T, P extends string> = T extends string ? (P extends ColumnPath<T> 
 type Reading<R extends string> = [R] extends [never] ? TableName : R;
 
 /**
- * One row as a read returns it: exactly the paths `show` names, each typed from the generated rows (an id past 2^53
- * is a string — never run one through Number()). Without `show`, every column of the resource. A column the read did
- * not show is a type error, because it is not there.
+ * One row as a read returns it: the paths `show` names, each typed from the generated rows (an id past 2^53
+ * is a string — never run one through Number()), and the resource's key column(s), which `List` and `useRows` always
+ * read beside `show`. Without `show`, every column of the resource. Any other column the read did not show is a type
+ * error, because it is not there.
  */
 export type PageRow<T extends string, S extends readonly string[] = readonly []> = [SchemaColumns] extends [never]
   ? UiRow
@@ -185,7 +186,9 @@ export type PageRow<T extends string, S extends readonly string[] = readonly []>
     ? [T] extends [never]
       ? UiRow
       : { readonly [C in Extract<keyof KindsOf<T> | keyof RowsOf<T>, string>]: ValueIn<T, C> }
-    : { readonly [P in S[number]]: ValueIn<Reading<T>, P> };
+    : { readonly [P in S[number]]: ValueIn<Reading<T>, P> } & KeyOf<T>;
+/* The key column(s) a read adds beside `show`. Untyped where the resource is not one name (a List inside a Scope, without its own `from`: the runtime still sends the key) or the types are not generated. */
+type KeyOf<T extends string> = [SchemaKeys] extends [never] ? {} : [T] extends [never] ? {} : RecordKey<T>;
 
 /* The value a condition compares a column with, by the column's kind: a number column takes a number or its digits
    (an id past 2^53 is digits), a vocabulary one of its words. */
@@ -647,7 +650,7 @@ export declare function Steps<const N extends CommandName>(props: StepsProps<N>)
  * may not run it, disabled while the row's state does not allow it, busy while it runs. Its accessible name is its
  * label and the row's title ("Check in Morgan Lee"), so a list of them reads apart. Its outcome is said in the
  * platform's live region — `done` says it in the page's words — and a refusal is said there too. The row needs its
- * key (a `List`'s rows carry it; a `useRows` read shows it). `page.useCommand` stays for what a button cannot say.
+ * key (a `List`'s and a `useRows` read's rows both carry it). `page.useCommand` stays for what a button cannot say.
  */
 export declare function CommandButton(props: {
   command: CommandName;

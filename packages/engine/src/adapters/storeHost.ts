@@ -118,6 +118,8 @@ export interface SqliteStoreHost {
   closed(): boolean;
   /** Refuses once the path names another file than the one opened. */
   assertWriteIdentity(): void;
+  /** Refuses where queueWrite would, inside a transaction this process holds open: for work that joins a write before queueing it. */
+  assertIndependentWrite(): void;
   /** Records and a journal in one transaction (SqliteAdapter.transact). */
   journalTransaction<J, T>(
     journal: SqliteTransactionJournal<J>,

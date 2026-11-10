@@ -66,6 +66,16 @@ export function withAdmission<T>(address: string, work: () => T): T {
   return admissions.run({ key: `client:${address}` }, work);
 }
 
+/**
+ * Run `work` with its checkouts filed under no account, wherever it was
+ * started: work done for several requests at once, which no one of them may be
+ * charged for nor refused on behalf of (mistri's read audit group commit,
+ * adapters/readAudit/groupCommit.ts, carries rows of every account waiting).
+ */
+export function withoutAdmission<T>(work: () => T): T {
+  return admissions.exit(work);
+}
+
 /** The request's session names its account: its checkouts from here on wait as that account's. */
 export function admitAs(account: string | undefined): void {
   const admission = admissions.getStore();

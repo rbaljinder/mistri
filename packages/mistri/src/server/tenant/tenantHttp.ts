@@ -118,7 +118,7 @@ import { appSurfaceForRealm } from '../../shared/appTenancy.js';
 import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
 import { PAGE_HEADER, pageLoad, pageManifestRefusal } from '../http/pageLoad.js';
 import { currentReadRoute, readRouteOf, withReadKind, withReadRoute } from '../readAudit.js';
-import { tenantReadRefusal } from './tenantReadRefusal.js';
+import { readRefusalHeaders, tenantReadRefusal } from './tenantReadRefusal.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
 import { attributeAction, attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js';
 import { tenantHistoryStoreKey } from './tenantRecordHistoryStore.js';
@@ -2190,9 +2190,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           reportRefusal(req, error.status, error.code, error.message, error);
           return send(req, res, error.status, { error: error.message, code: error.code });
         }
-        const { status, code, message, said } = tenantReadRefusal(error);
-        reportRefusal(req, status, code, message, error, said);
-        return send(req, res, status, { error: message, code }, {}, error);
+        const refusal = tenantReadRefusal(error);
+        reportRefusal(req, refusal.status, refusal.code, refusal.message, error, refusal.said);
+        return send(req, res, refusal.status, { error: refusal.message, code: refusal.code }, readRefusalHeaders(refusal), error);
       })
       .catch(() => {
         if (!res.destroyed) res.destroy();

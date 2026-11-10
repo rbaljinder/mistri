@@ -17,7 +17,7 @@ import { Card, Meter, Stat, Table, Value } from './kit.js';
 import { UiHostContext, type UiHost } from './context.js';
 import { fixtures, renderSection, renderValue } from './testing.js';
 import { FixtureSection } from './fixture.js';
-import { useMessage, useRows } from './hooks.js';
+import { useMessage, useRecord, useRows } from './hooks.js';
 import { sayAppMessage } from './appMessage.js';
 
 describe('the SDK surface', () => {
@@ -209,6 +209,30 @@ describe('@mistriwork/mistri/ui/testing', () => {
     });
     renderSection(Seen, declaration, { data });
     expect(await screen.findByText('name:Cy name:Bo n=2 hook=3')).toBeInTheDocument();
+  });
+
+  test("a useRows read carries the resource's key beside show, as a List's rows do", async () => {
+    const Seen = () => {
+      const rows = useRows('person', { show: ['name'] });
+      return <p>{rows.data?.map((row) => Object.keys(row).join('+') + ':' + String(row.id)).join(' ') ?? '…'}</p>;
+    };
+    const data = fixtures<{ person: { id: number; name: string; age: number } }>({
+      person: [{ id: 7, name: 'Ann', age: 3 }],
+    });
+    renderSection(Seen, { title: 'People', component: { id: 'people' } }, { data });
+    expect(await screen.findByText('name+id:7')).toBeInTheDocument();
+  });
+
+  test("a useRecord read carries the record's key beside show, as its type says", async () => {
+    const Seen = () => {
+      const record = useRecord('person', { id: 7 }, ['name']);
+      return <p>{record.data ? Object.keys(record.data).join('+') + ':' + String(record.data.id) : '…'}</p>;
+    };
+    const data = fixtures<{ person: { id: number; name: string; age: number } }>({
+      person: [{ id: 7, name: 'Ann', age: 3 }],
+    });
+    renderSection(Seen, { title: 'People', component: { id: 'people' } }, { data });
+    expect(await screen.findByText('name+id:7')).toBeInTheDocument();
   });
 
   test('answers a declared total with the fixtures measured whole: one figure, or a group for each value', async () => {

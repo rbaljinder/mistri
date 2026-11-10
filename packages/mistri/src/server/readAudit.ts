@@ -18,8 +18,11 @@
  * the request: ReadAuditFailed is answered 503 (READ_NOT_RECORDED), and the rows it
  * read never leave.
  *
- * What a row costs: one insert, its own statement, on the audited table's
- * own database, and nothing for a table that is not audited. Within one
+ * What a row costs: a place in the next group commit on the audited table's
+ * own database (adapters/readAudit/groupCommit.ts) — one insert and one writer
+ * for the rows gathered while the ones before them were written, so a page's
+ * reads together cost a few round trips, not one each — and nothing for
+ * a table that is not audited. Within one
  * process a re-read inside COALESCE_MS that matches an earlier row on every
  * field that says what was read (app, tenant, actor, visit, resource, route,
  * the record or the query and the ids it returned) is not written again: a
@@ -29,6 +32,7 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
+import { isPoolBusy, POOL_BUSY_MESSAGE, poolBusyRetryAfterSeconds } from '@mistriwork/engine/adapters/poolMetrics.js';
 import type { QueryRequest, ViewResult } from '@mistriwork/engine/adapters/adapter.js';
 import type { QueryResult } from '@mistriwork/engine/shared/reads.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
@@ -69,8 +73,23 @@ export const READ_NOT_RECORDED = Object.freeze({ error: 'The read could not be r
 
 /** Whether `error` is a read the audit could not record, directly or beneath what wrapped it. */
 export function readNotRecorded(error: unknown): boolean {
-  for (let at = error, depth = 0; at instanceof Error && depth < 8; at = at.cause, depth++) if (at instanceof ReadAuditFailed) return true;
-  return false;
+  return auditFailure(error) !== undefined;
+}
+
+function auditFailure(error: unknown): ReadAuditFailed | undefined {
+  for (let at = error, depth = 0; at instanceof Error && depth < 8; at = at.cause, depth++) if (at instanceof ReadAuditFailed) return at;
+  return undefined;
+}
+
+/**
+ * What a read the audit could not record is answered (503 either way, and nothing it read leaves). A row refused
+ * because the pool lent no writer in time is the server busy, said as any busy refusal is (reply.ts sendBusy), with
+ * when to ask again, so a client retries it; any other failure keeps the fixed words, never why.
+ */
+export function readAuditRefusal(error: unknown): { body: { error: string; code: string }; retryAfter?: number } {
+  for (let at = auditFailure(error)?.cause, depth = 0; at instanceof Error && depth < 8; at = at.cause, depth++)
+    if (isPoolBusy(at)) return { body: { error: POOL_BUSY_MESSAGE, code: 'server_busy' }, retryAfter: poolBusyRetryAfterSeconds(at) };
+  return { body: READ_NOT_RECORDED };
 }
 
 /* `null` is the server's own read, never audited; no store at all is a read by no door, refused. */
