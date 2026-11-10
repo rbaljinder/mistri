@@ -36,6 +36,7 @@ import { actingPrincipal } from './tenantApiRequest.js';
 import { withTenantReadAudit } from './tenantReadAudit.js';
 import type { ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
 import { readZone } from '../app/readerZone.js';
+import { readerZone, zoneColumn } from '../../shared/appUi.js';
 import { readLocale } from '../app/readerLocale.js';
 
 /* The row scope a context reads under, by the context: live sync asks it of a
@@ -524,12 +525,22 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                snapshot ends), false where the callback or a read failed. */
               const answer = async (): Promise<boolean> => {
                 /* On one snapshot between them, as they are asked at once. */
+                /* Where `ui.timezone: { column }` names the platform-owned profile, the scope catalog does not hold it, so the
+                   platform reads that one column of this tenant's row itself (the way it reads the row's name), and a value it
+                   does not know as a zone is the App's, as an App-owned column's is. */
+                const named = zoneColumn(app.ui);
+                const fromProfile = named !== undefined && named.resource === ownership.profile;
                 const [zoneRead, localeRead] = await together(() =>
-                  Promise.allSettled([readZone(app.ui, schema, data.query), readLocale(app.ui, schema, data.query)]),
+                  Promise.allSettled([
+                    fromProfile ? Promise.resolve(undefined) : readZone(app.ui, schema, data.query),
+                    readLocale(app.ui, schema, data.query),
+                  ]),
                 );
                 if (zoneRead.status === 'rejected') throw zoneRead.reason;
                 if (localeRead.status === 'rejected') throw localeRead.reason;
-                const zone = zoneRead.value,
+                const zone = fromProfile
+                    ? readerZone(await source.readTenantZone({ tenantId: principal.tenantId, column: named.column }).catch(() => undefined))
+                    : zoneRead.value,
                   locale = localeRead.value;
                 assertActive();
                 const context = Object.freeze({

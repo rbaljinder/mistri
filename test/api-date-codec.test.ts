@@ -51,7 +51,7 @@ test('DATE refuses zero/BC/infinity/noncanonical/instant values in each SQL dial
       assert.throws(() => codec.encode(value));
       assert.equal(valid(value), false);
     }
-    for (const type of ['timestamp', 'datetime', 'time', ...(dialect === 'postgres' ? [] : ['timestamptz', 'timestamp with time zone'])])
+    for (const type of ['datetime', 'time', ...(dialect === 'postgres' ? [] : ['timestamptz', 'timestamp with time zone'])])
       assert.throws(() => apiValueCodec({ type }, dialect, 'number'));
   }
 });

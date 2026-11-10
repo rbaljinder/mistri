@@ -134,13 +134,30 @@ test(
     // What was in the process's memory: the lease the first host granted (reported, not redesigned).
     t.diagnostic(`the first host's lease after a restart: ${old.ok ? 'still answers' : `refused (${old.status} ${old.code ?? ''})`}`);
 
+    // A grant saved: the member's reads follow the new App, not what the first host knew (field reports #30, #68).
+    save('app.ts', (text) =>
+      text.replace(
+        "reception: { label: 'Reception', realm: 'tenant', read: clinicReads,",
+        "reception: { label: 'Reception', realm: 'tenant', read: clinicReads.filter((name) => name !== 'notice'),",
+      ),
+    );
+    await until('the host to start again with the new grant', () => listening() === 3);
+    // A client holds the lease its host granted; a restarted host's member comes in as a new one.
+    const again = await tenantTestClient(origin, 'clinic', { accountId, email, password }, 'north');
+    assert.ok((await again.rows('appointment')).ok, 'what it still grants is read');
+    assert.equal((await again.rows('notice')).ok, false, 'the grant the save took away is not still held');
+    save('app.ts', (text) => text.replace("clinicReads.filter((name) => name !== 'notice')", 'clinicReads'));
+    await until('the host to start again with the grant back', () => listening() === 4);
+    const last = await tenantTestClient(origin, 'clinic', { accountId, email, password }, 'north');
+    assert.ok((await last.rows('notice')).ok, 'a grant added by a save is read at once');
+
     // A page that does not load: the host says why and goes, and the parent waits for the next save.
     save('views.ts', (text) => `${text}\nexport const broken = ;\n`);
     await until('the refusal', () => /waiting for the next save/.test(output));
     assert.equal(parent.exitCode, null, 'the parent stays');
     assert.equal(childrenOf(parent.pid!).length, 0);
     save('views.ts', (text) => text.replace('\nexport const broken = ;\n', ''));
-    await until('the fixed page to serve', () => listening() === 3);
+    await until('the fixed page to serve', () => listening() === 5);
     assert.equal((await person.request('/api/auth/get-session')).status, 200);
 
     // Stopping the parent stops its host and leaves nothing behind.

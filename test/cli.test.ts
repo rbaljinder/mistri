@@ -62,7 +62,7 @@ describe('the command line', () => {
     const { code, out, err } = await run(['api-token', 'inspect', '--port', 'PRIVATE_ARGUMENT']);
     assert.equal(code, 2);
     assert.equal(out, '');
-    assert.match(err, /API token maintenance failed/);
+    assert.match(err, /API token maintenance could not be completed: the verb or flags are malformed/);
     assert.doesNotMatch(err, /PRIVATE_ARGUMENT|Listening on/);
   });
 

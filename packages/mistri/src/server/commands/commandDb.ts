@@ -16,11 +16,14 @@
  * exactly the tables its footprint names.
  */
 import {
+  insertAll,
   isWriteConflict,
+  updateAll,
   type AggregateMeasure,
   type AggregateRequest,
   type Condition,
   type Filter,
+  type UpdateRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { declaredScale, exactAverage, formatDecimal, parseDecimal } from '@mistriwork/engine/shared/decimals.js';
@@ -232,6 +235,17 @@ export interface WriteTable<Row> extends ReadTable<Row> {
   update(row: Row, changes: Written<Row>): Promise<Row>;
   /** Removes the row by its key, or `stale_record` when it is gone. */
   remove(row: Row): Promise<void>;
+  /**
+   * Many new rows, as stored, in the order given: one statement where the source can say it, each row through the
+   * same grants, stamps, audit and history as `insert`. The rows of one call cannot refer to each other.
+   */
+  insertMany(rows: readonly Written<Row>[]): Promise<Row[]>;
+  /**
+   * The same `changes` to every row the where matches, each guarded as `update` guards it and its revision bumped:
+   * one read, then one statement where the source can say it. The rows as written; `stale_record` when any moved
+   * since the read, and nothing is written. More than 1,000 matches is refused rather than cut.
+   */
+  updateWhere(where: WhereInput<Row>, changes: Written<Row>): Promise<Row[]>;
   /**
    * A file resource's new row (`file: { content, name, type?, size? }`): the
    * bytes, name, type and size go in the columns the resource names, held to
@@ -1046,6 +1060,32 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
   };
   if (!writable) return Object.freeze(read);
   const writer = tx as WriteTransaction;
+  /* The changes as written: constants worked out, each column one of the table's. */
+  const changed = async (changes: unknown): Promise<Record<string, Value>> => {
+    const values = { ...(await withConstants(table, changes as Record<string, unknown>, options)) } as Record<string, Value>;
+    for (const column of Object.keys(values)) {
+      if (!Object.hasOwn(table.kinds, column)) throw new Error(`${name}: "${column}" is not one of its columns.`);
+    }
+    return values;
+  };
+  /* One row's guarded update: its revision bumped, and guarded by exactly the changed columns, each at the value
+     this row was read with — but a JSON column, which no engine compares and which is written whole (appAccess.ts). */
+  const guarded = (row: UntypedRow, changes: Record<string, Value>): UpdateRequest => {
+    const key = keyOf(row);
+    const values = { ...changes };
+    const revision = options.versionField;
+    if (revision && Object.hasOwn(table.kinds, revision) && !Object.hasOwn(values, revision)) {
+      const current = (row as Record<string, unknown>)[revision];
+      if (typeof current === 'number' && Number.isSafeInteger(current) && current < Number.MAX_SAFE_INTEGER) values[revision] = current + 1;
+    }
+    const expected: Record<string, Value> = {};
+    for (const column of Object.keys(values)) {
+      if (!Object.hasOwn(row, column)) throw new Error(`${name}: update needs the row as read; it has no "${column}".`);
+      if (table.meta.columns.some((meta) => meta.name === column && isJsonType(meta.type))) continue;
+      expected[column] = ((row as Record<string, unknown>)[column] ?? null) as Value;
+    }
+    return { table: name, key, expected, values };
+  };
   const insert = async (given: Record<string, unknown>) => {
     const values = await withConstants(table, given, options);
     const result = await writer.insert({ table: name, values: values as Record<string, Value> });
@@ -1074,36 +1114,54 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
       return row;
     },
     async update(row, changes) {
-      const key = keyOf(row);
-      const values = { ...(await withConstants(table, changes as Record<string, unknown>, options)) } as Record<string, Value>;
-      for (const column of Object.keys(values)) {
-        if (!Object.hasOwn(table.kinds, column)) throw new Error(`${name}: "${column}" is not one of its columns.`);
-      }
+      const values = await changed(changes);
       if (!Object.keys(values).length) return row;
-      const revision = options.versionField;
-      if (revision && Object.hasOwn(table.kinds, revision) && !Object.hasOwn(values, revision)) {
-        const current = (row as Record<string, unknown>)[revision];
-        if (typeof current === 'number' && Number.isSafeInteger(current) && current < Number.MAX_SAFE_INTEGER)
-          values[revision] = current + 1;
-      }
-      /* The guard: exactly the changed columns, each at the value this row was
-         read with — but a JSON column, which no engine compares and which is
-         written whole (appAccess.ts). */
-      const expected: Record<string, Value> = {};
-      for (const column of Object.keys(values)) {
-        if (!Object.hasOwn(row, column)) throw new Error(`${name}: update needs the row as read; it has no "${column}".`);
-        if (table.meta.columns.some((meta) => meta.name === column && isJsonType(meta.type))) continue;
-        expected[column] = ((row as Record<string, unknown>)[column] ?? null) as Value;
-      }
+      const request = guarded(row, values);
       let result: Awaited<ReturnType<WriteTransaction['update']>>;
       try {
-        result = await writer.update({ table: name, key, expected, values });
+        result = await writer.update(request);
       } catch (error) {
-        if (isWriteConflict(error)) return stale(key);
+        if (isWriteConflict(error)) return stale(request.key);
         throw error;
       }
-      if (result.affected !== 1) return stale(key);
-      return normalizeRow(table, { ...row, ...values, ...result.applied }) as UntypedRow;
+      if (result.affected !== 1) return stale(request.key);
+      return normalizeRow(table, { ...row, ...request.values, ...result.applied }) as UntypedRow;
+    },
+    async insertMany(given) {
+      if (!Array.isArray(given)) throw new TypeError(`${name}: insertMany takes an array of rows.`);
+      if (given.length > DEFAULT_CAP) authorMistake(`${name}: insertMany writes at most ${DEFAULT_CAP} rows in one call.`);
+      const requests = await Promise.all(
+        given.map(async (values) => ({
+          table: name,
+          values: (await withConstants(table, values as Record<string, unknown>, options)) as Record<string, Value>,
+        })),
+      );
+      const results = await insertAll(writer, requests);
+      return results.map((result) => normalizeRow(table, result.row ?? { ...result.applied, ...result.key }) as UntypedRow);
+    },
+    async updateWhere(where, changes) {
+      const values = await changed(changes);
+      const compiled = compileWhere(table, where, now(), [], undefined, HANDLE);
+      if (compiled.orderBy.length || compiled.limit !== undefined)
+        authorMistake(`${name}: updateWhere's where says which rows; leave "sort" and "limit" out of it.`);
+      const found = await rows(compiled, DEFAULT_CAP + 1);
+      if (found.length > DEFAULT_CAP) authorMistake(`${name}: more than ${DEFAULT_CAP} rows match; updateWhere changes at most that many.`);
+      if (!found.length || !Object.keys(values).length) return found;
+      /* Each row with its own revision and its own guard, so one that moved since the read is a WriteConflict and
+         the batch rolls back whole (adapter.ts updateAll), as one guarded update would. */
+      const requests = found.map((row) => guarded(row, values));
+      let results: Awaited<ReturnType<WriteTransaction['update']>>[];
+      try {
+        results = await updateAll(writer, requests);
+      } catch (error) {
+        /* A conflict does not say which row moved; one row's names it, as `update` does. */
+        if (isWriteConflict(error)) return requests.length === 1 ? stale(requests[0]!.key) : refuse('stale_record');
+        throw error;
+      }
+      return found.map((row, at) => {
+        if (results[at]!.affected !== 1) return stale(requests[at]!.key);
+        return normalizeRow(table, { ...row, ...requests[at]!.values, ...results[at]!.applied }) as UntypedRow;
+      });
     },
     async remove(row) {
       const key = keyOf(row);

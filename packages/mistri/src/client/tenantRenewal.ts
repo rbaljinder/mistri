@@ -10,7 +10,7 @@ import {
   tenantLeaseActive,
   type SessionIdentitySnapshot,
 } from '@mistriwork/kit/client/sessionIdentity.js';
-import { isTransientTenantFailure, renewTenant } from './tenantTransport.js';
+import { isTransientTenantFailure, registerTenantRenewer, renewTenant } from './tenantTransport.js';
 import { say } from './copy/tenancy/tenantRenewal.js';
 import { addHostListener, removeHostListener } from '@mistriwork/kit/client/shellHost.js';
 
@@ -211,6 +211,8 @@ export function startTenantRenewal(options: TenantRenewalOptions = {}) {
     if (document.visibilityState === 'hidden') park();
     else wake();
   };
+  // Requests wait for a renewal in flight, and one refused as stale asks for one here (tenantTransport.ts).
+  const unregister = registerTenantRenewer(owner, { inFlight: () => running, renew: check });
   const unsubscribeLease = subscribeTenantLease(changed);
   const unsubscribeIdentity = subscribeSessionIdentity(() => {
     if (sessionIdentity() !== owner) stop();
@@ -221,6 +223,7 @@ export function startTenantRenewal(options: TenantRenewalOptions = {}) {
     controller?.abort();
     clearTimeout(renewalTimer);
     clearTimeout(expiryTimer);
+    unregister();
     unsubscribeLease();
     unsubscribeIdentity();
     removeHostListener(window, 'offline', suspend);

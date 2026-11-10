@@ -33,7 +33,7 @@ import { applyBulk, bulkKey, matchingKeys } from '@mistriwork/kit/client/bulkAct
 import { confirmFor } from '@mistriwork/kit/client/prompt.js';
 import { expectedValues, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { commandOperations, type CommandOperation, type CommandOwner } from '../../commandState.js';
-import { prepareCommand, sendCommand } from '../../commandSend.js';
+import { checkCommand, prepareCommand, sendCommand } from '../../commandSend.js';
 import { heldReview, holdReview, reviewFresh, reviewOwner, staleReview } from '../../commandReviews.js';
 import { checkCommandStep } from '../commandStepCheck.js';
 import { commandAvailable, useCommandAvailability } from '../../commandAvailability.js';
@@ -289,11 +289,39 @@ function staleRefusal(action: AppCommandAction, options: UiCommandOptions): UiCo
 }
 
 /**
+ * A run whose answer did not arrive, or one still on its way: `unknown`, at once, never a form left waiting for a
+ * person. A page awaiting run() in a loop stalled on that form for good (a field report). Its `check()` asks the
+ * receipt under the same idempotency key, so asking never runs the command twice.
+ */
+function notKnown(
+  action: AppCommandAction,
+  owner: CommandOwner,
+  operation: CommandOperation,
+  fields: readonly AppCommandField[],
+  values: CommandValues | undefined,
+  options: UiCommandOptions,
+  checking = false,
+): UiCommandOutcome {
+  const message = say('notConfirmed', { label: options.label || action.label });
+  if (!checking && !options.quiet) toast(message, 'error');
+  const check = async (): Promise<UiCommandOutcome> => {
+    if (commandOperations.get(owner) !== operation) return { status: 'unknown', message, check };
+    await checkCommand(operation, owner, () => void queryClient.invalidateQueries());
+    if (operation.phase === 'pending' || operation.phase === 'unknown')
+      return notKnown(action, owner, operation, fields, values, options, true);
+    const outcome = outcomeOf(operation, values && refusedFields(operation.field, operation.message, fields, values));
+    commandOperations.forget(owner);
+    return outcome;
+  };
+  return { status: 'unknown', message, check };
+}
+
+/**
  * Send it with this input, as the form's submit would: prepared for the
  * record's revision, checked by the form's own rules (an incomplete or
  * invalid input opens the form instead, filled with it), sent once. A
  * refusal is said in the server's words, as the action bar says one; an
- * answer that did not arrive is the form's to resolve.
+ * answer that did not arrive settles `unknown`, with a check.
  */
 async function runCommand(
   action: AppCommandAction,
@@ -312,7 +340,7 @@ async function runCommand(
   }
   const owner = ownerFor(action, key);
   const before = commandOperations.get(owner);
-  if (before?.phase === 'pending' || before?.phase === 'unknown') return openForm(action, key, input, options);
+  if (before?.phase === 'pending' || before?.phase === 'unknown') return notKnown(action, owner, before, fields, undefined, options);
   if (before) commandOperations.forget(owner);
   /* A run the person confirmed from a review is sent for that revision alone, never prepared again (D6): a record
      that moved since is refused `stale` and shown again, where a plain run below quietly prepares once more. */
@@ -343,7 +371,8 @@ async function runCommand(
     return { status: 'refused', message };
   }
   const { operation } = sent;
-  if (operation.phase === 'unknown' || operation.phase === 'pending') return openForm(action, key, input, options);
+  if (operation.phase === 'unknown' || operation.phase === 'pending')
+    return notKnown(action, owner, operation, fields, values as CommandValues, options);
   // A review is spent once it ran, and moot once the server found its record moved.
   if (options.review) staleReview(options.review.token);
   if (review && operation.phase === 'error' && operation.code === 'stale_record') {

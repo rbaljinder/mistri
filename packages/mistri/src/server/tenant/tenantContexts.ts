@@ -129,6 +129,26 @@ export class TenantContextsBusy extends TenantContextError {
   }
 }
 const leaseFailures = new WeakMap<Error, LeaseCode>();
+/* A command or write refused because this server holds no such context — a restart forgot it — before anything ran.
+   Without the mark it answered as a denial of the person's role (403 forbidden), and the page said so; a read refused
+   the same way already answers tenant_context_unavailable, so the mark tells the caller nothing a read does not. */
+const lostContexts = new WeakSet<Error>();
+/** A command's or write's refusal that names a context this server does not hold, refused before anything ran. */
+function tenantContextLost(error: unknown): boolean {
+  return error instanceof Error && lostContexts.has(error);
+}
+/** A write refused before it ran: its refusal, its outcome, and what a delete or a revert says it did not do. */
+export function refusedWriteBody(path: string, refusal: { readonly code: string; readonly message: string }, outcome: string) {
+  const side = path === '/api/delete' ? { deleted: false } : path === '/api/revert' ? { reverted: false } : {};
+  return { error: refusal.message, code: refusal.code, outcome, ...side };
+}
+/** A write whose context this server no longer holds (a restart forgot it) and that ran nothing: refused as the
+ * context, as a read is, never as the person's role, so the page can enter again and send once more. */
+export function lostContext(error: unknown, path: string): ReturnType<typeof refusedWriteBody> | undefined {
+  return tenantContextLost(error) && (error instanceof BusinessCommandExecutionError || error instanceof TenantWriteFailure)
+    ? refusedWriteBody(path, new TenantContextError(), error.outcome)
+    : undefined;
+}
 /** Preserve the operation family's outcome/class while exposing only a safe
  * lease category. Never infer it from a provider's arbitrary error properties. */
 export function tenantLeaseFailureCode(error: unknown): LeaseCode | undefined {
@@ -498,6 +518,8 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
     options?: TenantCommandExecutionOptions,
   ): Promise<TenantContextResult<T>> => {
     let completed = false,
+      entered = false,
+      lost = false,
       invalidInput = false,
       leaseProblem: LeaseCode | undefined,
       commandOptions: ReturnType<typeof captureTenantCommandExecution> | undefined;
@@ -527,8 +549,10 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       // ledgered, so it is refused rather than quietly served.
       if (onSupport(tab, expected.expectedContext)) throw new TenantSupportUnavailable();
       // A tenant operation runs only on a tenant's lease; a platform lease reads through its own owner.
-      if (!tab || !lease || lease.realm !== 'tenant' || expected.expectedContext !== lease.token || selected !== tenantOf(lease))
+      if (!tab || !lease || lease.realm !== 'tenant' || expected.expectedContext !== lease.token || selected !== tenantOf(lease)) {
+        lost = true;
         return denyTenant();
+      }
       // Capture before authentication yields. A later renewal neither grants
       // this request a later deadline nor invalidates its admitted revision.
       const window = lease.window,
@@ -563,6 +587,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
           },
         );
         const bound = bindTenantDeploymentContext(deployment, guard);
+        entered = true;
         const returned = await run(bound, selectors, captured, commandOptions?.options, reply(tab, lease, window));
         completed = true;
         const value = captureTenantData(returned);
@@ -596,16 +621,22 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
         const supported = error instanceof TenantSupportUnavailable;
         const tagged = <T extends Error>(failure: T): T => {
           if (leaseProblem) leaseFailures.set(failure, leaseProblem);
+          if (lost && !entered) lostContexts.add(failure);
           if (supported) markSupportRefusal(failure, error as TenantSupportUnavailable);
           return failure;
         };
         if (commandFamily(family)) {
           if (error instanceof BusinessCommandExecutionError) throw tagged(error);
+          /* An execute whose lease was refused at the door (a renewal landed between the page's prepare and
+             execute), or whose context this server does not hold (a restart forgot it), ran nothing, so it says
+             not_applied: the page may renew or re-enter and send the same envelope once more. A status check stays
+             unknown: what it answers for is the command, which may have run before. */
+          const door = !entered && (leaseProblem !== undefined || lost) && family !== 'status';
           throw tagged(
             recordRefusalCause(
               new BusinessCommandExecutionError(
                 invalidInput ? 'invalid_input' : 'forbidden',
-                family !== 'prepare' && family !== 'availability' && !supported ? 'unknown' : 'not_applied',
+                family !== 'prepare' && family !== 'availability' && !supported && !door ? 'unknown' : 'not_applied',
               ),
               error,
             ),
@@ -796,6 +827,8 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
     const editing = family === 'write' || family === 'preview';
     let leaseProblem: LeaseCode | undefined,
       invalidInput = false,
+      entered = false,
+      lost = false,
       completed = false,
       commandOptions: ReturnType<typeof captureTenantCommandExecution> | undefined;
     return tracked(async () => {
@@ -812,7 +845,10 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
         lease = tab?.lease;
       // Platform commands and edits never run under support, not even later.
       if (onSupport(tab, expected.expectedContext)) throw new TenantSupportUnavailable();
-      if (!tab || !lease || lease.realm !== 'platform' || expected.expectedContext !== lease.token) return denyTenant();
+      if (!tab || !lease || lease.realm !== 'platform' || expected.expectedContext !== lease.token) {
+        lost = true;
+        return denyTenant();
+      }
       const window = lease.window,
         matchingRevision = expected.expectedRevision === window.revision;
       const current = (principal?: PlatformMembershipEvidence) => {
@@ -858,6 +894,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
           },
         );
         const bound = bindPlatformDeploymentContext(deployment, guard);
+        entered = true;
         const value = captureTenantData(await run(bound, captured, commandOptions?.options));
         completed = true;
         const released = await session(request);
@@ -886,6 +923,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
             error,
           );
           if (leaseProblem) leaseFailures.set(refused, leaseProblem);
+          if (lost && !entered) lostContexts.add(refused);
           if (supported) markSupportRefusal(refused, error as TenantSupportUnavailable);
           throw refused;
         }
@@ -894,9 +932,16 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
             ? error
             : new BusinessCommandExecutionError(
                 invalidInput ? 'invalid_input' : 'forbidden',
-                family !== 'prepare' && family !== 'availability' && !supported ? 'unknown' : 'not_applied',
+                // Refused at the door, as a tenant's command is (execute above): nothing ran.
+                family !== 'prepare' &&
+                  family !== 'availability' &&
+                  !supported &&
+                  !(!entered && (leaseProblem || lost) && family !== 'status')
+                  ? 'unknown'
+                  : 'not_applied',
               );
         if (leaseProblem) leaseFailures.set(failure, leaseProblem);
+        if (lost && !entered) lostContexts.add(failure);
         if (supported) markSupportRefusal(failure, error as TenantSupportUnavailable);
         throw failure;
       })

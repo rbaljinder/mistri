@@ -47,6 +47,8 @@ const binding = { appId, source: { id: 'business', connection: 'business-db' }, 
 /* Ada is a clerk and Eve a lead in north, Bea a viewer there; Sam is a clerk in south. Each is a person row of their own
    tenant, found by account id. An invoice's draft with no amount (north-empty) is one the action's `when` refuses. */
 const TABLES = `
+  CREATE TABLE customer (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL);
+  INSERT INTO customer VALUES ('north', 'North'), ('south', 'South');
   CREATE TABLE person (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, account_id TEXT NOT NULL, name TEXT NOT NULL,
     UNIQUE (tenant_id, account_id));
   CREATE TABLE item (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, title TEXT NOT NULL, amount INTEGER NOT NULL,
@@ -63,15 +65,20 @@ const app = parseTestApp(
     name: 'Desk',
     auth: {
       rows: 'tenant',
+      /* The tenant profile is platform-owned, so the tenant's scope catalog does not hold it: the fixed action's grant is
+         read off the capabilities, not resolved again against that catalog (a field report). */
+      tenancy: { label: 'Customer', profile: 'customer', platform: { label: 'Operator' } },
       me: { from: 'person', column: 'account_id' },
       roles: {
-        clerk: { read: true, actions: { item: ['send'] } },
-        lead: { read: true, write: ['item'] },
-        viewer: { read: true },
+        clerk: { realm: 'tenant', read: true, actions: { item: ['send'] } },
+        lead: { realm: 'tenant', read: true, write: ['item'] },
+        viewer: { realm: 'tenant', read: true },
+        operator: { realm: 'platform', read: true },
       },
     },
     sources: { business: { connection: binding.source.connection } },
     resources: {
+      customer: { owner: 'platform' },
       person: { owner: 'tenant' },
       item: {
         owner: 'tenant',
@@ -83,9 +90,9 @@ const app = parseTestApp(
         },
       },
     },
-    views: { items: { kind: 'list', from: 'item' } },
+    views: { items: { kind: 'list', from: 'item', realm: 'tenant' } },
     home: 'items',
-    nav: ['items'],
+    nav: [{ id: 'desk', label: 'Desk', realm: 'tenant', children: ['items'] }],
   },
   'tenant fixed actions fixture',
 );
@@ -95,9 +102,14 @@ const policy = defineAppTenantPolicy({
   kind: 'tenant',
   appId,
   storeId: binding.storeId,
-  ownership: { person: { kind: 'tenant', column: 'tenant_id' }, item: { kind: 'tenant', column: 'tenant_id' } },
+  ownership: {
+    customer: { kind: 'platform' },
+    person: { kind: 'tenant', column: 'tenant_id' },
+    item: { kind: 'tenant', column: 'tenant_id' },
+  },
   resolveMembershipRows: () => everything,
   resolveRows: () => everything,
+  resolvePlatformRows: () => ({ ...everything, customer: true }),
 });
 
 /* The verb's own words, as the bar sends them: the move, the member's `me` and the machine's `since`; the server resolves both. */
@@ -374,6 +386,6 @@ test('the generated isolation suite aims each granted action at another tenantâ€
   ]);
   const suite = await tenantsModule({ app } as never, grants as never, ['north', 'south']);
   assert.match(suite, /\['item', '\{"sent_by":"me","state":"sent","sent_at":"now"\}', 'clerk', 'clerk', 'send'\]/);
-  assert.match(suite, /refused on another tenant's record/);
+  assert.match(suite, /refused on another customer's record/);
   assert.match(suite, /\/api\/update/);
 });

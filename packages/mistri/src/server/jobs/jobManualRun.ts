@@ -4,16 +4,18 @@
  * key of its own (`manual-…`), so the same runner claims it, it is journaled as a slot's run is, and the store tells
  * it apart. The store runs a job at times one at a time (jobStoreRules.ts oneAtATime): a manual run waits while the
  * schedule's run of that job holds its lease, and the schedule's next slot waits for it. On a tenant App a job per
- * tenant is run by hand for one tenant, its run carrying that tenant as its slot's would; manual runs of it still go
- * one at a time, but a tenant's own slot carries its tenant in a longer key and is not held back by one.
+ * tenant is run by hand for one tenant, its run carrying that tenant as its slot's would, and in its key (the same
+ * hash), so a manual run for a tenant and that tenant's own slot take one lease; another tenant's runs are not held.
  */
 import { randomBytes } from 'node:crypto';
 import type { JobStore } from '../../adapters/jobs/jobStoreContract.js';
 import type { JobInspection } from '../../adapters/jobs/jobStoreTypes.js';
+import { tenantKeyHash } from './jobCommands.js';
 import type { CapturedJob, CapturedJobModule } from './jobModule.js';
 
 /** A manual run's key: when it was asked for, and enough chance that two asked in one millisecond are two. */
-const manualRunKey = (at: number): string => `manual-${String(at).padStart(16, '0')}-${randomBytes(12).toString('base64url')}`;
+const manualRunKey = (at: number, tenantId?: string): string =>
+  `manual-${String(at).padStart(16, '0')}-${randomBytes(12).toString('base64url')}${tenantId === undefined ? '' : `-${tenantKeyHash(tenantId)}`}`;
 
 /** Whether a person may run the job now: a job at times run once on the platform, or, where the caller runs it
  * for a tenant it names (`perTenant`), one run per tenant too. */
@@ -37,7 +39,7 @@ export async function enqueueManualRun(
   at: number,
   tenantId?: string,
 ): Promise<{ id: string; key: string }> {
-  const key = manualRunKey(at);
+  const key = manualRunKey(at, tenantId);
   const { id } = await jobs.enqueue(
     {
       job: job.id,

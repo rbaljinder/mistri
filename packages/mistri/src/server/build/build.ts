@@ -455,6 +455,7 @@ async function stagedBuild({
       mistri: runtimeVersion(),
       node: process.version,
       app: { id: loaded.app.id, name: loaded.app.name, manifest: basename(loaded.path) },
+      ...(typeof loaded.app.ui.theme?.preset === 'string' ? { theme: { preset: loaded.app.ui.theme.preset } } : {}),
       bundler: bundler
         ? { name: 'rolldown', version: bundler.version }
         : outputs.definition || Object.keys(built).length

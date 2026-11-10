@@ -244,7 +244,7 @@ test('generated list response validates real envelopes through resolved componen
 test('unsupported transport shapes refuse rather than inventing a published contract', () => {
   assert.throws(() => renderApiReadOpenApi(app(), schema(), {} as never), /integer representation/);
   const temporal = schema();
-  temporal.tables[0].columns[1].type = 'TIMESTAMP';
+  temporal.tables[0].columns[1].type = 'TIME';
   assert.throws(() => renderApiReadOpenApi(app(), temporal, { integers: 'decimal-string' }), /cannot represent/);
 });
 

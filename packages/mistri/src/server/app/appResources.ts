@@ -1,4 +1,5 @@
 import {
+  oneAtATime,
   Refusal,
   type Adapter,
   type AggregateRequest,
@@ -626,7 +627,9 @@ export function createAppResourcesOver(physicalAdapter: Adapter, catalog: AppRes
       const narrowed = narrowedTable(table);
       return narrowed && narrowedWrites(tx, narrowed);
     };
-    return {
+    /* A batch through a narrowed resource goes a row at a time, each kept inside its query as a single write is. */
+    const anyNarrowed = (requests: readonly { table: string }[]) => requests.some((request) => narrowedTable(request.table));
+    const mapped: WriteTransaction = {
       ...(tx.lockRecord ? { lockRecord: (request: DeleteRequest) => tx.lockRecord!(mapWrite(request)) } : {}),
       query: (request) => tx.query(mapRead(request)),
       count: (table, filter) => tx.count(toPhysical(table), physicalFilter(filter, table, catalog)),
@@ -636,6 +639,13 @@ export function createAppResourcesOver(physicalAdapter: Adapter, catalog: AppRes
       remove: (request) => through(request.table)?.remove(request) ?? tx.remove(mapWrite(request)),
       ...(tx.tell ? { tell: (request: TellRequest) => through(request.table)?.tell(request) ?? tx.tell!(mapWrite(request)) } : {}),
     };
+    if (tx.insertMany)
+      mapped.insertMany = (requests) =>
+        anyNarrowed(requests) ? oneAtATime(requests, (request) => mapped.insert(request)) : tx.insertMany!(requests.map(mapWrite));
+    if (tx.updateMany)
+      mapped.updateMany = (requests) =>
+        anyNarrowed(requests) ? oneAtATime(requests, (request) => mapped.update(request)) : tx.updateMany!(requests.map(mapWrite));
+    return mapped;
   };
   /* A single write outside a transaction: one through a narrowed resource is run in one, so its checks and the
      write are one unit. A source that writes one statement at a time cannot hold it there, and says so. */

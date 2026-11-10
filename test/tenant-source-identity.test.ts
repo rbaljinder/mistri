@@ -116,6 +116,7 @@ test('genuine same-file read/write pair returns captured immutable namespace wit
     'readServiceAnchors',
     'readTenantAddresses',
     'readTenantNames',
+    'readTenantZone',
     'resolveIntake',
     'resolvePublic',
     'scopePlatformReads',

@@ -91,6 +91,7 @@ export const Checkbox = onDemand(controls, 'Checkbox', { quiet: true });
 export const ChoiceCards = onDemand(controls, 'ChoiceCards', { quiet: true });
 export const DateField = onDemand(controls, 'DateField', { quiet: true });
 export const Drawer = onDemand(controls, 'Drawer', { quiet: true });
+export const FileField = onDemand(controls, 'FileField', { quiet: true });
 export const Modal = onDemand(controls, 'Modal', { quiet: true });
 export const Pagination = onDemand(controls, 'Pagination', { quiet: true });
 export const Popover = onDemand(controls, 'Popover', { quiet: true });
@@ -443,6 +444,10 @@ export function List({
     keys: true,
   });
   const status = (rows.error as { status?: number } | null)?.status;
+  /* A context the server forgot, which entering again could not replace (tenantTransport.ts): the transport's own line
+     says the page needs a reload; the person's role is not the reason. */
+  if (rows.data === undefined && status === 403 && (rows.error as { code?: string }).code === 'tenant_context_unavailable')
+    return <Refused text={(rows.error as Error).message} />;
   if (rows.data === undefined && (status === 401 || status === 403))
     return <Refused text={say(status === 401 ? 'listForMembers' : 'listNotYours')} />;
   return (

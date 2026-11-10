@@ -117,6 +117,36 @@ test('expired duplicate receipt advances CAS while suspended and needs a fresh n
   expect(session.captureSessionIdentity()).toBe(owner);
 });
 
+test('a context the server forgot is replaced for the same tenant only, keeping the selection and its storage', () => {
+  const owner = selected(),
+    lost = session.captureTenantLease()!,
+    key = session.sessionStorageKey('drafts'),
+    changed = vi.fn(),
+    identity = vi.fn();
+  session.subscribeTenantLease(changed);
+  session.subscribeSessionIdentity(identity);
+  const entered = tenant('north', 'context-entered', 'tab-two');
+  for (const refused of [
+    tenant('south', 'context-entered', 'tab-two'),
+    { ...entered, accountId: 'bob' },
+    { ...entered, revision: 2 },
+    { ...entered, expiresAt: Date.now() - 1 },
+    { ...lost, revision: 1 },
+  ])
+    expect(() => session.adoptTenantReentry(owner, lost, refused)).toThrow();
+  expect(() => session.adoptTenantReentry(owner, { ...lost, context: 'context-other' }, entered)).toThrow();
+  expect(changed).not.toHaveBeenCalled();
+  session.adoptTenantReentry(owner, lost, entered);
+  expect(session.captureTenantLease()).toEqual(entered);
+  expect(session.tenantLeaseActive()).toBe(true);
+  expect(session.captureSessionIdentity()).toBe(owner);
+  expect(session.sessionStorageKey('drafts')).toBe(key);
+  expect(changed).toHaveBeenCalledOnce();
+  expect(identity).not.toHaveBeenCalled();
+  /* Once: the lease it replaced no longer names the current one. */
+  expect(() => session.adoptTenantReentry(owner, lost, tenant('north', 'context-third', 'tab-three'))).toThrow();
+});
+
 test.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])('invalid revision %s cannot establish or renew a lease', (revision) => {
   session.establishSessionIdentity(account());
   session.requireTenantSelection();

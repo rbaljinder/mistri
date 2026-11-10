@@ -6,6 +6,7 @@ import { ActionBar, Columns, ProgressBar, ReviewList, StepHeader } from '@mistri
 import { SensitiveField } from '@mistriwork/ui/SensitiveField.js';
 import { MultiSelect, Select } from '@mistriwork/ui/Select.js';
 import { Slider } from '@mistriwork/ui/Slider.js';
+import { FileField } from '@mistriwork/ui/FileField.js';
 import { MaskedField, MoneyField, TextField } from '@mistriwork/ui/TextField.js';
 import { masks } from '@mistriwork/ui';
 
@@ -24,6 +25,7 @@ function Boxes() {
   const [born, setBorn] = useState('');
   const [pay, setPay] = useState('2500');
   const [ssn, setSsn] = useState('123456789');
+  const [file, setFile] = useState<File | null>(null);
   return (
     <div style={column}>
       <TextField label="First name" value={name} onChange={setName} valid={name.length > 1} tip={TIP} />
@@ -45,6 +47,15 @@ function Boxes() {
         valid={ssn.length === 9}
       />
       <TextField label="Read only" value="Fixed" onChange={() => {}} readOnly />
+      <FileField
+        label="Contacts file"
+        hint="A CSV, read here before anything is sent."
+        accept=".csv,text/csv"
+        value={file}
+        onChange={setFile}
+      />
+      <FileField label="With a problem" value={null} onChange={() => {}} problem="Choose a file." />
+      <FileField label="Disabled" value={null} onChange={() => {}} disabled />
     </div>
   );
 }

@@ -447,7 +447,7 @@ test('api-token issue --commands issues a command-scoped token that the served A
     const refused = await tokenCli(issue);
     assert.equal(refused.code, 2);
     assert.equal(refused.out, '');
-    assert.match(refused.err, /API token maintenance failed/);
+    assert.match(refused.err, /API token maintenance could not be completed: the App could not be loaded/);
   } finally {
     renameSync(`${f.commands}.held`, f.commands);
   }

@@ -56,6 +56,7 @@ import {
   JOB_HELD as held,
   JOB_MAX_CLOCK,
   jobRelease,
+  leaseGroupSql,
   oneAtATimeSql,
   verifyJobRow,
   withoutOverlap,
@@ -612,7 +613,7 @@ export async function openPostgresJobStore(
             client,
             `SELECT * FROM ${q(t.job)} AS j WHERE namespace = $3 AND state IN ('scheduled', 'retry') AND run_at <= $1
           AND NOT (${oneAtATimeSql('j')} AND EXISTS (SELECT 1 FROM ${q(t.job)} AS o
-            WHERE o.namespace = j.namespace AND o.job = j.job AND o.state IN ('leased', 'unknown') AND ${oneAtATimeSql('o')}))
+            WHERE o.namespace = j.namespace AND o.job = j.job AND o.state IN ('leased', 'unknown') AND ${oneAtATimeSql('o')} AND ${leaseGroupSql('o')} = ${leaseGroupSql('j')}))
           ORDER BY run_at, seq LIMIT $2 FOR UPDATE OF j SKIP LOCKED`,
             [at, room, ns],
           ),

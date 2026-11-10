@@ -88,7 +88,11 @@ export async function prepareTenantStartup(
   input: TenantStartupOptions,
   environment: NodeJS.ProcessEnv = process.env,
   /** A production build's fingerprints (tenantValidationRecord.ts): read its validation record and check what it does not vouch for. */
-  options: { readonly record?: BuildFingerprints } = {},
+  options: {
+    readonly record?: BuildFingerprints;
+    /** `mistri check`: what a check can only guess at (a pattern over a handler's source) is a refusal here and a warning when serving. */
+    readonly checking?: boolean;
+  } = {},
 ): Promise<{
   /** Present for a SQLite source: the file native auth must never alias. */
   readonly enrollment: Enrollment;
@@ -318,6 +322,7 @@ export async function prepareTenantStartup(
       engine: postgres ? 'postgres' : 'sqlite',
       policy,
       environment: capturedEnvironment,
+      checking: options.checking === true,
       platformSources: Object.freeze(outside.map((name, index) => Object.freeze({ name, connection: platformConnections[index]! }))),
     });
     for (const check of TENANT_STARTUP_CHECKS) {

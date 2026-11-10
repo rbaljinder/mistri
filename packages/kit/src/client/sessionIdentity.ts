@@ -137,6 +137,35 @@ export function acceptTenantRenewal(owner: SessionIdentitySnapshot, expectedRevi
   leaseChanged();
 }
 
+/** A fresh context for the same tenant, after the server forgot `lost`: a restarted host holds no context this page
+ * entered, so it opens a new one (revision 1, a new tab and context) and the page goes on under it. The selection —
+ * the snapshot, its storage namespace, every operation it owns — stands, because the same account chose the same
+ * tenant; only the lease the requests carry is replaced. Anything else is refused, never adopted. */
+export function adoptTenantReentry(owner: SessionIdentitySnapshot, lost: TenantContextReply, reply: TenantContextReply): void {
+  const state = owner === identity ? leases.get(owner) : undefined;
+  const now = Date.now();
+  if (
+    !state ||
+    owner !== identity ||
+    !owner.tenant ||
+    state.reply.revision !== lost.revision ||
+    !ownerFields.every((key) => lost[key] === state.reply[key]) ||
+    !validLease(reply) ||
+    reply.revision !== 1 ||
+    reply.appId !== owner.tenant.appId ||
+    reply.accountId !== owner.tenant.accountId ||
+    reply.tenantId !== owner.tenant.tenantId ||
+    reply.realm !== owner.tenant.realm ||
+    (reply.tabId === lost.tabId && reply.context === lost.context) ||
+    !Number.isFinite(now) ||
+    now < state.observedAt ||
+    reply.expiresAt <= now
+  )
+    throw new SessionIdentityError(say('theTenantSelectionCould'), 'invalid-identity');
+  leases.set(owner, { reply: Object.freeze({ ...reply }), suspended: false, observedAt: now });
+  leaseChanged();
+}
+
 function transition(mode: SessionIdentityMode, accountId: string | null, appId: string | null): SessionIdentitySnapshot {
   if (identity.mode !== mode || identity.accountId !== accountId || identity.appId !== appId) {
     identity = Object.freeze({ mode, accountId, appId, epoch: identity.epoch + 1 });

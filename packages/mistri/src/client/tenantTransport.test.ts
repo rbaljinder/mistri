@@ -600,7 +600,7 @@ test('renewal does not extend a read deadline through delayed JSON decoding', as
   expect(session.tenantLeaseActive()).toBe(true);
 });
 
-test.each(['tenant_lease_stale', 'tenant_lease_expired', 'tenant_context_unavailable', '401', 'network', 'malformed', 'wrong-revision'])(
+test.each(['tenant_context_unavailable', '401', 'network', 'malformed', 'wrong-revision'])(
   'delayed old-revision %s cannot lock or suspend a renewed lease',
   async (kind) => {
     const original = proof(),
@@ -628,6 +628,29 @@ test.each(['tenant_lease_stale', 'tenant_lease_expired', 'tenant_context_unavail
   },
 );
 
+test.each(['tenant_lease_stale', 'tenant_lease_expired'])(
+  'a delayed old-revision read refused %s is asked again under the lease renewed meanwhile',
+  async (kind) => {
+    const original = proof(),
+      owner = session.establishTenantSelection(original),
+      renewed = { ...original, revision: 2 };
+    let finish!: (value: Response) => void;
+    const fetcher = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => (finish = resolve)))
+      .mockResolvedValueOnce(reply({ tables: ['item'] }, renewed));
+    vi.stubGlobal('fetch', fetcher);
+    const pending = transport.tenantReadApi('/api/schema');
+    session.acceptTenantRenewal(owner, 1, renewed);
+    finish(new Response(JSON.stringify({ error: 'Refused', code: kind }), { status: 409 }));
+    expect(await pending).toEqual({ tables: ['item'] });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(new Headers(fetcher.mock.calls[1][1].headers).get('x-mistri-lease-revision')).toBe('2');
+    expect(session.captureSessionIdentity()).toBe(owner);
+    expect(session.tenantLeaseActive()).toBe(true);
+  },
+);
+
 test.each(['tenant_lease_stale', 'tenant_lease_expired'])('current %s suspends the same read owner without retries', async (kind) => {
   const original = proof(),
     owner = session.establishTenantSelection(original);
@@ -641,6 +664,78 @@ test.each(['tenant_lease_stale', 'tenant_lease_expired'])('current %s suspends t
   await expect(transport.tenantReadApi('/api/schema')).rejects.toThrow();
   expect(fetcher).toHaveBeenCalledOnce();
 });
+
+/* A host that restarted (mistri dev respawning) forgot the context: the page enters the same tenant again, once, and asks again. */
+const unavailableContext = () =>
+  new Response(JSON.stringify({ error: 'The tenant context could not be verified.', code: 'tenant_context_unavailable' }), {
+    status: 403,
+  });
+test('reads refused because the server forgot the context enter the same tenant once and are asked again under it', async () => {
+  const original = proof(),
+    owner = session.establishTenantSelection(original),
+    entered = { ...original, tabId: 'tab-two', context: 'context-entered' };
+  const fetcher = vi.fn(async (url: string, init: RequestInit) => {
+    if (url.startsWith('/api/tenant/context/open')) return reply(entered, entered);
+    const sent = new Headers(init.headers);
+    if (sent.get('x-mistri-context') === original.context) return unavailableContext();
+    return reply({ asked: url }, entered);
+  });
+  vi.stubGlobal('fetch', fetcher);
+  const [schema, rows] = await Promise.all([transport.tenantReadApi('/api/schema'), transport.tenantReadApi('/api/run', { q: 'item' })]);
+  expect(schema).toEqual({ asked: '/api/schema?app=atlas&tenant=north' });
+  expect(rows).toEqual({ asked: '/api/run?app=atlas&tenant=north' });
+  /* Two refused, one entry, two asked again. */
+  const opened = fetcher.mock.calls.filter(([url]) => url.startsWith('/api/tenant/context/open'));
+  expect(opened).toHaveLength(1);
+  expect(opened[0][0]).toBe('/api/tenant/context/open?app=atlas&tenant=north');
+  expect(opened[0][1].method).toBe('POST');
+  expect(fetcher).toHaveBeenCalledTimes(5);
+  for (const [, init] of fetcher.mock.calls.slice(-2)) {
+    expect(new Headers(init.headers).get('x-mistri-tab')).toBe('tab-two');
+    expect(new Headers(init.headers).get('x-mistri-context')).toBe('context-entered');
+  }
+  /* The selection stands: the same snapshot, now carrying the new lease. */
+  expect(session.captureSessionIdentity()).toBe(owner);
+  expect(session.captureTenantLease()).toEqual(entered);
+  expect(session.tenantLeaseActive()).toBe(true);
+});
+
+test('a read still refused after entering again is not asked a third time, and says the page needs a reload', async () => {
+  const original = proof(),
+    entered = { ...original, tabId: 'tab-two', context: 'context-entered' };
+  session.establishTenantSelection(original);
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(unavailableContext())
+    .mockResolvedValueOnce(reply(entered, entered))
+    .mockResolvedValue(unavailableContext());
+  vi.stubGlobal('fetch', fetcher);
+  await expect(transport.tenantReadApi('/api/schema')).rejects.toThrow(/Reload the page/);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  expect(session.sessionIdentity().mode).toBe('locked');
+});
+
+test.each(['refused', 'another tenant', 'network'])(
+  'a read whose entry again fails (%s) is refused as before, never sent again, and does not blame the role',
+  async (kind) => {
+    session.establishTenantSelection(proof());
+    const fetcher = vi.fn().mockResolvedValueOnce(unavailableContext());
+    if (kind === 'refused')
+      fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ code: 'forbidden', error: 'No' }), { status: 403 }));
+    else if (kind === 'network') fetcher.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    else {
+      const other = { ...proof('south', 'context-south'), tabId: 'tab-two' };
+      fetcher.mockResolvedValueOnce(reply(other, other));
+    }
+    fetcher.mockResolvedValue(reply({ tables: ['DO_NOT_PUBLISH'] }));
+    vi.stubGlobal('fetch', fetcher);
+    const refused = transport.tenantReadApi('/api/schema');
+    await expect(refused).rejects.toThrow(/Reload the page/);
+    await expect(refused).rejects.toMatchObject({ status: 403, code: 'tenant_context_unavailable' });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(session.sessionIdentity().mode).toBe('locked');
+  },
+);
 
 test.each(['503', '429', 'network'])('a current %s is asked again with backoff before it suspends the read owner', async (kind) => {
   const original = proof(),

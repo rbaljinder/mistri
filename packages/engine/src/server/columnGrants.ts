@@ -10,8 +10,11 @@
  */
 import {
   ANSI_STYLE,
+  gathered,
   Refusal,
   type Filter,
+  type InsertResult,
+  type UpdateResult,
   type QueryRequest,
   type WriteTransaction,
   type InsertRequest,
@@ -703,17 +706,19 @@ export type ResourceChecks = ReturnType<typeof resourceChecks>;
  * App's validation, transitions, stamps, fixed actions and what a line
  * consumes). Each runs once the grant's own checks have passed, and writes
  * through the transaction the checks were given; left out, the write is that
- * transaction's own.
+ * transaction's own. Where a rule is handed `write`, the row's own write goes
+ * through it rather than the transaction: that is how a batch carries each
+ * row's rules around one statement (adapter.ts `gathered`).
  */
 export interface WriteRules<G extends ColumnGrant> {
   /** This call's grant, kept stable across its awaits: `captureGrant`, with the product's own rules copied beside it. */
   capture(grant: G): G;
   /** A lock on a table the grant does not write, which the reader may still update some other way. */
   locksUnwritable?(table: string, grant: G): boolean;
-  insert?(request: InsertRequest, grant: G, server: boolean): ReturnType<WriteTransaction['insert']>;
+  insert?(request: InsertRequest, grant: G, server: boolean, write?: WriteTransaction['insert']): ReturnType<WriteTransaction['insert']>;
   /** An update to a table outside `writable`: what answers it instead of the grant's refusal, or undefined. */
-  unwritable?(request: UpdateRequest, grant: G): ReturnType<WriteTransaction['update']> | undefined;
-  update?(request: UpdateRequest, grant: G): ReturnType<WriteTransaction['update']>;
+  unwritable?(request: UpdateRequest, grant: G, write?: WriteTransaction['update']): ReturnType<WriteTransaction['update']> | undefined;
+  update?(request: UpdateRequest, grant: G, write?: WriteTransaction['update']): ReturnType<WriteTransaction['update']>;
   remove?(request: DeleteRequest, grant: G): ReturnType<WriteTransaction['remove']>;
 }
 
@@ -733,6 +738,37 @@ export function authorizeColumnWrites<G extends ColumnGrant>(
   const product = rules?.(checks);
   // Keep each call's rules stable across its awaits; the next call reads current grants.
   const capture = (current: G): G => (product ? product.capture(current) : captureGrant(current));
+  const insertVia = (input: InsertRequest, write: WriteTransaction['insert']): Promise<InsertResult> => {
+    const server = isServerRequest(input);
+    const request = jsonWritten(full, requestData(input));
+    const operation = capture(grant);
+    assertWrite(request.table);
+    if (operation.creatable && !operation.creatable.has(request.table)) throw new AppAccessDenied();
+    recordFields(request.table, request.values, 'write', server);
+    const written = product?.insert ? product.insert(request, operation, server, write) : (async () => write(request))();
+    return written.then((result) => {
+      const readable = operation.fields?.get(request.table)?.read;
+      if (!readable || !result.row) return result;
+      return { ...result, row: Object.fromEntries(Object.entries(result.row).filter(([column]) => readable.has(column))) };
+    });
+  };
+  const updateVia = (input: UpdateRequest, write: WriteTransaction['update']): Promise<UpdateResult> => {
+    const request = jsonWritten(full, requestData(input));
+    const operation = capture(grant);
+    if (!operation.writable.has(request.table)) {
+      const answered = product?.unwritable?.(request, operation, write);
+      if (answered) return answered;
+    }
+    assertWrite(request.table);
+    recordFields(request.table, request.values, 'write', isServerRequest(input));
+    keyFields(request.table, request.key);
+    if (request.expected !== undefined) {
+      recordFields(request.table, request.expected, 'read');
+      if (!expectedCovers(full, request)) throw new AppAccessDenied();
+    }
+    assertRelatedWrites(request.table, Object.keys(request.values));
+    return product?.update ? product.update(request, operation, write) : (async () => write(request))();
+  };
   return {
     ...(writer.lockRecord
       ? {
@@ -759,37 +795,15 @@ export function authorizeColumnWrites<G extends ColumnGrant>(
     query: (request) => writer.query(queryFor(request)),
     count: (table, filter) => writer.count(table, filterFor(table, filter)),
     ...(writer.aggregate ? { aggregate: (request: AggregateRequest) => writer.aggregate!(aggregateFor(request)) } : {}),
-    insert: (input) => {
-      const server = isServerRequest(input);
-      const request = jsonWritten(full, requestData(input));
-      const operation = capture(grant);
-      assertWrite(request.table);
-      if (operation.creatable && !operation.creatable.has(request.table)) throw new AppAccessDenied();
-      recordFields(request.table, request.values, 'write', server);
-      const written = product?.insert ? product.insert(request, operation, server) : (async () => writer.insert(request))();
-      return written.then((result) => {
-        const readable = operation.fields?.get(request.table)?.read;
-        if (!readable || !result.row) return result;
-        return { ...result, row: Object.fromEntries(Object.entries(result.row).filter(([column]) => readable.has(column))) };
-      });
-    },
-    update: (input) => {
-      const request = jsonWritten(full, requestData(input));
-      const operation = capture(grant);
-      if (!operation.writable.has(request.table)) {
-        const answered = product?.unwritable?.(request, operation);
-        if (answered) return answered;
-      }
-      assertWrite(request.table);
-      recordFields(request.table, request.values, 'write', isServerRequest(input));
-      keyFields(request.table, request.key);
-      if (request.expected !== undefined) {
-        recordFields(request.table, request.expected, 'read');
-        if (!expectedCovers(full, request)) throw new AppAccessDenied();
-      }
-      assertRelatedWrites(request.table, Object.keys(request.values));
-      return product?.update ? product.update(request, operation) : (async () => writer.update(request))();
-    },
+    insert: (input) => insertVia(input, (request) => writer.insert(request)),
+    update: (input) => updateVia(input, (request) => writer.update(request)),
+    // A batch: each row through the same checks, its write one row of one statement.
+    ...(writer.insertMany
+      ? { insertMany: (inputs: readonly InsertRequest[]) => gathered(inputs, insertVia, (requests) => writer.insertMany!(requests)) }
+      : {}),
+    ...(writer.updateMany
+      ? { updateMany: (inputs: readonly UpdateRequest[]) => gathered(inputs, updateVia, (requests) => writer.updateMany!(requests)) }
+      : {}),
     remove: (input) => {
       const request = requestData(input);
       assertWrite(request.table);

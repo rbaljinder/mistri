@@ -5,6 +5,41 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.34
+
+Command speed, lease and restart recovery, bulk writes, and fixes from a tenant-App field report.
+
+- **SQLite commands verify their writer whole only when the schema moved.** The full check runs when the transaction opens and again before COMMIT. Between those, each operation reads the schema version and re-checks only when it moved. On a 21-call tenant command, the attests went from 124 to 4 and the time from 164 ms to 26 ms. A schema change during the command is still refused before COMMIT.
+- **A command caught by a lease renewal runs once.** A tenant page holds reads and commands while a renewal is in flight, then sends them under the renewed lease.
+  - A request refused as `tenant_lease_stale` or `tenant_lease_expired` renews once and is sent again. A read is always resent. A command is resent only when the refusal said `not_applied`, with the same idempotency key, so the server's receipt makes a second delivery a replay.
+  - A command refused at the door answers `not_applied`.
+  - `run()` always settles. An answer that never came settles as `unknown`, with a `check()` under the same key.
+- **A page that is open across a `mistri dev` restart enters its tenant again.** The server answers a context it no longer holds with 403 `tenant_context_unavailable` and outcome `not_applied`. The page then opens the same tenant once and asks again, under the same rules as a lease refusal. A second failure says the page needs a reload; it never blames the person's role. A grant saved during dev is the one the restarted host serves.
+- **Bulk writes.** `db.<table>.insertMany(rows)` and `db.<table>.updateWhere(where, changes)` write their rows in one statement on SQLite and PostgreSQL.
+  - Each row meets every check a single write meets, and each row writes one audit change.
+  - A call takes at most 1,000 rows. If the database refuses one row, none are kept.
+  - `updateWhere` guards each row by what it read, so a row that changes in between refuses `stale_record`.
+  - Tenant, row-scoped and draft writers write one row at a time, with the same outcome.
+- **`ui.timezone` may name the platform-owned tenant profile.** The platform reads that one column for the signed-in person's tenant; no role needs a grant on the profile. A command's `today()` counts days in that zone, as reads do. An empty or unknown value falls back to the App's zone, and `check` refuses a column the profile does not have.
+- **`openPage` keeps a tenant session in place.** It no longer reloads the App, and neither does an `Item`'s in-App link.
+- **Kit `FileField`.** It takes `label`, `hint`, `problem`, `accept` and `disabled`, and hands the chosen `File` (or null) to `onChange`. It is exported from the page entry beside `TextField` and `Select`.
+- **`check`.**
+  - It holds a `<Rows>`, `<List>` or `<RecordCard>` to the page's declared reads. This covers its literal `show`, `query` and `sort` paths. The serve and dev lint run the same scan.
+  - It refuses a command write that sets a reference to a table the command does not read, on tenant Apps too.
+  - A command-reference finding is an error under `check` and a warning at a start.
+- **Tenant fixes.**
+  - A fixed-action grant in a tenant App with a platform-owned profile no longer refuses every request.
+  - `ui.microphone` is read on a tenant host's shell.
+- **CLI.**
+  - `mistri dev` runs one session per App folder (`.mistri/dev.pid`). A second session is refused with the pid and port of the first; a dead pid is taken over.
+  - `jobs run --tenant` takes the tenant's lease, so a manual run and that tenant's scheduled run never overlap.
+  - `migrate up <db file>` works on a tenant App.
+  - `api-token` names the precondition a refusal comes from and the phase a failed step was in.
+  - `--export openapi` leaves jobs out, and reads a timestamp with no zone as a UTC `date-time` string.
+- **A build records its resolved theme preset.** A start that resolves another preset warns, and the build's preset still holds.
+- **The auth and token stores wait up to 5 s for a concurrent reader** instead of exiting on `database is locked`.
+- **Docs.** The events-and-jobs guide no longer says a tenant job may not run a command with events or a lookup. Only a job that runs a platform command is refused.
+
 ## 1.0.0-rc.33
 
 Fixes and defaults from a tenant-App field report, kit list and rail blocks, and a dev and test as-of clock.

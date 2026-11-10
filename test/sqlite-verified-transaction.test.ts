@@ -29,7 +29,7 @@ function fixture(t: TestContext) {
 const update = { table: 'item', key: { id: 1 }, values: { name: 'After' } };
 const query = { table: 'item', limit: 20, offset: 0 };
 
-test('verified SQLite boundary shares the writer and brackets operations and commit', async (t) => {
+test('verified SQLite boundary shares the writer and verifies whole when it opens and before commit', async (t) => {
   const f = fixture(t);
   let calls = 0;
   const handles = new Set<DatabaseSync>();
@@ -49,26 +49,92 @@ test('verified SQLite boundary shares the writer and brackets operations and com
       assert.equal((await records.query(query)).rows[0].name, 'After');
     },
   );
-  assert.equal(calls, 6);
+  assert.equal(calls, 2);
   assert.equal(handles.size, 1);
   assert.equal([...handles][0].isTransaction, false);
   assert.equal(f.name(), 'After');
 });
 
-for (const phase of [1, 2, 3, 4]) {
+/* The budget a field report asked for: each database call verified whole read the catalog twice, 100 to 150 ms with
+   forty tables. Whole verification is two a transaction however many operations it makes, while the schema holds. */
+test('a verified transaction of many operations verifies whole twice when the schema does not move', async (t) => {
+  const f = fixture(t);
+  let calls = 0;
+  await f.adapter.scopeVerifiedTransaction(
+    { item: true },
+    () => {
+      calls++;
+    },
+    async (records) => {
+      for (let i = 0; i < 20; i++) {
+        await records.update({ ...update, values: { name: `After ${i}` } });
+        await records.query(query);
+        await records.count('item');
+      }
+    },
+  );
+  assert.equal(calls, 2);
+  assert.equal(f.name(), 'After 19');
+});
+
+/* The verifier's raw handle is the one way to change the schema mid-transaction: a stand-in for anything that moves it
+   (a TEMP shadow, an index, a trigger). The next operation verifies whole, and the verifier, which compares the schema
+   with the one it attested, refuses before COMMIT. */
+for (const ddl of ['CREATE INDEX main.item_name ON item(name)', 'CREATE TEMP TABLE shadow(x)', 'CREATE TEMP VIEW shadow AS SELECT 1']) {
+  test(`a schema moved mid-transaction (${ddl.split(' ').slice(0, 3).join(' ')}) is verified whole again and refused before commit`, async (t) => {
+    const f = fixture(t);
+    let calls = 0,
+      handle!: DatabaseSync,
+      baseline: string | undefined;
+    const schema = (db: DatabaseSync) =>
+      JSON.stringify([
+        db.prepare('SELECT type, name, sql FROM main.sqlite_schema ORDER BY name').all(),
+        db.prepare('SELECT type, name, sql FROM temp.sqlite_schema ORDER BY name').all(),
+      ]);
+    await assert.rejects(
+      f.adapter.scopeVerifiedTransaction(
+        { item: true },
+        (db) => {
+          calls++;
+          handle = db;
+          const now = schema(db);
+          if (baseline !== undefined && now !== baseline) throw new Refusal('The schema moved.');
+          baseline ??= now;
+        },
+        async (records) => {
+          await records.query(query);
+          await records.query(query);
+          handle.exec(ddl);
+          await records.update(update);
+        },
+      ),
+      /The schema moved/,
+    );
+    // Opening, then the operation after the move; never the commit.
+    assert.equal(calls, 2);
+    assert.equal(f.name(), 'Before');
+    assert.equal(f.db.prepare("SELECT count(*) AS n FROM sqlite_schema WHERE name = 'item_name'").get()!.n, 0);
+  });
+}
+
+for (const phase of [1, 2, 3]) {
   test(`verified boundary refusal at phase ${phase} rolls back even if an operation rejection is caught`, async (t) => {
     const f = fixture(t),
       failure = new Refusal('owned boundary refusal');
     let calls = 0,
-      entered = false;
+      entered = false,
+      handle!: DatabaseSync;
     await assert.rejects(
       f.adapter.scopeVerifiedTransaction(
         { item: true },
-        () => {
+        (db) => {
+          handle = db;
           if (++calls === phase) throw failure;
         },
         async (records) => {
           entered = true;
+          // Moved, so the operation verifies whole (phase 2) before the commit does (phase 3).
+          handle.exec('CREATE TEMP TABLE moved(x)');
           try {
             await records.update(update);
           } catch (error) {
@@ -154,7 +220,8 @@ test('failed rollback after a verifier refusal remains an unknown transaction ou
       f.adapter.scopeVerifiedTransaction(
         { item: true },
         () => {
-          if (++calls === 3) {
+          // The verification before COMMIT.
+          if (++calls === 2) {
             armed = true;
             throw new Refusal('private verifier refusal');
           }

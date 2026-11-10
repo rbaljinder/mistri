@@ -127,6 +127,7 @@ const PAGE_ONLY = [
   'ChoiceCards',
   'DateField',
   'Drawer',
+  'FileField',
   'Modal',
   'Pagination',
   'Popover',

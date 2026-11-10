@@ -3,6 +3,7 @@ import { defineMessages } from '@mistriwork/kit/client/messages.js';
 
 export const say = defineMessages({
   theTenantContextIsUnavailable: 'The tenant context is unavailable. Verify your session and choose a tenant again.',
+  thisPageNeedsAReload: 'This page lost its connection to the server. Reload the page to continue.',
   theTenantResponseCould: 'The tenant response could not be verified.',
   theTenantRequestWasRefused: 'The tenant request was refused.',
   thisOperationIsNotEnabled: 'This operation is not enabled in the tenant browser.',

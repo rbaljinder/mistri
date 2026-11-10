@@ -2,6 +2,7 @@
  * never retries a write or claims that an output failure rolled it back. */
 import type { Writable } from 'node:stream';
 import { assertApiTokenSecretId } from '../api/apiTokenSecret.js';
+import { MaintenanceRefusal } from './apiTokenRefusal.js';
 
 const API_TOKEN_USAGE = `mistri api-token <provision|issue|inspect|revoke> --app <dir> --config <file> --store-id <uuid>
   issue:   --subject <native-account-id> --actor <native-account-id>
@@ -58,13 +59,17 @@ export async function runApiTokenCommand(
     });
     await writeApiTokenOutput(stdout, `${JSON.stringify(result)}\n`);
     return 0;
-  } catch {
+  } catch (error) {
     // Do not echo loader, driver, argv or output errors: they can contain
     // credentials. A commit may have succeeded before an error was observed.
+    // A refusal is the exception: it names the precondition that failed and nothing else (apiTokenRefusal.ts), a field
+    // report asked for it.
     try {
       await writeApiTokenOutput(
         stderr,
-        'mistri: API token maintenance failed. The outcome may be uncertain; inspect the store/token before retrying.' +
+        (error instanceof MaintenanceRefusal
+          ? `mistri: ${error.message}`
+          : 'mistri: API token maintenance failed. The outcome may be uncertain; inspect the store/token before retrying.') +
           (issueLocator ? ` Token ID: ${issueLocator}.` : '') +
           '\n',
       );

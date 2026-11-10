@@ -38,23 +38,38 @@ export const JOB_HELD: readonly string[] = Object.freeze(['leased', 'unknown']);
  * A job at times runs one at a time (OP9): a run of its platform slot (`every-` and the slot's sixteen digits,
  * jobCommands.ts everySlotKey) or an operator's run of it now (`manual-`, jobManualRun.ts) is not claimed while
  * another such run of the same job holds a lease, nor beside one in the same claim. A tenant's slot carries its
- * tenant in a longer key and is not held back by another tenant's; an event's or a timer's job is never held back.
+ * tenant in a longer key (leaseGroup): its own slots and manual runs are one group, and another tenant's are not held back by it; an event's or a timer's job is never held back.
  * The claim is one serialized step on both engines (SQLite's one writer, PostgreSQL's namespace lock), so two hosts
  * cannot each lease one.
  */
-const TIMED_KEY = /^(?:manual-|every-\d{16}$)/;
+/* Platform runs: `every-` + 16 digits (22 characters) and `manual-` + 16 digits, `-`, 16 characters of chance (40).
+   A tenant's run of either adds `-` and its tenant's 40-hex hash (63 and 81): the same group as the other runs of that
+   tenant, so a manual run for a tenant and the tenant's own slot take one lease, as the platform's do. */
+const TIMED_KEY = /^(?:manual-|every-\d{16}(?:-[0-9a-f]{40})?$)/;
 /** Whether a row's key is one of a job at times' runs that may not overlap. */
 const oneAtATime = (key: unknown): boolean => typeof key === 'string' && TIMED_KEY.test(key);
+/** The tenant a timed run's key names ('' for the platform's): runs in one group are the ones that may not overlap. */
+const leaseGroup = (key: unknown): string => {
+  if (typeof key !== 'string') return '';
+  if (key.startsWith('every-') && key.length === 63) return key.slice(23);
+  if (key.startsWith('manual-') && key.length === 81) return key.slice(41);
+  return '';
+};
 /** The same, in SQL both engines read, over a table alias. */
 export const oneAtATimeSql = (alias: string) =>
-  `(substr(${alias}.idempotency_key, 1, 7) = 'manual-' OR (substr(${alias}.idempotency_key, 1, 6) = 'every-' AND length(${alias}.idempotency_key) = 22))`;
+  `(substr(${alias}.idempotency_key, 1, 7) = 'manual-' OR (substr(${alias}.idempotency_key, 1, 6) = 'every-' AND length(${alias}.idempotency_key) IN (22, 63)))`;
+/** The tenant's hash a timed run's key carries, or '' (leaseGroup, in SQL). */
+export const leaseGroupSql = (alias: string) =>
+  `(CASE WHEN substr(${alias}.idempotency_key, 1, 6) = 'every-' AND length(${alias}.idempotency_key) = 63 THEN substr(${alias}.idempotency_key, 24) ` +
+  `WHEN substr(${alias}.idempotency_key, 1, 7) = 'manual-' AND length(${alias}.idempotency_key) = 81 THEN substr(${alias}.idempotency_key, 42) ELSE '' END)`;
 /** Due rows, less a second one-at-a-time run of a job in the same claim (the query already left out a job that holds one). */
 export function withoutOverlap<R extends JobRow>(rows: readonly R[]): R[] {
-  const taken = new Set<unknown>();
+  const taken = new Set<string>();
   return rows.filter((row) => {
     if (!oneAtATime(row.idempotency_key)) return true;
-    if (taken.has(row.job)) return false;
-    taken.add(row.job);
+    const group = `${String(row.job)}\n${leaseGroup(row.idempotency_key)}`;
+    if (taken.has(group)) return false;
+    taken.add(group);
     return true;
   });
 }

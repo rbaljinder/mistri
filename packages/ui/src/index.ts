@@ -33,6 +33,7 @@ export { DateField, type DateFieldProps, type DateFieldWords } from './DateField
 export type { FieldFrame } from './fieldFrame.js';
 export { TextField, MaskedField, MoneyField, ValidMark, type MaskedFieldProps, type TextFieldProps } from './TextField.js';
 export { SensitiveField, type SensitiveFieldProps } from './SensitiveField.js';
+export { FileField, type FileFieldProps } from './FileField.js';
 export { Select, MultiSelect } from './Select.js';
 export {
   CheckCards,

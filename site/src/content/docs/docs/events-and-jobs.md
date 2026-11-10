@@ -87,8 +87,11 @@ processes serve the App; after a stop, only the latest missed slot runs, and a
 first start never runs a missed one. A slot that falls due while the last run
 still holds its lease waits for it. In a tenant App a job says
 `realm: 'tenant'` (once per active tenant) or `realm: 'platform'` (once, no
-tenant's rows). A tenant App's job may not run a command that declares
-`events` or looks anything up; the server refuses the pair at start.
+tenant's rows). A tenant job may run a command that declares `events` or looks
+something up: the event is recorded in that tenant's store as
+`service:<principal>`, and the lookup reads global rows and the record the
+command targets. A job that runs a platform command may not, since that
+command runs outside any tenant; the server refuses that pair at start.
 
 `mistri jobs run nightlyClose --app . --jobs jobs.ts` runs it now, once, as the
 job's principal, journaled as a slot's run is. It waits while the schedule's

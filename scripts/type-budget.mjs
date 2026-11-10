@@ -215,11 +215,14 @@ const require = createRequire(join(ROOT, 'package.json'));
    App with a page does. Measured with and without the page: 30,258 / 120,306 / 93,576 without the DOM lib or the
    page, 31,225 / 124,068 / 101,566 with both. The DOM lib is 25,500 of the symbols and React's declarations and the
    page about 8,000; neither grows with the schema. Compass's symbols ceiling rises to about 3% above; its types and
-   instantiations hold, as do synthetic's and Ignition's. */
+   instantiations hold, as do synthetic's and Ignition's.
+   rc.34: Ignition measures 193,923 symbols, 23 past: the command `db` gains `insertMany` and `updateWhere`, two
+   methods on the table writer every table shares, read once, nothing per table. Symbols rise to about 1.5% above;
+   types and instantiations hold. */
 export const BUDGET = {
   synthetic: { types: 184_400, instantiations: 991_600, symbols: 480_200 },
   compass: { types: 32_500, instantiations: 149_000, symbols: 104_600 },
-  ignition: { types: 65_900, instantiations: 242_300, symbols: 193_900 },
+  ignition: { types: 65_900, instantiations: 242_300, symbols: 196_800 },
 };
 
 /* Seconds of an unloaded core, scaled from the process's wall time (`calibrate`): a

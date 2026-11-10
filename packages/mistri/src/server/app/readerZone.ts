@@ -51,13 +51,19 @@ export function zoneColumnProblem(app: AppDef, schema: DatabaseSchema): string |
 export async function commandZone(
   ui: AppUi | undefined,
   reads: () => Promise<{ query(request: QueryRequest): Promise<QueryResult> }>,
+  /** Where the column is on the platform-owned profile (the scope holds no such table): the platform's own read of it,
+   * so a command counts the day the reads do. */
+  profile?: { readonly resource: string | undefined; read(column: string): Promise<string | undefined> },
 ): Promise<string | undefined> {
   const named = zoneColumn(ui);
   if (!named) return undefined;
   let value: unknown;
   try {
-    const { rows } = await (await reads()).query({ table: named.resource, columns: [named.column], limit: 1, offset: 0 });
-    value = rows[0]?.[named.column];
+    if (profile && profile.resource === named.resource) value = await profile.read(named.column);
+    else {
+      const { rows } = await (await reads()).query({ table: named.resource, columns: [named.column], limit: 1, offset: 0 });
+      value = rows[0]?.[named.column];
+    }
   } catch {
     value = undefined;
   }

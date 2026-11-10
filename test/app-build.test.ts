@@ -11,7 +11,13 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { buildApp, BUILD_EXIT, BuildFailure } from '../packages/mistri/src/server/build/build.js';
 import { loadRolldown } from '../packages/mistri/src/server/build/bundle.js';
-import { decodeLossless, encodeLossless, BUILD_MANIFEST, type BuildManifest } from '../packages/mistri/src/server/app/appBuild.js';
+import {
+  decodeLossless,
+  encodeLossless,
+  themeDriftWarning,
+  BUILD_MANIFEST,
+  type BuildManifest,
+} from '../packages/mistri/src/server/app/appBuild.js';
 import { runtimeVersion } from '../packages/engine/src/server/packageVersion.js';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
 
@@ -267,4 +273,11 @@ describe('a build, served', () => {
     const unknown = await edited((dir, manifest) => writeFileSync(join(dir, BUILD_MANIFEST), JSON.stringify({ ...manifest, format: 2 })));
     await assert.rejects(loadApp(unknown), /is not a build this mistri reads \(format 2\)/);
   });
+});
+
+test('a start says when its theme preset is not the one the build recorded, and says nothing for an older build', () => {
+  assert.match(themeDriftWarning('workshop', 'ledger')!, /recorded "workshop".*resolves "ledger".*Rebuild, or drop the env override/);
+  assert.match(themeDriftWarning('workshop', undefined)!, /resolves none/);
+  assert.equal(themeDriftWarning('workshop', 'workshop'), undefined);
+  assert.equal(themeDriftWarning(undefined, 'ledger'), undefined, 'a manifest without the field gives no warning');
 });

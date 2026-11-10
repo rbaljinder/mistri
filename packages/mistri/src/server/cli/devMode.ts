@@ -16,7 +16,7 @@
  * which is why it refuses to run under NODE_ENV=production.
  */
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import type { LoadedApp } from '../app/apps.js';
 import { appDirectoryWord, findConfig, holdsApp } from '@mistriwork/engine/server/config/profile.js';
@@ -24,6 +24,7 @@ import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { isTenantApp } from '../../shared/appModel.js';
 import { columnKind, primaryKey, tableNamed } from '@mistriwork/engine/shared/schema.js';
 import type { Options } from '@mistriwork/engine/server/cli/args.js';
+import { DEV_SUPERVISED_ENV } from './devSupervisor.js';
 
 const USAGE = 'mistri dev [--app <dir>] [<db> | --db <target> | --config <path>] [serve options]';
 const ADMIN = 'admin@example.test';
@@ -62,6 +63,54 @@ function devFile(folder: string): { file: string; dev: DevFile } {
   dev.passwords.admin ??= password();
   writeFileSync(file, `${JSON.stringify(dev, null, 2)}\n`, { mode: 0o600 });
   return { file, dev };
+}
+
+/** Whether a process is still there: signal 0 delivers nothing, and EPERM is a process of someone else's, which is there. */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * One `mistri dev` per App folder. Two sessions on one folder share its auth store, its ports and its restarts, and each
+ * killed the other's server (a field report), so the session that holds the folder writes `.mistri/dev.pid` (its pid
+ * and port) and a second refuses, naming both and how to stop it. A pid that is gone (a session that was killed, not
+ * stopped) is taken over silently. The file is the supervising parent's: a restarted child keeps it, and says its port
+ * once it listens.
+ */
+function claimDevFolder(folder: string, port: number | undefined): { owner: number; record: (port: number) => void } {
+  const file = join(folder, 'dev.pid');
+  const supervised = process.env[DEV_SUPERVISED_ENV] === '1';
+  const owner = supervised ? process.ppid : process.pid;
+  const write = (at: number | undefined) =>
+    writeFileSync(file, `${JSON.stringify({ pid: owner, ...(at !== undefined ? { port: at } : {}) })}\n`);
+  if (!supervised) {
+    try {
+      const held = JSON.parse(readFileSync(file, 'utf8')) as { pid?: unknown; port?: unknown };
+      if (typeof held.pid === 'number' && held.pid !== process.pid && alive(held.pid))
+        throw new DevRefusal(
+          `another mistri dev session already serves this App folder (pid ${held.pid}${typeof held.port === 'number' ? `, port ${held.port}` : ''}); ` +
+            `two sessions stop each other's server. Stop it with: kill ${held.pid} (or Ctrl-C in its terminal), then start again.`,
+        );
+    } catch (error) {
+      if (error instanceof DevRefusal) throw error;
+      /* No file, or one that does not parse: nobody holds the folder. */
+    }
+    write(port);
+    process.on('exit', () => {
+      try {
+        const held = JSON.parse(readFileSync(file, 'utf8')) as { pid?: unknown };
+        if (held.pid === process.pid) rmSync(file, { force: true });
+      } catch {
+        /* Already gone. */
+      }
+    });
+  }
+  return { owner, record: (at) => write(at) };
 }
 
 /** Whether the person named where the data is: then it is theirs to say, and dev mode does not look for a config. */
@@ -106,6 +155,8 @@ export function prepareDev(argv: string[], env: NodeJS.ProcessEnv = process.env)
 
   const folder = join(app, '.mistri');
   const { file, dev } = devFile(folder);
+  const portAt = args.indexOf('--port');
+  const claimed = claimDevFolder(folder, portAt >= 0 && /^\d+$/.test(args[portAt + 1] ?? '') ? Number(args[portAt + 1]) : undefined);
   env.BETTER_AUTH_SECRET = dev.secret;
   env.MISTRI_AUTH_ADMIN_EMAIL = ADMIN;
   env.MISTRI_AUTH_ADMIN_PASSWORD = dev.passwords.admin;
@@ -116,6 +167,11 @@ export function prepareDev(argv: string[], env: NodeJS.ProcessEnv = process.env)
   return {
     argv: ['--app', app, ...args, ...(args.includes('--dev') ? [] : ['--dev'])],
     serving(opts, loadedApps, registry) {
+      /* The port the server bound, for the session that finds the folder held. */
+      void ready(opts).then(
+        () => claimed.record(opts.port),
+        () => {},
+      );
       const tenant = loadedApps.find((loaded) => isTenantApp(loaded.app));
       void (tenant ? tenantAccounts(opts, tenant, dev, file, registry) : accounts(opts, loadedApps, dev, file, registry)).catch(
         (error: Error) => {

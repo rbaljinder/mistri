@@ -266,6 +266,9 @@ export const main: Main = async () => {
     console.error('mistri: --commands requires a file and an --app: the HTTP App runtime, mistri check or --export.');
     process.exit(1);
   }
+  /* A document describes the App's API, which no job is part of: the jobs a config's `app` block names (or --jobs) are
+     left out of `--export openapi`, rather than refused as a mode that reads none (a field report). */
+  if (opts.jobs !== undefined && opts.export?.toLowerCase() === 'openapi') delete opts.jobs;
   if (opts.jobs !== undefined) {
     const refusal =
       !opts.jobs || opts.jobs.startsWith('-') || (opts.export && opts.export.toLowerCase() !== 'asyncapi') || opts.scaffoldApp

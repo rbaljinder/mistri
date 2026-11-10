@@ -113,3 +113,19 @@ async function execute(
   );
   return { operation };
 }
+
+/**
+ * A sent command whose answer did not arrive, asked again by its receipt: the same frozen envelope, so the same
+ * idempotency key, which the server answers from its journal and never runs a second time (businessCommandExecution.ts).
+ */
+export async function checkCommand(operation: CommandOperation, owner: CommandOwner, refresh: () => void): Promise<void> {
+  await commandOperations.send(
+    operation,
+    'status',
+    (path, envelope) => {
+      if (path !== '/api/commands/execute' && path !== '/api/commands/status') throw new Error(say('common.invalidCommandPath'));
+      return api(path, { ...envelope, ...ownedBy(owner.connection) });
+    },
+    refresh,
+  );
+}

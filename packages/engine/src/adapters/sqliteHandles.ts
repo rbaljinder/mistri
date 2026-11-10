@@ -137,6 +137,19 @@ export function transactionEpoch(db: DatabaseSync, journal?: { table: string; ve
   }
 }
 
+/**
+ * The schema a write handle sees, cheaply, for asking between a verified transaction's operations whether it moved:
+ * main's `schema_version` and the handle's own TEMP `schema_version`, each bumped by any schema change. The statement
+ * form `PRAGMA temp.schema_version` reads the TEMP schema's own counter, where the table-valued
+ * `temp.pragma_schema_version` (SCHEMA_EPOCH) answers main's. A manual `PRAGMA schema_version = …` reset is outside
+ * this contract, as it is for captureSchemaLifetime: no business operation can send one.
+ */
+export function schemaFingerprint(db: DatabaseSync): () => string {
+  const main = db.prepare('PRAGMA main.schema_version'),
+    temp = db.prepare('PRAGMA temp.schema_version');
+  return () => `${main.get()?.schema_version}.${temp.get()?.schema_version}`;
+}
+
 /** The schema and whether a store's meta row says its version, in one statement; undefined when the store is not there. */
 export function storeEpoch(db: DatabaseSync, meta: { table: string; version: number }): string | undefined {
   try {

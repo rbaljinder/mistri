@@ -125,7 +125,7 @@ export function openSqliteAuthStore(path: string, fence: () => void): AuthStoreH
   fence();
   mkdirSync(dirname(path), { recursive: true });
   fence();
-  const database = new DatabaseSync(path);
+  const database = new DatabaseSync(path, { timeout: 5000 });
   let closed = false;
   return {
     kind: 'sqlite',

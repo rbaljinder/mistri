@@ -18,6 +18,7 @@ import {
   JOB_HELD as held,
   JOB_MAX_CLOCK,
   jobRelease,
+  leaseGroupSql,
   oneAtATimeSql,
   verifyJobRow,
   withoutOverlap,
@@ -226,7 +227,7 @@ export function openSqliteJobStore(existingPath: string, input: JobPolicyInput):
                 .prepare(
                   `SELECT * FROM main."${t.job}" AS j WHERE state IN ('scheduled','retry') AND run_at<=?
           AND NOT (${oneAtATimeSql('j')} AND EXISTS (SELECT 1 FROM main."${t.job}" AS o
-            WHERE o.job=j.job AND o.state IN ('leased','unknown') AND ${oneAtATimeSql('o')}))
+            WHERE o.job=j.job AND o.state IN ('leased','unknown') AND ${oneAtATimeSql('o')} AND ${leaseGroupSql('o')}=${leaseGroupSql('j')}))
           ORDER BY run_at,seq LIMIT ?`,
                 )
                 .all(now, room),

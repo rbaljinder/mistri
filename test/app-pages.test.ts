@@ -545,6 +545,49 @@ function Board() {
     assert.equal(scan.unread.length, 0, '<Empty action> is a button and <Value resource> reads nothing: neither is a name to hold');
   });
 
+  test("page-undeclared: a <Rows>, <List> or <RecordCard> show or query that crosses into a table the page does not read, on its own from or its Scope's", async (t) => {
+    const dir = mkdtempSync(join(tmpdir(), 'mistri-page-block-paths-'));
+    const file = join(dir, 'desk.db');
+    const db = new DatabaseSync(file);
+    db.exec(SQL);
+    db.close();
+    const adapter = connect(file);
+    t.after(async () => {
+      await adapter.close();
+      rmSync(dir, { recursive: true, force: true });
+    });
+    const schema = await adapter.introspect();
+    const source = `import { definePage, Scope, Rows, List, RecordCard } from '@mistriwork/mistri/page';
+const page = definePage({ label: 'Settle', reads: ['ticket'], component: Settle });
+export default page;
+function Settle() {
+  return (
+    <>
+      <Rows from="ticket" show={['name', 'desk_id.name']} />
+      <List from="ticket" show={['name', 'desk_id']} query="desk_id.name = North">{(row) => null}</List>
+      <Scope from="ticket">
+        <RecordCard record={{ id: 1 }} show={['desk_id.name']} />
+        <Rows show={['name']} />
+      </Scope>
+      <Rows from="ticket" show={paths} />
+    </>
+  );
+}`;
+    const parseAst = await astParser();
+    const manifest = { key: 'settle', reads: ['ticket'], commands: [] };
+    const scan = scanPageSource(parseAst, source, 'tsx', manifest, schema);
+    assert.deepEqual(
+      scan.undeclared.map((problem) => `${problem.line}: ${problem.text}`),
+      [
+        '7: [page-undeclared] <Rows from="ticket"> reads "desk" through its show "desk_id.name", which the page "settle" does not declare in its reads',
+        '8: [page-undeclared] <List from="ticket"> reads "desk" through its query "desk_id.name = North", which the page "settle" does not declare in its reads',
+        '10: [page-undeclared] <RecordCard from="ticket"> reads "desk" through its show "desk_id.name", which the page "settle" does not declare in its reads',
+      ],
+      "a reference's own column and an expression read nothing past the base",
+    );
+    assert.deepEqual(scanPageSource(parseAst, source, 'tsx', { ...manifest, reads: ['ticket', 'desk'] }, schema).undeclared, []);
+  });
+
   test('page-undeclared: with the catalog, a literal show, query, sort or by that crosses into a table the page does not read, as the server refuses it', async (t) => {
     const dir = mkdtempSync(join(tmpdir(), 'mistri-page-paths-'));
     const file = join(dir, 'desk.db');

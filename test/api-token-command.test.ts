@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { Writable } from 'node:stream';
 import { test } from 'node:test';
+import { MaintenanceRefusal } from '../packages/mistri/src/server/cli/apiTokenRefusal.js';
 import { runApiTokenCommand } from '../packages/mistri/src/server/cli/apiTokenCommand.js';
 
 function sink(fail = false) {
@@ -115,4 +116,35 @@ test('uncertain issuance retains only a validated non-secret locator, including 
   await runApiTokenCommand([], async (_argv, remember) => remember('UNTRUSTED_SECRET'), out.stream, err.stream);
   assert.doesNotMatch(err.chunks.join(''), /UNTRUSTED_SECRET/);
   assert.deepEqual(out.chunks, []);
+});
+
+// A field report: a refusal that names its precondition was printed as the generic "maintenance failed".
+test('a refusal prints the precondition it names, and any other failure stays the generic line', async () => {
+  const refused = sink();
+  const code = await runApiTokenCommand(
+    ['provision'],
+    async () => {
+      throw new MaintenanceRefusal(
+        'API token maintenance could not be completed: no mistri.json configuration could be loaded (pass --config).',
+      );
+    },
+    sink().stream,
+    refused.stream,
+  );
+  assert.equal(code, 2);
+  assert.equal(
+    refused.chunks.join(''),
+    'mistri: API token maintenance could not be completed: no mistri.json configuration could be loaded (pass --config).\n',
+  );
+  const other = sink();
+  await runApiTokenCommand(
+    ['provision'],
+    async () => {
+      throw new Error('PRIVATE_DRIVER_DETAIL');
+    },
+    sink().stream,
+    other.stream,
+  );
+  assert.match(other.chunks.join(''), /API token maintenance failed/);
+  assert.doesNotMatch(other.chunks.join(''), /PRIVATE_DRIVER_DETAIL/);
 });

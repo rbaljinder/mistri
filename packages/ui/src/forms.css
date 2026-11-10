@@ -29,6 +29,13 @@
 .field-note { display: flex; align-items: center; gap: var(--space-3); margin: 0; font-size: var(--text-sm); line-height: 1.45; color: var(--ink-muted); }
 .field-note > svg { flex: none; width: 14px; height: 14px; }
 
+/* The file picker is the browser's own input in a field's box (`field-control`); only its button is dressed, in the
+   quiet button's tokens, and the box's own padding keeps the button off its edge. */
+.field-control.field-file { padding: calc(var(--space-2) - var(--control-border-w)) var(--space-2); color: var(--ink-muted); cursor: pointer; }
+.field-control.field-file::file-selector-button { margin-inline-end: var(--space-3); padding: var(--space-1h) var(--space-3); font: inherit; font-size: var(--text-sm); color: var(--ink); background: var(--raised); border: 1px solid var(--line-control); border-radius: var(--field-radius, var(--radius)); cursor: pointer; }
+.field-control.field-file:is(:disabled, [aria-disabled="true"]) { cursor: not-allowed; }
+.field-control.field-file:is(:disabled, [aria-disabled="true"])::file-selector-button { color: var(--ink-muted); cursor: not-allowed; }
+
 /* The form's listbox is the Dropdown dressed as a field box. */
 .dd-button.field-select { min-height: var(--control-h); border-width: var(--control-border-w); padding: var(--space-2h) var(--space-3h); font: inherit; font-size: var(--text-base); background: var(--field-fill); border-radius: var(--field-radius, var(--radius)); text-align: start; }
 .dd-button.field-select[aria-invalid="true"] { border-color: var(--status-critical); }

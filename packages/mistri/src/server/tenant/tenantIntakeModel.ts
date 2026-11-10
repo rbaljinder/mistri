@@ -304,6 +304,24 @@ export function captureAddressesLookup(owned: TenantOwnershipSnapshot, lookup: T
   for (const column of Object.values(value.columns)) if (column !== undefined) assertIntakeColumn(owned, column as string);
   return value as TenantAddressesLookup;
 }
+/** One tenant's profile column, read for the person's zone (`ui.timezone: { column }` naming the profile): a tenant
+ * (never the platform) and the one text column, attested as an address's is. Nothing else of the row is asked. */
+export interface TenantZoneLookup {
+  readonly tenantId: string;
+  readonly column: string;
+}
+export function captureZoneLookup(owned: TenantOwnershipSnapshot, lookup: TenantZoneLookup): TenantZoneLookup {
+  const value = captureTenantData(lookup);
+  tenantRecord(value, ['tenantId', 'column']);
+  const tenantId = parseTenantSelector([value.tenantId]);
+  if (tenantId === PLATFORM_TENANT_ID) return denyTenant();
+  assertIntakeColumn(owned, value.column as string);
+  return value as TenantZoneLookup;
+}
+/** What the profile row holds in that column: its one row's text, else nothing (a doubled key is no one's). */
+export function heldZone(rows: readonly Record<string, unknown>[]): string | undefined {
+  return rows.length === 1 && typeof rows[0].address === 'string' ? rows[0].address : undefined;
+}
 /** The value a tenant's profile row holds, when it is of an address's shape:
  * one row, never a doubled key. Its resolution (intakeAddressQuery) must still
  * name this tenant alone for it to be the tenant's own (tenantOwnAddress). */

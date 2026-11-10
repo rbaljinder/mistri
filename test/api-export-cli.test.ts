@@ -221,6 +221,16 @@ test('a read-only App exports its read surface without executing unrelated regis
   assert.doesNotMatch(readOnly.err, /ERR_MODULE_NOT_FOUND|ENOENT|could not be loaded/);
 });
 
+// A field report: an App whose config names `jobs` was refused in export mode, and no document was written.
+test('an openapi export ignores the jobs a start would run, and still writes its document', async (t) => {
+  const f = fixture();
+  t.after(() => rmSync(f.directory, { recursive: true, force: true }));
+  const args = ['--config', f.config, '--app', f.app, '--export', 'openapi', '--api-integers', 'decimal-string', '--commands', f.commands];
+  const jobs = await cli(f.directory, [...args, '--jobs', join(f.directory, 'jobs.ts')]);
+  assert.equal(jobs.code, 0, jobs.err);
+  assert.deepEqual(Object.keys(JSON.parse(jobs.out).paths), ['/person', '/person/{id}']);
+});
+
 test('an App file declaring API commands exports them with --commands, and refuses without it before importing anything', async (t) => {
   const c = commandFixture(true);
   t.after(() => rmSync(c.directory, { recursive: true, force: true }));

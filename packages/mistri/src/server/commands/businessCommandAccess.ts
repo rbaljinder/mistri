@@ -1,7 +1,9 @@
 import {
   TransactionOperations,
   type AggregateRequest,
+  type InsertRequest,
   type TellRequest,
+  type UpdateRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import type { CommandJournal } from '../../adapters/commands/commandJournal.js';
@@ -218,6 +220,22 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
               : {}),
             insert: (request) => operations.run(async () => tx.insert({ ...request, table: table(request.table, true) })),
             update: (request) => operations.run(async () => tx.update({ ...request, table: table(request.table, true) })),
+            ...(tx.insertMany
+              ? {
+                  insertMany: (requests: readonly InsertRequest[]) =>
+                    operations.run(async () =>
+                      tx.insertMany!(requests.map((request) => ({ ...request, table: table(request.table, true) }))),
+                    ),
+                }
+              : {}),
+            ...(tx.updateMany
+              ? {
+                  updateMany: (requests: readonly UpdateRequest[]) =>
+                    operations.run(async () =>
+                      tx.updateMany!(requests.map((request) => ({ ...request, table: table(request.table, true) }))),
+                    ),
+                }
+              : {}),
             remove: (request) => operations.run(async () => tx.remove({ ...request, table: table(request.table, true) })),
             ...(tx.tell
               ? { tell: (request: TellRequest) => operations.run(async () => tx.tell!({ ...request, table: table(request.table) })) }

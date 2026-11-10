@@ -4046,6 +4046,8 @@
         "./page: Field",
         "./page: FigureGroup",
         "./page: FigureValue",
+        "./page: FileField",
+        "./page: FileFieldProps",
         "./page: Fragment",
         "./page: Gallery",
         "./page: Grid",

@@ -556,6 +556,30 @@ for (const engine of jobEngines)
         [manual.id],
       );
     });
+
+    // A field report: `jobs run <name> --tenant <id>` must take the lease its tenant's scheduled run takes.
+    test("a tenant's manual run and that tenant's own slot take one lease; another tenant's runs are not held", async (t) => {
+      const store = await (await engine.fixture(t, policy({ maxInFlight: 8 }))).open();
+      const slot = (at: number, hash: string) => `every-${String(at).padStart(16, '0')}-${hash}`;
+      const manual = (hash: string) => `manual-0000000000001000-${'x'.repeat(16)}-${hash}`;
+      const timed = (key: string) => request(key, { job: 'remind', runAt: 1_000 });
+      const a = 'a'.repeat(40);
+      const b = 'b'.repeat(40);
+      const slotA = await store.enqueue(timed(slot(60_000, a)), 1_000);
+      const manualA = await store.enqueue(timed(manual(a)), 1_001);
+      const manualB = await store.enqueue(timed(manual(b)), 1_002);
+      const claimed = await store.claim(1_500);
+      assert.deepEqual(
+        claimed.map((claim) => claim.id),
+        [slotA.id, manualB.id],
+      );
+      assert.deepEqual(await store.claim(1_600), []);
+      await store.succeed(claimed[0].id, claimed[0].fence, 1_700);
+      assert.deepEqual(
+        (await store.claim(1_800)).map((claim) => claim.id),
+        [manualA.id],
+      );
+    });
   });
 
 describe('job store on SQLite only', () => {
