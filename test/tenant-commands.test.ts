@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, StatementSync } from 'node:sqlite';
 import { test, type TestContext } from 'node:test';
 import { TransactionOperations, TransactionOutcomeUnknown, type QueryResult } from '../packages/engine/src/adapters/adapter.js';
 import { COMMAND_JOURNAL_TABLES as tables, migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/commands/commandJournal.js';
@@ -338,20 +338,25 @@ test('command-only membership prepares, executes and replays with no generic CRU
 });
 
 /* The writer's whole attestation (tenantWriteSource.ts attest) ends in this read of the schema; counted as the
-   attestations a command makes. A field report found a handler of 20 database calls spending 2 to 3 seconds in them. */
+   attestations a command makes. A field report found a handler of 20 database calls spending 2 to 3 seconds in them.
+   The statement is prepared once per handle and kept (cachedStatement), so its runs are counted, not its prepares. */
 const ATTEST = 'FROM main.sqlite_schema ORDER BY type, name';
 function countAttests(t: TestContext) {
   const original = DatabaseSync.prototype.prepare;
+  const all = StatementSync.prototype.all;
   const seen = { count: 0, writer: undefined as DatabaseSync | undefined };
+  // The writer is the handle a handler's read is prepared on.
   DatabaseSync.prototype.prepare = function (this: DatabaseSync, sql: string, ...rest: unknown[]) {
-    if (sql.includes(ATTEST)) {
-      seen.count++;
-      seen.writer = this;
-    }
+    if (sql.includes('db_reviewer')) seen.writer ??= this;
     return (original as (this: DatabaseSync, ...args: unknown[]) => ReturnType<typeof original>).call(this, sql, ...rest);
   } as typeof original;
+  StatementSync.prototype.all = function (this: StatementSync, ...args: unknown[]) {
+    if (this.sourceSQL.includes(ATTEST)) seen.count++;
+    return (all as (this: StatementSync, ...args: unknown[]) => ReturnType<typeof all>).call(this, ...args);
+  } as typeof all;
   t.after(() => {
     DatabaseSync.prototype.prepare = original;
+    StatementSync.prototype.all = all;
   });
   return seen;
 }

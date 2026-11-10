@@ -226,6 +226,8 @@ interface SpanOptions {
   links?: readonly SpanLink[];
   /** Start only inside an existing span: a statement outside any request, job or command is not worth a trace. */
   childOnly?: boolean;
+  /** Start only beneath a sampled trace: the internal reads a statement span would otherwise open by the dozen (drivers.ts). */
+  sampledOnly?: boolean;
 }
 
 /** Begin a span; the caller ends it. Prefer `inSpan`, which also makes it current. */
@@ -235,6 +237,7 @@ export function startSpan(name: string, options: SpanOptions = {}): Span {
   if (options.childOnly && !parent) return NOOP;
   // Beneath a dropped span nothing is traced: the observer's own EXPLAIN is not a trace.
   if (parent?.discarded) return NOOP;
+  if (options.sampledOnly && !parent?.record.sampled) return NOOP;
   const remote = parent ? undefined : options.remote;
   const traceId = parent?.traceId ?? remote?.traceId ?? hex(16);
   const record: SpanRecord = {

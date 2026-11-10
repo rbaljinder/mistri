@@ -11,6 +11,7 @@ import {
   tenantRecord,
 } from '@mistriwork/engine/server/evidence.js';
 import { layoutRefusal, sqliteLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
+import { cachedStatement, schemaFingerprint } from '@mistriwork/engine/adapters/sqlite.js';
 import {
   parseTenantSelector,
   type TenantMembershipEvidence,
@@ -148,18 +149,32 @@ function catalog(db: DatabaseSync, schema: 'main' | 'temp'): CatalogEntry[] {
     .all(prefix.length, prefix, prefix.length, prefix) as unknown as CatalogEntry[];
 }
 const SQLITE_TENANT_STORE_VERSION = 1;
+/* A field report measured the store's layout read again inside every membership read. Any DDL on either schema
+   moves its schema_version, so while the pair is the one this handle's last passing layout check saw, the layout
+   it judged has not changed and the scan is skipped. The fingerprint is read before the scan, so DDL between the
+   two only makes the next read scan again; a refused check records nothing. The foreign-key flag is the
+   connection's own and DDL does not move it, and the meta row is data: both are read every time. */
+const layouts = new WeakMap<DatabaseSync, { fingerprint: () => string; passed?: string }>();
 function attest(db: DatabaseSync, owner: TenantStoreBinding): void {
-  const entries = catalog(db, 'main');
-  if (
-    catalog(db, 'temp').length ||
-    db.prepare('PRAGMA foreign_keys').get()?.foreign_keys !== 1 ||
-    definitions.size !== entries.filter((entry) => entry.sql !== null).length ||
-    entries.some((entry) =>
-      entry.sql === null
-        ? entry.type !== 'index' || !Object.values(TENANT_TABLES).some((name) => name === entry.tbl_name)
-        : definitions.get(entry.name) !== entry.sql,
+  let layout = layouts.get(db);
+  if (!layout) layouts.set(db, (layout = { fingerprint: schemaFingerprint(db) }));
+  const seen = layout.fingerprint();
+  if (cachedStatement(db, 'PRAGMA foreign_keys').get()?.foreign_keys !== 1) layout.passed = undefined;
+  else if (layout.passed !== seen) {
+    layout.passed = undefined;
+    const entries = catalog(db, 'main');
+    if (
+      !catalog(db, 'temp').length &&
+      definitions.size === entries.filter((entry) => entry.sql !== null).length &&
+      !entries.some((entry) =>
+        entry.sql === null
+          ? entry.type !== 'index' || !Object.values(TENANT_TABLES).some((name) => name === entry.tbl_name)
+          : definitions.get(entry.name) !== entry.sql,
+      )
     )
-  )
+      layout.passed = seen;
+  }
+  if (layout.passed !== seen)
     return denyLayout(layoutRefusal('The tenant store', sqliteLayoutVersion(db, TENANT_TABLES.meta), SQLITE_TENANT_STORE_VERSION));
   const rows = db.prepare(`SELECT singleton, version, app_id, source_id, store_id FROM main."${TENANT_TABLES.meta}"`).all();
   if (rows.length === 1 && typeof rows[0].app_id === 'string' && rows[0].app_id !== owner.appId)

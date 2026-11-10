@@ -5,6 +5,14 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.35
+
+Faster reads and commands in tenant Apps on SQLite.
+
+- **A read checks the tenant catalog only when the schema moved.** The tenant read source and the tenant store recorded the schema version after each passing check, and skip the full catalog scan while it is unchanged. A schema change, from any connection, is caught on the next read. A 20-read page went from 980 statements prepared to 60 (none of them catalog reads), and from 14.8 ms to 1.9 ms.
+- **The catalog cache outlives the adapter.** A writer reopened, or a second one on the same file, starts warm: the cache is kept per file (device, inode and birth time), at most 32 files, and every entry is still served only under the schema epoch the reader holds. An in-memory database never shares.
+- **Catalog reads cost less.** Statements for PRAGMA and catalog reads are prepared once per connection. A captured scope catalog is frozen with its sizes recorded, so a catalog derived from it is checked without copying its parts again. Catalog statements get trace spans only when the trace is sampled. A warm one-write command went from 491 statements prepared to 21.
+
 ## 1.0.0-rc.34
 
 Command speed, lease and restart recovery, bulk writes, and fixes from a tenant-App field report.

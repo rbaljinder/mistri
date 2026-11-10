@@ -17,6 +17,8 @@ import {
   storeEpoch,
   schemaFingerprint,
 } from './sqliteHandles.js';
+/* The tenant sources keep their catalog and store-layout checks by these (tenantReadSource.ts, tenantStore.ts). */
+export { cachedStatement, schemaFingerprint } from './sqliteHandles.js';
 import { captureScopeCatalog, mapScopeCatalog } from '../shared/scopeCatalog.js';
 import { inlineRows } from '../shared/anyRows.js';
 import { asksAboutRows } from '../shared/filter.js';
@@ -161,6 +163,41 @@ interface SqliteIndexRow {
   partial?: number;
 }
 
+/* The catalog answers a write transaction trusts outlive the adapter that read them: a writer reopened, or a second
+   one on the file, starts warm. Kept per file, by the identity of the file the handle opened (device, inode and birth
+   time, so a new file at a reused inode is a new key) and never across files; a file with no birth time to tell it
+   from its inode's next tenant, and an in-memory database, keep their own. Every entry is still served only under the
+   epoch the reader holds (epochCache.ts), and frozen, since another adapter reads the same value. */
+const sharedCatalogs = new Map<string, EpochCache<unknown>>();
+function catalogCacheOf(identity: string | undefined): EpochCache<unknown> {
+  if (identity === undefined) return new EpochCache();
+  const cache = sharedCatalogs.get(identity) ?? new EpochCache();
+  sharedCatalogs.delete(identity);
+  sharedCatalogs.set(identity, cache);
+  while (sharedCatalogs.size > 32) sharedCatalogs.delete(sharedCatalogs.keys().next().value!);
+  return cache;
+}
+function frozen<T>(value: T): T {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  if (value instanceof Map)
+    for (const [key, each] of value) {
+      frozen(key);
+      frozen(each);
+    }
+  else if (value instanceof Set) for (const each of value) frozen(each);
+  else for (const each of Object.values(value)) frozen(each);
+  return Object.freeze(value);
+}
+/* What the scope catalog was resolved with is part of its key: a caller judging trigger effects reads another
+   catalog than one that does not. */
+const resolverIds = new WeakMap<object, number>();
+let resolvers = 0;
+const resolverKey = (resolve: object | undefined) => {
+  if (!resolve) return 'scope';
+  if (!resolverIds.has(resolve)) resolverIds.set(resolve, ++resolvers);
+  return `scope:${resolverIds.get(resolve)}`;
+};
+
 const verifiedCommandAdapters = new WeakSet<object>();
 /** Identity-only native provenance; no caller can register a lookalike. */
 export const isSqliteVerifiedCommandSource = (value: unknown): value is SqliteAdapter =>
@@ -180,8 +217,8 @@ export class SqliteAdapter implements Adapter {
   /* Catalog answers a write transaction trusts — the journal's layout, the
      scope catalog, a table's existence and its columns — kept under the
      schema epoch the transaction read (transactionEpoch), so a warm command
-     asks the catalog nothing (epochCache.ts). */
-  private readonly catalogCache = new EpochCache<unknown>();
+     asks the catalog nothing (epochCache.ts). Shared by every adapter on the file (catalogCacheOf). */
+  private readonly catalogCache: EpochCache<unknown>;
   /** The epoch the open write transaction read, on the handle it read it on. */
   private txEpoch?: { handle: DatabaseSync; epoch: string };
 
@@ -199,7 +236,11 @@ export class SqliteAdapter implements Adapter {
       if (typeof filename === 'string' && filename) {
         const info = statSync(filename, { bigint: true });
         this.writeIdentity = `${info.dev}:${info.ino}`;
-      } else this.writeIdentity = Symbol('sqlite-memory');
+        this.catalogCache = catalogCacheOf(info.birthtimeNs > 0n ? `${info.dev}:${info.ino}:${info.birthtimeNs}` : undefined);
+      } else {
+        this.writeIdentity = Symbol('sqlite-memory');
+        this.catalogCache = catalogCacheOf(undefined);
+      }
       waitForLocks(this.db);
     } catch (error) {
       this.db.close();
@@ -1750,9 +1791,12 @@ export class SqliteAdapter implements Adapter {
           verified();
         };
         if (scope !== undefined) {
-          const catalog = this.catalogCache.throughSync(epoch, 'scope', () =>
-            readSqliteScopeCatalog(handle, effects?.resolveTriggerEffects),
-          ) as SqliteScopeCatalog;
+          /* Its schema captured once here, so the evidence mapping below is the same object every write and is
+             made once per schema rather than copied and checked twice a command (mapScopeCatalog). */
+          const catalog = this.catalogCache.throughSync(epoch, resolverKey(effects?.resolveTriggerEffects), () => {
+            const read = readSqliteScopeCatalog(handle, effects?.resolveTriggerEffects);
+            return frozen({ ...read, schema: captureScopeCatalog(read.schema) });
+          }) as SqliteScopeCatalog;
           physicalCatalog = catalog;
           journal?.admit?.(handle, catalog, scope);
           // Keep the complete physical graph for row/FK enforcement. Runtime
@@ -1978,15 +2022,14 @@ export class SqliteAdapter implements Adapter {
        the first write of an epoch reads the list, and no later one asks. */
     const epoch = this.epochOf(db);
     if (epoch !== undefined) {
-      const names = this.catalogCache.throughSync(
-        epoch,
-        'tables',
-        () =>
+      const names = this.catalogCache.throughSync(epoch, 'tables', () =>
+        frozen(
           new Set(
             (db.prepare(`SELECT name FROM sqlite_master WHERE type IN ('table','view')`).all() as Array<{ name: string }>).map(
               (row) => row.name,
             ),
           ),
+        ),
       );
       if (!(names as Set<string>).has(name)) throw new Error(`No table or view called "${name}" in this database.`);
       return name;
@@ -2000,8 +2043,10 @@ export class SqliteAdapter implements Adapter {
    * write transaction from what was read under the epoch it holds. */
   private tableInfo(table: string, db: DatabaseSync): SqliteColumnRow[] {
     return this.catalogCache.throughSync(this.epochOf(db), `columns:${table}`, () =>
-      (db.prepare(`PRAGMA main.table_xinfo(${ANSI_STYLE.quote(table)})`).all() as unknown as SqliteColumnRow[]).filter(
-        (c) => c.hidden !== 1,
+      frozen(
+        (db.prepare(`PRAGMA main.table_xinfo(${ANSI_STYLE.quote(table)})`).all() as unknown as SqliteColumnRow[]).filter(
+          (c) => c.hidden !== 1,
+        ),
       ),
     ) as SqliteColumnRow[];
   }

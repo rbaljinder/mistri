@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { ANSI_STYLE, Refusal } from '../adapter.js';
+import { cachedStatement as prepared } from '../sqliteHandles.js';
 import {
   chooseColumnReference,
   deleteRuleOf,
@@ -185,7 +186,7 @@ export function sqliteKeyFacts(db: DatabaseSync): Pick<EffectCatalog, 'keys' | '
   const definitions = new Map<string, string | undefined>();
   const definitionOf = (table: TableMeta) => {
     if (!definitions.has(table.id)) {
-      const row = db.prepare("SELECT sql FROM main.sqlite_schema WHERE type = 'table' AND name = ?").get(table.name);
+      const row = prepared(db, "SELECT sql FROM main.sqlite_schema WHERE type = 'table' AND name = ?").get(table.name);
       definitions.set(table.id, typeof row?.sql === 'string' ? row.sql : undefined);
     }
     return definitions.get(table.id);
@@ -224,13 +225,11 @@ export function sqliteKeyFacts(db: DatabaseSync): Pick<EffectCatalog, 'keys' | '
     if (!primary.length) return [];
     // A rowid alias holds integers alone, compared by no collation; it has no index of its own.
     if (primary.length === 1 && table.columns.find((column) => column.name === primary[0])?.identity) return [primary];
-    const index = db
-      .prepare(`PRAGMA main.index_list(${ANSI_STYLE.quote(table.name)})`)
+    const index = prepared(db, `PRAGMA main.index_list(${ANSI_STYLE.quote(table.name)})`)
       .all()
       .find((row) => row.origin === 'pk');
     if (typeof index?.name !== 'string') return [];
-    const indexed = db
-      .prepare(`PRAGMA main.index_xinfo(${ANSI_STYLE.quote(index.name)})`)
+    const indexed = prepared(db, `PRAGMA main.index_xinfo(${ANSI_STYLE.quote(index.name)})`)
       .all()
       .filter((row) => row.key === 1);
     const same = primary.every((name) => {
@@ -250,7 +249,7 @@ export function sqliteKeyFacts(db: DatabaseSync): Pick<EffectCatalog, 'keys' | '
  */
 export function sqliteBlockedTables(db: DatabaseSync): ReadonlyMap<string, string> {
   const blocked = new Map<string, string>();
-  for (const table of db.prepare('PRAGMA main.table_list').all() as unknown as ListedTable[]) {
+  for (const table of prepared(db, 'PRAGMA main.table_list').all() as unknown as ListedTable[]) {
     if (table.schema !== 'main' || typeof table.name !== 'string') continue;
     if (table.type === 'virtual' || table.type === 'shadow')
       blocked.set(table.name, "a virtual table's module, whose writes the policy cannot bound");
@@ -272,11 +271,12 @@ function scanSqliteScopeCatalog(
   db: DatabaseSync,
 ): SqliteScopeCatalog & { readable: ReadonlySet<string>; triggered: ReadonlyMap<string, readonly ScopeTrigger[]> } {
   try {
-    if (db.prepare('PRAGMA foreign_keys').get()?.foreign_keys !== 1) return refuse();
-    const entries = db
-      .prepare("SELECT name, type FROM main.sqlite_schema WHERE type IN ('table', 'view') ORDER BY name")
-      .all() as unknown as Array<{ name: string; type: string }>;
-    const listed = db.prepare('PRAGMA main.table_list').all() as unknown as ListedTable[];
+    if (prepared(db, 'PRAGMA foreign_keys').get()?.foreign_keys !== 1) return refuse();
+    const entries = prepared(
+      db,
+      "SELECT name, type FROM main.sqlite_schema WHERE type IN ('table', 'view') ORDER BY name",
+    ).all() as unknown as Array<{ name: string; type: string }>;
+    const listed = prepared(db, 'PRAGMA main.table_list').all() as unknown as ListedTable[];
     // Unknown PRAGMAs can return nothing without throwing. Never interpret
     // unavailable table-kind metadata as proof that a table is ordinary.
     if (!listed.some((table) => table.schema === 'main' && table.name === 'sqlite_schema' && table.type === 'table')) return refuse();
@@ -285,9 +285,10 @@ function scanSqliteScopeCatalog(
        it only validates its row, is read from that text per table below (sqliteTriggers.ts, scopeTriggers.ts). */
     const definitions = new Map<string, Array<{ name: string; sql: unknown }>>();
     for (const namespace of ['main', 'temp']) {
-      const triggers = db
-        .prepare(`SELECT tbl_name AS name, name AS trigger, sql FROM ${namespace}.sqlite_schema WHERE type = 'trigger' ORDER BY name`)
-        .all();
+      const triggers = prepared(
+        db,
+        `SELECT tbl_name AS name, name AS trigger, sql FROM ${namespace}.sqlite_schema WHERE type = 'trigger' ORDER BY name`,
+      ).all();
       for (const trigger of triggers) {
         if (typeof trigger.name !== 'string' || typeof trigger.trigger !== 'string') return refuse();
         definitions.set(folded(trigger.name), [
@@ -298,7 +299,7 @@ function scanSqliteScopeCatalog(
     }
     const triggered = new Map<string, readonly ScopeTrigger[]>();
     const shadowed = new Set<string>();
-    for (const table of db.prepare("SELECT name FROM temp.sqlite_schema WHERE type IN ('table', 'view')").all()) {
+    for (const table of prepared(db, "SELECT name FROM temp.sqlite_schema WHERE type IN ('table', 'view')").all()) {
       if (typeof table.name !== 'string') return refuse();
       shadowed.add(folded(table.name));
     }
@@ -317,7 +318,7 @@ function scanSqliteScopeCatalog(
         (entry.type === 'view') !== (kind.type === 'view')
       )
         return refuse();
-      const columns = db.prepare(`PRAGMA main.table_xinfo(${ANSI_STYLE.quote(entry.name)})`).all() as unknown as Column[];
+      const columns = prepared(db, `PRAGMA main.table_xinfo(${ANSI_STYLE.quote(entry.name)})`).all() as unknown as Column[];
       identities(columns);
       if (!columns.length || columns.length !== kind.ncol) return refuse();
       for (const [i, column] of columns.entries()) {
@@ -334,7 +335,7 @@ function scanSqliteScopeCatalog(
       }
       const primary = columns.filter((column) => column.pk > 0).sort((a, b) => a.pk - b.pk);
       if (primary.some((column, i) => column.pk !== i + 1)) return refuse();
-      const indexes = db.prepare(`PRAGMA main.index_list(${ANSI_STYLE.quote(entry.name)})`).all();
+      const indexes = prepared(db, `PRAGMA main.index_list(${ANSI_STYLE.quote(entry.name)})`).all();
       // INTEGER PRIMARY KEY DESC has a PK index and is not a rowid alias.
       const identity =
         kind.type === 'table' &&
@@ -392,7 +393,7 @@ function scanSqliteScopeCatalog(
     const byName = identities(tables);
     const foreignKeys: DatabaseSchema['foreignKeys'] = [];
     for (const table of tables) {
-      const rows = db.prepare(`PRAGMA main.foreign_key_list(${ANSI_STYLE.quote(table.name)})`).all() as unknown as ForeignKeyRow[];
+      const rows = prepared(db, `PRAGMA main.foreign_key_list(${ANSI_STYLE.quote(table.name)})`).all() as unknown as ForeignKeyRow[];
       const groups = new Map<number, ForeignKeyRow[]>();
       for (const row of rows) {
         if (
