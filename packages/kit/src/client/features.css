@@ -1262,6 +1262,7 @@ body.app-mode .sidebar[data-density="comfortable"] #table-list li > button { pad
 /* The fade is tied to the scroll where the browser can: there only while the list scrolls, thinning to nothing at
    its end. Always drawn, it sat over the last entry of a list that fit (Payday's Reports, with room above the
    footer) and, taking 24px of the list's height, made a list that fit scroll. Without scroll timelines: no fade. */
+body.app-mode :is(#table-list, .mobile-nav-list) { scroll-padding-bottom: 48px; }
 body.app-mode :is(#table-list, .mobile-nav-list)::after {
   content: ''; display: block; position: sticky; bottom: 0; height: 40px; margin-top: -40px; pointer-events: none; opacity: 0;
   background: linear-gradient(to bottom, transparent, var(--menu-ground, var(--surface)));
@@ -1721,6 +1722,11 @@ body.app-mode .confirm:is(.insert-dialog, .command-form, .set-field-dialog) > h2
 .app-issues-dialog h2 { margin: 0 0 var(--space-3h); font: 600 var(--text-md) var(--mono); }
 .app-issues-list { margin: 0 0 var(--space-3h); padding-left: 1.4rem; }
 .app-issues-list li { font: var(--text-sm)/1.6 var(--mono); overflow-wrap: anywhere; }
+/* The as-of chip (AsOfChip.tsx): a development server's other clock, said once in muted ink; no tint, since nothing is wrong. */
+.as-of-chip {
+  border: 1px solid var(--line); border-radius: 999px; color: var(--ink-muted);
+  font: var(--text-sm) var(--mono); padding: var(--space-1) var(--space-3h); white-space: nowrap;
+}
 
 /* ---------- the record picker ---------- */
 

@@ -1232,7 +1232,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
             return;
           /* The sign-in page and every other page wear a tenant's name only when the host names the tenant. A public
              form reached through a tenant's own intake address (`?via=`) wears it too: whose form it is is not in doubt. */
-          let hosted = await hostBranding(req);
+          let hosted = await hostBranding(req).catch(() => undefined);
           const via = url.searchParams.get('via');
           const formPath = inside.startsWith(`/${loaded.app.id}/`) ? inside : `/${loaded.app.id}${inside}`;
           if (!hosted && via && placedBranding && formHead(loaded.app, formPath, loaded.app.name)) {
@@ -1242,11 +1242,14 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
           // An OAuth consent page is framed by nobody, this origin included (http/handler.ts): a click there gives a token.
           const consenting = url.searchParams.has('authorize');
           if (consenting) res.setHeader('x-frame-options', 'DENY');
-          return serveClient(CLIENT_FILES, req, res, {
-            ...shell(inside, hosted, req),
-            ...(await landingSocial(req, inside, hosted)),
-            ...(consenting ? { unframed: true } : {}),
+          /* A tenant's look dresses a signed-out visitor's page and never refuses it: one that cannot be worn
+             leaves the App's own (a field report: a saved name answered every public form 403). */
+          const head = async (dress: BrandingPresentation | undefined) => ({
+            ...shell(inside, dress, req),
+            ...(await landingSocial(req, inside, dress)),
           });
+          const page = hosted ? await head(hosted).catch(() => head(undefined)) : await head(undefined);
+          return serveClient(CLIENT_FILES, req, res, { ...page, ...(consenting ? { unframed: true } : {}) });
         }
         if (
           [APP_FLAG_VALUES_PATH, EXPERIMENT_EXPOSURES_PATH, EXPERIMENT_VISITOR_PATH].includes(path) &&

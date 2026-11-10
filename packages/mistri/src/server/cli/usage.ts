@@ -50,7 +50,7 @@ over your own database.
   mistri jobs run <name>          run one of an App's jobs at times now, once (see below)
   mistri audit reads              who read an audited resource's rows, as JSON lines (see below)
   mistri decide eval <name>       measure a decision on settled records, and pin its model (see below)
-  mistri tenant init|grant        a tenant App's first boot: its realms, tenants and first operators (see below)
+  mistri tenant init|grant|brand  a tenant App's first boot: its realms, tenants, first operators and branding (see below)
   mistri tenant clone|import|clock
                                   a tenant App's sandboxes: clone, import plan, dev clock (see below)
   mistri deploy [init cloudflare|status|verify|rollback|logs]
@@ -167,6 +167,13 @@ Options:
                       feel a remote database on this machine; 20 is a typical
                       cloud distance. Or set MISTRI_DEV_DB_LATENCY. Refused
                       under NODE_ENV=production and when serving a build.
+      --as-of <date>  Development and tests only: App logic's clock starts at
+                      this moment and moves on in real time (2026-01-05 is
+                      midnight in the App's zone; 2026-01-05T09:30Z an
+                      instant), so seed data dated for one day reads as it
+                      did. Sign-in, sessions and receipts keep the real
+                      clock. Or set MISTRI_AS_OF. Refused under
+                      NODE_ENV=production and when serving a build.
       --app <dir>     Serve an app: a directory whose app.ts (or app.mjs /
                       app.json) declares its resources, views, navigation
                       and pages. Repeatable; with more than one, every app
@@ -717,7 +724,7 @@ Reading the read audit — who read an audited resource's rows, and by which rou
 
 Running a job now — one of an App's jobs at times, once, by hand:
   mistri jobs run <name> [--app <dir>] --jobs <file> [--wait <seconds>]
-                  [<db> | --db <target> | --config <path>]
+                  [--policy <file> [--tenant <id>]] [<db> | --db <target> | --config <path>]
   Enqueues one run of the job in the App's job store, marked manual beside
   the slots the schedule enqueues, for the server started with --jobs to run
   as the job's principal, journaled as a slot's run is; waits --wait seconds
@@ -725,7 +732,10 @@ Running a job now — one of an App's jobs at times, once, by hand:
   one at a time: a manual run waits while the schedule's run of the job holds
   its lease. A name that is not one of the App's jobs at times is refused with
   the names that are. A job store with no run of a job yet starts at its next
-  slot: a first start never runs a missed one.
+  slot: a first start never runs a missed one. On a tenant App, --policy names
+  its policy, as its server's start does: a job per tenant runs for the tenant
+  --tenant names, or once for each tenant active now, one run at a time; a
+  job on the platform runs once and takes no --tenant.
   Exit codes: 1 could not run, 2 still waiting when --wait ran out, 3 the run
   did not succeed.
 
@@ -752,6 +762,8 @@ A tenant App's first boot — after mistri migrate stores up --policy:
   mistri tenant init [<tenant>...] [--app <dir>] --policy <file>
   mistri tenant grant <email> --roles <role,...> [--tenant <id>] [--name <name>] [--days <n>]
                   [--app <dir>] --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
+  mistri tenant brand <tenant> [--name <name>] [--preset <theme>] [--file <branding.json>]
+                  [--app <dir>] --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
   init opens the platform realm (when the App declares one) and puts each named
   tenant, active; one already there is left as it is, so it runs again after a
   stop part-way. grant grants <email> a membership of the platform realm, or
@@ -759,8 +771,12 @@ A tenant App's first boot — after mistri migrate stores up --policy:
   180, at most 366). An address with no account gets one in the App's auth
   store, its password read from MISTRI_ACCOUNT_PASSWORD, never the command
   line: the store the App names, else mistri dev's once dev has started the
-  App there, else a plain start's; grant says which. Exit codes: 1 could
-  not run.
+  App there, else a plain start's; grant says which. brand saves a tenant's
+  branding, checked as a tenant admin's save is against the App's branding:
+  --file names the whole value (JSON), else the saved one is kept, and
+  --name and --preset are laid over either; the stored logo is kept. A
+  server sharing the cache connection reads it on its next page, one with
+  its own cache within five minutes. Exit codes: 1 could not run.
 
 A tenant App's sandboxes — a copy of a tenant to try changes in:
   mistri tenant clone <source> <sandbox> [--app <dir>] --policy <file> [--samples]

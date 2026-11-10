@@ -52,7 +52,7 @@ import { sessionIdentity } from '../sessionIdentity.js';
 import type { DefinedFold } from '../recordDrafts.js';
 import { shell } from '../shellMode.js';
 import { cancelEditInteractions, useEditInteraction } from './editInteraction.js';
-import { formatLocale, formatTimezone } from '../locale.js';
+import { appNow, formatLocale, formatTimezone } from '../locale.js';
 import { DateField } from './DateField.js';
 import { InputSlot, columnInput } from './inputRenderers.js';
 import { say } from '../copy/record/components/Editable.js';
@@ -588,6 +588,7 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
           disabled={locked}
           locale={formatLocale()}
           timezone={formatTimezone()}
+          now={appNow()}
           popupRef={interaction.popupRef}
           onOpenChange={interaction.onOpenChange}
         />

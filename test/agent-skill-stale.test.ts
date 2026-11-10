@@ -10,6 +10,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { entryPoints, runAgent, staleSkillWarning } from '../packages/mistri/src/server/cli/agentInit.js';
+import { runtimeVersion } from '../packages/engine/src/server/packageVersion.js';
 
 const exportsMap = (
   JSON.parse(readFileSync(new URL('../packages/mistri/package.json', import.meta.url), 'utf8')) as { exports: Record<string, unknown> }
@@ -63,6 +64,41 @@ describe('a stale agent skill', () => {
       assert.equal(staleSkillWarning(project, '1.0.0-rc.19'), undefined, 'a newer copy is not stale');
       stamped(project, '1.0.0-rc.19');
       assert.match(staleSkillWarning(project, '1.0.0') ?? '', /rc\.19/, 'a pre-release is older than its release');
+    } finally {
+      rmSync(project, { recursive: true, force: true });
+    }
+  });
+
+  /* A field report: after an upgrade whose skill files had not changed, a re-run said "up to date" and kept the old
+     stamp, so check went on warning until the folder was moved away. */
+  test('whose files are current is restamped by a re-run, with or without --force, and check stops warning', () => {
+    const project = mkdtempSync(join(tmpdir(), 'mistri-agent-restamp-'));
+    const manifest = join(project, '.claude', 'skills', 'mistri', '.mistri-skill.json');
+    const init = (...flags: string[]) => {
+      const said: string[] = [];
+      const code = runAgent(
+        ['init', '--dir', project, '--tool', 'claude', ...flags],
+        (text) => said.push(text),
+        () => {},
+      );
+      return { code, said: said.join('') };
+    };
+    const backdate = () => {
+      const stamp = JSON.parse(readFileSync(manifest, 'utf8')) as { mistri: string };
+      writeFileSync(manifest, JSON.stringify({ ...stamp, mistri: '1.0.0-rc.1' }));
+    };
+    try {
+      assert.equal(init().code, 0);
+      assert.match(init().said, /\.claude\/skills\/mistri \(claude\): up to date/);
+      for (const flags of [[], ['--force']]) {
+        backdate();
+        assert.match(staleSkillWarning(project, runtimeVersion()) ?? '', /rc\.1\b/);
+        const rerun = init(...flags);
+        assert.equal(rerun.code, 0, flags.join(' '));
+        assert.match(rerun.said, /\.claude\/skills\/mistri \(claude\): updated/, flags.join(' '));
+        assert.equal((JSON.parse(readFileSync(manifest, 'utf8')) as { mistri: string }).mistri, runtimeVersion());
+        assert.equal(staleSkillWarning(project, runtimeVersion()), undefined);
+      }
     } finally {
       rmSync(project, { recursive: true, force: true });
     }

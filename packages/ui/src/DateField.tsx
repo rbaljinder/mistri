@@ -126,6 +126,8 @@ export interface DateFieldProps {
   max?: string;
   locale?: string;
   timezone?: string;
+  /** The moment the calendar's today is counted from: the App's clock where it runs as of another day; the real time when absent. */
+  now?: Date;
   firstDay?: number;
   className?: string;
   name?: string;
@@ -157,6 +159,7 @@ export function DateField({
   max,
   locale,
   timezone,
+  now,
   firstDay = 1,
   className = '',
   name,
@@ -181,7 +184,7 @@ export function DateField({
     }
   }, [min, max, withTime]);
   const bounds = configuredBounds ?? dateBounds();
-  const today = todayInZone(new Date(), timezone);
+  const today = todayInZone(now ?? new Date(), timezone);
   const seed = () => clampDate(isPickerDate(datePart) ? datePart : today, bounds);
   const [active, setActive] = useState(seed);
   const [open, setOpenState] = useState(false);

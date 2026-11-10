@@ -1,4 +1,5 @@
 import { BrandingRefused } from '../../shared/tenantBranding.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { lagTolerantReads, primaryReads } from '@mistriwork/engine/adapters/replicas.js';
 import { toleratesLag } from '@mistriwork/engine/server/http/readRouting.js';
 import type { TenantBrandingService } from './tenantBranding.js';
@@ -298,6 +299,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     ownership,
   } = captureTenantEnrollment(raw.enrollment as TenantEnrollment<IncomingMessage>);
   const app = captureTenantData(raw.app as AppDef);
+  // App logic's clock (http/clock.ts): a schema's, loader's or command's `now`; sessions, contexts and leases keep `now`.
+  const appNow = (): Date => appTime(now());
   /* The history store as readRecordHistoryFor asks for one: reads by the store key, which the route derives. */
   const historyStore = Object.freeze({
     recordHistoryReady: async () => true,
@@ -454,13 +457,13 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     };
     /* An import is many reads and writes over as long as the file takes: each its own unit of work, at the instant it
        is asked, rather than all at the one the request arrived at. */
-    const fresh = <T>(work: () => Promise<T>): Promise<T> => withRequestInstant(new Date(now()), work);
+    const fresh = <T>(work: () => Promise<T>): Promise<T> => withRequestInstant(appNow(), work);
     const reading = <T>(run: (context: TenantReadContext) => T | Promise<T>) =>
       fresh(() => contexts.withContext(req, selectors, expected, run)).then(owned);
     try {
       const request = readImportRequest(input);
       const { schema, zone } = await reading((context) => ({
-        schema: tenantServedSchema(context, app, new Date(now())),
+        schema: tenantServedSchema(context, app, appNow()),
         zone: context.zone,
       }));
       const call = <K extends keyof ScopedReads>(method: K) =>
@@ -486,7 +489,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         schema,
         reader,
         locale: app.ui.locale ?? 'en-US',
-        now: () => zonedNow(appZone(app.ui, zone), new Date(now())),
+        now: () => zonedNow(appZone(app.ui, zone), appNow()),
         signal,
       };
       const unknownAsUnknown = async <T>(work: () => Promise<T>): Promise<T> => {
@@ -892,14 +895,14 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         /* The stream lasts as long as the tab, and each resolution and probe is a read of its own, asked when it is
            asked: each at its own instant, never the one the stream opened at, nor whatever the hub's change came in on. */
         const resolve = () =>
-          withRequestInstant(new Date(now()), async () => {
+          withRequestInstant(appNow(), async () => {
             const admitted = await contexts.withContext(req, selectors, expected, (context: TenantReadContext) =>
-              tenantLiveGrants(context, app, ownership, now()),
+              tenantLiveGrants(context, app, ownership, appNow().getTime()),
             );
             return { grants: admitted.value, context: admitted.context };
           });
         const probe = (table: string, keys: Parameters<typeof tenantProbe>[2]) =>
-          withRequestInstant(new Date(now()), () =>
+          withRequestInstant(appNow(), () =>
             contexts
               .withContext(req, selectors, expected, (context: TenantReadContext) => tenantProbe(context, table, keys))
               .then((answer) => answer.value),
@@ -1057,7 +1060,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               platform
                 ? contexts.withPlatformContext(req, expected, (context: PlatformReadContext, lease) => exporting(context, lease))
                 : contexts.withContext(req, selectors, expected, (context: TenantReadContext, lease) => exporting(context, lease)),
-            schemaOf: (context) => tenantServedSchema(context, app, new Date(now()), readerEmail),
+            schemaOf: (context) => tenantServedSchema(context, app, appNow(), readerEmail),
             reader: readAdapter,
             person: tenantPerson,
             settled: assertActive,
@@ -1442,7 +1445,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                   view: input.view,
                   section: input.section,
                   period: input.period,
-                  now: new Date(now()),
+                  now: appNow(),
                   roles: context.principal.roles,
                 }),
               );
@@ -1572,7 +1575,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               schema,
               page,
               input.key as Record<string, string | number>,
-              zonedNow(appZone(app.ui, context.zone), new Date(now())),
+              zonedNow(appZone(app.ui, context.zone), appNow()),
             );
             if (path === '/api/pages/plan') return reply(planned);
             /* A record page whole: its plan and every read its sections will
@@ -1633,7 +1636,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           const dispatch = () =>
             dispatchResourceReadHttp(path as ResourceHttpPath, input, told, schema, {
               app: APP_READS,
-              now: () => zonedNow(appZone(app.ui, context.zone), new Date(now())),
+              now: () => zonedNow(appZone(app.ui, context.zone), appNow()),
               weekStart: localeWeekStart(app.ui.locale),
               me: () => tenantPerson(context, schema),
             });
@@ -1706,7 +1709,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           /* Every read on one snapshot of the one context, as a composed page's are (tenantReadSource.ts `together`). */
           const reading = within((context) =>
             together(context, async () => {
-              const schema = tenantServedSchema(context, app, new Date(now()), readerEmail);
+              const schema = tenantServedSchema(context, app, appNow(), readerEmail);
               const answers: FirstPaintData['reads'] = {};
               const itemAnswers: FirstPaintData['items'] = {};
               /* One read, as its own request would be gated and answered; a request fault (a bad question, a
@@ -1833,7 +1836,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         }
         const answer = () =>
           within(async (context) => {
-            const schema = tenantServedSchema(context, app, new Date(now()), readerEmail);
+            const schema = tenantServedSchema(context, app, appNow(), readerEmail);
             return pageRefusal(context, schema, path, input) ?? route(context, schema, path, input);
           });
         const result = await (bounded ? withBoundedReads(answer) : answer());
@@ -1928,7 +1931,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       if (path === '/api/insert' && input.lines !== undefined) {
         const judged = (
           await writeContext((context) => {
-            const schema = tenantServedSchema(context, app, new Date(now()));
+            const schema = tenantServedSchema(context, app, appNow());
             const granted = (child: string) => context.capabilities?.resources[child];
             return judgeLines(
               {
@@ -1987,7 +1990,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               parent: named.parent,
               stamps: uploadStamps,
               meOwned: uploadsMeOwned,
-              now: new Date(now()),
+              now: appNow(),
               who: session?.identity.who,
             }),
           )
@@ -2071,7 +2074,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     /* The door this request came in by, for an audited resource's read (readAudit.ts). The authenticated host
        names it before dispatching here, and the assistant's own requests keep its `assistant`; a data server
        reached directly names it from the address. */
-    const instant = () => withRequestInstant(new Date(now()), work);
+    const instant = () => withRequestInstant(appNow(), work);
     void (currentReadRoute() === undefined ? withReadRoute(readRouteOf((req.url ?? '/').split('?')[0], req.headers), instant) : instant())
       .catch((error) => {
         // A support refusal: nothing ran, and the reply says which support rule

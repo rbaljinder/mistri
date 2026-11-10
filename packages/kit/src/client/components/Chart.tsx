@@ -181,6 +181,7 @@ export function LineChart({
   seriesLabel = String,
   seriesVocabulary,
   onPick,
+  partial,
 }: {
   /** With `series` on its rows, a line per series (MultiLine). */
   rows: Array<ChartRow & { series?: unknown }>;
@@ -198,6 +199,8 @@ export function LineChart({
   /** Where a point goes when it drills, by its raw key: single-series lines only — a multi-series line takes no
       drill, since one pick cannot name both a series and a point. */
   onPick?: ((value: unknown) => void) | null;
+  /** Buckets the window cuts through: drawn dashed and named partial, single-series lines only. */
+  partial?: PartialPeriods;
 }) {
   if (rows.some((row) => row.series !== undefined))
     return (
@@ -212,7 +215,9 @@ export function LineChart({
         vocabulary={seriesVocabulary}
       />
     );
-  return <OneLine rows={rows} say={say} wide={wide} high={high} target={target} smooth={smooth} dots={dots} onPick={onPick} />;
+  return (
+    <OneLine rows={rows} say={say} wide={wide} high={high} target={target} smooth={smooth} dots={dots} onPick={onPick} partial={partial} />
+  );
 }
 
 function OneLine({
@@ -224,6 +229,7 @@ function OneLine({
   smooth,
   dots,
   onPick,
+  partial,
 }: {
   rows: ChartRow[];
   say: Say;
@@ -233,6 +239,7 @@ function OneLine({
   smooth: boolean;
   dots: boolean;
   onPick?: ((value: unknown) => void) | null;
+  partial?: PartialPeriods;
 }) {
   const points = fillGaps(
     rows
@@ -299,11 +306,22 @@ function OneLine({
   /* A point is named with its year wherever it stands alone — a dot's
      title, the crosshair, the table — and the axis drops the year a tick
      shares with the one before it. */
-  const named = points.map((p) => periodTick(p.key));
+  const named = points.map((p) => partialName(periodTick(p.key), p.key, partial));
   const marks = axisMarks(
     points.map((p) => p.key),
     x,
   );
+  /* A window cuts only its first and last bucket: the line is solid through the whole ones and dashed to and from a
+     partial one, so a week still in hand does not read as the measure falling. */
+  const cut = points.map((p) => Boolean(partial?.keys.has(p.key)));
+  const last = points.length - 1;
+  const whole: [number, number] = [cut[0] ? 1 : 0, cut[last] ? last - 1 : last];
+  const hasWhole = whole[1] - whole[0] >= 1;
+  const through = (from: number, to: number) =>
+    linePath(
+      points.slice(from, to + 1).map((p, i) => [x(from + i), y(p.value)] as const),
+      smooth,
+    );
 
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     // screen-px: clientX is a screen-pixel ruler too; the ratio maps it into viewBox units.
@@ -349,11 +367,14 @@ function OneLine({
           </g>
         )}
         {!dots && <path className="chart-area" d={area} />}
-        {!dots && <path className="chart-stroke" d={line} />}
+        {!dots && (hasWhole || !cut.some(Boolean)) && <path className="chart-stroke" d={hasWhole ? through(whole[0], whole[1]) : line} />}
+        {!dots && cut.some(Boolean) && !hasWhole && <path className="chart-stroke is-partial" d={line} />}
+        {!dots && hasWhole && whole[0] > 0 && <path className="chart-stroke is-partial" d={through(0, whole[0])} />}
+        {!dots && hasWhole && whole[1] < last && <path className="chart-stroke is-partial" d={through(whole[1], last)} />}
         {points.map((p, i) => {
           const dot = (
             <circle
-              className={dots && p.value !== 0 ? 'chart-dot chart-dot-solid' : 'chart-dot'}
+              className={`${dots && p.value !== 0 ? 'chart-dot chart-dot-solid' : 'chart-dot'}${cut[i] ? ' is-partial' : ''}`}
               cx={f1(x(i))}
               cy={f1(y(p.value))}
               r={dots ? 4 : 3}
@@ -736,6 +757,18 @@ function MultiLine({
   );
 }
 
+/** The periods a window cuts through (shared/autoBucket.ts `partialPeriods`): a bucket drawn from only part of its days. */
+export interface PartialPeriods {
+  keys: ReadonlySet<string>;
+  unit: 'week' | 'month' | 'quarter';
+}
+
+/** A bucket's name, said as partial where its window cuts it, so a short first week and a week still in hand are not read as full ones. */
+const partialName = (label: string, key: unknown, partial: PartialPeriods | undefined): string =>
+  partial?.keys.has(String(key))
+    ? sayCopy(partial.unit === 'week' ? 'partialWeek' : partial.unit === 'month' ? 'partialMonth' : 'partialQuarter', { label })
+    : label;
+
 /** Whether a key is a period the grammar buckets by ("2026-08", "2026-Q3"). */
 const PERIOD = /^\d{4}(-\d{2}(-\d{2})?|-Q[1-4])?$/;
 
@@ -764,6 +797,7 @@ export function BarChart({
   high,
   target,
   tone,
+  partial,
 }: {
   rows: ChartRow[];
   say?: Say;
@@ -771,6 +805,8 @@ export function BarChart({
   wide?: number;
   high?: number;
   target?: number;
+  /** Buckets the window cuts through: drawn lighter with a dashed edge, and named partial. */
+  partial?: PartialPeriods;
   /** A category's display tone (a state's, a status's), where its column has them: each bar wears the ink its dot and badge wear. */
   tone?: (key: unknown) => string | undefined;
 }) {
@@ -799,7 +835,7 @@ export function BarChart({
   const inks = periods || !tone ? undefined : bars.map((b) => TONE_INK[tone(b.raw) ?? '']);
   const toned = !!inks && inks.every(Boolean);
   const named = bars.map((b, i) => (periods ? periodTick(String(b.raw), i ? String(bars[i - 1].raw) : undefined) : label(b.raw)));
-  const whole = bars.map((b) => (periods ? periodTick(String(b.raw)) : label(b.raw)));
+  const whole = bars.map((b) => partialName(periods ? periodTick(String(b.raw)) : label(b.raw), b.raw, partial));
   const W = measured > 0 ? measured : wide;
   const H = high ? Math.max(120, Math.round(high)) : Math.max(160, Math.min(Math.round(W / 3), 240));
   const goal = target !== undefined && Number.isFinite(target) ? target : undefined;
@@ -862,7 +898,7 @@ export function BarChart({
           return (
             <rect
               key={i}
-              className={`chart-bar${toned ? ' is-toned' : ''}${i === active ? ' is-active' : ''}`}
+              className={`chart-bar${toned ? ' is-toned' : ''}${i === active ? ' is-active' : ''}${partial?.keys.has(String(bars[i].raw)) ? ' is-partial' : ''}`}
               style={toned ? { ['--bar-ink' as string]: inks![i] } : undefined}
               x={f1(x(i))}
               y={f1(Math.min(y(b.value), base))}

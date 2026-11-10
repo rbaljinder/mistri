@@ -278,7 +278,7 @@ const writesHead = (head: ShellTitle | undefined) =>
 /** Generate only registered token names and validated theme values. Row text
  * exists only in escaped JSON; it can never close a style/script element. */
 function brandingHead(html: string, presentation: HeadBranding, base?: string): string {
-  const theme = parseThemes([presentation.value.theme], 'Request branding')![0];
+  const theme = parseThemes([presentation.value.theme], 'Request branding', 'themes', { platform: true })![0];
   const declarations = (mode: 'light' | 'dark') => {
     const pairs: Array<[string, string]> = [];
     for (const [key, token] of Object.entries(PALETTE_TOKENS)) {

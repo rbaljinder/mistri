@@ -43,6 +43,9 @@ The App process inherits nothing but `PATH`: pass each variable in
 `environment`. A test secret is a literal written for the test, and the session
 secret is random per host. Real provider keys never belong in a test; a call to
 any host but loopback fails it unless `allowedHosts` names that host.
+To test against seed data dated for one day, pass `asOf: '2026-01-05'`: App
+logic's today and now start there (midnight in the App's zone) while sign-in
+and sessions keep the real clock.
 
 ## Choosing what to run
 

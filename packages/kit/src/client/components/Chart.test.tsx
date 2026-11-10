@@ -943,3 +943,42 @@ describe('categories that carry a tone (a state)', () => {
     expect(shared.container.querySelector<SVGCircleElement>('.chart-slice')!.style.stroke).toBe('var(--chart-1, var(--accent))');
   });
 });
+
+describe('the buckets a window cuts through', () => {
+  const weeks = [
+    { key: '2026-09-14', value: 4 },
+    { key: '2026-09-21', value: 9 },
+    { key: '2026-09-28', value: 8 },
+    { key: '2026-10-05', value: 7 },
+    { key: '2026-10-12', value: 2 },
+  ];
+  const partial = { keys: new Set(['2026-09-14', '2026-10-12']), unit: 'week' as const };
+
+  test('a short first week and a week still in hand are drawn and named as partial bars, the whole ones are not', () => {
+    const { container } = render(<BarChart rows={weeks} say={money} wide={600} partial={partial} />);
+    const bars = [...container.querySelectorAll('.chart-bar')];
+    expect(bars.map((bar) => bar.classList.contains('is-partial'))).toEqual([true, false, false, false, true]);
+    expect(bars[0].querySelector('title')!.textContent).toMatch(/\(partial week\): \$4$/);
+    expect(bars[1].querySelector('title')!.textContent).not.toMatch(/partial/);
+    // The table assistive technology reads says it too.
+    expect(container.querySelectorAll('.chart-data tr')[4].textContent).toMatch(/partial week/);
+  });
+
+  test('a line is dashed to and from a partial point and solid through the whole ones', () => {
+    const { container } = render(<LineChart rows={weeks} say={money} wide={600} partial={partial} />);
+    expect(container.querySelectorAll('.chart-stroke:not(.is-partial)')).toHaveLength(1);
+    expect(container.querySelectorAll('.chart-stroke.is-partial')).toHaveLength(2);
+    expect([...container.querySelectorAll('.chart-dot')].map((dot) => dot.classList.contains('is-partial'))).toEqual([
+      true,
+      false,
+      false,
+      false,
+      true,
+    ]);
+  });
+
+  test('with no partial bucket nothing changes', () => {
+    const { container } = render(<LineChart rows={weeks} say={money} wide={600} />);
+    expect(container.querySelectorAll('.is-partial')).toHaveLength(0);
+  });
+});

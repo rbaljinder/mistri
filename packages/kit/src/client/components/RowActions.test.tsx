@@ -81,12 +81,12 @@ function StandInGrid() {
   );
 }
 
-function draw() {
+function draw(labelOf?: (row: Record<string, unknown>) => string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
       <RowTrailHosts>
-        <RowActions table={table} rows={rows} actions={actions} onDone={() => {}} />
+        <RowActions table={table} rows={rows} actions={actions} onDone={() => {}} {...(labelOf ? { labelOf } : {})} />
         <StandInGrid />
       </RowTrailHosts>
     </QueryClientProvider>,
@@ -127,4 +127,9 @@ test('a record none of whose conditions hold says so instead of an empty menu', 
   await user.click(await screen.findByRole('button', { name: 'Actions for Wei Iyer' }));
   expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toContain('Mark lost');
   expect(screen.queryByRole('menuitem', { name: 'Start working' })).toBeNull();
+});
+
+test("a row is named as the page names it (its resource's recordLabel), not by what the row alone holds", async () => {
+  draw((row) => `Lead #${row.id} · ${row.status}`);
+  expect(await screen.findByRole('button', { name: 'Actions for Lead #2 · working' })).toBeTruthy();
 });

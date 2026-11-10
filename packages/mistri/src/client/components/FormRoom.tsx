@@ -91,6 +91,8 @@ export function formPresentation(form: ServedForm): FormPresentation {
     ...(form.review === false ? { review: false as const } : {}),
     ...(form.submitLabel === undefined ? {} : { submitLabel: form.submitLabel }),
     ...(form.done === undefined ? {} : { done: form.done }),
+    // What an address (or `openForm(view, prefill)`) may start filled: without it a signed-in form starts blank whatever it is given.
+    ...((form as { prefillable?: string[] }).prefillable ? { prefillable: (form as { prefillable?: string[] }).prefillable } : {}),
     ...((form as { inputs?: FormPresentation['inputs'] }).inputs
       ? { inputs: (form as { inputs?: FormPresentation['inputs'] }).inputs }
       : {}),

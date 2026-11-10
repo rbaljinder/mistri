@@ -5,6 +5,26 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.33
+
+Fixes and defaults from a tenant-App field report, kit list and rail blocks, and a dev and test as-of clock.
+
+- **A tenant's saved look never refuses a signed-out visitor.** A public form on a tenant that saved its name or theme opens, reads and submits signed out; a presentation that cannot be worn falls back to the App's own instead of answering 403.
+- **`check` follows a free-form page's paths.** A literal `show`, `query`, `sort` or `by` path that walks into a table the page does not read is reported with its file, page and path, by the rule the server refuses it with.
+- **A suggested record page opens for a role that cannot read every related list.** The sections the role can read are drawn and the rest are left out, as declared pages already did.
+- **CLI.** `mistri tenant brand <tenant> --name … --preset …` saves a tenant's branding from the shell, through the tenant admin's own checks. `mistri jobs run <job> --policy … [--tenant <id>]` runs a tenant App's job once in each active tenant, or in the one named; a platform job runs once.
+- **A preset read from the environment reaches the browser.** A `ui.theme.preset` read from the environment is the look both the head and the App payload carry; a built App keeps the look it was built with.
+- **`agent init` restamps an older stamp**, so `check` stops warning after an upgrade that left the skill's files unchanged.
+- **`check` names the right package.json** when a shared package without `"type": "module"` is read as CommonJS.
+- **`mistri dev` restarts for a policy or commands save** and says which file changed; a server that is not supervised says a restart is needed. A failed restart waits for the next save. The tenant watcher skips `node_modules` and `.git`.
+- **Forms and labels.** `openForm(view, prefill)` carries its prefill into the dialog. The related list's ⋯ dialog names a row by its record label, and a record label formats its dates. A reference's hover card shows the label and declared fields, not internals. A `targets: 'none'` command runs from a `CommandButton`.
+- **Display defaults.** A menu scrolls the current item clear of its bottom fade. A refused condition reads as one sentence. A windowed time chart marks a partial first or last bucket. An `empty` display word says what a null shows, in lists, records and values. The state strip appears only when a workflow has three or more states. `useLook()` returns the preset id beside the look.
+- **Kit: list and rail blocks.** `Items` and `Item` (lead, title, note, action) draw a quiet list; an `Item` with a same-origin `href` navigates through the page host. `Card` takes `count` and `action`. `Beside` sets a main column beside a rail that stacks on a phone.
+- **Kit inks follow the ground.** Kit blocks placed on a dark ground take light inks, in every look.
+- **`startedFrom` is the platform's.** An authored theme names its look with `extends`; one that sets `startedFrom` is refused.
+- **A dev and test as-of clock.** `mistri dev --as-of 2026-01-05` (or `MISTRI_AS_OF`) starts App logic's clock at that moment and lets it run: a command's or loader's `now` and `today`, a job's `now`, a dashboard's window and the browser's today. A date alone is midnight in the App's zone. Sign-in, sessions, one-time codes, rate limits, receipts and history keep the real clock. The test kit takes `asOf`, and a chip in the App's bar says the clock is moved. It is refused under `NODE_ENV=production` and when serving a build.
+- **Docs.** The themes guide names `preset`, not `theme`, in `branding.allow`.
+
 ## 1.0.0-rc.32
 
 Read audit speed, from a field report, and the row types a page reads.

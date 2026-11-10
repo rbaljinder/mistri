@@ -7,7 +7,7 @@
  * `ui.timezone` where it names one, else as written. A move keeps the value's form: its separator, whether it has
  * seconds, and its offset — the instant moved, not re-said in another zone.
  */
-import { formatTimezone } from '@mistriwork/kit/client/locale.js';
+import { appNow, formatTimezone } from '@mistriwork/kit/client/locale.js';
 
 /** Where a record stands on the grid: its day (YYYY-MM-DD) and its minute of that day, 0 to 1439. */
 export interface Moment {
@@ -95,7 +95,7 @@ export function momentOf(value: unknown): Moment | null {
 }
 
 /** The present, as the grid places it: in the App's zone where it names one, else the reader's own clock. */
-export function nowMoment(now: Date = new Date()): Moment {
+export function nowMoment(now: Date = appNow()): Moment {
   const zone = appZone();
   if (zone) return fromWall(wallIn(now.getTime(), zone));
   return { day: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`, minute: now.getHours() * 60 + now.getMinutes() };

@@ -79,11 +79,14 @@ export function RowActions({
   rows,
   actions,
   onDone,
+  labelOf,
 }: {
   table: TableMeta;
   rows: Array<Record<string, unknown>>;
   actions: AppAction[];
   onDone: () => void;
+  /** How the page names a row where the row alone cannot: a related list's rows hold the resource's `recordLabel` under a private projection, not under the table's own label path. */
+  labelOf?: (row: Record<string, unknown>) => string;
 }) {
   const store = useRowTrailScope();
   if (!store) return null;
@@ -93,7 +96,7 @@ export function RowActions({
         const key = keyOf(table, row) as Record<string, unknown> | null;
         if (!key) return null;
         const id = bulkKey(table, key);
-        const label = String(rowLabel(table, row) ?? say('common.untitled'));
+        const label = String((labelOf ? labelOf(row) : rowLabel(table, row)) ?? say('common.untitled'));
         return (
           <RowDecoration key={id} rowKey={id} store={store}>
             <RowMenu table={table} record={key} label={label} actions={actions} onDone={onDone} />

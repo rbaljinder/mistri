@@ -41,6 +41,7 @@ import { mentionsMe } from './appMe.js';
 export { embeddedOnlyViews } from '@mistriwork/engine/shared/appEmbeds.js';
 import type { AppPayloadDocument, AppPayloadNavNode, ServedApp } from '@mistriwork/engine/shared/servedApp.js';
 import { DIRECTORY_AT, navPlaces } from '@mistriwork/engine/shared/servedApp.js';
+import { appClockOffset } from '@mistriwork/engine/shared/appClock.js';
 export type { AppPayloadDocument, AppPayloadNavNode } from '@mistriwork/engine/shared/servedApp.js';
 
 /** A record page, as an address reads it. */
@@ -421,6 +422,9 @@ type ServedUi = Omit<AppUi, 'branding' | 'shell' | 'timezone' | 'localeColumn' |
   timezone?: string;
   /** The wall clock zone-less timestamps are written in: `ui.timezone`, UTC when the App names none (unlike `timezone`, which then is the serving process's). */
   clockZone?: string;
+  /** How far App logic's clock stands from the real one, in milliseconds, where a development or test server runs as of
+   * another moment (`mistri dev --as-of`, http/clock.ts): what the client's relative dates and today read (locale.ts appNow). */
+  clockOffset?: number;
   /** The languages the App has words in, where it has several: what the language picker offers (client messages.ts). */
   languages?: readonly string[];
   /** The reader's own row, where `ui.locale` names a column of it: what the picker writes their pick to. */
@@ -467,6 +471,7 @@ export function servedUi(ui: AppUi, views: Readonly<Record<string, object>> = {}
     ...rest,
     timezone: appZone(ui) ?? new Intl.DateTimeFormat().resolvedOptions().timeZone,
     clockZone: appZone(ui) ?? 'UTC',
+    ...(appClockOffset() ? { clockOffset: appClockOffset() } : {}),
     ...(shell === undefined ? {} : { shell: { ...plainShell, ...(shellNew.length ? { new: shellNew } : {}) } }),
     ...(editing === undefined ? {} : { editing: { ...editing } }),
     ...(appSwitcher === undefined ? {} : { appSwitcher: structuredClone(appSwitcher) }),

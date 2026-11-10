@@ -70,11 +70,19 @@ export function withSaying(
   );
 }
 
-const NEEDS: Readonly<Record<string, string>> = { '=': '=', '!=': '≠', '<': '<', '<=': '≤', '>': '>', '>=': '≥' };
+/* The comparison said in words, so the refusal is a sentence ("needs to be no") and not the condition's own symbols. */
+const NEEDS: Readonly<Record<string, string>> = {
+  '=': 'to be',
+  '!=': 'to be anything but',
+  '<': 'to be under',
+  '<=': 'to be at most',
+  '>': 'to be over',
+  '>=': 'to be at least',
+};
 
 /**
  * Why a record failed a command's declarative `when`, in one sentence about its first failing part:
- * `balance_cents is $108.99; needs ≤ $0.00`. Only a column the person may read is named with its value
+ * `Balance owed is $108.99; needs to be at most $0.00`. Only a column the person may read is named with its value
  * (`mayRead`); otherwise undefined, and the refusal keeps its generic sentence. A computed column is named by its
  * label as a stored one is, and its value is what `whenHolds` judged (`derived`).
  */

@@ -407,6 +407,7 @@ const LOOK_ATTRIBUTES = [
   'data-custom-theme',
   'data-visual-theme',
   'data-theme-style',
+  'data-theme-preset',
   'data-theme-palette',
   ...RECIPE_PARTS.map(lookAttribute),
   'data-look-elevation',
@@ -436,6 +437,8 @@ function apply() {
   root.setAttribute('data-custom-theme', '');
   root.dataset.visualTheme = definition.id;
   root.dataset.themeStyle = definition.base ?? '';
+  /* The theme a derived one (a tenant's) started from, so a page can tell its look when the look's own id is `tenant`. */
+  root.dataset.themePreset = definition.startedFrom ?? definition.id;
   root.dataset.themePalette = visualPaletteChoice();
   const { attributes, sheets } = recipeAttributes(definition, lookNavRole(definition));
   /* A role the worn theme leaves to the look has no attribute, so one the last theme set goes. */

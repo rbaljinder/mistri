@@ -37,6 +37,8 @@ export interface Options {
   noLive?: boolean;
   /** `--db-latency <ms>`: each database round trip waits this long first, in development (adapters/dbLatency.ts). */
   dbLatency?: string;
+  /** `--as-of <date>`: App logic's clock starts at this moment, in development and tests (http/clock.ts). */
+  asOf?: string;
   /** Extra names the `Host` header may carry. See `doorRefusal`. */
   allowedHosts: string[];
   /** Speak MCP over stdio instead of serving HTTP. For coding agents. */
@@ -222,6 +224,7 @@ export function parseArgs(argv: string[]): Options {
     else if (arg === '--no-config') opts.noConfig = true;
     else if (arg === '--no-live') opts.noLive = true;
     else if (arg === '--db-latency') opts.dbLatency = argv[++i] ?? '';
+    else if (arg === '--as-of') opts.asOf = argv[++i] ?? '';
     else if (arg === '--app') (opts.apps ??= []).push(argv[++i] ?? '');
     else if (arg === '--mount') {
       const said = argv[++i] ?? '';

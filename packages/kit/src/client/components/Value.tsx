@@ -154,6 +154,13 @@ function CopyValue({ value, label }: { value: unknown; label: string }) {
 
 function DrawnValue(props: ValueProps & { rule: DisplayRule | null }) {
   const { col, value, tableId, compact = false, rule } = props;
+  /* A missing value is said in the App's own word where its rule gives one ("Open", "Never"), not as a dash. */
+  if ((value === null || value === undefined) && rule?.empty)
+    return (
+      <span className="null" title="null">
+        {rule.empty}
+      </span>
+    );
   /* The App's own renderer, where its display rule names one: the value drawn
      the platform's way until it has arrived, and whenever it cannot draw. An
      empty value is the platform's to say, as it is in a grid cell. */

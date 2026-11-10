@@ -5,6 +5,7 @@
  * and what is missing or changed before the values are written.
  */
 import { coerceForColumn, columnKind, isFlagColumn, type ColumnMeta, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { appNow } from '../locale.js';
 import { autoKey, formShownFields, isRequired } from '@mistriwork/engine/shared/form.js';
 import type { AppForm } from '@mistriwork/engine/shared/servedApp.js';
 import { evaluateFormCondition, typedValue, type FormScalar } from '@mistriwork/engine/shared/formValues.js';
@@ -34,7 +35,8 @@ export function isFormFieldVisible(
        stored: `when: { po_number: 'total > 1000' }`. One over a rollup reads no lines here, so it stays unknown. */
     const computed = Object.entries(table.computed ?? {});
     if (!computed.length) return evaluateFormCondition(condition, values, table.columns) !== false;
-    const clock = { today: new Date().toISOString().slice(0, 10), now: new Date(), me: null };
+    const now = appNow();
+    const clock = { today: now.toISOString().slice(0, 10), now, me: null };
     const worked = Object.fromEntries(
       computed.map(([name, value]) => {
         const result = evaluateComputed(value.expr as ComputedNode, clock, (path) => typedValue(table, path, values[path]));

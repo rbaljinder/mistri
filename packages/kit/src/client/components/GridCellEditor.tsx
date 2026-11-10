@@ -38,7 +38,7 @@ import { recordKey as wireKey } from '../resourceRequests.js';
 import { validateRecordEdits } from '../recordEditValidation.js';
 import { shell } from '../shellMode.js';
 import { sessionIdentity } from '../sessionIdentity.js';
-import { defaultCurrency, formatLocale, formatTimezone } from '../locale.js';
+import { appNow, defaultCurrency, formatLocale, formatTimezone } from '../locale.js';
 import { rowCurrency } from '@mistriwork/engine/shared/money.js';
 import { MinorMoneyInput } from './MinorMoneyInput.js';
 import { Dropdown } from './Dropdown.js';
@@ -157,6 +157,7 @@ function PlatformControl({
         aria-describedby={describedBy}
         locale={formatLocale()}
         timezone={formatTimezone()}
+        now={appNow()}
       />
     );
   }

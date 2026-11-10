@@ -1,4 +1,5 @@
 import { commandVisitorAudit } from '../experiments/commandVisitor.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { isProxy } from 'node:util/types';
 import { inWriteLanes, recordLane } from '@mistriwork/engine/adapters/writeLanes.js';
@@ -431,7 +432,7 @@ async function executeUntraced(
       if (signal.aborted) throw new BusinessCommandExecutionError('cancelled');
     };
     checkCancelled();
-    const now = options.now ?? (() => new Date());
+    const now = options.now ?? (() => appTime());
     const requestId = options.requestId ?? randomUUID();
     // A job attempt names itself `job:<jobId>:<attempt>`; colons are its separators.
     if (typeof requestId !== 'string' || !/^[A-Za-z0-9_:-]{1,128}$/.test(requestId)) throw new CommandInputError('requestId');

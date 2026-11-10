@@ -23,7 +23,7 @@ import { appForRoles } from '../../shared/appViewRoles.js';
 import { appZone } from '../../shared/appUi.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
-import { tablesReached } from './tablesReached.js';
+import { strayRead } from './tablesReached.js';
 import { PageLoaderRefused, runPageLoader } from '../commands/pageLoaderRun.js';
 import { clockNow } from '@mistriwork/engine/server/http/clock.js';
 
@@ -135,10 +135,6 @@ export function pageManifestRefusal(options: {
       ? undefined
       : refuse(`The page "${key}" runs ${view.page.commands.join(', ') || 'no commands'}; "${String(stray)}" is not one of them.`);
   }
-  const asked = tablesReached(options.schema, path, body);
-  if (!asked) return undefined;
-  const id = (name: string) => (options.schema && tableNamed(options.schema, name)?.id) ?? name;
-  const declared = new Set(view.page.reads.map(id));
-  const stray = asked.find((table) => !declared.has(id(table)));
+  const stray = strayRead(options.schema, view.page.reads, path, body);
   return stray === undefined ? undefined : refuse(`The page "${key}" reads ${view.page.reads.join(', ')}; "${stray}" is not one of them.`);
 }

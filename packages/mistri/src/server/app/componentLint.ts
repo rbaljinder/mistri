@@ -28,6 +28,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { AppDef } from '../../shared/appModel.js';
 import type { CompiledComponents } from './appComponents.js';
+import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { astParser, scanPageSource } from './appPages.js';
 import { nearestToken, UI_TOKENS } from '@mistriwork/kit/shared/uiTokens.js';
 import { APP_ICONS, parseIcon } from '@mistriwork/engine/shared/appIcons.js';
@@ -298,8 +299,16 @@ export function pageManifestsOf(app: { views: AppDef['views'] }): PageManifests 
   );
 }
 
-/** Every finding in an App's component sources; a free-form page's are also held to the reads and commands it declares. */
-export async function lintComponents(dir: string, compiled: CompiledComponents, pages: PageManifests = new Map()): Promise<ComponentLint> {
+/**
+ * Every finding in an App's component sources; a free-form page's are also held to the reads and commands it declares,
+ * and with the App's catalog to the tables its literal paths reach.
+ */
+export async function lintComponents(
+  dir: string,
+  compiled: CompiledComponents,
+  pages: PageManifests = new Map(),
+  schema?: DatabaseSchema,
+): Promise<ComponentLint> {
   const problems: ComponentFinding[] = [];
   const warnings: ComponentFinding[] = [];
   const seen = new Set<string>();
@@ -340,7 +349,7 @@ export async function lintComponents(dir: string, compiled: CompiledComponents, 
       const manifest = pages.get(id);
       const lang = /\.(tsx?|jsx?)$/.exec(file)?.[1] as 'ts' | 'tsx' | 'js' | 'jsx' | undefined;
       if (manifest && parse && lang) {
-        const scan = scanPageSource(parse, raw, lang, manifest);
+        const scan = scanPageSource(parse, raw, lang, manifest, schema);
         for (const finding of scan.undeclared) problems.push({ component: id, file, line: finding.line, text: finding.text });
         for (const finding of scan.unread) warn(finding.line, finding.text);
       }

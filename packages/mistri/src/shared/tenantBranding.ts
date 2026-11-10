@@ -351,6 +351,7 @@ export function tenantTheme(declaration: BrandingDeclaration, value: TenantBrand
   return {
     ...rest,
     id: 'tenant',
+    startedFrom: chosen.id,
     label: value.name ?? chosen.label,
     light: mode('light'),
     dark: mode('dark'),

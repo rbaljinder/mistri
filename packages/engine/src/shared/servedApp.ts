@@ -265,6 +265,9 @@ export interface AppDisplayRule {
   signature?: true | { table: string; key: string };
   /** A copy button beside the value on a record: the stored value copied, a toast saying so. */
   copy?: true;
+  /** What a missing (null) value is said as where the dash would stand — "Open", "Never": a list's cell, a record's
+      field and a value drawn on its own. The row keeps its null for sorting, filtering and export. */
+  empty?: string;
   /** Value → one of the theme's chart colors, 1 to 8: a category's own color — a board card's chip and stripe, a
       chip in a cell — kept apart from `tone`, which says meaning. A value it does not name takes a color of its
       own, fixed by its words. */

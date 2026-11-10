@@ -13,6 +13,7 @@
  * so an attempt whose outcome was lost lands on the receipt that exists.
  */
 import { createHash } from 'node:crypto';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { isProxy } from 'node:util/types';
 import { asBackgroundWork } from '@mistriwork/engine/adapters/writeLanes.js';
 import { AppAccessDenied } from '../app/appAccess.js';
@@ -202,7 +203,7 @@ export function jobHandlers(
           const execution = {
             signal: context.signal,
             requestId: `job:${context.jobId}:${context.attempt}`,
-            now: () => new Date(context.now()),
+            now: () => appTime(context.now()),
             ...(job.timer
               ? {
                   timer: {

@@ -43,7 +43,7 @@ import { idKeyOf, paramKinds, paramValue, type ParamValue } from './paramKinds.j
 import { say } from '../../copy/components/components/sdk/page.js';
 
 export * from './index.js';
-export { Card, Cluster, Columns, Empty, Heading, Loaded, Row, Stack, Stat, Value } from './kit.js';
+export { Beside, Card, Cluster, Columns, Empty, Heading, Item, Items, Loaded, Row, Stack, Stat, Value } from './kit.js';
 export { Button };
 /* A page's place in its address, as written: `page.useParam` reads it through this hook and checks it against the
    param's kind; this one is for a module the page draws that is not the page itself (a widget, the Console's rooms). */
@@ -298,6 +298,9 @@ export function CommandForm({
    says none of its own). Not a Scope: blocks drawn in a row do not inherit the list's condition. */
 const ListResource = createContext<string | undefined>(undefined);
 
+/* The row of a command that names none (`targets: 'none'`): its key is empty, as its form's submit sends it. */
+const NO_ROW: Readonly<Record<string, unknown>> = Object.freeze({});
+
 type ButtonIntent = 'primary' | 'secondary' | 'quiet' | 'danger';
 type ButtonSize = 'compact' | 'default' | 'large';
 interface RowButtonProps {
@@ -343,20 +346,27 @@ function RowButton({
 }
 
 /**
- * One command on one row: `<CommandButton command="checkIn" row={booking} />`. Its outcome is said in the page's live
+ * One command on one row: `<CommandButton command="checkIn" row={booking} />`, or a command that names no row
+ * (`targets: 'none'`), with none: `<CommandButton command="postRent" />`. Its outcome is said in the page's live
  * region — in `done`'s words when given — and a refusal in the server's (the command's run says it). The hook
  * (`useCommand`) stays for what a button cannot say.
  */
-export function CommandButton({ command, done, onDone, ...props }: RowButtonProps & { command: string }) {
+export function CommandButton({
+  command,
+  done,
+  onDone,
+  row = NO_ROW,
+  ...props
+}: Omit<RowButtonProps, 'row'> & { command: string; row?: RowButtonProps['row'] }) {
   const handle = useCommand(command);
   const host = useUiHost();
   const label = props.label ?? handle.label;
   const run = () =>
-    void handle.run(props.row, undefined, { label }).then((outcome) => {
+    void handle.run(row, undefined, { label }).then((outcome) => {
       if (outcome.status === 'applied') host.announce(done ?? outcome.message ?? say('commandDone', { label }), 'ok');
       onDone?.(outcome);
     });
-  return <RowButton handle={handle} run={run} {...props} />;
+  return <RowButton handle={handle} run={run} row={row} {...props} />;
 }
 
 /** One of the page's fixed actions on one row, as `CommandButton` draws a command: `<ActionButton action="startVisit" row={visit} />`. */

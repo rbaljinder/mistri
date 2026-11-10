@@ -63,7 +63,7 @@ import {
   type AskLookups,
 } from '@mistriwork/engine/shared/dashboardAsks.js';
 import { sparkText, sparkWindow } from '@mistriwork/engine/shared/dashboardTrend.js';
-import { trendPoints } from '@mistriwork/engine/shared/autoBucket.js';
+import { autoKeyOf, partialPeriods, trendPoints, windowPhraseOf } from '@mistriwork/engine/shared/autoBucket.js';
 import type { ColumnMeta, ForeignKey, TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { message, messageLanguage, subscribeMessages } from '@mistriwork/kit/client/messages.js';
 import { activeApp, inAppMode } from '../appState.js';
@@ -115,7 +115,7 @@ import {
   type Section,
 } from '@mistriwork/kit/client/components/dashboardModel.js';
 import { declaredOrder, orderDeclared } from '@mistriwork/kit/client/components/groupOrder.js';
-import { formatApprox, formatLocale, formatPercent } from '@mistriwork/kit/client/locale.js';
+import { appNow, formatApprox, formatLocale, formatPercent } from '@mistriwork/kit/client/locale.js';
 import { dateWindow } from '@mistriwork/engine/shared/queryDates.js';
 /* The dashboard's own blocks' sheet travels with this chunk (onDemand), not in the first stylesheet. */
 import './DashboardBlocks.css';
@@ -461,7 +461,7 @@ export const Metric = memo(function Metric({
      clock (`over`). It composes with whatever the card is narrowed to by
      other than time: a picked owner's card shows a picked owner's trend. */
   /* No trend line through several currencies' sums: there is no one line to draw. */
-  const sparkAsk = live && !currencySplit(section) ? sparkText(section) : null;
+  const sparkAsk = live && !currencySplit(section) ? sparkText(section, appNow()) : null;
   const spark = useBreakdown(sparkAsk, section.table);
 
   const shown = section.error ? '—' : now.isError ? '—' : now.data === undefined ? '…' : say(now.data);
@@ -509,8 +509,8 @@ export const Metric = memo(function Metric({
     const read = (rows.rows ?? [])
       .map((r) => ({ key: r[keyName], value: r[valueName] }))
       .sort((a, b) => (String(a.key) < String(b.key) ? -1 : String(a.key) > String(b.key) ? 1 : 0));
-    const over = sparkWindow(section);
-    const now = new Date();
+    const now = appNow();
+    const over = sparkWindow(section, now);
     return over ? trendPoints(read, over.read, over.unit, section.measure, dateWindow(over.phrase, now), now) : read;
   }, [spark.data, section]);
   /* Both slots stand from the first paint: a change the card will show holds its line while the two figures are
@@ -997,6 +997,32 @@ const StepCards = memo(function StepCards({ section }: { section: Section }) {
 const sayUnit = (unit: 'day' | 'week' | 'month' | 'quarter'): string =>
   unit === 'day' ? sayCopy('byDay') : unit === 'week' ? sayCopy('byWeek') : unit === 'month' ? sayCopy('byMonth') : sayCopy('byQuarter');
 
+/* The buckets a chart's window cuts through — `last 30 days` by week has a short first week and a week still in hand —
+   so the chart can draw them as partial and not as full ones (Chart.tsx). None for a chart with no window the date
+   grammar bounds, a unit that is a day, or keys that are not periods. */
+function partialBuckets(
+  section: Section,
+  unit: 'day' | 'week' | 'month' | 'quarter' | undefined,
+  answer: { columns?: string[]; rows?: Array<Record<string, unknown>> } | undefined,
+): { keys: ReadonlySet<string>; unit: 'week' | 'month' | 'quarter' } | undefined {
+  const first = (section.by ?? '').split(',')[0]?.trim() ?? '';
+  const spelled = /^(day|week|month|quarter|year)\s+(\S+)$/i.exec(first);
+  const cut =
+    unit ??
+    (spelled && /^(week|month|quarter)$/i.test(spelled[1]) ? (spelled[1].toLowerCase() as 'week' | 'month' | 'quarter') : undefined);
+  if (!cut || cut === 'day' || !answer?.columns?.length) return undefined;
+  const column = section.over ?? autoKeyOf(section.by)?.column ?? spelled?.[2];
+  const phrase = windowPhraseOf(section.query, column);
+  const window = phrase ? dateWindow(phrase, new Date()) : undefined;
+  if (!window) return undefined;
+  const keys = partialPeriods(
+    (answer.rows ?? []).map((row) => String(row[answer.columns![0]] ?? '')),
+    cut,
+    window,
+  );
+  return keys.size ? { keys, unit: cut } : undefined;
+}
+
 const Chart = memo(function Chart({ section }: { section: Section }) {
   /* Stacked bars cross two keys, as a matrix does: every cross is fetched
      and the chart keeps the longest bars, so `limit` counts bars, not rows. */
@@ -1050,6 +1076,9 @@ const Chart = memo(function Chart({ section }: { section: Section }) {
       <ChartFigure
         answer={answer}
         dots={drawn?.dots}
+        partial={
+          section.shape === 'bar' || !section.shape || section.shape === 'line' ? partialBuckets(section, drawn?.unit, answer) : undefined
+        }
         shape={section.shape as 'line' | 'bar' | 'donut' | 'stacked' | undefined}
         limit={section.limit}
         target={typeof section.target === 'number' ? section.target : undefined}

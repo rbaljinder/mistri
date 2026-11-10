@@ -23,6 +23,7 @@
  * has no owner, and pages as an App without tenants does (cli/commandHost.ts).
  */
 import { captureTenantData, denyTenant, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { parseTenantSelector } from './tenantMembership.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
 import { atWhenFilter } from '../../shared/appAtWhen.js';
@@ -90,7 +91,7 @@ export function dueTimersPlan(owned: TenantOwnershipSnapshot, input: DueTimersQu
   /* A `when` the catalog does not read as the record's own conditions is refused, never run as text. */
   let when: Filter | undefined;
   if (!machine && query.when !== undefined) {
-    const read = atWhenFilter(owned.schema, table, query.when, new Date());
+    const read = atWhenFilter(owned.schema, table, query.when, appTime());
     if (!read.filter) return denyTenant();
     when = read.filter;
   }

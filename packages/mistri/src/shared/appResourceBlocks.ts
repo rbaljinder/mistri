@@ -1150,6 +1150,7 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
     'face',
     'timezone',
     'copy',
+    'empty',
   ];
   for (const k of Object.keys(r)) {
     if (!takes.includes(k)) throw new Error(`${at} ${unknownKey(k, takes)}.`);
@@ -1165,6 +1166,10 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
       throw new Error(
         `${at} has "masked: true", which draws a placeholder instead of the value; it takes no ${dressing.map((key) => `"${key}"`).join(', ')}.`,
       );
+  }
+  /* What a missing value means, said where the dash would stand: "Open" for a row not yet resolved, "Never". */
+  if (r.empty !== undefined && (typeof r.empty !== 'string' || !r.empty.trim() || r.empty.trim().length > 40)) {
+    throw new Error(`${at} has an "empty" that is not a word of at most 40 characters, like "Never" or "Open".`);
   }
   /* A value a reader copies to use elsewhere — a tracking number, an account number — takes a copy button beside it.
      A signature is a picture, not text to paste. */
@@ -1400,6 +1405,7 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
     ...(r.images === undefined ? {} : { images: r.images as string }),
     ...(r.face === undefined ? {} : { face: r.face as AppDisplayRule['face'] }),
     ...(r.copy === true ? { copy: true as const } : {}),
+    ...(r.empty === undefined ? {} : { empty: (r.empty as string).trim() }),
     ...own,
   };
 }

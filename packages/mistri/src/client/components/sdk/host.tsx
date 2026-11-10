@@ -37,7 +37,7 @@ import { batchedBreakdown } from '@mistriwork/kit/client/breakdownBatch.js';
 import { densityChoice } from '@mistriwork/kit/client/density.js';
 import { fillComposer as fillPageComposer } from '@mistriwork/kit/client/components/composerDraft.js';
 import { tableNamed, type TableMeta } from '@mistriwork/engine/shared/schema.js';
-import { HOST_GLOBAL } from '../../../shared/uiSdk.js';
+import { HOST_GLOBAL, uiBreakdownText, uiRowsQuery, uiViewRunBody } from '../../../shared/uiSdk.js';
 import { pageBridge } from '@mistriwork/kit/client/uiBridge.js';
 import type { DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
 import { setPageHost, type UiDeployment, type UiHost, type UiLook, type UiOption, type UiResourceChoices, type UiRow } from './context.js';
@@ -71,12 +71,10 @@ async function viewRows(
 ): Promise<UiRow[]> {
   const paths = show?.length ? [...show] : table.columns.map((column) => column.name);
   const body = {
-    count: 'none' as const,
-    ...(query.trim() ? { query: query.trim() } : {}),
+    ...uiViewRunBody(table.id, table.name, paths, query, limit),
     /* Sent as written, not compiled here: the server judges it against the columns this reader is served. */
     ...(where === undefined ? {} : { where }),
     ...(offset ? { offset } : {}),
-    view: { id: `ui:${table.id}`, name: table.name, base: table.id, columns: paths.map((path) => ({ path })), limit },
   };
   const got = page ? await pageApi(page, '/api/view/run', body) : await api('/api/view/run', body);
   return rowsByPath(paths, got, say('theRowsOfCould', { name: table.name }), { schema: state.schema, base: table.id });
@@ -126,7 +124,8 @@ function look(): UiLook {
   const attribute = root().dataset.theme;
   const dark = attribute === 'dark' || (!attribute && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
   const density = densityChoice() as UiLook['density'];
-  return { look: root().dataset.visualTheme ?? 'workshop', mode: dark ? 'dark' : 'light', density };
+  const id = root().dataset.visualTheme ?? 'workshop';
+  return { look: id, preset: root().dataset.themePreset ?? id, mode: dark ? 'dark' : 'light', density };
 }
 
 /** The App as this deployment presents it: read from the payload the page was served (the overrides are already in it). */
@@ -165,7 +164,7 @@ const pageHost: UiHost = {
     const table = tableOf(resource);
     const paths = keys && show?.length ? [...new Set([...show, ...(primaryKey(table) as string[])])] : show;
     const size = limit ?? 20;
-    const got = await viewRows(table, paths, [query ?? '', sort ? `sort ${sort}` : ''].join(' '), size + 1, page, where, offset);
+    const got = await viewRows(table, paths, uiRowsQuery(query, sort), size + 1, page, where, offset);
     return { rows: got.slice(0, size), more: got.length > size };
   },
   async record(resource, key, show, asking = {}) {
@@ -178,7 +177,7 @@ const pageHost: UiHost = {
   },
   async breakdown(resource, { by, measure, query, limit, page }) {
     const table = tableOf(resource);
-    const text = [table.id, query ?? '', `${measure ?? 'count'} by ${by}`].filter(Boolean).join(' ');
+    const text = uiBreakdownText(table.id, query, measure, by);
     /* A page's breakdown is asked alone: a batch is many sections' and carries no one page's name. */
     const got = page
       ? ((await pageApi(page, '/api/breakdown', { text, ...(limit ? { limit } : {}) })) as { rows?: UiRow[] })

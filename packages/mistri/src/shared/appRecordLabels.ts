@@ -20,6 +20,7 @@ import { displayWord, vocabularyWord } from '@mistriwork/engine/shared/model.js'
 import { recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import {
   datedField,
+  datedPath,
   isLabelTemplate,
   fieldText,
   maskedField,
@@ -111,21 +112,34 @@ export function appLabelTemplates(app: AppDef, schema: DatabaseSchema): Map<stri
     });
     return words.length ? Object.fromEntries(words) : undefined;
   };
+  /* Whether a path lands on a date or a timestamp column the display does not format itself: said as its day in a
+     name ("Oct 23, 2026"), as the field says it, not as it is stored (2026-10-23). */
+  const saysDay = (table: TableMeta, path: string): boolean => {
+    try {
+      const { table: at, column } = resolvePath(schema, table.id, path);
+      if (column.references || (columnKind(column.type ?? '') !== 'date' && !momentColumn(column))) return false;
+      return !byTable.get(at.id)?.resource.display?.[column.name]?.format;
+    } catch {
+      return false;
+    }
+  };
   /* A template with its masked columns marked, so the statement says their
-     placeholder, and its worded ones, so it says their words (viewLabels.ts). */
+     placeholder, and its worded ones, so it says their words (viewLabels.ts), and its dates, so it says their day. */
   const masking = (table: TableMeta, template: string): string => {
     const parsed = parseLabelTemplate(template);
     if ('problem' in parsed) return template;
     return parsed.parts
       .map((part) => {
         if ('text' in part) return part.text;
-        const said = (path: string): string => {
+        const said = (field: { path: string; date?: true }): string => {
+          const path = field.path;
           const mask = maskOf(table, path);
           if (mask) return maskedPath(path, mask.prefix);
           const words = wordsOf(table, path);
-          return words ? wordedPath(path, words) : path;
+          if (words) return wordedPath(path, words);
+          return field.date || saysDay(table, path) ? datedPath(path) : path;
         };
-        return fieldText([part.path, ...(part.or ?? []).map((other) => other.path)].map(said));
+        return fieldText([part, ...(part.or ?? [])].map(said));
       })
       .join('');
   };

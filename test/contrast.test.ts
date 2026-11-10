@@ -90,6 +90,63 @@ test('every built-in look, palette and mode meets AA on the pairs the design sys
   assert.deepEqual(failures, []);
 });
 
+/** color-mix(in srgb, a weight%, b), as kit.css writes it. */
+function mix(a: string, weight: number, b: string): string {
+  const [x, y] = [parse(a), parse(b)];
+  const hex = (i: number) =>
+    Math.round((x[i]! * weight + y[i]! * (1 - weight)) * 255)
+      .toString(16)
+      .padStart(2, '0');
+  return `#${hex(0)}${hex(1)}${hex(2)}`;
+}
+
+test('the kit on the nav ground (data-ground="nav") is legible in every look, palette and mode', () => {
+  // The scope's own bindings (kit.css): its inks are the nav's, its surfaces the nav ground and a step off it, its tones the page's
+  // own at 35% over the nav's ink, and a control's edge the nav's ink at 55%.
+  const failures: string[] = [];
+  let measured = 0;
+  for (const look of THEME_PRESETS)
+    for (const id of ['default', ...(look.palettes ?? []).map((p) => p.id)])
+      for (const mode of ['light', 'dark'] as const) {
+        const palette = effectiveThemePalette(
+          effectiveThemeDefinition(look, id)[mode] as ThemePalette,
+          mode === 'dark',
+        ) as unknown as Record<string, string>;
+        if (!palette.navGround || !palette.navInk) continue;
+        const raised = mix(palette.navInk, 0.08, palette.navGround);
+        const scoped: Record<string, string> = {
+          ink: palette.navInk,
+          inkMuted: palette.navMuted!,
+          link: palette.navAccent!,
+          ground: palette.navGround,
+          raised,
+          lineControl: mix(palette.navInk, 0.55, palette.navGround),
+          focus: palette.navAccent!,
+          onAccent: palette.navGround,
+          accent: palette.navInk,
+          ...Object.fromEntries(
+            ['Good', 'Warning', 'Critical', 'Info'].map((tone) => [`status${tone}`, mix(palette[`status${tone}`]!, 0.35, palette.navInk)]),
+          ),
+        };
+        const text = ['ink', 'inkMuted', 'link', 'statusGood', 'statusWarning', 'statusCritical', 'statusInfo'];
+        failures.push(
+          ...measure(scoped, `${look.id}/${id}/${mode} on nav`, [
+            // Body text, figures' labels and tones on the ground and on a row's hover or a count's pill.
+            ...text.flatMap((fg) => ['ground', 'raised'].map((bg): Pair => [fg, bg, 4.5])),
+            // A figure is large text.
+            ['ink', 'ground', 3],
+            // The chosen segment: the ground's words on an ink fill.
+            ['onAccent', 'accent', 4.5],
+            ['lineControl', 'ground', 3],
+            ['focus', 'ground', 3],
+          ]),
+        );
+        measured++;
+      }
+  assert.ok(measured >= THEME_PRESETS.length * LOOK_PALETTES.length * 2, `every look, palette and mode was measured (${measured})`);
+  assert.deepEqual(failures, []);
+});
+
 test('every built-in look offers the same palettes, its own colors are one of them, and its charts stay apart', () => {
   const ids = LOOK_PALETTES.map((palette) => palette.id);
   assert.ok(ids.length >= 12, 'at least twelve palettes');

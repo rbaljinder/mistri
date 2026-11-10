@@ -509,7 +509,11 @@ function projectAfresh(
     App's words. The Workbench's page of counts and lists named a related list by its raw table ("No ledger_entry yet."). */
 export function tenantSuggestedPage(app: AppDef, pages: readonly PageDef[], schema: DatabaseSchema, table: string): PageDef {
   tenantIdentifier(table);
+  // A role that reads the record but not every table or column its suggested
+  // page relates to still opens it, without those sections, as a declared
+  // page does (a field report: links to such a record led nowhere).
   const page = appDefaultPage(app, pages, schema, table);
-  if (!page || !fieldAccessiblePage(schema, page)) return denyTenant();
-  return captureTenantData(page);
+  const kept = page && readablePage(schema, page);
+  if (!kept) return denyTenant();
+  return captureTenantData(kept);
 }

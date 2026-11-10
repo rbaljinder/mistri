@@ -59,6 +59,8 @@ export interface UiOpenViewOptions {
 }
 export interface UiLook {
   look: string;
+  /** The theme the look started from: the App's chosen theme where `look` is `tenant`, else the look itself. */
+  preset: string;
   mode: 'light' | 'dark';
   density: 'compact' | 'comfortable' | 'spacious';
 }
@@ -382,6 +384,11 @@ export function setPageHost(host: UiHost): void {
 }
 
 export const UiHostContext = createContext<UiHost | null>(null);
+
+/** The host where there is one: a kit block drawn outside a section (a story, a test) keeps the browser's own behaviour. */
+export function useHostIfAny(): UiHost | null {
+  return useContext(UiHostContext) ?? pageHost;
+}
 
 export function useUiHost(): UiHost {
   const host = useContext(UiHostContext) ?? pageHost;

@@ -33,10 +33,15 @@ interface Target {
   value: string;
 }
 
-/** The key first, then the label column, then whatever else fits. */
+/** Whether a record's name is a computed `$label` (an App's `recordLabel`): a path the card says as its heading, never as a row. */
+const namedByLabel = (label: string | undefined): label is string => label === '$label';
+
+/** The key first, then the label column, then whatever else fits. A record named by its `$label` leads with that
+    instead and leaves its key out: the key is an internal the name stands in for. */
 function fieldsFor(table: TableMeta): string[] {
   const key = table.columns.filter((c) => c.primaryKey).map((c) => c.name);
   const label = labelPath(table) as string | undefined;
+  if (namedByLabel(label)) return [label, ...table.columns.map((c) => c.name).filter((n) => !key.includes(n))].slice(0, FIELDS + 1);
   return [
     ...key,
     ...(label && !key.includes(label) ? [label] : []),
@@ -97,6 +102,7 @@ export function PeekLayer() {
 function PeekCard({ target }: { target: Target }) {
   const { chip, table, column, value } = target;
   const fields = fieldsFor(table);
+  const label = labelPath(table) as string | undefined;
   const columns = presentationColumns(state.schema, table, fields);
   /* The connection is part of the key: staging's employee must not show for
      production's reference. */
@@ -161,29 +167,32 @@ function PeekCard({ target }: { target: Target }) {
 
   if (!row.data || !chip.isConnected) return null;
   const data = row.data;
+  const named = namedByLabel(label) && data[label] != null && String(data[label]) !== '';
   return (
     <div className="peek" role="tooltip" ref={card}>
       <div className="peek-head">
         <span className="peek-table">{table.name}</span>
-        <span className="peek-key">{value}</span>
+        <span className="peek-key">{named ? String(data[label!]) : value}</span>
       </div>
       <div className="peek-body">
-        {fields.map((name) => (
-          <div key={name} className="peek-line">
-            <span className="peek-name" title={name}>
-              {(columnLabel(table.id, name) as string | null) ?? name}
-            </span>
-            {data[name] === null || data[name] === undefined ? (
-              <span className="peek-value null" title="null">
-                {emptyWord()}
+        {fields
+          .filter((name) => !namedByLabel(name))
+          .map((name) => (
+            <div key={name} className="peek-line">
+              <span className="peek-name" title={name}>
+                {(columnLabel(table.id, name) as string | null) ?? name}
               </span>
-            ) : (
-              <div className="peek-value">
-                <Value col={columns.get(name)} value={data[name]} tableId={table.id} compact />
-              </div>
-            )}
-          </div>
-        ))}
+              {data[name] === null || data[name] === undefined ? (
+                <span className="peek-value null" title="null">
+                  {emptyWord()}
+                </span>
+              ) : (
+                <div className="peek-value">
+                  <Value col={columns.get(name)} value={data[name]} tableId={table.id} compact />
+                </div>
+              )}
+            </div>
+          ))}
       </div>
       {/* The card is a glance; clicking the chip is the walk. */}
       <div className="peek-foot">{say('clickToOpen')}</div>

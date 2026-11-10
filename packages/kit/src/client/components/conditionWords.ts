@@ -23,7 +23,7 @@ import { columnKind, isFlagColumn, type ColumnMeta } from '@mistriwork/engine/sh
 import { maskQuoted, sortFields, splitConditions, splitQuery } from '../clauses.js';
 import { andWords, joined, squeeze, ungroup, written } from './conditionText.js';
 import { unquote } from '../filterbar.js';
-import { defaultCurrency, formatDate, formatMoney, formatNumber, formatPercent } from '../locale.js';
+import { appNow, defaultCurrency, formatDate, formatMoney, formatNumber, formatPercent } from '../locale.js';
 import { messageLanguage } from '../messages.js';
 import { say as sayCopy } from '../copy/filters/components/conditionWords.js';
 import { withUnit, wordFor, type DisplayRule } from './valueModel.js';
@@ -121,7 +121,7 @@ const SPAN = /^(last|next|previous)\s+(\d+)\s+(minute|hour|day|week|month|year)s
 function datePhrase(value: Operand): { words: string; span: boolean } | undefined {
   if (value.quoted) return undefined;
   const p = value.text.toLowerCase().trim();
-  if (!dateWindow(p, new Date())) return undefined;
+  if (!dateWindow(p, appNow())) return undefined;
   if (Object.hasOwn(FIXED_PHRASES, p)) return { words: FIXED_PHRASES[p](), span: false };
   const span = SPAN.exec(p);
   if (!span) return undefined;
@@ -135,7 +135,7 @@ function datePhrase(value: Operand): { words: string; span: boolean } | undefine
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$/;
 
 function shortDate(text: string): string {
-  const sameYear = text.slice(0, 4) === String(new Date().getFullYear());
+  const sameYear = text.slice(0, 4) === String(appNow().getFullYear());
   return formatDate(text, { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) });
 }
 

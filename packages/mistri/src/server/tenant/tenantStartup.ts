@@ -558,8 +558,11 @@ export async function prepareTenantStartup(
  * (tenantLook.ts): it answers whether the save was the look alone and was worn in
  * place, and anything else is the restart it always was. The policy, commands,
  * jobs and connection files are never offered: they are authority. */
-/** `mistri dev`'s folder in the App's directory (devMode.ts): its secret, passwords, auth store and tools. */
-const DEV_STATE = '.mistri';
+/**
+ * What in the App's directory is not the App: `mistri dev`'s folder (devMode.ts: its secret, passwords, auth store and
+ * tools), a package manager's, and git's. As devSupervisor.ts's watcher skips them.
+ */
+const NOT_THE_APP = new Set(['.mistri', 'node_modules', '.git']);
 export function watchTenantStartup(
   options: {
     loaded: LoadedApp;
@@ -609,8 +612,9 @@ export function watchTenantStartup(
     const required = [options.loaded.path, ...Object.values(options.loaded.sources)];
     const appWatcher = watch(root, { recursive: true }, (_event, filename) => {
       /* `mistri dev` keeps its own state in the App's .mistri/ (devMode.ts) and rewrites dev.json on every
-         start: not an App edit, and taking it for one restarted a dev-served tenant App forever. */
-      if (filename !== null && filename.split(/[\\/]/)[0] === DEV_STATE) return;
+         start: not an App edit, and taking it for one restarted a dev-served tenant App forever. A package install
+         or a dependency cache under node_modules writes .js and .json too, and stopped the server the same way. */
+      if (filename !== null && NOT_THE_APP.has(filename.split(/[\\/]/)[0])) return;
       try {
         if (!statSync(root).isDirectory() || required.some((file) => !statSync(file).isFile())) return invalidate();
       } catch {

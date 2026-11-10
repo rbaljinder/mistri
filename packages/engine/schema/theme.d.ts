@@ -69,6 +69,9 @@ export interface ThemeDefinition {
   id: string;
   label: string;
   base?: ThemeBase;
+  /** The theme this one was derived from: a tenant's branding is the App's chosen theme with the tenant's accent over
+      it (`useLook().preset` says it). Set by the platform on that derived theme, never authored. */
+  startedFrom?: string;
   /** Opaque six-digit hex colors. Omitted roles inherit the base style. */
   light: ThemePalette;
   dark: ThemePalette;

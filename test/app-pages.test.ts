@@ -31,6 +31,7 @@ import { authorityReport } from '../packages/mistri/src/shared/appAuthority.js';
 import { appForRoles } from '../packages/mistri/src/shared/appViewRoles.js';
 import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
 import { parseTestApp } from './support/commandCatalog.js';
+import { uiViewRunBody } from '../packages/mistri/src/shared/uiSdk.js';
 
 const component = (key: string) => ({ id: `page-${key}`, module: `./pages/${key}.page.tsx`, kind: 'page' });
 const SQL = `CREATE TABLE desk (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
@@ -542,6 +543,62 @@ function Board() {
       ],
     );
     assert.equal(scan.unread.length, 0, '<Empty action> is a button and <Value resource> reads nothing: neither is a name to hold');
+  });
+
+  test('page-undeclared: with the catalog, a literal show, query, sort or by that crosses into a table the page does not read, as the server refuses it', async (t) => {
+    const dir = mkdtempSync(join(tmpdir(), 'mistri-page-paths-'));
+    const file = join(dir, 'desk.db');
+    const db = new DatabaseSync(file);
+    db.exec(SQL);
+    db.close();
+    const adapter = connect(file);
+    t.after(async () => {
+      await adapter.close();
+      rmSync(dir, { recursive: true, force: true });
+    });
+    const schema = await adapter.introspect();
+    const source = `import { definePage } from '@mistriwork/mistri/page';
+const page = definePage({ label: 'Settle', reads: ['ticket'], commands: ['settle'], component: Settle });
+export default page;
+function Settle() {
+  page.useRows('ticket', { show: ['name', 'desk_id', 'desk_id.name'], sort: 'desk_id.name' });
+  page.useRows('ticket', { query: 'desk_id.name = North' });
+  page.useRows('ticket', { sort: 'desk_id.name desc' });
+  page.useRecord('ticket', { id: 1 }, ['desk_id.name']);
+  page.useBreakdown('ticket', { by: 'desk_id.name' });
+  page.useRows('ticket', { show: ['name', 'desk_id'], query: 'name = x', sort: 'name' });
+  page.useRows('ticket', { show: paths });
+  return null;
+}`;
+    const parseAst = await astParser();
+    const manifest = { key: 'settle', reads: ['ticket'], commands: ['settle'] };
+    const scan = scanPageSource(parseAst, source, 'tsx', manifest, schema);
+    assert.deepEqual(
+      scan.undeclared.map((problem) => `${problem.line}: ${problem.text}`),
+      [
+        '5: [page-undeclared] useRows("ticket") reads "desk" through its show "desk_id.name", which the page "settle" does not declare in its reads',
+        '6: [page-undeclared] useRows("ticket") reads "desk" through its query "desk_id.name = North", which the page "settle" does not declare in its reads',
+        '7: [page-undeclared] useRows("ticket") reads "desk" through its sort "desk_id.name desc", which the page "settle" does not declare in its reads',
+        '8: [page-undeclared] useRecord("ticket") reads "desk" through its show "desk_id.name", which the page "settle" does not declare in its reads',
+        '9: [page-undeclared] useBreakdown("ticket") reads "desk" through its by "desk_id.name", which the page "settle" does not declare in its reads',
+      ],
+      "a reference's own column reads nothing past the base; a path written as an expression is the types' to judge",
+    );
+    assert.deepEqual(scanPageSource(parseAst, source, 'tsx', { ...manifest, reads: ['ticket', 'desk'] }, schema).undeclared, []);
+    assert.equal(scanPageSource(parseAst, source, 'tsx', manifest).undeclared.length, 0, 'without the catalog only the names are held');
+    // The request the host sends for line 5's crossing path is the one the server refuses: one rule, both sides.
+    const app = parse();
+    assert.equal(
+      pageManifestRefusal({
+        app,
+        roles: ['clerk'],
+        header: 'settle',
+        path: '/api/view/run',
+        body: uiViewRunBody('ticket', 'ticket', ['desk_id.name'], '', 1),
+        schema,
+      })?.body.code,
+      'page_undeclared',
+    );
   });
 });
 

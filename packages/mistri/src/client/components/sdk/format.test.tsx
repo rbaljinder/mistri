@@ -5,6 +5,7 @@
  */
 import { afterEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { appNow } from '@mistriwork/kit/client/locale.js';
 import { installShell } from '@mistriwork/kit/client/shellMode.js';
 import { useFormat } from './hooks.js';
 import { Loaded } from './kit.js';
@@ -35,6 +36,18 @@ test("a page reckons the App's day in the App's zone, and in the reader's own wh
   expect(useFormat().timezone).toBe('America/Denver');
   installShell({ format: () => ({ locale: 'en-US' }) });
   expect(useFormat().timezone).toBeUndefined();
+});
+
+test("a page's today follows the clock offset a development server runs as of, and the real clock without one", () => {
+  const asOf = Date.UTC(2026, 0, 5, 12);
+  installShell({ format: () => ({ locale: 'en-US', timezone: 'UTC', clockOffset: asOf - Date.now() }) });
+  expect(Math.abs(appNow().getTime() - asOf)).toBeLessThan(60_000);
+  expect(useFormat().relative('2026-01-04')).toBe('yesterday');
+  expect(useFormat().relative('2026-01-05')).toBe('today');
+  expect(useFormat().relative('2026-01-06')).toBe('tomorrow');
+  installShell({ format: () => ({ locale: 'en-US', timezone: 'UTC' }) });
+  expect(Math.abs(appNow().getTime() - Date.now())).toBeLessThan(1000);
+  expect(useFormat().relative('2026-01-05')).not.toBe('today');
 });
 
 const query = <T,>(state: { data?: T; isError?: boolean; error?: Error | null }) => ({

@@ -12,6 +12,7 @@
  * column is not there, and no value says what its inputs would not.
  */
 import { grantsByRole, type AppDef } from './appModel.js';
+import { appClockNow } from '@mistriwork/engine/shared/appClock.js';
 import { appZone } from './appUi.js';
 import {
   ComputedError,
@@ -226,7 +227,7 @@ export function computedConstants(
 export function withComputed(
   app: AppDef,
   schema: DatabaseSchema,
-  now: Date = new Date(),
+  now: Date = appClockNow(),
   me: string | null = null,
   zone?: string,
   symbolic = false,

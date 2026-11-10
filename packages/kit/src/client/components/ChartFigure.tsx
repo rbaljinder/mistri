@@ -6,7 +6,7 @@
  */
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { viewportBox } from '../core.js';
-import { BarChart, DonutChart, LineChart, StackedBars, TIMED_HEIGHT } from './Chart.js';
+import { BarChart, DonutChart, LineChart, StackedBars, TIMED_HEIGHT, type PartialPeriods } from './Chart.js';
 import { Empty } from './Notes.js';
 import { orderDeclared } from './groupOrder.js';
 import { onDemand } from './onDemand.js';
@@ -66,6 +66,8 @@ interface ChartFigureProps {
   arrange?: 'answer' | 'value' | 'category';
   /** A line with too few filled buckets to draw a line through keeps its shape and stands its points alone. */
   dots?: boolean;
+  /** The buckets the window cuts through, for bars and a single line to draw as partial. */
+  partial?: PartialPeriods;
   /** Stacked bars over periods stand as columns at a fixed height (Chart.tsx), which the room is held at before the answer. */
   timed?: boolean;
 }
@@ -95,6 +97,7 @@ export function ChartFigure({
   dots,
   arrange,
   timed,
+  partial,
 }: ChartFigureProps) {
   const stacked = shape === 'stacked';
   const donut = shape === 'donut';
@@ -148,7 +151,7 @@ export function ChartFigure({
         (donut ? (
           <DonutChart rows={rows} say={say} label={label} onPick={onPick} total={total} ordered={scale} tone={tone} />
         ) : bars ? (
-          <BarChart rows={rows} say={say} label={label} wide={wide} high={height} target={target} tone={tone} />
+          <BarChart rows={rows} say={say} label={label} wide={wide} high={height} target={target} tone={tone} partial={partial} />
         ) : stacked ? (
           <StackedBars
             rows={rows}
@@ -175,6 +178,7 @@ export function ChartFigure({
             seriesLabel={seriesLabel}
             seriesVocabulary={seriesVocabulary}
             onPick={onPick}
+            partial={partial}
           />
         ))}
     </div>

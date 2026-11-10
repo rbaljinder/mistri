@@ -35,6 +35,7 @@
  * delivery, 413 too large, or the command's own refusal.
  */
 import { createHash, randomBytes } from 'node:crypto';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isAbsolute, resolve } from 'node:path';
@@ -274,7 +275,7 @@ export async function openTenantMail(options: TenantMailOptions): Promise<Tenant
           bound.binding,
           actor,
           { command: reference.id, commandVersion: reference.version, key, expectedVersion: 0, idempotencyKey, input },
-          { door: 'job', flags, requestId: `mail:${part}`, now: () => new Date(now()), ...(files ? { files } : {}) },
+          { door: 'job', flags, requestId: `mail:${part}`, now: () => appTime(now()), ...(files ? { files } : {}) },
         );
       } finally {
         bound.release();

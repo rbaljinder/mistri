@@ -6,6 +6,7 @@
  * (server/http/firstPaintRooms.ts), in the same words.
  */
 import { andQuery } from './query.js';
+import { appClockNow } from './appClock.js';
 import { type AutoUnit, unitForSpan, windowDays, windowPhraseOf } from './autoBucket.js';
 import type { AskedSection } from './dashboardAsks.js';
 
@@ -16,7 +17,7 @@ import type { AskedSection } from './dashboardAsks.js';
  */
 export function sparkWindow(
   section: Pick<AskedSection, 'query' | 'over' | 'windowPhrase'>,
-  now = new Date(),
+  now = appClockNow(),
 ): { phrase: string; read: AutoUnit; unit: AutoUnit } | null {
   if (!section.over) return null;
   const phrase = section.windowPhrase ?? windowPhraseOf(section.query, section.over);
@@ -40,10 +41,11 @@ const TREND_PERIODS = 400;
  */
 export function sparkText(
   section: Pick<AskedSection, 'table' | 'query' | 'windowBase' | 'windowPhrase' | 'measure' | 'over' | 'spark'>,
+  now = appClockNow(),
 ): string | null {
   /* An authored false is heard over a window too: a card can be a figure alone, which it once could not say. */
   if (!section.over || section.spark === false) return null;
-  const window = sparkWindow(section);
+  const window = sparkWindow(section, now);
   if (window)
     return [section.table, section.query, `${section.measure ?? 'count'} by ${window.read} ${section.over}`, `limit ${TREND_PERIODS}`]
       .filter(Boolean)

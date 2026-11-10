@@ -286,6 +286,27 @@ describe('tsc, said readably', () => {
     assert.match(lines[6], /hint: "lable" is not a key this place takes/);
   });
 
+  /* A field report: a workspace package sharing a stylesheet (mistri.cssPrefix) lacked "type": "module", and the hint
+     sent the reader to the App's package.json, which had it. */
+  test("CommonJS is said of the package.json over the file tsc named, the App's or a workspace package's", () => {
+    const repo = join(work, 'commonjs-workspace');
+    mkdirSync(join(repo, 'apps', 'desk'), { recursive: true });
+    mkdirSync(join(repo, 'packages', 'look', 'src'), { recursive: true });
+    writeFileSync(join(repo, 'apps', 'desk', 'package.json'), '{ "type": "module" }\n');
+    writeFileSync(join(repo, 'packages', 'look', 'package.json'), '{ "name": "@acme/look", "mistri": { "cssPrefix": "acme" } }\n');
+    const said =
+      "error TS1295: ECMAScript imports and exports cannot be written in a CommonJS file under verbatimModuleSyntax. Adjust the 'type' field in the nearest 'package.json' to make this file an ECMAScript module.";
+    const appDir = join(repo, 'apps', 'desk');
+    const [, shared] = readableTypeErrors(`../../packages/look/src/Card.tsx(1,1): ${said}`, 20, new Set(), false, new Map(), appDir);
+    assert.match(
+      shared,
+      /hint: \.\.\/\.\.\/packages\/look\/src\/Card\.tsx is read as CommonJS: \.\.\/\.\.\/packages\/look\/package\.json has no "type", and it is not the App's package\.json\. Set "type": "module" in it \(npm pkg set type=module, in \.\.\/\.\.\/packages\/look\)\./,
+    );
+    writeFileSync(join(repo, 'apps', 'desk', 'package.json'), '{ "type": "commonjs" }\n');
+    const [, own] = readableTypeErrors(`app.ts(1,1): ${said}`, 20, new Set(), false, new Map(), appDir);
+    assert.match(own, /hint: the App is read as CommonJS: its package\.json needs "type": "module"\./);
+  });
+
   test('a label path the schema does not have names the table it was judged against', () => {
     const lines = readableTypeErrors(
       [

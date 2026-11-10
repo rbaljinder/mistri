@@ -175,6 +175,29 @@ export function trendPoints<R extends { key: unknown; value: unknown }>(
   return [...into].map(([key, value]) => ({ key, value }));
 }
 
+/**
+ * The buckets a window cuts through: a week, month or quarter that starts before the window does or runs on past
+ * its end, drawn from only part of its days. `last 30 days` by week has a short first week and a week still in
+ * hand at the end; drawn as full ones, the line fell at its end as if the measure had dropped. A day is never
+ * partial, and a label the unit does not spell is left alone.
+ */
+export function partialPeriods(keys: readonly string[], unit: AutoUnit, window: { start: Date; end: Date }): Set<string> {
+  const partial = new Set<string>();
+  if (unit === 'day') return partial;
+  const start = (key: string): Date | undefined => {
+    if (!SPELLED[unit].test(key)) return undefined;
+    if (unit === 'week') return new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, Number(key.slice(8, 10)));
+    if (unit === 'month') return new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, 1);
+    return new Date(Number(key.slice(0, 4)), (Number(key.slice(6)) - 1) * 3, 1);
+  };
+  for (const key of keys) {
+    const from = start(key);
+    const to = from && start(nextKey(key, unit));
+    if (from && to && (from < window.start || to > window.end)) partial.add(key);
+  }
+  return partial;
+}
+
 /** How many periods of the unit run from the first label to the last, both ends counted. */
 function periodsBetween(first: string, last: string, unit: AutoUnit): number {
   let count = 1;

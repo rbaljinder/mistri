@@ -122,7 +122,7 @@ export interface ShellMode {
   /** What an empty value reads as. */
   emptyWord(): string;
   /** The locale, currency and zones figures are written in, or null for the browser's (locale.ts). */
-  format(): { locale?: string; currency?: string; timezone?: string; clockZone?: string } | null | undefined;
+  format(): { locale?: string; currency?: string; timezone?: string; clockZone?: string; clockOffset?: number } | null | undefined;
   /** Whether a table may be written from here, beyond the connection's own flag. */
   writeScope(tableId: string): boolean;
   /** Whether records open as pages, for a table or at all. */

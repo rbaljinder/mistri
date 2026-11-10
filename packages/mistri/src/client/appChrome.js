@@ -463,6 +463,25 @@ function appIssuesBadge() {
 }
 
 /**
+ * The as-of chip, beside the issues badge: a development server started
+ * `--as-of` another moment says so in the bar (AsOfChip.tsx). The offset
+ * rides the App's payload only when it is not zero, which the server allows
+ * only in development and tests, so a deployed App never draws it.
+ */
+function appAsOfChip() {
+  const offset = inAppMode() ? (activeApp()?.ui.clockOffset ?? 0) : 0;
+  let host = shellById('as-of-host');
+  if (!host) {
+    if (!offset) return;
+    const menuHost = shellById('more-host');
+    if (!menuHost) return;
+    host = el('span', { id: 'as-of-host', class: 'host-contents' });
+    menuHost.before(host);
+  }
+  mount(host, createElement(AsOfChip, { offset }));
+}
+
+/**
  * The assistant's door, beside the menu's host, where the App payload offers
  * this person one (appProjection.ts strips it otherwise). Its box is held
  * from the moment the bar is drawn, before React has painted the button
@@ -494,6 +513,8 @@ function renderAssistant() {
  * a chunk of its own (NewMenu.tsx), which draws nothing when none of the
  * entries is one this reader may use: no button that opens an empty menu.
  */
+// Fetched only when a development server runs at another moment: a deployed App never draws it.
+const AsOfChip = onDemand(() => import('@mistriwork/kit/client/components/AsOfChip.js'), 'AsOfChip', { quiet: true });
 const AppNewMenu = onDemand(() => import('./components/NewMenu.js'), 'AppNewMenu', { quiet: true });
 function renderNewMenu() {
   const app = inAppMode() ? activeApp() : null;
@@ -566,6 +587,7 @@ export function brandChrome() {
   );
   watchRoomTitle();
   appIssuesBadge();
+  appAsOfChip();
   renderNewMenu();
   renderAssistant();
   /* The New menu's host is made beside the bar's keys, which may stand in the sidebar's foot: dock it again. */

@@ -541,6 +541,10 @@ export interface AppDisplayRule {
       a pointer or keyboard focus at a desk and stays on touch. Not with `masked: true` or `signature`, and a value a
       `masked` prefix hides is not copied. @preview */
   copy?: true;
+  /** What a missing value is said as where the dash would stand, in a list's cell, a record's field and a value drawn
+      alone: `resolved_at: { empty: 'Open' }`, `last_seen: { empty: 'Never' }`. The stored null still sorts, filters and
+      exports as null. At most 40 characters. */
+  empty?: string | AppMessageRef;
   /** With format "richText": who an @ names — the resource of people, the column stored as the handle, the column shown
       or a template of their columns (`labelColumn: '{first_name} {last_name}'`); typing after the @ matches any word of the label
       and the handle by its start —

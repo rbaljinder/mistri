@@ -30,7 +30,7 @@ import { RichTextField, mentionSearch, pictureKeeper } from '@mistriwork/kit/cli
 import type { CommandValue } from '../commandState.js';
 import { Dropdown, readsAsName } from '@mistriwork/kit/client/components/Dropdown.js';
 import { DateField } from '@mistriwork/kit/client/components/DateField.js';
-import { defaultCurrency, formatLocale, formatTimezone } from '@mistriwork/kit/client/locale.js';
+import { appNow, defaultCurrency, formatLocale, formatTimezone } from '@mistriwork/kit/client/locale.js';
 import { onDemand, useArrived } from '@mistriwork/kit/client/components/onDemand.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Field, type AnswerKind } from '@mistriwork/ui/Field.js';
@@ -190,8 +190,8 @@ export function blankCommandValues(fields: readonly AppCommandField[]): CommandV
     else if (typeof start === 'object' && 'auto' in start && start.auto !== 'me')
       values[field.name] =
         start.auto === 'today'
-          ? new Intl.DateTimeFormat('en-CA', { timeZone: formatTimezone() }).format(new Date())
-          : new Date(Math.floor(Date.now() / 60_000) * 60_000).toISOString();
+          ? new Intl.DateTimeFormat('en-CA', { timeZone: formatTimezone() }).format(appNow())
+          : new Date(Math.floor(appNow().getTime() / 60_000) * 60_000).toISOString();
     // A box unticked is an answer, no; a yes or a no asked as two buttons is unanswered until one is pressed, so a
     // question that waits on its no (`when: 'entry_ok = false'`) waits for it, and a required one is asked.
     else if (field.type === 'boolean' && field.as !== 'buttons') values[field.name] = false;
@@ -689,6 +689,7 @@ export function CommandFieldControl({
         max={field.max}
         locale={formatLocale()}
         timezone={formatTimezone()}
+        now={appNow()}
         value={String(value ?? '')}
         onChange={onChange}
       />

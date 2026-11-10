@@ -666,11 +666,12 @@ function tenantLocaleReader(
   reader: Pick<TenantReadSource, 'readBranding'>,
 ): ((tenant: string) => Promise<string | undefined>) | undefined {
   if (!app.branding?.allow.includes('locale')) return undefined;
+  /* A language that cannot be read says the notice in the App's own: a visitor's submission is written by then, and
+     its answer must not turn on the tenant's look. */
   return async (tenant) => {
-    const stored = await reader.readBranding({ app: app.id, tenant });
-    if (!stored) return undefined;
     try {
-      return canonicalLocale((JSON.parse(stored.value) as { locale?: unknown }).locale);
+      const stored = await reader.readBranding({ app: app.id, tenant });
+      return stored ? canonicalLocale((JSON.parse(stored.value) as { locale?: unknown }).locale) : undefined;
     } catch {
       return undefined;
     }

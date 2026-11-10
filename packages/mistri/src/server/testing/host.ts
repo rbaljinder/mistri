@@ -28,6 +28,9 @@ interface HostOptions {
   timeoutMs?: number;
   /** Explicit opt-in for real contract/database hosts; isolated tests default to loopback. */
   allowedHosts?: readonly string[];
+  /** Run App logic as of this moment (MISTRI_AS_OF, http/clock.ts): a date alone is midnight in the App's zone, and
+      the clock moves on in real time from it. Sign-in, sessions and receipts keep the real clock. */
+  asOf?: string | Date;
 }
 export interface TestAppOptions extends HostOptions {
   directory: string;
@@ -124,6 +127,7 @@ async function startHost(options: HostOptions, argumentsFor: (port: number) => P
         MISTRI_SERVER_TIMING: '1',
         MISTRI_SERVER_TIMING_TOKEN: randomBytes(16).toString('hex'),
         ...options.environment,
+        ...(options.asOf !== undefined ? { MISTRI_AS_OF: options.asOf instanceof Date ? options.asOf.toISOString() : options.asOf } : {}),
         XDG_CONFIG_HOME: options.workspace.path('config'),
         HOME: options.workspace.directory,
         MISTRI_TEST_ALLOWED_HOSTS: JSON.stringify(options.allowedHosts ?? []),

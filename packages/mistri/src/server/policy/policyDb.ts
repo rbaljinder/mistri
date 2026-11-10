@@ -13,6 +13,7 @@
  * job; what it returns is a row scope, which is judged like any other.
  */
 import type { AggregateRequest, Filter, QueryRequest } from '@mistriwork/engine/adapters/adapter.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import type { RuntimeResources } from '../app/appRuntimeResources.js';
 import { commandCatalog, zonedCatalog, createCommandDb, type ReadTable, type UntypedRow } from '../commands/commandDb.js';
 
@@ -43,5 +44,5 @@ export function createPolicyDb(resources: RuntimeResources, zone?: string): Poli
       ? { aggregate: (request: AggregateRequest) => adapter(request.table).aggregate!(request) }
       : {}),
   });
-  return createCommandDb({ tx: reader, catalog, read: names, write: [], now: () => new Date() }) as PolicyDb;
+  return createCommandDb({ tx: reader, catalog, read: names, write: [], now: () => appTime() }) as PolicyDb;
 }

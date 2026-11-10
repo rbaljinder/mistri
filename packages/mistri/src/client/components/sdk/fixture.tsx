@@ -115,6 +115,8 @@ export interface RenderOptions {
   /** Props beside the declaration's own: a test of one prop's effect. */
   props?: Record<string, unknown>;
   look?: string;
+  /** The theme the look started from, where `look` is `'tenant'`; the look itself when unsaid. */
+  preset?: string;
   mode?: 'light' | 'dark';
   /** The section's width in pixels; below 420 it is compact, as on a phone. */
   width?: number;
@@ -423,7 +425,12 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
     const status = options.refused?.[resource];
     if (status) throw Object.assign(new Error(say('fixtureRefused', { resource })), { status });
   };
-  const look: UiLook = { look: options.look ?? 'workshop', mode: options.mode ?? 'light', density: 'comfortable' };
+  const look: UiLook = {
+    look: options.look ?? 'workshop',
+    preset: options.preset ?? options.look ?? 'workshop',
+    mode: options.mode ?? 'light',
+    density: 'comfortable',
+  };
   /* A fresh page says nothing yet: an announcement left by the test before is not this one's. */
   // host-global: the test's own document, where the fixture said what it announced.
   if (typeof document !== 'undefined') document.getElementById('mistri-fixture-announce')?.remove();

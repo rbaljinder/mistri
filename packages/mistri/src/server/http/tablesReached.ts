@@ -143,3 +143,25 @@ export function tablesReached(schema: DatabaseSchema | undefined, path: string, 
   }
   return undefined;
 }
+
+/**
+ * The first table a read request reaches that `reads` does not declare, or undefined: the rule a page's manifest and a
+ * surface hold a request to, and `mistri check` holds a page's literal reads to (app/appPages.ts scanPageSource), so
+ * the check refuses what the server would. A request that is not a read reaches nothing here.
+ */
+export function strayRead(
+  schema: DatabaseSchema | undefined,
+  reads: readonly string[],
+  path: string,
+  body: Record<string, unknown>,
+): string | undefined {
+  const asked = tablesReached(schema, path, body);
+  return asked && strayTable(schema, reads, asked);
+}
+
+/** The first of `asked` that `reads` does not declare, each named by its catalog id where the catalog has it. */
+export function strayTable(schema: DatabaseSchema | undefined, reads: readonly string[], asked: readonly string[]): string | undefined {
+  const id = (name: string) => (schema && tableNamed(schema, name)?.id) ?? name;
+  const declared = new Set(reads.map(id));
+  return asked.find((table) => !declared.has(id(table)));
+}

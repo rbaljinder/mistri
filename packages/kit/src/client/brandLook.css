@@ -41,6 +41,11 @@
   :root[data-look-bar='dark'] .app-mode .topbar .app-issues {
     color: color-mix(in srgb, var(--status-warning) 40%, var(--nav-ink));
   }
+  /* The as-of chip the same way: the page's muted ink is dark on a dark ground. */
+  :root[data-look-bar='dark'] .app-mode .topbar .as-of-chip {
+    border-color: color-mix(in srgb, var(--nav-ink) 30%, transparent);
+    color: color-mix(in srgb, var(--nav-ink) 75%, var(--nav-ground, transparent));
+  }
   /* The current room as a wash of the navigation's accent; its items stay the bar's muted ink. */
   :root[data-look-nav='wash'] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current='true']) {
     background: color-mix(in srgb, var(--nav-accent) 18%, transparent);

@@ -1362,13 +1362,13 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
             name: 'typecheck',
             status: 'failed',
             detail: olderTypes ? `${olderSaid}. ${typed.detail}` : typed.detail,
-            lines: [...(olderTypes ? [olderSaid] : []), ...readableTypeErrors(typed.output ?? '', 20, columns, !named, hidden)],
+            lines: [...(olderTypes ? [olderSaid] : []), ...readableTypeErrors(typed.output ?? '', 20, columns, !named, hidden, appDir)],
             /* Each of tsc's errors at its own file, line and column, with the definition path the position is inside. */
             problems: await Promise.all(
               parseTsc(typed.output ?? '').map(async (error) => {
                 const file = error.file === undefined ? undefined : resolve(appDir, error.file);
                 const inner = error.detail.at(-1);
-                const fix = hint(error, columns, hidden);
+                const fix = hint(error, columns, hidden, appDir);
                 const path = file && error.line ? await pathAt(file, error.line, error.column ?? 1, appDir) : undefined;
                 return problem(
                   'typecheck',
@@ -1649,9 +1649,10 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
 
     // 4. Custom components, when it declares any: their sources, as compiled.
     if (loaded?.components) {
-      /* A free-form page's sources are held to what it declares: each a dashboard of one component, with its manifest. */
+      // A free-form page's sources are held to what it declares, and its literal paths to its reads as the server holds them.
       const pages = pageManifestsOf(loaded.app);
-      const lint = await lintComponents(appDir, loaded.components, pages);
+      const schema = pages.size ? (await catalogOf(loaded)).schema : undefined;
+      const lint = await lintComponents(appDir, loaded.components, pages, schema);
       const said = (finding: { file: string; line: number; text: string }) =>
         `${shown(join(appDir, finding.file))}:${finding.line}  ${finding.text}`;
       const count = Object.keys(loaded.components.entries).length;

@@ -114,3 +114,16 @@ test("the day mark is the platform's own: an authored template may not write it"
   const bad = resolveResources(app({ visit: { recordLabel: '{starts_at|date}' } }), schema).problems.join('\n');
   assert.match(bad, /starts_at/);
 });
+
+test('an authored template says a date column as its day, as the field says it, not as it is stored', async (t) => {
+  const { adapter, schema } = await fixture(t);
+  const authored = app({ visit: { recordLabel: 'Visit {job_id.title} on {starts_at}' } });
+  assert.equal(appLabelTemplates(authored, schema).get('visit'), 'Visit {job_id.title} on {starts_at|date}');
+  assert.deepEqual((await names(adapter, schema, 'visit', authored)).slice(0, 2), [
+    'Visit Fix sticking door on Sep 13, 2026',
+    'Visit Fix sticking door on Jan 2, 2026',
+  ]);
+  /* A column whose display rule formats it keeps its own format. */
+  const formatted = app({ visit: { recordLabel: 'Visit {starts_at}', display: { starts_at: { format: 'date' } } } });
+  assert.equal(appLabelTemplates(formatted, schema).get('visit'), 'Visit {starts_at}');
+});

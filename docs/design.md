@@ -1551,7 +1551,8 @@ every look, so the picture it keeps reads on whatever page shows it.
   keeps its sideways scroll and its head scrolls with it. Placeholder rows
   are the real rows' height, and a tab's badge keeps its count while the
   next one is on the way.
-- A workflow strip is a track of thin segments, one per step, the label
+- A workflow strip is drawn from three states up: with one or two, the head's chip
+  already says where the record stands. It is a track of thin segments, one per step, the label
   under each: a step walked is a quiet tint of the accent, the current one
   the accent with its label in the ink at 600, a step the record's actions
   can reach now an outlined segment, a step ahead the rule's grey. The track

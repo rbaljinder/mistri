@@ -458,7 +458,7 @@ export function embedHost({ surface, endpoint, authorization, navigator, basePat
       const meta = table?.columns.find((each) => each.name === column);
       return meta ? { meta, label: column } : undefined;
     },
-    look: () => ({ look: 'workshop', mode: 'light', density: 'comfortable' }),
+    look: () => ({ look: 'workshop', preset: 'workshop', mode: 'light', density: 'comfortable' }),
     deployment: () => ({ name: surface.label, mark: null, theme: null, locale: null, basePath: base }),
     token: () => '',
     subscribeLook: () => () => {},

@@ -677,7 +677,7 @@ function PlatformCell({
   if (value === null || value === undefined) {
     return (
       <td className={`null align-${plan.align}${pinClass}`} title="null" {...pinAttrs}>
-        {emptyWord()}
+        {(display as DisplayRule | null)?.empty ?? emptyWord()}
       </td>
     );
   }

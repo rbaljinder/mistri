@@ -12,7 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api, state } from '../core.js';
 import { ownedBy } from '../requestIdentity.js';
 import { equalityFilter } from '../resourceRequests.js';
-import { formatClockZone } from '../locale.js';
+import { appNow, formatClockZone } from '../locale.js';
 import { formDefaultWord } from '@mistriwork/engine/shared/formValues.js';
 import { primaryKey, type ColumnMeta, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { clockDefault, type FormCuration } from './newRecordModel.js';
@@ -73,7 +73,7 @@ export function resolvedForm(
   me: Record<string, string | number | null> = {},
 ): FormCuration | undefined {
   if (!words.length) return form;
-  const now = new Date();
+  const now = appNow();
   const resolved: Record<string, unknown> = { ...(form?.defaults ?? {}) };
   for (const { column, word } of words) {
     if (word !== 'me') resolved[column.name] = clockDefault(word, column, now, formatClockZone());

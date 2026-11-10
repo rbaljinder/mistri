@@ -201,8 +201,26 @@ export type ToneName = 'good' | 'warn' | 'bad' | 'info' | 'neutral';
     writes it (`bar: 5` fills against 5). */
 export type ValueDisplay = import('./app.js').Plain<import('./app.js').AppDisplayRule>;
 
-/** One box: a hairline and the surface. A card inside a card, or a Stat inside one, draws as a plain group. */
-export declare function Card(props: Children & { title?: ReactTypes.ReactNode; className?: string }): ReactTypes.ReactElement;
+/** One box: a hairline and the surface. A card inside a card, or a Stat inside one, draws as a plain group. `count` is a
+    quiet number beside the title and `action` a slot at the title row's end (buttons, a menu): given either, the title
+    row is a header row. `ground="nav"` puts the box on the look's navigation ground: a Stat, Value, Meter, Table, Items,
+    Segmented or Empty inside it takes that ground's inks. Any element with `data-ground="nav"` is the same scope. */
+export declare function Card(
+  props: Children & { title?: ReactTypes.ReactNode; count?: ReactTypes.ReactNode; action?: ReactTypes.ReactNode; ground?: 'nav'; className?: string },
+): ReactTypes.ReactElement;
+/** A main column beside a rail (notes, filters, facts). The rail is `railWidth` wide (a CSS length, `'20rem'` by default,
+    never past half the box) at the `side` edge (`'end'` by default); the main takes the rest. Where the box itself is
+    under 40rem wide it stacks, main first, and it never scrolls sideways. Cluster makes equal columns; this makes two unequal ones. */
+export declare function Beside(props: Children & { rail: ReactTypes.ReactNode; railWidth?: string; side?: 'start' | 'end'; className?: string }): ReactTypes.ReactElement;
+/** Rows with no head row, each an `Item`. `label` names the list for assistive technology; `empty` is drawn when there are no rows. */
+export declare function Items(props: Children & { label?: string; empty?: ReactTypes.ReactNode; className?: string }): ReactTypes.ReactElement | null;
+/** One row of `Items`: `lead` a slot before the text (icon, avatar, a Value), `title` its words, `note` one quiet line
+    under it, `action` a slot at the row's end. With `href` or `onClick` the title is the row's one link or button and the
+    whole row answers a pointer; a click inside `action` never opens the row. */
+export declare function Item(props: {
+  lead?: ReactTypes.ReactNode; title: ReactTypes.ReactNode; note?: ReactTypes.ReactNode; action?: ReactTypes.ReactNode;
+  href?: string; onClick?: () => void;
+}): ReactTypes.ReactElement;
 /** Children one under another: a field's 20px apart (default), a section's 40px, or tight. */
 export declare function Stack(props: Children & { gap?: Gap; as?: 'div' | 'ul' | 'ol'; className?: string }): ReactTypes.ReactElement;
 /** Children side by side, wrapping where there is no room. `foot`: the page's actions at the screen's foot (a sticky
@@ -601,8 +619,8 @@ export declare function useFormat(): {
   /** "in 3 days", "yesterday"; undefined for a value that is not a date. */
   relative(value: string): string | undefined;
 };
-/** The look the App wears for this reader, light or dark, and the density; redraws when any changes. */
-export declare function useLook(): { look: string; mode: 'light' | 'dark'; density: 'compact' | 'comfortable' | 'spacious' };
+/** The look the App wears for this reader, light or dark, and the density; redraws when any changes. `look` is `'tenant'` where a tenant's branding dresses the page; `preset` is then the App's theme it started from (`'workshop'`), and the look itself otherwise. */
+export declare function useLook(): { look: string; preset: string; mode: 'light' | 'dark'; density: 'compact' | 'comfortable' | 'spacious' };
 /** Every design token a component may read — colors, faces, corners, type, motion — as `var(--accent)` in CSS or `useToken('--accent')` in script. `mistri check` warns about any other `var(--…)` a component does not declare itself. */
 export type Token =
   | '--ground'

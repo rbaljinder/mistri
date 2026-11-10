@@ -5,7 +5,7 @@
  */
 import { windowPhraseOf } from '@mistriwork/engine/shared/autoBucket.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
-import { formatDate } from '@mistriwork/kit/client/locale.js';
+import { appNow, formatDate } from '@mistriwork/kit/client/locale.js';
 import { dateWindow } from '@mistriwork/engine/shared/queryDates.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
 import { say as sayCopy } from '../copy/dashboards/components/DashboardWindow.js';
@@ -53,7 +53,7 @@ export function WindowRow({
   if (control === 'button') {
     /* The dates the window covers, its last day inclusive (the window's end is the next day's start); a phrase the
        calendar cannot place is said as itself. */
-    const span = current ? dateWindow(current, new Date()) : undefined;
+    const span = current ? dateWindow(current, appNow()) : undefined;
     const shown = span
       ? sayCopy('windowRange', {
           from: formatDate(span.start, { month: 'short', day: 'numeric' }),

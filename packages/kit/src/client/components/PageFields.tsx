@@ -537,7 +537,7 @@ export function FieldsSection({
         <dd className="page-prose-empty">{say('noneYet', { caption: (columnLabel(base.id, path, stem) ?? path).toLowerCase() })}</dd>
       ) : (
         <dd className="null" title="null">
-          {emptyWord()}
+          {(columnDisplay(base.id, path) as { empty?: string } | null)?.empty ?? emptyWord()}
         </dd>
       );
     } else if (column?.references && String(value) !== '') {

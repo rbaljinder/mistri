@@ -43,7 +43,7 @@ The first line of the help says it: *mistri — the App framework: a few lines o
 | `mistri jobs run <name>` | run one of an App's jobs at times now, once (see below) |
 | `mistri audit reads` | who read an audited resource's rows, as JSON lines (see below) |
 | `mistri decide eval <name>` | measure a decision on settled records, and pin its model (see below) |
-| `mistri tenant init|grant` | a tenant App's first boot: its realms, tenants and first operators (see below) |
+| `mistri tenant init|grant|brand` | a tenant App's first boot: its realms, tenants, first operators and branding (see below) |
 | `mistri tenant clone|import|clock` | a tenant App's sandboxes: clone, import plan, dev clock (see below) |
 | `mistri deploy [init cloudflare|status|verify|rollback|logs]` | an App on Cloudflare Containers (see below) |
 | `mistri docs [topic]` | the App reference, offline: access, relationships, dates, dashboards, reload and restart, … |
@@ -81,6 +81,7 @@ The server's flags: where the data is, how it is served, and what an App adds.
 | `--no-config` | Ignore any config file |
 | `--no-live` | Turn live sync off, even for an App that asks for it (live: true): its open pages then refresh on focus and after their own saves. Nothing is written to the change store and /api/live answers 204. |
 | `--db-latency <ms>` | Development only: every database round trip waits this long before it is sent (a pipelined batch pays once), to feel a remote database on this machine; 20 is a typical cloud distance. Or set MISTRI_DEV_DB_LATENCY. Refused under NODE_ENV=production and when serving a build. |
+| `--as-of <date>` | Development and tests only: App logic's clock starts at this moment and moves on in real time (2026-01-05 is midnight in the App's zone; 2026-01-05T09:30Z an instant), so seed data dated for one day reads as it did. Sign-in, sessions and receipts keep the real clock. Or set MISTRI_AS_OF. Refused under NODE_ENV=production and when serving a build. |
 | `--app <dir>` | Serve an app: a directory whose app.ts (or app.mjs / app.json) declares its resources, views, navigation and pages. Repeatable; with more than one, every app names its connection. A save reloads it; a change to its grants, sources or sign-in needs a restart. mistri docs getting-started is where to begin. One App is served at the root (/leases/12); several each under its id (/lintel/leases/12). --app names the App on every command that takes one (check, build, shot, grade, dev, test init, flows, jobs, audit, decide, tenant, deploy init, migrate files). Left out, the App is the current directory when it holds an app.ts (or app.mjs / app.json). seed, migrate, messages extract and theme show read it left out as no App. A directory typed where a database or route goes is refused, never read as the App. |
 | `--mount` | <app>=<path> Where an App is served, over that default: / makes it the main App at the root, /billing puts it there. Repeatable, one per App. Or "mount" in the config. |
 | `--base-path <path>` | The path a reverse proxy serves this server under, like /tools: every address, asset, API call, cookie and link carries it. Or "basePath" in the config, or set MISTRI_BASE_PATH. |
@@ -551,7 +552,7 @@ One of an App's jobs at times, once, by hand.
 
 ```text
 mistri jobs run <name> [--app <dir>] --jobs <file> [--wait <seconds>]
-                [<db> | --db <target> | --config <path>]
+                [--policy <file> [--tenant <id>]] [<db> | --db <target> | --config <path>]
 Enqueues one run of the job in the App's job store, marked manual beside
 the slots the schedule enqueues, for the server started with --jobs to run
 as the job's principal, journaled as a slot's run is; waits --wait seconds
@@ -559,7 +560,10 @@ as the job's principal, journaled as a slot's run is; waits --wait seconds
 one at a time: a manual run waits while the schedule's run of the job holds
 its lease. A name that is not one of the App's jobs at times is refused with
 the names that are. A job store with no run of a job yet starts at its next
-slot: a first start never runs a missed one.
+slot: a first start never runs a missed one. On a tenant App, --policy names
+its policy, as its server's start does: a job per tenant runs for the tenant
+--tenant names, or once for each tenant active now, one run at a time; a
+job on the platform runs once and takes no --tenant.
 Exit codes: 1 could not run, 2 still waiting when --wait ran out, 3 the run
 did not succeed.
 ```
@@ -596,6 +600,8 @@ After mistri migrate stores up --policy.
 mistri tenant init [<tenant>...] [--app <dir>] --policy <file>
 mistri tenant grant <email> --roles <role,...> [--tenant <id>] [--name <name>] [--days <n>]
                 [--app <dir>] --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
+mistri tenant brand <tenant> [--name <name>] [--preset <theme>] [--file <branding.json>]
+                [--app <dir>] --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
 init opens the platform realm (when the App declares one) and puts each named
 tenant, active; one already there is left as it is, so it runs again after a
 stop part-way. grant grants <email> a membership of the platform realm, or
@@ -603,8 +609,12 @@ with --tenant of that tenant, with that realm's --roles, for --days (default
 180, at most 366). An address with no account gets one in the App's auth
 store, its password read from MISTRI_ACCOUNT_PASSWORD, never the command
 line: the store the App names, else mistri dev's once dev has started the
-App there, else a plain start's; grant says which. Exit codes: 1 could
-not run.
+App there, else a plain start's; grant says which. brand saves a tenant's
+branding, checked as a tenant admin's save is against the App's branding:
+--file names the whole value (JSON), else the saved one is kept, and
+--name and --preset are laid over either; the stored logo is kept. A
+server sharing the cache connection reads it on its next page, one with
+its own cache within five minutes. Exit codes: 1 could not run.
 ```
 
 ## A tenant App's sandboxes
@@ -898,6 +908,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--app-mcp` | [Options](#options) |
 | `--append` | [Rows to look at](#rows-to-look-at) |
 | `--as` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app) |
+| `--as-of` | [Options](#options) |
 | `--auth-proxy-from` | [Options](#options) |
 | `--auth-proxy-header` | [Options](#options) |
 | `--backup-check` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
@@ -933,6 +944,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--errors` | [Watching what a --dev server did](#watching-what-a---dev-server-did) |
 | `--export` | [Options](#options), [Writing a client from an exported App API document](#writing-a-client-from-an-exported-app-api-document) |
 | `--fail-on-design-warning` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
+| `--file` | [A tenant App's first boot](#a-tenant-apps-first-boot) |
 | `--fix` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--flow` | [Starting flows on records already there](#starting-flows-on-records-already-there) |
 | `--force` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Giving a coding agent the App skill](#giving-a-coding-agent-the-app-skill), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
@@ -969,9 +981,10 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--pending-on` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--phone` | [Looking at an App](#looking-at-an-app) |
 | `--pin` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies) |
-| `--policy` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
+| `--policy` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
 | `--pooler` | [Options](#options) |
 | `--port` | [Options](#options) |
+| `--preset` | [A tenant App's first boot](#a-tenant-apps-first-boot) |
 | `--press` | [Looking at an App](#looking-at-an-app) |
 | `--provider` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies) |
 | `--rate` | [A tenant App's sandboxes](#a-tenant-apps-sandboxes) |
@@ -1001,7 +1014,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--strict-migrations` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--suite` | [Changing the schema](#changing-the-schema) |
 | `--template` | [Commands](#commands) |
-| `--tenant` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Starting flows on records already there](#starting-flows-on-records-already-there), [Reading the read audit](#reading-the-read-audit), [A tenant App's first boot](#a-tenant-apps-first-boot) |
+| `--tenant` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Starting flows on records already there](#starting-flows-on-records-already-there), [Reading the read audit](#reading-the-read-audit), [Running a job now](#running-a-job-now), [A tenant App's first boot](#a-tenant-apps-first-boot) |
 | `--text` | [Looking at an App](#looking-at-an-app) |
 | `--theme` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app) |
 | `--tool` | [Changing the schema](#changing-the-schema), [Giving a coding agent the App skill](#giving-a-coding-agent-the-app-skill) |

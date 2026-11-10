@@ -893,6 +893,7 @@
     { "id": "cli-command-theme", "surface": ["cli: command theme"], "tests": [{ "file": "test/theme-tooling.test.ts" }] },
     { "id": "cli-command-upgrade", "surface": ["cli: command upgrade"], "tests": [{ "file": "test/upgrade.test.ts" }] },
     { "id": "cli-command-virtual", "surface": ["cli: command virtual"], "tests": [{ "file": "test/virtualization-cli.test.ts" }] },
+    { "id": "cli-flag-as-of", "surface": ["cli: flag --as-of"], "tests": [{ "file": "test/as-of-clock.test.ts" }] },
     {
       "id": "cli-flag-allowed-host",
       "surface": ["cli: flag --allowed-host"],
@@ -987,6 +988,8 @@
     { "id": "cli-flag-cpus", "surface": ["cli: flag --cpus"], "tests": [{ "file": "test/connection-budget.test.ts" }, { "file": "test/check-deploy.test.ts" }] },
     { "id": "cli-flag-dark", "surface": ["cli: flag --dark"], "tests": [{ "file": "e2e/shot.spec.ts" }] },
     { "id": "cli-flag-days", "surface": ["cli: flag --days"], "tests": [{ "file": "test/tenant-first-boot-cli.test.ts" }] },
+    { "id": "cli-flag-file", "surface": ["cli: flag --file"], "tests": [{ "file": "test/tenant-first-boot-cli.test.ts" }] },
+    { "id": "cli-flag-preset", "surface": ["cli: flag --preset"], "tests": [{ "file": "test/tenant-first-boot-cli.test.ts" }] },
     {
       "id": "cli-flag-db",
       "surface": ["cli: flag --db"],
@@ -1132,7 +1135,11 @@
     {
       "id": "cli-flag-policy",
       "surface": ["cli: flag --policy"],
-      "tests": [{ "file": "test/api-token-tenant-postgres.test.ts" }, { "file": "test/shot-tenant-release.test.ts" }]
+      "tests": [
+        { "file": "test/api-token-tenant-postgres.test.ts" },
+        { "file": "test/shot-tenant-release.test.ts" },
+        { "file": "test/jobs-run-tenant.test.ts" }
+      ]
     },
     { "id": "cli-flag-pooler", "surface": ["cli: flag --pooler"], "tests": [{ "file": "test/connection-pool-config.test.ts" }] },
     {
@@ -1190,7 +1197,11 @@
     {
       "id": "cli-flag-tenant",
       "surface": ["cli: flag --tenant"],
-      "tests": [{ "file": "test/api-token-tenant-postgres.test.ts" }, { "file": "test/shot-tenant-release.test.ts" }]
+      "tests": [
+        { "file": "test/api-token-tenant-postgres.test.ts" },
+        { "file": "test/shot-tenant-release.test.ts" },
+        { "file": "test/jobs-run-tenant.test.ts" }
+      ]
     },
     {
       "id": "cli-flag-text",

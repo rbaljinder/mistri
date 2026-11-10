@@ -1,5 +1,5 @@
 /**
- * `mistri tenant init|grant|clone|import|clock`: a tenant App's first boot
+ * `mistri tenant init|grant|brand|clone|import|clock`: a tenant App's first boot
  * and its sandboxes, from the operator's shell or a
  * deployment's one-off job, with no TypeScript runner. The deployment is validated as a start
  * validates it (tenantStartup.ts), which also judges the App's clone marks,
@@ -11,12 +11,14 @@
  * Manage tenants through that tenant's own membership, never here.
  */
 import { refusalHeadline } from '@mistriwork/engine/shared/refusal.js';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 
 const TENANT_USAGE = `mistri tenant init [<tenant>...] [--app <dir>] --policy <file>
        mistri tenant grant <email> --roles <role,...> [--tenant <id>] [--name <name>] [--days <n>]
+                 [--app <dir>] --policy <file>
+       mistri tenant brand <tenant> [--name <name>] [--preset <theme>] [--file <branding.json>]
                  [--app <dir>] --policy <file>
        mistri tenant clone <source> <sandbox> [--app <dir>] --policy <file> [--samples]
        mistri tenant import <sandbox> [--app <dir>] --policy <file>
@@ -36,6 +38,12 @@ const HELP = `${TENANT_USAGE}
           --name (default: the address before its @). The store is the
           one the App names, else mistri dev's once dev has started the
           App there, else a plain start's; grant says which.
+  brand   Saves <tenant>'s branding, checked as a tenant admin's save is
+          against the App's branding: --file names the whole value (JSON),
+          else the saved one is kept; --name and --preset are laid over
+          either. The stored logo is kept. A server sharing the cache
+          connection reads it on its next page; one with its own cache
+          within five minutes.
   clone   Makes <sandbox>, a new tenant, from a copy of <source>: the rows of
           every resource the App marks clone: 'config', and with --samples
           those marked clone: 'sample' too. Ids are rewritten so the copy
@@ -53,8 +61,8 @@ const HELP = `${TENANT_USAGE}
 Exit codes: 1 could not run.`;
 
 const TENANT = /^[a-z0-9][a-z0-9_-]{0,127}$/;
-const COMMANDS = new Set(['init', 'grant', 'clone', 'import', 'clock']);
-const FLAGS = ['--app', '--policy', '--operator', '--ahead', '--rate', '--roles', '--tenant', '--name', '--days'];
+const COMMANDS = new Set(['init', 'grant', 'brand', 'clone', 'import', 'clock']);
+const FLAGS = ['--app', '--policy', '--operator', '--ahead', '--rate', '--roles', '--tenant', '--name', '--days', '--preset', '--file'];
 const DURATION = /^(\d+)(ms|s|m|h|d)?$/;
 const UNIT: Record<string, number> = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
 
@@ -84,7 +92,7 @@ export async function runTenantCommand(
     if (email === undefined || !/^[^\s@]+@[^\s@]+$/.test(email)) return fail(`grant names an email address.\n${TENANT_USAGE}`);
   } else if (tenants.length !== wanted || tenants.some((id) => !TENANT.test(id)))
     return fail(
-      `${command} names ${command === 'clone' ? 'the source tenant and the new sandbox' : command === 'init' ? 'its tenants' : 'a sandbox'} by id: a–z, 0–9, "_" and "-".\n${TENANT_USAGE}`,
+      `${command} names ${command === 'clone' ? 'the source tenant and the new sandbox' : command === 'init' ? 'its tenants' : command === 'brand' ? 'a tenant' : 'a sandbox'} by id: a–z, 0–9, "_" and "-".\n${TENANT_USAGE}`,
     );
   const flags: Record<string, string> = {};
   let samples = false;
@@ -106,8 +114,22 @@ export async function runTenantCommand(
     rest.push(arg);
   }
   if (samples && command !== 'clone') return fail('--samples is for clone.');
-  if (command !== 'grant' && ['--roles', '--tenant', '--name', '--days'].some((flag) => flags[flag] !== undefined))
-    return fail(`--roles, --tenant, --name and --days are grant's.\n${TENANT_USAGE}`);
+  if (command !== 'grant' && ['--roles', '--tenant', '--days'].some((flag) => flags[flag] !== undefined))
+    return fail(`--roles, --tenant and --days are grant's.\n${TENANT_USAGE}`);
+  if (command !== 'grant' && command !== 'brand' && flags['--name'] !== undefined)
+    return fail(`--name is grant's and brand's.\n${TENANT_USAGE}`);
+  if (command !== 'brand' && (flags['--preset'] !== undefined || flags['--file'] !== undefined))
+    return fail(`--preset and --file are brand's.\n${TENANT_USAGE}`);
+  if (command === 'brand' && [flags['--name'], flags['--preset'], flags['--file']].every((flag) => flag === undefined))
+    return fail(`brand needs --name, --preset or --file.\n${TENANT_USAGE}`);
+  let brandingFile: unknown;
+  if (flags['--file'] !== undefined) {
+    try {
+      brandingFile = JSON.parse(readFileSync(resolve(flags['--file']), 'utf8'));
+    } catch (error) {
+      return fail(`${flags['--file']} is not a JSON branding value: ${(error as Error).message}`);
+    }
+  }
   if (command === 'grant' && !flags['--roles']) return fail(`grant needs --roles.\n${TENANT_USAGE}`);
   if (flags['--tenant'] !== undefined && !TENANT.test(flags['--tenant']))
     return fail('--tenant names a tenant by id: a–z, 0–9, "_" and "-".');
@@ -241,6 +263,27 @@ export async function runTenantCommand(
       } finally {
         if (saved === undefined) delete process.env.XDG_CONFIG_HOME;
         else process.env.XDG_CONFIG_HOME = saved;
+      }
+    }
+    if (command === 'brand') {
+      const { BrandingRefused } = await import('../../shared/tenantBranding.js');
+      try {
+        const saved = await maintenance.saveTenantBranding(where, binding, {
+          app: loaded.app,
+          tenantId: tenants[0],
+          ...(brandingFile !== undefined ? { value: brandingFile } : {}),
+          ...(flags['--name'] !== undefined ? { name: flags['--name'] } : {}),
+          ...(flags['--preset'] !== undefined ? { preset: flags['--preset'] } : {}),
+          operator,
+          // The deployment's cache, so a running server sharing it drops its copy now rather than in five minutes.
+          cache: registry.cache(),
+        });
+        write(`${tenants[0]}: branding saved, revision ${saved.revision}.`);
+        return 0;
+      } catch (error) {
+        if (!(error instanceof BrandingRefused)) throw error;
+        // Each sentence names its field; a key the App does not allow is filed under name, so the field is not printed.
+        return fail(`${tenants[0]}'s branding was not saved:\n${error.refusals.map((refusal) => `  ${refusal.message}`).join('\n')}`);
       }
     }
     if (command !== 'clock' && !prepared.clone)

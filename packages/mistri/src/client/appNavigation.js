@@ -210,7 +210,15 @@ function writeScope(tableId) {
 
 function figures() {
   const app = inAppMode() ? activeApp() : null;
-  return app ? { locale: app.ui.locale, currency: app.ui.currency, timezone: app.ui.timezone, clockZone: app.ui.clockZone } : null;
+  return app
+    ? {
+        locale: app.ui.locale,
+        currency: app.ui.currency,
+        timezone: app.ui.timezone,
+        clockZone: app.ui.clockZone,
+        clockOffset: app.ui.clockOffset,
+      }
+    : null;
 }
 
 /* How a record opens is the view's word: `open: "drawer"` sends the click

@@ -13,9 +13,13 @@
 import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
+import { themePreset } from '../packages/engine/src/shared/themePresets.js';
+import { createApp } from './support/createApp.js';
 import { parseAppEnv, readStartupConfig } from '../packages/engine/src/server/cli/config.js';
 import { startupTargets } from '../packages/mistri/src/server/cli/apps.js';
 import { parseArgs } from '../packages/engine/src/server/cli/args.js';
@@ -85,6 +89,43 @@ describe('the environment of a definition', () => {
     assert.throws(() => parseAppEnv(['not a name'], 'here'), /takes names/);
     assert.throws(() => parseAppEnv([{ name: 'X', secret: 'yes' }], 'here'), /takes names/);
     assert.throws(() => parseAppEnv('REGION', 'here'), /must be a list/);
+  });
+
+  /* A field report saw the server wear a look read from the environment while the browser kept the first one.
+     The browser takes its look from the payload and its first paint from the head; both are the one definition
+     the worker evaluated, so the value the server read is the value each carries. */
+  test("a preset read from a listed name is the head's look and the payload's", async () => {
+    process.env.TABLEWALK_TEST_LOOK = 'ledger';
+    const app = dir('env-look', {
+      'app.mjs':
+        "export default { name: 'Looks', resources: { task: {} }, views: { tasks: { kind: 'list', from: 'task' } }, home: 'tasks', " +
+        "ui: { theme: { preset: process.env.TABLEWALK_TEST_LOOK ?? 'workshop' } } };\n",
+    });
+    const db = join(app, 'looks.db');
+    const handle = new DatabaseSync(db);
+    handle.exec('CREATE TABLE task (id INTEGER PRIMARY KEY, name TEXT)');
+    handle.close();
+    const loaded = await loadApp(app, { lock: 'report', env: [{ name: 'TABLEWALK_TEST_LOOK' }] });
+    assert.equal(loaded.app.ui?.theme?.preset, 'ledger');
+    const registry = new Registry();
+    registry.add({ name: 'looks', url: db, writable: false, source: 'config' });
+    registry.setActive('looks');
+    await registry.open('looks');
+    const server = createApp({ registry, apps: [{ app: loaded, pages: [] }], bound: { host: '127.0.0.1', port: 0 } });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      const payload = (await (await fetch(`${base}/api/app`)).json()) as { app: { ui?: { theme?: { preset?: string } } } };
+      assert.equal(payload.app.ui?.theme?.preset, 'ledger');
+      const ground = themePreset('ledger')!.light.ground;
+      assert.notEqual(ground, themePreset('workshop')!.light.ground);
+      const head = await (await fetch(`${base}/`)).text();
+      assert.match(head, new RegExp(`<meta name="theme-color" content="${ground}" media="\\(prefers-color-scheme: light\\)">`, 'i'));
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+      await registry.closeAll();
+      delete process.env.TABLEWALK_TEST_LOOK;
+    }
   });
 
   test('mistri.json lists an App with its env, resolved beside the file', async () => {

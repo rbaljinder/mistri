@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test, type TestContext } from 'node:test';
 import * as maintenance from '@mistriwork/mistri/maintenance';
+import { BRANDING_TABLES } from '../packages/mistri/src/adapters/branding/branding.js';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
 import { appAuthStore } from '../packages/mistri/src/server/auth/auth.js';
 import { prepareDev } from '../packages/mistri/src/server/cli/devMode.js';
@@ -23,7 +24,7 @@ import { scratch } from './support/scratch.js';
 const binding = { appId: 'lending', source: { id: 'business', connection: 'business-db' }, storeId: 'lending-store' };
 const PASSWORD = 'first-boot-password-123';
 
-async function fixture(t: TestContext, platform = true, named = true) {
+async function fixture(t: TestContext, platform = true, named = true, branded = false) {
   const { directory } = scratch(t, 'mistri-tenant-first-boot-');
   const appDir = join(directory, 'app');
   mkdirSync(appDir);
@@ -37,11 +38,13 @@ async function fixture(t: TestContext, platform = true, named = true) {
   db.close();
   // As `mistri migrate stores up --policy` does before a first start.
   await maintenance.provisionStores({ sqlite: data }, { app: { tenant: binding }, only: ['tenant-store', 'tenant-administration'] });
+  if (branded) await maintenance.provisionStores({ sqlite: data }, { only: ['branding'] });
   writeFileSync(
     join(appDir, 'app.json'),
     JSON.stringify({
       id: 'lending',
       name: 'Lending',
+      ...(branded ? { branding: { allow: ['name', 'accent'], editors: ['staff'] } } : {}),
       sources: { business: { connection: 'business-db' } },
       resources: { ...(platform ? { dealer: { owner: 'platform' } } : {}), lead: { owner: 'tenant' } },
       auth: {
@@ -111,7 +114,8 @@ async function fixture(t: TestContext, platform = true, named = true) {
   const memberships = () =>
     read(`SELECT tenant_id AS tenant, account_id AS account, status, roles_json AS roles FROM "${tables.membership}" ORDER BY tenant_id`);
   const receipts = () => read(`SELECT actor_id AS actor, operation FROM "${journal.receipt}" ORDER BY completed_at, id`);
-  return { directory, appDir, run, anchors, memberships, receipts };
+  const branding = () => read(`SELECT tenant, value_json AS value, saved_by AS by FROM "${BRANDING_TABLES.value}" ORDER BY tenant`);
+  return { directory, appDir, run, anchors, memberships, receipts, branding };
 }
 
 test('init opens the platform realm and the named tenants, and a second run leaves them as they are', async (t) => {
@@ -254,7 +258,10 @@ test("init and grant refuse each other's options and a malformed address before 
   for (const [argv, refused] of [
     [['grant', 'not-an-address', '--roles', 'manager'], /grant names an email address/],
     [['grant', 'lee@lender.example'], /grant needs --roles/],
-    [['init', 'north', '--roles', 'manager'], /--roles, --tenant, --name and --days are grant's/],
+    [['init', 'north', '--roles', 'manager'], /--roles, --tenant and --days are grant's/],
+    [['init', 'north', '--name', 'North'], /--name is grant's and brand's/],
+    [['grant', 'lee@lender.example', '--roles', 'manager', '--preset', 'mono'], /--preset and --file are brand's/],
+    [['brand', 'north'], /brand needs --name, --preset or --file/],
     [['grant', 'lee@lender.example', '--roles', 'manager', '--days', '400'], /--days is a whole number of days, 1 to 366/],
     [['grant', 'lee@lender.example', '--roles', 'manager', '--tenant', 'North!'], /--tenant names a tenant by id/],
     [['init', 'North!'], /init names its tenants by id/],
@@ -264,4 +271,31 @@ test("init and grant refuse each other's options and a malformed address before 
     assert.match(result.err, refused, argv.join(' '));
   }
   assert.deepEqual(f.anchors(), []);
+});
+
+test("brand saves a tenant's branding through the checks a tenant admin's save meets, and keeps what it does not name (field report)", async (t) => {
+  const f = await fixture(t, false, true, true);
+  assert.equal((await f.run('init', 'north')).code, 0);
+  const named = await f.run('brand', 'north', '--name', 'North Motors');
+  assert.equal(named.code, 0, named.err);
+  assert.equal(named.out, 'north: branding saved, revision 1.');
+  const file = join(f.directory, 'branding.json');
+  writeFileSync(file, JSON.stringify({ accent: '#1d4ed8' }));
+  // The file is the whole value; --name is laid over it.
+  const whole = await f.run('brand', 'north', '--file', file, '--name', 'North');
+  assert.equal(whole.code, 0, whole.err);
+  assert.equal(whole.out, 'north: branding saved, revision 2.');
+  // Without --file the saved value is the base: the accent stays.
+  assert.equal((await f.run('brand', 'north', '--name', 'North Motors')).out, 'north: branding saved, revision 3.');
+  const saved = f.branding();
+  assert.deepEqual(
+    saved.map((row) => [row.tenant, JSON.parse(String(row.value)), row.by]),
+    [['north', { accent: { light: '#1d4ed8', dark: '#7997ee' }, name: 'North Motors' }, 'maintenance:ops-ada']],
+  );
+  // A field the App does not let a tenant brand is refused by name, and nothing is written.
+  const refused = await f.run('brand', 'north', '--preset', 'mono');
+  assert.equal(refused.code, 1);
+  assert.match(refused.err, /north's branding was not saved:\n {2}This App does not let a customer change "preset"\./);
+  assert.match((await f.run('brand', 'south', '--name', 'South')).err, /"south" is not a tenant of lending/);
+  assert.equal(f.branding().length, 1);
 });

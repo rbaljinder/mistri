@@ -136,12 +136,14 @@ const renderedHashes = (files: Map<string, Buffer | string>): Record<string, str
 const same = (a: Record<string, string>, b: Record<string, string>) =>
   JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
 
-function readManifest(dir: string): Record<string, string> | undefined {
+function readManifest(dir: string): { files: Record<string, string>; mistri?: string } | undefined {
   try {
     const manifest = JSON.parse(readFileSync(join(dir, MANIFEST), 'utf8')) as {
       files?: Record<string, string>;
+      mistri?: unknown;
     };
-    return manifest.files && typeof manifest.files === 'object' ? manifest.files : undefined;
+    if (!manifest.files || typeof manifest.files !== 'object') return undefined;
+    return { files: manifest.files, ...(typeof manifest.mistri === 'string' ? { mistri: manifest.mistri } : {}) };
   } catch {
     return undefined;
   }
@@ -171,14 +173,17 @@ function place(target: string, files: Map<string, Buffer | string>, force: boole
     return { said: 'installed', kept: false };
   }
   const installed = readManifest(target);
-  const edits = installed ? editsIn(target, installed) : ['(a copy mistri did not install)'];
+  const edits = installed ? editsIn(target, installed.files) : ['(a copy mistri did not install)'];
   if (edits.length > 0 && !force) {
     return {
       said: `left alone: changed since it was installed (${edits.join(', ')}); --force replaces it`,
       kept: true,
     };
   }
-  if (edits.length === 0 && same(installed!, source)) return { said: 'up to date', kept: false };
+  /* The stamp is what `check` compares with the running mistri, so files that did not change between releases are
+     still rewritten under a new stamp: "up to date" beside a stamp naming the old release left check warning. */
+  if (edits.length === 0 && same(installed!.files, source) && installed!.mistri === runtimeVersion())
+    return { said: 'up to date', kept: false };
   install(target, files, source);
   return {
     said: edits.length > 0 ? 'replaced (--force)' : 'updated',

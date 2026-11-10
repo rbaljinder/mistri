@@ -471,6 +471,17 @@ describe('cells', () => {
     expect(cellsOf(1)('paid').querySelector('.no')).toHaveTextContent('✗');
   });
 
+  test("a column's own `empty` word stands where the dash would", () => {
+    appMode = true;
+    displayRules = { customer_id: { empty: 'Unassigned' } };
+    try {
+      draw(<Grid table={invoice} data={data} />);
+      expect(cellsOf(1)('customer_id')).toHaveTextContent('Unassigned');
+    } finally {
+      displayRules = {};
+    }
+  });
+
   test('in an app the empty word is a dash', () => {
     appMode = true;
     draw(<Grid table={invoice} data={data} />);
