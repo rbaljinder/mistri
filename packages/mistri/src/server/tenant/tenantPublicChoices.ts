@@ -15,7 +15,7 @@ import { logicalResource, type AppDef } from '../../shared/app.js';
 import { formCommands } from '../../shared/appSavedForms.js';
 import type { AppFormView } from '../../shared/app.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
-import { CHOICE_ROWS_MOST, tenantChoices } from '../forms/choiceCache.js';
+import { CHOICE_ROWS_MOST, choiceOrder, tenantChoices } from '../forms/choiceCache.js';
 import { tenantChoiceTables, tenantLiveHub } from './tenantLive.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
 import type { PublicPlacement, PublicReadContext } from './tenantPublicReadRuntime.js';
@@ -77,13 +77,13 @@ export function tenantPublicChoices(options: TenantPublicChoicesOptions) {
             tables,
             appId: app.id,
             tenant,
-            source: { resource, physical, by: field.source.by, labelColumn: field.source.labelColumn },
+            source: { resource, physical, by: field.source.by, labelColumn: field.source.labelColumn, sort: field.source.sort },
             read: () =>
               options.withPublicContext({ tenant }, async (context) => {
                 const result = await context.data.query({
                   table: resource,
                   columns,
-                  orderBy: [{ column: field.source.labelColumn, direction: 'asc' }],
+                  orderBy: choiceOrder(field.source),
                   limit: CHOICE_ROWS_MOST + 1,
                   offset: 0,
                 });

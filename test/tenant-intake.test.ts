@@ -621,7 +621,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
             `${attempt} ${address}`,
           );
         }
-        // A refused removal names the write it refused, for the operator's log, never the visitor's answer.
+        // A refused removal names the row it refused in the operator's log, never in the visitor's answer.
         mode = 'remove';
         const removal = await f.submit(NORTH, 'Mallory').then(
           () => assert.fail('a public removal applied'),
@@ -629,6 +629,8 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         );
         assert.match(refusalReasons(removal).join(' | '), /a public submission (removes no lead row|names no record)/);
         assert.doesNotMatch((removal as Error).message, /lead/);
+        // The visitor's answer names the delete, not the table (a field report: it said the command was unavailable).
+        assert.match((removal as Error).message, /cannot delete a record/);
       } finally {
         mode = 'place';
       }

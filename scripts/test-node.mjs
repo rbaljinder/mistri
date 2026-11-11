@@ -31,6 +31,14 @@
  *   TABLEWALK_TEST_CONCURRENCY=4 …               override the parallel width
  *   node scripts/test-node.mjs --record-timings  run, and record each file's time in test/node-timings.json
  *   TABLEWALK_TEST_LEAKS=report …                say what a lane left, and pass anyway
+ *   TABLEWALK_TEST_LANE_MINUTES=90 …             how long a lane may run before it is killed (default 60, 0 for no limit)
+ *
+ * Each file's start and its duration are printed as the lane goes
+ * (scripts/node-progress-reporter.mjs), and every two minutes the files that
+ * have been running longer than that are named. The runner is a process group
+ * of its own: when a lane passes its time, or the gate is interrupted, the
+ * files still running are named and the whole group is killed, so a hung case
+ * leaves neither a lane that never ends nor a server nobody will stop.
  *
  * Each lane runs with a temporary directory of its own as TMPDIR, and what a
  * lane leaves in it is a leak: a scratch directory no hook removed, or a
@@ -44,7 +52,7 @@
  * Both lanes run even if the first fails: a red parallel lane should not hide
  * what the serial lane would have said. The exit code is the worse of the two.
  */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { globSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -224,11 +232,46 @@ export function leaks(scratch, label) {
   return true;
 }
 
+/** Seconds from `ps`'s elapsed time, `[[dd-]hh:]mm:ss`. */
+const seconds = (elapsed) => {
+  const [, days = '0', rest] = /^(?:(\d+)-)?(.*)$/.exec(elapsed.trim());
+  return rest.split(':').reduce((sum, part) => sum * 60 + Number(part), 0) + Number(days) * 86400;
+};
+
+/** The test files a process group is running right now, with how long each has
+ * been: the processes of the group whose command line names a `*.test.*` file.
+ * Read from the process table rather than the runner's events, because the
+ * runner reports files in order and a file stuck early holds back everything
+ * after it — the one moment the names are wanted. */
+export function running(group) {
+  const ps = spawnSync('ps', ['-Ao', 'pgid=,etime=,args='], { encoding: 'utf8' });
+  const found = new Map();
+  for (const line of (ps.stdout ?? '').split('\n')) {
+    const match = /^\s*(\d+)\s+(\S+)\s+(.*)$/.exec(line);
+    /* Not the runner itself, whose command line lists every file it was given. */
+    if (!match || Number(match[1]) !== group || / --test( |$)/.test(match[3])) continue;
+    const file = / (\S+\.test\.[cm]?[jt]s)(?: |$)/.exec(match[3])?.[1];
+    if (file) found.set(relative(ROOT, resolve(ROOT, file)).split('\\').join('/'), seconds(match[2]));
+  }
+  return [...found].sort((a, b) => b[1] - a[1]);
+}
+
+/** Stop a lane's whole process group — the runner and every file's process
+ * under it, and whatever a file started — not just the runner. */
+function killGroup(child, signal) {
+  try {
+    if (process.platform === 'win32') child.kill(signal);
+    else process.kill(-child.pid, signal);
+  } catch {
+    /* gone already */
+  }
+}
+
 /* Run only from the command line: test/repo/structure.test.ts imports this
    module for `lanes()` and must not start a suite by doing so. */
-if (process.argv[1] === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) await main();
 
-function main() {
+async function main() {
   const argv = process.argv.slice(2);
   const shardArg = argv.find((arg) => arg.startsWith('--shard='));
   /* Anything else is passed through to node's runner, so a one-off
@@ -290,7 +333,7 @@ function main() {
     process.exit(0);
   }
 
-  const run = (files, concurrency, label) => {
+  const run = async (files, concurrency, label) => {
     const mine = shard(files, index, total, readTimings(), headStart);
     if (!mine.length) {
       console.log(`# ${label}: nothing in this shard`);
@@ -313,12 +356,32 @@ function main() {
           `--test-reporter-destination=${recorded}`,
         ]
       : [];
-    const result = spawnSync(
+    /* Beside whatever else is reporting; a reporter the caller chose is theirs, and is not paired with ours. */
+    const progress = rest.some((arg) => arg.startsWith('--test-reporter'))
+      ? []
+      : [
+          ...(recorded ? [] : ['--test-reporter=spec', '--test-reporter-destination=stdout']),
+          `--test-reporter=${join(ROOT, 'scripts', 'node-progress-reporter.mjs')}`,
+          '--test-reporter-destination=stderr',
+        ];
+    const child = spawn(
       process.execPath,
-      ['--import', 'tsx', '--test', '--test-timeout=120000', `--test-concurrency=${concurrency}`, ...reporters, ...rest, ...mine],
+      [
+        '--import',
+        'tsx',
+        '--test',
+        '--test-timeout=120000',
+        `--test-concurrency=${concurrency}`,
+        ...reporters,
+        ...progress,
+        ...rest,
+        ...mine,
+      ],
       {
         cwd: ROOT,
         stdio: 'inherit',
+        /* Its own process group, so the group can be stopped as one. */
+        detached: process.platform !== 'win32',
         env: {
           ...process.env,
           TMPDIR: scratch,
@@ -338,6 +401,42 @@ function main() {
         },
       },
     );
+    const minutes = Number(process.env.TABLEWALK_TEST_LANE_MINUTES ?? 60);
+    let stopped = '';
+    const stop = (why) => {
+      if (stopped) return;
+      stopped = why;
+      const names = running(child.pid);
+      console.error(
+        `# ${label}: ${why}; still running: ${names.length ? names.map(([file, s]) => `${file} (${s}s)`).join(', ') : 'none found'}`,
+      );
+      killGroup(child, 'SIGTERM');
+      /* A hung file may ignore the polite signal. */
+      setTimeout(() => killGroup(child, 'SIGKILL'), 5000).unref();
+    };
+    const beat = setInterval(() => {
+      const slow = running(child.pid).filter(([, s]) => s >= 120);
+      if (slow.length) console.error(`# ${label}: still running: ${slow.map(([file, s]) => `${file} (${s}s)`).join(', ')}`);
+    }, 120000);
+    const limit = minutes > 0 ? setTimeout(() => stop(`passed its ${minutes} minutes`), minutes * 60000) : undefined;
+    /* A terminal's Ctrl-C reaches only this process's group, not the lane's. */
+    const interrupts = ['SIGINT', 'SIGTERM', 'SIGHUP'].map((signal) => {
+      const handler = () => {
+        aborted = true;
+        stop(`interrupted by ${signal}`);
+      };
+      process.on(signal, handler);
+      return [signal, handler];
+    });
+    const result = await new Promise((done) => {
+      child.on('error', (error) => done({ error }));
+      child.on('close', (status, signal) => done({ status, signal }));
+    });
+    clearInterval(beat);
+    clearTimeout(limit);
+    for (const [signal, handler] of interrupts) process.off(signal, handler);
+    /* Whatever the runner left in its group once it is gone. */
+    killGroup(child, 'SIGKILL');
     rmSync(configHome, { recursive: true, force: true });
     const leaked = leaks(scratch, label);
     if (recorded) {
@@ -354,15 +453,17 @@ function main() {
     }
     /* A signal is not a status. A lane the OOM killer took reports `null`, and
        `?? 0` would have called that green. */
-    const status = result.signal ? 1 : (result.status ?? 1);
+    const status = stopped || result.signal ? 1 : (result.status ?? 1);
     /* A leak fails the lane: the first full gates found only the runner's own
        caches, which are not counted (TOOL_CACHES). `report` says, and passes. */
     return status || (leaked && process.env.TABLEWALK_TEST_LEAKS !== 'report' ? 1 : 0);
   };
 
+  /* Set by an interrupt: the second lane must not start after the first was stopped by hand. */
+  let aborted = false;
   const timings = {};
-  const first = run(parallel, width, 'parallel lane');
-  const second = run(serial, 1, 'serial lane');
+  const first = await run(parallel, width, 'parallel lane');
+  const second = aborted ? 1 : await run(serial, 1, 'serial lane');
   if (record) {
     /* Merged over the last record, so one shard's run refreshes its files and keeps the others'. */
     const merged = { ...readTimings(), ...timings };

@@ -1,12 +1,14 @@
 /**
- * Lookup in a tenant App. A tenant command looks up only what every tenant
- * reads (`owner: 'global'`, a global table in the ownership), through the
- * tenant's own row scope: it reads the global table and writes with what it
- * read; the target it reads first is scoped like every tenant read, so
- * another tenant's key is not found and the lookup never runs; and a lookup
- * of a tenant-owned table is refused when the commands are created. An HTTP
- * lookup is not a case here: tenant ownership takes SQLite and PostgreSQL
- * sources only.
+ * Lookup in a tenant App. A tenant command looks up what every tenant reads
+ * (`owner: 'global'`, a global table in the ownership), through the tenant's
+ * own row scope: it reads the global table and writes with what it read; the
+ * target it reads first is scoped like every tenant read, so another tenant's
+ * key is not found and the lookup never runs; and a lookup that also names a
+ * tenant-owned table is created and runs. What a lookup of the tenant's own
+ * tables may read (grants, row filters, columns, no writes) is
+ * tenant-command-lookup-tenant-tables.test.ts, on both engines. An HTTP lookup
+ * is not a case here: tenant ownership takes SQLite and PostgreSQL sources
+ * only.
  */
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -20,7 +22,7 @@ import { readSqliteReadCatalog } from '../packages/engine/src/adapters/scoped/sq
 import { appResourceCatalog } from '../packages/mistri/src/server/app/appResources.js';
 import type { Identity } from '../packages/mistri/src/server/auth/auth.js';
 import { BusinessCommandExecutionError } from '../packages/mistri/src/server/commands/businessCommandExecution.js';
-import { BusinessCommandDefinitionError, defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
+import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { createTenantCommands } from '../packages/mistri/src/server/tenant/tenantCommands.js';
 import { captureTenantOwnership } from '../packages/mistri/src/server/tenant/tenantOwnership.js';
 import { openSqliteTenantReadSource } from '../packages/mistri/src/server/tenant/tenantReadSource.js';
@@ -207,11 +209,10 @@ test("another tenant's key is refused before the lookup runs, and reveals nothin
   assert.equal(f.db.prepare("SELECT version FROM db_item WHERE id='south-row'").get()!.version, 0);
 });
 
-test('a lookup of a tenant-owned table is refused when the commands are created', async (t) => {
-  const f = await fixture(t);
-  await assert.rejects(f.issue({ business: ['item'] }), (error: unknown) => {
-    assert.ok(error instanceof BusinessCommandDefinitionError, String(error));
-    assert.match(error.message, /global/);
-    return true;
-  });
+test("a lookup that also names the tenant's own table is created, and runs", async (t) => {
+  const f = await fixture(t),
+    service = await f.issue({ business: ['country', 'item'] });
+  const result = await service.execute(request, north, f.body('north-row'), { requestId: 'request-003' });
+  assert.equal(result.status, 'applied');
+  assert.deepEqual(JSON.parse(JSON.stringify(result.result)), { name: 'Norway' });
 });

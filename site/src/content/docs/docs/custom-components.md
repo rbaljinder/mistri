@@ -1,7 +1,21 @@
 ---
 title: Custom components
 description: Draw what no built-in block draws with a React component of your own, fed by checked reads and changing data only through commands.
-keywords: [custom component, React, widget, plugin, extension, '@mistriwork/mistri/ui', '@mistriwork/mistri/page', SDK, visualization, definePage, free-form page, loader]
+keywords:
+  [
+    custom component,
+    React,
+    widget,
+    plugin,
+    extension,
+    '@mistriwork/mistri/ui',
+    '@mistriwork/mistri/page',
+    SDK,
+    visualization,
+    definePage,
+    free-form page,
+    loader,
+  ]
 ---
 
 Draw what no built-in block draws with a React component of your own, fed by checked reads and changing data only through commands.
@@ -46,13 +60,13 @@ The module, `widgets/BinMap.tsx`, draws with `@mistriwork/mistri/ui`.
 
 ## Options
 
-| Kind | Declared | Placed | Props type |
-| --- | --- | --- | --- |
-| Section (default) | `component(id, { module, props })` | `custom(title, comp, { record, rows, props })` on a page or dashboard | `SectionProps` |
-| Value | `kind: 'value'` | `resources.<r>.display.<column>` | `ValueProps` |
-| Input | `kind: 'input'` | `resources.<r>.inputs`, an action's or a command form's `inputs` (`'trade.vin'` inside a group) | `InputProps` |
-| List | `kind: 'list'` | `presentation: customList(comp, { show })` | `ListProps` |
-| Page | `definePage({ path, label, reads, … })` in `pages/<path>.page.tsx` | Its own address and nav place; see [free-form pages](#free-form-pages) | `PageProps` |
+| Kind              | Declared                                                           | Placed                                                                                          | Props type     |
+| ----------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | -------------- |
+| Section (default) | `component(id, { module, props })`                                 | `custom(title, comp, { record, rows, props })` on a page or dashboard                           | `SectionProps` |
+| Value             | `kind: 'value'`                                                    | `resources.<r>.display.<column>`                                                                | `ValueProps`   |
+| Input             | `kind: 'input'`                                                    | `resources.<r>.inputs`, an action's or a command form's `inputs` (`'trade.vin'` inside a group) | `InputProps`   |
+| List              | `kind: 'list'`                                                     | `presentation: customList(comp, { show })`                                                      | `ListProps`    |
+| Page              | `definePage({ path, label, reads, … })` in `pages/<path>.page.tsx` | Its own address and nav place; see [free-form pages](#free-form-pages)                          | `PageProps`    |
 
 `props` are JSON-safe: `prop.number({ default, min, max })`, `prop.text`, `prop.bool`, `prop.choice([...])`. `rows` holds up to eight named reads, `{ from, show, query?, sort?, limit? }`, tied to the record by `whose` on a page or to the window by `over` on a dashboard. Every key: [pages reference](/docs/dsl-pages/#pagessectionskindcustom).
 
@@ -90,7 +104,13 @@ export default function BinMap({ rows }: SectionProps<typeof warehouseBins, Rows
 ```tsx
 const close = useCommand('closeTicket');
 const can = close.available(ticket); // undefined while the server is asked
-{can !== false && <Button busy={can === undefined} onClick={() => close.run(ticket, { outcome: 'fixed' })}>Close</Button>}
+{
+  can !== false && (
+    <Button busy={can === undefined} onClick={() => close.run(ticket, { outcome: 'fixed' })}>
+      Close
+    </Button>
+  );
+}
 ```
 
 - Gate a button on `available(record)`, not `granted`: `granted` is the role, `available` adds the command's `when` for this record. While it is undefined, keep the button and set `busy`, never `disabled`: a disabled button drops the reader's focus.
@@ -122,7 +142,13 @@ A resource's fixed actions (a machine's verbs, `action(label, { set })`) are not
 
 ```tsx
 const start = page.useAction('startVisit'); // the page declares `actions: ['startVisit']`
-{start.granted && <Button disabled={start.reason(request) === 'unavailable'} onClick={() => start.run(request)}>{start.label}</Button>}
+{
+  start.granted && (
+    <Button disabled={start.reason(request) === 'unavailable'} onClick={() => start.run(request)}>
+      {start.label}
+    </Button>
+  );
+}
 ```
 
 - `run(record)` writes the action's `set` to that record, found by its key. An action that says `confirm` asks first, in the platform's dialog; one that asks a reason takes it as `run(record, { reason })`. It takes no other input.
@@ -189,7 +215,7 @@ See it in the sample (`examples/apps/ladle/pages/check-in.page.tsx:24`).
 - The path is the file's name, and the address: `/check-in?class=2`. `home` may name a page by its path.
 - A page's path is its address alone: a view with the same key is refused (`[page-path]`), and the page never replaces it. Rename the file, or remove the view and let the page take its place.
 - `nav: { group }` is the nav group the page stands in. In a nav split into workspaces, a list stands in each: `nav: { group: ['sales', 'support'] }`. A group the nav lacks, or one named twice, is refused (`[page-nav]`).
-- A page places itself: naming it in the App's own `nav` is refused at load, and by the types where they know the page (`mistri check` writes its path into `mistri-commands.d.ts`). `nav: false` keeps it out of the menu, and a `public: true` page that says nothing of `nav` stays off the signed-in menu too (it is the signed-out door's); say `nav: {}` or `nav: { group }` to put it in both.
+- A page places itself: naming it in the App's own `nav` is refused at load, and by the types where they know the page (`mistri check` writes its path into `mistri-commands.d.ts`). `nav: false` keeps it out of the menu, and a `public: true` page that says nothing of `nav` stays off the signed-in menu too (it is the signed-out door's); say `nav: {}` or `nav: { group }` to put it in both. A `nav: false` page is still served at its address; another page reaches it with `pageHref('<key>')` or `openPage('<key>')`, and `mistri check` warns ([`page-unlinked`](/docs/check-codes/#page-unlinked)) when no source links to it.
 - `nav.position` is an index into the siblings as they stand when the page is placed. Pages are placed in path order after the App's own `nav`, so at the top level a group counts as one sibling and a page placed earlier counts as one for the next: `position: 0` leads the menu, a position past the end goes last, and of two pages asking the same place the later in path order stands first, since each is put in at that place as it comes. To keep a menu's order in one place, give the pages a group (an empty `navGroup('desk', 'Desk', [])` in `app.ts`) and order them inside it.
 - A command a page lists in `commands` is offered by that declaration alone: it needs no `action('…', { command })` on its table, and the role still needs the grant (an ungranted role is refused at prepare and at run). The page's command stays off the record's bar, its More menu and every row menu until an action offers it there.
 - A page that must stay current needs `live: true` on the App (live sync is off unless the App asks; `dev` says so), or its own timer that calls `refresh()` for its loader and each read's `refetch()` (`page.useRows(…).refetch()`) for the rows it draws.
@@ -202,7 +228,7 @@ See it in the sample (`examples/apps/ladle/pages/check-in.page.tsx:24`).
 - `<CommandButton command row />` and `<ActionButton action row />` (a command that names no row, `targets: 'none'`, takes none: `<CommandButton command />`) are hidden where the reader is not granted them, held where the row's state does not allow them, busy while they run, named with the row's title ("Check in Morgan Lee"), and say the outcome aloud; `done` words it.
 - `@mistriwork/mistri/page` holds everything `@mistriwork/mistri/ui` does, and the shell's own `Modal`, `Drawer`, `Popover`, `Tooltip`, `TextField`, `DateField`, `Select`, `FileField` (the browser's file picker, handing the page the chosen `File` or null), `Choices`, `Switch`, `Slider`, `Pagination` and `Avatar`, so a page needs one import.
 - A role is offered the page when it is granted every read (`roles` narrows it; `public: true` opens it within `auth.public`). `useCommand(…).granted` is false for a command the role lacks; draw its button where `available(record)` is not false. A service role is offered a page only where the page names it.
-- A `public: true` page may name `public: true` commands, and a signed-out visitor runs them through the page's own door. That door asks for the page's ticket, takes a request from the page's own origin only (never from a host that embeds it), and holds the run to the public form's rules. `run(record, input, { challenge })` passes a human check's token where `auth.challenge` names one. The applied answer's `output` is `{ reference, receipt }`, never the input, and its `message` the command's own words or else a thank-you naming the reference: show it, and `output.reference` beside it where the visitor needs it and the command's words leave it out, or go on with `useNavigate()` to a page of your own. A lost answer is `unknown`, and `check({ challenge })` asks again under the same submission.
+- A `public: true` page may name `public: true` commands, and a signed-out visitor runs them through the page's own door. That door asks for the page's ticket, takes a request from the page's own origin only (never from a host that embeds it), and holds the run to the public form's rules. `run(record, input, { challenge })` passes a human check's token where `auth.challenge` names one. The applied answer's `output` is `{ reference, receipt }`, never the input, and its `message` the command's own words or else a thank-you naming the reference: show it, and `output.reference` beside it where the visitor needs it and the command's words leave it out, or go on with `useNavigate()` to a page of your own. A lost answer is `unknown`, and `check({ challenge })` asks again under the same submission. On a tenant App the run lands where its visitor's address places it, through [public intake](/docs/tenant-apps/#public-intake), which says what such a page may run.
 - `authority.lock` records which pages are public, the public commands each runs, and which load; what a signed-in page reads and runs is the roles' grants, which the lock already records. `<CommandForm command="…" />` is a command's own dialog behind a button.
 - `head` says the form of the page's head. `head: 'compact'` is the title alone on one line with its star, at a list's size, with no `description` under it: a working page whose controls start at once. `head: false` is a page that draws its own head: the platform's title stays for a screen reader only, so the room keeps one `h1` and the page's first element is the first thing in the pane (no band, no rule, no gap above it), and the label still names the browser tab, the crumb and the palette entry. Draw your own title as an `h2` or the kit's `<Heading>`, never a second `h1`; say the intro yourself. Absent, the page has the full head: title, star and description.
 - `layout: 'bare'` takes the sidebar and the top bar away: the component owns the whole window, edge to edge (no gutter, no band), for a kiosk, a wallboard or a landing page. The title still names the tab, the crumb and the palette and stays for a screen reader as the page's one `h1`; the skip link and focus are the shell's. A bare page draws no head, so it takes no `head` (`[page-layout]`). With `public: true` it is a public landing page, held to `auth.public` as any public page is. With no sidebar there is no way out but the page's own links, so a bare page that is not a kiosk gives the reader one.
@@ -230,7 +256,9 @@ The platform's sections are components of `@mistriwork/mistri/page`, each taking
 <Grid>
   <Metric title="Open" from="ticket" where={{ status: 'open' }} width="third" />
   <Chart title="Opened" from="ticket" by="month opened_on" width="two-thirds" />
-  <Panel title="This record" width="half"><RecordCard from="ticket" record={{ id: 7 }} /></Panel>
+  <Panel title="This record" width="half">
+    <RecordCard from="ticket" record={{ id: 7 }} />
+  </Panel>
   <Tabs param="tab" tabs={[{ key: 'open', label: 'Open', content: <Rows title="Open" from="ticket" where={{ status: 'open' }} /> }]} />
 </Grid>
 ```
@@ -324,7 +352,11 @@ const page = definePage({
 
 function Pipeline(): ReactNode {
   const account = page.useRecordKey('account'); // { id: 13 }, typed { readonly id: number }
-  return <Scope from="opportunity" where={{ account_id: account.id }}>…</Scope>;
+  return (
+    <Scope from="opportunity" where={{ account_id: account.id }}>
+      …
+    </Scope>
+  );
 }
 ```
 
@@ -342,7 +374,10 @@ function Pipeline(): ReactNode {
 
 ```tsx title="examples/apps/lintel/pages/add-charge.page.tsx"
 const page = definePage({
-  label: 'Add a charge', reads: ['lease'], commands: ['addCharge'], component: AddCharge,
+  label: 'Add a charge',
+  reads: ['lease'],
+  commands: ['addCharge'],
+  component: AddCharge,
   params: { lease: 'id', step: ['what', 'amount'] },
 });
 
@@ -354,7 +389,7 @@ const page = definePage({
     { id: 'what', label: 'What', title: 'What is the charge for?', inputs: ['kind', 'description'] },
     { id: 'amount', label: 'Amount', title: 'How much, and when is it due?', inputs: ['amount', 'due_on'] },
   ]}
-/>
+/>;
 ```
 
 - Each step names the command's inputs it asks (`inputs`), its short `label` for "Step 2 of 2: Amount", and optionally a `title`, a `lead` sentence and a `next` button word. `page.Steps` types `command` against the page's `commands`, each input against that command's inputs, and `param` against the page's params that hold words.

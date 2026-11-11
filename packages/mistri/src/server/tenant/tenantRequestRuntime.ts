@@ -30,6 +30,7 @@ import { membershipLapsed } from './tenantStoreContract.js';
 import { evidenceRefused, type AdmissionCache } from './tenantAdmissionCache.js';
 import { actingPrincipal } from './tenantApiRequest.js';
 import { bindTenantFlagOwner } from './tenantFlagRuntime.js';
+import type { ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
 
 /** Private host scope, never passed to a command handler. Its single transaction
  * owns actual completion; an executor must not nest a pretend transaction inside
@@ -56,6 +57,8 @@ export interface TenantRequestScope {
   advisoryReads<T>(run: (records: WriteTransaction) => T | Promise<T>, read: readonly string[]): Promise<T>;
   /** The tenant's own scoped reads, outside any transaction: what a command's lookup reads through. */
   reads(): ReturnType<TenantReadSource['scopeReads']>;
+  /** A command's read of an audited resource, written through the writer outside any transaction (tenantReadAudit.ts). */
+  appendReadAudit(row: ReadAuditRow): Promise<void>;
   /** One text column of this tenant's platform-owned profile row, as the source reads it for the person's zone
    * (`readTenantZone`): no resource read, no grant, that column alone. */
   profileZone(column: string): Promise<string | undefined>;
@@ -422,6 +425,10 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
               active();
               outside = true;
               return (scoped ??= reader.scopeReads(admitted, rows));
+            },
+            appendReadAudit: (row) => {
+              active();
+              return writer.appendReadAudit(row);
             },
             profileZone: (column) => {
               active();

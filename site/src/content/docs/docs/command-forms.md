@@ -112,7 +112,7 @@ input: {
   extras: field.choices(EXTRAS, { as: 'cards', exclusive: ['none'] }),
   monthly: field.money({ min: 150, max: 1000, step: 10, as: 'slider' }),
   texts: field.bool({ optional: true, label: 'Text messages', statement: SMS_CONSENT }),
-  make: field.choice({ from: 'vehicle_make', label: 'name' }),
+  make: field.choice({ from: 'vehicle_make', labelColumn: 'name', label: 'Make' }),
   ssn: field.text({ mask: '000-00-0000', sensitive: { keep: 'last4' } }),
   zip: field.text({ mask: '00000', message: 'Enter the 5 digits of your ZIP.' }),
   joint: field.bool({ label: 'Applying with someone?', as: 'buttons' }),

@@ -129,9 +129,11 @@ export function readMigrations(dir: string): MigrationDirectory {
  * runner will do with it. The version is one past the highest the directory
  * holds, in the directory's own style: a team that numbers by timestamp gets a
  * timestamp. `body` is the file's text when something already wrote it
- * (`migrate diff`).
+ * (`migrate diff`). `number` is the version a person chose (`--number 0042`),
+ * spelled as given: a team that zero-pads keeps its padding. One the directory
+ * already holds is refused, since two files of one version stop every run.
  */
-export function newMigration(dir: string, name: string, repeatable: boolean, now = new Date(), body?: string): string {
+export function newMigration(dir: string, name: string, repeatable: boolean, now = new Date(), body?: string, number?: string): string {
   const slug = name
     .trim()
     .replace(/[^A-Za-z0-9]+/g, '_')
@@ -142,6 +144,13 @@ export function newMigration(dir: string, name: string, repeatable: boolean, now
   let file: string;
   if (repeatable) {
     file = `R__${slug}.sql`;
+  } else if (number !== undefined) {
+    if (!/^\d+(?:[._]\d+)*$/.test(number)) throw new Error(`--number takes a version of digits, like 0042 or 2.1; "${number}" is not one.`);
+    const version = number.replace(/_/g, '.');
+    const taken = files.find((f) => f.version !== undefined && compareVersions(f.version, version) === 0);
+    if (taken)
+      throw new Error(`version ${number} is taken: ${taken.script} has it. Choose another --number, or leave it out for the next.`);
+    file = `V${number}__${slug}.sql`;
   } else {
     const majors = files.filter((f) => f.version !== undefined).map((f) => BigInt(f.version!.split('.')[0]));
     const highest = majors.reduce((a, b) => (b > a ? b : a), 0n);

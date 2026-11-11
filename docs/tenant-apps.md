@@ -1154,6 +1154,26 @@ keep each tenant's secrets and verify each tenant's webhooks at
 runs jobs, each tenant's committed facts reaching a job that runs one of the
 App's own commands fenced on that tenant ([tenant jobs](#tenant-jobs)).
 
+## Tenant command lookups
+
+A tenant command's `lookup` reads `owner: 'global'` tables and its own tenant's
+`owner: 'tenant'` tables, read only, through the acting person's scope: the
+tenant's row scope, their role's row filter and their column rule
+(`fields.read`, the key always kept) are the reads that person could make
+anywhere else, so another tenant's row is never there and a column they cannot
+read is not in the row. A field report needed this: consent kept in the
+tenant's own table, checked before a model is called, where the only way had
+been to stamp the target record from an earlier command. The lookup's tables
+offer `get`, `find` and `where`; `insert`, `update`, `remove` are absent from
+the type and refused at run time in words that send the write to the handler.
+A table the person's role does not read refuses the command (not the session),
+naming the table and the command, and a read of a resource that audits reads is
+written under the route `command` with the command's id, through the same
+`auditCommandRead` the handler's reads take. Platform-owned tables are refused
+when the commands bind; a `realm: 'platform'` command looks up global tables
+only, since it acts in no tenant (`commandLookupRules.ts`). Proved on SQLite
+and PostgreSQL by `test/tenant-command-lookup-tenant-tables.test.ts`.
+
 <!-- Reserved for work in progress. Each block is one piece's own section:
      it writes only between its own markers, so pieces never edit each
      other's lines. Empty blocks render as nothing. -->
@@ -1395,8 +1415,8 @@ times that ticks every tenant every minute.
 
 A tenant job's command, a mail command and a flow or workflow step may
 declare events and look up: the event is recorded in that tenant's store as
-`service:<principal>`, and a lookup reads global rows (and the record the command
-targets, within the tenant) before the transaction, with the anchor fence still
+`service:<principal>`, and a lookup reads global rows and that tenant's own (and
+the record the command targets, within the tenant) before the transaction, with the anchor fence still
 holding to commit. A platform job's command still refuses both: it runs outside
 any tenant, so it has no tenant store or rows to use. A job cycle through such
 events is refused at load.

@@ -61,6 +61,15 @@ function sourceSchema(source: string, schema: string | undefined, catalog: Datab
   return schema;
 }
 
+/* Each loaded graph's opened databases, by registry owner: the dialect adapters that hold its stores (a read audit
+   row a command writes goes to the database its rows came from), which the graph itself only wraps. */
+const openedDatabases = new WeakMap<RuntimeResources, ReadonlyMap<string, Adapter>>();
+
+/** The dialect adapter a loaded graph opened for a registry owner, where its stores are (stores/appStores.ts storesOf). */
+export function databaseOf(resources: RuntimeResources, connection: string): Adapter | undefined {
+  return openedDatabases.get(resources)?.get(connection);
+}
+
 /** Resolve an App's data graph; the caller owns registry leases and shutdown. */
 export async function loadAppRuntimeResources(
   registry: Registry,
@@ -83,7 +92,7 @@ export async function loadAppRuntimeResources(
   if (!app.sources) {
     const opened = await registry.open(connection);
     onOpen(connection);
-    return keptResources(app, connection, [...declared(app), opened.adapter, opened.schema], () => {
+    const resources = keptResources(app, connection, [...declared(app), opened.adapter, opened.schema], () => {
       const resources = mapOpenedAppRuntimeResources(app, connection, new Map([['', opened]]), new Map([['', connection]]));
       if (checksApi) {
         checkApiReadCatalog(readApp.api!, readApp, resources.schema);
@@ -91,6 +100,8 @@ export async function loadAppRuntimeResources(
       }
       return resources;
     });
+    openedDatabases.set(resources, new Map([[connection, opened.adapter]]));
+    return resources;
   }
   const bindings = appSourceConnections(registry, app);
   if (bindings.get(homeSourceOf(app)!) !== connection) throw new Refusal('This is not the application entry point.');
@@ -123,7 +134,11 @@ export async function loadAppRuntimeResources(
       registry.configOf(owner)?.writable === true,
     ]),
   ];
-  return keptResources(app, connection, inputs, () => mapSources(app, connection, bindings, databases, registry, readApp, checksApi));
+  const resources = keptResources(app, connection, inputs, () =>
+    mapSources(app, connection, bindings, databases, registry, readApp, checksApi),
+  );
+  openedDatabases.set(resources, new Map([...databases].map(([owner, database]) => [owner, database.adapter])));
+  return resources;
 }
 
 /* The mapping is 15–20 ms of every App request — every source's catalog

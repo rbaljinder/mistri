@@ -126,7 +126,17 @@ for (const mode of modes) {
       assert.equal(arguments.length, 3);
       assert.deepEqual(Reflect.ownKeys(records).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
       assert.equal(Object.isFrozen(records), true);
-      assert.deepEqual(Reflect.ownKeys(journal).sort(), ['commit', 'find', 'insert', 'kept', 'nextNumber', 'stage', 'takeStaged', 'taken']);
+      assert.deepEqual(Reflect.ownKeys(journal).sort(), [
+        'appendReadAudit',
+        'commit',
+        'find',
+        'insert',
+        'kept',
+        'nextNumber',
+        'stage',
+        'takeStaged',
+        'taken',
+      ]);
       assert.notEqual(evidence, catalog);
       frozen(evidence);
       assert.deepEqual(evidence.tables.map((table) => table.id).sort(), [people, tickets].sort());

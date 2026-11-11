@@ -11,6 +11,7 @@
  */
 import type { AppFormCommandReference } from '../../../shared/command.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
+import { publicPlacement } from '@mistriwork/kit/client/addressMount.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { commandInput, prefilledCommandValues, readyToJudge } from '../CommandFields.js';
 import type { UiCommandHandle, UiCommandOptions, UiCommandOutcome } from './context.js';
@@ -55,7 +56,11 @@ export function publicPageCommand(page: string, id: string, reference: AppFormCo
     if (!held) return { status: 0, body: {} as Record<string, unknown> };
     const young = TICKET_AGE_MS - (Date.now() - held.at);
     if (young > 0) await wait(young);
-    const res = await fetchServer(`/api/pages/${encodeURIComponent(page)}/commands/${encodeURIComponent(id)}`, {
+    /* On a tenant App the visitor's public address places the submission in that tenant (server tenantPublicHttp.ts),
+       as a form's does; a ticket's read carries none. */
+    const via = publicPlacement();
+    const placed = via ? `?via=${encodeURIComponent(via)}` : '';
+    const res = await fetchServer(`/api/pages/${encodeURIComponent(page)}/commands/${encodeURIComponent(id)}${placed}`, {
       method: 'POST',
       credentials: 'same-origin',
       signal: AbortSignal.timeout(30_000),

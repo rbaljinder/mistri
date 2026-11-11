@@ -625,3 +625,44 @@ export function scanPageSource(
   });
   return scan;
 }
+
+/** The calls by which a component sends the reader to a free-form page by its key (`useNavigate()`, sdk/hooks.ts). */
+const PAGE_LINKS = new Set(['pageHref', 'openPage']);
+
+/**
+ * The pages one source file links to: the literal first argument of each
+ * `pageHref(…)` and `openPage(…)`, called bare (destructured from
+ * `useNavigate()`) or on an object. `unseen` says one named its page with an
+ * expression, which check cannot follow. Read so a `nav: false` page is held
+ * to the links that reach it rather than refused for having no menu entry.
+ */
+export function pageLinks(parseAst: Parse, code: string, lang: 'ts' | 'tsx' | 'js' | 'jsx'): { pages: string[]; unseen: boolean } {
+  const found = { pages: [] as string[], unseen: false };
+  let program: unknown;
+  try {
+    program = parseAst(code, { lang });
+  } catch {
+    return found;
+  }
+  walk(program, (node) => {
+    if (node.type !== 'CallExpression') return;
+    const callee = node.callee as AstNode;
+    const name =
+      callee.type === 'Identifier'
+        ? callee.name
+        : callee.type === 'MemberExpression' && !callee.computed
+          ? (callee.property as AstNode).name
+          : undefined;
+    if (typeof name !== 'string' || !PAGE_LINKS.has(name)) return;
+    const first = (node.arguments as AstNode[])[0];
+    const page =
+      first?.type === 'Literal' && typeof first.value === 'string'
+        ? first.value
+        : first?.type === 'TemplateLiteral' && !(first.expressions as unknown[]).length
+          ? ((first.quasis as AstNode[])[0]?.value as { cooked?: string })?.cooked
+          : undefined;
+    if (page === undefined) found.unseen = true;
+    else found.pages.push(page);
+  });
+  return found;
+}

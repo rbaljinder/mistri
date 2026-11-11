@@ -52,7 +52,7 @@ vi.mock('./appRooms.js', () => ({
   viewRoom: (_app: unknown, key: string) => rooms[key],
   isListRoom: () => true,
 }));
-const { findRecords, findableTables, lineOf } = await import('./recordSearch.js');
+const { findAcross, findRecords, findableTables, lineOf, searchedTables, SEARCHED_MOST } = await import('./recordSearch.js');
 const app = { views: { articles: {}, catalog: {}, broken: {} } } as never;
 
 beforeEach(() => {
@@ -82,4 +82,19 @@ test("each table is asked its list search's text filter, by name, with the line 
     { label: 'Standard laptop', line: 'A 14-inch laptop', key: { id: 3 } },
     { label: 'Dock', line: undefined, key: { id: 4 } },
   ]);
+});
+
+test('a search over the menu names every table it holds, past the ceiling said as how many are left', () => {
+  const seen = searchedTables(app);
+  expect(seen.tables.map((each) => each.table.id)).toEqual(['article', 'catalog_item']);
+  expect(seen.left).toBe(0);
+  expect(SEARCHED_MOST).toBeGreaterThan(6);
+});
+
+test('findAcross asks every table, a few at a time, and answers them in the order they were given', async () => {
+  const found = findableTables(app, ['article', 'catalog_item']);
+  const asked = await findAcross([found[0], found[1], found[0], found[1], found[0]], 'x', 2, 2);
+  expect(asked).toHaveLength(5);
+  expect(calls).toHaveLength(5);
+  expect(await findAcross([], 'x', 2)).toEqual([]);
 });

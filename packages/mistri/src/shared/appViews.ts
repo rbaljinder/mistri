@@ -568,7 +568,11 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
         `${view.at} is a signed-in form referenced by nothing — not nav, not home, not the New menu (ui.shell.new), not a page's forms — so nothing could open it. Reference it, or remove it.`,
       );
     }
-    if (view.kind === 'dashboard' && !reachable.has(key)) {
+    /* A free-form page is served at its address, and a `nav: false` one is reached by the pages and components that
+       link to it (`pageHref`, `openPage`), which this declaration cannot see: refusing it here refused pages other
+       pages link to (a field report). Check reads their sources for those links and warns when it finds none
+       ([page-unlinked], componentLint.ts). */
+    if (view.kind === 'dashboard' && !view.view.page && !reachable.has(key)) {
       across.push(
         `${view.at} is referenced by nothing — not nav, not home, not a reachable dashboard's embed, metric or note action, or a landing's { kind: 'view' } section — so nothing could open it. Reference it, or remove it.`,
       );

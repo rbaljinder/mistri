@@ -21,7 +21,7 @@ export const commandLookupCheck = Object.freeze<TenantStartupCheck>({
   phase: 'commands',
   run: ({ app, registry }) => {
     for (const [id, command] of Object.entries(registry ?? {})) {
-      const problem = commandLookupProblem(app, id, command.sources);
+      const problem = commandLookupProblem(app, id, command.sources, command.realm);
       if (problem) throw new CommandLookupRefusal(problem);
     }
   },

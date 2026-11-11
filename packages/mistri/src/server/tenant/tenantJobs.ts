@@ -44,7 +44,7 @@ import {
   type AuthorizedBusinessCommand,
   type BusinessCommandBinding,
 } from '../commands/businessCommandAccess.js';
-import { assertGlobalLookups, scopedLookupReader } from '../commands/commandLookup.js';
+import { assertLookupOwners, scopedLookupReader } from '../commands/commandLookup.js';
 import { brandTenantJobs } from './tenantJobsBrand.js';
 import { createBusinessCommandAuthorizer } from '../commands/businessCommandAuthorization.js';
 import { defineCommands, getCommandEvents, type BusinessCommandActor, type BusinessCommandRegistry } from '../commands/businessCommands.js';
@@ -88,6 +88,7 @@ import { assertTenantSourcePair } from './tenantSourceIdentity.js';
 import { binding as storeBinding, type TenantStoreBinding } from './tenantStoreContract.js';
 import { tenantVisibleFields } from './tenantVisibleFields.js';
 import { captureTenantWriteSource, TenantWriteFailure, type TenantWriteSource } from './tenantWriteSource.js';
+import { tenantCommandReadAudit } from './tenantReadAudit.js';
 
 const refuse = (message: string): never => {
   throw new JobDeclarationError(`Jobs: ${message}`);
@@ -516,8 +517,8 @@ export function bindTenantJobs(options: TenantJobsOptions) {
     commands: registry,
   });
   assertTenantJobs(module, app, registry, ownership, identity.source.connection);
-  // A service's lookup reads what a member's does: global rows only, whatever the App declares.
-  assertGlobalLookups(app, registry, ownership.ownership);
+  // A service's lookup reads what a member's does: global rows and the tenant's own, whatever the App declares.
+  assertLookupOwners(app, registry, ownership.ownership);
   /* A flows runner's reads and `set` steps are the platform's own command
      beside the App's (workflows/flowCommand.ts), granted to its runner alone. */
   const runners = flowRunnersOf(module.workflows);
@@ -850,6 +851,12 @@ export function bindTenantJobs(options: TenantJobsOptions) {
           ...(place === 'tenant'
             ? { receiptOwner: captureTenantData({ storeId: identity.storeId, sourceId: identity.source.id, tenantId: tenantId! }) }
             : {}),
+          ...tenantCommandReadAudit(
+            authorization,
+            { app: app.id, tenant: place === 'tenant' ? tenantId! : '', actor: actorId },
+            identity.source.connection,
+            (row) => writer.appendReadAudit(row),
+          ),
           assertTarget: (records: WriteTransaction, target: Readonly<Record<string, string | number>>) =>
             contexts.get(records)?.target(target) ?? deny(),
           assertResult: (records: WriteTransaction, target: Readonly<Record<string, string | number>>, result: unknown) =>

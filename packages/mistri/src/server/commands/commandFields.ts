@@ -45,15 +45,14 @@ const spec = (type: string, options: Record<string, unknown> = {}): never => {
   return { type, ...rest, ...(pattern === undefined ? {} : { pattern: pattern instanceof RegExp ? pattern.source : pattern }) } as never;
 };
 
-/* One choice or several: from written values, or from a table's rows (`{ from, label }`, its label column). */
+/* One choice or several: from written values, or from a table's rows (`{ from, labelColumn }`; `label` is the field's title). */
 function choiceSpec(
   type: 'choice' | 'choices',
   values: unknown,
   options: { each?: (value: never) => string } & Record<string, unknown>,
 ): never {
   if (!Array.isArray(values)) {
-    const { label, ...rest } = values as Record<string, unknown>;
-    return spec(type, { ...rest, labelColumn: label });
+    return spec(type, values as Record<string, unknown>);
   }
   const { each, ...rest } = options;
   return spec(type, {
@@ -101,12 +100,13 @@ export const field: {
     values: V,
     options?: O & { each?: (value: Exclude<V[number], AppCommandChoice>) => string },
   ): Omit<CommandChoiceField, 'options'> & { options: readonly { value: ChoiceValue<V[number]>; label: string }[] } & Optional<O>;
-  /** One of a table's rows, by key: `field.choice({ from: 'category', label: 'name' })` offers each row's `name` and
-      sends its `id` (`by` names another key column). The rows are read as the form opens and again as it is sent. */
-  choice<const O extends Omit<CommandChoiceField, 'type' | 'options' | 'from' | 'labelColumn'> & { from: string; label: string }>(
+  /** One of a table's rows, by key: `field.choice({ from: 'category', labelColumn: 'name' })` offers each row's `name` and
+      sends its `id` (`by` names another key column), in the order of `name` unless `sort: { column, direction }` says one;
+      `label` is the field's own title. The rows are read as the form opens and again as it is sent. */
+  choice<const O extends Omit<CommandChoiceField, 'type' | 'options' | 'from' | 'labelColumn'> & { from: string; labelColumn: string }>(
     source: O,
   ): CommandChoiceField & { from: O['from'] } & Optional<O>;
-  /** Several of these values, or of a table's rows (`{ from, label }`): `min`/`max` how many, an `exclusive` value chosen alone (`'none'`). */
+  /** Several of these values, or of a table's rows (`{ from, labelColumn, sort }`): `min`/`max` how many, an `exclusive` value chosen alone (`'none'`). */
   choices<
     const V extends readonly (string | number | AppCommandChoice)[],
     const O extends Omit<CommandChoicesField, 'type' | 'options'> = {},
@@ -114,7 +114,7 @@ export const field: {
     values: V,
     options?: O & { each?: (value: Exclude<V[number], AppCommandChoice>) => string },
   ): Omit<CommandChoicesField, 'options'> & { options: readonly { value: ChoiceValue<V[number]>; label: string }[] } & Optional<O>;
-  choices<const O extends Omit<CommandChoicesField, 'type' | 'options' | 'from' | 'labelColumn'> & { from: string; label: string }>(
+  choices<const O extends Omit<CommandChoicesField, 'type' | 'options' | 'from' | 'labelColumn'> & { from: string; labelColumn: string }>(
     source: O,
   ): CommandChoicesField & { from: O['from'] } & Optional<O>;
   /** A picker over a resource: `field.reference('customer', { by: 'id', labelColumn: 'name' })`, its key column (`by`) and the column it is shown by; a `query` may name the target's own columns (`'sales_order_id = record.id'`); `tree: 'parent_id'` offers the rows as the hierarchy that column makes, each choice said with its path. On a public form, over a resource `auth.public` opens: the visitor's choices are the rows it reads, by key and label. */
@@ -134,7 +134,8 @@ export const field: {
   ): { type: 'lines'; from: R; show: S } & O;
   /** Files attached to the form, landing in the file resource `from` (among the command's `write`):
       `field.files('repair_photo', { max: 5, accept: 'image/*' })`. Each is held as it is picked; the handler receives
-      them and stores each with `db.<from>.insertFile(file, values)`. Never in a group. */
+      them and stores each with `db.<from>.insertFile(file, values)`. In a group, each row's own: `field.group({ file:
+      field.files('attachment', { max: 1 }), label: field.text() }, { repeat: { max: 10 } })`. */
   files<const R extends string, const O extends Omit<CommandFilesField, 'type' | 'from'> = {}>(
     from: R,
     options?: O,

@@ -205,7 +205,7 @@ describe('what the App asks of its trail (ui.shell.breadcrumbs)', () => {
   const page = { kind: 'page', pageId: 'pipeline', table: 'lead', label: 'Pipeline' };
   const recordPage = { kind: 'page', pageId: 'lead', table: 'lead', key: { id: 127 }, label: 'Ada Stone' };
   const shown = (breadcrumbs: unknown, stack: unknown[]) => {
-    app = { views: {}, resources: {}, ui: { shell: breadcrumbs === undefined ? {} : { breadcrumbs } } };
+    app = { views: {}, nav: [], resources: {}, ui: { shell: breadcrumbs === undefined ? {} : { breadcrumbs } } };
     return crumbBarShown(stack as never);
   };
 
@@ -240,6 +240,26 @@ describe('what the App asks of its trail (ui.shell.breadcrumbs)', () => {
     expect(shown(false, [lead])).toBe(false);
   });
 
+  test('a bare page draws no bar, whatever the setting or its history', () => {
+    appMode = true;
+    const bare = { kind: 'page', pageId: 'dash-studio', label: 'Studio' };
+    const home = { kind: 'page', pageId: 'dash-home', label: 'Home' };
+    for (const breadcrumbs of [undefined, true, { top: true }]) {
+      app = {
+        views: { studio: { label: 'Studio', sections: [], layout: 'bare' }, home: { label: 'Home', sections: [] } },
+        nav: [],
+        resources: {},
+        ui: { shell: breadcrumbs === undefined ? {} : { breadcrumbs } },
+      };
+      // A param set with `push` is a second step of the walk in the same room: the bar came over the page's controls.
+      expect(crumbBarShown([bare, { ...bare, rootBody: 'tab=b' }] as never)).toBe(false);
+      expect(crumbBarShown([bare] as never)).toBe(false);
+      expect(crumbBarShown([home, bare] as never)).toBe(false);
+    }
+    // The page before it is not exempt once the reader is back on it.
+    expect(crumbBarShown([bare, home] as never)).toBe(true);
+  });
+
   test('the Workbench keeps its whole trail, whatever an App says', () => {
     appMode = false;
     expect(shown(false, [{ kind: 'table', table: 'invoice', query: 'invoice' }])).toBe(true);
@@ -247,7 +267,7 @@ describe('what the App asks of its trail (ui.shell.breadcrumbs)', () => {
 
   test('by default the trail starts at the first room, with no house and nothing before it', () => {
     appMode = true;
-    app = { name: 'Compass', views: {}, resources: {}, ui: {} };
+    app = { name: 'Compass', views: {}, nav: [], resources: {}, ui: {} };
     walk.stack = [list, lead];
     const { container } = render(<Crumbs onHome={() => {}} />);
     expect(container.querySelector('.crumb-home')).toBeNull();

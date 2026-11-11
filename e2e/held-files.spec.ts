@@ -2,9 +2,10 @@ import { SLOW_MS } from './support/budgets';
 /**
  * A public command form's files and signature, in a browser: a file the field
  * does not take is refused in the server's words, pictures are sent as they
- * are picked and shown by name with a Remove, a signature is typed on the pad
- * and kept, and the submission lands each file as a row of its resource under
- * the repair the command wrote, nothing left held. It starts its own server
+ * are picked and shown by name with a Remove, a repeating group's row holds its
+ * own picture beside its own note, a signature is typed on the pad and kept,
+ * and the submission lands each file as a row of its resource under the repair
+ * the command wrote, nothing left held. It starts its own server
  * over a disposable database (support/intakeServer.ts, the Repairs fixture), so
  * it shares nothing with another spec.
  *
@@ -73,6 +74,14 @@ test.describe("A command form's files", () => {
     await photos.getByRole('button', { name: 'Remove back.png' }).click();
     await expect(photos.getByRole('button', { name: 'Remove back.png' })).toHaveCount(0);
 
+    // A close-up is a row: its picture is held by the field's path and lands with the row's own note.
+    await page.getByRole('button', { name: 'Add row to Close-ups' }).click();
+    const closeUp = page.getByRole('group', { name: 'Close-ups, row 1' });
+    await expect(closeUp.getByRole('button', { name: '+ Choose a file' })).toBeVisible();
+    await closeUp.locator('input[type=file]').setInputFiles({ name: 'pad.png', mimeType: 'image/png', buffer: PNG });
+    await expect(closeUp.getByRole('button', { name: 'Remove pad.png' })).toBeVisible();
+    await closeUp.getByRole('textbox', { name: /^What it shows/ }).fill('The worn pad');
+
     // Sent without a signature: the form says what is missing, and nothing is written.
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByText('Signature is required.')).toBeVisible();
@@ -88,8 +97,9 @@ test.describe("A command form's files", () => {
     await expect(page.getByText('Your repair is in').first()).toBeVisible();
     const [repair] = read<{ id: number; title: string }>(app, 'SELECT id, title FROM repair');
     expect(repair).toMatchObject({ title: 'The brakes squeal' });
-    expect(read(app, 'SELECT repair_id, file_name, content_type, byte_size FROM repair_photo')).toEqual([
-      { repair_id: repair!.id, file_name: 'front.png', content_type: 'image/png', byte_size: PNG.byteLength },
+    expect(read(app, 'SELECT repair_id, file_name, content_type, byte_size, caption FROM repair_photo ORDER BY id')).toEqual([
+      { repair_id: repair!.id, file_name: 'front.png', content_type: 'image/png', byte_size: PNG.byteLength, caption: null },
+      { repair_id: repair!.id, file_name: 'pad.png', content_type: 'image/png', byte_size: PNG.byteLength, caption: 'The worn pad' },
     ]);
     expect(read(app, 'SELECT repair_id, file_name, content_type FROM repair_signature')).toEqual([
       { repair_id: repair!.id, file_name: 'signature.png', content_type: 'image/png' },

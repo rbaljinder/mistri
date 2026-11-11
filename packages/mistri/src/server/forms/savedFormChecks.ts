@@ -93,7 +93,7 @@ function publicPickerProblem(
       declared.type === 'reference'
         ? declared
         : (declared.type === 'choice' || declared.type === 'choices') && declared.source
-          ? { from: declared.source.from, by: declared.source.by, labelColumn: declared.source.labelColumn }
+          ? { from: declared.source.from, by: declared.source.by, labelColumn: declared.source.labelColumn, sort: declared.source.sort }
           : undefined;
     if (!field) continue;
     const resource = logicalResource(app, command.source, field.from);
@@ -106,7 +106,7 @@ function publicPickerProblem(
     const ceilings = [opened.fields?.[resource]?.read, app.resources?.[resource]?.fields?.read].filter((read) => read !== undefined);
     /* A tree picker reads each row's parent too, to draw the hierarchy and say a choice's path. */
     const tree = declared.type === 'reference' && declared.tree ? [declared.tree] : [];
-    for (const column of new Set([field.by, field.labelColumn, ...tree])) {
+    for (const column of new Set([field.by, field.labelColumn, ...('sort' in field && field.sort ? [field.sort.column] : []), ...tree])) {
       if (keys.includes(column)) continue;
       if (ceilings.some((read) => !read.includes(column)))
         return `${at}, and a visitor may not read its column "${column}". Name it in "auth.public.fields.${resource}", or pick by, label and tree columns the public reads.`;

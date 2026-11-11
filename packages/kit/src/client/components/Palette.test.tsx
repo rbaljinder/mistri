@@ -17,6 +17,11 @@ const site: TableMeta = {
   indexed: ['id'],
   columns: [col('id', 'INTEGER', { primaryKey: true, nullable: false }), col('name', 'TEXT')] as TableMeta['columns'],
 };
+/** Further lists of further tables (`room1`…), each with a table of its own, for the tests of a long menu. */
+let extraLists = 0;
+const extraTable = (n: number): TableMeta => ({ ...site, id: `t${n}`, name: `t${n}` });
+const tableById = (id: string): TableMeta | undefined =>
+  id === 'site' ? site : /^t\d+$/.test(id) && Number(id.slice(1)) <= extraLists ? extraTable(Number(id.slice(1))) : undefined;
 const ran: string[] = [];
 const opened: unknown[] = [];
 const calls: string[] = [];
@@ -31,7 +36,7 @@ vi.mock('../core.js', () => ({
     calls.push(body.q);
     return reply(body.q);
   },
-  findTable: (id: string) => (id === 'site' ? site : undefined),
+  findTable: (id: string) => tableById(id),
   labelPath: () => 'name',
   rowLabel: (_table: TableMeta, row: Record<string, unknown>) => String(row.name ?? row.id),
   primaryKey: () => ['id'],
@@ -42,8 +47,14 @@ vi.mock('../core.js', () => ({
 vi.mock('../../../../mistri/src/client/appState.js', () => ({
   inAppMode: () => appMode,
   activeApp: () => ({
-    views: { sites: { table: 'site', label: 'Sites' } },
-    nav: [{ view: 'sites', label: 'Sites' }],
+    views: {
+      sites: { table: 'site', label: 'Sites' },
+      ...Object.fromEntries(Array.from({ length: extraLists }, (_, i) => [`list${i + 1}`, { table: `t${i + 1}`, label: `List ${i + 1}` }])),
+    },
+    nav: [
+      { view: 'sites', label: 'Sites' },
+      ...Array.from({ length: extraLists }, (_, i) => ({ view: `list${i + 1}`, label: `List ${i + 1}` })),
+    ],
     resources: {},
     ui: {},
   }),
@@ -93,6 +104,7 @@ afterEach(() => {
   calls.length = 0;
   appMode = false;
   morePages = [];
+  extraLists = 0;
   reply = northYard;
 });
 
@@ -302,4 +314,41 @@ test("before anything is typed a long menu's pages are a first handful, so Creat
   expect(screen.getByRole('group', { name: 'Create' })).toBeInTheDocument();
   await user.type(screen.getByRole('combobox'), 'room');
   expect(pagesGroup().querySelectorAll('[role="option"]')).toHaveLength(7);
+});
+
+test('the term is searched in every list the menu holds, not the first six, a few at a time', async () => {
+  const user = userEvent.setup();
+  appMode = true;
+  // Eight lists in all: the first six used to be the only ones asked.
+  extraLists = 7;
+  let flying = 0;
+  let most = 0;
+  reply = async (q) => {
+    flying += 1;
+    most = Math.max(most, flying);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    flying -= 1;
+    const table = q.split(' ')[0];
+    return { rows: [{ id: 1, name: `Yard of ${table}` }] };
+  };
+  render(<Palette onClose={vi.fn()} />);
+  await user.type(screen.getByRole('combobox'), 'yard');
+  await vi.waitFor(() => expect(calls.filter((q) => q.includes('contains "yard"'))).toHaveLength(8));
+  expect(calls.filter((q) => q.includes('contains "yard"')).map((q) => q.split(' ')[0])).toEqual(
+    expect.arrayContaining(['site', 't1', 't2', 't3', 't4', 't5', 't6', 't7']),
+  );
+  expect(most).toBeLessThanOrEqual(6);
+  // The nine it shows are one from each table before a second from any, so the last lists are not crowded out.
+  await screen.findByText('Yard of t7');
+  expect(screen.queryByRole('note')).toBeNull();
+});
+
+test('a menu with more lists than one search asks says how many are searched', async () => {
+  const user = userEvent.setup();
+  appMode = true;
+  extraLists = 29;
+  render(<Palette onClose={vi.fn()} />);
+  expect(screen.getByRole('note')).toHaveTextContent('Records are searched in 24 of 30 lists.');
+  await user.type(screen.getByRole('combobox'), 'yard');
+  await vi.waitFor(() => expect(calls.filter((q) => q.includes('contains "yard"'))).toHaveLength(24));
 });

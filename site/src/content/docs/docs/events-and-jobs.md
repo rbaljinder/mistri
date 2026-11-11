@@ -89,8 +89,8 @@ still holds its lease waits for it. In a tenant App a job says
 `realm: 'tenant'` (once per active tenant) or `realm: 'platform'` (once, no
 tenant's rows). A tenant job may run a command that declares `events` or looks
 something up: the event is recorded in that tenant's store as
-`service:<principal>`, and the lookup reads global rows and the record the
-command targets. A job that runs a platform command may not, since that
+`service:<principal>`, and the lookup reads global rows, that tenant's own and
+the record the command targets. A job that runs a platform command may not, since that
 command runs outside any tenant; the server refuses that pair at start.
 
 `mistri jobs run nightlyClose --app . --jobs jobs.ts` runs it now, once, as the

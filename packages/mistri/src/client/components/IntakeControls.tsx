@@ -57,13 +57,21 @@ function useSourced(field: Field, source: ChoiceSource | undefined): readonly Ch
   const served =
     from && (field.type === 'choice' || field.type === 'choices') && (from.served || field.options.length) ? field.options : undefined;
   const read = useQuery({
-    queryKey: ['command-choices', typeof source === 'string' ? source : source?.visitor, from?.from, from?.by, from?.labelColumn],
+    queryKey: [
+      'command-choices',
+      typeof source === 'string' ? source : source?.visitor,
+      from?.from,
+      from?.by,
+      from?.labelColumn,
+      from?.sort?.column,
+      from?.sort?.direction,
+    ],
     enabled: from !== undefined && source !== undefined && served === undefined,
     staleTime: 60_000,
     queryFn: async () => {
       const columns = [...new Set([from!.by, from!.labelColumn])].join(', ');
       const data = await run(source!, {
-        q: `${from!.from} show ${columns} sort ${from!.labelColumn}`,
+        q: `${from!.from} show ${columns} sort ${from!.sort ? `${from!.sort.column} ${from!.sort.direction}` : from!.labelColumn}`,
         limit: SOURCED_MOST,
         offset: 0,
         count: 'none',

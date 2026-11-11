@@ -27,6 +27,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { acceptsMedia, STAGED_FILE_ID } from '../../shared/command.js';
+import { heldFileFields, heldFilePath } from '../../shared/commandInput.js';
 import { fileValues } from '../http/fileRows.js';
 import { sniffImage } from '../http/imageSniff.js';
 import { StagedFileRefused, StagedFilesFull, type StagedLimits } from '../../adapters/commands/commandStaging.js';
@@ -158,9 +159,10 @@ export async function stageCommandFile(
   // A public form holds files for its own public command, and a signed-in person for a command that is not one.
   if (publicActor !== (authorized.command.public === true) || (publicActor && authorized.actor.kind !== 'public'))
     throw new StageRefusal(403, 'forbidden', 'This command is not available to this account.');
-  const field = authorized.command.fields.find(
-    (each): each is HeldField => each.name === fieldName && (each.type === 'files' || each.type === 'signature'),
-  );
+  /* A field inside a group is named by its path, a repeating group's rows by `[]` (`attachments[].file`; a row's own
+     `attachments[2].file` is read as that): the hold is the field's, whichever row it ends up in. */
+  const path = heldFilePath(fieldName);
+  const field = heldFileFields(authorized.command.fields).find((each) => each.path === path)?.field as HeldField | undefined;
   if (!field) throw new StageRefusal(404, 'no_such_field', 'This command takes no file by that name.');
   const rule = authorized.files?.get(field.from);
   if (!rule) throw new StageRefusal(404, 'no_such_field', 'This command takes no file by that name.');
@@ -198,7 +200,7 @@ export async function stageCommandFile(
           idHash: stagedIdHash(id),
           owner,
           command: commandId,
-          field: field.name,
+          field: path,
           name: kept,
           type: media,
           size: bytes.byteLength,
@@ -223,8 +225,10 @@ export async function stageCommandFile(
 
 /**
  * The files a command's input names by id, taken from what is held for its sender, in the command's transaction:
- * each field's value becomes its files (a signature's one file). A file not held for this sender, command and field —
- * another person's, one used already, one past its day — refuses the command at that field, and nothing is taken.
+ * each field's value becomes its files (a signature's one file), and a group holding a file field becomes its value
+ * with each row's files in place, so a row's handler code reads `row.file` as it reads a top-level field. A file not
+ * held for this sender, command and field path — another person's, another field's, one used already, one past its
+ * day — refuses the command at that field (`attachments[1].file`), and nothing is taken.
  */
 export async function takeHeldFiles(
   fields: readonly AppCommandField[],
@@ -232,33 +236,29 @@ export async function takeHeldFiles(
   journal: CommandJournal,
   scope: { appId: string; command: string; owner: string | undefined; now: number },
 ): Promise<{
-  files: Record<string, CommandFile | readonly CommandFile[]>;
+  files: Record<string, unknown>;
   taken: readonly CommandFile[];
   from: ReadonlyMap<CommandFile, string>;
 }> {
-  const files: Record<string, CommandFile | readonly CommandFile[]> = {};
   const taken: CommandFile[] = [];
   const from = new Map<CommandFile, string>();
-  const values = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
-  for (const field of fields) {
-    if (field.type !== 'files' && field.type !== 'signature') continue;
-    const value = values[field.name];
-    if (value === undefined) continue;
+  const take = async (field: HeldField, value: unknown, at: string): Promise<CommandFile | readonly CommandFile[] | undefined> => {
+    if (value === undefined) return undefined;
     const ids = (Array.isArray(value) ? value : [value]) as string[];
-    if (!ids.length) continue;
+    if (!ids.length) return undefined;
     if (!scope.owner || typeof journal.takeStaged !== 'function')
-      throw new BusinessCommandExecutionError('invalid_input', 'not_applied', field.name);
+      throw new BusinessCommandExecutionError('invalid_input', 'not_applied', at);
     let held;
     try {
       held = await journal.takeStaged(scope.appId, {
         owner: scope.owner,
         command: scope.command,
-        field: field.name,
+        field: heldFilePath(at),
         hashes: ids.map(stagedIdHash),
         now: scope.now,
       });
     } catch (error) {
-      if (error instanceof StagedFileRefused) throw new BusinessCommandExecutionError('invalid_input', 'not_applied', field.name);
+      if (error instanceof StagedFileRefused) throw new BusinessCommandExecutionError('invalid_input', 'not_applied', at);
       throw error;
     }
     const each = held.map((file) => {
@@ -267,7 +267,34 @@ export async function takeHeldFiles(
       return made;
     });
     taken.push(...each);
-    files[field.name] = field.type === 'signature' ? each[0]! : Object.freeze(each);
-  }
-  return { files, taken, from };
+    return field.type === 'signature' ? each[0]! : Object.freeze(each);
+  };
+  /* The fields of `list` that hold files, or hold a group that does, replaced in `values`: what is handed back is only
+     what changed, and a group is handed back whole — a copy of its object or rows with the files in place. */
+  const within = async (list: readonly AppCommandField[], values: Record<string, unknown>, path: string) => {
+    const changed: Record<string, unknown> = {};
+    for (const field of list) {
+      const at = path ? `${path}.${field.name}` : field.name;
+      const value = values[field.name];
+      if (field.type === 'files' || field.type === 'signature') {
+        const files = await take(field, value, at);
+        if (files !== undefined) changed[field.name] = files;
+      } else if (field.type === 'group' && heldFileFields(field.fields).length && value && typeof value === 'object') {
+        const row = async (each: unknown, rowAt: string) => {
+          const plain = each && typeof each === 'object' ? (each as Record<string, unknown>) : {};
+          return Object.freeze({ ...plain, ...(await within(field.fields, plain, rowAt)) });
+        };
+        if (!Array.isArray(value)) changed[field.name] = await row(value, at);
+        else {
+          // One row after another: the takes share the command's one transaction, and the first refusal is the first row's.
+          const rows: unknown[] = [];
+          for (const [index, each] of value.entries()) rows.push(await row(each, `${at}[${index}]`));
+          changed[field.name] = Object.freeze(rows);
+        }
+      }
+    }
+    return changed;
+  };
+  const values = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+  return { files: await within(fields, values, ''), taken, from };
 }

@@ -27,6 +27,7 @@ import { connectionHub, choiceTablesOf } from '../live/liveBinding.js';
 import type { LiveHub, LiveTap } from '../live/liveHub.js';
 import type { LiveAuthority, LiveGrant } from '../live/liveFilter.js';
 import { bareTable } from '../../adapters/live/liveChange.js';
+import type { CommandChoiceSource } from '@mistriwork/engine/schema/model.js';
 
 /** At most this many rows are offered by a choice from a table (the client's SOURCED_MOST agrees). */
 export const CHOICE_ROWS_MOST = 200;
@@ -49,7 +50,16 @@ interface ChoiceSourceRef {
   readonly physical: string;
   readonly by: string;
   readonly labelColumn: string;
+  /** The order they are read in, when the field says one (`sort`); an entry per order, since the options are in it. */
+  readonly sort?: CommandChoiceSource['sort'];
 }
+
+/** The order a choice reads its rows in: the field's own `sort`, else the label column, ascending. */
+export const choiceOrder = (source: { labelColumn: string; sort?: CommandChoiceSource['sort'] }) => [
+  source.sort
+    ? { column: source.sort.column, direction: source.sort.direction }
+    : { column: source.labelColumn, direction: 'asc' as const },
+];
 
 interface Kept {
   /** The table bare, as the hub's deliveries name it. */
@@ -68,8 +78,8 @@ interface DatabaseCache {
 
 const caches = new WeakMap<Registry, Map<string, DatabaseCache>>();
 
-const entryKey = (appId: string, connection: string, source: Pick<ChoiceSourceRef, 'resource' | 'by' | 'labelColumn'>) =>
-  JSON.stringify([appId, connection, source.resource, source.by, source.labelColumn]);
+const entryKey = (appId: string, connection: string, source: Pick<ChoiceSourceRef, 'resource' | 'by' | 'labelColumn' | 'sort'>) =>
+  JSON.stringify([appId, connection, source.resource, source.by, source.labelColumn, source.sort ?? null]);
 
 function databaseCache(registry: Registry, connection: string): DatabaseCache {
   let connections = caches.get(registry);
@@ -153,7 +163,7 @@ function choicesOf(rows: readonly Record<string, unknown>[], by: string, labelCo
 
 /**
  * The choices of `source` for the App `appId` on `connection`, from the cache or read now by `read` (at most
- * CHOICE_ROWS_MOST + 1 rows, sorted by the label). Kept only while the database's changes are heard; a read that a
+ * CHOICE_ROWS_MOST + 1 rows, sorted by the label, or the field's `sort`). Kept only while the database's changes are heard; a read that a
  * change overtook is answered but not kept.
  */
 export async function sharedChoices(options: {
@@ -183,7 +193,7 @@ export function cachedChoices(
   registry: Registry,
   connection: string,
   appId: string,
-  source: Pick<ChoiceSourceRef, 'resource' | 'by' | 'labelColumn'>,
+  source: Pick<ChoiceSourceRef, 'resource' | 'by' | 'labelColumn' | 'sort'>,
 ): CachedChoices | undefined {
   return caches
     .get(registry)
@@ -222,8 +232,8 @@ interface TenantCache {
 
 const tenantCaches = new WeakMap<LiveHub, Map<string, TenantCache>>();
 
-const tenantEntryKey = (appId: string, tenant: string, source: Pick<ChoiceSourceRef, 'resource' | 'by' | 'labelColumn'>) =>
-  JSON.stringify([appId, tenant, source.resource, source.by, source.labelColumn]);
+const tenantEntryKey = (appId: string, tenant: string, source: Pick<ChoiceSourceRef, 'resource' | 'by' | 'labelColumn' | 'sort'>) =>
+  JSON.stringify([appId, tenant, source.resource, source.by, source.labelColumn, source.sort ?? null]);
 
 /* The tenant's cache, made the most recently asked; one past the bound sends the least recently asked away. */
 function tenantCache(hub: LiveHub, tenant: string): TenantCache {
@@ -284,7 +294,7 @@ function listenTenant(hub: LiveHub, tenant: string, cache: TenantCache, tables: 
 
 /**
  * One tenant's choices of `source` on a tenant App's public form, from the cache or read now by `read` (as that
- * tenant's visitor, at most CHOICE_ROWS_MOST + 1 rows, sorted by the label). Kept only where `hub` hears the table's
+ * tenant's visitor, at most CHOICE_ROWS_MOST + 1 rows, sorted by the label, or the field's `sort`). Kept only where `hub` hears the table's
  * writes — `tables`, the tenant-owned choice tables its writer captures — and a read that a change overtook is
  * answered but not kept.
  */
@@ -315,7 +325,7 @@ export function cachedTenantChoices(
   hub: LiveHub,
   appId: string,
   tenant: string,
-  source: Pick<ChoiceSourceRef, 'resource' | 'by' | 'labelColumn'>,
+  source: Pick<ChoiceSourceRef, 'resource' | 'by' | 'labelColumn' | 'sort'>,
 ): CachedChoices | undefined {
   return tenantCaches
     .get(hub)

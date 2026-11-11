@@ -1,5 +1,6 @@
 /**
- * `tablewalk migrate`'s own flags, each by what it changes: `--repeatable` makes `new` write an R__ file,
+ * `tablewalk migrate`'s own flags, each by what it changes: `--repeatable` makes `new` write an R__ file, `--number`
+ * a V file of that version,
  * `--history-table` is where the run keeps its history, and `--connection` chooses the database when a config
  * names several. Run in process over SQLite files of the test's own.
  */
@@ -56,6 +57,39 @@ test('--repeatable makes new write an R__ file, which without it is the next V',
   const repeatable = await migrate(['new', 'views', '--repeatable', '--migrations', migrations]);
   assert.equal(repeatable.code, 0, repeatable.err);
   assert.deepEqual(readdirSync(migrations).sort(), ['R__views.sql', 'V1__note.sql', 'V2__add_tag.sql']);
+});
+
+test('--number writes the V file at the version given, and refuses one a file already has', async () => {
+  const { migrations } = project('number');
+  const chosen = await migrate(['new', 'add tag', '--number', '0042', '--migrations', migrations]);
+  assert.equal(chosen.code, 0, chosen.err);
+  assert.ok(readdirSync(migrations).includes('V0042__add_tag.sql'));
+  // 42 and 0042 are one version to Flyway's order, so either spelling is taken.
+  for (const taken of ['42', '1']) {
+    const again = await migrate(['new', 'other', '--number', taken, '--migrations', migrations]);
+    assert.notEqual(again.code, 0);
+    assert.match(again.err, /is taken: V(0042__add_tag|1__note)\.sql has it/);
+  }
+  const words = await migrate(['new', 'other', '--number', 'next', '--migrations', migrations]);
+  assert.match(words.err, /takes a version of digits/);
+  const r = await migrate(['new', 'views', '--repeatable', '--number', '7', '--migrations', migrations]);
+  assert.match(r.err, /an R__ file has no version/);
+});
+
+test('up refuses a pending file with no statement in it, by name, and applies nothing', async () => {
+  const { migrations, db } = project('blank');
+  // What new writes, left as it was: one comment line.
+  const blank = await migrate(['new', 'add tag', '--migrations', migrations]);
+  assert.equal(blank.code, 0, blank.err);
+  writeFileSync(join(migrations, 'V3__later.sql'), 'CREATE TABLE later (id INTEGER PRIMARY KEY);\n');
+  const ran = await migrate(['up', db, '--migrations', migrations]);
+  assert.notEqual(ran.code, 0);
+  assert.match(ran.err, /V2__add_tag\.sql holds no statement/);
+  assert.ok(!tables(db).includes('note'), 'nothing before it was applied either');
+  writeFileSync(join(migrations, 'V2__add_tag.sql'), '-- a tag\nCREATE TABLE tag (id INTEGER PRIMARY KEY);\n');
+  const filled = await migrate(['up', db, '--migrations', migrations]);
+  assert.equal(filled.code, 0, filled.err);
+  assert.ok(tables(db).includes('tag'));
 });
 
 test('--history-table is the table the run keeps its history in', async () => {

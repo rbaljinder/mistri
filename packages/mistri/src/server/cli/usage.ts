@@ -582,7 +582,7 @@ A theme as it is worn — every color, recipe, type and shape after extends:
 
 Changing the schema — versioned SQL files in Flyway's format, forward only:
 
-  mistri migrate new <name> [--repeatable]
+  mistri migrate new <name> [--repeatable | --number <n>]
   mistri migrate status | up | validate | baseline | repair
   mistri migrate diff <name> | check | squash
                   [--app <dir>] [<db> | --db <target> | --config <path>]
@@ -643,6 +643,8 @@ Changing the schema — versioned SQL files in Flyway's format, forward only:
       --tool flyway   run the command with an installed Flyway instead (on the
                       PATH, or MISTRI_FLYWAY), over the same files and history
       --repeatable    with new: an R__ file
+      --number <n>    with new: the V file's version as written (0042),
+                      refused when a file already has it
       --schema-file <path>
                       with diff, check or squash: the schema you want (default
                       schema.sql beside the migrations directory)
@@ -714,12 +716,14 @@ Reading the read audit — who read an audited resource's rows, and by which rou
   Prints the reads recorded for the App's resources with audit: { reads: true },
   newest first, one JSON object a line: when, the actor, the tenant, the
   resource, the route (page, api, mcp, assistant, export, picker, custom-page,
-  related) and the one record read or the query with the count and ids it
-  returned; never a field's value. Each flag narrows: --record by the record's
-  key, --actor an account id, service:<principal>, support:<operator>,
-  api-token:<id> or assistant:<account>, --since an ISO instant or an age,
-  --limit at most n rows (default 1000). Read from the database, no server
-  started; the store is made by mistri migrate stores up, never here.
+  related, or command with the command's id) and the one record read or the
+  query with the count and ids it returned; never a field's value. Each flag
+  narrows: --record by the record's key, read alone or among the ids a list read
+  returned (a row keeps at most 500 of them), --actor an account id,
+  service:<principal>, support:<operator>, api-token:<id> or
+  assistant:<account>, --since an ISO instant or an age, --limit at most n rows
+  (default 1000). Read from the database, no server started; the store is made
+  by mistri migrate stores up, never here.
   Exit codes: 1 could not run.
 
 Running a job now — one of an App's jobs at times, once, by hand:

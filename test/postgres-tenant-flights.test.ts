@@ -63,8 +63,19 @@ function flightsOf(header: string | null): Record<string, number> {
    (MISTRI_AUTH_SESSION_CACHE, authStoreReads.ts), and the first request past it reads them again, two `auth` flights
    paid once a window and not by that request. On a loaded machine a measurement lands on it, as on the catalog's
    digest. Statements are the window's, any request's, so the request's own header says whether it paid. */
+/** A read of the session table, whichever way it is spelled: Better Auth's `from "auth_session"`, and the tenant
+ * binding's own check of the session (storeObserver.ts), which names the runtime schema, `from mistri."auth_session" s`.
+ * The first alone was the pattern, and a window's refresh made only by the second paid a flight it did not recognise. */
+const SESSION_READ = /\bfrom\s+(?:"?\w+"?\.)?"auth_session"/i;
 const refreshed = (answer: Answer): boolean =>
-  (answer.flights.auth ?? 0) > 0 && answer.statements.some((statement) => /from "auth_session"/.test(statement.text));
+  (answer.flights.auth ?? 0) > 0 && answer.statements.some((statement) => SESSION_READ.test(statement.text));
+
+/** What to say of an answer that paid `auth` flights no session read explains: the statements, since the budget's
+ * failure is otherwise a number with no way to tell a new cost from a spelling the pattern did not know. */
+const unexplainedAuth = (answer: Answer): string =>
+  (answer.flights.auth ?? 0) > 0 && !refreshed(answer)
+    ? `\n  paid ${answer.flights.auth} auth flight(s) with no session read among the statements (SESSION_READ); all of them:\n${byFlight(answer.statements, 400)}`
+    : '';
 
 function byFlight(statements: Statement[], width = Number(process.env.TABLEWALK_FLIGHTS_WIDTH ?? 220)): string {
   const flights = new Map<string, string[]>();
@@ -453,7 +464,8 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
     const over = Object.entries(measured).filter(([name, answer]) => answer.total > BUDGETS[name.replace(/ together \d+$/, '')]!);
     assert.deepEqual(
       over.map(
-        ([name, answer]) => `${name}: ${answer.total} > ${BUDGETS[name.replace(/ together \d+$/, '')]}\n${byFlight(answer.statements)}`,
+        ([name, answer]) =>
+          `${name}: ${answer.total} > ${BUDGETS[name.replace(/ together \d+$/, '')]}\n${byFlight(answer.statements)}${unexplainedAuth(answer)}`,
       ),
       [],
     );

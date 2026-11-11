@@ -47,7 +47,6 @@ import { createBusinessCommandAuthorizer, type BusinessCommandAuthorization } fr
 import { BusinessCommandExecutionError, executeBusinessCommand, type BusinessCommandResult } from '../commands/businessCommandExecution.js';
 import {
   defineCommands,
-  getCommandEvents,
   type AnyBusinessCommand,
   type BusinessCommandActor,
   type BusinessCommandRegistry,
@@ -58,12 +57,13 @@ import { formCommands, isSavedForm, platformColumns, type AppFormSave } from '..
 import type { AppFormView } from '../../shared/app.js';
 import { savedFormRoots } from '../forms/savedFormChecks.js';
 import { readDraftProgress, type SavedDraftRun } from '../forms/savedForms.js';
+import { intakeCommandProblem, tenantPageProblems, tenantPublicPages } from './tenantIntakePages.js';
 import { publicPrincipal } from '../commands/formHttp.js';
 import type { CommandResultReference } from '../commands/scopedBusinessCommandAccess.js';
 import { captureTenantCommandExecution, tenantCommandDomain, type TenantCommandExecutionOptions } from './tenantCommands.js';
 import { STAGED_FILE_ID } from '../../shared/command.js';
 import { StageRefusal, stageCommandFile } from '../commands/stagedFiles.js';
-import { runTenantCommandTransaction } from './tenantCommandTransaction.js';
+import { PUBLIC_REMOVAL, runTenantCommandTransaction } from './tenantCommandTransaction.js';
 import {
   captureTenantData,
   denyTenant,
@@ -85,6 +85,7 @@ import { captureTenantReadSource, type TenantReadSource } from './tenantReadSour
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { assertTenantSourcePair } from './tenantSourceIdentity.js';
 import { captureTenantWriteSource, TenantIntakeMoved, TenantWriteFailure, type TenantWriteSource } from './tenantWriteSource.js';
+import { tenantCommandReadAudit } from './tenantReadAudit.js';
 
 interface TenantIntakeOptions {
   /** Placement is admitted by this owner. The public form id is not a visitor identity. */
@@ -113,8 +114,10 @@ interface TenantIntakeDraft {
   readonly token: string;
 }
 export interface TenantIntakeSubmission {
-  /** The public form's view key, from the route, never the body. */
+  /** The public form's or public page's view key, from the route, never the body. */
   readonly form: string;
+  /** On a public page, the command it runs, from the route: one the page names. A form's command is the form's own. */
+  readonly command?: string;
   /** The address the request carried, unchecked; anything not an address is none. */
   readonly address: unknown;
   readonly input: unknown;
@@ -203,8 +206,9 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
   const registry = defineCommands(
     tenantOptions(raw.registry, Object.keys(Object.getOwnPropertyDescriptors(raw.registry))) as BusinessCommandRegistry,
   );
-  const forms = tenantPublicForms(app);
-  if (!forms.size) return denyTenant();
+  const forms = tenantPublicForms(app),
+    pages = tenantPublicPages(app);
+  if (!forms.size && !pages.size) return denyTenant();
   const ownerFields = Object.fromEntries(
     Object.entries(ownership.ownership).flatMap(([id, rule]) => (rule.kind === 'tenant' ? [[id, rule.column]] : [])),
   );
@@ -221,27 +225,25 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
   const extractors = new Map<string, (result: unknown) => readonly CommandResultReference[]>();
   /* A public intake command inserts into a tenant's tables or the platform's,
      never a global one; it runs no lookup, emits no event or effect, and
-     belongs to no realm of its own: where it lands is decided per submission. */
+     belongs to no realm of its own: where it lands is decided per submission
+     (tenantIntakePages.ts says so in words, for startup and `check`). */
+  const kindOf = (table: string) => ownership.ownership[table]?.kind;
+  const extract = (id: string): boolean => {
+    const extractor = declarations[id];
+    if (typeof extractor !== 'function' || isProxy(extractor)) return false;
+    extractors.set(id, extractor as (result: unknown) => readonly CommandResultReference[]);
+    return true;
+  };
   for (const form of forms.values()) {
     // A saved form's steps are public commands of the same kind as its submit.
     for (const { id } of formCommands(form)) {
-      const command = registry[id];
-      if (
-        !command ||
-        command.public !== true ||
-        command.realm !== undefined ||
-        command.source !== identity.source.id ||
-        getCommandEvents(command) !== undefined ||
-        typeof command.lookup === 'function' ||
-        command.sources !== undefined ||
-        command.write.some((table) => !['tenant', 'platform'].includes(ownership.ownership[table]?.kind ?? ''))
-      )
-        return denyTenant();
-      const extractor = declarations[id];
-      if (typeof extractor !== 'function' || isProxy(extractor)) return denyTenant();
-      extractors.set(id, extractor as (result: unknown) => readonly CommandResultReference[]);
+      if (intakeCommandProblem(registry[id], identity.source.id, kindOf) !== undefined || !extract(id)) return denyTenant();
     }
   }
+  // A public page's commands are held to the same rule, and each to a picker it can fill.
+  const pageProblem = tenantPageProblems(app, registry, identity.source.id, kindOf)[0];
+  if (pageProblem !== undefined) return denyTenant(pageProblem);
+  for (const commands of pages.values()) for (const id of commands) if (!extract(id)) return denyTenant();
   const validation = compileAppDefinitionValidation(ownership.schema, app);
   // No role: the footprint bounds a public handler, and its place bounds the footprint.
   const grants: ResourceAccess = { readable: new Set(), writable: new Set(), ...(validation ? { validation } : {}) };
@@ -372,13 +374,15 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
     state: { moved: boolean },
     flagsFor: (actor: BusinessCommandActor, admitted: Admitted) => Promise<CommandFlags | undefined>,
   ): Promise<BusinessCommandResult> => {
-    const form = forms.get(request.form)!,
+    const form = forms.get(request.form),
       draft = request.draft;
-    // Which command runs is the form's: its submit, or the named step's own.
+    // Which command runs is the form's: its submit, or the named step's own. A page's is the one its route named.
     const reference =
-      !draft || draft.phase === 'submit'
-        ? form.command
-        : ((form as SavedIntakeForm).steps.find((step) => step.id === draft.step)?.command ?? denyTenant());
+      request.command !== undefined
+        ? { id: request.command }
+        : !draft || draft.phase === 'submit'
+          ? form!.command
+          : ((form as SavedIntakeForm).steps.find((step) => step.id === draft.step)?.command ?? denyTenant());
     const id = reference.id,
       command = registry[id],
       extractor = extractors.get(id)!;
@@ -415,12 +419,19 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
           ...(place === 'tenant'
             ? { receiptOwner: captureTenantData({ storeId: identity.storeId, sourceId: identity.source.id, tenantId: evidence.tenantId }) }
             : {}),
+          ...tenantCommandReadAudit(
+            authorization,
+            { app: app.id, tenant: place === 'tenant' ? evidence.tenantId : '', actor: 'public' },
+            identity.source.connection,
+            (row) => writer.appendReadAudit(row),
+          ),
           // A public command names no record: an empty key, and nothing to see.
           assertTarget: async (_records: WriteTransaction, key: Readonly<Record<string, string | number>>) => {
-            // Said to the operator's log, never the visitor: a removal of its target's row lands here first.
+            /* The key is always empty but for a removal of its target's row, which lands here first: the visitor is
+               told it was the delete that was refused, and the operator's log what was named (a field report). */
             if (Object.keys(key).length)
               throw recordRefusalCause(
-                new AppAccessDenied(),
+                new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, undefined, PUBLIC_REMOVAL),
                 'a public submission names no record: it removes no row of its target, and reads none by key',
               );
           },
@@ -588,7 +599,7 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
       let request: TenantIntakeSubmission;
       try {
         request = captureTenantData(
-          tenantOptions(input, ['form', 'address', 'input', 'submission', 'draft', 'visitor']),
+          tenantOptions(input, ['form', 'command', 'address', 'input', 'submission', 'draft', 'visitor']),
         ) as unknown as TenantIntakeSubmission;
         if (request.visitor !== undefined && (typeof request.visitor !== 'string' || !STAGED_FILE_ID.test(request.visitor)))
           throw new Error();
@@ -606,7 +617,20 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
       } catch {
         throw new BusinessCommandExecutionError('invalid_input');
       }
-      if (typeof request.form !== 'string' || !forms.has(request.form)) throw new BusinessCommandExecutionError('forbidden');
+      if (typeof request.form !== 'string') throw new BusinessCommandExecutionError('forbidden');
+      /* A form runs its own command and names none; a page runs one it names, with no draft and no held file: it
+         saves no step, and holds nothing for a visitor (a stock form's `hold` is a form's alone). */
+      const page = pages.get(request.form);
+      if (
+        forms.has(request.form)
+          ? request.command !== undefined
+          : !page ||
+            typeof request.command !== 'string' ||
+            !page.includes(request.command) ||
+            request.draft !== undefined ||
+            request.visitor !== undefined
+      )
+        throw new BusinessCommandExecutionError('forbidden');
       // A saved form runs only as its steps and its submit, each with its draft; any other form never with one.
       const saved = drafts.has(request.form),
         draft = request.draft;

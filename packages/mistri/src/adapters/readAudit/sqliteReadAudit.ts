@@ -31,14 +31,12 @@ import {
 
 const { meta, row: log } = READ_AUDIT_TABLES;
 const bytes = (column: string, limit: number) => `length(CAST(${column} AS BLOB)) <= ${limit}`;
-const definitions = new Map<string, string>([
-  [
-    meta,
-    `CREATE TABLE "${meta}" (
+const metaDdl = (version: number) => `CREATE TABLE "${meta}" (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-  version INTEGER NOT NULL CHECK (version = ${READ_AUDIT_VERSION})
-)`,
-  ],
+  version INTEGER NOT NULL CHECK (version = ${version})
+)`;
+const definitions = new Map<string, string>([
+  [meta, metaDdl(READ_AUDIT_VERSION)],
   [
     log,
     `CREATE TABLE "${log}" (
@@ -54,7 +52,9 @@ const definitions = new Map<string, string>([
   query_json TEXT CHECK (json_valid(query_json) AND ${bytes('query_json', READ_AUDIT_LIMITS.query)}),
   row_count INTEGER CHECK (row_count >= 0),
   ids_json TEXT CHECK (json_valid(ids_json) AND ${bytes('ids_json', READ_AUDIT_LIMITS.ids)}),
-  CHECK ((record_key IS NULL) <> (query_json IS NULL))
+  command TEXT COLLATE BINARY CHECK (${bytes('command', READ_AUDIT_LIMITS.command)}),
+  CHECK ((record_key IS NULL) <> (query_json IS NULL)),
+  CHECK ((command IS NULL) <> (route = 'command'))
 )`,
   ],
 ]);
@@ -67,6 +67,33 @@ const TRIGGERS = new Map<string, string>([
   [`${log}_no_delete`, `CREATE TRIGGER "${log}_no_delete" BEFORE DELETE ON "${log}" ${APPEND_ONLY}`],
   [`${log}_no_update`, `CREATE TRIGGER "${log}_no_update" BEFORE UPDATE ON "${log}" ${APPEND_ONLY}`],
 ]);
+
+/* Version 1's columns, which version 2 keeps in order and adds `command` after. */
+const V1_COLUMNS = 'id, at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json';
+
+/**
+ * Version 1 to 2, as statements for the store upgrade (storeLayouts.ts) to run in its one transaction. SQLite keeps
+ * a table's CREATE text and the attestation compares it whole, so the log is rebuilt rather than altered: its rows
+ * copied, ids kept, into this version's table. The triggers go first and come back last; DROP TABLE fires no
+ * DELETE trigger, and nothing else may write while the transaction holds the file. Every row is copied: a row the
+ * new table's checks refuse fails the step, and the transaction leaves version 1 as it was.
+ */
+export function sqliteReadAuditUpgradeFrom1(): readonly string[] {
+  const parked = `${log}_v1`;
+  return [
+    ...[...TRIGGERS.keys()].map((name) => `DROP TRIGGER "${name}"`),
+    ...[...INDEXES.keys()].map((name) => `DROP INDEX "${name}"`),
+    `ALTER TABLE "${log}" RENAME TO "${parked}"`,
+    definitions.get(log)!,
+    `INSERT INTO "${log}" (${V1_COLUMNS}) SELECT ${V1_COLUMNS} FROM "${parked}" ORDER BY id`,
+    `DROP TABLE "${parked}"`,
+    ...INDEXES.values(),
+    ...TRIGGERS.values(),
+    `DROP TABLE "${meta}"`,
+    metaDdl(READ_AUDIT_VERSION),
+    `INSERT INTO "${meta}" (singleton, version) VALUES (1, ${READ_AUDIT_VERSION})`,
+  ];
+}
 
 interface CatalogEntry {
   type: string;
@@ -157,7 +184,7 @@ export function provisionSqliteReadAudit(existingPath: string): { version: typeo
 const MAIN_EPOCH = '(SELECT schema_version FROM main.pragma_schema_version)';
 const TEMP_EPOCH = `(SELECT coalesce(group_concat(type || ':' || name || ':' || tbl_name || ':' || coalesce(sql, ''), char(10)), '') FROM temp.sqlite_schema)`;
 const META_ROW = `(SELECT count(*) FROM main."${meta}" WHERE singleton = 1 AND version = ${READ_AUDIT_VERSION})`;
-const COLUMNS = 'at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json';
+const COLUMNS = 'at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command';
 const attestedEpochs = new WeakMap<DatabaseSync, { main: number; temp: string }>();
 
 const values = (row: ReadAuditRow) =>
@@ -173,6 +200,7 @@ const values = (row: ReadAuditRow) =>
     row.query ?? null,
     row.count ?? null,
     row.ids ?? null,
+    row.command ?? null,
   ] as const;
 
 /**
@@ -186,7 +214,7 @@ export function appendSqliteReadAudit(db: DatabaseSync, row: ReadAuditRow): void
   const known = attestedEpochs.get(db);
   if (known) {
     const done = db
-      .prepare(`INSERT INTO main."${log}" (${COLUMNS}) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      .prepare(`INSERT INTO main."${log}" (${COLUMNS}) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       WHERE ${MAIN_EPOCH} = ? AND ${TEMP_EPOCH} = ? AND ${META_ROW} = 1`)
       .run(...values(row), known.main, known.temp);
     if (Number(done.changes) === 1) return;
@@ -194,7 +222,7 @@ export function appendSqliteReadAudit(db: DatabaseSync, row: ReadAuditRow): void
   }
   const epoch = db.prepare(`SELECT ${MAIN_EPOCH} AS main, ${TEMP_EPOCH} AS temp`).get() as { main: number; temp: string };
   assertSqliteReadAudit(db);
-  db.prepare(`INSERT INTO main."${log}" (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(...values(row));
+  db.prepare(`INSERT INTO main."${log}" (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(...values(row));
   attestedEpochs.set(db, { main: Number(epoch.main), temp: String(epoch.temp) });
 }
 
@@ -228,10 +256,12 @@ export function readSqliteReadAudit(db: DatabaseSync, query: ReadAuditQuery, att
   assertReadAuditQuery(query);
   if (!attested) assertSqliteReadAudit(db);
   const filters = readAuditFilters(query);
+  const clause = ([column, op]: (typeof filters)[number]) =>
+    op === 'shown' ? `(${column} = ? OR EXISTS (SELECT 1 FROM json_each(ids_json) WHERE value = ?))` : `${column} ${op} ?`;
   const rows = db
-    .prepare(`SELECT id, at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json
-    FROM main."${log}" ${filters.length ? `WHERE ${filters.map(([column, op]) => `${column} ${op} ?`).join(' AND ')}` : ''}
+    .prepare(`SELECT id, at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command
+    FROM main."${log}" ${filters.length ? `WHERE ${filters.map(clause).join(' AND ')}` : ''}
     ORDER BY id DESC LIMIT ?`)
-    .all(...filters.map(([, , value]) => value), query.limit) as Array<Record<string, unknown>>;
+    .all(...filters.flatMap(([, op, value]) => (op === 'shown' ? [value, value] : [value])), query.limit) as Array<Record<string, unknown>>;
   return rows.map(storedReadAudit);
 }

@@ -150,7 +150,10 @@ const SURFACES: Record<string, { rules: string[]; why: string }> = {
     ],
     why: 'Mail, an unsubscribe link and an integration’s webhook prove themselves (a signature, a signed token): the Host only. Then the Host for everything; each dispatcher further in holds its write’s line. Native auth asks the fetch site and Origin on a write but not a JSON body (sign-out is bodyless, a callback a form POST), and not the Origin where a route holds its own proof.',
   },
-  'packages/mistri/src/server/tenant/tenantPublicHttp.ts': { rules: ['{ writing: !reading }'], why: 'A public form.' },
+  'packages/mistri/src/server/tenant/tenantPublicHttp.ts': {
+    rules: ["{ writing: true, origin: 'always', sameSite: true }", '{ writing: !reading }'],
+    why: "A public form, and a signed-out page's public command, which writes as a visitor and so holds its origin.",
+  },
   'packages/mistri/src/server/http/pageCommandRoutes.ts': {
     rules: ["{ writing: true, origin: 'always', sameSite: true }"],
     why: 'A public page’s command: from the page’s own origin, never a host an embed token vouches for, since the ticket is the page’s.',

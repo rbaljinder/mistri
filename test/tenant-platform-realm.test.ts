@@ -18,7 +18,7 @@ import {
   defineCommand,
   defineCommands,
 } from '../packages/mistri/src/server/commands/businessCommands.js';
-import { assertGlobalLookups } from '../packages/mistri/src/server/commands/commandLookup.js';
+import { assertLookupOwners } from '../packages/mistri/src/server/commands/commandLookup.js';
 import { projectPlatformCapabilities, projectTenantCapabilities } from '../packages/mistri/src/server/tenant/tenantCapabilities.js';
 import { createTenantContexts } from '../packages/mistri/src/server/tenant/tenantContexts.js';
 import { TenantContextError, TenantRequestFault } from '../packages/engine/src/server/evidence.js';
@@ -952,7 +952,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       test(`a platform lookup of ${resource} is refused at enrollment because it is not global`, async (t) => {
         const app = parseTestApp(manifest(), 'lending.ts');
         assert.throws(
-          () => assertGlobalLookups(app, defineCommands({ stamp: stampWith(resource) }), OWNERSHIP),
+          () => assertLookupOwners(app, defineCommands({ stamp: stampWith(resource) }), OWNERSHIP),
           (error: unknown) => {
             assert.ok(error instanceof CommandLookupRefusal);
             assert.match(error.message, /Command "stamp" looks up/);

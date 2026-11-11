@@ -161,7 +161,8 @@ async function runManaged<T>(
     !isProxy(journal) &&
     typeof Object.getOwnPropertyDescriptor(journal, name)?.value === 'function';
   const staging = own('stage') ? journalMethod('stage') : undefined,
-    taking = own('takeStaged') ? journalMethod('takeStaged') : undefined;
+    taking = own('takeStaged') ? journalMethod('takeStaged') : undefined,
+    auditing = own('appendReadAudit') ? journalMethod('appendReadAudit') : undefined;
   const operations = new TransactionOperations();
   let accepting = true;
   let callbackFailure: { error: unknown } | undefined;
@@ -366,6 +367,7 @@ async function runManaged<T>(
             }
           : {}),
         ...heldFileMethods(invoke, staging, taking),
+        ...(auditing ? { appendReadAudit: (rows) => invoke({ rows }, (input) => auditing(input.rows)) } : {}),
       })
     : undefined;
   const completed = (value: T): T => {

@@ -128,7 +128,7 @@ const migrateUsage = () =>
   product() +
   ' migrate <new <name> | diff <name> | check | squash | status | up | validate | baseline | repair> [--app <dir>] ' +
   '[<db> | --db <target> | --config <path>] [--connection <name>] [--schema <name>] [--migrations <dir>] [--history-table <name>] ' +
-  '[--schema-file <path>] [--dev-url <url>] [--dry-run] [--tool flyway] [--repeatable]';
+  '[--schema-file <path>] [--dev-url <url>] [--dry-run] [--tool flyway] [--repeatable] [--number <n>]';
 
 /** The exit codes: what went wrong, for CI. */
 const EXIT = { ok: 0, couldNot: 1, invalid: 2, failed: 3, app: 4, stores: 5 } as const;
@@ -178,7 +178,7 @@ export async function runMigrate<A extends MigrateApp>(
       `${migrateUsage()}\n\n` +
         "Versioned SQL files in Flyway's format (V3__add_payoff_quote.sql, R__views.sql), in migrations/ inside the App\n" +
         'by default, run forward only, each in its own transaction.\n' +
-        '  new <name>  write the next V file (--repeatable: an R__ file)\n' +
+        '  new <name>  write the next V file (--repeatable: an R__ file; --number 0042: that version, refused when taken)\n' +
         '  diff <name> write the next V file from schema.sql: what the migrations still lack to build it (Atlas;\n' +
         '              the first is schema.sql itself, with no download)\n' +
         '  check       the migrations, applied to a scratch database, build schema.sql (exit 2 if not)\n' +
@@ -214,6 +214,7 @@ export async function runMigrate<A extends MigrateApp>(
   let tool: string | undefined;
   let dryRun = false;
   let repeatable = false;
+  let number: string | undefined;
   let json = false;
   let schemaFile: string | undefined;
   let devUrl: string | undefined;
@@ -275,6 +276,10 @@ export async function runMigrate<A extends MigrateApp>(
         repeatable = true;
         continue;
       }
+      if (arg === '--number') {
+        number = value(i++, arg);
+        continue;
+      }
       if (arg === '--json') {
         json = true;
         continue;
@@ -307,6 +312,8 @@ export async function runMigrate<A extends MigrateApp>(
     return fail(`${command} takes no migration-file options. ${own.usage}`);
   }
   if (repeatable && command !== 'new') return fail('--repeatable is for new: it names the file R__<name>.sql.');
+  if (number !== undefined && command !== 'new') return fail('--number is for new: it is the version the V file is written with.');
+  if (number !== undefined && repeatable) return fail('--number is for a V file; an R__ file has no version.');
   if (json && (app === undefined || !['status', 'up', 'validate'].includes(command)))
     return fail('--json is for status, up and validate with --app: it prints the bootstrap plan as data.');
   if (json && tool) return fail('--json reads the plan the runner keeps; drop --tool flyway to see it as data.');
@@ -378,7 +385,14 @@ export async function runMigrate<A extends MigrateApp>(
     }
 
     if (command === 'new') {
-      const path = newMigration(targetDir(registry, config, flags, appDir, loaded?.binding), name!, repeatable);
+      const path = newMigration(
+        targetDir(registry, config, flags, appDir, loaded?.binding),
+        name!,
+        repeatable,
+        new Date(),
+        undefined,
+        number,
+      );
       write(`wrote ${shown(path)}`);
       return EXIT.ok;
     }

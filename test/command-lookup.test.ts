@@ -158,7 +158,7 @@ test('a lookup that fails refuses a first attempt, not applied; the replay of on
   });
 });
 
-test('an App is held to its lookups: a declared source, never a row-policy App, and in a tenant App only global resources', () => {
+test("an App is held to its lookups: a declared source, never a row-policy App, and in a tenant App global resources and the tenant's own", () => {
   const declared = app();
   assert.equal(commandLookupProblem(declared, 'assignContact', { desk: ['contacts'] }), undefined);
   assert.match(
@@ -174,11 +174,18 @@ test('an App is held to its lookups: a declared source, never a row-policy App, 
       resources: { ...declared.resources, 'desk.contacts': { ...declared.resources!['desk.contacts'], owner } },
     }) as AppDef;
   assert.equal(commandLookupProblem(tenant('global'), 'assignContact', { desk: ['contacts'] }), undefined);
+  // The tenant's own rows, read as the person running it could read them.
+  assert.equal(commandLookupProblem(tenant('tenant'), 'assignContact', { desk: ['contacts'] }), undefined);
   assert.match(
-    commandLookupProblem(tenant('tenant'), 'assignContact', { desk: ['contacts'] })!,
-    /"desk\.contacts", which is "owner": "tenant"\. A tenant App's command looks up only resources every tenant reads, "owner": "global"/,
+    commandLookupProblem(tenant('platform'), 'assignContact', { desk: ['contacts'] })!,
+    /"desk\.contacts", which is "owner": "platform"\. A tenant App's command looks up resources every tenant reads, "owner": "global", and its own tenant's/,
   );
-  assert.match(commandLookupProblem(tenant('platform'), 'assignContact', { desk: ['contacts'] })!, /"owner": "platform"/);
+  // The platform realm acts in no tenant: global resources only.
+  assert.equal(commandLookupProblem(tenant('global'), 'assignContact', { desk: ['contacts'] }, 'platform'), undefined);
+  assert.match(
+    commandLookupProblem(tenant('tenant'), 'assignContact', { desk: ['contacts'] }, 'platform')!,
+    /"owner": "tenant"\. A platform-realm command looks up only resources every tenant reads, "owner": "global"/,
+  );
 });
 
 test('the binding asks the same question, so startup and mistri check refuse a lookup the App cannot run', async () => {

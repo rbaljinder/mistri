@@ -16,12 +16,13 @@ const HELP = `${AUDIT_USAGE}
 
   Prints the reads recorded for the App's audited resources, newest first,
   one JSON object a line: when, who (actor, and a support visit's id), the
-  tenant, the resource, the route it came by, and the one record read or the
-  query with the count and ids of the rows it returned. Field values are
-  never recorded.
+  tenant, the resource, the route it came by (a command's own reads: route
+  "command" and the command's id), and the one record read or the query with
+  the count and ids of the rows it returned. Field values are never recorded.
 
   --resource <name>  only this resource
-  --record <id>      only reads of this one record, by its key
+  --record <id>      only reads of this one record, by its key: read alone,
+                     or among the rows a list read returned
   --actor <who>      only this reader: an account id, service:<principal>,
                      support:<operator>, api-token:<id> or assistant:<account>
   --tenant <id>      only this tenant's rows, on a tenant App

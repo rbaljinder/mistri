@@ -6,6 +6,8 @@ export const say = defineMessages({
   goToATable: 'Go to a table, view, saved filter or database…',
   nothingMatches: 'Nothing matches "{term}".',
   nothingToGo: 'Nothing to go to.',
+  /* An App with more lists than one search asks: the ones left out are said, not silently unsearched. */
+  searchedSome: 'Records are searched in {searched} of {total} lists.',
   /* The badge on each row says what it opens, in the reader's words rather than the registry's identifiers. */
   kindPage: 'page',
   kindView: 'view',

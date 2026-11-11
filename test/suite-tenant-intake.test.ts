@@ -250,6 +250,6 @@ test('suite-mounted tenant saved intake owns its address, draft cookie, writes a
   writeFileSync(file, JSON.stringify({ port, basePath, apps: [rootDeployment, { ...leadsDeployment, policy: './leads/no-intake.mjs' }] }));
   await assert.rejects(
     startConfiguredSuite(file, { SECRET: 'suite-intake-test-secret-longer-than-thirty-two-characters' }),
-    /public form needs the tenant policy's intake/,
+    /public form or public page needs the tenant policy's intake/,
   );
 });

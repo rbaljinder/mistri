@@ -755,6 +755,23 @@ test.each(['503', '429', 'network'])('a current %s is asked again with backoff b
   expect(session.captureTenantLease()).toEqual(original);
 });
 
+test('a read the audit could not record fails that read alone: asked once, the lease and the session left as they were', async () => {
+  const original = proof(),
+    owner = session.establishTenantSelection(original);
+  const fetcher = vi.fn(
+    async () =>
+      new Response(JSON.stringify({ error: 'The read could not be recorded. Try again.', code: 'read_not_recorded' }), { status: 503 }),
+  );
+  vi.stubGlobal('fetch', fetcher);
+  const refused = transport.tenantReadApi('/api/query');
+  await expect(refused).rejects.toMatchObject({ status: 503, code: 'read_not_recorded' });
+  await expect(refused).rejects.not.toHaveProperty('transient');
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(session.captureSessionIdentity()).toBe(owner);
+  expect(session.tenantLeaseActive()).toBe(true);
+  expect(session.captureTenantLease()).toEqual(original);
+});
+
 test.each(['503', 'network', 'broken body'])('a %s that passes leaves the lease open and answers the read (G172)', async (kind) => {
   const original = proof(),
     owner = session.establishTenantSelection(original);

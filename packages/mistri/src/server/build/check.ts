@@ -45,20 +45,9 @@ import { appHome, segmentsTakenFrom, settingsMount, type AddressMount } from '@m
 import { isTenantApp } from '../../shared/appModel.js';
 import { appRealms } from '../../shared/appTenancy.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { genericWriteOf } from '../commands/genericWriteBrand.js';
-import { flowCommandOf } from '../commands/flowCommandBrand.js';
-import { callerRead, getCommandEvents, type BusinessCommandRegistry } from '../commands/businessCommands.js';
+import { getCommandEvents, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { NO_OUTPUT } from '../commands/commandShapes.js';
-import {
-  AppProblems,
-  appCommandGrants,
-  homeSourceOf,
-  isFormView,
-  logicalResource,
-  resolveAppAccess,
-  withRollups,
-  type AppDef,
-} from '../../shared/app.js';
+import { AppProblems, homeSourceOf, isFormView, logicalResource, withRollups, type AppDef } from '../../shared/app.js';
 import { parseArgs, postgresPoolFlags, type Options } from '@mistriwork/engine/server/cli/args.js';
 import { sayBudget } from '@mistriwork/engine/adapters/connectionBudget.js';
 import { readStartupConfig } from '@mistriwork/engine/server/cli/config.js';
@@ -71,6 +60,8 @@ import { documentedFix } from './checkCodes.js';
 import { connectionBudgets, deployFindings } from './checkDeploy.js';
 import { schemaChanges } from './schemaChanges.js';
 import { appConnection, pageQueryFailures } from './checkQueries.js';
+import { readAuditUnrecordable } from './checkReadAudit.js';
+import { commandElevations, commandUnreadable, publicCommandRemovals } from './checkCommands.js';
 import { SMALL_TABLE_ROWS, holdBack, indexFindings, readPgIndexes } from './checkIndexes.js';
 import { asDeployFinding, migrationsToJudge } from './deployMigrations.js';
 import { migrationFindings } from './migrationSafety.js';
@@ -1616,6 +1607,31 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       }
     }
 
+    /* A tenant App's public command whose handler removes a row is refused on every run (tenantIntake.ts,
+       tenantCommandTransaction.ts): said here, by command, when the handler's own text shows the removal. */
+    if (loaded?.commands?.registry && loaded.app.auth?.rows === 'tenant') {
+      const removing = publicCommandRemovals(loaded.commands.registry);
+      const judged = steps.findLast((step) => step.name === 'validation');
+      if (judged && removing.length) {
+        judged.lines = [...judged.lines, ...removing.map((said) => `error: ${said}`)];
+        judged.problems = [...(judged.problems ?? []), ...removing.map((said) => problem('validation', 'public-command-remove', said))];
+        judged.status = 'failed';
+      }
+    }
+
+    /* A query over a resource whose reads are audited, which the audit could not record, refuses every read through
+       it (checkReadAudit.ts): said here, by view and tab. */
+    if (audited.length && !tenantWaits) {
+      const { schema } = await catalogOf(loaded!);
+      const unrecordable = schema ? readAuditUnrecordable(loaded!.app, schema) : [];
+      const judged = steps.findLast((step) => step.name === 'validation');
+      if (judged && unrecordable.length) {
+        judged.lines = [...judged.lines, ...unrecordable.map((said) => `error: ${said}`)];
+        judged.problems = [...(judged.problems ?? []), ...unrecordable.map((said) => problem('validation', 'read-audit-query', said))];
+        judged.status = 'failed';
+      }
+    }
+
     /* An HTTP connection's description against the spec it pins: the adapter reads the description alone, so a spec that
        moved on is said here. A warning (a spec file that is gone) does not fail. */
     const specFindings = await httpSpecFindings(registry.configs());
@@ -2159,62 +2175,6 @@ export function checkedRoutes(loaded: LoadedApp, schema: DatabaseSchema, mount: 
   const tenant = qualified(routeTable(appRoutes(loaded, schema, 'tenant'), app), 'tenant={tenant}');
   if (!appRealms(loaded.app).platform) return tenant;
   return [...tenant, ...qualified(routeTable(appRoutes(loaded, schema, 'platform'), app), 'realm=platform')];
-}
-
-/**
- * Every read a command makes under its own authority rather than its
- * caller's (`elevate`), as `check --design` lists them: which tables, and
- * which roles granted the command would not read them otherwise.
- */
-export function commandElevations(app: AppDef, commands: BusinessCommandRegistry, schema: DatabaseSchema | undefined): string[] {
-  return Object.entries(commands)
-    .filter(([, command]) => command.elevate?.read.length)
-    .map(([id, command]) => {
-      const tables = command.elevate!.read.map((local) => logicalResource(app, command.source, local));
-      const roles = Object.keys(app.auth?.roles ?? {}).filter((role) => appCommandGrants(app, [role]).has(id));
-      const blind = schema
-        ? roles.filter((role) => {
-            try {
-              const readable = resolveAppAccess(app, schema, [role]).readable;
-              return tables.some((table) => !readable.has(table));
-            } catch {
-              return false;
-            }
-          })
-        : [];
-      return (
-        `command "${id}" reads ${tables.map((table) => `"${table}"`).join(', ')} under its own authority` +
-        (blind.length ? `, for role${blind.length === 1 ? '' : 's'} ${blind.map((role) => `"${role}"`).join(', ')}` : '')
-      );
-    });
-}
-
-/**
- * Each role granted a command that cannot read a table the command's caller must (`read`, less what it `elevate`s):
- * every run is refused for that role, so each is named with its command and table. Public, flow and generic-write
- * commands are no role's grant.
- */
-export function commandUnreadable(app: AppDef, commands: BusinessCommandRegistry, schema: DatabaseSchema): string[] {
-  const out: string[] = [];
-  for (const [id, command] of Object.entries(commands)) {
-    if (command.public === true || genericWriteOf(command) !== undefined || flowCommandOf(command) !== undefined) continue;
-    const tables = callerRead(command).map((local) => logicalResource(app, command.source, local));
-    for (const role of Object.keys(app.auth?.roles ?? {})) {
-      if (!appCommandGrants(app, [role]).has(id)) continue;
-      let readable: ReadonlySet<string>;
-      try {
-        readable = resolveAppAccess(app, schema, [role]).readable;
-      } catch {
-        continue;
-      }
-      for (const table of tables.filter((each) => !readable.has(each)))
-        out.push(
-          `command "${id}" is granted to role "${role}", which cannot read "${table}" its read names, so every run is refused [command-reads-unreadable]. ` +
-            `Let "${role}" read "${table}", drop it from the command's read, or elevate its read.`,
-        );
-    }
-  }
-  return out;
 }
 
 /** What the App and its jobs module declare that makes a served App build more hosts (servedHosts.ts). */

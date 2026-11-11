@@ -19,6 +19,8 @@ import type { CommandEventBatch, CommandEventManifest, CommandEventOwner } from 
 import { captureCommandEventManifest } from '../events/commandEventCapture.js';
 import { BULK_LIMIT } from '../../shared/command.js';
 import { nextSqliteCommandNumber, provisionSqliteCommandSequences } from './commandSequences.js';
+import { appendSqliteReadAudit } from '../readAudit/sqliteReadAudit.js';
+import type { ReadAuditRow } from '../readAudit/readAudit.js';
 import {
   provisionSqliteCommandStaging,
   stageSqliteFile,
@@ -738,6 +740,20 @@ export function createSqliteCommandJournal(
         text(input.appId, 'application', 128);
         if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
         return takeSqliteStaged(db, input.appId, namespace, input.take);
+      }),
+    /* Row by row, in the owner's transaction: a batch's own BEGIN (appendSqliteReadAudits) would nest in it. A row
+       of another App, or of another tenant than the one this journal is bound to, is refused. */
+    appendReadAudit: (rows: readonly ReadAuditRow[]) =>
+      invoke({ rows }, async (input) => {
+        for (const row of input.rows) {
+          if (
+            (member && row?.app !== member.appId) ||
+            (appScope && row?.app !== appScope.appId) ||
+            (bound && row?.tenant !== bound.tenantId)
+          )
+            return invalid();
+          appendSqliteReadAudit(db, row);
+        }
       }),
     kept: (appId: string, commandId: string, commandVersion: number) =>
       invoke({ appId, commandId, commandVersion }, async (input) => {

@@ -1,4 +1,4 @@
-import type { CommandFieldPresentation } from '@mistriwork/engine/schema/model.js';
+import type { CommandChoiceSource, CommandFieldPresentation } from '@mistriwork/engine/schema/model.js';
 import type {
   AppCommandChoice,
   AppCommandField,
@@ -286,15 +286,27 @@ export const isHexColor = (value: unknown): value is string => typeof value === 
 /** A rating's stars when it says none, and its bounds, as a column's rating takes them (appValidation's outOf). */
 const RATING = { outOf: 5, least: 3, most: 10 } as const;
 
-/* Choices read from a table: its rows by key, shown by a column. */
-function choiceSource(f: Record<string, unknown>, where: string): { from: string; by: string; labelColumn: string } {
+/* Choices read from a table: its rows by key, shown by a column, in the order of that column unless `sort` says one. */
+function choiceSource(f: Record<string, unknown>, where: string): CommandChoiceSource {
   if (f.options !== undefined) return fail(where, 'names its options or a table to read them from (from), not both');
   if (f.labelColumn === undefined)
-    return fail(where, `reads its choices from "${String(f.from)}" and needs labelColumn: the column each is shown by`);
+    return fail(
+      where,
+      `reads its choices from "${String(f.from)}" and needs labelColumn: the column each is shown by` +
+        (typeof f.label === 'string' ? " (label is the field's own title, and no longer names that column)" : ''),
+    );
+  let sort: CommandChoiceSource['sort'];
+  if (f.sort !== undefined) {
+    const said = record(f.sort, ['column', 'direction'], `${where}, sort`);
+    if (said.direction !== undefined && said.direction !== 'asc' && said.direction !== 'desc')
+      return fail(where, "sort.direction is 'asc' or 'desc'");
+    sort = { column: name(said.column, `${where}, sort.column`), direction: (said.direction as 'asc' | 'desc' | undefined) ?? 'asc' };
+  }
   return {
     from: name(f.from, `${where}, from`, true),
     by: f.by === undefined ? 'id' : name(f.by, `${where}, by`),
     labelColumn: name(f.labelColumn, `${where}, labelColumn`),
+    ...(sort ? { sort } : {}),
   };
 }
 
@@ -374,6 +386,7 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
       'above',
       'by',
       'labelColumn',
+      'sort',
       'query',
       'options',
       'fields',
@@ -679,11 +692,13 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
   }
   if (f.type === 'choice' || f.type === 'choices') {
     only(
-      f.type === 'choices' ? ['options', 'from', 'by', 'labelColumn', 'min', 'max', 'exclusive'] : ['options', 'from', 'by', 'labelColumn'],
+      f.type === 'choices'
+        ? ['options', 'from', 'by', 'labelColumn', 'sort', 'min', 'max', 'exclusive']
+        : ['options', 'from', 'by', 'labelColumn', 'sort'],
     );
     const source = f.from === undefined ? undefined : choiceSource(f, where);
-    if (!source && (f.by !== undefined || f.labelColumn !== undefined))
-      return fail(where, 'by and labelColumn read choices from a table: give from');
+    if (!source && (f.by !== undefined || f.labelColumn !== undefined || f.sort !== undefined))
+      return fail(where, 'by, labelColumn and sort read choices from a table: give from');
     const options = source
       ? []
       : items(f.options, where, 'options', COMMAND_INPUT_LIMITS.choiceOptions, 'options').map((option, index) =>
@@ -829,12 +844,13 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
     };
   }
   /* Files, sent as they are picked and held for the command (server/commands/stagedFiles.ts): the value is their ids,
-     and the handler receives the files. A held file is the person's who sent it and this field's, so it sits in no
-     group, where a row's files would be no one field's; and nothing starts as one. */
+     and the handler receives the files. A held file is the person's who sent it and this field's: in a group, the
+     field's path, `attachments[].file` (heldFileFields), never a row's index, so adding, removing or reordering rows
+     leaves every hold its field's. A signature is the signer's mark on the whole submission, so it stays a field of
+     the input itself; and nothing starts as either. */
   if (f.type === 'files' || f.type === 'signature') {
     only(f.type === 'files' ? ['from', 'min', 'max', 'accept'] : ['from']);
-    if (rules.depth)
-      return fail(where, `${f.type === 'files' ? 'files are' : 'a signature is'} a field of the input itself, not one inside a group`);
+    if (f.type === 'signature' && rules.depth) return fail(where, 'a signature is a field of the input itself, not one inside a group');
     const stray = (['default', 'as', 'input'] as const).find((key) => f[key] !== undefined);
     if (stray !== undefined) return fail(where, `${f.type === 'files' ? 'files take' : 'a signature takes'} no ${stray}`);
     const from = name(f.from, `${where}, from`, true);
@@ -1234,7 +1250,7 @@ export function commandInputProblem(
       const from = tableNamed(schema, f.source.from);
       if (!from)
         return `Command input "${f.name}" offers the rows of "${f.source.from}", which is not a resource the command reads: add it to \`read\`.`;
-      for (const column of [f.source.by, f.source.labelColumn])
+      for (const column of [f.source.by, f.source.labelColumn, ...(f.source.sort ? [f.source.sort.column] : [])])
         if (!from.columns.some((c) => c.name === column)) return `Command input "${f.name}": "${f.source.from}" has no column "${column}".`;
       continue;
     }

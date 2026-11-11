@@ -16,7 +16,7 @@ const FILE_COLUMNS = `repair_id INTEGER NOT NULL REFERENCES repair(id), file_nam
     content_type TEXT, byte_size INTEGER, data BLOB NOT NULL`;
 const SCHEMA = `BEGIN;
   CREATE TABLE repair (id INTEGER PRIMARY KEY, reference TEXT NOT NULL UNIQUE, title TEXT NOT NULL);
-  CREATE TABLE repair_photo (id INTEGER PRIMARY KEY, ${FILE_COLUMNS});
+  CREATE TABLE repair_photo (id INTEGER PRIMARY KEY, ${FILE_COLUMNS}, caption TEXT);
   CREATE TABLE repair_signature (id INTEGER PRIMARY KEY, ${FILE_COLUMNS});
   COMMIT;`;
 

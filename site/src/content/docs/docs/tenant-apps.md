@@ -43,12 +43,12 @@ auth: {
 
 ## Options
 
-| Part | What it does | Status |
-| --- | --- | --- |
-| `auth.rows: 'tenant'` | Scopes every row by tenant membership | Stable |
-| `auth.tenancy` | `label` (what a tenant is called), `profile` (its one-row table), `platform` (the realm above) | Stable |
-| A role's `realm` | `'tenant'` or `'platform'`; every role says one once a platform is declared | Stable |
-| A resource's `owner` | `'tenant'` (each tenant's own), `'global'` (read by all, never written), `'platform'` (no tenant reads it) | Stable |
+| Part                    | What it does                                                                                                | Status |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------- | ------ |
+| `auth.rows: 'tenant'`   | Scopes every row by tenant membership                                                                       | Stable |
+| `auth.tenancy`          | `label` (what a tenant is called), `profile` (its one-row table), `platform` (the realm above)              | Stable |
+| A role's `realm`        | `'tenant'` or `'platform'`; every role says one once a platform is declared                                 | Stable |
+| A resource's `owner`    | `'tenant'` (each tenant's own), `'global'` (read by all, never written), `'platform'` (no tenant reads it)  | Stable |
 | `defineAppTenantPolicy` | The server-only policy: ownership columns, rows, administration, invitations, support, intake, public reads | Stable |
 
 Tenant Apps run on SQLite and PostgreSQL. The server loads the policy with
@@ -132,36 +132,36 @@ export default defineAppTenantPolicy({
 
 ### Policy reference
 
-| Key | Type | Default | Limit |
-| --- | --- | --- | --- |
-| `kind` | `'tenant'` | required | |
-| `appId` | the App's `id` | required | 256 characters |
-| `storeId` | text naming the tenant store | required | 256 characters |
-| `ownership` | per table: `{ kind: 'tenant', column }`, `{ kind: 'global', access: 'read-only' }` or `{ kind: 'platform' }` | required | 1 to 256 tables, at least one `'tenant'` |
-| `resolveMembershipRows` | `(member) => RowScope` | required | |
-| `resolveRows` | `(member) => RowScope`, for the roles a request acts under | required | |
-| `resolvePlatformRows` | `(member) => RowScope` | none | required once a table is `'platform'` |
-| `authorizeDeletedRecord` | `(member, image) => boolean` | none: a member deletes no tenant row | |
-| `resultReferences` | per command id, `(result) => [{ table, key }]` | none | one per command under `--commands`; 4096 |
-| `administration.id`, `.version` | text | required | 256 characters |
-| `administration.maxMembershipLifetimeMs` | milliseconds | required | 1 to 366 days |
-| `administration.operators` | `[{ accountId, tenants, operations, roles }]` | required | 256 rules, each `'all'` or 1 to 256 tenants (`'all'` reaches every tenant, audited like a listed one); empty only beside `delegates` |
-| `administration.delegates` | `[{ role, operations, roles }]` | none | each operation in one rule |
-| `invitations.id`, `.version` | text | required | 256 bytes |
-| `invitations.maxMembershipLifetimeMs` | milliseconds | required | 1 to 366 days |
-| `invitations.maxRedemptionLifetimeMs` | milliseconds | required | 1 to 7 days |
-| `invitations.maxPendingPerTenant` | count | required | 1 to 10000 |
-| `invitations.operators` | `[{ accountId, tenants, operations, roles }]` | required | 256 rules, each `'all'` or 1 to 256 tenants (`'all'` reaches every tenant, audited like a listed one); empty only beside `delegates` |
-| `invitations.delegates` | `[{ role, operations, roles }]` | none | each operation in one rule |
-| `support.id`, `.version` | text | required | 256 bytes |
-| `support.grants` | `[{ platformRole, tenants: 'all' or [ids], dealerRoles }]` | required | 1 to 256, one per platform role; 1024 tenants; 256 roles |
-| `intake.address` | a text column of the profile table | none: no public form | needs a `'platform'` table |
-| `public.address` | a text column of the profile table | none: no public reads | needs a `'platform'` table; comes with `resolvePublicRows` |
-| `resolvePublicRows` | `(visitor) => RowScope` | none | comes with `public` |
-| `assistant.tokensPerTenantPerDay` | tokens | the App's own caps | 1 to 1000000000 |
-| `assistant.retentionDays` | days | 90 | 1 to 3650 |
-| `decisions.callsPerTenantPerDay` | model calls | no cap | 1 to 100000000 |
-| `decisions.retentionDays` | days | 365 | 1 to 3650 |
+| Key                                      | Type                                                                                                         | Default                                     | Limit                                                                                                                                |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `kind`                                   | `'tenant'`                                                                                                   | required                                    |                                                                                                                                      |
+| `appId`                                  | the App's `id`                                                                                               | required                                    | 256 characters                                                                                                                       |
+| `storeId`                                | text naming the tenant store                                                                                 | required                                    | 256 characters                                                                                                                       |
+| `ownership`                              | per table: `{ kind: 'tenant', column }`, `{ kind: 'global', access: 'read-only' }` or `{ kind: 'platform' }` | required                                    | 1 to 256 tables, at least one `'tenant'`                                                                                             |
+| `resolveMembershipRows`                  | `(member) => RowScope`                                                                                       | required                                    |                                                                                                                                      |
+| `resolveRows`                            | `(member) => RowScope`, for the roles a request acts under                                                   | required                                    |                                                                                                                                      |
+| `resolvePlatformRows`                    | `(member) => RowScope`                                                                                       | none                                        | required once a table is `'platform'`                                                                                                |
+| `authorizeDeletedRecord`                 | `(member, image) => boolean`                                                                                 | none: a member deletes no tenant row        |                                                                                                                                      |
+| `resultReferences`                       | per command id, `(result) => [{ table, key }]`                                                               | none                                        | one per command under `--commands`; 4096                                                                                             |
+| `administration.id`, `.version`          | text                                                                                                         | required                                    | 256 characters                                                                                                                       |
+| `administration.maxMembershipLifetimeMs` | milliseconds                                                                                                 | required                                    | 1 to 366 days                                                                                                                        |
+| `administration.operators`               | `[{ accountId, tenants, operations, roles }]`                                                                | required                                    | 256 rules, each `'all'` or 1 to 256 tenants (`'all'` reaches every tenant, audited like a listed one); empty only beside `delegates` |
+| `administration.delegates`               | `[{ role, operations, roles }]`                                                                              | none                                        | each operation in one rule                                                                                                           |
+| `invitations.id`, `.version`             | text                                                                                                         | required                                    | 256 bytes                                                                                                                            |
+| `invitations.maxMembershipLifetimeMs`    | milliseconds                                                                                                 | required                                    | 1 to 366 days                                                                                                                        |
+| `invitations.maxRedemptionLifetimeMs`    | milliseconds                                                                                                 | required                                    | 1 to 7 days                                                                                                                          |
+| `invitations.maxPendingPerTenant`        | count                                                                                                        | required                                    | 1 to 10000                                                                                                                           |
+| `invitations.operators`                  | `[{ accountId, tenants, operations, roles }]`                                                                | required                                    | 256 rules, each `'all'` or 1 to 256 tenants (`'all'` reaches every tenant, audited like a listed one); empty only beside `delegates` |
+| `invitations.delegates`                  | `[{ role, operations, roles }]`                                                                              | none                                        | each operation in one rule                                                                                                           |
+| `support.id`, `.version`                 | text                                                                                                         | required                                    | 256 bytes                                                                                                                            |
+| `support.grants`                         | `[{ platformRole, tenants: 'all' or [ids], dealerRoles }]`                                                   | required                                    | 1 to 256, one per platform role; 1024 tenants; 256 roles                                                                             |
+| `intake.address`                         | a text column of the profile table                                                                           | none: no public form or public command page | needs a `'platform'` table                                                                                                           |
+| `public.address`                         | a text column of the profile table                                                                           | none: no public reads                       | needs a `'platform'` table; comes with `resolvePublicRows`                                                                           |
+| `resolvePublicRows`                      | `(visitor) => RowScope`                                                                                      | none                                        | comes with `public`                                                                                                                  |
+| `assistant.tokensPerTenantPerDay`        | tokens                                                                                                       | the App's own caps                          | 1 to 1000000000                                                                                                                      |
+| `assistant.retentionDays`                | days                                                                                                         | 90                                          | 1 to 3650                                                                                                                            |
+| `decisions.callsPerTenantPerDay`         | model calls                                                                                                  | no cap                                      | 1 to 100000000                                                                                                                       |
+| `decisions.retentionDays`                | days                                                                                                         | 365                                         | 1 to 3650                                                                                                                            |
 
 Administration operations: `createTenant`, `setTenantStatus`,
 `grantMembership`, `replaceMembership`, `revokeMembership`,
@@ -342,6 +342,27 @@ tenant's invoice is not found. When `amount > 0` is false the update is refused
 and the move is in the record's history like any other write. A platform
 member's or a support visit's writes get no fixed actions: it is a member's verb.
 
+### A command's lookup
+
+A tenant command's `lookup` may read `owner: 'global'` tables and its own
+tenant's `owner: 'tenant'` tables, read only, as the person running it could
+read them: their role's row filter and column rule apply, and another tenant's
+rows are never there. A consent check reads the tenant's consent table before
+the model is called:
+
+```ts
+sources: { business: ['consent'] },
+async lookup({ sources }, input) {
+  const consent = await sources.business.consent.find({ subject: input.subject });
+  return { consented: Boolean(consent?.granted) };
+},
+```
+
+A table the person's role cannot read fails the command, not the session, in
+words that name the table and the command. Platform-owned tables are never read
+in a tenant's context, and a `realm: 'platform'` command looks up global tables
+only. A tenant job's lookup reads the same, as its service.
+
 ### Public intake
 
 A tenant App's [public form](/docs/command-forms/#public-forms) lands in
@@ -382,6 +403,18 @@ apart until one of them changes, and a change in one tenant drops that
 tenant's copy alone; a submission still reads its chosen key in the tenant it
 lands in, so another tenant's key is refused at its field.
 
+A [public page](/docs/custom-components/) that runs public commands
+(`definePage({ public: true, commands })`) is taken by the same intake: the
+[public address](#public-reads) its visitor reads it under (`?via=`) places
+each run with that tenant's intake address, as the tenant's mapped host does,
+with the same ticket, origin, budgets and human check as on an ordinary App, and
+the same triage for an address that places nobody. `mistri check` and the
+start refuse, in words naming the page, what intake cannot take: a command that is not
+public, belongs to a realm, writes another source or a table that is neither
+a tenant's nor the platform's, runs a lookup or reads other sources, or emits
+events or effects; and a field that chooses from a table (give it fixed
+options). Without `intake.address` such a page is refused as a public form is.
+
 ### Public reads
 
 A visitor may browse one tenant's public rows (`auth.public`) by that tenant's
@@ -391,7 +424,7 @@ The policy names the profile column that holds it (`public: { address:
 server adds the tenant, so a visitor reads that tenant's rows and global ones,
 never another tenant's or the platform's. `auth.public.read` may not name a
 platform-owned resource. An unknown address or a suspended tenant is the
-ordinary not-found. Visitors run no command.
+ordinary not-found. Visitors run no command but a public page's (above).
 
 A tenant reads its own addresses from `/api/app` (`addresses: { intake, public
 }`), and a custom component turns them into a link with
@@ -402,18 +435,18 @@ A tenant reads its own addresses from `/api/app` (`addresses: { intake, public
 Where a feature is served, refused, or kept per tenant, in one table. The
 refusal quoted is the one the server gives; the file is where it lives.
 
-| Feature | In a tenant App | Where it is decided | Try it |
-| --- | --- | --- | --- |
-| Record history, `activity()` feeds, notifications and their mail | Per tenant: the tenant whose record it is | `tenant/tenantInbox.ts` | `mistri check --routes --app .` |
-| Command effects: `post(...)` and `send(...)` | Served; each delivery runs as the tenant it was written for | `tenant/tenantFeatureEffects.ts` | `mistri migrate status --app . --commands commands.ts` |
-| Hand-written `defineInbound` | Refused: "inbound endpoints are not served on a tenant App: a delivery has no tenant to act for." | `tenant/tenantJobs.ts` | `mistri check --app . --jobs jobs.mjs` |
-| An [integration's](/docs/integrations/) webhooks | Served at `/api/inbound/<name>/<tenant>`, verified with that tenant's secret | `tenant/tenantIntegrations.ts` | `mistri check --app . --jobs jobs.mjs` |
-| An integration's secrets | Per tenant, sealed under `MISTRI_SECRETS_KEY` | `tenant/tenantIntegrations.ts` | `mistri check --app . --jobs jobs.mjs` |
-| Mail in and out (`mail: { receive, send, links }`) | Served through the jobs module; each message in the tenant its address names ([tenant mail](/docs/tenant-mail/)) | `tenant/tenantJobs.ts` | `mistri check --app . --jobs jobs.mjs` |
-| Jobs at times, timers, workflows, flows from rows | Per tenant: `realm: 'tenant'` runs once per active tenant, `'platform'` once | `tenant/tenantJobs.ts` | `mistri check --app . --jobs jobs.mjs` |
-| The [App API](/docs/app-api/)'s event feed (`GET /$events`) | Refused, [`api-event-unsupported`](/docs/check-codes/#api-event-unsupported): "A tenant App delivers its events through webhooks." | `api/apiEventFeed.ts` | `mistri check --app .` |
-| The App API's generic writes | Not served in a tenant App; commands only ([what each kind of App can do](/docs/row-access/#what-each-kind-of-app-can-do)) | `api/apiGenericWrites.ts` | `mistri check --app .` |
-| The App's MCP (`--app-mcp`) | Served; each token binds one membership | `tenant/tenantAuthenticatedHttp.ts` | `mistri --app . --policy policy.mjs --app-mcp` |
+| Feature                                                          | In a tenant App                                                                                                                    | Where it is decided                 | Try it                                                 |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------ |
+| Record history, `activity()` feeds, notifications and their mail | Per tenant: the tenant whose record it is                                                                                          | `tenant/tenantInbox.ts`             | `mistri check --routes --app .`                        |
+| Command effects: `post(...)` and `send(...)`                     | Served; each delivery runs as the tenant it was written for                                                                        | `tenant/tenantFeatureEffects.ts`    | `mistri migrate status --app . --commands commands.ts` |
+| Hand-written `defineInbound`                                     | Refused: "inbound endpoints are not served on a tenant App: a delivery has no tenant to act for."                                  | `tenant/tenantJobs.ts`              | `mistri check --app . --jobs jobs.mjs`                 |
+| An [integration's](/docs/integrations/) webhooks                 | Served at `/api/inbound/<name>/<tenant>`, verified with that tenant's secret                                                       | `tenant/tenantIntegrations.ts`      | `mistri check --app . --jobs jobs.mjs`                 |
+| An integration's secrets                                         | Per tenant, sealed under `MISTRI_SECRETS_KEY`                                                                                      | `tenant/tenantIntegrations.ts`      | `mistri check --app . --jobs jobs.mjs`                 |
+| Mail in and out (`mail: { receive, send, links }`)               | Served through the jobs module; each message in the tenant its address names ([tenant mail](/docs/tenant-mail/))                   | `tenant/tenantJobs.ts`              | `mistri check --app . --jobs jobs.mjs`                 |
+| Jobs at times, timers, workflows, flows from rows                | Per tenant: `realm: 'tenant'` runs once per active tenant, `'platform'` once                                                       | `tenant/tenantJobs.ts`              | `mistri check --app . --jobs jobs.mjs`                 |
+| The [App API](/docs/app-api/)'s event feed (`GET /$events`)      | Refused, [`api-event-unsupported`](/docs/check-codes/#api-event-unsupported): "A tenant App delivers its events through webhooks." | `api/apiEventFeed.ts`               | `mistri check --app .`                                 |
+| The App API's generic writes                                     | Not served in a tenant App; commands only ([what each kind of App can do](/docs/row-access/#what-each-kind-of-app-can-do))         | `api/apiGenericWrites.ts`           | `mistri check --app .`                                 |
+| The App's MCP (`--app-mcp`)                                      | Served; each token binds one membership                                                                                            | `tenant/tenantAuthenticatedHttp.ts` | `mistri --app . --policy policy.mjs --app-mcp`         |
 
 CSV import (the owner injected; a file cannot name a tenant), custom
 components and signed-in forms work inside the tenant whose rows they touch. A

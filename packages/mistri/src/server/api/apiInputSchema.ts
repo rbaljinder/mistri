@@ -267,7 +267,7 @@ function scalarSchema(
   if (field.type === 'files' || field.type === 'signature') {
     const id = Object.freeze({ type: 'string', pattern: STAGED_FILE_ID.source });
     const held =
-      `Sent first to POST /api/commands/files as { command, field: ${quoted(field.name)}, file: { name, type, data } } (the bytes ` +
+      `Sent first to POST /api/commands/files as { command, field: ${quoted(path)}, file: { name, type, data } } (the bytes ` +
       `base64), and named here by the id it answers: usable once, by whoever sent it, within a day. Each lands in ${quoted(field.from)}.`;
     if (field.type === 'signature') return described(required ? id : optionalScalar(id), [`A signature, a PNG picture. ${held}`, ...notes]);
     const list = Object.freeze({ type: 'array', items: id, uniqueItems: true, minItems: field.min ?? 1, maxItems: field.max });
@@ -291,7 +291,8 @@ function listSchema(fields: readonly Field[], within: string, undescribed: ApiIn
     const when = condition === undefined ? [] : [`Asked only where the record meets: ${condition}.${needed ? ' Required there.' : ''}`];
     try {
       if (field.type === 'group') {
-        const members = listSchema(field.fields, path, undescribed);
+        // A row's fields are named as their held files are (`attachments[].file`): one path for every row.
+        const members = listSchema(field.fields, field.repeat ? `${path}[]` : path, undescribed);
         const full = field.fields.some((member) => (member as { required?: true }).required === true);
         const notes = field.help ? [field.help] : [];
         if (field.repeat) {

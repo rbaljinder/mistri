@@ -29,6 +29,7 @@ import { parseTrustedProxies } from '../../packages/engine/src/server/http/trust
 import { provisionPostgresLiveChange } from '../../packages/mistri/src/adapters/live/postgresLiveChange.js';
 import { provisionSqliteLiveChange } from '../../packages/mistri/src/adapters/live/sqliteLiveChange.js';
 import { provisionSqliteBranding, writeSqliteBranding } from '../../packages/mistri/src/adapters/branding/sqliteBranding.js';
+import { settingsMount } from '../../packages/engine/src/shared/mount.js';
 import { parseTestApp } from './commandCatalog.js';
 import { openTenantEngine, type TenantDialect, type TenantEngine } from './tenantDialects.js';
 
@@ -77,8 +78,12 @@ export interface TenantPublicFormOptions {
       whose choice reads it; live sync's change store is provisioned, so each dealer's choices are kept until a row of
       theirs changes. The App does not ask for live sync. */
   readonly publicReads?: true;
-  /** Each tenant may name itself (`branding.allow: ['name']`) and north has: "North Motors Co" (SQLite only). */
+  /** Each tenant may brand itself (its name, logo, accent, radius and density) and north has named itself "North Motors Co" (SQLite only). */
   readonly tenantBranding?: true;
+  /** The App served at the root, as `mistri tenant` serves its one App: a form's page is `/form/{key}`. */
+  readonly atRoot?: true;
+  /** A public command page, `lobby`, that runs `apply` (with `publicReads`, it reads `make` too). */
+  readonly publicPage?: true;
   /** `--trust-proxy`: the ranges whose X-Forwarded-For names a visitor on the public doors. */
   readonly trustedProxies?: readonly string[];
 }
@@ -107,13 +112,13 @@ export interface TenantPublicForms {
 /** The suite's own PostgreSQL database: a suffix ending in a UUID, dropped by the suite when it ends. */
 export const publicFormsDatabase = () => `tenant_public_forms_${randomUUID().replaceAll('-', '')}`;
 
-async function portFor() {
-  const server = createServer();
+/* The front listener holds its port from the start: the configuration names the origin before the server is built,
+   and a port asked for, let go and taken again later could meanwhile go to another file in the parallel lane. */
+async function listenFirst(server: ReturnType<typeof createServer>) {
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('No port.');
-  await new Promise<void>((resolve) => server.close(() => resolve()));
   return address.port;
 }
 
@@ -168,7 +173,7 @@ export async function openTenantPublicForms(
       db.close();
     }
   }
-  const port = await portFor(),
+  const port = await listenFirst(front),
     origin = `http://127.0.0.1:${port}`;
   const loaded: LoadedApp = {
     path: join(directory, 'app.ts'),
@@ -185,7 +190,7 @@ export async function openTenantPublicForms(
           lead: { access: 'write', owner: 'tenant' },
           intake_submission: { access: 'write', owner: 'platform' },
         },
-        ...(options.tenantBranding ? { branding: { allow: ['name'], editors: ['staff'] } } : {}),
+        ...(options.tenantBranding ? { branding: { allow: ['name', 'logo', 'accent', 'radius', 'density'], editors: ['staff'] } } : {}),
         auth: {
           store: join(directory, 'auth.db'),
           signUp: 'open',
@@ -205,6 +210,18 @@ export async function openTenantPublicForms(
                 quote: { kind: 'form', label: 'Ask for a quote', public: true, command: { id: 'quote', version: 1, input: quoteInput } },
                 // A visitor names a make the dealer lacks: a write to a choice table through the deployment's writer.
                 suggest: { kind: 'form', label: 'Suggest a make', public: true, command: { id: 'suggest', version: 1, input } },
+              }
+            : {}),
+          ...(options.publicPage
+            ? {
+                lobby: {
+                  kind: 'page',
+                  label: 'Lobby',
+                  component: { id: 'page-lobby', module: './pages/lobby.page.tsx', kind: 'page' },
+                  reads: options.publicReads ? ['make'] : [],
+                  commands: ['apply'],
+                  public: true,
+                },
               }
             : {}),
           draft: {
@@ -330,6 +347,7 @@ export async function openTenantPublicForms(
     auth,
     browser: true,
     bound: { host: '127.0.0.1', port, allowedHosts: [NORTH_HOST] },
+    ...(options.atRoot ? { mount: settingsMount([APP_ID], {}) } : {}),
     ...(options.trustedProxies ? { trustedProxies: parseTrustedProxies(options.trustedProxies).ranges } : {}),
     enrollment: {
       policy: defineAppTenantPolicy({
@@ -365,8 +383,6 @@ export async function openTenantPublicForms(
     }
     owner!.server.emit('request', req, res);
   });
-  front.listen(port, '127.0.0.1');
-  await once(front, 'listening');
   const call: TenantPublicForms['call'] = (path, init = {}) =>
     new Promise((resolve, reject) => {
       const host = init.host ?? `127.0.0.1:${port}`;

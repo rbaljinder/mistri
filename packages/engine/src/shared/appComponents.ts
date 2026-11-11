@@ -512,9 +512,12 @@ const words = (raw: unknown): raw is string[] => Array.isArray(raw) && raw.every
 export function parsePage(raw: Record<string, unknown>, at: string): PageDecl {
   const component = parseComponentDecl(raw.component, `${at}, "component"`, 'page');
   const reads = raw.reads;
-  if (!words(reads) || !reads.length) {
+  /* `reads: []` is a page that says it reads nothing (a welcome page, one
+     that only runs commands): what it declares is still checked against what
+     its module reads. Only a missing or malformed list is refused. */
+  if (!words(reads)) {
     throw new Error(
-      `[page-reads] ${at} has no "reads": the resources the page reads — reads: ['pick_list', 'order_line']. A page reads nothing it does not declare.`,
+      `[page-reads] ${at} has no "reads": the resources the page reads — reads: ['pick_list', 'order_line'], or reads: [] for none. A page reads nothing it does not declare.`,
     );
   }
   const commands = raw.commands === undefined ? [] : raw.commands;

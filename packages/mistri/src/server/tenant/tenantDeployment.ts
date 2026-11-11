@@ -56,6 +56,7 @@ import {
   type TenantIntakeSubmission,
 } from './tenantIntake.js';
 import { tenantPublicForms } from './tenantIntakeModel.js';
+import { tenantPublicPages } from './tenantIntakePages.js';
 import { createAdmissionCache } from './tenantAdmissionCache.js';
 import {
   bindPublicReadRuntime,
@@ -450,7 +451,7 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
         resultReferences,
         now,
       });
-    } else if (tenantPublicForms(requests.app).size) throw new Error();
+    } else if (tenantPublicForms(requests.app).size || tenantPublicPages(requests.app).size) throw new Error();
     // A visitor's reads over the same genuine reader, under their own owner:
     // exactly when the App opens resources to visitors.
     let publicReads: ReturnType<typeof bindPublicReadRuntime> | undefined;

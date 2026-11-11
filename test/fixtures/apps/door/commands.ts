@@ -36,7 +36,7 @@ export const ask = defineCommand({
   read: ['make'],
   write: ['inquiry'],
   input: {
-    make: field.choice({ from: 'make', label: 'name' }),
+    make: field.choice({ from: 'make', labelColumn: 'name' }),
     color: field.text({ max: 20, label: 'Color' }),
   },
   output: shape({ reference: text({ pattern: publicReferencePattern('ASK') }) }),
@@ -55,7 +55,7 @@ export const enrol = defineCommand({
   read: ['make'],
   write: ['enrolment'],
   // The page draws its own select of the makes, from the rows served with this command (useCommand(...).choices).
-  input: { name: field.text({ max: 40 }), make: field.choice({ from: 'make', label: 'name' }) },
+  input: { name: field.text({ max: 40 }), make: field.choice({ from: 'make', labelColumn: 'name' }) },
   output: shape({ reference: text({ pattern: publicReferencePattern('ENR') }) }),
   async handle({ db }, input) {
     const reference = publicReference('ENR');

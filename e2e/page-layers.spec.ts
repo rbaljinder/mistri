@@ -74,6 +74,17 @@ test.describe('A free-form page and what it draws around itself', () => {
     expect(root!.height).toBeGreaterThanOrEqual(viewport.height);
   });
 
+  /* A field report: a param set with `push` made a second step of the walk, and the shell's sticky bar came over the bare page. */
+  test('a bare page draws no trail bar after a pushed param, and its own button takes the click', async ({ page }) => {
+    await page.goto(`${app.origin}/wall`);
+    await settled(page);
+    await page.getByRole('button', { name: 'Lay a brick' }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('brick')).toBe('red');
+    await expect(page.getByRole('button', { name: 'Brick red' })).toBeVisible();
+    await expect(page.locator('.crumbs-host, .crumbs')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Brick red' }).click();
+  });
+
   test('a page with no head starts at the top of the content pane', async ({ page }) => {
     await page.goto(`${app.origin}/hero`);
     await settled(page);
@@ -84,6 +95,11 @@ test.describe('A free-form page and what it draws around itself', () => {
 
   /* A field report: openPage loaded the App again, so a marker on the window was lost and the context ran once more. */
   test('openPage moves to another page in place: the document, and a marker on its window, are kept', async ({ page }) => {
+    const logged: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error' || message.type() === 'warning') logged.push(message.text());
+    });
+    page.on('pageerror', (error) => logged.push(error.message));
     await page.goto(`${app.origin}/hero`);
     await settled(page);
     await page.evaluate(() => {
@@ -93,6 +109,8 @@ test.describe('A free-form page and what it draws around itself', () => {
     await expect.poll(() => new URL(page.url()).pathname).toBe('/wall');
     await settled(page);
     expect(await page.evaluate(() => (window as unknown as { marker?: string }).marker)).toBe('kept');
+    // The report also had the console naming a chunk that was not there: the page's own part loads, or nothing is said.
+    expect(logged.filter((text) => /chunk|dynamically imported|Failed to fetch/i.test(text))).toEqual([]);
   });
 
   test('a plain link in a page takes the look’s link color', async ({ page }) => {

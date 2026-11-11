@@ -11,7 +11,7 @@ import { humanName } from '@mistriwork/engine/shared/model.js';
 import { isAppIcon } from '@mistriwork/engine/shared/appIcons.js';
 import { shell } from '../shellMode.js';
 import { findTable, openRecord } from '../core.js';
-import { findRecords, findableTables, type Findable } from './recordSearch.js';
+import { findAcross, searchedTables, type Findable } from './recordSearch.js';
 import { appRooms, isListRoom } from './appRooms.js';
 import { Icon } from './Icon.js';
 import { whenMenuChanges } from '../menu.js';
@@ -133,9 +133,19 @@ function kindWord(kind: string): string {
   }
 }
 
-function recordTables(): Findable[] {
+/** The tables the term is searched in: every list the reader's menu holds, up to the search's own ceiling (recordSearch.ts),
+    and how many past it are left out. */
+function recordTables(): { tables: Findable[]; left: number } {
   const app = shell().inApp() ? shell().app() : null;
-  return app ? findableTables(app) : [];
+  return app ? searchedTables(app) : { tables: [], left: 0 };
+}
+
+/** The hits one from each table in turn, so the few a palette shows are not the first tables' alone. */
+function interleaved<T>(lists: readonly (readonly T[])[], most: number): T[] {
+  const out: T[] = [];
+  for (let at = 0; out.length < most && lists.some((each) => at < each.length); at++)
+    for (const each of lists) if (at < each.length && out.length < most) out.push(each[at]);
+  return out;
 }
 
 export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: () => void }) {
@@ -180,27 +190,26 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
   useEffect(() => {
     const term = query.trim();
     const mine = ++recordToken.current;
-    const tables = recordTables();
+    const { tables } = recordTables();
     if (term.length < 2 || !tables.length) {
       setRecords({ term, items: [] });
       return;
     }
     const timer = setTimeout(
       () => {
-        void Promise.all(
-          tables.map(async (findable) =>
-            (await findRecords(findable, term, 3)).map((found): PaletteItem => ({
-              kind: 'record',
-              label: found.label,
-              search: '',
-              detail: `${humanName(findable.table.name)} · ${Object.values(found.key).join('/')}`,
-              icon: findable.room.icon as string | undefined,
-              run: found.open,
-            })),
-          ),
-        ).then((hits) => {
+        void findAcross(tables, term, 3).then((found) => {
           if (mine !== recordToken.current) return;
-          setRecords({ term, items: hits.flat().slice(0, 9) });
+          const hits = found.map((own, at) =>
+            own.map((each): PaletteItem => ({
+              kind: 'record',
+              label: each.label,
+              search: '',
+              detail: `${humanName(tables[at].table.name)} · ${Object.values(each.key).join('/')}`,
+              icon: tables[at].room.icon as string | undefined,
+              run: each.open,
+            })),
+          );
+          setRecords({ term, items: interleaved(hits, MOST.records) });
         });
       },
       prefill && query === prefill ? 0 : 180,
@@ -222,7 +231,8 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
      the box never named. Until the hits answer this text, "nothing matches"
      is not yet true either. */
   const hits = offeredChoices({ typed: term, asked: records.term, rows: records.items, label: (item) => item.label });
-  const settled = hits.answered || term.length < 2 || !recordTables().length;
+  const { tables: searched, left } = recordTables();
+  const settled = hits.answered || term.length < 2 || !searched.length;
   /* An App's rows stand in groups, each ranked within itself: where the reader was (only before they type — typing is
      asking for something else), the pages, what they can make, the commands, and the records the words found. A room
      they were just in is under Recent and not again under Pages. */
@@ -385,6 +395,13 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
                   </div>
                 ))}
         </div>
+        {inApp && left > 0 ? (
+          /* Said whether or not a word is typed, so it is there before the first record is asked for and nothing moves
+             when it is: a search past its ceiling is told as one, never mistaken for every list answering. */
+          <p className="palette-note" role="note">
+            {say('searchedSome', { searched: searched.length, total: searched.length + left })}
+          </p>
+        ) : null}
         {inApp ? (
           /* The keys, as marks: the box answers to them, and nobody is told so. Not read out: the combobox says it. */
           <div className="palette-foot" aria-hidden="true">

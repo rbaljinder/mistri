@@ -378,13 +378,30 @@ test(
       sql: "CREATE TABLE job(id INTEGER PRIMARY KEY, title TEXT NOT NULL); INSERT INTO job VALUES (1, 'Tune');",
       live: true,
     });
+    /* A stream is counted against its client from the moment it is admitted, but "200" is only the head: under load
+       the count the next request meets has been seen to lag. `hello` is written once the stream is attached and
+       open, so reading as far as it is the signal that the stream is held — a stream that ended instead says so
+       here, rather than as a 200 where the ninth was to be refused. */
     const open = async (client: string) => {
       const controller = new AbortController();
+      t.after(() => controller.abort());
       const response = await fetch(`${server.origin}/api/live?app=board`, {
         headers: { origin: server.origin, 'x-forwarded-for': client },
         signal: controller.signal,
       });
-      t.after(() => controller.abort());
+      if (response.status === 200) {
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        let seen = '';
+        const deadline = Date.now() + 15_000;
+        while (!seen.includes('event: hello')) {
+          assert.ok(!seen.includes('event: end'), `a stream for ${client} ended: ${seen}`);
+          assert.ok(Date.now() < deadline, `no hello for ${client} within 15 s: ${seen}`);
+          const { value, done } = await reader.read();
+          assert.ok(!done, `the stream for ${client} closed before hello: ${seen}`);
+          seen += decoder.decode(value, { stream: true });
+        }
+      }
       return response.status;
     };
     // Nine visitors, one stream each: nine streams, where the proxy's one address used to hold eight of them.

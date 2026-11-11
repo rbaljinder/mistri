@@ -30,6 +30,8 @@ const deny = (): never => {
 };
 /** A denial that tells the operator, never the visitor, which write it refused. */
 const refused = (reason: string): AppAccessDenied => recordRefusalCause(new AppAccessDenied(), reason);
+/** What a visitor is told when a public command's handler removes a row. */
+export const PUBLIC_REMOVAL = 'A public submission cannot delete a record: this command removes one, and only a signed-in command may.';
 export interface TenantCommandRecords {
   readonly records: WriteTransaction;
   readonly journal?: CommandJournal;
@@ -312,8 +314,14 @@ export async function runTenantCommandTransaction<T>(
     remove: (input) =>
       invoke(input, async (value) => {
         const table = authorization.table(value.table, true);
+        /* Said to the visitor too, in words that name the delete and not the table: "not available to this account"
+           sent a handler's author looking at grants when it was the removal that was refused (a field report).
+           `mistri check` refuses a public command whose handler it sees remove a row ([public-command-remove]). */
         if (!place.removes)
-          throw refused(`a public submission removes no ${value.table} row: it may insert, and update its tenant's declared rows`);
+          throw recordRefusalCause(
+            new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, undefined, PUBLIC_REMOVAL),
+            `a public submission removes no ${value.table} row: it may insert, and update its tenant's declared rows`,
+          );
         keyFor(table, value.key);
         const own = value.table === authorization.command.target && !creating(value.key);
         if (own) {
@@ -358,6 +366,10 @@ export async function runTenantCommandTransaction<T>(
               : {}),
             // Held files are kept in this place's own journal store, under the same fence as a commit.
             ...heldFileMethods(invoke, journal.stage?.bind(journal), journal.takeStaged?.bind(journal)),
+            // A command's audited reads are written in this place's store too, kept or rolled back with its commit.
+            ...(journal.appendReadAudit
+              ? { appendReadAudit: (rows) => invoke({ rows }, (input) => journal.appendReadAudit!(input.rows)) }
+              : {}),
           }),
         }
       : {}),

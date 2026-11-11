@@ -73,6 +73,8 @@ import { commandEventsAppended } from '../events/commandEventSignal.js';
 import { nextPostgresCommandNumber, provisionPostgresCommandSequences } from './postgresCommandSequences.js';
 import { provisionPostgresCommandStaging, stagePostgresFile, takePostgresStaged } from './postgresCommandStaging.js';
 import type { StagedFileRow, StagedLimits, StagedTake } from './commandStaging.js';
+import { appendPostgresReadAudits } from '../readAudit/postgresReadAudit.js';
+import type { ReadAuditRow } from '../readAudit/readAudit.js';
 
 /** Explicit maintenance operation. Never called implicitly when opening an App.
  * No journal gets version 1; any other layout is refused, not altered. */
@@ -319,6 +321,19 @@ export function createPostgresCommandJournal(client: PgQuery, operations: Transa
         validText(input.appId, 'application', 128);
         if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
         return takePostgresStaged(client, input.appId, namespace, input.take);
+      }),
+    /* One INSERT on the owner's transaction, so the rows commit or roll back with the command. A row of another App,
+       or of another tenant than the one this journal is bound to, is refused. */
+    appendReadAudit: (rows: readonly ReadAuditRow[]) =>
+      invoke({ rows }, async (input) => {
+        for (const row of input.rows)
+          if (
+            (member && row?.app !== member.appId) ||
+            (appScope && row?.app !== appScope.appId) ||
+            (bound && row?.tenant !== bound.tenantId)
+          )
+            return invalid();
+        await appendPostgresReadAudits(client, input.rows);
       }),
     /* No advisory lock and no savepoint probe (which proves a transaction
        block for the lock's sake): a new key is the common case, and a

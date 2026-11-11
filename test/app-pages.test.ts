@@ -17,6 +17,7 @@ import { describe, test, type TestContext } from 'node:test';
 import { connect } from '../packages/engine/src/adapters/connect.js';
 import type { AppHost } from '../packages/mistri/src/server/app/apps.js';
 import { astParser, pageFiles, placePages, readPageFiles, scanPageSource } from '../packages/mistri/src/server/app/appPages.js';
+import { lintComponents, pageManifestsOf } from '../packages/mistri/src/server/app/componentLint.js';
 import { checkPageLoaders } from '../packages/mistri/src/server/app/pageLoaderCheck.js';
 import { defineLoader, defineLoaders, LOADER_RESULT_MOST, type PageLoader } from '../packages/mistri/src/server/commands/pageLoaders.js';
 import { count, max } from '../packages/mistri/src/server/commands/commandDb.js';
@@ -341,7 +342,8 @@ export default definePage({ label: String(typeof process === 'object' && process
   });
 
   test('page-reads, page-params, page-commands, page-public, page-coverage: what the page declares, held to the App', () => {
-    assert.throws(() => parse(views({ board: { ...APP.views.board, reads: [] } })), /\[page-reads\]/);
+    const { reads: _reads, ...unread } = APP.views.board;
+    assert.throws(() => parse(views({ board: unread })), /\[page-reads\]/);
     assert.throws(() => parse(views({ board: { ...APP.views.board, params: ['period'] } })), /\[page-params\]/);
     assert.throws(() => parse(views({ settle: { ...APP.views.settle, commands: ['refund'] } })), /\[page-commands\].*"refund"/);
     assert.throws(
@@ -365,6 +367,52 @@ export default definePage({ label: String(typeof process === 'object' && process
       () => parse(views({ settle: { ...APP.views.settle, roles: ['reader'] } })),
       /\[page-coverage\].*runs "settle", which no role it is offered to is granted/,
     );
+  });
+
+  test('page-reads: `reads: []` is a page that reads nothing, and is held to it like any other list (a field report)', () => {
+    const welcome = { kind: 'page', label: 'Welcome', component: component('welcome'), reads: [] };
+    const app = parse({ ...views({ welcome }), nav: [...APP.nav, 'welcome'] });
+    const view = app.views.welcome;
+    assert.ok('sections' in view && view.page);
+    assert.deepEqual(view.page.reads, []);
+  });
+
+  test('page-unlinked: a `nav: false` page is served, and check warns only when no source links to it (a field report)', async (t) => {
+    /* Left out of every menu, the page was refused as "referenced by nothing" though another page opened it. */
+    const hidden = { kind: 'page', label: 'Hidden', component: component('hidden'), reads: ['desk'] };
+    const app = parse(views({ hidden }));
+    assert.ok('sections' in app.views.hidden && app.views.hidden.page);
+    const manifests = pageManifestsOf(app);
+    assert.equal(manifests.get('page-hidden')?.unplaced, true);
+    assert.equal(manifests.get('page-board')?.unplaced, undefined, 'a page in the menu is placed');
+    assert.equal(manifests.get('page-lobby')?.unplaced, undefined, 'a public page is opened at its address');
+    const lint = async (board: string) => {
+      const dir = mkdtempSync(join(tmpdir(), 'mistri-unlinked-'));
+      t.after(() => rmSync(dir, { recursive: true, force: true }));
+      mkdirSync(join(dir, 'pages'));
+      writeFileSync(join(dir, 'pages', 'board.page.tsx'), board);
+      writeFileSync(join(dir, 'pages', 'hidden.page.tsx'), 'export default () => <b>Hidden</b>;\n');
+      const entries = { 'page-board': { sources: ['pages/board.page.tsx'] }, 'page-hidden': { sources: ['pages/hidden.page.tsx'] } };
+      const only = new Map([...manifests].filter(([id]) => id in entries));
+      return lintComponents(dir, { entries } as never, only);
+    };
+    const unlinked = (await lint('export default () => <b>Board</b>;\n')).warnings.filter((w) => w.text.includes('[page-unlinked]'));
+    assert.equal(unlinked.length, 1);
+    assert.match(unlinked[0].text, /"hidden" is in no menu.*openPage\('hidden'\)/);
+    assert.equal(unlinked[0].file, 'pages/hidden.page.tsx');
+    for (const link of [
+      "import { useNavigate } from '@mistriwork/mistri/page';\nexport default () => { const nav = useNavigate(); return <a onClick={() => nav.openPage('hidden', {})}>Go</a>; };\n",
+      "import { pageHref } from '@mistriwork/mistri/page';\nexport default () => <a href={pageHref(`hidden`)}>Go</a>;\n",
+    ]) {
+      const { warnings } = await lint(link);
+      assert.deepEqual(
+        warnings.filter((w) => w.text.includes('[page-unlinked]')),
+        [],
+        link,
+      );
+    }
+    const named = (await lint('export default ({ nav, to }) => <a onClick={() => nav.openPage(to)}>Go</a>;\n')).warnings;
+    assert.match(named.find((w) => w.text.includes('[page-unlinked]'))?.text ?? '', /a link named by an expression is not followed/);
   });
 
   test("page-forms: a page opens the App's form views; a signed-in one it names needs no menu entry of its own", () => {

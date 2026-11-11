@@ -15,6 +15,7 @@ import {
   writeSqliteBranding,
 } from '../packages/mistri/src/adapters/branding/sqliteBranding.js';
 import type { AppDef } from '../packages/mistri/src/shared/app.js';
+import { parseBrandingDeclaration } from '../packages/mistri/src/shared/tenantBranding.js';
 import { createTenantBrandingService } from '../packages/mistri/src/server/tenant/tenantBranding.js';
 import {
   NORTH,
@@ -27,6 +28,8 @@ import {
   UNKNOWN,
   via,
 } from './support/tenantPublicForms.js';
+
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
 const open = (t: Parameters<typeof openTenantPublicForms>[0]) =>
   openTenantPublicForms(t, 'sqlite', publicFormsDatabase(), { tenantBranding: true });
@@ -127,4 +130,55 @@ test("a tenant's saved name never asks a signed-out visitor for a session: its f
     assert.equal(sent.status, 200, sent.text);
     assert.deepEqual(Object.keys(sent.body).sort(), ['receipt', 'reference']);
   }
+});
+
+/* The same report, on the host `mistri tenant` serves — its one App at the root, so a form's page is
+   `/form/{key}` — and with a whole look saved, logo and favicon included: the page, the form, the logo the page
+   names and a submission all answer a visitor carrying no session. */
+test("a tenant's whole saved look, at the root, never asks a signed-out visitor for a session", async (t) => {
+  const f = await openTenantPublicForms(t, 'sqlite', publicFormsDatabase(), { tenantBranding: true, atRoot: true });
+  const at = <T>(work: (db: DatabaseSync) => T) => {
+    const db = new DatabaseSync(f.engine.path!);
+    try {
+      return work(db);
+    } finally {
+      db.close();
+    }
+  };
+  const declared = parseBrandingDeclaration(
+    { allow: ['name', 'logo', 'accent', 'radius', 'density'], editors: ['staff'] },
+    { ui: {}, auth: { rows: 'tenant', roles: { staff: { realm: 'tenant', read: true } } } } as never,
+    'branding',
+  );
+  const service = createTenantBrandingService({
+    app: { id: 'yard', name: 'Yard', branding: declared } as unknown as AppDef,
+    store: {
+      read: async (query) => at((db) => readSqliteBranding(db, query)),
+      logo: async (query) => at((db) => readSqliteBrandingLogo(db, query)),
+      write: async (write) => at((db) => writeSqliteBranding(db, write)),
+    },
+    cache: new MemoryCacheStore(),
+  });
+  const png = PNG.toString('base64');
+  await service.save(
+    'south',
+    {
+      value: { name: 'South Wheels Co', accent: { light: '#1d4ed8', dark: '#93c5fd' }, radius: '4px', density: 'compact' },
+      logo: png,
+      darkLogo: png,
+      favicon: png,
+    },
+    'south-owner',
+  );
+  const page = await f.call(`/form/apply${via(SOUTH)}`);
+  assert.equal(page.status, 200, page.text);
+  assert.match(page.text, /South Wheels Co/);
+  const form = await f.call(`/api/forms/apply${via(SOUTH)}`);
+  assert.equal(form.status, 200, form.text);
+  assert.equal(form.body.app.name, 'South Wheels Co');
+  const logo = /\/api\/branding\/logo\/[0-9a-f]{64}/.exec(JSON.stringify(form.body))?.[0];
+  assert.ok(logo, "the form names its tenant's logo");
+  assert.equal((await f.call(logo)).status, 200);
+  const sent = await f.call(`/api/forms/apply${via(SOUTH)}`, { body: { input: { name: 'Avery' }, submission: randomUUID() } });
+  assert.equal(sent.status, 200, sent.text);
 });

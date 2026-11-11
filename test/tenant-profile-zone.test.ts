@@ -3,27 +3,25 @@
  * zone their tenant's profile row holds, though no role is granted that resource and the scope catalog does not hold
  * it (the platform reads that one column itself, as it reads the row's name). A null, unknown or empty zone is the
  * App's own, and a column the profile does not have is refused by `zoneColumnProblem`.
+ *
+ * On SQLite always and on PostgreSQL where `TABLEWALK_TEST_PG` names a server: the platform's read of the profile
+ * column is its own statement on the tenant source (readTenantZone), and each engine spells the catalog it reads.
  */
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
-import { test, type TestContext } from 'node:test';
-import { TransactionOperations } from '../packages/engine/src/adapters/adapter.js';
-import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/commands/commandJournal.js';
+import { describe, test, type TestContext } from 'node:test';
 import type { VerifiedSessionInstance } from '../packages/mistri/src/server/auth/auth.js';
 import { defineAppTenantPolicy } from '../packages/mistri/src/server/policy/appTenantPolicy.js';
 import { createTenantEnrollment } from '../packages/mistri/src/server/tenant/tenantEnrollment.js';
 import { createTenantHttpServer } from '../packages/mistri/src/server/tenant/tenantHttp.js';
-import { createSqliteTenantAdministration, provisionSqliteTenantStore } from '../packages/mistri/src/server/tenant/tenantStore.js';
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { zoneColumnProblem } from '../packages/mistri/src/server/app/readerZone.js';
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { parseTestApp } from './support/commandCatalog.js';
+import { dropDedicatedPostgresDatabase, openTenantEngine, TENANT_DIALECTS, type TenantDialect } from './support/tenantDialects.js';
 
 type Answer = { status: number; text: string; body: Record<string, unknown> };
 type Context = { tabId: string; context: string; accountId: string; tenantId: string; revision: number };
@@ -85,48 +83,49 @@ const policy = defineAppTenantPolicy({
 
 /* Each tenant has a ticket opened on Chicago's today and one on Kiritimati's
    (a day apart for most of every day); `today` picks the tenant's own. */
-async function fixture(t: TestContext) {
-  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-profile-zone-'));
-  const path = join(directory, 'business.db'),
-    db = new DatabaseSync(path);
-  t.after(() => {
-    db.close();
-    rmSync(directory, { recursive: true, force: true });
-  });
+async function fixture(t: TestContext, dialect: TenantDialect) {
+  const suffix = `pzone_${randomUUID().replaceAll('-', '')}`;
   const chicago = dayIn(ZONES.north),
     kiritimati = dayIn(ZONES.south);
-  db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
+  const tables = `
     CREATE TABLE customer (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, timezone TEXT);
     CREATE TABLE ticket (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, opened_on DATE NOT NULL);
     INSERT INTO customer VALUES ('north', 'North', '${ZONES.north}'), ('south', 'South', '${ZONES.south}'),
       ('west', 'West', 'Not/AZone'), ('empty', 'Empty', ''), ('none', 'None', NULL);
     INSERT INTO ticket VALUES
       ('north-chi', 'north', '${chicago}'), ('north-kir', 'north', '${kiritimati}'),
-      ('south-chi', 'south', '${chicago}'), ('south-kir', 'south', '${kiritimati}');`);
-  provisionSqliteTenantStore(path, binding);
-  migrateSqliteCommandJournal(path);
-  const operations = new TransactionOperations();
-  db.exec('BEGIN IMMEDIATE');
-  const admin = createSqliteTenantAdministration(db, operations, binding);
-  for (const tenantId of ['north', 'south', 'west', 'empty', 'none']) {
-    await admin.putTenant({ tenantId, status: 'active', expectedVersion: null });
-    await admin.putMembership({
-      tenantId,
-      accountId: 'eve',
-      membershipId: `${tenantId}-eve`,
-      status: 'active',
-      roles: ['agent'],
-      validUntil: Date.now() + 3_600_000,
-      expectedVersion: null,
-    });
-  }
-  await operations.finish();
-  db.exec('COMMIT');
+      ('south-chi', 'south', '${chicago}'), ('south-kir', 'south', '${kiritimati}');`;
+  const engine = await openTenantEngine(dialect, {
+    tables: ['customer', 'ticket'],
+    sqlite: `PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;${tables}`,
+    postgres: tables,
+    database: suffix,
+  });
+  t.after(async () => {
+    await engine.close().catch(() => {});
+    if (dialect === 'postgres') await dropDedicatedPostgresDatabase(suffix);
+  });
+  await engine.provisionStore(binding);
+  await engine.migrateCommandJournal();
+  await engine.maintenance(binding, async (admin) => {
+    for (const tenantId of ['north', 'south', 'west', 'empty', 'none']) {
+      await admin.putTenant({ tenantId, status: 'active', expectedVersion: null });
+      await admin.putMembership({
+        tenantId,
+        accountId: 'eve',
+        membershipId: `${tenantId}-eve`,
+        status: 'active',
+        roles: ['agent'],
+        validUntil: Date.now() + 3_600_000,
+        expectedVersion: null,
+      });
+    }
+  });
   const enrollment = await createTenantEnrollment<IncomingMessage>({
     app,
     pages: [],
     policy,
-    source: { ...binding.source, existingPath: path },
+    source: { ...binding.source, ...(dialect === 'postgres' ? { url: engine.url } : { existingPath: engine.path }) },
     deployment: 'desk-profile-zone-deployment',
     roles: ['agent'],
     commands: { registry },
@@ -202,39 +201,10 @@ async function fixture(t: TestContext) {
       input: { id },
     });
     assert.equal(reply.status, 200, reply.text);
-    return (db.prepare('SELECT opened_on FROM ticket WHERE id = ?').get(id) as { opened_on: string }).opened_on;
+    return String((await engine.get('SELECT CAST(opened_on AS TEXT) AS opened_on FROM ticket WHERE id = ?', [id]))?.opened_on);
   };
   return { open, served, today, stamp, read, chicago, kiritimati };
 }
-
-test("each tenant's person reads their days in the zone their profile row holds, with no grant on the profile", async (t) => {
-  const f = await fixture(t);
-  const north = await f.open('north'),
-    south = await f.open('south');
-  const expected = (tenant: 'north' | 'south', zone: string) =>
-    [`${tenant}-chi`, `${tenant}-kir`].filter((id) => (id.endsWith('chi') ? f.chicago : f.kiritimati) === dayIn(zone)).sort();
-  for (let round = 0; round < 2; round++) {
-    const northUi = await f.served(north);
-    assert.deepEqual([northUi.timezone, northUi.clockZone], [ZONES.north, OWN]);
-    assert.deepEqual(await f.today(south), expected('south', ZONES.south));
-    assert.equal((await f.served(south)).timezone, ZONES.south);
-    assert.deepEqual(await f.today(north), expected('north', ZONES.north));
-  }
-  assert.equal((await f.served(south)).clockZone, OWN, 'writes keep one clock whoever caused them');
-});
-
-test('a null, empty or unknown zone on the profile is the App’s own, silently', async (t) => {
-  const f = await fixture(t);
-  for (const tenant of ['west', 'empty', 'none']) assert.equal((await f.served(await f.open(tenant))).timezone, OWN, tenant);
-});
-
-test('the profile is not readable through the zone: no other column, and no grant is implied', async (t) => {
-  const f = await fixture(t);
-  const north = await f.open('north');
-  const reply = await f.read(north, 'customer');
-  assert.match(reply.text, /No table called/);
-  assert.doesNotMatch(reply.text, /America\/Chicago|North/);
-});
 
 test('check refuses a profile zone column the profile does not have, naming it', () => {
   const catalog = (columns: string[]): DatabaseSchema => ({
@@ -256,12 +226,44 @@ test('check refuses a profile zone column the profile does not have, naming it',
   assert.match(zoneColumnProblem(app, catalog(['id', 'name'])) ?? '', /"customer" has no column "timezone"/);
 });
 
-test("a tenant command's today() is the day of the profile's zone, the day the reads count", async (t) => {
-  const f = await fixture(t);
-  for (const tenant of ['north', 'south'] as const) {
-    const lease = await f.open(tenant);
-    assert.equal(await f.stamp(lease, `${tenant}-stamped`), dayIn(ZONES[tenant]), tenant);
-  }
-  // The same lease's list for today finds what it stamped.
-  assert.ok((await f.today(await f.open('south'))).includes('south-stamped'));
-});
+for (const { dialect, skip } of TENANT_DIALECTS)
+  describe(`a profile's zone on ${dialect}`, { skip }, () => {
+    test("each tenant's person reads their days in the zone their profile row holds, with no grant on the profile", async (t) => {
+      const f = await fixture(t, dialect);
+      const north = await f.open('north'),
+        south = await f.open('south');
+      const expected = (tenant: 'north' | 'south', zone: string) =>
+        [`${tenant}-chi`, `${tenant}-kir`].filter((id) => (id.endsWith('chi') ? f.chicago : f.kiritimati) === dayIn(zone)).sort();
+      for (let round = 0; round < 2; round++) {
+        const northUi = await f.served(north);
+        assert.deepEqual([northUi.timezone, northUi.clockZone], [ZONES.north, OWN]);
+        assert.deepEqual(await f.today(south), expected('south', ZONES.south));
+        assert.equal((await f.served(south)).timezone, ZONES.south);
+        assert.deepEqual(await f.today(north), expected('north', ZONES.north));
+      }
+      assert.equal((await f.served(south)).clockZone, OWN, 'writes keep one clock whoever caused them');
+    });
+
+    test('a null, empty or unknown zone on the profile is the App’s own, silently', async (t) => {
+      const f = await fixture(t, dialect);
+      for (const tenant of ['west', 'empty', 'none']) assert.equal((await f.served(await f.open(tenant))).timezone, OWN, tenant);
+    });
+
+    test('the profile is not readable through the zone: no other column, and no grant is implied', async (t) => {
+      const f = await fixture(t, dialect);
+      const north = await f.open('north');
+      const reply = await f.read(north, 'customer');
+      assert.match(reply.text, /No table called/);
+      assert.doesNotMatch(reply.text, /America\/Chicago|North/);
+    });
+
+    test("a tenant command's today() is the day of the profile's zone, the day the reads count", async (t) => {
+      const f = await fixture(t, dialect);
+      for (const tenant of ['north', 'south'] as const) {
+        const lease = await f.open(tenant);
+        assert.equal(await f.stamp(lease, `${tenant}-stamped`), dayIn(ZONES[tenant]), tenant);
+      }
+      // The same lease's list for today finds what it stamped.
+      assert.ok((await f.today(await f.open('south'))).includes('south-stamped'));
+    });
+  });
