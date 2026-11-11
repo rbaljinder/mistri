@@ -1905,7 +1905,11 @@ const Sections = memo(function Sections({
                 {section.title ?? (section.kind === 'branding' ? sayCopy('branding') : sayCopy('integrations'))}
               </h2>
             )}
-            {section.kind === 'branding' ? <BrandingForm /> : <IntegrationsForm />}
+            {section.kind === 'branding' ? (
+              <BrandingForm />
+            ) : (
+              <IntegrationsForm {...(section.integrations ? { only: section.integrations } : {})} />
+            )}
           </>
         );
       } else {

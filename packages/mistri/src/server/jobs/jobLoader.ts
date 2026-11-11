@@ -33,7 +33,12 @@ import {
   type AnyBusinessCommand,
   type BusinessCommandRegistry,
 } from '../commands/businessCommands.js';
-import { integrationCommandProblems, integrationNotifyProblems, integrationRoleProblems } from '../integrations/integrationChecks.js';
+import {
+  integrationCommandProblems,
+  integrationFormProblems,
+  integrationNotifyProblems,
+  integrationRoleProblems,
+} from '../integrations/integrationChecks.js';
 import { integrationEventCommands } from '../integrations/integrationDeclaration.js';
 import { serviceActor } from './jobAuthorization.js';
 import {
@@ -504,6 +509,7 @@ export async function prepareJobs(
     ...integrationCommandProblems(module.integrations, commands),
     ...integrationRoleProblems(module.integrations, module.principals, app),
     ...integrationNotifyProblems(module.integrations, app),
+    ...integrationFormProblems(module.integrations, app),
   ];
   if (integrationProblem) refuse(integrationProblem);
   // An integration's webhook is an inbound endpoint: its principal reads its command's footprint, as a defineInbound's does.

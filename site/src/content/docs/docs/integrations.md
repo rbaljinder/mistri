@@ -106,6 +106,10 @@ orders: { notify: [{ on: { changes: 'status' }, when: 'status = shipped', title:
 
 Add `integrationsForm('Integrations')` to a dashboard for the screen where an
 editor enters the secrets. It loads on demand and never shows a saved value.
+`integrations` narrows it to the ones named, in that order, for a settings page
+per integration: `integrationsForm('Payments', { integrations: ['stripe'] })`.
+Each must be one the jobs module lists. It narrows what the page shows, not who
+may read it.
 
 ## What core does
 

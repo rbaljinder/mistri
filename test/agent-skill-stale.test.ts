@@ -6,7 +6,7 @@
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { entryPoints, runAgent, staleSkillWarning } from '../packages/mistri/src/server/cli/agentInit.js';
@@ -99,6 +99,31 @@ describe('a stale agent skill', () => {
         assert.equal((JSON.parse(readFileSync(manifest, 'utf8')) as { mistri: string }).mistri, runtimeVersion());
         assert.equal(staleSkillWarning(project, runtimeVersion()), undefined);
       }
+    } finally {
+      rmSync(project, { recursive: true, force: true });
+    }
+  });
+
+  // A field report: --force on a copy it could not tell was stale answered "up to date" and wrote nothing.
+  test('--force rewrites a copy that is current, and says so', () => {
+    const project = mkdtempSync(join(tmpdir(), 'mistri-agent-force-'));
+    const readme = join(project, '.claude', 'skills', 'mistri', 'SKILL.md');
+    const said: string[] = [];
+    const init = (...flags: string[]) =>
+      runAgent(
+        ['init', '--dir', project, '--tool', 'claude', ...flags],
+        (text) => said.push(text),
+        () => {},
+      );
+    try {
+      assert.equal(init(), 0);
+      const before = statSync(readme).mtimeMs;
+      const until = Date.now() + 20;
+      while (Date.now() < until);
+      said.length = 0;
+      assert.equal(init('--force'), 0);
+      assert.match(said.join(''), /\.claude\/skills\/mistri \(claude\): updated \(--force\)/);
+      assert.ok(statSync(readme).mtimeMs > before, 'the files were written again');
     } finally {
       rmSync(project, { recursive: true, force: true });
     }

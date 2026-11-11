@@ -22,8 +22,8 @@ import { DashboardNote } from './DashboardNote.js';
 import { TimelineSection } from './PageTimeline.js';
 import type { HistoryApi } from './PageHistory.js';
 import type { FlowsApi } from './PageFlows.js';
-import { ListSection, RelatedCount, useRelatedCounts, type Counting } from './PageRelated.js';
-import { EmptyRun } from './PageEmptyRun.js';
+import { ListSection, RelatedCount, relatedDoor, useRelatedCounts, type Counting } from './PageRelated.js';
+import { EmptyRun, useStandings } from './PageEmptyRun.js';
 import { useMessageLanguage } from './useMessageLanguage.js';
 import { useTabFold } from './useTabFold.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
@@ -350,7 +350,10 @@ export function TabStrip({
 
 /** A run of lists as tabs: the names across the top, one table under them, fetched when opened. */
 function ListTabs({
-  items,
+  items: run,
+  plans,
+  base,
+  recordKey,
   entry,
   onTab,
   draw,
@@ -359,6 +362,9 @@ function ListTabs({
   pages,
 }: {
   items: Shown[];
+  plans: SectionPlan[];
+  base: TableMeta;
+  recordKey: Record<string, unknown>;
   entry: PageEntry;
   onTab: (tab: string | undefined) => void;
   draw: (item: Shown) => ReactNode;
@@ -368,6 +374,20 @@ function ListTabs({
   pages?: PageTab[];
 }) {
   useMessageLanguage();
+  const context = useContext(PageRenderContext);
+  /* A list stands in a strip as it stands outside one: its `when` unmet leaves it no tab, and one that hides while empty
+     has none until it has rows, unless the reader may add to it (a door is never taken away). A list the page is still
+     asking about is left out until it is known, so a tab arrives rather than goes. */
+  const hiding = (item: Shown) => item.section.kind === 'list' && item.section.emptyMode === 'hide';
+  const standing = useStandings(run, plans, base, recordKey, hiding);
+  const items = run.filter((item, i) => {
+    const hides = hiding(item);
+    if (standing[i] === 'gone') return false;
+    if (standing[i] === 'wait') return !item.section.when && !hides;
+    if (standing[i] === 'empty' && hides)
+      return Boolean(relatedDoor(item.section, base, recordKey, { preview: context.preview, actions: context.actions }).door);
+    return true;
+  });
   /* The token is the source's words (apps.ts keepAddresses), so an address names one tab in every language. */
   const named = (item: Shown) =>
     item.section.kind === 'history'
@@ -398,6 +418,7 @@ function ListTabs({
     ),
   }));
   const strip = withPageTabs(tabs, (i) => draw(items[i]), pages);
+  if (!strip.tabs.length) return null;
   return <TabStrip tabs={strip.tabs} name="Related lists" entry={entry} onTab={onTab} draw={strip.draw} scoped={scoped} />;
 }
 
@@ -562,8 +583,8 @@ export function Sections({
        place on the page, and a tab strip spans it whole. The Workbench's
        builder gives every list it adds a width, so there a width is not a
        placement anyone chose, and its lists keep the strip. */
-    /* A list that says what it does while empty (`empty: 'hide' | 'collapse'`) is a tab like any other: inside a strip
-       an empty list is neither hidden nor collapsed, its tab shows it and the strip already folds it. */
+    /* A list that says what it does while empty (`empty: 'hide' | 'collapse'`) is a tab like any other. The strip then
+       follows the list's own answers (ListTabs): `hide` leaves no tab while it has no rows, `collapse` keeps the tab. */
     const tabbed = (section: PageSection) => tabbedSection(section, inAppPage(), inferred);
     /* Outside a strip, such a list is left out or said in one line with its neighbours (PageEmptyRun.tsx). */
     const emptyable = (section: PageSection) =>
@@ -600,6 +621,9 @@ export function Sections({
             <ListTabs
               key={`tabs-${i}`}
               items={strip}
+              plans={plans}
+              base={base}
+              recordKey={key}
               entry={entry}
               onTab={onTab}
               draw={draw}

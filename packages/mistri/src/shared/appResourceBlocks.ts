@@ -1627,12 +1627,9 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
     }
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`${here} is not an object.`);
     const a = entry as Record<string, unknown>;
-    /* A command's button carries the command's own `when` (its registration says it once), so only a fixed update has one to write. */
     allowKeys(
       a,
-      a.command !== undefined && !derived
-        ? ['label', 'command', 'bulk', 'header', 'inputs', 'set', 'confirm', 'reason']
-        : ['label', 'command', 'set', 'when', 'confirm', 'bulk', 'header', 'reason', 'inputs', ...(derived ? ['labels', 'move'] : [])],
+      ['label', 'command', 'set', 'when', 'confirm', 'bulk', 'header', 'reason', 'inputs', ...(derived ? ['labels', 'move'] : [])],
       here,
       { enter: LATER.T8 },
     );
@@ -1665,10 +1662,14 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
           `${here} names an input component for "${unknown}", which is not one of the command's inputs (${command.input.map((field) => field.name).join(', ') || 'it has none'}).`,
         );
       }
-      /* A machine's verb is offered from the states that leave (the machine wrote that condition); any other button is offered where the command is. */
-      if (derived && a.when !== undefined && (typeof a.when !== 'string' || !a.when.trim()))
-        throw new Error(`${here} has a "when" that is not a condition.`);
-      const when = derived && a.when !== undefined ? (a.when as string).trim() : registeredCommand(command.id)?.when;
+      /* A machine's verb is offered from the states that leave (the machine wrote that condition). Any other button is
+         offered where the command is, narrowed by the action's own `when` where it has one: the command's says where it
+         may run, the action's where this button is worth drawing (a tenant's verbs that do not apply to it). */
+      if (a.when !== undefined && (typeof a.when !== 'string' || !a.when.trim()))
+        throw new Error(`${here} has a "when" that is not a condition like "status = new".`);
+      const offered = !derived && a.when !== undefined ? (a.when as string).trim() : undefined;
+      const registered = registeredCommand(command.id)?.when;
+      const when = derived && a.when !== undefined ? (a.when as string).trim() : offered ? andQuery(registered, offered) : registered;
       // A machine's verb said differently from different states (machineActions): carried as the machine wrote it.
       const labels = derived && Array.isArray(a.labels) ? (a.labels as Array<{ when: string; label: string }>) : undefined;
       const move = derived && isRecord(a.move) ? (a.move as { column: string; edges: Array<{ from: string; to: string }> }) : undefined;
@@ -1677,6 +1678,7 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
         label: a.label.trim(),
         command,
         ...(when === undefined ? {} : { when }),
+        ...(offered === undefined ? {} : { offered }),
         ...(labels ? { labels } : {}),
         ...(move ? { move } : {}),
         ...(a.bulk === undefined ? {} : { bulk: a.bulk as boolean }),

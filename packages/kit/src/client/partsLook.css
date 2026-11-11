@@ -1073,4 +1073,30 @@
     font-variant-caps: var(--part-chart-caps);
     letter-spacing: var(--part-chart-tracking);
   }
+  :root[data-parts~="kicker:ground"] .app-mode .form-page .eyebrow {
+    background: var(--part-kicker-ground);
+  }
+  :root[data-parts~="kicker:ink"] .app-mode .form-page .eyebrow {
+    color: var(--part-kicker-ink);
+  }
+  :root[data-parts~="kicker:edge"] .app-mode .form-page .eyebrow {
+    border-color: var(--part-kicker-edge);
+  }
+  :root[data-parts~="kicker:radius"] .app-mode .form-page .eyebrow {
+    border-radius: var(--part-kicker-radius);
+  }
+  :root[data-parts~="kicker:lift"] .app-mode .form-page .eyebrow {
+    box-shadow: var(--part-kicker-lift);
+  }
+  :root[data-parts~="kicker:face"] .app-mode .form-page .eyebrow {
+    font-family: var(--part-kicker-face);
+  }
+  :root[data-parts~="kicker:weight"] .app-mode .form-page .eyebrow {
+    font-weight: var(--part-kicker-weight);
+  }
+  :root[data-parts~="kicker:case"] .app-mode .form-page .eyebrow {
+    text-transform: var(--part-kicker-transform);
+    font-variant-caps: var(--part-kicker-caps);
+    letter-spacing: var(--part-kicker-tracking);
+  }
 }

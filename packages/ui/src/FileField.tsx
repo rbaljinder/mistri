@@ -8,10 +8,7 @@ import { useEffect, useRef, type ReactNode, type Ref } from 'react';
 import { Field } from './Field.js';
 import { frameOf, type FieldFrame } from './fieldFrame.js';
 
-export interface FileFieldProps extends FieldFrame {
-  /** The chosen file; null while there is none. Set it to null to clear the choice. */
-  value: File | null;
-  onChange: (file: File | null) => void;
+interface FileFieldBase extends FieldFrame {
   /** What the picker offers, as the input's `accept`: `.csv`, `text/csv`, `image/*`, separated by commas. */
   accept?: string;
   name?: string;
@@ -19,12 +16,34 @@ export interface FileFieldProps extends FieldFrame {
   inputRef?: Ref<HTMLInputElement>;
 }
 
+/**
+ * One file by default: `value` is the chosen File (null while there is none) and `onChange` hands up one. With `multiple`
+ * the picker takes several at once, `value` is a `File[]` (empty while there is none) and `onChange` hands up the whole
+ * choice, in the order the browser gives it; the input itself says how many ("3 files"), so a page need not.
+ */
+export type FileFieldProps = FileFieldBase &
+  (
+    | {
+        multiple?: false;
+        /** The chosen file; null while there is none. Set it to null to clear the choice. */
+        value: File | null;
+        onChange: (file: File | null) => void;
+      }
+    | {
+        multiple: true;
+        /** The chosen files; empty while there are none. Set it to `[]` to clear the choice. */
+        value: File[];
+        onChange: (files: File[]) => void;
+      }
+  );
+
 export function FileField(props: FileFieldProps): ReactNode {
   const own = useRef<HTMLInputElement | null>(null);
-  // The input keeps its own file, so a page that clears the value (null) has to clear it too.
+  // The input keeps its own files, so a page that clears the value (null, or an empty list) has to clear it too.
+  const cleared = props.multiple ? props.value.length === 0 : props.value === null;
   useEffect(() => {
-    if (props.value === null && own.current && own.current.value !== '') own.current.value = '';
-  }, [props.value]);
+    if (cleared && own.current && own.current.value !== '') own.current.value = '';
+  }, [cleared]);
   return (
     <Field {...frameOf(props)}>
       {(control) => (
@@ -40,7 +59,12 @@ export function FileField(props: FileFieldProps): ReactNode {
           name={props.name}
           accept={props.accept}
           disabled={props.disabled}
-          onChange={(e) => props.onChange(e.target.files?.[0] ?? null)}
+          multiple={props.multiple === true}
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            if (props.multiple === true) props.onChange(files);
+            else props.onChange(files[0] ?? null);
+          }}
         />
       )}
     </Field>

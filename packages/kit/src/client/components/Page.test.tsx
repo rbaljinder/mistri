@@ -183,7 +183,21 @@ const lease: TableMeta = {
     col('ends_on', 'DATE'),
   ] as TableMeta['columns'],
 };
-const tables: Record<string, TableMeta> = { customer, invoice, note, unit, lease };
+const attachment: TableMeta = {
+  id: 'attachment',
+  name: 'attachment',
+  schema: '',
+  isView: false,
+  indexed: ['id'],
+  columns: [
+    col('id', 'INTEGER', { primaryKey: true, nullable: false }),
+    col('customer_id', 'INTEGER'),
+    col('file_name', 'TEXT'),
+    col('kind', 'TEXT'),
+    col('content', 'BLOB'),
+  ] as TableMeta['columns'],
+};
+const tables: Record<string, TableMeta> = { customer, invoice, note, unit, lease, attachment };
 
 vi.mock('../core.js', () => {
   const core = {
@@ -537,21 +551,71 @@ test('a list with a width never joins a strip, even where the page asks for tabs
   expect(document.querySelector('.page-list.width-half')).not.toBeNull();
 });
 
-/* Inside a strip an empty list is neither hidden nor collapsed: its tab shows it, and the strip already folds it. */
-test('a list that hides when empty is still a tab of a strip, which is where an empty list stays', async () => {
-  appMode = true;
-  draw({
-    page: {
-      ...page,
-      listTabs: true,
-      sections: [
-        ...page.sections,
-        { kind: 'list' as const, from: 'invoice', title: 'Payoff quotes', columns: ['id'], emptyMode: 'hide' as const },
-      ],
-    },
+/* Inside a strip a list stands as it stands outside one: its `when` and `empty: 'hide'` are honored, so a tab
+   is never a heading over nothing (field report: an empty tab was shown whatever the record said). */
+describe('a list in a listTabs strip', () => {
+  const quotes = { kind: 'list' as const, from: 'invoice', title: 'Payoff quotes', columns: ['id'], emptyMode: 'hide' as const };
+  /* The page's own sections, then the list under test (section 7, planned as the page's lists are). */
+  const strip = (extra: Record<string, unknown> = {}) => ({
+    ...page,
+    listTabs: true,
+    sections: [...page.sections, { ...quotes, ...extra }],
   });
-  await screen.findByText('Harbour Freight');
-  expect(await screen.findByRole('tab', { name: 'Payoff quotes' })).not.toBeNull();
+  /* The record answers as itself; the lists under test answer what the case says. */
+  const answer = (invoices: Record<string, unknown>[]) => {
+    rowsByBase = {
+      customer: [{ id: 4, name: 'Harbour Freight', status: 'active' }],
+      invoice: invoices,
+      note: [{ id: 1, body: 'Called back' }],
+    };
+  };
+  const planned = [...plans, { index: 7, view: viewDefinition('list-quotes', 'invoice', ['id']) }];
+
+  test("empty: 'hide' leaves an empty list without a tab, and a list with rows keeps it", async () => {
+    appMode = true;
+    answer([]);
+    draw({ page: strip(), plans: planned });
+    await screen.findByText('Harbour Freight');
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === '/api/view/run' && (call.body.view as { id?: string })?.id === 'list-quotes')).toBe(true),
+    );
+    expect(screen.queryByRole('tab', { name: 'Payoff quotes' })).toBeNull();
+    // The strip itself stays, for the lists that say nothing about being empty.
+    expect(await screen.findByRole('tab', { name: /note/i })).toBeInTheDocument();
+    cleanup();
+    answer([{ id: 1001 }]);
+    draw({ page: strip(), plans: planned });
+    expect(await screen.findByRole('tab', { name: 'Payoff quotes' })).toBeInTheDocument();
+  });
+
+  test('a list whose `when` is not met has no tab, and has one once it is', async () => {
+    appMode = true;
+    answer([{ id: 1001 }]);
+    const gated = strip({ emptyMode: undefined, when: 'status = converted' });
+    draw({ page: gated, plans: planned });
+    await screen.findByText('Harbour Freight');
+    await waitFor(() => expect(calls.some((call) => call.path === '/api/run')).toBe(true));
+    expect(screen.queryByRole('tab', { name: 'Payoff quotes' })).toBeNull();
+    cleanup();
+    matches = { 'customer id = 4 and status = converted': true };
+    draw({ page: gated, plans: planned });
+    expect(await screen.findByRole('tab', { name: 'Payoff quotes' })).toBeInTheDocument();
+  });
+
+  test('an empty list that hides keeps its tab where the reader may add to it: a door is never taken away', async () => {
+    appMode = true;
+    insertable = true;
+    answer([]);
+    const fk = { name: 'customer_id', from: { table: 'invoice', columns: ['customer_id'] }, to: { table: 'customer', columns: ['id'] } };
+    const { state } = (await import('../core.js')) as unknown as { state: { schema: { foreignKeys: unknown[] } } };
+    state.schema.foreignKeys.push(fk);
+    try {
+      draw({ page: strip({ path: 'customer_id' }), plans: planned });
+      expect(await screen.findByRole('tab', { name: 'Payoff quotes' })).toBeInTheDocument();
+    } finally {
+      state.schema.foreignKeys.splice(state.schema.foreignKeys.indexOf(fk), 1);
+    }
+  });
 });
 
 test('a Workbench page keeps its strip for lists the builder gave a width', async () => {
@@ -648,6 +712,21 @@ describe('related list options', () => {
     draw({ page: { ...page, sections: [{ ...invoices, rowActions: true }] }, plans: [{ index: 0, view }] });
     await waitFor(() => expect(screen.getAllByText('627.95').length).toBeGreaterThan(0));
     expect(document.querySelector('.row-actions-trigger')).toBeNull();
+  });
+
+  test("an attachment's second line says a column as the resource dresses it (display.values), not as stored", async () => {
+    appMode = true;
+    viewRows = [{ id: 1, file_name: 'scan.png', kind: 'id_card' }];
+    appResource = { resources: { attachment: { file: { name: 'file_name', content: 'content' } } }, grantedCommands: [] };
+    displays = { kind: { values: { id_card: 'Photo ID' }, humanize: true } };
+    const files = { kind: 'list' as const, from: 'attachment', path: 'customer_id', title: 'Files', columns: ['file_name', 'kind'] };
+    draw({
+      page: { ...page, sections: [files] },
+      plans: [{ index: 0, view: viewDefinition('page:customer:1', 'attachment', ['file_name', 'kind']) }],
+    });
+    expect(await screen.findByText('scan.png')).toBeVisible();
+    expect(screen.getByText('Photo ID')).toBeVisible();
+    expect(screen.queryByText('id_card')).toBeNull();
   });
 
   test("a grouped list's tables draw the ⋯ row menu too, one on each group's rows", async () => {

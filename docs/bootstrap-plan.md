@@ -69,8 +69,10 @@ never inferred, and a tenant App refuses to start without "explicit `--policy` e
 | `migrate stores up` | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | `seed` | ✓ | ✓ | | | | |
 | `test init` | ✓ | ✓ | ✓ | ✓ | ✓ | |
-| `tenant`, `flows` | ✓ | ✓ | | | ✓ | |
-| `jobs`, `decide` | ✓ | ✓ | (implied) | ✓ | | |
+| `tenant` | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| `flows` | ✓ | ✓ | | | ✓ | |
+| `jobs` | ✓ | ✓ | (implied) | ✓ | ✓ | |
+| `decide` | ✓ | ✓ | (implied) | ✓ | | |
 | `api-token` | ✓ | ✓ | ✓ | | ✓ | |
 
 Secrets live in the environment (`BETTER_AUTH_SECRET`, and `${VAR}` in `mistri.json` connection URLs). Dev keeps

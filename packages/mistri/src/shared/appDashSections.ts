@@ -164,6 +164,20 @@ export function nameSectionWindows(sections: AppDashSection[], at: string): void
 const FIND_MAX = 6;
 
 /**
+ * The integrations a settings form shows, by name. Which names the jobs module
+ * lists is the jobs module's to say (integrationChecks.ts), since the App is
+ * read without it; here, only that they are names.
+ */
+export function integrationNames(given: unknown, at: string): string[] {
+  if (!Array.isArray(given) || !given.length || given.some((name) => typeof name !== 'string' || !name.trim()))
+    throw new Error(`${at} has "integrations" that is not a list of integration names, like ['stripe'].`);
+  const names = given.map((name: string) => name.trim());
+  const twice = names.find((name, i) => names.indexOf(name) !== i);
+  if (twice !== undefined) throw new Error(`${at} names integration "${twice}" twice in "integrations".`);
+  return names;
+}
+
+/**
  * One box over several resources' records, by their names: each resource
  * named is one the App declares, searched as the reader reads it.
  */

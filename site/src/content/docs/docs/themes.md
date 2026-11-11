@@ -57,7 +57,7 @@ See it in the sample (`examples/apps/lintel/theme.ts:7`). That is the smallest t
 | `ui.theme.for` | A theme per audience: `public` for every page a signed-out visitor sees, worn whatever a reader picked, and `roles: { rider: 'cadence' }`, the first entry the account holds, over a tenant's saved theme; a reader's own pick still wins in the shell | none | Stable |
 | `branding.allow` | What a tenant may change (`logo` includes the dark logo and the tab icon): `logo`, `name`, `accent`, `palette`, `radius`, `density`, `preset`, `locale` | required | Stable |
 | `branding.editors` | The tenant roles whose members may save it | required | Stable |
-| `branding.themes` | One to six themes a tenant picks from (`theme` needs two) | the App's own look | Stable |
+| `branding.themes` | One to six themes a tenant picks from (`preset` needs two) | the App's own look | Stable |
 | `brandingForm()` | A dashboard section: the form beside a live preview | none | Stable |
 
 ```ts

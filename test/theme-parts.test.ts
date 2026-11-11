@@ -102,7 +102,7 @@ test("a pattern is drawn at the strength check measures it at; paper's low end i
 });
 
 test('parts: published names, role colors only, the menus the rest of the theme speaks', () => {
-  assert.equal(THEME_PARTS.length, 36);
+  assert.equal(THEME_PARTS.length, 37);
   assert.deepEqual(Object.keys(PART_SELECTORS).sort(), [...THEME_PARTS].sort());
   const styled = theme({
     parts: {
@@ -217,4 +217,20 @@ test('a full-screen dialog has no edge for dialog:edge to draw: the structure la
   assert.match(css, /\[role='dialog'\]\.modal-fullscreen \{[^}]*border: 0/);
   assert.match(css, /\.modal-fullscreen-mobile \{[^}]*border: 0/);
   assert.match(css, /^@layer structure/m);
+});
+
+test("the kicker over a form page's heading is a part: sentence case by default, a theme may set it", () => {
+  assert.equal(PART_SELECTORS.kicker, '.app-mode .form-page .eyebrow');
+  const kicker = theme({ parts: { kicker: { case: 'upper', face: 'data' } } });
+  assert.equal(partAttribute(kicker.parts), 'kicker:face kicker:case');
+  assert.equal(partTokens(kicker.parts)['--part-kicker-transform'], 'uppercase');
+  assert.match(
+    partsSheet(),
+    /data-parts~="kicker:case"\] \.app-mode \.form-page \.eyebrow \{\s*text-transform: var\(--part-kicker-transform\)/,
+  );
+  // The page's own rule is no capitals: the old tag look is what a theme's `case: 'upper'` brings back.
+  const css = readFileSync('packages/mistri/src/client/components/FormSurface.css', 'utf8');
+  const rule = /\.form-page \.eyebrow \{([^}]*)\}/.exec(css)?.[1] ?? '';
+  assert.ok(rule, 'the kicker has a rule');
+  assert.doesNotMatch(rule, /text-transform|letter-spacing/);
 });

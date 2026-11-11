@@ -48,6 +48,8 @@ export const PART_SELECTORS: Record<ThemePart, string> = {
   menu: app('.tn-pop', '.th-menu', '.page-actions-menu'),
   dialog: app('.modal'),
   chart: app('.chart-host'),
+  // The small line over a form page's heading: the App's name, in sentence case unless a theme sets it otherwise.
+  kicker: app('.form-page .eyebrow'),
 };
 
 /** The selectors a part is drawn with. */

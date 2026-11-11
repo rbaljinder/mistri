@@ -57,13 +57,6 @@ const ALLOWED: Array<{ rule: string; target: string; why: string }> = [
       'An open menu (Base UI) holds the focus itself and moves it through its items with the arrow keys, ' +
       'which scroll it; axe asks for a Tab stop inside, and a menu has none by design (APG menu pattern).',
   },
-  {
-    rule: 'label-content-name-mismatch',
-    target: 'data-table-index=',
-    why:
-      'A menu row is named by its label and says its count as its description (Sidebar.tsx, TableRow): named with the ' +
-      'number it was "Website 1". The label starts the name and the visible words; the count after it is not label.',
-  },
 ];
 
 interface Finding {
@@ -77,6 +70,8 @@ interface Finding {
 async function audit(page: Page, where: string, findings: Finding[]) {
   // Motion is off, so a colour mid-transition is not what is measured.
   await page.waitForTimeout(150);
+  // The skip link is the first thing in the banner landmark, not a stray link before it (282).
+  expect(await page.locator('.skip-link:not(header .skip-link)').count(), `${where}: skip link outside the banner`).toBe(0);
   const { violations } = await new AxeBuilder({ page }).withTags(TAGS).analyze();
   /* WCAG 2.5.3 (label in name) is A, but axe-core ships its rule off as experimental. It is on over every room
      this spec visits: a control's accessible name starts with the words it shows (ALLOWED holds what is known to differ). */

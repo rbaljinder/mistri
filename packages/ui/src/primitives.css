@@ -40,7 +40,8 @@ a.btn.ghost { background: transparent; color: var(--ink-muted); border-color: va
 .form-field-label-row > :not(.form-field-label-hidden) ~ .help-tip { margin-inline-start: var(--space-2h); }
 .form-field-label-row > .help-tip { vertical-align: -0.2em; }
 .form-field.is-required > .form-field-label::after { content: "*" / ""; margin-left: var(--space-1h); color: var(--status-critical); }
-.form-field-hint { margin: 0; font-size: var(--text-sm); line-height: 1.45; color: var(--ink-muted); }
+/* A hint reads at a measure: under a field in a wide room it stood as one line of 150 characters. */
+.form-field-hint { margin: 0; max-width: 70ch; font-size: var(--text-sm); line-height: 1.45; color: var(--ink-muted); }
 .form-field-problem { margin: 0; font-size: var(--text-sm); line-height: 1.45; color: var(--status-critical); overflow-wrap: anywhere; }
 .form-field-compact { gap: var(--space-2); }
 /* A field is as wide as its answer (docs/design.md, Forms): a count, an amount, a day and a time are a few characters

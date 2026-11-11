@@ -32,6 +32,7 @@ import { assertPresentationNamesApps, presentationOf } from '../cli/apps.js';
 import { appRoutes, loadApp, type LoadedApp } from '../app/apps.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import { homeSourceOf, isTenantApp } from '../../shared/app.js';
+import { isPublicForm } from '../../shared/appModel.js';
 import type { AddressBook } from '../../shared/appAddress.js';
 import { THEME_PRESETS } from '@mistriwork/engine/shared/themePresets.js';
 import { ROUND } from '@mistriwork/engine/shared/themeTokens.js';
@@ -497,6 +498,8 @@ export interface Shot {
   table?: string;
   /** What the address is, for grade's inventory of what it covered. */
   kind?: 'home' | 'view' | 'page' | 'record' | 'document';
+  /** A public form's page (`/{app}/form/{view}`): opened as a visitor is, signed out, whoever the run signs in as. */
+  signedOut?: boolean;
 }
 
 /** An address the discovery did not open, and why: grade says these beside what it covered. */
@@ -545,6 +548,20 @@ export async function addresses(
         throw new Refusal(
           `"${said}" is not an address of "${loaded.app.id}": its addresses start ${appHome(mount, loaded.app.id)}. mistri check --routes lists them.`,
         );
+      /* A public form is drawn only on its own page, `/{app}/form/{view}`, which no route of the book names; a
+         visitor opens it signed out, so it is shot as one. */
+      if (segment === 'form') {
+        const key = deeper.length === 1 ? deeper[0] : undefined;
+        if (key === undefined || !Object.hasOwn(loaded.app.views, key) || !isPublicForm(loaded.app.views[key])) {
+          const forms = Object.entries(loaded.app.views)
+            .filter(([, view]) => isPublicForm(view))
+            .map(([name]) => name);
+          throw new Refusal(
+            `"${said}" names no public form of "${loaded.app.id}": ${forms.length ? `its public forms are ${forms.join(', ')}, at /form/{form}` : 'it has none'}. mistri check --routes lists every address.`,
+          );
+        }
+        return { path: `/${app}/form/${encodeURIComponent(key)}`, name: slug(`form-${key}`), view: key, kind: 'view', signedOut: true };
+      }
       /* A query-language or @/~ address still opens (the App rewrites it); a segment is checked. */
       const known = segment === undefined || segment.startsWith('@') || segment.includes('~') || book.routes.has(segment);
       if (!known) {
@@ -847,6 +864,8 @@ async function capture(
 ): Promise<{ errors: string[]; text?: string; picture?: Buffer }> {
   const viewport = { width: width ?? SIZES[size].width, height: SIZES[size].height };
   let taken: Buffer | undefined;
+  /* A public form is a visitor's page: no session, and no tenant to choose. */
+  if (shot.signedOut) [session, choice] = [undefined, undefined];
   const context = await shotContext(browser, origin, { viewport, scale, dark, look, pick: reader?.pick, session });
   const errors: string[] = [];
   let text: string | undefined;
@@ -1317,6 +1336,8 @@ interface OpenedShotRun {
   skipped: Unshot[];
   origin: string;
   browser: Browser;
+  /** The browser closed and a new one started: for a run long enough to wear one out (shotBrowser.ts). Sessions are cookies, not the browser's. */
+  restartBrowser: () => Promise<Browser>;
   session?: SessionState;
   /** The tenant a page is entered in, where the account holds one. */
   choice?: string;
@@ -1586,16 +1607,23 @@ class ShotRun {
         },
       );
       this.child = started.child;
-      const browser = (this.browser = await launch(chromium, join(this.xdg, 'tmp'), options.browser).catch((error) => {
-        if (error instanceof Refusal) throw error;
-        const said = (error as Error).message.split('\n')[0];
-        /* Playwright is there and its browser is not: the one line that installs it, not the package again. */
-        throw new Refusal(
-          /Executable doesn't exist/i.test(said)
-            ? `no browser to shoot with: Playwright's Chromium is not installed and no Chrome, Edge or Chromium was found. Name one with --browser <path> (or CHROME_PATH), or install Playwright's: ${found.install}`
-            : `no browser to shoot with: it did not start (${said}) and no Chrome, Edge or Chromium was found. Name one with --browser <path> (or CHROME_PATH), or install Playwright's: ${found.install}`,
-        );
-      }));
+      const start = () =>
+        launch(chromium, join(this.xdg, 'tmp'), options.browser).catch((error) => {
+          if (error instanceof Refusal) throw error;
+          const said = (error as Error).message.split('\n')[0];
+          /* Playwright is there and its browser is not: the one line that installs it, not the package again. */
+          throw new Refusal(
+            /Executable doesn't exist/i.test(said)
+              ? `no browser to shoot with: Playwright's Chromium is not installed and no Chrome, Edge or Chromium was found. Name one with --browser <path> (or CHROME_PATH), or install Playwright's: ${found.install}`
+              : `no browser to shoot with: it did not start (${said}) and no Chrome, Edge or Chromium was found. Name one with --browser <path> (or CHROME_PATH), or install Playwright's: ${found.install}`,
+          );
+        });
+      const browser = (this.browser = await start());
+      /* The old one is closed before the new starts: two at once is the memory this is here to spare. */
+      const restartBrowser = async () => {
+        await this.browser?.close().catch(() => {});
+        return (this.browser = await start());
+      };
       /* Each role a person signs in as, by an account the bootstrapped administrator makes, and signed out first. */
       let sessions: OpenedShotRun['sessions'];
       if (options.everyRole) {
@@ -1620,6 +1648,7 @@ class ShotRun {
         skipped,
         origin: started.origin,
         browser,
+        restartBrowser,
         session,
         choice: this.member?.choice,
         ...(session && options.as ? { as: { role: options.as, chosen } } : {}),

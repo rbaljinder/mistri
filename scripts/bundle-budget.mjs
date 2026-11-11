@@ -94,14 +94,16 @@ export const BUDGET = {
    states and phone passes, rc.11's fixes) and rc.15's scoping class, `.mistri-root` named twice in every rule
    (scripts/embed-css.mjs: about 31 KB raw, 368 bytes in brotli, raw text a host's bundler compresses).
    Set at rc.16, measured: provider 14,413 / 5,157, adapter 3,475 / 1,368, shell 629,214 / 88,746.
+   Reset at rc.38 to about 3% above the measure (the shell's growth since rc.16 is the field-report passes; headless
+   measured about 128,400 / 34,100 and its ceiling comes down to within 5%): headless 134,000 / 35,500, shell 670,000 / 94,000.
    `headless` is @mistriwork/mistri/react/headless, built apart (`--mode headless`) and imported only by a front end
    that draws its own pages: its Provider, the SDK's hooks, TanStack Query and the host they read through. */
 export const EMBED_BUDGET = {
   provider: { raw: 15_000, br: 5_300 },
   /* The headless embed entry, new in rc.25: measured 127,890 / 33,995, its ceiling about 10% above. */
-  headless: { raw: 140_000, br: 37_500 },
+  headless: { raw: 134_000, br: 35_500 },
   adapter: { raw: 3_600, br: 1_400 },
-  shell: { raw: 650_000, br: 91_500 },
+  shell: { raw: 670_000, br: 94_000 },
 };
 
 /* The chrome's words in a language besides English (vite.config.ts LOCALE_GROUP, src/client/copy/<lang>.ts), one chunk

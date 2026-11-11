@@ -127,7 +127,8 @@ function IntegrationCard({ integration, editor, saved }: { integration: Integrat
   );
 }
 
-export function IntegrationsForm() {
+/** `only`: the integrations this page shows, by name, in that order (the section's `integrations`); every one without it. */
+export function IntegrationsForm({ only }: { only?: readonly string[] } = {}) {
   const [reply, setReply] = useState<Reply | undefined>();
   const [failed, setFailed] = useState('');
   useEffect(() => {
@@ -158,11 +159,15 @@ export function IntegrationsForm() {
         {say('loading')}
       </p>
     );
-  if (!reply.integrations.length) return <p className="integrations-form-note">{say('none')}</p>;
+  /* A page per integration shows its own keys alone; a save still answers every integration, so the narrowing is here. */
+  const shown = only
+    ? only.flatMap((name) => reply.integrations.find((integration) => integration.name === name) ?? [])
+    : reply.integrations;
+  if (!shown.length) return <p className="integrations-form-note">{say('none')}</p>;
   return (
     <div className="integrations-form">
       {!reply.editor && <p className="integrations-form-note">{say('readOnly')}</p>}
-      {reply.integrations.map((integration) => (
+      {shown.map((integration) => (
         <IntegrationCard key={integration.name} integration={integration} editor={reply.editor} saved={setReply} />
       ))}
     </div>

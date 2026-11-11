@@ -162,6 +162,21 @@ test('malformed/mixed arguments refuse before any loader or clock', async () => 
   }
 });
 
+test('an unexpected failure names where it was and its own words, minus any credential', async () => {
+  const f = fixture();
+  f.dependencies.provision = () => {
+    throw new Error('no such table: api_token_meta for postgres://operator:PRIVATE_PASSWORD@db.internal/auth');
+  };
+  await assert.rejects(runApiTokenMaintenance(['provision', ...common], f.dependencies), (error: Error) => {
+    assert.match(
+      error.message,
+      /the token store could not be opened or written.*\(no such table: api_token_meta for .*db\.internal.*\)\.$/,
+    );
+    assert.doesNotMatch(error.message, /PRIVATE_PASSWORD/);
+    return true;
+  });
+});
+
 const issueArgs = [
   'issue',
   ...common,
@@ -449,11 +464,12 @@ test('failed load/context/owner errors never expose credentials and never retry 
     let attempts = 0;
     f.dependencies[stage] = () => {
       attempts++;
-      throw new Error('secret postgres://password@host');
+      throw new Error('could not open postgres://operator:hunter2@db.internal/auth');
     };
     await assert.rejects(runApiTokenMaintenance(['provision', ...common], f.dependencies), (error) => {
       assert.match((error as Error).message, /^API token maintenance could not be completed: .+\.$/);
-      assert.doesNotMatch((error as Error).message, /secret|password/);
+      assert.doesNotMatch((error as Error).message, /hunter2|operator/);
+      assert.match((error as Error).message, /could not open db\.internal\/auth/);
       assert.equal((error as Error).cause, undefined);
       return true;
     });

@@ -39,8 +39,9 @@ const theme = (bar: string, nav: string): ThemeDefinition => ({
   },
 });
 
-/* Every element of the menu that draws a word or an icon: its entries, group headings, counts and icons. */
-const MENU = ':is(.sidebar, .app-mode .topbar) :is(a, button, span, h2, h3, div, svg)';
+/* Every element of the menu that draws a word or an icon: its entries, group headings, counts and icons. The skip link
+   sits in the top bar's banner and is the page's own control, in the page's ink on its surface, not the menu's. */
+const MENU = ':is(.sidebar, .app-mode .topbar) :is(a, button, span, h2, h3, div, svg):not(.skip-link)';
 
 test('the menu draws in nav.ink and nav.muted on nav.ground under every bar and nav recipe, placement and mode', async ({ page }) => {
   test.setTimeout(BUILD_MS);

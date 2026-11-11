@@ -488,6 +488,24 @@ for (const { dialect, skip } of ENGINES)
       assert.equal((await jobsOf(lab)).length, 3);
     });
 
+    test("a job per tenant run now (a test's host.runJob) runs for the tenant named alone; without one, or on the platform's, it is refused", async (t) => {
+      const lab = await openLab(t, dialect, timed);
+      const enrollment = await enroll(t, lab, timed),
+        host = await hostOf(t, enrollment, clockOf());
+      await assert.rejects(host.runNow('sweepTenants', 10_000), /"sweepTenants" runs per tenant: name the tenant/);
+      await assert.rejects(host.runNow('auditPlatform', 10_000, 'north'), /"auditPlatform" runs once on the platform/);
+      assert.equal((await host.runNow('sweepTenants', 10_000, 'north')).state, 'succeeded');
+      /* The host's ticks run the schedule's slots too; the manual run is the one under a manual key, and it was north's
+         alone, as its slot's run would be. */
+      const manual = await lab.rows(
+        `SELECT job, state, provenance_json FROM "${JOB_TABLES.job}" WHERE substr(idempotency_key, 1, 7) = 'manual-'`,
+      );
+      assert.deepEqual(
+        manual.map((row) => [row.job, row.state, JSON.parse(String(row.provenance_json)).tenantId]),
+        [['sweepTenants', 'succeeded', 'north']],
+      );
+    });
+
     test("a workflow instance is one tenant's: the same key lives in two tenants, and one tenant's event never wakes the other's", async (t) => {
       const lab = await openLab(t, dialect, flows);
       const enrollment = await enroll(t, lab, flows),

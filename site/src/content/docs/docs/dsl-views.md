@@ -330,6 +330,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
+| `views.*[kind=dashboard].sections[][kind=integrations].integrations` | array | Stable | The integrations this form shows, by name, in this order; each one the jobs module lists. Without it, every one. |
 | `views.*[kind=dashboard].sections[][kind=integrations].kind` |  | Stable |  One of `integrations`. Used in `examples/apps/lintel/blueprint.ts`. |
 
 ## `views.*[kind=dashboard].sections[][kind=matrix]`

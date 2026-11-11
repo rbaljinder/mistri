@@ -294,7 +294,7 @@ export async function createSqliteApiReadOwner(
               await auditEventFeed(
                 withReadAuditSinkPer(
                   resolveAppAccess(app, resources.schema, [...before.roles]),
-                  { app: app.id, tenant: '', actor: `api-token:${before.tokenId}` },
+                  { app: app.id, tenant: '', actor: `api-token:${before.tokenId}`, roles: before.roles },
                   // Each row goes to the database that holds its resource, which is not always the feed's lane.
                   async (c) => {
                     const open = physicals.get(c);
@@ -363,7 +363,7 @@ export async function createSqliteApiReadOwner(
             reads,
             withReadAuditSink(
               resolveAppAccess(app, reads.schema, [...before.roles]),
-              { app: app.id, tenant: '', actor: `api-token:${before.tokenId}` },
+              { app: app.id, tenant: '', actor: `api-token:${before.tokenId}`, roles: before.roles },
               physical,
               lane,
             ),

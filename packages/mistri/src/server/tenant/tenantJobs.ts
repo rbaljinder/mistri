@@ -71,7 +71,12 @@ import { flowRunnersOf, tenantFlowChangeReader } from '../workflows/flowChanges.
 import { flowCommandId, flowCommandProblems, withFlowCommands } from '../workflows/flowCommand.js';
 import { flowCommandOf } from '../commands/flowCommandBrand.js';
 import { integrationEventCommands } from '../integrations/integrationDeclaration.js';
-import { integrationCommandProblems, integrationNotifyProblems, integrationRoleProblems } from '../integrations/integrationChecks.js';
+import {
+  integrationCommandProblems,
+  integrationFormProblems,
+  integrationNotifyProblems,
+  integrationRoleProblems,
+} from '../integrations/integrationChecks.js';
 import type { JobAuthorizationRequest } from '../jobs/jobRunner.js';
 import type { JobContext } from '../jobs/jobs.js';
 import { runTenantCommandTransaction, type TenantCommandRecords } from './tenantCommandTransaction.js';
@@ -300,6 +305,7 @@ function tenantJobProblems(module: CapturedJobModule, app: AppDef, registry: Bus
   // A webhook arrives for one tenant: its principal holds tenant service roles alone, granted what it runs.
   problems.push(...integrationRoleProblems(module.integrations, module.principals, app));
   problems.push(...integrationNotifyProblems(module.integrations, app));
+  problems.push(...integrationFormProblems(module.integrations, app));
   for (const { runAs, integration } of integrationEventCommands(module.integrations)) {
     if (module.principals.get(runAs)!.some((role) => !Object.hasOwn(roles, role) || roles[role].realm === 'platform'))
       problems.push(

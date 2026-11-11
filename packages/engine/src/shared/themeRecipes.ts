@@ -248,6 +248,7 @@ export const THEME_PARTS = [
   'menu',
   'dialog',
   'chart',
+  'kicker',
 ] as const satisfies readonly ThemePart[];
 
 /** What a part style may say, in the order its words are written. */

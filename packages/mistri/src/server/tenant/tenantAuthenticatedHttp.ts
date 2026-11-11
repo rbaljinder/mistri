@@ -1277,7 +1277,15 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
             ...(await landingSocial(req, inside, dress)),
           });
           const page = hosted ? await head(hosted).catch(() => head(undefined)) : await head(undefined);
-          return serveClient(CLIENT_FILES, req, res, { ...page, ...(consenting ? { unframed: true } : {}) });
+          const framing = consenting ? { unframed: true } : {};
+          /* The look is written into the page as it is sent (clientHttp.ts brandingHead), after the catch above: a
+             look the head cannot write still leaves the App's own page, never the 403 a throw here would answer. */
+          try {
+            return await serveClient(CLIENT_FILES, req, res, { ...page, ...framing });
+          } catch (error) {
+            if (!hosted || res.headersSent) throw error;
+            return serveClient(CLIENT_FILES, req, res, { ...(await head(undefined)), ...framing });
+          }
         }
         if (
           [APP_FLAG_VALUES_PATH, EXPERIMENT_EXPOSURES_PATH, EXPERIMENT_VISITOR_PATH].includes(path) &&
@@ -1683,9 +1691,9 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
               },
               readiness: () => [...(jobs?.readiness() ?? []), ...(outbound?.readiness() ?? [])],
               /* A test host's "run this job now" (http/testControl.ts), the declared jobs' own; nothing else calls it. */
-              runNow: (name: string, timeoutMs?: number) =>
+              runNow: (name: string, timeoutMs?: number, tenantId?: string) =>
                 jobs
-                  ? jobs.runNow(name, timeoutMs)
+                  ? jobs.runNow(name, timeoutMs, tenantId)
                   : Promise.reject(new Error(`This server runs no jobs: start the App with --jobs to run "${name}".`)),
             }),
           }

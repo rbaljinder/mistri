@@ -2166,6 +2166,10 @@ body.app-mode th .pk { display: none; }
 /* The stepper's step: the bar, then its name set tight, the step's one strong thing. */
 .multi-step-heading { display: grid; gap: var(--space-5); }
 .multi-step-heading h2 { margin: 0; font-size: 1.25rem; line-height: 1.15; letter-spacing: var(--track-display); text-wrap: balance; }
+.multi-step-heading .multi-step-lead { margin: calc(var(--space-2) - var(--space-5)) 0 0; max-width: 60ch; font-size: var(--text-md); line-height: 1.5; color: var(--ink-muted); text-wrap: pretty; }
+/* A row of two fields (`show: [['a', 'b']]`) in a stepper is spaced as the fields around it are: forms.css gave it a
+   16px gap both ways, so the pair stood closer than the stack above and below it. */
+.multi-step-form:not([data-style='intake']) .form-columns { column-gap: var(--space-4); row-gap: var(--field-gap); }
 
 /* A page's steps beside the form (MultiStepForm.tsx): drawn always, shown only where the page is wide enough for both
    (structure.css lays the column out), so a page's first frame is the same at any width. Their dress is here. */

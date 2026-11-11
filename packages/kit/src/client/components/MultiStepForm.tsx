@@ -348,10 +348,12 @@ export function MultiStepForm<Field extends string = string>({
         </>
       ) : (
         /* The stepper says where the reader is as the intake does — the bar and its count — over the step's name. Its
-           row of numbered tabs was a second way to say it, and ran off a phone at three names. */
+           row of numbered tabs was a second way to say it, and ran off a phone at three names. A step an author gave a
+           title and a lead says them here too, plainly sized: the bar's name stays the label, the short word. */
         <div className="multi-step-heading">
           {progressRow}
-          <h2 id={titleId}>{active.label}</h2>
+          <h2 id={titleId}>{heading}</h2>
+          {active.lead && <p className="multi-step-lead">{active.lead}</p>}
         </div>
       )}
       {panelNode}

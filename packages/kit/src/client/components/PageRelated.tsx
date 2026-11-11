@@ -9,7 +9,7 @@ import { useContext, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ownedBy } from '../requestIdentity.js';
 import type { ResourceClientReply } from '@mistriwork/engine/shared/resourceHttp.js';
-import { columnLabel, recordLabel, api as coreApi, findTable, openRecord, rowLabel, state, writeAllowed } from '../core.js';
+import { columnDisplay, columnLabel, recordLabel, api as coreApi, findTable, openRecord, rowLabel, state, writeAllowed } from '../core.js';
 import { relatedRows } from '../prefs.js';
 import { formatBytes, formatNumber, formatRelativeDay } from '../locale.js';
 import { columnKind, linkTarget, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
@@ -37,6 +37,7 @@ import { canInsert, openRelatedRecord } from '../insert.js';
 import type { FormCuration } from './newRecordModel.js';
 import { formShownFields } from '@mistriwork/engine/shared/form.js';
 import { pinnedBy, sectionClass } from './pageModel.js';
+import { groupLabel } from './valueModel.js';
 import { CurrentCard } from './PageCurrent.js';
 import { PageRenderContext, recordReadNames, spoken, usePageApi, type RecordActions, type SlotProps } from './pageContext.js';
 import { Loading, SectionBox } from './PageSectionBox.js';
@@ -652,6 +653,14 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
       return (error as Error).message;
     }
   };
+  /* A column of a file's row said as the resource dresses it — `display.values`, a vocabulary's words — for a second line
+     or a caption, undefined where the rule has no word for it (a date or a size has its own reading). */
+  const worded = (column: string, value: unknown): string | undefined => {
+    if (!table) return undefined;
+    const text = String(value);
+    const said = groupLabel(columnDisplay(table.id, column), value, table.columns.find((candidate) => candidate.name === column)?.allowed);
+    return said === text ? undefined : said;
+  };
   const lease = filesOnLease();
   const attachments =
     file && table
@@ -670,7 +679,9 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
                 row[column] !== '',
             )
             .map((column) =>
-              column === file.size ? formatBytes(Number(row[column])) : (formatRelativeDay(String(row[column])) ?? String(row[column])),
+              column === file.size
+                ? formatBytes(Number(row[column]))
+                : (worded(column, row[column]) ?? formatRelativeDay(String(row[column])) ?? String(row[column])),
             );
           const href = served(`/api/file?${new URLSearchParams({ ...ownedBy(owner), table: table.id, key: JSON.stringify(rowKey) })}`);
           const type = file.type && typeof row[file.type] === 'string' ? (row[file.type] as string) : undefined;
@@ -717,7 +728,7 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
                 row[column] !== '' &&
                 captions(column),
             )
-            .map((column) => String(row[column]));
+            .map((column) => worded(column, row[column]) ?? String(row[column]));
           const alt = words[0] ?? String(row[file.name] ?? '');
           return [
             {

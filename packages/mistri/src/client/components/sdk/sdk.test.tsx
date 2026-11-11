@@ -5,6 +5,7 @@
  * column down with it, and the fixture host answers a declared read as the
  * planner would.
  */
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -590,5 +591,86 @@ describe('a Card with a count or an action, Items, Beside and the nav ground', (
     expect(start.style.getPropertyValue('--kit-beside-rail')).toBe('14rem');
     expect(start).toHaveClass('kit-beside-start', 'mine');
     expect([...start.children].map((c) => c.textContent)).toEqual(['Body', 'Left']);
+  });
+});
+
+describe('the words and levels a page under the platform head needs', () => {
+  afterEach(cleanup);
+
+  test("a Card's title is an h3 unless `level` says an h2 or an h4 (WCAG 1.3.1: an h3 under the page's h1 skips a level)", () => {
+    const { container, rerender } = render(<ui.Card title="Plain">x</ui.Card>);
+    expect(container.querySelector('h3.kit-card-title')?.textContent).toBe('Plain');
+    rerender(
+      <ui.Card title="Section" level={2}>
+        x
+      </ui.Card>,
+    );
+    expect(container.querySelector('h2.kit-card-title')?.textContent).toBe('Section');
+    expect(container.querySelector('h3')).toBeNull();
+    // In a header row (a count or an action) the heading keeps its level too.
+    rerender(
+      <ui.Card title="Section" level={4} count={2}>
+        x
+      </ui.Card>,
+    );
+    expect(container.querySelector('.kit-card-head > h4.kit-card-title')?.textContent).toBe('Section');
+  });
+
+  test('Text and VisuallyHidden are in the ui entry the guide names them in', () => {
+    const { container } = render(
+      <ui.Text tone="muted" size="sm">
+        A note<ui.VisuallyHidden>, for the screen reader</ui.VisuallyHidden>
+      </ui.Text>,
+    );
+    expect(container.querySelector('p.kit-text.kit-text-muted.kit-text-sm')).not.toBeNull();
+    expect(container.querySelector('.kit-visually-hidden')?.textContent).toBe(', for the screen reader');
+    expect(UI_EXPORTS).toContain('Text');
+    expect(UI_EXPORTS).toContain('VisuallyHidden');
+  });
+});
+
+describe('a Table whose box scrolls sideways', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    // Own properties set below shadow the prototype's; removing them restores the layout-less default.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const name of ['scrollWidth', 'clientWidth']) delete (HTMLElement.prototype as any)[name];
+  });
+  // A column that draws its own cell needs no host: this is about the box, not the values.
+  const columns = [{ key: 'name', label: 'Name', render: (row: { name: string }) => row.name }];
+  const rows = [{ name: 'Ada' }];
+  /* happy-dom has no layout: say how wide the box and what it holds are. */
+  const measured = (scroll: number, client: number) => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get: () => scroll });
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => client });
+  };
+
+  test('is a focusable, named region while it scrolls (WCAG 2.1.1), and a plain box while it fits', async () => {
+    measured(480, 300);
+    const { container, unmount } = render(<ui.Table label="Open visits" columns={columns} rows={rows} />);
+    const box = await vi.waitFor(() => {
+      const found = container.querySelector('.kit-table')!;
+      expect(found).toHaveAttribute('tabindex', '0');
+      return found;
+    });
+    expect(box).toHaveAttribute('role', 'region');
+    expect(screen.getByRole('region', { name: 'Open visits' })).toBe(box);
+    unmount();
+    measured(300, 300);
+    const fits = render(<ui.Table label="Open visits" columns={columns} rows={rows} />);
+    await Promise.resolve();
+    expect(fits.container.querySelector('.kit-table')).not.toHaveAttribute('tabindex');
+    expect(screen.queryByRole('region')).toBeNull();
+  });
+});
+
+describe('a custom component section in a card', () => {
+  // happy-dom lays nothing out, so the rule is read where it is written: a section is never a scroll container.
+  test('clips sideways instead of scrolling (overflow-x: auto computes the other axis to auto, a second scroll in the card)', () => {
+    const css = readFileSync('packages/mistri/src/client/components/sdk/kit.css', 'utf8');
+    const rule = css.match(/\.custom-section,\s*\.custom-list\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toContain('overflow-x: clip');
+    expect(rule).not.toMatch(/overflow(-x)?:\s*(auto|scroll)/);
   });
 });

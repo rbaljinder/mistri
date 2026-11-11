@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FormStep } from '../../../../mistri/src/shared/formRules.js';
 import { MultiStepForm } from './MultiStepForm.js';
@@ -282,11 +283,22 @@ describe('MultiStepForm, the intake style', () => {
     await waitFor(() => expect(into).toHaveBeenCalledWith({ block: 'start', inline: 'nearest', behavior: 'instant' }));
   });
 
-  it('keeps the stepper showing labels, never titles, under the same bar as the intake', () => {
+  it("draws a step's title and lead in the stepper, under the same bar named by the label", () => {
     render(<MultiStepForm steps={intake}>{() => <div />}</MultiStepForm>);
-    expect(screen.getByRole('heading', { level: 2, name: 'Email' })).toBeTruthy();
-    expect(screen.queryByText("Let's start with your email.")).toBeNull();
+    expect(screen.getByRole('heading', { level: 2, name: "Let's start with your email." })).toBeTruthy();
+    expect(screen.getByText('We write only about this.')).toBeTruthy();
     expect(screen.getByRole('progressbar', { name: 'Step 1 of 4: Email' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy();
+  });
+
+  it("keeps the label as the stepper's heading where a step has no title, and draws no empty lead", () => {
+    const { container } = view();
+    expect(screen.getByRole('heading', { level: 2, name: 'Identity' })).toBeTruthy();
+    expect(container.querySelector('.multi-step-lead')).toBeNull();
+  });
+
+  it('spaces a row of two fields in the stepper as the fields around it (a rule, as happy-dom lays nothing out)', () => {
+    const css = readFileSync('packages/kit/src/client/features.css', 'utf8');
+    expect(css).toMatch(/\.multi-step-form:not\(\[data-style='intake'\]\) \.form-columns \{[^}]*row-gap: var\(--field-gap\)/);
   });
 });

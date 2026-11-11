@@ -75,7 +75,10 @@ grant, and in an App without role grants it is the one switch. A person streams
 at most two files at once; a third is a 429 until one ends. A file whose rows
 are read by position (a table with no key, a union, or an order its key cannot
 continue) stops at 100,000 rows: past that it is a 422 before a byte is sent,
-and a filter or a `limit` brings it back within.
+and a filter or a `limit` brings it back within. A refused file is never a 200: a
+table the person may not export is a 403, a table they are not served a 404
+(the same whether it exists or not), and a question that cannot be read a 400,
+each with the reason in the body.
 
 A role cannot widen a resource's ceiling. All keys:
 [the generated reference](/docs/dsl-auth/). Every grant is a line of

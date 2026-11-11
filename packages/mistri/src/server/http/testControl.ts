@@ -82,10 +82,11 @@ export function testControlFrom(
   }
 
   async function job(body: Record<string, unknown>) {
-    const { job: name, timeoutMs } = body;
+    const { job: name, timeoutMs, tenant } = body;
     if (typeof name !== 'string' || !name) throw new HttpError(400, 'Name the job to run.');
+    if (tenant !== undefined && (typeof tenant !== 'string' || !tenant)) throw new HttpError(400, 'A run per tenant names its tenant.');
     if (!serving.jobs) throw new HttpError(400, `This server runs no jobs: start the App with --jobs to run "${name}".`);
-    return serving.jobs.runNow(name, typeof timeoutMs === 'number' && timeoutMs > 0 ? timeoutMs : undefined);
+    return serving.jobs.runNow(name, typeof timeoutMs === 'number' && timeoutMs > 0 ? timeoutMs : undefined, tenant);
   }
 
   /**

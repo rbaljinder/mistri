@@ -36,8 +36,10 @@ export {
   Stack,
   Stat,
   Table,
+  Text,
   Tone,
   Value,
+  VisuallyHidden,
 } from './kit.js';
 export {
   useAction,

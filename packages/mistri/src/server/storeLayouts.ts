@@ -198,7 +198,7 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'read-audit',
     title: "read audit: who read an audited resource's rows, append-only, never pruned",
     tables: { prefix: '__mistri_read_audit_' },
-    current: both(2),
+    current: both(3),
     read: marked(everywhere('__mistri_read_audit_meta')),
     upgrades: {
       sqlite: {
@@ -208,12 +208,25 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
             for (const sql of (await import('../adapters/readAudit/sqliteReadAudit.js')).sqliteReadAuditUpgradeFrom1()) await db.run(sql);
           },
         },
+        2: {
+          says: "adds the reader's roles and, on a tenant App, its membership",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/readAudit/sqliteReadAudit.js')).sqliteReadAuditUpgradeFrom2()) await db.run(sql);
+          },
+        },
       },
       postgres: {
         1: {
           says: "adds the 'command' route and the command's id: a command's handler and lookup reads are audited",
           run: async ({ db }) => {
             for (const sql of (await import('../adapters/readAudit/postgresReadAudit.js')).postgresReadAuditUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+        2: {
+          says: "adds the reader's roles and, on a tenant App, its membership",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/readAudit/postgresReadAudit.js')).postgresReadAuditUpgradeFrom2())
               await db.run(sql);
           },
         },

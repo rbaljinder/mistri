@@ -201,6 +201,22 @@ const IN_PADDING = (right: string) => `
     </span></label>
   </main>`;
 
+/* A field report: a status dot's label was set at font-size 0 in the dot's own color, and grade blamed a theme token
+   for the low contrast of words no reader can see. */
+test('words no reader can see are no contrast reading; the same words drawn are', async ({ browser }) => {
+  const dot = (style: string) =>
+    `<p>Status <span class="tone" style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #d92d20; color: #d92d20; ${style}">Overdue</span></p>`;
+  for (const hidden of [
+    'font-size: 0',
+    'color: transparent',
+    'clip: rect(0, 0, 0, 0); position: absolute',
+    'clip-path: inset(50%); position: absolute',
+    'overflow: hidden; width: 1px; height: 1px; position: absolute',
+  ])
+    expect(await graded(browser, dot(hidden)), hidden).not.toContain('low-contrast');
+  expect(await graded(browser, dot('font-size: 8px')), 'the words are drawn, in the dot color').toContain('low-contrast');
+});
+
 test("a control inside a text input's padding, clear of its text, is no overlap; one over the text is", async ({ browser }) => {
   for (const width of [1280, 390, 320]) expect(await graded(browser, IN_PADDING('4px'), { width, height: 800 })).not.toContain('overlap');
   expect(await graded(browser, IN_PADDING('80px'), { width: 1280, height: 800 })).toContain('overlap');

@@ -2,7 +2,7 @@
  * never retries a write or claims that an output failure rolled it back. */
 import type { Writable } from 'node:stream';
 import { assertApiTokenSecretId } from '../api/apiTokenSecret.js';
-import { MaintenanceRefusal } from './apiTokenRefusal.js';
+import { describeFailure, MaintenanceRefusal } from './apiTokenRefusal.js';
 
 const API_TOKEN_USAGE = `mistri api-token <provision|issue|inspect|revoke> --app <dir> --config <file> --store-id <uuid>
   issue:   --subject <native-account-id> --actor <native-account-id>
@@ -60,16 +60,16 @@ export async function runApiTokenCommand(
     await writeApiTokenOutput(stdout, `${JSON.stringify(result)}\n`);
     return 0;
   } catch (error) {
-    // Do not echo loader, driver, argv or output errors: they can contain
-    // credentials. A commit may have succeeded before an error was observed.
-    // A refusal is the exception: it names the precondition that failed and nothing else (apiTokenRefusal.ts), a field
-    // report asked for it.
+    // A driver's message can quote a credential, so it passes through describeFailure, which takes the URLs and
+    // tokens out; a field report found the bare "failed" line named no cause. A commit may have succeeded before an
+    // error was observed. A refusal names the precondition that failed and nothing else (apiTokenRefusal.ts).
+    const cause = error instanceof MaintenanceRefusal ? '' : describeFailure(error);
     try {
       await writeApiTokenOutput(
         stderr,
         (error instanceof MaintenanceRefusal
           ? `mistri: ${error.message}`
-          : 'mistri: API token maintenance failed. The outcome may be uncertain; inspect the store/token before retrying.') +
+          : `mistri: API token maintenance failed${cause ? `: ${cause}` : ''}. The outcome may be uncertain; inspect the store/token before retrying.`) +
           (issueLocator ? ` Token ID: ${issueLocator}.` : '') +
           '\n',
       );

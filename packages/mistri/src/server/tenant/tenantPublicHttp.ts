@@ -29,6 +29,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AppDef, AppFormView } from '../../shared/app.js';
 import type { AppCommandField } from '../../../schema/command.js';
 import { wearing, type TenantLook } from './tenantLook.js';
+import { withIconGlyphs } from '../app/iconPayload.js';
 import { cookieUnder } from '@mistriwork/engine/shared/mount.js';
 import { TENANT_HTTP_HEADERS as headers } from '../../shared/tenantContext.js';
 import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
@@ -300,13 +301,16 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       branding = baseRecordBranding(app);
       visible = withRecordBranding(app, branding);
     }
+    /* The logo, with the glyph of an icon it names: the brand row draws the App's mark, and without it a lettered
+       square (appBrand.tsx), where the App's signed-in screens and the ordinary host's forms draw the icon. */
     const presentation = {
-      app: {
+      app: withIconGlyphs({
         id: visible.id,
         name: visible.name,
+        ...(visible.ui.logo ? { logo: visible.ui.logo } : {}),
         ...(visible.ui.theme ? { theme: visible.ui.theme } : {}),
         ...(visible.ui.customThemes ? { customThemes: visible.ui.customThemes } : {}),
-      },
+      }),
     };
     if (url.pathname === LANDING_PATH) {
       answerLanding(req, res, app, false, branding);

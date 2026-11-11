@@ -60,3 +60,17 @@ test("the server's refusal is said on the card", async () => {
   fireEvent.click(within(card).getByRole('button', { name: 'Save' }));
   expect(await within(card).findByText('fakepay takes no secret "apiKy".')).toBeInTheDocument();
 });
+
+test('a page given its integrations shows those alone, in that order, and a save keeps it so', async () => {
+  const two = { ...state(true), integrations: [...state(true).integrations, { ...state(true).integrations[0]!, name: 'fakesms' }] };
+  api.mockResolvedValueOnce(two);
+  render(<IntegrationsForm only={['fakesms']} />);
+  const card = await screen.findByRole('form', { name: 'fakesms' });
+  expect(screen.queryByRole('form', { name: 'fakepay' })).toBeNull();
+  fireEvent.change(card.querySelector('input[type="password"]')!, { target: { value: 'k' } });
+  api.mockResolvedValueOnce(two);
+  fireEvent.click(within(card).getByRole('button', { name: 'Save' }));
+  await vi.waitFor(() => expect(api).toHaveBeenCalledTimes(2));
+  expect(await screen.findByRole('form', { name: 'fakesms' })).toBeInTheDocument();
+  expect(screen.queryByRole('form', { name: 'fakepay' })).toBeNull();
+});

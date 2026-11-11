@@ -3,7 +3,8 @@
  * checked before a model is called), read only, as the person running the command could read them: a table their
  * role reads is read through their row filter and their column rule, inside their tenant; a table their role does
  * not read is refused in words that name it, and the refusal fails that command, not the next; a lookup has no
- * writes, in its type or at runtime; and what it reads of an audited resource is written under the command.
+ * writes, in its type or at runtime; what it reads of an audited resource is written under the command; and it knows
+ * its tenant, so slow per-tenant work can happen there rather than holding the writer in the handler.
  * SQLite always, PostgreSQL live-gated (support/tenantDialects.ts).
  */
 import assert from 'node:assert/strict';
@@ -62,8 +63,8 @@ const registry = defineCommands({
     read: ['parcel'],
     input: {},
     sources: { business: ['consent'] },
-    output: { parse: (value: unknown) => value as { listed: string[]; got: string[]; columns: string[] } },
-    async lookup({ sources }) {
+    output: { parse: (value: unknown) => value as { listed: string[]; got: string[]; columns: string[]; tenant?: string } },
+    async lookup({ sources, tenant }) {
       const listed = (await sources.business.consent.where({ subject: 'ada' }).orderBy('id').limit(10)) as Consent[];
       const got: string[] = [];
       for (const id of ['c1', 'c2', 'c3'])
@@ -72,10 +73,10 @@ const registry = defineCommands({
         } catch {
           // Not found, hidden or another tenant's: a lookup cannot tell which, and needs not.
         }
-      return { listed: listed.map((row) => row.id), got, columns: Object.keys(listed[0] ?? {}).sort() };
+      return { listed: listed.map((row) => row.id), got, columns: Object.keys(listed[0] ?? {}).sort(), tenant };
     },
     async handle({ lookup }) {
-      return lookup as { listed: string[]; got: string[]; columns: string[] };
+      return lookup as { listed: string[]; got: string[]; columns: string[]; tenant?: string };
     },
   }),
   peek: defineCommand({
@@ -212,7 +213,11 @@ async function enrolled(t: TestContext, dialect: TenantDialect) {
     });
   const audit = dialect === 'postgres' ? 'mistri.read_audit_row' : '"__mistri_read_audit_row"';
   const audited = async () =>
-    (await engine.all(`SELECT route, command, resource, actor, tenant, record_key, ids_json FROM ${audit} ORDER BY id`)).map((row) => ({
+    (
+      await engine.all(
+        `SELECT route, command, resource, actor, tenant, roles_json, membership, record_key, ids_json FROM ${audit} ORDER BY id`,
+      )
+    ).map((row) => ({
       ...row,
     }));
   const consents = async () => (await engine.all('SELECT id FROM consent ORDER BY id')).map((row) => row.id);
@@ -231,6 +236,8 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         got: ['c1'],
         // The memo is not in her role's column rule.
         columns: ['granted', 'id', 'owner_id', 'subject'],
+        // A command that names no record still knows, before its transaction, the tenant it runs in.
+        tenant: 'north',
       });
     });
 
@@ -242,7 +249,11 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       const rows = await f.audited();
       assert.ok(rows.length > 0, 'the lookup wrote its reads');
       for (const row of rows)
-        assert.deepEqual([row.route, row.command, row.resource, row.actor, row.tenant], ['command', 'check', 'consent', 'alice', 'north']);
+        assert.deepEqual(
+          [row.route, row.command, row.resource, row.actor, row.tenant, row.roles_json, row.membership],
+          // The roles she read under and the membership that granted them, in this tenant.
+          ['command', 'check', 'consent', 'alice', 'north', '["clerk"]', 'north-alice'],
+        );
       // The list, and each key it asked for: a key it could not read is recorded as asked, as a target's is, and
       // nothing it could not read is among what any read returned.
       assert.deepEqual(

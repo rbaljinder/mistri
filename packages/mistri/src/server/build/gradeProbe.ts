@@ -84,11 +84,24 @@ export function contrastReadings(input: { states: ReadonlyArray<readonly [string
     const [a, b] = [lum(fg), lum(bg)];
     return { ratio: Math.round(((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)) * 100) / 100, fg: hex(fg), bg: hex(bg) };
   };
+  /* Words no reader can see are no reading: grade blamed a theme token for a status dot whose label was set at font-size
+     0, in the dot's own color. Sub-pixel type, a fully clear color, and the visually-hidden patterns (a clip, a
+     clip-path, a 1px box that cuts what overflows) are all cheap to read from the computed style. */
+  const unseen = (el: Element) => {
+    const style = getComputedStyle(el);
+    if (parseFloat(style.fontSize) < 1 || rgba(style.color)[3] === 0) return true;
+    for (let e: Element | null = el; e && e !== document.body; e = e.parentElement) {
+      const cut = getComputedStyle(e);
+      if (/^rect\((?:0(?:px)?[ ,]*){4}\)$/.test(cut.clip) || /^inset\((?:50|100)%\)/.test(cut.clipPath)) return true;
+      if (cut.overflow !== 'visible' && (parseFloat(cut.width) <= 1 || parseFloat(cut.height) <= 1)) return true;
+    }
+    return false;
+  };
   // What is drawn: a list also keeps its phone summaries, hidden, beside the grid.
   const WORDS =
     '.tone, .avatar, .tab[aria-selected="true"], .tab[aria-selected="true"] .tab-count, .app-mode .topbar .tn-group.active > .tn-group-button, .calendar-date';
   const words = [...document.querySelectorAll(WORDS)]
-    .filter((el) => el.checkVisibility())
+    .filter((el) => el.checkVisibility() && !unseen(el))
     .map((el) => ({
       what: `${el.className} "${el.textContent}"`,
       ...measure(el, getComputedStyle(el).color),
@@ -150,7 +163,7 @@ export function contrastReadings(input: { states: ReadonlyArray<readonly [string
       const own = [...el.childNodes].some((node) => node.nodeType === 3 && node.textContent!.trim());
       if (!own || !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
       const box = el.getBoundingClientRect();
-      if (box.width < 1 || box.height < 1 || painted(el)) continue;
+      if (box.width < 1 || box.height < 1 || painted(el) || unseen(el)) continue;
       const style = getComputedStyle(el);
       const size = parseFloat(style.fontSize);
       const large = size >= 24 || (size >= 18.66 && Number(style.fontWeight) >= 700);

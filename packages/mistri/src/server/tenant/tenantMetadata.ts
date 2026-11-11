@@ -178,14 +178,21 @@ function normalizedPage(page: Record<string, unknown>): void {
             return denyTenant(new Error(`a timeline stream has "${unknown}", which a tenant App's timeline does not take.`));
         }
         tenantRecord(stream, STREAM_FIELDS);
-        text(stream, STREAM_FIELDS);
+        text(
+          stream,
+          STREAM_FIELDS.filter((name) => name !== 'compact'),
+        );
+        // One line a row, or nothing: the normalized stream writes `true` or leaves the key out.
+        if (stream.compact !== undefined && stream.compact !== true) return denyTenant();
       }
     }
   }
 }
 
-/** What a normalized timeline stream may carry into a tenant host. */
-const STREAM_FIELDS = ['from', 'path', 'at', 'text', 'badge', 'by', 'filter', 'of'];
+/** What a normalized timeline stream may carry into a tenant host. `tone` and `compact` name no column, so they
+ *  reach a host as a quiet ground and a one-line row; `side` is a condition over the rows, which the projection
+ *  would have to judge against the reader's grants first, so it still does not. */
+const STREAM_FIELDS = ['from', 'path', 'at', 'text', 'badge', 'by', 'filter', 'of', 'tone', 'compact'];
 /** What a normalized App page may carry into a tenant host. */
 const PAGE_FIELDS = [
   'id',

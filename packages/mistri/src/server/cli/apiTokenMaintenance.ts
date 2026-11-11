@@ -27,7 +27,7 @@ import {
   issuePostgresApiCommandToken,
 } from '../auth/postgresApiTokenMaintenance.js';
 import { loadPostgresTokenSchema } from './postgresApiTokenSchema.js';
-import { MaintenanceRefusal } from './apiTokenRefusal.js';
+import { describeFailure, MaintenanceRefusal } from './apiTokenRefusal.js';
 import { readTenantIssuance } from './apiTokenTenant.js';
 import { issueSqliteApiTenantToken } from '../auth/sqliteApiTokenMaintenance.js';
 import { issuePostgresApiTenantToken } from '../auth/postgresApiTokenMaintenance.js';
@@ -67,7 +67,7 @@ export async function runApiTokenMaintenance(
   dependencies: typeof production = production,
   onIssueLocator?: (tokenId: string) => void,
 ) {
-  /* Where the run was when it failed, said in the refusal below: a fixed phrase per step, never the error's own text. */
+  /* Where the run was when it failed, said in the refusal below with the error's scrubbed message beside it. */
   let step = 'the configuration, App or store could not be read or written (check the --config, --app and store settings)';
   try {
     let args: ReturnType<typeof parseApiTokenArgs>;
@@ -241,6 +241,8 @@ export async function runApiTokenMaintenance(
     });
   } catch (error) {
     if (error instanceof MaintenanceRefusal) throw error;
-    return refuse(step);
+    /* The step says where; the error's own scrubbed words say why (apiTokenRefusal.ts). */
+    const cause = describeFailure(error);
+    return refuse(cause ? `${step} (${cause})` : step);
   }
 }

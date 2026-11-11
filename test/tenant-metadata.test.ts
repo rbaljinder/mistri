@@ -1009,6 +1009,46 @@ test("a timeline stream's about survives capture and projection, and a key a str
   );
 });
 
+test("a timeline's compact rows, one stream's or the section's, survive capture in a tenant App", () => {
+  /* A stream's `compact: true` and `tone` were refused by capture, as `about` was, so a field report's tenant App
+     could not draw its time-logged rows on one line. */
+  const input = parsePagesConfig(
+    {
+      pages: [
+        {
+          id: 'item-detail',
+          label: 'Item detail',
+          base: 'item',
+          sections: [
+            {
+              kind: 'timeline',
+              title: 'Activity',
+              compact: { amount: ['0'] },
+              streams: [
+                { from: 'note', whose: 'item_id', at: 'at', text: 'name', compact: true },
+                { from: 'note', whose: 'item_id', at: 'at', text: 'name', tone: 'warn' },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    'PAGE_FILE',
+  );
+  const definition = app();
+  const [captured] = captureTenantPages(definition, input);
+  const section = plain(captured.sections[0]) as { compact?: unknown; streams: Array<{ compact?: true; tone?: string }> };
+  assert.deepEqual(section.compact, { amount: ['0'] });
+  assert.deepEqual(
+    section.streams.map((stream) => [stream.compact, stream.tone]),
+    [
+      [true, undefined],
+      [undefined, 'warn'],
+    ],
+  );
+  assert.equal(projectTenantMetadata(definition, [captured], schema()).pages.length, 1);
+});
+
 test('read-only page projection strips related creation without losing the readable page', () => {
   const definition = app(),
     input = captureTenantPages(definition, [page({ ...list, create: { label: secret, show: ['hidden_secret'] } })]);

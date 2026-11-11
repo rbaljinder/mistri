@@ -1,8 +1,8 @@
 /**
  * A command's reads in the read audit (route `command`): what its lookup and its handler read of an audited
- * resource is written under the command's id, with the rows read, as any other door's read is; a read of a
- * resource that audits nothing writes nothing; and a read the audit cannot record fails that command, not the
- * next one.
+ * resource is written under the command's id, with the rows read, as any other door's read is; its target, when
+ * that is audited, is one named-record line whether or not a lookup read it first; a read of a resource that
+ * audits nothing writes nothing; and a read the audit cannot record fails that command, not the next one.
  */
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -31,7 +31,7 @@ const app = () =>
       name: 'Desk',
       sources: { desk: { connection: 'desk-db', default: true } },
       resources: { incident: { access: 'write', audit: { reads: true } }, service: { access: 'write' } },
-      auth: { roles: { staff: { read: true, commands: ['triage', 'unaudited', 'survey'] } } },
+      auth: { roles: { staff: { read: true, commands: ['triage', 'unaudited', 'survey', 'close', 'rename'] } } },
       views: { incidents: { kind: 'list', from: 'incident' } },
       home: 'incidents',
     },
@@ -89,6 +89,30 @@ const unaudited = defineCommand({
   },
 });
 
+/* No lookup, and its handler reads nothing: the executor's read of the audited target is the only read. */
+const close = defineCommand({
+  source: 'desk',
+  target: 'incident',
+  input: {},
+  output: { parse: (value: unknown) => value as { status: string } },
+  async handle({ db, record }) {
+    await db.incident.update(record!, { status: 'closed' });
+    return { status: 'closed' };
+  },
+});
+
+/* No lookup, and a target that audits nothing. */
+const rename = defineCommand({
+  source: 'desk',
+  target: 'service',
+  input: {},
+  output: { parse: (value: unknown) => value as { name: string } },
+  async handle({ db, record }) {
+    await db.service.update(record!, { name: 'Payments' });
+    return { name: 'Payments' };
+  },
+});
+
 async function fixture(
   run: (f: { db: DatabaseSync; execute: (command: string, key: number) => Promise<unknown> }) => Promise<void>,
   provision = true,
@@ -110,7 +134,7 @@ async function fixture(
     const resources = await loadAppRuntimeResources(registry, loaded, 'desk-db');
     const binding = bindBusinessCommands({
       app: loaded,
-      registry: defineCommands({ triage, unaudited, survey }),
+      registry: defineCommands({ triage, unaudited, survey, close, rename }),
       resources,
       writableConnection: (id) => id === 'desk-db',
     });
@@ -144,7 +168,7 @@ test("a command's lookup and handler reads of an audited resource are written un
   await fixture(async ({ db, execute }) => {
     assert.deepEqual(await execute('triage', 1), { siblings: 2, open: 2 });
     assert.deepEqual(logged(db), [
-      // The target as it stood, by its key: a named record.
+      // The target as it stood, by its key: a named record, once — the transaction's read of it is not a second line.
       ['command', 'triage', 'incident', 'account-a', '1', null, null],
       // The lookup's list read of the same resource: the rows it returned.
       ['command', 'triage', 'incident', 'account-a', null, '["1","3"]', 2],
@@ -152,11 +176,31 @@ test("a command's lookup and handler reads of an audited resource are written un
       ['command', 'triage', 'incident', 'account-a', null, '["1","2"]', 2],
     ]);
     assert.equal(db.prepare('SELECT status FROM incident WHERE id = 1').get()!.status, 'triaged');
+    // Each line names the roles the reader held when it read, not only who it was.
+    assert.deepEqual(
+      readSqliteReadAudit(db, { app: 'desk', limit: 100 }).map((row) => [row.roles, row.membership]),
+      Array.from({ length: 3 }, () => [['staff'], undefined]),
+    );
     // `mistri audit reads --record 3` asks this: the one read that returned it, the lookup's, says which command.
     assert.deepEqual(
       readSqliteReadAudit(db, { app: 'desk', record: '3', limit: 100 }).map((row) => [row.route, row.command, row.ids]),
       [['command', 'triage', '["1","3"]']],
     );
+  });
+});
+
+test('a command without a lookup writes one named-record line for an audited target, and none for one that audits nothing', async () => {
+  await fixture(async ({ db, execute }) => {
+    assert.deepEqual(await execute('close', 2), { status: 'closed' });
+    assert.deepEqual(logged(db), [['command', 'close', 'incident', 'account-a', '2', null, null]]);
+    assert.deepEqual(
+      readSqliteReadAudit(db, { app: 'desk', record: '2', limit: 100 }).map((row) => [row.route, row.command]),
+      [['command', 'close']],
+    );
+  });
+  await fixture(async ({ db, execute }) => {
+    assert.deepEqual(await execute('rename', 1), { name: 'Payments' });
+    assert.deepEqual(logged(db), []);
   });
 });
 

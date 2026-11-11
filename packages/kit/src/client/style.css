@@ -397,6 +397,8 @@ html[data-starting] .content.nav-holding.nav-holding-focusable > :not(.nav-held)
   background: none; border: none; padding: var(--space-1) 5px;
   color: var(--link); font: inherit; font-family: var(--mono);
   cursor: pointer; border-radius: min(3px, var(--radius));
+  /* A step of the trail is a target (WCAG 2.5.8): at the small text sizes its line and padding came to 22px. */
+  min-block-size: 24px; box-sizing: border-box;
 }
 .crumbs > button:hover { background: var(--raised); }
 /* The chevron is the only separator, and it is set lighter and roomier than
@@ -2296,7 +2298,7 @@ body.app-mode .page-head.has-record + .page-body { padding-bottom: calc(132px + 
 .command-field .field-control { width: 100%; box-sizing: border-box; }
 .command-field input[type="checkbox"] { width: auto; justify-self: start; }
 .command-field textarea { resize: vertical; }
-.command-help { color: var(--ink-muted); font-size: var(--text-sm); }
+.command-help { max-width: 70ch; color: var(--ink-muted); font-size: var(--text-sm); }
 /* A group is a section of the form: a hairline seams it from what comes
    before and its label heads it, the way a record page's sections read — no
    box around it. A repeating group's rows are seamed the same way, each with
@@ -3214,6 +3216,7 @@ tr.expanded > td { border-bottom-color: transparent; background: var(--accent-so
   color: var(--ink);
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius);
+  min-block-size: 24px; box-sizing: border-box;
 }
 /* Inline SVG sits on the text baseline by default and leaves descender space
    under it, which is the other half of the same misalignment. */
@@ -3389,6 +3392,7 @@ tr.expanded > td { border-bottom-color: transparent; background: var(--accent-so
    vanishes the moment somebody types into it. */
 .field-hint {
   display: block;
+  max-width: 70ch;
   margin-top: var(--space-2);
   font-size: var(--text-xs);
   line-height: 1.45;

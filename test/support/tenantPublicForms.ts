@@ -78,8 +78,14 @@ export interface TenantPublicFormOptions {
       whose choice reads it; live sync's change store is provisioned, so each dealer's choices are kept until a row of
       theirs changes. The App does not ask for live sync. */
   readonly publicReads?: true;
+  /** The App's own logo, an icon of its own (`ui.logo`): what a public form's brand row draws where no tenant saved a picture. */
+  readonly logo?: string;
   /** Each tenant may brand itself (its name, logo, accent, radius and density) and north has named itself "North Motors Co" (SQLite only). */
   readonly tenantBranding?: true;
+  /** With `tenantBranding`: each tenant may also pick its theme, from Workshop and Sage (`branding.themes`). */
+  readonly brandingPresets?: true;
+  /** The App wears a theme of its own that ships a font file (`type.faces`), as an App with its own look may. */
+  readonly ownFaces?: true;
   /** The App served at the root, as `mistri tenant` serves its one App: a form's page is `/form/{key}`. */
   readonly atRoot?: true;
   /** A public command page, `lobby`, that runs `apply` (with `publicReads`, it reads `make` too). */
@@ -190,7 +196,36 @@ export async function openTenantPublicForms(
           lead: { access: 'write', owner: 'tenant' },
           intake_submission: { access: 'write', owner: 'platform' },
         },
-        ...(options.tenantBranding ? { branding: { allow: ['name', 'logo', 'accent', 'radius', 'density'], editors: ['staff'] } } : {}),
+        ...(options.ownFaces || options.logo
+          ? {
+              ui: {
+                ...(options.logo ? { logo: options.logo } : {}),
+                ...(options.ownFaces
+                  ? {
+                      theme: { preset: 'yard' },
+                      customThemes: [
+                        {
+                          kind: 'theme',
+                          id: 'yard',
+                          label: 'Yard',
+                          extends: 'workshop',
+                          type: { faces: [{ family: 'Figtree', src: './fonts/figtree.woff2', weight: '300 900' }] },
+                        },
+                      ],
+                    }
+                  : {}),
+              },
+            }
+          : {}),
+        ...(options.tenantBranding
+          ? {
+              branding: {
+                allow: ['name', 'logo', 'accent', 'radius', 'density', ...(options.brandingPresets ? ['preset'] : [])],
+                editors: ['staff'],
+                ...(options.brandingPresets ? { themes: ['workshop', 'sage'] } : {}),
+              },
+            }
+          : {}),
         auth: {
           store: join(directory, 'auth.db'),
           signUp: 'open',

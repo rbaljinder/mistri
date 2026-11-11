@@ -588,6 +588,8 @@ export interface AppDashSection {
     | 'integrations';
   /** find: the resources one box searches by their records' names (config `resources`), served as table ids. */
   searched?: string[];
+  /** integrations: the ones the settings form shows, by name, in this order (config `integrations`); every one without it. */
+  integrations?: string[];
   /** find: the box's words before anything is typed. */
   placeholder?: string;
   /** activity: the resources whose record history the feed reads, each with its mark and, where the
@@ -1662,7 +1664,7 @@ export const SECTION_KEYS: Record<AppDashSection['kind'] | 'banner', readonly st
   activity: ['kind', 'area', 'title', 'icon', 'resources', 'limit', 'width'],
   find: ['kind', 'area', 'title', 'icon', 'resources', 'placeholder', 'width'],
   branding: ['kind', 'area', 'title', 'icon', 'width'],
-  integrations: ['kind', 'area', 'title', 'icon', 'width'],
+  integrations: ['kind', 'area', 'title', 'icon', 'width', 'integrations'],
 };
 
 /** The keys a dashboard's embed of a list view takes (`{ kind: 'view', view }`). */

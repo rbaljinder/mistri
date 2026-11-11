@@ -691,6 +691,50 @@ function Settle() {
       'page_undeclared',
     );
   });
+
+  /* A field report: eight pages broke on upgrade while check said ok. Typed code writes its paths `as const` or names
+     them once in a constant, and the scan read neither, so the crossing was the browser's to find. */
+  test("page-undeclared: a path written `as const`, `satisfies`, or in a constant of the page's module is held too", async (t) => {
+    const dir = mkdtempSync(join(tmpdir(), 'mistri-page-const-paths-'));
+    const file = join(dir, 'desk.db');
+    const db = new DatabaseSync(file);
+    db.exec(SQL);
+    db.close();
+    const adapter = connect(file);
+    t.after(async () => {
+      await adapter.close();
+      rmSync(dir, { recursive: true, force: true });
+    });
+    const schema = await adapter.introspect();
+    const source = `import { definePage, Rows } from '@mistriwork/mistri/page';
+const SHOW = ['name', 'desk_id.name'] as const;
+const OPTIONS = { query: 'desk_id.name = North' } satisfies object;
+const page = definePage({ label: 'Settle', reads: ['ticket'], component: Settle });
+export default page;
+function Settle() {
+  page.useRows('ticket', { show: ['name', 'desk_id.name'] as const });
+  page.useRows('ticket', { show: SHOW });
+  page.useRows('ticket', OPTIONS);
+  page.useRecord('ticket', { id: 1 }, SHOW);
+  let later = ['desk_id.name'];
+  page.useRows('ticket', { show: later });
+  return <Rows from="ticket" show={SHOW} />;
+}`;
+    const parseAst = await astParser();
+    const manifest = { key: 'settle', reads: ['ticket'], commands: [] };
+    assert.deepEqual(
+      scanPageSource(parseAst, source, 'tsx', manifest, schema).undeclared.map((problem) => `${problem.line}: ${problem.text}`),
+      [
+        '7: [page-undeclared] useRows("ticket") reads "desk" through its show "desk_id.name", which the page "settle" does not declare in its reads',
+        '8: [page-undeclared] useRows("ticket") reads "desk" through its show "desk_id.name", which the page "settle" does not declare in its reads',
+        '9: [page-undeclared] useRows("ticket") reads "desk" through its query "desk_id.name = North", which the page "settle" does not declare in its reads',
+        '10: [page-undeclared] useRecord("ticket") reads "desk" through its show "desk_id.name", which the page "settle" does not declare in its reads',
+        '13: [page-undeclared] <Rows from="ticket"> reads "desk" through its show "desk_id.name", which the page "settle" does not declare in its reads',
+      ],
+      "a `let` may change before it is read: it is the types' to judge",
+    );
+    assert.deepEqual(scanPageSource(parseAst, source, 'tsx', { ...manifest, reads: ['ticket', 'desk'] }, schema).undeclared, []);
+  });
 });
 
 describe('what the App records of its pages', () => {

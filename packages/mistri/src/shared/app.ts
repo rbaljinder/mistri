@@ -2078,12 +2078,14 @@ export function resolveResources(app: AppDef, schema: DatabaseSchema): { resourc
       }
       /* Read as a tab's query is, where a rollup and a computed column are names like a column's: the browser asks
          an action's `when` as a list asks its tab, and a command judges its own (commandWhen.ts). */
+      /* A command action's own part first, so a problem is pointed at in the words its author wrote. */
+      for (const when of ['offered' in action ? action.offered : undefined, action.when]) {
+        if (!when || problem) continue;
+        const parsed = parseViewQuery(schema, table.id, when, undefined, person ? { me: person } : {});
+        if (parsed.errors.length) problem = `action "${action.id}", when: ${saidAt(parsed.errors[0], when)}`;
+      }
+      if (problem) break;
       if (action.when) {
-        const parsed = parseViewQuery(schema, table.id, action.when, undefined, person ? { me: person } : {});
-        if (parsed.errors.length) {
-          problem = `action "${action.id}", when: ${saidAt(parsed.errors[0], action.when)}`;
-          break;
-        }
         if (!action.command) problem = derivedWhenProblem(action, table, resource.segments);
         if (problem) break;
       }

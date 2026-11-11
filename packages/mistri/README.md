@@ -30,7 +30,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.37; the
+These App features ship in mistri 1.0.0-rc.38; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -615,8 +615,9 @@ mistri audit reads [--app <dir>] [--resource <name>] [--record <id>] [--actor <w
                 [--tenant <id>] [--since <instant | 30m | 24h | 7d>] [--limit <n>]
                 [<db> | --db <target> | --config <path>]
 Prints the reads recorded for the App's resources with audit: { reads: true },
-newest first, one JSON object a line: when, the actor, the tenant, the
-resource, the route (page, api, mcp, assistant, export, picker, custom-page,
+newest first, one JSON object a line: when, the actor, the roles it read
+under and, on a tenant App, its membership, the tenant, the resource, the
+route (page, api, mcp, assistant, export, picker, custom-page,
 related, or command with the command's id) and the one record read or the
 query with the count and ids it returned; never a field's value. Each flag
 narrows: --record by the record's key, --actor an account id,

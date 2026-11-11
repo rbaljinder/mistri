@@ -104,6 +104,7 @@ import {
   parseActivitySection,
   parseCustomDashSection,
   parseFindSection,
+  integrationNames,
   parseSectionWindows,
 } from './appDashSections.js';
 import { parseCustomList } from '@mistriwork/engine/shared/appComponents.js';
@@ -1623,6 +1624,7 @@ function parseDashSections(
           ...(s.title === undefined ? {} : { title: (s.title as string).trim() }),
           ...(s.icon === undefined ? {} : { icon: parseIcon(s.icon, here) }),
           ...(s.width === undefined ? {} : { width: s.width as SectionWidth }),
+          ...(kind === 'integrations' && s.integrations !== undefined ? { integrations: integrationNames(s.integrations, here) } : {}),
         };
       }
       let bannerKeys: Pick<AppDashSection, 'variant' | 'eyebrow' | 'image'> = {};

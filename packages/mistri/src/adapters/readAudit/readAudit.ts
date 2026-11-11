@@ -18,8 +18,10 @@
 import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
 
 /** Version 2 adds the `command` route and the command's id beside it: a command's handler and lookup read audited
-    rows too (version 1 never saw them). A version 1 store is upgraded in place by `mistri migrate stores up`. */
-export const READ_AUDIT_VERSION = 2;
+    rows too (version 1 never saw them). Version 3 adds the reader's roles and, on a tenant App, the membership it read
+    through: an account id alone could not say what the reader was let read, nor which membership held a token. An
+    older store is upgraded in place by `mistri migrate stores up`. */
+export const READ_AUDIT_VERSION = 3;
 export const READ_AUDIT_PREFIX = '__mistri_read_audit_';
 export const READ_AUDIT_TABLES = Object.freeze({
   meta: `${READ_AUDIT_PREFIX}meta`,
@@ -53,6 +55,10 @@ export const READ_AUDIT_LIMITS = Object.freeze({
   visit: 200,
   resource: 512,
   command: 200,
+  /** A membership's id, as long as tenant administration lets one be (tenantAdministration.ts). */
+  membership: 1024,
+  /** The roles' JSON array: a role's name is a word, and a reader holds a few. */
+  roles: 4096,
   record: 2048,
   query: 16_384,
   ids: 65_536,
@@ -79,6 +85,12 @@ export interface ReadAuditRow {
   readonly tenant: string;
   /** An account id, or `service:<principal>`, `support:<operator>`, `api-token:<id>`, `assistant:<account>`. */
   readonly actor: string;
+  /** The roles the read was granted under, as the grant held them, sorted; absent where no role grants it (a
+      signed-out visitor, a service, a support operator). An API token's are the token's own, which may be fewer than
+      its holder's. */
+  readonly roles?: readonly string[];
+  /** On a tenant App, the membership the reader read through: a person's own, or the one that holds the API token. */
+  readonly membership?: string;
   /** A support visit's id, when the read was made under one. */
   readonly visit?: string;
   readonly resource: string;
@@ -124,6 +136,12 @@ export function assertReadAuditRow(row: ReadAuditRow): ReadAuditRow {
   text(row.app, READ_AUDIT_LIMITS.app, 'app');
   text(row.tenant, READ_AUDIT_LIMITS.tenant, 'tenant', true);
   text(row.actor, READ_AUDIT_LIMITS.actor, 'actor');
+  if (row.roles !== undefined) {
+    if (!Array.isArray(row.roles) || row.roles.some((role) => typeof role !== 'string' || !role))
+      throw new Refusal("A read audit row's roles must be a list of role names.");
+    text(JSON.stringify(row.roles), READ_AUDIT_LIMITS.roles, 'roles');
+  }
+  if (row.membership !== undefined) text(row.membership, READ_AUDIT_LIMITS.membership, 'membership');
   if (row.visit !== undefined) text(row.visit, READ_AUDIT_LIMITS.visit, 'visit');
   text(row.resource, READ_AUDIT_LIMITS.resource, 'resource');
   if (!(READ_ROUTES as readonly string[]).includes(row.route))
@@ -163,6 +181,8 @@ export function storedReadAudit(row: Record<string, unknown>): StoredReadAudit {
     app: String(row.app),
     tenant: String(row.tenant),
     actor: String(row.actor),
+    ...(row.roles_json == null ? {} : { roles: Object.freeze(JSON.parse(String(row.roles_json)) as string[]) }),
+    ...(row.membership == null ? {} : { membership: String(row.membership) }),
     ...(row.visit == null ? {} : { visit: String(row.visit) }),
     resource: String(row.resource),
     route: row.route as ReadRoute,

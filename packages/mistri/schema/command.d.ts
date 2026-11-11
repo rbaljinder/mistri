@@ -449,8 +449,10 @@ export type ActionSetValue = string | number | boolean | null | { readonly auto:
 /** A command action as it is authored: the command by its name, which the generated mistri-commands.d.ts types. */
 export interface CommandAction<Name extends string = string, Label extends string | AppMessageRef = string | AppMessageRef> extends CommandActionBase<Label> {
   command: Name;
-  /** The command's own `when` decides where its button is offered; say it once, in `defineCommand`. */
-  when?: never;
+  /** Where this button is offered, in the query language with paths, as a section's `when` is: on top of the command's
+      own `when`, which still decides where it may run. Visibility only — say a rule the command must keep in
+      `defineCommand`, which the server judges on every run. */
+  when?: string;
 }
 
 /** A resource action as it is authored. A fixed action's `set` also takes a column held `undefined`, which is

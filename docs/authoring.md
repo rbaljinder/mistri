@@ -444,8 +444,8 @@ gives every key.
   rides the URL by name and whose unopened tabs are never fetched.
   A related list's `empty` is guidance, `'hide'` (left out while it has no rows) or `'collapse'` (one line for the
   empty lists side by side, each with its Add); `page(…, { empty })` is the default for lists that say nothing. A list
-  that offers an Add collapses rather than hides, a tab keeps at least one list, and inside a `listTabs` strip an empty
-  list is a tab. `empty: false` is now `empty: 'hide'`.
+  that offers an Add collapses rather than hides, a tab keeps at least one list, and inside a `listTabs` strip a list is a tab that follows the same answers: its `when`
+  unmet, or `'hide'` while it has no rows (and no Add to keep), leaves it no tab. `empty: false` is now `empty: 'hide'`.
   A related list's `group: { by, show?, sort?, limit?, empty?, sum? }` reads the rows under a header for each record they share through
   `by` (one level; a plain column groups by its value): the groups are one breakdown of the same rows, each group's rows
   one read of the keys that come back, and `show` is read off the rows (`by.column`), so a header costs no read. `limit`
@@ -594,7 +594,11 @@ reply: field.richText({ max: 20_000, mentions: { from: 'agent', by: 'handle' } }
   bytes travel as base64 in JSON and are drawn from a blob address; an upload
   is at most 10 MB (the resource's `maxBytes` when smaller), and a picture is
   typed by its own bytes only when it is asked for in place — anything else is
-  a download. Cards and avatar photos from files are not drawn on a lease.
+  a download. A component's `useFile` reads the same way: its address is
+  undefined until the blob lands, then the component draws again. A signed
+  link an `<img>` could fetch with no lease was the other way to do it; it
+  is not taken, because it would outlive the lease and travel with a copied
+  address. Cards and avatar photos from files are not drawn on a lease.
 
 ## Existing-record save policy
 
