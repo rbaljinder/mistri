@@ -6,6 +6,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Field } from './Field.js';
 import { frameOf, type FieldFrame } from './fieldFrame.js';
 import { grouped } from './masks.js';
+import { slotted } from './internal/uiKitContext.js';
 
 export interface SliderProps extends FieldFrame {
   value: number;
@@ -18,7 +19,7 @@ export interface SliderProps extends FieldFrame {
   disabled?: boolean;
 }
 
-export function Slider(props: SliderProps): ReactNode {
+function DefaultSlider(props: SliderProps): ReactNode {
   const say = props.format ?? grouped;
   const span = props.max - props.min;
   const share = span > 0 ? ((props.value - props.min) / span) * 100 : 0;
@@ -51,3 +52,6 @@ export function Slider(props: SliderProps): ReactNode {
     </Field>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Slider = slotted('Slider', DefaultSlider);

@@ -264,18 +264,26 @@ function decodeCompiledApp(
 /** Where a build lists its compiled components; the files sit beside it, each hashed like every file of the build. */
 export const COMPONENTS_INDEX = 'components/components.json';
 
+/* The control kit's line in the index: a key no component id can be, since an id names a placement. */
+const KIT_INDEX = '#uiKit';
+
 /** The index a build writes: each component's kind and served files, without the sources a watcher needs. */
 export function componentsIndex(compiled: CompiledComponents): Record<string, { kind: string; js: string; css?: string }> {
-  return Object.fromEntries(Object.entries(compiled.entries).map(([id, { kind, js, css }]) => [id, { kind, js, ...(css ? { css } : {}) }]));
+  const { kit } = compiled;
+  return Object.fromEntries([
+    ...Object.entries(compiled.entries).map(([id, { kind, js, css }]) => [id, { kind, js, ...(css ? { css } : {}) }]),
+    ...(kit ? [[KIT_INDEX, { kind: 'kit', js: kit.js, ...(kit.css ? { css: kit.css } : {}) }]] : []),
+  ]);
 }
 
 async function readBuiltComponents(dir: string, index: string): Promise<CompiledComponents> {
   const listed = JSON.parse(await readFile(join(dir, index), 'utf8')) as Record<
     string,
-    { kind: 'section' | 'value'; js: string; css?: string }
+    { kind: 'section' | 'value' | 'kit'; js: string; css?: string }
   >;
   const files: Record<string, string> = {};
   const entries: CompiledComponents['entries'] = {};
+  let kit: CompiledComponents['kit'];
   const folder = join(dir, 'components');
   for (const [id, entry] of Object.entries(listed)) {
     for (const file of [entry.js, `${entry.js}.map`, ...(entry.css ? [entry.css] : [])]) {
@@ -283,9 +291,10 @@ async function readBuiltComponents(dir: string, index: string): Promise<Compiled
       if (text === undefined && !file.endsWith('.map')) throw new Error(`${dir}: components/${file} is missing. ${rebuild}`);
       if (text !== undefined) files[file] = text;
     }
-    entries[id] = { kind: entry.kind, js: entry.js, ...(entry.css ? { css: entry.css } : {}), sources: [] };
+    if (entry.kind === 'kit') kit = { js: entry.js, ...(entry.css ? { css: entry.css } : {}), sources: [] };
+    else entries[id] = { kind: entry.kind, js: entry.js, ...(entry.css ? { css: entry.css } : {}), sources: [] };
   }
-  return { entries, files };
+  return { entries, files, ...(kit ? { kit } : {}) };
 }
 
 /** A build's theme fonts (appFonts.ts), from its fonts/ folder by the names its definition carries. */

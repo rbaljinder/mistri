@@ -16,6 +16,7 @@ import { useCallback, useContext, useId, useImperativeHandle, useRef, useState, 
 import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { Dialog } from '@base-ui/react/dialog';
 import { popupContainer } from './internal/popups.js';
+import { slotted } from './internal/uiKitContext.js';
 
 export interface ModalHandle {
   close: () => void;
@@ -50,7 +51,7 @@ interface ModalProps {
   ref?: Ref<ModalHandle>;
 }
 
-export function Modal({
+function DefaultModal({
   className = '',
   onClose,
   closeDisabled = false,
@@ -120,3 +121,6 @@ export function Modal({
     </Dialog.Root>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Modal = slotted('Modal', DefaultModal);

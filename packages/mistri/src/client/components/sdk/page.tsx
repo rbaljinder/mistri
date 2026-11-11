@@ -48,6 +48,8 @@ export { Button };
 /* A page's place in its address, as written: `page.useParam` reads it through this hook and checks it against the
    param's kind; this one is for a module the page draws that is not the page itself (a widget, the Console's rooms). */
 export { useAddressState };
+/* An App's control kit (Preview): its module imports these from here, so the kit and the page share the one seam. */
+export { defineUiKit, defaultUiKit } from '@mistriwork/ui/UiKit.js';
 /* The platform's blocks (blocks.tsx): a part of their own, loaded when a page first draws one. They draw the
    platform's rooms, which reach this module again through the host, so the module that draws a free-form page hands
    in how they load (pageBlocks.ts) rather than this one importing them. */

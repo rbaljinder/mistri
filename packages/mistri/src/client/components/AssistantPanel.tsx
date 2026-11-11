@@ -1034,16 +1034,16 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
         <div className="assistant-head">
           {/* The room's conversations on a phone, where the rail is a sheet: the head's first control, as a drawer's is. */}
           {room && (
-            <button
-              type="button"
-              className="btn ghost btn-compact assistant-rail-toggle"
+            <Button
+              size="compact"
+              className="assistant-rail-toggle"
               aria-pressed={listing}
               title={say('conversations')}
               onClick={() => setListing((was) => !was)}
             >
               <ListMark />
               <span className="visually-hidden">{say('conversations')}</span>
-            </button>
+            </Button>
           )}
           {room && titled && renamingTitle ? (
             <RenameField

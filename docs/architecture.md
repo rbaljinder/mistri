@@ -274,6 +274,16 @@ nothing has to be built first. The build is the maintainer's, never the user's.
   walk's globals; `Value`'s drawing rules moved to `components/Dressed.tsx`
   so the kit can share them. A section's declared reads are planned like a
   related list's (`customReadView` in `packages/engine/src/shared/pagePaths.ts`).
+- **An App's control kit** (`uiKit`, Preview) is its own drawing of the
+  `@mistriwork/ui` primitives, slot by slot (`packages/ui/src/UiKit.tsx`): each
+  primitive is `slotted()`, so it draws the installed kit's component for its
+  slot and its own where the kit has none. The kit is compiled like a custom
+  component (`compileUiKit`, with its stylesheet in the `components` layer),
+  named in the page head and installed before the first render
+  (`components/sdk/uiKitLoader.ts`), so the first paint is already the kit's; the
+  Workbench never takes one. `@mistriwork/ui/conformance` holds a kit to what
+  the shells rely on, and `test/check-client-controls.mjs` keeps controls drawn
+  by hand out of the client, where a kit could not reach them.
 - **Routing is by path**, not hash. An App has one canonical address per thing,
   from one book (`packages/mistri/src/shared/appAddress.ts`) that the client
   (`publicAddress.ts`), the server's public-page head and redirect

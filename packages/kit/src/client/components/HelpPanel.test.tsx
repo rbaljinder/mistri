@@ -3,7 +3,7 @@
  * schema, sharpened when the sample rows arrive, run with one click.
  */
 import { afterEach, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 
 const ran: string[] = [];
@@ -70,7 +70,8 @@ test('names the database, draws grammar and examples, and says why a section is 
   expect(document.querySelectorAll('.help-section')).toHaveLength(5);
   expect(screen.getByText('invoice status = value')).toBeInTheDocument();
   expect(screen.getByText('This database has no foreign keys, so there is nothing to walk.')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+  /* A Modal now: Base UI hands focus over once the box has attached. */
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus());
 });
 
 test("the keys for the room the reader is in come first, marked as this page's", () => {
@@ -115,5 +116,8 @@ test('an example runs and closes the panel; Escape and ? close it and go no furt
   /* A single key under the panel is swallowed; the page must not act on it. */
   fireEvent.keyDown(document.body, { key: 'h' });
   expect(outer).not.toHaveBeenCalledWith(expect.objectContaining({ key: 'h' }));
+  /* Escape is the dialog's own, and it too is heard once. */
+  await user.keyboard('{Escape}');
+  expect(onClose).toHaveBeenCalledTimes(3);
   document.removeEventListener('keydown', outer);
 });

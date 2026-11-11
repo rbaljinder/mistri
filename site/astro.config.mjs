@@ -116,6 +116,7 @@ export default defineConfig({
             { label: 'Conventions', slug: 'docs/conventions' },
             { label: 'Reload and restart', slug: 'docs/reload-and-restart' },
             { label: 'Custom components', slug: 'docs/custom-components' },
+            { label: 'Plug in a control kit', slug: 'docs/control-kits' },
             { label: 'Page recipes', slug: 'docs/page-recipes' },
             { label: 'The general path', slug: 'docs/general-path' },
             { label: 'Mount in your server', slug: 'docs/mount-in-your-server' },

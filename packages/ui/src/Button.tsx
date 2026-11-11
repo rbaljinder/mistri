@@ -9,12 +9,13 @@
  * focus it holds, so a busy one says `aria-disabled` and refuses the press
  * itself — a click, and the implicit submission Enter makes through it.
  */
-import type { ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from 'react';
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from 'react';
+import { slotted } from './internal/uiKitContext.js';
 
 export type ButtonIntent = 'primary' | 'secondary' | 'quiet' | 'danger';
 export type ButtonSize = 'compact' | 'default' | 'large';
 
-interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> {
+export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> {
   /** Primary is the one filled action; secondary the outlined rest; quiet a word in the link ink; danger what cannot be taken back. */
   intent?: ButtonIntent;
   size?: ButtonSize;
@@ -51,7 +52,7 @@ export function buttonClass({
   return ['btn', DRESS[intent], size === 'default' ? '' : `btn-${size}`, block ? 'btn-block' : '', className].filter(Boolean).join(' ');
 }
 
-export function Button({
+function DefaultButton({
   intent = 'secondary',
   size = 'default',
   busy = false,
@@ -85,3 +86,19 @@ export function Button({
     </button>
   );
 }
+
+export interface ButtonLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
+  intent?: ButtonIntent;
+  size?: ButtonSize;
+  block?: boolean;
+  ref?: Ref<HTMLAnchorElement>;
+}
+
+/** A link dressed as a button: it goes somewhere (a download, another page) rather than doing something here. */
+function DefaultButtonLink({ intent, size, block, className, ...rest }: ButtonLinkProps) {
+  return <a {...rest} className={buttonClass({ intent, size, block, className })} />;
+}
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Button = slotted('Button', DefaultButton);
+export const ButtonLink = slotted('ButtonLink', DefaultButtonLink);

@@ -102,6 +102,8 @@ export const COMPONENT_GLOBS = [
   'test/fixtures/apps/*/*/widgets/**/*.test.{ts,tsx}',
   'test/fixtures/apps/*/pages/**/*.test.{ts,tsx}',
   'test/fixtures/apps/*/*/pages/**/*.test.{ts,tsx}',
+  // A control kit an App plugs in is held to @mistriwork/ui's conformance suite beside it (kit-desk's).
+  'test/fixtures/apps/*/ui/**/*.test.{ts,tsx}',
 ];
 
 /** Every test file of every suite. Exported so the structure test can hold the partition to the suites' own globs. */

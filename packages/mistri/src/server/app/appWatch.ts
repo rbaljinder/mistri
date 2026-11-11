@@ -17,7 +17,9 @@ function componentWatchDirs(loaded: LoadedApp): string[] {
   if (!loaded.dir || !loaded.components) return [];
   return [
     ...new Set(
-      Object.values(loaded.components.entries).flatMap((entry) => entry.sources.map((source) => dirname(join(loaded.dir!, source)))),
+      [...Object.values(loaded.components.entries), ...(loaded.components.kit ? [loaded.components.kit] : [])].flatMap((entry) =>
+        entry.sources.map((source) => dirname(join(loaded.dir!, source))),
+      ),
     ),
   ];
 }
@@ -103,6 +105,7 @@ export function loadedFiles(loaded: LoadedApp): ReadonlySet<string> | undefined 
       ...Object.values(loaded.fonts?.sources ?? {}).map(within),
       ...Object.values(loaded.brand?.sources ?? {}).map(within),
       ...Object.values(loaded.components?.entries ?? {}).flatMap((entry) => entry.sources.map(within)),
+      ...(loaded.components?.kit?.sources ?? []).map(within),
     ].flatMap((file) => [resolve(file), real(file)]),
   );
 }

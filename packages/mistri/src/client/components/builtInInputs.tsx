@@ -16,6 +16,7 @@
  * a radio group, one tab stop, the arrow keys moving the pick.
  */
 import { useEffect, useId, useRef, useState, type ComponentType, type KeyboardEvent, type PointerEvent } from 'react';
+import { Button } from '@mistriwork/ui/Button.js';
 import { api } from '@mistriwork/kit/client/core.js';
 import { pageBridge } from '@mistriwork/kit/client/uiBridge.js';
 import { richTextImageAddress } from '@mistriwork/engine/shared/richText.js';
@@ -233,14 +234,14 @@ function JsonInput({ value, onChange, id, describedBy, invalid, disabled, requir
         <span id={problemId} className="json-input-problem" aria-live="polite">
           {problem ? say('jsonProblem', { problem }) : ''}
         </span>
-        <button
-          type="button"
-          className="btn btn-quiet json-input-format"
+        <Button
+          intent="quiet"
+          className="json-input-format"
           disabled={disabled || Boolean(problem) || !shown.trim()}
           onClick={() => change(JSON.stringify(JSON.parse(shown), null, 2))}
         >
           {say('formatJson')}
-        </button>
+        </Button>
       </span>
     </span>
   );
@@ -316,9 +317,9 @@ function ScanInput({ value, onChange, id, describedBy, invalid, disabled, requir
           onChange={(event) => onChange(event.target.value === '' ? null : event.target.value)}
         />
         {can && (
-          <button
-            type="button"
-            className="btn btn-quiet scan-input-button"
+          <Button
+            intent="quiet"
+            className="scan-input-button"
             aria-pressed={open}
             disabled={disabled}
             onClick={() => {
@@ -327,7 +328,7 @@ function ScanInput({ value, onChange, id, describedBy, invalid, disabled, requir
             }}
           >
             {say(open ? 'stopScanning' : 'scan')}
-          </button>
+          </Button>
         )}
       </span>
       {open && (
@@ -493,12 +494,12 @@ export function SignaturePad({
           <span className="signature-input-kept is-unseen">{say('signatureKept')}</span>
         )}
         <span className="signature-input-tools">
-          <button ref={again} type="button" className="btn btn-quiet" disabled={disabled} onClick={() => setSigning(true)}>
+          <Button ref={again} intent="quiet" disabled={disabled} onClick={() => setSigning(true)}>
             {say('signAgain')}
-          </button>
-          <button type="button" className="btn btn-quiet" disabled={disabled} onClick={() => onChange(null)}>
+          </Button>
+          <Button intent="quiet" disabled={disabled} onClick={() => onChange(null)}>
             {say('removeSignature')}
-          </button>
+          </Button>
         </span>
       </span>
     );
@@ -557,34 +558,24 @@ export function SignaturePad({
       <span className="signature-input-tools">
         {typed === null && (
           <>
-            <button
-              type="button"
-              className="btn btn-quiet"
-              disabled={disabled || !strokes.length}
-              onClick={() => setStrokes((all) => all.slice(0, -1))}
-            >
+            <Button intent="quiet" disabled={disabled || !strokes.length} onClick={() => setStrokes((all) => all.slice(0, -1))}>
               {say('undoStroke')}
-            </button>
-            <button type="button" className="btn btn-quiet" disabled={disabled || !strokes.length} onClick={() => setStrokes([])}>
+            </Button>
+            <Button intent="quiet" disabled={disabled || !strokes.length} onClick={() => setStrokes([])}>
               {say('clearSignature')}
-            </button>
+            </Button>
           </>
         )}
-        <button type="button" className="btn btn-quiet" disabled={disabled} onClick={() => setTyped(typed === null ? '' : null)}>
+        <Button intent="quiet" disabled={disabled} onClick={() => setTyped(typed === null ? '' : null)}>
           {say(typed === null ? 'typeInstead' : 'drawInstead')}
-        </button>
-        <button
-          type="button"
-          className="btn signature-input-keep"
-          disabled={disabled || empty || !keeper || state === 'keeping'}
-          onClick={() => void keep()}
-        >
+        </Button>
+        <Button className="signature-input-keep" disabled={disabled || empty || !keeper || state === 'keeping'} onClick={() => void keep()}>
           {say(state === 'keeping' ? 'keepingSignature' : 'useSignature')}
-        </button>
+        </Button>
         {value !== null && value !== '' && (
-          <button type="button" className="btn btn-quiet" onClick={() => setSigning(false)}>
+          <Button intent="quiet" onClick={() => setSigning(false)}>
             {say('keepPrevious')}
-          </button>
+          </Button>
         )}
       </span>
       {state === 'failed' && (

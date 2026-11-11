@@ -1270,6 +1270,11 @@ export interface AppDef {
    * the App says. A resource leaves it with its own `live: false`.
    */
   live?: true;
+  /**
+   * The module that draws the App's controls (Preview): a path inside the App directory whose default export is
+   * `defineUiKit({ … })`. Compiled with its components and put in place before the first render.
+   */
+  uiKit?: string;
   id: string;
   name: string;
   /** What a phone's bar and an installed icon say where `name` does not fit; 12 characters or fewer. */

@@ -10,6 +10,7 @@
  * a pager for a single page is noise.
  */
 import type { ReactNode } from 'react';
+import { slotted } from './internal/uiKitContext.js';
 
 export interface PaginationProps {
   /** The current page, 1-based. */
@@ -44,7 +45,7 @@ export function paginationItems(page: number, pages: number): Array<number | 'â€
   return items;
 }
 
-export function Pagination({ page, pages, onPageChange, ariaLabel, words: given }: PaginationProps) {
+function DefaultPagination({ page, pages, onPageChange, ariaLabel, words: given }: PaginationProps) {
   const words: PaginationWords = { pages: 'Pages', previous: 'Previous', next: 'Next', ...given };
   if (pages <= 1) return null;
   const current = Math.min(Math.max(page, 1), pages);
@@ -76,3 +77,6 @@ export function Pagination({ page, pages, onPageChange, ariaLabel, words: given 
     </nav>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Pagination = slotted('Pagination', DefaultPagination);

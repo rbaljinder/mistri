@@ -3494,6 +3494,11 @@ export interface AppConfig {
    * `--no-live` turns it off whatever the App says. A resource leaves it with its own `live: false`.
    */
   live?: boolean;
+  /** The module that draws the App's controls — `uiKit: './ui/kit.tsx'`, whose default export is
+      `defineUiKit({ Button, Modal, … })` from `@mistriwork/mistri/page`. A slot the kit leaves out draws as the
+      platform's own; the page around the controls stays the platform's. `mistri check` refuses a slot the kit does not
+      have. @preview */
+  uiKit?: string;
   /** What each tenant may change about how the App looks to its people — `branding: { allow: ['logo', 'name',
       'accent'], editors: ['owner'] }` — saved by those roles in a `brandingForm()` and kept per tenant. A tenant App only. */
   branding?: AppBranding;

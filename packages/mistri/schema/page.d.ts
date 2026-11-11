@@ -100,6 +100,12 @@ export {
   type TooltipProps,
   type YesNoProps,
 } from '@mistriwork/ui';
+/**
+ * An App's control kit (Preview): the module `uiKit` names exports `defineUiKit({ Button, Modal, … })`, each slot
+ * drawn with the props the platform's own control takes; `defaultUiKit` holds those defaults, to dress rather than
+ * replace one. `mistri check` refuses a slot name the kit does not have.
+ */
+export { defineUiKit, defaultUiKit, type SlotName, type UiKit, type UiKitSlots } from '@mistriwork/ui';
 
 /* ---------- what the App's generated types register ---------- */
 

@@ -18,6 +18,7 @@ import { useEffect, useId, useRef, useState, type Ref } from 'react';
 import { Select } from '@base-ui/react/select';
 import { layoutViewport, zoomAnchor } from './internal/anchor.js';
 import { popupContainer } from './internal/popups.js';
+import { slotted } from './internal/uiKitContext.js';
 
 export interface DropdownItem {
   value: string;
@@ -77,12 +78,12 @@ export interface DropdownAction {
 /* A value no option could carry, so an action's row is told apart from an option's. */
 const ACTION = '~~action:';
 
-export function Dropdown(props: DropdownProps) {
+function DefaultDropdown(props: DropdownProps) {
   return <DropdownList {...props} />;
 }
 
 /** The same listbox choosing several: it stays open while it is chosen from, and the button says the choices. */
-export function MultiDropdown(props: MultiDropdownProps) {
+function DefaultMultiDropdown(props: MultiDropdownProps) {
   return <DropdownList {...props} multiple />;
 }
 
@@ -273,3 +274,7 @@ function DropdownList(props: DropdownInput) {
     </div>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Dropdown = slotted('Dropdown', DefaultDropdown);
+export const MultiDropdown = slotted('MultiDropdown', DefaultMultiDropdown);

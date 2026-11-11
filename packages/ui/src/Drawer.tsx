@@ -20,6 +20,7 @@ import { useContext, type ReactNode } from 'react';
 import { Drawer as BaseDrawer } from '@base-ui/react/drawer';
 import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { popupContainer } from './internal/popups.js';
+import { slotted } from './internal/uiKitContext.js';
 
 export type DrawerSide = 'left' | 'right';
 
@@ -38,7 +39,7 @@ interface DrawerBase {
 /** A sheet is named by a title it draws or by an `ariaLabel` it does not; one of the two is required, so none is announced unnamed. */
 export type DrawerProps = DrawerBase & ({ title: ReactNode; ariaLabel?: string } | { title?: undefined; ariaLabel: string });
 
-export function Drawer({
+function DefaultDrawer({
   open,
   onOpenChange,
   side = 'right',
@@ -84,3 +85,6 @@ export function Drawer({
     </BaseDrawer.Root>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Drawer = slotted('Drawer', DefaultDrawer);

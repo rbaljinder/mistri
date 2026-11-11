@@ -121,6 +121,11 @@
       "default": false,
       "description": "Whether the App's open pages follow other people's changes (live sync): a list, a record and a dashboard read again what a change touched, as it commits. Off unless true; then pages refresh on focus and after their own saves, and a dashboard reads every section again each minute while shown. The operator's --no-live wins. A resource leaves it with live: false."
     },
+    "uiKit": {
+      "type": "string",
+      "pattern": "^\\.{1,2}/.+\\.(tsx?|jsx?)$",
+      "description": "Preview. The module that draws the App's controls, as './ui/kit.tsx': its default export is defineUiKit({ Button, Modal, … }) from @mistriwork/mistri/page. A slot the kit leaves out draws as the platform's own."
+    },
     "branding": {
       "type": "object",
       "additionalProperties": false,

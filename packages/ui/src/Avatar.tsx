@@ -8,6 +8,7 @@
  * disc's title. Sizes are the house ones: `sm` 28px, `md` 36px, `lg` 48px.
  */
 import { Avatar as BaseAvatar } from '@base-ui/react/avatar';
+import { slotted } from './internal/uiKitContext.js';
 
 export type AvatarSize = 'sm' | 'md' | 'lg';
 
@@ -35,7 +36,7 @@ export function initialsOf(name: string): string {
   return firstLetter(words[0]!) + firstLetter(words[1]!);
 }
 
-export function Avatar({ name, src, size = 'md', className }: AvatarProps) {
+function DefaultAvatar({ name, src, size = 'md', className }: AvatarProps) {
   return (
     <BaseAvatar.Root className={['ui-avatar', `ui-avatar-${size}`, className].filter(Boolean).join(' ')}>
       {src ? <BaseAvatar.Image className="ui-avatar-image" src={src} alt="" /> : null}
@@ -45,3 +46,6 @@ export function Avatar({ name, src, size = 'md', className }: AvatarProps) {
     </BaseAvatar.Root>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Avatar = slotted('Avatar', DefaultAvatar);

@@ -37,6 +37,7 @@ const KEYS: Record<string, string> = {
   home: 'Where a visitor starts',
   nav: 'The menu: arrangement only',
   ui: 'Look, density and components for the whole App',
+  uiKit: "The App's own control primitives replace the default ones in every view",
 };
 
 const declared = () => {

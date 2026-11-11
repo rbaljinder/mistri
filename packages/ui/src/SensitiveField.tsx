@@ -11,6 +11,7 @@ import { Field } from './Field.js';
 import { frameOf, type FieldFrame } from './fieldFrame.js';
 import { digits, type Mask } from './masks.js';
 import { ValidMark } from './TextField.js';
+import { slotted } from './internal/uiKitContext.js';
 
 export interface SensitiveFieldProps extends FieldFrame {
   /** The raw value. */
@@ -28,7 +29,7 @@ export interface SensitiveFieldProps extends FieldFrame {
   hideLabel: string;
 }
 
-export function SensitiveField(props: SensitiveFieldProps): ReactNode {
+function DefaultSensitiveField(props: SensitiveFieldProps): ReactNode {
   const [shown, setShown] = useState(false);
   const formatted = props.mask.format(props.value);
   const display = shown ? formatted : '•'.repeat(formatted.length);
@@ -75,3 +76,6 @@ export function SensitiveField(props: SensitiveFieldProps): ReactNode {
     </Field>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const SensitiveField = slotted('SensitiveField', DefaultSensitiveField);

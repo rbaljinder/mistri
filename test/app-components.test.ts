@@ -5,7 +5,8 @@
  * page's singletons left external and the server's modules refused, its CSS
  * layered and scoped, `mistri check`'s lints, the host modules the import
  * map points at, a real server serving the compiled files and listing them in
- * /api/app, and `mistri build` carrying the components/ graph.
+ * /api/app, and `mistri build` carrying the components/ graph; and an App's
+ * control kit (Preview), compiled the same way and named in its page's head.
  */
 import { after, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,6 +20,8 @@ import { appComponents } from '../packages/mistri/src/shared/appComponentPlaces.
 import { parseAppConfig, type AppDef } from '../packages/mistri/src/shared/app.js';
 import { parsePagesConfig, validatePage, type PageDef } from '../packages/engine/src/shared/page.js';
 import { compileComponents } from '../packages/mistri/src/server/app/appComponents.js';
+import { componentsIndex } from '../packages/mistri/src/server/app/appBuild.js';
+import { withHead } from '../packages/engine/src/server/clientHttp.js';
 import { withHostPaths } from '../packages/mistri/src/server/http/componentRoutes.js';
 import { lintComponents } from '../packages/mistri/src/server/app/componentLint.js';
 import { hostModuleSource } from '../packages/mistri/src/server/app/componentSdk.js';
@@ -477,5 +480,72 @@ describe("mistri check's lints, spelled another way", () => {
     const { problems } = await lintComponents(at, compiled);
     const lines = new Set(problems.map((finding) => finding.line));
     for (const line of [2, 3, 4, 5, 6]) assert.ok(lines.has(line), `line ${line} is a finding: ${JSON.stringify(problems)}`);
+  });
+});
+
+describe("an App's control kit (Preview)", () => {
+  /* The fixture e2e/ui-kit.spec.ts drives: a plain-HTML kit beside an App that declares it. */
+  const KIT_DESK = join(ROOT, 'test/fixtures/apps/kit-desk');
+  const kitApp = (name: string, kit: string) =>
+    dir(name, {
+      'ui/kit.jsx': kit,
+      'app.mjs': [
+        "import { defineApp } from '@mistriwork/mistri/app';",
+        "export default defineApp({ id: 'tick', name: 'Tick', connection: 'tick', resources: { task: {} },",
+        "  views: { tasks: { kind: 'list', from: 'task' } },",
+        "  home: 'tasks', nav: ['tasks'], uiKit: './ui/kit.jsx' });",
+      ].join('\n'),
+    });
+
+  test("is compiled beside the components, its sheet layered under the look, and listed in a build's index", async () => {
+    const loaded = await loadApp(KIT_DESK);
+    const kit = loaded.components?.kit;
+    assert.ok(kit, 'the declared kit is compiled');
+    assert.match(kit.js, /^ui-kit-[0-9a-f]{12}\.js$/);
+    assert.match(kit.css ?? '', /^ui-kit-[0-9a-f]{12}\.css$/);
+    // Page-wide, not scoped to a placement: the kit draws every page's controls, under the look's layer.
+    assert.match(loaded.components!.files[kit.css!], /^@layer components \{[\s\S]*\.kit-button/);
+    // React and the page module stay external: the kit draws in the page's one React, as a component does.
+    assert.match(loaded.components!.files[kit.js], /from "react-dom";\nimport \{ defineUiKit \} from "@mistriwork\/mistri\/page";/);
+    assert.deepEqual(componentsIndex(loaded.components!)['#uiKit'], { kind: 'kit', js: kit.js, css: kit.css });
+  });
+
+  test('a slot the kit does not have refuses the load, naming the nearest one', async () => {
+    const bad = kitApp(
+      'kit-misspelled',
+      "import { defineUiKit } from '@mistriwork/mistri/page';\nexport default defineUiKit({ Buton: () => null });\n",
+    );
+    await assert.rejects(loadApp(bad), /the UI kit \(\.\/ui\/kit\.jsx\) has no slot named "Buton" \(did you mean "Button"\?\)/);
+    const bare = kitApp('kit-bare', 'export default { Button: () => null };\n');
+    await assert.rejects(loadApp(bare), /no default export made by defineUiKit/);
+  });
+
+  test("the page's head preloads the module and links the sheet before the first render; the Workbench's never does", () => {
+    const page = '<html><head><meta charset="utf-8"><title>x</title></head><body></body></html>';
+    const uiKit = { js: '/desk/_components/ui-kit-0123456789ab.js', css: '/desk/_components/ui-kit-0123456789ab.css' };
+    const html = withHead(page, { uiKit });
+    assert.match(html, /<link rel="modulepreload" crossorigin href="\/desk\/_components\/ui-kit-0123456789ab\.js">/);
+    assert.match(html, /<link rel="stylesheet" href="\/desk\/_components\/ui-kit-0123456789ab\.css" data-component-css="ui-kit">/);
+    assert.match(html, /<meta name="mistri-ui-kit" content="\/desk\/_components\/ui-kit-0123456789ab\.js" data-css="[^"]+\.css">/);
+    assert.ok(html.indexOf('mistri-ui-kit') < html.indexOf('</head>'));
+    assert.doesNotMatch(withHead(page, { uiKit, workbench: true }), /ui-kit/);
+    assert.doesNotMatch(withHead(page, { title: 'No kit' }), /ui-kit/, 'an App without a kit is told of nothing extra');
+  });
+
+  test('mistri build carries the kit and serves it back with no compiler', async () => {
+    const out = join(work, 'kit-build');
+    const built = await new Promise<{ code: number; err: string }>((done) =>
+      execFile(
+        process.execPath,
+        ['--import', 'tsx', ENTRY, 'build', '--app', KIT_DESK, '--out', out],
+        { cwd: ROOT, timeout: 120_000 },
+        (error, _stdout, stderr) => done({ code: (error as { code?: number } | null)?.code ?? 0, err: stderr }),
+      ),
+    );
+    assert.equal(built.code, 0, built.err);
+    const loaded = await loadApp(out);
+    assert.match(loaded.components?.kit?.js ?? '', /^ui-kit-[0-9a-f]{12}\.js$/);
+    assert.match(loaded.components!.files[loaded.components!.kit!.js], /data-kit/);
+    assert.deepEqual(Object.keys(loaded.components!.entries), []);
   });
 });

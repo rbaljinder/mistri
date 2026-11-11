@@ -23,8 +23,9 @@ import { Autocomplete } from '@base-ui/react/autocomplete';
 import { viewportBox } from './internal/ruler.js';
 import { layoutViewport, zoomAnchor } from './internal/anchor.js';
 import { popupContainer } from './internal/popups.js';
+import { slotted } from './internal/uiKitContext.js';
 
-interface TypeaheadProps<T> {
+export interface TypeaheadProps<T> {
   text: string;
   onText: (text: string) => void;
   /** Already ranked and bounded; drawn in this order. */
@@ -65,7 +66,7 @@ interface TypeaheadProps<T> {
   onHighlight?: (item: T | undefined) => void;
 }
 
-export function Typeahead<T>({
+function DefaultTypeahead<T>({
   text,
   onText,
   items,
@@ -198,3 +199,6 @@ export function Typeahead<T>({
     </Autocomplete.Root>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Typeahead = slotted('Typeahead', DefaultTypeahead);

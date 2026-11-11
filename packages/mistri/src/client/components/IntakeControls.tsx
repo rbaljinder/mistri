@@ -12,6 +12,7 @@
 import { useState, type AriaAttributes, type CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Dropdown, readsAsName } from '@mistriwork/kit/client/components/Dropdown.js';
+import { Button } from '@mistriwork/ui/Button.js';
 import { CheckCards } from '@mistriwork/ui/Choices.js';
 import { run, type ChoiceSource } from './CommandReference.js';
 import '@mistriwork/kit/client/formControls.css';
@@ -331,9 +332,9 @@ export function IntakeControl(props: IntakeControlProps) {
           value={drawn}
           onChange={(event) => onChange(field.mask ? maskRaw(field.mask, event.target.value) : event.target.value)}
         />
-        <button type="button" className="btn btn-quiet" aria-controls={id} aria-pressed={shown} onClick={() => setShown(!shown)}>
+        <Button intent="quiet" aria-controls={id} aria-pressed={shown} onClick={() => setShown(!shown)}>
           {shown ? say('hideValue') : say('showValue')}
-        </button>
+        </Button>
       </div>
     );
   }

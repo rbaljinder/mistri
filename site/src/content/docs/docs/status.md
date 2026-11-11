@@ -1,6 +1,6 @@
 ---
 title: Status & roadmap
-description: The 1.0.0-rc.39 scope, stable and preview features, current limitations and planned work.
+description: The 1.0.0-rc.40 scope, stable and preview features, current limitations and planned work.
 ---
 
 The scope of this release, stable and preview features, current limitations and planned work.
@@ -10,7 +10,7 @@ npx @mistriwork/mistri check --app .
 #   preview: This App uses Preview features (…). They work as documented and may change in any 1.x release.
 ```
 
-This site describes **mistri 1.0.0-rc.39**, a release candidate. Since rc.2, the first release under the mistri name,
+This site describes **mistri 1.0.0-rc.40**, a release candidate. Since rc.2, the first release under the mistri name,
 the App framework is split out of tablewalk, which stays the standalone database browser. A save is a fixed number of
 database round trips, the runtime forgets what it wrote about an App after the App's own retention windows, and on
 PostgreSQL the runtime lives in one schema named `mistri`. There is no upgrade from a tablewalk 0.9 App database.
@@ -69,6 +69,7 @@ stable.
 | The header's New menu (`ui.shell.new`) | Stable |
 | [Custom components](/docs/custom-components/): `component()`, sections, value renderers, inputs, `customList()`, `useCommand`, `ui.csp`, public surfaces | Stable |
 | [Free-form pages](/docs/custom-components/#free-form-pages) (`definePage` from `@mistriwork/mistri/page`, `pages/*.page.tsx`), their loaders and blocks, and a role's `service` | Stable |
+| [Control kits](/docs/control-kits/) (`uiKit`, `defineUiKit` and `UiKitSlots` from `@mistriwork/mistri/page`, `@mistriwork/ui/conformance`) | Preview |
 | [The assistant](/docs/assistant/) (`assistant()`): a panel that reads and proposes as the signed-in person, Claude via `ANTHROPIC_API_KEY`; on a tenant App, per customer once the platform owner turns it on, sending only the person's messages and the rows their own reads return | Stable |
 | [The assistant's page](/docs/assistant/) (`placement: [..., 'page']`), full screen, `starters`, and verbs on its record cards and table rows | Stable |
 
@@ -135,7 +136,7 @@ and `package.json` are files, not entry points.
 | --- | --- | --- |
 | `mistri` (the command, `node_modules/.bin/mistri`) | The [command line](/docs/cli/) | Stable |
 | `@mistriwork/mistri/app` | Types for an App's `app.ts` | Stable |
-| `@mistriwork/mistri/page` | `definePage` and the free-form page API (`Loaded` is Preview) | Stable |
+| `@mistriwork/mistri/page` | `definePage` and the free-form page API (`Loaded` and the control-kit names are Preview) | Stable |
 | `@mistriwork/mistri/ui` | Custom components, `useCommand`, the kit (`Loaded` is Preview) | Stable |
 | `@mistriwork/mistri/ui/testing` | Rendering a component against a served App in a test | Stable |
 | `@mistriwork/mistri/commands` | `defineCommand`, `defineEvent`, `defineChallenges`, effects (the aggregates are Preview) | Stable |
@@ -170,7 +171,7 @@ entry points above:
   "version": "1.0.0",
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "peerDependencies": { "@mistriwork/mistri": "^1.0.0-rc.39" }
+  "peerDependencies": { "@mistriwork/mistri": "^1.0.0-rc.40" }
 }
 ```
 

@@ -195,6 +195,7 @@
  "e2e/tick.spec.ts": 28.6,
  "e2e/tree-picker.spec.ts": 7.8,
  "e2e/typeahead-geometry.spec.ts": 10.4,
+ "e2e/ui-kit.spec.ts": 12,
  "e2e/ui-standalone.spec.ts": 3.5,
  "e2e/under-load.spec.ts": 23,
  "e2e/update-reliability.spec.ts": 13.9,

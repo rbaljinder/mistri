@@ -66,6 +66,8 @@ const need = {
     /* Written by the pack (scripts/pack-manifest.mjs): the release candidates, not the repository's 700 KB. */
     'CHANGELOG.md',
   ],
+  /* The control-kit seam (Preview): an App's kit is made with defineUiKit, and checked by the conformance suite. */
+  '@mistriwork/ui': [...common, 'dist/UiKit.js', 'dist/uiKitSlots.js', 'dist/conformance.js'],
   'create-mistri': [...common, 'bin.js'],
   '@mistriwork/cloudflare': [...common, 'dist/index.js', 'dist/index.d.ts'],
 };

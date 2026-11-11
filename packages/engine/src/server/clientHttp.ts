@@ -196,6 +196,12 @@ interface ShellTitle {
    * script and no hash to keep. Absent, the page says nothing of the kind.
    */
   pwa?: { manifest: string; register: string };
+  /**
+   * The App's control kit (Preview; the App framework's appComponents.ts compileUiKit): its module, preloaded and named
+   * in a meta the shell reads to install it before its first render, and its stylesheet, linked so it is in force from
+   * the first paint. Never the Workbench's.
+   */
+  uiKit?: { js: string; css?: string };
   /** The App declared `ui.microphone`: its pages may ask for the microphone, from this origin alone (`pagePermissions`). */
   microphone?: true;
   /** The scheme that look says (clientSurface.ts lookSchemeFor), said in the page so it is dark from its first paint. */
@@ -272,6 +278,7 @@ const writesHead = (head: ShellTitle | undefined) =>
     head?.looks?.length ||
     head?.social ||
     head?.pane ||
+    head?.uiKit ||
     head?.pwa,
   );
 
@@ -393,6 +400,18 @@ export function withHead(html: string, head: ShellTitle | undefined): string {
       () =>
         `  <link rel="manifest" href="${escapeHtml(head!.pwa!.manifest)}">\n  <script src="${escapeHtml(head!.pwa!.register)}" defer></script>\n  </head>`,
     );
+  /* The kit's module is fetched beside the entry rather than after it, and its sheet is a link in the head, so the
+     first render draws the kit's controls in the kit's rules: nothing is swapped, and nothing moves, after paint. */
+  if (head!.uiKit && !head!.workbench) {
+    const kit = head!.uiKit;
+    const css = kit.css ? `  <link rel="stylesheet" href="${escapeHtml(kit.css)}" data-component-css="ui-kit">\n` : '';
+    out = out.replace(
+      /<\/head>/i,
+      () =>
+        `  <link rel="modulepreload" crossorigin href="${escapeHtml(kit.js)}">\n${css}` +
+        `  <meta name="mistri-ui-kit" content="${escapeHtml(kit.js)}"${kit.css ? ` data-css="${escapeHtml(kit.css)}"` : ''}>\n  </head>`,
+    );
+  }
   if (!head?.title && !head?.canonical) return out;
   /* Replaced by a function, never a replacement string: a string's `$&`,
      `` $` `` and `$'` are patterns, and a record's name is anybody's text —

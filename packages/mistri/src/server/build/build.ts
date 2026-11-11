@@ -368,8 +368,9 @@ async function stagedBuild({
       for (const [file, text] of Object.entries(loaded.components.files)) await writeFile(join(staging, 'components', file), text);
       await writeFile(join(staging, COMPONENTS_INDEX), `${JSON.stringify(componentsIndex(loaded.components), null, 2)}\n`);
       outputs.components = COMPONENTS_INDEX;
+      const { kit } = loaded.components;
       say(
-        `components: ${Object.entries(loaded.components.entries)
+        `components: ${[...Object.entries(loaded.components.entries), ...(kit ? [['UI kit', kit] as const] : [])]
           .map(([id, entry]) => `${id} (${entry.js}${entry.css ? `, ${entry.css}` : ''})`)
           .join(', ')}`,
       );

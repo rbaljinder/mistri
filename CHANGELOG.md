@@ -5,6 +5,16 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.40
+
+The UI seam (Preview): an App plugs in its own control primitives, slot by slot
+
+- **An App can bring its own controls.** `uiKit: './ui/kit.tsx'` names a `defineUiKit()` module that replaces any of 31 `@mistriwork/ui` primitives: Button and ButtonLink, the fields and choices, Select, Dropdown and Typeahead, DateField, Modal, Drawer, Popover, Tooltip, the DropMenu family, Tabs, Pagination and Avatar. A slot the kit leaves out keeps the default. The platform's own surfaces draw through the kit too, so a record page, a New form, a dialog and a row menu all wear it.
+- **A kit costs nothing until it is named.** The custom-component pipeline compiles the kit and its optional stylesheet, which sits in the components layer on the look's tokens. The head preloads both and the shell installs the kit before its first render, so nothing is swapped after paint. An App without a kit fetches nothing extra.
+- **`mistri check` runs the kit with stand-ins** and names a misspelled slot or a menu family given only in part.
+- **`@mistriwork/ui/conformance`** is the contract's test suite: a kit passes it, as the default kit does. The guide is "Plug in a control kit".
+- Bundle budget: the public first paint's script target moves to 721,000 raw / 201,000 in brotli (measured 700,146 / 195,250). Every public form's controls now ask the installed kit for their slot.
+
 ## 1.0.0-rc.39
 
 A tenant's profile, shared with its members: conditions, menus, form fields, captions, replies and job hours that follow the tenant; one-time words in a notice; a refusal that keeps what it must leave behind; and fixes from a field report.

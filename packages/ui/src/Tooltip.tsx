@@ -23,6 +23,7 @@ import { Tooltip as BaseTooltip } from '@base-ui/react/tooltip';
 import { layoutViewport, zoomAnchor } from './internal/anchor.js';
 import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { popupContainer, useDialogContainer } from './internal/popups.js';
+import { slotted } from './internal/uiKitContext.js';
 
 export interface TooltipProps {
   /** The element the note belongs to; a button, a word, an icon. */
@@ -35,7 +36,7 @@ export interface TooltipProps {
   className?: string;
 }
 
-export function Tooltip({ trigger, children, open, defaultOpen, onOpenChange, className }: TooltipProps) {
+function DefaultTooltip({ trigger, children, open, defaultOpen, onOpenChange, className }: TooltipProps) {
   const tooltipId = useId();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen ?? false);
   const isOpen = open ?? uncontrolledOpen;
@@ -83,3 +84,6 @@ export function Tooltip({ trigger, children, open, defaultOpen, onOpenChange, cl
     </BaseTooltip.Root>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Tooltip = slotted('Tooltip', DefaultTooltip);

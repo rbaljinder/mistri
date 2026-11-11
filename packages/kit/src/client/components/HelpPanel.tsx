@@ -10,7 +10,8 @@
  * to learn and no examples to fetch.
  */
 import { useEffect, useRef, useState } from 'react';
-import { currentEntry, state, trapFocus } from '../core.js';
+import { Modal } from '@mistriwork/ui/Modal.js';
+import { currentEntry, state } from '../core.js';
 import { SECTIONS, buildExamples, runExample, sampleRows } from '../helpContent.js';
 import { say } from '../copy/workbench/components/HelpPanel.js';
 import '../help.css';
@@ -63,17 +64,12 @@ function useExamples(enabled: boolean): Built {
 }
 
 export function HelpPanel({ onClose, keysOnly = false }: { onClose: () => void; keysOnly?: boolean }) {
-  const backdrop = useRef<HTMLDivElement>(null);
   const close = useRef<HTMLButtonElement>(null);
   const built = useExamples(!keysOnly);
   useEffect(() => {
-    const release = trapFocus(backdrop.current!) as (() => void) | undefined;
-    close.current?.focus();
-    return () => release?.();
-  }, []);
-  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || e.key === '?') {
+      /* Escape is the dialog's own (Modal); `?` is the key that opened the panel, so it closes it too. */
+      if (e.key === '?') {
         e.preventDefault();
         e.stopPropagation();
         onClose();
@@ -95,43 +91,35 @@ export function HelpPanel({ onClose, keysOnly = false }: { onClose: () => void; 
   ];
   const title = keysOnly ? say('keyboard') : say('queryLanguage');
   return (
-    <div
-      ref={backdrop}
-      className="help-backdrop"
-      onPointerDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="help-panel" role="dialog" aria-modal="true" aria-label={title}>
-        <header className="help-head">
-          <div>
-            <h2 className="help-title">{title}</h2>
-            <p className="help-sub">{keysOnly ? say('theKeysThisPage') : say('everyExampleBelowRuns', { label })}</p>
-          </div>
-          <button
-            ref={close}
-            type="button"
-            className="help-close"
-            aria-label={say('common.close')}
-            title={say('closeParenEsc')}
-            onClick={onClose}
-          >
-            <span aria-hidden="true">×</span>
-          </button>
-        </header>
-        <div className="help-body">
-          {ordered.map((spec) => (
-            <Section
-              key={spec.title}
-              spec={spec}
-              examples={built.examples}
-              onRun={onClose}
-              here={Boolean(here && spec.rooms?.includes(here))}
-            />
-          ))}
+    <Modal className="help-panel" onClose={onClose} ariaLabel={title} initialFocus={close} fullscreen={false}>
+      <header className="help-head">
+        <div>
+          <h2 className="help-title">{title}</h2>
+          <p className="help-sub">{keysOnly ? say('theKeysThisPage') : say('everyExampleBelowRuns', { label })}</p>
         </div>
+        <button
+          ref={close}
+          type="button"
+          className="help-close"
+          aria-label={say('common.close')}
+          title={say('closeParenEsc')}
+          onClick={onClose}
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      </header>
+      <div className="help-body">
+        {ordered.map((spec) => (
+          <Section
+            key={spec.title}
+            spec={spec}
+            examples={built.examples}
+            onRun={onClose}
+            here={Boolean(here && spec.rooms?.includes(here))}
+          />
+        ))}
       </div>
-    </div>
+    </Modal>
   );
 }
 

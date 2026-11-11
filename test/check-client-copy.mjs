@@ -74,6 +74,11 @@ const ALLOWED = [
     reason: "a heat map head's font, to measure its names with, never shown",
   },
   {
+    file: 'components/sdk/uiKitLoader.ts',
+    text: 'The UI kit {}',
+    reason: "an App's control kit refused in the console, in the words its load gives the App's author; never drawn",
+  },
+  {
     file: 'components/sdk/fixture.tsx',
     text: 'The object form has no operator "{}".',
     reason: "the test fixture's refusal of a malformed where, read by the test's author and never drawn in an App",
