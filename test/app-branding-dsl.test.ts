@@ -334,6 +334,40 @@ test('local headline validation narrows view actions and leaves checked targets 
   input.pages.profile.sections[0].links[1].to = 'missing';
   const missing = parseAppPages(input, 'fixture');
   assert.ok(appProblems({ ...loaded(app), pages: missing }, schema()).some((problem) => problem.includes('opens "missing"')));
+  // A list on one of its tabs, by its address word: one it does not have is named with the ones it does.
+  (input.pages.profile.sections[0].links[1] as { to: unknown }).to = { view: 'profiles', tab: 'late' };
+  const tabbed = parseAppPages(input, 'fixture');
+  assert.deepEqual(tabbed[0]!.sections[0] && 'actions' in tabbed[0]!.sections[0] ? tabbed[0]!.sections[0].actions?.[1] : undefined, {
+    label: 'Local',
+    view: 'profiles',
+    tab: 'late',
+  });
+  assert.ok(
+    appProblems({ ...loaded(app), pages: tabbed }, schema()).some((problem) =>
+      problem.includes(`the headline's "Local" names the tab "late", which the view "profiles" does not have`),
+    ),
+  );
+});
+
+test('the JSON schema takes a view action as a key or { view, tab }, on a headline, a note and an empty list', () => {
+  const read = (name: string) =>
+    JSON.parse(readFileSync(new URL(`../packages/mistri/schema/${name}.schema.json`, import.meta.url), 'utf8'));
+  const ajv = new Ajv2020({ strict: true, strictTypes: false, strictRequired: false, allErrors: true });
+  ajv.addSchema(read('theme'));
+  ajv.addSchema(read('page'));
+  const validate = ajv.compile(read('app'));
+  const app = (to: unknown) => ({
+    ...raw(),
+    views: {
+      profiles: { kind: 'list', from: 'profile', tabs: ['open'], empty: { title: 'None', action: { label: 'Open', to } } },
+      board: { kind: 'dashboard', label: 'Board', sections: [{ kind: 'note', text: 'Hi', action: { label: 'Open', to } }] },
+    },
+    pages: { profile: { base: 'profile', sections: [{ kind: 'headline', show: ['name'], links: [{ label: 'Open', to }] }] } },
+  });
+  for (const to of ['profiles', { view: 'profiles' }, { view: 'profiles', tab: 'open' }])
+    assert.equal(validate(app(to)), true, JSON.stringify(validate.errors));
+  for (const to of [{ view: 'profiles', tabs: 'open' }, { view: 'profiles', tab: ' ' }, { tab: 'open' }, { view: 'Profiles!' }])
+    assert.equal(validate(app(to)), false, JSON.stringify(to));
 });
 
 test('local public-form prefill still enforces published fields and prefillable inputs beside checked targets', () => {

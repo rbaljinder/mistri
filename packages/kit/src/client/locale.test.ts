@@ -257,6 +257,17 @@ describe('absolute dates', () => {
     expect(plain(formatAbsolute(Date.UTC(2026, 8, 4, 21, 30), { time: true })), 'an epoch is an instant').toBe('Sep 4, 2026, 2:30 PM PDT');
   });
 
+  test("'short' says a moment in the fewest characters, without seconds, in the zone it would be said in", () => {
+    inLocale({ locale: 'en-US' });
+    expect(plain(formatDateTime('2026-03-05 14:30:15', 'short'))).toBe('3/5/26, 2:30 PM');
+    expect(plain(formatDateTime('2026-03-05', 'short')), 'a date alone').toBe('3/5/26');
+    expect(plain(formatDateTime('14:30:00', 'short')), 'a time alone').toBe('2:30 PM');
+    expect(plain(formatAbsolute('2026-09-04T21:30:15Z', { time: true, zone: 'America/New_York', short: true }))).toBe(
+      '9/4/26, 5:30 PM EDT',
+    );
+    expect(formatAbsolute('2026-09-04', { short: true })).toBe('9/4/26');
+  });
+
   test('a wall clock past a DST change lands on the hour it names', () => {
     inLocale({ locale: 'en-US', clockZone: 'America/New_York' });
     expect(plain(formatAbsolute('2026-03-08 12:00:00', { time: true, zone: 'UTC' }))).toBe('Mar 8, 2026, 4:00 PM UTC');

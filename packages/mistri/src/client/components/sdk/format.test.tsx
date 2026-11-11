@@ -31,6 +31,13 @@ test('a moment is said in a named zone with its name, and as the App clock says 
   expect(format.dateTime('2026-09-04 21:30')).toBe(format.dateTime('2026-09-04 21:30', {}));
 });
 
+test('a short moment is the fewest characters, in a named zone as without one', () => {
+  const format = useFormat();
+  const spaced = (text: string) => text.replace(/[\s\u202f\u00a0]+/g, ' ');
+  expect(spaced(format.dateTime('2026-09-04 21:30:15', { style: 'short' }))).toBe('9/4/26, 9:30 PM');
+  expect(spaced(format.dateTime('2026-09-04T21:30:00Z', { timezone: 'America/Los_Angeles', style: 'short' }))).toBe('9/4/26, 2:30 PM PDT');
+});
+
 test("a page reckons the App's day in the App's zone, and in the reader's own where the App names none", () => {
   installShell({ format: () => ({ locale: 'en-US', timezone: 'America/Denver' }) });
   expect(useFormat().timezone).toBe('America/Denver');

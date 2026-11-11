@@ -60,6 +60,16 @@ export const LANGUAGE_WORDS = new Set([
   'yes',
   'no',
   'empty',
+  /* A metric's or a breakdown's line reads its measure and its `by` after the conditions: a segment called `count`
+     or `max` is read as the measure and one called `by` splits the line, so a list over it worked and the first
+     dashboard over it failed. Refused at check, by name, as a field report asked. */
+  'by',
+  'count',
+  'sum',
+  'avg',
+  'min',
+  'max',
+  'median',
 ]);
 
 /* ---------- served ---------- */

@@ -73,7 +73,8 @@ import {
   tabSlug,
   tabWord,
 } from '@mistriwork/engine/shared/addressParams.js';
-import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { looksLikeDate, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { dateWindow } from '@mistriwork/engine/shared/queryDates.js';
 import {
   INBOX_SEGMENT,
   ASSISTANT_ROOM,
@@ -102,6 +103,15 @@ const unquoted = (value: string) => {
 };
 
 const literal = (value: string) => (NUMBER.test(value) ? value : String(quote(value)));
+
+/* A date column's window — `today`, `last 30 days` — is a phrase of the
+   language, not a value: quoted, the column check refused it as one no date
+   holds (a field report), and the address a dashboard's drill wrote opened on
+   an error. */
+function valueFor(spec: ListSpec, name: string, value: string): string {
+  const column = (findTable(spec.table) as TableMeta | undefined)?.columns.find((c) => c.name === name);
+  return column && looksLikeDate(column) && dateWindow(value, new Date()) ? value : literal(value);
+}
 
 /** The name column, whose box is the list's search: the list's own rule (appListModel.ts). */
 function nameColumn(spec: ListSpec): string | undefined {
@@ -292,7 +302,7 @@ export function addressQuestion(spec: ListSpec, params: URLSearchParams): string
   if (q !== null) return squeeze(q);
   const tabs = tabQuestions(spec);
   // No tab, or one the view no longer has, is the tab the view opens on.
-  const tab = tabs.find((candidate) => candidate.slug === params.get('tab')) ?? tabs[0];
+  const tab = tabs.find((candidate) => candidate.slug.toLowerCase() === params.get('tab')?.toLowerCase()) ?? tabs[0];
   const conditions: string[] = [];
   const naming = nameColumn(spec);
   const search = params.get('search');
@@ -318,7 +328,7 @@ export function addressQuestion(spec: ListSpec, params: URLSearchParams): string
       conditions.push(`${name} has ${values.length > 1 ? `(${values.map(literal).join(', ')})` : literal(values[0])}`);
       continue;
     }
-    conditions.push(values.length > 1 ? `${name} in (${values.map(literal).join(', ')})` : `${name} = ${literal(values[0])}`);
+    conditions.push(values.length > 1 ? `${name} in (${values.map(literal).join(', ')})` : `${name} = ${valueFor(spec, name, values[0])}`);
   }
   // The tab's words as the list writes them, so the tab lights; the boxes after them.
   const where = conditions.length ? andQuery(tab.query, ...conditions) : tab.query;

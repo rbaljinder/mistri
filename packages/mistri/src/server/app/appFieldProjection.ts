@@ -1,7 +1,8 @@
 import { ANSI_STYLE } from '@mistriwork/engine/adapters/adapter.js';
 import { pageAbouts } from '@mistriwork/engine/shared/pageModel.js';
 import { assertNever } from '@mistriwork/engine/shared/model.js';
-import { backdropProblem, isFormView, labelTemplateProblem, listProblem, type AppDef, type AppForm } from '../../shared/app.js';
+import { isFormView, labelTemplateProblem, type AppDef, type AppForm } from '../../shared/app.js';
+import { backdropProblem, listProblem } from '../../shared/appListProblems.js';
 import { isLabelTemplate } from '@mistriwork/engine/shared/recordLabel.js';
 import { compileBreakdown } from '@mistriwork/engine/shared/breakdown.js';
 import { StatementInstantMissing } from '@mistriwork/engine/shared/computed.js';

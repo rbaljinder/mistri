@@ -37,7 +37,7 @@ vi.mock('./appListModel.js', () => ({
 /* The list as it opens: its key alone (publicAddress.test says why); a
    dashboard is its key in the App's book (app-address.test says how). The
    App's addresses are the shell's answer (shellMode.ts), as appnav.js gives it. */
-const asked = vi.hoisted(() => ({ search: '' }));
+const asked = vi.hoisted(() => ({ search: '', adoptOrder: undefined as boolean | undefined }));
 beforeEach(() =>
   installShell({
     addresses: {
@@ -45,7 +45,10 @@ beforeEach(() =>
         asked.search = search;
         return { kind: 'table', view: key, table: 'issue', query: `asked ${search}` };
       },
-      listParams: (entry: { view?: string }) => (entry.view === 'board' ? '' : undefined),
+      listParams: (entry: { view?: string; query: string }, options?: { adoptOrder?: boolean }) => {
+        asked.adoptOrder = options?.adoptOrder;
+        return entry.view !== 'board' ? undefined : entry.query.includes('status = open') ? 'status=open' : '';
+      },
       address: (connection: string, [entry]: readonly object[]) =>
         (entry as { kind: string }).kind === 'page' ? `/${connection}/home` : undefined,
       stackFrom: () => null,
@@ -54,12 +57,19 @@ beforeEach(() =>
   }),
 );
 
-const { viewLink } = await import('./viewLink.js');
+const { listEntry, viewLink } = await import('./viewLink.js');
 
 test("a list's link is its key, a dashboard's its own, and a key naming nothing no link", () => {
   expect(viewLink('board')?.href).toBe('/thread/board');
   expect(viewLink('home')?.href).toBe('/thread/home');
   expect(viewLink('nowhere')).toBeUndefined();
+});
+
+test('a list on one of its tabs (`to: { view, tab }`) is the list its `?tab=` address opens', async () => {
+  const { go } = await import('../core.js');
+  viewLink('board', 'push', { tab: 'Overdue' })?.onClick?.({ button: 0, preventDefault() {} } as never);
+  expect(asked.search).toBe('tab=overdue');
+  expect(go).toHaveBeenLastCalledWith({ kind: 'table', view: 'board', table: 'issue', query: 'asked tab=overdue' }, 'push');
 });
 
 test("a signed-in form's link opens its own room, not a dashboard's", async () => {
@@ -82,4 +92,17 @@ test('openView with a tab, a search and filters opens the list that address woul
   expect(pageBridge.openView?.('board')).toBe(true);
   expect(go).toHaveBeenLastCalledWith({ kind: 'table', table: 'issue', query: 'issue cycle_id = 1', tab: 'rows', view: 'board' });
   expect(pageBridge.openView?.('nowhere')).toBe(false);
+});
+
+test("a dashboard's drill opens the list its address would: the view's show and order, not the bare question", () => {
+  // A field report: a drill opened every column, sorted by the key, and the address it wrote failed on a direct load.
+  expect(listEntry('board', 'issue cycle_id = 1 and status = open')).toEqual({
+    kind: 'table',
+    view: 'board',
+    table: 'issue',
+    query: 'asked status=open',
+  });
+  expect(asked.adoptOrder).toBe(true);
+  expect(asked.search).toBe('status=open');
+  expect(listEntry('nowhere', 'issue')).toBeUndefined();
 });

@@ -36,12 +36,12 @@ interface Ran {
   out: string;
   err: string;
 }
-function run(args: string[]): Promise<Ran> {
+function run(args: string[], extra: Record<string, string> = {}): Promise<Ran> {
   return new Promise((done, reject) => {
     execFile(
       process.execPath,
       ['--import', 'tsx', ENTRY, ...args],
-      { cwd: ROOT, env, timeout: 180_000, killSignal: 'SIGKILL' },
+      { cwd: ROOT, env: { ...env, ...extra }, timeout: 180_000, killSignal: 'SIGKILL' },
       (error, out, err) => {
         if (error && (error as { killed?: boolean }).killed) {
           reject(new Error(`tablewalk ${args.join(' ')} did not exit`));
@@ -507,6 +507,35 @@ describe('mistri check --json', () => {
   test('an App that uses no Preview feature says nothing about Preview', async () => {
     const ran = await run(['check', '--app', 'examples/apps/tick', '--config', config, '--json']);
     assert.equal(JSON.parse(ran.out).problems.filter((found: Problem) => found.code === 'preview-feature').length, 0);
+  });
+
+  test('the command actions that ask nothing and say no confirm are one one-click finding, at information severity', async () => {
+    const dir = app('one-click', {
+      'app.ts': `export default { id: 'tiny', name: 'Tiny', connection: 'tick',
+        auth: { providers: ['email'], store: 'auth.db', roles: { staff: { read: true, commands: ['close', 'note'] } } },
+        resources: { task: { access: 'write', actions: {
+          close: { label: 'Close', command: 'close' },
+          note: { label: 'Note', command: 'note' },
+          purge: { label: 'Purge', command: 'close', confirm: true } } } },
+        views: { tasks: { kind: 'list', from: 'task' } }, home: 'tasks' };\n`,
+      'commands.mjs': `import { defineCommand, defineCommands, field } from '@mistriwork/mistri/commands';
+export default defineCommands({
+  close: defineCommand({ source: 'tick', target: 'task', input: {}, async handle({ db, record }) { await db.task.update(record, { completed: true }); } }),
+  note: defineCommand({ source: 'tick', target: 'task', input: { name: field.text({ max: 40 }) }, async handle({ db, record, input }) { await db.task.update(record, { name: input.name }); } }),
+});\n`,
+    });
+    const args = ['check', '--app', dir, '--config', config, '--commands', join(dir, 'commands.mjs')];
+    const secret = { BETTER_AUTH_SECRET: 'synthetic-one-click-secret-at-least-thirty-two-characters' };
+    const ran = await run([...args, '--json'], secret);
+    const report = JSON.parse(ran.out);
+    conforms(report);
+    const said = report.problems.filter((found: Problem) => found.code === 'one-click');
+    assert.equal(said.length, 1, ran.out);
+    assert.equal(said[0].severity, 'info');
+    // The one that asks for a name and the one that says confirm are not listed.
+    assert.match(said[0].message, /^1 command action asks nothing and runs at one click, with no dialog: task\.close\. /);
+    const text = await run(args, secret);
+    assert.match(text.out, /^ {2}one click: 1 command action asks nothing/m, text.out);
   });
 
   test('Lintel, the flagship, checks with no error; its Gantt is one information finding', async () => {

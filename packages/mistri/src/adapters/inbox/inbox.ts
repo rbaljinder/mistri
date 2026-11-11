@@ -348,6 +348,22 @@ const sameText = (value: unknown, wanted: string) => {
 
 const EMAIL = /^[^\s@]+@[^\s@]+$/;
 
+/* A rule whose account reached nobody, said once in the server's log: a person row holding an address where a tenant
+   App's `auth.me` holds the account's id dropped every mention, and nothing said so (a field report). The value is
+   not said: it is a person's. */
+const unreached = new WeakSet<NoticeRule>();
+const sayUnreached = (rule: NoticeRule, account: string) => {
+  if (unreached.has(rule)) return;
+  unreached.add(rule);
+  console.error(
+    `mistri: warning: App "${rule.app}", resources "${rule.open.resource}", notify: an account it names is no member where the notice is kept, so it tells nobody` +
+      (EMAIL.test(account.trim())
+        ? ". The value is an email address; auth.me's column holds each person's account id, which is what a notice is told at."
+        : '.') +
+      ' Said once per rule.',
+  );
+};
+
 /* `@ada` at the start or after a space or punctuation — never inside a word
    or an address (`ada@example.com` mentions nobody). */
 const MENTION = /(?:^|[^A-Za-z0-9_@.])@([A-Za-z0-9_][A-Za-z0-9_.-]{0,62}[A-Za-z0-9_]|[A-Za-z0-9_])/g;
@@ -563,6 +579,7 @@ export function captureNotices(adapter: object, sink: NoticeSink, context: Notic
       for (const account of accounts) {
         if (!rule.members) break;
         const email = await rule.members(account, owner as string | undefined);
+        if (typeof email !== 'string' || !email) sayUnreached(rule, account);
         tell(email);
         // The account a person was reached as is how their own row is found, for the locale they are told in.
         if (typeof email === 'string') accountOf.set(email.trim().toLowerCase(), account);

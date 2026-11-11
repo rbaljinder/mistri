@@ -115,6 +115,30 @@ export default definePage({ label: String(typeof process === 'object' && process
     assert.deepEqual(read, { key: 'a', module: './pages/a.page.tsx', fields: { label: '0', reads: ['desk'] } });
   });
 
+  test('page-file: a hook imported from the wrong entry names the entry that exports it, not a data: address', async (t) => {
+    const widget = `import { useAddressState } from '@mistriwork/mistri/ui';\nexport const Widget = () => useAddressState;\n`;
+    await assert.rejects(
+      readFiles(t, {
+        'widget.ts': widget,
+        'a.page.tsx': `import { Widget } from './widget.js';\n${pageSource("label: 'A', reads: ['desk']")}export { Widget };\n`,
+      }),
+      (error: Error) => {
+        assert.match(
+          error.message,
+          /\[page-file\] pages\/a\.page\.tsx: `useAddressState` is exported by @mistriwork\/mistri\/page, not @mistriwork\/mistri\/ui: import \{ useAddressState \} from '@mistriwork\/mistri\/page'\./,
+        );
+        assert.doesNotMatch(error.message, /data:/);
+        return true;
+      },
+    );
+    await assert.rejects(
+      readFiles(t, {
+        'a.page.tsx': `import { useNothing } from '@mistriwork/mistri/ui';\n${pageSource("label: String(typeof useNothing), reads: ['desk']")}`,
+      }),
+      /\[page-file\] pages\/a\.page\.tsx: @mistriwork\/mistri\/ui has no export named `useNothing`\./,
+    );
+  });
+
   test("page-path: definePage takes no path, a file name the server answers itself is refused, and a view's is too", async (t) => {
     // The file's name is the path; saying one is refused with the way to leave it out, whether or not it agrees.
     for (const said of ['b', 'a']) {

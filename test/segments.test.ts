@@ -172,6 +172,9 @@ test('loading names a segment that collides, loops or does not read', () => {
   assert.deepEqual(problems(SEGMENTS), []);
   assert.match(problems({ status: 'status = open' })[0], /the column "status" of work_order/);
   assert.match(problems({ and: 'status = open' })[0], /a word of the query language/);
+  // A dashboard's line reads its measure and `by` after the conditions: those words are the language's too.
+  for (const word of ['count', 'max', 'by'])
+    assert.match(problems({ [word]: 'status = open' })[0], new RegExp(`a word of the query language \\("${word}"\\)`));
   assert.match(problems({ hot: 'status = open' }, { rollups: { hot: { fn: 'count', from: 'work_order' } } })[0], /also a rollup/);
   assert.match(problems({ a: 'b', b: 'a' })[0], /segments "a": The segment "a" names itself through/);
   assert.match(problems({ late: 'due_by < today' })[0], /segments "late" query: .*due_by/);

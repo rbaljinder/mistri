@@ -6,14 +6,20 @@
  */
 import { readFileSync } from 'node:fs';
 
-/** The generated schema and command types are written by mistri, not by the author. */
+/**
+ * The type files mistri writes beside an App (typegen.ts, typegenComponents.ts), not its author: a formatter leaves them
+ * alone, and a watcher does not take `mistri check` rewriting one for an edit to the App (tenantStartup.ts,
+ * devSupervisor.ts), as they are types and change nothing that is served.
+ */
+export const GENERATED_TYPE_FILES: ReadonlySet<string> = new Set(['mistri-schema.d.ts', 'mistri-commands.d.ts', 'mistri-components.d.ts']);
+
 const OXFMT_CONFIG = {
   printWidth: 140,
   singleQuote: true,
   semi: true,
   trailingComma: 'all',
   tabWidth: 2,
-  ignorePatterns: ['**/mistri-schema.d.ts', '**/mistri-commands.d.ts', '**/mistri-components.d.ts'],
+  ignorePatterns: [...GENERATED_TYPE_FILES].map((name) => `**/${name}`),
 };
 
 /** The `.oxfmtrc.json` a project is written with. */

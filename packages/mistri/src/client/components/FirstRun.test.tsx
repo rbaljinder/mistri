@@ -33,9 +33,9 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
 }));
 vi.mock('../../../../kit/src/client/insert.js', () => ({ canInsert: (table: { id: string }) => mocks.writable.has(table.id) }));
 vi.mock('../../../../kit/src/client/components/viewLink.js', () => ({
-  viewLink: (view: string, mode: string, adding: boolean) => {
-    mocks.links.push([view, mode, adding]);
-    return { href: `/crm/${view}${adding ? '!new' : ''}` };
+  viewLink: (view: string, mode: string, opened: { adding?: boolean } = {}) => {
+    mocks.links.push([view, mode, opened.adding]);
+    return { href: `/crm/${view}${opened.adding ? '!new' : ''}` };
   },
 }));
 

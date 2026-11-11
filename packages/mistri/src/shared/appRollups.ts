@@ -32,14 +32,7 @@ import { appComputedRules, computedConstants, withComputed } from './appComputed
 import { withUnions } from './appUnions.js';
 import { appZone, zonedNow } from './appZone.js';
 import { servedSegments } from './appSegments.js';
-import {
-  computedColumnMeta,
-  computedReads,
-  foldConstants,
-  readsMe,
-  type ComputedColumn,
-  type ComputedNode,
-} from '@mistriwork/engine/shared/computed.js';
+import { computedColumnMeta, computedReads, foldConstants, readsMe, type ComputedNode } from '@mistriwork/engine/shared/computed.js';
 import { parseComputed } from '@mistriwork/engine/shared/computedParse.js';
 import { appTagRules } from './appResourceRules.js';
 import { TAGS_COLUMN } from '@mistriwork/engine/shared/tagLists.js';
@@ -184,9 +177,8 @@ export function appRollupRules(
   };
   /* A computed column of the child a rollup reads (`rollup.sum('order_line', 'line_total')`, where line_total is
      `qty * price`): its expression, folded and written inline over the child's row. Undefined where the child
-     declares none of that name; false where it does but cannot be read here — the problem said when the
-     rollup is why, or the computed column not served in this catalog, its own check saying why at load. */
-  let computedRules: Map<string, Record<string, ComputedColumn>> | undefined;
+     declares none of that name; false where it does but cannot be read here, the problem said either way. */
+  let computedRules: ReturnType<typeof appComputedRules> | undefined;
   const computedRead = (
     child: TableMeta,
     name: string,
@@ -227,11 +219,19 @@ export function appRollupRules(
       );
       return false;
     }
-    computedRules ??= appComputedRules(app, schema).rules;
-    const computed = computedRules.get(child.id)?.[name];
-    if (!computed) return false;
-    const expr = foldConstants(computed.expr, computedConstants(app, now ?? new Date(), null, zone));
-    return { type: computedColumnMeta(name, computed).type, expression: { type: computed.type, expr, reads: computed.reads } };
+    computedRules ??= appComputedRules(app, schema);
+    const rule = computedRules.rules.get(child.id)?.[name];
+    /* The computed column is not served (its own problem says why); a rollup over it said nothing and was left out
+       of the catalog while the generated types still named it (a field report). */
+    if (!rule) {
+      const why = computedRules.problems.find((problem) => problem.includes(`, computed "${name}": `));
+      problems.push(
+        `${here}: ${said} is a computed column that is not served${why ? ` (${why.slice(why.indexOf(': ') + 2)})` : ''}, so this rollup cannot read it.`,
+      );
+      return false;
+    }
+    const expr = foldConstants(rule.expr, computedConstants(app, now ?? new Date(), null, zone));
+    return { type: computedColumnMeta(name, rule).type, expression: { type: rule.type, expr, reads: rule.reads } };
   };
   /* The one reference named `name` from `from` to `to`, or the problem that says why there is none. */
   const hop = (from: TableMeta, to: TableMeta, name: string, here: string) => {

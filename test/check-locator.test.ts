@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { test } from 'node:test';
-import { sourceLocator } from '../packages/mistri/src/server/build/checkProblems.js';
+import { pathOfMessage, placeOf, sourceLocator } from '../packages/mistri/src/server/build/checkProblems.js';
 
 test('a finding is placed in the modules the App loads, and one about a command at its definition', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'mistri-locator-'));
@@ -97,6 +97,52 @@ test("a finding about a role is placed at the role's declaration, not at a job t
     const found = at('role "integration" [role-label]: it has no "label", so the screens that name it to people say "Integration".');
     assert.equal(found && `${relative(dir, resolve(found.file))}:${found.line}`, 'app.ts:5');
     assert.equal(at('role "ghost" [role-label]: it has no "label", so the screens say "Ghost".'), undefined);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* A field report: a problem on a feature's page was placed in another feature's module, where the same words were
+   also written, because the walk from defineApp's object found no "pages" there and the text search took over. */
+test("a finding about a feature's page is placed in that feature's module, not another that shares its words", async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-locator-'));
+  try {
+    mkdirSync(join(dir, 'features'));
+    writeFileSync(
+      join(dir, 'app.ts'),
+      [
+        "import { defineApp } from '@mistriwork/mistri/app';",
+        "import { major } from './features/major.ts';",
+        "import { desk } from './features/desk.ts';",
+        "export default defineApp({ id: 'ops', name: 'Ops', features: [major, desk] });",
+        '',
+      ].join('\n'),
+    );
+    const feature = (id: string, page: string) =>
+      [
+        "import { defineFeature } from '@mistriwork/mistri/app';",
+        `export const ${id} = defineFeature({`,
+        `  id: '${id}',`,
+        '  pages: {',
+        `    ${page}: {`,
+        "      base: 'incident',",
+        "      sections: [{ kind: 'related', from: 'task', query: 'priorty = high' }],",
+        '    },',
+        '  },',
+        '});',
+        '',
+      ].join('\n');
+    writeFileSync(join(dir, 'features', 'major.ts'), feature('major', 'outage'));
+    writeFileSync(join(dir, 'features', 'desk.ts'), feature('desk', 'incidents'));
+    const message = 'page "incidents", section 1: "priorty" is not a column of task.';
+    const path = pathOfMessage(message);
+    assert.equal(path, 'pages.incidents.sections[0]');
+    /* What check walks once the App's origins say the page is the desk feature's. */
+    const found = await placeOf([join(dir, 'app.ts')], `features.desk.${path}`, message, process.cwd());
+    assert.equal(found && `${relative(dir, resolve(found.file))}:${found.line}`, 'features/desk.ts:7');
+    /* A feature the list does not hold is placed at the list, never in a feature's module. */
+    const missing = await placeOf([join(dir, 'app.ts')], 'features.ghost.pages.incidents', message, process.cwd());
+    assert.equal(missing && `${relative(dir, resolve(missing.file))}:${missing.line}`, 'app.ts:4');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -252,7 +252,9 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=current].empty` | object | Stable | Guidance shown when no row is current, or hide (leave the card out while there is none). One of `hide`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=current].empty.action` | object | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `pages.*.sections[][kind=current].empty.action.label` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
-| `pages.*.sections[][kind=current].empty.action.to` | string | Stable |  Used in `examples/apps/lintel/dashboards.ts`. |
+| `pages.*.sections[][kind=current].empty.action.to` | string \| object | Stable | One of this App's views by key, or { view, tab }: a list opened on one of its tabs, the tab named by its address word (?tab=). Used in `examples/apps/lintel/dashboards.ts`. |
+| `pages.*.sections[][kind=current].empty.action.to.tab` | string | Stable |  |
+| `pages.*.sections[][kind=current].empty.action.to.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `pages.*.sections[][kind=current].empty.description` | string \| object | Stable | A sentence under the title. One of `&lt;presentationCopy>`. Used in `examples/apps/lintel/app.ts`. |
 | `pages.*.sections[][kind=current].empty.title` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
 | `pages.*.sections[][kind=current].from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
@@ -318,7 +320,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | --- | --- | --- | --- |
 | `pages.*.sections[][kind=header].actions` | array | Stable | The verbs the head draws, by id and in this order: ['resolve', 'reassign']. The record's other verbs go into More; they stay granted and reachable from the palette and useCommand. Absent, the head draws up to three and folds the rest. Used in `examples/apps/tick/app.ts`. |
 | `pages.*.sections[][kind=header].destructive` | array | Stable | Action ids drawn last and quiet: ['withdraw']. Update actions that confirm, or set a value the display tones call bad, are destructive without being named. Used in `examples/apps/lintel/pages/lease.ts`. |
-| `pages.*.sections[][kind=header].facts` | array | Stable | The facts line: columns or one-hop label paths, each value dressed by its display rule; { column, after } says a word after the value ("3 beds"), agreeing with a count, and { column, before } a word before it ("Born Apr 24, 2017"). Used in `examples/apps/lintel/pages/lease.ts`. |
+| `pages.*.sections[][kind=header].facts` | array | Stable | The facts line, at most 12: the first 6 under the name, the rest in a More under it. Columns or one-hop label paths, each value dressed by its display rule; { column, after } says a word after the value ("3 beds"), agreeing with a count, and { column, before } a word before it ("Born Apr 24, 2017"). Used in `examples/apps/lintel/pages/lease.ts`. |
 | `pages.*.sections[][kind=header].facts[].after` | string \| object | Stable |  |
 | `pages.*.sections[][kind=header].facts[].after.many` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
 | `pages.*.sections[][kind=header].facts[].after.one` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
@@ -340,6 +342,8 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=headline].links[].open` |  | Stable | Draw the public form over this record instead of opening its page. The address still opens the form on its own. One of `modal`. Used in `examples/apps/tick/app.ts`. |
 | `pages.*.sections[][kind=headline].links[].prefill` | object | Stable | A public form's inputs filled from this record: form input → field path. Where the form starts, never what it sends. Used in `examples/apps/lintel/pages/unit.ts`. |
 | `pages.*.sections[][kind=headline].links[].to` | object | Stable |  One of `&lt;appTarget>`. Used in `examples/apps/lintel/dashboards.ts`. |
+| `pages.*.sections[][kind=headline].links[].to.tab` | string | Stable |  |
+| `pages.*.sections[][kind=headline].links[].to.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `pages.*.sections[][kind=headline].note` | string | Stable | Small print under the links: what the figures assume. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=headline].show` | array | Stable | The figure first, then the facts. |
 | `pages.*.sections[][kind=headline].subfigure` | string | Stable | A headline's second figure, under the first and smaller: an estimate, a unit price. Used in `examples/apps/lintel/pages/unit.ts`. |
@@ -367,7 +371,9 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=list].empty` | object | Stable | Guidance for an empty related list, or hide (leave it out while it has no rows) or collapse (say so in one line with the other empty lists). A list that offers an Add collapses rather than hides, and a tab keeps at least one list. One of `collapse`, `hide`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=list].empty.action` | object | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `pages.*.sections[][kind=list].empty.action.label` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
-| `pages.*.sections[][kind=list].empty.action.to` | string | Stable |  Used in `examples/apps/lintel/dashboards.ts`. |
+| `pages.*.sections[][kind=list].empty.action.to` | string \| object | Stable | One of this App's views by key, or { view, tab }: a list opened on one of its tabs, the tab named by its address word (?tab=). Used in `examples/apps/lintel/dashboards.ts`. |
+| `pages.*.sections[][kind=list].empty.action.to.tab` | string | Stable |  |
+| `pages.*.sections[][kind=list].empty.action.to.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `pages.*.sections[][kind=list].empty.description` | string \| object | Stable | A sentence under the title. One of `&lt;presentationCopy>`. Used in `examples/apps/lintel/app.ts`. |
 | `pages.*.sections[][kind=list].empty.title` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
 | `pages.*.sections[][kind=list].from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
@@ -442,7 +448,9 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | --- | --- | --- | --- |
 | `pages.*.sections[][kind=note].action` | object | Stable | A local room or checked cross-App destination. An App page only. Used in `examples/apps/lintel/views.ts`. |
 | `pages.*.sections[][kind=note].action.label` | string | Stable |  |
-| `pages.*.sections[][kind=note].action.to` | string | Stable |  One of `&lt;appTarget>`. Used in `examples/apps/lintel/dashboards.ts`. |
+| `pages.*.sections[][kind=note].action.to` | string \| object | Stable | One of this App's views by key, or { view, tab }: a list opened on one of its tabs, the tab named by its address word (?tab=). One of `&lt;appTarget>`. Used in `examples/apps/lintel/dashboards.ts`. |
+| `pages.*.sections[][kind=note].action.to.tab` | string | Stable |  |
+| `pages.*.sections[][kind=note].action.to.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `pages.*.sections[][kind=note].kind` |  | Stable |  One of `note`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `pages.*.sections[][kind=note].text` | string | Stable | The words. Plain text; blank lines separate paragraphs. Used in `examples/apps/lintel/views.ts`. |
 | `pages.*.sections[][kind=note].variant` | `"quiet"` · `"callout"` | Stable | quiet: small print, no mark. callout: a ground of its own, for what must be seen. Absent: the plain note. One of `callout`, `quiet`. |

@@ -15,16 +15,25 @@ import { viewportBox } from '../core.js';
 
 /**
  * Which items are shown: as many as fit in order, with room left for More where any do not, and the chosen one always
- * among them (the last that fit give way to it). `widths` are each item's own, `gap` the space between two.
+ * among them (the last that fit give way to it). `widths` are each item's own, `gap` the space between two. Those in
+ * `yields` give way first, whatever their place: an empty list kept only for its Add folds before one that has rows (a
+ * field report's Attachments waited under More behind four empty tabs).
  */
-export function foldTabs(widths: readonly number[], room: number, more: number, gap: number, active: number): number[] {
+export function foldTabs(
+  widths: readonly number[],
+  room: number,
+  more: number,
+  gap: number,
+  active: number,
+  yields: ReadonlySet<number> = NONE,
+): number[] {
   const all = widths.map((_, i) => i);
   const span = (items: readonly number[]) => items.reduce((sum, i) => sum + widths[i], 0) + gap * Math.max(0, items.length - 1);
   if (span(all) <= room) return all;
   /* More stands after the shown ones, a gap before it. */
   const budget = room - more - gap;
   const shown: number[] = [];
-  for (const i of all) {
+  for (const i of [...all.filter((i) => !yields.has(i)), ...all.filter((i) => yields.has(i))]) {
     if (span([...shown, i]) > budget) break;
     shown.push(i);
   }
@@ -32,7 +41,7 @@ export function foldTabs(widths: readonly number[], room: number, more: number, 
     while (shown.length && span([...shown, active]) > budget) shown.pop();
     shown.push(active);
   }
-  return shown;
+  return shown.sort((a, b) => a - b);
 }
 
 /**
@@ -54,11 +63,16 @@ const SLACK = 0.5;
  * whose gap is the strip's, and its More wears `data-fold-more`; `active` is the chosen tab's index, `count` how many.
  * Returns the ref for the strip and the indices folded under More.
  */
-export function useTabFold(count: number, active: number): { strip: RefObject<HTMLDivElement | null>; folded: ReadonlySet<number> } {
+export function useTabFold(
+  count: number,
+  active: number,
+  yields: ReadonlySet<number> = NONE,
+): { strip: RefObject<HTMLDivElement | null>; folded: ReadonlySet<number> } {
   const strip = useRef<HTMLDivElement | null>(null);
   const [folded, setFolded] = useState<ReadonlySet<number>>(NONE);
-  const latest = useRef({ active, folded });
-  latest.current = { active, folded };
+  const latest = useRef({ active, folded, yields });
+  latest.current = { active, folded, yields };
+  const yielding = [...yields].join();
 
   useLayoutEffect(() => {
     const box = strip.current;
@@ -80,7 +94,7 @@ export function useTabFold(count: number, active: number): { strip: RefObject<HT
       const room = box.clientWidth - parseFloat(style.paddingLeft || '0') - parseFloat(style.paddingRight || '0');
       if (room <= 0) return;
       const moreWidth = more ? viewportBox(more).width : 0;
-      const shown = new Set(foldTabs(widths, room + SLACK, moreWidth, gap, latest.current.active));
+      const shown = new Set(foldTabs(widths, room + SLACK, moreWidth, gap, latest.current.active, latest.current.yields));
       const next = new Set(widths.map((_, i) => i).filter((i) => !shown.has(i)));
       /* For a row that sizes the strip by its content (a list's controls): with nothing folded the strip is its tabs'
          width on its own; with some folded it goes on asking for every tab's, so it gives way only where the row
@@ -130,7 +144,7 @@ export function useTabFold(count: number, active: number): { strip: RefObject<HT
       cancelAnimationFrame(frame);
       watch.disconnect();
     };
-  }, [count, active]);
+  }, [count, active, yielding]);
 
   return { strip, folded };
 }

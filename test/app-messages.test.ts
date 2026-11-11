@@ -431,6 +431,8 @@ export default definePage({ label: { message: 'ticket.plural' }, description: { 
       'app.d.ts AppDisplayRule.subtitle',
       /* A headline's subtitle names a column of the record too. */
       'app.d.ts HeadlineSection.subtitle',
+      /* A link's tab is the tab's address word, not words said to a reader. */
+      'model.d.ts ViewTo.tab',
     ]);
     const found = new Set<string>();
     const property = new RegExp(`\\b(${[...CAPTION_KEYS].join('|')})\\??: ([^;,)=]*)`, 'g');

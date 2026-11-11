@@ -25,7 +25,7 @@ export function DashboardNote({ title, text, icon, action, row, variant, eyebrow
   const navigate = useListNavigation();
   /* A call to action into another App of the suite is the App framework's (shellMode.ts): none where the shell has none. */
   const { TargetAction } = shell().slots;
-  const link = action && 'view' in action ? navigate?.(action.view) : undefined;
+  const link = action && 'view' in action ? navigate?.(action.view, 'push', { tab: action.tab }) : undefined;
   const paragraphs = text
     .split(/\n\s*\n/)
     .map((paragraph) => paragraph.trim())

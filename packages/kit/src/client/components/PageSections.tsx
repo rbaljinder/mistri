@@ -220,6 +220,8 @@ interface Tab {
   key: string | number;
   token: string;
   label: ReactNode;
+  /** Folds under More before the others (useTabFold.ts): a list with no rows, kept for its Add. */
+  yields?: true;
 }
 /** A free-form page that is a tab of this record (pages/<list view>/[id]/<tab>.page.tsx): a tab that draws itself. */
 interface PageTab extends Tab {
@@ -258,7 +260,8 @@ export function TabStrip({
   const [drawn, setDrawn] = useState<Set<number>>(() => new Set([asked === -1 ? 0 : asked, ...eager]));
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
   /* The tabs that do not fit go under More (useTabFold.ts); the chosen one is never among them. */
-  const { strip, folded } = useTabFold(tabs.length, active);
+  const yields = new Set(tabs.flatMap((tab, i) => (tab.yields ? [i] : [])));
+  const { strip, folded } = useTabFold(tabs.length, active, yields);
   /* A tab reached by the keyboard may have been under More: it is focused once the fold has made room for it. */
   const focusing = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -380,12 +383,16 @@ function ListTabs({
      asking about is left out until it is known, so a tab arrives rather than goes. */
   const hiding = (item: Shown) => item.section.kind === 'list' && item.section.emptyMode === 'hide';
   const standing = useStandings(run, plans, base, recordKey, hiding);
+  /* One kept only for its Add is the first to wait under More, so a list with rows keeps its place in the row. */
+  const forTheDoor = new Set<Shown>();
   const items = run.filter((item, i) => {
     const hides = hiding(item);
     if (standing[i] === 'gone') return false;
     if (standing[i] === 'wait') return !item.section.when && !hides;
-    if (standing[i] === 'empty' && hides)
-      return Boolean(relatedDoor(item.section, base, recordKey, { preview: context.preview, actions: context.actions }).door);
+    if (standing[i] === 'empty' && hides) {
+      if (!relatedDoor(item.section, base, recordKey, { preview: context.preview, actions: context.actions }).door) return false;
+      forTheDoor.add(item);
+    }
     return true;
   });
   /* The token is the source's words (apps.ts keepAddresses), so an address names one tab in every language. */
@@ -409,6 +416,7 @@ function ListTabs({
   // Read as the strip renders: the run is still being gathered when the strip is created.
   const tabs = items.map((item) => ({
     key: item.index,
+    ...(forTheDoor.has(item) ? { yields: true as const } : {}),
     token: scoped ? `section:${item.index}` : named(item),
     label: (
       <>

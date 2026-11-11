@@ -461,7 +461,33 @@ export async function placeOf(
         }
         let next: Node | undefined;
         if (typeof step === 'number' && ast.isArrayLiteralExpression(at)) next = at.elements[step];
-        else if (typeof step === 'string' && ast.isObjectLiteralExpression(at)) {
+        else if (typeof step === 'string' && ast.isArrayLiteralExpression(at)) {
+          /* A list keyed by its members' ids — `features: [people, payroll]`, each written in its own module as
+             `defineFeature({ id: 'payroll', … })`: the step is the member whose id it is, where that member is written. */
+          let member: At | undefined;
+          for (const element of at.elements) {
+            let each: At | undefined = { ...value, node: bare(element) };
+            if (ast.isIdentifier(each.node)) each = follow(each.node.text, each);
+            if (!each) continue;
+            let object = bare(each.node);
+            if (ast.isCallExpression(object))
+              object = object.arguments.map((arg) => bare(arg)).findLast((arg) => ast.isObjectLiteralExpression(arg)) ?? object;
+            if (!ast.isObjectLiteralExpression(object)) continue;
+            const id = object.properties.find(
+              (entry) => ast.isPropertyAssignment(entry) && ast.isIdentifier(entry.name) && entry.name.text === 'id',
+            );
+            const said = id && ast.isPropertyAssignment(id) ? bare(id.initializer) : undefined;
+            if (said && (ast.isStringLiteral(said) || ast.isNoSubstitutionTemplateLiteral(said)) && said.text === step) {
+              member = { ...each, node: object };
+              break;
+            }
+          }
+          if (member) {
+            keyed = member;
+            value = member;
+            continue;
+          }
+        } else if (typeof step === 'string' && ast.isObjectLiteralExpression(at)) {
           const property = at.properties.find((entry) => {
             const name = ast.isSpreadAssignment(entry) ? undefined : entry.name;
             return name && (ast.isIdentifier(name) || ast.isStringLiteral(name)) && name.text === step;

@@ -41,6 +41,14 @@ const inbox = {
   filters: ['status'],
   presentation: { kind: 'split', limit: 25, detail: ['name', 'source'] },
 };
+/* A list filtered by when its rows came in: a dashboard's window drills into it (`created_on = last 30 days`). */
+const recent = {
+  id: 'recent',
+  table: 'lead',
+  label: 'Recent leads',
+  show: ['name', 'status'],
+  filters: ['status', 'created_on'],
+};
 const text = (name: string) => ({ name, type: 'TEXT', nullable: false, primaryKey: false });
 const vehicle = {
   id: 'vehicle',
@@ -119,6 +127,7 @@ const rooms: Record<string, unknown> = {
   vehicles: spec,
   leads,
   inbox,
+  recent,
   workspace: { id: 'workspace', kind: 'dashboard', label: 'Workspace', sections: [] },
   review: {
     id: 'review',
@@ -247,6 +256,8 @@ test('no tab reads back as the first, and a tab reads back as the tab exactly, s
     const entry = listEntry('leads', search);
     expect(listParams({ table: 'lead', view: 'leads', query: entry.query })).toBe(search);
   }
+  // A tab's word in any case is that tab (a field report): a capital opened the first tab.
+  expect(squeeze(listEntry('leads', 'tab=Working').query)).toBe(squeeze(appListQuery(leads as never, 1)));
   // A tab the view no longer has is the view as it opens.
   expect(squeeze(listEntry('leads', 'tab=gone').query)).toBe(squeeze(appListQuery(leads as never, 0)));
 });
@@ -310,4 +321,29 @@ test('a filter across a related table is said by its own word, and read back to 
   expect(addressQuestion(accounts as never, new URLSearchParams('has.opportunity.open=no'))).toBe('');
   // The rows' condition is a value like any other: one is an equality.
   expect(addressQuestion(accounts as never, new URLSearchParams('has.opportunity.stage=won'))).toBe('any opportunity where stage = "won"');
+});
+
+test("a date window in an address is the window, read back unquoted, and round-trips as the list's own question", () => {
+  // A field report: `?created_on=last+30+days` was read back as a quoted value no date column holds.
+  expect(addressQuestion(recent as never, new URLSearchParams('created_on=last+30+days'))).toBe('created_on = last 30 days');
+  expect(addressQuestion(recent as never, new URLSearchParams('created_on=today'))).toBe('created_on = today');
+  // A column that is not a date keeps the word as a value.
+  expect(addressQuestion(recent as never, new URLSearchParams('status=today'))).toBe('status = "today"');
+  for (const search of ['created_on=today', 'created_on=last+30+days', 'status=new&created_on=this+week']) {
+    const entry = listEntry('recent', search);
+    expect(entry.query).toMatch(/ show name, status/);
+    expect(listParams({ table: 'lead', view: 'recent', query: entry.query })).toBe(search);
+  }
+  // `q=` the parameters can say is rewritten to them, and that address asks the same question.
+  const fromQ = listEntry('recent', 'q=created_on%20%3D%20today');
+  const rewritten = listParams({ table: 'lead', view: 'recent', query: fromQ.query })!;
+  expect(rewritten).toBe('created_on=today');
+  expect(squeeze(listEntry('recent', rewritten).query)).toBe(squeeze(fromQ.query));
+});
+
+test("a dashboard's drill, said as the view's address and read back, keeps the view's show", () => {
+  const drilled = { table: 'lead', view: 'recent', query: 'lead created_on = last 30 days' };
+  const search = listParams(drilled, { adoptOrder: true })!;
+  expect(search).toBe('created_on=last+30+days');
+  expect(squeeze(listEntry('recent', search).query)).toBe('lead created_on = last 30 days show name, status, id');
 });

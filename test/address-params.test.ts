@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { addressFilterValue, addressSortValue } from '../packages/engine/src/shared/addressParams.js';
+import { addressFilterValue, addressSortValue, namesTab } from '../packages/engine/src/shared/addressParams.js';
 
 test('address filter lexical grammar preserves equality, lists and Unicode without coercion', () => {
   for (const value of ['Toyota', '9007199254740993', '1e3', 'São Paulo', '東京', '2026-09-01..', '..', 'a..b']) {
@@ -39,4 +39,16 @@ test('address sort lexing preserves multi-key order and refuses unsupported whol
   for (const value of ['', ' id', 'id ', 'id, -name', 'id desc', '+id', 'id,', '1id', '名字', 'id;drop']) {
     assert.equal(addressSortValue(value), undefined, value);
   }
+});
+
+test('a tab word names its tab in any case and in the spelling a link writes', () => {
+  const segment = { label: 'High value', slug: 'high_value' };
+  for (const word of ['high_value', 'HIGH_VALUE', 'high-value']) assert.equal(namesTab(segment, word), true, word);
+  // A label with a space is not an address word; the refusal names the word to say instead.
+  assert.equal(namesTab(segment, 'High value'), false);
+  assert.equal(namesTab({ label: 'Open' }, 'OPEN'), true);
+  for (const word of ['high', 'value', '', null, undefined]) assert.equal(namesTab(segment, word), false, String(word));
+  /* A word in another script spells to nothing in an address: it names only a tab whose own word is that word. */
+  assert.equal(namesTab({ label: '新しい', slug: '新しい' }, '古い'), false);
+  assert.equal(namesTab({ label: '新しい', slug: '新しい' }, '新しい'), true);
 });

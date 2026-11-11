@@ -26,7 +26,15 @@ import { isRecord, VIEW_KEY } from '@mistriwork/engine/shared/model.js';
 import { COMPONENT_ID, type ComponentDecl } from '@mistriwork/engine/shared/appComponents.js';
 import { isMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import { RESERVED_PATHS } from '../../shared/appAddress.js';
-import { HOST_MODULES, PAGE_EXPORTS, uiBreakdownText, uiRowsQuery, uiViewRunBody, type HostModule } from '../../shared/uiSdk.js';
+import {
+  HOST_MODULES,
+  PAGE_EXPORTS,
+  SERVED_MODULES,
+  uiBreakdownText,
+  uiRowsQuery,
+  uiViewRunBody,
+  type HostModule,
+} from '../../shared/uiSdk.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { strayRead } from '../http/tablesReached.js';
 import { compilePageModule } from './appComponents.js';
@@ -336,6 +344,21 @@ function standInUrl(module: HostModule): string {
   return url;
 }
 
+/* Node names a stand-in by its address, a data: URL several kilobytes long, when a named import is not among its
+   exports. Said as the host module the author wrote, and, where another host module exports the name (a hook that
+   moved from /ui to /page), as the import that works (a field report). */
+const MISSING_EXPORT = /The requested module '(data:[^']*)' does not provide an export named '([^']+)'/;
+function hostImportMessage(message: string): string {
+  const missing = MISSING_EXPORT.exec(message);
+  const module = missing && [...standIns].find(([, url]) => url === missing[1])?.[0];
+  if (!missing || !module) return message;
+  const name = missing[2];
+  const home = SERVED_MODULES.find((other) => other !== module && exportNames(other).includes(name));
+  return home
+    ? `\`${name}\` is exported by ${home}, not ${module}: import { ${name} } from '${home}'.`
+    : `${module} has no export named \`${name}\`.`;
+}
+
 /** Rolldown's parser: an optional peer, so asked for only by an App that has pages. */
 type Parse = (code: string, options: { lang: 'ts' | 'tsx' | 'js' | 'jsx' }) => unknown;
 export async function astParser(): Promise<Parse> {
@@ -395,7 +418,7 @@ export function evaluate(code: string, kind: 'page' | 'surface' | 'UI kit' = 'pa
       fn();
     };
     worker.once('message', (m: { ok: boolean; value?: unknown; message?: string }) =>
-      done(() => (m.ok ? resolveValue(m.value) : reject(new Error(m.message)))),
+      done(() => (m.ok ? resolveValue(m.value) : reject(new Error(hostImportMessage(m.message ?? ''))))),
     );
     worker.once('error', (err) => done(() => reject(err)));
     const timer = setTimeout(() => done(() => reject(new Error(`the ${kind} module did not finish loading within 10s`))), 10_000);

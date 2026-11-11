@@ -8,6 +8,7 @@
 import { setBuildIdSource } from '@mistriwork/engine/server/http/probes.js';
 import { authoringApp } from '@mistriwork/engine/server/http/refusalReport.js';
 import { readFile } from 'node:fs/promises';
+import { dirname, relative } from 'node:path';
 import { createAppAuth } from '../auth/auth.js';
 import { loadConfig, type Registry } from '@mistriwork/engine/server/connections.js';
 import { loadApp } from '../app/apps.js';
@@ -87,6 +88,15 @@ export async function startTenantServing(
        ordinary App server reads its addresses by. */
     const mount: AddressMount = settingsMount([loaded.app.id], opts, config);
     let changed = false;
+    let changedFiles: readonly string[] | undefined;
+    /* Which file moved, where the watcher knows: a restart that names none leaves its author to guess which of their
+       saves, or which tool's write, it was (a field report). */
+    const which = (touched?: readonly string[]) => {
+      if (!touched?.length) return '';
+      const root = loaded.dir ?? dirname(loaded.path);
+      const names = touched.map((file) => relative(root, file));
+      return ` (${names.slice(0, 3).join(', ')}${names.length > 3 ? `, and ${names.length - 3} more` : ''})`;
+    };
     let retireOnChange: ((touched?: readonly string[]) => void) | undefined;
     /* Set once the host serves: before then a save of any kind is a restart, as a half-read deployment would be. */
     let restyle: ((touched: string[]) => Promise<boolean>) | undefined;
@@ -104,6 +114,7 @@ export async function startTenantServing(
           },
           (touched) => {
             changed = true;
+            changedFiles = touched;
             retireOnChange?.(touched);
           },
         );
@@ -153,7 +164,7 @@ export async function startTenantServing(
     }
     const { enrollment, authStoreExclusion, jobLines, adviceLines, validation } = prepared;
     if (validation) console.error(`mistri: validation record: ${validation.say}.`);
-    if (changed) throw new Error('Tenant deployment files changed during validation; restart.');
+    if (changed) throw new Error(`Tenant deployment files changed during validation${which(changedFiles)}; restart.`);
     if (opts.checkApp) {
       stopWatching();
       const lock = await checkAuthorityLock(loaded.authority, opts.writeAuthority);
@@ -327,14 +338,14 @@ export async function startTenantServing(
           : false;
       console.error(
         drew
-          ? 'Tenant deployment files changed: a page, component or look file, nothing that grants or runs. Requests are unavailable; restart `mistri dev` to wear it.'
-          : 'Tenant deployment files changed. Requests are unavailable; restart with the new configuration.',
+          ? `Tenant deployment files changed${which(touched)}: a page, component or look file, nothing that grants or runs. Requests are unavailable; restart \`mistri dev\` to wear it.`
+          : `Tenant deployment files changed${which(touched)}. Requests are unavailable; restart with the new configuration.`,
       );
       void stop(0);
     };
     if (changed) {
       await owner.retire();
-      throw new Error('Tenant deployment files changed during authentication startup; restart.');
+      throw new Error(`Tenant deployment files changed during authentication startup${which(changedFiles)}; restart.`);
     }
     if (opts.embedded) {
       for (const line of unsweptBuckets([loaded.app], owner.filesSwept)) console.log(`mistri: ${line}`);

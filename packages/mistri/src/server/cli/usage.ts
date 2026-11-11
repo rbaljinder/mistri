@@ -364,7 +364,7 @@ Checking an App while authoring it — the one command of the loop:
   source each color or chart order its contrast and color-blind failures
   say passes, and checks again; the themes step comes first, a line per
   theme and mode, and fonts says the faces against their 150 KB budget. --defaults prints what each column is
-  drawn by when the App says nothing, and the layout each page is drawn in.
+  drawn by when the App says nothing, the layout each page is drawn in and what its default aside draws.
   --pending first applies the pending migrations (mistri migrate) to a
   scratch copy of the database — SQLite: a copy of the file; PostgreSQL:
   CREATE DATABASE … TEMPLATE, which needs CREATEDB and no other session on

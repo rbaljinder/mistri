@@ -7,7 +7,8 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { listProblem, parseAppConfig, type AppDashboardView, type AppListView } from '../packages/mistri/src/shared/app.js';
+import { parseAppConfig, type AppDashboardView, type AppListView } from '../packages/mistri/src/shared/app.js';
+import { listProblem } from '../packages/mistri/src/shared/appListProblems.js';
 
 const app = (views: Record<string, unknown>, extra: Record<string, unknown> = {}, resources: Record<string, unknown> = {}) =>
   parseAppConfig(

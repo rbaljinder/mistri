@@ -120,8 +120,25 @@ function distance(a: string, b: string): number {
   return row[b.length]!;
 }
 
-/** The token a name was most likely meant to be: the word another system uses for it, else the nearest spelling. */
+/**
+ * The tokens renamed before 1.0, each to the one that says it now. Read before spelling: by spelling `--text-dim` is
+ * nearest `--text-sm` and `--ok` nearest `--ink` (a field report). `mistri upgrade` rewrites them from this table.
+ */
+export const RENAMED_TOKENS: Readonly<Record<string, string>> = {
+  '--text': '--ink',
+  '--text-dim': '--ink-muted',
+  '--border': '--line',
+  '--border-strong': '--line-strong',
+  '--danger': '--status-critical',
+  '--warn': '--status-warning',
+  '--ok': '--status-good',
+  '--surface-2': '--raised',
+  '--bg': '--ground',
+};
+
+/** The token a name was most likely meant to be: the one it was renamed to, the word another system uses for it, else the nearest spelling. */
 export function nearestToken(name: string): string | undefined {
+  if (Object.hasOwn(RENAMED_TOKENS, name)) return RENAMED_TOKENS[name];
   const bare = name.replace(/^--/, '').toLowerCase();
   const said = WORDS[bare];
   if (said) return said;

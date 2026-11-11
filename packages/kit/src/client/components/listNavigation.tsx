@@ -7,7 +7,7 @@ interface ListNavigationLink {
   onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
 }
 
-type ListNavigation = (view: string, mode?: 'push' | 'reset') => ListNavigationLink | undefined;
+type ListNavigation = (view: string, mode?: 'push' | 'reset', opened?: { tab?: string }) => ListNavigationLink | undefined;
 
 const ListNavigationContext = createContext<ListNavigation | undefined>(undefined);
 

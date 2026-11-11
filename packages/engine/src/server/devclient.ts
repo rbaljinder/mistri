@@ -330,6 +330,46 @@ async function devCache(workspace: string) {
 }
 
 /**
+ * The dependency optimizer's bundles in flight. Vite's close only flags a
+ * running bundle as cancelled and deletes its folder while the bundle may
+ * still be writing there, and the cache's removal after it raced the same
+ * write: the failure ("Failed to write file … deps_temp_…") landed after the
+ * test that started the server had ended. Rolldown starts a bundle's build at
+ * its write and calls closeBundle once it is written or has failed, so a
+ * plugin in the optimizer's own bundle sees each run end. One environment's
+ * optimizer runs one bundle at a time.
+ */
+export function optimizerRuns() {
+  let running = 0;
+  let idle: Promise<void> | undefined,
+    wake = () => {};
+  return {
+    plugin: {
+      name: 'mistri:optimizer-runs',
+      buildStart() {
+        running++;
+      },
+      closeBundle() {
+        // A bundle that fails closes itself, and Vite's finally closes it again.
+        running = Math.max(0, running - 1);
+        if (running > 0) return;
+        idle = undefined;
+        wake();
+      },
+    },
+    /* Bounded: a build that starts and never says it ended must not hold a server's close forever; the folder's
+       removal then races one late write, which is what happened before this wait existed, not a hang. */
+    settled: (limit = 10_000): Promise<void> =>
+      running > 0
+        ? Promise.race([
+            (idle ??= new Promise<void>((resolve) => (wake = resolve))),
+            new Promise<void>((resolve) => setTimeout(resolve, limit).unref()),
+          ])
+        : Promise.resolve(),
+  };
+}
+
+/**
  * What Vite's file watcher may look at: the package whose client it serves,
  * and nothing outside it. Vite watches its root and adds every file it loads
  * from beyond it (src/shared, src/adapters, package.json) whatever its path,
@@ -379,6 +419,7 @@ export function quietWatcherErrors(
 export function devClient(files: Pick<ClientFiles, 'source' | 'workspace'>, base = ''): Promise<Vite> {
   return hosts.get(async (httpServer) => {
     const cache = await devCache(files.workspace);
+    const runs = optimizerRuns();
     try {
       const { createServer } = await import('vite');
       const created = await createServer({
@@ -388,6 +429,7 @@ export function devClient(files: Pick<ClientFiles, 'source' | 'workspace'>, base
         // imports, CSS URLs, React refresh and the HMR socket all use it.
         base: `${base}/`,
         cacheDir: cache.path,
+        optimizeDeps: { rolldownOptions: { plugins: [runs.plugin] } },
         appType: 'custom',
         logLevel: 'warn',
         server: {
@@ -407,7 +449,11 @@ export function devClient(files: Pick<ClientFiles, 'source' | 'workspace'>, base
         // Closing the optimizer then strands import-analysis hooks waiting for
         // its dependency batch, and pluginContainer.close never resolves.
         await created.environments.client.waitForRequestsIdle();
+        // Before close, so Vite's cancel does not delete a folder mid-write;
+        // after it, for a run the scan's end started while closing.
+        await runs.settled();
         await close();
+        await runs.settled();
       };
       return ownDevClient(created, cache.remove);
     } catch (error) {

@@ -16,6 +16,21 @@ export function tabSlug(label: string): string {
 /** A tab's word in an address: the App's own language's, whatever language its label is said in. */
 export const tabKey = (tab: { label: string; slug?: string }): string => tab.slug ?? tabSlug(tab.label);
 
+/** Whether a word names a tab, in any case: `?tab=Open`, or a section's `tab: 'Open'`, is the tab whose word is
+    `open`. Matched exactly, a capital opened the view's first tab instead, with nothing said (a field report). */
+export const namesTab = (tab: { label: string; slug?: string }, word: string | null | undefined): boolean => {
+  if (typeof word !== 'string') return false;
+  const key = tabKey(tab);
+  if (key.toLowerCase() === word.toLowerCase()) return true;
+  /* A segment's tab keeps the segment's own name (`high_value`), and a link spells a tab the way an address does
+     (`high-value`): both said in that spelling, so a link never opens the first tab instead. Only for one word: a
+     label with spaces (`All tasks`) is refused with the word to say instead. Never on an empty spelling, which a
+     word in another script would give. */
+  if (/\s/.test(word)) return false;
+  const spelled = tabSlug(key);
+  return spelled !== '' && spelled === tabSlug(word);
+};
+
 /** A record tab's word in an address: a section group's name, a related list's title. */
 export function tabWord(token: string): string {
   if (token.startsWith('tab:')) return slugOf(token.slice(4), token);

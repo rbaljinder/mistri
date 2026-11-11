@@ -157,6 +157,8 @@ export type PageHeadlineAction =
   | {
       label: string;
       view: string;
+      /** The tab of a list it opens on, by its address word (`to: { view, tab }`). */
+      tab?: string;
       intent?: 'primary' | 'secondary';
       prefill?: Record<string, string>;
       defaults?: Record<string, string>;

@@ -26,7 +26,12 @@ import { liveSkip } from './live.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
 
-const day = (back: number) => new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10);
+/* A local calendar date: windows end on the server's local today, so a UTC date seeded in the evening (US time)
+   is tomorrow and falls outside "last 30 days". */
+const day = (back: number) => {
+  const at = new Date(Date.now() - back * 86_400_000);
+  return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+};
 
 /* Five accounts and their tickets: Acme 2 (one open), Brio 1, Cato 2 (both open), Dune 3 (one open), Echo none.
    Created today, three days ago, sixty, forty-five and a hundred days ago. */

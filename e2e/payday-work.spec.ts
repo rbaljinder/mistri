@@ -148,9 +148,11 @@ test.describe('Payday people operations', () => {
       // rendered its filtered records before shutting down the server it still needs.
       // The room's own heading; the menu's group of the same name is a heading too.
       await expect(page.getByRole('main').getByRole('heading', { name: 'People', exact: true })).toBeVisible();
-      const people = page.getByRole('grid');
+      // A drill opens the view it names in that view's own presentation: People is cards, narrowed by a chip.
+      const people = page.getByRole('main').getByRole('list', { name: 'People' });
       await expect(people).toBeVisible();
-      await expect(people.locator('tbody tr[data-row]')).toHaveCount(expected);
+      await expect(people.getByRole('listitem')).toHaveCount(expected);
+      await expect(page.getByRole('button', { name: 'Remove Status is Active or Leave' })).toBeVisible();
       await expect(page.locator('[data-section-error]')).toHaveCount(0);
     } finally {
       // End the browser client before taking away its server; the harness still

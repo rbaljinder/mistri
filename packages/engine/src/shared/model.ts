@@ -38,8 +38,41 @@ export function allowKeys(
 ): void {
   for (const key of Object.keys(obj)) {
     if (allowed.includes(key) || /^[$_]/.test(key)) continue;
-    if (Object.hasOwn(refused, key)) throw new Error(`${at} has "${key}", which ${refused[key]}.`);
-    throw new Error(`${at} ${unknownKey(key, allowed, keyHomes(key))}.`);
+    const refusal = Object.hasOwn(refused, key)
+      ? `${at} has "${key}", which ${refused[key]}.`
+      : `${at} ${unknownKey(key, allowed, keyHomes(key))}.`;
+    /* A key declared ahead of its feature stops the parse: the part was written to do what is not there yet, so
+       what follows from it (an action with no write) would only be a second, misleading refusal. */
+    if (!noted || Object.hasOwn(refused, key)) throw new Error(refusal);
+    // A place read twice — its shape, then the whole — says a key it does not take once.
+    const said = notedAt.get(noted) ?? new Set<string>();
+    notedAt.set(noted, said);
+    if (said.has(`${at}\0${key}`)) continue;
+    said.add(`${at}\0${key}`);
+    noted.push(refusal);
+  }
+}
+
+const notedAt = new WeakMap<string[], Set<string>>();
+
+/* Where a refused key is noted instead of thrown, while an App is parsed whole (noteRefusedKeys). */
+let noted: string[] | undefined;
+
+/**
+ * Parse with every refused key noted in `into` and passed over, not thrown. A key the location does not take is
+ * read by nothing, so the part it is in still parses and the parts that depend on that one are judged too: an App
+ * moved across a release met one kind of refused key per run — its display keys, then its page keys, then its tabs —
+ * because a resource refused for one key held back every view over it (a field report). The caller refuses the
+ * load when `into` is not empty. Outside it — a request's input, a tenant's row — a refused key is thrown at once;
+ * `undefined` puts that back for a read inside it that has to know (a lenient read that drops what does not parse).
+ */
+export function noteRefusedKeys<T>(into: string[] | undefined, parse: () => T): T {
+  const outer = noted;
+  noted = into;
+  try {
+    return parse();
+  } finally {
+    noted = outer;
   }
 }
 

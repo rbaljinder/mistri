@@ -31,7 +31,7 @@ import { requestRecordBranding } from './recordBranding.js';
 import { pictureDetails } from './publicPictures.js';
 import { appFileRules } from '../../shared/app.js';
 import { outward, serverPath } from '@mistriwork/engine/shared/mount.js';
-import { tabKey } from '@mistriwork/engine/shared/addressParams.js';
+import { namesTab } from '@mistriwork/engine/shared/addressParams.js';
 import { listPage, publicAddressBook, recordPage, type PublicPage, type PublicReading } from './publicPage.js';
 
 /** What the shell carries for one public address, or where it lives instead. */
@@ -242,7 +242,7 @@ async function placed(ctx: RequestContext, rest: string[]): Promise<ShellHead | 
       /* A list as it opens, or on a tab: a search or a refinement is the client's question to ask (publicAddress.ts). */
       const params = [...ctx.url.searchParams.keys()];
       const tab = ctx.url.searchParams.get('tab');
-      const index = tab === null ? 0 : (view.tabs ?? []).findIndex((item) => tabKey(item) === tab);
+      const index = tab === null ? 0 : (view.tabs ?? []).findIndex((item) => namesTab(item, tab));
       const plain = target.kind === 'list' && params.every((name) => name === 'tab') && index >= 0;
       return {
         ...titled(view.label),

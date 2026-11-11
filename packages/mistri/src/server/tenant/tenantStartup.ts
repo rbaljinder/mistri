@@ -17,6 +17,7 @@ import {
   tenantAppShape,
   tenantBusinessApp,
 } from '../../shared/app.js';
+import { GENERATED_TYPE_FILES } from '../formatterConfig.js';
 import { appRoutes, commandsInWords, LOADED_APP_KEYS, type LoadedApp } from '../app/apps.js';
 import { appCatalogs, MessageSayer } from '../app/appMessages.js';
 import type { SuiteLinkSurface } from '../app/suiteLinks.js';
@@ -635,6 +636,10 @@ export function watchTenantStartup(
          start: not an App edit, and taking it for one restarted a dev-served tenant App forever. A package install
          or a dependency cache under node_modules writes .js and .json too, and stopped the server the same way. */
       if (filename !== null && NOT_THE_APP.has(filename.split(/[\\/]/)[0])) return;
+      /* `mistri check` rewrites the App's generated types when the database or a declaration moved: types, which
+         change nothing served, and stopping the deployment for them sent its author to restart it after every check
+         (a field report). */
+      if (filename !== null && GENERATED_TYPE_FILES.has(basename(filename))) return;
       try {
         if (!statSync(root).isDirectory() || required.some((file) => !statSync(file).isFile())) return invalidate();
       } catch {

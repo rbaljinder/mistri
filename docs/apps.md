@@ -280,7 +280,7 @@ kept equal to it by `test/prose.test.ts`; change both together.
 | Commands over the [App API](../site/src/content/docs/docs/app-api.md) and its MCP | Yes | Yes, each token as its own account | Yes, each token bound to one membership |
 | The App API's generic writes | Yes, where every role reads all rows | No | No |
 | The App API's event feed | Yes, where every role reads all rows | No (`[policy-events-feed]`) | No: webhooks instead (`[api-event-unsupported]`) |
-| `mistri check --pending`, `check --deploy`, `mistri build` | Every step | Every step, given `--policy` | The queries step is skipped; validation waits for the tenant stores |
+| `mistri check --pending`, `check --deploy`, `mistri build` | Every step | Every step, given `--policy` | The queries step is skipped; validation is judged up to the tenant stores |
 | Delete and restore | Yes | Only with `authorizeDeletedRecord` | Only with `authorizeDeletedRecord` (`[tenant-delete-unauthorized]`) |
 | List exports | Yes | Yes, the person's rows | Yes, the tenant's rows |
 | The [assistant](../site/src/content/docs/docs/assistant.md) | Yes | Yes, reading as the person, under the policy | Yes, where the platform owner turns it on for that customer |

@@ -30,6 +30,19 @@ test('an unknown var(--…) warns with the token it was meant to be; a real or o
   assert.equal(componentCode(said[0]!), 'component-token');
 });
 
+test('a token renamed before 1.0 is named by its new name, not the nearest spelling', async () => {
+  // A field report: by spelling `--text-dim` suggested `--text-sm`, `--ok` `--ink`, and `--warn` nothing.
+  const { warnings } = await lint({
+    'tile.css': '.c-tile { color: var(--text-dim); border-color: var(--warn); background: var(--ok); }',
+  });
+  const said = warnings.map((w) => w.text);
+  assert.equal(said.length, 3);
+  assert.match(said[0]!, /"--text-dim".*renamed --ink-muted.*var\(--ink-muted\)/);
+  assert.match(said[1]!, /"--warn".*var\(--status-warning\)/);
+  assert.match(said[2]!, /"--ok".*var\(--status-good\)/);
+  assert.equal(componentCode(said[0]!), 'component-token');
+});
+
 test("a component's own --c-<id>-* property is allowed however it is set; another component's or an unprefixed one still warns", async () => {
   const { warnings } = await lint({
     'tile.css': '.c-tile { color: var(--c-tile-hue); border-color: var(--c-other-hue); outline-color: var(--hue); }',
@@ -94,7 +107,7 @@ test('an icon name a component writes, plain or in either branch of a conditiona
       'export const a = <Icon name="hosue" />;',
       "export const b = <Icon name={done ? 'check-circle' : 'circle-dahsed'} size={12} />;",
       "export const c = <Icon name={done ? 'chekc-circle' : 'x-circle'} />;",
-      "export const d = { icon: ready ? 'bel' : 'bell' };",
+      "export const d = <Menu items={[{ label: 'Bell', icon: ready ? 'bel' : 'bell' }]} />;",
       "export const e = <Badge icon={'staar'} />;",
       "export const ok = <Icon name={done ? 'check-circle' : 'circle-dashed'} />;",
       'export const dynamic = <Icon name={row.icon} />;',
@@ -104,6 +117,8 @@ test('an icon name a component writes, plain or in either branch of a conditiona
       "el.dataset.icon = 'not-an-icon';",
       "export const $icon = 'not-an-icon';",
       "export const tray = { trayicon: 'not-an-icon' };",
+      // An object of the author's own may mean anything by `icon` (a field report): a table of field labels.
+      "export const labels = [{ name: 'Name', icon: 'Icon' }, { name: 'Status', icon: ready ? 'Ready' : 'Waiting' }];",
     ].join('\n'),
   });
   assert.deepEqual(warnings, []);
@@ -138,6 +153,30 @@ test("a shared package's declared cssPrefix owns its classes; the App's own pack
   } as never);
   const classes = warnings.map((w) => /"\.([\w-]+)"/.exec(w.text)?.[1]).sort();
   assert.deepEqual(classes, ['acmes', 'app-card'], 'only a class outside every declared name-space warns');
+});
+
+test('a stylesheet several components draw owns classes after its own name, where no other stylesheet has that name', async () => {
+  /* A widget two pages draw met neither page's c-<id>- rule and warned on every page (a field report). */
+  const dir = await mkdtemp(join(tmpdir(), 'tw-sheet-'));
+  made.push(dir);
+  for (const folder of ['widgets', 'widgets/badge', 'a', 'b']) await mkdir(join(dir, folder), { recursive: true });
+  await writeFile(
+    join(dir, 'widgets', 'TicketList.css'),
+    '.c-ticket-list { gap: 0; }\n.c-ticket-list-row { gap: 0; }\n.c-ticket-lists { gap: 0; }',
+  );
+  await writeFile(join(dir, 'widgets', 'badge', 'styles.css'), '.c-badge-dot { gap: 0; }');
+  // Two stylesheets called card.css: neither owns c-card-.
+  await writeFile(join(dir, 'a', 'card.css'), '.c-card-a { gap: 0; }');
+  await writeFile(join(dir, 'b', 'card.css'), '.c-card-b { gap: 0; }');
+  const { warnings } = await lintComponents(dir, {
+    entries: {
+      'page-my-tickets': { sources: ['widgets/TicketList.css', 'widgets/badge/styles.css', 'a/card.css'] },
+      'page-my-work': { sources: ['widgets/TicketList.css', 'b/card.css'] },
+    },
+  } as never);
+  const classes = warnings.map((w) => /"\.([\w-]+)"/.exec(w.text)?.[1]).sort();
+  assert.deepEqual(classes, ['c-card-a', 'c-card-b', 'c-ticket-lists']);
+  assert.match(warnings.find((w) => /c-ticket-lists/.test(w.text))!.text, /or "c-ticket-list-…" after the stylesheet/);
 });
 
 test("the looks' own shadow tokens and a blur-free inset stripe are not a shadow warning; any other shadow still is", async () => {

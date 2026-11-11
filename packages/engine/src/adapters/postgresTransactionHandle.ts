@@ -49,7 +49,7 @@ export interface AheadReport {
   taken: number;
   /** Statements asked in their turn while answers sent ahead were still waiting: each cost a round trip one sent ahead might have saved. */
   missed: number;
-  /** Answers sent ahead that nothing took before they were dropped, by what each said. */
+  /** Answers sent ahead that nothing took and that the transaction never asked again in its turn, by what each said. */
   left: string[];
   /** Times the transaction began again without them, because one failed. */
   redone: number;
@@ -116,6 +116,15 @@ export function transactionHandle(client: PgQuery, origin?: object): PgQuery {
         state.report.taken += 1;
         return answer;
       }
+    }
+    /* One dropped and asked again in its turn was asked: what it cost is in missed and asked, and only one never
+       asked is a hint that no longer says what the transaction does. A tenant command's first save after a start
+       describes the catalog before its journal, and every statement sent for the journal was warned of (a field
+       report). */
+    if (state.report.left.length) {
+      const key = said(args);
+      const at = key === undefined ? -1 : state.report.left.indexOf(key);
+      if (at !== -1) state.report.left.splice(at, 1);
     }
     // A rollback of the whole transaction: what waited for its COMMIT is never sent.
     if (typeof text === 'string' && /^\s*ROLLBACK\s*;?\s*$/i.test(text)) {
@@ -208,6 +217,28 @@ export function waitsAhead(client: PgQuery, statement: Readonly<{ text: string; 
   if (!state?.ahead.size) return false;
   const key = said(statement.values?.length ? [statement.text, [...statement.values]] : [statement.text]);
   return key !== undefined && (state.ahead.get(key)?.length ?? 0) > 0;
+}
+
+/**
+ * A lock sent ahead that the transaction stands on without asking it again:
+ * the row was held from the moment its answer came back, whatever dropped
+ * that answer since (postgres.ts `lock` and `holds`). It counts as taken, so
+ * the report does not warn of a lock the transaction relied on as never used
+ * (a field report: each tenant command that saved its journal before writing
+ * a row it had locked ahead warned of that row's lock).
+ */
+export function heldAhead(client: PgQuery, statement: Readonly<{ text: string; values?: readonly unknown[] }>): void {
+  const state = transactions.get(client);
+  const key = state && said(statement.values?.length ? [statement.text, [...statement.values]] : [statement.text]);
+  if (!state || key === undefined) return;
+  const waiting = state.ahead.get(key);
+  const left = state.report.left.indexOf(key);
+  if (waiting?.length) {
+    waiting.shift();
+    if (!waiting.length) state.ahead.delete(key);
+  } else if (left !== -1) state.report.left.splice(left, 1);
+  else return;
+  state.report.taken += 1;
 }
 
 /**

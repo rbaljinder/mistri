@@ -1353,7 +1353,8 @@ every look, so the picture it keeps reads on whatever page shows it.
   its line is hovered or it is current. Past a dozen nodes the bar offers a
   filter: matches marked in `--changed-hue`, whatever holds one opened, the
   rest folded. In a grid it is one quiet `--code` line that opens the
-  document in the confirm dialog's box, whose head is the viewer's bar.
+  document in the confirm dialog's box, whose head is the viewer's bar. In a
+  record it takes the field grid's whole width, with no cap of its own.
   Read-only: a document is not a line of text, so no field editor is offered
   one.
 - Cards, galleries and accordions are presentations, not styling. A card is

@@ -9,13 +9,13 @@ import { parseRelatedCreate } from './relatedCreate.js';
 import { parseListEmpty } from './listEmpty.js';
 import { CHART_SHAPES, FIGURE_FORMATS, FIGURE_FORMAT_WORDS, allowKeys, humanName } from './model.js';
 import { headingOf } from './appNoun.js';
-import { CARDS_MAX_LINES, HEADER_MAX_FACTS, parseCards, parseFacts, type AppCardsList } from './appCards.js';
+import { CARDS_MAX_LINES, HEADER_FACTS_SHOWN, HEADER_MAX_FACTS, parseCards, parseFacts, type AppCardsList } from './appCards.js';
 import { parseIcon } from './appIcons.js';
 import { slug } from './slug.js';
 import { parsePageLayout } from './pageLayouts.js';
 import { parseSortText } from './sortText.js';
 import { componentPropValues, parseComponentDecl, parsePageReads, parsePageTotals, parseRecordFields } from './appComponents.js';
-import { parseAppLinkAction, parseAppTarget, type AppLinkAction } from './appLinks.js';
+import { parseAppLinkAction, parseAppTarget, parseLinkTo, type AppLinkAction } from './appLinks.js';
 import {
   type PageChart,
   type SectionWidth,
@@ -1256,6 +1256,13 @@ function parseHeader(s: Record<string, unknown>, at: string): PageSection {
       `${at}: a record header says something: a "status", "facts", its "primary" verb, its "destructive" ones or the "actions" it draws.`,
     );
   }
+  /* The limit said with the rule behind it: a field report met "one to 12" and could not tell what the line holds. */
+  if (Array.isArray(s.facts) && s.facts.length > HEADER_MAX_FACTS) {
+    throw new Error(
+      `${at}, header: "facts" names ${s.facts.length}, and a header says at most ${HEADER_MAX_FACTS}: the first ${HEADER_FACTS_SHOWN} in the line under the name, the rest in its More. ` +
+        `Keep the ${HEADER_MAX_FACTS} a reader looks for first and show the others in fields([...]).`,
+    );
+  }
   const facts = s.facts === undefined ? undefined : parseFacts(s.facts, `${at}, header`, 'facts', HEADER_MAX_FACTS);
   return {
     kind: 'fields',
@@ -1487,7 +1494,8 @@ function parseHeadlineActions(raw: unknown, at: string): PageHeadlineAction[] {
     const here = `${at}, link ${i + 1}`;
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error(`${here} is not an object { label, to }.`);
     const a = entry as Record<string, unknown>;
-    if (a.to !== undefined && typeof a.to !== 'string') {
+    const appLink = !!a.to && typeof a.to === 'object' && (Object.hasOwn(a.to, 'app') || Object.hasOwn(a.to, 'kind'));
+    if (appLink) {
       allowKeys(a, ['label', 'to', 'intent'], here, INTENT_RENAMED);
       if (typeof a.label !== 'string' || !a.label.trim() || a.label.trim().length > 60)
         throw new Error(`${here} needs a "label" of at most 60 characters.`);
@@ -1502,8 +1510,9 @@ function parseHeadlineActions(raw: unknown, at: string): PageHeadlineAction[] {
     allowKeys(a, ['label', 'to', 'intent', 'prefill', 'defaults', 'open'], here, INTENT_RENAMED);
     if (typeof a.label !== 'string' || !a.label.trim() || a.label.trim().length > 60)
       throw new Error(`${here} needs a "label" of at most 60 characters.`);
-    if (typeof a.to !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(a.to))
-      throw new Error(`${here} needs a "to": the key of one of the App's views, or an appLink().`);
+    const to = typeof a.to === 'string' || (a.to && typeof a.to === 'object') ? parseLinkTo(a.to, `${here}, "to"`) : undefined;
+    if (!to || !('view' in to) || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(to.view))
+      throw new Error(`${here} needs a "to": the key of one of the App's views, { view, tab }, or an appLink().`);
     if (a.intent !== undefined && a.intent !== 'primary' && a.intent !== 'secondary')
       throw new Error(`${here} has an "intent" of "${String(a.intent)}". Use "primary" or "secondary".`);
     /* A public form over the record, rather than a page of its own. Only
@@ -1533,7 +1542,8 @@ function parseHeadlineActions(raw: unknown, at: string): PageHeadlineAction[] {
     const defaults = inputs(a.defaults, 'defaults');
     return {
       label: a.label.trim(),
-      view: a.to,
+      view: to.view,
+      ...(to.tab === undefined ? {} : { tab: to.tab }),
       ...(a.intent === undefined ? {} : { intent: a.intent as 'primary' | 'secondary' }),
       ...(prefill ? { prefill } : {}),
       ...(defaults ? { defaults } : {}),

@@ -8,6 +8,11 @@
  * apart by anything on the page goes to `REFUSED`, which names the line for a person to change.
  */
 
+import { RENAMED_TOKENS } from '@mistriwork/kit/shared/uiTokens.js';
+
+/** The looks' tokens renamed before 1.0 (`--text` is `--ink`): the table `check` names them from too. */
+export const TOKENS = RENAMED_TOKENS;
+
 /** The package the App framework was published as, before `@mistriwork/mistri`. */
 const OLD_PACKAGE = 'tablewalk';
 const NEW_PACKAGE = '@mistriwork/mistri';

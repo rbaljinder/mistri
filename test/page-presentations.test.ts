@@ -499,7 +499,7 @@ test('a record header is a kind of its own: a status and facts, drawn in the hea
   assert.throws(() => page({ kind: 'header', status: 'account_id.status' }), /"status" that is not one of the record's own columns/);
   assert.throws(
     () => page({ kind: 'header', facts: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm'] }),
-    /"facts" must be one to 12/,
+    /"facts" names 13, and a header says at most 12: the first 6 in the line under the name, the rest in its More\. Keep the 12 .* fields\(\[\.\.\.\]\)/,
   );
   // More than the line holds is allowed: the facts past the sixth fold into the head's More.
   assert.doesNotThrow(() => page({ kind: 'header', facts: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] }));

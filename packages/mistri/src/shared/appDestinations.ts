@@ -17,6 +17,7 @@
  * that disappears for them is said once and not found by signing in as each role.
  */
 import { isFormView } from './appModel.js';
+import { namesTab, tabKey } from '@mistriwork/engine/shared/addressParams.js';
 
 /** What a view key names, as a destination reads it. */
 export type DestinationKind = 'list' | 'dashboard' | 'form' | 'public form' | 'landing';
@@ -55,4 +56,27 @@ export function destinationProblem(at: string, view: string, kind: DestinationKi
         ? ': the landing is where home sends a signed-out visitor'
         : '';
   return `${at} names "${view}", which is not ${ROOMS}${why}.`;
+}
+
+/**
+ * The refusal of a destination's tab (`to: { view, tab }`) that the list does not have, or undefined for one it has.
+ * A tab is a list's, named by its address word (`?tab=`), as an embedded list's `listTab` names one: a label is said in
+ * the reader's language and changes with `msg()`, the word does not. Unchecked, a wrong word opened the first tab.
+ */
+export function destinationTabProblem(
+  at: string,
+  view: string,
+  tab: string | undefined,
+  kind: DestinationKind | undefined,
+  tabs: readonly { label: string; slug?: string }[] | undefined,
+): string | undefined {
+  if (tab === undefined || !isRoom(kind)) return undefined;
+  if (kind !== 'list') return `${at} names the tab "${tab}" of "${view}", which is a ${kind}: a tab is a list's.`;
+  if (tabs?.some((candidate) => namesTab(candidate, tab))) return undefined;
+  const byLabel = tabs?.find((candidate) => candidate.label === tab);
+  if (byLabel) return `${at} names the tab "${tab}" by its label. Name a tab by its address word: "${tabKey(byLabel)}".`;
+  return (
+    `${at} names the tab "${tab}", which the view "${view}" does not have. ` +
+    (tabs?.length ? `Its tabs: ${tabs.map((candidate) => tabKey(candidate)).join(', ')}.` : 'It has no tabs.')
+  );
 }

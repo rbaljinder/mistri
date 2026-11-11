@@ -211,6 +211,30 @@ describe('a load names every refusal in one run', () => {
     assert.ok(problems.some((p) => /pages "customer"/.test(p)));
   });
 
+  test('a refused key does not hold back the views over its resource: every refused key is said in one run', () => {
+    // A field report: renamed keys met one per run, because one refused key on a resource held back every view over it.
+    const problems = refused({
+      resources: { task: { lable: 'Task' } },
+      views: {
+        tasks: { ...LIST, sumary: 'x' },
+        board: { kind: 'dashboard', label: 'Board', sections: [{ kind: 'metric', from: 'task', valu: 1 }] },
+      },
+      nav: ['tasks', 'board'],
+    });
+    assert.ok(
+      problems.some((p) => /resources "task" has no "lable"/.test(p)),
+      problems.join('\n'),
+    );
+    assert.ok(
+      problems.some((p) => /views "tasks" has no "sumary"/.test(p)),
+      problems.join('\n'),
+    );
+    assert.ok(
+      problems.some((p) => /views "board", section 1 \(a metric\) has no "valu"/.test(p)),
+      problems.join('\n'),
+    );
+  });
+
   test("the checks across views are gathered too: the menu's typo, the home's and a list's empty action in one run (UX-16)", () => {
     const problems = refused({
       views: { tasks: { ...LIST, empty: { title: 'None', action: { to: 'nowhere', label: 'Add' } } } },

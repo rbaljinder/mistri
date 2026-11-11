@@ -59,7 +59,7 @@ export function FirstRun({ section, done, fresh }: { section: Section; done: boo
           const table = findTable(step.table ?? '') as TableMeta | undefined;
           /* The New form where the reader may add; the list itself where they may only read. */
           const adding = !done[i] && Boolean(table && canInsert(table, true));
-          const link = viewLink(step.view, 'push', adding);
+          const link = viewLink(step.view, 'push', { adding });
           return (
             <li key={step.view} className={`first-run-step${done[i] ? ' is-done' : ''}`}>
               <span className="first-run-mark" aria-hidden="true">

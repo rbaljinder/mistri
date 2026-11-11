@@ -274,6 +274,9 @@ export function parseComputed(text: string, isColumn: (path: string) => boolean)
       }
       if (lower === 'true' || lower === 'false') return { k: 'bool', value: lower === 'true' };
       if (lower === 'today' || lower === 'now' || lower === 'me') return { k: lower };
+      /* A column named for a unit of time (`minutes * 60`) is the column: a unit is read only after a value
+         (`3 days`, `term months`), where no column stands. */
+      if (Object.hasOwn(UNITS, lower) && isColumn(token.v)) return { k: 'path', path: token.v };
       if (['and', 'or', 'not', 'is', 'empty', 'in'].includes(lower) || Object.hasOwn(UNITS, lower))
         throw new ComputedError(`"${token.v}" stands where a value goes.`, token.at);
       return { k: 'path', path: token.v };

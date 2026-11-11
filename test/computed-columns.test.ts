@@ -110,6 +110,16 @@ describe('the words', () => {
     }
   });
 
+  test('a column named for a unit of time is the column; a unit is read only after a value', () => {
+    const minutes = (path: string) => path === 'minutes';
+    const column = { k: 'path', path: 'minutes' };
+    const sixty = { k: 'number', value: 60 };
+    assert.deepEqual(parseComputed('minutes * 60', minutes), { k: 'op', op: '*', left: column, right: sixty });
+    assert.deepEqual(parseComputed('60 * minutes', minutes), { k: 'op', op: '*', left: sixty, right: column });
+    assert.deepEqual(parseComputed('3 minutes', minutes), { k: 'span', unit: 'minute', of: { k: 'number', value: 3 } });
+    assert.throws(() => parseComputed('minutes * 60', () => false), /"minutes" stands where a value goes/, 'no such column');
+  });
+
   test("`in (…)` and `not in (…)` are the query language's list: the equalities they mean, typed, compiled and worked out as `=` is", () => {
     const owner = (path: string) => path === 'owner';
     const eq = (value: string) => ({ k: 'op', op: '=', left: { k: 'path', path: 'owner' }, right: { k: 'text', value } });
@@ -403,6 +413,16 @@ describe('a rollup and a dashboard window read one', () => {
       NOW,
     ).problems;
     assert.match(flag[0], /the computed column "task\.done" is boolean; a sum reads numbers/);
+  });
+
+  test('a computed column that is not served names the rollup over it, and why', () => {
+    const broken = appRollupRules(
+      work({ x: { fn: 'sum', from: 'task', column: 'odd' } }, { odd: { type: 'number', value: 'spent +' } }),
+      tree(),
+      NOW,
+    ).problems;
+    assert.equal(broken.length, 1);
+    assert.match(broken[0], /rollups "x": "task\.odd" is a computed column that is not served \(.+\), so this rollup cannot read it/);
   });
 
   test("a rollup's query narrows its rows by a computed column of theirs, and `now` is the request's", () => {

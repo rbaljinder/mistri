@@ -151,6 +151,26 @@ test('a second run changes nothing', () => {
   assert.equal(upgradeSource(once[0]!).text, once[0]);
 });
 
+test("the looks' renamed tokens are rewritten in sources and stylesheets; one the App declares itself is refused", () => {
+  const dir = folder({
+    'c/tile.css': '.c-tile { color: var(--text-dim); border: 1px solid var(--border-strong, red); --bg: white; background: var(--bg); }\n',
+    'c/tile.tsx': "export default () => <b style={{ color: 'var(--danger)', gap: `var(--space-2)` }} />;\nconst ok = useToken('--ok');\n",
+  });
+  const first = run(['--app', dir]);
+  assert.equal(first.code, 1, first.out);
+  assert.equal(
+    readFileSync(join(dir, 'c/tile.css'), 'utf8'),
+    '.c-tile { color: var(--ink-muted); border: 1px solid var(--line-strong, red); --bg: white; background: var(--bg); }\n',
+  );
+  assert.equal(
+    readFileSync(join(dir, 'c/tile.tsx'), 'utf8'),
+    "export default () => <b style={{ color: 'var(--status-critical)', gap: `var(--space-2)` }} />;\nconst ok = useToken('--status-good');\n",
+  );
+  assert.match(first.out, /refused .*tile\.css:1: --bg is the App's own property/);
+  /* A token that is the looks' own today, or a longer name, is left alone. */
+  assert.deepEqual(upgradeSource("const a = 'var(--ink) var(--text-sm) var(--border-width)';").changes, []);
+});
+
 test('a flag it does not take, or a folder that is not there, is exit 2', () => {
   assert.equal(run(['--force']).code, 2);
   assert.equal(run(['--app', join(tmpdir(), 'mistri-upgrade-no-such-folder')]).code, 2);

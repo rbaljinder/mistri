@@ -7,6 +7,7 @@
 import { allowKeys, isRecord } from './model.js';
 import type { AppListEmpty } from './listPresentations.js';
 import { parseCaption } from './appMessages.js';
+import { parseLinkTo } from './appLinks.js';
 
 /** Read the shared empty-list copy used by list views and related sections. */
 export function parseListEmpty(raw: unknown, at: string): AppListEmpty {
@@ -21,9 +22,10 @@ export function parseListEmpty(raw: unknown, at: string): AppListEmpty {
   const actionAt = `${here}, "action"`;
   allowKeys(raw.action, ['label', 'to'], actionAt);
   const label = parseCaption(raw.action.label, `${actionAt} needs a non-empty "label"`);
-  if (typeof raw.action.to !== 'string' || !raw.action.to.trim())
-    throw new Error(`${actionAt} needs a non-empty "to": the key of a list, a dashboard or a signed-in form view.`);
-  return { ...result, action: { label, view: raw.action.to.trim() } };
+  const to = typeof raw.action.to === 'string' || isRecord(raw.action.to) ? parseLinkTo(raw.action.to, `${actionAt}, "to"`) : undefined;
+  if (!to || !('view' in to))
+    throw new Error(`${actionAt} needs a "to": the key of a list, a dashboard or a signed-in form view, or { view, tab }.`);
+  return { ...result, action: { label, ...to } };
 }
 
 /** The authored shape again, for a definition written back out. */
@@ -31,6 +33,13 @@ export function listEmptyConfig(empty: AppListEmpty) {
   return {
     title: empty.title,
     ...(empty.description === undefined ? {} : { description: empty.description }),
-    ...(empty.action ? { action: { label: empty.action.label, to: empty.action.view } } : {}),
+    ...(empty.action
+      ? {
+          action: {
+            label: empty.action.label,
+            to: empty.action.tab ? { view: empty.action.view, tab: empty.action.tab } : empty.action.view,
+          },
+        }
+      : {}),
   };
 }

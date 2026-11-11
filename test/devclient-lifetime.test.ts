@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ownDevClient, sweepDevCaches } from '../packages/engine/src/server/devclient.js';
+import { optimizerRuns, ownDevClient, sweepDevCaches } from '../packages/engine/src/server/devclient.js';
 
 test('retirement fences late dependency watches before provider close and never reactivates them', async () => {
   const watched: string[] = [];
@@ -138,4 +138,29 @@ test("a start sweeps optimizer directories whose process is gone, and keeps a li
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("a retiring client waits for the optimizer's bundles to finish writing", async () => {
+  const { rolldown } = await import('rolldown');
+  const runs = optimizerRuns();
+  const source = (code: string) => ({ name: 'source', resolveId: (id: string) => id, load: () => code });
+  const pending = async () =>
+    Promise.race([runs.settled().then(() => false), new Promise<boolean>((resolve) => setTimeout(resolve, 50, true))]);
+  const bundle = await rolldown({ input: 'one', plugins: [runs.plugin, source('export default 1')], logLevel: 'silent' });
+  assert.equal(await pending(), false, 'a bundle builds at its write, not before');
+  await bundle.generate({});
+  const waiting = runs.settled();
+  assert.equal(await pending(), true, 'the bundle is still open');
+  await bundle.close();
+  await waiting;
+  // A bundle that fails closes itself and is closed again; the next run still counts.
+  const failing = await rolldown({ input: 'bad', plugins: [runs.plugin, source('export default (')], logLevel: 'silent' });
+  await assert.rejects(failing.generate({}));
+  await failing.close();
+  assert.equal(await pending(), false);
+  const next = await rolldown({ input: 'two', plugins: [runs.plugin, source('export default 2')], logLevel: 'silent' });
+  await next.generate({});
+  assert.equal(await pending(), true);
+  await next.close();
+  assert.equal(await pending(), false);
 });

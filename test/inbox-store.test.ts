@@ -138,6 +138,44 @@ test("a person told by account id is told at that account's email, and its words
   });
 });
 
+test("an account that is nobody's member tells nobody, and that is said once in the log, naming an address held there", async () => {
+  await fixture(async (adapter, db) => {
+    // The person row holds the address where a tenant App's auth.me holds the account id: no member is found.
+    const said: string[] = [];
+    const error = console.error;
+    console.error = (line: unknown) => void said.push(String(line));
+    try {
+      bindNotices(
+        adapter,
+        new Map([
+          [
+            'ticket',
+            [
+              rule(
+                { kind: 'update', columns: ['status'] },
+                {
+                  to: [{ column: 'owner_id', hops: [{ table: 'person', key: 'id', column: 'email' }], account: true }],
+                  members: async () => undefined,
+                },
+              ),
+            ],
+          ],
+        ]),
+      );
+      for (const status of ['closed', 'open'])
+        await attributeWrites({ actor: 'bob@example.test', via: 'app' }, () =>
+          adapter.update({ table: 'ticket', key: { id: 1 }, values: { status } }),
+        );
+    } finally {
+      console.error = error;
+    }
+    assert.equal(notices(db).length, 0);
+    assert.equal(said.length, 1, 'said once, not on every write');
+    assert.match(said[0]!, /an account it names is no member where the notice is kept, so it tells nobody\. The value is an email address/);
+    assert.doesNotMatch(said[0]!, /ann@example\.test/, "the person's value is not logged");
+  });
+});
+
 test('the writer is never told, a record told of twice in one write is one notice, and when narrows by the values after it', async () => {
   await fixture(async (adapter, db) => {
     bindNotices(

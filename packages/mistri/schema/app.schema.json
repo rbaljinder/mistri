@@ -421,6 +421,16 @@
         { "properties": { "key": { "additionalProperties": { "$ref": "#/$defs/appLinkScalar" } }, "tenant": { "properties": { "id": { "$ref": "#/$defs/appLinkScalar" } } } } }
       ]
     },
+    "viewTo": {
+      "description": "One of this App's views by key, or { view, tab }: a list opened on one of its tabs, the tab named by its address word (?tab=).",
+      "oneOf": [
+        { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
+        {
+          "type": "object", "additionalProperties": false, "required": ["view"],
+          "properties": { "view": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" }, "tab": { "type": "string", "pattern": "\\S" } }
+        }
+      ]
+    },
     "appMenuLabel": {
       "type": "string", "minLength": 1, "maxLength": 120,
       "allOf": [{ "pattern": "\\S" }, { "not": { "pattern": "[\\u0000-\\u001f\\u007f-\\u009f\\ud800-\\udfff]" } }]
@@ -1803,7 +1813,6 @@
         },
         "hidden": {
           "type": "array",
-          "minItems": 1,
           "uniqueItems": true,
           "items": {
             "type": "string",
@@ -2252,7 +2261,7 @@
         "notify": {
           "type": "array",
           "maxItems": 16,
-          "description": "Which writes tell which people, kept in each person's inbox and written in the triggering write's own transaction, in reserved tables provisioned once (mistri migrate stores up, or provisionStores from @mistriwork/mistri/maintenance with only: ['inbox']). The person who made the write is never told. Needs sign-in; not under auth.rows 'tenant'.",
+          "description": "Which writes tell which people, kept in each person's inbox and written in the triggering write's own transaction, in reserved tables provisioned once (mistri migrate stores up, or provisionStores from @mistriwork/mistri/maintenance with only: ['inbox']). The person who made the write is never told. Needs sign-in. Under auth.rows 'tenant' a notice is kept in the inbox of the tenant whose record was written, and read only there.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -3695,11 +3704,7 @@
                 "label": {
                   "$ref": "page.schema.json#/$defs/presentationCopy"
                 },
-                "to": {
-                  "type": "string",
-                  "minLength": 1,
-                  "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
-                }
+                "to": { "$ref": "#/$defs/viewTo" }
               }
             }
           },
@@ -4285,11 +4290,7 @@
                         "label": {
                           "$ref": "page.schema.json#/$defs/presentationCopy"
                         },
-                        "to": {
-                          "type": "string",
-                          "minLength": 1,
-                          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
-                        }
+                        "to": { "$ref": "#/$defs/viewTo" }
                       }
                     }
                   }
@@ -4460,7 +4461,7 @@
             },
             "action": {
               "oneOf": [
-                { "type": "object", "additionalProperties": false, "required": ["label", "to"], "properties": { "label": { "type": "string", "pattern": "\\S" }, "to": { "type": "string", "pattern": "\\S" } } },
+                { "type": "object", "additionalProperties": false, "required": ["label", "to"], "properties": { "label": { "type": "string", "pattern": "\\S" }, "to": { "$ref": "#/$defs/viewTo" } } },
                 { "type": "object", "additionalProperties": false, "required": ["label", "to"], "properties": { "label": { "type": "string", "pattern": "\\S" }, "to": { "$ref": "#/$defs/appTargetStatic" } } }
               ]
             },
@@ -4506,7 +4507,7 @@
             },
             "action": {
               "oneOf": [
-                { "type": "object", "additionalProperties": false, "required": ["label", "to"], "properties": { "label": { "type": "string", "pattern": "\\S" }, "to": { "type": "string", "pattern": "\\S" } } },
+                { "type": "object", "additionalProperties": false, "required": ["label", "to"], "properties": { "label": { "type": "string", "pattern": "\\S" }, "to": { "$ref": "#/$defs/viewTo" } } },
                 { "type": "object", "additionalProperties": false, "required": ["label", "to"], "properties": { "label": { "type": "string", "pattern": "\\S" }, "to": { "$ref": "#/$defs/appTargetStatic" } } }
               ]
             },

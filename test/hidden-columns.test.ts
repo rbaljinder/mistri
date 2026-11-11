@@ -440,6 +440,8 @@ test("hidden is refused where it cannot hold, and intersects every role's grant"
       'hidden refusals',
     );
   assert.throws(() => app({ account: { hidden: 'password_hash' } }), /"hidden" that is not a list/);
+  // An empty list hides nothing (a field report): it loads, as no "hidden" at all.
+  assert.equal(app({ account: { hidden: [] } }).resources!.account!.hidden, undefined);
   assert.throws(
     () => app({ account: { hidden: ['api_secret'], search: { connection: 'find', fields: ['name', 'api_secret'] } } }),
     /index would hold its values/,

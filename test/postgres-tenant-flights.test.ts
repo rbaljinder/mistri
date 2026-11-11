@@ -287,6 +287,15 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
   test('each endpoint a page asks stays within its round-trip budget', async (t) => {
     const relay = await startLatencyProxy(LIVE!, 0);
     t.after(() => relay.close());
+    /* A statement sent ahead that its transaction never asks is a round trip paid for nothing. A command's history
+       capture read its row by its own columns, never the whole row sent for it, and warned on every save (a field
+       report). */
+    const leftAhead: string[] = [];
+    const heard = (warning: Error) => {
+      if (warning.name === 'MistriWriteAhead') leftAhead.push(warning.message);
+    };
+    process.on('warning', heard);
+    t.after(() => process.off('warning', heard));
     const f = await deploy(t, relay);
     /* A start describes each database's catalog once: startup's two checks, its trial enrollment and the host's, each
        read source, the first scoped transaction and each platform source's two snapshots each described it afresh —
@@ -461,6 +470,9 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
         .map(([name]) => name),
       [],
     );
+    // emitWarning is heard on the next tick: let the last save's arrive.
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(leftAhead, []);
     const over = Object.entries(measured).filter(([name, answer]) => answer.total > BUDGETS[name.replace(/ together \d+$/, '')]!);
     assert.deepEqual(
       over.map(

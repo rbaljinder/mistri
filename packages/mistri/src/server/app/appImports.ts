@@ -12,7 +12,7 @@ import { join } from 'node:path';
 
 import { nearest } from '@mistriwork/engine/shared/suggest.js';
 
-/** What a display helper that no longer exists is written as now. */
+/** What a helper that no longer exists is written as now. */
 const REMOVED: Record<string, string> = {
   money: "write the rule as data: `{ format: 'money', currency: 'EUR', unit: '/mo' }`",
   number: "write the rule as data: `{ format: 'number', unit: 'mi' }`",
@@ -20,6 +20,10 @@ const REMOVED: Record<string, string> = {
   relative: "write the rule as data: `{ format: 'relative' }`",
   items: "write the rule as data: `{ format: 'items' }`",
   tones: "write the rule as data: `{ tone: { paid: 'good', void: 'bad' } }`",
+  room: 'a screen of its own is a free-form page: `pages/<path>.page.tsx`, importing from `@mistriwork/mistri/page`',
+  similar: "a list of rows like this one is `related(title, from, { same: ['column'], near? })`",
+  count: "a count of the rows that point here is `rollup.count('table')`",
+  sum: "a total of the rows that point here is `rollup.sum('table', 'column')`",
 };
 
 interface MissingImport {

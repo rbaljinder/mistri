@@ -207,7 +207,8 @@ export function consumesCommandWarnings(app: AppDef, schema: DatabaseSchema, com
  * source as the checks above are: `db.<table>.insert({ part_id: … })`, or
  * `tx.insert({ table: '…', values: { … } })`, with the column written as a key
  * of the object it passes. A call built through a variable or a computed key is
- * missed, which the run-time refusal is not.
+ * missed, which the run-time refusal is not, and so is a write a helper the
+ * handler calls makes: the warning says so, since a clean check does not.
  */
 export function referenceReadWarnings(app: AppDef, schema: DatabaseSchema, commands: BusinessCommandRegistry | undefined): string[] {
   if (!commands) return [];
@@ -229,7 +230,8 @@ export function referenceReadWarnings(app: AppDef, schema: DatabaseSchema, comma
         const said = schema.tables.find((candidate) => candidate.id === idOf(to))?.name ?? to;
         warnings.add(
           `command "${id}" sets ${table.name}.${column.name}, which points at a "${said}" row, and "${said}" is not in its read [command-reference-unread]: ` +
-            `the run refuses it with 500 invalid_result → add "${said}" to read.`,
+            `the run refuses it with 500 invalid_result → add "${said}" to read. ` +
+            "Only the handler's own text is read: a row a helper it calls writes is not seen here, so give read the tables its helpers point at too.",
         );
       }
     };
