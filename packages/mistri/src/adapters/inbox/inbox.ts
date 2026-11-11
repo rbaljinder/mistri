@@ -31,7 +31,7 @@ import { richTextMentioned } from '@mistriwork/engine/shared/richText.js';
 import type { NotifyMentions, NotifyPath, NotifySend } from '../../shared/appNotify.js';
 import type { QueuedChannelNotice } from '../integrations/integrationStore.js';
 
-export const INBOX_VERSION = 1;
+export const INBOX_VERSION = 2;
 import { INBOX_PREFIX } from './inboxTables.js';
 export { INBOX_PREFIX, INBOX_TABLES } from './inboxTables.js';
 /** The one index the notice table carries: a person's notices in one App, newest last. */
@@ -103,8 +103,12 @@ export interface NoticeRule {
   readonly when?: readonly (readonly { readonly column: string; readonly values: readonly string[]; readonly not?: true }[])[];
   /** Each resolves to one email, or to nobody. */
   readonly to: readonly NoticePath[];
-  /** The words, literal parts and values read off the record; on a `flow` rule, `{ message }` is the step's own words. */
-  readonly title: readonly (string | NoticePath | NoticeMessage)[];
+  /** The words, literal parts and values read off the record; on a `flow` rule, `{ message }` is the step's own words;
+      `{ word }` one the write gave (`{ words }` on an insert or update), masked in the inbox and sealed until sent. */
+  readonly title: readonly (string | NoticePath | NoticeMessage | NoticeWord)[];
+  /** Seals a title that says the write's words, bound to `place` (server/app/noticeWordsSeal.ts): where the title
+      has a `{ word }`, the queued mail and channel message keep the said title only this way. */
+  readonly seal?: (text: string, place: readonly string[]) => string;
   /** A title said from the App's messages instead: its arguments read off the record once, and the words said for
       each recipient in their own locale (server/app/noticeWords.ts) — `recipient` absent for a channel's address,
       and its `account` the account it was told as, where it was reached through one. */
@@ -142,7 +146,16 @@ export interface NoticeRule {
 interface NoticeMessage {
   readonly message: true;
 }
-const isMessage = (part: string | NoticePath | NoticeMessage): part is NoticeMessage => typeof part !== 'string' && 'message' in part;
+type TitlePart = NoticeRule['title'][number];
+const isMessage = (part: TitlePart): part is NoticeMessage => typeof part !== 'string' && 'message' in part;
+
+/** Where a title says one of the write's own words (`{words.code}`): a value the write gave, not a column. */
+interface NoticeWord {
+  readonly word: string;
+}
+const isWord = (part: TitlePart): part is NoticeWord => typeof part !== 'string' && 'word' in part;
+/** What the inbox shows for a word: the notice is there, the code or token is not. */
+const MASKED_WORD = '…';
 
 interface NoticeSend {
   readonly channel: string;
@@ -282,6 +295,8 @@ export interface NoticeRow {
   action: string;
   /** Queue it in the outbox too, in the same transaction. */
   email?: true;
+  /** The mailed title, said with the write's words and sealed to the stored notice's id: the outbox's row keeps it. */
+  sealWords?: (notice: number) => string;
 }
 
 /** A stored notice read back, newest first. */
@@ -374,7 +389,10 @@ const MOST_IN_A_TEAM = 100;
 /** The columns of the triggering table a rule reads off the record. */
 function ruleColumns(rule: NoticeRule): string[] {
   const columns = new Set<string>();
-  for (const path of [...rule.to, ...rule.title.filter((part): part is NoticePath => typeof part !== 'string' && !isMessage(part))])
+  for (const path of [
+    ...rule.to,
+    ...rule.title.filter((part): part is NoticePath => typeof part !== 'string' && !isMessage(part) && !isWord(part)),
+  ])
     columns.add(path.column);
   for (const condition of (rule.when ?? []).flat()) columns.add(condition.column);
   if (rule.mentions) columns.add(rule.mentions.column);
@@ -405,7 +423,13 @@ export function noticeKey(key: Record<string, unknown>): string {
 interface NoticeCapture {
   /** The columns the rules on a table read, for the writer to read back after the write. */
   columns(table: string): string[] | undefined;
-  inserted(table: string, key: Record<string, string | number>, after: Record<string, unknown>): Promise<void>;
+  /** `words`: what the write gave its notices to say (`{words.x}`), never stored on the record. */
+  inserted(
+    table: string,
+    key: Record<string, string | number>,
+    after: Record<string, unknown>,
+    words?: Readonly<Record<string, string>>,
+  ): Promise<void>;
   /** `before`: the record as it was, in the columns the rules read, so an edit tells only the people it newly mentions. */
   updated(
     table: string,
@@ -413,10 +437,17 @@ interface NoticeCapture {
     changed: ReadonlySet<string>,
     after: Record<string, unknown>,
     before?: Record<string, unknown>,
+    words?: Readonly<Record<string, string>>,
   ): Promise<void>;
   /** A flow's notify step about this record: the rules `on: { flow: audience }`, their `{message}` the step's words. */
   told(table: string, key: Record<string, string | number>, audience: string, message: string, row: Record<string, unknown>): Promise<void>;
 }
+
+/* A rule that says words is bound with its sealer (server/inbox.ts); one without has no way to keep them. */
+const sealer = (rule: NoticeRule) => {
+  if (!rule.seal) throw new Error("A notification says the write's words and has no key to seal them with.");
+  return rule.seal;
+};
 
 /**
  * One transaction's notices, or undefined where the adapter notifies nobody.
@@ -448,6 +479,7 @@ export function captureNotices(adapter: object, sink: NoticeSink, context: Notic
     tenant: string,
     record: string,
     text: string,
+    spoken?: string,
   ) => {
     const said = textOf(await resolve(send.to, row));
     /* An email address is one address or nothing is queued: a typed `a@b.c, d@e.f` or a line break never reaches a header. */
@@ -458,13 +490,17 @@ export function captureNotices(adapter: object, sink: NoticeSink, context: Notic
     if (sent.has(once)) return;
     sent.add(once);
     const zone = send.timezone ? textOf(await resolve(send.timezone, row))?.trim() : undefined;
+    const key = `notify-${randomUUID()}`;
+    const because = (words: string) => (email && send.because ? `${words}\n\n${send.because}` : words);
     await sink.message({
       app: rule.app,
-      key: `notify-${randomUUID()}`,
+      key,
       tenant,
       channel: send.channel,
       recipient: address,
-      text: email && send.because ? `${text}\n\n${send.because}` : text,
+      text: because(text),
+      /* The message log keeps the masked words; the said ones wait sealed to this row, and go when it is sent. */
+      ...(spoken === undefined ? {} : { words: sealer(rule)(because(spoken), [rule.app, tenant, key]) }),
       consent: send.consent ? sameText(await resolve(send.consent, row), 'true') : false,
       timezone: zone || null,
       /* A visitor's write mails an address only where they proved it in the form: the server stamped it on this record. */
@@ -489,6 +525,7 @@ export function captureNotices(adapter: object, sink: NoticeSink, context: Notic
     happened: (rule: NoticeRule) => boolean,
     before?: Record<string, unknown>,
     message?: string,
+    words?: Readonly<Record<string, string>>,
   ) => {
     for (const [index, rule] of (binding.get(table) ?? []).entries()) {
       if (!happened(rule)) continue;
@@ -496,6 +533,10 @@ export function captureNotices(adapter: object, sink: NoticeSink, context: Notic
       // A tenant's record tells its people in that tenant's inbox; a row that does not say whose it is tells nobody.
       const owner = rule.owner ? row[rule.owner] : undefined;
       if (rule.owner && (typeof owner !== 'string' || !owner)) continue;
+      /* A rule that says a word the write did not give is not this write's notice: the table has other writers (an
+         import, a plain edit, another command) that never had a code to send, and their writes stand without it. */
+      const saysWords = rule.title.some(isWord);
+      if (rule.title.some((part) => isWord(part) && typeof words?.[part.word] !== 'string')) continue;
       const recipients = new Set<string>();
       const accounts = new Set<string>();
       const tell = (value: unknown, account?: true) => {
@@ -531,10 +572,51 @@ export function captureNotices(adapter: object, sink: NoticeSink, context: Notic
         const said = text.replace(/\s+/g, ' ').trim();
         return said.length > NOTICE_TITLE_CHARS ? `${said.slice(0, NOTICE_TITLE_CHARS - 1)}…` : said;
       };
+      /* `spoken` is cut only in the App's own text and the record's: a word the write gave (a code, a link) is said
+         whole, or the mail would carry half of it. Too long, the text before a word is cut at its end, and after the
+         cut only the words are said. */
+      const lineAround = (parts: ReadonlyArray<{ readonly text: string; readonly word: boolean }>) => {
+        const said = parts
+          .map((part) => part.text)
+          .join('')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (said.length <= NOTICE_TITLE_CHARS) return said;
+        const squashed = parts.map((part) => ({ ...part, text: part.text.replace(/\s+/g, ' ') }));
+        /* One for the ellipsis and one for the space that keeps it off the word after it. */
+        let room = NOTICE_TITLE_CHARS - 2 - squashed.reduce((sum, part) => sum + (part.word ? part.text.length : 0), 0);
+        let out = '';
+        let cut = false;
+        for (const part of squashed) {
+          if (part.word) out += cut ? ` ${part.text.trim()}` : part.text;
+          else if (cut) continue;
+          else if (part.text.length <= room) {
+            out += part.text;
+            room -= part.text.length;
+          } else {
+            out += `${part.text.slice(0, Math.max(room, 0)).trimEnd()}…`;
+            cut = true;
+          }
+        }
+        return out.replace(/\s+/g, ' ').trim();
+      };
+      /* `title` is what the inbox keeps, each word masked; `spoken`, what the mail and the channel say once unsealed. */
       let title = '';
-      for (const part of rule.title)
-        title += typeof part === 'string' ? part : isMessage(part) ? (message ?? '') : (textOf(await resolve(part, row)) ?? '');
+      const spokenParts: Array<{ text: string; word: boolean }> = [];
+      for (const part of rule.title) {
+        const text =
+          typeof part === 'string'
+            ? part
+            : isMessage(part)
+              ? (message ?? '')
+              : isWord(part)
+                ? undefined
+                : (textOf(await resolve(part, row)) ?? '');
+        title += text ?? MASKED_WORD;
+        spokenParts.push(text === undefined && isWord(part) ? { text: words![part.word], word: true } : { text: text ?? '', word: false });
+      }
       title = line(title);
+      const spoken = lineAround(spokenParts);
       /* A title said from the App's messages is read off the record once and said per recipient, in each one's locale. */
       let values: Record<string, unknown> | undefined;
       if (rule.say) {
@@ -558,7 +640,15 @@ export function captureNotices(adapter: object, sink: NoticeSink, context: Notic
       if (rule.send) {
         const said = await titleFor(undefined);
         if (said)
-          await queueSend(rule, rule.send, row, typeof owner === 'string' ? owner : '', `${index}|${table}|${noticeKey(key)}`, said);
+          await queueSend(
+            rule,
+            rule.send,
+            row,
+            typeof owner === 'string' ? owner : '',
+            `${index}|${table}|${noticeKey(key)}`,
+            said,
+            saysWords ? spoken : undefined,
+          );
       }
       if (!recipients.size) continue;
       let opens: { resource: string; key: Record<string, unknown> };
@@ -587,6 +677,7 @@ export function captureNotices(adapter: object, sink: NoticeSink, context: Notic
           actorName: context.actorName,
           action: context.action,
           ...(rule.email ? { email: true as const } : {}),
+          ...(rule.email && saysWords ? { sealWords: (notice: number) => sealer(rule)(spoken, [app, String(notice)]) } : {}),
         });
         if (rule.email) mailQueued();
       }
@@ -655,9 +746,17 @@ export function captureNotices(adapter: object, sink: NoticeSink, context: Notic
       if (!rules) return undefined;
       return [...new Set(rules.flatMap(ruleColumns))];
     },
-    inserted: (table, key, after) =>
-      fire(table, key, after, (rule) => rule.on.kind === 'insert' || (rule.on.kind === 'action' && rule.on.label === context.action)),
-    updated: (table, key, changed, after, before) =>
+    inserted: (table, key, after, words) =>
+      fire(
+        table,
+        key,
+        after,
+        (rule) => rule.on.kind === 'insert' || (rule.on.kind === 'action' && rule.on.label === context.action),
+        undefined,
+        undefined,
+        words,
+      ),
+    updated: (table, key, changed, after, before, words) =>
       fire(
         table,
         key,
@@ -668,6 +767,8 @@ export function captureNotices(adapter: object, sink: NoticeSink, context: Notic
           return rule.on.kind === 'action' && rule.on.label === context.action;
         },
         before,
+        undefined,
+        words,
       ),
     told: (table, key, audience, message, row) =>
       fire(table, key, row, (rule) => rule.on.kind === 'flow' && rule.on.audience === audience, undefined, message),

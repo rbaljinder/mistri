@@ -29,8 +29,9 @@ import { typedValue } from '../../shared/formLines.js';
 import { parseViewQuery } from '@mistriwork/engine/shared/view.js';
 import { mentionsMe } from '../../shared/appMe.js';
 import type { QueryPerson } from '@mistriwork/engine/shared/query.js';
+import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import type { Rollup } from '@mistriwork/engine/shared/rollups.js';
-import type { DatabaseSchema, TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { isFlagColumn, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { canonicalKey, compileWhere, keyFilter, type CommandCatalog } from './commandDb.js';
 
 /** A rollup a `when` reads, named in the command's own (local) tables. */
@@ -239,6 +240,71 @@ export function compileWhen(table: Table, when: unknown, now: Date, me?: QueryPe
   const reads = plain.filter.groups.flatMap((group) => group.flatMap((c) => [c.column, ...(c.other === undefined ? [] : [c.other])]));
   const compared = plain.filter.groups.flat().flatMap((c) => (c.other === undefined ? [] : [c.column, c.other]));
   return { filter: plain.filter, none: plain.none, derived: new Set(compared), reads: [...new Set(reads)] };
+}
+
+/** What a menu's `when` compares a shared column with: the same of a flag or a word, never an order. */
+const FOLD_OPS: ReadonlySet<string> = new Set(['=', '!=', 'in', 'isNull', 'isNotNull']);
+
+/**
+ * A `when` over the tenant's shared profile alone — a menu's: `tenant.boarding = true`, `tenant.plan in (pro, team)`,
+ * joined by and/or — folded once, when the App loads, into a test of the profile's values. It reads no row, so a menu
+ * is judged per request with nothing asked of the database. Each condition names `tenant.<column>` of a flag or a
+ * vocabulary column (`allowed`) `shared` lists, and is decided as a statement would: nothing equals nothing. A `when`
+ * that does not fold to that — another column, a path, an order, a count — throws, and the App does not start.
+ */
+export function foldWhen(
+  profile: TableMeta,
+  shared: readonly string[],
+  when: string,
+): (tenant: Readonly<Record<string, TenantValue>>) => boolean {
+  /* Read as a query of a table whose `tenant` points at the profile, so `tenant.<column>` is a path the parser knows,
+     and only the shared columns stand on the profile there. */
+  const KEY = '\u0000key';
+  const columns = profile.columns.filter((column) => shared.includes(column.name));
+  const schema: DatabaseSchema = {
+    label: 'menu',
+    dialect: 'sqlite',
+    readAt: '',
+    tables: [
+      {
+        name: 'menu',
+        schema: '',
+        id: 'menu',
+        isView: false,
+        columns: [{ name: 'tenant', type: 'text', nullable: true, primaryKey: false }],
+      },
+      {
+        name: profile.name,
+        schema: '',
+        id: profile.name,
+        isView: false,
+        columns: [{ name: KEY, type: 'text', nullable: false, primaryKey: true }, ...columns],
+      },
+    ],
+    foreignKeys: [{ name: 'menu_tenant', from: { table: 'menu', columns: ['tenant'] }, to: { table: profile.name, columns: [KEY] } }],
+  };
+  const parsed = parseViewQuery(schema, 'menu', when, new Date(0), {});
+  if (parsed.errors.length) throw new Error(parsed.errors.map((error) => error.message).join(' '));
+  if (parsed.columns?.length || parsed.orderBy.length || parsed.limit !== undefined)
+    throw new Error('a menu\'s when names tenants, not columns, an order or a count; leave out "show", "sort" and "limit".');
+  const groups = parsed.filter.groups.map((group) =>
+    group.map((c): Condition => {
+      const name = c.path.startsWith('tenant.') ? c.path.slice('tenant.'.length) : undefined;
+      const column = name === undefined ? undefined : columns.find((candidate) => candidate.name === name);
+      if (!column || c.any || c.other !== undefined)
+        throw new Error(
+          `"${c.path}" is not the tenant's profile; a menu's when reads tenant.<column> of a column auth.tenancy.shared lists.`,
+        );
+      if (!isFlagColumn(column) && !column.allowed?.length)
+        throw new Error(
+          `tenant.${name} is ${column.type}; a menu's when reads a flag or a column of a fixed vocabulary (a CHECK … IN list or an enum).`,
+        );
+      if (!FOLD_OPS.has(c.op)) throw new Error(`tenant.${name} is judged with ${c.op}; a menu's when compares with =, !=, in or is empty.`);
+      return { column: name!, op: c.op, ...(c.value === undefined ? {} : { value: c.value }) };
+    }),
+  );
+  if (!groups.length) throw new Error("a menu's when names no condition.");
+  return (tenant) => groups.some((group) => group.every((condition) => meets(condition, tenant[condition.column] ?? null)));
 }
 
 function derivedWhen(table: Table, derived: CommandDerived, when: string, now: Date, me?: QueryPerson): CompiledWhen {
@@ -643,7 +709,7 @@ export function failingCondition(table: Table, when: CompiledWhen, row: Readonly
  * a condition of its own columns as a count of that row, one over a rollup or a computed column by `whenHolds`.
  * Returns the names of the inputs whose condition does not hold, which the form leaves out and a run refuses.
  */
-export async function inputsWithheld(
+async function inputsWithheld(
   reader: Reader,
   catalog: CommandCatalog,
   target: string,
@@ -670,4 +736,124 @@ export async function inputsWithheld(
     if (!holds) withheld.push(field.name);
   }
   return withheld;
+}
+
+/** The reference a `record.` path steps through from `table`: its one-column foreign key among the command's reads. */
+function pathStep(catalog: CommandCatalog, table: string, column: string): { table: string; column: string } | undefined {
+  const fk = catalog[table]?.declared?.foreignKeys.find(
+    (candidate) => candidate.from.table === table && candidate.from.columns.length === 1 && candidate.from.columns[0] === column,
+  );
+  return fk && fk.to.columns.length === 1 && catalog[fk.to.table] ? { table: fk.to.table, column: fk.to.columns[0] } : undefined;
+}
+
+/* The row a `record.<ref>.….<column>` path ends on, read through the command's own reader (so under the actor's
+   row policy): undefined where a reference is empty, or the row it names is not exactly one this reader sees. Each
+   row is read for its key, the next reference and `last` alone, so a column rule on a table the path crosses
+   narrows nothing it needs (the load-time check holds a granted role to reading those). */
+async function pathRow(
+  reader: Reader,
+  catalog: CommandCatalog,
+  target: string,
+  row: Readonly<Record<string, unknown>>,
+  refs: readonly string[],
+  last: string,
+): Promise<{ table: string; row: Readonly<Record<string, unknown>> } | undefined> {
+  let table = target;
+  let current = row;
+  for (const [index, ref] of refs.entries()) {
+    const step = pathStep(catalog, table, ref);
+    const value = current[ref];
+    if (!step || value === null || value === undefined || typeof value === 'object') return undefined;
+    const keys = catalog[step.table].meta.columns.filter((column) => column.primaryKey).map((column) => column.name);
+    const { rows } = await reader.query({
+      table: step.table,
+      filter: { groups: [[{ column: step.column, op: '=', value: value as string | number | boolean }]] },
+      columns: [...new Set([...keys, refs[index + 1] ?? last])],
+      limit: 2,
+      offset: 0,
+    });
+    if (rows.length !== 1) return undefined;
+    table = step.table;
+    current = rows[0];
+  }
+  return { table, row: current };
+}
+
+/* A comparison whose subject is a path: `<ref>.….<column>` and the rest of it. */
+const PATH_COMPARISON = /^([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)(\s[\s\S]*)$/;
+
+/**
+ * Where a `record.<ref>.….<column>` path ends, judged at load against the command's catalog: each reference a
+ * one-column foreign key to a table the command reads, and the last name a column of the table it reaches.
+ */
+export function recordPathEnd(catalog: CommandCatalog, target: string, path: string): { table: string; column: string; crossed: string[] } {
+  const segments = path.split('.');
+  let table = target;
+  const crossed: string[] = [];
+  for (const ref of segments.slice(0, -1)) {
+    const step = pathStep(catalog, table, ref);
+    if (!step)
+      throw new Error(
+        `"record.${path}" steps through "${ref}", which is not a reference from "${table}" to a table the command reads; ` +
+          `add that table to the command's reads, or read a nearer column [command-when-path].`,
+      );
+    table = step.table;
+    crossed.push(table);
+  }
+  const column = segments[segments.length - 1];
+  if (!catalog[table].meta.columns.some((candidate) => candidate.name === column))
+    throw new Error(`"record.${path}" ends on "${column}", which "${table}" does not have [command-when-path].`);
+  return { table, column, crossed };
+}
+
+/** A record part of an input's `when` as its table judges it: the target's own comparison, or a path's last
+    column over the table the path ends on. */
+export function recordPartEnd(
+  catalog: CommandCatalog,
+  target: string,
+  comparison: string,
+): { table: string; comparison: string; path?: { segments: string[]; crossed: string[] } } {
+  const path = PATH_COMPARISON.exec(comparison);
+  if (!path) return { table: target, comparison };
+  const end = recordPathEnd(catalog, target, path[1]);
+  return { table: end.table, comparison: `${end.column}${path[2]}`, path: { segments: path[1].split('.'), crossed: end.crossed } };
+}
+
+/**
+ * Whether one record part of an input's `when` holds of the target row (commandDraft.ts bindRecord): a comparison
+ * of the target's own column as `inputsWithheld` judges it, one over `<ref>.<column>` (at most two references) of the
+ * row the path ends on. A reference that is empty, or names a row the actor's reader does not see, holds of nothing.
+ */
+export async function recordPartHolds(
+  reader: Reader,
+  catalog: CommandCatalog,
+  target: string,
+  comparison: string,
+  row: Readonly<Record<string, unknown>>,
+  now: Date,
+  me?: QueryPerson,
+): Promise<boolean> {
+  const path = PATH_COMPARISON.exec(comparison);
+  if (!path) return !(await inputsWithheld(reader, catalog, target, [{ name: 'part', when: comparison }], row, now, me)).length;
+  const segments = path[1].split('.');
+  const ended = await pathRow(reader, catalog, target, row, segments.slice(0, -1), segments[segments.length - 1]);
+  if (!ended) return false;
+  const when = `${segments[segments.length - 1]}${path[2]}`;
+  return !(await inputsWithheld(reader, catalog, ended.table, [{ name: 'part', when }], ended.row, now, me)).length;
+}
+
+/**
+ * The value a `default: { record: '<ref>.<column>' }` reads, through the actor's reader: undefined where a reference is
+ * empty or names a row the reader does not see, so the input starts empty rather than with what the actor may not read.
+ */
+export async function recordPathValue(
+  reader: Reader,
+  catalog: CommandCatalog,
+  target: string,
+  row: Readonly<Record<string, unknown>>,
+  path: string,
+): Promise<unknown> {
+  const segments = path.split('.');
+  const ended = await pathRow(reader, catalog, target, row, segments.slice(0, -1), segments[segments.length - 1]);
+  return ended?.row[segments[segments.length - 1]];
 }

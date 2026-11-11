@@ -57,6 +57,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
     keys: [
       'appSwitcher',
       'branding',
+      'catalog',
       'csp',
       'currency',
       'customThemes',

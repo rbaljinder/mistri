@@ -12,6 +12,11 @@
  * process ran is not run late one by one: after a stop, the most recent slot
  * that passed runs once, and the ones before it are skipped. A store that
  * holds no run of the job has missed nothing: its first slot is the next.
+ *
+ * `timezone: 'tenant'` reads it on each tenant's own wall clock instead (a
+ * tenant App's job per tenant): the zone its profile names through
+ * `ui.timezone`, so `0 6 * * *` is six in the morning at each tenant. The
+ * host groups the tenants by zone and keeps each zone's slots apart.
  */
 const WORDS: Record<string, string> = { '@hourly': '0 * * * *', '@daily': '0 0 * * *', '@weekly': '0 0 * * 0', '@monthly': '0 0 1 * *' };
 const BOUNDS: Array<[number, number]> = [
@@ -31,6 +36,14 @@ export interface JobEvery {
   readonly fields: readonly ReadonlySet<number>[];
   /** Both day fields restricted: as cron has it, a day matches either. */
   readonly eitherDay: boolean;
+  /** Read on each tenant's zone (`timezone: 'tenant'`): `timezone` is then a placeholder that `inZone` replaces. */
+  readonly tenantZone?: true;
+}
+
+/** The same `every`, read on one zone's wall clock: a tenant-zone job's slots for the tenants in that zone. */
+export function inZone(every: JobEvery, zone: string): JobEvery {
+  const { tenantZone: _tenantZone, ...rest } = every;
+  return Object.freeze({ ...rest, timezone: zone });
 }
 
 function field(text: string, [low, high]: [number, number], where: string): Set<number> {
@@ -47,10 +60,13 @@ function field(text: string, [low, high]: [number, number], where: string): Set<
   return values;
 }
 
-/** Read an `every` and its timezone; refused with what is wrong. */
-export function parseEvery(text: unknown, timezone: unknown = 'UTC'): JobEvery {
+/** Read an `every` and its timezone; refused with what is wrong. `tenant`: a job's, which may say `'tenant'`, each
+ * tenant's own zone. */
+export function parseEvery(text: unknown, timezone: unknown = 'UTC', tenant = false): JobEvery {
   if (typeof text !== 'string' || !text.trim()) throw new Error('every is five cron fields, or @hourly, @daily, @weekly or @monthly.');
-  if (typeof timezone !== 'string') throw new Error('timezone is an IANA time zone name, such as America/New_York.');
+  if (tenant && timezone === 'tenant') return Object.freeze({ ...parseEvery(text, 'UTC'), tenantZone: true as const });
+  if (typeof timezone !== 'string')
+    throw new Error(`timezone is an IANA time zone name, such as America/New_York${tenant ? ", or 'tenant'" : ''}.`);
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: timezone });
   } catch {

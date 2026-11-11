@@ -416,7 +416,7 @@ export function withHome<A extends Pick<AppPayloadApp, 'views' | 'home'>>(
 }
 
 /** The chrome as a reader is served it: no branding, and the New menu's entries resolved to the views they open. */
-type ServedUi = Omit<AppUi, 'branding' | 'shell' | 'timezone' | 'localeColumn' | 'messages'> & {
+type ServedUi = Omit<AppUi, 'branding' | 'shell' | 'timezone' | 'localeColumn' | 'messages' | 'catalog'> & {
   shell?: Omit<AppShell, 'new'> & { new?: ServedShellNew[] };
   /** The zone this reader's days are counted in (appZone): the App's, or the one their row names; the serving process's when neither does. */
   timezone?: string;
@@ -463,7 +463,17 @@ export function servedLanguages<U extends object>(ui: U, offered: readonly strin
  * agree with server date filters without changing the authored definition.
  */
 export function servedUi(ui: AppUi, views: Readonly<Record<string, object>> = {}): ServedUi {
-  const { shell, editing, appSwitcher, branding: _branding, localeColumn: _column, messages: _messages, export: exportable, ...rest } = ui;
+  const {
+    shell,
+    editing,
+    appSwitcher,
+    branding: _branding,
+    localeColumn: _column,
+    messages: _messages,
+    catalog: _catalog,
+    export: exportable,
+    ...rest
+  } = ui;
   /* The New menu as this reader was served the views it opens (appNewMenu.ts); none left, no key. */
   const { new: authoredNew, ...plainShell } = shell ?? {};
   const shellNew = servedShellNew(authoredNew, views);

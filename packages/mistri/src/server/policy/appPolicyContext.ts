@@ -783,6 +783,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                           key,
                           catalog: authorized.catalog!,
                           ...(authorized.people ? { people: authorized.people } : {}),
+                          ...(authorized.tenant ? { tenant: authorized.tenant } : {}),
                           flags: capturedFlags,
                           ...(signal ? { signal } : {}),
                           ...(requestId ? { requestId } : {}),

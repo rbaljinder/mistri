@@ -22,7 +22,9 @@ import {
 } from '@mistriwork/engine/server/evidence.js';
 import { createTenantMembershipIssuer, type TenantMembershipEvidence } from './tenantMembership.js';
 import { composeTenantReadScope } from './tenantReadScope.js';
-import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
+import { captureTenantReadSource, readSharedProfile, type TenantReadSource } from './tenantReadSource.js';
+import type { TenantRowsContext } from '../policy/appTenantPolicy.js';
+import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import { assertStructuredReadFilter, ResourceReadError } from '@mistriwork/engine/server/resourceReadOperations.js';
 import { PathError } from '@mistriwork/engine/shared/viewPaths.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
@@ -93,6 +95,8 @@ export interface TenantReadContext {
   readonly zone?: string;
   /** This member's own locale, where `ui.locale` reads one (readerLocale.ts); resolved with the tenant's and the App's. */
   readonly locale?: string;
+  /** The tenant's shared profile columns (`auth.tenancy.shared`), read once for this request; empty where it shares none. */
+  readonly tenant: Readonly<Record<string, TenantValue>>;
   /** `work`, its reads of this context on one snapshot (tenantReadSource.ts `together`): for a request that asks
       many at once — a composed record page, a page's boot, a post-write refresh. */
   readonly together?: <T>(work: () => Promise<T>) => Promise<T>;
@@ -106,7 +110,7 @@ export interface TenantReadRuntimeOptions<Request> {
   readonly maxLifetimeMs: number;
   readonly verifySession: (request: Request) => Identity | null | Promise<Identity | null>;
   readonly resolveMembershipRows: (principal: TenantMembershipEvidence) => RowScope | Promise<RowScope>;
-  readonly resolveRows: (principal: TenantMembershipEvidence) => RowScope | Promise<RowScope>;
+  readonly resolveRows: (principal: TenantMembershipEvidence, context: TenantRowsContext) => RowScope | Promise<RowScope>;
   readonly presentation?: (principal: TenantMembershipEvidence, schema: DatabaseSchema) => TenantCapabilities;
   readonly now?: () => number;
   /** The deployment's kept admissions (tenantAdmissionCache.ts). */
@@ -411,7 +415,10 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
               assertActive();
               // Granted to the roles this request acts under: a token's own (tenantApiRequest.ts).
               const acting = actingPrincipal(request, principal);
-              const authoredResult = delivered(authoredRows(acting));
+              // The tenant's shared profile, once: what `resolveRows`, `tenant.<column>` and the reader's zone read.
+              const tenant = await readSharedProfile(source, app, principal.tenantId);
+              assertActive();
+              const authoredResult = delivered(authoredRows(acting, Object.freeze({ tenant })));
               const authored = isPromise(authoredResult) ? await authoredResult : authoredResult;
               assertActive();
               const rows = composeTenantReadScope(ownership, principal, member, authored);
@@ -531,11 +538,10 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                snapshot ends), false where the callback or a read failed. */
               const answer = async (): Promise<boolean> => {
                 /* On one snapshot between them, as they are asked at once. */
-                /* Where `ui.timezone: { column }` names the platform-owned profile, the scope catalog does not hold it, so the
-                   platform reads that one column of this tenant's row itself (the way it reads the row's name), and a value it
-                   does not know as a zone is the App's, as an App-owned column's is. */
+                /* Where `ui.timezone: { column: 'tenant.<column>' }` names the profile, it is the shared profile this request
+                   read already, and a value it does not know as a zone is the App's, as an App-owned column's is. */
                 const named = zoneColumn(app.ui);
-                const fromProfile = named !== undefined && named.resource === ownership.profile;
+                const fromProfile = named !== undefined && named.resource === 'tenant';
                 const [zoneRead, localeRead] = await together(() =>
                   Promise.allSettled([
                     fromProfile ? Promise.resolve(undefined) : readZone(app.ui, schema, data.query),
@@ -544,9 +550,7 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                 );
                 if (zoneRead.status === 'rejected') throw zoneRead.reason;
                 if (localeRead.status === 'rejected') throw localeRead.reason;
-                const zone = fromProfile
-                    ? readerZone(await source.readTenantZone({ tenantId: principal.tenantId, column: named.column }).catch(() => undefined))
-                    : zoneRead.value,
+                const zone = fromProfile ? readerZone(tenant[named.column] ?? undefined) : zoneRead.value,
                   locale = localeRead.value;
                 assertActive();
                 const context = Object.freeze({
@@ -554,6 +558,7 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                   schema,
                   data,
                   together,
+                  tenant,
                   ...(capabilities === undefined ? {} : { capabilities }),
                   ...(zone === undefined ? {} : { zone }),
                   ...(locale === undefined ? {} : { locale }),

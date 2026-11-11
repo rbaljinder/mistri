@@ -7,6 +7,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { userEvent } from '@testing-library/user-event';
 import { BarChart, DonutChart, LineChart, Sparkline, StackedBars, axisMarks, namesAtEnds, periodTick, sliceRing } from './Chart.js';
 import { installShell } from '../shellMode.js';
+import { groupLabel } from './valueModel.js';
 
 afterEach(cleanup);
 const money = (v: unknown) => `$${Number(v)}`;
@@ -603,6 +604,40 @@ describe('the donut', () => {
   test('nothing positive is nothing to divide', () => {
     render(<DonutChart rows={[{ key: 'a', value: 0 }]} />);
     expect(screen.getByText('Nothing to divide.')).toBeInTheDocument();
+  });
+});
+
+describe("a field's word for a missing value", () => {
+  /* A field report: a field declared `empty: 'No decision yet'` read so in its list and on its record, and as a dash in
+     every chart that broke down by it. A bucket of no value is the field's missing value, said as the field says it. */
+  const said = (key: unknown) => groupLabel({ empty: 'No decision yet' }, key);
+  const rows = [
+    { key: 'approved', value: 4 },
+    { key: null, value: 3 },
+  ];
+
+  test('names the bars, the slices and the stacks', () => {
+    const bars = render(<BarChart rows={rows} label={said} wide={600} />);
+    expect([...bars.container.querySelectorAll('.chart-data tr')].map((row) => row.textContent)).toEqual(['approved4', 'No decision yet3']);
+    bars.unmount();
+    render(<DonutChart rows={rows} label={said} />);
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      expect.stringContaining('approved'),
+      expect.stringContaining('No decision yet'),
+    ]);
+    cleanup();
+    const stacked = render(
+      <StackedBars
+        rows={[
+          { key: null, series: 'north', value: 2 },
+          { key: 'approved', series: null, value: 5 },
+        ]}
+        label={said}
+        seriesLabel={said}
+      />,
+    );
+    expect(stacked.container.textContent).toContain('No decision yet');
+    expect(stacked.container.textContent).not.toContain('—');
   });
 });
 

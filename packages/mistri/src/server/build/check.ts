@@ -67,6 +67,7 @@ import { asDeployFinding, migrationsToJudge } from './deployMigrations.js';
 import { migrationFindings } from './migrationSafety.js';
 import type { ServedFacts } from './servedHosts.js';
 import { lintComponents, pageManifestsOf } from '../app/componentLint.js';
+import { appCatalogs } from '../app/appMessages.js';
 import { designLint, sayDesignFinding } from '../app/designLint.js';
 import { segmentCost } from '../../shared/appSegments.js';
 import { inferredReport } from '@mistriwork/engine/shared/displayDefaults.js';
@@ -1668,7 +1669,13 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       // A free-form page's sources are held to what it declares, and its literal paths to its reads as the server holds them.
       const pages = pageManifestsOf(loaded.app);
       const schema = pages.size ? (await catalogOf(loaded)).schema : undefined;
-      const lint = await lintComponents(appDir, loaded.components, pages, schema);
+      /* A component's useMessage key the source catalog lacks is said as the key itself, by design (sdk/appMessage.ts),
+         so serving never fails on one: check is where it fails. */
+      const catalogs = appCatalogs(loaded.app);
+      const messages = catalogs
+        ? { keys: new Set(Object.keys(catalogs.locales[catalogs.source] ?? {})), file: catalogs.files[catalogs.source] }
+        : { keys: new Set<string>() };
+      const lint = await lintComponents(appDir, loaded.components, pages, schema, messages);
       const said = (finding: { file: string; line: number; text: string }) =>
         `${shown(join(appDir, finding.file))}:${finding.line}  ${finding.text}`;
       const count = Object.keys(loaded.components.entries).length;

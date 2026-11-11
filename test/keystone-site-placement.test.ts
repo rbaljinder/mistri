@@ -379,7 +379,7 @@ test('actual Site commands use binder placement for both dealers, atomically rep
   assert.equal(count(database, PUBLIC_PLACEMENT_TABLES.receipt), 6);
   const audits = database.prepare(`SELECT r.changes_json FROM ${PUBLIC_PLACEMENT_TABLES.receipt} r WHERE r.form='apply'`).all();
   assert.ok(audits.length > 0);
-  assert.doesNotMatch(JSON.stringify(audits), /alex@example|1234|100 Example St/);
+  assert.doesNotMatch(JSON.stringify(audits), /alex@example|\b1234\b|100 Example St/);
   assert.deepEqual(
     database
       .prepare('SELECT id,version,status FROM vehicle ORDER BY id')

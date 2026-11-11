@@ -391,7 +391,7 @@ export function captureRecordHistory(
         const given = result.row;
         const after =
           given && watched.every((column) => Object.hasOwn(given, column)) ? given : await sink.read(request.table, result.key, watched);
-        if (after) await notices!.inserted(request.table, result.key, after);
+        if (after) await notices!.inserted(request.table, result.key, after, request.words);
       }
       return result;
     },
@@ -449,7 +449,7 @@ export function captureRecordHistory(
           'update',
           moved.map((column) => change(rule, column, before[column], after[column], 'update')),
         );
-      if (watched) await notices!.updated(request.table, key, new Set(moved), after, { ...after, ...before });
+      if (watched) await notices!.updated(request.table, key, new Set(moved), after, { ...after, ...before }, request.words);
       return result;
     },
     async remove(request, write) {

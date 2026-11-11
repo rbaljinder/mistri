@@ -195,20 +195,22 @@ interface CompiledApp {
    parse — the manifest's export, its JSON pages, the command catalog its names resolve to, and the checked catalogs. */
 interface CompiledWords {
   definition: { raw: unknown; filePages: unknown; catalog?: Array<[string, unknown]> };
-  catalogs: Pick<AppCatalogs, 'source' | 'locales' | 'files' | 'advisories'>;
+  catalogs: Pick<AppCatalogs, 'source' | 'locales' | 'variants' | 'files' | 'advisories'>;
 }
 
 function compiledWords(loaded: LoadedApp): CompiledWords | undefined {
   const localizer = localizerOf(loaded.app);
   if (!localizer) return undefined;
   const { raw, filePages, catalog } = localizer.definition as DefinitionInput;
-  const { source, locales, files, advisories } = localizer.catalogs;
+  const { source, locales, variants, files, advisories } = localizer.catalogs;
+  const plainOf = (tags: typeof locales) => Object.fromEntries(Object.entries(tags).map(([tag, entries]) => [tag, { ...entries }]));
   return {
     definition: { raw, filePages, ...(catalog ? { catalog: [...catalog] } : {}) },
     /* A catalog's entries have no prototype (appMessages.ts), which JSON cannot say: they are written plain, and read back bare. */
     catalogs: {
       source,
-      locales: Object.fromEntries(Object.entries(locales).map(([tag, entries]) => [tag, { ...entries }])),
+      locales: plainOf(locales),
+      variants: Object.fromEntries(Object.entries(variants).map(([variant, tags]) => [variant, plainOf(tags)])),
       files: { ...files },
       advisories: [...advisories],
     },
@@ -422,10 +424,20 @@ export async function loadBuiltApp(
       filePages: filePages as DefinitionInput['filePages'],
       ...(catalog ? { catalog: new Map(catalog) as NonNullable<DefinitionInput['catalog']> } : {}),
     };
-    const locales = Object.fromEntries(
-      Object.entries(messages.catalogs.locales).map(([tag, entries]) => [tag, Object.freeze(Object.assign(Object.create(null), entries))]),
-    );
-    holdLocalizer(app, { definition, catalogs: Object.freeze({ ...messages.catalogs, locales: Object.freeze(locales), Format }) });
+    const bare = (tags: AppCatalogs['locales']) =>
+      Object.freeze(
+        Object.fromEntries(Object.entries(tags).map(([tag, entries]) => [tag, Object.freeze(Object.assign(Object.create(null), entries))])),
+      );
+    const variants = Object.fromEntries(Object.entries(messages.catalogs.variants).map(([variant, tags]) => [variant, bare(tags)]));
+    holdLocalizer(app, {
+      definition,
+      catalogs: Object.freeze({
+        ...messages.catalogs,
+        locales: bare(messages.catalogs.locales),
+        variants: Object.freeze(variants),
+        Format,
+      }),
+    });
   }
   return {
     path,

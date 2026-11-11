@@ -24,11 +24,11 @@ export default defineMessages<typeof en>('es', {
 });
 ```
 
-A caption names a message where its text would go: `labels: { name: msg('people.name') }`, `related(msg('people.directReports'), …)`, `tab: msg('people.overview')`, a list's `tabs: [{ label: msg('people.toDo'), … }]`, a free-form page's `definePage({ label: msg('page.help.label'), description: msg('page.help.description'), … })`. Every caption a reader sees takes one: a view's or a dashboard's label and description, a section's title, a note's words, a headline's small print, a unit, a donut's total, a banner's eyebrow, an image's `alt`, a validation `message`, an action's label, an empty state, a form's labels and steps, a document's name, a nav group, the landing's words. A command's inputs are the exception: their labels are written in `defineCommand`, which the App API and MCP read too. The catalog in the App's own language (`ui.locale`) is the source: every key is in it, and another catalog translates some or all of its keys. A key a translation leaves out is said in the source's words.
+A caption names a message where its text would go: `labels: { name: msg('people.name') }`, `related(msg('people.directReports'), …)`, `tab: msg('people.overview')`, a list's `tabs: [{ label: msg('people.toDo'), … }]`, a free-form page's `definePage({ label: msg('page.help.label'), description: msg('page.help.description'), … })`. Every caption a reader sees takes one: a view's or a dashboard's label and description, a section's title, a note's words, a headline's small print, a unit, a donut's total, a banner's eyebrow, an image's `alt`, a validation `message`, an action's label, an empty state, a form's labels and steps, a document's name, a nav group, the landing's words. A command's inputs take one too: `field.text({ label: msg('ticket.reason'), help: msg('ticket.reasonHelp') })`, an option's `label`, `help` and `icon`; the App API and MCP read them in the App's own words. The catalog in the App's own language (`ui.locale`) is the source: every key is in it, and another catalog translates some or all of its keys. A key a translation leaves out is said in the source's words.
 
 A resource's `noun` takes a message with a plural, so a translation says it its own way: `noun: msg('people.person')` with `'{count, plural, one {person} other {people}}'`; the same for a fact's word, `{ column: 'reviews', after: msg('car.review') }`. An untitled `history()` says "History" in the reader's language without one.
 
-A custom component or a `definePage` page says a message itself, in the reader's language: `useMessage('help.title')`, `useMessage('help.results', { count })` from `@mistriwork/mistri/ui`.
+A custom component or a `definePage` page says a message itself, in the reader's language: `useMessage('help.title')`, `useMessage('help.results', { count })` from `@mistriwork/mistri/ui`. A key the catalog lacks is shown as the key itself rather than failing the page, so `mistri check` refuses a quoted key the source catalog does not have, or any quoted key in an App with no catalog (`component-message`); a key built from an expression is not followed.
 
 ## Whose language
 
@@ -68,6 +68,15 @@ ui: {
 
 A row says one key in one language over the App's catalog, for that tenant only. A row is checked as it is written (a key the source has, a language tag, ICU text that reads only the source's arguments) and skipped as it is read if it no longer fits.
 
+A kind of tenant may have its own words too: `ui.catalog: 'tenant.kind'` names a shared profile column, and `messages/clinic/en.ts` says the keys a tenant whose `kind` is `clinic` reads differently.
+
+```ts
+// messages/clinic/en.ts
+export default defineMessages<typeof en>('en', { 'visit.visits': 'Appointments' });
+```
+
+A caption is said from the tenant's own rows, then the variant in the reader's language, then the App's catalog in it, then the variant's and the App's source. A value naming no folder reads the App's catalog. A variant says only keys the source has, in a language the App has a catalog for.
+
 ## Translating
 
 ```sh
@@ -79,7 +88,7 @@ With a locale, each key the catalog lacks is appended to `messages/<tag>.ts` as 
 
 ## Checks
 
-`mistri check` refuses a catalog that does not parse (`message-syntax`), a key no catalog has or catalogs without the App's own language (`message-missing`), a translation reading an argument its source does not (`message-placeholder`) and an argument bound to no column (`message-arg`). It advises on a catalog that translates only some keys (`message-untranslated`) and a key only a translation has (`message-unused`). See [Check codes](/docs/check-codes/).
+`mistri check` refuses a catalog that does not parse (`message-syntax`), a key no catalog has or catalogs without the App's own language (`message-missing`), a translation reading an argument its source does not (`message-placeholder`) and an argument bound to no column (`message-arg`), and a `ui.catalog` that is no shared text column of the profile, or variant folders with no `ui.catalog` (`ui-catalog`). It advises on a catalog that translates only some keys (`message-untranslated`) and a key no `msg()` and no component's `useMessage` names, or that only a translation has (`message-unused`). See [Check codes](/docs/check-codes/).
 
 ## Related
 

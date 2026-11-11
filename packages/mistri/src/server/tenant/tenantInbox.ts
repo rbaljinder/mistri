@@ -45,9 +45,10 @@ import {
   type NoticeRule,
 } from '../../adapters/inbox/inbox.js';
 import { bindNotices } from '../stores/writeCaptures.js';
+import { assertNoticeWordsKey, noticeWordsSeal } from '../app/noticeWordsSeal.js';
 import { storesOf } from '../stores/appStores.js';
 import type { AppDef } from '../../shared/app.js';
-import { appKeepsInbox, appNotifyRules, notifyRulePaths, type NotifyPath } from '../../shared/appNotify.js';
+import { appKeepsInbox, appNotifyRules, notifyRulePaths, saysWord, type NotifyPath } from '../../shared/appNotify.js';
 import { PLATFORM_TENANT_ID } from './tenantPlatform.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
 import type { TenantReadSource } from './tenantReadSource.js';
@@ -73,6 +74,8 @@ export function tenantNoticeBinding(
     if (id === undefined) throw new Error(`notify: "${table}" is not one of this tenant App's own tables.`);
     return id;
   };
+  /* An App whose notices say a write's words does not start where it could not seal them. */
+  if ([...rules.values()].some((compiled) => compiled.some((rule) => rule.title.some(saysWord)))) assertNoticeWordsKey(app.id);
   for (const [resource, compiled] of rules) {
     const owner = ownership.ownership[resource];
     if (!owner || owner.kind === 'global')
@@ -122,7 +125,8 @@ export function tenantNoticeBinding(
           on: rule.on,
           ...(rule.when ? { when: rule.when } : {}),
           to: rule.to.map(path),
-          title: rule.title.map((part) => (typeof part === 'string' || 'message' in part ? part : path(part))),
+          title: rule.title.map((part) => (typeof part === 'string' || 'message' in part || 'word' in part ? part : path(part))),
+          ...(rule.title.some(saysWord) ? { seal: noticeWordsSeal(app.id) } : {}),
           ...(rule.say
             ? (() => {
                 const said = noticeWords(

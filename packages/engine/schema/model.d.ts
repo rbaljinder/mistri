@@ -50,13 +50,23 @@ export type StaticAppTarget = AppTarget<string | number>;
 /**
  * A field's starting value: a literal (`'phone'`, `3`, `true`); `today` on a
  * date field or `now` on a datetime field, as the form opens in the App's time
- * zone; `me` on a text field, the reader's email; or `{ record: 'on_hand' }`,
- * the target record's column as the reader sees it. The constants are
- * `@mistriwork/mistri/app`'s. `me` and `{ record }` are read when one record's form is
- * prepared, so they fill a field of the input itself on a command that targets
- * one record.
+ * zone; `me` on a text field, the reader's email; `{ record: 'on_hand' }`,
+ * the target record's column as the reader sees it, or one its references
+ * reach (`{ record: 'customer_id.default_rate' }`, at most two hops, each read
+ * under the reader's grants: a hop they cannot read starts nothing); or
+ * `{ tenant: 'country' }`, a column of the tenant's profile its members read
+ * (`auth.tenancy.shared`). The constants are `@mistriwork/mistri/app`'s. `me`,
+ * `{ record }` and `{ tenant }` are read when the form is prepared, so they
+ * fill a field of the input itself; `{ record }` on a command that targets one
+ * record.
  */
-export type CommandFieldDefault = string | number | boolean | { readonly auto: 'today' | 'now' | 'me' } | { readonly record: string };
+export type CommandFieldDefault =
+  | string
+  | number
+  | boolean
+  | { readonly auto: 'today' | 'now' | 'me' }
+  | { readonly record: string }
+  | { readonly tenant: string };
 
 /** One option of a `choice` input. */
 export interface AppCommandChoice {
@@ -276,6 +286,10 @@ export interface CommandActionBase<Label extends string | AppMessageRef> {
       the platform's control. An input in a group is named by its path (`trade.vin`), and in a repeating group stands in
       every row; what the value must be is still the command's to judge. */
   inputs?: Readonly<Record<string, { readonly id: string; readonly module: string; readonly kind: string }>>;
+  /** The command's own inputs this action's page supplies (`useCommand(name).open(record, { step })`): its form does not
+      draw them, and sends what the page gave. A required one with no default is typed by no one, so the action says
+      `header: false` and is not `bulk`: only a page opens it. The server judges the value as any other. */
+  given?: readonly string[];
 }
 
 /** A command action as the App serves it. */

@@ -321,7 +321,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         'readServiceAnchors',
         'readTenantAddresses',
         'readTenantNames',
-        'readTenantZone',
+        'readTenantProfile',
         'resolveIntake',
         'resolvePublic',
         'scopePlatformReads',

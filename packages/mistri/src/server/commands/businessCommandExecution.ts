@@ -39,13 +39,13 @@ import {
   registeredAvailability,
   type BusinessCommandActor,
 } from './businessCommands.js';
-import { canonicalKey, createCommandDb, keyFilter, normalizeRow, type UntypedRow } from './commandDb.js';
+import { canonicalKey, createCommandDb, keyFilter, normalizeRow, type UntypedRow, type WriteTable } from './commandDb.js';
 import { auditCommandRead, type CommandReadAudit, type ReadAuditSink } from '../readAudit.js';
 import { FLOW_TELL, flowCommandOf } from './flowCommandBrand.js';
 import {
   compileWhen,
   failingCondition,
-  inputsWithheld,
+  recordPartHolds,
   type DerivedFailure,
   personMatch,
   whenHolds,
@@ -53,7 +53,7 @@ import {
   type CommandPeople,
 } from './commandWhen.js';
 import { whenRefusalSentence } from './commandSaying.js';
-import { bindRecord, readsRecord, type BoundCondition } from '../../shared/commandDraft.js';
+import { bindRecord, readsRecord, readsTarget, type BoundCondition } from '../../shared/commandDraft.js';
 import { mayReadTargetColumn } from './commandActorColumns.js';
 import { rowRevision } from './commandRevision.js';
 import { NO_OUTPUT } from './commandShapes.js';
@@ -80,7 +80,14 @@ import {
   type CommandKey,
 } from './commandPayload.js';
 import { captureTenantData, recordRefusalCause, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
-import { BusinessCommandExecutionError, isBusinessCommandExecutionError } from './commandErrors.js';
+import {
+  BusinessCommandExecutionError,
+  carryRefusalKeep,
+  isBusinessCommandExecutionError,
+  refusalKeep,
+  type RefusalKeepDb,
+} from './commandErrors.js';
+import { attributeAction, currentWriteAttribution } from '@mistriwork/engine/adapters/writeAttribution.js';
 import { evaluateCommandAvailability } from './commandAvailability.js';
 import { constraintColumns, writeFailureKind } from '@mistriwork/engine/server/constraints.js';
 import { placeFile, type PlacedFile } from '../files/fileStorage.js';
@@ -313,6 +320,8 @@ async function executeUntraced(
   const afterCommit: Array<() => void> = [];
   /* The parsed input, kept for a refusal: the field a broken constraint names is marked only when the input has it. */
   let given: unknown;
+  /* Runs a refusal's keep (refuse(code, { keep })), once the command and its lanes are known. */
+  let keepRefused: ((keep: (db: RefusalKeepDb) => Promise<unknown>) => Promise<void>) | undefined;
   try {
     // Only the actor's own declared kind, or the binding's word that a
     // signed-in form runs the command, decides whether an empty key is
@@ -606,9 +615,10 @@ async function executeUntraced(
       } catch (error) {
         if (signal.aborted) throw new BusinessCommandExecutionError('cancelled');
         if (error instanceof AppAccessDenied) throw error;
-        /* The reason is kept for the operator (a read the audit could not record is said as itself), never the caller. */
+        /* The reason is kept for the operator (a read the audit could not record is said as itself), never the caller;
+           and a lookup's refuse(code, { keep }) its keep, run once the transaction this refusal rolls back has. */
         lookupFailure = isBusinessCommandExecutionError(error)
-          ? new BusinessCommandExecutionError(error.code, 'not_applied', error.field, error.key, error.reason)
+          ? carryRefusalKeep(error, new BusinessCommandExecutionError(error.code, 'not_applied', error.field, error.key, error.reason))
           : recordRefusalCause(new BusinessCommandExecutionError('temporarily_unavailable'), error);
       }
     }
@@ -643,6 +653,95 @@ async function executeUntraced(
     };
     // One snapshot for every read, where the command asked for it (snapshotRead.ts); SQLite's writer is one already.
     const reading = <T>(work: () => Promise<T>) => withWriteAhead(ahead, () => withSnapshotRead(snapshot, work));
+    /* What a refusal still writes (refuse(code, { keep })), once the handler's own writes are rolled back: a fresh
+       transaction, not a savepoint inside the first, since rolling back to a savepoint drops the locks taken after it
+       (postgresTransactionHandle.ts), the fence's among them. The same principal and fence through the same authorized
+       source, in the same lanes; only `refused.writes`, only insert and update, each stamped as a handler's write is.
+       No receipt, no events, no effects: the record history marks its writes as kept on refusal, and a notify on
+       them fires as on any write. It does not watch the request's signal: the refusal is decided, and a caller that
+       hangs up then must not undo what it leaves behind, or dropping the connection would skip an attempt's count.
+       What holds any transaction to its source (a scope still active, the connection still writable) holds it. */
+    keepRefused = (keep) => {
+      const refused = command.refused;
+      if (!refused)
+        throw developerError(
+          `Command "${commandId}" refused with a keep but declares no refused: { writes: [...] } for it to write [refused-writes].`,
+        );
+      const action = `${currentWriteAttribution()?.action ?? commandId} (kept on refusal)`;
+      const addingOnly = (table: string) => {
+        const said = authorized.insertOnly?.get(table);
+        if (said !== undefined) throw new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, undefined, said);
+      };
+      return inWriteLanes(lanes, () =>
+        attributeAction(action, () =>
+          authorized.commandTransaction!(async (records) => {
+            /* The targets as the handler's transaction held them (assertTargets): this one is fresh, and the person's
+               rows may have moved since. What the keep writes the row scope holds as it holds any write. */
+            const targets = async () => {
+              for (const key of list.keys) await authorized.assertTarget?.(records, key);
+            };
+            await targets();
+            const operations = new TransactionOperations(true);
+            const accept = <Request, Result>(request: Request, run: (request: Request) => Promise<Result>, read = false) => {
+              const copy = scoped ? snapshotScopedData(request) : structuredClone(request);
+              return read ? operations.read(() => run(copy)) : operations.run(() => run(copy));
+            };
+            const tx: WriteTransaction = Object.freeze<WriteTransaction>({
+              query: (request) => accept(request, async (request) => (addingOnly(request.table), records.query(request)), true),
+              count: (table, filter) =>
+                accept({ table, filter }, async ({ table, filter }) => (addingOnly(table), records.count(table, filter)), true),
+              ...(records.aggregate
+                ? {
+                    aggregate: (request: AggregateRequest) =>
+                      accept(request, async (request) => (addingOnly(request.table), records.aggregate!(request)), true),
+                  }
+                : {}),
+              insert: (request) =>
+                accept(request, (request) =>
+                  records.insert(
+                    bindMoments(authorized, machineInsert(authorized.machine, request, now(), authorized.catalog, authorized.timezone)),
+                  ),
+                ),
+              update: (request) =>
+                accept(request, async (request) => {
+                  addingOnly(request.table);
+                  const moved = await machineUpdate(authorized.machine, request, records, now(), authorized.catalog, authorized.timezone);
+                  return records.update(bindMoments(authorized, moved));
+                }),
+              remove: () => Promise.reject(developerError(`Command "${commandId}"'s keep removes nothing; it inserts and updates.`)),
+            });
+            const db = createCommandDb({
+              tx,
+              catalog: authorized.catalog ?? {},
+              read: refused.writes,
+              write: refused.writes,
+              now,
+              ...(authorized.versionField === undefined ? {} : { versionField: authorized.versionField }),
+              target: command.target,
+              constant: (table, column, word) => commandConstant(authorized, tx, table.meta, column, word, now()),
+            });
+            // Insert and update, never remove nor a file: what a refusal leaves behind is a count, a mark, a row.
+            const kept: RefusalKeepDb = Object.freeze(
+              Object.fromEntries(
+                Object.entries(db).map(([name, table]) => {
+                  const { remove: _remove, insertFile: _insertFile, ...rest } = table as WriteTable<UntypedRow>;
+                  return [name, Object.freeze(rest)];
+                }),
+              ),
+            );
+            try {
+              await keep(kept);
+              await operations.finish();
+            } catch (error) {
+              await operations.finish().catch(() => {});
+              throw error;
+            }
+            await targets();
+            return null;
+          }),
+        ),
+      ).then(() => undefined);
+    };
     const committed: BusinessCommandStatus = await inWriteLanes(lanes, () =>
       reading(() =>
         authorized.commandTransaction!(async (records, journal) => {
@@ -1060,14 +1159,16 @@ async function executeUntraced(
                record, so it is a line under this command whether or not a lookup or the handler reads it too. */
             const auditedTarget = authorized.audited?.tables.get(command.target);
             const targets: UntypedRow[] = [];
-            /* `me` in the command's `when` and its inputs' is this actor (commandWhen.ts whenPerson), read once. */
-            const me =
+            /* `me` in the command's `when` and its inputs' is this actor (commandWhen.ts whenPerson), read once; it
+               carries the tenant's profile, which an input's record part may compare with. */
+            const person =
               command.targets !== 'none' && !creating
                 ? await whenPerson(tx, authorized.actor, authorized.people, [
                     command.when,
                     ...command.fields.map((field) => (field.type === 'group' ? undefined : field.when)),
                   ])
                 : undefined;
+            const me = authorized.tenant ? { ...(person ?? { email: authorized.actor.email ?? null }), tenant: authorized.tenant } : person;
             if (command.targets !== 'none' && !creating) {
               for (const [index, key] of list.keys.entries()) {
                 checkCancelled();
@@ -1223,44 +1324,43 @@ async function executeUntraced(
                 }
                 targets.push(row);
               }
-              /* An input asked only where its `when` holds, where that `when` reads the record: each
-               `record.<column>` part judged of the record in this transaction, as the command's own `when` is, and
-               the rest over the draft. A value for one the draft hides is refused, as is a required one left empty
-               where it is shown; each names its field, as the form's own checks do. */
-              const conditional = command.fields.filter(
-                (field) => field.type !== 'group' && field.type !== 'lines' && field.when !== undefined && readsRecord(field.when),
-              );
-              if (conditional.length && targets.length === 1) {
-                const bound: Record<string, BoundCondition> = {};
-                for (const field of conditional) {
-                  bound[field.name] = await bindRecord(
-                    (field as { when: string }).when,
-                    `input "${field.name}"`,
-                    async (comparison) => {
-                      const [withheld] = await inputsWithheld(
-                        tx,
-                        catalog!,
-                        command.target,
-                        [{ name: field.name, when: comparison }],
-                        targets[0],
-                        now(),
-                        me,
-                      );
-                      return withheld === undefined;
-                    },
-                    now(),
-                    command.fields,
-                  );
-                }
-                try {
-                  judgeDraft(command, (input ?? {}) as Record<string, unknown>, bound, now());
-                } catch (error) {
-                  if (error instanceof DraftRefusal)
-                    throw new BusinessCommandExecutionError('invalid_input', 'not_applied', error.path, undefined, error.said);
-                  throw error;
-                }
-                checkCancelled();
+            }
+            /* An input asked only where its `when` holds, where that `when` reads the record or the tenant: each
+               `record.<path>` part judged of the record in this transaction (following its references as the actor
+               reads them), each `tenant.<column>` of the profile the request read, and the rest over the draft — the
+               form's truths are judged again here, whatever it was told. A value for one the draft hides is refused,
+               as is a required one left empty where it is shown; each names its field, as the form's own checks do. */
+            const conditional = command.fields.filter(
+              (field) =>
+                field.type !== 'group' &&
+                field.type !== 'lines' &&
+                field.when !== undefined &&
+                readsRecord(field.when) &&
+                (targets.length === 1 || !readsTarget(field.when)),
+            );
+            if (conditional.length) {
+              const bound: Record<string, BoundCondition> = {};
+              for (const field of conditional) {
+                bound[field.name] = await bindRecord(
+                  (field as { when: string }).when,
+                  `input "${field.name}"`,
+                  (comparison) =>
+                    targets.length === 1
+                      ? recordPartHolds(tx, catalog!, command.target, comparison, targets[0], now(), me)
+                      : Promise.resolve(false),
+                  now(),
+                  command.fields,
+                  authorized.tenant ?? {},
+                );
               }
+              try {
+                judgeDraft(command, (input ?? {}) as Record<string, unknown>, bound, now());
+              } catch (error) {
+                if (error instanceof DraftRefusal)
+                  throw new BusinessCommandExecutionError('invalid_input', 'not_applied', error.path, undefined, error.said);
+                throw error;
+              }
+              checkCancelled();
             }
             /* Answers to questions defined in rows, judged against the rows as they stand in this
              transaction and in the reader's tenant, whatever the form drew. */
@@ -1386,6 +1486,7 @@ async function executeUntraced(
                     ...named,
                     ...(lookupRun ? { lookup } : {}),
                     ...(intake ? { intake } : {}),
+                    ...(authorized.tenant ? { tenant: authorized.tenant } : {}),
                     ...(placement ? { placement } : {}),
                     ...(draft ? { draft: draft.context } : {}),
                     ...(options.files ? { files: Object.freeze(options.files.map((file) => Object.freeze({ ...file }))) } : {}),
@@ -1557,7 +1658,7 @@ async function executeUntraced(
     }
     return committed;
   } catch (error) {
-    const cause = footprintFault ?? (error instanceof CommandTransactionFailure ? error.cause : error);
+    let cause = footprintFault ?? (error instanceof CommandTransactionFailure ? error.cause : error);
     /* The fresh path checked for its receipt without a lock, so a delivery
        of the same request can commit after the check: this attempt then
        finds its receipt taken at commit, or finds the record already moved by
@@ -1587,6 +1688,27 @@ async function executeUntraced(
         }
       }
       if (cause instanceof ReceiptTaken) throw new BusinessCommandExecutionError('temporarily_unavailable', 'unknown');
+    }
+    /* A refusal that keeps something (refuse(code, { keep })) is answered once its keep commits. Only after a
+       rollback known to have happened: an attempt whose commit may have landed keeps nothing more. A keep the record
+       moved under is run again, three times at most; a keep that fails is what the caller hears, since what the
+       refusal had to leave behind is not there. */
+    const keep = rolledBack && !options.statusOnly && keepRefused ? refusalKeep(cause) : undefined;
+    if (keep) {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await keepRefused!(keep);
+          break;
+        } catch (kept) {
+          const reason = kept instanceof CommandTransactionFailure ? kept.cause : kept;
+          const unknown = kept instanceof CommandTransactionFailure && kept.outcome === 'unknown';
+          const stale = isWriteConflict(reason) || (isBusinessCommandExecutionError(reason) && reason.code === 'stale_record');
+          if (stale && !unknown && attempt < KEEP_RETRIES) continue;
+          if (unknown) priorOutcomeUnknown = true;
+          cause = reason;
+          break;
+        }
+      }
     }
     const outcome =
       options.statusOnly || priorOutcomeUnknown
@@ -1731,6 +1853,8 @@ function auditRefusal(command: string, change: Record<string, unknown>): string 
 
 type Authorized = import('./businessCommandAccess.js').AuthorizedBusinessCommand;
 const developerError = (cause: string) => authorFault(new BusinessCommandExecutionError('invalid_result'), cause);
+/* How many more times a refusal's keep runs when the record moved under it. */
+const KEEP_RETRIES = 3;
 
 /**
  * A reference a command's write sets must land in the command's footprint

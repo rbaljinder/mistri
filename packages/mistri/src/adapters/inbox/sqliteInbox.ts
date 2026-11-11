@@ -63,7 +63,8 @@ const definitions = new Map<string, string>([
   state TEXT COLLATE BINARY NOT NULL,
   attempts INTEGER NOT NULL,
   due_at TEXT NOT NULL,
-  last_error TEXT
+  last_error TEXT,
+  words TEXT
 )`,
   ],
   [
@@ -165,11 +166,30 @@ export function appendSqliteNotice(db: DatabaseSync, row: NoticeRow): void {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(row.app, row.recipient, row.at, row.resource, row.key, row.title, uses, row.actor, row.actorName, row.action);
   if (row.email) {
-    db.prepare(`INSERT INTO main."${mail}" (notice, state, attempts, due_at, last_error) VALUES (?, 'queued', 0, ?, NULL)`).run(
+    db.prepare(`INSERT INTO main."${mail}" (notice, state, attempts, due_at, last_error, words) VALUES (?, 'queued', 0, ?, NULL, ?)`).run(
       written.lastInsertRowid,
       row.at,
+      row.sealWords?.(Number(written.lastInsertRowid)) ?? null,
     );
   }
+}
+
+/**
+ * Version 1 to 2, as statements for the store upgrade (storeLayouts.ts) to run in its one transaction: the outbox
+ * gains `words`, a notice's said title sealed while it waits. SQLite keeps a table's CREATE text and the attestation
+ * compares it whole, so the outbox is rebuilt rather than altered, every row kept with no words.
+ */
+export function sqliteInboxUpgradeFrom1(): readonly string[] {
+  const kept = 'notice, state, attempts, due_at, last_error';
+  return [
+    `ALTER TABLE "${mail}" RENAME TO "${mail}_v1"`,
+    definitions.get(mail)!,
+    `INSERT INTO "${mail}" (${kept}) SELECT ${kept} FROM "${mail}_v1" ORDER BY notice`,
+    `DROP TABLE "${mail}_v1"`,
+    `DROP TABLE "${meta}"`,
+    definitions.get(meta)!,
+    `INSERT INTO "${meta}" (singleton, version) VALUES (1, 2)`,
+  ];
 }
 
 /** One person's notices in one App, newest first. */

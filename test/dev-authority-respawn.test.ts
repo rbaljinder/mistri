@@ -49,12 +49,20 @@ test(
     const parent = spawn(
       process.execPath,
       ['--import', 'tsx', ENTRY, 'dev', '--app', dir, '--config', join(dir, 'mistri.json'), '--port', String(port)],
-      { cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'] },
+      /* Its own process group: the supervisor's server child inherits these pipes, so killing only the parent on a
+         failure left the child holding them open and the file never ended (a CI shard ran out its clock). */
+      { cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true },
     );
     let output = '';
     for (const stream of [parent.stdout, parent.stderr]) stream.on('data', (chunk) => (output += String(chunk)));
     t.after(() => {
-      if (parent.exitCode === null && parent.signalCode === null) parent.kill('SIGKILL');
+      try {
+        process.kill(-parent.pid!, 'SIGKILL');
+      } catch {
+        // The group is gone already.
+      }
+      parent.stdout.destroy();
+      parent.stderr.destroy();
       rmSync(work, { recursive: true, force: true });
     });
     const until = async (what: string, ready: () => boolean | Promise<boolean>, ms = 90000) => {

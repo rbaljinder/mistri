@@ -40,12 +40,11 @@ names — their tenant's, their account's. In a tenant App a command's
 `today()`, `now()` and its stamps count the day in the running tenant's own
 zone, read the same way; a name that is not an IANA zone falls to `default`
 (and is logged outside production). Elsewhere writes keep `default`. In a tenant
-App the column may be on the platform-owned tenant profile
-(`auth.tenancy.profile`, say `customer.timezone`): each tenant's people count
-their days in the zone their tenant's profile row holds, read by the platform
-itself, so no role needs a grant on the profile and no other profile column
-becomes readable. An empty, null or unknown value is `default`, and `mistri
-check` refuses a column the profile does not have. A tenant command's `today()`
+App the tenant's own zone is a shared profile column: `timezone: { column:
+'tenant.timezone', default: 'America/New_York' }` with `timezone` listed in
+`auth.tenancy.shared` ([what members read](/docs/tenant-apps/#what-members-read)).
+An empty, null or unknown value is `default`, and `mistri check` refuses a column
+`shared` does not list (`tenant-shared-column`). A tenant command's `today()`
 counts the same day.
 
 `locale` is also the App's own language, the one its `messages/` catalogs are
@@ -53,7 +52,9 @@ written from, and may be read per reader the same way: `locale: { column:
 'person.locale', default: 'en-US' }`. A tenant's tag (`branding.allow:
 ['locale']`) comes before `default`. `messages: fromRecord('tenant_message',
 { by: 'tenant', tenantField, fields: { key, locale, text } })` keeps a
-tenant's own words over the catalogs. See [Languages](/docs/languages/).
+tenant's own words over the catalogs. `catalog: 'tenant.kind'` picks a
+variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
+[Languages](/docs/languages/).
 
 ## `branding`
 
@@ -508,6 +509,12 @@ tenant's own words over the catalogs. See [Languages](/docs/languages/).
 | `ui.appSwitcher.label` | string | Stable |  |
 | `ui.appSwitcher.placement` | `"navbar"` · `"account"` | Stable |  One of `account`, `navbar`. Used in `examples/apps/tick/app.ts`. |
 
+## `ui.catalog`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `ui.catalog` | string | Stable | The tenant's profile column, listed in auth.tenancy.shared, whose value names a folder of the App's catalogs: 'tenant.wording' with a tenant whose wording is 'clinic' says messages/clinic/en.ts over messages/en.ts. |
+
 ## `ui.csp`
 
 | Key | Type | Status | What it does |
@@ -692,7 +699,7 @@ tenant's own words over the catalogs. See [Languages](/docs/languages/).
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `ui.timezone` | string \| object | Stable | IANA zone the app’s "today" is reckoned in ("Australia/Sydney"). Absent: the server’s clock. A TIMESTAMP or DATETIME that carries no zone holds the wall clock in this zone (UTC when the App names none) — whatever writes it: an action's now, a machine's since, a Date a command writes, a New form's now. A column with a zone (timestamptz) holds the instant. { column, default } counts each reader's days in the zone the first row of that text column they may read names (their tenant's, their account's); writes keep default. Used in `examples/apps/lintel/app.ts`. |
-| `ui.timezone.column` | string | Stable | The resource's text column naming the reader's IANA zone: "desk_setting.timezone". Used in `examples/apps/lintel/app.ts`. |
+| `ui.timezone.column` | string | Stable | The resource's text column naming the reader's IANA zone: "desk_setting.timezone"; in a tenant App, "tenant.timezone", a profile column auth.tenancy.shared lists. Used in `examples/apps/lintel/app.ts`. |
 | `ui.timezone.default` | string | Stable | The App's own zone: what writes keep, and the reader's where the row names none. Used in `examples/apps/lintel/app.ts`. |
 
 ## `theme file: theme.colors`

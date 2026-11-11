@@ -865,6 +865,45 @@ describe('the resource owns its New form and its actions', () => {
     );
   });
 
+  test("a command action's given inputs are its own, and a required one with no default is only a page's to open", () => {
+    const app = (action: Record<string, unknown>, input: Record<string, unknown> = { step: { type: 'text' }, note: { type: 'text' } }) =>
+      parse({
+        resources: { task: { access: 'write', actions: { check: { label: 'Check', command: { ...REF, input }, ...action } } } },
+        views: { all: LIST },
+        home: 'all',
+        nav: ['all'],
+      });
+    const given = (parsed: ReturnType<typeof app>) =>
+      (parsed.resources?.task.actions?.[0] as { given?: readonly string[] } | undefined)?.given;
+    assert.deepEqual(given(app({ given: ['step'], header: false })), ['step']);
+    assert.deepEqual(
+      given(app({ given: ['step'] }, { step: { type: 'text', default: 'intake' } })),
+      ['step'],
+      'a default fills it where no page does',
+    );
+    assert.deepEqual(given(app({ given: ['step'] }, { step: { type: 'text', optional: true } })), ['step']);
+    assert.throws(
+      () => app({ given: ['step'] }),
+      /gives "step", which the command requires and starts with no default.*header: false.*\[action-given\]/,
+    );
+    assert.throws(
+      () => app({ given: ['nope'], header: false }),
+      /gives "nope", which is not one of the command's inputs \(step, note\) \[action-given\]/,
+    );
+    assert.throws(() => app({ given: ['step', 'step'], header: false }), /gives "step" twice \[action-given\]/);
+    assert.throws(() => app({ given: [] }), /"given" that is not a list of the command's input names/);
+    assert.throws(
+      () =>
+        parse({
+          resources: { task: { access: 'write', actions: { done: { label: 'Done', set: { done: true }, given: ['step'] } } } },
+          views: { all: LIST },
+          home: 'all',
+          nav: ['all'],
+        }),
+      /names "given", which only a command's form leaves undrawn/,
+    );
+  });
+
   test("a resource's form and actions need no list view to carry them, and a queue's narrowing narrows only the queue", () => {
     const dash = parse({ resources: { task: { actions: ACTIONS } }, views: { d: DASH }, home: 'd', nav: ['d'] });
     assert.deepEqual(servedApp(dash, SCHEMA).resources.task.actions, SERVED);

@@ -7,6 +7,7 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import type { CommandJournal } from '../../adapters/commands/commandJournal.js';
+import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import type { CommandJournalAppScope } from '../../adapters/commands/commandJournalTypes.js';
 import { captureCommandEventStoreBinding, type CommandEventStoreBinding } from '../../adapters/events/commandEventSchema.js';
 import type { AppDef } from '../../shared/app.js';
@@ -73,6 +74,9 @@ export interface AuthorizedBusinessCommand {
   readonly intake?: 'tenant' | 'platform';
   /** Set only by the explicitly enrolled public-placement source owner. */
   readonly placement?: Readonly<{ tenantId: string }>;
+  /** A tenant App's signed-in command, or a public submission placed with a tenant: the profile columns the App shares
+   * with its members (`auth.tenancy.shared`), read once for this request. The runtime's, never a request's. */
+  readonly tenant?: Readonly<Record<string, TenantValue>>;
   assertTarget?(records: WriteTransaction, key: Readonly<Record<string, string | number>>): Promise<void>;
   assertResult?(records: WriteTransaction, key: Readonly<Record<string, string | number>>, result: unknown): Promise<void>;
   transaction<T>(run: (tx: WriteTransaction) => Promise<T>): Promise<T>;

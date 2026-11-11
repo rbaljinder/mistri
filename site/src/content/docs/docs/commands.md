@@ -91,14 +91,22 @@ Every field takes `help` and a `default` it opens at: a literal, `today`
 (a date), `now` (a datetime), `me` (a text field, the reader's email) or
 `{ record: 'on_hand' }`, the target's own column, so a stock count opens at
 what the shelf holds: `field.number({ default: { record: 'on_hand' } })`.
-`me` and `{ record }` fill a field of the input itself; `{ record }` needs a
-command that targets one record, and a value worked out from several is
-`initial()`'s.
+`{ record }` follows up to two references (`{ record: 'customer_id.default_rate' }`),
+each to a table the command reads (`[command-when-path]`), read as the person
+reads it, so a row they cannot see opens the field empty. In a tenant App,
+`{ tenant: 'country' }` is a column of the tenant's profile listed in
+`auth.tenancy.shared`. `me`, `{ record }` and `{ tenant }` fill a field of the
+input itself; `{ record }` needs a command that targets one record, and a value
+worked out from several is `initial()`'s.
 
 A field with `when` is asked only while its condition holds over the draft:
 a bare name is another answer (`nickname: field.text({ when: 'joint = true' })`),
 and on a command that targets one record `record.<column>` is that record's
-value (`reason: field.text({ when: 'record.open_parts > 0' })`). The form
+value (`reason: field.text({ when: 'record.open_parts > 0' })`), through up to
+two references as for a default (`when: 'record.customer_id.tax_exempt = false'`);
+in a tenant App `tenant.<column>` is a shared profile column
+(`vat_number: field.text({ when: "tenant.country = 'DE'" })`). The browser is told
+only whether those parts hold, never the values behind them. The form
 draws it while the condition holds and then requires it; the server refuses
 it sent while the condition does not hold, and requires it while it does.
 Only a top-level field takes `when`. A command's `rules`
@@ -233,6 +241,12 @@ words; a handler that answers a wrong key with its own refusal should read with
 `where` or `find`, which return nothing for both, so every caller gets one answer.
 A handler's `where` reads that table's own columns, and `any`/`no` over a child table the command declares in `read` or `write` (``db.invoice.where`any line where qty > 5` ``); a reference path, or a child it does not declare, is refused. [Where the query language works](/docs/query/#where-the-query-language-works) lists what each place reads.
 
+`insert` and `update` take `{ words }` as a last argument: values the write's
+notifications say (`{words.code}` in a [notify title](/docs/email/#a-writes-own-words)) and the
+database never holds, such as a one-time code: ``await db.sign_in.insert({ person_email }, { words: { code } })``.
+A write that does not give a word a rule says stands, and that rule sends no
+notice for it: an import or a plain edit of the same table has no code to say.
+
 ### Many rows at once
 
 `db.<table>.insertMany(rows)` adds rows and returns them in the order given;
@@ -268,6 +282,22 @@ most 300 characters). A sentence about one answer names its input, and the
 form says it beside that field and stays open to change it:
 `refuse('Only $12.00 is left to refund.', { field: 'amount' })` (a row of a
 list is `lines[0].quantity`).
+
+A refusal that must still leave something behind (a failed attempt counted, a
+lockout set) says so with `keep`, writing only the tables the command lists
+in `refused: { writes }`: they are inserted or updated in a fresh transaction
+once the handler's own writes are rolled back, and the refusal is answered
+after that commits. A refusal keeps no receipt, so a retry with the same
+idempotency key runs the command, and its `keep`, again: an attempt is
+counted once more, never skipped.
+
+```ts
+defineCommand({ /* … */ write: ['attempt'], refused: { writes: ['attempt'] },
+  handle: async ({ db, record }, input) => {
+    if (!matches(record, input.code))
+      refuse('That code is not right.', { keep: (db) => db.attempt.insert({ account_id: record.id }) });
+  } });
+```
 
 The handler reads its footprint whole, as the App's own server code: a
 column a role's `fields` or the resource's `hidden` withholds is still in
@@ -365,9 +395,10 @@ answer is `temporarily_unavailable`.
 - A granted command with `targets: 'none'` that no form runs (Mark all read) is a button: `useCommand('markAllRead').run({}, {})` sends it with an empty key.
 - `run` resolves with `{ status: 'applied', output }`, `output` being what the handler returned, so a component acts on what it made (opens the ticket by `output.id`) instead of looking it up; otherwise `{ status: 'refused', message }`, or `{ status: 'closed' }` when its form closed with nothing sent. `open` (the command's own form over the page) resolves when the form closes, with how its last submission ended: `applied` with the same `output`, `refused` with the server's words, `unknown` (an answer that never came; its `check()` asks again under the same key), or `closed` only when nothing was sent. A form left behind by a changed session lets go the same way.
 - A command on a record that only a component runs (a playbook's tick) is still the resource's action, in no menu: `checkStep: action('Mark a step done', { command: 'checkStep', header: false })`. `useCommand('checkStep')` runs it under the same grant, revision check and audit.
+- `given: ['step']` on that action names the inputs its page supplies, `useCommand('checkStep').open(record, { step })`: the form does not draw `step` and sends what the page gave. A required one with no default needs `header: false` and no `bulk`, since only a page can fill it.
 - A command a free-form page lists in `commands` is offered by that declaration, with no action beside it and nothing added to a menu; the grant still decides who may run it. A section's component (not a page) still reaches a record's command through an action.
 - `label: 'Book an appointment'` on `defineCommand` is the title of the command's dialog and its buttons; without it they say the command's key as words (`book` is "Book"). It is text of 1 to 120 characters.
-- A public command's `output` may carry `message` only as `literal('…')`; that sentence is what the public page's outcome says in place of the platform's thank-you (at most 280 characters), beside the receipt's reference. A public form's reply stays the platform's.
+- A public command's `output` may carry `message` only as `literal('…')`; that sentence is what the public page's outcome says in place of the platform's thank-you (at most 280 characters), beside the receipt's reference. A public form's reply stays the platform's. On a tenant App, a submission placed with a tenant hands the handler that tenant's shared profile as `tenant`, so it may pick among the sentences its output declares: `message: literal('We will call you.', 'We will text you.')` and `return { reference, message: tenant?.contact === 'sms' ? 'We will text you.' : 'We will call you.' }`. The platform's triage has no `tenant`.
 - `lookup({ sources, record }, input)` runs before the transaction opens and hands its JSON to the handler as `lookup`; a failure is `temporarily_unavailable`. It reads the other sources (a database or an HTTP connection) its `sources` names, `{ valuations: ['estimate'] }`. A lookup that reads none, one that works from its input or the record alone, declares no `sources`; `sources` without a `lookup` is refused. Its tables offer `get`, `find` and `where` only: there is no `insert`, `update` or `remove`, in the type or at run time, so a write belongs in the handler. What it reads of a resource that audits reads is recorded under the command, as the handler's reads are. In a [tenant App](/docs/tenant-apps/#a-commands-lookup) it reads global tables and its own tenant's, as the person running it could read them, and `tenant` is the id of the tenant it runs in.
 - `effects: { notify: post('dealer-hooks', output => ({ id: output.applicationId })) }` posts to a `"kind": "webhook"` connection after commit, with retries; nothing is sent on rollback. `{ envelope: false, headers }` sends your own body shape; a delivery whose headers name one the request owns, the connection's `auth.header` among them, is rejected for an operator, not sent. On a tenant App each delivery carries its tenant.
 - `effects: { text: send('sms', output => ({ to: output.phone, text: 'Shipped.', consent: true })) }` sends on an [integration's](/docs/integrations/) channel after commit.

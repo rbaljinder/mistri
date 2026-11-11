@@ -45,6 +45,7 @@ import { appEntrypoint } from '../app/appEntrypoint.js';
 import { nativeMailAccount } from '../auth/authAccounts.js';
 import { appInboxConnection, ensureAppInbox, noticeForReader } from '../inbox.js';
 import { nextIdleWait } from '../jobs/jobHost.js';
+import { keptReason, NOTICE_WORDS_UNOPENED, openNoticeWords } from '../app/noticeWordsSeal.js';
 import { EmailFailure, type EmailTransport } from './email.js';
 
 /** An address's account: its id and roles. */
@@ -174,7 +175,11 @@ export function createEmailOutbox(options: OutboxOptions) {
     let outcome: MailOutcome;
     try {
       const person = await account(host, mail.recipient);
+      /* A title that says the write's words is kept masked; the said one waited sealed to this row, and is what the
+         reader is told where they may read the whole title. One that does not open here is never sent masked. */
+      const title = mail.words === undefined ? mail.title : openNoticeWords(app.id, [mail.app, String(mail.notice)], mail.words);
       if (!person || (await store.emailOff(app.id, mail.recipient))) outcome = { kind: 'skipped' };
+      else if (title === undefined) outcome = { kind: 'failed', error: NOTICE_WORDS_UNOPENED };
       else {
         const tell = async (reader: { adapter: Adapter; schema: DatabaseSchema }) => {
           const told = await noticeForReader(app, reader.adapter, reader.schema, {
@@ -182,7 +187,7 @@ export function createEmailOutbox(options: OutboxOptions) {
             resource: mail.resource,
             key: mail.key,
             uses: mail.uses,
-            title: mail.title,
+            title,
           });
           if (!told) return undefined;
           let segments: string[] | undefined;
@@ -261,12 +266,12 @@ export function createEmailOutbox(options: OutboxOptions) {
 /** What became of a send that threw: tried again later, or kept as failed once refused for good or past the attempts. */
 export function unsent(
   error: unknown,
-  mail: Pick<QueuedMail, 'attempts'>,
+  mail: Pick<QueuedMail, 'attempts' | 'words'>,
   at: number,
   warn: (message: string) => void,
   app: string,
 ): MailOutcome {
-  const reason = error instanceof Error ? error.message : 'the message could not be sent.';
+  const reason = keptReason(error instanceof Error ? error.message : 'the message could not be sent.', mail.words);
   const permanent = error instanceof EmailFailure && error.permanent;
   const outcome: MailOutcome =
     permanent || mail.attempts + 1 >= MAX_ATTEMPTS

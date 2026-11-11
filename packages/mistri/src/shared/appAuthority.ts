@@ -56,6 +56,8 @@ export function authorityReport(app: AppDef, origins?: AppOrigins, env: readonly
     fact(`auth rows ${app.auth.rows}`);
     if (app.auth.tenancy?.platform) fact('auth platform realm enabled');
     if (app.auth.tenancy?.profile) fact(`auth tenant profile ${app.auth.tenancy.profile}`);
+    // A column of the tenant row put in front of its members is one added line in review.
+    for (const column of sorted(app.auth.tenancy?.shared ?? [])) fact(`auth tenant shared ${column}`);
   }
   // These are configured binding names, never resolved connection credentials.
   if (app.sources)

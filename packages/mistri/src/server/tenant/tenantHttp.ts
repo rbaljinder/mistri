@@ -8,7 +8,8 @@ import { AppAccessDenied } from '../app/appAccessDenied.js';
 import { resolveLocale } from '@mistriwork/engine/shared/appLocale.js';
 import { pickedLocale } from '../app/readerLocale.js';
 import { readTenantMessages } from '../app/recordMessages.js';
-import { localizedApp } from '../app/apps.js';
+import { tenantImporter } from './tenantImport.js';
+import { tenantProjection } from './tenantProjection.js';
 import { componentMessages } from '../app/appMessages.js';
 import type { TenantIntegrations } from './tenantIntegrations.js';
 import { IntegrationSettingsRefusal } from '../integrations/integrationRuntime.js';
@@ -22,17 +23,14 @@ import { type IncomingMessage, type ServerResponse } from 'node:http';
 import { isDeepStrictEqual } from 'node:util';
 import { isPromise, isProxy } from 'node:util/types';
 import {
-  TransactionOutcomeUnknown,
   type Adapter,
   type InsertRequest,
   type InsertResult,
-  type ScopedReads,
   type UpdateRequest,
   type UpdateResult,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { isTenantApp, tenantAppShape, zonedNow, type AppDef } from '../../shared/app.js';
-import type { PageDef } from '@mistriwork/engine/shared/pageModel.js';
-import { wearing, type TenantLook } from './tenantLook.js';
+import type { TenantLook } from './tenantLook.js';
 import { appZone } from '../../shared/appUi.js';
 import { localeWeekStart } from '@mistriwork/engine/shared/weekStart.js';
 import { shownWrite } from '../http/fileRows.js';
@@ -114,7 +112,6 @@ import { commandActionLabel, readRecordHistoryFor, updateActionLabel } from '../
 import { readRecordFlowsFor, startRecordFlowFor } from '../recordFlows.js';
 import { flowRunsOf } from '../workflows/flowRuns.js';
 import { readRecordActivityFor } from '../recordActivity.js';
-import { appForRoles } from '../../shared/appViewRoles.js';
 import { appSurfaceForRealm } from '../../shared/appTenancy.js';
 import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
 import { PAGE_HEADER, pageLoad, pageManifestRefusal } from '../http/pageLoad.js';
@@ -128,8 +125,6 @@ import { answerDecisions, DECISION_PATHS } from '../http/decisionRoutes.js';
 import { inboxEmailFor, markInboxFor, readInboxFor } from '../inbox.js';
 import { TenantTokenRefusal, type TenantTokenService } from './tenantTokenService.js';
 import type { TenantSearch } from './tenantSearch.js';
-import { ImportUnavailable, readImportRequest, runImport } from '../app/appImport.js';
-import { importDeclaration } from '../../shared/appImportDeclaration.js';
 import { leaseInbox } from './tenantInbox.js';
 import { answerLiveOff, LIVE_PATH } from '../live/liveRoute.js';
 import { liveOffResources, liveSyncOn } from '../live/liveBinding.js';
@@ -184,23 +179,11 @@ type ReadContext = Pick<TenantReadContext, 'schema' | 'data'> & {
   readonly locale?: string;
   /** A member's context: many reads asked at once, on one snapshot (tenantReadRuntime.ts). */
   readonly together?: TenantReadContext['together'];
+  /** A member's context: the columns of the tenant's profile `auth.tenancy.shared` lists, read for this request. */
+  readonly tenant?: TenantReadContext['tenant'];
 };
 /** `work` with its reads on one snapshot of `context`, where the context can share one; else as it is. */
 const together = <T>(context: ReadContext, work: () => Promise<T>): Promise<T> => (context.together ? context.together(work) : work());
-/* The App and pages in another language or a tenant's own words, captured once per localization. localizedApp keeps
-   each (locale, words) localization as the same two objects, built from the App's definition and nobody's request,
-   so they are this process's as the App itself is; their capture was a deep copy of the whole App on every request
-   that answered its payload, and then hashed whole again by the projection (tenantMetadata.ts), since a new copy is
-   a new object: a field report put a tenant's enter at up to a second of CPU. Nothing about the person, tenant or
-   lease is in it: those decide what the projection keeps of it, afterwards, on every request. */
-const localizations = new WeakMap<object, { readonly pages: unknown; readonly said: { app: AppDef; pages: readonly PageDef[] } }>();
-export function capturedLocalization(local: { app: AppDef; pages: readonly PageDef[] }) {
-  const held = localizations.get(local.app);
-  if (held && held.pages === local.pages) return held.said;
-  const said = captureTenantData({ app: local.app, pages: local.pages });
-  localizations.set(local.app, { pages: local.pages, said });
-  return said;
-}
 export function readAdapter(context: ReadContext): Adapter {
   return Object.freeze({
     dialect: context.schema.dialect,
@@ -434,106 +417,6 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       })),
     };
   };
-  /**
-   * A CSV file imported into a resource the member writes (app/appImport.ts),
-   * on this tab's lease: every read it makes is a read in the member's own
-   * context, and its rows are written in one transaction of that context, the
-   * tenant's ownership injected on each (tenantRecordHistory.ts importRows), or
-   * each through the resource's declared command. Nothing in the request names
-   * a tenant, an owner or a key the context did not admit.
-   */
-  const tenantImport = async (
-    req: IncomingMessage,
-    selectors: readonly string[],
-    expected: TenantContextAssertion,
-    input: Record<string, unknown>,
-    attributed: <T>(work: () => Promise<T>, action?: string) => Promise<T>,
-    signal: AbortSignal,
-  ) => {
-    let last: TenantContextReply | undefined;
-    const owned = <T>(answer: { value: T; context: TenantContextReply }): T => {
-      last = answer.context;
-      return answer.value;
-    };
-    /* An import is many reads and writes over as long as the file takes: each its own unit of work, at the instant it
-       is asked, rather than all at the one the request arrived at. */
-    const fresh = <T>(work: () => Promise<T>): Promise<T> => withRequestInstant(appNow(), work);
-    const reading = <T>(run: (context: TenantReadContext) => T | Promise<T>) =>
-      fresh(() => contexts.withContext(req, selectors, expected, run)).then(owned);
-    try {
-      const request = readImportRequest(input);
-      const { schema, zone } = await reading((context) => ({
-        schema: tenantServedSchema(context, app, appNow()),
-        zone: context.zone,
-      }));
-      const call = <K extends keyof ScopedReads>(method: K) =>
-        ((...args: unknown[]) =>
-          reading((context) => (context.data[method] as (...values: unknown[]) => unknown)(...args))) as ScopedReads[K];
-      const reader = Object.freeze({
-        dialect: schema.dialect,
-        introspect: async () => schema,
-        close: async () => denyTenant(),
-        query: call('query'),
-        count: call('count'),
-        runView: call('runView'),
-        countView: call('countView'),
-        runBreakdown: call('runBreakdown'),
-        countBreakdown: call('countBreakdown'),
-      }) as unknown as Adapter;
-      /* A list that names roles the member does not hold in this tenant imports nothing for them, as one that is not there. */
-      const roles = await reading((context) => context.principal.roles);
-      const declared = importDeclaration(appForRoles(app, roles), request.table, request.view);
-      if (!declared) throw new ImportUnavailable(404, 'This list does not import files.');
-      const runtime = {
-        app,
-        schema,
-        reader,
-        locale: app.ui.locale ?? 'en-US',
-        now: () => zonedNow(appZone(app.ui, zone), appNow()),
-        signal,
-      };
-      const unknownAsUnknown = async <T>(work: () => Promise<T>): Promise<T> => {
-        try {
-          return await work();
-        } catch (error) {
-          throw error instanceof TenantWriteFailure && error.outcome === 'unknown' ? new TransactionOutcomeUnknown(error) : error;
-        }
-      };
-      const report = declared.def.command
-        ? await runImport(
-            {
-              ...runtime,
-              commandLabel: `${commandActionLabel(app, { command: declared.def.command.id }) ?? 'Command'} (import)`,
-              commands: {
-                prepare: (body) => fresh(() => contexts.prepare(req, selectors, expected, body)).then(owned),
-                execute: (body) => fresh(() => attributed(() => contexts.execute(req, selectors, expected, body).then(owned))),
-              },
-            },
-            request,
-          )
-        : await runImport(
-            {
-              ...runtime,
-              writer: {
-                trial: (insert) =>
-                  unknownAsUnknown(() =>
-                    fresh(() => contexts.importRows(req, selectors, expected, { inserts: [insert], trial: true })).then(owned),
-                  ).then(() => {}),
-                commit: (inserts) =>
-                  unknownAsUnknown(() =>
-                    fresh(() => attributed(() => contexts.importRows(req, selectors, expected, { inserts, trial: false }).then(owned))),
-                  ).then(() => ({ undo: 'An import is undone record by record here.' })),
-              },
-            },
-            request,
-          );
-      if (!last) return denyTenant();
-      return { report, context: last };
-    } catch (error) {
-      if (error instanceof ImportUnavailable) return { refused: { status: error.status, message: error.message } };
-      throw error;
-    }
-  };
   const contexts = createTenantContexts({
     deployment: enrollment.deployment,
     verifySessionInstance: verified,
@@ -547,6 +430,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         }
       : {}),
   });
+  const tenantImport = tenantImporter({ app, contexts, appNow });
   /* Live streams this server holds open: ended when it retires, so its close does not wait ten minutes for them. */
   const liveStreams = new Set<ServerResponse>();
   /* People arriving, a few at a time (tenantArrivals.ts): a burst of them queued here, cheaply, instead of for the
@@ -1046,6 +930,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
             session?.identity.who ?? null,
             own ? (account as string) : undefined,
             readAdapter(context),
+            platform ? undefined : context.tenant,
           );
         };
         if (path === TENANT_EXPORT_PATH) {
@@ -1066,41 +951,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
             settled: assertActive,
           });
         }
-        /* The App and its pages as this context is offered them, in `locale` with the tenant's own `words`: what
-           `/api/app` and `/api/pages` answer from, and what the page's boot plans its room from. Projected once per
-           served schema, look, locale and words: the boot asks both routes together, and it was projected for each. */
-        const projections = new WeakMap<object, Array<{ look: unknown; key: string; value: ReturnType<typeof projectTenantMetadata> }>>();
-        const projected = (
-          context: ReadContext,
-          schema: ReturnType<typeof tenantServedSchema>,
-          locale: string | undefined,
-          words: Awaited<ReturnType<typeof readTenantMessages>>,
-        ) => {
-          /* The payload wears the look a save changed in place; every check above read the App it started with. */
-          const wearingNow = look?.();
-          const key = JSON.stringify([locale ?? null, words?.words.size ? words.stamp : null]);
-          const held = projections.get(schema) ?? [];
-          const found = held.find((entry) => entry.look === wearingNow && entry.key === key);
-          if (found) return found.value;
-          const worn = wearing(app, wearingNow);
-          const local = localizedApp({ app: worn, pages: [...pages] }, locale, words);
-          const said = local.app === worn ? { app: worn, pages } : capturedLocalization(local);
-          /* The lease's realm, not the schema's shape, decides which
-             surface this context is offered. A support session reads as
-             the dealer it entered, so it is offered the dealer's realm. */
-          const value = projectTenantMetadata(
-            said.app,
-            said.pages,
-            schema,
-            context.capabilities,
-            context.principal.roles,
-            platform ? 'platform' : 'tenant',
-            context.zone,
-            locale,
-          );
-          projections.set(schema, [...held, { look: wearingNow, key, value }]);
-          return value;
-        };
+        /* The App and its pages as this context is offered them (tenantProjection.ts): what `/api/app` and `/api/pages`
+           answer from, and what the page's boot plans its room from. */
+        const { projected, variantOf } = tenantProjection({ app, pages, schema: ownership.schema, platform, look });
         /* One read on this context, as its own request is answered: the
            metadata posts and the resource reads. A composed record page asks
            each of its parts through this, under the one context it holds. */
@@ -1222,7 +1075,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               const own = branding ? undefined : await ownAsked;
               const branded = metadata.app && withRecordBranding(metadata.app, branding ?? own);
               /* The App's catalog in this reader's words beside the components that say it (`useMessage`). */
-              const catalog = components && Object.keys(components).length ? componentMessages(app, locale, tenantWords) : undefined;
+              const catalog =
+                components && Object.keys(components).length ? componentMessages(app, locale, tenantWords, variantOf(context)) : undefined;
               const shown = branded && components ? { ...branded, components, ...(catalog ? { messages: catalog } : {}) } : branded;
               /* The assistant is drawn only where its routes answer (tenantAssistant.ts): a tenant's own lease, a
                  role it is offered to, a model to talk to, and the tenant's switch on, read on every page load. Never

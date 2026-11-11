@@ -21,19 +21,8 @@ import { configLocations } from '@mistriwork/engine/server/config/locations.js';
 import { appMissingTables, isRowPolicyApp, isTenantApp, resolveAppAccess } from '../../shared/app.js';
 import { appSignUpProblems } from '../../shared/appWarnings.js';
 import { appUsesCommands } from '../../shared/appCommandIds.js';
-import {
-  appAdvisories,
-  appProblems,
-  assertAppScopes,
-  componentWatchDirs,
-  mergeAppPages,
-  reloadApp,
-  watchApp,
-  loadedFiles,
-  themeWatchDirs,
-  type AppHost,
-  type LoadedApp,
-} from '../app/apps.js';
+import { appAdvisories, appProblems, assertAppScopes, mergeAppPages, reloadApp, type AppHost, type LoadedApp } from '../app/apps.js';
+import { loadedFiles, watchApp, watchedDirs } from '../app/appWatch.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import { loadHttpAppPolicy, type HttpAppPolicy } from '../policy/appPolicyHttp.js';
 import { appEntrypoint } from '../app/appEntrypoint.js';
@@ -1031,7 +1020,7 @@ export async function startServing(
             );
           },
           undefined,
-          () => [...componentWatchDirs(host.app), ...themeWatchDirs(host.app), ...(host.app.entry ? [dirname(host.app.entry)] : [])],
+          () => watchedDirs(host),
           () => loadedFiles(host.app),
         ),
       );

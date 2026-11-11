@@ -32,9 +32,10 @@ import {
   type NoticeRule,
   type StoredNotice,
 } from '../adapters/inbox/inbox.js';
-import { appKeepsInbox, appNotifyRules, notifyRulePaths, type NotifyPath } from '../shared/appNotify.js';
+import { appKeepsInbox, appNotifyRules, notifyRulePaths, saysWord, type NotifyPath } from '../shared/appNotify.js';
 import type { InboxMailStore } from '../adapters/inbox/inboxMail.js';
 import { bindNotices } from './stores/writeCaptures.js';
+import { assertNoticeWordsKey, noticeWordsSeal } from './app/noticeWordsSeal.js';
 import { storesOf } from './stores/appStores.js';
 import { recordNoun, type AppDef } from '../shared/app.js';
 import { findTable, primaryKey, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
@@ -148,6 +149,8 @@ function physicalRules(app: AppDef, resources: Pick<RuntimeResources, 'schema' |
       );
     return said ? { say: said } : {};
   };
+  /* An App whose notices say a write's words does not start where it could not seal them. */
+  if ([...rules.values()].some((compiled) => compiled.some((rule) => rule.title.some(saysWord)))) assertNoticeWordsKey(app.id);
   for (const [resource, compiled] of rules) {
     const connection = resources.connectionFor(resource);
     // Every hop is read inside the triggering write's transaction, on its connection.
@@ -178,7 +181,8 @@ function physicalRules(app: AppDef, resources: Pick<RuntimeResources, 'schema' |
           on: rule.on,
           ...(rule.when ? { when: rule.when } : {}),
           to: rule.to.map(path),
-          title: rule.title.map((part) => (typeof part === 'string' || 'message' in part ? part : path(part))),
+          title: rule.title.map((part) => (typeof part === 'string' || 'message' in part || 'word' in part ? part : path(part))),
+          ...(rule.title.some(saysWord) ? { seal: noticeWordsSeal(app.id) } : {}),
           ...sayOf(rule),
           open: rule.open,
           uses: rule.uses,

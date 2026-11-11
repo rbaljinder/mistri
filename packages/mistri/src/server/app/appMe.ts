@@ -108,6 +108,19 @@ export async function lookupTenantPerson(
   who: string | null,
   account: string | undefined,
   reader: Reader,
+  /** The tenant's shared profile columns this request read (`auth.tenancy.shared`): what `tenant.<column>` is. */
+  tenant?: QueryPerson['tenant'],
+): Promise<QueryPerson> {
+  const person = await tenantMember(app, schema, who, account, reader);
+  return tenant ? { ...person, tenant } : person;
+}
+
+async function tenantMember(
+  app: AppDef,
+  schema: DatabaseSchema,
+  who: string | null,
+  account: string | undefined,
+  reader: Reader,
 ): Promise<QueryPerson> {
   const { table, column } = personTable(app, schema);
   /* The table is this reader's but its account column is not: nobody, rather
@@ -207,13 +220,18 @@ export async function personKey(
  * name: a tab that says `my_groups` reads `me.group_member.group_id` where the
  * segment is written, and the parse spells it out only after the sets are read.
  */
+/* `tenant.<column>` outside quoted text: the reader's tenant profile, which rides on the person (QueryPerson.tenant). */
+const TENANT_WORD = /(?<![\w.])tenant\.[A-Za-z_]/;
+const mentions = (text: string) => mentionsMe(text) || (text.includes('tenant.') && TENANT_WORD.test(maskQuoted(text)));
+
 /**
  * Whether any of these texts compares with `me`, directly or through a segment it names: a tab that names
- * `my_threads` (`author_id = me`) says no `me` of its own, and read without the person it matches nobody.
+ * `my_threads` (`author_id = me`) says no `me` of its own, and read without the person it matches nobody. A text
+ * that reads `tenant.<column>` asks for the person too, since the tenant's profile is read with them.
  */
 export function textsMentionMe(texts: readonly unknown[], schema: DatabaseSchema): boolean {
   const said = texts.filter((text): text is string => typeof text === 'string');
-  return said.some((text) => mentionsMe(text)) || segmentsNamed(said, schema).some((text) => mentionsMe(text));
+  return said.some(mentions) || segmentsNamed(said, schema).some(mentions);
 }
 
 /**

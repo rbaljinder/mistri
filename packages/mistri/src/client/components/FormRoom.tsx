@@ -23,7 +23,7 @@ import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { draftTransport } from './draftFormApi.js';
 import { checkCommandStep } from './commandStepCheck.js';
 import type { SavedFormPresentation } from './SavedFormSurface.js';
-import type { CommandQuestions } from './CommandFields.js';
+import { askedFields, type CommandQuestions } from './CommandFields.js';
 import type { PageEntry } from '@mistriwork/kit/client/components/pageModel.js';
 import { say } from '../copy/forms/components/FormRoom.js';
 import type { UiCommandOutcome } from './sdk/context.js';
@@ -153,7 +153,12 @@ export function FormBody({
     staleTime: 0,
     gcTime: 0,
     enabled: prepares,
-    queryFn: async (): Promise<{ initial: Record<string, unknown>; questions?: CommandQuestions }> => {
+    queryFn: async (): Promise<{
+      initial: Record<string, unknown>;
+      questions?: CommandQuestions;
+      withheld?: string[];
+      when?: Record<string, string>;
+    }> => {
       const result = await api('/api/commands/prepare', {
         ...ownedBy(connection),
         command: form.command.id,
@@ -163,7 +168,10 @@ export function FormBody({
       const initial = result?.initial && typeof result.initial === 'object' && !Array.isArray(result.initial) ? result.initial : {};
       // Its questions defined in rows, as the server read them for this reader.
       const questions = result?.defined && typeof result.defined === 'object' ? (result.defined as CommandQuestions) : undefined;
-      return { initial, ...(questions ? { questions } : {}) };
+      // The inputs the tenant's profile does not ask, and what is left of the rest to judge over the draft.
+      const withheld = Array.isArray(result?.withheld) ? (result.withheld as unknown[]).filter((name) => typeof name === 'string') : [];
+      const when = result?.when && typeof result.when === 'object' ? (result.when as Record<string, string>) : undefined;
+      return { initial, ...(questions ? { questions } : {}), ...(withheld.length ? { withheld } : {}), ...(when ? { when } : {}) };
     },
   });
   const draft = useMemo(() => {
@@ -198,10 +206,11 @@ export function FormBody({
   }
   if (prepares && prepared.error) return <p className="note">{prepared.error.message}</p>;
   if (prepares && !prepared.data) return <p className="note" aria-busy="true" />;
+  const presented = formPresentation(form);
   return (
     <FormSurface
       key={form.id}
-      form={formPresentation(form)}
+      form={prepares ? { ...presented, input: [...askedFields(presented.input, prepared.data)] } : presented}
       appName={appName}
       again={!onDismiss}
       inDialog={Boolean(onDismiss)}

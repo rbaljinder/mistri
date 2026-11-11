@@ -44,6 +44,7 @@ export const UI_KEYS = [
   'export',
   'locale',
   'messages',
+  'catalog',
   'timezone',
   'currency',
   'footer',
@@ -150,6 +151,10 @@ export function parseUi(raw: unknown, where: string): AppUi {
       throw new Error(`${where}: ui.messages fromRecord: ${(error as Error).message}`);
     }
   }
+  if (raw.catalog !== undefined && (typeof raw.catalog !== 'string' || !/^tenant\.[A-Za-z_]\w*$/.test(raw.catalog)))
+    throw new Error(
+      `${where}: ui.catalog names the tenant's profile column that picks a messages/ folder, like 'tenant.wording' [ui-catalog].`,
+    );
   const timezone = raw.timezone === undefined ? undefined : parseZone(raw.timezone, where);
   const csp = raw.csp === undefined ? undefined : parseCsp(raw.csp, where);
   if (raw.currency !== undefined && (typeof raw.currency !== 'string' || !/^[A-Za-z]{3}$/.test(raw.currency))) {
@@ -226,6 +231,7 @@ export function parseUi(raw: unknown, where: string): AppUi {
     ...(locale?.tag === undefined ? {} : { locale: locale.tag }),
     ...(locale?.column === undefined ? {} : { localeColumn: locale.column }),
     ...(messages === undefined ? {} : { messages }),
+    ...(raw.catalog === undefined ? {} : { catalog: (raw.catalog as string).slice('tenant.'.length) }),
     ...(timezone === undefined ? {} : { timezone }),
     ...(raw.currency === undefined ? {} : { currency: (raw.currency as string).toUpperCase() }),
     ...(csp === undefined ? {} : { csp }),

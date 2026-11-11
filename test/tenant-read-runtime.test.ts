@@ -234,7 +234,7 @@ test('tenant runtime exposes only frozen read authority, with membership resourc
   frozen(runtime);
   assert.deepEqual(Reflect.ownKeys(runtime).sort(), ['retire', 'withContext']);
   const result = await runtime.withContext(request, ['north'], async (context) => {
-    assert.deepEqual(Reflect.ownKeys(context).sort(), ['data', 'principal', 'schema', 'together']);
+    assert.deepEqual(Reflect.ownKeys(context).sort(), ['data', 'principal', 'schema', 'tenant', 'together']);
     assert.deepEqual(Reflect.ownKeys(context.data).sort(), [
       'aggregate',
       'count',

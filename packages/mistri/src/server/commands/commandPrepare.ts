@@ -22,9 +22,9 @@ import {
   type BusinessCommandActor,
 } from './businessCommands.js';
 import { evaluateCommandAvailability } from './commandAvailability.js';
-import { visibleTargetRow } from './commandActorColumns.js';
+import { mayReadColumn, visibleTargetRow } from './commandActorColumns.js';
 import { canonicalKey, createCommandDb, keyFilter, normalizeRow, type CommandCatalog, type UntypedRow } from './commandDb.js';
-import { compileWhen, inputsWithheld, whenHolds, whenPerson, type CommandPeople } from './commandWhen.js';
+import { compileWhen, recordPartHolds, recordPathEnd, recordPathValue, whenHolds, whenPerson, type CommandPeople } from './commandWhen.js';
 import { canonicalCommandJson, commandKeyText, type CommandKey } from './commandPayload.js';
 import type { PreparedCommandTarget } from './commandTargets.js';
 import { revisionColumns, rowRevision, versionColumn } from './commandRevision.js';
@@ -32,6 +32,7 @@ import { commandFlagEnabled, commandFlagsReader, type CommandFlags } from './com
 import { definedInputs, readCommandDefinitions } from './commandDefined.js';
 import { askedWhen, preparedStarts, preparesInitial, recordPickers } from './commandPrepareNeeds.js';
 import type { DefinedField } from '@mistriwork/engine/shared/definedFields.js';
+import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import { withWriteAhead } from '@mistriwork/engine/adapters/writeAhead.js';
 
 export interface PreparedCommand {
@@ -166,6 +167,9 @@ export async function readPreparedRecord(
     /** After the revision is read and before `initial`: a caller's target check. The revision
      *  is read first, so a record outside the caller's rows is not found, as without `initial`. */
     beforeInitial?: () => Promise<void>;
+    /** The tenant's shared profile columns (`auth.tenancy.shared`), where a tenant member prepares: what
+     *  `tenant.<column>` reads in an input's `when` and `default: { tenant }`. */
+    tenant?: Readonly<Record<string, TenantValue>>;
   },
 ): Promise<PreparedCommand> {
   const { command, key, catalog } = options;
@@ -220,11 +224,13 @@ export async function readPreparedRecord(
   if (rows.rows.length !== 1 || rowRevision(rows.rows[0], versionField) !== expectedVersion)
     throw new BusinessCommandExecutionError('invalid_result');
   const record = normalizeRow(table, rows.rows[0]) as UntypedRow;
-  /* `me` in the command's `when` and its inputs' is this actor (commandWhen.ts whenPerson), read once. */
-  const me = await whenPerson(tx, options.actor, options.people, [
+  /* `me` in the command's `when` and its inputs' is this actor (commandWhen.ts whenPerson), read once; it carries
+     the tenant's profile, which a record's part may compare with (`record.rate = tenant.default_rate`). */
+  const person = await whenPerson(tx, options.actor, options.people, [
     command.when,
     ...conditional.map((field) => (field.type === 'group' ? undefined : field.when)),
   ]);
+  const me = options.tenant ? { ...(person ?? { email: options.actor.email ?? null }), tenant: options.tenant } : person;
   if (registeredAvailability(command) && command.when !== undefined) {
     const when = compileWhen(table, command.when, now(), me);
     const [named] = keyFilter(exact).groups;
@@ -254,12 +260,11 @@ export async function readPreparedRecord(
     const bound = await bindRecord(
       field.when,
       `input "${field.name}"`,
-      async (comparison) => {
-        const [out] = await inputsWithheld(tx, catalog, command.target, [{ name: field.name, when: comparison }], record, now(), me);
-        return out === undefined;
-      },
+      // A part may follow references (`record.customer_id.vip`), each hop read as the actor reads it.
+      (comparison) => recordPartHolds(tx, catalog, command.target, comparison, record, now(), me),
       now(),
       command.fields,
+      options.tenant,
     );
     const text = boundText(bound);
     if (text === false) withheld.push(field.name);
@@ -276,10 +281,11 @@ export async function readPreparedRecord(
   // Bound to the record as the actor reads it: a column they cannot see narrows to nothing.
   const visible = visibleTargetRow(options.actor, record);
   const choices = pickers.length ? { choices: Object.fromEntries(pickers.map((p) => [p.path, boundRecordQuery(p.query, visible)])) } : {};
-  const started = startingValues(
+  const started = await startingValues(
     starts.filter((field) => !withheld.includes(field.name)),
     options.actor,
-    visible,
+    { reader: tx, catalog, target: command.target, record, visible },
+    options.tenant,
   );
   if (!initial) return { expectedVersion, ...choices, ...asked, ...(Object.keys(started).length ? { initial: started } : {}) };
   const value = await initial(
@@ -306,17 +312,42 @@ export async function readPreparedRecord(
   return { expectedVersion, initial: servedInitial(command, given), ...choices, ...asked };
 }
 
+/* Whether each column a path names past the target's own is one the actor reads: the next hop's reference and
+   the column it ends on, each on the table it reaches. */
+function pathReadable(actor: BusinessCommandActor, catalog: CommandCatalog, target: string, path: string): boolean {
+  const segments = path.split('.');
+  const { crossed } = recordPathEnd(catalog, target, path);
+  return crossed.every((table, index) => mayReadColumn(actor, table, segments[index + 1]));
+}
+
 /* Each starting value on its own: one the field would refuse (a column grown past its max) is left for the
-   reader to fill, rather than failing the whole form. */
-function startingValues(
+   reader to fill, rather than failing the whole form. A path (`customer_id.default_rate`) starts from the column
+   the record's own reference names, its first step a column the actor reads and each hop read under their grants:
+   a hop they cannot read starts nothing. A tenant's column starts from its profile, where a member prepares. */
+async function startingValues(
   starts: ReadonlyArray<Exclude<AppCommandField, { type: 'group' }>>,
   actor: BusinessCommandActor,
-  record: Readonly<Record<string, unknown>>,
-): Record<string, unknown> {
+  over:
+    | {
+        reader: Pick<WriteTransaction, 'query' | 'count'>;
+        catalog: CommandCatalog;
+        target: string;
+        record: Readonly<Record<string, unknown>>;
+        visible: Readonly<Record<string, unknown>>;
+      }
+    | undefined,
+  tenant: Readonly<Record<string, TenantValue>> | undefined,
+): Promise<Record<string, unknown>> {
   const started: Record<string, unknown> = {};
   for (const field of starts) {
-    const start = field.default as { record?: string };
-    let value = start.record === undefined ? actor.email : record[start.record];
+    const start = field.default as { record?: string; tenant?: string };
+    let value: unknown;
+    if (start.tenant !== undefined) value = tenant?.[start.tenant];
+    else if (start.record === undefined) value = actor.email;
+    else if (!over) value = undefined;
+    else if (!start.record.includes('.')) value = over.visible[start.record];
+    else if (Object.hasOwn(over.visible, start.record.split('.')[0]) && pathReadable(actor, over.catalog, over.target, start.record))
+      value = await recordPathValue(over.reader, over.catalog, over.target, over.record, start.record).catch(() => undefined);
     if (field.type === 'number' && typeof value === 'string' && value.trim() !== '') value = Number(value);
     if (value === null || value === undefined) continue;
     try {
@@ -358,6 +389,7 @@ async function readPreparedStart(
     now: () => Date;
     flags: ReturnType<typeof commandFlagsReader>;
     requestId?: string;
+    tenant?: Readonly<Record<string, TenantValue>>;
   },
 ): Promise<PreparedCommand> {
   const { command, catalog, signal, now, flags } = options;
@@ -365,15 +397,30 @@ async function readPreparedStart(
   if (Object.keys(options.key).length) throw new BusinessCommandExecutionError('invalid_input', 'not_applied', 'key');
   if (!preparesInitial(command)) return { expectedVersion: 0 };
   if (!commandFlagEnabled(command, flags)) throw new BusinessCommandExecutionError('forbidden');
-  const started = startingValues(preparedStarts(command), options.actor, {});
+  const started = await startingValues(preparedStarts(command), options.actor, undefined, options.tenant);
   const initial = registeredInitial(command);
   const tx = Object.freeze<Pick<WriteTransaction, 'query' | 'count' | 'aggregate'>>({
     query: (request) => records.query(request),
     count: (table, filter) => records.count(table, filter),
     ...(records.aggregate ? { aggregate: (request) => records.aggregate!(request) } : {}),
   });
+  /* An input asked by the tenant's profile alone (`when: 'tenant.country = "US"'`): judged here, as no record is,
+     so the form is told which it is not asked and what is left of the rest over the draft. */
+  const withheld: string[] = [];
+  const said: Record<string, string> = {};
+  for (const field of askedWhen(command)) {
+    const bound = await bindRecord(field.when, `input "${field.name}"`, async () => false, now(), command.fields, options.tenant ?? {});
+    const text = boundText(bound);
+    if (text === false) withheld.push(field.name);
+    else if (text !== true) said[field.name] = text;
+  }
+  for (const name of withheld) delete started[name];
   // Its questions, where it asks some: those that name no record, as no record is named.
-  const asked = definedInputs(command).length ? { defined: await readCommandDefinitions(tx, catalog, command) } : {};
+  const asked = {
+    ...(withheld.length ? { withheld } : {}),
+    ...(Object.keys(said).length ? { when: said } : {}),
+    ...(definedInputs(command).length ? { defined: await readCommandDefinitions(tx, catalog, command) } : {}),
+  };
   if (signal.aborted) throw new BusinessCommandExecutionError('cancelled');
   if (!initial) return { expectedVersion: 0, ...(Object.keys(started).length ? { initial: started } : {}), ...asked };
   const value = await initial(
@@ -391,5 +438,7 @@ async function readPreparedStart(
     }),
   );
   if (signal.aborted) throw new BusinessCommandExecutionError('cancelled');
-  return { expectedVersion: 0, initial: servedInitial(command, { ...started, ...(value ?? {}) }), ...asked };
+  const given: Record<string, unknown> = { ...started, ...(value ?? {}) };
+  for (const name of withheld) delete given[name];
+  return { expectedVersion: 0, initial: servedInitial(command, given), ...asked };
 }

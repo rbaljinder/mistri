@@ -1201,6 +1201,9 @@ export type AppRoleClaims = {
 export interface AppTenancy<Resource extends string = string> {
   label?: string | AppMessageRef;
   profile?: Resource;
+  /** Columns of the tenant's profile row its members read, at most 16 scalar ones: `tenant.country` in a query, a row
+      scope, a `when` or a handler's `tenant`. Read once per request; a tenant with no row reads nulls. Needs `profile`. */
+  shared?: readonly string[];
   platform?: {
     label: string | AppMessageRef;
     /** Who `me` is in the platform realm, as `auth.me` says it in a tenant's: the platform-owned resource its staff
@@ -2980,8 +2983,8 @@ export type AppIcon = AppIconName | Lowercase<string>;
 export type PageIcon = AppIconName | (Register extends { icons: infer I extends string } ? I : never);
 
 export type AppNavLink = { label: string | AppMessageRef; to: StaticAppTarget };
-/** The roles the menu offers an entry to (arrangement only: see `AppNavGroup.roles`). */
-type AppNavRoles = { roles?: readonly string[] };
+/** The roles the menu offers an entry to (arrangement only: see `AppNavGroup.roles`), and the tenants (`AppNavGroup.when`). */
+type AppNavRoles = { roles?: readonly string[]; when?: string };
 /** Type-only target manifest checking; the runtime helper returns its argument. */
 export declare function appLink<TargetManifest>(target: StaticAppTarget & {
   app: TargetManifest extends { id: infer Id extends string } ? Id : string;
@@ -3017,6 +3020,10 @@ export interface AppNavGroup<View extends string = Lowercase<string>, Placement 
       one with `placement: 'footer'`, which stays at the sidebar's foot in each. A view may stand in two workspaces. The
       workspace is the room's, never in the address; in the top placement a workspace is an ordinary group. Not with `inline`. */
   workspace?: true;
+  /** In a tenant App, the tenants the menu offers the group to, by their shared profile: `'tenant.boarding = true'`,
+      `'tenant.plan in (pro, team)'` — a flag or a vocabulary column `auth.tenancy.shared` lists. Arrangement only, as
+      `roles` is: a hidden menu is not access control, and grants alone decide who may open anything. */
+  when?: string;
 }
 /** In the App's nav and its groups only: the named feature's nav fragment, spliced in place, once. */
 export interface AppNavPlacement<Feature extends string = Lowercase<string>> { feature: Feature }
@@ -3245,10 +3252,14 @@ export interface AppUi {
       `fromRecord('tenant_message', { by: 'tenant', tenantField: 'tenant_id', fields: { key: 'key', locale: 'locale', text: 'text' } })`.
       A row is checked as it is written and skipped when read if it no longer says a source key's arguments. */
   messages?: RecordMessagesSpec;
+  /** The tenant's profile column, listed in `auth.tenancy.shared`, whose value names a folder of the App's catalogs:
+      `'tenant.wording'` with a tenant whose `wording` is `'clinic'` says `messages/clinic/en.ts` over `messages/en.ts`. */
+  catalog?: `tenant.${string}`;
   /** IANA zone the app's "today" is reckoned in ("Australia/Sydney"). A TIMESTAMP or DATETIME with no zone holds the wall clock in it (UTC when the App names none); a column with a zone holds the instant.
       `{ column: 'desk_setting.timezone', default: 'America/New_York' }` counts each reader's days — today, windows, the
       payload's zone — in the zone the first row of that text column they may read names (their tenant's, their
-      account's); writes keep `default`, which also stands in where the row names none. */
+      account's); writes keep `default`, which also stands in where the row names none. In a tenant App,
+      `column: 'tenant.timezone'` reads the tenant's profile column listed in `auth.tenancy.shared`. */
   timezone?: string | ReaderZone;
   /** ISO 4217 default for money rules that name none. Defaults to USD. */
   currency?: string;
@@ -4263,8 +4274,8 @@ export declare function customList<const C extends ComponentDecl<string, 'list'>
 ): { kind: 'custom'; readonly [madeBy]: 'customList'; component: C; show: S } & Authored<O>;
 /** Structural navigation parent; its children are view ids, `{ to, label }` or groups, kept as literals. */
 export declare function navGroup<const Children extends readonly AppNavNode<Lowercase<string>, AppNavPlacement>[]>(
-  id: string, label: string | AppMessageRef, children: Children, opts?: Pick<AppNavGroup, 'realm' | 'roles' | 'icon' | 'placement' | 'inline' | 'folded' | 'workspace'>,
-): { id: string; label: string | AppMessageRef; children: Children; realm?: 'tenant' | 'platform'; icon?: AppIcon; placement?: 'footer'; inline?: true; folded?: true; workspace?: true };
+  id: string, label: string | AppMessageRef, children: Children, opts?: Pick<AppNavGroup, 'realm' | 'roles' | 'icon' | 'placement' | 'inline' | 'folded' | 'workspace' | 'when'>,
+): { id: string; label: string | AppMessageRef; children: Children; realm?: 'tenant' | 'platform'; icon?: AppIcon; placement?: 'footer'; inline?: true; folded?: true; workspace?: true; when?: string };
 
 /* ---------- schema-typed names ----------
    Pair with `mistri --export types > mistri-schema.d.ts`: the

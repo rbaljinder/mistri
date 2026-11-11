@@ -51,7 +51,10 @@ export interface JobSchedule {
  */
 interface EveryJobDeclaration {
   readonly every: string;
-  readonly timezone?: string;
+  /** An IANA zone name, or `'tenant'`: each tenant's own zone, the one its
+   * profile names through `ui.timezone: { column: 'tenant.<column>' }`, read
+   * per tenant (`realm: 'tenant'` only). */
+  readonly timezone?: string | 'tenant';
   /** A tenant App's, required there and refused elsewhere: `'tenant'` runs
    * the job once per active tenant each slot, as the service in that tenant;
    * `'platform'` runs it once, in the platform realm, over the platform's
@@ -490,10 +493,13 @@ function defineEveryJob(value: Record<string, unknown>): Job {
   if (Object.hasOwn(value, 'realm') && value.realm !== 'tenant' && value.realm !== 'platform') fail("Job realm is 'tenant' or 'platform'.");
   let every: JobEvery;
   try {
-    every = parseEvery(value.every, value.timezone ?? 'UTC');
+    every = parseEvery(value.every, value.timezone ?? 'UTC', true);
   } catch (error) {
     return fail(`Job ${(error as Error).message}`);
   }
+  /* Each tenant's zone is a tenant App's, read per tenant: a job run once has no one tenant's clock to keep. */
+  if (every.tenantZone && value.realm !== 'tenant')
+    fail("Job timezone 'tenant' reads each tenant's zone, so it runs per tenant: say realm: 'tenant' [job-tenant-zone].");
   if (typeof value.runAs !== 'string' || !PRINCIPAL.test(value.runAs))
     fail('Job runAs must name a principal: lowercase letters, digits and hyphens.');
   const command = commandReference(value.command, 'Job command');

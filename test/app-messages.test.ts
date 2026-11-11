@@ -398,8 +398,8 @@ export default definePage({ label: { message: 'ticket.plural' }, description: { 
   });
 
   test("one rule for what a caption is: every key it names takes msg() in the authored types, but the few that are not a reader's words", () => {
-    /* Each with why it stays text. A command's inputs are parsed when defineCommand runs, before any catalog is
-       read, and the same contract is the App API's and MCP's; the served shapes are said already; an API's words are
+    /* Each with why it stays text. A command input's rule messages are parsed when defineCommand runs, before any
+       catalog is read (its label and help take msg() and are said where it is served); the served shapes are said already; an API's words are
        its OpenAPI document's, one per App, not a reader's; a composer's template `text` and a timeline row's `text` name a column. */
     const STRING_ONLY = new Set([
       'app.d.ts TimelineComposer.text',
@@ -409,18 +409,8 @@ export default definePage({ label: { message: 'ticket.plural' }, description: { 
       'app.d.ts DraftApiConfig.description',
       'app.d.ts ApiConfig.label',
       'app.d.ts ApiConfig.description',
-      'command.d.ts FieldBase.label',
-      'command.d.ts FieldBase.help',
       'model.d.ts AppCommandChoice.label',
       'model.d.ts AppCommandChoice.help',
-      'command.d.ts CommandGroupField.label',
-      'command.d.ts CommandGroupField.description',
-      'command.d.ts CommandLinesField.label',
-      'command.d.ts CommandLinesField.description',
-      'command.d.ts CommandFilesField.label',
-      'command.d.ts CommandFilesField.help',
-      'command.d.ts CommandSignatureField.label',
-      'command.d.ts CommandSignatureField.help',
       'model.d.ts CommandValueBase.label',
       'model.d.ts CommandValueBase.help',
       'model.d.ts AppCommandLines.label',

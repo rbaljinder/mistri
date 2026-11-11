@@ -19,10 +19,14 @@
  *   notice sent on a channel is queued here by the write that tells it, in
  *   that write's transaction (`queued`, with the consent and zone the record
  *   said), and decided and sent after it commits, as a command's message is.
- *   Version 2 keeps who made the write (`actor_kind`: an account, a service,
+ *   It keeps who made the write (`actor_kind`: an account, a service,
  *   a public visitor, or one who proved the address), which decides whether
  *   an email to an address a visitor typed may go, and an index by recipient
- *   that the email channel's caps count sent rows through.
+ *   that the email channel's caps count sent rows through. Version 2 adds
+ *   `words`: where the notice's title says a write's words (`{words.code}`),
+ *   `text` keeps them masked and `words` the said text, sealed
+ *   (noticeWordsSeal.ts), only while the message is held: a row that is sent,
+ *   suppressed or fails keeps none.
  *
  * Under the reserved runtime prefix, so no App lists, reads or writes it.
  * Provisioned explicitly (provisionStores in @mistriwork/mistri/maintenance, `only:
@@ -40,7 +44,7 @@ import { beforeCommit } from '@mistriwork/engine/adapters/postgresTransactionHan
 import { runtimeName, runtimeSchema, runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 
 const INTEGRATION_PREFIX = '__mistri_integration_';
-const INTEGRATION_VERSION = 1;
+const INTEGRATION_VERSION = 2;
 const t = Object.freeze({
   meta: `${INTEGRATION_PREFIX}meta`,
   secret: `${INTEGRATION_PREFIX}secret`,
@@ -132,7 +136,7 @@ const SQLITE = [
   consent INTEGER CHECK (consent IN (0, 1)),
   timezone TEXT,
   attempts INTEGER NOT NULL,
-  at INTEGER NOT NULL, ${ACTOR_KIND_SQLITE},
+  at INTEGER NOT NULL, ${ACTOR_KIND_SQLITE}, words TEXT,
   PRIMARY KEY (app, key)
 )`,
   `CREATE INDEX "${t.message}_due" ON "${t.message}" (app, state, due_at)`,
@@ -199,6 +203,7 @@ const POSTGRES = [
   attempts integer NOT NULL,
   at bigint NOT NULL,
   ${ACTOR_KIND_POSTGRES},
+  words text,
   PRIMARY KEY (app, key)
 )`,
   `CREATE INDEX "${t.message}_due" ON ${runtimeTable('postgres', t.message)} (app, state, due_at)`,
@@ -261,6 +266,9 @@ export interface MessageRow {
   readonly timezone?: string | null;
   /** A queued notice's: who made the write that queued it. */
   readonly actorKind?: ActorKind | null;
+  /** A held notice's said text, sealed, where its title says a write's words (`text` has them masked). The store keeps
+      it only while the row is held. */
+  readonly words?: string | null;
   readonly attempts: number;
   readonly at: number;
 }
@@ -276,6 +284,8 @@ export interface QueuedChannelNotice {
   readonly consent: boolean;
   readonly timezone: string | null;
   readonly actorKind: ActorKind;
+  /** The said text, sealed, where the title says a write's words: `text` has them masked. */
+  readonly words?: string;
   readonly at: number;
 }
 /** The reason a queued notice is held under until the sender has decided it (integrationChannels.ts). */
@@ -362,10 +372,13 @@ const messageOf = (row: Record<string, unknown>): MessageRow => ({
   consent: row.consent === null || row.consent === undefined ? null : num(row.consent) === 1,
   timezone: nullable(row.timezone),
   ...(row.actor_kind === null || row.actor_kind === undefined ? {} : { actorKind: String(row.actor_kind) as ActorKind }),
+  ...(row.words === null || row.words === undefined ? {} : { words: String(row.words) }),
   attempts: num(row.attempts),
   at: num(row.at),
 });
 const clip = (value: string | null, most: number) => (value === null ? null : value.slice(0, most));
+/* A notice's sealed words outlive nothing but the wait: once a row is sent, suppressed or failed it keeps none. */
+const heldWords = (row: MessageRow) => (row.state === 'held' ? (row.words ?? null) : null);
 
 /* ---------- SQLite ---------- */
 
@@ -562,10 +575,10 @@ function openSqliteIntegrationStore(existingPath: string): IntegrationStore {
     async putMessage(row) {
       write(() => {
         db.prepare(
-          `INSERT INTO "${t.message}" (app, key, tenant, channel, recipient, text, state, reason, provider_id, due_at, attempts, at, consent, timezone)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO "${t.message}" (app, key, tenant, channel, recipient, text, state, reason, provider_id, due_at, attempts, at, consent, timezone, words)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (app, key) DO UPDATE SET state = excluded.state, reason = excluded.reason, provider_id = excluded.provider_id,
-             due_at = excluded.due_at, attempts = excluded.attempts, at = excluded.at`,
+             due_at = excluded.due_at, attempts = excluded.attempts, at = excluded.at, words = excluded.words`,
         ).run(
           row.app,
           row.key,
@@ -581,6 +594,7 @@ function openSqliteIntegrationStore(existingPath: string): IntegrationStore {
           row.at,
           row.consent === undefined || row.consent === null ? null : Number(row.consent),
           row.timezone ?? null,
+          heldWords(row),
         );
         db.prepare(
           `DELETE FROM "${t.message}" WHERE rowid IN (SELECT rowid FROM "${t.message}" WHERE at < ? AND state <> 'held' LIMIT 100)`,
@@ -799,10 +813,10 @@ async function openPostgresIntegrationStore(url: string): Promise<IntegrationSto
     async putMessage(row) {
       await query(
         `WITH old AS (DELETE FROM ${table(t.message)} WHERE ctid IN (SELECT ctid FROM ${table(t.message)} WHERE at < $13 AND state <> 'held' LIMIT 100))
-         INSERT INTO ${table(t.message)} (app, key, tenant, channel, recipient, text, state, reason, provider_id, due_at, attempts, at, consent, timezone)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $14, $15)
+         INSERT INTO ${table(t.message)} (app, key, tenant, channel, recipient, text, state, reason, provider_id, due_at, attempts, at, consent, timezone, words)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $14, $15, $16)
          ON CONFLICT (app, key) DO UPDATE SET state = excluded.state, reason = excluded.reason, provider_id = excluded.provider_id,
-           due_at = excluded.due_at, attempts = excluded.attempts, at = excluded.at`,
+           due_at = excluded.due_at, attempts = excluded.attempts, at = excluded.at, words = excluded.words`,
         [
           row.app,
           row.key,
@@ -819,6 +833,7 @@ async function openPostgresIntegrationStore(url: string): Promise<IntegrationSto
           row.at - KEEP_MS,
           row.consent === undefined || row.consent === null ? null : Number(row.consent),
           row.timezone ?? null,
+          heldWords(row),
         ],
       );
     },
@@ -858,6 +873,30 @@ async function openPostgresIntegrationStore(url: string): Promise<IntegrationSto
   });
 }
 
+/* ---------- upgrades ---------- */
+
+/** Version 1 to 2, as statements for the store upgrade (storeLayouts.ts): a message gains `words`, every row kept with
+    none. SQLite keeps the CREATE text and the attestation compares it, and ADD COLUMN writes it as version 2 lays it out. */
+export function sqliteIntegrationsUpgradeFrom1(): readonly string[] {
+  return [
+    `ALTER TABLE "${t.message}" ADD COLUMN words TEXT`,
+    `DROP TABLE "${t.meta}"`,
+    SQLITE_META,
+    `INSERT INTO "${t.meta}" (singleton, version) VALUES (1, 2)`,
+  ];
+}
+
+/** The same on PostgreSQL. */
+export function postgresIntegrationsUpgradeFrom1(): readonly string[] {
+  const meta = runtimeTable('postgres', t.meta);
+  return [
+    `ALTER TABLE ${runtimeTable('postgres', t.message)} ADD COLUMN words text`,
+    `ALTER TABLE ${meta} DROP CONSTRAINT ${runtimeName('postgres', t.meta)}_version_check`,
+    `UPDATE ${meta} SET version = 2`,
+    `ALTER TABLE ${meta} ADD CONSTRAINT ${runtimeName('postgres', t.meta)}_version_check CHECK (version = 2)`,
+  ];
+}
+
 /* ---------- a notice told via a channel, queued in its write's transaction ---------- */
 
 const queuedValues = (row: QueuedChannelNotice): Array<string | number | null> => [
@@ -873,22 +912,23 @@ const queuedValues = (row: QueuedChannelNotice): Array<string | number | null> =
   row.consent ? 1 : 0,
   row.timezone?.slice(0, 64) ?? null,
   row.actorKind,
+  row.words ?? null,
   row.at,
 ];
 
 /** Queue a notice on the write's own SQLite handle: it commits or rolls back with the write. */
 export function queueSqliteChannelNotice(db: DatabaseSync, row: QueuedChannelNotice): void {
   db.prepare(
-    `INSERT INTO "${t.message}" (app, key, tenant, channel, recipient, text, state, reason, due_at, consent, timezone, actor_kind, attempts, at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?) ON CONFLICT (app, key) DO NOTHING`,
+    `INSERT INTO "${t.message}" (app, key, tenant, channel, recipient, text, state, reason, due_at, consent, timezone, actor_kind, words, attempts, at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?) ON CONFLICT (app, key) DO NOTHING`,
   ).run(...queuedValues(row));
 }
 
 /** The same on the write's PostgreSQL client. */
 export async function queuePostgresChannelNotice(client: PgQuery, row: QueuedChannelNotice): Promise<void> {
   const queued = {
-    text: `INSERT INTO ${runtimeTable('postgres', t.message)} (app, key, tenant, channel, recipient, text, state, reason, due_at, consent, timezone, actor_kind, attempts, at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, $13) ON CONFLICT (app, key) DO NOTHING`,
+    text: `INSERT INTO ${runtimeTable('postgres', t.message)} (app, key, tenant, channel, recipient, text, state, reason, due_at, consent, timezone, actor_kind, words, attempts, at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 0, $14) ON CONFLICT (app, key) DO NOTHING`,
     values: queuedValues(row),
   };
   // Nothing reads the answer: on a writer that pipelines it leaves with the COMMIT (beforeCommit).

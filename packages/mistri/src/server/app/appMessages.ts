@@ -14,9 +14,14 @@
  * was, in that locale's order; a notify title keeps the reference, and is
  * said per recipient after the write (inbox.ts).
  *
+ * A variant is a folder of the same catalogs, `messages/<variant>/<locale>.ts`,
+ * that says some keys differently for the tenants whose profile names it
+ * (`ui.catalog: 'tenant.<column>'`): it rewords, it never adds a key.
+ *
  * ICU MessageFormat (intl-messageformat) is imported only by an App that has
  * catalogs: never on --mcp, never by the CLI's start (test/cli-startup.test.ts).
  */
+import type { Dirent } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -30,6 +35,8 @@ type Element = MessageAst[number];
 
 /** A catalog file's name: its locale, then the module suffix. */
 const CATALOG_FILE = /^([a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)\.(ts|mts|mjs|js)$/;
+/** A variant's folder under messages/: the value a tenant's `ui.catalog` column holds. */
+const VARIANT_NAME = /^[a-z][a-z0-9-]{0,63}$/;
 /** Literal, argument, number, date, time, select, plural, pound, tag (the parser's element types). */
 const LITERAL = 0;
 const ARGUMENT = 1;
@@ -46,6 +53,8 @@ export interface AppCatalogs {
   readonly locales: Readonly<Record<string, Readonly<Record<string, string>>>>;
   /** Each locale's file, from the App directory: `messages/es.ts`. */
   readonly files: Readonly<Record<string, string>>;
+  /** Each variant's entries, by folder then tag (`messages/formal/es.ts`): only keys the source has. */
+  readonly variants: Readonly<Record<string, Readonly<Record<string, Readonly<Record<string, string>>>>>>;
   /** Advisories the load does not refuse: a translation's key the source lacks (`message-unused`). */
   readonly advisories: readonly string[];
   /** The formatter class, imported for this App. */
@@ -55,13 +64,19 @@ export interface AppCatalogs {
 /** A tenant's words over the App's (`ui.messages: fromRecord`): key → locale → text, already checked. */
 export type MessageOverrides = ReadonlyMap<string, ReadonlyMap<string, string>>;
 
-/** The catalog files an App directory holds, by name; none without a messages/ folder. */
+/** The catalog files an App directory holds, by name — a variant's as `formal/es.ts`; none without a messages/ folder. */
 export async function catalogFiles(dir: string): Promise<string[]> {
+  let entries: Dirent[];
   try {
-    return (await readdir(join(dir, 'messages'))).filter((file) => CATALOG_FILE.test(file)).sort();
+    entries = await readdir(join(dir, 'messages'), { withFileTypes: true });
   } catch {
     return [];
   }
+  const files = entries.filter((entry) => entry.isFile() && CATALOG_FILE.test(entry.name)).map((entry) => entry.name);
+  for (const entry of entries)
+    if (entry.isDirectory() && VARIANT_NAME.test(entry.name))
+      for (const file of await readdir(join(dir, 'messages', entry.name))) if (CATALOG_FILE.test(file)) files.push(`${entry.name}/${file}`);
+  return files.sort();
 }
 
 const plain = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -94,8 +109,8 @@ function simple(ast: MessageAst): boolean {
  * imported in one worker. Throws naming the file and the fix:
  * `[message-syntax]` for a file that is not a catalog or a text ICU cannot
  * parse, `[message-missing]` for catalogs without the source,
- * `[message-placeholder]` for a translation reading an argument its source
- * does not.
+ * `[message-placeholder]` for a translation or a variant reading an argument
+ * its source does not.
  */
 export async function readCatalogs(
   dir: string,
@@ -113,9 +128,12 @@ export async function readCatalogs(
   const locales: Record<string, Record<string, string>> = {};
   const named: Record<string, string> = {};
   const parsed: Record<string, Record<string, MessageAst>> = {};
+  const variants: Record<string, Record<string, Record<string, string>>> = {};
   for (const [i, file] of files.entries()) {
     const at = `messages/${file}`;
-    const tag = CATALOG_FILE.exec(file)![1];
+    const slash = file.indexOf('/');
+    const variant = slash < 0 ? undefined : file.slice(0, slash);
+    const tag = CATALOG_FILE.exec(file.slice(slash + 1))![1];
     const catalog = modules[i];
     if (!plain(catalog) || catalog.kind !== 'messages' || typeof catalog.locale !== 'string' || !plain(catalog.entries))
       throw new Error(
@@ -123,16 +141,18 @@ export async function readCatalogs(
       );
     if (catalog.locale !== tag)
       throw new Error(
-        `[message-syntax] ${at} says defineMessages('${catalog.locale}'); a catalog's file is named for its locale: messages/${catalog.locale}.ts.`,
+        `[message-syntax] ${at} says defineMessages('${catalog.locale}'); a catalog's file is named for its locale: messages/${variant ? `${variant}/` : ''}${catalog.locale}.ts.`,
       );
-    if (Object.hasOwn(locales, tag)) throw new Error(`[message-syntax] messages/ has two catalogs for "${tag}"; keep one.`);
+    const held = variant === undefined ? locales : (variants[variant] ??= {});
+    if (Object.hasOwn(held, tag))
+      throw new Error(`[message-syntax] messages/${variant ? `${variant}/` : ''} has two catalogs for "${tag}"; keep one.`);
     const entries: Record<string, string> = Object.create(null);
-    parsed[tag] = Object.create(null);
+    const asts: Record<string, MessageAst> = Object.create(null);
     for (const [key, text] of Object.entries(catalog.entries)) {
       if (!MESSAGE_KEY.test(key) || typeof text !== 'string' || !text.trim())
         throw new Error(`[message-syntax] ${at}: "${key}" is not a key like "lead.title" with text.`);
       try {
-        parsed[tag][key] = new Format(text, tag).getAst();
+        asts[key] = new Format(text, tag).getAst();
       } catch (error) {
         throw new Error(
           `[message-syntax] ${at}: "${key}" is not ICU MessageFormat (${(error as Error).message}): ${JSON.stringify(text)}.`,
@@ -140,8 +160,9 @@ export async function readCatalogs(
       }
       entries[key] = text;
     }
-    locales[tag] = Object.freeze(entries);
-    named[tag] = at;
+    held[tag] = Object.freeze(entries);
+    parsed[variant === undefined ? tag : `${variant}/${tag}`] = asts;
+    if (variant === undefined) named[tag] = at;
   }
   const source = Object.hasOwn(locales, sourceLocale)
     ? sourceLocale
@@ -169,7 +190,36 @@ export async function readCatalogs(
         );
     }
   }
-  return Object.freeze({ source, locales: Object.freeze(locales), files: Object.freeze(named), advisories, Format });
+  /* A variant rewords the App's keys in the App's languages: a key the source lacks is said nowhere, and a language
+     the App has no catalog for would never be chosen for a reader. */
+  for (const [variant, tags] of Object.entries(variants))
+    for (const [tag, entries] of Object.entries(tags)) {
+      const at = `messages/${variant}/${tag}.ts`;
+      if (!Object.hasOwn(locales, tag))
+        throw new Error(`[message-missing] ${at} has no messages/${tag}.ts beside it; a variant rewords a language the App has.`);
+      for (const key of Object.keys(entries)) {
+        const original = parsed[source][key];
+        if (!original) {
+          advisories.push(`[message-unused] ${at}: "${key}" is not in ${named[source]}, so nothing says it.`);
+          continue;
+        }
+        const allowed = messageArgs(original);
+        const extra = [...messageArgs(parsed[`${variant}/${tag}`][key])].filter((name) => !allowed.has(name));
+        if (extra.length)
+          throw new Error(
+            `[message-placeholder] ${at}: "${key}" reads {${extra.join('}, {')}}, which ${named[source]}'s text does not; a variant says the source's arguments.`,
+          );
+      }
+    }
+  for (const tags of Object.values(variants)) Object.freeze(tags);
+  return Object.freeze({
+    source,
+    locales: Object.freeze(locales),
+    variants: Object.freeze(variants),
+    files: Object.freeze(named),
+    advisories,
+    Format,
+  });
 }
 
 /**
@@ -184,9 +234,14 @@ export class MessageSayer {
     /** The reader's resolved tag: `es-MX`. Words come from the nearest catalog; figures from the tag itself. */
     readonly locale: string,
     readonly overrides?: MessageOverrides,
+    /** The tenant's variant folder (`ui.catalog`), where the App has it. */
+    readonly variant?: string,
   ) {}
 
-  /** Where a key's text comes from, nearest first: the tenant's row for the locale, then its language, then the catalogs. */
+  /**
+   * Where a key's text comes from, nearest first: the tenant's row for the locale, then its language; the variant's
+   * catalog for them, then the App's; then the variant's source, then the App's.
+   */
   private found(key: string): { text: string; locale: string } | undefined {
     const tried = [this.locale, languageOf(this.locale)];
     const tenant = this.overrides?.get(key);
@@ -194,11 +249,20 @@ export class MessageSayer {
       const text = tenant?.get(tag);
       if (text !== undefined) return { text, locale: tag };
     }
-    const { locales, source } = this.catalogs;
-    for (const tag of [...tried, source]) {
-      const text = Object.hasOwn(locales, tag) ? locales[tag][key] : undefined;
-      if (text !== undefined) return { text, locale: tag };
-    }
+    const { locales, source, variants } = this.catalogs;
+    const variant = this.variant !== undefined && Object.hasOwn(variants, this.variant) ? variants[this.variant] : undefined;
+    const from = (catalogs: typeof locales | undefined, tag: string) =>
+      catalogs && Object.hasOwn(catalogs, tag) ? catalogs[tag][key] : undefined;
+    for (const [catalogs, tags] of [
+      [variant, tried],
+      [locales, tried],
+      [variant, [source]],
+      [locales, [source]],
+    ] as const)
+      for (const tag of tags) {
+        const text = from(catalogs, tag);
+        if (text !== undefined) return { text, locale: tag };
+      }
     return undefined;
   }
 
@@ -307,17 +371,20 @@ export function componentMessages(
   app: { id: string },
   locale: string | undefined,
   overrides?: { stamp: string; words: MessageOverrides },
+  /** The tenant's variant (`ui.catalog`); one the App has no folder for says the App's words. */
+  variant?: string,
 ): Readonly<Record<string, MessageAst>> | undefined {
   const localizer = localizerOf(app);
   if (!localizer) return undefined;
   const { catalogs } = localizer;
   const tag = locale ?? catalogs.source;
-  const key = JSON.stringify([tag, overrides?.words.size ? overrides.stamp : null]);
+  const kind = variant !== undefined && Object.hasOwn(catalogs.variants, variant) ? variant : undefined;
+  const key = JSON.stringify([tag, kind ?? null, overrides?.words.size ? overrides.stamp : null]);
   let byReader = saidCatalogs.get(localizer);
   if (!byReader) saidCatalogs.set(localizer, (byReader = new Map()));
   let said = byReader.get(key);
   if (!said) {
-    const sayer = new MessageSayer(catalogs, tag, overrides?.words);
+    const sayer = new MessageSayer(catalogs, tag, overrides?.words, kind);
     said = Object.freeze(Object.fromEntries(Object.keys(catalogs.locales[catalogs.source]).map((name) => [name, sayer.ast(name)])));
     if (byReader.size >= 32) byReader.delete(byReader.keys().next().value!);
     byReader.set(key, said);
@@ -533,10 +600,14 @@ export function messageArgProblems(
 /**
  * The advice a load does not refuse: `[message-untranslated]`, how many of
  * the source's keys each translation leaves to the source's words, and
- * `[message-unused]`, a key nothing names (or a translation's key the source
- * lacks).
+ * `[message-unused]`, a key no msg() and no component's `useMessage` names (or a
+ * translation's key the source lacks).
  */
-export function messageAdvisories(raw: unknown, catalogs: AppCatalogs): string[] {
+export function messageAdvisories(
+  raw: unknown,
+  catalogs: AppCatalogs,
+  componentKeys: ReadonlySet<string> | undefined = new Set(),
+): string[] {
   const out = [...catalogs.advisories];
   const keys = Object.keys(catalogs.locales[catalogs.source]);
   for (const [tag, entries] of Object.entries(catalogs.locales)) {
@@ -547,7 +618,10 @@ export function messageAdvisories(raw: unknown, catalogs: AppCatalogs): string[]
         `[message-untranslated] ${catalogs.files[tag]} translates ${keys.length - missing.length} of ${keys.length} messages; ${missing.length} say ${catalogs.files[catalogs.source]}'s words (${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ', …' : ''}).`,
       );
   }
-  const named = new Set(messageRefsIn(raw).map(({ ref }) => ref.message));
+  /* A key a custom component says (`useMessage`) is named too, and where its sources cannot be read, none is said to be
+     unused: advice to remove a key a component needs is what leaves its text missing in the browser. */
+  if (!componentKeys) return out;
+  const named = new Set([...messageRefsIn(raw).map(({ ref }) => ref.message), ...componentKeys]);
   for (const key of keys)
     if (!named.has(key))
       out.push(`[message-unused] ${catalogs.files[catalogs.source]}: "${key}" is named by no msg(); name it or remove it.`);

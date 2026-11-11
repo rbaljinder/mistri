@@ -177,6 +177,35 @@ test('checked leaves never manufacture local references, reachability, ordering 
   );
 });
 
+test("a menu's when rides on a group, a { label, to } and the view it names, and is a condition", () => {
+  const app = parseAppConfig(
+    raw([
+      {
+        id: 'group',
+        label: 'Group',
+        when: 'tenant.boarding = true',
+        children: [{ label: 'Work', to: 'work', when: ' tenant.plan = pro ' }, link],
+      },
+    ]),
+    'fixture',
+  );
+  assert.deepEqual(app.nav[0], {
+    group: 'group',
+    label: 'Group',
+    when: 'tenant.boarding = true',
+    children: [{ view: 'work', label: 'Work', when: 'tenant.plan = pro' }, link],
+  });
+  for (const when of ['', '  ', 3, true])
+    assert.throws(() => parseAppConfig(raw([{ id: 'group', label: 'Group', when, children: ['work'] }]), 'fixture'), /"when"/);
+  const group = ajv.getSchema('app.schema.json#/$defs/navGroup')!;
+  assert.equal(
+    group({ id: 'group', label: 'Group', when: 'tenant.boarding = true', children: ['work'] }),
+    true,
+    JSON.stringify(group.errors),
+  );
+  assert.equal(group({ id: 'group', label: 'Group', when: ' ', children: ['work'] }), false);
+});
+
 test('root targets are source-realm neutral; nested links follow their source group, not target intent', () => {
   const definition = parseAppConfig(
     {

@@ -22,9 +22,10 @@ export type {
  * (`validate`, and `handle`).
  */
 interface FieldBase {
-  /** The field's label; omitted, it is read from the key: `applicant_email` is "Applicant email". */
-  label?: string;
-  help?: string;
+  /** The field's label; omitted, it is read from the key: `applicant_email` is "Applicant email". A `msg()` is said in
+      the reader's language, and in the App's own to the App API and MCP. */
+  label?: string | AppMessageRef;
+  help?: string | AppMessageRef;
   /** A field is required unless it says `optional: true`; an optional field left empty is absent. */
   optional?: boolean;
   /** What the field starts as; see CommandFieldDefault. An `initial()` value for the field stands over it. */
@@ -202,11 +203,17 @@ export interface CommandRichTextField extends FieldBase {
     are in the order of `labelColumn` unless `sort` names a column of `from` and a direction. `label` is the field's own title. */
 export interface CommandChoiceField extends FieldBase {
   type: 'choice';
-  options?: readonly AppCommandChoice[];
+  options?: readonly CommandChoiceOption[];
   from?: string;
   by?: string;
   labelColumn?: string;
   sort?: CommandChoiceSort;
+}
+/** An option as `defineCommand` writes it: AppCommandChoice, whose words and icon may each be a `msg()`. */
+export interface CommandChoiceOption extends Omit<AppCommandChoice, 'label' | 'icon' | 'help'> {
+  label: string | AppMessageRef;
+  icon?: string | AppMessageRef;
+  help?: string | AppMessageRef;
 }
 /** The order a choice read from a table is offered in. */
 export interface CommandChoiceSort {
@@ -217,7 +224,7 @@ export interface CommandChoiceSort {
     `exclusive` option (`'none'`) is chosen alone. Drawn as checks for a few and a select with checks past six. */
 export interface CommandChoicesField extends FieldBase {
   type: 'choices';
-  options?: readonly AppCommandChoice[];
+  options?: readonly CommandChoiceOption[];
   from?: string;
   by?: string;
   labelColumn?: string;
@@ -267,9 +274,9 @@ export interface CommandDefinedField extends FieldBase {
  */
 export interface CommandGroupField {
   type: 'group';
-  label?: string;
+  label?: string | AppMessageRef;
   /** A line under the group's label, as a form's groups say theirs. */
-  description?: string;
+  description?: string | AppMessageRef;
   fields: CommandInput;
   /** At most 50 rows; at most 10 on a public form. */
   repeat?: { min?: number; max: number };
@@ -291,9 +298,9 @@ export interface CommandGroupField {
  */
 export interface CommandLinesField {
   type: 'lines';
-  label?: string;
+  label?: string | AppMessageRef;
   /** A line under the label, as a group's says it. */
-  description?: string;
+  description?: string | AppMessageRef;
   /** The resource of the rows; the command declares it among its `write`. */
   from: string;
   /** The row's columns asked, in order: one to 12. */
@@ -330,8 +337,8 @@ export interface CommandFile {
  */
 export interface CommandFilesField {
   type: 'files';
-  label?: string;
-  help?: string;
+  label?: string | AppMessageRef;
+  help?: string | AppMessageRef;
   /** Required unless it says `optional: true`; an optional field left empty is absent. */
   optional?: boolean;
   /** As FieldBase's `when`: asked only while it holds. */
@@ -353,8 +360,8 @@ export interface CommandFilesField {
  */
 export interface CommandSignatureField {
   type: 'signature';
-  label?: string;
-  help?: string;
+  label?: string | AppMessageRef;
+  help?: string | AppMessageRef;
   optional?: boolean;
   when?: string;
   /** The file resource the picture lands in. */

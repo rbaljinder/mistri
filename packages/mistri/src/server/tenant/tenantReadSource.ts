@@ -116,12 +116,20 @@ import {
   ownAddressResolution,
   type TenantAddresses,
   type TenantAddressesLookup,
-  type TenantZoneLookup,
-  captureZoneLookup,
-  heldZone,
+  type TenantProfileLookup,
+  captureProfileLookup,
+  activeTenantsZone,
+  activeWithColumn,
+  heldProfile,
+  type ActiveTenant,
+  type ActiveTenantsQuery,
+  tenantProfileColumnQuery,
+  tenantProfileQuery,
   type TenantIntakeLookup,
   type TenantIntakeResolution,
 } from './tenantIntakeModel.js';
+import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
+import type { AppDef } from '../../shared/app.js';
 import { PLATFORM_TENANT_ID } from './tenantPlatform.js';
 import { readSqliteActiveTenants, readSqliteIntakeAnchor } from './tenantStore.js';
 import { dueTimersPlan, type DueTimer, type DueTimersQuery } from './tenantDueTimers.js';
@@ -255,17 +263,19 @@ export interface TenantReadSource {
    * address's shape that resolves back to this tenant alone. For the tenant's
    * own lease to show; admits nobody. */
   readTenantAddresses(lookup: TenantAddressesLookup): Promise<TenantAddresses>;
-  /** One text column of a tenant's profile row, for the person's zone where `ui.timezone: { column }` names the
-   * profile: the platform's own read of the row (as the names and addresses are), no App resource read and no grant.
-   * That column and nothing else of the row; admits nobody. */
-  readTenantZone(lookup: TenantZoneLookup): Promise<string | undefined>;
+  /** The columns of a tenant's profile row its members read (`auth.tenancy.shared`), by column, once per request:
+   * the platform's own read of the row (as the names and addresses are), no App resource read and no grant. Those
+   * columns and nothing else of the row; a missing row reads as every column null. Admits nobody. */
+  readTenantProfile(lookup: TenantProfileLookup): Promise<Readonly<Record<string, TenantValue>>>;
   /** A job attempt's anchors, in one snapshot: the named tenant's row and
    * `@platform`, each its version while active, else null. With no tenant
    * (the platform's own time job), `@platform` alone. Admits nobody. */
   readServiceAnchors(tenantId: string | null): Promise<Readonly<{ tenantVersion: string | null; platformVersion: string | null }>>;
   /** The tenants active now, by id: whom a job at times per tenant runs for.
-   * Each attempt is admitted again on its own tenant's row. Admits nobody. */
-  readActiveTenants(): Promise<readonly string[]>;
+   * Given `zone`, a shared profile column, each also carries that column off
+   * its row (null where it has none): the zone its slots keep. Each attempt is
+   * admitted again on its own tenant's row. Admits nobody. */
+  readActiveTenants(options?: ActiveTenantsQuery): Promise<readonly ActiveTenant[]>;
   /** A machine timer's due records across the active tenants, a page at a
    * time, each with the tenant its owner column names, read off the row here
    * (tenantDueTimers.ts). A plan, as readActiveTenants is: each run is
@@ -859,10 +869,10 @@ export function openSqliteTenantReadSource(
           return Object.freeze(found) as TenantAddresses;
         }),
       // Always a tenant's: `@platform` fails the selector.
-      readTenantZone: (lookup: TenantZoneLookup) =>
+      readTenantProfile: (lookup: TenantProfileLookup) =>
         invoke(lookup, (query) => {
-          const { tenantId, column } = captureZoneLookup(owned, query);
-          return heldZone(db.prepare(tenantAddressQuery(owned, column)).all(tenantId) as Record<string, unknown>[]);
+          const { tenantId, columns } = captureProfileLookup(owned, query);
+          return heldProfile(owned, columns, db.prepare(tenantProfileQuery(owned, columns)).all(tenantId) as Record<string, unknown>[]);
         }),
       readServiceAnchors: (tenantId: string | null) =>
         invoke(tenantId, (id) =>
@@ -871,7 +881,14 @@ export function openSqliteTenantReadSource(
             platformVersion: readSqliteIntakeAnchor(db, owner, PLATFORM_TENANT_ID),
           }),
         ),
-      readActiveTenants: () => invoke(null, () => readSqliteActiveTenants(db, owner)),
+      readActiveTenants: (options?: ActiveTenantsQuery) =>
+        invoke(options ?? {}, (query): readonly ActiveTenant[] => {
+          const zone = activeTenantsZone(owned, query);
+          const active = readSqliteActiveTenants(db, owner);
+          if (zone === undefined) return Object.freeze(active.map((id) => Object.freeze({ id })));
+          const rows = db.prepare(tenantProfileColumnQuery(owned, zone)).all() as Record<string, unknown>[];
+          return activeWithColumn(owned, zone, active, rows);
+        }),
       readSandboxClocks: () =>
         invoke(null, async () => {
           const rows = sqliteSandboxSession(db);
@@ -1997,10 +2014,10 @@ export async function openPostgresTenantReadSource(
           }
           return Object.freeze(found) as TenantAddresses;
         }),
-      readTenantZone: (lookup: TenantZoneLookup) =>
+      readTenantProfile: (lookup: TenantProfileLookup) =>
         invoke(lookup, async (query, lease) => {
-          const { tenantId, column } = captureZoneLookup(owned, query);
-          return heldZone((await lease.client.query(tenantAddressQuery(owned, column), [tenantId])).rows);
+          const { tenantId, columns } = captureProfileLookup(owned, query);
+          return heldProfile(owned, columns, (await lease.client.query(tenantProfileQuery(owned, columns), [tenantId])).rows);
         }),
       readServiceAnchors: (tenantId: string | null) =>
         invoke(tenantId, async (id, lease) =>
@@ -2009,7 +2026,14 @@ export async function openPostgresTenantReadSource(
             platformVersion: await readPostgresIntakeAnchor(lease.client, owner, PLATFORM_TENANT_ID),
           }),
         ),
-      readActiveTenants: () => invoke(null, (_none, lease) => readPostgresActiveTenants(lease.client, owner)),
+      readActiveTenants: (options?: ActiveTenantsQuery) =>
+        invoke(options ?? {}, async (query, lease): Promise<readonly ActiveTenant[]> => {
+          const zone = activeTenantsZone(owned, query);
+          const active = await readPostgresActiveTenants(lease.client, owner);
+          if (zone === undefined) return Object.freeze(active.map((id) => Object.freeze({ id })));
+          const rows = (await lease.client.query(tenantProfileColumnQuery(owned, zone))).rows as Record<string, unknown>[];
+          return activeWithColumn(owned, zone, active, rows);
+        }),
       readSandboxClocks: () =>
         invoke(null, async (_none, lease) => {
           const rows = postgresSandboxSession(lease.client);
@@ -2070,4 +2094,17 @@ export async function openPostgresTenantReadSource(
     }
     return denyTenant();
   }
+}
+
+const NO_PROFILE: Readonly<Record<string, TenantValue>> = Object.freeze({});
+/** The tenant's shared profile columns (`auth.tenancy.shared`) for one request, read before its row scope is asked for:
+ * nothing is read where the App shares none, nor in the platform realm, where no one tenant is meant. A failed read
+ * fails the request; a row scope never guesses a value. */
+export function readSharedProfile(
+  source: Pick<TenantReadSource, 'readTenantProfile'>,
+  app: AppDef,
+  tenantId: string,
+): Promise<Readonly<Record<string, TenantValue>>> {
+  const columns = app.auth?.tenancy?.shared;
+  return columns?.length && tenantId !== PLATFORM_TENANT_ID ? source.readTenantProfile({ tenantId, columns }) : Promise.resolve(NO_PROFILE);
 }

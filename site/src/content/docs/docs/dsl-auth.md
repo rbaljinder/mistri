@@ -144,3 +144,4 @@ tenant App refuses one at startup ([Tenant Apps](/docs/tenant-apps/)).
 | `auth.tenancy.platform.me.column` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `auth.tenancy.platform.me.from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `auth.tenancy.profile` | string | Stable | The platform-owned resource with one row per tenant. A tenant's row may reference it, only through its ownership column. |
+| `auth.tenancy.shared` | array | Stable | Columns of the tenant's profile row its members read, scalar ones only: tenant.country in a query, a row scope, a when or a handler's tenant. Read once per request; a tenant with no row reads nulls. Needs profile. |

@@ -1610,6 +1610,34 @@ const scalar = (v: unknown): v is string | number | boolean | null => v === null
 const ACTION_ID = /^[A-Za-z][A-Za-z0-9_]*$/;
 
 /**
+ * A command action's `given` ([action-given]): the command's own inputs its page supplies, left undrawn in its form.
+ * A required one with no default can be filled by nothing but the page, so the action must be one only a page opens:
+ * off the record's bar (`header: false`) and never offered for a selection, whose form no page fills.
+ */
+function parseGiven(a: Record<string, unknown>, command: ReturnType<typeof parseCommandReference>, here: string): string[] | undefined {
+  if (a.given === undefined) return undefined;
+  if (!Array.isArray(a.given) || !a.given.length || a.given.some((name) => typeof name !== 'string' || !name))
+    throw new Error(`${here} has a "given" that is not a list of the command's input names, like given: ['step'] [action-given].`);
+  const given = a.given as string[];
+  const twice = given.find((name, index) => given.indexOf(name) !== index);
+  if (twice) throw new Error(`${here} gives "${twice}" twice [action-given].`);
+  for (const name of given) {
+    const field = command.input.find((candidate) => candidate.name === name);
+    if (!field)
+      throw new Error(
+        `${here} gives "${name}", which is not one of the command's inputs (${command.input.map((f) => f.name).join(', ') || 'it has none'}) [action-given].`,
+      );
+    if (field.required !== true || ('default' in field && field.default !== undefined)) continue;
+    if (a.header !== false || a.bulk === true)
+      throw new Error(
+        `${here} gives "${name}", which the command requires and starts with no default, so only a page can fill it: ` +
+          `say header: false${a.bulk === true ? ' and leave bulk out' : ''}, so the record's bar and a selection never open a form that cannot be sent [action-given].`,
+      );
+  }
+  return given;
+}
+
+/**
  * A resource's actions, keyed by id in the order they are drawn. The id is
  * the action's name everywhere else — a header's `primary`, a queue's
  * selector, a role's grant — so renaming a button's words renames nothing.
@@ -1629,7 +1657,7 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
     const a = entry as Record<string, unknown>;
     allowKeys(
       a,
-      ['label', 'command', 'set', 'when', 'confirm', 'bulk', 'header', 'reason', 'inputs', ...(derived ? ['labels', 'move'] : [])],
+      ['label', 'command', 'set', 'when', 'confirm', 'bulk', 'header', 'reason', 'inputs', 'given', ...(derived ? ['labels', 'move'] : [])],
       here,
       { enter: LATER.T8 },
     );
@@ -1662,6 +1690,7 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
           `${here} names an input component for "${unknown}", which is not one of the command's inputs (${command.input.map((field) => field.name).join(', ') || 'it has none'}).`,
         );
       }
+      const given = parseGiven(a, command, here);
       /* A machine's verb is offered from the states that leave (the machine wrote that condition). Any other button is
          offered where the command is, narrowed by the action's own `when` where it has one: the command's says where it
          may run, the action's where this button is worth drawing (a tenant's verbs that do not apply to it). */
@@ -1685,9 +1714,12 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
         ...(a.confirm === true ? { confirm: true } : {}),
         ...header,
         ...(inputs ? { inputs } : {}),
+        ...(given ? { given } : {}),
       };
     }
     if (a.inputs !== undefined) throw new Error(`${here} names "inputs", which only a command's form draws; a fixed update asks nothing.`);
+    if (a.given !== undefined)
+      throw new Error(`${here} names "given", which only a command's form leaves undrawn; a fixed update asks nothing.`);
     if (!a.set || typeof a.set !== 'object' || Array.isArray(a.set) || !Object.keys(a.set).length) {
       throw new Error(
         `${here} has no "set" — the column → value it writes, like { "status": "working" } — and no "command": write it with action(label, { set }) or action(label, { command }).`,

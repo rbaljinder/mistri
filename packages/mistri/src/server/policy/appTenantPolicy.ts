@@ -13,6 +13,7 @@ import type { TenantMembershipEvidence } from '../tenant/tenantMembership.js';
 import type { PlatformMembershipEvidence } from '../tenant/tenantPlatform.js';
 import type { TenantPublicEvidence } from '../tenant/tenantPublicRead.js';
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
+import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import { MAX_COMMAND_IDS } from '../commands/commandLimits.js';
 import { ASSISTANT_RETENTION_DAYS } from '../../shared/appAssistant.js';
 import type { CommandResultReference } from '../commands/scopedBusinessCommandAccess.js';
@@ -26,6 +27,13 @@ export type TenantPolicyOwnership<S extends Record<string, string>> = {
     | { readonly kind: 'global'; readonly access: 'read-only' }
     | { readonly kind: 'platform' };
 };
+/** What a tenant App's `resolveRows` is given beside the member. */
+export interface TenantRowsContext {
+  /** The tenant's profile columns the App shares with its members (`auth.tenancy.shared`), read once for this request:
+   * `{ country: 'IN' }`. Empty where it shares none; a tenant with no profile row has every column null. */
+  readonly tenant: Readonly<Record<string, TenantValue>>;
+}
+
 /** Trusted server-only declaration. Account/session verification and membership
  * storage are supplied by the host, never overridable by policy callbacks. */
 export interface AppTenantPolicy<S extends Record<string, string> = Record<string, string>> {
@@ -34,7 +42,7 @@ export interface AppTenantPolicy<S extends Record<string, string> = Record<strin
   readonly storeId: string;
   readonly ownership: TenantPolicyOwnership<S>;
   readonly resolveMembershipRows: (principal: TenantMembershipEvidence) => RowScope | Promise<RowScope>;
-  readonly resolveRows: (principal: TenantMembershipEvidence) => RowScope | Promise<RowScope>;
+  readonly resolveRows: (principal: TenantMembershipEvidence, context: TenantRowsContext) => RowScope | Promise<RowScope>;
   /** The platform realm's rows (`auth.tenancy.platform`): every table a platform
    * context reads, across tenants. A table it does not name is denied. Present
    * exactly when the App declares the platform realm; required once any

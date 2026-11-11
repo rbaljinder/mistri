@@ -39,7 +39,20 @@ export interface QueryPerson {
    * or why they cannot be read.
    */
   sets?: Readonly<Record<string, MeSet>>;
+  /**
+   * `tenant.<column>`: the reader's tenant profile row, by column, for the columns
+   * the App shares with its members (`auth.tenancy.shared`), read once for this
+   * request. A missing row reads as every column null. Absent where no tenant is
+   * meant, and `tenant.<column>` is then refused rather than read as text.
+   */
+  tenant?: Readonly<Record<string, TenantValue>>;
 }
+
+/** One column of a tenant's profile row, as a member may read it. */
+export type TenantValue = string | number | boolean | null;
+
+/** `tenant.<column>`, unquoted, on the right of a comparison or in a value list. */
+const TENANT_VALUE = /^tenant\.([A-Za-z_]\w*)$/;
 
 /** Nobody in particular (`anyone` above): what a check that runs before any request reads `me` as. */
 export const ANYONE: QueryPerson = Object.freeze({ email: null, anyone: true });
@@ -58,6 +71,34 @@ export interface CompileContext {
   me?: QueryPerson | null;
   /** A machine's states by column, where the catalog does not carry them (a parse with no schema). */
   states?: Readonly<Record<string, MachineStates>>;
+}
+
+/**
+ * What `tenant.<column>` stands for beside one column: the profile's value, read for
+ * this request. Undefined where the word is not one (quoted, or the table has a
+ * `tenant` column of its own, whose path it then is). A null value matches no row, as
+ * SQL's `= NULL` would, but said as conditions every engine speaks; in a list it is
+ * left out. A check before any request (ANYONE) reads it as the word.
+ */
+export function tenantOperand(
+  ctx: CompileContext,
+  column: ColumnMeta | undefined,
+  word: string,
+  quoted: boolean,
+): { value?: string | number | boolean; none?: true; error?: string } | undefined {
+  const match = quoted ? null : TENANT_VALUE.exec(word);
+  if (!match || ctx.table?.columns.some((c) => c.name === 'tenant')) return undefined;
+  const me = ctx.me;
+  if (me?.anyone && me.tenant === undefined) return { value: word };
+  if (!me?.tenant)
+    return { error: `${word} is the reader's tenant profile, and no tenant is meant here. Quote it ("${word}") to mean the text.` };
+  if (!Object.hasOwn(me.tenant, match[1]))
+    return { error: `${word} is not a column the App shares with its members: list "${match[1]}" in auth.tenancy.shared.` };
+  const value = me.tenant[match[1]];
+  if (value === null) return { none: true };
+  if (typeof value === 'boolean' && column && columnKind(column.type) !== 'boolean')
+    return { error: `${word} is a flag, and ${column.name} is not.` };
+  return { value };
 }
 
 const COMPARISON_OPS = new Set<Op>(['=', '!=', '<', '<=', '>', '>=']);

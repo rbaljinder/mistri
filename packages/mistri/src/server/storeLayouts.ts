@@ -277,9 +277,26 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'inbox',
     title: 'notices, mail and opt-outs',
     tables: { prefix: '__mistri_inbox_' },
-    current: both(1),
+    current: both(2),
     read: marked(everywhere('__mistri_inbox_meta')),
-    upgrades: {},
+    upgrades: {
+      sqlite: {
+        1: {
+          says: "adds the mail queue's sealed words: a notice whose title says a write's words keeps them sealed until it is sent",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/inbox/sqliteInbox.js')).sqliteInboxUpgradeFrom1()) await db.run(sql);
+          },
+        },
+      },
+      postgres: {
+        1: {
+          says: "adds the mail queue's sealed words: a notice whose title says a write's words keeps them sealed until it is sent",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/inbox/postgresInbox.js')).postgresInboxUpgradeFrom1()) await db.run(sql);
+          },
+        },
+      },
+    },
     provision: {
       sqlite: async (path) => (await import('../adapters/inbox/sqliteInbox.js')).provisionSqliteInbox(path),
       postgres: async (url) => (await import('../adapters/inbox/postgresInbox.js')).provisionPostgresInbox(url),
@@ -425,9 +442,28 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'integrations',
     title: "integrations' secrets, calls, webhook deliveries and channel messages",
     tables: { prefix: '__mistri_integration_' },
-    current: both(1),
+    current: both(2),
     read: marked({ sqlite: { table: '__mistri_integration_meta' }, postgres: { table: '__mistri_integration_meta' } }),
-    upgrades: {},
+    upgrades: {
+      sqlite: {
+        1: {
+          says: "adds a channel message's sealed words: a notice whose text says a write's words keeps them sealed until it is sent",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/integrations/integrationStore.js')).sqliteIntegrationsUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+      },
+      postgres: {
+        1: {
+          says: "adds a channel message's sealed words: a notice whose text says a write's words keeps them sealed until it is sent",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/integrations/integrationStore.js')).postgresIntegrationsUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+      },
+    },
     provision: {
       sqlite: async (path) => (await import('../adapters/integrations/integrationStore.js')).provisionSqliteIntegrations(path),
       postgres: async (url) => (await import('../adapters/integrations/integrationStore.js')).provisionPostgresIntegrations(url),

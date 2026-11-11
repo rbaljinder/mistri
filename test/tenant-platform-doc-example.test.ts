@@ -479,9 +479,12 @@ test('mistri dev serves the tenant App and does not restart over its own state',
   assert.doesNotMatch(output, /restart with the new configuration/);
 });
 
-// ui.timezone may name the platform-owned profile; a column the profile does not have is refused by check, naming it.
-test('mistri check refuses a ui.timezone column the platform-owned profile does not have', { timeout: 60000 }, async (t) => {
+// A tenant's zone is a shared profile column, named `tenant.<column>`: the profile's own name for it is refused, saying the form.
+test('mistri check refuses ui.timezone naming the profile table, and says to name it tenant.timezone', { timeout: 60000 }, async (t) => {
   const result = await check(fixture(t, COMMANDS(), { ui: { timezone: { column: 'customer.timezone', default: 'UTC' } } }));
   assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.match(result.stderr + result.stdout, /"ui.timezone" reads "customer.timezone", and "customer" has no column "timezone"/);
+  assert.match(
+    result.stderr + result.stdout,
+    /"ui.timezone" reads "customer.timezone", the tenant profile: name it "tenant.timezone" and list "timezone" in auth.tenancy.shared \[tenant-shared-column\]/,
+  );
 });

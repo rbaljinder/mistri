@@ -241,6 +241,12 @@ redrive is never forgotten, however old.
 | --- | --- | --- | --- |
 | `nav[].to` | string | Stable |  One of `&lt;appTarget>`. Used in `examples/apps/lintel/dashboards.ts`. |
 
+## `nav[].when`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `nav[].when` | string | Stable | In a tenant App, the tenant's shared profile the menu offers the entry for: tenant.&lt;column> of a flag or a vocabulary column in auth.tenancy.shared, as 'tenant.boarding = true'. Arrangement only: grants alone decide who may open anything. Used in `examples/apps/tick/app.ts`. |
+
 ## `retention`
 
 | Key | Type | Status | What it does |

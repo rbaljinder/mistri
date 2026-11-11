@@ -74,7 +74,7 @@ import { JOB_SERVICE_ID, type JobDeployment } from './jobLoader.js';
 import { JobDeclarationError, type CapturedJob, type CapturedJobModule, type MachineTimer } from './jobModule.js';
 import { createJobRunner, type JobAuthorizationRequest, type JobAuthorizer } from './jobRunner.js';
 import { defineJobHandler, JobRejected, type AnyJobDefinition } from './jobs.js';
-import { latestSlot, nextSlot, type JobEvery } from './jobSchedule.js';
+import { inZone, latestSlot, nextSlot, type JobEvery } from './jobSchedule.js';
 import { createHash } from 'node:crypto';
 import { attemptEnded, enqueueManualRun, findRun, jobToRun } from './jobManualRun.js';
 import { AppAccessDenied } from '../app/appAccess.js';
@@ -113,6 +113,9 @@ interface JobHostOptions {
   /** A tenant App's active tenants, asked at each slot of a job at times with
    * `realm: 'tenant'`: each gets its own run, carrying its tenant. */
   readonly tenants?: () => Promise<readonly string[]>;
+  /** The same tenants, each with its zone (the App's own where its profile names none it knows): whom a job on
+   * each tenant's zone (`timezone: 'tenant'`) runs for, grouped by zone. */
+  readonly tenantZones?: () => Promise<readonly Readonly<{ id: string; zone: string }>[]>;
   /** The new history rows of the resources whose flows a runner of this module runs (workflows/flowTail.ts). */
   readonly flowChanges?: FlowChangeReader;
   /** The records a machine timer is due on: in its state since at or before `cutoff` (appMachine.ts `after`).
@@ -176,6 +179,9 @@ export interface JobHost {
 const MAX_IDLE_MS = 30_000;
 /** The longest an idle host that hears every write waits: a fallback, for a notification lost with its connection. */
 const QUIET_MS = 5 * 60_000;
+/* How long a job on each tenant's zone goes without reading the tenants' zones again: a tenant that joins or moves
+   zone is seen within it. */
+const ZONE_READ_MS = 15 * 60_000;
 
 /** The wait before the next cycle: none after work, else double the last idle wait, from `idleMs` up to `maxIdleMs`. */
 export function nextIdleWait(last: number | undefined, worked: boolean, idleMs: number, maxIdleMs: number): number {
@@ -625,21 +631,104 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
     }
     return enqueued;
   }
+  type TimedJob = (typeof timed)[number];
+  /** One slot's runs, each carrying its tenant (none: once, on the platform); throws when the store is unavailable. */
+  async function enqueueRuns(job: TimedJob, slot: number, runs: readonly (string | undefined)[], at: number): Promise<boolean> {
+    let enqueued = false;
+    for (const tenantId of runs) {
+      const key = tenantId === undefined ? everySlotKey(slot) : everyTenantSlotKey(slot, tenantId);
+      await jobs.enqueue(
+        {
+          job: job.id,
+          version: job.version,
+          idempotencyKey: key,
+          input: { key: {}, input: job.input ?? {} },
+          runAt: slot,
+          provenance: {
+            appId: deployment.appId,
+            actorId: `service:${job.runAs}`,
+            ...(tenantId === undefined ? {} : { tenantId }),
+            correlationId: key,
+            causationId: key,
+          },
+        },
+        at,
+      );
+      enqueued = true;
+    }
+    return enqueued;
+  }
+  /** Whether the store holds no run of the job: undefined when it cannot say now. */
+  async function freshJob(job: TimedJob): Promise<boolean | undefined> {
+    try {
+      return (await jobs.inspect({ job: job.id }, 1)).length === 0;
+    } catch {
+      return undefined;
+    }
+  }
+  /* A job on each tenant's zone (`timezone: 'tenant'`): the tenants grouped by the zone their profile names, and
+     each zone's slots its own (`job@zone`), so six in the morning comes to each tenant at its own six. Under the job's
+     own key, the gate: the soonest zone's next slot, or ZONE_READ_MS on, so a tenant that joins or moves is seen. On
+     the process's first pass each zone catches up its latest missed slot (none on a fresh store); a zone first seen
+     later starts at its next slot. A tenant that moves zone keeps its new zone's slots from then: that day it may run
+     twice, or not at all. */
+  async function enqueueZoneSlots(job: TimedJob, at: number): Promise<boolean> {
+    const gate = slotDue.get(job.id);
+    if ((gate !== undefined && at < gate) || !options.tenantZones) return false;
+    let tenants: readonly Readonly<{ id: string; zone: string }>[];
+    try {
+      tenants = await options.tenantZones();
+    } catch {
+      return false; // Unavailable now: the next cycle asks again.
+    }
+    const first = gate === undefined;
+    const fresh = first ? await freshJob(job) : false;
+    if (fresh === undefined) return false;
+    const zones = new Map<string, string[]>();
+    for (const tenant of tenants) zones.set(tenant.zone, [...(zones.get(tenant.zone) ?? []), tenant.id]);
+    for (const key of [...slotDue.keys()])
+      if (key.startsWith(`${job.id}@`) && !zones.has(key.slice(job.id.length + 1))) slotDue.delete(key);
+    let enqueued = false,
+      failed = false,
+      soonest = at + ZONE_READ_MS;
+    for (const [zone, ids] of zones) {
+      const every = inZone(job.every!, zone),
+        key = `${job.id}@${zone}`;
+      let next = slotDue.get(key);
+      if (next === undefined && (fresh || !first)) slotDue.set(key, (next = nextSlot(every, at)));
+      else if (next === undefined || at >= next) {
+        const slot = latestSlot(every, at);
+        if (slot !== undefined && (next === undefined || slot >= next)) {
+          try {
+            enqueued = (await enqueueRuns(job, slot, ids, at)) || enqueued;
+          } catch {
+            failed = true; // Unavailable now: the next cycle asks again, under the same keys.
+            continue;
+          }
+        }
+        slotDue.set(key, (next = nextSlot(every, slot ?? at)));
+      }
+      if (next !== undefined) soonest = Math.min(soonest, next);
+    }
+    if (failed) slotDue.delete(job.id);
+    else slotDue.set(job.id, soonest);
+    return enqueued;
+  }
   async function enqueueSlots(): Promise<boolean> {
     let enqueued = await sweepTimers();
     for (const job of timed) {
       const at = now();
+      if (job.every!.tenantZone) {
+        enqueued = (await enqueueZoneSlots(job, at)) || enqueued;
+        continue;
+      }
       const next = slotDue.get(job.id);
       if (next !== undefined && at < next) continue;
       /* A store that holds no run of the job has missed nothing (OP9): its first slot is the next one, so a first
          start never runs a job by surprise. One that holds a run catches up the latest slot it missed. */
       if (next === undefined) {
-        let fresh: boolean;
-        try {
-          fresh = (await jobs.inspect({ job: job.id }, 1)).length === 0;
-        } catch {
-          continue; // Unavailable now: the next cycle asks again.
-        }
+        const fresh = await freshJob(job);
+        if (fresh === undefined) continue; // Unavailable now: the next cycle asks again.
         if (fresh) {
           slotDue.set(job.id, nextSlot(job.every!, at));
           continue;
@@ -660,27 +749,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
           }
         }
         try {
-          for (const tenantId of runs) {
-            const key = tenantId === undefined ? everySlotKey(slot) : everyTenantSlotKey(slot, tenantId);
-            await jobs.enqueue(
-              {
-                job: job.id,
-                version: job.version,
-                idempotencyKey: key,
-                input: { key: {}, input: job.input ?? {} },
-                runAt: slot,
-                provenance: {
-                  appId: deployment.appId,
-                  actorId: `service:${job.runAs}`,
-                  ...(tenantId === undefined ? {} : { tenantId }),
-                  correlationId: key,
-                  causationId: key,
-                },
-              },
-              at,
-            );
-            enqueued = true;
-          }
+          enqueued = (await enqueueRuns(job, slot, runs, at)) || enqueued;
         } catch {
           continue;
         } // Unavailable now: the next cycle asks again, under the same keys.

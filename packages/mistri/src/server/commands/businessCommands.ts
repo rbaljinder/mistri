@@ -12,16 +12,19 @@
  * App's grants.
  */
 import { parseComputed } from '@mistriwork/engine/shared/computedParse.js';
+import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import type { WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import {
   commandFieldsDeep,
+  saidIconProblem,
   type AppCommandField,
   type CommandInitialOf,
   type CommandInput,
   type CommandInputOf,
 } from '../../shared/command.js';
 import { parseCommandInput } from '../../shared/commandInputParse.js';
+import { isMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import { COMMAND_FIELD_PATH } from '@mistriwork/engine/shared/commandFieldPath.js';
 import { CommandInputRefusal, readCommandInput } from '../../shared/commandInput.js';
 import {
@@ -46,7 +49,15 @@ import type { SavedDraftContext } from '../forms/savedForms.js';
 import type { WhenGuard } from '../../../schema/query.js';
 import type { CommandFile } from '../../../schema/command.js';
 import { cutSensitive } from '../forms/formKey.js';
-import { brokenRules, draftHolds, draftNames, readsRecord, type BoundCondition, type DraftRule } from '../../shared/commandDraft.js';
+import {
+  brokenRules,
+  draftHolds,
+  draftNames,
+  readsRecord,
+  readsTarget,
+  type BoundCondition,
+  type DraftRule,
+} from '../../shared/commandDraft.js';
 import { readRichTextInput } from '../richText.js';
 import { NO_OUTPUT, describeShape, preserveShapeDescriptor, type Shape } from './commandShapes.js';
 import { captureCommandFlagGate, type CommandFlagGate, type CommandFlags } from './commandFlags.js';
@@ -176,6 +187,14 @@ export interface BusinessCommandContext extends CommandContextBase {
    * must not be able to tell them apart.
    */
   readonly intake?: 'tenant' | 'platform';
+  /**
+   * A tenant App's signed-in command, and a public submission that landed with a tenant (`intake: 'tenant'`): the
+   * columns of this tenant's profile row the App shares with its members (`auth.tenancy.shared`), read once for the
+   * request — `tenant.country`, `tenant.plan` — and null where the row has none. A public handler picks its reply's
+   * `message` by it among the literals its output declares. Absent off a tenant App, on the platform realm and in the
+   * platform's triage, where no one tenant is meant.
+   */
+  readonly tenant?: Readonly<Record<string, TenantValue>>;
   /** A placed public form's admitted destination, captured by its source owner.
    * This is not native tenant membership and carries no binding or anchors. */
   readonly placement?: Readonly<{ tenantId: string }>;
@@ -272,6 +291,7 @@ type CommandHandlerContext<
   readonly tx: WriteTransaction;
   readonly nextNumber: CommandNextNumber;
   readonly intake?: BusinessCommandContext['intake'];
+  readonly tenant?: BusinessCommandContext['tenant'];
   readonly placement?: BusinessCommandContext['placement'];
   readonly draft?: SavedDraftContext;
   readonly files?: BusinessCommandContext['files'];
@@ -362,6 +382,11 @@ export interface CommandDefinition<
       takes the note. Needs a table in `write` beyond the target. Left out, every command is refused up front, as
       before. */
   readonly appendOnly?: true;
+  /** The tables a refusal may still write: `refused: { writes: ['attempt'] }`. A handler that refuses with
+      `refuse(code, { keep: async (db) => db.attempt.insert(…) })` has its own writes rolled back, then `keep` runs
+      in a fresh transaction under the same person, and the refusal is answered once that commits: a failed sign-in
+      attempt counted, a lockout set. Only these tables, only insert and update. */
+  readonly refused?: { readonly writes: readonly (Target | Write[number])[] };
   /** Tables of `read` the handler reads under the command's own authority, not the caller's:
       `elevate: { read: ['rate_card'] }`. A role granted the command need not read them; what the handler
       reads there reaches the caller only as the declared output. `mistri check --design` lists each one. */
@@ -553,6 +578,8 @@ export interface BusinessCommand<Input, Output, I extends CommandInput = Command
   readonly support?: 'refuse';
   /** See CommandDefinition.appendOnly: the stale check waits for a write to the target, if the command makes one. */
   readonly appendOnly?: true;
+  /** See CommandDefinition.refused: the tables a refusal's `keep` writes, each in the write footprint. */
+  readonly refused?: { readonly writes: readonly string[] };
   readonly handle: (context: BusinessCommandContext, input: Input) => Output | Promise<Output>;
 }
 
@@ -630,6 +657,7 @@ const definitionKeys = new Set([
   'read',
   'write',
   'appendOnly',
+  'refused',
   'elevate',
   'input',
   'when',
@@ -702,13 +730,14 @@ function rulesOption(value: unknown, fields: readonly AppCommandField[]): readon
         if (rule[key] === undefined) continue;
         if (typeof rule[key] !== 'string' || !rule[key].trim() || rule[key].length > 1000)
           fail(`${at} has a ${key} that is not a condition.`);
-        let names: { fields: string[]; record: string[] };
+        let names: { fields: string[]; record: string[]; tenant: string[] };
         try {
           names = draftNames(rule[key] as string, `${at}, ${key}`);
         } catch (error) {
           return fail((error as Error).message);
         }
         if (names.record.length) fail(`${at} reads record.${names.record[0]}; a rule reads the input alone.`);
+        if (names.tenant.length) fail(`${at} reads tenant.${names.tenant[0]}; a rule reads the input alone.`);
         if (key === 'must' && !names.fields.length) fail(`${at} names no field in must; a rule is about the input.`);
         for (const name of names.fields) {
           const field = top.get(name);
@@ -786,6 +815,20 @@ function logicalName(value: unknown, where: string): string {
     return fail(`${where} must be an unqualified, non-reserved identifier.`);
   }
   return value;
+}
+
+/** What a refusal may still write (`refused: { writes }`): tables the command already writes, never more, so a
+    `keep` reaches nothing the command's own footprint does not. */
+function refusedOption(value: unknown, write: readonly string[]): { readonly writes: readonly string[] } {
+  const where = 'Command refused';
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some((key) => key !== 'writes'))
+    return fail(`${where} is { writes: [...] }, the tables a refusal's keep may write [refused-writes].`);
+  const writes = resources((value as { writes?: unknown }).writes, `${where} writes`);
+  if (!writes.length) return fail(`${where} writes names at least one table [refused-writes].`);
+  const outside = writes.find((table) => !write.includes(table));
+  if (outside !== undefined)
+    return fail(`${where} writes "${outside}", which the command does not write: add it to write first [refused-writes].`);
+  return Object.freeze({ writes: Object.freeze([...writes]) });
 }
 
 /** A list of distinct source-local tables; absent is none. */
@@ -998,6 +1041,7 @@ export function defineCommand<
   if (Object.hasOwn(value, 'appendOnly') && value.appendOnly !== true) fail('Command appendOnly must be true when present.');
   if (value.appendOnly === true && (!names || write.length < 2))
     fail('Command appendOnly adds rows beside the record it acts on; it needs a target record and a table in write beyond it.');
+  const refused = Object.hasOwn(value, 'refused') ? refusedOption(value.refused, write) : undefined;
   // One word, and only the withholding one: there is no "allow" to write,
   // because allowed is what a command already is under support.
   if (Object.hasOwn(value, 'support') && value.support !== 'refuse') fail('Command support must be "refuse" when present.');
@@ -1077,7 +1121,7 @@ export function defineCommand<
       field.type !== 'lines' &&
       field.when !== undefined &&
       (value.targets ?? 'one') !== 'one' &&
-      readsRecord(field.when)
+      readsTarget(field.when)
     )
       fail(
         `Command input "${path}" is asked "when: ${field.when}", which reads the record (record.<column>), and only a command that targets one record has one.`,
@@ -1118,6 +1162,9 @@ export function defineCommand<
       // form's command prepares over no record); a batch has neither, a public form no reader.
       if ('record' in start && (value.targets ?? 'one') !== 'one')
         fail(`Command input "${path}" starts from the record, which only a command that targets one record reads.`);
+      // A tenant's column is read with its profile, where a member prepares any form; a selection's command does not prepare.
+      if ('tenant' in start && value.targets === 'many')
+        fail(`Command input "${path}" starts from the tenant's profile, which a selection's command does not prepare.`);
       if ('auto' in start && start.auto === 'me' && value.targets === 'many')
         fail(`Command input "${path}" starts from the reader, which a selection's command does not prepare.`);
       continue;
@@ -1220,6 +1267,7 @@ export function defineCommand<
     ...(value.snapshot === true ? { snapshot: true as const } : {}),
     ...(value.support === undefined ? {} : { support: value.support as 'refuse' }),
     ...(value.appendOnly === true ? { appendOnly: true as const } : {}),
+    ...(refused === undefined ? {} : { refused }),
     handle: value.handle as BusinessCommand<Input, Output, I>['handle'],
   } as BusinessCommand<Input, Output, I>;
   // Derived, so not spread: a registered command spreads back into defineCommand as its definition.
@@ -1443,15 +1491,56 @@ export function withCommandVersions(
       result[id] = command;
       continue;
     }
-    if (!registered.has(command)) fail(`Command "${id}" must be created with defineCommand.`);
-    const copy = { ...command, version };
-    Object.defineProperty(copy, 'fields', { value: command.fields, enumerable: false });
-    Object.freeze(copy);
-    registered.add(copy);
-    for (const map of [commandEvents, commandSlots, commandEffects, commandRules] as WeakMap<object, unknown>[]) {
-      if (map.has(command)) map.set(copy, map.get(command));
+    result[id] = recommand(id, command, { version });
+  }
+  return Object.freeze(result);
+}
+
+/* A registered command again, with these changes: registered as the original was, with its captured rules, events,
+   effects and restatements carried over. */
+function recommand(
+  id: string,
+  command: AnyBusinessCommand,
+  changes: { version?: number; fields?: readonly AppCommandField[] },
+): AnyBusinessCommand {
+  if (!registered.has(command)) fail(`Command "${id}" must be created with defineCommand.`);
+  const copy = { ...command, ...(changes.version === undefined ? {} : { version: changes.version }) };
+  Object.defineProperty(copy, 'fields', { value: changes.fields ?? command.fields, enumerable: false });
+  Object.freeze(copy);
+  registered.add(copy);
+  for (const map of [commandEvents, commandSlots, commandEffects, commandRules, restatements] as WeakMap<object, unknown>[]) {
+    if (map.has(command)) map.set(copy, map.get(command));
+  }
+  return copy as AnyBusinessCommand;
+}
+
+/* Whether a `msg()` stands anywhere in a command's input: a label, a help, an option's words or icon. */
+const holdsMessageRef = (value: unknown): boolean =>
+  isMessageRef(value) || (value !== null && typeof value === 'object' && Object.values(value).some(holdsMessageRef));
+
+/**
+ * Internal: the registry with each input's `msg()` said in the App's own words, by `say` (the loader's
+ * localizeDefinition over the source catalog, apps.ts). The handler's checks, the App API's description of an input
+ * and MCP read these; a reader's form is drawn from the catalog, built from the registry before this and said in the
+ * reader's language. A command whose input holds no `msg()` comes back as it is.
+ */
+export function withCommandWords(
+  registry: BusinessCommandRegistry,
+  say: (fields: readonly AppCommandField[], where: string) => readonly AppCommandField[],
+): BusinessCommandRegistry {
+  const entries = Object.entries(registry);
+  if (!entries.some(([, command]) => holdsMessageRef(command.fields))) return registry;
+  const result: Record<string, AnyBusinessCommand> = Object.create(null);
+  for (const [id, command] of entries) {
+    if (!holdsMessageRef(command.fields)) {
+      result[id] = command;
+      continue;
     }
-    result[id] = copy as AnyBusinessCommand;
+    const where = `command "${id}" input`;
+    const fields = say(command.fields, where);
+    const problem = saidIconProblem(fields, where);
+    if (problem) fail(problem);
+    result[id] = recommand(id, command, { fields: freezeDeep(fields) });
   }
   return Object.freeze(result);
 }

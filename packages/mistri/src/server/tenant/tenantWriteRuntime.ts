@@ -3,6 +3,7 @@ import { TransactionOperations, TransactionOutcomeUnknown, type WriteTransaction
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
 import type { AppDef } from '../../shared/app.js';
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
+import type { TenantRowsContext } from '../policy/appTenantPolicy.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { captureScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import { appActionGrants } from '../../shared/appAccess.js';
@@ -45,7 +46,7 @@ export interface TenantWriteRuntimeOptions<Request> {
   readonly maxLifetimeMs: number;
   readonly verifySession: (request: Request) => Identity | null | Promise<Identity | null>;
   readonly resolveMembershipRows: (principal: TenantMembershipEvidence) => RowScope | Promise<RowScope>;
-  readonly resolveRows: (principal: TenantMembershipEvidence) => RowScope | Promise<RowScope>;
+  readonly resolveRows: (principal: TenantMembershipEvidence, context: TenantRowsContext) => RowScope | Promise<RowScope>;
   /** Private historical-record policy, not ordinary owner-field write authority. */
   readonly authorizeDeletedRecord?: TenantDeletedRecordPolicy;
   readonly now?: () => number;
@@ -168,7 +169,14 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
               ? {
                   actions,
                   me: (reader) =>
-                    lookupTenantPerson(runtime.app, ownership.schema, scope.who(), peopleOwned ? principal.accountId : undefined, reader),
+                    lookupTenantPerson(
+                      runtime.app,
+                      ownership.schema,
+                      scope.who(),
+                      peopleOwned ? principal.accountId : undefined,
+                      reader,
+                      scope.tenant,
+                    ),
                 }
               : {}),
             ...(stamps?.rules.size ? { stamp: (request, reader) => stampUpdate(stamps, request, moment(reader)) } : {}),

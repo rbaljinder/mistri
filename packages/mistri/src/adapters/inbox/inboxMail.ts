@@ -32,6 +32,8 @@ export interface QueuedMail {
   title: string;
   uses: string[];
   actorName: string;
+  /** The said title, sealed (noticeWordsSeal.ts), where the title says a write's words: the inbox keeps them masked. */
+  words?: string;
 }
 
 export type MailOutcome =
@@ -112,7 +114,8 @@ export function inboxMailStore(
         const bound = Math.max(1, Math.min(100, Math.trunc(limit)));
         const due = await sql.all(
           `SELECT m.notice AS notice, m.attempts AS attempts, m.due_at AS due_at, n.app AS app, n.recipient AS recipient,
-          n.resource AS resource, n.key_json AS key_json, n.title AS title, n.uses_json AS uses_json, n.actor_name AS actor_name
+          n.resource AS resource, n.key_json AS key_json, n.title AS title, n.uses_json AS uses_json, n.actor_name AS actor_name,
+          m.words AS words
         FROM ${mail} m JOIN ${notice} n ON n.id = m.notice
         WHERE m.state = 'queued' AND m.due_at <= ? AND n.app = ? ORDER BY m.due_at, m.notice LIMIT ${bound}`,
           [now, app],
@@ -138,6 +141,7 @@ export function inboxMailStore(
             title: String(row.title),
             uses: uses(row.uses_json),
             actorName: String(row.actor_name ?? ''),
+            ...(row.words == null ? {} : { words: String(row.words) }),
           });
         }
         return claimed;
@@ -163,7 +167,8 @@ export function inboxMailStore(
             ...at,
           ]);
         } else
-          await sql.run(`UPDATE ${mail} SET state = 'failed', last_error = ? WHERE notice = ? AND due_at = ?`, [
+          // A mail that will not be sent no longer holds its words, sealed or not.
+          await sql.run(`UPDATE ${mail} SET state = 'failed', last_error = ?, words = NULL WHERE notice = ? AND due_at = ?`, [
             outcome.error.slice(0, ERROR_CHARS),
             ...at,
           ]);

@@ -18,7 +18,7 @@ import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/com
 import { JOB_TABLES } from '../packages/mistri/src/adapters/jobs/jobStoreSchema.js';
 import { everySlotKey } from '../packages/mistri/src/server/jobs/jobCommands.js';
 import { defineJob, defineJobs, JobDeclarationError } from '../packages/mistri/src/server/jobs/jobModule.js';
-import { latestSlot, nextSlot, parseEvery } from '../packages/mistri/src/server/jobs/jobSchedule.js';
+import { inZone, latestSlot, nextSlot, parseEvery } from '../packages/mistri/src/server/jobs/jobSchedule.js';
 import { provisionStores } from '../packages/mistri/src/server/maintenance.js';
 
 const at = (iso: string) => Date.parse(iso);
@@ -49,6 +49,18 @@ test("every reads cron on the timezone's wall clock, through daylight saving", (
   // The key a slot is enqueued under: the job store's pattern, the same in every process.
   assert.match(everySlotKey(at('2026-03-06T11:00:00Z')), /^every-\d{16}$/);
   assert.equal(everySlotKey(at('2026-03-06T11:00:00Z')), everySlotKey(at('2026-03-06T11:00:00Z')));
+});
+
+test("'tenant' is a job's zone alone: each tenant's, read on the zone inZone gives it", () => {
+  const each = parseEvery('0 6 * * *', 'tenant', true);
+  assert.equal(each.tenantZone, true);
+  // A decision's every, or any other reader's, still takes an IANA name only.
+  assert.throws(() => parseEvery('0 6 * * *', 'tenant'), /not an IANA time zone/);
+  const chicago = inZone(each, 'America/Chicago');
+  assert.equal(chicago.tenantZone, undefined);
+  assert.equal(chicago.timezone, 'America/Chicago');
+  assert.equal(iso(nextSlot(chicago, at('2026-01-05T00:00:00Z'))), '2026-01-05T12:00:00.000Z');
+  assert.equal(iso(nextSlot(inZone(each, 'Pacific/Kiritimati'), at('2026-01-05T00:00:00Z'))), '2026-01-05T16:00:00.000Z');
 });
 
 test('annual and leap-day schedules cross more than two months in both directions', () => {

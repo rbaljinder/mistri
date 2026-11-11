@@ -23,6 +23,14 @@ test('a tenant command reads the zone from the tenant settings row', async () =>
   assert.deepEqual(seen, [{ table: 'desk_setting', columns: ['timezone'], limit: 1, offset: 0 }]);
 });
 
+test('a tenant.<column> zone is the shared profile value the request read, with no read of the scope', async () => {
+  const seen: unknown[] = [];
+  const shared = { timezone: { column: 'tenant.timezone', default: 'America/New_York' } } as never;
+  assert.equal(await commandZone(shared, reading('Asia/Tokyo', seen), { timezone: 'Pacific/Kiritimati' }), 'Pacific/Kiritimati');
+  assert.equal(await commandZone(shared, reading('Asia/Tokyo', seen), { timezone: null }), undefined);
+  assert.deepEqual(seen, []);
+});
+
 test('no column form, no row, or an unreadable column leaves the App zone', async () => {
   assert.equal(await commandZone({ timezone: 'America/Chicago' } as never, reading('Asia/Tokyo')), undefined);
   assert.equal(await commandZone(undefined, reading('Asia/Tokyo')), undefined);

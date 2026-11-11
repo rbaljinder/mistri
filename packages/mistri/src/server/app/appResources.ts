@@ -293,6 +293,9 @@ function resourceBreakdown(breakdown: BreakdownDef, catalog: AppResourceCatalog)
           // A rail's counts under a tags filter read the link and tag tables as the list does (physicalView).
           ...(rest.tagged ? { tagged: physicalTags(rest.tagged, catalog.toPhysical) } : {}),
           ...(filter ? { filter: physicalAny(filter, catalog) } : {}),
+          // A `count when [any ticket]` asks about its child as the filter does: renamed, or on PostgreSQL the
+          // compiler finds no table by the App's name and refuses the whole batch the figure rode in.
+          ...(rest.measures ? { measures: rest.measures.map((m) => (m.where ? { ...m, where: physicalAny(m.where, catalog) } : m)) } : {}),
         },
         catalog,
       ),

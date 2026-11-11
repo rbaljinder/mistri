@@ -139,7 +139,7 @@ export default defineAppTenantPolicy({
 | `storeId`                                | text naming the tenant store                                                                                 | required                                    | 256 characters                                                                                                                       |
 | `ownership`                              | per table: `{ kind: 'tenant', column }`, `{ kind: 'global', access: 'read-only' }` or `{ kind: 'platform' }` | required                                    | 1 to 256 tables, at least one `'tenant'`                                                                                             |
 | `resolveMembershipRows`                  | `(member) => RowScope`                                                                                       | required                                    |                                                                                                                                      |
-| `resolveRows`                            | `(member) => RowScope`, for the roles a request acts under                                                   | required                                    |                                                                                                                                      |
+| `resolveRows`                            | `(member, { tenant }) => RowScope`, for the roles a request acts under                                       | required                                    |                                                                                                                                      |
 | `resolvePlatformRows`                    | `(member) => RowScope`                                                                                       | none                                        | required once a table is `'platform'`                                                                                                |
 | `authorizeDeletedRecord`                 | `(member, image) => boolean`                                                                                 | none: a member deletes no tenant row        |                                                                                                                                      |
 | `resultReferences`                       | per command id, `(result) => [{ table, key }]`                                                               | none                                        | one per command under `--commands`; 4096                                                                                             |
@@ -279,6 +279,36 @@ parent included; `mistri check` names one it is missing. That tenant must be
 active. Rows are written as a member's command writes them, the owner placed
 for it, and no other tenant's row is in reach. The receipt is the platform
 member's; every audit row names the tenant.
+
+### What members read
+
+A tenant's members hold no grant on the platform-owned profile, yet a setting on
+it (the country, the plan, the zone) often decides what they see. List those
+columns in `auth.tenancy.shared` and read them as `tenant.<column>`:
+
+```ts
+auth: { rows: 'tenant', tenancy: { profile: 'customer', shared: ['country', 'timezone'] } },
+views: { taxes: { type: 'list', table: 'tax_rate', query: 'tax_rate country = tenant.country' } },
+```
+
+The request reads the tenant's row once, and the same values reach a view's
+query, `resolveRows(member, { tenant })` and a command handler's `tenant`
+(`handle({ db, tenant })`); `ui.timezone: { column: 'tenant.timezone' }` counts
+the tenant's days in its own zone. A tenant without a row reads nulls, and
+`country = tenant.country` then matches nothing. At most 16 plain columns —
+text, a number, a flag or a date, never the key or a reference — and no other
+profile column becomes readable. The platform realm reads across tenants, so
+`tenant.` is refused there (`tenant-shared-platform`), and a public intake
+handler has no `tenant`. A table with its own `tenant` column keeps reading it.
+
+A menu entry or group can be offered by the same profile: `when` reads a
+shared flag or a column of a fixed vocabulary, and the menu leaves it out for
+the tenants it does not fit. A hidden menu entry is not access control: the room
+still opens at its address to whoever holds its grant.
+
+```ts
+nav: [navGroup('boarding', 'Boarding', ['kennels', 'stays'], { when: 'tenant.boarding = true' })],
+```
 
 ### Who `me` is
 

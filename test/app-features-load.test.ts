@@ -13,7 +13,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { appProblems, loadApp, mergeAppPages, reloadApp, watchApp, type AppHost } from '../packages/mistri/src/server/app/apps.js';
+import { appProblems, loadApp, mergeAppPages, reloadApp, type AppHost } from '../packages/mistri/src/server/app/apps.js';
+import { watchApp } from '../packages/mistri/src/server/app/appWatch.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { AUTHORITY_CHANGED, AUTHORITY_LOCK, authorityLockProblem } from '../packages/mistri/src/server/app/authorityLock.js';
 import { createApp } from './support/createApp.js';
