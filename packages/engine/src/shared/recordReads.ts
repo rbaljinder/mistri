@@ -617,6 +617,27 @@ export function recordPageReads(
         assertNever(section.kind, 'page section kind');
     }
   });
+  /* A strip of related tabs decides which tabs it has before one is opened (kit ListTabs, useStandings): the condition of a
+     list that has one, and the first page of a list that hides while empty, which is the answer to "has it rows?". They
+     are the reads the list asks itself when its tab is opened, so they are asked here too, once, and the strip finds
+     them waiting (as for a list alone). A closed tab is asked what it must decide on and no more. */
+  for (const run of runs) {
+    if (run.length < 2) continue;
+    for (const index of run) {
+      const section = page.sections[index];
+      if (section.hidden || drawn.has(index) || section.kind !== 'list') continue;
+      kind = 'related';
+      if (section.when) reads.push({ path: '/api/run', body: whenBody(base, key, section.when) });
+      const plan = planOf(index);
+      if (section.emptyMode !== 'hide' || !plan || plan.error || plan.empty) continue;
+      if (section.group && plan.groups) {
+        reads.push({ path: '/api/breakdown', body: groupsBody(plan.groups, 0), kind });
+        continue;
+      }
+      const listed = listView(names, section, plan, options.rows).view;
+      if (listed) view({ view: listed, offset: 0 });
+    }
+  }
   /* An inferred page's tabs say how many rows each holds, all of them in one read; a list alone says it in its head. */
   if (isInferredPage(page, names.app))
     for (const run of runs) {

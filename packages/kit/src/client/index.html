@@ -139,12 +139,14 @@
     <div id="startup-status" role="status"><div class="startup-skeleton" aria-hidden="true"><i class="st-band"></i><div class="st-page"><b class="st-title"></b><b class="st-line"></b><div class="st-figures"><b></b><b></b><b></b></div><b class="st-row"></b><b class="st-row"></b><b class="st-row"></b><b class="st-row"></b><b class="st-row"></b></div></div><p>Loading...</p><a href="" hidden>Reload</a></div>
     <!-- A pane the server drew (a public page, server/publicRender.ts) is the page without scripts too. -->
     <noscript><style>#startup-status { display: none !important; } #content[data-ssr] { visibility: visible !important; }</style>JavaScript is required to open this application.</noscript>
-    <!-- The first stop on the page, so a keyboard gets past the top bar and
-         the sidebar's list of tables in one press. app.js moves the focus
-         itself: following the fragment would be a navigation the router
-         hears. -->
-    <a class="skip-link" href="#content">Skip to content</a>
     <header class="topbar">
+      <!-- The first stop on the page, so a keyboard gets past the top bar and
+           the sidebar's list of tables in one press. app.js moves the focus
+           itself: following the fragment would be a navigation the router
+           hears. It is inside the banner, not before it: a link outside every
+           landmark is content a screen reader's landmark list skips (axe's
+           "region" rule). It is fixed, so it takes no room in the bar. -->
+      <a class="skip-link" href="#content">Skip to content</a>
       <button type="button" class="brand" id="home-button" title="Back to the schema (h)">
         <span class="brand-mark"></span>
         <span class="brand-name">tablewalk</span>

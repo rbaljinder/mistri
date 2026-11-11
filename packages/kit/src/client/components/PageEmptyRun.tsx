@@ -10,7 +10,9 @@
  * - a tab keeps at least one list: where a tab holds nothing but lists and they are all empty, they are said in a
  *   line rather than leaving the tab blank.
  *
- * Inside a `listTabs` strip an empty list is neither hidden nor collapsed: its tab shows it (PageSections.tsx).
+ * Inside a `listTabs` strip a list is a tab, and the tab follows the same answers (`useStandings`): a list whose `when` is
+ * not met has no tab, and an empty one that hides has none unless the reader may add to it. One that collapses keeps its
+ * tab, which says the list is empty (PageSections.tsx).
  */
 import { shellRoot } from '../shellHost.js';
 import { useContext, type ReactNode } from 'react';
@@ -31,7 +33,7 @@ interface RunItem {
 }
 
 /** What a list is, for deciding: waiting to know, with rows (or broken, which it says itself), or empty. */
-type Standing = 'wait' | 'rows' | 'empty' | 'gone';
+export type Standing = 'wait' | 'rows' | 'empty' | 'gone';
 
 /** The names said as a sentence's list: "charges, payments or notes". */
 function said(names: string[]): string {
@@ -40,6 +42,67 @@ function said(names: string[]): string {
   } catch {
     return names.join(', ');
   }
+}
+
+/**
+ * Where each list of a run stands: asked the question the list asks itself (the same query, so the answer is shared),
+ * and its `when` asked of the record. The run's items and their standing, by position.
+ */
+export function useStandings(
+  items: RunItem[],
+  plans: SectionPlan[],
+  base: TableMeta,
+  recordKey: Record<string, unknown>,
+  /** The lists whose rows are asked for: a strip of tabs fetches each when opened, so it asks only for the ones it must decide on. */
+  decide: (item: RunItem) => boolean = () => true,
+): Standing[] {
+  const api = usePageApi();
+  const context = useContext(PageRenderContext);
+  const planOf = (item: RunItem): SectionPlan => plans.find((p) => p.index === item.index) ?? { index: item.index };
+  const reads = items.map((item) => listRead(item.section, planOf(item)).view);
+  const asked = useQueries({
+    queries: items.map((item, i) => {
+      const plan = planOf(item);
+      const view = reads[i];
+      /* A grouped list is empty when it has no groups: it asks the groups it asks itself (PageRelated.tsx). */
+      if (item.section.group && plan.groups) {
+        const groups = plan.groups;
+        return {
+          queryKey: ['page-list', 'groups', groups, 0],
+          queryFn: () => api('/api/breakdown', groupsBody(groups, 0)),
+          enabled: !plan.empty && !plan.error && decide(item),
+          staleTime: 0,
+        };
+      }
+      return {
+        queryKey: ['page-list', view, 0],
+        queryFn: () => api('/api/view/run', { view: view!, offset: 0 }),
+        enabled: !plan.empty && !plan.error && Boolean(view) && decide(item),
+        staleTime: 0,
+      };
+    }),
+  });
+  const gates = useQueries({
+    queries: items.map((item) => ({
+      queryKey: ['when', base.id, recordKey, item.section.when ?? `none-${item.index}`],
+      queryFn: () => rootMatches(base, recordKey, item.section.when!, context.connection),
+      enabled: Boolean(item.section.when),
+      staleTime: 0,
+    })),
+  });
+  return items.map((_, i): Standing => {
+    const { section } = items[i];
+    const plan = planOf(items[i]);
+    if (section.when && gates[i].data !== true) return gates[i].isPending ? 'wait' : 'gone';
+    if (plan.error || !decide(items[i])) return 'rows';
+    if (plan.empty) return 'empty';
+    const grouped = Boolean(section.group && plan.groups);
+    if (!reads[i] && !grouped) return 'rows';
+    const got = asked[i].data;
+    if (asked[i].isPending) return 'wait';
+    if (grouped) return got && !('errors' in got) && got.rows.length === 0 ? 'empty' : 'rows';
+    return got && 'view' in got && got.rows.length === 0 ? 'empty' : 'rows';
+  });
 }
 
 export function EmptyRun({
@@ -60,54 +123,8 @@ export function EmptyRun({
   rescue: boolean;
 }) {
   useMessageLanguage();
-  const api = usePageApi();
   const context = useContext(PageRenderContext);
-  const planOf = (item: RunItem): SectionPlan => plans.find((p) => p.index === item.index) ?? { index: item.index };
-  const reads = items.map((item) => listRead(item.section, planOf(item)).view);
-  const asked = useQueries({
-    queries: items.map((item, i) => {
-      const plan = planOf(item);
-      const view = reads[i];
-      /* A grouped list is empty when it has no groups: it asks the groups it asks itself (PageRelated.tsx). */
-      if (item.section.group && plan.groups) {
-        const groups = plan.groups;
-        return {
-          queryKey: ['page-list', 'groups', groups, 0],
-          queryFn: () => api('/api/breakdown', groupsBody(groups, 0)),
-          enabled: !plan.empty && !plan.error,
-          staleTime: 0,
-        };
-      }
-      return {
-        queryKey: ['page-list', view, 0],
-        queryFn: () => api('/api/view/run', { view: view!, offset: 0 }),
-        enabled: !plan.empty && !plan.error && Boolean(view),
-        staleTime: 0,
-      };
-    }),
-  });
-  const gates = useQueries({
-    queries: items.map((item) => ({
-      queryKey: ['when', base.id, recordKey, item.section.when ?? `none-${item.index}`],
-      queryFn: () => rootMatches(base, recordKey, item.section.when!, context.connection),
-      enabled: Boolean(item.section.when),
-      staleTime: 0,
-    })),
-  });
-  const standing = (i: number): Standing => {
-    const { section } = items[i];
-    const plan = planOf(items[i]);
-    if (section.when && gates[i].data !== true) return gates[i].isPending ? 'wait' : 'gone';
-    if (plan.error) return 'rows';
-    if (plan.empty) return 'empty';
-    const grouped = Boolean(section.group && plan.groups);
-    if (!reads[i] && !grouped) return 'rows';
-    const got = asked[i].data;
-    if (asked[i].isPending) return 'wait';
-    if (grouped) return got && !('errors' in got) && got.rows.length === 0 ? 'empty' : 'rows';
-    return got && 'view' in got && got.rows.length === 0 ? 'empty' : 'rows';
-  };
-  const states = items.map((_, i) => standing(i));
+  const states = useStandings(items, plans, base, recordKey);
   /* Nothing here is drawn as a list: the run is all that stands in its tab, so it may not vanish. */
   const nothingElse = rescue && states.every((state) => state === 'empty' || state === 'gone') && states.includes('empty');
   const door = (item: RunItem) => relatedDoor(item.section, base, recordKey, { preview: context.preview, actions: context.actions }).door;

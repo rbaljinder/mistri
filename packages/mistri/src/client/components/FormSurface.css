@@ -6,7 +6,9 @@
    and the primary button. A public form is the whole page and nothing else
    of the shell; a signed-in form sits in the content pane beside the menu. */
 .form-page { width: min(40rem, 100%); margin: 0 auto; padding: var(--space-7) 20px 56px; display: grid; gap: var(--space-4h); }
-.form-page .eyebrow { margin: 0; font: 500 var(--text-xs) var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted); }
+/* The App's name over the heading, said as a person says it: a sentence-case line, not a capitalized tag. A theme sets it
+   by its `kicker` part (`case: 'upper'` is the old look); the `theme` layer's rule is above this one. */
+.form-page .eyebrow { margin: 0; font: 500 var(--text-sm)/1.4 var(--sans); color: var(--ink-muted); }
 .form-page h1, .form-page-done > h2 { margin: 0; font: var(--heading-weight, 600) calc(24px * var(--type-k)) var(--heading-font, var(--sans)); letter-spacing: var(--track-display, -0.015em); }
 .form-page-description { margin: 0 0 var(--space-4); color: var(--ink-muted); font-size: var(--text-md); line-height: 1.5; max-width: 70rem; }
 .form-page-steps { padding-top: var(--space-2h); }

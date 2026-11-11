@@ -277,3 +277,33 @@ test('runtime UX: dismissing search restores its launcher, and search offers no 
   await input.press('Escape');
   await expect(search).toBeFocused();
 });
+
+test('runtime UX: an App bar crowded at 768px wraps instead of scrolling the page sideways', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto(CRM);
+  const bar = page.locator('.topbar');
+  await expect(bar).toBeVisible();
+  await expect(page.locator('.topnav .tn-links, .topnav .tn-wide').first()).toBeAttached();
+  const rows = () => bar.evaluate((node) => node.getBoundingClientRect().height);
+  const oneRow = await rows();
+  // A bar that fits is one row, as it was.
+  expect(oneRow).toBeLessThan(70);
+  // A long name and three more controls, as a tenant App's bar carries (its customer, a freshness chip, the issues).
+  await page.evaluate(() => {
+    document.querySelector('.brand-name')!.textContent = 'A Very Long Veterinary Practice Name Incorporated';
+    const actions = document.querySelector('.topbar-actions')!;
+    for (const words of ['Acme Clinic Group', 'Updated 2 min ago', 'Issues 3']) {
+      const button = document.createElement('button');
+      button.className = 'icon-button';
+      button.textContent = words;
+      actions.prepend(button);
+    }
+  });
+  await expect.poll(rows).toBeGreaterThan(oneRow + 20);
+  const sideways = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+  expect(sideways).toBeLessThanOrEqual(0);
+  const edge = await page.evaluate(() =>
+    Math.max(...[...document.querySelector('.topbar')!.children].map((k) => k.getBoundingClientRect().right)),
+  );
+  expect(edge).toBeLessThanOrEqual(768);
+});

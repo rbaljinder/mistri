@@ -68,7 +68,7 @@ const { ActionBar } = await import('./Actions.js');
 const command = (id: string, input: unknown[] = []) => ({ id, version: 1, target: 'ticket', input }) as never;
 const watch: AppAction = { id: 'watch', label: 'Watch', command: command('watch') };
 
-function draw(actions: AppAction[]) {
+function draw(actions: AppAction[], matches: (when: string) => Promise<boolean> = async () => true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const onDone = vi.fn();
   render(
@@ -80,7 +80,7 @@ function draw(actions: AppAction[]) {
         actions={actions}
         recordKey={{ id: 7 }}
         label="INC0007"
-        matches={async () => true}
+        matches={matches}
         onDone={onDone}
         grantedCommands={actions.map((action) => (action.command ? action.command.id : action.id))}
       />,
@@ -97,6 +97,24 @@ beforeEach(() => {
   mocks.stale = 0;
 });
 afterEach(() => cleanup());
+
+test("a command action's own when is asked, and the button is drawn only where the record matches it", async () => {
+  const asked: string[] = [];
+  draw(
+    [
+      { ...watch, when: 'version = 0 and region = north', offered: 'region = north' },
+      { id: 'flag', label: 'Flag', command: command('flag'), when: 'region = south', offered: 'region = south' },
+    ],
+    async (when) => {
+      asked.push(when);
+      return when === 'region = north';
+    },
+  );
+  expect(await screen.findByRole('button', { name: 'Watch' })).toBeTruthy();
+  // Only the action's own part: the command's is the server's availability answer, not a second question.
+  expect([...new Set(asked)].sort()).toEqual(['region = north', 'region = south']);
+  expect(screen.queryByRole('button', { name: 'Flag' })).toBeNull();
+});
 
 test('a command that asks nothing runs on one click, with no dialog, and a notice says it ran', async () => {
   const { onDone } = draw([watch]);

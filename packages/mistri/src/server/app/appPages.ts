@@ -507,8 +507,33 @@ export function scanPageSource(
       });
     }
   };
+  /* The module's own constants, so a read's paths are held where typed code writes them: `as const`, `satisfies`, or
+     named once at the top of the file (a field report: eight pages broke on upgrade while check said ok). Only the
+     module's level, where no parameter or inner binding can shadow the name, and only a `const`, which cannot change. */
+  const constants = new Map<string, AstNode>();
+  for (const statement of ((program as AstNode).body as AstNode[]) ?? []) {
+    const declaration = statement.type === 'ExportNamedDeclaration' ? (statement.declaration as AstNode | undefined) : statement;
+    if (declaration?.type !== 'VariableDeclaration' || declaration.kind !== 'const') continue;
+    for (const each of (declaration.declarations as AstNode[]) ?? []) {
+      const id = each.id as AstNode;
+      if (id.type === 'Identifier' && each.init) constants.set(id.name as string, each.init as AstNode);
+    }
+  }
+  const WRAPPERS = new Set([
+    'TSAsExpression',
+    'TSSatisfiesExpression',
+    'TSNonNullExpression',
+    'TSTypeAssertion',
+    'ParenthesizedExpression',
+  ]);
+  const resolved = (node: AstNode | undefined, depth = 0): AstNode | undefined => {
+    if (!node || depth > 8) return node;
+    if (WRAPPERS.has(node.type)) return resolved(node.expression as AstNode, depth + 1);
+    if (node.type === 'Identifier' && constants.has(node.name as string)) return resolved(constants.get(node.name as string), depth + 1);
+    return node;
+  };
   /* The pieces of a literal read the host sends as one request (shared/uiSdk.ts), each asked alone, so a finding names
-     the path that crossed into a table the page does not read. A piece written as an expression is the types' to judge. */
+     the path that crossed into a table the page does not read. A piece written as any other expression is the types' to judge. */
   const crossings = (
     hook: string,
     resource: string | undefined,
@@ -518,15 +543,21 @@ export function scanPageSource(
   ) => {
     const table = schema && resource !== undefined && manifest.reads.includes(resource) ? tableNamed(schema, resource) : undefined;
     if (!table) return;
-    const option = (node: AstNode | undefined, key: string) =>
-      node?.type === 'ObjectExpression'
-        ? ((node.properties as AstNode[]).find(
-            (prop) =>
-              prop.type === 'Property' && !prop.computed && ((prop.key as AstNode).name === key || (prop.key as AstNode).value === key),
-          )?.value as AstNode | undefined)
+    const option = (given: AstNode | undefined, key: string) => {
+      const node = resolved(given);
+      return node?.type === 'ObjectExpression'
+        ? resolved(
+            (node.properties as AstNode[]).find(
+              (prop) =>
+                prop.type === 'Property' && !prop.computed && ((prop.key as AstNode).name === key || (prop.key as AstNode).value === key),
+            )?.value as AstNode | undefined,
+          )
         : undefined;
-    const paths = (node: AstNode | undefined) =>
-      node?.type === 'ArrayExpression' ? (node.elements as AstNode[]).flatMap((each) => literal(each) ?? []) : [];
+    };
+    const paths = (given: AstNode | undefined) => {
+      const node = resolved(given);
+      return node?.type === 'ArrayExpression' ? (node.elements as AstNode[]).flatMap((each) => literal(resolved(each)) ?? []) : [];
+    };
     const view = (paths: string[], query: string) => ['/api/view/run', uiViewRunBody(table.id, table.name, paths, query, 1)] as const;
     const pieces: Array<[string, readonly [string, Record<string, unknown>]]> = [];
     if (hook === 'useBreakdown') {

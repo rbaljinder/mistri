@@ -75,7 +75,7 @@ async function fixture(
     const { adapter } = await registry.open(connection);
     const access = withReadAuditSink(
       resolveAppAccess(manifest, resources.schema, ['viewer']),
-      { app: appId, tenant: '', actor: 'account-viewer' },
+      { app: appId, tenant: '', actor: 'account-viewer', roles: ['viewer'], membership: 'membership-1' },
       adapter,
       connection,
     );
@@ -148,5 +148,11 @@ test('a record asked for is found in the list reads that returned it, by its exa
     /* "1" is not "10": the second page returned 6 to 10 and is not a read of record 1. */
     assert.deepEqual(ids(await readPostgresReadAudit(control as never, { record: '1', limit: 10 })), [['1', '2', '3', '4', '5']]);
     assert.deepEqual(ids(await readPostgresReadAudit(control as never, { record: '10', limit: 10 })), [['10', '6', '7', '8', '9']]);
+    /* Who read, as the grant stood: the roles and the membership come back as they were written. */
+    const kept = await readPostgresReadAudit(control as never, { limit: 10 });
+    assert.deepEqual(
+      kept.map((row) => [row.roles, row.membership]),
+      kept.map(() => [['viewer'], 'membership-1']),
+    );
   });
 });

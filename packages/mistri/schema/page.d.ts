@@ -712,9 +712,6 @@ export type BlockWidth = 'full' | 'half' | 'third' | 'two-thirds';
 
 /** The page's grid: blocks and panels side by side by their `width`, wrapping as a dashboard's sections do. */
 export declare function Grid(props: { children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
-/** A line of words: `<Text tone="muted" size="sm">Not open to your role.</Text>`. The default is the page's ink, `muted` its secondary ink
-    (a note, a caption), `danger` the status colour of a refusal or a failure. It sets no layout of its own. */
-export declare function Text(props: { tone?: 'default' | 'muted' | 'danger'; size?: 'sm' | 'md'; children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
 /** A titled region of the grid: `<Panel title="Open lines" width="half">…</Panel>`. */
 export declare function Panel(props: { title?: ReactTypes.ReactNode; width?: BlockWidth; children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
 /** Tabs, each panel drawn the first time it is opened; `param` (one of the page's `params`) keeps the open tab in the

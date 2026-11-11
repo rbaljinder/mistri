@@ -50,7 +50,7 @@ A record page follows one skeleton: a head, its figures, its children as tabs, a
 - **When a list is usually empty**, set `empty: 'hide'`: left out rather than drawn empty (where the reader may
   add a row it collapses to a line instead, so the Add stays). `empty: 'collapse'` says it in one line, and several
   side by side become one, "No charges, payments or notes yet", each with its Add; `page(…, [...], { empty: 'collapse' })`
-  says it for every list that says nothing of its own. Inside `listTabs` an empty list is a tab, neither —
+  says it for every list that says nothing of its own. Inside `listTabs` a list is a tab that follows the same answers: its `when` unmet or `empty: 'hide'` with no rows (and no Add to keep) leaves it no tab, and `'collapse'` keeps its tab, which says it is empty —
   `examples/apps/lintel/pages/unit.ts:33`.
 - **When the record is worked by talking** (a repair, a ticket), say
   `layout: 'conversation'`: its one `timeline` last in the main column, so the

@@ -57,6 +57,8 @@ const definitions: readonly string[] = [
   row_count integer CHECK (row_count >= 0),
   ids_json text CHECK (octet_length(ids_json) <= ${READ_AUDIT_LIMITS.ids}),
   command text COLLATE "C" CHECK (octet_length(command) <= ${READ_AUDIT_LIMITS.command}),
+  roles_json text CHECK (octet_length(roles_json) <= ${READ_AUDIT_LIMITS.roles}),
+  membership text COLLATE "C" CHECK (octet_length(membership) <= ${READ_AUDIT_LIMITS.membership}),
   CHECK ((command IS NULL) <> (route = 'command'))
 )`,
   `CREATE INDEX "${READ_AUDIT_RECORD_INDEX}" ON ${q(log)} (resource, record_key, id)`,
@@ -124,6 +126,8 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       column('row_count', 'integer', null, false),
       column('ids_json', 'text', 'default', false),
       column('command', 'text', 'C', false),
+      column('roles_json', 'text', 'default', false),
+      column('membership', 'text', 'C', false),
     ],
     [
       bytes('app', READ_AUDIT_LIMITS.app),
@@ -135,6 +139,8 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       bytes('query_json', READ_AUDIT_LIMITS.query),
       bytes('ids_json', READ_AUDIT_LIMITS.ids),
       bytes('command', READ_AUDIT_LIMITS.command),
+      bytes('roles_json', READ_AUDIT_LIMITS.roles),
+      bytes('membership', READ_AUDIT_LIMITS.membership),
       "CHECK (((command IS NULL) <> (route = 'command'::text)))",
       `CHECK ((route = ANY (ARRAY[${READ_ROUTES.map((route) => `'${route}'::text`).join(', ')}])))`,
       'CHECK ((row_count >= 0))',
@@ -162,11 +168,28 @@ export function postgresReadAuditUpgradeFrom1(): readonly string[] {
     `ALTER TABLE ${q(log)} ADD CONSTRAINT ${log}_route_check CHECK (route IN (${routes}))`,
     `ALTER TABLE ${q(log)} ADD COLUMN command text COLLATE "C" CHECK (octet_length(command) <= ${READ_AUDIT_LIMITS.command})`,
     `ALTER TABLE ${q(log)} ADD CONSTRAINT ${log}_check CHECK ((command IS NULL) <> (route = 'command'))`,
-    `ALTER TABLE ${q(meta)} DROP CONSTRAINT ${meta}_version_check`,
-    `UPDATE ${q(meta)} SET version = ${READ_AUDIT_VERSION}`,
-    `ALTER TABLE ${q(meta)} ADD CONSTRAINT ${meta}_version_check CHECK (version = ${READ_AUDIT_VERSION})`,
+    ...nextVersion(2),
   ];
 }
+
+/**
+ * Version 2 to 3: the reader's roles and membership added last, where a fresh store has them. Every existing row
+ * keeps them empty: version 2 never recorded them, and nothing now can say what they were.
+ */
+export function postgresReadAuditUpgradeFrom2(): readonly string[] {
+  return [
+    `ALTER TABLE ${q(log)} ADD COLUMN roles_json text CHECK (octet_length(roles_json) <= ${READ_AUDIT_LIMITS.roles})`,
+    `ALTER TABLE ${q(log)} ADD COLUMN membership text COLLATE "C" CHECK (octet_length(membership) <= ${READ_AUDIT_LIMITS.membership})`,
+    ...nextVersion(3),
+  ];
+}
+
+/* The version row's own check moved on, pinned to the step's version so an older step never writes a later one. */
+const nextVersion = (to: number) => [
+  `ALTER TABLE ${q(meta)} DROP CONSTRAINT ${meta}_version_check`,
+  `UPDATE ${q(meta)} SET version = ${to}`,
+  `ALTER TABLE ${q(meta)} ADD CONSTRAINT ${meta}_version_check CHECK (version = ${to})`,
+];
 
 const canonical = (value: unknown) => canonicalCommandJson(value, 1_048_576);
 
@@ -201,7 +224,7 @@ export async function provisionPostgresReadAudit(url: string): Promise<{ version
   });
 }
 
-const COLUMNS = 12;
+const COLUMNS = 14;
 
 /**
  * Rows gathered by a group commit (groupCommit.ts), in one INSERT: one
@@ -214,7 +237,7 @@ export async function appendPostgresReadAudits(client: PgQuery, rows: readonly R
   if (!attested && !(await postgresReadAuditReady(client))) throw new ReadAuditUnavailable(await layoutMessage(client));
   const places = rows.map((_, at) => `(${Array.from({ length: COLUMNS }, (_, column) => `$${at * COLUMNS + column + 1}`).join(', ')})`);
   await client.query(
-    `INSERT INTO ${q(log)} (at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command)
+    `INSERT INTO ${q(log)} (at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command, roles_json, membership)
     VALUES ${places.join(', ')}`,
     rows.flatMap((row) => [
       row.at,
@@ -229,6 +252,8 @@ export async function appendPostgresReadAudits(client: PgQuery, rows: readonly R
       row.count ?? null,
       row.ids ?? null,
       row.command ?? null,
+      row.roles === undefined ? null : JSON.stringify(row.roles),
+      row.membership ?? null,
     ]),
   );
 }
@@ -240,7 +265,7 @@ export async function readPostgresReadAudit(client: PgQuery, query: ReadAuditQue
   const filters = readAuditFilters(query);
   const values = filters.map(([, , value]) => value);
   const result = await client.query(
-    `SELECT id::text AS id, ${AT_ISO} AS at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command
+    `SELECT id::text AS id, ${AT_ISO} AS at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command, roles_json, membership
     FROM ${q(log)} ${filters.length ? `WHERE ${filters.map(([name, op], index) => (op === 'shown' ? `(${name} = $${index + 1} OR ids_json::jsonb @> jsonb_build_array($${index + 1}::text))` : `${name} ${op} $${index + 1}`)).join(' AND ')}` : ''}
     ORDER BY id DESC LIMIT $${values.length + 1}`,
     [...values, query.limit],

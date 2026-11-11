@@ -198,8 +198,9 @@ store is absent, check and a start name it and print this command. In code,
 (`only: ['tenant-store']` with `app: { tenant: binding }`).
 
 `mistri dev --app ./leads --policy ./leads/server/tenant-policy.ts --commands ./leads/commands.ts`
-prints a sign-in per role: each account is a member of the first two tenants of
-the profile table, or of the platform realm for a platform role. In tests,
+prints a sign-in per role: each account is a member of every tenant of the
+profile table, up to the first 100 by its key, or of the platform realm for a
+platform role. In tests,
 `host.tenant(id, { roles })` makes a member the same way
 ([Test an App](/docs/testing-apps/#tenant-apps)).
 
@@ -207,7 +208,8 @@ A resource with `audit: { reads: true }` adds the read audit store to the same
 command, and a start without it is refused. Each row carries the tenant whose
 rows were read and is written through that tenant's fenced writer before the
 rows leave; a row that cannot be written is the tenant unavailable (503), not
-a denial. A support visit's reads name the operator and the visit. A tenant
+a denial. A member's reads name the account, its membership and the roles it
+read under; a support visit's name the operator and the visit. A tenant
 reads only its own rows: `mistri audit reads --tenant north --since 7d`
 ([read audit](/docs/dsl-resources/#read-audit)).
 
@@ -362,6 +364,14 @@ A table the person's role cannot read fails the command, not the session, in
 words that name the table and the command. Platform-owned tables are never read
 in a tenant's context, and a `realm: 'platform'` command looks up global tables
 only. A tenant job's lookup reads the same, as its service.
+
+A lookup also knows its tenant: `tenant` is the id of the tenant the command
+runs in, the person's own, the one a public form's link placed it in, or the one
+a job runs for. A command that names no record (`targets: 'none'`) has it too,
+so slow work for that tenant (an outside service keyed by it) happens in
+`lookup`, before the transaction, rather than holding the writer in the
+handler. A `realm: 'platform'` command's lookup has none: one acting in a tenant
+reads it from the input field its `tenant` names.
 
 ### Public intake
 

@@ -226,6 +226,12 @@ export interface BusinessCommandLookupContext extends CommandContextBase {
   readonly sources: LookupSources;
   /** The integrations the command declares, each action a function of its input. */
   readonly integrations: IntegrationCalls;
+  /**
+   * In a tenant App, the tenant this command runs in: the person's own, the one a public form's link placed it in,
+   * or the one a job runs for. Known before the transaction opens, so work for that tenant (an outside service
+   * keyed by it) happens here rather than holding the writer in the handler. Absent off a tenant App.
+   */
+  readonly tenant?: string;
   readonly record?: UntypedRow;
   readonly records?: readonly UntypedRow[];
 }
@@ -277,6 +283,8 @@ type CommandLookupContext<Src, Target extends string, Many, Pub = undefined, Use
   readonly sources: LookupSources;
   /** `integrations.<name>.<action>(input)`: one recorded, idempotent call, typed by the package's action. */
   readonly integrations: IntegrationCallsOf<Uses>;
+  /** In a tenant App, the tenant this command runs in, known before the transaction; absent off a tenant App. */
+  readonly tenant?: string;
 } & RecordPart<RowOf<Src, Target>, Names<Many, Pub>>;
 
 /** A definition's `initial` context: every footprint table read-only, and the target — none for a form's command. */

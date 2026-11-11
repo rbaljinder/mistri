@@ -165,9 +165,10 @@ export interface JobHost {
   /**
    * A job at times run once now, as its next slot would run it — the same runner, principal and grants, at the
    * host's clock, a manual run as `mistri jobs run` enqueues one (jobManualRun.ts) — and the attempt's end: for a
-   * test (testing/host.ts `runJob`), never on a schedule's behalf.
+   * test (testing/host.ts `runJob`), never on a schedule's behalf. A job per tenant runs for the tenant named, as
+   * that tenant's slot would; a job on the platform takes none.
    */
-  runNow(job: string, timeoutMs?: number): Promise<Readonly<{ state: string; code: string | null }>>;
+  runNow(job: string, timeoutMs?: number, tenantId?: string): Promise<Readonly<{ state: string; code: string | null }>>;
   stop(): Promise<void>;
 }
 
@@ -782,12 +783,19 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
       ]);
     },
     tick,
-    async runNow(name: string, timeoutMs = 30_000) {
-      const job = jobToRun(module, name);
+    async runNow(name: string, timeoutMs = 30_000, tenantId?: string) {
+      /* A job per tenant has no run of its own: each is one tenant's, which the runner refuses without its tenant,
+         so the test names it here rather than reading a refusal off a run that could never succeed. */
+      const declared = module.jobs.get(name);
+      if (declared?.every && declared.realm === 'tenant' && tenantId === undefined)
+        throw new JobDeclarationError(`Jobs: "${name}" runs per tenant: name the tenant, host.runJob('${name}', { tenant }).`);
+      const job = jobToRun(module, name, tenantId !== undefined);
       if (typeof job === 'string') throw new JobDeclarationError(`Jobs: ${job}`);
+      if (tenantId !== undefined && job.realm !== 'tenant')
+        throw new JobDeclarationError(`Jobs: "${name}" runs once on the platform, not per tenant: leave out the tenant.`);
       /* Its own key, not a slot's: the slot the schedule enqueues is still its own, and a run now is a second run,
          after the schedule's if that one holds its lease (jobManualRun.ts). */
-      const { id } = await enqueueManualRun(jobs, deployment.appId, job, now());
+      const { id } = await enqueueManualRun(jobs, deployment.appId, job, now(), tenantId);
       const deadline = Date.now() + timeoutMs;
       for (;;) {
         const found = await findRun(jobs, job.id, id);

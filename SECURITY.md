@@ -100,7 +100,8 @@ The database browser, in its own repository
   assistant), at the authorized reader every one of them goes through, and
   before the rows leave the server. A row names when, who (the account,
   `service:<principal>`, `api-token:<id>`, `support:<operator>` with the
-  visit, or `assistant:<account>`), the tenant, the resource, the door, and
+  visit, or `assistant:<account>`) with the roles it read under and, on a
+  tenant App, its membership, the tenant, the resource, the door, and
   the one record read or the query with its count and up to 500 ids; it
   never holds a field value. A read whose row cannot be written is answered
   503 with the fixed `read_not_recorded` error (the same words in a single App

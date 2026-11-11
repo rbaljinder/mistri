@@ -76,6 +76,27 @@ export function integrationCommandProblems(declared: CapturedIntegrations | unde
   return problems;
 }
 
+/** An `integrationsForm`'s `integrations` names only integrations the jobs module lists: one it does not would draw
+    nothing, and a settings page that is quietly empty reads as "no keys needed". */
+export function integrationFormProblems(declared: CapturedIntegrations | undefined, app: AppDef): string[] {
+  const use = declared?.use ?? new Map();
+  return Object.entries(app.views ?? {}).flatMap(([key, view]) =>
+    'sections' in view
+      ? [...view.sections, ...(view.aside ?? [])].flatMap((section) =>
+          section.kind === 'integrations'
+            ? (section.integrations ?? [])
+                .filter((name) => !use.has(name))
+                .map(
+                  (name) =>
+                    `[integration-unknown] views "${key}" integrationsForm shows integration "${name}", which the jobs module does not list in integrations.use` +
+                    (use.size ? `. It lists: ${[...use.keys()].join(', ')}.` : '.'),
+                )
+            : [],
+        )
+      : [],
+  );
+}
+
 /** A `notify` rule's `send` names a channel a listed integration provides, or the platform's email: its message is queued
     in the integrations store. */
 export function integrationNotifyProblems(declared: CapturedIntegrations | undefined, app: AppDef): string[] {

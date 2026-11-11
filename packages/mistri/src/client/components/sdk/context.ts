@@ -279,8 +279,14 @@ export interface UiHost {
   publicLink(view: string): string | undefined;
   /** Puts words in the page's timeline composer, never sending them; false when the page draws none. */
   fillComposer(text: string, mode?: 'reply' | 'note'): boolean;
-  /** Where a file resource's row is served, inline: its smaller copy with `thumbnail`. */
-  fileAddress(resource: string, key: Readonly<Record<string, unknown>>, options?: { thumbnail?: boolean }): string | undefined;
+  /** Where a file resource's row is served, inline: its smaller copy with `thumbnail`. Undefined while it is read first
+      (a tenant App reads a file on its lease, into a blob): `drawn` is called when it has an address. */
+  fileAddress(
+    resource: string,
+    key: Readonly<Record<string, unknown>>,
+    options?: { thumbnail?: boolean },
+    drawn?: () => void,
+  ): string | undefined;
   /** A command as this reader is served it; `page` is the free-form page asking, whose public commands run through
       its own door. */
   command(ref: UiCommandRef, page?: string): UiCommandHandle;

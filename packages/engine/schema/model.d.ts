@@ -283,8 +283,12 @@ export interface AppCommandAction<Target extends string = string, Label extends 
   /** Its key in `resources.<table>.actions`. */
   id: string;
   command: AppCommandReference<Target>;
-  /** Where the button is offered: the command's own `when`, or the states a machine's verb leaves. Visibility only; the server judges the command's. */
+  /** Where the button is offered: the command's own `when` and the action's together, or the states a machine's verb
+      leaves. Visibility only; the server judges the command's. */
   when?: string;
+  /** The action's own `when` alone, when it has one: what a record's bar asks, since the server's availability answer
+      already holds the command's. */
+  offered?: string;
   /** A machine's verb that says itself differently from different states (a per-edge `label`, or `{to}` in it):
       each label with the states it is said from, as a condition. `label` is the first state's. */
   labels?: Array<{ when: string; label: string }>;

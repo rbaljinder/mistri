@@ -405,3 +405,34 @@ test('a list read of a table its reader may not export answers a screen, never a
     many,
   );
 });
+
+/* A field report: a refused export answered 200 with the reason in the body, so a client that reads the status took
+   the refusal for a file. A table this reader is not served is not found — the same answer whether it exists or not —
+   and a question that cannot be read is a bad request; both still say why in `errors`. */
+test('an export of a table the App does not serve answers 404, and a question it cannot read 400', async () => {
+  await served(
+    async (base) => {
+      const refused = async (q: string) => {
+        const response = await fetch(`${base}/api/export`, {
+          method: 'POST',
+          signal: AbortSignal.timeout(3_000),
+          headers: { Cookie: 'session=writer', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ app: appId, q, format: 'ndjson' }),
+        });
+        const said = (await response.json()) as { errors?: Array<{ message: string }> };
+        return { status: response.status, message: said.errors?.[0]?.message ?? '' };
+      };
+      const hidden = await refused('payroll');
+      assert.equal(hidden.status, 404);
+      assert.match(hidden.message, /No table called "payroll"/);
+      const unknown = await refused('nothing_here show id');
+      assert.equal(unknown.status, 404, 'a table that does not exist reads the same as one that is not served');
+      const misread = await refused('incident show nmae');
+      assert.equal(misread.status, 400);
+      assert.match(misread.message, /"nmae" is not a column on incident/);
+      assert.equal((await refused('')).status, 400, 'a question with no table is not a missing table');
+    },
+    app,
+    `CREATE TABLE payroll (id INTEGER PRIMARY KEY, amount INTEGER); INSERT INTO payroll VALUES (1, 100);`,
+  );
+});

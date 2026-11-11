@@ -275,10 +275,21 @@ const writesHead = (head: ShellTitle | undefined) =>
     head?.pwa,
   );
 
+/** What an App's own theme carries that a page's head never writes: its served files and where its menu sits. */
+const HEAD_UNWRITTEN: ReadonlySet<string> = new Set(['faces', 'stylesheet', 'shell']);
+
 /** Generate only registered token names and validated theme values. Row text
  * exists only in escaped JSON; it can never close a style/script element. */
 function brandingHead(html: string, presentation: HeadBranding, base?: string): string {
-  const theme = parseThemes([presentation.value.theme], 'Request branding', 'themes', { platform: true })![0];
+  /* A tenant's theme starts from the App's own, which may ship font files, a stylesheet or a menu placement. The head
+     writes none of them (the shell serves the App's already), so the validator is not asked them: a field report's
+     App wore its own faces, and every public form of a tenant that had saved a name answered 403. */
+  const said = presentation.value.theme;
+  const tokens =
+    said && typeof said === 'object' && !Array.isArray(said)
+      ? Object.fromEntries(Object.entries(said).filter(([key]) => !HEAD_UNWRITTEN.has(key)))
+      : said;
+  const theme = parseThemes([tokens], 'Request branding', 'themes', { platform: true })![0];
   const declarations = (mode: 'light' | 'dark') => {
     const pairs: Array<[string, string]> = [];
     for (const [key, token] of Object.entries(PALETTE_TOKENS)) {

@@ -41,9 +41,23 @@ See it in the sample (`examples/apps/tick/app.ts:42`).
 | `reason` | A column for a required note, written with the change; not with `bulk` | none | Stable |
 | `bulk` | Offer it on a queue's selection, written record by record | `false` | Stable |
 | `header` | `false` keeps it out of the record's action bar and menu; still granted, and run from a queue, a board or `useCommand` | `true` | Stable |
-| `command` | Run a [command](/docs/commands/) instead; it takes no `set`, `when` or `reason`. One that asks nothing runs on one click, or asks first with `confirm: true`; one with inputs asks them in its form | none | Stable |
+| `command` | Run a [command](/docs/commands/) instead; it takes no `set` or `reason`. One that asks nothing runs on one click, or asks first with `confirm: true`; one with inputs asks them in its form | none | Stable |
 
 All keys: [the generated reference](/docs/dsl-resources/).
+
+### A command's button, where it applies
+
+A command action's button is offered where the command's own `when` holds. Its
+`when` narrows that further, in the query language with paths, as a section's
+does:
+
+```ts
+renew: action('Renew support', { command: 'renewSupport', when: 'account.tier = enterprise' }),
+```
+
+The action's `when` decides only where the button is drawn, and where a
+queue's selection offers it. Put a rule the command must keep in its
+`defineCommand`, which the server judges on every run.
 
 ### Stamps: the moment, the day and the person
 

@@ -460,6 +460,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                 app: app.id,
                 tenant: '',
                 actor: principal.id || 'public',
+                ...(!visitor && principal.roles.length ? { roles: [...principal.roles] } : {}),
                 append: (row, connection) =>
                   readAuditStoreOf(options.resources.forConnection(connection), `connection "${connection}"`).appendReadAudit(row),
               },

@@ -18,6 +18,8 @@ import type { AppDef } from '../packages/mistri/src/shared/app.js';
 import { parseBrandingDeclaration } from '../packages/mistri/src/shared/tenantBranding.js';
 import { createTenantBrandingService } from '../packages/mistri/src/server/tenant/tenantBranding.js';
 import {
+  APP_ID,
+  binding,
   NORTH,
   NORTH_BRAND,
   NORTH_HOST,
@@ -181,4 +183,88 @@ test("a tenant's whole saved look, at the root, never asks a signed-out visitor 
   assert.equal((await f.call(logo)).status, 200);
   const sent = await f.call(`/api/forms/apply${via(SOUTH)}`, { body: { input: { name: 'Avery' }, submission: randomUUID() } });
   assert.equal(sent.status, 200, sent.text);
+});
+
+/* The same report, saved as a tenant saves it: an editor signs in, opens their tenant's lease and posts Branding's
+   own save to the host, so the host's copy of the look is the one that changes. Then the form is opened by a visitor
+   with no session, and by the same browser still holding the editor's cookie. The App that reported it wore a theme
+   of its own with a font file, which the page's head refused to write: the tenant's look starts from that theme. */
+test("a look saved through the host's own Branding save never asks a form's visitor for a session", async (t) => {
+  for (const [atRoot, ownFaces] of [
+    [false, false],
+    [true, false],
+    [false, true],
+  ]) {
+    const f = await openTenantPublicForms(t, 'sqlite', publicFormsDatabase(), {
+      tenantBranding: true,
+      ...(atRoot ? { atRoot: true } : {}),
+      ...(ownFaces ? { ownFaces: true } : {}),
+    });
+    const signedUp = await f.call('/api/auth/sign-up/email', {
+      body: { email: `editor-${atRoot}-${ownFaces}@example.invalid`, password: 'a-long-synthetic-password-1', name: 'Editor' },
+    });
+    assert.equal(signedUp.status, 200, signedUp.text);
+    const accountId = String(signedUp.body.user.id);
+    const cookie = ([] as string[])
+      .concat(signedUp.headers['set-cookie'] ?? [])
+      .map((value) => value.split(';')[0])
+      .join('; ');
+    await f.engine.maintenance(binding, (admin) =>
+      admin
+        .putMembership({
+          tenantId: 'south',
+          accountId,
+          membershipId: `m-${accountId}`,
+          status: 'active',
+          roles: ['staff'],
+          validUntil: Date.now() + 3600000,
+          expectedVersion: null,
+        })
+        .then(() => {}),
+    );
+    const signed = { cookie, 'x-mistri-account': accountId };
+    const opened = await f.call(`/api/tenant/context/open?app=${APP_ID}&tenant=south`, { body: {}, headers: signed });
+    assert.equal(opened.status, 200, opened.text);
+    const lease = {
+      ...signed,
+      'x-mistri-tab': String(opened.body.tabId),
+      'x-mistri-context': String(opened.body.context),
+      'x-mistri-lease-revision': String(opened.body.revision),
+    };
+    const png = PNG.toString('base64');
+    const saved = await f.call(`/api/branding/save?app=${APP_ID}&tenant=south`, {
+      body: {
+        branding: { name: 'South Wheels Co', accent: { light: '#1d4ed8', dark: '#93c5fd' }, radius: '4px', density: 'compact' },
+        logo: png,
+        favicon: png,
+      },
+      headers: lease,
+    });
+    assert.equal(saved.status, 200, saved.text);
+    const pagePath = atRoot ? `/form/apply${via(SOUTH)}` : `/${APP_ID}/form/apply${via(SOUTH)}`;
+    for (const headers of [{}, { cookie }] as Record<string, string>[]) {
+      const page = await f.call(pagePath, { headers });
+      assert.equal(page.status, 200, `${pagePath} ${JSON.stringify(Object.keys(headers))}: ${page.text.slice(0, 300)}`);
+      assert.match(page.text, /South Wheels Co/);
+      const form = await f.call(`/api/forms/apply${via(SOUTH)}`, { headers });
+      assert.equal(form.status, 200, form.text);
+      assert.equal(form.body.app.name, 'South Wheels Co');
+      const logo = /\/api\/branding\/logo\/[0-9a-f]{64}/.exec(JSON.stringify(form.body))?.[0];
+      assert.ok(logo);
+      assert.equal((await f.call(logo, { headers })).status, 200);
+    }
+  }
+});
+
+/* A field report: a tenant App's public form drew a lettered square where its signed-in screens drew the App's icon
+   logo, because the presentation it sent a visitor carried the name and the theme and not the logo. The ordinary host
+   tells a visitor the whole look (appLook), glyphs included, so the brand row has a mark to draw. */
+test("a tenant App's public form is told the App's own logo, glyph and all, as the ordinary host's is", async (t) => {
+  const f = await openTenantPublicForms(t, 'sqlite', publicFormsDatabase(), { logo: 'wrench' });
+  for (const path of ['/api/forms', '/api/forms/apply']) {
+    const form = await f.call(path);
+    assert.equal(form.status, 200, form.text);
+    assert.equal(form.body.app.logo, 'wrench', path);
+    assert.ok(form.body.app.icons?.wrench, `${path} carries the glyph the page cannot fetch before it draws`);
+  }
 });

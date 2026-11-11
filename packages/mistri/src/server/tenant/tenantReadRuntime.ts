@@ -453,7 +453,13 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                 resources,
                 withTenantReadAudit(
                   { ...readGrant([...acting.roles]), rows },
-                  { app: app.id, tenant: principal.tenantId, actor: principal.accountId },
+                  {
+                    app: app.id,
+                    tenant: principal.tenantId,
+                    actor: principal.accountId,
+                    roles: acting.roles,
+                    membership: principal.membershipId,
+                  },
                   readAudit,
                 ),
                 assertActive,

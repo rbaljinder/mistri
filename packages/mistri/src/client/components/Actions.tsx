@@ -341,10 +341,17 @@ export function ActionBar({
      condition. An action without one asks nothing — a disabled placeholder
      for each shared one key, which React Query reported as duplicates. */
   /* A machine's verb that says itself differently by state ("Move to Proposal") asks which state the record is in
-     the same way: one condition per label, answered with the rest. */
+     the same way: one condition per label, answered with the rest. A command action with a `when` of its own asks
+     that part alone, also with the rest. */
   const asked = [
     ...new Set(
-      drawable.flatMap((action) => (isCommand(action) ? (action.labels ?? []).map((said) => said.when) : action.when ? [action.when] : [])),
+      drawable.flatMap((action) =>
+        isCommand(action)
+          ? [...(action.offered ? [action.offered] : []), ...(action.labels ?? []).map((said) => said.when)]
+          : action.when
+            ? [action.when]
+            : [],
+      ),
     ),
   ];
   const conditions = useQueries({
@@ -354,8 +361,9 @@ export function ActionBar({
     })),
   });
   const answered = new Map(asked.map((when, i) => [when, conditions[i]?.data]));
-  // Command availability already checks its current target/when on the
-  // server; do not add a second per-row visibility HTTP request here.
+  // Command availability already checks its current target and the
+  // command's own when on the server; do not ask that again here. Only an
+  // action's own `when` (`offered`) is asked, in the batch above.
   /* A verb with per-state labels waits for its label, so it never arrives in one set of words and changes to another. */
   const said = (action: AppAction): AppAction => {
     if (!isCommand(action) || !action.labels) return action;
@@ -365,7 +373,9 @@ export function ActionBar({
   const available = drawable
     .filter((action) =>
       isCommand(action)
-        ? availableCommand(action) && (action.labels ?? []).every((candidate) => answered.get(candidate.when) !== undefined)
+        ? availableCommand(action) &&
+          (!action.offered || answered.get(action.offered) === true) &&
+          (action.labels ?? []).every((candidate) => answered.get(candidate.when) !== undefined)
         : !action.when || answered.get(action.when) === true,
     )
     .map(said);

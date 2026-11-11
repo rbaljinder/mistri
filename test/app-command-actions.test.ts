@@ -107,6 +107,29 @@ test("a command action refuses a name the module does not register, an object, a
   );
 });
 
+test("a command action's when narrows where its button is offered, on top of the command's own", () => {
+  // Paths, as on a section: a tenant's actions offered only where they apply (a field report).
+  const parsed = app([action('Assign reviewer', { command: 'assignReviewer', when: 'name = "Example" or version > 3' })]);
+  const { resources, problems } = resolveResources(parsed, schema);
+  assert.deepEqual(problems, []);
+  const [served] = resources.loan.actions as Array<{ when?: string; offered?: string }>;
+  // The served when is both, so a selection's prepare, the assistant and a list judge the button where it is drawn.
+  assert.equal(served.when, 'version = 0 and (name = "Example" or version > 3)');
+  // The authored part alone, which the record's bar asks: the command's own is the server's availability answer.
+  assert.equal(served.offered, 'name = "Example" or version > 3');
+  // A command whose registration says no when is offered by the action's alone.
+  const close = app([{ label: 'Close', command: 'closeLoans', bulk: true, when: 'version = 1' }]).resources!.loan.actions![0] as {
+    when?: string;
+    offered?: string;
+  };
+  assert.equal(close.when, 'version = 1');
+  assert.equal(close.offered, 'version = 1');
+  // A condition is checked against the table, and the problem names the author's words.
+  const bad = resolveResources(app([{ label: 'Assign', command: 'assignReviewer', when: 'nmae = x' }]), schema);
+  assert.match(bad.problems.join('\n'), /action "action0", when: .*nmae/);
+  assert.throws(() => app([{ label: 'Assign', command: 'assignReviewer', when: ' ' }]), /"when" that is not a condition/);
+});
+
 test('command inputs reject malformed identities, bounds, sparse inputs and duplicate fields', () => {
   const parse = (raw: unknown) => parseCommandInput(raw, 'Command input');
   for (const raw of [
@@ -225,6 +248,7 @@ test("typed command names: an unknown name, a record's command on another table 
     action('Invalid', {command:'assign', set:{version:1}});
     // @ts-expect-error A command on one record is not offered in bulk.
     action('Assign', {command:'assign', bulk:true});
+    action('Assign', {command:'assign', when:'version = 0'});
     action('Close', {command:'closeLoans', bulk:true});
     const form = commandForm('Log a call', 'logCall', [step('The call', ['account', 'notes'])]);
     // @ts-expect-error A step names only the command's inputs.

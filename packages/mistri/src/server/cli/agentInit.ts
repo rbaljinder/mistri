@@ -181,12 +181,13 @@ function place(target: string, files: Map<string, Buffer | string>, force: boole
     };
   }
   /* The stamp is what `check` compares with the running mistri, so files that did not change between releases are
-     still rewritten under a new stamp: "up to date" beside a stamp naming the old release left check warning. */
-  if (edits.length === 0 && same(installed!.files, source) && installed!.mistri === runtimeVersion())
+     still rewritten under a new stamp: "up to date" beside a stamp naming the old release left check warning.
+     --force never says "up to date": it is what a person types when they doubt the copy, so it always rewrites. */
+  if (!force && edits.length === 0 && same(installed!.files, source) && installed!.mistri === runtimeVersion())
     return { said: 'up to date', kept: false };
   install(target, files, source);
   return {
-    said: edits.length > 0 ? 'replaced (--force)' : 'updated',
+    said: edits.length > 0 ? 'replaced (--force)' : force ? 'updated (--force)' : 'updated',
     kept: false,
   };
 }

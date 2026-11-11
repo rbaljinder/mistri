@@ -28,6 +28,7 @@ import { defineIntegration, IntegrationDeclarationError, shape } from '../packag
 import { channelHolder, channelSender, quietUntil } from '../packages/mistri/src/server/integrations/integrationChannels.js';
 import {
   integrationCommandProblems,
+  integrationFormProblems,
   integrationNotifyProblems,
   integrationRoleProblems,
 } from '../packages/mistri/src/server/integrations/integrationChecks.js';
@@ -212,6 +213,39 @@ async function openRuntime(t: TestContext, declared: CapturedIntegrations, clock
   });
   return createIntegrationRuntime({ appId: 'shop', declared, store, now: () => clock.now });
 }
+
+test("an integrationsForm's `integrations` narrows the page to those named, each one the jobs module lists", () => {
+  const settings = (section: Record<string, unknown>) =>
+    parseTestApp(
+      {
+        id: 'shop',
+        name: 'Shop',
+        sources: { db: { connection: 'shop-db' } },
+        resources: { orders: { physical: 'orders', access: 'write' } },
+        views: {
+          orders: { kind: 'list', from: 'orders' },
+          payments: { kind: 'dashboard', label: 'Payments', sections: [{ kind: 'integrations', ...section }] },
+        },
+        nav: ['orders', 'payments'],
+        home: 'orders',
+      },
+      'shop.ts',
+    );
+  const app = settings({ integrations: ['fakepay'] });
+  const served = (app.views.payments as { sections: Array<{ integrations?: string[] }> }).sections[0];
+  assert.deepEqual(served.integrations, ['fakepay']);
+  assert.deepEqual(integrationFormProblems(capture({ use: [fakepay()] }), app), []);
+  const typo = integrationFormProblems(capture({ use: [fakepay()] }), settings({ integrations: ['fakepey'] }));
+  assert.deepEqual(typo.map(validationCode), ['integration-unknown']);
+  assert.match(
+    typo[0],
+    /views "payments" integrationsForm shows integration "fakepey", which the jobs module does not list.* It lists: fakepay\./,
+  );
+  assert.throws(() => settings({ integrations: [] }), /"integrations" that is not a list of integration names/);
+  assert.throws(() => settings({ integrations: ['fakepay', 'fakepay'] }), /names integration "fakepay" twice/);
+  // Without it, every one the jobs module lists, as before.
+  assert.equal((settings({}).views.payments as { sections: Array<{ integrations?: string[] }> }).sections[0].integrations, undefined);
+});
 
 test('a channel message waits out quiet hours, in the recipient zone when it names one, and an opt-in stands for consent', async (t) => {
   resetProvider();

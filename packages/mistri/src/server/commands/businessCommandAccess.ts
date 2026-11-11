@@ -279,6 +279,7 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
                   app: options.app.id,
                   tenant: '',
                   actor: binding.actor.kind === 'public' ? 'public' : binding.actor.id,
+                  ...(binding.actor.kind !== 'public' && binding.actor.roles.length ? { roles: binding.actor.roles } : {}),
                   append: async (row, connection) =>
                     readAuditStoreOf(
                       databaseOf(resources, connection) ?? resources.forConnection(connection),

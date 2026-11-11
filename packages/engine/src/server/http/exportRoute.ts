@@ -230,8 +230,11 @@ export async function exportFile(asked: ExportAsked): Promise<(() => void) | und
       );
     }
   }
+  /* Not a file, so not a 200: a client reads the status before the body. A table this reader is not served is not
+     found — the same answer whether it exists or not, so a refusal tells nothing — and any other question that cannot
+     be read is a bad request. Either way `errors` says why, as `/api/run`'s does. */
   if (!parsed.query || parsed.errors.length) {
-    answer(200, { errors: parsed.errors });
+    answer(servesTable(schema, text) ? 400 : 404, { errors: parsed.errors });
     return undefined;
   }
 
@@ -289,6 +292,12 @@ export async function exportFile(asked: ExportAsked): Promise<(() => void) | und
     asked.headers,
     byOffset ? answer : undefined,
   );
+}
+
+/** Whether the question's first word is a table in this reader's schema, by id or by bare name (as parseQuery finds it); an empty question names none and is no missing table. */
+function servesTable(schema: DatabaseSchema, text: string): boolean {
+  const first = text.trim().split(/\s+/)[0];
+  return !first || findTable(schema, first) !== undefined || schema.tables.some((table) => table.name === first);
 }
 
 function refuseTable(answer: (status: number, body: unknown) => void, tableId: string): undefined {

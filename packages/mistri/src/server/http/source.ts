@@ -44,11 +44,18 @@ import { withoutReadAudit, type ReadAuditSink } from '../readAudit.js';
 import { readAuditStoreOf } from '../readAuditStore.js';
 
 /* A plain App's read audit sink: one row on the database that holds the read rows (stores/appStores.ts). */
-function plainReadAudit(registry: RequestContext['registry'], app: string, actor: string): ReadAuditSink {
+function plainReadAudit(
+  registry: RequestContext['registry'],
+  app: string,
+  actor: string,
+  roles: readonly string[] | undefined,
+): ReadAuditSink {
+  const held = roles?.filter(Boolean);
   return {
     app,
     tenant: '',
     actor,
+    ...(held?.length ? { roles: held } : {}),
     append: async (row, connection) =>
       readAuditStoreOf((await registry.open(connection)).adapter, `connection "${connection}"`).appendReadAudit(row),
   };
@@ -357,7 +364,11 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
             }
           : grant;
       /* The reader's sink, per request: the grant above is cached per role set (servedFor), the reader is not. */
-      if (grant.audited) access = { ...access, readAudit: plainReadAudit(registry, app.id, visitor ? 'public' : identity.id!) };
+      if (grant.audited)
+        access = {
+          ...access,
+          readAudit: plainReadAudit(registry, app.id, visitor ? 'public' : identity.id!, visitor ? undefined : verifiedRoles),
+        };
       wholeRowWrites = wholeWrites;
       resources = authorizeResources(resources, access);
       const reads = resources.adapter;

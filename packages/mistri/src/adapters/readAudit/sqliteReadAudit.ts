@@ -35,11 +35,9 @@ const metaDdl = (version: number) => `CREATE TABLE "${meta}" (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
   version INTEGER NOT NULL CHECK (version = ${version})
 )`;
-const definitions = new Map<string, string>([
-  [meta, metaDdl(READ_AUDIT_VERSION)],
-  [
-    log,
-    `CREATE TABLE "${log}" (
+/* The log as `version` lays it out: version 3 adds the reader's roles and membership after `command`. The upgrade
+   from version 1 builds version 2's table, which the step after it rebuilds again. */
+const logDdl = (version: 2 | 3) => `CREATE TABLE "${log}" (
   id INTEGER PRIMARY KEY,
   at TEXT NOT NULL,
   app TEXT COLLATE BINARY NOT NULL CHECK (${bytes('app', READ_AUDIT_LIMITS.app)}),
@@ -52,11 +50,19 @@ const definitions = new Map<string, string>([
   query_json TEXT CHECK (json_valid(query_json) AND ${bytes('query_json', READ_AUDIT_LIMITS.query)}),
   row_count INTEGER CHECK (row_count >= 0),
   ids_json TEXT CHECK (json_valid(ids_json) AND ${bytes('ids_json', READ_AUDIT_LIMITS.ids)}),
-  command TEXT COLLATE BINARY CHECK (${bytes('command', READ_AUDIT_LIMITS.command)}),
+  command TEXT COLLATE BINARY CHECK (${bytes('command', READ_AUDIT_LIMITS.command)}),${
+    version === 3
+      ? `
+  roles_json TEXT CHECK (json_valid(roles_json) AND ${bytes('roles_json', READ_AUDIT_LIMITS.roles)}),
+  membership TEXT COLLATE BINARY CHECK (${bytes('membership', READ_AUDIT_LIMITS.membership)}),`
+      : ''
+  }
   CHECK ((record_key IS NULL) <> (query_json IS NULL)),
   CHECK ((command IS NULL) <> (route = 'command'))
-)`,
-  ],
+)`;
+const definitions = new Map<string, string>([
+  [meta, metaDdl(READ_AUDIT_VERSION)],
+  [log, logDdl(READ_AUDIT_VERSION)],
 ]);
 const INDEXES = new Map<string, string>([
   [READ_AUDIT_RECORD_INDEX, `CREATE INDEX "${READ_AUDIT_RECORD_INDEX}" ON "${log}" (resource, record_key, id)`],
@@ -68,31 +74,41 @@ const TRIGGERS = new Map<string, string>([
   [`${log}_no_update`, `CREATE TRIGGER "${log}_no_update" BEFORE UPDATE ON "${log}" ${APPEND_ONLY}`],
 ]);
 
-/* Version 1's columns, which version 2 keeps in order and adds `command` after. */
+/* Version 1's columns, which version 2 keeps in order and adds `command` after; version 3 adds `roles_json` and
+   `membership` after that. */
 const V1_COLUMNS = 'id, at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json';
+const V2_COLUMNS = `${V1_COLUMNS}, command`;
 
-/**
- * Version 1 to 2, as statements for the store upgrade (storeLayouts.ts) to run in its one transaction. SQLite keeps
- * a table's CREATE text and the attestation compares it whole, so the log is rebuilt rather than altered: its rows
- * copied, ids kept, into this version's table. The triggers go first and come back last; DROP TABLE fires no
- * DELETE trigger, and nothing else may write while the transaction holds the file. Every row is copied: a row the
- * new table's checks refuse fails the step, and the transaction leaves version 1 as it was.
- */
-export function sqliteReadAuditUpgradeFrom1(): readonly string[] {
-  const parked = `${log}_v1`;
+/* The log rebuilt as `to` lays it out. SQLite keeps a table's CREATE text and the attestation compares it whole, so
+   the log is rebuilt rather than altered: its rows copied, ids kept, into the new table. The triggers go first and
+   come back last; DROP TABLE fires no DELETE trigger, and nothing else may write while the transaction holds the
+   file. Every row is copied: a row the new table's checks refuse fails the step, and the transaction leaves the
+   store as it was. */
+function rebuild(to: 2 | 3, kept: string): readonly string[] {
+  const parked = `${log}_v${to - 1}`;
   return [
     ...[...TRIGGERS.keys()].map((name) => `DROP TRIGGER "${name}"`),
     ...[...INDEXES.keys()].map((name) => `DROP INDEX "${name}"`),
     `ALTER TABLE "${log}" RENAME TO "${parked}"`,
-    definitions.get(log)!,
-    `INSERT INTO "${log}" (${V1_COLUMNS}) SELECT ${V1_COLUMNS} FROM "${parked}" ORDER BY id`,
+    logDdl(to),
+    `INSERT INTO "${log}" (${kept}) SELECT ${kept} FROM "${parked}" ORDER BY id`,
     `DROP TABLE "${parked}"`,
     ...INDEXES.values(),
     ...TRIGGERS.values(),
     `DROP TABLE "${meta}"`,
-    metaDdl(READ_AUDIT_VERSION),
-    `INSERT INTO "${meta}" (singleton, version) VALUES (1, ${READ_AUDIT_VERSION})`,
+    metaDdl(to),
+    `INSERT INTO "${meta}" (singleton, version) VALUES (1, ${to})`,
   ];
+}
+
+/** Version 1 to 2, as statements for the store upgrade (storeLayouts.ts) to run in its one transaction. */
+export function sqliteReadAuditUpgradeFrom1(): readonly string[] {
+  return rebuild(2, V1_COLUMNS);
+}
+
+/** Version 2 to 3: every row kept, with no roles or membership, which version 2 never recorded. */
+export function sqliteReadAuditUpgradeFrom2(): readonly string[] {
+  return rebuild(3, V2_COLUMNS);
 }
 
 interface CatalogEntry {
@@ -184,7 +200,8 @@ export function provisionSqliteReadAudit(existingPath: string): { version: typeo
 const MAIN_EPOCH = '(SELECT schema_version FROM main.pragma_schema_version)';
 const TEMP_EPOCH = `(SELECT coalesce(group_concat(type || ':' || name || ':' || tbl_name || ':' || coalesce(sql, ''), char(10)), '') FROM temp.sqlite_schema)`;
 const META_ROW = `(SELECT count(*) FROM main."${meta}" WHERE singleton = 1 AND version = ${READ_AUDIT_VERSION})`;
-const COLUMNS = 'at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command';
+const COLUMNS =
+  'at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command, roles_json, membership';
 const attestedEpochs = new WeakMap<DatabaseSync, { main: number; temp: string }>();
 
 const values = (row: ReadAuditRow) =>
@@ -201,6 +218,8 @@ const values = (row: ReadAuditRow) =>
     row.count ?? null,
     row.ids ?? null,
     row.command ?? null,
+    row.roles === undefined ? null : JSON.stringify(row.roles),
+    row.membership ?? null,
   ] as const;
 
 /**
@@ -214,7 +233,7 @@ export function appendSqliteReadAudit(db: DatabaseSync, row: ReadAuditRow): void
   const known = attestedEpochs.get(db);
   if (known) {
     const done = db
-      .prepare(`INSERT INTO main."${log}" (${COLUMNS}) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      .prepare(`INSERT INTO main."${log}" (${COLUMNS}) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       WHERE ${MAIN_EPOCH} = ? AND ${TEMP_EPOCH} = ? AND ${META_ROW} = 1`)
       .run(...values(row), known.main, known.temp);
     if (Number(done.changes) === 1) return;
@@ -222,7 +241,7 @@ export function appendSqliteReadAudit(db: DatabaseSync, row: ReadAuditRow): void
   }
   const epoch = db.prepare(`SELECT ${MAIN_EPOCH} AS main, ${TEMP_EPOCH} AS temp`).get() as { main: number; temp: string };
   assertSqliteReadAudit(db);
-  db.prepare(`INSERT INTO main."${log}" (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(...values(row));
+  db.prepare(`INSERT INTO main."${log}" (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(...values(row));
   attestedEpochs.set(db, { main: Number(epoch.main), temp: String(epoch.temp) });
 }
 
@@ -259,7 +278,7 @@ export function readSqliteReadAudit(db: DatabaseSync, query: ReadAuditQuery, att
   const clause = ([column, op]: (typeof filters)[number]) =>
     op === 'shown' ? `(${column} = ? OR EXISTS (SELECT 1 FROM json_each(ids_json) WHERE value = ?))` : `${column} ${op} ?`;
   const rows = db
-    .prepare(`SELECT id, at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command
+    .prepare(`SELECT id, at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command, roles_json, membership
     FROM main."${log}" ${filters.length ? `WHERE ${filters.map(clause).join(' AND ')}` : ''}
     ORDER BY id DESC LIMIT ?`)
     .all(...filters.flatMap(([, op, value]) => (op === 'shown' ? [value, value] : [value])), query.limit) as Array<Record<string, unknown>>;

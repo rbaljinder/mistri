@@ -178,7 +178,8 @@ export type ThemePart =
   | 'identityMark'
   | 'menu'
   | 'dialog'
-  | 'chart';
+  | 'chart'
+  | 'kicker';
 
 /** A color role by its path in `colors`: `ink`, `nav.ground`, `status.good`, `chart[2]`. */
 export type ThemeColorPath =

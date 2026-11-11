@@ -259,9 +259,20 @@ async function ready(opts: Options): Promise<{ origin: () => string; base: strin
 /** How long a dev membership lasts: a restart after it ends grants another. */
 const DEV_MEMBERSHIP_DAYS = 30;
 
+/* How many tenants the dev accounts join: every row of a seeded profile table, where a field report found two too few
+   to try a tenant switcher, but bounded, since each is a membership per role made on every start. */
+const DEV_TENANTS = 100;
+
+/* Where a sign-in works, as a line reads: `a, b and c`, the first few of a long list and how many more. */
+const sayTenants = (names: string[], label: string) => {
+  const shown = names.length > 5 ? [...names.slice(0, 4), `${names.length - 4} more ${label}s`] : names;
+  return shown.length > 1 ? `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}` : shown.join('');
+};
+
 /**
- * A tenant App's sign-ins: an account per role, each a member where its role works — a tenant role in the first two
- * tenants of the profile table (made active if the tenant store has none yet), a platform role in the platform realm.
+ * A tenant App's sign-ins: an account per role, each a member where its role works — a tenant role in every tenant of
+ * the profile table, up to DEV_TENANTS by its key (made active if the tenant store has none yet), a platform role in
+ * the platform realm.
  * People in a tenant App are memberships, not role grants, so these are made as an operator makes them, by the
  * maintenance steps on this machine's database (tenant/tenantLocalAccess.ts), never through a door of the App.
  */
@@ -274,7 +285,8 @@ async function tenantAccounts(opts: Options, loaded: LoadedApp, dev: DevFile, fi
   if (!roles.length || !loaded.dir) return;
   const local = await import('../tenant/tenantLocalAccess.js');
   const access = await local.tenantLocalAccess(loaded, registry, opts.policy);
-  const tenants = await local.profileTenants(loaded, registry, 2);
+  const profiled = await local.profileTenants(loaded, registry, DEV_TENANTS + 1);
+  const tenants = profiled.slice(0, DEV_TENANTS);
   const save = () => writeFileSync(file, `${JSON.stringify(dev, null, 2)}\n`, { mode: 0o600 });
   /* Each password is kept before its account is made with it, so a start cut short never leaves an account no one can sign in to. */
   let changed = false;
@@ -315,12 +327,15 @@ async function tenantAccounts(opts: Options, loaded: LoadedApp, dev: DevFile, fi
   for (const role of roles) {
     console.log(`  ${role.padEnd(width)}  ${emailOf(role)}  ${dev.passwords[role]}`);
     const where = platform(role) ? [app.auth?.tenancy?.platform?.label ?? 'the platform'] : tenants;
-    if (where.length) console.log(`  ${' '.repeat(width)}  a member of ${where.join(' and ')}`);
+    if (where.length) console.log(`  ${' '.repeat(width)}  a member of ${sayTenants(where, label)}`);
   }
-  if (!tenants.length && roles.some((role) => !platform(role)))
+  const profile = app.auth?.tenancy?.profile ?? 'the profile table';
+  if (profiled.length > DEV_TENANTS)
     console.log(
-      `  No ${label} is in ${app.auth?.tenancy?.profile ?? 'the profile table'} yet, so the ${label} roles are members of none: add a row and start again.`,
+      `  The ${label} roles are members of the first ${DEV_TENANTS} ${label}s of ${profile} by its key; the rest have no dev account.`,
     );
+  if (!tenants.length && roles.some((role) => !platform(role)))
+    console.log(`  No ${label} is in ${profile} yet, so the ${label} roles are members of none: add a row and start again.`);
   console.log(`  Kept in ${relative(process.cwd(), join(file, '..')) || '.mistri'}; delete it to start over.`);
 }
 

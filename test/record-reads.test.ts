@@ -237,6 +237,51 @@ test("the record's row is read once for every section that reads it, and each ot
   );
 });
 
+test("a strip's closed tabs are read for what the strip decides: a hiding list's first page, and any list's condition", () => {
+  // Open on the first tab: the strip decides which tabs it has (kit ListTabs), before a closed one is opened.
+  const sections: ReadSection[] = [
+    { kind: 'list', from: 'deal' },
+    { kind: 'list', from: 'note', title: 'Hiding', emptyMode: 'hide' },
+    { kind: 'list', from: 'note', title: 'Shown', emptyMode: 'show' },
+    { kind: 'list', from: 'deal', title: 'Gated', emptyMode: 'hide', when: 'status = active' },
+    { kind: 'list', from: 'deal', title: 'Gated shown', when: 'tier = gold' },
+    { kind: 'list', from: 'note', title: 'Cut', emptyMode: 'hide', hidden: true },
+  ];
+  const plans: ReadPlan[] = sections.map((_, index) => ({
+    index,
+    view: view(index === 1 || index === 2 || index === 5 ? 'note' : 'deal', ['id']),
+  }));
+  plans[3] = { index: 3, view: view('deal', ['id']) };
+  const asked = (page: { sections: readonly ReadSection[]; listTabs?: boolean }, planned: readonly ReadPlan[]) =>
+    recordPageReads(names, { id: 'account', ...page }, account, planned, { id: 1 }, { rows: 10, history: false }).reads.map((read) => [
+      read.path,
+      read.kind,
+      read.body.view ? (read.body.view as { base: string }).base : (read.body.q ?? 'def'),
+    ]);
+  assert.deepEqual(asked({ sections, listTabs: true }, plans), [
+    // The open tab, as it is drawn.
+    ['/api/view/run', 'related', 'deal'],
+    // A hiding tab: its first page, which is the very read the list asks when it is opened.
+    ['/api/view/run', 'related', 'note'],
+    // A list behind a condition: the condition, then (hiding) its rows. The planner cannot know the answer, as for a
+    // drawn list; the route reads under the reader's grants and the client drops what it does not use.
+    ['/api/run', undefined, 'account id = 1 and status = active'],
+    ['/api/view/run', 'related', 'deal'],
+    ['/api/run', undefined, 'account id = 1 and tier = gold'],
+  ]);
+  // The tab shown while empty asks nothing; a section the page hides is no tab at all; a list that is no strip asks as it did.
+  const alone = asked({ sections: sections.slice(0, 2) }, plans.slice(0, 2));
+  assert.deepEqual(alone, [
+    ['/api/view/run', 'related', 'deal'],
+    ['/api/view/run', 'related', 'note'],
+  ]);
+  // A hiding list the planner could not plan (an error, or empty by the reader's grant) is not asked.
+  const unplanned = plans.map((plan) => (plan.index === 1 ? { index: 1, error: 'refused' } : plan));
+  assert.ok(
+    !asked({ sections, listTabs: true }, unplanned).some(([path, , base], i) => path === '/api/view/run' && base === 'note' && i === 1),
+  );
+});
+
 /* A timeline's author that is a reference is said by name, read through the reference (kit PageTimeline.tsx): the
    page's planned read is that very read, so its answer is taken and nothing is asked again once the page has drawn. A
    stream's far side is asked beside its rows, as the section asks it. */

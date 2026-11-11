@@ -64,14 +64,21 @@ export function withTenantReadAudit<T extends AuditedAccess>(
  */
 export function tenantCommandReadAudit(
   authorization: { readonly audited?: unknown },
-  sink: Pick<ReadAuditSink, 'app' | 'tenant' | 'actor'>,
+  sink: Pick<ReadAuditSink, 'app' | 'tenant' | 'actor' | 'roles' | 'membership'>,
   connection: string,
   append: (row: ReadAuditRow) => Promise<void>,
 ): { readonly readAudit?: CommandReadAudit } {
   if (!authorization.audited) return {};
   return {
     readAudit: Object.freeze<CommandReadAudit>({
-      sink: Object.freeze<ReadAuditSink>({ app: sink.app, tenant: sink.tenant, actor: sink.actor, append: (row) => append(row) }),
+      sink: Object.freeze<ReadAuditSink>({
+        app: sink.app,
+        tenant: sink.tenant,
+        actor: sink.actor,
+        ...(sink.roles ? { roles: sink.roles } : {}),
+        ...(sink.membership ? { membership: sink.membership } : {}),
+        append: (row) => append(row),
+      }),
       connectionOf: () => connection,
     }),
   };

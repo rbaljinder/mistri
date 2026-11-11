@@ -23,7 +23,7 @@ const TENANT_USAGE = `mistri tenant init [<tenant>...] [--app <dir>] --policy <f
        mistri tenant clone <source> <sandbox> [--app <dir>] --policy <file> [--samples]
        mistri tenant import <sandbox> [--app <dir>] --policy <file>
        mistri tenant clock <sandbox> [--app <dir>] --policy <file> --ahead <duration> [--rate <n>]
-                 [--operator <name>] [--commands <file>] [<db> | --db <target> | --config <path>]`;
+                 [--operator <name>] [--commands <file>] [--jobs <file>] [<db> | --db <target> | --config <path>]`;
 
 const HELP = `${TENANT_USAGE}
 
@@ -58,6 +58,9 @@ const HELP = `${TENANT_USAGE}
           from now (default 1). Its machine timers fall due on it. Only a
           sandbox has one; --ahead 0 sets it back to real time.
   --operator <name>  who ran the step, for the receipt (default: your login)
+  --jobs <file>      the App's jobs module, read as its server reads it: an
+                     App whose commands call an integration needs it. With a
+                     mistri.json, --policy, --commands and --jobs come from it.
 Exit codes: 1 could not run.`;
 
 const TENANT = /^[a-z0-9][a-z0-9_-]{0,127}$/;
@@ -192,6 +195,8 @@ export async function runTenantCommand(
       connections: registry.configs(),
       policyFile: flags['--policy'],
       ...(opts.commands ? { commandsFile: opts.commands } : {}),
+      // As a start loads it: a command that calls an integration is wired by the jobs module, and refused without it.
+      ...(opts.jobs !== undefined ? { jobsFile: opts.jobs } : {}),
     });
     const { source, policy } = prepared.enrollment;
     const where = 'url' in source && source.url ? { postgres: source.url } : { sqlite: (source as { existingPath: string }).existingPath };

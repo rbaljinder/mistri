@@ -241,6 +241,8 @@ test('each door writes one row before its rows leave, and an unaudited resource 
     assert.equal(written.length, 1);
     assert.equal(written[0].route, 'page');
     assert.equal(written[0].actor, 'account-viewer');
+    assert.deepEqual(written[0].roles, ['viewer'], 'the roles the reader held when it read');
+    assert.equal(written[0].membership, undefined, 'a single App has no membership');
     assert.equal(written[0].resource, 'incident');
     assert.equal(written[0].tenant, '');
     assert.equal(written[0].count, 3);
@@ -562,6 +564,7 @@ test("a custom page's loader reads an audited resource: one row, by the custom-p
       assert.equal(written.length, 1, JSON.stringify(written));
       assert.equal(written[0].route, 'custom-page');
       assert.equal(written[0].actor, 'account-viewer');
+      assert.deepEqual(written[0].roles, ['viewer']);
       assert.equal(written[0].resource, 'incident');
       assert.deepEqual(JSON.parse(written[0].ids!).sort(), ['1', '2', '3']);
     },
@@ -754,7 +757,11 @@ test('a tenant row carries its tenant, a support visit its operator, and one ten
     const append = async (row: ReadAuditRow) => appendSqliteReadAudit(db, row);
     forgetReadAuditCoalescing();
 
-    const memberA = withTenantReadAudit(audited, { app: appId, tenant: 'a', actor: 'account-a' }, append);
+    const memberA = withTenantReadAudit(
+      audited,
+      { app: appId, tenant: 'a', actor: 'account-a', roles: ['front-desk', 'billing', 'front-desk'], membership: 'membership-a' },
+      append,
+    );
     const memberB = withTenantReadAudit(audited, { app: appId, tenant: 'b', actor: 'account-b' }, append);
     const support = withTenantReadAudit(audited, { app: appId, tenant: 'a', actor: 'support:operator-1', visit: 'visit-9' }, append);
     for (const access of [memberA, memberB, support])
@@ -766,6 +773,11 @@ test('a tenant row carries its tenant, a support visit its operator, and one ten
     assert.deepEqual(a.map((row) => [row.tenant, row.actor, row.visit ?? null, row.record]).sort(), [
       ['a', 'account-a', null, '1'],
       ['a', 'support:operator-1', 'visit-9', '1'],
+    ]);
+    /* A member's line names its membership and its roles, sorted and once each; a support visit has neither. */
+    assert.deepEqual(a.map((row) => [row.actor, row.roles ?? null, row.membership ?? null]).sort(), [
+      ['account-a', ['billing', 'front-desk'], 'membership-a'],
+      ['support:operator-1', null, null],
     ]);
     const b = readSqliteReadAudit(db, { tenant: 'b', limit: 10 });
     assert.deepEqual(

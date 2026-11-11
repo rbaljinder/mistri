@@ -263,9 +263,15 @@ test("a feed page's row goes to the database that holds the audited resource, no
       db.close();
     }
   };
-  const rows = rowsOf(f.urls.stock);
+  const all = rowsOf(f.urls.stock);
+  // The restock above read its target under the command (route `command`), in this same database; the feed page's own line is the one `api`.
+  assert.deepEqual(
+    all.filter((row) => row.route !== 'api').map((row) => row.route),
+    ['command'],
+    JSON.stringify(all),
+  );
+  const rows = all.filter((row) => row.route === 'api');
   assert.equal(rows.length, 1, JSON.stringify(rows));
-  assert.equal(rows[0].route, 'api');
   assert.match(rows[0].actor, /^api-token:/);
   assert.equal(rows[0].query, '"$events"');
   assert.throws(() => rowsOf(f.urls.ledger), 'the feed lane has no read audit store, and no row was written there');

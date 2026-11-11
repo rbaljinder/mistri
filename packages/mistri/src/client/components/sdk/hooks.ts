@@ -11,7 +11,7 @@
  * Reads go through the page's one query cache, keyed by the reader, so a
  * sign-out or a switch of account never serves one reader's rows to another.
  */
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import { useInfiniteQuery, useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
   defaultCurrency,
@@ -456,13 +456,19 @@ export function useComposer(): { fill(text: string, options?: { mode?: 'reply' |
   return { fill: (text, options = {}) => host.fillComposer(text, options.mode) };
 }
 
-/** Where a file resource's row is served, for an `<img>`: `useFile('member_avatar')({ id: 4 }, { thumbnail: true })`. */
+/**
+ * Where a file resource's row is served, for an `<img>`: `useFile('member_avatar')({ id: 4 }, { thumbnail: true })`.
+ * In a tenant App the file is read on the reader's lease first, so the address is undefined until it lands, and the
+ * component draws again then.
+ */
 export function useFile(
   resource: string,
 ): (key: Readonly<Record<string, unknown>>, options?: { thumbnail?: boolean }) => string | undefined {
   const host = useUiHost();
   useDeclared(resource);
-  return useCallback((key, options) => host.fileAddress(resource, key, options), [host, resource]);
+  /* A new function once a file lands, so a component that keeps what it drew by this one draws again too. */
+  const [landed, drawn] = useReducer((count: number) => count + 1, 0);
+  return useCallback((key, options) => host.fileAddress(resource, key, options, drawn), [host, resource, landed]);
 }
 
 /** Who is reading: signed in or not, and the signed-in account's id. Redraws when that changes. */

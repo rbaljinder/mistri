@@ -2060,6 +2060,10 @@ export interface IntegrationsDashSection extends DashSectionCommon {
   readonly [madeBy]: 'integrationsForm';
   /** A curated mark in the section's heading row. */
   icon?: AppIcon;
+  /** The integrations this form shows, by name, in this order: a settings page per integration
+      (`integrationsForm('Payments', { integrations: ['stripe'] })`). Each is one the jobs module lists. Without it,
+      every one. What the page shows, not who may read it. */
+  integrations?: readonly string[];
 }
 
 /** One section of a dashboard, by kind. */
@@ -2534,7 +2538,7 @@ export interface ListSection extends SectionCommon {
       `'hide'`, which leaves it out while it has no rows — a person's direct reports, where most people have none —
       or `'collapse'`, which says it in one line with the other empty lists beside it ("No charges, payments or notes
       yet", each with its Add). A list that offers an Add or `actions` to this reader collapses rather than hides, and a
-      tab keeps at least one list; inside a `listTabs` strip an empty list is a tab and neither. Absent, the page's
+      tab keeps at least one list; inside a `listTabs` strip the list is a tab that follows the same answers: `'hide'` leaves it no tab while it has no rows, and `'collapse'` keeps the tab. Absent, the page's
       `empty` applies. */
   empty?: AppListEmpty | 'hide' | 'collapse';
   /** Numeric columns, or the rows' numeric rollups and computed columns (`['total_amount', 'refunded']`), summed in
@@ -3849,12 +3853,13 @@ export declare function commandForm<const Name extends FormCommandName, const O 
 export declare function step<const F extends string>(label: string | AppMessageRef, fields: readonly (F | readonly F[])[], opts?: StepOptions): FormStep<F>;
 /** A step of a form saved on every step: it asks the named command's inputs, and its handler saves them. */
 export declare function step(label: string | AppMessageRef, command: FormCommandName, opts?: Omit<StepOptions, 'skip'>): SavedFormStep;
-/** What `step()` takes beside its label and fields: the id, and the intake style's words. */
+/** What `step()` takes beside its label and fields: the id, and the step's own words. */
 export interface StepOptions {
   id?: string;
-  /** The step's heading in the intake style (at most 160 characters); absent, the label. */
+  /** The step's heading, in the stepper and the intake style alike (at most 160 characters); absent, the label. The
+      progress bar is still named by the label. */
   title?: string | AppMessageRef;
-  /** One sentence under the title (at most 500 characters). */
+  /** One sentence under the title (at most 500 characters), in the stepper too. */
   lead?: string | AppMessageRef;
   /** The primary's words on this step (at most 40 characters); absent, "Continue". */
   next?: string | AppMessageRef;
@@ -4351,12 +4356,18 @@ export type TypedAppAction<S extends SchemaShape, T extends TableOf<S>> =
   | (CommandAction<CommandOn<T>, string | AppMessageRef> & MadeBy<'action'>);
 
 /** Each resource block keyed by its table, its column-valued keys checked against that table. `hidden`, `fields`
-    and `audit.redact` govern columns, so they also take the ones no reader is served (`H`); every other key shows
-    or writes one, so it takes only those a reader may be served. */
+    and `audit.redact` govern columns, so they also take the ones no reader is served (`H`), as do a file's `object`
+    and `hash`, which the server alone reads; every other key shows or writes one, so it takes only those a reader may
+    be served. */
 export type TypedResources<S extends SchemaShape, R extends SchemaReferences = never, H extends SchemaHidden = {}> = {
-  [T in TableOf<S>]?: Omit<AppResource<ColumnOf<S, T>>, 'fields' | 'hidden' | 'references' | 'display' | 'inputs' | 'validation' | 'labels' | 'recordLabel' | 'form' | 'actions' | 'audit' | 'rollups' | 'import' | 'notify' | 'defined' | 'flows'> & {
+  [T in TableOf<S>]?: Omit<AppResource<ColumnOf<S, T>>, 'fields' | 'hidden' | 'references' | 'display' | 'inputs' | 'validation' | 'labels' | 'recordLabel' | 'form' | 'actions' | 'audit' | 'rollups' | 'import' | 'notify' | 'defined' | 'flows' | 'file'> & {
     fields?: AppFieldAccess<GovernedOf<S, H, T>>;
     hidden?: readonly GovernedOf<S, H, T>[];
+    /* A bucket's `object` and `hash` are the server's alone, so an App hides them; the rule may still name them. */
+    file?: Omit<NonNullable<AppResource<ColumnOf<S, T>>['file']>, 'object' | 'hash'> & {
+      object?: GovernedOf<S, H, T>;
+      hash?: GovernedOf<S, H, T>;
+    };
     references?: Partial<Record<ColumnOf<S, T>, { [To in TableOf<S>]: { to: To; column?: ColumnOf<S, To> } }[TableOf<S>]>>;
     display?: Partial<Record<ColumnOf<S, T>, AppDisplayRule | ComponentDecl<string, 'value'>>>;
     inputs?: Partial<Record<ColumnOf<S, T>, ComponentDecl<string, 'input'>>>;

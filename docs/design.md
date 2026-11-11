@@ -703,7 +703,8 @@ every look, so the picture it keeps reads on whatever page shows it.
   breakdown bars and donut legends at 46rem, prose at 70rem — the room
   keeps its width, the content keeps its shape.
   Dashboard guidance paragraphs use a tighter 70ch measure so short explanatory
-  notes remain easy to read on wide screens.
+  notes remain easy to read on wide screens; so does a field's hint, which
+  under a field in a wide room stood as one line of 150 characters.
 - **Gutters are symmetric** (the grid stops 14px short of both edges),
   and the top-bar shell adds 22px of pane air where the sidebar used
   to soften the left.
@@ -984,8 +985,9 @@ every look, so the picture it keeps reads on whatever page shows it.
   reports would be. Empty lists side by side are one quiet sentence, "No
   charges, payments or notes yet", each name followed by its Add. A list that
   offers an Add or `actions` is collapsed, never hidden: a door is not taken
-  away. A tab always keeps at least one list, and inside a `listTabs` strip an
-  empty list is a tab, neither hidden nor collapsed.
+  away. A tab always keeps at least one list, and inside a `listTabs` strip a
+  list is a tab that follows the same answers: its `when` unmet, or `hide` with no rows and no door, leaves
+  it no tab; `collapse` keeps the tab, which says it is empty.
 - A related list read as groups (`group`) is a header for each record its rows
   share, over that group's own table: the record's name as the link (accent ink),
   its facts after it in the muted ink, the count at the far end in the mono
@@ -1431,6 +1433,11 @@ every look, so the picture it keeps reads on whatever page shows it.
   stack to two lines on a phone, where the dialog fills the screen. Its
   History is the same rows — when, the change, by whom — with no target in
   them: a record is read, not opened.
+- Between a phone and a desk (601-768px) the App bar wraps rather than
+  overflowing: a long name beside the tenant's control and the account ran
+  the page sideways at 768px. What does not fit stands on a second line at the
+  right, and the name gives way first, to an ellipsis. A bar that fits is one
+  row as it was.
 - A phone's App bar is one row in every App, whichever shell it has on a
   desk: the menu's mark, the brand, then search as its magnifier, the
   settings, the bell where there is an inbox, and the account. The list's own search is the one box on a
@@ -1695,6 +1702,16 @@ every look, so the picture it keeps reads on whatever page shows it.
   the print layer, so no look moves paper. Printed, it is the sheet alone:
   the skip link, the bars and every App navigation are said away in print.
 
+### The kicker over a form's heading
+
+A form's page opens with the App's name in a small line over its h1, said in
+sentence case (`--text-sm`, `--ink-muted`, the UI face), never as a capitalized
+tag. It is the published part `kicker`: a theme sets its ground, ink, face,
+weight and case like any part (`kicker: { case: 'upper' }` brings the tag
+back for a theme whose voice is capitals). A public form's brand row draws the
+App's own logo, an icon or a picture, wherever the form is served, a tenant's
+host included; the lettered square stands only for an App that has none.
+
 ### The intake style of a form with steps
 
 `style: 'intake'` is for a long application, not a wizard. It draws no form
@@ -1934,11 +1951,14 @@ found not to hold.
   border alongside the written explanation, while retaining the focus ring.
 - **One `<main>`, and a way to it.** The pane a room is drawn in is the
   page's `<main>`; the sidebar is navigation beside it, not inside it. The
-  first Tab stop is "Skip to content", which lands on that pane. The menu is
-  one Tab stop — its filter, or, where an App hides the filter, the current
-  row — and the arrows move from there.
+  first Tab stop is "Skip to content", which lands on that pane and sits
+  inside the top bar's banner landmark (a link outside every landmark is
+  skipped by a landmark list). The menu is one Tab stop — its filter, or,
+  where an App hides the filter, the current row — and the arrows move from
+  there. A menu row's accessible name is its label and then its count
+  ("People 48"), so the name holds the words shown (WCAG 2.5.3).
 - **Targets are 24px square at least** where they sit among others (a
-  card's ⋯), and 44px where this file asks (the landing's calls to action).
+  card's ⋯, a step of the breadcrumb trail), and 44px where this file asks (the landing's calls to action).
   On a coarse pointer a row's own small controls — the grip, a checklist's
   box, a card's ⋯, a chip's × — take a 44px hit area without growing what
   they draw (structure.css), and so do the chrome's: the trail's steps, a

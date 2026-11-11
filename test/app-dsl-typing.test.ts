@@ -347,6 +347,25 @@ test('hidden columns are typed apart: hidden and access rules take them, nothing
   assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
 });
 
+/* A field report: a bucket's two columns are the server's alone, so an App hides them, and then its file rule could
+   not name them (TS2322). `object` and `hash` are read by the server and served to nobody, as `hidden` says. */
+test("a file rule's object and hash take a column no reader is served", () => {
+  const compiled = compile(
+    [
+      'import type { Resources } from "./mistri-schema.d.ts";',
+      'export const resources = {',
+      '  ticket: { hidden: ["resolution", "closed_at"], file: { content: "subject", name: "status", object: "resolution", hash: "closed_at" } },',
+      '} satisfies Resources;',
+      '// @ts-expect-error A column the table does not have is still refused.',
+      'export const typo = { ticket: { file: { content: "subject", name: "status", object: "resolutoin" } } } satisfies Resources;',
+      "// @ts-expect-error The file's name is shown, so it is not one of them.",
+      'export const named = { ticket: { file: { content: "subject", name: "resolution" } } } satisfies Resources;',
+    ].join('\n'),
+    { ticket: ['resolution', 'closed_at'] },
+  );
+  assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+});
+
 test("column names in a list's named orders, a board's sort, a search index and a dashboard's pick-filters are the schema's", () => {
   const compiled = compile(
     [

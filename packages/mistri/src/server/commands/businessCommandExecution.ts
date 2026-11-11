@@ -527,6 +527,9 @@ async function executeUntraced(
     // did, and only a first attempt hears that its lookup failed.
     const lookupRun = options.statusOnly || !flagEnabled ? undefined : registeredLookup(command);
     let lookup: unknown, lookupFailure: BusinessCommandExecutionError | undefined;
+    /* Targets the lookup's read already wrote to the read audit: the transaction's read of the same row is not a
+       second line. */
+    const lookupAudited = new Set<string>();
     if (lookupRun) {
       const reader = authorized.lookup;
       const table = authorized.catalog?.[command.target];
@@ -557,13 +560,15 @@ async function executeUntraced(
           for (const key of list.keys) {
             const exact = canonicalKey(table, key);
             const row = exact ? await reader.target(exact) : undefined;
-            if (exact && targetAudit)
+            if (exact && targetAudit) {
               await auditCommandRead(authorized.readAudit, request.command, {
                 ...targetAudit,
                 keys: table.key,
                 groups: keyFilter(exact).groups,
                 rows: row ? [row] : [],
               });
+              lookupAudited.add(commandKeyText(exact));
+            }
             if (!row) throw new BusinessCommandExecutionError('not_found', 'not_applied', undefined, key);
             before.push(normalizeRow(table, row) as UntypedRow);
           }
@@ -590,6 +595,8 @@ async function executeUntraced(
               signal,
               declared: command.integrations,
             }),
+            // The tenant it runs in, read before the transaction: a command naming no record has no row to say it.
+            ...(receiptOwner ? { tenant: receiptOwner.tenantId } : {}),
             ...stood,
           }),
           input,
@@ -1034,6 +1041,24 @@ async function executeUntraced(
             const catalog = authorized.catalog,
               table = catalog?.[command.target];
             if (!table) throw new AppAccessDenied();
+            /* Inside the command's transaction, so through its journal: a second writer would nest in it (SQLite
+               refuses that) or wait on it. The rows commit with the command or roll back with it; a journal that
+               keeps no read audit fails the command (ReadAuditFailed). */
+            const heldAudit: CommandReadAudit | undefined = authorized.readAudit && {
+              ...authorized.readAudit,
+              sink: Object.freeze<ReadAuditSink>({
+                ...authorized.readAudit.sink,
+                held: true,
+                append: async (row) => {
+                  if (typeof journal.appendReadAudit !== 'function')
+                    throw new Error('this database keeps no read audit in a command transaction');
+                  await journal.appendReadAudit([row]);
+                },
+              }),
+            };
+            /* The target is the one read of the executor's own that the read audit hears: the person acted on that
+               record, so it is a line under this command whether or not a lookup or the handler reads it too. */
+            const auditedTarget = authorized.audited?.tables.get(command.target);
             const targets: UntypedRow[] = [];
             /* `me` in the command's `when` and its inputs' is this actor (commandWhen.ts whenPerson), read once. */
             const me =
@@ -1119,6 +1144,13 @@ async function executeUntraced(
                   }
                 }
                 const row = normalizeRow(table, found!.rows[0]) as UntypedRow;
+                if (auditedTarget && !lookupAudited.has(commandKeyText(exact)))
+                  await auditCommandRead(heldAudit, request.command, {
+                    ...auditedTarget,
+                    keys: table.key,
+                    groups: keyFilter(exact).groups,
+                    rows: [row],
+                  });
                 let derivedFailure: DerivedFailure | undefined;
                 if (when !== undefined && derives)
                   [eligible] = await whenHolds(
@@ -1255,24 +1287,9 @@ async function executeUntraced(
             const denied = available.findIndex((value) => !value);
             if (denied >= 0) throw new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, list.keys[denied]);
             /* What the handler reads through its `db` and `tx` of an audited resource is written before it has the
-               rows, under this command (readAudit.ts auditCommandRead); the executor's own reads around it — the
-               target, availability, constants — are the command's machinery, not the handler's reads. */
+               rows, under this command (readAudit.ts auditCommandRead); the executor's own reads around it —
+               availability, constants — are the command's machinery, not the handler's reads. */
             const auditedTables = authorized.audited?.tables;
-            /* Inside the command's transaction, so through its journal: a second writer would nest in it (SQLite
-               refuses that) or wait on it. The rows commit with the command or roll back with it; a journal that
-               keeps no read audit fails the command (ReadAuditFailed). */
-            const heldAudit: CommandReadAudit | undefined = authorized.readAudit && {
-              ...authorized.readAudit,
-              sink: Object.freeze<ReadAuditSink>({
-                ...authorized.readAudit.sink,
-                held: true,
-                append: async (row) => {
-                  if (typeof journal.appendReadAudit !== 'function')
-                    throw new Error('this database keeps no read audit in a command transaction');
-                  await journal.appendReadAudit([row]);
-                },
-              }),
-            };
             const audit = (inner: WriteTransaction): WriteTransaction =>
               auditedTables?.size
                 ? Object.freeze<WriteTransaction>({

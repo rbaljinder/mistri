@@ -204,9 +204,10 @@ export type ValueDisplay = import('./app.js').Plain<import('./app.js').AppDispla
 /** One box: a hairline and the surface. A card inside a card, or a Stat inside one, draws as a plain group. `count` is a
     quiet number beside the title and `action` a slot at the title row's end (buttons, a menu): given either, the title
     row is a header row. `ground="nav"` puts the box on the look's navigation ground: a Stat, Value, Meter, Table, Items,
-    Segmented or Empty inside it takes that ground's inks. Any element with `data-ground="nav"` is the same scope. */
+    Segmented or Empty inside it takes that ground's inks. Any element with `data-ground="nav"` is the same scope. The title is an h3; `level` makes it
+    an h2 or an h4 where the page's outline needs one (a card that is a section of a page under the platform's h1 is `level={2}`). */
 export declare function Card(
-  props: Children & { title?: ReactTypes.ReactNode; count?: ReactTypes.ReactNode; action?: ReactTypes.ReactNode; ground?: 'nav'; className?: string },
+  props: Children & { title?: ReactTypes.ReactNode; level?: 2 | 3 | 4; count?: ReactTypes.ReactNode; action?: ReactTypes.ReactNode; ground?: 'nav'; className?: string },
 ): ReactTypes.ReactElement;
 /** A main column beside a rail (notes, filters, facts). The rail is `railWidth` wide (a CSS length, `'20rem'` by default,
     never past half the box) at the `side` edge (`'end'` by default); the main takes the rest. Where the box itself is
@@ -231,6 +232,11 @@ export declare function Row(
 /** Children in a grid of equal columns, each as wide as `min` (a CSS length, `'16rem'` by default) where there is room
     and fewer columns where there is not: it wraps, and never scrolls sideways. Three cards across at a desk, one on a phone. */
 export declare function Cluster(props: Children & { min?: string; gap?: Gap; className?: string }): ReactTypes.ReactElement;
+/** A line of words: `<Text tone="muted" size="sm">Not open to your role.</Text>`. The default is the page's ink, `muted` its secondary ink
+    (a note, a caption), `danger` the status colour of a refusal or a failure. It sets no layout of its own. */
+export declare function Text(props: { tone?: 'default' | 'muted' | 'danger'; size?: 'sm' | 'md'; children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
+/** Words only a screen reader hears: `<VisuallyHidden>, opens in a new tab</VisuallyHidden>`. Clipped, not `display: none`, so they stay announced and take no room. */
+export declare function VisuallyHidden(props: { children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
 /** A heading inside a section, whose own title is its h2. */
 export declare function Heading(props: Children & { level?: 3 | 4; className?: string }): ReactTypes.ReactElement;
 /** The platform's one button. */

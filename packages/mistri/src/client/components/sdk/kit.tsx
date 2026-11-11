@@ -16,6 +16,7 @@ import {
   useContext,
   useEffect,
   useRef,
+  useState,
   type ComponentProps,
   type CSSProperties,
   type KeyboardEvent,
@@ -50,9 +51,12 @@ const given = (slot: ReactNode): boolean => slot !== undefined && slot !== null 
  * `count` (a quiet number beside the title) and `action` (right-aligned in the same row) turn the title into a header
  * row; with neither it is the heading alone. `ground="nav"` is the box on the look's navigation ground (see
  * `data-ground` in kit.css): everything the kit draws inside it takes that ground's inks.
+ * The title is an h3 unless `level` says another: a page of the App's own has the platform's h1 above it, and an
+ * h3 straight under it skips a level of the outline (WCAG 1.3.1), so a card that is a section of the page is `level={2}`.
  */
 export function Card({
   title,
+  level = 3,
   count,
   action,
   ground,
@@ -60,6 +64,7 @@ export function Card({
   className,
 }: {
   title?: ReactNode;
+  level?: 2 | 3 | 4;
   count?: ReactNode;
   action?: ReactNode;
   ground?: 'nav';
@@ -68,7 +73,8 @@ export function Card({
 }) {
   const nested = useContext(InCard);
   const classes = [nested ? 'kit-group' : 'kit-card', className].filter(Boolean).join(' ');
-  const heading = title !== undefined && <h3 className="kit-card-title">{title}</h3>;
+  const Tag = `h${level}` as 'h2' | 'h3' | 'h4';
+  const heading = title !== undefined && <Tag className="kit-card-title">{title}</Tag>;
   return (
     <div className={classes} {...(ground ? { 'data-ground': ground } : {})}>
       {given(count) || given(action) ? (
@@ -179,6 +185,36 @@ export function Beside({
       </div>
     </div>
   );
+}
+
+/**
+ * A line of words: `<Text tone="muted" size="sm">Not shared with your role.</Text>`. The default is the page's ink; `muted`
+ * is its secondary ink, for a note or a caption; `danger` is the status colour for a refusal or a failure. It stands
+ * in a Card or on the page and sets no layout of its own.
+ */
+export function Text({
+  tone = 'default',
+  size = 'md',
+  children,
+}: {
+  tone?: 'default' | 'muted' | 'danger';
+  size?: 'sm' | 'md';
+  children?: ReactNode;
+}) {
+  return (
+    <p className={['kit-text', tone === 'default' ? '' : `kit-text-${tone}`, size === 'sm' ? 'kit-text-sm' : ''].filter(Boolean).join(' ')}>
+      {children}
+    </p>
+  );
+}
+
+/**
+ * Words only a screen reader hears: a count's unit, the "opens in a new tab" a link's icon implies, a heading a sighted
+ * reader has no use for. It is clipped, not `display: none`, so it stays in the accessibility tree and the page's
+ * tab order and layout never see it. A page that wrote its own clip rule for this can drop it.
+ */
+export function VisuallyHidden({ children }: { children?: ReactNode }) {
+  return <span className="kit-visually-hidden">{children}</span>;
 }
 
 /** A heading inside a section: the section's own title is its h2, so this is an h3 by default. */
@@ -476,6 +512,28 @@ export interface TableColumn<Row> {
 }
 
 /**
+ * Whether a box scrolls sideways right now. Such a box is a Tab stop and has a name (WCAG 2.1.1; axe
+ * scrollable-region-focusable): a keyboard reader cannot reach what is off the edge of a box they cannot focus. It is
+ * so only while it scrolls — a table that fits adds no stop to the page — and only attributes change, so nothing moves.
+ */
+function useScrolls() {
+  const box = useRef<HTMLDivElement>(null);
+  const [scrolls, setScrolls] = useState(false);
+  useEffect(() => {
+    const node = box.current;
+    if (!node) return;
+    const measure = () => setScrolls(node.scrollWidth > node.clientWidth + 1);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(node);
+    if (node.firstElementChild) watch.observe(node.firstElementChild);
+    return () => watch.disconnect();
+  }, []);
+  return { box, scrolls };
+}
+
+/**
  * Rows the component read, in the look's own table: the head, the hairlines and the row hover are the platform's,
  * and each cell is a `Value`, so a column dressed in the App is dressed here. Sorting is the caller's, as its rows
  * are: a head is a button once `onSort` is given, and the table says which way it stands; it never reorders what it
@@ -503,8 +561,9 @@ export function Table<Row extends Record<string, unknown>>({
   /** Said under the head when there are no rows. */
   empty?: ReactNode;
 }) {
+  const { box, scrolls } = useScrolls();
   return (
-    <div className="table-wrap kit-table">
+    <div ref={box} className="table-wrap kit-table" {...(scrolls ? { role: 'region', tabIndex: 0, 'aria-label': label } : {})}>
       <table aria-label={label}>
         <thead>
           <tr>

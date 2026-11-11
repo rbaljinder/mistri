@@ -52,7 +52,7 @@ test('token command waits for maintenance before its single JSON handoff', async
   assert.deepEqual(err.chunks, []);
 });
 
-test('maintenance and post-commit output failures never retry or disclose diagnostics', async () => {
+test('maintenance and post-commit output failures never retry or disclose credentials', async () => {
   for (const outputFailure of [false, true]) {
     const out = sink(outputFailure),
       err = sink();
@@ -61,7 +61,7 @@ test('maintenance and post-commit output failures never retry or disclose diagno
       ['revoke'],
       async () => {
         calls++;
-        if (!outputFailure) throw new Error('PRIVATE_DRIVER_DETAIL');
+        if (!outputFailure) throw new Error('connect ECONNREFUSED postgres://operator:PRIVATE_PASSWORD@db.internal:5432/auth');
         return { verb: 'revoke', result: true };
       },
       out.stream,
@@ -70,7 +70,9 @@ test('maintenance and post-commit output failures never retry or disclose diagno
     assert.equal(code, 2);
     assert.equal(calls, 1);
     assert.match(err.chunks.join(''), /outcome may be uncertain/);
-    assert.doesNotMatch(err.chunks.join(''), /PRIVATE_DRIVER_DETAIL/);
+    assert.doesNotMatch(err.chunks.join(''), /PRIVATE_PASSWORD|operator:/);
+    // The cause is named, minus the credential: the host it could not reach is the useful half.
+    if (!outputFailure) assert.match(err.chunks.join(''), /^mistri: API token maintenance failed: connect ECONNREFUSED .*db\.internal/);
     if (!outputFailure) assert.deepEqual(out.chunks, []);
   }
 });
@@ -91,6 +93,7 @@ test('broken diagnostic output still returns failure', async () => {
 
 test('uncertain issuance retains only a validated non-secret locator, including broken handoff', async () => {
   const tokenId = '12345678-1234-4abc-8def-123456789abc';
+  const secret = `twa1.${tokenId}.${'A'.repeat(43)}`;
   for (const outputFailure of [false, true]) {
     const out = sink(outputFailure),
       err = sink();
@@ -100,8 +103,8 @@ test('uncertain issuance retains only a validated non-secret locator, including 
       async (_argv, remember) => {
         calls++;
         remember(tokenId);
-        if (!outputFailure) throw new Error('PRIVATE_SECRET');
-        return { token: 'PRIVATE_SECRET', tokenId };
+        if (!outputFailure) throw new Error(`could not store ${secret}`);
+        return { token: secret, tokenId };
       },
       out.stream,
       err.stream,
@@ -109,7 +112,7 @@ test('uncertain issuance retains only a validated non-secret locator, including 
     assert.equal(code, 2);
     assert.equal(calls, 1);
     assert.ok(err.chunks.join('').includes(tokenId));
-    assert.doesNotMatch(err.chunks.join(''), /PRIVATE_SECRET/);
+    assert.doesNotMatch(err.chunks.join(''), /AAAAAAAAAA/);
   }
   const out = sink(),
     err = sink();
@@ -119,7 +122,7 @@ test('uncertain issuance retains only a validated non-secret locator, including 
 });
 
 // A field report: a refusal that names its precondition was printed as the generic "maintenance failed".
-test('a refusal prints the precondition it names, and any other failure stays the generic line', async () => {
+test('a refusal prints the precondition it names, and any other failure prints its cause', async () => {
   const refused = sink();
   const code = await runApiTokenCommand(
     ['provision'],
@@ -145,6 +148,9 @@ test('a refusal prints the precondition it names, and any other failure stays th
     sink().stream,
     other.stream,
   );
-  assert.match(other.chunks.join(''), /API token maintenance failed/);
-  assert.doesNotMatch(other.chunks.join(''), /PRIVATE_DRIVER_DETAIL/);
+  // The generic line is only for a failure with no message of its own; one that has one prints it.
+  assert.match(other.chunks.join(''), /API token maintenance failed: PRIVATE_DRIVER_DETAIL\. The outcome may be uncertain/);
+  const silent = sink();
+  await runApiTokenCommand(['provision'], async () => Promise.reject({}), sink().stream, silent.stream);
+  assert.match(silent.chunks.join(''), /^mistri: API token maintenance failed\. The outcome may be uncertain/);
 });

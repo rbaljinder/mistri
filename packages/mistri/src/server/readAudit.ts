@@ -49,6 +49,11 @@ export interface ReadAuditSink {
   readonly actor: string;
   /** A support visit's id. */
   readonly visit?: string;
+  /** The roles the read is granted under: a person's verified ones, or an API token's own. Absent for a signed-out
+   * visitor, a service principal and a support operator, whose reads no role grants. */
+  readonly roles?: readonly string[];
+  /** On a tenant App, the membership the read comes through: the person's own, or the one that holds the API token. */
+  readonly membership?: string;
   /** One row, durable before it resolves, on the database that holds `connection`'s rows. */
   append(row: ReadAuditRow, connection: string): Promise<void>;
   /** Rows written in a transaction that may yet roll back (a command handler's reads): never coalesced, since a row
@@ -257,6 +262,9 @@ async function record(read: Read, sink: ReadAuditSink | undefined): Promise<void
     tenant: sink.tenant,
     actor: actor.slice(0, READ_AUDIT_LIMITS.actor),
     ...(sink.visit ? { visit: sink.visit } : {}),
+    /* Sorted and once each, so the same grant reads as the same line and coalesces with it. */
+    ...(sink.roles?.length ? { roles: [...new Set(sink.roles)].sort() } : {}),
+    ...(sink.membership ? { membership: sink.membership } : {}),
     resource: read.resource,
     route: door.route,
     ...(door.route === 'command' && door.command !== undefined ? { command: door.command } : {}),
@@ -277,6 +285,8 @@ async function record(read: Read, sink: ReadAuditSink | undefined): Promise<void
     row.tenant,
     row.actor,
     row.visit ?? '',
+    row.roles ? JSON.stringify(row.roles) : '',
+    row.membership ?? '',
     row.resource,
     row.route,
     row.command ?? '',

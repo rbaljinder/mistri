@@ -57,3 +57,42 @@ test('a problem marks it invalid and joins its description; disabled is the inpu
   expect(input).toHaveAccessibleDescription('Choose a file.');
   expect(input).toBeDisabled();
 });
+
+test('with `multiple` the whole choice is handed up as a list, and an empty list clears the input', async () => {
+  const user = userEvent.setup();
+  const pick = vi.fn();
+  function Many() {
+    const [files, set] = useState<File[]>([]);
+    return (
+      <>
+        <FileField
+          label="Exports"
+          multiple
+          value={files}
+          onChange={(next) => {
+            pick(next);
+            set(next);
+          }}
+        />
+        <button type="button" onClick={() => set([])}>
+          Clear
+        </button>
+      </>
+    );
+  }
+  render(<Many />);
+  const input = screen.getByLabelText<HTMLInputElement>('Exports');
+  expect(input).toHaveAttribute('multiple');
+  const a = new File(['1'], 'a.csv', { type: 'text/csv' });
+  const b = new File(['2'], 'b.csv', { type: 'text/csv' });
+  await user.upload(input, [a, b]);
+  expect(pick).toHaveBeenLastCalledWith([a, b]);
+  expect(input.files).toHaveLength(2);
+  await user.click(screen.getByRole('button', { name: 'Clear' }));
+  expect(input.files).toHaveLength(0);
+});
+
+test('without `multiple` the input takes one file', () => {
+  render(<FileField label="Contacts" value={null} onChange={() => {}} />);
+  expect(screen.getByLabelText('Contacts')).not.toHaveAttribute('multiple');
+});

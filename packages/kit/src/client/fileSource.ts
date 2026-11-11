@@ -9,7 +9,10 @@
  * lease as base64 (`/api/file/read`), made a blob here, and drawn or saved
  * from the blob's own address, which no other page and no other tenant can
  * open. A picture read once is kept for the page's life, a few hundred at
- * most, so a list that scrolls back does not read it again.
+ * most, so a list that scrolls back does not read it again. A free-form
+ * page's `useFile` draws from the same blobs (pictureOnLeaseNow): a signed
+ * address an `<img>` could fetch would be a second way into a tenant's files,
+ * one that outlives the lease and travels with a copied link.
  */
 import { useEffect, useState } from 'react';
 import { api } from './core.js';
@@ -66,31 +69,59 @@ async function fileOnLease(
   return { blob: new Blob([bytesOf(reply.data)], { type }), name: reply.name };
 }
 
-/* Pictures read on the lease, by what they were read as; the oldest is let go past the most kept. */
+/* Pictures read on the lease, by what they were read as, with the address once it is known; the oldest is let go past the most kept. */
 const KEPT = 300;
-const pictures = new Map<string, Promise<string>>();
+interface Picture {
+  read: Promise<string>;
+  src?: string;
+}
+const pictures = new Map<string, Picture>();
 /* The lease a picture was read on: another account or tenant reads its own. */
 let keptFor: unknown;
 
-function pictureOnLease(table: string, key: Record<string, unknown>, variant?: 'thumb'): Promise<string> {
+function pictureOnLease(table: string, key: Record<string, unknown>, variant?: 'thumb'): Picture {
   const identity = captureSessionIdentity();
   if (keptFor !== identity) {
-    for (const kept of pictures.values()) void kept.then(URL.revokeObjectURL, () => {});
+    for (const kept of pictures.values()) void kept.read.then(URL.revokeObjectURL, () => {});
     pictures.clear();
     keptFor = identity;
   }
   const name = JSON.stringify([table, key, variant ?? '']);
   const kept = pictures.get(name);
   if (kept) return kept;
-  const read = fileOnLease(table, key, { inline: true, ...(variant ? { variant } : {}) }).then(({ blob }) => URL.createObjectURL(blob));
-  read.catch(() => pictures.delete(name));
-  pictures.set(name, read);
+  const picture: Picture = {
+    read: fileOnLease(table, key, { inline: true, ...(variant ? { variant } : {}) }).then(({ blob }) => {
+      picture.src = URL.createObjectURL(blob);
+      return picture.src;
+    }),
+  };
+  picture.read.catch(() => pictures.get(name) === picture && pictures.delete(name));
+  pictures.set(name, picture);
   if (pictures.size > KEPT) {
     const [oldest, gone] = pictures.entries().next().value!;
     pictures.delete(oldest);
-    void gone.then(URL.revokeObjectURL, () => {});
+    void gone.read.then(URL.revokeObjectURL, () => {});
   }
-  return read;
+  return picture;
+}
+
+/**
+ * A picture's address on the lease as it stands, for a caller that answers
+ * while it draws (a free-form page's `useFile`): the blob's address once it
+ * has been read, else undefined, with the read started and `drawn` called
+ * when it lands so the caller draws again. A picture that cannot be read
+ * stays undefined and never calls `drawn`, so a failure is not a loop.
+ */
+export function pictureOnLeaseNow(
+  table: string,
+  key: Record<string, unknown>,
+  variant: 'thumb' | undefined,
+  drawn: () => void,
+): string | undefined {
+  const picture = pictureOnLease(table, key, variant);
+  if (picture.src !== undefined) return picture.src;
+  picture.read.then(drawn, () => {});
+  return undefined;
 }
 
 /**
@@ -112,7 +143,7 @@ export function usePictureAddress(
   useEffect(() => {
     if (!lease || !table || !key) return;
     let current = true;
-    pictureOnLease(table, key, variant).then(
+    pictureOnLease(table, key, variant).read.then(
       (src) => current && setDrawn({ name, src }),
       () => current && setDrawn(undefined),
     );

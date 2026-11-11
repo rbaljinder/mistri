@@ -467,9 +467,9 @@ function TableRow({
 }) {
   const row = useRef<HTMLButtonElement>(null);
   const snapshot = rowCount(item, undefined);
-  /* Named by its label alone and the count said as its description: named
-     with the number, a row was "Website 1", which a screen reader reads as
-     its name and a test or a voice command has to guess at. */
+  /* Named by its label and then its count, in the order they are drawn: the name holds the words the row shows
+     ("Website 1"), as WCAG 2.5.3 asks, so a voice command that reads the screen finds it. The label alone, with
+     the count said as a description, was "Website" under a row that reads "Website 1". */
   const labelId = useId(),
     countId = useId();
   return (
@@ -484,8 +484,7 @@ function TableRow({
       data-table-index={index}
       tabIndex={tabNavigation ? 0 : -1}
       aria-current={current ? 'true' : 'false'}
-      aria-labelledby={labelId}
-      aria-describedby={countId}
+      aria-labelledby={`${labelId} ${countId}`}
       className={active ? 'active' : undefined}
       title={title}
       onClick={
@@ -508,6 +507,8 @@ function TableRow({
       <span className="nav-label" id={labelId}>
         {item.label}
       </span>
+      {/* A space between the words, as the name has one: a row is flex, so it draws nothing, but the words read as drawn
+          ("Pick lists 16", not "Pick lists16") for a check of the name against the text. */}{' '}
       {item.tag === 'view' ? (
         <span className="view-tag" id={countId}>
           {say('view')}

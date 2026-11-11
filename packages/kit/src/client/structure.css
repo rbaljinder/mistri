@@ -147,6 +147,26 @@
     }
   }
 
+  /* Between a phone and a desk the bar's controls are not one row by rule, and a long App name beside the tenant's
+   control and the account ran past the window's edge: at 768px the page scrolled sideways (a field report). It wraps:
+   what does not fit stands on a second line at the right (the actions' own auto margin), and the name gives way
+   first, to an ellipsis. A bar that fits is one row as before; a phone's is always one (below). */
+  @media (min-width: 601px) and (max-width: 768px) {
+    body.app-mode .topbar {
+      flex-wrap: wrap;
+      row-gap: var(--space-1);
+    }
+    body.app-mode .topbar .brand {
+      min-width: 0;
+      max-width: 100%;
+    }
+    body.app-mode .topbar .brand-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
   /* A phone's App bar is one row in every App, whichever shell it has on a
    desk: the menu's mark first, the brand taking the room, then search, the
    settings and the account at the right edge. A top-bar App had put its

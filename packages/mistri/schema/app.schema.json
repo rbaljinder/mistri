@@ -1233,7 +1233,7 @@
           },
           "when": {
             "type": "string",
-            "description": "Shown only when the record matches, in the query language."
+            "description": "Shown only when the record matches, in the query language. On a command action, on top of the command's own `when`, which still decides where it may run."
           },
           "confirm": {
             "type": "boolean",
@@ -5085,6 +5085,13 @@
             "kind": { "const": "integrations" },
             "title": { "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
             "icon": { "$ref": "#/$defs/appIcon", "description": "A curated mark in the section’s heading row." },
+            "integrations": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 },
+              "description": "The integrations this form shows, by name, in this order; each one the jobs module lists. Without it, every one."
+            },
             "area": { "$ref": "#/$defs/dashArea" },
             "width": { "enum": ["full", "two-thirds", "half", "third"] }
           }

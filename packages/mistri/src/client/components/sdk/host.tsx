@@ -45,6 +45,7 @@ import { rowsByPath } from './rows.js';
 import { sayAppMessage } from './appMessage.js';
 import { say } from '../../copy/components/components/sdk/host.js';
 import { served, shownUnplaced } from '@mistriwork/kit/client/addressMount.js';
+import { filesOnLease, pictureOnLeaseNow } from '@mistriwork/kit/client/fileSource.js';
 import { hrefFor, viewPath } from '../../publicAddress.js';
 import { createPageAppFlags } from '../../appFlags.js';
 import { pageAnalyticsBeacon } from '../../analyticsBeacon.js';
@@ -249,8 +250,11 @@ const pageHost: UiHost = {
   fillComposer(text, mode) {
     return fillPageComposer(text, mode);
   },
-  fileAddress(resource, key, options = {}) {
+  fileAddress(resource, key, options = {}, drawn) {
     const table = tableOf(resource);
+    /* A tenant's file is never a link (fileSource.ts): an <img> sends no lease, so the file route refuses it. It is
+       read on the lease into a blob the shell's own attachments share, and has an address once that lands. */
+    if (filesOnLease()) return pictureOnLeaseNow(table.id, { ...key }, options.thumbnail ? 'thumb' : undefined, drawn ?? (() => {}));
     return served(
       `/api/file?${new URLSearchParams({
         ...ownedBy(state.activeConnection ?? null),

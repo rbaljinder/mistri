@@ -52,9 +52,11 @@ const PROFILE_TAKES: Record<string, ProfileTakes & { bare?: boolean }> = {
   shot: { entries: ['commands', 'jobs', 'policy'], bare: true, cwdApp: true },
   grade: { entries: ['commands', 'jobs', 'policy'], bare: true, cwdApp: true },
   seed: { entries: ['entry'], bare: true },
-  tenant: { entries: ['policy'], cwdApp: true },
+  /* A tenant step reads the deployment as a start does: the commands and the jobs module that wires their integrations. */
+  tenant: { entries: ['commands', 'jobs', 'policy'], cwdApp: true },
   flows: { entries: ['jobs', 'policy'], cwdApp: true },
-  jobs: { entries: ['jobs'], cwdApp: true },
+  /* jobsCommand.ts leaves the policy out on an App that is not a tenant App, where the profile may name a row policy. */
+  jobs: { entries: ['commands', 'jobs', 'policy'], cwdApp: true },
   decide: { entries: ['jobs'], cwdApp: true },
   deploy: { entries: [], cwdApp: true },
   test: { entries: [], cwdApp: true },

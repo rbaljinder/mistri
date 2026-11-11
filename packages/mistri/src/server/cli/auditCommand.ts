@@ -16,6 +16,7 @@ const HELP = `${AUDIT_USAGE}
 
   Prints the reads recorded for the App's audited resources, newest first,
   one JSON object a line: when, who (actor, and a support visit's id), the
+  roles it read under and, on a tenant App, its membership, the
   tenant, the resource, the route it came by (a command's own reads: route
   "command" and the command's id), and the one record read or the query with
   the count and ids of the rows it returned. Field values are never recorded.

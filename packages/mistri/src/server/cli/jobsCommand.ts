@@ -10,6 +10,7 @@
  */
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { projectContext } from '@mistriwork/engine/server/config/profile.js';
 
 const JOBS_USAGE = `mistri jobs run <name> [--app <dir>] --jobs <file> [--wait <seconds>]
                     [--policy <file> [--tenant <id>]]
@@ -25,7 +26,8 @@ const HELP = `${JOBS_USAGE}
   that is not one of the App's jobs at times is refused with the names that
   are.
 
-  On a tenant App, --policy names its policy, as its server's start does. A
+  On a tenant App, --policy names its policy, as its server's start does
+  (from mistri.json when the App's profile names it, as --jobs is). A
   job per tenant runs for the tenant --tenant names, or, without it, once for
   each tenant active now, as its next slot would; the runs go one at a time.
   A job on the platform runs once, and takes no --tenant.
@@ -129,6 +131,12 @@ export async function runJobsCommand(
     }
     const app = loaded.app;
     const tenantApp = isTenantApp(app);
+    // The project profile names a row policy too: one it supplied is not this App's to refuse, and is left out.
+    const policyFromProfile =
+      flags['--policy'] !== undefined &&
+      projectContext()?.entries.policy?.from === 'profile' &&
+      projectContext()?.entries.policy?.path === resolve(flags['--policy']);
+    if (!tenantApp && policyFromProfile) delete flags['--policy'];
     if (!tenantApp && (flags['--policy'] !== undefined || flags['--tenant'] !== undefined))
       return fail(`--policy and --tenant are a tenant App's, and ${app.id} is not one.`);
     let job: import('../jobs/jobModule.js').CapturedJob;

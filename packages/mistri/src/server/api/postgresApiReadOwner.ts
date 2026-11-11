@@ -305,7 +305,7 @@ export async function createPostgresApiReadOwner(
                     await auditEventFeed(
                       withReadAuditSinkPer(
                         resolveAppAccess(app, resources.schema, [...observed.roles]),
-                        { app: app.id, tenant: '', actor: `api-token:${observed.tokenId}` },
+                        { app: app.id, tenant: '', actor: `api-token:${observed.tokenId}`, roles: observed.roles },
                         // Each row goes to the database that holds its resource, which is not always the feed's lane.
                         async (c) => {
                           const open = physicals.get(c);
@@ -373,7 +373,7 @@ export async function createPostgresApiReadOwner(
                   resources,
                   withReadAuditSink(
                     resolveAppAccess(app, resources.schema, [...observed.roles]),
-                    { app: app.id, tenant: '', actor: `api-token:${observed.tokenId}` },
+                    { app: app.id, tenant: '', actor: `api-token:${observed.tokenId}`, roles: observed.roles },
                     physicals.get(lane)!.physical,
                     lane,
                   ),

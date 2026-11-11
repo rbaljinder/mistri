@@ -692,7 +692,13 @@ export function bindPlatformCommands<Request>(runtime: PlatformRequestRuntime<Re
                   /* The platform realm's reads are its own, as its read runtime writes them (tenantDeployment.ts). */
                   ...tenantCommandReadAudit(
                     authorization,
-                    { app: app.id, tenant: '', actor: scope.principal.accountId },
+                    {
+                      app: app.id,
+                      tenant: '',
+                      actor: scope.principal.accountId,
+                      roles: actor.roles,
+                      membership: scope.principal.membershipId,
+                    },
                     identity.source.connection,
                     scope.appendReadAudit,
                   ),

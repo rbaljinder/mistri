@@ -125,6 +125,8 @@ export interface Section {
   /** find: the tables its box searches (DashboardFind.tsx), and the box's words before anything is typed. */
   searched?: string[];
   placeholder?: string;
+  /** integrations: the ones the settings form shows, in this order (IntegrationsForm.tsx); every one without it. */
+  integrations?: string[];
 }
 
 /** The chart shapes a part on demand draws (ChartShapes.tsx), so a dashboard of lines and bars never fetches it. */

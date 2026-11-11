@@ -563,6 +563,22 @@ test('a role that reads and writes only the file column has its object and hash 
   );
 });
 
+// A field report: the generated types counted a hidden column out of `file.object` and `file.hash`, so an App
+// that hid its bucket columns could not name them. Hidden or not, the server keeps them for its own work.
+test('a file rule may name hidden object and hash columns, and the server still keeps them', async () => {
+  const base = definition('bucket');
+  const app = { ...base, resources: { ...base.resources, attachment: { ...base.resources.attachment, hidden: ['object_key', 'sha256'] } } };
+  await serve(async ({ upload, download, db }) => {
+    const sent = await upload({ table: 'attachment', values: { issue_id: 1 }, file: { name: 'a.bin', data: bytes.toString('base64') } });
+    assert.equal(sent.status, 200, JSON.stringify(sent.body));
+    assert.match(row(db).object_key ?? '', /^files\/files\/-\/attachment\//);
+    assert.equal(row(db).sha256, createHash('sha256').update(bytes).digest('hex'));
+    const got = await download(key(1));
+    assert.equal(got.status, 200);
+    assert.deepEqual(Buffer.from(await got.arrayBuffer()), bytes);
+  }, app);
+});
+
 const deletable = () => {
   const app = definition('bucket');
   return { ...app, resources: { ...app.resources, attachment: { ...app.resources.attachment, delete: true } } };

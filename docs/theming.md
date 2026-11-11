@@ -270,8 +270,8 @@ computed-style snapshot of every look holds this).
   `section.title`, `stat`, `stat.figure`, `fields`, `field.label`, `table`,
   `table.head`, `table.row`, `status`, `tag`, `button.primary`,
   `button.secondary`, `button.quiet`, `link`, `board.lane`, `board.card`,
-  `workflow.step`, `banner`, `steps.step`, `avatar`, `identityMark`, `menu`, `dialog` and
-  `chart`. A part takes a `ground`, an `ink` and an `edge` as color roles by
+  `workflow.step`, `banner`, `steps.step`, `avatar`, `identityMark`, `menu`, `dialog`,
+  `chart` and `kicker`. A part takes a `ground`, an `ink` and an `edge` as color roles by
   their path (`nav.ground`, `status.good`, `chart[2]`), never a hex, so
   `check` measures its ink on its ground in every mode and palette
   (`theme-part`, C13); a `radius` (`control`, `field`, `pill`, `panel`,

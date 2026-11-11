@@ -416,7 +416,12 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
               }
               const guarded = authorizeResources(
                 resources,
-                withTenantReadAudit({ ...visible, fields }, { app: app.id, tenant: '', actor: principal.accountId }, readAudit),
+                withTenantReadAudit(
+                  { ...visible, fields },
+                  // The platform membership read through: the platform's staff, not a tenant's.
+                  { app: app.id, tenant: '', actor: principal.accountId, roles: principal.roles, membership: principal.membershipId },
+                  readAudit,
+                ),
                 assertActive,
               );
               const reader = guarded.adapter;

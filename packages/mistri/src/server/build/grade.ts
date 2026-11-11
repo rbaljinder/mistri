@@ -64,6 +64,7 @@ import {
   type Judged,
   type Window,
 } from './gradeJudge.js';
+import { recycledBrowser } from './shotBrowser.js';
 import { openShot, Refusal, shotContext, shotLooks, withShotRun, type SessionState, type Shot, type ShotLook } from './shot.js';
 import { themePlace } from './themeSource.js';
 import type { ThemeDefinition, ThemePalette } from '@mistriwork/engine/schema/theme.js';
@@ -201,6 +202,8 @@ async function measure(
   theme?: GradedTheme,
   asked: Asked = { desk: false, cold: false, tree: false },
 ): Promise<{ found: Judged[]; tree?: string; revealed?: string[] }> {
+  /* A public form is a visitor's page: no session, and no tenant to choose. */
+  if (shot.signedOut) [session, choice] = [undefined, undefined];
   const context = await shotContext(browser, origin, {
     viewport: { width: window.width, height: window.height },
     dark: window.dark,
@@ -392,7 +395,9 @@ export async function runGrade(
         app: appDir,
         widest: !everyRole,
       });
-      const { loaded, origin, browser, session, choice } = opened;
+      const { loaded, origin, session, choice } = opened;
+      /* One browser for a few routes at a time (shotBrowser.ts): a grade over many of them is not one process's memory. */
+      const browsers = recycledBrowser(opened.browser, opened.restartBrowser);
       if (opened.as?.chosen)
         warn(`note: grade signed in as "${opened.as.role}", the role that reads the most. --as <role> grades another.`);
       /* Grade reads every page as a person would, so on a database with the store its visits are in the read audit too. */
@@ -445,6 +450,7 @@ export async function runGrade(
         const moved = look?.placement;
         const seen: Array<{ page: string; window: string; found: Judged[] }> = [];
         for (const [s, shot] of rowShots.entries()) {
+          const browser = await browsers.forRoute();
           for (const [w, window] of windows.entries()) {
             say(look, shot.path, window);
             const desk = window.label === '1280' && !colorOnly;

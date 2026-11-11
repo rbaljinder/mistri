@@ -107,27 +107,6 @@ export function Grid({ children }: { children?: ReactNode }) {
   return <div className="page-body">{children}</div>;
 }
 
-/**
- * A line of words: `<Text tone="muted" size="sm">Not shared with your role.</Text>`. The default is the page's ink; `muted`
- * is its secondary ink, for a note or a caption; `danger` is the status colour for a refusal or a failure. It stands
- * in a Card or on the page and sets no layout of its own.
- */
-export function Text({
-  tone = 'default',
-  size = 'md',
-  children,
-}: {
-  tone?: 'default' | 'muted' | 'danger';
-  size?: 'sm' | 'md';
-  children?: ReactNode;
-}) {
-  return (
-    <p className={['kit-text', tone === 'default' ? '' : `kit-text-${tone}`, size === 'sm' ? 'kit-text-sm' : ''].filter(Boolean).join(' ')}>
-      {children}
-    </p>
-  );
-}
-
 /** A titled region of the grid, a dashboard section's box: `<Panel title="Open lines" width="half">…</Panel>`. */
 export function Panel({
   title,

@@ -75,7 +75,9 @@ back.
 `content` column can download the file. They are the server's alone: never in a
 list, a record, the catalog or an upload's reply, and a request that names one
 (a column, filter, sort, export, insert or update) is refused as naming a
-column that is not there. The App API refuses to expose either.
+column that is not there. The App API refuses to expose either. Listing them
+in the resource's `hidden` changes nothing: the rule still names them, and the
+server still keeps them.
 
 `maxBytes` caps one upload: 10 MB when unsaid, at most 25 MB (10 MB in a tenant
 App). An upload is one request, and mistri does no S3 multipart upload.

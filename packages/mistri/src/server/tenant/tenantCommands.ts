@@ -369,7 +369,13 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                     ...(authorization.lookupTables ? { lookup: scopedLookupReader(authorization, () => scope.reads()) } : {}),
                     ...tenantCommandReadAudit(
                       authorization,
-                      { app: app.id, tenant: scope.principal.tenantId, actor: scope.principal.accountId },
+                      {
+                        app: app.id,
+                        tenant: scope.principal.tenantId,
+                        actor: scope.principal.accountId,
+                        roles: actor.roles,
+                        membership: scope.principal.membershipId,
+                      },
                       identity.source.connection,
                       scope.appendReadAudit,
                     ),

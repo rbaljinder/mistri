@@ -247,7 +247,9 @@ test('sidebar target participates in roving focus without counts/current/local n
   expect(anchor).not.toHaveAttribute('aria-current');
   expect(anchor).not.toHaveAttribute('data-table');
   expect(anchor.querySelector('.rows')).toBeNull();
-  within(host).getByRole('button', { name: 'People' }).focus();
+  within(host)
+    .getByRole('button', { name: /^People\b/ })
+    .focus();
   move(1, host);
   expect(anchor).toHaveFocus();
   expect(anchor).toHaveAttribute('tabindex', '0');
@@ -295,7 +297,7 @@ test('revoked external leaf removes its sidebar heading on menu re-open', async 
   await act(async () => document.dispatchEvent(new Event('mistri:sidebar-fold')));
   expect(within(host).queryByRole('link')).toBeNull();
   expect(host).not.toHaveTextContent('Other work');
-  expect(within(host).getByRole('button', { name: 'People' })).toBeInTheDocument();
+  expect(within(host).getByRole('button', { name: /^People\b/ })).toBeInTheDocument();
 });
 
 test('nested groups remain separate headings and participate in filtering', () => {
@@ -580,9 +582,8 @@ for (const mode of ['workbench', 'app'] as const)
       expect(host.querySelector('[data-table="unknown"] .rows')).toBeNull();
       expect(host.querySelector('[data-table="null_count"] .rows')).toBeNull();
       expect(host.querySelector('[data-table="empty"] .rows')).toHaveTextContent('0');
-      // A row is named by its label; its count is said apart, as its description.
-      const populated = within(host).getByRole('button', { name: 'populated' });
-      expect(populated).toHaveAccessibleDescription('48');
+      // A row is named by the words it shows, label then count (WCAG 2.5.3 Label in Name); a row with no count by its label.
+      expect(within(host).getByRole('button', { name: 'populated 48' })).toBeInTheDocument();
       expect(within(host).getByRole('button', { name: 'unknown' })).toHaveAccessibleDescription('');
       // A count the role may not read is absent, not an error said in the menu.
       expect(toast).not.toHaveBeenCalled();

@@ -222,6 +222,7 @@ and prints the path of each PNG. A route is /{app}/leads/12 or leads/12;
 with none, every view and page the App declares, a page on its first record.
 A record under any list over its table opens at the table's canonical address
 (the resource's view, else the first plain list in menu order); a note says which.
+A public form's page, /{app}/form/{view}, is opened signed out, as a visitor sees it.
     --theme <id|all>  with shot or grade: a built-in look (workshop, lumen,
                     mono, sage, ledger) or one of the App's own themes instead of the
                     one it wears; with shot, all shoots every built-in
@@ -360,6 +361,9 @@ The App is --app <dir>, else the current directory. An App with sign-in is
 graded as the role that reads the most, unless --as names one (or an
 account, as shot's --as <email> does). --store <dir> reads those accounts
 from another folder shaped as .mistri/, as shot's --store does.
+One window is open at a time, and the browser is started again every ten routes, so a
+grade over many routes stays within a bounded memory. Words no reader can see (font-size 0,
+a clear color, visually hidden) are not read for contrast.
     --json          with grade: one JSON document of the findings and score
     --theme <id>    with grade: grade in a built-in look or one of the App's
                     own themes instead of the one it wears; a finding
@@ -537,8 +541,9 @@ mistri audit reads [--app <dir>] [--resource <name>] [--record <id>] [--actor <w
                 [--tenant <id>] [--since <instant | 30m | 24h | 7d>] [--limit <n>]
                 [<db> | --db <target> | --config <path>]
 Prints the reads recorded for the App's resources with audit: { reads: true },
-newest first, one JSON object a line: when, the actor, the tenant, the
-resource, the route (page, api, mcp, assistant, export, picker, custom-page,
+newest first, one JSON object a line: when, the actor, the roles it read
+under and, on a tenant App, its membership, the tenant, the resource, the
+route (page, api, mcp, assistant, export, picker, custom-page,
 related, or command with the command's id) and the one record read or the
 query with the count and ids it returned; never a field's value. Each flag
 narrows: --record by the record's key, read alone or among the ids a list read
@@ -810,8 +815,8 @@ database is the App's mistri.json unless one is named. Where auth.me
 names the table people are rows of, each role's account takes the email of
 one of its rows, so a view of "= me" shows that person's records. A
 tenant App, started with its --policy, gets an account per role that is a
-member of the first two tenants of its profile table, or of the platform
-realm for a platform role.
+member of every tenant of its profile table, up to the first 100 by its
+key, or of the platform realm for a platform role.
 
 mistri test init [--app <dir>] [--config <path>] [--force]
 

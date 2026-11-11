@@ -283,14 +283,18 @@ command's own transaction, so a command that is undone leaves none);
 the reader is an account id, `service:<principal>`, `support:<operator>`
 with the visit's id, `api-token:<id>`, `assistant:<account>` for the
 assistant reading as the person it acts for, or `public` for a signed-out
-visitor. Counts, breakdowns and aggregates are not row reads and are not
-logged.
+visitor. Beside it, `roles` names the roles the read was granted under (a
+person's, or an API token's own; none for a visitor or a support visit),
+and on a tenant App `membership` names the member who read, so a line still
+says what the reader could see after their roles change. Counts, breakdowns
+and aggregates are not row reads and are not logged.
 
 It fails closed: a read whose row cannot be written is answered 503 with no
 body (a command's read fails that command, not the session), and an App that
-audits a resource on a database without the store, or with the version 1
-store that had no `command` route, refuses to start, naming `mistri migrate
-stores up`, which brings it up to date in place. The store is append-only
+audits a resource on a database without the store, or with an older store
+(version 1 had no `command` route, version 2 no `roles` or `membership`),
+refuses to start, naming `mistri migrate stores up`, which brings it up to
+date in place; lines written before then keep those empty. The store is append-only
 and never pruned. A request writes one row a read; the same read again
 within 60 seconds in one process (same reader, resource, door, and record or
 query and ids) is not written twice, while a new query, another page or

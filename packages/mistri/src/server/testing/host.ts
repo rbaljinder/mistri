@@ -382,10 +382,15 @@ function setup(url: string, control: string) {
     platform: (account: TestTenantAccount): Promise<TestTenantClient> => member(PLATFORM_TENANT_ID, account),
     /**
      * A job at times (`every`) run once now, as its next slot would run it: the same principal, grants and command,
-     * on the server's clock. Resolves when its first attempt ends, with how it ended.
+     * on the server's clock. Resolves when its first attempt ends, with how it ended. A tenant App's job per tenant
+     * runs for the `tenant` named, as that tenant's slot would; a job on the platform takes none.
      */
-    runJob: (job: string, options: { timeoutMs?: number } = {}): Promise<TestJobRun> =>
-      ask<TestJobRun>(TEST_CONTROL_PATHS.job, { job, timeoutMs: options.timeoutMs ?? 30000 }, options.timeoutMs ?? 30000),
+    runJob: (job: string, options: { timeoutMs?: number; tenant?: string } = {}): Promise<TestJobRun> =>
+      ask<TestJobRun>(
+        TEST_CONTROL_PATHS.job,
+        { job, timeoutMs: options.timeoutMs ?? 30000, ...(options.tenant === undefined ? {} : { tenant: options.tenant }) },
+        options.timeoutMs ?? 30000,
+      ),
     /**
      * The read audit's rows (resources with `audit: { reads: true }`), newest first, as `mistri audit reads` prints
      * them: who read, by which route, and the record or the query with the ids it returned. A tenant App's are read
