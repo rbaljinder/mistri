@@ -59,14 +59,13 @@
 
 /* ---------- the panel ---------- */
 
-.help-backdrop {
-  position: fixed; inset: 0; z-index: 60;
-  background: var(--scrim);
-  display: flex; justify-content: center;
-  padding: 8vh var(--space-5) var(--space-5);
-}
-.help-panel {
-  width: min(720px, 96vw); max-height: 84vh;
+/* A Modal (HelpPanel.tsx): the scrim is its backdrop, and the box hangs from the top rather than sitting centered, so
+   the sections do not jump as the examples sharpen. */
+.modal-backdrop.help-panel-backdrop { background: var(--scrim); }
+.modal.help-panel {
+  inset: 8vh 0 auto; margin: 0 auto; padding: 0;
+  width: min(720px, 96vw); max-width: none; height: auto; max-height: 84vh;
+  color: var(--ink);
   display: flex; flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--line-strong);

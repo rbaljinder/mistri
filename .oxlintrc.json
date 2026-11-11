@@ -18,7 +18,8 @@
       "files": [
         "packages/*/src/client/**",
         "packages/*/src/embed/**",
-        "packages/ui/src/**"
+        "packages/ui/src/**",
+        "test/fixtures/apps/*/ui/**"
       ],
       "env": {
         "browser": true,

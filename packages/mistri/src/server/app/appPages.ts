@@ -65,6 +65,9 @@ const NAV_RENAMED: Readonly<Record<string, string>> = { icon: 'the page\'s own "
 const FIELDS = 'mistri.page';
 /** The key `defineSurface` keeps its fields under (appSurfaces.ts). */
 const SURFACE_FIELDS = 'mistri.surface';
+/** The key `defineUiKit` keeps a kit's slots under, each as what its value is (`function`, `object`, …), for the
+    worker to hand back: a component cannot cross a worker, and a slot's name and kind are all a check needs. */
+const UI_KIT_SLOTS = 'mistri.uiKit';
 
 /** One page file, read. */
 interface PageFile {
@@ -299,7 +302,7 @@ export default inert;`;
 
 function standIn(module: HostModule): string {
   if (module === '@mistriwork/mistri/page') {
-    const others = PAGE_EXPORTS.filter((name) => name !== 'definePage' && name !== 'defineSurface');
+    const others = PAGE_EXPORTS.filter((name) => name !== 'definePage' && name !== 'defineSurface' && name !== 'defineUiKit');
     return [
       INERT,
       `export const ${others.map((name) => `${name} = inert`).join(', ')};`,
@@ -312,6 +315,12 @@ function standIn(module: HostModule): string {
       `export function defineSurface(definition) {
   if (!definition || typeof definition !== 'object') throw new Error('defineSurface takes the surface: defineSurface({ label, reads }).');
   return { [Symbol.for(${JSON.stringify(SURFACE_FIELDS)})]: { ...definition } };
+}`,
+      `export function defineUiKit(kit) {
+  const kinds = kit && typeof kit === 'object' && !Array.isArray(kit)
+    ? Object.fromEntries(Object.entries(kit).map(([slot, value]) => [slot, value === null ? 'null' : typeof value]))
+    : null;
+  return { [Symbol.for(${JSON.stringify(UI_KIT_SLOTS)})]: kinds };
 }`,
     ].join('\n');
   }
@@ -362,9 +371,9 @@ export function withStandIns(parseAst: Parse, code: string): string {
 
 /** The fields `definePage` (or, for a surface, `defineSurface`) was given, read in a worker with no environment; the
     component is never called. */
-export function evaluate(code: string, kind: 'page' | 'surface' = 'page'): Promise<unknown> {
-  const symbol = kind === 'page' ? FIELDS : SURFACE_FIELDS;
-  const maker = kind === 'page' ? 'definePage' : 'defineSurface';
+export function evaluate(code: string, kind: 'page' | 'surface' | 'UI kit' = 'page'): Promise<unknown> {
+  const symbol = kind === 'page' ? FIELDS : kind === 'surface' ? SURFACE_FIELDS : UI_KIT_SLOTS;
+  const maker = kind === 'page' ? 'definePage' : kind === 'surface' ? 'defineSurface' : 'defineUiKit';
   return new Promise((resolveValue, reject) => {
     const worker = new Worker(
       `const { parentPort, workerData } = require('node:worker_threads');
@@ -392,6 +401,33 @@ export function evaluate(code: string, kind: 'page' | 'surface' = 'page'): Promi
     const timer = setTimeout(() => done(() => reject(new Error(`the ${kind} module did not finish loading within 10s`))), 10_000);
     timer.unref();
   });
+}
+
+/**
+ * What is wrong with an App's compiled control kit, each a sentence tail after the kit's name, read the way a page's
+ * definition is: its module run under stand-ins in a worker, `defineUiKit` answering with each slot's kind. The
+ * names are held to the slots by `uiKitProblems`, the very rule the browser's `defineUiKit` applies.
+ */
+export async function uiKitModuleProblems(code: string): Promise<string[]> {
+  let kinds: unknown;
+  try {
+    kinds = await evaluate(withStandIns(await astParser(), code), 'UI kit');
+  } catch (error) {
+    const message = (error as Error).message;
+    return [message.startsWith('has ') ? message : `does not load: ${message}`];
+  }
+  const { uiKitProblems } = await import('@mistriwork/ui/uiKitSlots.js');
+  if (!isRecord(kinds)) return uiKitProblems(undefined);
+  /* A stand-in for each slot's value, of the kind it was: what `uiKitProblems` judges is the kind. */
+  const component = () => null;
+  return uiKitProblems(
+    Object.fromEntries(
+      Object.entries(kinds).map(([slot, kind]) => [
+        slot,
+        kind === 'function' ? component : kind === 'object' ? {} : kind === 'null' ? null : kind,
+      ]),
+    ),
+  );
 }
 
 /* ---------- the manifest, held to the module ---------- */

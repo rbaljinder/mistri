@@ -42,6 +42,7 @@ import {
   withDate,
 } from './internal/datePickerModel.js';
 import { popupContainer } from './internal/popups.js';
+import { slotted } from './internal/uiKitContext.js';
 
 /** What a date field says. A `format` is the locale's numeric date pattern ("MM/DD/YYYY"). */
 export interface DateFieldWords {
@@ -145,7 +146,7 @@ export interface DateFieldProps {
 }
 
 /** A date field, or a date and a wall-clock time. No input is parsed as an instant or shifted by a timezone. */
-export function DateField({
+function DefaultDateField({
   id,
   words,
   calendarIcon,
@@ -499,3 +500,6 @@ export function DateField({
     </Popover.Root>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const DateField = slotted('DateField', DefaultDateField);

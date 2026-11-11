@@ -16,6 +16,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Tabs } from '@base-ui/react/tabs';
+import { Button } from '@mistriwork/ui/Button.js';
 import { Dropdown } from '@mistriwork/kit/client/components/Dropdown.js';
 import { say } from '../copy/observe/observe/Observer.js';
 
@@ -190,9 +191,9 @@ function Explain({ spanId }: { spanId: string }) {
   const explain = useMutation({ mutationFn: () => post<{ plan?: string[]; error?: string }>('/explain', { spanId }) });
   return (
     <div className="obs-explain">
-      <button type="button" className="btn-compact obs-quiet" onClick={() => explain.mutate()} disabled={explain.isPending}>
+      <Button size="compact" className="obs-quiet" onClick={() => explain.mutate()} disabled={explain.isPending}>
         {explain.isPending ? say('explaining') : 'EXPLAIN'}
-      </button>
+      </Button>
       {explain.error && <p className="obs-problem">{explain.error.message}</p>}
       {explain.data?.error && <p className="obs-problem">{explain.data.error}</p>}
       {explain.data?.plan && <pre className="obs-code">{explain.data.plan.join('\n')}</pre>}
@@ -804,9 +805,9 @@ function Access() {
           onChange={(event) => setCommand(event.target.value)}
           aria-label={say('command')}
         />
-        <button type="submit" className="btn-compact">
+        <Button type="submit" intent="primary" size="compact">
           {say('explain')}
-        </button>
+        </Button>
       </form>
       {ask.error && <p className="obs-problem">{ask.error.message}</p>}
       {ask.data && (
@@ -870,9 +871,9 @@ export function Observer() {
           </Tabs.List>
           <span className="obs-head-end">
             <span className="obs-faint">{say('devOnly')}</span>
-            <button type="button" className="btn-compact obs-quiet" onClick={() => clear.mutate()}>
+            <Button size="compact" className="obs-quiet" onClick={() => clear.mutate()}>
               {say('clear')}
-            </button>
+            </Button>
           </span>
         </header>
         <Tabs.Panel value="requests" className="obs-panel">

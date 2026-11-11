@@ -197,6 +197,7 @@ export const ROOT_KEYS = [
   'home',
   'nav',
   'ui',
+  'uiKit',
   'branding',
   'api',
   'track',
@@ -455,6 +456,11 @@ function parseRoot(raw: unknown, where: string, composed?: AppApiDef, surfaces?:
     throw new Error(`${where}: live is true (its open pages follow other people's changes) or false, the default.`);
   }
   const retention = Object.hasOwn(a, 'retention') ? parseAppRetention(a.retention, `${where}: retention`) : undefined;
+  /* A path the App's loader compiles (apps.ts); here only its shape, so a typo is named before a compiler is asked. */
+  if (a.uiKit !== undefined && (typeof a.uiKit !== 'string' || !/^\.{1,2}\/.+\.(tsx?|jsx?)$/.test(a.uiKit)))
+    throw new Error(
+      `${where}: uiKit is the path of a module in the App directory, as './ui/kit.tsx': its default export is defineUiKit({ … }).`,
+    );
   const pages = parsedPages!.value;
   const app: AppDef = {
     id,
@@ -479,6 +485,7 @@ function parseRoot(raw: unknown, where: string, composed?: AppApiDef, surfaces?:
     ...(content.surfaces ? { surfaces: content.surfaces } : {}),
     ...(a.track === undefined ? {} : { track: a.track as NonNullable<AppDef['track']> }),
     ...(a.live === true ? { live: true as const } : {}),
+    ...(typeof a.uiKit === 'string' ? { uiKit: a.uiKit } : {}),
     ...(a.branding === undefined
       ? {}
       : {

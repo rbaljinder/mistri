@@ -71,10 +71,13 @@ const EMBED = join(ROOT, 'packages/mistri/dist/embed/react');
    1,415,725 / 388,229, style 395,684 / 53,108. rc.17 to rc.22 grew inside them. rc.23 moved the App script and both
    stylesheets: free-form pages as record tabs and in workspaces (their addresses in appModel and appAddress), Steps,
    the list presentations as page blocks, and saved form drafts in the shell's forms. Measured: App script 1,468,279 /
-   402,006, style 408,234 / 54,814; public style 408,120 / 54,758. The public script kept its target. */
+   402,006, style 408,234 / 54,814; public style 408,120 / 54,758. The public script kept its target. rc.24 to rc.39
+   grew inside them. rc.40 moved the public script: the UI seam, which every public form's controls now draw through
+   (each primitive asks the installed kit for its slot; the kit itself is a module fetched only when an App names one).
+   Measured: public script 700,146 / 195,250. */
 export const BUDGET = {
   mistri: {
-    public: { script: { raw: 700_000, br: 196_000 }, style: { raw: 420_000, br: 56_500 } },
+    public: { script: { raw: 721_000, br: 201_000 }, style: { raw: 420_000, br: 56_500 } },
     app: { script: { raw: 1_510_000, br: 414_000 }, style: { raw: 420_000, br: 56_500 } },
   },
 };

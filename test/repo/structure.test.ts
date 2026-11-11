@@ -510,6 +510,8 @@ const CLIENT_CROSSINGS = [
   'viewLink',
   // Where an App's components are fetched from, installed by surfaceShell.js for pages served without app.js.
   'appComponents',
+  // An App's control kit, installed by the shell before its first render: a lazy chunk an App without a kit never fetches.
+  'uiKitLoader',
   // An App list's presentation chain, installed as the shell's `present` by appnav.js.
   'presentedList',
   // The server-sent event reader, React-free: live sync's stream (liveSync.ts) reads its frames with the assistant's.

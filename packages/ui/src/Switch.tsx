@@ -10,6 +10,7 @@
  */
 import { useId, type ReactNode, type Ref } from 'react';
 import { Switch as BaseSwitch } from '@base-ui/react/switch';
+import { slotted } from './internal/uiKitContext.js';
 
 export interface SwitchProps {
   /** The label beside the switch; its click toggles, as the switch's own does. */
@@ -28,7 +29,7 @@ export interface SwitchProps {
   ref?: Ref<HTMLButtonElement>;
 }
 
-export function Switch({
+function DefaultSwitch({
   label,
   description,
   checked,
@@ -74,3 +75,6 @@ export function Switch({
     </span>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Switch = slotted('Switch', DefaultSwitch);

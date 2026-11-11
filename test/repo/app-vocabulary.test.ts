@@ -47,6 +47,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'surfaces',
       'track',
       'ui',
+      'uiKit',
       'unions',
       'valueLabels',
       'views',

@@ -17,6 +17,7 @@ import { Menu } from '@base-ui/react/menu';
 import { layoutViewport, zoomAnchor } from './internal/anchor.js';
 import { popupContainer } from './internal/popups.js';
 import { buttonClass } from './Button.js';
+import { slotted } from './internal/uiKitContext.js';
 
 interface DropMenuProps {
   /** The wrapper's class — where the stylesheet places the control. */
@@ -39,7 +40,7 @@ interface DropMenuProps {
   children: ReactNode;
 }
 
-export function DropMenu({
+function DefaultDropMenu({
   className,
   triggerClassName = buttonClass(),
   triggerTitle,
@@ -100,7 +101,7 @@ export function DropMenu({
 }
 
 /** A labelled run of items: a menu that changes several things says which each item changes. */
-export function DropGroup({
+function DefaultDropGroup({
   className,
   labelClassName,
   label,
@@ -120,12 +121,12 @@ export function DropGroup({
 }
 
 /** A rule between two runs of items, a separator to a screen reader. */
-export function DropSeparator({ className = 'dd-divider' }: { className?: string }) {
+function DefaultDropSeparator({ className = 'dd-divider' }: { className?: string }) {
   return <Menu.Separator className={className} />;
 }
 
 /** An item drawn as a button, so `disabled` and the button styles hold. Closes the menu unless told not to. */
-export function DropItem({
+function DefaultDropItem({
   className = 'dd-option',
   disabled,
   closeOnClick,
@@ -154,3 +155,9 @@ export function DropItem({
     </Menu.Item>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const DropMenu = slotted('DropMenu', DefaultDropMenu);
+export const DropGroup = slotted('DropGroup', DefaultDropGroup);
+export const DropSeparator = slotted('DropSeparator', DefaultDropSeparator);
+export const DropItem = slotted('DropItem', DefaultDropItem);

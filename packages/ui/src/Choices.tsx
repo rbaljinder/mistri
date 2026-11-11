@@ -8,6 +8,7 @@
 import { useId, useRef, useState, type AriaAttributes, type KeyboardEvent, type ReactNode } from 'react';
 import { Field } from './Field.js';
 import { frameOf, type FieldFrame } from './fieldFrame.js';
+import { slotted } from './internal/uiKitContext.js';
 
 export interface ChoiceOption {
   value: string;
@@ -27,7 +28,7 @@ export interface YesNoProps extends Omit<FieldFrame, 'label'> {
 }
 
 /** Two buttons answering a question. */
-export function YesNo(props: YesNoProps): ReactNode {
+function DefaultYesNo(props: YesNoProps): ReactNode {
   const name = useId();
   return (
     <Field {...frameOf(props)} group>
@@ -62,7 +63,7 @@ export interface ChoiceCardsProps extends FieldFrame {
 }
 
 /** Cards with an icon, a label and a box. One choice is a radio group; `multiple` a group of checkboxes. */
-export function ChoiceCards(props: ChoiceCardsProps): ReactNode {
+function DefaultChoiceCards(props: ChoiceCardsProps): ReactNode {
   const name = useId();
   const toggle = (v: string, on: boolean): void => {
     if (!props.multiple) return props.onChange(on ? [v] : []);
@@ -145,7 +146,7 @@ export interface CheckCardsProps {
  * on, else the first), the arrows and Home and End move between them, and Space turns the one in hand on or off — and
  * each is a `checkbox` saying `aria-checked`, so a screen reader hears "checked" as it moves.
  */
-export function CheckCards(props: CheckCardsProps): ReactNode {
+function DefaultCheckCards(props: CheckCardsProps): ReactNode {
   const { cards } = props;
   const [held, setHeld] = useState<number | undefined>(undefined);
   const faces = useRef<(HTMLDivElement | null)[]>([]);
@@ -229,7 +230,7 @@ export interface CheckboxProps extends Omit<FieldFrame, 'label'> {
 }
 
 /** A checkbox beside its text. */
-export function Checkbox(props: CheckboxProps): ReactNode {
+function DefaultCheckbox(props: CheckboxProps): ReactNode {
   return (
     <Field {...frameOf(props)} check>
       {(control) => (
@@ -247,6 +248,13 @@ export function Checkbox(props: CheckboxProps): ReactNode {
 }
 
 /** A checkbox for a long notice: the paragraph is the label, in the body's weight. */
-export function Consent(props: CheckboxProps): ReactNode {
+function DefaultConsent(props: CheckboxProps): ReactNode {
   return <Checkbox {...props} className={['form-field-consent', props.className].filter(Boolean).join(' ')} />;
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const YesNo = slotted('YesNo', DefaultYesNo);
+export const ChoiceCards = slotted('ChoiceCards', DefaultChoiceCards);
+export const CheckCards = slotted('CheckCards', DefaultCheckCards);
+export const Checkbox = slotted('Checkbox', DefaultCheckbox);
+export const Consent = slotted('Consent', DefaultConsent);

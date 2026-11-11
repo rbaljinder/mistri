@@ -108,9 +108,9 @@ import { withMachineSteppers } from '../../shared/appMachine.js';
 import { tabSlug } from '@mistriwork/engine/shared/addressParams.js';
 import { isMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import { appNotifyRules, notifyAdvisories } from '../../shared/appNotify.js';
-import { compileComponents, componentHrefs, type CompiledComponents } from './appComponents.js';
+import { compileComponents, compileUiKit, componentHrefs, uiKitCode, type CompiledComponents } from './appComponents.js';
 import { componentMessageKeys, lintComponents, pageManifestsOf } from './componentLint.js';
-import { pageFiles, placePages, readPageFiles } from './appPages.js';
+import { pageFiles, placePages, readPageFiles, uiKitModuleProblems } from './appPages.js';
 import { readSurfaceFiles, surfaceFiles } from './appSurfaces.js';
 import type { SurfaceFile } from '../../shared/appSurfaces.js';
 import { valueLabelFindings, valueLabelHolder } from './valueLabels.js';
@@ -650,6 +650,21 @@ export async function loadApp(
         componentModules: [...declared.values()].map((decl) => resolve(dir, decl.module)),
       });
     }
+  }
+  /* Its control kit (Preview), compiled beside its components and read under stand-ins, so a slot name the kit does
+     not have is refused at load and by `mistri check` alike, never at a reader's first paint. */
+  if (app.uiKit) {
+    if (!dir)
+      throw new Error(
+        `${path} declares a UI kit; load the App from its directory, where its module lives: --app <dir>, with --app-entry ${path} to keep this manifest.`,
+      );
+    try {
+      components = await compileUiKit(dir, app.uiKit, components);
+    } catch (err) {
+      throw new Error(`${path}: ${(err as Error).message}`);
+    }
+    const problems = await uiKitModuleProblems(uiKitCode(components)!);
+    if (problems.length) throw new Error(`${path}: the UI kit (${app.uiKit}) ${problems.join(` It `)}`);
   }
   /* Its themes' faces, read now so a missing file refuses the load as any other problem does (appFonts.ts). */
   const fonts = await readAppFonts(app, dir, path);

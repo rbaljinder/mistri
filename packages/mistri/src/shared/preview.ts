@@ -32,6 +32,7 @@ export const PREVIEW_PATHS: readonly RegExp[] = [
   /^ui\.shell\.breadcrumbs\.(home|top)$/,
   /^resources\.[^.]+\.query( = .*)?$/, // rc.16: one table bound as several resources, each on fixed conditions (appNarrowed.ts)
   /^resources\.[^.]+\.computed\.[^.]+(\[type=text\]|\.type = "text")$/, // rc.16: a JSON column's member as text, display only
+  /^uiKit( = .*)?$/, // an App's own control kit: the slots' contract settles with the first adapter outside core
 ];
 
 /** Whole package entry points that are Preview. */
@@ -78,6 +79,12 @@ export const PREVIEW_EXPORTS: readonly string[] = [
   './app: TimelineReactions',
   './page: Loaded',
   './ui: Loaded',
+  /* An App's control kit (`uiKit`): the slots are @mistriwork/ui's primitives, Preview as they are. */
+  './page: defineUiKit',
+  './page: defaultUiKit',
+  './page: SlotName',
+  './page: UiKit',
+  './page: UiKitSlots',
   /* The command aggregates (rc.11): `db.<t>.group(…)` and its types. `RowQuery`, which types the older `where()`, stays. */
   './commands: count',
   './commands: sum',

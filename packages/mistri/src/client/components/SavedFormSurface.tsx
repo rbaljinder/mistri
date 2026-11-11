@@ -27,7 +27,7 @@ import {
 } from './CommandFields.js';
 import { PHONE_QUERY, useMediaQuery } from '@mistriwork/kit/client/components/useMediaQuery.js';
 import { MultiStepForm } from '@mistriwork/kit/client/components/MultiStepForm.js';
-import { Button, buttonClass } from '@mistriwork/ui/Button.js';
+import { Button, ButtonLink } from '@mistriwork/ui/Button.js';
 import {
   drawsField,
   formRefusal,
@@ -479,12 +479,12 @@ export function SavedFormSurface({
               <>
                 <p className="form-page-done-message">{say('claimWindow')}</p>
                 <div className="form-claim-actions">
-                  <a className={buttonClass({ intent: 'primary' })} href={`${base}/claim?account=new`}>
+                  <ButtonLink intent="primary" href={`${base}/claim?account=new`}>
                     {say('createAnAccountToTrack')}
-                  </a>
-                  <a className={buttonClass({ intent: 'secondary' })} href={`${base}/claim`}>
+                  </ButtonLink>
+                  <ButtonLink intent="secondary" href={`${base}/claim`}>
                     {say('signInToAdd')}
-                  </a>
+                  </ButtonLink>
                 </div>
                 <Button
                   intent="quiet"

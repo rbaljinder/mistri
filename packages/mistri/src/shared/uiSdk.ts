@@ -138,6 +138,8 @@ const PAGE_ONLY = [
   'TextField',
   'Tooltip',
   'YesNo',
+  'defineUiKit',
+  'defaultUiKit',
 ] as const;
 
 /**

@@ -7,6 +7,7 @@ import type { ReactNode, Ref } from 'react';
 import { Field } from './Field.js';
 import { frameOf, type FieldFrame } from './fieldFrame.js';
 import { masks, type Mask } from './masks.js';
+import { slotted } from './internal/uiKitContext.js';
 
 /** The mark at a box's inline end: drawn in CSS unless a picture is lent. Decorative: validity is `aria-invalid`'s to say. */
 export function ValidMark({ icon }: { icon?: ReactNode }): ReactNode {
@@ -37,7 +38,7 @@ export interface TextFieldProps extends FieldFrame {
   after?: ReactNode;
 }
 
-export function TextField(props: TextFieldProps): ReactNode {
+function DefaultTextField(props: TextFieldProps): ReactNode {
   return (
     <Field {...frameOf(props)}>
       {(control) => (
@@ -75,7 +76,7 @@ export interface MaskedFieldProps extends Omit<TextFieldProps, 'value' | 'onChan
 }
 
 /** A box that shows its value through a mask and keeps the raw one: `masks.phone`, `masks.date` (typed MM/DD/YYYY), `masks.ssn`… */
-export function MaskedField({ mask, value, onChange, ...rest }: MaskedFieldProps): ReactNode {
+function DefaultMaskedField({ mask, value, onChange, ...rest }: MaskedFieldProps): ReactNode {
   return (
     <TextField
       {...rest}
@@ -88,6 +89,11 @@ export function MaskedField({ mask, value, onChange, ...rest }: MaskedFieldProps
 }
 
 /** Whole money, drawn `$2,500` (or `25,000` with `symbol=""`). The value is the digits. */
-export function MoneyField({ symbol = '$', ...rest }: Omit<MaskedFieldProps, 'mask'> & { symbol?: string }): ReactNode {
+function DefaultMoneyField({ symbol = '$', ...rest }: Omit<MaskedFieldProps, 'mask'> & { symbol?: string }): ReactNode {
   return <MaskedField kind="money" {...rest} mask={masks.money(symbol)} />;
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const TextField = slotted('TextField', DefaultTextField);
+export const MaskedField = slotted('MaskedField', DefaultMaskedField);
+export const MoneyField = slotted('MoneyField', DefaultMoneyField);

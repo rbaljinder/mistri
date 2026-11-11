@@ -733,6 +733,16 @@
       "browser": true
     },
     {
+      "id": "ui-kit",
+      "surface": ["dsl: app: uiKit"],
+      "tests": [
+        { "file": "test/app-components.test.ts" },
+        { "file": "test/fixtures/apps/kit-desk/ui/kit.test.tsx" },
+        { "file": "e2e/ui-kit.spec.ts" }
+      ],
+      "browser": true
+    },
+    {
       "id": "nav",
       "surface": ["dsl: app: nav"],
       "tests": [

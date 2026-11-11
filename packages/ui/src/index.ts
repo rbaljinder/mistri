@@ -5,7 +5,7 @@
  * icons, its answers and its hooks are props (scripts/check-boundary.mjs holds the `ui` layer to importing only
  * itself).
  */
-export { Button, buttonClass, type ButtonIntent, type ButtonSize } from './Button.js';
+export { Button, ButtonLink, buttonClass, type ButtonIntent, type ButtonLinkProps, type ButtonProps, type ButtonSize } from './Button.js';
 export { Field, type AnswerKind, type FieldControlProps } from './Field.js';
 export { Modal, type ModalHandle } from './Modal.js';
 export { DropMenu, DropGroup, DropItem, DropSeparator } from './DropMenu.js';
@@ -17,7 +17,7 @@ export {
   type DropdownProps,
   type MultiDropdownProps,
 } from './Dropdown.js';
-export { Typeahead } from './Typeahead.js';
+export { Typeahead, type TypeaheadProps } from './Typeahead.js';
 export {
   Icon,
   loadIconsWith,
@@ -80,3 +80,15 @@ export { Carousel, type CarouselProps, type CarouselSlide } from './Carousel.js'
 export { Resizable, type ResizablePanel, type ResizableProps } from './Resizable.js';
 export { ScrollArea, type ScrollAreaProps } from './ScrollArea.js';
 export { Tooltip, type TooltipProps } from './Tooltip.js';
+/* The seam a control kit plugs into: the slots, their props, and a kit's declaration. Preview. */
+export {
+  SLOT_NAMES,
+  UiKitProvider,
+  defaultUiKit,
+  defineUiKit,
+  installUiKit,
+  uiKitProblems,
+  type SlotName,
+  type UiKit,
+  type UiKitSlots,
+} from './UiKit.js';

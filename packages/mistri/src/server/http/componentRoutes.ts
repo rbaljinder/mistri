@@ -131,7 +131,8 @@ export async function tenantComponentRoute(
 
 const formFiles = new WeakMap<object, ReadonlySet<string>>();
 
-/* The files of the input components an App's public forms draw (appComponentPlaces.ts publicFormInputIds), per compile. */
+/* The files of the input components an App's public forms draw (appComponentPlaces.ts publicFormInputIds), and its
+   control kit's, per compile. */
 function publicFormFiles(host: AppHost): ReadonlySet<string> {
   const compiled = host.app.components;
   if (!compiled) return new Set();
@@ -139,11 +140,13 @@ function publicFormFiles(host: AppHost): ReadonlySet<string> {
   if (!files) {
     const ids = new Set<string>();
     for (const view of Object.values(host.app.app.views)) if (isPublicForm(view)) for (const id of publicFormInputIds(view)) ids.add(id);
-    files = new Set(
-      Object.entries(compiled.entries)
+    files = new Set([
+      ...Object.entries(compiled.entries)
         .filter(([id, entry]) => ids.has(id) && entry.kind === 'input')
         .flatMap(([, entry]) => [entry.js, ...(entry.css ? [entry.css] : [])]),
-    );
+      /* The control kit draws the sign-in screen and a public form as it draws every other page, before anyone signs in. */
+      ...(compiled.kit ? [compiled.kit.js, ...(compiled.kit.css ? [compiled.kit.css] : [])] : []),
+    ]);
     formFiles.set(compiled, files);
   }
   return files;

@@ -123,7 +123,7 @@ import { formHead, landingHead } from '../http/publicHead.js';
 import { requestOrigin } from '@mistriwork/engine/server/http/requestOrigin.js';
 import { cardRequest, SHARE_CARD_PATH, sendShareCard, shareCard, shareCardImage } from '../http/shareCard.js';
 import { outward } from '@mistriwork/engine/shared/mount.js';
-import { componentHrefs } from '../app/appComponents.js';
+import { componentHrefs, uiKitHref } from '../app/appComponents.js';
 import { publicComponentIds } from '../../shared/appComponentPlaces.js';
 import { appKeepsInbox } from '../../shared/appNotify.js';
 import { tenantComponentRoute } from '../http/componentRoutes.js';
@@ -542,11 +542,14 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     const components = componentHrefs(loaded.app.id, loaded.components);
     /* The components a signed-out visitor's public pages and public forms draw, and their files: served to a visitor too. */
     const visitorComponents = publicComponentIds(loaded.app, loaded.pages);
-    const visitorFiles = new Set(
-      Object.entries(loaded.components?.entries ?? {})
+    const kit = loaded.components?.kit;
+    const visitorFiles = new Set([
+      ...Object.entries(loaded.components?.entries ?? {})
         .filter(([id]) => visitorComponents.has(id))
         .flatMap(([, entry]) => [entry.js, ...(entry.css ? [entry.css] : [])]),
-    );
+      // The control kit draws the sign-in screen too.
+      ...(kit ? [kit.js, ...(kit.css ? [kit.css] : [])] : []),
+    ]);
     const visitorHrefs =
       components && visitorComponents.size
         ? Object.fromEntries(Object.entries(components).filter(([id]) => visitorComponents.has(id)))
@@ -994,6 +997,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     // Dressed once per look, not per page: wearing copies the App.
     let dressed: { look: TenantLook | undefined; app: AppDef } = { look: undefined, app: loaded.app };
     const worn = () => (dressed.look === look ? dressed.app : (dressed = { look, app: wearing(loaded.app, look) }).app);
+    const uiKit = uiKitHref(loaded.app.id, loaded.components, (href) => outward(mount, href));
     const shell = (path: string, hosted?: BrandingPresentation, req?: IncomingMessage) => ({
       ...(egress ? { egress } : {}),
       /* A public form's page is titled by its form, as the ordinary host titles it (http/publicHead.ts);
@@ -1024,6 +1028,8 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       grounds: hosted ? groundsOf(hosted.value.theme) : lookGroundsFor(worn().ui),
       ...(req ? { locale: requestLocale(loaded.app, { visitor: true, req }) } : {}),
       ...(observerMounted() ? { observe: observerHome(mount) } : {}),
+      // Its control kit (Preview), preloaded and installed before the first render (http/handler.ts says the same).
+      ...(uiKit ? { uiKit } : {}),
     });
     /* The App's declared egress in the page's policy, as the ordinary host
        writes it (clientHttp.ts shellEgress): a component may reach only the

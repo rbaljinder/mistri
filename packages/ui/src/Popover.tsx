@@ -17,6 +17,7 @@ import { Popover as BasePopover } from '@base-ui/react/popover';
 import { layoutViewport, zoomAnchor } from './internal/anchor.js';
 import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { popupContainer, useDialogContainer } from './internal/popups.js';
+import { slotted } from './internal/uiKitContext.js';
 
 export interface PopoverProps {
   trigger: ReactNode;
@@ -29,7 +30,7 @@ export interface PopoverProps {
   ariaLabel?: string;
 }
 
-export function Popover({ trigger, children, open, defaultOpen, onOpenChange, className, ariaLabel }: PopoverProps) {
+function DefaultPopover({ trigger, children, open, defaultOpen, onOpenChange, className, ariaLabel }: PopoverProps) {
   /* The trigger is rendered as the trigger, not inside one: a button
      passed as a child nested inside Base UI's own button, giving two
      buttons for one control. The render prop merges onto the caller's
@@ -62,3 +63,6 @@ export function Popover({ trigger, children, open, defaultOpen, onOpenChange, cl
     </BasePopover.Root>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Popover = slotted('Popover', DefaultPopover);

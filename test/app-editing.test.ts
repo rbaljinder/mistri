@@ -103,7 +103,7 @@ test('editing rejects every unknown nested key, including annotations and non-JS
   assert.throws(() => parse({ save: 'blur' }), /has no "save"/);
   assert.throws(
     () => parse({ editing: { save: 'blur' } }),
-    /has no "editing"\. "editing" belongs inside "ui"\. It takes: id, name, shortName, connection, sources, resources, unions, auth, views, pages, features, home, nav, ui, branding, api, track, live, flags, audiences, experiments, analytics, assistant, retention\./,
+    /has no "editing"\. "editing" belongs inside "ui"\. It takes: id, name, shortName, connection, sources, resources, unions, auth, views, pages, features, home, nav, ui, uiKit, branding, api, track, live, flags, audiences, experiments, analytics, assistant, retention\./,
   );
   for (const extra of [
     { views: { tasks: { ...view, editing: { save: 'blur' } } } },

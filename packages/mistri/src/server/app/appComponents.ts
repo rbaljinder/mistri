@@ -46,6 +46,8 @@ interface CompiledComponent {
 export interface CompiledComponents {
   entries: Record<string, CompiledComponent>;
   files: Record<string, string>;
+  /** The App's control kit (`uiKit`, Preview): served from the same place, named `ui-kit-<hash>`. */
+  kit?: { js: string; css?: string; sources: string[] };
 }
 
 const APP_DSL = fileURLToPath(new URL('../../../schema/app.mjs', import.meta.url));
@@ -119,9 +121,10 @@ async function compileOne(
   decl: ComponentDecl,
   minify: boolean,
   shared: readonly string[] = [],
+  kit = false,
 ): Promise<{ code: string; map: string; css: string; sources: string[] }> {
   const entry = resolve(dir, decl.module);
-  const at = `the component "${decl.id}" (${decl.module})`;
+  const at = kit ? `the UI kit (${decl.module})` : `the component "${decl.id}" (${decl.module})`;
   let file: string;
   try {
     if (!statSync(entry).isFile()) throw new Error('not a file');
@@ -201,9 +204,11 @@ async function compileOne(
   if (!chunk || chunk.type !== 'chunk') throw new Error(`${at} compiled to nothing.`);
   if (!chunk.exports.includes('default'))
     throw new Error(
-      decl.kind === 'page'
-        ? `[page-file] ${at} has no default export. Export the page: export default definePage({ … }).`
-        : `${at} has no default export. Export the component: export default function Thing(props) { … }.`,
+      kit
+        ? `${at} has no default export. Export the kit: export default defineUiKit({ Button, … }).`
+        : decl.kind === 'page'
+          ? `[page-file] ${at} has no default export. Export the page: export default definePage({ … }).`
+          : `${at} has no default export. Export the component: export default function Thing(props) { … }.`,
     );
   const cssFiles = order.filter((id) => id.endsWith('.css') && isAbsolute(id));
   const css = (await Promise.all(cssFiles.map((id) => readFile(id, 'utf8')))).join('\n');
@@ -241,6 +246,60 @@ export async function compileComponents(
     entries[decl.id] = { kind: decl.kind, js: `${name}.js`, ...(built.css.trim() ? { css: `${name}.css` } : {}), sources: built.sources };
   }
   return { entries, files };
+}
+
+/** The name a compiled kit is served under: the component file pattern, which a leading `_` would not match. */
+const UI_KIT = 'ui-kit';
+
+/**
+ * Compile an App's control kit (`uiKit`, Preview) into `compiled`, or into a set of its own when the App declares no
+ * component. The same boundary as a component: the page's React and SDK are the kit's, and nothing of the server's.
+ * Its stylesheet is not scoped to an element, as a component's is: a kit draws controls everywhere on the page,
+ * popups in a portal included, so its rules are page-wide, still in the components layer a look and `structure` win
+ * over.
+ */
+export async function compileUiKit(
+  dir: string,
+  module: string,
+  compiled: CompiledComponents | undefined,
+  options: { minify?: boolean; shared?: readonly string[] } = {},
+): Promise<CompiledComponents> {
+  const bundler = await loadRolldown();
+  if (!bundler)
+    throw new Error(
+      'The App declares a UI kit, which is compiled with rolldown: install it beside mistri (`npm i -D rolldown`), or serve a `mistri build` of the App.',
+    );
+  const decl: ComponentDecl = { id: UI_KIT, module, kind: 'section' };
+  const built = await compileOne(bundler, dir, decl, options.minify ?? false, options.shared, true);
+  const hash = createHash('sha256').update(built.code).update('\0').update(built.css).digest('hex').slice(0, 12);
+  const name = `${UI_KIT}-${hash}`;
+  const files: Record<string, string> = { ...compiled?.files };
+  files[`${name}.js`] = `${built.code.trimEnd()}\n//# sourceMappingURL=${name}.js.map\n`;
+  if (built.map) files[`${name}.js.map`] = JSON.stringify({ ...JSON.parse(built.map), file: `${name}.js` });
+  const css = built.css.trim() ? `${name}.css` : undefined;
+  if (css) files[css] = `@layer components {\n${built.css.trim()}\n}\n`;
+  return { entries: compiled?.entries ?? {}, files, kit: { js: `${name}.js`, ...(css ? { css } : {}), sources: built.sources } };
+}
+
+/** The compiled kit's code, for the server to read its slots under stand-ins (appPages.ts `readUiKit`). */
+export function uiKitCode(compiled: CompiledComponents): string | undefined {
+  const js = compiled.kit?.js;
+  return js ? compiled.files[js]?.replace(/\n\/\/# sourceMappingURL=.*\n$/, '\n') : undefined;
+}
+
+/**
+ * Where an App's control kit is served, for the page's head (clientHttp.ts `uiKit`): the inside addresses, each as the
+ * browser reaches it (`outward`), so the meta's address is the very one the head preloads.
+ */
+export function uiKitHref(
+  appId: string,
+  compiled: CompiledComponents | undefined,
+  outward: (inside: string) => string,
+): { js: string; css?: string } | undefined {
+  const kit = compiled?.kit;
+  if (!kit) return undefined;
+  const at = (file: string) => outward(`/${encodeURIComponent(appId)}/${COMPONENTS_SEGMENT}/${file}`);
+  return { js: at(kit.js), ...(kit.css ? { css: at(kit.css) } : {}) };
 }
 
 /** Where each component is served, for the App payload: `/{app}/_components/<file>`, the inside address the page says where its App is mounted (client addressMount.js). */

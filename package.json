@@ -1,6 +1,6 @@
 {
   "name": "mistri-workspace",
-  "version": "1.0.0-rc.39",
+  "version": "1.0.0-rc.40",
   "private": true,
   "description": "The workspace root: the packages under packages/ (mistri, create-mistri, @mistriwork/cloudflare, @mistriwork/kit, @mistriwork/ui, @mistriwork/engine), their tests, the site and the tools. Nothing here is published.",
   "license": "MIT",
@@ -23,7 +23,7 @@
     "start": "tsx packages/mistri/src/server/index.ts",
     "test": "npm run test:static && npm run test:node && vitest run",
     "test:ci-parity": "node scripts/ci-parity.mjs",
-    "test:static": "node --max-old-space-size=4096 node_modules/typescript/bin/tsc --noEmit && oxlint && node --max-old-space-size=4096 test/check-client-types.mjs && node test/check-client-geometry.mjs && node test/check-client-motion.mjs && node test/check-client-host.mjs && node test/check-client-shape.mjs && node test/check-client-type.mjs && node test/check-client-space.mjs && node test/check-client-copy.mjs && node scripts/audit-exports.mjs && node scripts/check-boundary.mjs --entries && knip --no-progress && npm run format:check",
+    "test:static": "node --max-old-space-size=4096 node_modules/typescript/bin/tsc --noEmit && oxlint && node --max-old-space-size=4096 test/check-client-types.mjs && node test/check-client-geometry.mjs && node test/check-client-motion.mjs && node test/check-client-host.mjs && node test/check-client-shape.mjs && node test/check-client-type.mjs && node test/check-client-space.mjs && node test/check-client-copy.mjs && node test/check-client-controls.mjs && node scripts/audit-exports.mjs && node scripts/check-boundary.mjs --entries && knip --no-progress && npm run format:check",
     "test:node": "node scripts/test-node.mjs",
     "typecheck": "tsc --noEmit",
     "test:exports": "node scripts/prove-exports.mjs",
@@ -175,7 +175,8 @@
         ],
         "ignoreDependencies": [
           "@base-ui/react",
-          "react"
+          "react",
+          "react-dom"
         ]
       },
       "packages/kit": {

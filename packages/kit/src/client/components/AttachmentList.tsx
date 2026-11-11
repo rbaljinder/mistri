@@ -11,7 +11,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { formatBytes } from '../locale.js';
 import { toast } from '../core.js';
 import { Empty } from './Notes.js';
-import { Button, buttonClass } from '@mistriwork/ui/Button.js';
+import { Button, ButtonLink } from '@mistriwork/ui/Button.js';
 import { Field } from '@mistriwork/ui/Field.js';
 import { Modal, type ModalHandle } from '@mistriwork/ui/Modal.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
@@ -220,15 +220,17 @@ export function AttachmentList({ items, emptyText, empty, upload }: AttachmentLi
                       {item.meta.length > 0 && <span className="attachments-meta">{item.meta.join(' · ')}</span>}
                     </span>
                     <span className="attachments-actions">
-                      <a
-                        className={buttonClass({ intent: 'quiet', size: 'compact', className: 'attachments-download' })}
+                      <ButtonLink
+                        intent="quiet"
+                        size="compact"
+                        className="attachments-download"
                         href={item.href}
                         download={item.name}
                         onClick={saveOnLease(item)}
                         aria-label={say('downloadName', { name: item.name })}
                       >
                         {say('download')}
-                      </a>
+                      </ButtonLink>
                       {(item.onOpen || item.rename || item.remove) && (
                         <DropMenu
                           className="row-actions-menu"

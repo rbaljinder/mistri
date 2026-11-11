@@ -14,7 +14,7 @@ import { findTable, state } from '@mistriwork/kit/client/core.js';
 import { batchedRun } from '@mistriwork/kit/client/breakdownBatch.js';
 import { canInsert } from '@mistriwork/kit/client/insert.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
-import { buttonClass } from '@mistriwork/ui/Button.js';
+import { ButtonLink } from '@mistriwork/ui/Button.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { viewLink } from '@mistriwork/kit/client/components/viewLink.js';
 import type { Section } from '@mistriwork/kit/client/components/dashboardModel.js';
@@ -74,13 +74,13 @@ export function FirstRun({ section, done, fresh }: { section: Section; done: boo
               </span>
               {link &&
                 (done[i] ? (
-                  <a className={buttonClass({ intent: 'quiet', size: 'compact' })} {...link}>
+                  <ButtonLink intent="quiet" size="compact" {...link}>
                     {say('open')}
-                  </a>
+                  </ButtonLink>
                 ) : (
-                  <a className={buttonClass({ intent: i === next ? 'primary' : 'secondary', size: 'compact' })} {...link}>
+                  <ButtonLink intent={i === next ? 'primary' : 'secondary'} size="compact" {...link}>
                     {adding ? say('common.add') : say('open')}
-                  </a>
+                  </ButtonLink>
                 ))}
             </li>
           );

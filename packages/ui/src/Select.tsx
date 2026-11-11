@@ -7,6 +7,7 @@ import { useId, type ReactNode, type Ref } from 'react';
 import { Dropdown, MultiDropdown, type DropdownItem } from './Dropdown.js';
 import { Field } from './Field.js';
 import { frameOf, type FieldFrame } from './fieldFrame.js';
+import { slotted } from './internal/uiKitContext.js';
 
 interface ListFrame extends FieldFrame {
   options: DropdownItem[];
@@ -17,7 +18,7 @@ interface ListFrame extends FieldFrame {
 }
 
 /** One choice from a list, under a field box. */
-export function Select(props: ListFrame & { value: string; onChange: (value: string) => void }): ReactNode {
+function DefaultSelect(props: ListFrame & { value: string; onChange: (value: string) => void }): ReactNode {
   const valueId = useId();
   return (
     <Field {...frameOf(props)} group>
@@ -43,7 +44,7 @@ export function Select(props: ListFrame & { value: string; onChange: (value: str
 }
 
 /** Several choices, each with a checkbox; the closed box says them as "Acura, Alfa Romeo". */
-export function MultiSelect(props: ListFrame & { value: string[]; onChange: (value: string[]) => void }): ReactNode {
+function DefaultMultiSelect(props: ListFrame & { value: string[]; onChange: (value: string[]) => void }): ReactNode {
   const valueId = useId();
   return (
     <Field {...frameOf(props)} group>
@@ -67,3 +68,7 @@ export function MultiSelect(props: ListFrame & { value: string[]; onChange: (val
     </Field>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Select = slotted('Select', DefaultSelect);
+export const MultiSelect = slotted('MultiSelect', DefaultMultiSelect);

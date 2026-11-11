@@ -35,6 +35,16 @@ export async function start() {
   if (shellQuery('meta[name="mistri-observe"]') && window.name.startsWith('mistri-theme-bench:') && window.parent !== window)
     void import('./themeBench.js').then((bench) => bench.joinThemeBench(window.name)).catch(() => {});
 
+  /* The App's control kit (Preview), when the head names one: installed before anything is drawn, so its controls
+     are the first ones painted (sdk/uiKitLoader.ts). One that will not load leaves the platform's own controls, said
+     in the console rather than leaving the page blank. */
+  const kit = shellQuery('meta[name="mistri-ui-kit"]');
+  const kitHref = kit?.getAttribute('content');
+  if (kitHref)
+    await import('./components/sdk/uiKitLoader.js')
+      .then((loader) => loader.installServedUiKit(kitHref, kit?.getAttribute('data-css') ?? undefined))
+      .catch((error) => console.error(error));
+
   /* The path: the app routes by path, and a fragment is not an address.
      Read before anything renders, as the shell reads it again, in its inside
      form — the App's id first, the base path off (addressMount.js). */

@@ -8,6 +8,7 @@
  */
 import type { ReactNode } from 'react';
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
+import { slotted } from './internal/uiKitContext.js';
 
 export interface TabItem {
   value: string;
@@ -26,7 +27,7 @@ export interface TabsProps {
   ariaLabel?: string;
 }
 
-export function Tabs({ tabs, value, defaultValue, onValueChange, className, ariaLabel }: TabsProps) {
+function DefaultTabs({ tabs, value, defaultValue, onValueChange, className, ariaLabel }: TabsProps) {
   return (
     <BaseTabs.Root
       className={['ui-tabs', className].filter(Boolean).join(' ')}
@@ -49,3 +50,6 @@ export function Tabs({ tabs, value, defaultValue, onValueChange, className, aria
     </BaseTabs.Root>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Tabs = slotted('Tabs', DefaultTabs);

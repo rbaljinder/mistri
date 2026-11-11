@@ -30,6 +30,7 @@ import { fontRoute } from './fontRoutes.js';
 import { brandRoute } from './brandRoutes.js';
 import { pwaRoute } from './pwaRoutes.js';
 import { pwaUrls } from '../app/appPwa.js';
+import { uiKitHref } from '../app/appComponents.js';
 import { publicHead, type ShellHead } from './publicHead.js';
 import { personAddress } from './personAddress.js';
 import { cardRequest, SHARE_CARD_PATH, sendShareCard, shareCard, shareCardImage } from './shareCard.js';
@@ -648,7 +649,10 @@ async function serveShell(ctx: RequestContext): Promise<void> {
   /* An App's page is titled with the App's name from its first byte, not
      "tablewalk" until the client boots; a public page's own title stands. */
   const segment = ctx.path.split('/')[1] ?? '';
-  const served = (ctx.appHosts ?? []).find((host) => host.app.app.id === decodeSegment(segment))?.app.app;
+  const servedHost = (ctx.appHosts ?? []).find((host) => host.app.app.id === decodeSegment(segment));
+  const served = servedHost?.app.app;
+  /* Its control kit (Preview), preloaded and installed before the first render; an App without one says nothing. */
+  const uiKit = served ? uiKitHref(served.id, servedHost.app.components, (href) => outward(ctx.mount, href)) : undefined;
   const named = served?.name;
   /* Who the page is drawn for, so its first paint is guessed in their theme (ui.theme.for, themeResolve.ts). */
   const audience = { public: ctx.identity.id === undefined, roles: sessionRoles(ctx.identity.role) };
@@ -686,6 +690,7 @@ async function serveShell(ctx: RequestContext): Promise<void> {
       : {}),
     mount,
     path: ctx.path,
+    ...(uiKit ? { uiKit } : {}),
     looks: lookSheetsFor(served?.ui, audience),
     faces: lookFacesFor(served?.ui, audience),
     appFaces: appFaceHead(served?.ui, (href) => outward(ctx.mount, href), audience),
