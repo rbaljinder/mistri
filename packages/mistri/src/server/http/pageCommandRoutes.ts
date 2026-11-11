@@ -36,13 +36,14 @@ import { issueTicket, ticketMessage, ticketRefusal } from '../forms/publicTicket
 import { CHALLENGE_REFUSAL, challengeAnswered } from './formRoutes.js';
 
 /** The header a page's ticket travels in. */
-const TICKET_HEADER = 'x-mistri-ticket';
+export const TICKET_HEADER = 'x-mistri-ticket';
 
 const KEY = '[a-z0-9][a-z0-9_-]{0,63}';
 const PATH = new RegExp(`^/api/pages/(${KEY})/(?:(ticket)|commands/([A-Za-z][A-Za-z0-9_-]{0,63}))$`);
 
-/** The page and, for a submission, the command a path names; undefined for any other path. */
-function pageCommandPath(path: string): { page: string; command?: string } | undefined {
+/** The page and, for a submission, the command a path names; undefined for any other path. A tenant App's host serves
+    the same paths (tenant/tenantPublicHttp.ts). */
+export function pageCommandPath(path: string): { page: string; command?: string } | undefined {
   const match = PATH.exec(path);
   if (!match) return undefined;
   return match[2] ? { page: match[1] } : { page: match[1], command: match[3] };

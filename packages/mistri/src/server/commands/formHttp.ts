@@ -129,6 +129,13 @@ type PublicSubmissionReply = { reference: string; receipt: { id: string; status:
 /** The longest thank-you a handler may return for its visitor: a sentence, not a page. */
 const PUBLIC_MESSAGE_MOST = 280;
 
+/** A public command's thank-you for its visitor, as a reply member: a literal its output declares (savedFormChecks.ts),
+    so the author's fixed words, never input echoed back. Nothing when it returned none or one past a sentence. */
+export function publicMessage(result: unknown): { message?: string } {
+  const message = (result as { message?: unknown } | null)?.message;
+  return typeof message === 'string' && message.trim() && message.length <= PUBLIC_MESSAGE_MOST ? { message: message.trim() } : {};
+}
+
 /**
  * What a door asks of a submission before it runs, with its extra members: undefined to go on, `'decoy'` to answer it
  * as accepted and write nothing (a filled honeypot), or a thrown refusal.
@@ -239,17 +246,12 @@ export async function dispatchPublicFormSubmissionHttp(options: {
     // reference has left the applicant nothing to quote, which is its bug.
     if (typeof reference !== 'string' || !reference.trim() || reference.length > 64)
       throw new BusinessCommandExecutionError('invalid_result', 'unknown');
-    /* A public command's `message` is a literal its output declares (savedFormChecks.ts), so it is the author's fixed
-       words, never input echoed back, and the visitor is told them. A door with an admission (a public form's
-       honeypot) answers a decoy that cannot know them, so it leaves them out and the decoy stays shaped like a real
-       answer. */
-    const message = (result.result as { message?: unknown } | null)?.message;
+    /* The visitor is told a public command's `message`. A door with an admission (a public form's honeypot) answers a
+       decoy that cannot know it, so it leaves it out and the decoy stays shaped like a real answer. */
     return {
       reference,
       receipt: { id: result.receiptId, status: result.status },
-      ...(!options.admit && typeof message === 'string' && message.trim() && message.length <= PUBLIC_MESSAGE_MOST
-        ? { message: message.trim() }
-        : {}),
+      ...(!options.admit ? publicMessage(result.result) : {}),
     };
   } catch (error) {
     if (error instanceof CommandBodyTooLarge && options.tooLarge === 'thrown') throw error;

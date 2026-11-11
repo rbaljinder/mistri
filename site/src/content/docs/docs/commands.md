@@ -79,11 +79,12 @@ its key (`due_on` is "Due on") unless it says otherwise.
 | `field.time()`                                             | a time of day, `HH:MM` on a 24-hour clock, in the browser's time picker; `min`, `max` (times), `below`/`above` a sibling                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `field.bool()`                                             | `accept: true` for a box that must be checked (consent, terms)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `field.choice(values)`                                     | values (said as words: `wont_fix` is "Wont fix") or `{ value, label }`; radios up to four, a listbox past that                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `field.choice({ from, labelColumn, by, sort })`            | one of a table's rows by its key (`by`, `id` unless said), shown by `labelColumn`, in that column's order unless `sort: { column, direction }` says one; `label` is the field's own title. `field.choices` takes the same. Read as the form opens and again as it is sent                                                                                                                                                                                                                                                                                                                                               |
 | `field.reference(table, { by, labelColumn, query, tree })` | a picker; on a public form, over a resource `auth.public` opens, by columns the public reads (`[public-form-picker]`). `record.<column>` in `query` is the target's own value: `query: 'sales_order_id = record.id'` offers only this order's lines. `tree: 'parent_id'` names the table's own parent column: the picker opens on the rows with no parent, reads a branch as it opens, searches every level and says each match and the choice with its path                                                                                                                                                            |
 | `field.group(fields, { repeat: { min, max } })`            | a section, or rows people add and remove (`max` is at most 50, and 10 on a public form)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `field.lines(from, { show, copy, query, min, max })`       | a record's lines as a lines grid: each line a row of `from` asking the columns in `show` (all required), money worked out beside it and summed as the subtotal. `copy: { unit_price: 'variant_id.price' }` shows a column filled from the referenced record, never sent; `query` narrows a reference's picker as in `field.reference`. The handler receives typed rows (`{ variant_id: number; quantity: number }[]`) and writes them, so `from` is in `write`; a refused line names its cell (`refuse(msg, { field: 'lines[1].quantity' })`). Never on a public form or in a group; it says `description`, not `help`. |
 | `field.defined(from, { whose })`                           | questions kept as rows of `from` (columns `key`, `label`, `type`, and optionally `options`, `required`, `help`, `position`), asked as one section and answered as an object by key. `whose` is the column naming the target, so each record asks its own questions and those naming none. The server judges the answers against the rows it reads in the command's transaction; `from` is in `read`. Never on a public form or in a group.                                                                                                                                                                              |
-| `field.files(from, { min, max, accept })`                  | files a person picks, drops or pastes, each sent as it is picked and held for the command (below); `from` is a file resource, in `write`. `min` (1 unsaid) to `max` (10 unsaid, 20 at most); `accept: 'image/*'` or a list of media types. The handler receives `{ name, type, size, data }[]` and stores each with `db.<from>.insertFile(file, values)`. Not in a group.                                                                                                                                                                                                                                               |
+| `field.files(from, { min, max, accept })`                  | files a person picks, drops or pastes, each sent as it is picked and held for the command (below); `from` is a file resource, in `write`. `min` (1 unsaid) to `max` (10 unsaid, 20 at most); `accept: 'image/*'` or a list of media types. The handler receives `{ name, type, size, data }[]` and stores each with `db.<from>.insertFile(file, values)`. In a group, each row's own (below).                                                                                                                                                                                                                           |
 | `field.signature(from)`                                    | a signature drawn on a pad (or typed), held as a PNG like a file; the handler receives one `{ name, type, size, data }` to store with `insertFile`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 Every field takes `help` and a `default` it opens at: a literal, `today`
@@ -125,7 +126,13 @@ A form cannot carry a file in its input, so each one is sent as it is picked
 and held for the person who sent it, this command and this field. The server
 holds it under the grant that runs the command, to the resource's `maxBytes`
 (413) and `accept` (415). It answers an id, and the input sends the ids.
-The command takes the files in its own transaction:
+The body of that request is `{ command, field, file: { name, type, data } }`, `data` the
+file's bytes in base64, with the App's selector in the query (`?app=<id>`) on a
+server that serves several; the answer is `{ id, name, type, size }`. A public
+form's door takes the same body, naming no `command`. In a test,
+`client.holdFile(command, field, file)` (from `@mistriwork/mistri/testing`) sends it as the
+form does and answers a result: `{ ok: true, value: { id } }`, and the input names
+`[held.value.id]`. The command takes the files in its own transaction:
 
 - An id is random and used once. Another person, another command, another
   field or a second run cannot take it.
@@ -135,6 +142,31 @@ The command takes the files in its own transaction:
   (`invalid_result`).
 - A held file expires after a day (a public form's after an hour), and the
   retention job removes it.
+
+A file field may sit in a group, and in a repeating group each row has its own:
+a file and the inputs that go with it.
+
+```ts
+input: {
+  attachments: field.group(
+    { file: field.files('attachment', { max: 1 }), label: field.text({ max: 80 }) },
+    { repeat: { min: 1, max: 10 } },
+  ),
+},
+write: ['attachment'],
+async handler({ input, db }) {
+  for (const row of input.attachments) await db.attachment.insertFile(row.file[0], { label: row.label });
+},
+```
+
+A row's file is held for the field's path, rows named by `[]`:
+`{ command, field: 'attachments[].file', file }`, and the row names its ids
+(`{ attachments: [{ file: [id], label: 'Floor plan' }] }`). The hold is the field's whatever row it lands in, so
+adding, removing or reordering rows loses none, and a file held for another
+field or path is refused at the row that names it (`attachments[1].file`). Each
+row's field keeps its own `min`, `max` and `accept`; the count and size a
+person may hold at once are across the whole submission. A signature stays a
+field of the input itself.
 
 A public form holds files only for a field its command declares, and only for the
 visitor's own browser, by a cookie the first file sets. Ten files and 25 MB
@@ -336,7 +368,7 @@ answer is `temporarily_unavailable`.
 - A command a free-form page lists in `commands` is offered by that declaration, with no action beside it and nothing added to a menu; the grant still decides who may run it. A section's component (not a page) still reaches a record's command through an action.
 - `label: 'Book an appointment'` on `defineCommand` is the title of the command's dialog and its buttons; without it they say the command's key as words (`book` is "Book"). It is text of 1 to 120 characters.
 - A public command's `output` may carry `message` only as `literal('…')`; that sentence is what the public page's outcome says in place of the platform's thank-you (at most 280 characters), beside the receipt's reference. A public form's reply stays the platform's.
-- `lookup({ sources, record }, input)` runs before the transaction opens and hands its JSON to the handler as `lookup`; a failure is `temporarily_unavailable`. It reads the other sources (a database or an HTTP connection) its `sources` names, `{ valuations: ['estimate'] }`. A lookup that reads none, one that works from its input or the record alone, declares no `sources`; `sources` without a `lookup` is refused.
+- `lookup({ sources, record }, input)` runs before the transaction opens and hands its JSON to the handler as `lookup`; a failure is `temporarily_unavailable`. It reads the other sources (a database or an HTTP connection) its `sources` names, `{ valuations: ['estimate'] }`. A lookup that reads none, one that works from its input or the record alone, declares no `sources`; `sources` without a `lookup` is refused. Its tables offer `get`, `find` and `where` only: there is no `insert`, `update` or `remove`, in the type or at run time, so a write belongs in the handler. What it reads of a resource that audits reads is recorded under the command, as the handler's reads are. In a [tenant App](/docs/tenant-apps/#a-commands-lookup) it reads global tables and its own tenant's, as the person running it could read them.
 - `effects: { notify: post('dealer-hooks', output => ({ id: output.applicationId })) }` posts to a `"kind": "webhook"` connection after commit, with retries; nothing is sent on rollback. `{ envelope: false, headers }` sends your own body shape; a delivery whose headers name one the request owns, the connection's `auth.header` among them, is rejected for an operator, not sent. On a tenant App each delivery carries its tenant.
 - `effects: { text: send('sms', output => ({ to: output.phone, text: 'Shipped.', consent: true })) }` sends on an [integration's](/docs/integrations/) channel after commit.
 

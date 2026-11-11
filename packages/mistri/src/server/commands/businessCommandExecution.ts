@@ -40,6 +40,7 @@ import {
   type BusinessCommandActor,
 } from './businessCommands.js';
 import { canonicalKey, createCommandDb, keyFilter, normalizeRow, type UntypedRow } from './commandDb.js';
+import { auditCommandRead, type CommandReadAudit, type ReadAuditSink } from '../readAudit.js';
 import { FLOW_TELL, flowCommandOf } from './flowCommandBrand.js';
 import {
   compileWhen,
@@ -530,12 +531,39 @@ async function executeUntraced(
       const reader = authorized.lookup;
       const table = authorized.catalog?.[command.target];
       if (!reader || !table) throw new AppAccessDenied();
+      /* A lookup's reads of audited resources — its sources' and the target as it stands — are written as the
+         handler's are, under this command; one the audit refuses fails the lookup, so the command, as any lookup failure. */
+      const audited = authorized.audited;
+      const lookupQuery: typeof reader.query = audited?.lookups.size
+        ? async (source, local, read) => {
+            const result = await reader.query(source, local, read);
+            const found = audited.lookups.get(source)?.get(local);
+            if (found)
+              await auditCommandRead(authorized.readAudit, request.command, {
+                ...found,
+                keys: reader.catalogs[source]?.[local]?.key ?? [],
+                groups: read.filter?.groups,
+                sort: read.orderBy,
+                offset: read.offset,
+                rows: result.rows,
+              });
+            return result;
+          }
+        : reader.query;
+      const targetAudit = audited?.tables.get(command.target);
       try {
         const before: UntypedRow[] = [];
         if (command.targets !== 'none' && !creating) {
           for (const key of list.keys) {
             const exact = canonicalKey(table, key);
             const row = exact ? await reader.target(exact) : undefined;
+            if (exact && targetAudit)
+              await auditCommandRead(authorized.readAudit, request.command, {
+                ...targetAudit,
+                keys: table.key,
+                groups: keyFilter(exact).groups,
+                rows: row ? [row] : [],
+              });
             if (!row) throw new BusinessCommandExecutionError('not_found', 'not_applied', undefined, key);
             before.push(normalizeRow(table, row) as UntypedRow);
           }
@@ -551,7 +579,7 @@ async function executeUntraced(
             signal,
             now,
             flags,
-            sources: createLookupSources({ catalogs: reader.catalogs, query: reader.query, now }),
+            sources: createLookupSources({ catalogs: reader.catalogs, query: lookupQuery, now }),
             // Each call keyed by this request, so a replay re-running lookup is answered from the call's record.
             integrations: integrationCalls({
               appId: scope.appId,
@@ -571,9 +599,10 @@ async function executeUntraced(
       } catch (error) {
         if (signal.aborted) throw new BusinessCommandExecutionError('cancelled');
         if (error instanceof AppAccessDenied) throw error;
+        /* The reason is kept for the operator (a read the audit could not record is said as itself), never the caller. */
         lookupFailure = isBusinessCommandExecutionError(error)
           ? new BusinessCommandExecutionError(error.code, 'not_applied', error.field, error.key, error.reason)
-          : new BusinessCommandExecutionError('temporarily_unavailable');
+          : recordRefusalCause(new BusinessCommandExecutionError('temporarily_unavailable'), error);
       }
     }
     const lanes = [
@@ -903,6 +932,12 @@ async function executeUntraced(
               ),
             });
           };
+          /* A file resource the actor cannot read takes this command's new rows and gives nothing back
+             (businessCommandAuthorization.ts insertOnly): every read, change and removal of it is refused. */
+          const addingOnly = (table: string) => {
+            const said = authorized.insertOnly?.get(table);
+            if (said !== undefined) throw new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, undefined, said);
+          };
           // Audit explicit write intent, not trigger/default after-images. Deletions
           // retain identity, not potentially sensitive fields from the deleted row.
           const tx = Object.freeze<WriteTransaction>({
@@ -911,6 +946,7 @@ async function executeUntraced(
                 request,
                 async (request) => {
                   checkCancelled();
+                  addingOnly(request.table);
                   return store.query(request);
                 },
                 true,
@@ -920,6 +956,7 @@ async function executeUntraced(
                 { table, filter },
                 async ({ table, filter }) => {
                   checkCancelled();
+                  addingOnly(table);
                   return store.count(table, filter);
                 },
                 true,
@@ -933,6 +970,7 @@ async function executeUntraced(
                       request,
                       async (request) => {
                         checkCancelled();
+                        addingOnly(request.table);
                         return store.aggregate!(request);
                       },
                       true,
@@ -940,10 +978,15 @@ async function executeUntraced(
                 }
               : {}),
             insert: (request) => accept(request, (request) => insertVia(request, (request) => store.insert(request))),
-            update: (request) => accept(request, (request) => updateVia(request, (request) => store.update(request))),
+            update: (request) =>
+              accept(request, async (request) => {
+                addingOnly(request.table);
+                return updateVia(request, (request) => store.update(request));
+              }),
             remove: (request) =>
               accept(request, async (request) => {
                 checkCancelled();
+                addingOnly(request.table);
                 if (request.table === command.target) guardTarget(request.key);
                 const own = request.table === command.target ? heldKey(request.key) : undefined;
                 if (own && !held.has(own)) await authorized.assertTarget?.(records, request.key);
@@ -971,6 +1014,7 @@ async function executeUntraced(
               ? {
                   updateMany: (requests: readonly UpdateRequest[]) =>
                     accept(requests, async (requests) => {
+                      for (const request of requests) addingOnly(request.table);
                       const read = await beforeImages(requests);
                       return gathered(
                         requests,
@@ -1210,8 +1254,47 @@ async function executeUntraced(
             });
             const denied = available.findIndex((value) => !value);
             if (denied >= 0) throw new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, list.keys[denied]);
+            /* What the handler reads through its `db` and `tx` of an audited resource is written before it has the
+               rows, under this command (readAudit.ts auditCommandRead); the executor's own reads around it — the
+               target, availability, constants — are the command's machinery, not the handler's reads. */
+            const auditedTables = authorized.audited?.tables;
+            /* Inside the command's transaction, so through its journal: a second writer would nest in it (SQLite
+               refuses that) or wait on it. The rows commit with the command or roll back with it; a journal that
+               keeps no read audit fails the command (ReadAuditFailed). */
+            const heldAudit: CommandReadAudit | undefined = authorized.readAudit && {
+              ...authorized.readAudit,
+              sink: Object.freeze<ReadAuditSink>({
+                ...authorized.readAudit.sink,
+                held: true,
+                append: async (row) => {
+                  if (typeof journal.appendReadAudit !== 'function')
+                    throw new Error('this database keeps no read audit in a command transaction');
+                  await journal.appendReadAudit([row]);
+                },
+              }),
+            };
+            const audit = (inner: WriteTransaction): WriteTransaction =>
+              auditedTables?.size
+                ? Object.freeze<WriteTransaction>({
+                    ...inner,
+                    async query(read) {
+                      const result = await inner.query(read);
+                      const found = auditedTables.get(read.table);
+                      if (found)
+                        await auditCommandRead(heldAudit, request.command, {
+                          ...found,
+                          keys: catalog[read.table]?.key ?? [],
+                          groups: read.filter?.groups,
+                          sort: read.orderBy,
+                          offset: read.offset,
+                          rows: result.rows,
+                        });
+                      return result;
+                    },
+                  })
+                : inner;
             const db = createCommandDb({
-              tx: batched,
+              tx: audit(batched),
               catalog,
               read: command.read,
               write: command.write,
@@ -1281,7 +1364,7 @@ async function executeUntraced(
                     today: () => zoneDay(now(), authorized.timezone),
                     flags: executionFlags,
                     db,
-                    tx,
+                    tx: audit(tx),
                     nextNumber: handlerNextNumber(journal, authorized.actor.appId),
                     ...named,
                     ...(lookupRun ? { lookup } : {}),

@@ -103,6 +103,9 @@ export interface TakenFile {
 const HASH = /^[0-9a-f]{64}$/;
 const OWNER = /^(?:actor|visitor):[^\0]{1,200}$/;
 const WORD = /^[A-Za-z][\w.-]{0,63}$/;
+/* A held file is its field's by the field's path in the declaration: `photos`, `address.photo`, a repeating group's
+   `attachments[].file` (shared/commandInput.ts heldFileFields); groups nest two deep, so three names at most. */
+const FIELD_PATH = /^(?=.{1,200}$)[A-Za-z_]\w*(?:(?:\[\])?\.[A-Za-z_]\w*){0,2}$/;
 
 /** The row as the store may keep it: every column inside its bounds, or nothing is written. */
 export function checkStagedRow(row: StagedFileRow): void {
@@ -110,7 +113,7 @@ export function checkStagedRow(row: StagedFileRow): void {
     !HASH.test(row.idHash) ||
     !OWNER.test(row.owner) ||
     !WORD.test(row.command) ||
-    !WORD.test(row.field) ||
+    !FIELD_PATH.test(row.field) ||
     typeof row.name !== 'string' ||
     !row.name ||
     row.name.length > 255 ||
@@ -129,7 +132,7 @@ export function checkStagedTake(take: StagedTake): void {
   if (
     !OWNER.test(take.owner) ||
     !WORD.test(take.command) ||
-    !WORD.test(take.field) ||
+    !FIELD_PATH.test(take.field) ||
     !Array.isArray(take.hashes) ||
     !take.hashes.length ||
     take.hashes.length > 20 ||

@@ -1147,6 +1147,7 @@
       "surface": ["cli: flag --port"],
       "tests": [{ "file": "e2e/new-form-switch.spec.ts" }]
     },
+    { "id": "cli-flag-number", "surface": ["cli: flag --number"], "tests": [{ "file": "test/migrate-flags.test.ts" }] },
     { "id": "cli-flag-press", "surface": ["cli: flag --press"], "tests": [{ "file": "test/shot-interaction.test.ts" }] },
     { "id": "cli-flag-read-pool", "surface": ["cli: flag --read-pool"], "tests": [{ "file": "test/connection-pool-config.test.ts" }] },
     { "id": "cli-flag-recipes", "surface": ["cli: flag --recipes"], "tests": [{ "file": "test/theme-bench.test.ts" }] },

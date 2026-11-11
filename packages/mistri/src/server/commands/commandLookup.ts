@@ -18,17 +18,21 @@
  * always did, and only a first attempt is refused, `temporarily_unavailable`
  * and not applied. A `refuse(...)` inside lookup keeps its own code.
  *
- * A tenant App looks up only resources every tenant already reads (`owner:
- * 'global'`), through the tenant's own row scope; the platform realm does
- * the same. A row-policy App looks up nothing yet. Both are checked when the
- * commands bind, so startup and mistri check refuse them.
+ * A tenant App's command looks up resources every tenant reads (`owner:
+ * 'global'`) and its own tenant's (`owner: 'tenant'`), through the acting
+ * person's scope: the tenant's rows alone, the role's row filters, and, for a
+ * tenant's table, the role's column grants — what that person could read, and
+ * nothing to write (`insert`, `update` and `remove` are refused in words). The
+ * platform realm looks up global rows only. A row-policy App looks up nothing
+ * yet. These are checked when the commands bind, so startup and mistri check
+ * refuse them.
  */
 import type { QueryRequest, QueryResult, ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
 import { logicalResource, type AppDef } from '../../shared/app.js';
 import { canonicalCommandJson } from './commandPayload.js';
 import { refuse } from './commandErrors.js';
 import type { BusinessCommandAuthorization } from './businessCommandAuthorization.js';
-import { TENANT_RULE } from './commandLookupRules.js';
+import { PLATFORM_RULE, TENANT_RULE, lookupOwners } from './commandLookupRules.js';
 import { CommandLookupRefusal, type BusinessCommandRegistry } from './businessCommands.js';
 import {
   canonicalKey,
@@ -56,8 +60,10 @@ export interface CommandLookupReader {
 /**
  * A tenant's or the platform realm's lookup reader: every read through the
  * context's own row scope, outside the command transaction, so a lookup sees
- * exactly what that context may read — and, in a tenant App, only global rows
- * are ever declared (assertGlobalLookups).
+ * exactly what that context may read — the tenant's rows and the role's row
+ * filters (the scope), and only the columns the role reads of a tenant's table
+ * (the catalog authorize narrowed). The owners a realm may look up are held by
+ * assertLookupOwners.
  */
 export function scopedLookupReader(
   authorization: Pick<BusinessCommandAuthorization, 'lookupTables' | 'resource'>,
@@ -68,13 +74,32 @@ export function scopedLookupReader(
   // physical tables themselves (mapAppScopedReads); a physical name is unknown to them.
   return Object.freeze<CommandLookupReader>({
     catalogs: tables.catalogs,
-    query: async (source, local, request) => (await reads()).query({ ...request, table: tables.logical(source, local) }),
+    async query(source, local, request) {
+      const columns = tables.columns?.(source, local);
+      const result = await (
+        await reads()
+      ).query({ ...request, table: tables.logical(source, local), ...(columns ? { columns: [...columns] } : {}) });
+      if (!columns) return result;
+      /* Asked for by name and cut to them as well: a column the role does not read never reaches the lookup, whatever
+         the adapter makes of the request's columns. */
+      const keep = new Set(columns);
+      return {
+        ...result,
+        columns: result.columns.filter((column) => keep.has(column)),
+        rows: result.rows.map((row) =>
+          Object.fromEntries(Object.entries(row as Record<string, unknown>).filter(([column]) => keep.has(column))),
+        ),
+      };
+    },
     async target(key) {
       const found = await (await reads()).query({ table: authorization.resource, filter: keyFilter(key), limit: 2, offset: 0 });
       return found.rows.length === 1 ? (found.rows[0] as Readonly<Record<string, unknown>>) : undefined;
     },
   });
 }
+
+/** What a lookup's handle says to a write: it only reads, and the write belongs in the handler's transaction. */
+const READ_ONLY = ['insert', 'update', 'remove', 'upsert', 'delete'] as const;
 
 /** One looked-up table, read only. */
 export interface LookupTable<Row> {
@@ -160,6 +185,16 @@ export function createLookupSources(
           return query;
         },
       } as LookupTable<UntypedRow>;
+      /* Not in the type, and refused if called anyway (an untyped App, a cast): the lookup runs before the
+         transaction, outside its fence and its receipt, so a write there would be applied by no command. */
+      for (const verb of READ_ONLY)
+        Object.defineProperty(handle, verb, {
+          value: () => {
+            throw new Error(
+              `${source}.${local}: a lookup only reads, so "${verb}" is not there; write in the handler, inside the command's transaction.`,
+            );
+          },
+        });
       tables[local] = Object.freeze(handle);
     }
     sources[source] = Object.freeze(tables);
@@ -170,19 +205,21 @@ export function createLookupSources(
 /**
  * The tenant rule against a deployment's attested ownership — the tenant and
  * platform bindings' own — whatever the App's authoring says: every table a
- * command looks up holds global rows.
+ * tenant's command looks up holds global rows or the tenant's own, and every
+ * table a platform-realm command looks up holds global rows.
  */
-export function assertGlobalLookups(
+export function assertLookupOwners(
   app: AppDef,
   registry: BusinessCommandRegistry,
   ownership: Readonly<Record<string, { readonly kind: string }>>,
 ): void {
   for (const [id, command] of Object.entries(registry)) {
+    const allowed = lookupOwners(command.realm);
     for (const [source, locals] of Object.entries(command.sources ?? {})) {
       for (const local of locals) {
         const logical = logicalResource(app, source, local);
         const kind = Object.hasOwn(ownership, logical) ? ownership[logical].kind : undefined;
-        if (kind === 'global') continue;
+        if (kind !== undefined && allowed.includes(kind)) continue;
         throw new CommandLookupRefusal(
           `Command "${id}" looks up "${logical}", which ${
             kind === 'tenant'
@@ -190,7 +227,7 @@ export function assertGlobalLookups(
               : kind === 'platform'
                 ? "holds the platform's rows"
                 : 'this deployment does not hold'
-          }. ${TENANT_RULE}`,
+          }. ${command.realm === 'platform' ? PLATFORM_RULE : TENANT_RULE}`,
         );
       }
     }

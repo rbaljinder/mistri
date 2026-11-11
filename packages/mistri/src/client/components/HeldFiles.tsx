@@ -139,7 +139,7 @@ interface FieldProps {
   invalid: boolean;
   disabled: boolean;
   label: string;
-  /** The input's name, the field the server holds the files for. */
+  /** The field the server holds the files for, by its path: `photos`, a repeating group's `attachments[].file`. */
   name: string;
   target: HeldTarget | undefined;
 }
@@ -394,15 +394,18 @@ export function HeldSignatureInput({
 /** A files or signature field as a command form draws it (CommandFields.tsx): the one entry the form loads. */
 export function HeldInput({
   field,
+  path,
   value,
   onChange,
   ...props
 }: Omit<FieldProps, 'label' | 'name'> & {
   field: Extract<AppCommandField, { type: 'files' | 'signature' }>;
+  /** Where the field sits in a group, its rows by `[]` (`attachments[].file`): what the files are held for. Absent, its name. */
+  path?: string;
   value: unknown;
   onChange: (value: string[] | string | undefined) => void;
 }) {
-  const named = { ...props, label: field.label, name: field.name };
+  const named = { ...props, label: field.label, name: path ?? field.name };
   return field.type === 'files' ? (
     <HeldFilesInput
       {...named}

@@ -225,7 +225,7 @@ for (const secondary of [false, true]) {
       await commandsOf(authorized).commandTransaction!(async (records, journal) => {
         assert.deepEqual(Reflect.ownKeys(records).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
         assert.equal(Object.isFrozen(records), true);
-        assert.deepEqual(Reflect.ownKeys(journal).sort(), ['commit', 'find', 'insert', 'nextNumber', 'taken']);
+        assert.deepEqual(Reflect.ownKeys(journal).sort(), ['appendReadAudit', 'commit', 'find', 'insert', 'nextNumber', 'taken']);
         assert.deepEqual(
           (await records.query(query('tickets'))).rows.map((row) => row.id),
           [1],

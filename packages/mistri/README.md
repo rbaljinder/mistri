@@ -30,7 +30,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.36; the
+These App features ship in mistri 1.0.0-rc.37; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -519,7 +519,7 @@ mistri explain <check-code>
                               means and the fix, from the check-codes page;
                               an unknown code lists the nearest
 
-mistri migrate new <name> [--repeatable]
+mistri migrate new <name> [--repeatable | --number <n>]
 mistri migrate status | up | validate | baseline | repair
 mistri migrate diff <name> | check | squash
                 [--app <dir>] [<db> | --db <target> | --config <path>]
@@ -617,12 +617,13 @@ mistri audit reads [--app <dir>] [--resource <name>] [--record <id>] [--actor <w
 Prints the reads recorded for the App's resources with audit: { reads: true },
 newest first, one JSON object a line: when, the actor, the tenant, the
 resource, the route (page, api, mcp, assistant, export, picker, custom-page,
-related) and the one record read or the query with the count and ids it
-returned; never a field's value. Each flag narrows: --record by the record's
-key, --actor an account id, service:<principal>, support:<operator>,
-api-token:<id> or assistant:<account>, --since an ISO instant or an age,
---limit at most n rows (default 1000). Read from the database, no server
-started; the store is made by mistri migrate stores up, never here.
+related, or command with the command's id) and the one record read or the
+query with the count and ids it returned; never a field's value. Each flag
+narrows: --record by the record's key, --actor an account id,
+service:<principal>, support:<operator>, api-token:<id> or
+assistant:<account>, --since an ISO instant or an age, --limit at most n rows
+(default 1000). Read from the database, no server started; the store is made
+by mistri migrate stores up, never here.
 Exit codes: 1 could not run.
 
 mistri jobs run <name> [--app <dir>] --jobs <file> [--wait <seconds>]
@@ -710,6 +711,8 @@ Exit codes: 1 could not run.
                               PostgreSQL: where two scratch databases are made
                               and dropped (default the connection's server)
       --repeatable            with migrate new: an R__ file
+      --number <n>            with migrate new: the V file's version as
+                              written (0042), refused when a file has it
 
 mistri shot [--app <dir>] [<route>…] [<db> | --db <target> | --config <path>]
                 [--theme <id|all>] [--palette <id>]

@@ -319,3 +319,25 @@ test('a toned free-text column keeps the values that order its steps, and a decl
     said.join('\n'),
   );
 });
+
+/* A field report: `priority = subject` read as comparing two columns of the row, and found nothing — beside text a
+   bare word is the value, even where the table has a column of that name. Said, not refused; quoting quiets it. */
+test('a bare word beside a text column that is also a column of the table is said, and quoted it is not', () => {
+  const app = parseAppConfig(
+    {
+      name: 'Helpdesk',
+      resources: {
+        ticket: { segments: { same: 'priority = subject', meant: 'priority = "subject"', numbers: 'version = id' } },
+        reply: {},
+      },
+      views: { tickets: { kind: 'list', from: 'ticket', label: 'Tickets', tabs: ['same', 'meant', 'numbers'] } },
+      home: 'tickets',
+      nav: ['tickets'],
+    },
+    'app.ts',
+  );
+  assert.deepEqual(appLiteralWarnings(app, [], withRollups(app, schema)), [
+    'view "tickets", tab "Same" [bare-word-column]: "priority … subject" compares ticket.priority with the text "subject", ' +
+      'though ticket has a column "subject": a bare word beside text is its value, never a column. Quote it ("subject") if the text is meant.',
+  ]);
+});

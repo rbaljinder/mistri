@@ -799,7 +799,7 @@ test('an elevated read binds for a role that cannot read the table, and is refus
 });
 
 test('check --design lists every elevation, with the granted roles that would not read the table otherwise', async () => {
-  const { commandElevations } = await import('../packages/mistri/src/server/build/check.js');
+  const { commandElevations } = await import('../packages/mistri/src/server/build/checkCommands.js');
   const f = fixture();
   const registry = defineCommands({
     'approve-loan': defineCommand({
@@ -820,9 +820,41 @@ test('check --design lists every elevation, with the granted roles that would no
   assert.deepEqual(commandElevations(f.app, defineCommands({ 'approve-loan': f.definition() }), f.schema), []);
 });
 
+test("check refuses a tenant App's public command whose handler removes a row, and leaves one that only inserts", async () => {
+  const { publicCommandRemovals } = await import('../packages/mistri/src/server/build/checkCommands.js');
+  const command = (handle: (context: never, input: never) => unknown) =>
+    defineCommand({
+      targets: 'none',
+      public: true,
+      source: 'operations',
+      target: 'loan',
+      read: [],
+      write: ['loan'],
+      input: {},
+      output: { parse: (value: unknown) => value },
+      handle: handle as never,
+    });
+  const registry = defineCommands({
+    withdraw: command((async ({ db }: { db: Record<string, { remove(key: object): Promise<void> }> }) => {
+      await db.loan.remove({ id: 1 });
+    }) as never),
+    'withdraw-indexed': command((async ({ db }: { db: Record<string, { remove(key: object): Promise<void> }> }) => {
+      await db['loan'].remove({ id: 1 });
+    }) as never),
+    apply: command((async ({ db }: { db: Record<string, { insert(row: object): Promise<void> }> }) => {
+      await db.loan.insert({ id: 1 });
+    }) as never),
+  });
+  assert.deepEqual(
+    publicCommandRemovals(registry).map((said) => said.slice(0, said.indexOf(' removes'))),
+    ['public command "withdraw"', 'public command "withdraw-indexed"'],
+  );
+  assert.match(publicCommandRemovals(registry)[0], /\[public-command-remove\]/);
+});
+
 test('a role granted a command that reads a table the role cannot read: check names role, command and table; the run names the table to a signed-in caller', async () => {
   const f = fixture();
-  const { commandUnreadable } = await import('../packages/mistri/src/server/build/check.js');
+  const { commandUnreadable } = await import('../packages/mistri/src/server/build/checkCommands.js');
   const { refusalSaid } = await import('../packages/engine/src/shared/refusal.js');
   const registry = defineCommands({ 'approve-loan': f.definition() });
   assert.deepEqual(commandUnreadable(f.app, registry, f.schema), [

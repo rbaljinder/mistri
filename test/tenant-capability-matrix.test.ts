@@ -12,7 +12,7 @@ const section = doc.slice(doc.indexOf('### What a tenant keeps'), doc.indexOf('#
 const source = (file: string) => `packages/mistri/src/server/${file}`;
 
 test('every file the matrix names exists', () => {
-  const files = [...section.matchAll(/\| `((?:tenant|api)\/[A-Za-z]*\.?[A-Za-z]*(?:\.ts)?)` \|/g)].map((each) => each[1]);
+  const files = [...section.matchAll(/\| +`((?:tenant|api)\/[A-Za-z]*\.?[A-Za-z]*(?:\.ts)?)` +\|/g)].map((each) => each[1]);
   assert.ok(files.length >= 8, 'the matrix names its files');
   for (const file of files) assert.ok(existsSync(source(file)) || existsSync(source(file.replace(/\/$/, ''))), file);
 });

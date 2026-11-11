@@ -43,8 +43,13 @@ function findableOf(room: ListRoom): Findable | undefined {
   return table && label && (primaryKey(table) as string[]).length ? { table, label, room } : undefined;
 }
 
-/** The tables whose records the reader may find: those of `tables` (ids), or of the App's first lists. */
-export function findableTables(app: ServedApp, tables?: readonly string[], most = 6): Findable[] {
+/** The most tables one search asks at once, and how many of them are in flight together: a search is one request per
+    table, and an App's menu may hold a few dozen lists. */
+export const SEARCHED_MOST = 24;
+const SEARCH_CONCURRENCY = 6;
+
+/** Every table the reader may find records of: those of `tables` (ids), or of every list the menu holds, in its order. */
+function findableAll(app: ServedApp, tables?: readonly string[]): Findable[] {
   const seen = new Set<string>();
   const out: Findable[] = [];
   const rooms = listRooms(app, Boolean(tables));
@@ -53,9 +58,38 @@ export function findableTables(app: ServedApp, tables?: readonly string[], most 
     seen.add(room.table);
     const found = findableOf(room);
     if (found) out.push(found);
-    if (out.length >= most) break;
   }
   return out;
+}
+
+/** The tables whose records the reader may find: those of `tables` (ids), or of the App's menu, at most `most`. */
+export function findableTables(app: ServedApp, tables?: readonly string[], most = SEARCHED_MOST): Findable[] {
+  return findableAll(app, tables).slice(0, most);
+}
+
+/** The tables a search over the whole menu asks, and how many it leaves out past SEARCHED_MOST (so it can say so). */
+export function searchedTables(app: ServedApp): { tables: Findable[]; left: number } {
+  const every = findableAll(app);
+  return { tables: every.slice(0, SEARCHED_MOST), left: Math.max(0, every.length - SEARCHED_MOST) };
+}
+
+/**
+ * `limit` records of each table whose names hold `term`, the tables asked a few at a time and answered in the menu's
+ * order. A refusal answers nothing for its table (findRecords), never the whole search's failure.
+ */
+export async function findAcross(
+  findables: readonly Findable[],
+  term: string,
+  limit: number,
+  concurrency = SEARCH_CONCURRENCY,
+): Promise<Found[][]> {
+  const answers: Found[][] = findables.map(() => []);
+  let next = 0;
+  const worker = async () => {
+    for (let at = next++; at < findables.length; at = next++) answers[at] = await findRecords(findables[at], term, limit);
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, findables.length) }, worker));
+  return answers;
 }
 
 /**

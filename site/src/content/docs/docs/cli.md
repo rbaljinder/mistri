@@ -395,7 +395,7 @@ colors.
 Versioned SQL files in Flyway's format, forward only.
 
 ```text
-mistri migrate new <name> [--repeatable]
+mistri migrate new <name> [--repeatable | --number <n>]
 mistri migrate status | up | validate | baseline | repair
 mistri migrate diff <name> | check | squash
                 [--app <dir>] [<db> | --db <target> | --config <path>]
@@ -456,6 +456,8 @@ MISTRI_ATLAS=<path to it>); serving never fetches it. PostgreSQL and SQLite.
     --tool flyway   run the command with an installed Flyway instead (on the
                     PATH, or MISTRI_FLYWAY), over the same files and history
     --repeatable    with new: an R__ file
+    --number <n>    with new: the V file's version as written (0042),
+                    refused when a file already has it
     --schema-file <path>
                     with diff, check or squash: the schema you want (default
                     schema.sql beside the migrations directory)
@@ -537,12 +539,14 @@ mistri audit reads [--app <dir>] [--resource <name>] [--record <id>] [--actor <w
 Prints the reads recorded for the App's resources with audit: { reads: true },
 newest first, one JSON object a line: when, the actor, the tenant, the
 resource, the route (page, api, mcp, assistant, export, picker, custom-page,
-related) and the one record read or the query with the count and ids it
-returned; never a field's value. Each flag narrows: --record by the record's
-key, --actor an account id, service:<principal>, support:<operator>,
-api-token:<id> or assistant:<account>, --since an ISO instant or an age,
---limit at most n rows (default 1000). Read from the database, no server
-started; the store is made by mistri migrate stores up, never here.
+related, or command with the command's id) and the one record read or the
+query with the count and ids it returned; never a field's value. Each flag
+narrows: --record by the record's key, read alone or among the ids a list read
+returned (a row keeps at most 500 of them), --actor an account id,
+service:<principal>, support:<operator>, api-token:<id> or
+assistant:<account>, --since an ISO instant or an age, --limit at most n rows
+(default 1000). Read from the database, no server started; the store is made
+by mistri migrate stores up, never here.
 Exit codes: 1 could not run.
 ```
 
@@ -972,6 +976,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--no-index-check` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--no-live` | [Options](#options) |
 | `--no-query-check` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
+| `--number` | [Changing the schema](#changing-the-schema) |
 | `--open` | [Options](#options) |
 | `--openapi` | [Options](#options) |
 | `--operator` | [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes) |

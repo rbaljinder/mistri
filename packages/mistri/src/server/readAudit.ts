@@ -51,12 +51,17 @@ export interface ReadAuditSink {
   readonly visit?: string;
   /** One row, durable before it resolves, on the database that holds `connection`'s rows. */
   append(row: ReadAuditRow, connection: string): Promise<void>;
+  /** Rows written in a transaction that may yet roll back (a command handler's reads): never coalesced, since a row
+   * rolled back was never kept, and the same read again must write it again. */
+  readonly held?: boolean;
 }
 
 /** The door a request came in by. `actor` replaces the sink's (an API token's reads are `api-token:<id>`). */
 interface ReadDoor {
   readonly route: ReadRoute;
   readonly actor?: string;
+  /** A command's id, where the read is its handler's or its lookup's (route `command`). */
+  readonly command?: string;
 }
 
 /** A read audit row could not be written, or an audited read came by no door: the request is answered 503 (READ_NOT_RECORDED). */
@@ -213,6 +218,28 @@ interface Read {
 }
 
 /**
+ * The text a list read's row keeps for what it asked: its conditions, sort and offset as canonical JSON. A parsed
+ * condition carries members the JSON has no word for — `is empty` is `{ op: 'isNull', value: undefined }` — and the
+ * canonical writer refuses those outright; refused there, the read failed as no audit failure at all and a tenant
+ * page answered it as its session lost (a field report). So the conditions go through JSON first, which leaves an
+ * absent member out and spells a bigint as its digits. What still cannot be kept — a query past
+ * READ_AUDIT_LIMITS.query — is a read the audit could not record, answered as one (`mistri check` names the App's
+ * own queries that would be: build/checkReadAudit.ts).
+ */
+export function auditQuery(groups: unknown, sort: unknown, offset: number): string {
+  try {
+    const plain: unknown = JSON.parse(
+      JSON.stringify({ where: groups ?? [], sort: sort ?? [], offset }, (_key, value: unknown) =>
+        typeof value === 'bigint' ? value.toString() : value,
+      ),
+    );
+    return canonicalCommandJson(plain, READ_AUDIT_LIMITS.query);
+  } catch (error) {
+    throw new ReadAuditFailed('The read could not be recorded in the read audit: its query is too large to keep.', { cause: error });
+  }
+}
+
+/**
  * Write one row for a read, or refuse. `sink` absent with a door set is a
  * grant nobody wired: refused. Resolves once the row is durable.
  */
@@ -232,6 +259,7 @@ async function record(read: Read, sink: ReadAuditSink | undefined): Promise<void
     ...(sink.visit ? { visit: sink.visit } : {}),
     resource: read.resource,
     route: door.route,
+    ...(door.route === 'command' && door.command !== undefined ? { command: door.command } : {}),
   };
   let row: ReadAuditRow;
   if (named !== undefined && read.rows.length <= 1) row = { ...base, record: named };
@@ -239,9 +267,7 @@ async function record(read: Read, sink: ReadAuditSink | undefined): Promise<void
     const kept = ids.slice(0, READ_AUDIT_LIMITS.idCount);
     row = {
       ...base,
-      query:
-        read.said ??
-        canonicalCommandJson({ where: read.groups ?? [], sort: read.sort ?? [], offset: read.offset }, READ_AUDIT_LIMITS.query),
+      query: read.said ?? auditQuery(read.groups, read.sort, read.offset),
       count: read.rows.length,
       ids: JSON.stringify(kept),
     };
@@ -253,18 +279,19 @@ async function record(read: Read, sink: ReadAuditSink | undefined): Promise<void
     row.visit ?? '',
     row.resource,
     row.route,
+    row.command ?? '',
     row.record ?? '',
     row.query ?? '',
     row.ids ?? '',
   ].join('\0');
   const now = Date.now();
-  const pending = coalesced(key, now);
+  const pending = sink.held ? undefined : coalesced(key, now);
   if (pending) return pending;
   const written = sink.append(row, read.connection).catch((error: unknown) => {
     if (recent.get(key)?.written === written) recent.delete(key);
     throw new ReadAuditFailed(`The read could not be recorded in the read audit: ${(error as Error).message}`, { cause: error });
   });
-  recent.set(key, { at: now, written });
+  if (!sink.held) recent.set(key, { at: now, written });
   return written;
 }
 
@@ -328,6 +355,55 @@ export async function auditViewRead(
     access.readAudit,
   );
   return result;
+}
+
+/** Where a command's reads of audited resources are written: the sink of the person it runs for, and each table's database. */
+export interface CommandReadAudit {
+  readonly sink: ReadAuditSink;
+  /** The registry owner of a logical table, which its row is written to. */
+  connectionOf(table: string): string;
+}
+
+/**
+ * A command's own read of an audited resource — its handler's `db` or `tx`, or its lookup's sources and target — its
+ * row written before the rows are handed on, under the route `command` with the command's id. One path for both, so a
+ * handler and a lookup are audited alike. Whoever the request came in as still reads: an API token's id, or the
+ * assistant acting for its person. The server's own work (withoutReadAudit) writes nothing, as every other read; a read
+ * with no sink is refused (ReadAuditFailed), which fails the command and nothing else.
+ */
+export async function auditCommandRead(
+  audit: CommandReadAudit | undefined,
+  command: string,
+  read: {
+    /** The logical table read, and the resource its row is written under. */
+    readonly table: string;
+    readonly resource: string;
+    readonly keys: readonly string[];
+    readonly groups?: ReadonlyArray<ReadonlyArray<{ op: string; value?: unknown; other?: string }>>;
+    readonly sort?: unknown;
+    readonly offset?: number;
+    readonly rows: ReadonlyArray<Record<string, unknown>>;
+  },
+): Promise<void> {
+  const outer = doors.getStore();
+  if (outer === null) return;
+  if (!audit) throw new ReadAuditFailed('An audited resource was read by a command with no read audit to record it.');
+  const actor = outer?.actor ?? (outer?.route === 'assistant' ? `assistant:${audit.sink.actor}` : undefined);
+  await doors.run({ route: 'command', command, ...(actor ? { actor } : {}) }, () =>
+    record(
+      {
+        table: read.table,
+        resource: read.resource,
+        connection: audit.connectionOf(read.table),
+        groups: read.groups,
+        sort: read.sort,
+        offset: read.offset ?? 0,
+        rows: read.rows,
+        keys: read.keys,
+      },
+      audit.sink,
+    ),
+  );
 }
 
 /* A row's query is JSON (its store checks it), so the feed's is the JSON string. */

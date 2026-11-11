@@ -22,7 +22,10 @@ import {
   type BusinessCommandActor,
   type BusinessCommandRegistry,
 } from './businessCommands.js';
-import { createBusinessCommandAuthorizer, type CommandFileRule } from './businessCommandAuthorization.js';
+import { createBusinessCommandAuthorizer, type CommandAudited, type CommandFileRule } from './businessCommandAuthorization.js';
+import type { CommandReadAudit, ReadAuditSink } from '../readAudit.js';
+import { readAuditStoreOf } from '../readAuditStore.js';
+import { databaseOf } from '../app/appRuntimeResources.js';
 import { keyFilter, type CommandCatalog } from './commandDb.js';
 import type { CommandLookupReader } from './commandLookup.js';
 import { captureTenantJobs } from '../tenant/tenantJobsBrand.js';
@@ -55,8 +58,14 @@ export interface AuthorizedBusinessCommand {
   readonly people?: Readonly<{ table: string; column: string; key: string; id: string }>;
   /** The file resources it writes, by local name: the only tables a command may put bytes in, within their cap. */
   readonly files?: ReadonlyMap<string, CommandFileRule>;
+  /** The file resources it writes that this actor cannot read: it may add rows there and nothing more (see businessCommandAuthorization.ts). */
+  readonly insertOnly?: ReadonlyMap<string, string>;
   /** Present when the command looks up: its sources' tables, read outside any transaction. */
   readonly lookup?: CommandLookupReader;
+  /** The audited resources it reads, by where it reads them (businessCommandAuthorization.ts); absent where none. */
+  readonly audited?: CommandAudited;
+  /** Where its reads of those are written (readAudit.ts auditCommandRead). Absent with `audited` present, a read of one is refused. */
+  readonly readAudit?: CommandReadAudit;
   /** Private stable namespace; never request-supplied membership/session evidence. */
   readonly receiptOwner?: Readonly<{ storeId: string; sourceId: string; tenantId: string }>;
   /** A tenant App's public intake only: where this submission lands, the
@@ -260,6 +269,26 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
         ...(binding.currency ? { currency: binding.currency } : {}),
         ...(binding.people ? { people: binding.people } : {}),
         ...(binding.files ? { files: binding.files } : {}),
+        ...(binding.insertOnly ? { insertOnly: binding.insertOnly } : {}),
+        /* A read of an audited resource is written to the database its rows came from, as a page's is (http/source.ts). */
+        ...(binding.audited
+          ? {
+              audited: binding.audited,
+              readAudit: Object.freeze<CommandReadAudit>({
+                sink: Object.freeze<ReadAuditSink>({
+                  app: options.app.id,
+                  tenant: '',
+                  actor: binding.actor.kind === 'public' ? 'public' : binding.actor.id,
+                  append: async (row, connection) =>
+                    readAuditStoreOf(
+                      databaseOf(resources, connection) ?? resources.forConnection(connection),
+                      `connection "${connection}"`,
+                    ).appendReadAudit(row),
+                }),
+                connectionOf: (table) => resources.connectionFor(table),
+              }),
+            }
+          : {}),
         // A lookup reads each declared table through its own source's adapter,
         // outside any transaction, and the target through the command's.
         ...(binding.lookupTables

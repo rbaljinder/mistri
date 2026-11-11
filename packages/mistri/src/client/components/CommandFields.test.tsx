@@ -657,3 +657,83 @@ test('a lines field starts with one blank line, sends only what a line asks, typ
   });
   expect(() => commandInput([items], { items: [line({ vehicle_id: '7', quantity: 'two' })] })).toThrow(/quantity/i);
 });
+
+/* A group's files are each row's own: every row draws the picker, holds under the field's path (never the row's
+   index, so a removed or reordered row takes nothing of another's), and a removed row lets its files go. */
+test("a repeating group's file field is a picker in every row, held by the field's path, and a removed row lets its files go", async () => {
+  const { rememberHeldFile } = await import('../heldFileNames.js');
+  const sent: Array<{ url: string; body: { command?: string; field: string } }> = [];
+  class Xhr {
+    upload = { onprogress: null };
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    onabort: (() => void) | null = null;
+    status = 0;
+    responseText = '';
+    url = '';
+    withCredentials = false;
+    open(_method: string, url: string) {
+      this.url = url;
+    }
+    setRequestHeader() {}
+    send(body: string) {
+      sent.push({ url: this.url, body: JSON.parse(body) });
+    }
+    abort() {}
+  }
+  vi.stubGlobal('XMLHttpRequest', Xhr);
+  const revoke = vi.fn();
+  URL.revokeObjectURL = revoke;
+  const id = (n: number) => String(n).repeat(43);
+  rememberHeldFile(id(1), { name: 'left.png', type: 'image/png', size: 4, url: 'blob:left' });
+  rememberHeldFile(id(2), { name: 'right.png', type: 'image/png', size: 4, url: 'blob:right' });
+  const fields: AppCommandField[] = [
+    {
+      name: 'attachments',
+      label: 'Attachments',
+      type: 'group',
+      repeat: { max: 3 },
+      fields: [
+        { name: 'file', label: 'File', type: 'files', from: 'repair_photo', max: 1, accept: ['image/*'], required: true },
+        { name: 'caption', label: 'Caption', type: 'text' },
+      ],
+    },
+  ];
+  let values: Record<string, unknown> = {
+    attachments: [
+      { file: [id(1)], caption: 'Left wall' },
+      { file: [id(2)], caption: 'Right wall' },
+    ],
+  };
+  const draw = () => (
+    <CommandFields
+      fields={fields}
+      values={values as never}
+      idPrefix="t"
+      identityEpoch={1}
+      isCurrent={() => true}
+      held={{ command: 'attach', connection: 'loans' }}
+      onChange={(next) => {
+        values = next;
+      }}
+    />
+  );
+  const view = render(draw());
+  await waitFor(() => expect(view.container.querySelectorAll('input[type=file]')).toHaveLength(2));
+  expect(screen.getByRole('button', { name: 'Preview left.png' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Preview right.png' })).toBeInTheDocument();
+  // The first row's own picker holds under the field's path.
+  values = { attachments: [{ file: [], caption: 'Left wall' }, (values.attachments as unknown[])[1]] };
+  view.rerender(draw());
+  await waitFor(() => expect(view.container.querySelectorAll('input[type=file]')).toHaveLength(2));
+  const png = new File([new Uint8Array([137, 80, 78, 71])], 'left.png', { type: 'image/png' });
+  fireEvent.change(view.container.querySelectorAll('input[type=file]')[0]!, { target: { files: [png] } });
+  await waitFor(() => expect(sent).toHaveLength(1));
+  expect(sent[0]!.body).toMatchObject({ command: 'attach', field: 'attachments[].file' });
+  // Removing the second row takes its file with it, and leaves the first row's alone.
+  fireEvent.click(screen.getByRole('button', { name: 'Remove row 2 of Attachments' }));
+  expect(revoke).toHaveBeenCalledWith('blob:right');
+  expect(revoke).not.toHaveBeenCalledWith('blob:left');
+  expect(values).toEqual({ attachments: [{ file: [], caption: 'Left wall' }] });
+  vi.unstubAllGlobals();
+});

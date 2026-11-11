@@ -9,7 +9,7 @@ import { recordRefusalCause, TenantUnavailableError } from '@mistriwork/engine/s
 import type { AppDef } from '../../shared/app.js';
 import { ReadAuditUnavailable, type ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
 import { storesOf } from '../stores/appStores.js';
-import type { AuditedAccess, ReadAuditSink } from '../readAudit.js';
+import type { AuditedAccess, CommandReadAudit, ReadAuditSink } from '../readAudit.js';
 
 /** Whether any of the App's resources audits its reads; nothing below is bound for one that does not. */
 export const auditsReads = (app: Pick<AppDef, 'resources'>): boolean =>
@@ -52,5 +52,27 @@ export function withTenantReadAudit<T extends AuditedAccess>(
         }
       },
     },
+  };
+}
+
+/**
+ * Where a tenant App's command writes its reads of an audited resource (readAudit.ts auditCommandRead): under the
+ * place it acts in and who acts, through the writer, the tenant's fenced source. Its lookup's and its target's rows are
+ * written there, outside the transaction; its handler's go in the command's own transaction, its journal checking
+ * the tenant again (businessCommandExecution.ts). A row that cannot be written fails that command, as on a single
+ * App, never the person's context. A command that reads nothing audited is handed nothing.
+ */
+export function tenantCommandReadAudit(
+  authorization: { readonly audited?: unknown },
+  sink: Pick<ReadAuditSink, 'app' | 'tenant' | 'actor'>,
+  connection: string,
+  append: (row: ReadAuditRow) => Promise<void>,
+): { readonly readAudit?: CommandReadAudit } {
+  if (!authorization.audited) return {};
+  return {
+    readAudit: Object.freeze<CommandReadAudit>({
+      sink: Object.freeze<ReadAuditSink>({ app: sink.app, tenant: sink.tenant, actor: sink.actor, append: (row) => append(row) }),
+      connectionOf: () => connection,
+    }),
   };
 }

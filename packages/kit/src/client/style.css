@@ -624,6 +624,7 @@ html[data-starting] .content.nav-holding.nav-holding-focusable > :not(.nav-held)
 .palette-item.active .palette-label { color: var(--accent-ink); }
 .palette-detail { font: var(--text-xs) var(--mono); color: var(--ink-subtle); }
 .palette-empty { padding: var(--space-5); margin: 0; font-size: var(--text-sm); color: var(--ink-muted); }
+.palette-note { padding: var(--space-2) var(--space-3h); margin: 0; font-size: var(--text-xs); color: var(--ink-subtle); }
 
 /* An App's palette (Palette.tsx, `palette-grouped`; the Workbench keeps the flat list above): rows in groups under
    quiet headings, each with the mark its room or table has in the menu, the kind said in the line under the name and

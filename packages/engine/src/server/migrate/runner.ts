@@ -151,6 +151,17 @@ export function migrateUp(target: MigrateTarget, options: { dryRun?: boolean; wa
       };
     }
     if (initial.plan.problems.length) return { status: initial, applied: [] };
+    /* A V file `migrate new` wrote and nobody filled in would be recorded as applied, and the statements written
+       into it afterwards never run: its checksum then disagrees and every later run stops on it. An R__ file runs
+       again whenever its text changes, so an empty one (a placeholder for views to come) does no harm. */
+    const blank = initial.plan.pending.filter((file) => file.kind === 'versioned' && !splitPostgres(file.sql).length);
+    if (blank.length) {
+      return {
+        status: initial,
+        applied: [],
+        refused: `${blank.map((file) => file.script).join(', ')} ${blank.length === 1 ? 'holds' : 'hold'} no statement, only comments or blank lines. Write the migration into it, or delete it; nothing was applied.`,
+      };
+    }
     if (options.dryRun) return { status: initial, applied: [], wouldRun: initial.plan.pending };
 
     const expected = initial.snapshot?.objects;

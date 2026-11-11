@@ -27,7 +27,7 @@ import {
   defineCommands,
   type BusinessCommandRegistry,
 } from '../commands/businessCommands.js';
-import { assertGlobalLookups, scopedLookupReader } from '../commands/commandLookup.js';
+import { assertLookupOwners, scopedLookupReader } from '../commands/commandLookup.js';
 import {
   CommandInputError,
   parseCommandPrepareRequest,
@@ -53,6 +53,7 @@ import { authorizedCommandFlags, commandFlagsOnce } from '../commands/commandFla
 import type { TenantMembershipEvidence } from './tenantMembership.js';
 import { actingPrincipal } from './tenantApiRequest.js';
 import { runDraftRoute } from '../forms/draftHttp.js';
+import { tenantCommandReadAudit } from './tenantReadAudit.js';
 
 export interface TenantCommandOptions<Request> extends TenantWriteRuntimeOptions<Request> {
   readonly commands: {
@@ -231,8 +232,8 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
     if (command.realm === 'platform' || command.public === true) continue;
     if (command.source !== identity.source.id || command.write.some((table) => ownership.ownership[table]?.kind !== 'tenant')) deny();
   }
-  // Decided, may be revisited: a tenant's command looks up only global rows, whatever the App declares.
-  assertGlobalLookups(app, registry, ownership.ownership);
+  // Decided, may be revisited: a tenant's command looks up global rows and its own tenant's, whatever the App declares.
+  assertLookupOwners(app, registry, ownership.ownership);
   const own = (id: string) => {
     if (Object.hasOwn(registry, id) && (registry[id].realm === 'platform' || registry[id].public === true)) deny();
   };
@@ -366,6 +367,12 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                        the tenant's rows, and write nothing (draftHttp.ts, decideReads.ts). */
                     readsInCommand: true,
                     ...(authorization.lookupTables ? { lookup: scopedLookupReader(authorization, () => scope.reads()) } : {}),
+                    ...tenantCommandReadAudit(
+                      authorization,
+                      { app: app.id, tenant: scope.principal.tenantId, actor: scope.principal.accountId },
+                      identity.source.connection,
+                      scope.appendReadAudit,
+                    ),
                     receiptOwner: captureTenantData({
                       storeId: identity.storeId,
                       sourceId: identity.source.id,

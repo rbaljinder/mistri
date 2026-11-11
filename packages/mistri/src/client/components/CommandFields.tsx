@@ -21,6 +21,7 @@ import {
   CommandInputRefusal,
   commandFieldAt,
   commandInputProblems,
+  heldFilePath,
   readCommandInput,
   type CommandInputReason,
 } from '../../shared/commandInput.js';
@@ -38,6 +39,7 @@ import { InputSlot, builtInInputId } from '@mistriwork/kit/client/components/inp
 import { say } from '../copy/forms/components/CommandFields.js';
 import type { DefinedField } from '@mistriwork/engine/shared/definedFields.js';
 import type { HeldTarget } from './HeldFiles.js';
+import { forgetHeldFile } from '../heldFileNames.js';
 
 /** A form's values while it is filled in: one per field, an object per group, rows per repeating group, a grid's lines. */
 export type CommandValues = { [name: string]: CommandValue | CommandValues | CommandValues[] | LineDraft[] | undefined };
@@ -1013,6 +1015,7 @@ function FieldEntry({
         held ? (
           <HeldInput
             field={field}
+            path={heldFilePath(path)}
             id={id}
             describedBy={control['aria-describedby']}
             labelledBy={control['aria-labelledby']}
@@ -1116,6 +1119,19 @@ function GroupFields({
   );
 }
 
+/** The held files' ids a group's value names, its rows' and inner groups' included. */
+function heldIds(fields: readonly AppCommandField[], value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap((row) => heldIds(fields, row));
+  if (!value || typeof value !== 'object') return [];
+  const values = value as Record<string, unknown>;
+  return fields.flatMap((member) => {
+    const held = values[member.name];
+    if (member.type === 'group') return heldIds(member.fields, held);
+    if (member.type === 'files') return Array.isArray(held) ? held.filter((id): id is string => typeof id === 'string') : [];
+    return member.type === 'signature' && typeof held === 'string' ? [held] : [];
+  });
+}
+
 /** A repeating group's rows, from its minimum to its maximum; each row is the group's fields again. */
 function RepeatRows({
   field,
@@ -1157,6 +1173,8 @@ function RepeatRows({
               aria-label={say('removeRow', { index: index + 1, label: field.label })}
               onClick={() => {
                 keys.current.splice(index, 1);
+                // The row's held files leave with it: their ids are no longer in the input, and their previews are let go.
+                for (const id of heldIds(field.fields, row)) forgetHeldFile(id);
                 onChange(
                   rows.filter((_, other) => other !== index),
                   path,

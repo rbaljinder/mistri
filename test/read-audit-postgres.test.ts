@@ -21,6 +21,7 @@ import { appEntrypoint } from '../packages/mistri/src/server/app/appEntrypoint.j
 import { loadAppRuntimeResources } from '../packages/mistri/src/server/app/appRuntimeResources.js';
 import { provisionStores } from '../packages/mistri/src/server/maintenance.js';
 import { forgetReadAuditCoalescing, ReadAuditFailed, withReadRoute } from '../packages/mistri/src/server/readAudit.js';
+import { readPostgresReadAudit } from '../packages/mistri/src/adapters/readAudit/postgresReadAudit.js';
 import { withReadAuditSink } from '../packages/mistri/src/server/readAuditStore.js';
 import { statementsOf } from './support/statements.js';
 import { pgClient, uuidPostgresDatabase, type Control } from './support/tenantDialects.js';
@@ -135,5 +136,17 @@ test('a batch that cannot be written refuses every read in it, and the next batc
     await control.query('DROP TRIGGER refuse_audit ON mistri.read_audit_row');
     await read(20);
     assert.equal(await auditRows(control), 2);
+  });
+});
+
+test('a record asked for is found in the list reads that returned it, by its exact id', { skip }, async () => {
+  await fixture(async ({ control, read }) => {
+    await read(0);
+    await read(5);
+    const ids = (rows: Array<{ ids?: string }>) => rows.map((row) => JSON.parse(row.ids!).sort());
+    assert.deepEqual(ids(await readPostgresReadAudit(control as never, { record: '3', limit: 10 })), [['1', '2', '3', '4', '5']]);
+    /* "1" is not "10": the second page returned 6 to 10 and is not a read of record 1. */
+    assert.deepEqual(ids(await readPostgresReadAudit(control as never, { record: '1', limit: 10 })), [['1', '2', '3', '4', '5']]);
+    assert.deepEqual(ids(await readPostgresReadAudit(control as never, { record: '10', limit: 10 })), [['10', '6', '7', '8', '9']]);
   });
 });

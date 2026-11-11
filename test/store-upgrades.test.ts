@@ -5,8 +5,8 @@
  *  1. what a fresh provisioning leaves is exactly the fixture of the version
  *     this build expects, and the registry reads it as that version;
  *  2. the upgrade framework runs a registered step once and in order, and refuses a version with no step
- *     or one newer than this build, unchanged (every store is at layout version 1, so a test's own
- *     registry stands for a later layout);
+ *     or one newer than this build, unchanged (a test's own registry stands for a later layout; the read
+ *     audit's real step is test/read-audit-upgrade.test.ts);
  *  3. `mistri migrate stores status | up` says and does the same.
  *
  * SQLite always; PostgreSQL when TABLEWALK_TEST_PG names a server where the

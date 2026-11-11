@@ -5,6 +5,8 @@
  * the visitor's share and the form's, never read back out.
  */
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { createServer } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -34,6 +36,7 @@ import {
 import { STAGED_FILE_ID } from '../packages/mistri/src/shared/command.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { clearJournal } from '../packages/engine/src/server/journal.js';
+import { createTestClient } from '../packages/mistri/src/server/testing/client.js';
 import { parseTestApp } from './support/commandCatalog.js';
 
 const APP = 'repairs';
@@ -48,6 +51,11 @@ const agent = (id = 'account-ana') => ({ id, appId: APP, roles: ['tech'] });
 
 const photos = field.files('repair_photo', { max: 3, accept: 'image/*' });
 const reportInput = { title: field.text(), photos };
+// Each row a file and its own caption: the file is the row's, held under the field's path, not the row's index.
+const attachments = field.group(
+  { file: field.files('repair_photo', { max: 1, accept: 'image/*' }), caption: field.text() },
+  { repeat: { max: 4 } },
+);
 let behavior: 'store' | 'store-then-refuse' | 'ignore' = 'store';
 let handed: unknown;
 
@@ -78,6 +86,18 @@ const commands = defineCommands({
       await db.repair_photo.insertFile(input.signature as CommandFile, { repair_id: repair.id as number });
     },
   }),
+  attach: defineCommand({
+    source: 'main',
+    target: 'repair',
+    targets: 'none',
+    write: ['repair', 'repair_photo'],
+    input: { title: field.text(), attachments },
+    async handle({ db }, input) {
+      const repair = await db.repair.insert({ title: input.title });
+      for (const row of input.attachments)
+        await db.repair_photo.insertFile(row.file[0]!, { repair_id: repair.id as number, caption: row.caption });
+    },
+  }),
   report: defineCommand({
     source: 'main',
     target: 'repair',
@@ -103,7 +123,7 @@ before(async () => {
   db = new DatabaseSync(file);
   db.exec(`CREATE TABLE repair (id INTEGER PRIMARY KEY, title TEXT NOT NULL);
     CREATE TABLE repair_photo (id INTEGER PRIMARY KEY, repair_id INTEGER NOT NULL REFERENCES repair(id), file_name TEXT NOT NULL,
-      content_type TEXT, byte_size INTEGER, data BLOB);`);
+      content_type TEXT, byte_size INTEGER, data BLOB, caption TEXT);`);
   migrateSqliteCommandJournal(file);
   clearJournal(CONNECTION);
   registry = new Registry();
@@ -120,7 +140,7 @@ before(async () => {
           file: { content: 'data', name: 'file_name', type: 'content_type', size: 'byte_size', maxBytes: 4096 },
         },
       },
-      auth: { roles: { tech: { read: true, commands: ['fileReport', 'signOff'] } } },
+      auth: { roles: { tech: { read: true, commands: ['fileReport', 'signOff', 'attach'] } } },
       views: {
         repairs: { kind: 'list', from: 'repair' },
         report: {
@@ -270,6 +290,56 @@ describe('a signed-in form', () => {
     );
   });
 
+  test("a group's rows each hold their own file, held by the field's path and landing with the row's own inputs", async () => {
+    const left = await hold(PNG(11), { command: 'attach', field: 'attachments[].file', name: 'left.png' });
+    // A row's concrete path is the same field: the client may name it either way.
+    const right = await hold(PNG(12), { command: 'attach', field: 'attachments[1].file', name: 'right.png' });
+    assert.equal(heldCount(), 2);
+    const before = rows('repair_photo');
+    await run('attach', {
+      title: 'Cracked tile',
+      attachments: [
+        { file: [left.id], caption: 'Left wall' },
+        { file: [right.id], caption: 'Right wall' },
+      ],
+    });
+    assert.equal(rows('repair_photo'), before + 2);
+    assert.deepEqual(
+      db
+        .prepare('SELECT file_name, caption FROM repair_photo ORDER BY id DESC LIMIT 2')
+        .all()
+        .map((row) => ({ ...row })),
+      [
+        { file_name: 'right.png', caption: 'Right wall' },
+        { file_name: 'left.png', caption: 'Left wall' },
+      ],
+    );
+    assert.equal(heldCount(), 0);
+  });
+
+  test("a group's file held under another field's path is refused at the row that names it, and nothing is taken", async () => {
+    behavior = 'store';
+    const own = await hold(PNG(13), { command: 'attach', field: 'attachments[].file' });
+    const other = await hold(PNG(14), { command: 'fileReport', field: 'photos' });
+    const [repairs, photosBefore] = [rows('repair'), rows('repair_photo')];
+    await assert.rejects(
+      run('attach', {
+        title: 'Wrong path',
+        attachments: [
+          { file: [own.id], caption: 'Mine' },
+          { file: [other.id], caption: 'Elsewhere' },
+        ],
+      }),
+      refusedAt('invalid_input', 'attachments[1].file'),
+    );
+    assert.deepEqual([rows('repair'), rows('repair_photo'), heldCount()], [repairs, photosBefore, 2]);
+    await assert.rejects(hold(PNG(), { command: 'attach', field: 'attachments[].caption' }), status(404));
+    await assert.rejects(hold(PNG(), { command: 'attach', field: 'attachments.file[]' }), status(404));
+    await run('attach', { title: 'Right path', attachments: [{ file: [own.id], caption: 'Mine' }] });
+    await run('fileReport', { title: 'Its own', photos: [other.id] });
+    assert.equal(heldCount(), 0);
+  });
+
   test('a file past its day is not taken, and the retention job deletes it', async () => {
     const day = 24 * 60 * 60 * 1000;
     const held = await hold(PNG(10), { now: () => new Date(Date.now() - day - 1000) });
@@ -352,7 +422,7 @@ describe('a public form', () => {
   });
 });
 
-test('field.files and field.signature are declared on the input itself, of a file resource the command writes', async () => {
+test('field.files is declared on the input or in a group, field.signature on the input itself, of a file resource the command writes', async () => {
   const { parseCommandInput } = await import('../packages/mistri/src/shared/commandInputParse.js');
   assert.deepEqual(parseCommandInput({ photos }, 'x')[0], {
     name: 'photos',
@@ -363,7 +433,12 @@ test('field.files and field.signature are declared on the input itself, of a fil
     max: 3,
     accept: ['image/*'],
   });
-  assert.throws(() => parseCommandInput({ g: field.group({ photos }) }, 'x'), /not one inside a group/);
+  // A file is its row's; a signature is the signer's mark on the whole submission, so it stays the input's own.
+  assert.equal(parseCommandInput({ g: field.group({ photos }, { repeat: { max: 2 } }) }, 'x')[0]!.type, 'group');
+  assert.throws(
+    () => parseCommandInput({ g: field.group({ s: field.signature('repair_photo') }) }, 'x'),
+    /a signature is a field of the input itself, not one inside a group/,
+  );
   assert.throws(() => parseCommandInput({ p: { ...photos, accept: 'images' } }, 'x'), /accept is a media type/);
   assert.throws(() => parseCommandInput({ p: { ...photos, max: 21 } }, 'x'), /from 1 to 20/);
   assert.throws(() => parseCommandInput({ p: { ...photos, default: 'x' } }, 'x'), /take no default/);
@@ -379,4 +454,48 @@ test('field.files and field.signature are declared on the input itself, of a fil
       }),
     /takes files of "repair_photo"; declare it among the command's write/,
   );
+});
+
+/* A field report: a test of a command with files had to read the client to learn how a file is held. The kit's
+   `holdFile` sends what the client sends, to the route the server dispatches (COMMAND_ROUTES.files) with the App's
+   selector in its query; here a door that answers it as the server's does is in front of the same binding. */
+test("the testing kit's holdFile holds a file as the form does, and its id is what the command's input names", async () => {
+  const seen: Array<{ url: string; body: unknown }> = [];
+  const door = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', async () => {
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      seen.push({ url: req.url ?? '', body });
+      res.setHeader('content-type', 'application/json');
+      try {
+        res.end(JSON.stringify(await stageCommandFile(binding, agent() as never, body)));
+      } catch (error) {
+        if (!(error instanceof StageRefusal)) throw error;
+        res.statusCode = error.status;
+        res.end(JSON.stringify({ code: error.code, error: error.message }));
+      }
+    });
+  });
+  door.listen(0, '127.0.0.1');
+  await once(door, 'listening');
+  try {
+    const client = createTestClient(`http://127.0.0.1:${(door.address() as { port: number }).port}`, { app: APP });
+    behavior = 'store';
+    const held = await client.holdFile('fileReport', 'photos', { name: 'sink.png', type: 'image/png', data: PNG(8) });
+    assert.ok(held.ok, JSON.stringify(held));
+    assert.match(held.value.id, STAGED_FILE_ID);
+    assert.deepEqual(seen[0], {
+      url: `/api/commands/files?app=${APP}`,
+      body: { command: 'fileReport', field: 'photos', file: { name: 'sink.png', type: 'image/png', data: base64(PNG(8)) } },
+    });
+    const before = rows('repair_photo');
+    await run('fileReport', { title: 'Dripping', photos: [held.value.id] });
+    assert.equal(rows('repair_photo'), before + 1);
+    // A refusal is a value, with the server's status and code, as every other call of the kit answers.
+    const refused = await client.holdFile('fileReport', 'photos', { name: 'notes.txt', type: 'text/plain', data: 'just words' });
+    assert.ok(!refused.ok && refused.status === 415, JSON.stringify(refused));
+  } finally {
+    door.close();
+  }
 });

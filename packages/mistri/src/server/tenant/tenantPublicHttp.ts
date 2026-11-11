@@ -19,6 +19,11 @@
  * A form saved on every step is served here as on the ordinary host
  * (forms/savedFormHttp.ts): its steps, its submit and its resume, each
  * carrying the address on to the intake, which resolves it every time.
+ *
+ * A public command page (`definePage({ public: true, commands })`) is a door
+ * of the same kind: its ticket and its commands at the ordinary host's paths
+ * and under its rules (http/pageCommandRoutes.ts), placed by the same address
+ * and taken by the same intake (tenantIntakePages.ts says what it can take).
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AppDef, AppFormView } from '../../shared/app.js';
@@ -27,10 +32,10 @@ import { wearing, type TenantLook } from './tenantLook.js';
 import { cookieUnder } from '@mistriwork/engine/shared/mount.js';
 import { TENANT_HTTP_HEADERS as headers } from '../../shared/tenantContext.js';
 import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
-import { businessCommandHttpError, commandBody, holdCommandBody } from '../commands/businessCommandHttp.js';
+import { businessCommandHttpError, CommandBodyTooLarge, commandBody, holdCommandBody } from '../commands/businessCommandHttp.js';
 import { BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
 import { CommandInputError } from '../commands/commandPayload.js';
-import { decoyReply, parseSubmission, presentForm, publicFormComponents } from '../commands/formHttp.js';
+import { decoyReply, parseSubmission, presentForm, publicFormComponents, publicMessage } from '../commands/formHttp.js';
 import type { HumanCheck } from '../commands/challenges.js';
 import type { CompiledComponents } from '../app/appComponents.js';
 import {
@@ -62,13 +67,16 @@ import {
 } from '../http/recordBranding.js';
 import { getTenantHostIntent } from '../http/tenantHosts.js';
 import { tenantPublicPlacement } from './tenantPublicPlacement.js';
+import { pageCommandPath, TICKET_HEADER } from '../http/pageCommandRoutes.js';
+import { issueTicket, ticketMessage, ticketRefusal } from '../forms/publicTicket.js';
+import { tenantPublicPages } from './tenantIntakePages.js';
 
 /** A public file's body: base64 of the largest file a public form holds, and room for the rest (commands/stagedFileHttp.ts). */
 const PUBLIC_FILE_BODY = Math.ceil(PUBLIC_STAGED_FILE_MOST / 3) * 4 + 64 * 1024;
 
-/** The paths this module answers: the landing and the public forms. */
+/** The paths this module answers: the landing, the public forms and the public command pages' doors. */
 export function isTenantPublicPath(path: string): boolean {
-  return path === LANDING_PATH || publicFormPath(path) !== undefined;
+  return path === LANDING_PATH || publicFormPath(path) !== undefined || pageCommandPath(path) !== undefined;
 }
 
 interface TenantPublicHttpOptions {
@@ -86,7 +94,11 @@ interface TenantPublicHttpOptions {
   /** A tenant's own intake address, as its profile row holds it now (tenantEnrollment.ts `addresses`): how this App's
       mapped host places a request, through the same resolution and fence as a link's `?via=`. */
   readonly hostAddress?: (tenant: string) => Promise<string | undefined>;
-  /** The deployment's public intake; absent when the App has no public form. */
+  /** The intake address of the tenant a visitor's public address (`?via=`, `public.address`) places, or nothing when it
+      places none. A public page's visitor carries the address its reads are placed by, which is not the tenant's intake
+      address, so a page's run is placed through this. Absent (no public reads): a carried address places nobody. */
+  readonly pageAddress?: (carried: string) => Promise<string | undefined>;
+  /** The deployment's public intake; absent when the App has no public form or public command page. */
   readonly submit?: TenantIntake['submit'];
   /** A saved form's resume on the same intake. */
   readonly resume?: TenantIntake['resume'];
@@ -141,7 +153,94 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
   };
   const { app: base, submit, resume, hold, bound, basePath, assertActive } = options;
   const forms = publicForms(base);
+  const pages = tenantPublicPages(base);
   const invalid = (res: ServerResponse) => send(res, 400, { code: 'invalid_input', error: 'This request is not valid.' });
+  /** A public command page's ticket or submission, in the ordinary host's order (http/pageCommandRoutes.ts), each guard
+      before anything later is read; what is added is the intake address, placed as a form's submission is. */
+  const answerPage = async (req: IncomingMessage, res: ServerResponse, url: URL, match: { page: string; command?: string }) => {
+    const refuse = (status: number, code: string, error: string) => send(res, status, { code, error });
+    const named = pages.get(match.page);
+    // A page that is not a public door, or a command it does not name, reads from outside as one that does not exist.
+    if (!named || (match.command !== undefined && !named.includes(match.command))) return refuse(404, 'not_found', 'No such page.');
+    const reading = match.command === undefined;
+    if (reading ? req.method !== 'GET' && req.method !== 'HEAD' : req.method !== 'POST') {
+      res.setHeader('allow', reading ? 'GET, HEAD' : 'POST');
+      return refuse(405, 'method_not_allowed', reading ? 'A ticket is read with GET.' : 'A page runs a command with POST.');
+    }
+    // A ticket's URL says nothing; a submission's says at most its address, once.
+    const keys = [...url.searchParams.keys()];
+    if ((reading ? keys.length > 0 : keys.some((key) => key !== 'via')) || url.searchParams.getAll('via').length > 1) return invalid(res);
+    const carried = url.searchParams.get('via') ?? undefined;
+    const placement = tenantPublicPlacement(req, base.id, carried, options.hostAddress);
+    if (placement.conflict) return invalid(res);
+    const address = clientAddress(req, bound.trustedProxies);
+    /* The budget a public form spends, shared rather than a second allowance: this client's part first, the ceiling
+       every visitor shares only once the ticket and the check have passed. */
+    const budgets = [reading ? 'read' : 'submit'] as Array<'read' | 'submit'>;
+    if (await rateLimited(res, budgets, address, 'client')) return;
+    if (reading) {
+      if (await rateLimited(res, budgets, address, 'all')) return;
+      return send(res, 200, { ticket: issueTicket(base.id, match.page) });
+    }
+    // The page's own origin only, as on the ordinary host: a write door open to the public stands for no embed host.
+    if (doorRefusal(req, bound, { writing: true, origin: 'always', sameSite: true }))
+      return refuse(403, 'cross_origin', 'This page takes submissions from its own page only.');
+    const refused = ticketRefusal(req.headers[TICKET_HEADER], base.id, match.page);
+    if (refused) return refuse(refused === 'early' ? 425 : 403, 'ticket_refused', ticketMessage(refused));
+    const tooLarge = () => {
+      /* The rest of the body is left unread, so the connection carries nothing after the answer. */
+      res.setHeader('connection', 'close');
+      refuse(413, 'too_large', 'This submission is too large.');
+    };
+    const length = Number(req.headers['content-length']);
+    if (Number.isFinite(length) && length > MAX_COMMAND_BYTES) return tooLarge();
+    try {
+      const held = await holdCommandBody(req);
+      if (held === 'too_large') return tooLarge();
+      if (held === 'too_slow') {
+        res.setHeader('connection', 'close');
+        return refuse(408, 'too_slow', 'This submission took too long to arrive.');
+      }
+    } catch {
+      return; // The visitor went away before the body arrived; there is no one to answer.
+    }
+    if (!(await challengeAnsweredBy(options.challenge, req, address))) return refuse(403, 'challenge_failed', CHALLENGE_REFUSAL);
+    if (await rateLimited(res, budgets, address, 'all')) return;
+    assertActive();
+    if (!submit) return refuse(403, 'forbidden', 'This page is not accepting submissions.');
+    const controller = new AbortController(),
+      abort = () => controller.abort();
+    req.once('aborted', abort);
+    res.once('close', abort);
+    try {
+      if (req.aborted || res.destroyed) abort();
+      const { input, submission } = parseSubmission(await commandBody(req));
+      /* A mapped host places the run with its tenant's intake address, as a form's; an address the visitor carries is
+         the public one its page was read under, turned into that tenant's intake address. Either way the intake
+         resolves and fences it, and one that places nobody lands in triage. */
+      const placed = carried === undefined ? await placement.address() : await options.pageAddress?.(carried);
+      assertActive();
+      // A public submission's writes are the page's, as a form's are: the record history says so.
+      const result = await attributeWrites({ via: 'form' }, () =>
+        submit({ form: match.page, command: match.command, address: placed, input, submission }, { signal: controller.signal }),
+      );
+      const reference = (result.result as { reference?: unknown } | null)?.reference;
+      if (typeof reference !== 'string' || !reference.trim() || reference.length > 64)
+        throw new BusinessCommandExecutionError('invalid_result', 'unknown');
+      send(res, 200, { reference, receipt: { id: result.receiptId, status: result.status }, ...publicMessage(result.result) });
+    } catch (error) {
+      if (error instanceof CommandBodyTooLarge) return tooLarge();
+      // Fixed public messages and the field they are about; never the input, never where it landed.
+      const failure = businessCommandHttpError(
+        error instanceof CommandInputError ? new BusinessCommandExecutionError('invalid_input', 'not_applied', error.field) : error,
+      );
+      const { outcome: _outcome, ...body } = failure.body;
+      send(res, failure.status, body);
+    } finally {
+      req.off('aborted', abort);
+      res.off('close', abort);
+    }
+  };
   return async (req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> => {
     assertActive();
     const app = wearing(base, options.look?.());
@@ -153,6 +252,12 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
         invalid(res);
         return;
       }
+    }
+    const page = pageCommandPath(url.pathname);
+    if (page) {
+      res.setHeader('cache-control', 'no-store');
+      await answerPage(req, res, url, page);
+      return;
     }
     let branding = baseRecordBranding(app);
     let hostDressed = false;

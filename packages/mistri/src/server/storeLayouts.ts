@@ -1,8 +1,9 @@
 /**
  * Every store mistri keeps in a database of its own, defined once: where
  * its tables are, how it is provisioned and attested, and the one way to bring
- * an older one forward (`mistri migrate stores status | up`). Every store is
- * at layout version 1; a later layout adds its steps here.
+ * an older one forward (`mistri migrate stores status | up`). A store starts
+ * at layout version 1; a later layout adds its steps here (the read audit's
+ * version 2 is the first).
  *
  * A store is provisioned explicitly (`provisionStores` in @mistriwork/mistri/maintenance,
  * or `mistri migrate stores up --app`), attested at open and never changed
@@ -197,9 +198,27 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'read-audit',
     title: "read audit: who read an audited resource's rows, append-only, never pruned",
     tables: { prefix: '__mistri_read_audit_' },
-    current: both(1),
+    current: both(2),
     read: marked(everywhere('__mistri_read_audit_meta')),
-    upgrades: {},
+    upgrades: {
+      sqlite: {
+        1: {
+          says: "adds the 'command' route and the command's id: a command's handler and lookup reads are audited",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/readAudit/sqliteReadAudit.js')).sqliteReadAuditUpgradeFrom1()) await db.run(sql);
+          },
+        },
+      },
+      postgres: {
+        1: {
+          says: "adds the 'command' route and the command's id: a command's handler and lookup reads are audited",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/readAudit/postgresReadAudit.js')).postgresReadAuditUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+      },
+    },
     provision: {
       sqlite: async (path) => (await import('../adapters/readAudit/sqliteReadAudit.js')).provisionSqliteReadAudit(path),
       postgres: async (url) => (await import('../adapters/readAudit/postgresReadAudit.js')).provisionPostgresReadAudit(url),

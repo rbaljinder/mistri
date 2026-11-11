@@ -205,6 +205,12 @@ export function bindPolicyPublicIntake(options: PolicyPublicIntakeOptions) {
                       accept({ appId, take }, (value) => journal.takeStaged!(value.appId, value.take)),
                   }
                 : {}),
+              ...(journal.appendReadAudit
+                ? {
+                    appendReadAudit: (rows: Parameters<NonNullable<CommandJournal['appendReadAudit']>>[0]) =>
+                      accept({ rows }, (value) => journal.appendReadAudit!(value.rows)),
+                  }
+                : {}),
             });
             const emptyKey = (key: Readonly<Record<string, string | number>>) => {
               if (Object.keys(key).length) deny();

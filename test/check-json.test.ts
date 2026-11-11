@@ -577,6 +577,9 @@ describe('the codes and the paths', () => {
       'mount',
       'route-clash',
       'command-reads-unreadable',
+      'public-command-remove',
+      'bare-word-column',
+      'read-audit-query',
       ...['markup', 'code-from-text', 'environment', 'color', 'radius', 'motion', 'shadow', 'class', 'ruler'].map(
         (rule) => `component-${rule}`,
       ),

@@ -347,7 +347,9 @@ async function request(
       status: response.status,
       ...(typeof value.code === 'string' ? { code: value.code } : {}),
     });
-    throw transient(response) ? slow(failure) : failure;
+    /* A read the audit could not record (503 read_not_recorded) is that read's answer alone: tagged slow, a read
+       retried it until it fenced the lease, and one list the audit could not keep paused the whole page. */
+    throw transient(response) && value.code !== 'read_not_recorded' ? slow(failure) : failure;
   }
   return { response, value };
 }

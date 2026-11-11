@@ -198,8 +198,21 @@ export interface CommandRichTextField extends FieldBase {
 }
 /** One of the options, drawn as radios when there are a few and a select otherwise. At most 100. Or, with `from`,
     one of a table's rows by its key (`by`, the primary key; `id` unless said), shown by `labelColumn`: read under
-    the reader's grants (a public form's, what `auth.public` opens) and checked against the table where it runs. */
-export interface CommandChoiceField extends FieldBase { type: 'choice'; options?: readonly AppCommandChoice[]; from?: string; by?: string; labelColumn?: string }
+    the reader's grants (a public form's, what `auth.public` opens) and checked against the table where it runs. The rows
+    are in the order of `labelColumn` unless `sort` names a column of `from` and a direction. `label` is the field's own title. */
+export interface CommandChoiceField extends FieldBase {
+  type: 'choice';
+  options?: readonly AppCommandChoice[];
+  from?: string;
+  by?: string;
+  labelColumn?: string;
+  sort?: CommandChoiceSort;
+}
+/** The order a choice read from a table is offered in. */
+export interface CommandChoiceSort {
+  column: string;
+  direction?: 'asc' | 'desc';
+}
 /** Several of the options (or of a table's rows, `from`): at least `min` (0 unless said) and at most `max`; an
     `exclusive` option (`'none'`) is chosen alone. Drawn as checks for a few and a select with checks past six. */
 export interface CommandChoicesField extends FieldBase {
@@ -208,6 +221,7 @@ export interface CommandChoicesField extends FieldBase {
   from?: string;
   by?: string;
   labelColumn?: string;
+  sort?: CommandChoiceSort;
   min?: number;
   max?: number;
   exclusive?: readonly (string | number)[];
@@ -310,7 +324,9 @@ export interface CommandFile {
  * as it is picked, dropped or pasted, and held by the server — under the grant that runs the command, for the
  * person who sent it, for a day — until the command runs: the handler receives the files and stores each with
  * `db.<from>.insertFile(file, values)`, in the command's own transaction. A command refused stores nothing, and the
- * files stay held for the next try; one that runs and leaves a file unstored is refused. Never in a group.
+ * files stay held for the next try; one that runs and leaves a file unstored is refused. In a group, a row's files are
+ * that row's: `field.group({ file: field.files('attachment', { max: 1 }), label: field.text() }, { repeat: { max: 10 } })`
+ * hands the handler each row with its files in place (`row.file`), stored as a top-level field's are.
  */
 export interface CommandFilesField {
   type: 'files';

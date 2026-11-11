@@ -2,7 +2,7 @@
  * A store upgrade as an operator meets it: a database holding the committed v1 fixture, `upgradeStores` (what
  * `mistri migrate stores up` calls) taking it to v2 — and a process killed in the middle of the step.
  *
- * Every store mistri ships is at layout version 1, so there is no v2 to run: the rehearsal gives record-history one
+ * Record history has no v2 of its own to run, so the rehearsal gives it one
  * (test/support/storeUpgradeRehearsal.ts) and proves what the framework promises of any step, on a real database
  * and a real kill. SIGKILL ends the process with the step's transaction open, so the database must come back at v1
  * with the data as it was, and running the upgrade again must finish it, once.

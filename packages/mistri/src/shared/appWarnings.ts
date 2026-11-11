@@ -9,7 +9,7 @@
  * Pure over the parsed App, its pages and one catalog; a catalog that cannot
  * say a column's values (`allowed` absent) is never guessed at.
  */
-import type { QueryPerson } from '@mistriwork/engine/shared/query.js';
+import { expandSegments, type QueryPerson } from '@mistriwork/engine/shared/query.js';
 import { columnKind, tableNamed, type ColumnMeta, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { parseViewQuery, tryResolvePath } from '@mistriwork/engine/shared/view.js';
 import { checkedPerson } from './appMe.js';
@@ -60,6 +60,34 @@ const unholdable = (column: ColumnMeta, where: string, value: unknown): string |
   return undefined;
 };
 
+/* `column = word`, the word unquoted. Quoted values are blanked before the scan, so a word inside one is never read. */
+const COMPARED_WORD = /(?:^|[\s(])([\w.$+]+)\s*(?:!=|<=|>=|=|<|>)\s*([A-Za-z_$][\w$]*)(?=$|[\s)])/g;
+const QUOTED = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g;
+
+/**
+ * `[bare-word-column]`: a bare word compared with a text column that is also a column of that table. Beside text a
+ * bare word is the value (`source = email` is a status tab's word, queryOperands.ts columnOperand), so `assignee =
+ * reporter` asks for the text "reporter", never the row's own reporter, and reads as if it compared the two (a field
+ * report). Said, not refused: the word is often the value meant; quoting it says so and quiets this.
+ */
+function wordColumns(schema: DatabaseSchema, table: TableMeta, text: string): string[] {
+  /* A tab names its segment: the words to read are the segment's. */
+  const plain = expandSegments(text, table.segments).text.replace(QUOTED, (quoted) => ' '.repeat(quoted.length));
+  const found: string[] = [];
+  for (const [, path, word] of plain.matchAll(COMPARED_WORD)) {
+    if (word === 'me' || /^(?:null|true|false|now)$/i.test(word)) continue;
+    const { resolved } = tryResolvePath(schema, table.id, path!);
+    if (!resolved || columnKind(resolved.column.type) !== 'text') continue;
+    if (!resolved.table.columns.some((column) => column.name === word)) continue;
+    found.push(
+      `[bare-word-column] "${path} … ${word}" compares ${resolved.table.name}.${resolved.column.name} with the text "${word}", ` +
+        `though ${resolved.table.name} has a column "${word}": a bare word beside text is its value, never a column. ` +
+        `Quote it ("${word}") if the text is meant.`,
+    );
+  }
+  return found;
+}
+
 /**
  * Each literal a condition compares a column with that the column never
  * holds: outside its vocabulary, or not of its type. Read by the view parser,
@@ -74,6 +102,7 @@ function literalsIn(schema: DatabaseSchema, table: TableMeta, text: string | und
   const say = (problem: string | undefined) => {
     if (problem && !found.includes(problem)) found.push(problem);
   };
+  for (const problem of wordColumns(schema, table, text)) say(problem);
   for (const group of parsed.filter.groups) {
     for (const condition of group) {
       if (condition.other !== undefined || condition.op === 'isNull' || condition.op === 'isNotNull') continue;
@@ -103,7 +132,11 @@ export function appLiteralWarnings(app: AppDef, pages: readonly PageDef[], schem
   const person = checkedPerson(app, schema);
   const conditionLiterals = (schema: DatabaseSchema, table: TableMeta, text: string | undefined) => literalsIn(schema, table, text, person);
   const say = (where: string, problems: readonly string[]) => {
-    for (const problem of problems) warnings.push(`${where}: ${problem}`);
+    for (const problem of problems) {
+      /* A finding that carries its code puts it beside the place, as the App's other warnings do. */
+      const code = /^\[([a-z-]+)\] /.exec(problem);
+      warnings.push(code ? `${where} [${code[1]}]: ${problem.slice(code[0].length)}` : `${where}: ${problem}`);
+    }
   };
   for (const [key, view] of Object.entries(app.views)) {
     if (isFormView(view) || 'landing' in view) continue;

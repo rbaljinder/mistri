@@ -122,6 +122,8 @@ export interface CommandChoiceSource {
   from: string;
   by: string;
   labelColumn: string;
+  /** The order the rows are offered in: a column of `from` and a direction. Absent, the rows are in the order of `labelColumn`. */
+  sort?: { column: string; direction: 'asc' | 'desc' };
   /** Set by the server on a public form it served this field's rows with: `options` is the whole answer, an empty list
       meaning none to offer, and the page reads nothing of its own. Never written in an App. */
   served?: true;

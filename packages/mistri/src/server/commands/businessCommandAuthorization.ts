@@ -18,7 +18,8 @@ import { humanName } from '@mistriwork/engine/shared/model.js';
 import { recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import { TENANT_FILE_MOST } from '@mistriwork/engine/server/http/reply.js';
 import { plainImportTargets } from '../../shared/appImport.js';
-import { findTable, primaryKey, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { heldFileFields } from '../../shared/commandInput.js';
+import { findTable, primaryKey, tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import {
   BusinessCommandDefinitionError,
@@ -68,7 +69,12 @@ export interface BusinessCommandAuthorization {
   /** The footprint's tables by local name, for the handler's `db`. */
   readonly catalog: CommandCatalog;
   /** Present when the command looks up: each declared source's tables by local name, and a declared table's logical name. */
-  readonly lookupTables?: Readonly<{ catalogs: Readonly<Record<string, CommandCatalog>>; logical(source: string, local: string): string }>;
+  readonly lookupTables?: Readonly<{
+    catalogs: Readonly<Record<string, CommandCatalog>>;
+    logical(source: string, local: string): string;
+    /** The columns the actor's role reads of a tenant's table it looks up, where a column rule narrows them; undefined reads them all. */
+    columns?(source: string, local: string): readonly string[] | undefined;
+  }>;
   /** The machines of the tables it writes, by local name, and when it is a verb of its target's, where that verb leads. */
   readonly machine?: CommandMachine;
   /** The App's `ui.timezone`: the wall clock a write into a zone-less timestamp column is made in (UTC when absent). */
@@ -80,7 +86,28 @@ export interface BusinessCommandAuthorization {
   /** The file resources it writes, by local name: where a new row's bytes go and the most it may hold (the
       resource's `maxBytes`, and a tenant host's 10 MB), as an upload is held. */
   readonly files?: ReadonlyMap<string, CommandFileRule>;
+  /** The file resources it writes that this actor cannot read, by local name, each with the sentence a read of it is
+      refused in: the command may add rows there and nothing more (a photo filed where its sender cannot browse). */
+  readonly insertOnly?: ReadonlyMap<string, string>;
+  /** The resources it reads whose reads are audited (`audit: { reads: true }`); absent where it reads none. */
+  readonly audited?: CommandAudited;
   table(local: string, writing?: boolean): string;
+}
+
+/** An audited table a command reads: the resource its rows are written under, and its logical table. */
+interface CommandAuditedTable {
+  readonly resource: string;
+  readonly table: string;
+}
+
+/**
+ * Which of a command's reads write a read audit row (server/readAudit.ts auditCommandRead): its handler's tables by
+ * local name, and each lookup source's by source and local name. The same resources a page's read of them is audited
+ * for, so a command is no way round the audit.
+ */
+export interface CommandAudited {
+  readonly tables: ReadonlyMap<string, CommandAuditedTable>;
+  readonly lookups: ReadonlyMap<string, ReadonlyMap<string, CommandAuditedTable>>;
 }
 
 /** A file resource a command writes: the columns its `file` names, the table, and the cap a new row's bytes meet. */
@@ -320,6 +347,52 @@ function commandLabel(app: AppDef, id: string): string {
 }
 
 type AccessOf = (roles: readonly string[]) => ReturnType<typeof resolveAppAccess>;
+type LookupReader = NonNullable<BusinessCommandAuthorization['lookupTables']>;
+
+/* Per binding's reader and per resolved access (itself kept per set of roles), so a command run twice narrows once. */
+const narrowed = new WeakMap<LookupReader, WeakMap<object, LookupReader>>();
+
+/**
+ * A lookup's reader as the actor reads a tenant's own tables: each one a role's column rule narrows keeps the columns
+ * the rule reads and its key (a `get` names the row by it), so a where, an order or a row never reaches another. The
+ * same rule a generic read of that table is held to; reference data is not narrowed (the binding's own comment).
+ */
+function narrowedLookup(
+  reader: LookupReader,
+  tenantOwned: readonly Readonly<{ source: string; local: string; logical: string }>[],
+  fields: ReturnType<typeof resolveAppAccess>['fields'],
+): LookupReader {
+  if (!fields || !tenantOwned.some((table) => fields.get(table.logical))) return reader;
+  let byAccess = narrowed.get(reader);
+  if (!byAccess) narrowed.set(reader, (byAccess = new WeakMap()));
+  const known = byAccess.get(fields);
+  if (known) return known;
+  const catalogs: Record<string, CommandCatalog> = { ...reader.catalogs };
+  const columns = new Map<string, readonly string[]>();
+  for (const { source, local, logical } of tenantOwned) {
+    const seen = fields.get(logical)?.read;
+    if (!seen) continue;
+    const table = catalogs[source][local];
+    const keep = (column: string) => seen.has(column) || table.key.includes(column);
+    const meta = Object.freeze({ ...table.meta, columns: table.meta.columns.filter((column) => keep(column.name)) });
+    catalogs[source] = Object.freeze({
+      ...catalogs[source],
+      [local]: Object.freeze({
+        ...table,
+        meta,
+        kinds: Object.freeze(Object.fromEntries(Object.entries(table.kinds).filter(([column]) => keep(column)))),
+      }),
+    });
+    columns.set(`${source}\u0000${local}`, Object.freeze(meta.columns.map((column) => column.name)));
+  }
+  const result: LookupReader = Object.freeze({
+    catalogs: Object.freeze(catalogs),
+    logical: reader.logical,
+    columns: (source: string, local: string) => columns.get(`${source}\u0000${local}`),
+  });
+  byAccess.set(fields, result);
+  return result;
+}
 
 /**
  * One resolution per set of roles for an authorizer's life: its App and
@@ -559,6 +632,18 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
      the roles, and meeting them one a run (a table, then its revision column, then the next command's) was the
      slow part of wiring a second command into an App. */
   const conflicts: string[] = [];
+  /* The tables whose reads are audited, by table id to the resource's name, as shared/appAccess.ts withAudited finds them. */
+  const auditedIds = new Map<string, string>();
+  for (const [name, resource] of Object.entries(app.resources ?? {})) {
+    if (!resource.audit?.reads) continue;
+    const table = findTable(schema, name) ?? tableNamed(schema, name);
+    if (table) auditedIds.set(table.id, name);
+  }
+  const auditedTable = (logicalName: string): CommandAuditedTable | undefined => {
+    const table = auditedIds.size ? findTable(schema, logicalName) : undefined;
+    const resource = table && auditedIds.get(table.id);
+    return resource === undefined ? undefined : Object.freeze({ resource, table: logicalName });
+  };
   const bindings = new Map(
     Object.entries(registry).map(([id, command]) => {
       if (!Object.hasOwn(app.sources!, command.source)) invalid(`Command "${id}" has an unknown source.`);
@@ -708,15 +793,24 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         }
       }
       // A lookup reads the App's other sources before the transaction: judged
-      // like a read — inside the root ceiling, no field rule narrowing it — and
-      // held to the App's own rule for lookups (commandLookupRules.ts).
-      let lookup: Readonly<{ tables: readonly string[]; reader: NonNullable<BusinessCommandAuthorization['lookupTables']> }> | undefined;
+      // like a read — inside the root ceiling — and held to the App's own rule
+      // for lookups (commandLookupRules.ts). A tenant's own table it looks up is
+      // narrowed by the actor's column rule when the command is authorized.
+      let lookup:
+        | Readonly<{
+            tables: readonly string[];
+            reader: NonNullable<BusinessCommandAuthorization['lookupTables']>;
+            /** The tenant's own tables it looks up, which the actor's column rule narrows (narrowedLookup). */
+            tenantOwned: readonly Readonly<{ source: string; local: string; logical: string }>[];
+          }>
+        | undefined;
       if (command.sources) {
-        const problem = commandLookupProblem(app, id, command.sources);
+        const problem = commandLookupProblem(app, id, command.sources, command.realm);
         if (problem) throw new CommandLookupRefusal(problem);
         const sources = command.sources;
         const catalogs: Record<string, CommandCatalog> = {},
-          tables: string[] = [];
+          tables: string[] = [],
+          tenantOwned: { source: string; local: string; logical: string }[] = [];
         for (const [source, locals] of Object.entries(sources)) {
           const named = (local: string) => logicalResource(app, source, local);
           for (const local of locals) {
@@ -724,9 +818,12 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
               table = findTable(schema, looked);
             if (!rootRead.has(looked) || !table)
               invalid(`Command "${id}" looks up "${looked}", which is outside the application resource ceiling.`);
-            // A lookup is the handler's own read, before its transaction: a
-            // column rule narrows generic reads, never it (as above).
+            // A lookup of reference data is the handler's own read, before its
+            // transaction: a column rule never narrows it (as above). A tenant's
+            // own table is read as the person could read it, column rule and all.
             tables.push(looked);
+            if (app.auth?.rows === 'tenant' && app.resources?.[looked]?.owner === 'tenant')
+              tenantOwned.push({ source, local, logical: looked });
           }
           catalogs[source] = zonedCatalog(
             commandCatalog(schema, locals, named) ?? invalid(`Command "${id}" looks up outside the application resource ceiling.`),
@@ -735,6 +832,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         }
         lookup = Object.freeze({
           tables: Object.freeze(tables),
+          tenantOwned: Object.freeze(tenantOwned),
           reader: Object.freeze({
             catalogs: Object.freeze(catalogs),
             logical(source: string, local: string): string {
@@ -748,6 +846,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
       if (!lookup && (command.integrations || typeof command.lookup === 'function'))
         lookup = Object.freeze({
           tables: Object.freeze([]),
+          tenantOwned: Object.freeze([]),
           reader: Object.freeze({
             catalogs: Object.freeze({}),
             logical(): string {
@@ -756,6 +855,19 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           }),
         });
       const machine = commandMachine(app, schema, id, command, logical);
+      const auditedTables = new Map<string, CommandAuditedTable>();
+      for (const local of Object.keys(catalog)) {
+        const found = auditedTable(logical(local));
+        if (found) auditedTables.set(local, found);
+      }
+      const auditedLookups = new Map<string, Map<string, CommandAuditedTable>>();
+      for (const [source, locals] of Object.entries(command.sources ?? {}))
+        for (const local of locals) {
+          const found = auditedTable(logicalResource(app, source, local));
+          if (found) auditedLookups.set(source, (auditedLookups.get(source) ?? new Map()).set(local, found));
+        }
+      const audited: CommandAudited | undefined =
+        auditedTables.size || auditedLookups.size ? Object.freeze({ tables: auditedTables, lookups: auditedLookups }) : undefined;
       /* A file resource it writes takes bytes only as an upload would: in its content column, within its cap. */
       const files = new Map<string, CommandFileRule>();
       for (const local of command.write) {
@@ -773,10 +885,10 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         );
       }
       /* Held files land in their resource through insertFile, which takes bytes only into a file resource's content. */
-      for (const field of command.fields)
+      for (const { field, path } of heldFileFields(command.fields))
         if ((field.type === 'files' || field.type === 'signature') && !files.has(field.from))
           conflicts.push(
-            `Command "${id}" input "${field.name}" takes ${field.type === 'files' ? 'files' : 'a signature'} of "${field.from}", ` +
+            `Command "${id}" input "${path}" takes ${field.type === 'files' ? 'files' : 'a signature'} of "${field.from}", ` +
               `which holds no files: give resources.${logical(field.from)} a file: { content, name, … }.`,
           );
       return [
@@ -793,6 +905,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           catalog,
           lookup,
           machine,
+          audited,
           versionField,
           ...(appZone(app.ui) ? { timezone: appZone(app.ui) } : {}),
           currency: app.ui?.currency ?? 'USD',
@@ -884,6 +997,8 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         throw new AppAccessDenied();
       }
       if (!binding) throw new AppAccessDenied();
+      const insertOnly = new Map<string, string>();
+      let lookupTables = binding.lookup?.reader;
       if (identity.kind === 'public') {
         /* No role, so no grant and no role ceiling: the command must be
            public and be the one the public form names. Its reads were bounded
@@ -919,7 +1034,19 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         const access = accessOf(identity.roles);
         /* A signed-in caller is told which table: the refusal is theirs to act on, and the fixed sentence sent them to
            the command's author. (A public caller never reaches here, and keeps the generic message.) */
-        const unread = binding.callerReads.find((table) => !access.readable.has(table));
+        /* A file resource it writes beside its target, which the role cannot read, is no reason to refuse the run: a
+           command that files a photo or a signature only adds a row there, and a role that may send one need not
+           browse every other. It is held to adding (insertOnly, enforced by the executor's db), so read stays where the
+           role puts it: a handler that reads, counts, changes or removes those rows is refused as before. */
+        for (const rule of binding.files?.values() ?? [])
+          if (rule.table !== binding.command.target && !access.readable.has(rule.resource))
+            insertOnly.set(
+              rule.table,
+              `Your role cannot read ${recordNoun(app.resources?.[rule.resource]?.noun, rule.resource)} records, which "${commandLabel(app, id)}" reads: it may only add them.`,
+            );
+        const unread = binding.callerReads.find(
+          (table) => !access.readable.has(table) && ![...insertOnly.keys()].some((local) => binding.logical(local) === table),
+        );
         if (unread !== undefined) {
           const noun = app.resources?.[unread]?.noun;
           throw sayRefusal(
@@ -927,7 +1054,16 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
             `Your role cannot read ${recordNoun(noun, unread)} records, which "${commandLabel(app, id)}" needs.`,
           );
         }
-        if (binding.lookup?.tables.some((table) => !access.readable.has(table))) throw new AppAccessDenied();
+        /* A table it looks up that the role cannot read is said by name, as a handler's read is: the person could not
+           read it, so neither may the command they run. It refuses this command, nothing after it. */
+        const unlooked = binding.lookup?.tables.find((table) => !access.readable.has(table));
+        if (unlooked !== undefined)
+          throw sayRefusal(
+            new AppAccessDenied(),
+            `Your role cannot read ${recordNoun(app.resources?.[unlooked]?.noun, unlooked)} records, which "${commandLabel(app, id)}" looks up.`,
+          );
+        if (binding.lookup?.tenantOwned.length)
+          lookupTables = narrowedLookup(binding.lookup.reader, binding.lookup.tenantOwned, access.fields);
         // A job's service principal prepares no form and presses no button.
         const seen = access.fields?.get(binding.resource)?.read;
         if (seen && identity.kind !== 'service') issueTargetColumns(identity, seen);
@@ -945,12 +1081,14 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         write: binding.write,
         catalog: binding.catalog,
         ...(binding.versionField ? { versionField: binding.versionField } : {}),
-        ...(binding.lookup ? { lookupTables: binding.lookup.reader } : {}),
+        ...(lookupTables ? { lookupTables } : {}),
         ...(binding.machine ? { machine: machineFor(binding.machine, identity) } : {}),
         ...(binding.timezone ? { timezone: binding.timezone } : {}),
         ...(binding.currency ? { currency: binding.currency } : {}),
         ...(binding.people ? { people: binding.people } : {}),
         ...(binding.files ? { files: binding.files } : {}),
+        ...(insertOnly.size ? { insertOnly } : {}),
+        ...(binding.audited ? { audited: binding.audited } : {}),
         table(local: string, writing = false): string {
           if (!(writing ? binding.command.write : binding.command.read).includes(local)) throw new AppAccessDenied();
           return binding.logical(local);

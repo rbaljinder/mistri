@@ -33,6 +33,7 @@ import type { ReadAuditRow } from '../packages/mistri/src/adapters/readAudit/rea
 import {
   auditEventFeed,
   READ_NOT_RECORDED,
+  auditQuery,
   auditQueryRead,
   currentReadRoute,
   forgetReadAuditCoalescing,
@@ -52,6 +53,7 @@ import { tenantBatchRequest } from '../packages/mistri/src/shared/tenantBoot.js'
 import { defineLoader, defineLoaders } from '../packages/mistri/src/server/commands/pageLoaders.js';
 import { tenantReadRefusal } from '../packages/mistri/src/server/tenant/tenantReadRefusal.js';
 import { composeTenantRecordPage } from '../packages/mistri/src/server/tenant/tenantCompose.js';
+import { readAuditUnrecordable } from '../packages/mistri/src/server/build/checkReadAudit.js';
 import { createApp } from './support/createApp.js';
 import { statementsOf } from './support/statements.js';
 
@@ -191,9 +193,17 @@ test('the store: provisioned only when asked, append-only, and a tampered layout
       record: '1',
     };
     appendSqliteReadAudit(db, row);
+    /* --record also finds a list read that returned the record, by its exact id: "10" is not "1". */
+    const list = { ...row, record: undefined, query: '{}', count: 2 };
+    appendSqliteReadAudit(db, { ...list, ids: '["2","1"]' });
+    appendSqliteReadAudit(db, { ...list, ids: '["10","21"]' });
+    assert.deepEqual(
+      readSqliteReadAudit(db, { record: '1', limit: 10 }).map((read) => read.record ?? read.ids),
+      ['["2","1"]', '1'],
+    );
     assert.throws(() => db.exec(`UPDATE "__mistri_read_audit_row" SET actor = 'someone-else'`), /append-only/);
     assert.throws(() => db.exec(`DELETE FROM "__mistri_read_audit_row"`), /append-only/);
-    assert.equal(readSqliteReadAudit(db, { limit: 10 }).length, 1);
+    assert.equal(readSqliteReadAudit(db, { limit: 10 }).length, 3);
     assert.throws(
       () =>
         db
@@ -281,9 +291,22 @@ test('each door writes one row before its rows leave, and an unaudited resource 
     assert.equal(sameQueryOtherRoute.status, 200);
     assert.equal(rows().length, before + 2, 'a new route always writes');
 
+    /* A record's readers are those who read it by its key and those a list showed it to. */
+    const shown = (row: { record?: string; ids?: string }) =>
+      row.record === '1' || (row.ids !== undefined && JSON.parse(row.ids).includes('1'));
     const listed = await readAppReadAudit(registry, host, { resource: 'incident', record: '1' });
-    assert.equal(listed.length, 1);
-    assert.equal(listed[0].record, '1');
+    assert.deepEqual(
+      listed.map((row) => row.id),
+      rows()
+        .filter((row) => row.resource === 'incident' && shown(row))
+        .map((row) => row.id),
+    );
+    assert.equal(listed.filter((row) => row.record === '1').length, 1);
+    assert.ok(
+      listed.some((row) => row.route === 'page' && row.record === undefined),
+      'the list page that showed it',
+    );
+    assert.ok(!listed.some((row) => row.route === 'picker'), 'the picker read record 2 alone');
   });
 });
 
@@ -348,6 +371,85 @@ test('a composed record page whose related-list audit write fails is refused who
     true,
     { pages },
   );
+});
+
+test('a read on "is empty" or "is not empty" is recorded, and a query the audit cannot keep is a read not recorded, never a lost context', async () => {
+  /* A field report: a page's `name is not empty` on an audited resource was refused as the tenant context lost. */
+  await fixture(async ({ registry, host, post, rows }) => {
+    await ensureAppReadAudit(registry, host);
+    for (const q of ['incident name is not empty', 'incident name is empty']) {
+      const exported = await post('/api/export', { q, format: 'ndjson' });
+      assert.equal(exported.status, 200, exported.text);
+      assert.equal(rows()[0].route, 'export');
+      assert.match(rows()[0].query!, /"op":"is(Not)?Null"/);
+    }
+  });
+  assert.equal(
+    auditQuery([[{ path: 'name', op: 'isNotNull', value: undefined }]], [], 0),
+    '{"offset":0,"sort":[],"where":[[{"op":"isNotNull","path":"name"}]]}',
+  );
+  const huge = [[{ path: 'name', op: 'in', value: Array.from({ length: 2_000 }, (_, at) => `value number ${at}`) }]];
+  let thrown: unknown;
+  try {
+    auditQuery(huge, [], 0);
+  } catch (error) {
+    thrown = error;
+  }
+  assert.ok(thrown instanceof ReadAuditFailed);
+  assert.deepEqual(tenantReadRefusal(thrown), { status: 503, code: 'read_not_recorded', message: READ_NOT_RECORDED.error, said: true });
+});
+
+test('check refuses, by view and tab, a query over an audited resource that the read audit could not keep', async () => {
+  const schema: DatabaseSchema = {
+    label: 'audited',
+    dialect: 'sqlite',
+    readAt: '',
+    foreignKeys: [],
+    tables: [
+      {
+        id: 'incident',
+        name: 'incident',
+        schema: '',
+        isView: false,
+        columns: [
+          { name: 'id', type: 'INTEGER', nullable: false, primaryKey: true },
+          { name: 'name', type: 'TEXT', nullable: true, primaryKey: false },
+        ],
+      },
+    ],
+  } as never;
+  /* A view's query and a segment are each at most 500 characters; what reaches past what the audit keeps is a query
+     naming many segments, each expanded where it is named. */
+  const segments = Object.fromEntries(
+    Array.from({ length: 60 }, (_, at) => [
+      `named${at}`,
+      { label: `Named ${at}`, query: `name in (${Array.from({ length: 40 }, (_, value) => `"n${at}v${value}"`).join(', ')})` },
+    ]),
+  );
+  const app = (audit: boolean) =>
+    parseAppConfig(
+      {
+        id: 'audited-check',
+        name: 'Audited check',
+        connection,
+        resources: {
+          incident: {
+            ...(audit ? { audit: { reads: true } } : {}),
+            segments: { ...segments, unnamed: { label: 'Unnamed', query: 'name is empty' } },
+          },
+        },
+        auth: { providers: ['email'], defaultRole: 'viewer', roles: { viewer: { read: ['incident'] } } },
+        views: {
+          incidents: { kind: 'list', from: 'incident', query: 'name is not empty', tabs: ['unnamed'] },
+          everything: { kind: 'list', from: 'incident', query: Object.keys(segments).join(' or ') },
+        },
+      },
+      'check fixture',
+    );
+  const said = readAuditUnrecordable(app(true), schema);
+  assert.equal(said.length, 1, said.join('\n'));
+  assert.match(said[0], /^view "everything": reads of incident are audited, and the read audit cannot record this query/);
+  assert.deepEqual(readAuditUnrecordable(app(false), schema), []);
 });
 
 test('the tenant host says a read the audit could not record in the same words, however it was wrapped', () => {

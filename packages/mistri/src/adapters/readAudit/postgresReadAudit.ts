@@ -11,11 +11,8 @@ import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
 import { layoutRefusal, postgresLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
-import {
-  describePostgresRelations,
-  withPostgresMaintenanceTransaction,
-  type PostgresRelationDescription,
-} from '../commands/postgresCommandJournal.js';
+import { describePostgresRelations, type PostgresRelationDescription } from '../commands/postgresRelations.js';
+import { withPostgresMaintenanceTransaction } from '@mistriwork/engine/adapters/postgresMaintenance.js';
 import {
   READ_AUDIT_AT_INDEX,
   READ_AUDIT_LIMITS,
@@ -58,7 +55,9 @@ const definitions: readonly string[] = [
   record_key text COLLATE "C" CHECK (octet_length(record_key) <= ${READ_AUDIT_LIMITS.record}),
   query_json text CHECK (octet_length(query_json) <= ${READ_AUDIT_LIMITS.query}),
   row_count integer CHECK (row_count >= 0),
-  ids_json text CHECK (octet_length(ids_json) <= ${READ_AUDIT_LIMITS.ids})
+  ids_json text CHECK (octet_length(ids_json) <= ${READ_AUDIT_LIMITS.ids}),
+  command text COLLATE "C" CHECK (octet_length(command) <= ${READ_AUDIT_LIMITS.command}),
+  CHECK ((command IS NULL) <> (route = 'command'))
 )`,
   `CREATE INDEX "${READ_AUDIT_RECORD_INDEX}" ON ${q(log)} (resource, record_key, id)`,
   `CREATE INDEX "${READ_AUDIT_AT_INDEX}" ON ${q(log)} (at)`,
@@ -124,6 +123,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       column('query_json', 'text', 'default', false),
       column('row_count', 'integer', null, false),
       column('ids_json', 'text', 'default', false),
+      column('command', 'text', 'C', false),
     ],
     [
       bytes('app', READ_AUDIT_LIMITS.app),
@@ -134,6 +134,8 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       bytes('record_key', READ_AUDIT_LIMITS.record),
       bytes('query_json', READ_AUDIT_LIMITS.query),
       bytes('ids_json', READ_AUDIT_LIMITS.ids),
+      bytes('command', READ_AUDIT_LIMITS.command),
+      "CHECK (((command IS NULL) <> (route = 'command'::text)))",
       `CHECK ((route = ANY (ARRAY[${READ_ROUTES.map((route) => `'${route}'::text`).join(', ')}])))`,
       'CHECK ((row_count >= 0))',
       'PRIMARY KEY (id)',
@@ -146,6 +148,25 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
     2,
   ),
 ];
+
+/**
+ * Version 1 to 2, as statements for the store upgrade (storeLayouts.ts) to run in its one transaction under the
+ * store's lock: the route check widened to `command`, the `command` column added last (where a fresh store has it,
+ * so the catalog reads the same either way), the check that pairs them, and the version row's own check moved on.
+ * Constraints are named as PostgreSQL named version 1's; every existing row meets the new checks (no command, no
+ * `command` route), so none is touched.
+ */
+export function postgresReadAuditUpgradeFrom1(): readonly string[] {
+  return [
+    `ALTER TABLE ${q(log)} DROP CONSTRAINT ${log}_route_check`,
+    `ALTER TABLE ${q(log)} ADD CONSTRAINT ${log}_route_check CHECK (route IN (${routes}))`,
+    `ALTER TABLE ${q(log)} ADD COLUMN command text COLLATE "C" CHECK (octet_length(command) <= ${READ_AUDIT_LIMITS.command})`,
+    `ALTER TABLE ${q(log)} ADD CONSTRAINT ${log}_check CHECK ((command IS NULL) <> (route = 'command'))`,
+    `ALTER TABLE ${q(meta)} DROP CONSTRAINT ${meta}_version_check`,
+    `UPDATE ${q(meta)} SET version = ${READ_AUDIT_VERSION}`,
+    `ALTER TABLE ${q(meta)} ADD CONSTRAINT ${meta}_version_check CHECK (version = ${READ_AUDIT_VERSION})`,
+  ];
+}
 
 const canonical = (value: unknown) => canonicalCommandJson(value, 1_048_576);
 
@@ -180,7 +201,7 @@ export async function provisionPostgresReadAudit(url: string): Promise<{ version
   });
 }
 
-const COLUMNS = 11;
+const COLUMNS = 12;
 
 /**
  * Rows gathered by a group commit (groupCommit.ts), in one INSERT: one
@@ -193,7 +214,7 @@ export async function appendPostgresReadAudits(client: PgQuery, rows: readonly R
   if (!attested && !(await postgresReadAuditReady(client))) throw new ReadAuditUnavailable(await layoutMessage(client));
   const places = rows.map((_, at) => `(${Array.from({ length: COLUMNS }, (_, column) => `$${at * COLUMNS + column + 1}`).join(', ')})`);
   await client.query(
-    `INSERT INTO ${q(log)} (at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json)
+    `INSERT INTO ${q(log)} (at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command)
     VALUES ${places.join(', ')}`,
     rows.flatMap((row) => [
       row.at,
@@ -207,6 +228,7 @@ export async function appendPostgresReadAudits(client: PgQuery, rows: readonly R
       row.query ?? null,
       row.count ?? null,
       row.ids ?? null,
+      row.command ?? null,
     ]),
   );
 }
@@ -218,8 +240,8 @@ export async function readPostgresReadAudit(client: PgQuery, query: ReadAuditQue
   const filters = readAuditFilters(query);
   const values = filters.map(([, , value]) => value);
   const result = await client.query(
-    `SELECT id::text AS id, ${AT_ISO} AS at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json
-    FROM ${q(log)} ${filters.length ? `WHERE ${filters.map(([name, op], index) => `${name} ${op} $${index + 1}`).join(' AND ')}` : ''}
+    `SELECT id::text AS id, ${AT_ISO} AS at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command
+    FROM ${q(log)} ${filters.length ? `WHERE ${filters.map(([name, op], index) => (op === 'shown' ? `(${name} = $${index + 1} OR ids_json::jsonb @> jsonb_build_array($${index + 1}::text))` : `${name} ${op} $${index + 1}`)).join(' AND ')}` : ''}
     ORDER BY id DESC LIMIT $${values.length + 1}`,
     [...values, query.limit],
   );

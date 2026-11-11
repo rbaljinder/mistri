@@ -4,6 +4,7 @@ import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import type { TriggerAcceptance } from '@mistriwork/engine/adapters/storeHost.js';
 import type { StagedFileRow, StagedLimits, StagedTake, TakenFile } from './commandStaging.js';
+import type { ReadAuditRow } from '../readAudit/readAudit.js';
 
 /** Portable contracts only; SQLite storage and migration live in commandJournal.ts. */
 /** Bound by the private source owner, never supplied in receipt/lookup DTOs.
@@ -94,6 +95,10 @@ export interface CommandJournal {
   /** Takes held files for the command running in the owner's transaction: every one, deleted, or none and refused
    * (StagedFileRefused). A rollback holds them again. */
   takeStaged?(appId: string, take: StagedTake): Promise<readonly TakenFile[]>;
+  /** A command's own reads of an audited resource (route `command`), written in the owner's transaction to the read
+   * audit of this database: kept with the command or rolled back with it. Absent where the store keeps no read audit;
+   * a handler's audited read then fails its command (server/readAudit.ts auditCommandRead). */
+  appendReadAudit?(rows: readonly ReadAuditRow[]): Promise<void>;
   /**
    * Whether a receipt under this scope is there, in one statement and taking
    * no lock: the check before a handler runs on the path that keeps receipts

@@ -147,9 +147,9 @@ interface Running {
   inquiries: number[];
 }
 
-async function serve(t: TestContext, engine: Engine, raw: object = RAW): Promise<Running> {
+async function serve(t: TestContext, engine: Engine, raw: object = RAW, input: object = askInput): Promise<Running> {
   resetPublicFormLimits();
-  const app = parseTestApp(raw, 'choice cache fixture', CONTRACTS);
+  const app = parseTestApp(raw, 'choice cache fixture', { ask: { public: true, input } });
   const registry = new Registry();
   registry.add({ id: 'cars-db', name: 'Cars', url: engine.url, writable: true, source: 'config' });
   const inquiries: number[] = [];
@@ -161,7 +161,7 @@ async function serve(t: TestContext, engine: Engine, raw: object = RAW): Promise
       read: ['make', 'inquiry'],
       write: ['inquiry'],
       public: true,
-      input: askInput,
+      input: input as never,
       output: shape({ reference: text() }),
       async handle(context, input) {
         inquiries.push(Number(input.make));
@@ -291,6 +291,29 @@ test(
     await invalidation(t, await postgresEngine());
   },
 );
+
+test('a field’s own sort orders its rows, and an entry is kept per order', { timeout: 30_000 }, async (t) => {
+  const engine = await sqliteEngine();
+  const newest = { make: { label: 'Make', type: 'choice', from: 'make', labelColumn: 'name', sort: { column: 'id', direction: 'desc' } } };
+  const run = await serve(t, engine, RAW, newest);
+  t.after(() => engine.close());
+  assert.deepEqual(labels((await form(run)).options), ['BMW', 'Audi'], 'by the sort, not by the label');
+  await until(
+    'the entry is kept under its own order',
+    async () =>
+      cachedChoices(run.registry, 'cars-db', 'cars', {
+        resource: 'make',
+        by: 'id',
+        labelColumn: 'name',
+        sort: { column: 'id', direction: 'desc' },
+      }) !== undefined,
+  );
+  assert.equal(
+    cachedChoices(run.registry, 'cars-db', 'cars', { resource: 'make', by: 'id', labelColumn: 'name' }),
+    undefined,
+    'the label-ordered list is another entry',
+  );
+});
 
 test('without the change store nothing is kept: every read reads', { timeout: 30_000 }, async (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-choice-cache-'));

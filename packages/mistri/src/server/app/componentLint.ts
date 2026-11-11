@@ -29,7 +29,7 @@ import { dirname, join } from 'node:path';
 import type { AppDef } from '../../shared/appModel.js';
 import type { CompiledComponents } from './appComponents.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { astParser, scanPageSource } from './appPages.js';
+import { astParser, pageLinks, scanPageSource } from './appPages.js';
 import { nearestToken, UI_TOKENS } from '@mistriwork/kit/shared/uiTokens.js';
 import { APP_ICONS, parseIcon } from '@mistriwork/engine/shared/appIcons.js';
 
@@ -280,18 +280,43 @@ function cssFindings(
 /** What a free-form page declares, by its component's id: what its sources are held to (appPages.ts scanPageSource). */
 type PageManifests = ReadonlyMap<
   string,
-  { key: string; reads: readonly string[]; commands: readonly string[]; actions?: readonly string[] }
+  {
+    key: string;
+    reads: readonly string[];
+    commands: readonly string[];
+    actions?: readonly string[];
+    /** In no menu, no home rule, not public and not a record's tab: only a link opens it (`nav: false`). */
+    unplaced?: boolean;
+  }
 >;
 
+/* The view keys a menu names, groups' children included. */
+const menuKeys = (nodes: readonly unknown[]): string[] =>
+  nodes.flatMap((node) =>
+    node && typeof node === 'object'
+      ? [
+          ...(typeof (node as { view?: unknown }).view === 'string' ? [(node as { view: string }).view] : []),
+          ...(Array.isArray((node as { children?: unknown }).children) ? menuKeys((node as { children: unknown[] }).children) : []),
+        ]
+      : [],
+  );
+
 /** Each free-form page's manifest, by its component's id: a page is a dashboard of one component, with what it declares. */
-export function pageManifestsOf(app: { views: AppDef['views'] }): PageManifests {
+export function pageManifestsOf(app: { views: AppDef['views']; nav?: AppDef['nav']; home?: AppDef['home'] }): PageManifests {
+  const placed = new Set([...menuKeys(app.nav ?? []), ...(app.home ?? []).map((rule) => rule.view)]);
   return new Map(
     Object.entries(app.views).flatMap(([key, view]) =>
       'sections' in view && view.page && view.sections[0]?.component
         ? [
             [
               view.sections[0].component.id,
-              { key, reads: view.page.reads, commands: view.page.commands, actions: view.page.actions ?? [] },
+              {
+                key,
+                reads: view.page.reads,
+                commands: view.page.commands,
+                actions: view.page.actions ?? [],
+                ...(!placed.has(key) && !view.page.public && !view.page.record ? { unplaced: true } : {}),
+              },
             ] as const,
           ]
         : [],
@@ -328,6 +353,10 @@ export async function lintComponents(
   for (const [id, entry] of Object.entries(compiled.entries))
     for (const file of entry.sources) if (file.endsWith('.css')) sharers.set(file, [...(sharers.get(file) ?? []), id]);
   const parse = pages.size ? await astParser() : undefined;
+  /* The pages any component's source links to, for the pages only a link opens. */
+  const linked = new Set<string>();
+  const unplaced = [...pages.values()].some((manifest) => manifest.unplaced);
+  let unseen = false;
   for (const [id, entry] of Object.entries(compiled.entries)) {
     for (const file of entry.sources) {
       const css = file.endsWith('.css');
@@ -348,6 +377,11 @@ export async function lintComponents(
       iconFindings(text, (line, message) => problems.push({ component: id, file, line, text: message }));
       const manifest = pages.get(id);
       const lang = /\.(tsx?|jsx?)$/.exec(file)?.[1] as 'ts' | 'tsx' | 'js' | 'jsx' | undefined;
+      if (unplaced && parse && lang) {
+        const links = pageLinks(parse, raw, lang);
+        for (const page of links.pages) linked.add(page);
+        unseen ||= links.unseen;
+      }
       if (manifest && parse && lang) {
         const scan = scanPageSource(parse, raw, lang, manifest, schema);
         for (const finding of scan.undeclared) problems.push({ component: id, file, line: finding.line, text: finding.text });
@@ -370,6 +404,22 @@ export async function lintComponents(
         }
       });
     }
+  }
+  /* A `nav: false` page is served at its address and reached by links, which the App's declaration cannot see
+     (appViews.ts no longer refuses it). Where no source links to it, say so: a warning, since a link can be built
+     from an expression, an outside page or a bookmark, none of which check reads. */
+  for (const [id, manifest] of pages) {
+    if (!manifest.unplaced || linked.has(manifest.key)) continue;
+    const file = compiled.entries[id]?.sources.find((source) => /\.(tsx?|jsx?)$/.test(source));
+    if (!file) continue;
+    warnings.push({
+      component: id,
+      file,
+      line: 1,
+      text:
+        `[page-unlinked] the page "${manifest.key}" is in no menu, and no page or component links to it with pageHref('${manifest.key}') ` +
+        `or openPage('${manifest.key}')${unseen ? ' that check can read (a link named by an expression is not followed)' : ''}: only its address opens it`,
+    });
   }
   return { problems, warnings };
 }

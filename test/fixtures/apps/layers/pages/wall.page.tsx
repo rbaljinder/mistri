@@ -2,9 +2,17 @@
 import { definePage } from '@mistriwork/mistri/page';
 import './wall.css';
 
-const page = definePage({ label: 'Wall', layout: 'bare', reads: ['thing'], component: Wall });
+const page = definePage({ label: 'Wall', layout: 'bare', reads: ['thing'], params: { brick: 'text' }, component: Wall });
 export default page;
 
 function Wall() {
-  return <div className="c-page-wall">The wall</div>;
+  const [brick, setBrick] = page.useParam('brick');
+  return (
+    <div className="c-page-wall">
+      The wall
+      <button type="button" onClick={() => setBrick('red', { push: true })}>
+        {brick ? `Brick ${brick}` : 'Lay a brick'}
+      </button>
+    </div>
+  );
 }

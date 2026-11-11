@@ -507,3 +507,21 @@ export function commandFieldAt(fields: readonly AppCommandField[], path: string)
   }
   return found;
 }
+
+/** The fields whose value is held files (server/commands/stagedFiles.ts), each with the path its holds are kept under:
+    `photos`, a group's `address.photo`, a repeating group's `attachments[].file`. The path is the field's place in the
+    declaration and never a row's index, so adding, removing or reordering rows leaves every hold its own field's. */
+export function heldFileFields(fields: readonly AppCommandField[], within = ''): { field: AppCommandField; path: string }[] {
+  const found: { field: AppCommandField; path: string }[] = [];
+  for (const field of fields) {
+    const path = within ? `${within}.${field.name}` : field.name;
+    if (field.type === 'files' || field.type === 'signature') found.push({ field, path });
+    else if (field.type === 'group') found.push(...heldFileFields(field.fields, field.repeat ? `${path}[]` : path));
+  }
+  return found;
+}
+
+/** The path a value's holds are kept under: `attachments[1].file` → `attachments[].file`. */
+export function heldFilePath(path: string): string {
+  return path.replace(/\[\d+\]/g, '[]');
+}

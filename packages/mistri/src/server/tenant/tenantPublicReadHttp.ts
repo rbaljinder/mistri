@@ -18,6 +18,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import type { ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
 import { zonedNow, type AppDef } from '../../shared/app.js';
+import type { AppFormCommandReference } from '../../shared/command.js';
 import { appSurfaceForRealm } from '../../shared/appTenancy.js';
 import { appZone } from '../../shared/appUi.js';
 import type { PageDef } from '@mistriwork/engine/shared/page.js';
@@ -85,6 +86,10 @@ interface TenantPublicReadHttpOptions {
   readonly loaders?: Readonly<Record<string, PageLoader>>;
   /** Where the components a visitor's public pages draw are served (appComponents.ts publicComponentIds): code, never a row. */
   readonly components?: Readonly<Record<string, { kind: string; href: string; css?: string }>>;
+  /** The public commands the App's public pages run, as the ordinary host serves them (commandContracts.ts
+      `publicPageCommands`): a page's `useCommand` sends them through the page's door, which intake places
+      (tenantPublicHttp.ts). Absent where the deployment has no intake: there is no door to send them through. */
+  readonly publicCommands?: Readonly<Record<string, AppFormCommandReference>>;
 }
 
 class Refused extends Error {
@@ -250,9 +255,11 @@ export function createTenantPublicReadHttp(options: TenantPublicReadHttpOptions)
       const placed = options.components && branded ? placedComponents(branded, metadata.pages, options.components) : undefined;
       /* The catalog beside them, in the visitor's language as the rest of their payload is (`useMessage`). */
       const catalog = placed && Object.keys(placed).length ? componentMessages(app, locale ?? app.ui.locale) : undefined;
+      const served = placed ? { ...branded, components: placed, ...(catalog ? { messages: catalog } : {}) } : branded;
+      const commands = options.publicCommands;
       return reply({
         appId: app.id,
-        app: placed ? { ...branded, components: placed, ...(catalog ? { messages: catalog } : {}) } : branded,
+        app: served && commands && Object.keys(commands).length ? { ...served, publicCommands: commands } : served,
       });
     }
     if (path === '/api/pages') return reply({ appId: app.id, pages: metadata.pages });

@@ -285,7 +285,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     },
     "radius": {
       "control": "8px",
-      "field": "8px"
+      "field": "8px",
+      "pill": "999px"
     },
     "recipes": {
       "nav": "pill",
@@ -424,7 +425,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     },
     "radius": {
       "control": "0px",
-      "field": "0px"
+      "field": "0px",
+      "pill": "999px"
     },
     "recipes": {
       "nav": "inverted",
@@ -565,7 +567,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     },
     "radius": {
       "control": "8px",
-      "field": "8px"
+      "field": "8px",
+      "pill": "999px"
     },
     "recipes": {
       "nav": "quiet",

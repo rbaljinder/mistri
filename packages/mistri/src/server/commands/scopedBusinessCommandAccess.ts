@@ -218,6 +218,9 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
             ...(authorized.currency ? { currency: authorized.currency } : {}),
             ...(authorized.people ? { people: authorized.people } : {}),
             ...(authorized.files ? { files: authorized.files } : {}),
+            ...(authorized.insertOnly ? { insertOnly: authorized.insertOnly } : {}),
+            ...(authorized.audited ? { audited: authorized.audited } : {}),
+            ...(authorized.readAudit ? { readAudit: authorized.readAudit } : {}),
             transaction: deny,
             readsInCommand: true,
             assertTarget: (records: WriteTransaction, key: CommandResultReference['key']) => checks.get(records)?.target(key) ?? deny(),
@@ -307,6 +310,12 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
                       ? {
                           taken: (scope: Parameters<NonNullable<CommandJournal['taken']>>[0]) =>
                             accept({ scope }, (input) => readResult(journal.taken!(input.scope))),
+                        }
+                      : {}),
+                    ...(journal.appendReadAudit
+                      ? {
+                          appendReadAudit: (rows: Parameters<NonNullable<CommandJournal['appendReadAudit']>>[0]) =>
+                            accept({ rows }, (input) => journal.appendReadAudit!(input.rows)),
                         }
                       : {}),
                   });

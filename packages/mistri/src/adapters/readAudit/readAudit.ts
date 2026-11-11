@@ -17,7 +17,9 @@
  */
 import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
 
-export const READ_AUDIT_VERSION = 1;
+/** Version 2 adds the `command` route and the command's id beside it: a command's handler and lookup read audited
+    rows too (version 1 never saw them). A version 1 store is upgraded in place by `mistri migrate stores up`. */
+export const READ_AUDIT_VERSION = 2;
 export const READ_AUDIT_PREFIX = '__mistri_read_audit_';
 export const READ_AUDIT_TABLES = Object.freeze({
   meta: `${READ_AUDIT_PREFIX}meta`,
@@ -28,8 +30,19 @@ export const READ_AUDIT_RECORD_INDEX = `${READ_AUDIT_PREFIX}row_record`;
 /** By age: what `--since` asks, so neither scans the log. */
 export const READ_AUDIT_AT_INDEX = `${READ_AUDIT_PREFIX}row_at`;
 
-/** The doors a read comes through. `related` is a list of an audited resource read beside another record's page. */
-export const READ_ROUTES = Object.freeze(['page', 'api', 'mcp', 'assistant', 'export', 'picker', 'custom-page', 'related'] as const);
+/** The doors a read comes through. `related` is a list of an audited resource read beside another record's page;
+    `command` is a command's handler or lookup reading, and the row names the command. */
+export const READ_ROUTES = Object.freeze([
+  'page',
+  'api',
+  'mcp',
+  'assistant',
+  'export',
+  'picker',
+  'custom-page',
+  'related',
+  'command',
+] as const);
 export type ReadRoute = (typeof READ_ROUTES)[number];
 
 /** Bounds, the same on every engine. `ids` is a page's worth: a longer one is kept cut and says so (`count` stays whole). */
@@ -39,6 +52,7 @@ export const READ_AUDIT_LIMITS = Object.freeze({
   actor: 400,
   visit: 200,
   resource: 512,
+  command: 200,
   record: 2048,
   query: 16_384,
   ids: 65_536,
@@ -69,6 +83,8 @@ export interface ReadAuditRow {
   readonly visit?: string;
   readonly resource: string;
   readonly route: ReadRoute;
+  /** The command whose handler or lookup made the read: present exactly when the route is `command`. */
+  readonly command?: string;
   /** One record's id, as the store's key text. */
   readonly record?: string;
   /** The normalized query (where, search, sort, offset) that found the rows, as canonical JSON. */
@@ -112,6 +128,9 @@ export function assertReadAuditRow(row: ReadAuditRow): ReadAuditRow {
   text(row.resource, READ_AUDIT_LIMITS.resource, 'resource');
   if (!(READ_ROUTES as readonly string[]).includes(row.route))
     throw new Refusal(`A read audit row's route must be one of ${READ_ROUTES.join(', ')}.`);
+  if ((row.command !== undefined) !== (row.route === 'command'))
+    throw new Refusal("A read audit row names its command exactly when its route is 'command'.");
+  if (row.command !== undefined) text(row.command, READ_AUDIT_LIMITS.command, 'command');
   if ((row.record === undefined) === (row.query === undefined)) throw new Refusal('A read audit row names one record or one query.');
   if (row.record !== undefined) text(row.record, READ_AUDIT_LIMITS.record, 'record');
   if (row.query !== undefined) {
@@ -147,18 +166,23 @@ export function storedReadAudit(row: Record<string, unknown>): StoredReadAudit {
     ...(row.visit == null ? {} : { visit: String(row.visit) }),
     resource: String(row.resource),
     route: row.route as ReadRoute,
+    ...(row.command == null ? {} : { command: String(row.command) }),
     ...(row.record_key == null ? {} : { record: String(row.record_key) }),
     ...(row.query_json == null ? {} : { query: String(row.query_json), count: Number(row.row_count), ids: String(row.ids_json) }),
   });
 }
 
-/** The filters both engines apply, as (column, value) pairs in one order. */
-export function readAuditFilters(query: ReadAuditQuery): Array<readonly [column: string, op: '=' | '>=', value: string]> {
-  const filters: Array<readonly [string, '=' | '>=', string]> = [];
+/**
+ * The filters both engines apply, as (column, value) pairs in one order. `shown` is a record's: a row that read it by
+ * its key, or a list read whose returned ids include it. A list page is how most records are seen, so a record's
+ * readers asked by key alone missed every one who saw it in a list (a field report). Each engine says it its own way.
+ */
+export function readAuditFilters(query: ReadAuditQuery): Array<readonly [column: string, op: '=' | '>=' | 'shown', value: string]> {
+  const filters: Array<readonly [string, '=' | '>=' | 'shown', string]> = [];
   if (query.app !== undefined) filters.push(['app', '=', query.app]);
   if (query.tenant !== undefined) filters.push(['tenant', '=', query.tenant]);
   if (query.resource !== undefined) filters.push(['resource', '=', query.resource]);
-  if (query.record !== undefined) filters.push(['record_key', '=', query.record]);
+  if (query.record !== undefined) filters.push(['record_key', 'shown', query.record]);
   if (query.actor !== undefined) filters.push(['actor', '=', query.actor]);
   if (query.since !== undefined) filters.push(['at', '>=', new Date(query.since).toISOString()]);
   return filters;

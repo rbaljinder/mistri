@@ -316,7 +316,9 @@ const HOUSE: readonly HouseLook[] = [
         chart: ['#3559e6', '#9a78ec', '#12a678', '#c88317', '#e0559b', '#1597b9', '#d26b3b', '#6b7694'],
       },
     },
-    shape: { radius: { control: '8px', field: '8px' }, elevation: 'raised', border: { rule: '1px' } },
+    /* `pill` is said in every look: an App's stylesheet may read var(--pill-radius) (check accepts it), and a look that left it
+       unsaid gave that rule no value and square corners. Round is what the sheets draw a tag as already. */
+    shape: { radius: { control: '8px', field: '8px', pill: 'round' }, elevation: 'raised', border: { rule: '1px' } },
     /* The page's name anchors it: 28px, tight; a list's name a step under, and a section's heading 16px, so the
        page reads title, section, row at a glance. On a flat page the type is the hierarchy the boxes used to be. */
     type: {
@@ -409,7 +411,7 @@ const HOUSE: readonly HouseLook[] = [
         chart: ['#ffffff', '#8a8a8a', '#cccccc', '#6a6a6a', '#a8a8a8', '#4a4a4a', '#e6e6e6', '#333333'],
       },
     },
-    shape: { radius: { control: '0px', field: '0px' }, elevation: 'flat' },
+    shape: { radius: { control: '0px', field: '0px', pill: 'round' }, elevation: 'flat' },
     /* Figures and the labels that make the look in the platform's monospace, the labels and the bar's entries in
        capitals: not data, which a reader who wants monospace picks in Preferences. */
     type: {
@@ -493,7 +495,7 @@ const HOUSE: readonly HouseLook[] = [
         chart: ['#7fd1a0', '#c4b1f2', '#f2a08a', '#f08cc4', '#ecc36e', '#6fd1c8', '#92b8f2', '#8c887f'],
       },
     },
-    shape: { radius: { control: '8px', field: '8px' }, elevation: 'soft' },
+    shape: { radius: { control: '8px', field: '8px', pill: 'round' }, elevation: 'soft' },
     type: { font: { ui: SANS, data: SANS, heading: SANS, figures: FIGURES }, roles: { title: { weight: 600 } } },
     // Compact, as Mono and Lumen: see Mono's density.
     density: 'compact',

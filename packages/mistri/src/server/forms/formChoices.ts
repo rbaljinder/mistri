@@ -13,7 +13,7 @@ import { isRowPolicyApp, isTenantApp, logicalResource, type AppDef } from '../..
 import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
-import { CHOICE_ROWS_MOST, sharedChoices } from './choiceCache.js';
+import { CHOICE_ROWS_MOST, choiceOrder, sharedChoices } from './choiceCache.js';
 
 type Sourced = Extract<AppCommandField, { type: 'choice' | 'choices' }> & {
   source: NonNullable<Extract<AppCommandField, { type: 'choice' }>['source']>;
@@ -64,13 +64,13 @@ export async function withTableChoices(options: {
             registry,
             appId: app.id,
             connection: owner,
-            source: { resource, physical, by: field.source.by, labelColumn: field.source.labelColumn },
+            source: { resource, physical, by: field.source.by, labelColumn: field.source.labelColumn, sort: field.source.sort },
             read: async () =>
               (
                 await resources.forConnection(owner).query({
                   table: resource,
                   columns: [...new Set([field.source.by, field.source.labelColumn])],
-                  orderBy: [{ column: field.source.labelColumn, direction: 'asc' }],
+                  orderBy: choiceOrder(field.source),
                   limit: CHOICE_ROWS_MOST + 1,
                   offset: 0,
                 })

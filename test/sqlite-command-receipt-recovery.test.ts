@@ -56,7 +56,17 @@ async function fixture(run: (adapter: SqliteAdapter, db: DatabaseSync) => Promis
 test('ordinary private recovery shares find and returns immutable ordered target/key text only', async () => {
   await fixture(async (adapter, _db) => {
     await commandsOf(adapter).commandTransaction(async (_tx, journal) => {
-      assert.deepEqual(Object.keys(journal).sort(), ['commit', 'find', 'insert', 'kept', 'nextNumber', 'stage', 'takeStaged', 'taken']);
+      assert.deepEqual(Object.keys(journal).sort(), [
+        'appendReadAudit',
+        'commit',
+        'find',
+        'insert',
+        'kept',
+        'nextNumber',
+        'stage',
+        'takeStaged',
+        'taken',
+      ]);
       assert.deepEqual(await journal.find(receipt), receipt);
       const recovered = await recoverSqliteCommandReceipt(journal, receipt);
       assert.ok(recovered);

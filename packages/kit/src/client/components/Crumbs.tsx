@@ -83,6 +83,12 @@ function trailSetting(): { top: boolean; home: boolean } | false {
   return { top: said?.top ?? false, home: said?.home ?? false };
 }
 
+function bareAt(entry: WalkEntry | undefined): boolean {
+  if (!entry || entry.kind !== 'page' || entry.table || !entry.pageId) return false;
+  const app = shell().app();
+  return (app && (dashboardAt(app, entry.pageId) as { layout?: string } | undefined)?.layout) === 'bare';
+}
+
 // Indices stay the walk's own: only the selected row is left off the end.
 const trailOf = (walked: WalkEntry[]): WalkEntry[] => (splitSelection(walked) ? walked.slice(0, -1) : walked);
 
@@ -95,6 +101,11 @@ const trailOf = (walked: WalkEntry[]): WalkEntry[] => (splitSelection(walked) ? 
 export function crumbBarShown(walked: WalkEntry[]): boolean {
   const setting = trailSetting();
   if (!setting) return false;
+  /* A bare page owns the window, and the bar is part of the frame it takes out of the flow (features.css hides the
+     sidebar and top bar, not this). Drawn over it, the sticky bar sat on top of the page's own controls and took their
+     clicks once the walk had a second step — a param set with `push` — so the page's own layout decides, whatever the
+     setting or the history. */
+  if (bareAt(walked.at(-1))) return false;
   if (setting.top) return true;
   const stack = trailOf(walked);
   const top = stack.at(-1);

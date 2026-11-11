@@ -5,7 +5,8 @@ authoring, start at [the public catalog](../../../../examples/apps/README.md).
 
 It exists so [`e2e/held-files.spec.ts`](../../../../e2e/held-files.spec.ts)
 owns the App it runs against: a public command form that takes photos
-(`field.files`) and a signature (`field.signature`), each held as it is sent
+(`field.files`), close-ups that are each a photo and its note (`field.files`
+in a repeating `field.group`) and a signature (`field.signature`), each held as it is sent
 and stored by the command as a row of its file resource, over SQLite.
 
 - `app.ts` — the App: the repairs list and the one-page public form.

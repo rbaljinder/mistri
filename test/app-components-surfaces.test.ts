@@ -89,7 +89,7 @@ describe('as the App declares them', () => {
       { views: { ...APP.views, vehicles: { ...APP.views.vehicles, presentation: { kind: 'custom', component: list, show: [] } } } },
       /has no "show"/,
     );
-    refused({ views: { ...APP.views, desk: { ...APP.views.desk, reads: [] } } }, /\[page-reads\].*has no "reads"/);
+    refused({ views: { ...APP.views, desk: { ...APP.views.desk, reads: 'vehicle' } } }, /\[page-reads\].*has no "reads"/);
     refused({ views: { ...APP.views, desk: { ...APP.views.desk, reads: ['garage'] } } }, /no resource block declares/);
     refused({ views: { ...APP.views, desk: { ...APP.views.desk, params: ['period'] } } }, /\[page-params\].*"period" is a dashboard's/);
     refused(

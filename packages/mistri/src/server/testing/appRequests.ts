@@ -405,6 +405,28 @@ export function appRequests(send: Send, options: { app?: string; base?: string }
     });
   }
 
+  /**
+   * Holds a file for a command's `field.files` or `field.signature`, as the form holds each one it is given: POST
+   * /api/commands/files with `{ command, field, file: { name, type, data } }`, `data` the bytes in base64. The answer is
+   * the held file, and its `id` is what goes in the command's input (`{ photos: [held.value.id] }`): usable once, by
+   * the session that held it, for that command's field. A field inside a group is named by its path, a repeating
+   * group's rows by `[]` (`'attachments[].file'`), and its id goes in the row (`{ attachments: [{ file: [id] }] }`).
+   */
+  async function holdFile(
+    commandId: string,
+    field: string,
+    file: { name: string; type: string; data: Uint8Array | string },
+  ): Promise<TestResult<{ id: string; name: string; type: string; size: number }>> {
+    // A string is text to hold (its UTF-8 bytes), as a test writes a note or a CSV; bytes are held as they are.
+    const bytes = typeof file.data === 'string' ? Buffer.from(file.data, 'utf8') : Buffer.from(file.data);
+    return readResult(
+      await send(commandPath('files', await app()), {
+        method: 'POST',
+        json: { command: commandId, field, file: { name: file.name, type: file.type, data: bytes.toString('base64') } },
+      }),
+    );
+  }
+
   /** Whether this session may run a command on a record: the prepare the form makes first, which changes nothing. */
   async function prepare(
     name: string,
@@ -540,6 +562,7 @@ export function appRequests(send: Send, options: { app?: string; base?: string }
     rows,
     update,
     command,
+    holdFile,
     prepare,
     act,
     address,

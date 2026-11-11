@@ -998,6 +998,14 @@ export async function openPostgresTenantWriteSource(
                       },
                     }
                   : {}),
+                ...(journal.appendReadAudit
+                  ? {
+                      appendReadAudit: (...args: Parameters<NonNullable<CommandJournal['appendReadAudit']>>) => {
+                        live();
+                        return journal.appendReadAudit!(...args);
+                      },
+                    }
+                  : {}),
               });
             const outcome = await kind.run(
               owned,

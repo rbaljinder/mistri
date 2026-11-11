@@ -99,6 +99,7 @@ import { openTenantIntegrations, type TenantIntegrations } from './tenantIntegra
 import type { JobHost } from '../jobs/jobHost.js';
 import { tenantRetirement } from './tenantRetirement.js';
 import { createTenantPublicHttp, isTenantPublicPath } from './tenantPublicHttp.js';
+import { publicPageCommands } from '../commands/commandContracts.js';
 import { tenantPublicPlacement } from './tenantPublicPlacement.js';
 import { publicHome } from '../../shared/appHome.js';
 import { keepsRoles, roleLabelsOf } from '../../shared/appModel.js';
@@ -141,6 +142,7 @@ import { wearing, type TenantLook } from './tenantLook.js';
 import { createTenantPublicReadHttp } from './tenantPublicReadHttp.js';
 import { isPublicReadRequest } from '../../shared/tenantPublicReads.js';
 import { publicAddress } from './tenantPublicRead.js';
+import { TenantPublicNotFound } from './tenantPublicReadRuntime.js';
 import type { TenantAddresses } from './tenantIntakeModel.js';
 import { emailConfigOf, emailOf, webhookConfigOf } from '../serviceConnections.js';
 import { timeRequests } from '@mistriwork/engine/adapters/telemetry/serverTiming.js';
@@ -871,6 +873,24 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         : undefined;
     /* A tenant's own intake address, by which this App's mapped host places a public form and a page's flags. */
     const hostAddress = deployment.intake ? async (tenant: string) => ((await addressesOf(tenant)) as TenantAddresses).intake : undefined;
+    /* A public page's visitor carries the public address its reads were placed by; its run goes to that tenant's
+       intake address, through the intake's own resolution and fence. An address that places nobody is no address,
+       and the run lands in triage; any other failure is the store's and is not turned into a placement. */
+    const pageAddress =
+      hostAddress && deployment.publicReads
+        ? async (carried: string) => {
+            const address = publicAddress(carried);
+            if (address === undefined) return undefined;
+            let tenant: string;
+            try {
+              tenant = await deployment.withPublicContext({ address }, (context) => context.principal.tenantId);
+            } catch (error) {
+              if (error instanceof TenantPublicNotFound) return undefined;
+              throw error;
+            }
+            return hostAddress(tenant);
+          }
+        : undefined;
     const dispatchPublic = createTenantPublicHttp({
       app: loaded.app,
       ...(loaded.components ? { components: loaded.components } : {}),
@@ -891,6 +911,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       /* A mapped host places a form by its tenant's own intake address, so the read, the submission and every step
          land where the host says, through the intake's one resolution and fence. */
       ...(hostAddress ? { hostAddress } : {}),
+      ...(pageAddress ? { pageAddress } : {}),
       look: () => look,
       ...(branding ? { branding: (req: IncomingMessage) => hostBranding(req) } : {}),
       /* A form reached through a tenant's own intake address wears that tenant's published look. */
@@ -919,6 +940,8 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
           ...(search ? { search } : {}),
           ...(pageLoaders === undefined ? {} : { loaders: pageLoaders as Readonly<Record<string, PageLoader>> }),
           ...(visitorHrefs ? { components: visitorHrefs } : {}),
+          /* A public page's commands, sent through its door on the tenant host and taken by the intake that places them. */
+          ...(deployment.intake ? { publicCommands: publicPageCommands(loaded.app.views, captured.registry) } : {}),
         })
       : undefined;
     /* This App's own mapped host, which names the tenant a visitor there reads. */

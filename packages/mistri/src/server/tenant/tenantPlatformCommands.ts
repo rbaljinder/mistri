@@ -37,7 +37,7 @@ import {
 import { validateBusinessCommandReferences } from '../commands/businessCommandLoader.js';
 import { defineCommands, type AnyBusinessCommand, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { readCommandInput } from '../../shared/commandInput.js';
-import { assertGlobalLookups, scopedLookupReader } from '../commands/commandLookup.js';
+import { assertLookupOwners, scopedLookupReader } from '../commands/commandLookup.js';
 import { parseCommandPrepareRequest, parseCommandAvailability, type CommandAvailabilityResult } from '../commands/commandPayload.js';
 import { collectTenantAvailability } from './tenantCommandAvailability.js';
 import { readPreparedRecord, withPreparedAhead, type PreparedCommand } from '../commands/commandPrepare.js';
@@ -68,6 +68,8 @@ import { captureTenantWriteSource, TenantWriteFailure, type TenantWriteSource } 
 import { evidenceRefused, type AdmissionCache } from './tenantAdmissionCache.js';
 import type { CommandFlags } from '../commands/commandFlags.js';
 import { authorizedCommandFlags, commandFlagsOnce } from '../commands/commandFlagCapture.js';
+import { tenantCommandReadAudit } from './tenantReadAudit.js';
+import type { ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
 
 /** Private host scope of one platform command request, never a handler's. */
 interface PlatformRequestScope {
@@ -94,6 +96,8 @@ interface PlatformRequestScope {
   advisoryReads<T>(run: (records: WriteTransaction) => T | Promise<T>, read: readonly string[]): Promise<T>;
   /** The platform realm's scoped reads, outside any transaction: what a command's lookup reads through. */
   reads(): ReturnType<TenantReadSource['scopePlatformReads']>;
+  /** A command's read of an audited resource, written through the writer outside any transaction (tenantReadAudit.ts). */
+  appendReadAudit(row: ReadAuditRow): Promise<void>;
 }
 interface PlatformRequestRuntimeOptions<Request> {
   readonly app: AppDef;
@@ -451,6 +455,10 @@ export function bindPlatformRequestRuntime<Request>(options: PlatformRequestRunt
             active();
             return (scoped ??= reader.scopePlatformReads(admitted, rows));
           },
+          appendReadAudit: (row) => {
+            active();
+            return writer.appendReadAudit(row);
+          },
         });
         let result!: T;
         const completed = (value: T): T => {
@@ -549,8 +557,8 @@ export function bindPlatformCommands<Request>(runtime: PlatformRequestRuntime<Re
     )
       deny();
   }
-  // Decided, may be revisited: the platform realm looks up what every tenant reads, as a tenant does.
-  assertGlobalLookups(app, registry, ownership.ownership);
+  // Decided, may be revisited: the platform realm looks up only what every tenant reads; it acts in no tenant.
+  assertLookupOwners(app, registry, ownership.ownership);
   const declarations = tenantOptions(configured.resultReferences, Object.keys(registry));
   if (Object.keys(declarations).length !== Object.keys(registry).length) deny();
   const extractors = new Map(
@@ -681,6 +689,13 @@ export function bindPlatformCommands<Request>(runtime: PlatformRequestRuntime<Re
                   ...authorization,
                   transaction: deny,
                   ...(authorization.lookupTables ? { lookup: scopedLookupReader(authorization, () => scope.reads()) } : {}),
+                  /* The platform realm's reads are its own, as its read runtime writes them (tenantDeployment.ts). */
+                  ...tenantCommandReadAudit(
+                    authorization,
+                    { app: app.id, tenant: '', actor: scope.principal.accountId },
+                    identity.source.connection,
+                    scope.appendReadAudit,
+                  ),
                   assertTarget: (records: WriteTransaction, key: Readonly<Record<string, string | number>>) =>
                     contexts.get(records)?.target(key) ?? deny(),
                   assertResult: (records: WriteTransaction, key: Readonly<Record<string, string | number>>, result: unknown) =>

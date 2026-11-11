@@ -10,20 +10,34 @@ import { isRowPolicyApp } from '../../shared/appModel.js';
  * tenant startup before its deployment, so the refusal says why and what is
  * allowed rather than naming a stage.
  *
- * Decided, may be revisited: a tenant App (and its platform realm) looks up
- * only resources every tenant reads, `owner: 'global'`; tenant-owned rows
- * belong in the command's own transaction, and platform-owned rows are never
+ * Decided, may be revisited: a tenant App's command looks up resources every
+ * tenant reads, `owner: 'global'`, and its own tenant's, `owner: 'tenant'` —
+ * read only, through the acting person's scope, so the lookup reads what that
+ * person could read (their row filters, their column grants, their tenant's
+ * rows alone). Its platform realm looks up only global ones: it acts in no
+ * tenant, so there is no tenant's rows to read. Platform-owned rows are never
  * read in a tenant's context. A row-policy App looks up nothing: its rows are
  * scoped per actor, and that scope does not reach another source yet.
  */
 export const TENANT_RULE =
-  'A tenant App\'s command looks up only resources every tenant reads, "owner": "global" — reference data. ' +
-  "Rows a tenant owns belong in the command's own transaction; rows the platform owns are never read in a tenant's context.";
+  'A tenant App\'s command looks up resources every tenant reads, "owner": "global", and its own tenant\'s, "owner": "tenant" — ' +
+  "read only, as the person running it could read them. Rows the platform owns are never read in a tenant's context.";
+
+/** The platform realm's rule: it acts in no tenant, so it looks up global rows only. */
+export const PLATFORM_RULE =
+  'A platform-realm command looks up only resources every tenant reads, "owner": "global" — reference data; ' +
+  "it acts in no tenant, so it reads no tenant's rows, and rows the platform owns belong in its own transaction.";
+
+/** The owners a command of this realm may look up in a tenant App. */
+export function lookupOwners(realm: 'tenant' | 'platform' | undefined): readonly string[] {
+  return realm === 'platform' ? ['global'] : ['global', 'tenant'];
+}
 
 export function commandLookupProblem(
   app: AppDef,
   id: string,
   sources: Readonly<Record<string, readonly string[]>> | undefined,
+  realm?: 'tenant' | 'platform',
 ): string | undefined {
   if (!sources) return undefined;
   if (isRowPolicyApp(app)) {
@@ -38,8 +52,10 @@ export function commandLookupProblem(
     for (const local of tables) {
       const logical = logicalResource(app, source, local);
       const owner = Object.hasOwn(app.resources ?? {}, logical) ? app.resources![logical].owner : undefined;
-      if (owner !== 'global') {
-        return `Command "${id}" looks up "${logical}", which is ${owner ? `"owner": "${owner}"` : 'not a resource the App declares'}. ${TENANT_RULE}`;
+      if (!owner || !lookupOwners(realm).includes(owner)) {
+        return `Command "${id}" looks up "${logical}", which is ${owner ? `"owner": "${owner}"` : 'not a resource the App declares'}. ${
+          realm === 'platform' ? PLATFORM_RULE : TENANT_RULE
+        }`;
       }
     }
   }
