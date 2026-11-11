@@ -15,7 +15,7 @@
  * expires a session or holds a lease past its time.
  */
 import { appClockOffset, setAppClockOffset } from '../../shared/appClock.js';
-import { productEnv } from '../product.js';
+import { envName, productEnv } from '../product.js';
 
 /**
  * The pin wins over an as-of moment: a browser suite that pins the clock asks for the same instant on every run, and
@@ -23,7 +23,9 @@ import { productEnv } from '../product.js';
  */
 export function clockNow(): Date {
   const pinned = productEnv('CLOCK');
-  if (!pinned) return appTime();
+  /* configureAsOf refuses the pin at start; this is for a process that never asked it (a worker, an embed), so a
+     stray MISTRI_CLOCK in a deployed environment cannot freeze App logic's day either. */
+  if (!pinned || process.env.NODE_ENV === 'production') return appTime();
   const at = new Date(pinned);
   return Number.isNaN(at.getTime()) ? appTime() : at;
 }
@@ -122,6 +124,14 @@ interface AsOfProcess {
   readonly now?: number;
 }
 
+/** Why this process may not move App logic's clock, or undefined where it may: mistri dev, or a test process. */
+function clockRefusal(asked: AsOfProcess, env: NodeJS.ProcessEnv): string | undefined {
+  if (env.NODE_ENV === 'production') return 'NODE_ENV is production';
+  if (asked.build) return 'this serves a build, which is what is deployed';
+  if (!asked.dev && env.NODE_ENV !== 'test') return 'this is neither mistri dev nor a test process (NODE_ENV=test)';
+  return undefined;
+}
+
 /**
  * Read the as-of moment the flag or MISTRI_AS_OF asks for (the flag wins), and set App logic's clock to start at
  * it. Development and tests only: refused, with a message naming what asked, under NODE_ENV=production, when
@@ -131,17 +141,18 @@ interface AsOfProcess {
  */
 export function configureAsOf(flag: string | undefined, asked: AsOfProcess): Date | undefined {
   const env = asked.env ?? process.env;
+  const refused = clockRefusal(asked, env);
+  /* The pin is held to the same rule: it froze App logic's day for every visitor of a deployment it leaked into, and
+     clockNow read it without asking where it ran. */
+  const pin = productEnv('CLOCK', env);
+  if (pin && pin.trim() !== '' && refused)
+    throw new Error(
+      `${envName('CLOCK')} pins App logic's clock for development and tests (mistri dev, or NODE_ENV=test), and ` +
+        `${refused}. Remove ${envName('CLOCK')} to serve.`,
+    );
   const given = flag ?? env.MISTRI_AS_OF;
   if (given === undefined || (flag === undefined && given.trim() === '')) return undefined;
   const source = flag !== undefined ? '--as-of' : 'MISTRI_AS_OF';
-  const refused =
-    env.NODE_ENV === 'production'
-      ? 'NODE_ENV is production'
-      : asked.build
-        ? 'this serves a build, which is what is deployed'
-        : !asked.dev && env.NODE_ENV !== 'test'
-          ? 'this is neither mistri dev nor a test process (NODE_ENV=test)'
-          : undefined;
   if (refused)
     throw new Error(
       `${source} moves App logic's clock for development and tests (mistri dev, or NODE_ENV=test), and ${refused}. ` +

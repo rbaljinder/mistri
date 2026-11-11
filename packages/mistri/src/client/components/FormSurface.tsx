@@ -368,6 +368,21 @@ export function FormSurface({
   const [outcome, setOutcome] = useState<Outcome | undefined>(undefined);
   /* A public form's guard (PublicGuard.tsx), held while it is drawn. */
   const guarded = useRef<GuardHandle | undefined>(undefined);
+  /* The server asks the human check of a public file hold as of the submission (stagedFileHttp.ts), so each file takes
+     a token from the same guard the submit does. */
+  const heldBy = useMemo<HeldTarget | undefined>(() => {
+    if (!held || !('form' in held) || !visitor || !form.challenge) return held;
+    return {
+      ...held,
+      guard: {
+        async take() {
+          const taken = guarded.current?.take() ?? {};
+          return (taken instanceof Promise ? await taken : taken).challenge;
+        },
+        reset: () => guarded.current?.reset(),
+      },
+    };
+  }, [held, visitor, form.challenge]);
   const [pending, setPending] = useState(false);
   const [submittedReceipt, setReceipt] = useState<FormReceipt | null>(null);
   const [home, setHome] = useState<string | undefined>(typeof homeHref === 'string' ? homeHref : undefined);
@@ -590,7 +605,7 @@ export function FormSurface({
       inputs={form.inputs}
       {...(connection === undefined ? {} : { connection })}
       {...(visitor === undefined ? {} : { visitor })}
-      {...(held === undefined ? {} : { held })}
+      {...(heldBy === undefined ? {} : { held: heldBy })}
       {...(questions ? { questions } : {})}
     />
   );

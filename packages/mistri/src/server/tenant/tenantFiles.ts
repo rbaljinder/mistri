@@ -72,7 +72,8 @@ export async function tenantFileRead(
 
 /** What the export needs of a lease's context: its member's roles and, for a tenant, its zone. */
 interface ExportingContext {
-  readonly principal: { readonly roles: readonly string[] };
+  /* `accountId` names the person a file counts against (EXPORTS_IN_FLIGHT); a principal without one counts by address. */
+  readonly principal: { readonly roles: readonly string[]; readonly accountId?: string };
   readonly zone?: string;
 }
 
@@ -112,6 +113,7 @@ export async function tenantExport<C extends ExportingContext>(asked: {
         schema,
         now: () => zonedNow(appZone(app.ui, context.zone), appTime(asked.now())),
         may: appExportsTable(app, schema, context.principal.roles, true),
+        ...(context.principal.accountId ? { who: `account:${context.principal.accountId}` } : {}),
         person: async (text) =>
           textsMentionMe([text], schema) ? readMeSets(await asked.person(context, schema), [text], schema, reader) : undefined,
         amounts: (tableId) => appCsvAmounts(app, schema, tableId),

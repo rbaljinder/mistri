@@ -50,6 +50,7 @@ import { answerLanding, LANDING_PATH } from '../http/landingRoutes.js';
 import { clientAddress } from '@mistriwork/engine/server/http/rateLimit.js';
 import { HttpError, readJson, send } from '@mistriwork/engine/server/http/reply.js';
 import { newVisitorToken, PUBLIC_STAGED_FILE_MOST, readVisitorToken, StageRefusal, visitorCookie } from '../commands/stagedFiles.js';
+import { publicFileBytesRefused } from '../commands/stagedFileHttp.js';
 import { doorRefusal, type Bound } from '@mistriwork/engine/server/http/trust.js';
 import type { TenantIntake } from './tenantIntake.js';
 import {
@@ -104,9 +105,10 @@ interface TenantPublicHttpOptions {
 }
 
 export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
-  /** One file, held for the visitor in the place the address resolves to: the cookie is set here where they have none,
-      and the answer is the ordinary host's (commands/stagedFileHttp.ts), a refusal said as it says it. */
-  const holdFile = async (req: IncomingMessage, res: ServerResponse, key: string, address: string | undefined) => {
+  /** One file, held for the visitor in the place the intake address resolves to: charged to the client's day of bytes,
+      the cookie set here where they have none, and the answer the ordinary host's (commands/stagedFileHttp.ts), a
+      refusal said as it says it. */
+  const holdFile = async (req: IncomingMessage, res: ServerResponse, key: string, client: string, address: string | undefined) => {
     const length = Number(req.headers['content-length']);
     const refuse = (status: number, code: string, error: string) => send(res, status, { code, error });
     if (Number.isFinite(length) && length > PUBLIC_FILE_BODY) {
@@ -122,6 +124,7 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       if (error.status === 413) res.setHeader('connection', 'close');
       return refuse(error.status, error.status === 413 ? 'too_large' : 'invalid_input', error.message);
     }
+    if (await publicFileBytesRefused(res, client, body)) return;
     let visitor = readVisitorToken(req, key);
     const fresh = !visitor;
     visitor ??= newVisitorToken();
@@ -296,6 +299,12 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
         return;
       }
     }
+    /* A file held for a form writes too, so it asks the same check, from its header before the body is read: unasked, it
+       was the one door a script could fill without answering. A provider's token answers one request: one per file. */
+    if (files && named && !(await challengeAnsweredBy(options.challenge, req, address))) {
+      send(res, 403, { code: 'challenge_failed', error: CHALLENGE_REFUSAL });
+      return;
+    }
     if (await rateLimited(res, [...budgets], address, 'all')) return;
     assertActive();
     /* A placement that names no tenant sends the submission to triage. */
@@ -317,7 +326,7 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
         send(res, 403, { code: 'forbidden', error: 'This form is not accepting submissions.' });
         return;
       }
-      await holdFile(req, res, key, await placing());
+      await holdFile(req, res, key, address, await placing());
       return;
     }
     if (reading) {

@@ -32,7 +32,9 @@
  *
  * Routed before Better Auth's own handler (auth.ts), as the back-channel
  * logout is: a directory sends no cookie and no Origin. Each connection may
- * make 600 requests a minute, counted where the deployment's sign-in state is.
+ * make 600 requests a minute, counted where the deployment's sign-in state is;
+ * a caller with no known bearer is counted by its address, and a change it
+ * sends is refused before its body is read.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -93,8 +95,8 @@ interface ScimProvisioning {
   bind(apply: TenantDirectoryApply): void;
   /** Kept for the App's auth runtime, where the tenant host finds it. */
   register(runtime: object): void;
-  /** One request under `/api/auth/scim/`. */
-  serve(req: IncomingMessage, res: ServerResponse): Promise<void>;
+  /** One request under `/api/auth/scim/`, from the client address the auth handler resolved. */
+  serve(req: IncomingMessage, res: ServerResponse, address: string): Promise<void>;
 }
 
 /** The directories that provision each auth runtime's App, where any do. */
@@ -353,11 +355,18 @@ export async function scimProvisioning(
     register: (runtime: object) => {
       provisioned.set(runtime, provisioning);
     },
-    serve: async (req: IncomingMessage, res: ServerResponse) => {
+    serve: async (req: IncomingMessage, res: ServerResponse, address: string) => {
       const connection = connectionOf(req.headers.authorization);
-      const { allowed, retryAfter } = await signInState.consume(`scim:${connection ?? '-'}`, { window: 60, max: PER_MINUTE });
+      /* A known bearer is counted per connection; anyone else per address, so one stranger spends no one else's minute. */
+      const bucket = connection ? `scim:${connection}` : `scim-address:${address}`;
+      const { allowed, retryAfter } = await signInState.consume(bucket, { window: 60, max: PER_MINUTE });
       if (!allowed) return answer(res, 429, 'Too many requests.', { 'retry-after': String(retryAfter ?? 60) });
       const method = (req.method ?? 'GET').toUpperCase();
+      /* Every change needs a directory's bearer: one without it is refused before a byte of its body is read. The
+         discovery reads (ServiceProviderConfig, Schemas) carry no body and stay the plugin's to answer. */
+      if (!connection && method !== 'GET' && method !== 'HEAD') {
+        return answer(res, 401, 'A SCIM directory bearer token is required.', { 'www-authenticate': 'Bearer', connection: 'close' });
+      }
       let body: Buffer | undefined;
       if (method !== 'GET' && method !== 'HEAD') {
         const chunks: Buffer[] = [];

@@ -20,16 +20,21 @@ export interface CacheStore {
   set(key: string, value: string, ttlMs: number): Promise<void>;
   delete(key: string): Promise<void>;
   /**
-   * Count one under `key`. A new key starts a window of `ttlMs`; the answer is
-   * the count within it and the milliseconds it has left. Throws
-   * CacheUnavailable when the count cannot be kept.
+   * Count one under `key` — or `by`, a positive whole number, where what is
+   * counted is a size rather than a request. A new key starts a window of
+   * `ttlMs`; the answer is the count within it and the milliseconds it has
+   * left. Throws CacheUnavailable when the count cannot be kept.
    */
-  incr(key: string, ttlMs: number): Promise<{ count: number; ttlMs: number }>;
+  incr(key: string, ttlMs: number, by?: number): Promise<{ count: number; ttlMs: number }>;
   close(): Promise<void>;
 }
 
 /* Thirty days: a copy kept longer than that is a copy nobody meant to keep. */
 const MAX_TTL_MS = 30 * 24 * 3_600_000;
+
+function assertBy(by: number): void {
+  if (!Number.isSafeInteger(by) || by < 1) throw new Error(`A count goes up by a positive whole number; ${by} is not one.`);
+}
 
 function assertTtl(ttlMs: number): void {
   if (!Number.isSafeInteger(ttlMs) || ttlMs < 1 || ttlMs > MAX_TTL_MS) {
@@ -70,11 +75,12 @@ export class MemoryCacheStore implements CacheStore {
     this.entries.delete(key);
   }
 
-  async incr(key: string, ttlMs: number): Promise<{ count: number; ttlMs: number }> {
+  async incr(key: string, ttlMs: number, by = 1): Promise<{ count: number; ttlMs: number }> {
     assertTtl(ttlMs);
+    assertBy(by);
     const entry = this.live(key);
     const now = this.now();
-    const next = entry ? { value: String(Number(entry.value) + 1), expires: entry.expires } : { value: '1', expires: now + ttlMs };
+    const next = entry ? { value: String(Number(entry.value) + by), expires: entry.expires } : { value: String(by), expires: now + ttlMs };
     this.entries.delete(key);
     this.entries.set(key, next);
     this.trim();
@@ -106,8 +112,8 @@ export class MemoryCacheStore implements CacheStore {
 
 /* One round trip, and atomic: a window that is counted is a window that
    expires, even if this process stops between the two steps. */
-const COUNT_IN_WINDOW = `local n = redis.call('INCR', KEYS[1])
-if n == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end
+const COUNT_IN_WINDOW = `local n = redis.call('INCRBY', KEYS[1], ARGV[2])
+if n == tonumber(ARGV[2]) then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end
 local t = redis.call('PTTL', KEYS[1])
 if t < 0 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) t = tonumber(ARGV[1]) end
 return {n, t}`;
@@ -151,11 +157,12 @@ export class ValkeyCacheStore implements CacheStore {
     }
   }
 
-  async incr(key: string, ttlMs: number): Promise<{ count: number; ttlMs: number }> {
+  async incr(key: string, ttlMs: number, by = 1): Promise<{ count: number; ttlMs: number }> {
     assertTtl(ttlMs);
+    assertBy(by);
     let reply;
     try {
-      reply = await this.client.command('EVAL', COUNT_IN_WINDOW, 1, key, ttlMs);
+      reply = await this.client.command('EVAL', COUNT_IN_WINDOW, 1, key, ttlMs, by);
     } catch (error) {
       this.unavailable(error);
       throw error instanceof CacheUnavailable ? error : new CacheUnavailable('the cache refused a count.');
@@ -181,7 +188,7 @@ export function scopedCache(store: CacheStore, prefix: string): CacheStore {
     get: (key) => store.get(prefix + key),
     set: (key, value, ttlMs) => store.set(prefix + key, value, ttlMs),
     delete: (key) => store.delete(prefix + key),
-    incr: (key, ttlMs) => store.incr(prefix + key, ttlMs),
+    incr: (key, ttlMs, by) => store.incr(prefix + key, ttlMs, by),
     close: () => store.close(),
   };
 }

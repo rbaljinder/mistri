@@ -139,6 +139,8 @@ async function start(name, serveArgs, env = {}) {
       MISTRI_OPEN: '0',
       TABLEWALK_CLOCK: `${TODAY}T16:00:00.000Z`,
       MISTRI_CLOCK: `${TODAY}T16:00:00.000Z`,
+      /* The pin is a test's: a server refuses it outside mistri dev and NODE_ENV=test (http/clock.ts). */
+      NODE_ENV: 'test',
       ...env,
     },
     stdio: ['ignore', 'pipe', 'pipe'],

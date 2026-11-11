@@ -277,4 +277,16 @@ describe('FixedWindowLimiter', () => {
     assert.throws(() => new FixedWindowLimiter([{ limit: 1, ms: 1 }], Date.now, { total: [] }));
     assert.throws(() => new FixedWindowLimiter([{ limit: 1, ms: 1 }], Date.now, { maxClients: 0 }));
   });
+
+  test('a weighted take spends its weight: bytes are counted as a budget, and a take that would pass it is refused whole', () => {
+    const limiter = new FixedWindowLimiter([{ limit: 100, ms: 60_000 }], () => 1_000_000);
+    assert.deepEqual(limiter.take('a', 'client', 60), { ok: true, remaining: 40 });
+    assert.equal(limiter.take('a', 'client', 41).ok, false);
+    assert.deepEqual(limiter.take('a', 'client', 40), { ok: true, remaining: 0 });
+    // A first take heavier than the whole window is refused, and another client is untouched by any of it.
+    assert.equal(limiter.take('b', 'client', 101).ok, false);
+    assert.deepEqual(limiter.take('b', 'client', 100), { ok: true, remaining: 0 });
+    assert.throws(() => limiter.take('c', 'client', 0));
+    assert.throws(() => limiter.take('c', 'client', 1.5));
+  });
 });

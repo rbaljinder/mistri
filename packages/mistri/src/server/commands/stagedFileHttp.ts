@@ -10,6 +10,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { FILE_UPLOAD_BODY, HttpError, readJson, send } from '@mistriwork/engine/server/http/reply.js';
 import { cookieUnder } from '@mistriwork/engine/shared/mount.js';
+import { publicFileByteLimiter } from '@mistriwork/engine/server/http/rateLimit.js';
 import type { AppDef } from '../../shared/app.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
@@ -30,6 +31,28 @@ import {
 /** A public file's body: base64 of the largest file a public form holds, and room for the rest. */
 const PUBLIC_FILE_BODY = Math.ceil(PUBLIC_STAGED_FILE_MOST / 3) * 4 + 64 * 1024;
 
+/**
+ * Charges a public file's bytes to its client's day (rateLimit.ts `publicFileByteLimiter`), answering the refusal here:
+ * true when refused. Charged as sent, before the file is judged, so a client cannot spend the share every visitor holds
+ * together (stagedFiles.ts) by sending files the form then refuses either. A body with no content is left for the hold
+ * to refuse. Every public door calls it: the ordinary host's, a row-policy App's intake and a tenant App's host.
+ */
+export async function publicFileBytesRefused(res: ServerResponse, address: string, body: Record<string, unknown>): Promise<boolean> {
+  const file = body.file;
+  const data = file && typeof file === 'object' && !Array.isArray(file) ? (file as Record<string, unknown>).data : undefined;
+  const size = typeof data === 'string' ? Buffer.byteLength(data, 'base64') : 0;
+  if (size < 1) return false;
+  const decision = await publicFileByteLimiter().take(address, 'client', size);
+  if (decision.ok) return false;
+  res.setHeader('retry-after', String(decision.retryAfterSeconds));
+  send(res, 429, {
+    code: 'too_many_files',
+    error: 'This address has sent as many files as a day allows. Send the form with the files it holds, or try again later.',
+    retryAfter: decision.retryAfterSeconds,
+  });
+  return true;
+}
+
 interface StageDoor {
   req: IncomingMessage;
   res: ServerResponse;
@@ -43,6 +66,8 @@ interface StageDoor {
   visitor?: string;
   /** A public form's command: the visitor names only the field, never which command the file is for. */
   command?: string;
+  /** A public form's client, whose day of bytes the file is charged to. */
+  address?: string;
 }
 
 async function stage(door: StageDoor): Promise<void> {
@@ -64,6 +89,7 @@ async function stage(door: StageDoor): Promise<void> {
     send(res, error.status, { code: error.status === 413 ? 'too_large' : 'invalid_input', error: error.message });
     return;
   }
+  if (door.address !== undefined && (await publicFileBytesRefused(res, door.address, body))) return;
   const releases: Array<() => void> = [];
   try {
     const resources = await loadAppRuntimeResources(registry, app, connection, (owner) => releases.push(registry.lease(owner)));
@@ -117,6 +143,7 @@ export async function stagePublicFileHttp(
     key: string;
     command: string;
     secure: boolean;
+    address: string;
   },
 ): Promise<void> {
   const { req, res, registry } = ctx;
@@ -137,6 +164,7 @@ export async function stagePublicFileHttp(
     limit: PUBLIC_FILE_BODY,
     visitor,
     command: options.command,
+    address: options.address,
   });
 }
 
@@ -150,6 +178,7 @@ export async function holdPolicyFileHttp(
   key: string,
   hold: (form: string, body: unknown, visitor: string) => Promise<{ id: string; name: string; type: string; size: number }>,
   secure: boolean,
+  address: string,
 ): Promise<void> {
   const { req, res } = ctx;
   let visitor = readVisitorToken(req, key);
@@ -170,6 +199,7 @@ export async function holdPolicyFileHttp(
     send(res, error.status, { code: error.status === 413 ? 'too_large' : 'invalid_input', error: error.message });
     return;
   }
+  if (await publicFileBytesRefused(res, address, body)) return;
   try {
     // The command is the form's own, said by the intake; whatever the body names is ignored.
     const form = ctx.signedIn!.app.app.views[key] as { command: { id: string } };

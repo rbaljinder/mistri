@@ -133,12 +133,15 @@ The command takes the files in its own transaction:
   The files stay held for the person to send again.
 - A file the handler does not store with `insertFile` refuses the run
   (`invalid_result`).
-- A held file expires after a day, and the retention job removes it.
+- A held file expires after a day (a public form's after an hour), and the
+  retention job removes it.
 
 A public form holds files only for a field its command declares, and only for the
 visitor's own browser, by a cookie the first file sets. Ten files and 25 MB
-for each visitor, 10 MB a file and 256 MB across every visitor, within the
-form's own rate limit. Under a row policy a `publicForms` form holds them too,
+for each visitor, 50 MB a day from one client address, 10 MB a file and 256 MB
+across every visitor, within the form's own rate limit. A file nobody submits
+is kept an hour. Where the form asks its human check on submit, it asks it of
+each file too (the `x-mistri-challenge` header). Under a row policy a `publicForms` form holds them too,
 in the form's fixed destination, never one the request names. In a tenant App
 the file is held in the place its address names, and counted there: a form
 takes it for a submission placed in that tenant (or in the platform's triage)

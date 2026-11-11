@@ -157,6 +157,21 @@ test('the mail forwarder signs <timestamp>.<body> with HMAC-SHA-256 and maps the
     `v1=${createHmac('sha256', 'secret').update(`${timestamp}.${body}`).digest('hex')}`,
   );
   assert.deepEqual(JSON.parse(body).attachments, [{ name: 'attachment', type: 'text/plain', content: 'c' }]);
+  /* postal-mime's default: the bytes as an ArrayBuffer, which JSON would send as {}. They arrive as base64. */
+  const bytes = new Uint8Array(70_000).map((_, i) => (i * 31) % 256);
+  await forwardEmail(message, env, {
+    ...options,
+    parse: async () => ({
+      headers: [],
+      attachments: [
+        { filename: 'a.bin', mimeType: 'application/octet-stream', content: bytes.buffer },
+        { filename: 'b.txt', mimeType: 'text/plain', content: new TextEncoder().encode('hello') },
+      ],
+    }),
+  });
+  const [binary, typed] = JSON.parse(await sent!.text()).attachments as Array<{ content: string }>;
+  assert.deepEqual(new Uint8Array(Buffer.from(binary.content, 'base64')), bytes);
+  assert.equal(Buffer.from(typed.content, 'base64').toString('utf8'), 'hello');
   assert.equal(JSON.parse(body).recipient, 'help@app.test');
   status = 404;
   await forwardEmail(message, env, { ...options, path: '/in' });

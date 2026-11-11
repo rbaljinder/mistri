@@ -72,10 +72,12 @@ export function PublicGuard({ widget, handle }: { widget?: ChallengeWidget; hand
   const token = useRef<string | undefined>(undefined);
   const waiting = useRef<Array<(token: string | undefined) => void>>([]);
   const id = useRef<unknown>(undefined);
+  /* A token answers one request, so it goes to the first who waits for it (a file being held, the submit), and the
+     rest wait for the fresh one the next `reset` asks for. */
   const given = (next: string | undefined) => {
-    token.current = next;
-    if (next === undefined) return;
-    for (const resolve of waiting.current.splice(0)) resolve(next);
+    const first = next === undefined ? undefined : waiting.current.shift();
+    if (first) first(next);
+    else token.current = next;
   };
 
   useEffect(() => {
@@ -91,11 +93,16 @@ export function PublicGuard({ widget, handle }: { widget?: ChallengeWidget; hand
         };
         if (token.current !== undefined) return spend(token.current);
         return new Promise<string | undefined>((resolve) => {
-          const timer = setTimeout(() => resolve(undefined), TOKEN_WAIT_MS);
-          waiting.current.push((next) => {
+          const wait = (next: string | undefined) => {
             clearTimeout(timer);
             resolve(next);
-          });
+          };
+          // One that gave up is out of the line, so the token it would have had goes to the next.
+          const timer = setTimeout(() => {
+            waiting.current = waiting.current.filter((each) => each !== wait);
+            resolve(undefined);
+          }, TOKEN_WAIT_MS);
+          waiting.current.push(wait);
         }).then(spend);
       },
       reset() {

@@ -20,6 +20,7 @@ import {
   NORTH,
   NORTH_BRAND,
   NORTH_HOST,
+  NORTH_PUBLIC,
   openTenantPublicForms,
   publicFormsDatabase,
   SOUTH,
@@ -47,6 +48,35 @@ test("no address, an address that places nobody, and a tenant that saved no name
   assert.equal((await f.call(`/api/forms/apply${via(SOUTH)}`)).body.app.name, 'Yard');
   const bare = await f.call('/yard/form/apply');
   assert.doesNotMatch(bare.text, new RegExp(NORTH_BRAND));
+});
+
+/* The security review's BR-1: an address that places nobody and a real tenant's that published no look answer
+   alike — the same bytes, and the same reads on the way, since an unknown address that skipped the look's read
+   answered sooner and so told the two apart. */
+test("an unknown intake address and a real one that published no look can't be told apart", async (t) => {
+  const f = await open(t);
+  const reads: string[] = [];
+  const get = MemoryCacheStore.prototype.get;
+  t.mock.method(MemoryCacheStore.prototype, 'get', function (this: MemoryCacheStore, key: string) {
+    if (key.includes('branding:')) reads.push(key);
+    return get.call(this, key);
+  });
+  const answer = async (address: string) => {
+    reads.length = 0;
+    const api = await f.call(`/api/forms/apply${via(address)}`);
+    const apiReads = reads.length;
+    const page = await f.call(`/yard/form/apply${via(address)}`);
+    return {
+      api: [api.status, api.text],
+      page: [page.status, page.text.replaceAll(/nonce="[^"]*"|nonce-[A-Za-z0-9+/=_-]+/g, 'nonce')],
+      reads: [apiReads, reads.length - apiReads],
+    };
+  };
+  const unknown = await answer(UNKNOWN);
+  assert.equal(unknown.api[0], 200);
+  assert.deepEqual(await answer(SOUTH), unknown);
+  assert.deepEqual(await answer(NORTH_PUBLIC), unknown);
+  assert.ok(unknown.reads[0] > 0, 'an unknown address reads a look as a real one does');
 });
 
 test('the sign-in page is dressed only when the host names the tenant', async (t) => {

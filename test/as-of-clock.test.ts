@@ -79,6 +79,36 @@ describe('configureAsOf', () => {
     assert.equal(appClockOffset(), 0, 'a refusal moves nothing');
   });
 
+  test('the MISTRI_CLOCK pin is held to the same rule: refused in production, for a build and outside dev and tests', () => {
+    const PIN = { MISTRI_CLOCK: '2026-09-08T12:00:00Z' };
+    assert.throws(
+      () => configureAsOf(undefined, { dev: true, env: { ...PIN, NODE_ENV: 'production' } }),
+      /MISTRI_CLOCK pins App logic's clock .* NODE_ENV is production\. Remove MISTRI_CLOCK to serve\./,
+    );
+    assert.throws(() => configureAsOf(undefined, { dev: true, build: true, env: { ...PIN } }), /MISTRI_CLOCK .* serves a build/);
+    assert.throws(() => configureAsOf(undefined, { dev: false, env: { ...PIN } }), /MISTRI_CLOCK .* neither mistri dev nor a test/);
+    assert.equal(configureAsOf(undefined, { dev: true, env: { ...PIN } }), undefined, 'honored under mistri dev');
+    assert.equal(configureAsOf(undefined, { dev: false, env: { ...PIN, NODE_ENV: 'test' } }), undefined, 'and in a test process');
+    assert.equal(configureAsOf(undefined, { dev: false, env: { MISTRI_CLOCK: '', NODE_ENV: 'production' } }), undefined);
+  });
+
+  test('a pin that reaches a production process is not read', (t) => {
+    const saved = { clock: process.env.MISTRI_CLOCK, node: process.env.NODE_ENV };
+    t.after(() => {
+      for (const [key, value] of [
+        ['MISTRI_CLOCK', saved.clock],
+        ['NODE_ENV', saved.node],
+      ] as const)
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+    });
+    process.env.MISTRI_CLOCK = '2020-01-01T00:00:00Z';
+    process.env.NODE_ENV = 'test';
+    assert.equal(clockNow().toISOString(), '2020-01-01T00:00:00.000Z');
+    process.env.NODE_ENV = 'production';
+    assert.ok(Math.abs(clockNow().getTime() - Date.now()) < 1000);
+  });
+
   test('a value that names no moment is refused, saying what it takes', () => {
     assert.throws(() => configureAsOf('', { dev: true, env: {} }), /--as-of takes a date .* it got ""/);
     assert.throws(

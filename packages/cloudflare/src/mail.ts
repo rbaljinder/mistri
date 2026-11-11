@@ -52,6 +52,26 @@ export async function signMail(secret: string, timestamp: string, body: string):
   return `v1=${hex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${body}`)))}`;
 }
 
+/**
+ * An attachment's bytes as the App takes them: base64. postal-mime hands an ArrayBuffer unless it is told
+ * `attachmentEncoding: 'base64'`, and an ArrayBuffer is `{}` in JSON, so every attachment arrived empty; bytes are
+ * encoded here, and a string is taken as base64 already.
+ */
+function attachmentContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  const bytes =
+    content instanceof ArrayBuffer
+      ? new Uint8Array(content)
+      : ArrayBuffer.isView(content)
+        ? new Uint8Array(content.buffer, content.byteOffset, content.byteLength)
+        : undefined;
+  if (!bytes) throw new Error('an attachment carried neither bytes nor base64 text');
+  /* A chunk at a time: String.fromCharCode over a whole large file overflows the argument list. */
+  let binary = '';
+  for (let at = 0; at < bytes.length; at += 0x8000) binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+  return btoa(binary);
+}
+
 function mailBody(message: Pick<InboundMessage, 'to'>, mail: ParsedMail): string {
   return JSON.stringify({
     recipient: message.to,
@@ -65,7 +85,11 @@ function mailBody(message: Pick<InboundMessage, 'to'>, mail: ParsedMail): string
     text: mail.text,
     html: mail.html,
     headers: Object.fromEntries(mail.headers.map((h) => [h.key, h.value])),
-    attachments: mail.attachments.map((a) => ({ name: a.filename ?? 'attachment', type: a.mimeType, content: a.content })),
+    attachments: mail.attachments.map((a) => ({
+      name: a.filename ?? 'attachment',
+      type: a.mimeType,
+      content: attachmentContent(a.content),
+    })),
   });
 }
 

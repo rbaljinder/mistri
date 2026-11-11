@@ -55,7 +55,7 @@ import { expandEnvReferences } from '@mistriwork/engine/server/auth/credentials.
 import { doorRefusal, writes, type Bound, type ProxyRange } from '@mistriwork/engine/server/http/trust.js';
 import { frontDoor } from '@mistriwork/engine/server/http/frontDoor.js';
 import { embedDoor } from '../embed/crossOrigin.js';
-import { TENANT_HTTP_HEADERS as headers } from '../../shared/tenantContext.js';
+import { PLATFORM_TENANT_ID, TENANT_HTTP_HEADERS as headers } from '../../shared/tenantContext.js';
 import {
   captureTenantData,
   databaseUnanswered,
@@ -858,12 +858,15 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         : undefined;
     };
     /* A public form reached through a tenant's own intake address wears that tenant's published look: the address
-       places the tenant by the intake's one resolution and fence, and the platform's triage places none. */
+       places the tenant by the intake's one resolution and fence, and the platform's triage places none. An address
+       that places nobody reads a look too, the platform's, and drops it: otherwise skipping that read answered
+       an unknown address sooner than a real tenant's that published nothing, and the time told which was real. */
     const placedBranding =
       branding && deployment.intake && deployment.withPublicFlagIntake
         ? async (address: string, form: string) => {
             const tenant = await deployment.withPublicFlagIntake!(form, address, async (owner) => owner.tenantId);
-            return tenant ? branding.presentation(tenant, { private: false, public: true }) : undefined;
+            const worn = await branding.presentation(tenant ?? PLATFORM_TENANT_ID, { private: false, public: true });
+            return tenant ? worn : undefined;
           }
         : undefined;
     /* A tenant's own intake address, by which this App's mapped host places a public form and a page's flags. */

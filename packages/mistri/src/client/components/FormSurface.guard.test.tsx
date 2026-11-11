@@ -5,7 +5,7 @@
  * answer the widget is reset, and a retry waits for the fresh token. A signed-in form draws neither.
  */
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { formArrives, FormSurface, submitPublicForm, type FormPresentation } from './FormSurface.js';
 
 // A script is loaded once a page, so each test names its own.
@@ -133,6 +133,75 @@ test('a filled decoy rides with the submission; an expired token is not sent, th
   const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   expect((init.headers as Record<string, string>)['x-mistri-challenge']).toBe('renewed');
   expect(JSON.parse(String(init.body)).trap).toBe('https://spam.example.test');
+});
+
+class FakeXhr {
+  static sent: FakeXhr[] = [];
+  upload = { onprogress: null };
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  onabort: (() => void) | null = null;
+  status = 0;
+  responseText = '';
+  url = '';
+  headers: Record<string, string> = {};
+  withCredentials = false;
+  open(_method: string, url: string) {
+    this.url = url;
+  }
+  setRequestHeader(name: string, value: string) {
+    this.headers[name] = value;
+  }
+  send() {
+    FakeXhr.sent.push(this);
+  }
+  abort() {}
+  answer(status: number, data: Record<string, unknown>) {
+    this.status = status;
+    this.responseText = JSON.stringify(data);
+    act(() => this.onload?.());
+  }
+}
+
+test('a file held on a challenged form takes a token of its own, and the submit the fresh one after it', async () => {
+  FakeXhr.sent = [];
+  vi.stubGlobal('XMLHttpRequest', FakeXhr);
+  URL.createObjectURL = vi.fn(() => 'blob:a');
+  URL.revokeObjectURL = vi.fn();
+  fetchMock.mockResolvedValueOnce(answer(200, { reference: 'ASK-4', receipt: { id: 'r4', status: 'applied' } }));
+  const id = 'a'.repeat(43);
+  const challenged: FormPresentation = {
+    ...form,
+    challenge: widget,
+    input: [...form.input, { name: 'photos', label: 'Photos', type: 'files', from: 'repair_photo', max: 3, accept: ['image/*'] }],
+  };
+  await formArrives(challenged);
+  const { container } = render(
+    <FormSurface form={challenged} appName="Paints" submit={submit} visitor={{ app: 'paints' }} held={{ form: 'ask' }} />,
+  );
+  loadProviderScript();
+  await waitFor(() => expect(rendered).toHaveLength(1));
+  const give = rendered[0].options.callback as (token: string) => void;
+  give('token-1');
+  fireEvent.change(container.querySelector('input[type=file]')!, {
+    target: { files: [new File([new Uint8Array([137, 80, 78, 71])], 'front.png', { type: 'image/png' })] },
+  });
+  await waitFor(() => expect(FakeXhr.sent).toHaveLength(1));
+  expect(FakeXhr.sent[0].url).toBe('/api/forms/ask/files');
+  expect(FakeXhr.sent[0].headers['x-mistri-challenge']).toBe('token-1');
+  FakeXhr.sent[0].answer(200, { id, name: 'front.png', type: 'image/png', size: 4 });
+  // The hold spent its token: the widget is asked for a fresh one, and the submit waits for it.
+  await waitFor(() => expect(resets).toEqual(['widget-1']));
+  fireEvent.change(screen.getByLabelText('Question (required)'), { target: { value: 'Is it open on Sunday?' } });
+  fireEvent.click(screen.getByRole('button', { name: /Submit|Send/ }));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(fetchMock).not.toHaveBeenCalled();
+  give('token-2');
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect((init.headers as Record<string, string>)['x-mistri-challenge']).toBe('token-2');
+  expect(JSON.parse(String(init.body)).input.photos).toEqual([id]);
+  expect(await screen.findByText('Thanks')).toBeInTheDocument();
 });
 
 test('a signed-in form draws no decoy and no widget', async () => {

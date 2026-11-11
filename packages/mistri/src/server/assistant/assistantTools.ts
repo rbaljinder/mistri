@@ -19,6 +19,7 @@ import { viewOrder } from '../../shared/appModel.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
 import { labelColumn, primaryKey, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { dashboardListQuery } from '@mistriwork/engine/shared/dashboardAsks.js';
+import { formShownFields } from '@mistriwork/engine/shared/form.js';
 import type { Loop } from '@mistriwork/engine/server/http/firstPaint.js';
 import { lookupsOf } from '../http/firstPaintRooms.js';
 import type { AssistantCatalog, CatalogVerb } from './assistantCatalog.js';
@@ -299,15 +300,23 @@ async function find(context: Context, session: ToolSession, input: Record<string
   };
 }
 
+/** A resource's New form as this person is served it, and the fields it asks: all a proposal for it may fill. */
+function newForm(session: ToolSession, resource: string, table: TableMeta) {
+  const form = (
+    session.payload.resources[resource] as
+      | { form?: { show?: string[]; steps?: Array<{ fields: string[] }>; defaults?: Record<string, unknown> } }
+      | undefined
+  )?.form;
+  const shown = formShownFields(form) ?? table.columns.filter((column) => !column.primaryKey).map((column) => column.name);
+  return { form, shown };
+}
+
 async function describe(context: Context, session: ToolSession, input: Record<string, unknown>) {
   if (typeof input.action === 'string') {
     const verb = context.verbOf(input.action);
     const table = await context.tableOf(verb.resource);
     if (verb.kind === 'new') {
-      const form = (
-        session.payload.resources[verb.resource] as { form?: { show?: string[]; defaults?: Record<string, unknown> } } | undefined
-      )?.form;
-      const shown = form?.show ?? table.columns.filter((column) => !column.primaryKey).map((column) => column.name);
+      const { form, shown } = newForm(session, verb.resource, table);
       const fields = table.columns
         .filter((column) => shown.includes(column.name))
         .map((column) => ({
@@ -517,6 +526,7 @@ async function show(context: Context, session: ToolSession, input: Record<string
 
 async function propose(
   context: Context,
+  session: ToolSession,
   input: Record<string, unknown>,
   id: string,
 ): Promise<{ proposal: Proposal; label: string; result: unknown }> {
@@ -526,11 +536,13 @@ async function propose(
     input.values && typeof input.values === 'object' && !Array.isArray(input.values) ? (input.values as Record<string, unknown>) : {};
   const why = typeof input.why === 'string' && input.why.trim() ? input.why.trim().slice(0, 300) : undefined;
   if (verb.kind === 'new') {
-    const columns = new Set(table.columns.map((column) => column.name));
-    const unknown = Object.keys(values).filter((name) => !columns.has(name));
+    /* Only what the New form asks: a column it does not show (a hidden one, one the machine or the platform fills)
+       would otherwise ride into the form as a default the person never sees, and be written on their Confirm. */
+    const { shown } = newForm(session, verb.resource, table);
+    const unknown = Object.keys(values).filter((name) => !shown.includes(name));
     if (unknown.length)
       throw new ToolRefusal(
-        `${verb.resource} has no field ${unknown.map((name) => `"${name}"`).join(', ')}; describe ${verb.resource}.new for its fields.`,
+        `The New ${verb.resource} form has no field ${unknown.map((name) => `"${name}"`).join(', ')}; describe ${verb.resource}.new for its fields.`,
       );
     const proposal: Proposal = {
       id,
@@ -607,7 +619,7 @@ export async function answerTool(session: ToolSession, name: string, input: unkn
   try {
     if (!(session.assistant.tools as string[]).includes(name)) throw new ToolRefusal(`There is no tool "${name}" here.`);
     if (name === 'run') {
-      const { proposal, label, result } = await propose(context, args, id);
+      const { proposal, label, result } = await propose(context, session, args, id);
       return {
         result: JSON.stringify(result),
         proposal,
