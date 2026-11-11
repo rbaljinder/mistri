@@ -228,11 +228,16 @@ type WriteConstant = { readonly auto: 'now' | 'today' | 'me' };
 /** What a write may give a column: its value, or a constant the server works out as the write runs. */
 export type Written<Row> = { readonly [C in keyof Row]?: Row[C] | WriteConstant };
 
+/** What a write tells besides its row: `words` its notices say (`{words.code}` in a notify title), never stored. */
+export interface WriteOptions {
+  readonly words?: Readonly<Record<string, string>>;
+}
+
 export interface WriteTable<Row> extends ReadTable<Row> {
   /** The row as stored, its key and defaults included. */
-  insert(values: Written<Row>): Promise<Row>;
+  insert(values: Written<Row>, options?: WriteOptions): Promise<Row>;
   /** Writes `changes` guarded by the row's values for those columns, bumping its revision: the new row, or `stale_record`. */
-  update(row: Row, changes: Written<Row>): Promise<Row>;
+  update(row: Row, changes: Written<Row>, options?: WriteOptions): Promise<Row>;
   /** Removes the row by its key, or `stale_record` when it is gone. */
   remove(row: Row): Promise<void>;
   /**
@@ -597,6 +602,20 @@ const NOT_SUMMED = /money|json|xml|bytea|blob|binary|interval|array|\[\]/i;
    (refusal.ts authorFault); the caller hears the fixed sentence. */
 function authorMistake(message: string): never {
   throw authorFault(new BusinessCommandExecutionError('invalid_result'), message);
+}
+
+/* A write's words for its notices: a few short named texts, said once and kept nowhere but sealed on their way. */
+const WORD_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,62}$/;
+function wordsOf(name: string, written: WriteOptions | undefined): Readonly<Record<string, string>> | undefined {
+  const words = (written as { words?: unknown } | undefined)?.words;
+  if (words === undefined) return undefined;
+  if (typeof words !== 'object' || words === null || Array.isArray(words)) authorMistake(`${name}: words is an object of named texts.`);
+  const entries = Object.entries(words);
+  if (entries.length > 20) authorMistake(`${name}: a write gives its notices at most 20 words.`);
+  for (const [word, text] of entries)
+    if (!WORD_NAME.test(word) || typeof text !== 'string' || text.length > 2000)
+      authorMistake(`${name}: words.${word.slice(0, 64)} is a name and a text of at most 2,000 characters.`);
+  return Object.freeze(Object.fromEntries(entries)) as Readonly<Record<string, string>>;
 }
 
 /* The places a column holds: PostgreSQL's catalog says them beside the type, SQLite's type string says them itself. */
@@ -1086,9 +1105,10 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
     }
     return { table: name, key, expected, values };
   };
-  const insert = async (given: Record<string, unknown>) => {
+  const insert = async (given: Record<string, unknown>, written?: WriteOptions) => {
     const values = await withConstants(table, given, options);
-    const result = await writer.insert({ table: name, values: values as Record<string, Value> });
+    const words = wordsOf(name, written);
+    const result = await writer.insert({ table: name, values: values as Record<string, Value>, ...(words ? { words } : {}) });
     return normalizeRow(table, result.row ?? { ...result.applied, ...result.key }) as UntypedRow;
   };
   return Object.freeze({
@@ -1113,10 +1133,11 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
       options.stored?.(name, data);
       return row;
     },
-    async update(row, changes) {
+    async update(row, changes, written) {
+      const words = wordsOf(name, written);
       const values = await changed(changes);
       if (!Object.keys(values).length) return row;
-      const request = guarded(row, values);
+      const request = { ...guarded(row, values), ...(words ? { words } : {}) };
       let result: Awaited<ReturnType<WriteTransaction['update']>>;
       try {
         result = await writer.update(request);

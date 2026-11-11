@@ -84,8 +84,28 @@ export function asksDraftLogic(fields: readonly AppCommandField[], rules?: reado
   if (rules?.length) return true;
   return fields.some((field) => whenOf(field) !== undefined || (field.type === 'group' && asksDraftLogic(field.fields)));
 }
-/** Whether a condition reads the record (`record.<column>`): exact once the logic is here, a plain reading before. */
-export const readsRecord = (when: string): boolean => (drafting ? drafting.readsRecord(when) : /\brecord\./.test(when));
+/** Whether a condition reads the record (`record.<path>`) or the tenant (`tenant.<column>`), which prepare judges:
+ * exact once the logic is here, a plain reading before. */
+const readsRecord = (when: string): boolean => (drafting ? drafting.readsRecord(when) : /(?<![\w.])(?:record|tenant)\./.test(when));
+
+/* The fields a prepared form is asked. A `when` that reads the record or the tenant waits for prepare: left out where
+   that part never holds, a plain field where it always does, and otherwise the draft's part prepare left to judge as
+   it is typed. A `when` over the draft alone is the form's own to judge (commandDraft.ts). The browser is told only
+   these truths, never the values behind them. */
+export function askedFields(
+  input: readonly AppCommandField[],
+  prepared: { withheld?: string[]; when?: Record<string, string> } | undefined,
+): readonly AppCommandField[] {
+  if (!input.some((field) => field.type !== 'group' && field.type !== 'lines' && field.when !== undefined && readsRecord(field.when)))
+    return input;
+  return input.flatMap((field): AppCommandField[] => {
+    if (field.type === 'group' || field.type === 'lines' || field.when === undefined || !readsRecord(field.when)) return [field];
+    if (!prepared || prepared.withheld?.includes(field.name)) return [];
+    const { when: _when, ...plain } = field;
+    const left = prepared.when?.[field.name];
+    return [(left === undefined ? plain : { ...plain, when: left }) as AppCommandField];
+  });
+}
 /* A record's lines: the grid, with the catalog's cells and the words for a cell, fetched the first time a form asks
    lines. A public form cannot ask them, so its first page carries none of it. The cells are judged here by kind once it
    has arrived, which it has by the time a grid is drawn; before then, and in any case, the server reads them again. */

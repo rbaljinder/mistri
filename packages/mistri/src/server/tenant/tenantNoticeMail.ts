@@ -39,6 +39,7 @@ import type { TenantNames } from './tenantNames.js';
 import type { PlatformReadContext } from './tenantPlatformReadRuntime.js';
 import type { TenantReadContext } from './tenantReadRuntime.js';
 import { tenantServedSchema, withRequestInstant } from './tenantServedSchema.js';
+import { NOTICE_WORDS_UNOPENED, openNoticeWords } from '../app/noticeWordsSeal.js';
 
 /** What of the enrolled deployment the sender uses: its reads as a request, and the outbox beside its inbox. */
 interface NoticeMailDeployment<Request> {
@@ -81,7 +82,10 @@ export function openTenantNoticeMail<Request>(options: TenantNoticeMailOptions<R
     let outcome: MailOutcome;
     try {
       const person = await options.account(mail.recipient);
+      /* A title that says the write's words is kept masked; the said one waited sealed to this row (outbox.ts). */
+      const title = mail.words === undefined ? mail.title : openNoticeWords(app.id, [mail.app, String(mail.notice)], mail.words);
       if (!person || (await store.emailOff(mail.app, mail.recipient))) outcome = skipped;
+      else if (title === undefined) outcome = { kind: 'failed', error: NOTICE_WORDS_UNOPENED };
       else {
         const request = createTenantApiRequest(async () => {
           const again = await options.account(mail.recipient);
@@ -98,7 +102,7 @@ export function openTenantNoticeMail<Request>(options: TenantNoticeMailOptions<R
             resource: mail.resource,
             key: mail.key,
             uses: mail.uses,
-            title: mail.title,
+            title,
           });
           if (!told) return undefined;
           let segments: string[] | undefined;

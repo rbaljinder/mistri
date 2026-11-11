@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { realpathSync, statSync, watch, type FSWatcher } from 'node:fs';
-import { basename, dirname, extname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import type { IncomingMessage } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { PostgresAdapter } from '@mistriwork/engine/adapters/postgres.js';
@@ -17,7 +17,8 @@ import {
   tenantAppShape,
   tenantBusinessApp,
 } from '../../shared/app.js';
-import { appRoutes, LOADED_APP_KEYS, type LoadedApp } from '../app/apps.js';
+import { appRoutes, commandsInWords, LOADED_APP_KEYS, type LoadedApp } from '../app/apps.js';
+import { appCatalogs, MessageSayer } from '../app/appMessages.js';
 import type { SuiteLinkSurface } from '../app/suiteLinks.js';
 import { tenantAuthoringSchema } from './tenantVisibleFields.js';
 import { declareTenantPool } from './tenantConnections.js';
@@ -403,7 +404,15 @@ export async function prepareTenantStartup(
     }
     stage = 'the server-only command registry';
     const commandDeclarations = commandsFile === undefined ? discovered : await loadBusinessCommands(commandsFile);
-    const registry = commandDeclarations && withCommandVersions(commandDeclarations, lockedVersion(loaded.authority?.lock));
+    const catalogs = appCatalogs(loaded.app);
+    /* Its inputs in the App's own words, as the loader holds them (apps.ts commandsInWords). */
+    const registry =
+      commandDeclarations &&
+      (await commandsInWords(
+        withCommandVersions(commandDeclarations, lockedVersion(loaded.authority?.lock)),
+        catalogs && new MessageSayer(catalogs, catalogs.source),
+        commandsFile ?? 'commands',
+      ));
     stage = 'the server-only jobs module';
     const loadedJobs = jobsFile === undefined ? undefined : await loadJobModule(jobsFile);
     /* The App's machine timers (`after`, `at`) run as jobs of this module, in the tenant each row's owner names
@@ -568,6 +577,12 @@ export async function prepareTenantStartup(
  * tools), a package manager's, and git's. As devSupervisor.ts's watcher skips them.
  */
 const NOT_THE_APP = new Set(['.mistri', 'node_modules', '.git']);
+/**
+ * What in it is: any module (a component or a page is .tsx or .jsx, and devChangeKind in tenantLook.ts places them), a
+ * JSON file, a stylesheet a component imports and a theme's font. Not a log, a database's journal or an editor's swap
+ * file, which a running App writes beside its source on every request.
+ */
+const APP_FILE = /\.(?:[cm]?[jt]sx?|json|css|woff2?|ttf|otf)$/i;
 export function watchTenantStartup(
   options: {
     loaded: LoadedApp;
@@ -625,7 +640,7 @@ export function watchTenantStartup(
       } catch {
         return invalidate();
       }
-      if (filename !== null && !['.ts', '.mjs', '.js', '.json'].includes(extname(filename))) return;
+      if (filename !== null && !APP_FILE.test(filename)) return;
       if (filename === null || !options.look) return invalidate(filename === null ? undefined : [join(root, filename)]);
       touched.add(join(root, filename));
       clearTimeout(timer);

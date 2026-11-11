@@ -250,3 +250,27 @@ test("with me.by: 'account' an App's people are told by account id too, and the 
   const idColumn = { ...byAccount, auth: { ...byAccount.auth, me: { from: 'person', column: 'account_id', by: 'account' as const } } };
   assert.deepEqual(notifyAdvisories(idColumn, schema), []);
 });
+
+test("a title's {words.x} is said only by mail or on a channel, and only for a write's notice", () => {
+  const rule = { on: 'insert', to: 'watcher', title: 'Your code is {words.code}', email: true };
+  const { rules, problems } = appNotifyRules(app([rule]), schema);
+  assert.deepEqual(problems, []);
+  assert.deepEqual(rules.get('post')![0].title, ['Your code is ', { word: 'code' }]);
+  const said = (notify: unknown, extra: Record<string, unknown> = {}) => appNotifyRules(app(notify, extra), schema).problems.join('\n');
+  assert.throws(() => app([{ ...rule, title: 'Code {words.1x}' }]), /\[notify-words\] \{words\.1x\} does not name a word/);
+  assert.match(said([{ ...rule, email: undefined }]), /\[notify-words\] the title says a write's word, which the inbox masks/);
+  const flowing = {
+    resources: {
+      person: {},
+      thread: { access: 'write' },
+      post: {
+        access: 'write',
+        notify: [{ on: { flow: 'author' }, to: 'thread_id.author_id', title: 'Code {words.code}', email: true }],
+        flows: { from: 'post_flow', steps: 'post_step' },
+      },
+      post_flow: { access: 'write' },
+      post_step: { access: 'write' },
+    },
+  };
+  assert.match(said([], flowing), /\[notify-words\] the title's \{words\.code\} is a write's word, and a flow's notice has no write/);
+});

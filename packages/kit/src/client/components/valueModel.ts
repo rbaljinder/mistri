@@ -182,9 +182,11 @@ export function ruleSays(rule: DisplayRule | null | undefined, value: unknown): 
 /** Vocabulary captions only: identifiers and arbitrary grouped text stay exact.
  * A toned value is a word everywhere; a value of the column's own vocabulary
  * (`allowed`) is a word in an App, where the Workbench shows the data.
+ * A group of no value is the field's missing value, said in the field's own
+ * `empty` word where it has one, as its cell says it, and a dash where not.
  * Callers keep the raw key for navigation and aggregation. */
 export function groupLabel(rule: DisplayRule | null | undefined, value: unknown, allowed?: readonly string[]): string {
-  if (value == null) return '—';
+  if (value == null) return rule?.empty ?? '—';
   const text = String(value);
   const vocabulary = allowed?.includes(text) && typeof document !== 'undefined' && shellBody()?.classList.contains('app-mode');
   return wordFor(rule, text) ?? (rule?.tone || vocabulary ? vocabularyWord(text) : text);

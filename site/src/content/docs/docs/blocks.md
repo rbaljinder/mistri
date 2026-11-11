@@ -471,7 +471,7 @@ A warehouse App takes proof of delivery on a pick list this way. The pad is in t
 
 ### Empty
 
-What a missing value means, said where the dash would stand: a list's cell, a record's field and a value drawn alone. A ticket not yet resolved has no `resolved_at`, and "Open" is the answer.
+What a missing value means, said where the dash would stand: a list's cell, a record's field, a value drawn alone, and the group of rows with no value in a breakdown, a chart or a matrix over the field. A ticket not yet resolved has no `resolved_at`, and "Open" is the answer.
 
 ```ts
 resolved_at: { empty: 'Open' },

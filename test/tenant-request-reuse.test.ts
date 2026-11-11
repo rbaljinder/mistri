@@ -20,7 +20,7 @@ import { pruneCounters } from '../packages/mistri/src/server/app/appAccess.js';
 import { appResourceCatalog } from '../packages/mistri/src/server/app/appResources.js';
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { captureCounters, captureTenantData } from '../packages/engine/src/server/evidence.js';
-import { capturedLocalization } from '../packages/mistri/src/server/tenant/tenantHttp.js';
+import { capturedLocalization } from '../packages/mistri/src/server/tenant/tenantProjection.js';
 import type { AppDef } from '../packages/mistri/src/shared/app.js';
 import type { PageDef } from '../packages/engine/src/shared/pageModel.js';
 import { capabilityCounters } from '../packages/mistri/src/server/tenant/tenantCapabilities.js';

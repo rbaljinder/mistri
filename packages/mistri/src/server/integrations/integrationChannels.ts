@@ -45,6 +45,7 @@ import { EmailFailure, type EmailTransport } from '../email/email.js';
 import type { UnsubscribeClaim } from '../email/unsubscribe.js';
 import { knownTimeZone, type CapturedIntegrations } from './integrationDeclaration.js';
 import type { IntegrationRuntime } from './integrationRuntime.js';
+import { keptReason, NOTICE_WORDS_UNOPENED, openNoticeWords } from '../app/noticeWordsSeal.js';
 
 /**
  * A recipient's address as consent is kept by: a digest, so the opt-out list
@@ -59,6 +60,11 @@ export function channelHolder(address: string, channel: string): string {
     .update(`mistri.channel-holder.v1\n${channel === EMAIL_CHANNEL ? same : same.replace(/[\s().-]/g, '')}`)
     .digest('hex');
 }
+
+/* A notice that says a write's words keeps them masked in `text`; the said text waits sealed to its row
+   (noticeWordsSeal.ts), and one that does not open here is never sent masked. */
+const saidOf = (appId: string, row: MessageRow): string | undefined =>
+  row.words ? openNoticeWords(appId, [row.app, row.tenant, row.key], row.words) : row.text;
 
 const MINUTE = 60_000;
 /* A send that may pass is tried again a minute on, eight times in all, then recorded failed: on every channel. */
@@ -131,12 +137,17 @@ export function channelSender(runtime: IntegrationRuntime, channel: string) {
       });
       return 'rejected';
     }
+    const text = saidOf(runtime.appId, row);
+    if (text === undefined) {
+      await put({ ...row, state: 'failed', reason: NOTICE_WORDS_UNOPENED, dueAt: null, at: runtime.now() });
+      return 'rejected';
+    }
     try {
       const sent = (await integration.channel.send(
         integration.client(secrets),
         Object.freeze({
           to: row.recipient,
-          text: row.text,
+          text,
           idempotencyKey: row.key,
         }),
         Object.freeze({ signal }),
@@ -157,7 +168,7 @@ export function channelSender(runtime: IntegrationRuntime, channel: string) {
         await put({
           ...row,
           state: 'failed',
-          reason: error.reason ?? error.code,
+          reason: keptReason(error.reason ?? error.code, row.words),
           dueAt: null,
           attempts: row.attempts + 1,
           at: runtime.now(),
@@ -319,12 +330,14 @@ export function emailChannelSender(
       channel: EMAIL_CHANNEL,
       holder,
     });
-    const [subject] = row.text.split('\n', 1);
+    const text = saidOf(appId, row);
+    if (text === undefined) return put({ ...row, state: 'failed', reason: NOTICE_WORDS_UNOPENED, dueAt: null, at });
+    const [subject] = text.split('\n', 1);
     try {
       await transport.send({
         to: row.recipient,
         subject,
-        text: `${row.text}\n\nTo stop these emails: ${link}\n`,
+        text: `${text}\n\nTo stop these emails: ${link}\n`,
         unsubscribe: link,
       });
     } catch (error) {
@@ -332,7 +345,7 @@ export function emailChannelSender(
         return put({
           ...row,
           state: 'failed',
-          reason: error.message,
+          reason: keptReason(error.message, row.words),
           dueAt: null,
           attempts: row.attempts + 1,
           at: now(),

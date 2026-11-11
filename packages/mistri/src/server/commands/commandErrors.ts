@@ -4,6 +4,7 @@ import { COMMAND_FIELD_PATH } from '@mistriwork/engine/shared/commandFieldPath.j
 import { COMMAND_REFUSAL_MESSAGES } from '../../shared/commandRefusals.js';
 import { refusalSaid } from '@mistriwork/engine/shared/refusal.js';
 import type { CommandKey } from './commandPayload.js';
+import type { UntypedRow, WriteTable } from './commandDb.js';
 
 const messages = COMMAND_REFUSAL_MESSAGES;
 
@@ -101,7 +102,39 @@ export function isBusinessCommandExecutionError(error: unknown): error is Busine
 /** The codes a handler may refuse with: the platform's, each with its fixed message. */
 export type RefusalCode = keyof typeof messages;
 
-type RefusalDetail = { readonly field?: string; readonly key?: Readonly<Record<string, string | number>> };
+/** A table as a refusal's `keep` writes it: read, insert and update; never remove, never a file. */
+export type RefusalKeepTable = Omit<WriteTable<UntypedRow>, 'remove' | 'insertFile'>;
+/** What `keep` is handed: the tables of the command's `refused: { writes }`, and only those. */
+export type RefusalKeepDb = Readonly<Record<string, RefusalKeepTable>>;
+
+type RefusalDetail = {
+  readonly field?: string;
+  readonly key?: Readonly<Record<string, string | number>>;
+  /** What the refusal still writes, in a fresh transaction once the handler's own writes are rolled back. Method
+      syntax, so a handler may annotate `db` with its own context's type. */
+  keep?(db: RefusalKeepDb): Promise<unknown>;
+};
+
+/* Registered, like the brand: the executor may hold another copy of this module than the handler's. Not
+   enumerable, so a refusal said anywhere never carries its function along. */
+const keepKey = Symbol.for('mistri.refusalKeep');
+const keeping = (error: BusinessCommandExecutionError, keep: RefusalDetail['keep']): BusinessCommandExecutionError => {
+  if (keep !== undefined) {
+    if (typeof keep !== 'function') throw new TypeError('refuse() keep is an async function of the refused writes.');
+    Object.defineProperty(error, keepKey, { value: keep, enumerable: false });
+  }
+  return error;
+};
+
+/** The `keep` a handler's refusal carries, if it carries one. */
+export const refusalKeep = (error: unknown): ((db: RefusalKeepDb) => Promise<unknown>) | undefined => {
+  const keep = error && typeof error === 'object' ? (error as Record<symbol, unknown>)[keepKey] : undefined;
+  return typeof keep === 'function' ? (keep as (db: RefusalKeepDb) => Promise<unknown>) : undefined;
+};
+
+/** `to`, carrying the `keep` that `from` carries: a refusal said again elsewhere still leaves behind what it must. */
+export const carryRefusalKeep = (from: unknown, to: BusinessCommandExecutionError): BusinessCommandExecutionError =>
+  keeping(to, refusalKeep(from));
 
 /**
  * Refuse the command: nothing it wrote is kept, and the caller hears `code`'s
@@ -120,13 +153,18 @@ type RefusalDetail = { readonly field?: string; readonly key?: Readonly<Record<s
  * refund', { field: 'amount' })` is `invalid_input` — the answer, not the
  * record, is what stops it — said under that field of the form, which stays
  * open to be corrected. The field is an input's path, as `detail` names one.
+ *
+ * `{ keep: async (db) => … }` writes what a refusal must still leave behind — a
+ * failed attempt counted, a lockout set — in a fresh transaction once the
+ * handler's writes are rolled back, through the tables the command names in
+ * `refused: { writes }`. The refusal is answered after it commits.
  */
 export function refuse(reason: string, detail?: RefusalDetail): never;
 export function refuse(code: RefusalCode, detail?: string | RefusalDetail): never;
 export function refuse(codeOrReason: string, detail?: string | RefusalDetail): never {
-  const { field, key } = typeof detail === 'string' ? { field: detail, key: undefined } : (detail ?? {});
+  const { field, key, keep } = typeof detail === 'string' ? { field: detail, key: undefined, keep: undefined } : (detail ?? {});
   if (Object.hasOwn(messages, codeOrReason))
-    throw new BusinessCommandExecutionError(codeOrReason as RefusalCode, 'not_applied', field, key);
+    throw keeping(new BusinessCommandExecutionError(codeOrReason as RefusalCode, 'not_applied', field, key), keep);
   /* A word shaped like a code that is not one is a typo, not a sentence for
      a reader; it fails the handler rather than showing "ineligble_state". */
   const reason = readerReason(codeOrReason);
@@ -139,8 +177,8 @@ export function refuse(codeOrReason: string, detail?: string | RefusalDetail): n
     throw new TypeError(
       `refuse() names a field by its input's path, such as "amount" or "lines[1].quantity"; got ${JSON.stringify(String(field).slice(0, 60))}.`,
     );
-  if (field !== undefined) throw new BusinessCommandExecutionError('invalid_input', 'not_applied', field, key, reason);
-  throw new BusinessCommandExecutionError('ineligible_state', 'not_applied', undefined, key, reason);
+  if (field !== undefined) throw keeping(new BusinessCommandExecutionError('invalid_input', 'not_applied', field, key, reason), keep);
+  throw keeping(new BusinessCommandExecutionError('ineligible_state', 'not_applied', undefined, key, reason), keep);
 }
 
 /** `forbidden`, in the words of the rule that refused where it said them (sayRefusal), else the code's fixed message. */

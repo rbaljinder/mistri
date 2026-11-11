@@ -18,7 +18,10 @@ export const recordPickers = (command: AnyBusinessCommand) =>
 /* The fields that start from the record or the reader (`default: { record: 'on_hand' }`, `default: me`): prepare reads them. */
 export const preparedStarts = (command: AnyBusinessCommand) =>
   command.fields.filter(
-    (field) => field.type !== 'group' && typeof field.default === 'object' && ('record' in field.default || field.default.auto === 'me'),
+    (field) =>
+      field.type !== 'group' &&
+      typeof field.default === 'object' &&
+      ('record' in field.default || 'tenant' in field.default || field.default.auto === 'me'),
   ) as Array<Exclude<AppCommandField, { type: 'group' }>>;
 
 /* The inputs asked only of some records (`when: 'record.open_children > 0'`): prepare judges the record's part of

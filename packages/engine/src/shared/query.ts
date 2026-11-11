@@ -32,7 +32,7 @@ import { distance, nearest } from './suggest.js';
 import { columnKind, findTable, type ColumnMeta, type DatabaseSchema, type MachineStates, type TableMeta } from './schema.js';
 import { dateWindow } from './queryDates.js';
 import { maskQuoted } from './maskQuoted.js';
-import { ME_SET, columnOperand, meOperand, meSetOperand, type CompileContext, type QueryPerson } from './queryOperands.js';
+import { ME_SET, columnOperand, meOperand, meSetOperand, tenantOperand, type CompileContext, type QueryPerson } from './queryOperands.js';
 import { TAGS_TYPE } from './tagLists.js';
 import { DEFINED_PATH_TYPE } from './definedFields.js';
 
@@ -840,6 +840,15 @@ function compileClause(raw: string, ctx: CompileContext): { conditions?: Conditi
         const groups = item.quoted ? undefined : (column?.states ?? ctx.states?.[name])?.groups;
         if (groups && Object.hasOwn(groups, item.value))
           return { error: `"${item.value}" is a group of ${name}'s states; ask it with is: ${name} is ${item.value}.` };
+        const fromTenant = tenantOperand(ctx, column, item.value, item.quoted);
+        if (fromTenant) {
+          if (fromTenant.error) return { error: fromTenant.error };
+          if (typeof fromTenant.value === 'boolean')
+            return { error: `${item.value} is a flag: ask it with =, as in ${name} = ${item.value}.` };
+          /* A null profile value is in no list: left out, as a row key no one has. */
+          if (fromTenant.value !== undefined) values.push(fromTenant.value);
+          continue;
+        }
         if (!item.quoted && item.value === 'me') {
           if (ctx.me === undefined) return { error: NO_ONE_HERE };
           const me = meOperand(ctx, column, '=');
@@ -892,6 +901,13 @@ function compileClause(raw: string, ctx: CompileContext): { conditions?: Conditi
        every row, silently, on any path that forgot the person: refused here, so it forgets loudly. A path where
        nobody is signed in says so (`me: null`); a check before any request reads it as anyone's (ANYONE). */
     if (!quoted && value === 'me' && ctx.me === undefined) return { error: NO_ONE_HERE };
+    /* The reader's tenant profile (`country = tenant.country`), read once for this request; a null value matches no row. */
+    const fromTenant = tenantOperand(ctx, column, value, quoted);
+    if (fromTenant) {
+      if (fromTenant.error) return { error: fromTenant.error };
+      if (fromTenant.none) return { conditions: [{ column: name, op: 'in', value: [] }] };
+      return { conditions: [{ column: name, op, value: fromTenant.value! }] };
+    }
     if (!quoted && value === 'me') {
       const me = meOperand(ctx, column, op);
       if (me.error) return { error: me.error };

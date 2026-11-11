@@ -18,7 +18,8 @@ import {
 import { createTenantMembershipIssuer, type TenantMembershipEvidence } from './tenantMembership.js';
 import { composeTenantReadScope } from './tenantReadScope.js';
 import { tenantAppAccess } from './tenantAccess.js';
-import { advisoryRecords, captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
+import { advisoryRecords, captureTenantReadSource, readSharedProfile, type TenantReadSource } from './tenantReadSource.js';
+import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import { assertTenantSourcePair } from './tenantSourceIdentity.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { captureTenantWriteSource, TenantWriteFailure, type TenantWriteSource } from './tenantWriteSource.js';
@@ -59,9 +60,9 @@ export interface TenantRequestScope {
   reads(): ReturnType<TenantReadSource['scopeReads']>;
   /** A command's read of an audited resource, written through the writer outside any transaction (tenantReadAudit.ts). */
   appendReadAudit(row: ReadAuditRow): Promise<void>;
-  /** One text column of this tenant's platform-owned profile row, as the source reads it for the person's zone
-   * (`readTenantZone`): no resource read, no grant, that column alone. */
-  profileZone(column: string): Promise<string | undefined>;
+  /** The tenant's shared profile columns (`auth.tenancy.shared`), read once for this request before its row scope:
+   * what a handler's `tenant`, `tenant.<column>` and the person's zone read. Empty where the App shares none. */
+  readonly tenant: Readonly<Record<string, TenantValue>>;
 }
 function delivered<T>(value: T | Promise<T>): T | Promise<T> {
   return isPromise(value)
@@ -257,6 +258,7 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
            nothing has been written. */
         let rows!: RowScope,
           grants!: ResourceAccess,
+          profile!: Readonly<Record<string, TenantValue>>,
           kept = false;
         const admit = async (first: boolean) => {
           for (let fresh = first; ; fresh = true) {
@@ -277,7 +279,9 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
               active();
               // Granted to the roles this request acts under: a token's own (tenantApiRequest.ts).
               const acting = actingPrincipal(request, principal);
-              const authored = delivered(authoredRows(acting)),
+              profile = await readSharedProfile(reader, app, principal.tenantId);
+              active();
+              const authored = delivered(authoredRows(acting, Object.freeze({ tenant: profile }))),
                 policy = isPromise(authored) ? await authored : authored;
               active();
               rows = composeTenantReadScope(ownership, principal, member, policy);
@@ -430,10 +434,7 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
               active();
               return writer.appendReadAudit(row);
             },
-            profileZone: (column) => {
-              active();
-              return reader.readTenantZone({ tenantId: admitted.tenantId, column });
-            },
+            tenant: profile,
           });
           let result!: T;
           const completed = (value: T): T => {

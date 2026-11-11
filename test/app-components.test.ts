@@ -357,6 +357,61 @@ describe('served, and built', () => {
     }
   });
 
+  test("check fails a component's message key the App's catalog lacks, and a message in an App with no catalog", async () => {
+    /* A field report: a component's text was missing in the browser while `check` passed. useMessage says a key the
+       catalog lacks as itself, by design, so nothing failed until a person read the page. */
+    const said = (name: string, files: Record<string, string>) => {
+      const at = dir(name, {
+        'widgets/Hello.jsx': [
+          "import { useMessage } from '@mistriwork/mistri/ui';",
+          '// useMessage("in.a.comment") is not a finding',
+          'export default function Hello() {',
+          '  return <p className="c-hello">{useMessage(\'hello.title\')} {useMessage("hello.count", { count: 2 })}</p>;',
+          '}',
+        ].join('\n'),
+        'app.mjs': [
+          "import { component, custom, dashboard, defineApp } from '@mistriwork/mistri/app';",
+          "const hello = component('hello', { module: './widgets/Hello.jsx' });",
+          "export default defineApp({ id: 'tick', name: 'Tick', connection: 'tick', resources: { task: {} },",
+          "  views: { tasks: { kind: 'list', from: 'task' }, home: dashboard('Home', [custom('Hello', hello)]) },",
+          "  home: 'home', nav: ['home', 'tasks'] });",
+        ].join('\n'),
+        ...files,
+      });
+      const run = spawnSync(process.execPath, ['--import', 'tsx', ENTRY, 'check', '--app', at, '--config', `${db}.json`, '--warnings'], {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: { ...process.env, XDG_CONFIG_HOME: join(work, 'xdg') },
+        timeout: 120_000,
+      });
+      return { at, status: run.status, out: run.stdout + run.stderr };
+    };
+    const lacking = said('messages-lacking', {
+      'messages/en.mjs':
+        "import { defineMessages } from '@mistriwork/mistri/app';\nexport default defineMessages('en', { 'hello.title': 'Hello there' });\n",
+    });
+    assert.notEqual(lacking.status, 0, lacking.out);
+    assert.match(lacking.out, /Hello\.jsx:4 {2}.*"hello\.count" is not in messages\/en\.mjs/);
+    assert.doesNotMatch(lacking.out, /"hello\.title"/);
+    assert.doesNotMatch(lacking.out, /in\.a\.comment/);
+    // Serving keeps saying the slip as the key, as before: a missing message is check's to fail, not a load's.
+    assert.deepEqual(Object.keys((await loadApp(lacking.at)).components!.entries), ['hello']);
+
+    const none = said('messages-none', {});
+    assert.notEqual(none.status, 0, none.out);
+    assert.match(none.out, /Hello\.jsx:4 {2}.*useMessage\("hello\.title"\): the App has no messages\/<locale>\.ts/);
+
+    const whole = said('messages-whole', {
+      'messages/en.mjs':
+        "import { defineMessages } from '@mistriwork/mistri/app';\n" +
+        "export default defineMessages('en', { 'hello.title': 'Hello there', 'hello.count': '{count, plural, one {# task} other {# tasks}}', 'spare.key': 'Spare' });\n",
+    });
+    assert.equal(whole.status, 0, whole.out);
+    // A key only a component says is named: check advised removing it, which is how a component's text goes missing.
+    assert.match(whole.out, /"spare\.key" is named by no msg\(\)/);
+    assert.doesNotMatch(whole.out, /"hello\.(title|count)" is named by no msg\(\)/);
+  });
+
   test('mistri build writes the components/ graph and serves it back with no compiler', async () => {
     const out = join(work, 'build');
     const built = await new Promise<{ code: number; out: string; err: string }>((done) =>

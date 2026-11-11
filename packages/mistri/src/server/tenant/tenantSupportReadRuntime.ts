@@ -29,6 +29,7 @@ import { isPromise } from 'node:util/types';
 import type { Adapter, AggregateRequest, ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
 import { declaredReferences, physicalBindings, resolveAppAccess, tenantAppShape, type AppDef } from '../../shared/app.js';
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
+import type { TenantRowsContext } from '../policy/appTenantPolicy.js';
 import { assertScopeCatalog, captureScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { authorizeResources } from '../app/appAccess.js';
@@ -49,7 +50,7 @@ import {
 import { checkTenantInvocation, revalidateTenantInvocation, type TenantInvocationGuard } from './tenantInvocation.js';
 import type { TenantMembershipEvidence } from './tenantMembership.js';
 import { composeTenantReadScope } from './tenantReadScope.js';
-import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
+import { captureTenantReadSource, readSharedProfile, type TenantReadSource } from './tenantReadSource.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { isSupportEvidence, type SupportMembershipEvidence } from './tenantSupportLease.js';
 import { supportAsMember } from './tenantSupportMembership.js';
@@ -76,7 +77,7 @@ export interface SupportReadRuntimeOptions<Request> {
   /** The App's own rules for a dealer's rows, read on a member view of the
    * session's evidence: one rule, never a second that could disagree. */
   readonly resolveMembershipRows: (principal: TenantMembershipEvidence) => RowScope | Promise<RowScope>;
-  readonly resolveRows: (principal: TenantMembershipEvidence) => RowScope | Promise<RowScope>;
+  readonly resolveRows: (principal: TenantMembershipEvidence, context: TenantRowsContext) => RowScope | Promise<RowScope>;
   readonly presentation?: (principal: TenantMembershipEvidence, schema: DatabaseSchema) => TenantCapabilities;
   readonly now?: () => number;
   /** Where an audited resource's read is written (tenantReadAudit.ts), as `support:<operator>` with the visit. */
@@ -271,7 +272,10 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
           const membershipResult = delivered(membershipRows(view));
           const member = isPromise(membershipResult) ? await membershipResult : membershipResult;
           assertActive();
-          const authoredResult = delivered(authoredRows(view));
+          // The tenant's shared profile, once, as a member's request reads it (tenantReadRuntime.ts).
+          const tenant = await readSharedProfile(source, app, view.tenantId);
+          assertActive();
+          const authoredResult = delivered(authoredRows(view, Object.freeze({ tenant })));
           const authored = isPromise(authoredResult) ? await authoredResult : authoredResult;
           assertActive();
           await revalidate();
@@ -380,7 +384,7 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
           const schema = captureScopeCatalog(guarded.schema);
           const capabilities = presentation ? captureTenantData(presentation(supportAsMember(principal), schema)) : undefined;
           assertActive();
-          const context = Object.freeze({ principal, schema, data, ...(capabilities === undefined ? {} : { capabilities }) });
+          const context = Object.freeze({ principal, schema, data, tenant, ...(capabilities === undefined ? {} : { capabilities }) });
           let output: T | undefined,
             callbackFailed = false;
           try {

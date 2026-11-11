@@ -54,6 +54,7 @@ import type { TenantMembershipEvidence } from './tenantMembership.js';
 import { actingPrincipal } from './tenantApiRequest.js';
 import { runDraftRoute } from '../forms/draftHttp.js';
 import { tenantCommandReadAudit } from './tenantReadAudit.js';
+import { PLATFORM_TENANT_ID } from './tenantPlatform.js';
 
 export interface TenantCommandOptions<Request> extends TenantWriteRuntimeOptions<Request> {
   readonly commands: {
@@ -279,10 +280,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
             ...sessionActorWords({ id: scope.principal.accountId, who: scope.who() }),
           });
           /* This tenant's zone for `today()` and `now()` (readerZone.ts), where `ui.timezone` names a column. */
-          const zone =
-            mode === 'execute' || mode === 'draft'
-              ? await commandZone(app.ui, () => scope.reads(), { resource: ownership.profile, read: scope.profileZone })
-              : undefined;
+          const zone = mode === 'execute' || mode === 'draft' ? await commandZone(app.ui, () => scope.reads(), scope.tenant) : undefined;
           const flags = commandFlagsOnce(async () => {
             await scope.session();
             const captured = await captureFlags?.(scope.principal, request);
@@ -336,6 +334,8 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                           key: prepared.key,
                           catalog: authorization.catalog,
                           ...(authorization.people ? { people: authorization.people } : {}),
+                          // The tenant's shared profile, which an input's `when` and default may read (`tenant.<column>`).
+                          ...(scope.principal.tenantId === PLATFORM_TENANT_ID ? {} : { tenant: scope.tenant }),
                           signal: context!.options.signal,
                           flags: capturedFlags,
                         });
@@ -361,6 +361,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                   return Object.freeze<AuthorizedBusinessCommand>({
                     ...authorization,
                     ...(zone === undefined ? {} : { timezone: zone }),
+                    ...(scope.principal.tenantId === PLATFORM_TENANT_ID ? {} : { tenant: scope.tenant }),
                     transaction: deny,
                     /* No plain transaction here either: what a signed-in draft finds (the person's open draft, its
                        version) and a decision's inputs are read in this command's own fenced transaction, scoped to

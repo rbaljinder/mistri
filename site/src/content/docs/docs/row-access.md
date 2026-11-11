@@ -70,6 +70,10 @@ person. A filter is ANDed with every query the person makes. The resolver
 receives only the verified account id, the App id and the roles. Policy changes
 need a restart.
 
+A [tenant App](/docs/tenant-apps/#what-members-read)'s `resolveRows(member, { tenant })` also receives the tenant's
+shared profile columns:
+`resolveRows: (me, { tenant }) => ({ tax_rate: { groups: [[{ column: 'country', op: '=', value: tenant.country }]] } })`.
+
 ### What a policy scopes
 
 - **Reads.** Lists, records, related lists, searches, counts and exports. A path through a reference is scoped like one through a key.

@@ -13,10 +13,13 @@
  * 3. A workflow's instance is one tenant's: two tenants' instances of the
  *    same key live side by side, an event of tenant B wakes only B's, and a
  *    step runs as the principal in that instance's tenant.
- * 4. What stays refused, and why: a job at times with no realm, or with the
+ * 4. A job on each tenant's zone (`timezone: 'tenant'`) runs at each tenant's
+ *    own hour: the zone its profile row names, else the App's own.
+ * 5. What stays refused, and why: a job at times with no realm, or with the
  *    other realm's command; a realm on an App without tenants; a workflow
  *    principal holding a platform role; a retry that does not name the
- *    instance's tenant.
+ *    instance's tenant; a job on each tenant's zone that is not per tenant, or
+ *    on an App whose zone is no tenant column.
  */
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -62,6 +65,7 @@ import {
 } from '../packages/mistri/src/server/tenant/tenantStorePostgres.js';
 import { retryAdmits, workflowPartition } from '../packages/mistri/src/server/workflows/workflowKeys.js';
 import { defineWorkflow, defineWorkflows } from '../packages/mistri/src/server/workflows/workflowModule.js';
+import { nextSlot, parseEvery } from '../packages/mistri/src/server/jobs/jobSchedule.js';
 import { liveSkip } from './live.js';
 import { pgClient, uuidPostgresDatabase } from './support/tenantDialects.js';
 import { parseTestApp } from './support/commandCatalog.js';
@@ -123,6 +127,18 @@ const manifest = () => ({
   home: 'tasks',
 });
 const app = parseTestApp(manifest(), 'tenant-automation.ts');
+/* The same App, its zone each dealer's own: the profile's shared timezone column, UTC where a dealer names none. */
+const zonedApp = (() => {
+  const base = manifest();
+  return parseTestApp(
+    {
+      ...base,
+      auth: { ...base.auth, tenancy: { ...base.auth.tenancy, shared: ['timezone'] } },
+      ui: { timezone: { column: 'tenant.timezone', default: 'UTC' } },
+    },
+    'tenant-automation-zoned.ts',
+  );
+})();
 
 const policy = defineAppTenantPolicy({
   kind: 'tenant',
@@ -253,24 +269,31 @@ const followUp = defineWorkflow({
   },
 });
 const flows = defineJobs({}, { principals, store, workflows: defineWorkflows({ followUp }) });
+// Six in the morning at each dealer.
+const zoned = defineJobs(
+  { morningSweep: defineJob({ every: '0 6 * * *', timezone: 'tenant', realm: 'tenant', runAs: 'tenant-clock', command: 'sweep' }) },
+  { principals, store },
+);
 
 /* ---------- the engines ---------- */
 
 const SCHEMA = {
   sqlite: `PRAGMA journal_mode=WAL; PRAGMA foreign_keys = ON;
-    CREATE TABLE dealer (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL);
+    CREATE TABLE dealer (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, timezone TEXT);
     CREATE TABLE task (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES dealer(id), ref TEXT NOT NULL,
       version INTEGER NOT NULL DEFAULT 0, flagged INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE review (id TEXT PRIMARY KEY NOT NULL, note TEXT NOT NULL);`,
   postgres: `
-    CREATE TABLE public.dealer (id text PRIMARY KEY, name text NOT NULL);
+    CREATE TABLE public.dealer (id text PRIMARY KEY, name text NOT NULL, timezone text);
     CREATE TABLE public.task (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES public.dealer(id), ref text NOT NULL,
       version integer NOT NULL DEFAULT 0, flagged integer NOT NULL DEFAULT 0);
     CREATE TABLE public.review (id text PRIMARY KEY, note text NOT NULL);`,
 };
-// Two tenants' tasks share the ref 'Shared': the same workflow key, in each tenant.
+// Two tenants' tasks share the ref 'Shared': the same workflow key, in each tenant. West names no zone.
+const ZONES = { north: 'America/Chicago', south: 'Pacific/Kiritimati', west: 'UTC' } as const;
 const ROWS = `
-    INSERT INTO dealer VALUES ('north', 'North Motors'), ('south', 'South Auto'), ('west', 'West Cars');
+    INSERT INTO dealer (id, name, timezone) VALUES ('north', 'North Motors', 'America/Chicago'), ('south', 'South Auto', 'Pacific/Kiritimati'),
+      ('west', 'West Cars', NULL);
     INSERT INTO task (id, tenant_id, ref) VALUES ('n1', 'north', 'Shared'), ('n2', 'north', 'North only'), ('s1', 'south', 'Shared'),
       ('w1', 'west', 'West only');`;
 
@@ -387,9 +410,9 @@ async function openLab(t: TestContext, dialect: Dialect, module: JobModule): Pro
   return lab;
 }
 
-async function enroll(t: TestContext, lab: Lab, module: JobModule) {
+async function enroll(t: TestContext, lab: Lab, module: JobModule, which = app) {
   const enrollment = await createTenantEnrollment<Request>({
-    app,
+    app: which,
     policy,
     source: lab.source,
     deployment: 'generation-1',
@@ -486,6 +509,40 @@ for (const { dialect, skip } of ENGINES)
       clock.now += 1_000;
       await host.tick();
       assert.equal((await jobsOf(lab)).length, 3);
+    });
+
+    test("a job on each tenant's zone runs at each tenant's own six in the morning: the zone its profile names, else the App's", async (t) => {
+      const lab = await openLab(t, dialect, zoned);
+      const enrollment = await enroll(t, lab, zoned, zonedApp);
+      // Three days back, a second before a minute: each zone's next six o'clock is ahead of the host, behind the real clock.
+      const clock = { now: Math.floor((Date.now() - 72 * HOUR) / 60_000) * 60_000 - 1_000 },
+        host = await hostOf(t, enrollment, clock);
+      const due = (Object.entries(ZONES) as [string, string][])
+        .map(([tenant, zone]) => ({ tenant, at: nextSlot(parseEvery('0 6 * * *', zone), clock.now)! }))
+        .sort((a, b) => a.at - b.at);
+      const runs = async () =>
+        (await lab.rows(`SELECT provenance_json, state, run_at FROM "${JOB_TABLES.job}" WHERE job = 'morningSweep'`)).map((row) => ({
+          tenant: String(JSON.parse(String(row.provenance_json)).tenantId),
+          state: String(row.state),
+          runAt: Number(row.run_at),
+        }));
+      // A fresh store has missed nothing: no zone runs before its next six o'clock.
+      await host.tick();
+      assert.deepEqual(await runs(), []);
+      for (const [index, { tenant, at }] of due.entries()) {
+        clock.now = at;
+        await until(host, clock, async () => (await runs()).some((run) => run.tenant === tenant && run.state === 'succeeded'));
+        assert.deepEqual(
+          (await runs()).map((run) => run.tenant).sort(),
+          due
+            .slice(0, index + 1)
+            .map((slot) => slot.tenant)
+            .sort(),
+          `at ${tenant}'s six o'clock, ${tenant} runs and no tenant whose six o'clock is still ahead`,
+        );
+      }
+      // Each tenant's run is at its own zone's slot.
+      assert.deepEqual((await runs()).map((run) => [run.tenant, run.runAt]).sort(), due.map((slot) => [slot.tenant, slot.at]).sort());
     });
 
     test("a job per tenant run now (a test's host.runJob) runs for the tenant named alone; without one, or on the platform's, it is refused", async (t) => {
@@ -648,6 +705,23 @@ for (const { dialect, skip } of ENGINES)
 
 describe("what a tenant App's automation refuses", () => {
   const owner = { appId: binding.appId, storeId: binding.storeId, source: binding.source };
+  const ownedOf = (t: TestContext) => {
+    const db = new DatabaseSync(':memory:');
+    t.after(() => db.close());
+    db.exec(SCHEMA.sqlite.replace('PRAGMA journal_mode=WAL;', ''));
+    db.exec('BEGIN IMMEDIATE');
+    const schema = readSqliteScopeCatalog(db).schema;
+    db.exec('COMMIT');
+    return captureTenantOwnership({
+      appId: binding.appId,
+      source: binding.source,
+      schema,
+      physicalSchema: structuredClone(schema),
+      resources: Object.fromEntries(schema.tables.map((table) => [table.id, table.id])),
+      profile: 'dealer',
+      ownership: policy.ownership,
+    });
+  };
   test('a job at times says its realm, and runs a command of that realm', () => {
     const module = (job: { every: string; realm?: 'tenant' | 'platform'; runAs: string; command: string }) =>
       capturedJobModule(defineJobs({ job: defineJob(job) }, { principals, store }));
@@ -702,21 +776,7 @@ describe("what a tenant App's automation refuses", () => {
         }),
       },
     );
-    const db = new DatabaseSync(':memory:');
-    t.after(() => db.close());
-    db.exec(SCHEMA.sqlite.replace('PRAGMA journal_mode=WAL;', ''));
-    db.exec('BEGIN IMMEDIATE');
-    const schema = readSqliteScopeCatalog(db).schema;
-    db.exec('COMMIT');
-    const owned = captureTenantOwnership({
-      appId: binding.appId,
-      source: binding.source,
-      schema,
-      physicalSchema: structuredClone(schema),
-      resources: Object.fromEntries(schema.tables.map((table) => [table.id, table.id])),
-      profile: 'dealer',
-      ownership: policy.ownership,
-    });
+    const owned = ownedOf(t);
     assert.throws(
       () => assertTenantJobs(capturedJobModule(desk), app, commands, owned, binding.source.connection),
       (error: unknown) =>
@@ -726,5 +786,23 @@ describe("what a tenant App's automation refuses", () => {
         ),
     );
     assertTenantJobs(capturedJobModule(flows), app, commands, owned, binding.source.connection);
+  });
+
+  test("a job on each tenant's zone runs per tenant, on an App whose zone is a tenant's profile column", (t) => {
+    for (const realm of [undefined, 'platform'] as const)
+      assert.throws(
+        () => defineJob({ every: '0 6 * * *', timezone: 'tenant', ...(realm ? { realm } : {}), runAs: 'tenant-clock', command: 'sweep' }),
+        /runs per tenant: say realm: 'tenant' \[job-tenant-zone\]/,
+      );
+    // Only a job reads 'tenant' as a zone; anything else is an IANA name.
+    assert.throws(() =>
+      defineJob({ every: '0 6 * * *', timezone: 'Mars/Olympus', realm: 'tenant', runAs: 'tenant-clock', command: 'sweep' }),
+    );
+    const owned = ownedOf(t);
+    assert.throws(
+      () => assertTenantJobs(capturedJobModule(zoned), app, commands, owned, binding.source.connection),
+      /job "morningSweep" runs on each tenant's zone \(timezone: 'tenant'\), and the App's ui\.timezone names no tenant column.*\[job-tenant-zone\]/,
+    );
+    assertTenantJobs(capturedJobModule(zoned), zonedApp, commands, owned, binding.source.connection);
   });
 });

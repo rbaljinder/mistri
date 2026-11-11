@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { after, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { loadApp, type LoadedApp } from '../packages/mistri/src/server/app/apps.js';
@@ -136,6 +136,28 @@ test('the tenant watcher restarts when the look says the save was more than the 
   await delay(600);
   assert.ok(w.offered.length >= 1);
   assert.equal(w.restarts(), 1);
+});
+
+test('the tenant watcher sees a component module, a page file and a stylesheet, and still not a log or a journal', async () => {
+  /* A field report: a component added under `mistri dev` loaded only after a restart by hand, because the watcher took
+     only .ts, .mjs, .js and .json for the App's files, and a .tsx component, its page and its CSS were none of them. */
+  const quiet = await watching('drawn', false);
+  writeFileSync(join(quiet.dir, 'server.log'), 'request\n');
+  writeFileSync(join(quiet.dir, 'app.db-journal'), '1');
+  await delay(400);
+  assert.equal(quiet.restarts(), 0, 'a log or a journal restarted the App');
+  for (const file of ['widgets/Badge.tsx', 'widgets/Tally.jsx', 'widgets/badge.css', 'pages/board.page.tsx']) {
+    const w = await watching(`drawn-${file.replace(/\W/g, '-')}`, false);
+    mkdirSync(join(w.dir, dirname(file)), { recursive: true });
+    await delay(100);
+    writeFileSync(join(w.dir, file), 'export default function Badge() { return null; }\n');
+    await delay(600);
+    assert.equal(w.restarts(), 1, `${file} was never seen`);
+    assert.ok(
+      w.offered.flat().some((touched) => touched.endsWith(file)),
+      `${file} was not offered as the file it is`,
+    );
+  }
 });
 
 test('under dev, a save of a page, a component or the look is a reload, and anything that grants or runs is a restart', () => {

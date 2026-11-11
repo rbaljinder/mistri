@@ -18,6 +18,7 @@ import { TEXT_RULE_MOST as TEXT_INPUT_MOST } from '@mistriwork/engine/shared/tex
 import { RICH_TEXT_MOST } from '@mistriwork/engine/shared/richText.js';
 import { mentionLabelColumns } from '@mistriwork/engine/shared/mentionLabel.js';
 import { commandFieldsDeep, isIsoDate } from '@mistriwork/engine/shared/commandWire.js';
+import { isMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import type { DraftRule } from './commandDraft.js';
 export { BULK_LIMIT, commandFieldsDeep, commandKeyText, isIsoDate } from '@mistriwork/engine/shared/commandWire.js';
 
@@ -67,6 +68,13 @@ function text(raw: unknown, where: string, limit = 500): string {
   if (typeof raw !== 'string' || !raw.trim() || raw.length > limit)
     return fail(where, `expected nonempty text of at most ${limit} characters`);
   return raw.trim();
+}
+
+/* An input's words: text, or a `msg()` kept as it is written. The loader says each in the App's own words for the
+   server and in each reader's for the form (businessCommands.ts withCommandWords, apps.ts); the browser parses only
+   what was said. */
+function caption(raw: unknown, where: string, limit = 500): string {
+  return isMessageRef(raw) ? (raw as unknown as string) : text(raw, where, limit);
 }
 
 /* A mention's label: a column, or a template of the people's own columns ('{first_name} {last_name}', mentionLabel.ts). */
@@ -166,8 +174,13 @@ function items(raw: unknown, where: string, what: string, max: number, noun: str
   return result;
 }
 
-/** The names a field's `when` reads — the input's fields and the record's columns — or a throw where it does not parse. */
-type ConditionNames = (text: string, where: string) => { fields: string[]; record: string[] };
+/** The names a field's `when` reads — the input's fields, the record's columns or paths, the tenant's shared
+ * profile columns — or a throw where it does not parse. */
+type ConditionNames = (text: string, where: string) => { fields: string[]; record: string[]; tenant: string[] };
+
+/** The most references a `record.<path>` follows from the target (`record.customer_id.region_id.code` is two):
+ * each hop is a read, and a longer chain is the handler's to walk. */
+export const RECORD_HOPS = 2;
 
 interface FieldRules {
   depth: number;
@@ -179,19 +192,32 @@ interface FieldRules {
   names: ConditionNames;
 }
 
+/** An App icon's name, as a choice's icon is: what a `msg()` icon must say too. */
+const choiceIcon = (raw: unknown): boolean => typeof raw === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(raw);
+
+/** A `msg()` icon said as something no App icon is named, in a command's input said in one language: refused as a
+ * written one is. The loader asks it of the source words and of each reader's (apps.ts). */
+export function saidIconProblem(fields: readonly AppCommandField[], where: string): string | undefined {
+  for (const { field, path } of commandFieldsDeep(fields))
+    for (const option of 'options' in field && Array.isArray(field.options) ? (field.options as AppCommandChoice[]) : [])
+      if (option.icon !== undefined && !choiceIcon(option.icon))
+        return `${where}: "${path}" says the icon "${String(option.icon)}"; a choice's icon is an App icon's name, such as 'shield-check'.`;
+  return undefined;
+}
+
 function choiceOption(raw: unknown, where: string): AppCommandChoice {
   const o = record(raw, ['value', 'label', 'icon', 'help'], where);
   const value = o.value;
   if (!(typeof value === 'string' && value.trim() && value.length <= 120) && !(typeof value === 'number' && Number.isFinite(value))) {
     return fail(where, 'a choice value must be nonempty text of at most 120 characters or a finite number');
   }
-  if (o.icon !== undefined && (typeof o.icon !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(o.icon)))
+  if (o.icon !== undefined && !isMessageRef(o.icon) && !choiceIcon(o.icon))
     return fail(where, "a choice's icon is an App icon's name, such as 'shield-check'");
   return {
     value: value as string | number,
-    label: text(o.label, where, 120),
+    label: caption(o.label, where, 120),
     ...(o.icon === undefined ? {} : { icon: o.icon as string }),
-    ...(o.help === undefined ? {} : { help: text(o.help, where, 200) }),
+    ...(o.help === undefined ? {} : { help: caption(o.help, where, 200) }),
   };
 }
 
@@ -223,17 +249,35 @@ function fieldStart(raw: unknown, made: AppCommandField, where: string, rules: F
   if (made.type === 'group') return fail(where, 'a group starts as its fields do; give each of them its default');
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
     const start = raw as Record<string, unknown>;
-    const word = Object.keys(start).length === 1 ? (start.auto ?? (typeof start.record === 'string' ? 'record' : undefined)) : undefined;
-    if (word === 'record' || word === 'me') {
-      if (rules.publicForm) return fail(at, 'a public form has no record and no reader to start a field from');
-      if (rules.depth) return fail(at, `${word === 'me' ? 'me' : '{ record }'} fills a field of the input itself, not one inside a group`);
+    const word =
+      Object.keys(start).length === 1
+        ? (start.auto ?? (typeof start.record === 'string' ? 'record' : typeof start.tenant === 'string' ? 'tenant' : undefined))
+        : undefined;
+    if (word === 'record' || word === 'me' || word === 'tenant') {
+      if (rules.publicForm) return fail(at, 'a public form has no record, no reader and no member to start a field from');
+      if (rules.depth)
+        return fail(at, `${word === 'me' ? 'me' : `{ ${word as string} }`} fills a field of the input itself, not one inside a group`);
     }
-    if (word === 'record') return { record: name(start.record, at) };
+    if (word === 'record') {
+      // A column of the record, or one its references reach (`customer_id.default_rate`), judged against them where bound.
+      const path = String(start.record).split('.');
+      if (path.length > RECORD_HOPS + 1)
+        return fail(at, `{ record: '${String(start.record)}' } follows more than ${RECORD_HOPS} references; read a nearer column`);
+      for (const part of path) name(part, at);
+      return { record: start.record as string };
+    }
+    if (word === 'tenant') return { tenant: name(start.tenant, at) };
     if (typeof word === 'string' && START_WORDS[word]?.includes(made.type)) return { auto: word as 'today' | 'now' | 'me' };
-    return fail(at, 'is a literal, today (a date field), now (a datetime field), me (a text field) or { record: column }');
+    return fail(
+      at,
+      'is a literal, today (a date field), now (a datetime field), me (a text field), { record: column } or { tenant: column }',
+    );
   }
   if (typeof raw === 'string' || typeof raw === 'boolean' || (typeof raw === 'number' && Number.isFinite(raw))) return raw;
-  return fail(at, 'is a literal, today (a date field), now (a datetime field), me (a text field) or { record: column }');
+  return fail(
+    at,
+    'is a literal, today (a date field), now (a datetime field), me (a text field), { record: column } or { tenant: column }',
+  );
 }
 
 /* An input asked only while a condition over the draft holds: a bare name is another field of this input, and
@@ -246,13 +290,14 @@ function fieldWhen(f: Record<string, unknown>, where: string, rules: FieldRules)
     return fail(at, "is a condition over the draft, as text: another field's name (trade_in = true) or record.<column>");
   if (f.type === 'group') return fail(at, "is a single field's: a group is asked whole");
   if (rules.depth) return fail(at, 'asks a field of the input itself, not one inside a group');
-  let names: { fields: string[]; record: string[] };
+  let names: { fields: string[]; record: string[]; tenant: string[] };
   try {
     names = rules.names(f.when.trim(), at);
   } catch (error) {
     return fail(at, (error as Error).message.replace(/^.*?: /, '').replace(/\.$/, ''));
   }
   if (names.record.length && rules.publicForm) return fail(at, `reads record.${names.record[0]}, and a public form has no record`);
+  if (names.tenant.length && rules.publicForm) return fail(at, `reads tenant.${names.tenant[0]}, and a public form has no member`);
   return f.when.trim();
 }
 
@@ -429,9 +474,9 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
     );
   const base = {
     name: key,
-    label: f.label === undefined ? fieldLabel(key) : text(f.label, where, 120),
-    ...(f.help === undefined ? {} : { help: text(f.help, where) }),
-    ...((f.type === 'group' || f.type === 'lines') && f.description !== undefined ? { help: text(f.description, where) } : {}),
+    label: f.label === undefined ? fieldLabel(key) : caption(f.label, where, 120),
+    ...(f.help === undefined ? {} : { help: caption(f.help, where) }),
+    ...((f.type === 'group' || f.type === 'lines') && f.description !== undefined ? { help: caption(f.description, where) } : {}),
     ...(f.optional === true ? {} : { required: true }),
     ...(f.when === undefined ? {} : { when: fieldWhen(f, where, rules) }),
     ...presentation(f, where),
@@ -1234,7 +1279,14 @@ export function commandInputProblem(
 ): string | undefined {
   for (const { field: f } of commandFieldsDeep(input)) {
     const start = f.type === 'group' ? undefined : f.default;
-    if (start && typeof start === 'object' && 'record' in start && target && !target.table.columns.some((c) => c.name === start.record))
+    // A path's first step is the record's own column; the hops past it are judged where the command is bound.
+    if (
+      start &&
+      typeof start === 'object' &&
+      'record' in start &&
+      target &&
+      !target.table.columns.some((c) => c.name === start.record.split('.')[0])
+    )
       return `Command input "${f.name}" starts from record.${start.record}, which is not a column of ${target.table.id}.`;
     if (f.type === 'defined') {
       const problem = definedInputProblem(f, schema, target);

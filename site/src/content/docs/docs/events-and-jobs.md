@@ -93,6 +93,11 @@ something up: the event is recorded in that tenant's store as
 the record the command targets. A job that runs a platform command may not, since that
 command runs outside any tenant; the server refuses that pair at start.
 
+`timezone: 'tenant'` runs a tenant job on each tenant's own wall clock, the zone
+its profile names through `ui.timezone` (the App's default where it names none):
+`morningDigest: defineJob({ every: '0 6 * * *', timezone: 'tenant', realm: 'tenant', runAs: 'clock', command: 'sendDigest' })`
+is six in the morning at every tenant.
+
 `mistri jobs run nightlyClose --app . --jobs jobs.ts` runs it now, once, as the
 job's principal, journaled as a slot's run is. It waits while the schedule's
 run holds its lease ([command line](/docs/cli/#running-a-job-now)).

@@ -1278,6 +1278,16 @@
                 }
               ]
             }
+          },
+          "given": {
+            "type": "array",
+            "description": "A command action's inputs its page supplies (useCommand(name).open(record, { step })): its form does not draw them. A required one with no default needs header: false and no bulk.",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            }
           }
         }
       }
@@ -2837,6 +2847,17 @@
           "minLength": 1,
           "maxLength": 60,
           "description": "The platform-owned resource with one row per tenant. A tenant's row may reference it, only through its ownership column."
+        },
+        "shared": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "description": "Columns of the tenant's profile row its members read, scalar ones only: tenant.country in a query, a row scope, a when or a handler's tenant. Read once per request; a tenant with no row reads nulls. Needs profile."
         },
         "platform": {
           "type": "object",
@@ -6459,8 +6480,13 @@
         "folded": {
           "const": true,
           "description": "In the sidebar, the section starts folded to its heading for someone who has never opened or closed it. Their own fold is remembered over it; it still opens while it holds the current room, while filtering, and in the rail."
-        }
+        },
+        "when": { "$ref": "#/$defs/navWhen" }
       }
+    },
+    "navWhen": {
+      "type": "string", "pattern": "\\S",
+      "description": "In a tenant App, the tenant's shared profile the menu offers the entry for: tenant.<column> of a flag or a vocabulary column in auth.tenancy.shared, as 'tenant.boarding = true'. Arrangement only: grants alone decide who may open anything."
     },
     "navPlacement": {
       "type": "object",
@@ -6508,7 +6534,8 @@
               "pattern": "\\S"
             },
             "color": { "$ref": "#/$defs/navColor" },
-            "roles": { "$ref": "#/$defs/navRoles" }
+            "roles": { "$ref": "#/$defs/navRoles" },
+            "when": { "$ref": "#/$defs/navWhen" }
           }
         },
         {
@@ -6517,7 +6544,8 @@
             "label": { "$ref": "#/$defs/appMenuLabel" },
             "to": { "$ref": "#/$defs/appTargetStatic" },
             "color": { "$ref": "#/$defs/navColor" },
-            "roles": { "$ref": "#/$defs/navRoles" }
+            "roles": { "$ref": "#/$defs/navRoles" },
+            "when": { "$ref": "#/$defs/navWhen" }
           }
         },
         {
@@ -6981,6 +7009,11 @@
             }
           }
         },
+        "catalog": {
+          "type": "string",
+          "pattern": "^tenant\\.[A-Za-z_]\\w*$",
+          "description": "The tenant's profile column, listed in auth.tenancy.shared, whose value names a folder of the App's catalogs: 'tenant.wording' with a tenant whose wording is 'clinic' says messages/clinic/en.ts over messages/en.ts."
+        },
         "timezone": {
           "description": "IANA zone the app\u2019s \"today\" is reckoned in (\"Australia/Sydney\"). Absent: the server\u2019s clock. A TIMESTAMP or DATETIME that carries no zone holds the wall clock in this zone (UTC when the App names none) \u2014 whatever writes it: an action's now, a machine's since, a Date a command writes, a New form's now. A column with a zone (timestamptz) holds the instant. { column, default } counts each reader's days in the zone the first row of that text column they may read names (their tenant's, their account's); writes keep default.",
           "anyOf": [
@@ -6993,7 +7026,7 @@
                 "column": {
                   "type": "string",
                   "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*$",
-                  "description": "The resource's text column naming the reader's IANA zone: \"desk_setting.timezone\"."
+                  "description": "The resource's text column naming the reader's IANA zone: \"desk_setting.timezone\"; in a tenant App, \"tenant.timezone\", a profile column auth.tenancy.shared lists."
                 },
                 "default": { "type": "string", "description": "The App's own zone: what writes keep, and the reader's where the row names none." }
               }

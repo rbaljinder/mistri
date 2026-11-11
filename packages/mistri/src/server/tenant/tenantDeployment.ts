@@ -561,7 +561,7 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
            sender (tenantNoticeMail.ts) and a person's own switch on their lease. */
         inboxMail: () => writer.inboxMail,
         /* The tenants active now: whose inbox a due row's is, for the sender. */
-        tenants: () => reader.readActiveTenants(),
+        tenants: async () => (await reader.readActiveTenants()).map((tenant) => tenant.id),
       }),
       /* One tenant's saved branding and its logos, read and saved for the
          host that names the tenant from the lease (adapters/branding). */

@@ -27,6 +27,7 @@ import type { ResourceHttpPath } from '@mistriwork/engine/shared/resourceHttp.js
 import { isPublicReadRequest, PUBLIC_READ_GETS } from '../../shared/tenantPublicReads.js';
 import { localeWeekStart } from '@mistriwork/engine/shared/weekStart.js';
 import { localizedApp } from '../app/apps.js';
+import { visitorApp } from '../app/appTenantProfile.js';
 import { componentMessages } from '../app/appMessages.js';
 import { requestLocale } from '../app/readerLocale.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
@@ -242,7 +243,8 @@ export function createTenantPublicReadHttp(options: TenantPublicReadHttpOptions)
       return { status: loaded.status, body: loaded.body };
     }
     const said = localizedApp({ app, pages: [...pages] }, locale);
-    const metadata = projectTenantMetadata(said.app, said.pages, schema, undefined, [], 'tenant', undefined, locale, true);
+    /* A visitor reads no tenant's profile, so the menu's `when`s offer it nothing (appTenantProfile.ts). */
+    const metadata = projectTenantMetadata(visitorApp(said.app), said.pages, schema, undefined, [], 'tenant', undefined, locale, true);
     if (path === '/api/app') {
       const branding = options.branding ? await options.branding(tenantId).catch(() => undefined) : undefined;
       // The placed tenant's published look, and only one that says it is that tenant's.

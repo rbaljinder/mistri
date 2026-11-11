@@ -20,6 +20,8 @@ import { parseTenantSelector } from './tenantMembership.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
 import { PLATFORM_TENANT_ID } from './tenantPlatform.js';
 import { revision, time, type TenantStoreBinding } from './tenantStoreContract.js';
+import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
+import { profileScalar } from '../app/appTenantProfile.js';
 
 /** Admission-time evidence of one public submission: no account and no
  * membership, only where it lands and the window it was admitted for. Not a
@@ -304,23 +306,114 @@ export function captureAddressesLookup(owned: TenantOwnershipSnapshot, lookup: T
   for (const column of Object.values(value.columns)) if (column !== undefined) assertIntakeColumn(owned, column as string);
   return value as TenantAddressesLookup;
 }
-/** One tenant's profile column, read for the person's zone (`ui.timezone: { column }` naming the profile): a tenant
- * (never the platform) and the one text column, attested as an address's is. Nothing else of the row is asked. */
-export interface TenantZoneLookup {
+/** The columns of a tenant's profile row its members read (`auth.tenancy.shared`): a tenant (never the platform),
+ * and named scalar columns of the profile, none a key. Nothing else of the row is asked. */
+export interface TenantProfileLookup {
   readonly tenantId: string;
-  readonly column: string;
+  readonly columns: readonly string[];
 }
-export function captureZoneLookup(owned: TenantOwnershipSnapshot, lookup: TenantZoneLookup): TenantZoneLookup {
+/** A shared column: a scalar of the profile, neither its key nor any key, nor a reference — the row's own facts. */
+function assertProfileColumn(owned: TenantOwnershipSnapshot, name: string): void {
+  tenantIdentifier(name);
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return denyTenant();
+  const profile = owned.profile ?? denyTenant();
+  const table = owned.schema.tables.find((candidate) => candidate.id === profile) ?? denyTenant();
+  const column = table.columns.find((candidate) => candidate.name === name) ?? denyTenant();
+  if (
+    column.primaryKey ||
+    column.references ||
+    !profileScalar(column.type) ||
+    name === intakeProfileKey(owned) ||
+    owned.schema.foreignKeys.some((fk) => fk.to.table === profile && fk.to.columns.includes(name))
+  )
+    return denyTenant();
+}
+export function captureProfileLookup(owned: TenantOwnershipSnapshot, lookup: TenantProfileLookup): TenantProfileLookup {
   const value = captureTenantData(lookup);
-  tenantRecord(value, ['tenantId', 'column']);
+  tenantRecord(value, ['tenantId', 'columns']);
   const tenantId = parseTenantSelector([value.tenantId]);
   if (tenantId === PLATFORM_TENANT_ID) return denyTenant();
-  assertIntakeColumn(owned, value.column as string);
-  return value as TenantZoneLookup;
+  const columns = value.columns;
+  if (!Array.isArray(columns) || !columns.length || columns.length > 16) return denyTenant();
+  for (const column of columns) assertProfileColumn(owned, column as string);
+  return value as TenantProfileLookup;
 }
-/** What the profile row holds in that column: its one row's text, else nothing (a doubled key is no one's). */
-export function heldZone(rows: readonly Record<string, unknown>[]): string | undefined {
-  return rows.length === 1 && typeof rows[0].address === 'string' ? rows[0].address : undefined;
+/** The shared columns off one tenant's profile row, by the tenant key, in its engine's spelling: aliased by
+ * position, so no column's name is ever a result's. One parameter, the tenant id; two rows at most. */
+export function tenantProfileQuery(owned: TenantOwnershipSnapshot, columns: readonly string[]): string {
+  for (const column of columns) assertProfileColumn(owned, column);
+  const key = intakeProfileKey(owned),
+    physical = owned.resources[owned.profile ?? denyTenant()] ?? denyTenant();
+  const list = columns.map((column, at) => `${quoted(column)} AS c${at}`).join(', ');
+  if (owned.schema.dialect !== 'postgres') return `SELECT ${list} FROM main.${quoted(physical)} WHERE ${quoted(key)} = ? LIMIT 2`;
+  const dot = physical.indexOf('.');
+  if (dot < 1) return denyTenant();
+  return `SELECT ${list} FROM ${quoted(physical.slice(0, dot))}.${quoted(physical.slice(dot + 1))} WHERE ${quoted(key)} = $1 LIMIT 2`;
+}
+/** Whom a job at times runs for (readActiveTenants): `zone`, a shared profile column, asks each tenant's value of it. */
+export interface ActiveTenantsQuery {
+  readonly zone?: string;
+}
+export type ActiveTenant = Readonly<{ id: string; zone?: TenantValue }>;
+/** The column asked, if any: a shared column of the profile, as readTenantProfile's are. */
+export function activeTenantsZone(owned: TenantOwnershipSnapshot, query: unknown): string | undefined {
+  tenantRecord(query, ['zone']);
+  if (query.zone === undefined) return undefined;
+  assertProfileColumn(owned, query.zone as string);
+  return query.zone as string;
+}
+/** One shared column off every profile row, with its tenant key: the zone each tenant's job at times keeps
+ * (`timezone: 'tenant'`). No parameter; the caller keeps the active tenants' rows. */
+export function tenantProfileColumnQuery(owned: TenantOwnershipSnapshot, column: string): string {
+  assertProfileColumn(owned, column);
+  const key = intakeProfileKey(owned),
+    physical = owned.resources[owned.profile ?? denyTenant()] ?? denyTenant();
+  const list = `${quoted(key)} AS k, ${quoted(column)} AS c0`;
+  if (owned.schema.dialect !== 'postgres') return `SELECT ${list} FROM main.${quoted(physical)}`;
+  const dot = physical.indexOf('.');
+  if (dot < 1) return denyTenant();
+  return `SELECT ${list} FROM ${quoted(physical.slice(0, dot))}.${quoted(physical.slice(dot + 1))}`;
+}
+/** Each active tenant with that column's value off its own row: null where it has none, or its key is doubled. */
+export function activeWithColumn(
+  owned: TenantOwnershipSnapshot,
+  column: string,
+  active: readonly string[],
+  rows: readonly Record<string, unknown>[],
+): readonly Readonly<{ id: string; zone: TenantValue }>[] {
+  const byKey = new Map<string, Record<string, unknown>[]>();
+  for (const row of rows) {
+    const key = String(row.k);
+    byKey.set(key, [...(byKey.get(key) ?? []), row]);
+  }
+  return Object.freeze(active.map((id) => Object.freeze({ id, zone: heldProfile(owned, [column], byKey.get(id) ?? [])[column] })));
+}
+/** What the profile row holds, by column: its one row's values, else every column null (a doubled key is no one's,
+ * and a tenant with no row has no profile yet). A date is its ISO text; a big number its digits; bytes are nothing. */
+export function heldProfile(
+  owned: TenantOwnershipSnapshot,
+  columns: readonly string[],
+  rows: readonly Record<string, unknown>[],
+): Readonly<Record<string, TenantValue>> {
+  const table = owned.schema.tables.find((candidate) => candidate.id === owned.profile);
+  const found: Record<string, TenantValue> = {};
+  columns.forEach((column, at) => {
+    const raw = rows.length === 1 ? rows[0][`c${at}`] : null;
+    const flag = /^bool/i.test(table?.columns.find((candidate) => candidate.name === column)?.type ?? '');
+    found[column] =
+      raw === null || raw === undefined
+        ? null
+        : flag && typeof raw === 'number'
+          ? raw !== 0
+          : typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean'
+            ? raw
+            : raw instanceof Date
+              ? raw.toISOString()
+              : typeof raw === 'bigint'
+                ? String(raw)
+                : null;
+  });
+  return Object.freeze(found);
 }
 /** The value a tenant's profile row holds, when it is of an address's shape:
  * one row, never a doubled key. Its resolution (intakeAddressQuery) must still

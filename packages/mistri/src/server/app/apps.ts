@@ -8,13 +8,14 @@
  * database browser, and an app composes it rather than growing into it.
  */
 import { zoneColumnProblem } from './readerZone.js';
+import { catalogColumnProblems, menuWhenProblems, sharedProfileProblems } from './appTenantProfile.js';
 import { localeColumnProblem } from './readerLocale.js';
 import { unionProblems } from '../../shared/appUnions.js';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { realpathSync, statSync, watch, type FSWatcher } from 'node:fs';
+import { statSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Worker } from 'node:worker_threads';
-import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import type { WriteWording } from '@mistriwork/engine/server/http/writeRefusal.js';
@@ -88,7 +89,7 @@ import {
   type AppAuthority,
 } from './authorityLock.js';
 import { lockedTriggers } from '../commands/triggerLock.js';
-import { withCommandCatalog } from '../../shared/command.js';
+import { saidIconProblem, withCommandCatalog } from '../../shared/command.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
 import type { AppEnvName } from '../../shared/appAuthority.js';
 import { assertAppApiContext, readApiApp } from '../api/appApiValidation.js';
@@ -108,7 +109,7 @@ import { tabSlug } from '@mistriwork/engine/shared/addressParams.js';
 import { isMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import { appNotifyRules, notifyAdvisories } from '../../shared/appNotify.js';
 import { compileComponents, componentHrefs, type CompiledComponents } from './appComponents.js';
-import { lintComponents, pageManifestsOf } from './componentLint.js';
+import { componentMessageKeys, lintComponents, pageManifestsOf } from './componentLint.js';
 import { pageFiles, placePages, readPageFiles } from './appPages.js';
 import { readSurfaceFiles, surfaceFiles } from './appSurfaces.js';
 import type { SurfaceFile } from '../../shared/appSurfaces.js';
@@ -116,6 +117,7 @@ import { valueLabelFindings, valueLabelHolder } from './valueLabels.js';
 import { embeddedOnlyViews } from '@mistriwork/engine/shared/appEmbeds.js';
 import { homeViews } from '../../shared/appHome.js';
 import {
+  appCatalogs,
   catalogFiles,
   holdLocalizer,
   languageOf,
@@ -590,6 +592,9 @@ export async function loadApp(
   const { appCommandCatalog } = await import('../commands/commandContracts.js');
   const recordPages = dir ? await readFilePages(dir, (href) => importFresh(href, options.env, [dir], graph)) : { pages: [], modules: [] };
   const catalog = commands ? appCommandCatalog(commands.registry, localizeDefinition(raw, sourceSayer, path) as AppDef) : undefined;
+  /* The catalog above keeps each input's msg(), said per reader below; the handler, the App API and MCP read the
+     inputs in the App's own words. */
+  if (commands) commands = { ...commands, registry: await commandsInWords(commands.registry, sourceSayer, path) };
   const definition: DefinitionInput = {
     raw: raw as Record<string, unknown>,
     path,
@@ -639,7 +644,11 @@ export async function loadApp(
             lint.problems.map((finding) => `    ${finding.file}:${finding.line}  ${finding.text}`).join('\n'),
         );
     } catch (err) {
-      throw new Error(`${path}: ${(err as Error).message}`);
+      /* Where the modules were declared to be rides on the failure: a module named before it is written is in a folder
+         no good load compiled from, and the watcher must look there to see it arrive (`watchedDirs`). */
+      throw Object.assign(new Error(`${path}: ${(err as Error).message}`), {
+        componentModules: [...declared.values()].map((decl) => resolve(dir, decl.module)),
+      });
     }
   }
   /* Its themes' faces, read now so a missing file refuses the load as any other problem does (appFonts.ts). */
@@ -764,6 +773,19 @@ function sourceLocaleOf(raw: unknown): string {
 }
 
 /**
+ * The registry with each input's msg() said in the source words (businessCommands.ts withCommandWords): what the
+ * handler checks against and the App API and MCP describe. A tenant startup asks it of the registry it loads again.
+ */
+export async function commandsInWords(
+  registry: BusinessCommandRegistry,
+  sayer: MessageSayer | undefined,
+  where: string,
+): Promise<BusinessCommandRegistry> {
+  const { withCommandWords } = await import('../commands/businessCommands.js');
+  return withCommandWords(registry, (fields, at) => localizeDefinition(fields, sayer, `${where}: ${at}`));
+}
+
+/**
  * The definition parsed, its every msg() said by `sayer`: the App, its pages
  * — the manifest's and the pages/ files', each keyed once — and which file
  * defined each. One reading for the load and for every locale after it.
@@ -771,10 +793,17 @@ function sourceLocaleOf(raw: unknown): string {
 function parseDefinition(input: DefinitionInput, sayer: MessageSayer | undefined) {
   const { path, catalog } = input;
   const raw = localizeDefinition(input.raw, sayer, path);
+  /* Said with no catalogs too, so a msg() there is refused as one in the manifest is ([message-missing]). */
   const commandCatalog =
-    catalog && sayer
-      ? new Map([...catalog].map(([id, entry]) => [id, localizeDefinition(entry, sayer, `${path}: commands "${id}"`)]))
-      : catalog;
+    catalog &&
+    new Map(
+      [...catalog].map(([id, entry]) => {
+        const said = localizeDefinition(entry, sayer, `${path}: commands "${id}"`);
+        const problem = said === entry ? undefined : saidIconProblem(said.input, `${path}: command "${id}" input`);
+        if (problem) throw new Error(problem);
+        return [id, said];
+      }),
+    );
   /* A surface's label is said in the reader's words, as a page's is. */
   const surfaces = input.surfaces?.map((file) => ({ ...file, fields: localizeDefinition(file.fields, sayer, file.at) }));
   const parsed = parseAppConfig(raw, path, {
@@ -870,8 +899,10 @@ function withCountedLabels(app: AppDef, counted: ReturnType<typeof countedLabels
 /**
  * The App as one reader reads it: every caption in their locale, and a
  * tenant's own words over the App's. The load itself where the App has no
- * catalogs, or the locale says the source's words with nothing overridden.
- * Each (locale, tenant words) is parsed once and kept beside the load — the
+ * catalogs, or the locale says the source's words with nothing overridden
+ * and no variant. A tenant's variant (`ui.catalog`) says its folder's words
+ * over the App's; one the App has no folder for is the App's own words.
+ * Each (locale, variant, tenant words) is parsed once and kept beside the load — the
  * per-definition caches after it (the payload's, the projections') key on the
  * definition, so they key on the locale too — and never across tenants: a
  * tenant's words are in the key by their content.
@@ -880,18 +911,25 @@ export function localizedApp<L extends Pick<LoadedApp, 'app' | 'pages'>>(
   loaded: L,
   locale: string | undefined,
   overrides?: { stamp: string; words: MessageOverrides },
+  variant?: string,
 ): L {
   const localizer = localizerOf(loaded.app);
-  if (!localizer || !locale) return loaded;
+  if (!localizer) return loaded;
   const { catalogs } = localizer;
+  const kind = variant !== undefined && Object.hasOwn(catalogs.variants, variant) ? variant : undefined;
+  if (!locale && kind === undefined) return loaded;
+  locale ??= catalogs.source;
   const words = Object.hasOwn(catalogs.locales, locale) ? locale : languageOf(locale);
   const own = !Object.hasOwn(catalogs.locales, words) || words === catalogs.source;
-  if (own && !overrides?.words.size) return loaded;
-  const key = JSON.stringify([locale, overrides?.words.size ? overrides.stamp : null]);
+  if (own && !overrides?.words.size && kind === undefined) return loaded;
+  const key = JSON.stringify([locale, kind ?? null, overrides?.words.size ? overrides.stamp : null]);
   const held = (localizer.held ??= new Map()) as Map<string, Pick<LoadedApp, 'app' | 'pages'>>;
   let hit = held.get(key);
   if (!hit) {
-    const { app, pages } = parseDefinition(localizer.definition as DefinitionInput, new MessageSayer(catalogs, locale, overrides?.words));
+    const { app, pages } = parseDefinition(
+      localizer.definition as DefinitionInput,
+      new MessageSayer(catalogs, locale, overrides?.words, kind),
+    );
     /* Addresses are one per thing in every language: a tab's word and a section's window key stay the source's. */
     keepAddresses(loaded.app.views, app.views);
     keepAddresses(loaded.pages, pages);
@@ -1065,6 +1103,9 @@ export function appProblems(loaded: LoadedApp, schema: DatabaseSchema): string[]
   }
   const zone = zoneColumnProblem(loaded.app, schema);
   if (zone) problems.push(`${manifest}: ${zone}`);
+  problems.push(...sharedProfileProblems(loaded.app, schema).map((p) => `${manifest}: ${p}`));
+  problems.push(...menuWhenProblems(loaded.app, schema).map((p) => `${manifest}: ${p}`));
+  problems.push(...catalogColumnProblems(loaded.app, schema, appCatalogs(loaded.app)).map((p) => `${manifest}: ${p}`));
   const locale = localeColumnProblem(loaded.app, schema);
   if (locale) problems.push(`${manifest}: ${locale}`);
   problems.push(...messageProblems(loaded, schema).map((p) => `${manifest}: ${p}`));
@@ -1406,7 +1447,9 @@ function messageProblems(loaded: LoadedApp, schema: DatabaseSchema): string[] {
 /** `[message-untranslated]` and `[message-unused]`: advice about the catalogs, never a refusal. */
 function messageAdvice(loaded: LoadedApp): string[] {
   const words = wordsOf(loaded);
-  return words ? messageAdvisories(words.raw, words.catalogs) : [];
+  if (!words) return [];
+  const componentKeys = loaded.components ? loaded.dir && componentMessageKeys(loaded.dir, loaded.components) : new Set<string>();
+  return messageAdvisories(words.raw, words.catalogs, componentKeys || undefined);
 }
 
 /* A label said from the App's messages restates nothing: its words differ in every other language. */
@@ -2002,204 +2045,4 @@ export async function reloadApp(host: AppHost, target: string, configPages: Page
     host.loadFailure = { of: host.loadError, error: err };
     return false;
   }
-}
-
-/**
- * The directories an App's custom components were compiled from, for its
- * watcher: a save to a widget, or to a module or stylesheet it imports,
- * recompiles it (appComponents.ts) wherever in the App directory it lives.
- */
-export function componentWatchDirs(loaded: LoadedApp): string[] {
-  if (!loaded.dir || !loaded.components) return [];
-  return [
-    ...new Set(
-      Object.values(loaded.components.entries).flatMap((entry) => entry.sources.map((source) => dirname(join(loaded.dir!, source)))),
-    ),
-  ];
-}
-
-/**
- * The directories an App's look is kept in beyond its root, watched so an edit
- * to a theme reloads the page as an edit to the manifest does: the folders its
- * themes' font files sit in (appFonts.ts), and a `theme/` or `themes/` folder
- * of theme modules (a palette per file) where the App keeps one.
- */
-export function themeWatchDirs(loaded: LoadedApp): string[] {
-  if (!loaded.dir) return [];
-  const fonts = [...Object.values(loaded.fonts?.sources ?? {}), ...Object.values(loaded.brand?.sources ?? {})].map((source) =>
-    dirname(join(loaded.dir!, source)),
-  );
-  const folders = ['theme', 'themes']
-    .map((name) => join(loaded.dir!, name))
-    .filter((folder) => {
-      try {
-        return statSync(folder).isDirectory();
-      } catch {
-        return false;
-      }
-    });
-  return [...new Set([...fonts, ...folders])].filter((folder) => folder !== loaded.dir);
-}
-
-/* What a write to a database leaves in a directory: the file, and SQLite's journals beside it. */
-const DATABASE_FILE = /(?:\.(?:db|db3|sqlite|sqlite3)|-(?:wal|shm|journal))$/i;
-/* Code can be imported by anything the loader runs (the commands module, a component), so any module file is a change. */
-const CODE_FILE = /\.[cm]?[jt]sx?$/i;
-/* What the loader reads without importing: stylesheets, JSON, the authority lock, a theme's fonts, the App's pictures.
-   Of these only a file beside a subfolder's others counts when the loader did not say it read it (below). */
-const DATA_FILE = /\.(?:json|css|lock|woff2?|ttf|otf|png|jpe?g|webp|gif|avif|svg|ico)$/i;
-
-/**
- * The files an App's load read, for its watcher: the manifest, each page's and catalog's file, the commands module,
- * the fonts and pictures it serves, the components' sources, and the module graph its definition, pages and catalogs
- * imported (`LoadedApp.modules`). Absolute paths. `undefined` when a module manifest's load gave no graph, and the
- * watcher then judges by file type alone.
- */
-export function loadedFiles(loaded: LoadedApp): ReadonlySet<string> | undefined {
-  // A module manifest whose load gave no graph cannot say what it imported: judged by file type, as before.
-  if (!loaded.dir || (!loaded.modules && /\.(?:mjs|ts)$/.test(loaded.path))) return undefined;
-  const home = loaded.dir;
-  const within = (file: string) => resolve(home, file);
-  return new Set(
-    [
-      loaded.path,
-      ...(loaded.modules ?? []),
-      ...Object.values(loaded.sources),
-      ...(loaded.entry ? [loaded.entry] : []),
-      ...(loaded.commands ? [loaded.commands.file] : []),
-      ...(loaded.pageFiles ?? []).map(within),
-      ...(loaded.messageFiles ?? []).map(within),
-      ...Object.values(loaded.fonts?.sources ?? {}).map(within),
-      ...Object.values(loaded.brand?.sources ?? {}).map(within),
-      ...Object.values(loaded.components?.entries ?? {}).flatMap((entry) => entry.sources.map(within)),
-    ].flatMap((file) => [resolve(file), real(file)]),
-  );
-}
-
-/* A path as the loader sees it, links followed: a module graph is resolved to real paths, an event is named by the watched spelling. */
-function real(file: string): string {
-  try {
-    return realpathSync(file);
-  } catch {
-    return resolve(file);
-  }
-}
-
-/** The folders under the App holding a file its load imported, so a module in `lib/` is watched where it lives. */
-function importedDirs(read: ReadonlySet<string> | undefined, root: string): string[] {
-  if (!read) return [];
-  // The graph is in real paths and the App may be named by a link to its folder: each file is placed under the spelling given.
-  const placed = (file: string): string | undefined => {
-    const base = [real(root), root].find((spelled) => file === spelled || file.startsWith(`${spelled}${sep}`));
-    return base === undefined ? undefined : join(root, relative(base, file));
-  };
-  return [...new Set([...read].flatMap((file) => placed(dirname(file)) ?? []))].slice(0, 256);
-}
-
-/**
- * Whether a write to `file` can change what the App loads. A log, a database's journal, an editor's swap file and
- * a JSON the App's own process writes beside its source are not: reloading for them told every open page the App
- * had changed, in a loop when the file was written by the server itself (output redirected into the App folder).
- * What the loader read, or imported, is a change; so is any module file (the commands module's imports are not
- * followed), and a data file in a folder of the App's own — a new `pages/` entry, a font, a stylesheet — but not
- * one loose in its root, which is read only when the manifest says so, and is then in `read`.
- */
-function movesApp(file: string, root: string, read: ReadonlySet<string> | undefined): boolean {
-  const name = basename(file);
-  if (DATABASE_FILE.test(name)) return false;
-  if (read?.has(file) || read?.has(real(file))) return true;
-  if (CODE_FILE.test(name)) return true;
-  if (name === 'authority.lock' || name === 'mistri.json') return true;
-  /* A name with no type is a folder made or taken away (its files are the ones that matter, and a removed one may have
-     held some) unless it is a file there now: a log called `out`, `.DS_Store`, an editor's probe. */
-  if (!extname(name)) {
-    try {
-      return !statSync(file).isFile();
-    } catch {
-      return true;
-    }
-  }
-  return DATA_FILE.test(name) && (read === undefined || dirname(file) !== root);
-}
-
-export function watchApp(
-  target: string,
-  onChange: () => void,
-  debounceMs = 150,
-  extra: () => readonly string[] = () => [],
-  /** The files the last load read (`loadedFiles`), asked on every event: a write to any other file the loader does not
-      read by type (`movesApp`) is not a change to the App. */
-  read: () => ReadonlySet<string> | undefined = () => undefined,
-): () => void {
-  const root = (() => {
-    try {
-      return statSync(target).isDirectory() ? resolve(target) : dirname(resolve(target));
-    } catch {
-      return dirname(resolve(target));
-    }
-  })();
-  const watchers = new Map<string, FSWatcher>();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let closed = false;
-
-  const attach = (): void => {
-    if (closed) return;
-    let dirs: string[];
-    try {
-      dirs = statSync(target).isDirectory()
-        ? [target, join(target, 'pages'), join(target, 'features'), ...extra(), ...importedDirs(read(), root)]
-        : [dirname(target)];
-    } catch {
-      /* The target itself is gone. The last good app keeps serving; there is
-         nothing left to watch until a restart points at something real. */
-      return;
-    }
-    for (const [dir, watcher] of watchers) {
-      /* A directory deleted out from under its watcher leaves the watcher
-         alive and silent. Dropping it here lets the recreation re-attach. */
-      try {
-        statSync(dir);
-      } catch {
-        watcher.close();
-        watchers.delete(dir);
-      }
-    }
-    for (const dir of dirs) {
-      if (watchers.has(dir)) continue;
-      try {
-        const watcher = watch(dir, (event, filename) => burst(event, filename, dir));
-        watcher.on('error', () => {
-          watcher.close();
-          watchers.delete(dir);
-        });
-        watchers.set(dir, watcher);
-      } catch {
-        // pages/ is not there yet. Its creation is an event on the parent,
-        // which lands back here.
-      }
-    }
-  };
-
-  const burst = (_event: string, filename: string | Buffer | null, dir: string): void => {
-    /* Only a file the App loads is a change to it. A SQLite database kept beside the source is written by every save
-       (and its -wal and -journal with it), and a server started with its output redirected into the App folder writes
-       its log on every request: reloading on those told each open page the App had changed, and a record mid-edit lost
-       its editor and its saved note. A burst that names no file still counts. */
-    attach();
-    if (typeof filename === 'string' && !movesApp(resolve(dir, filename), root, read())) return;
-    if (closed) return;
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      timer = undefined;
-      onChange();
-    }, debounceMs);
-  };
-
-  attach();
-  return () => {
-    closed = true;
-    if (timer) clearTimeout(timer);
-    for (const watcher of watchers.values()) watcher.close();
-    watchers.clear();
-  };
 }

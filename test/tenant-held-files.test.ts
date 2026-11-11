@@ -56,7 +56,8 @@ const object = (value: unknown): Record<string, unknown> => {
 const appId = 'lending';
 const binding = { appId, source: { id: 'business', connection: 'business-db' }, storeId: 'held-http-store' };
 const draftColumns = 'more TEXT, status TEXT, resume_token_hash TEXT, resume_expires_at TEXT, resume_progress TEXT';
-const claimInput = { name: field.text({ max: 80 }), docs: field.files('lead_file', { max: 10 }) };
+// Optional, so a submission that places no tenant (the platform's triage, which keeps no files) can still be sent.
+const claimInput = { name: field.text({ max: 80 }), docs: field.files('lead_file', { max: 10, optional: true }) };
 const savedInput = { name: { label: 'Name', type: 'text', max: 80 } } as const;
 
 async function portFor() {
@@ -90,10 +91,10 @@ async function publicFixture(t: TestContext, options: { challenge?: boolean } = 
   try {
     db.exec(`PRAGMA foreign_keys = ON;
       CREATE TABLE dealer (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, intake_address TEXT);
-      CREATE TABLE lead (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES dealer(id), reference TEXT NOT NULL, name TEXT NOT NULL, ${draftColumns});
+      CREATE TABLE lead (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES dealer(id), reference TEXT NOT NULL, name TEXT NOT NULL, reply TEXT, ${draftColumns});
       CREATE TABLE lead_file (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES dealer(id), lead_id TEXT,
         file_name TEXT NOT NULL, content_type TEXT, byte_size INTEGER, data BLOB);
-      CREATE TABLE intake_submission (id TEXT PRIMARY KEY NOT NULL, reference TEXT NOT NULL, name TEXT NOT NULL, ${draftColumns});
+      CREATE TABLE intake_submission (id TEXT PRIMARY KEY NOT NULL, reference TEXT NOT NULL, name TEXT NOT NULL, reply TEXT, ${draftColumns});
       INSERT INTO dealer VALUES ('north', 'North Motors', '${NORTH}'), ('west', 'West Wheels', '${WEST}');`);
   } finally {
     db.close();
@@ -143,7 +144,7 @@ async function publicFixture(t: TestContext, options: { challenge?: boolean } = 
           store: join(directory, 'auth.db'),
           signUp: 'open',
           rows: 'tenant',
-          tenancy: { label: 'Dealer', profile: 'dealer', platform: { label: 'Lender' } },
+          tenancy: { label: 'Dealer', profile: 'dealer', shared: ['name'], platform: { label: 'Lender' } },
           roles: { staff: { realm: 'tenant', read: true }, manager: { realm: 'platform', read: true } },
           ...(options.challenge ? { challenge: 'verifyHuman' } : {}),
         },
@@ -236,15 +237,18 @@ async function publicFixture(t: TestContext, options: { challenge?: boolean } = 
       write: ['lead', 'lead_file', 'intake_submission'],
       public: true,
       input: claimInput,
-      output: shape({ reference: text() }),
-      async handle({ db: records, intake }, value) {
+      output: shape({ reference: text(), message: literal('We will call you.', 'North Motors will call you.') }),
+      async handle({ db: records, intake, tenant }, value) {
         const reference = `CLM-${value.name}`;
+        // The reply's words are picked by the placed tenant's shared profile; the platform's triage reads none. A
+        // form's reply is the platform's (its decoy could not know them), so the row keeps them too, for the test.
+        const message = tenant?.name === 'North Motors' ? ('North Motors will call you.' as const) : ('We will call you.' as const);
         // Where it lands: a dealer's rows keep the files; the platform's triage keeps the words.
         if (intake === 'tenant') {
-          const lead = await records.lead.insert({ id: randomUUID(), reference, name: value.name });
-          for (const each of value.docs) await records.lead_file.insertFile(each, { id: randomUUID(), lead_id: String(lead.id) });
-        } else await records.intake_submission.insert({ id: randomUUID(), reference, name: value.name });
-        return { reference };
+          const lead = await records.lead.insert({ id: randomUUID(), reference, name: value.name, reply: message });
+          for (const each of value.docs ?? []) await records.lead_file.insertFile(each, { id: randomUUID(), lead_id: String(lead.id) });
+        } else await records.intake_submission.insert({ id: randomUUID(), reference, name: value.name, reply: message });
+        return { reference, message };
       },
     }),
   });
@@ -338,6 +342,11 @@ test("a public tenant form holds a file for its visitor, and on submit it lands 
   const sent = await f.send(NORTH, [first.body.id as string], first.cookie);
   assert.equal(sent.response.status, 200, JSON.stringify(sent.body) + JSON.stringify(first.body));
   assert.equal(sent.body.reference, 'CLM-Ada');
+  assert.deepEqual(
+    f.rows("SELECT reply FROM lead WHERE tenant_id = 'north'"),
+    [{ reply: 'North Motors will call you.' }],
+    "the handler picks its words by the tenant's profile",
+  );
   assert.equal(JSON.stringify(sent.body).includes(first.body.id as string), false, 'a held id never comes back in a receipt');
   assert.deepEqual(f.rows('SELECT tenant_id, file_name, byte_size FROM lead_file'), [
     { tenant_id: 'north', file_name: 'doc.txt', byte_size: 5 },
@@ -348,6 +357,10 @@ test("a public tenant form holds a file for its visitor, and on submit it lands 
   const again = await f.send(NORTH, [first.body.id as string], first.cookie, 'Bea');
   assert.equal(again.response.status, 400);
   assert.equal(f.rows('SELECT 1 FROM lead_file').length, 1);
+  // A submission that places no tenant lands in triage, where the handler is handed no profile.
+  const triaged = await f.send('nowhere-intake-DDDDDDDDDDDDDDDD', [], undefined, 'Cy');
+  assert.equal(triaged.response.status, 200, JSON.stringify(triaged.body));
+  assert.deepEqual(f.rows('SELECT name, reply FROM intake_submission'), [{ name: 'Cy', reply: 'We will call you.' }]);
 });
 
 test('a file held under one tenant is refused by a form placed in another, and nothing is written there', async (t) => {

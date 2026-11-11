@@ -1,0 +1,473 @@
+/**
+ * A refusal that keeps something (`refuse(code, { keep })` on a command that
+ * declares `refused: { writes }`): the handler's own writes are rolled back,
+ * the keep's are committed in a fresh transaction under the same person and
+ * marked as kept on refusal, and the caller hears the refusal it was given.
+ * Only the declared tables, only insert and update; a keep the record moved
+ * under runs again, three more times at most. On SQLite, and on PostgreSQL
+ * where `TABLEWALK_TEST_PG` names one (`TABLEWALK_REQUIRE_LIVE=1` fails rather
+ * than skips): a savepoint there would have dropped the fence's locks.
+ */
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { describe, test } from 'node:test';
+import { currentWriteAttribution } from '../packages/engine/src/adapters/writeAttribution.js';
+import { Registry } from '../packages/engine/src/server/connections.js';
+import type { PgQuery } from '../packages/engine/src/adapters/postgresPool.js';
+import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/commands/commandJournal.js';
+import { migratePostgresCommandJournal } from '../packages/mistri/src/adapters/commands/postgresCommandJournal.js';
+import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
+import { loadAppRuntimeResources } from '../packages/mistri/src/server/app/appRuntimeResources.js';
+import { bindBusinessCommands } from '../packages/mistri/src/server/commands/businessCommandAccess.js';
+import {
+  BusinessCommandExecutionError,
+  executeBusinessCommand,
+  refuse,
+} from '../packages/mistri/src/server/commands/businessCommandExecution.js';
+import {
+  defineCommand,
+  defineCommands,
+  type BusinessCommandActor,
+  type BusinessCommandContext,
+} from '../packages/mistri/src/server/commands/businessCommands.js';
+import type { RefusalKeepDb } from '../packages/mistri/src/server/commands/commandErrors.js';
+import type { UntypedRow, WriteTable } from '../packages/mistri/src/server/commands/commandDb.js';
+import { liveSkip } from './live.js';
+import { Refusal, type Filter } from '../packages/engine/src/adapters/adapter.js';
+import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
+import type { RuntimeResources } from '../packages/mistri/src/server/app/appRuntimeResources.js';
+import { createAppSourceAdapter } from '../packages/mistri/src/server/app/appSourceAdapter.js';
+import { bindScopedBusinessCommands } from '../packages/mistri/src/server/commands/scopedBusinessCommandAccess.js';
+import { parseTestApp } from './support/commandCatalog.js';
+
+const LIVE = process.env.TABLEWALK_TEST_PG;
+const actor: BusinessCommandActor = { id: 'account-a', appId: 'keeps', roles: ['staff'] };
+type Handler = (context: BusinessCommandContext) => unknown;
+const writes = (table: unknown) => table as WriteTable<UntypedRow>;
+
+/** The rows as the test reads them, on either engine. */
+interface Engine {
+  url: string;
+  rows(sql: string): Promise<Record<string, unknown>[]>;
+  close(): Promise<void>;
+}
+
+async function sqliteEngine(): Promise<Engine> {
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-refusal-keep-'));
+  const path = join(directory, 'keeps.db');
+  const db = new DatabaseSync(path);
+  db.exec(`CREATE TABLE keep_account (id INTEGER PRIMARY KEY, email TEXT NOT NULL, locked INTEGER NOT NULL DEFAULT 0,
+      failures INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE keep_note (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL, body TEXT NOT NULL);
+    CREATE TABLE keep_attempt (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL, said TEXT NOT NULL);
+    INSERT INTO keep_account (id, email) VALUES (1, 'quinn@example.test');`);
+  migrateSqliteCommandJournal(path);
+  return {
+    url: path,
+    rows: async (sql) =>
+      db
+        .prepare(sql)
+        .all()
+        .map((row) => ({ ...row })),
+    close: async () => {
+      db.close();
+      rmSync(directory, { recursive: true, force: true });
+    },
+  };
+}
+
+interface Control extends PgQuery {
+  connect(): Promise<void>;
+  end(): Promise<void>;
+}
+const PG_RESET = 'DROP TABLE IF EXISTS public.keep_account, public.keep_note, public.keep_attempt CASCADE';
+async function postgresEngine(): Promise<Engine> {
+  const specifier = 'pg';
+  const pg = (await import(specifier)) as { default?: { Client: new (c: unknown) => Control }; Client?: new (c: unknown) => Control };
+  const Client = (pg.Client ?? pg.default?.Client)!;
+  const control = new Client({ connectionString: LIVE });
+  await control.connect();
+  for (const statement of [
+    PG_RESET,
+    `CREATE TABLE public.keep_account (id integer PRIMARY KEY, email text NOT NULL, locked boolean NOT NULL DEFAULT false,
+      failures integer NOT NULL DEFAULT 0, version integer NOT NULL DEFAULT 0)`,
+    `CREATE TABLE public.keep_note (id integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, account_id integer NOT NULL, body text NOT NULL)`,
+    `CREATE TABLE public.keep_attempt (id integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, account_id integer NOT NULL, said text NOT NULL)`,
+    `INSERT INTO public.keep_account (id, email) VALUES (1, 'quinn@example.test')`,
+  ])
+    await control.query(statement);
+  await migratePostgresCommandJournal(LIVE!);
+  return {
+    url: LIVE!,
+    rows: async (sql) => (await control.query(sql)).rows as Record<string, unknown>[],
+    close: async () => {
+      await control.query(PG_RESET).catch(() => {});
+      await control.end();
+    },
+  };
+}
+
+async function fixture(
+  engine: () => Promise<Engine>,
+  handler: Handler,
+  run: (f: { execute: (key?: string, signal?: AbortSignal) => Promise<unknown>; rows: Engine['rows'] }) => Promise<void>,
+  declared = true,
+  lookup?: () => unknown,
+) {
+  const store = await engine();
+  const registry = new Registry();
+  try {
+    registry.add({ id: 'keeps-db', name: 'Keeps', url: store.url, writable: true, source: 'config' });
+    const app = parseAppConfig(
+      {
+        id: 'keeps',
+        name: 'Keeps',
+        sources: { main: { connection: 'keeps-db' } },
+        resources: { keep_account: { access: 'write' }, keep_note: { access: 'write' }, keep_attempt: { access: 'write' } },
+        auth: { roles: { staff: { read: true, commands: ['sign_in'] } } },
+        views: { accounts: { kind: 'list', from: 'keep_account' } },
+        home: 'accounts',
+      },
+      'refusal keep fixture',
+    );
+    const commands = defineCommands({
+      sign_in: defineCommand({
+        source: 'main',
+        target: 'keep_account',
+        write: ['keep_note', 'keep_attempt'],
+        ...(declared ? { refused: { writes: ['keep_account', 'keep_attempt'] } } : {}),
+        ...(lookup ? { lookup } : {}),
+        input: {},
+        output: { parse: (value: unknown) => value },
+        handle: (context) => handler(context),
+      }),
+    });
+    const resources = await loadAppRuntimeResources(registry, app, 'keeps-db');
+    const binding = bindBusinessCommands({ app, registry: commands, resources, writableConnection: () => true });
+    let n = 0;
+    const execute = async (key?: string, signal?: AbortSignal) =>
+      (
+        await executeBusinessCommand(
+          binding,
+          actor,
+          {
+            command: 'sign_in',
+            commandVersion: 1,
+            idempotencyKey: key ?? `keeps-request-${String(++n).padStart(4, '0')}`,
+            input: {},
+            key: { id: 1 },
+            expectedVersion: 0,
+          },
+          signal ? { signal } : {},
+        )
+      ).result;
+    await run({ execute, rows: store.rows });
+  } finally {
+    await registry.closeAll();
+    await store.close();
+  }
+}
+
+const refusal = (code: string, reason?: string) => (error: unknown) => {
+  assert.ok(error instanceof BusinessCommandExecutionError, String(error));
+  assert.equal(error.code, code, `${error.field ?? ''} ${error.reason ?? ''} ${String((error as { cause?: unknown }).cause ?? '')}`);
+  if (reason !== undefined) assert.equal(error.reason, reason);
+  return true;
+};
+const count = async (rows: Engine['rows'], table: string) => Number((await rows(`SELECT count(*) AS n FROM ${table}`))[0].n);
+
+function suite(name: string, engine: () => Promise<Engine>, skip?: string | false) {
+  describe(name, { skip: skip || false }, () => {
+    test("the keep's writes stay, the handler's are undone, and the caller hears the refusal it was given", async () => {
+      const seen: { action?: string; via?: string; tables?: string[] } = {};
+      await fixture(
+        engine,
+        async ({ db, record }) => {
+          await writes(db.keep_note).insert({ account_id: 1, body: 'tried' });
+          refuse('That password is not right.', {
+            keep: async (kept: RefusalKeepDb) => {
+              const attribution = currentWriteAttribution();
+              Object.assign(seen, { action: attribution?.action, via: attribution?.via, tables: Object.keys(kept).sort() });
+              assert.equal('remove' in kept.keep_attempt, false, 'a keep removes nothing');
+              assert.equal('insertFile' in kept.keep_attempt, false);
+              await kept.keep_attempt.insert({ account_id: 1, said: 'wrong password' });
+              const account = (await kept.keep_account.get({ id: (record as { id: number }).id }))!;
+              await kept.keep_account.update(account, { failures: Number(account.failures) + 1 });
+            },
+          });
+        },
+        async (f) => {
+          await assert.rejects(f.execute(), refusal('ineligible_state', 'That password is not right.'));
+          assert.equal(await count(f.rows, 'keep_note'), 0, "the handler's own write was rolled back");
+          assert.deepEqual(await f.rows('SELECT account_id, said FROM keep_attempt'), [{ account_id: 1, said: 'wrong password' }]);
+          assert.deepEqual(await f.rows('SELECT failures, version FROM keep_account'), [{ failures: 1, version: 1 }]);
+          assert.deepEqual(seen, { action: 'sign_in (kept on refusal)', via: 'system', tables: ['keep_account', 'keep_attempt'] });
+        },
+      );
+    });
+
+    test('a coded refusal keeps too; a table outside refused.writes is not there to write', async () => {
+      await fixture(
+        engine,
+        () =>
+          refuse('forbidden', {
+            keep: async (kept: RefusalKeepDb) => {
+              assert.equal(kept.keep_note, undefined, 'keep_note is written by the command, not by its refusal');
+              await kept.keep_attempt.insert({ account_id: 1, said: 'locked out' });
+            },
+          }),
+        async (f) => {
+          await assert.rejects(f.execute(), refusal('forbidden'));
+          assert.equal(await count(f.rows, 'keep_attempt'), 1);
+          // No receipt is kept for a refusal: the same request, sent again, is refused again and keeps again.
+          await assert.rejects(f.execute('keeps-request-again'), refusal('forbidden'));
+          await assert.rejects(f.execute('keeps-request-again'), refusal('forbidden'));
+          assert.equal(await count(f.rows, 'keep_attempt'), 3);
+        },
+      );
+    });
+
+    test('a caller that hangs up once the refusal is decided does not undo what it keeps', async () => {
+      // The request's signal is the connection's (tenantPublicHttp.ts): aborted when the visitor drops it.
+      for (const when of ['before the keep', 'inside the keep'] as const) {
+        const caller = new AbortController();
+        await fixture(
+          engine,
+          () => {
+            if (when === 'before the keep') caller.abort();
+            refuse('forbidden', {
+              keep: async (db: RefusalKeepDb) => {
+                if (when === 'inside the keep') caller.abort();
+                const account = (await db.keep_account.get({ id: 1 }))!;
+                await db.keep_account.update(account, { failures: Number(account.failures) + 1 });
+              },
+            });
+          },
+          async (f) => {
+            await assert.rejects(f.execute(undefined, caller.signal), refusal('forbidden'), when);
+            assert.deepEqual(await f.rows('SELECT failures FROM keep_account'), [{ failures: 1 }], when);
+          },
+        );
+      }
+    });
+
+    test("a lookup's refusal keeps too, once the transaction it refuses has rolled back", async () => {
+      let handled = false;
+      await fixture(
+        engine,
+        () => void (handled = true),
+        async (f) => {
+          await assert.rejects(f.execute(), refusal('ineligible_state', 'That code has expired.'));
+          assert.equal(handled, false, 'the handler never ran');
+          assert.deepEqual(await f.rows('SELECT account_id, said FROM keep_attempt'), [{ account_id: 1, said: 'expired code' }]);
+        },
+        true,
+        () =>
+          refuse('That code has expired.', {
+            keep: async (db: RefusalKeepDb) => void (await db.keep_attempt.insert({ account_id: 1, said: 'expired code' })),
+          }),
+      );
+    });
+
+    test('a keep the record moved under runs again, three more times at most', async () => {
+      for (const [failing, kept] of [
+        [3, true],
+        [4, false],
+      ] as const) {
+        let attempts = 0;
+        await fixture(
+          engine,
+          () =>
+            refuse('forbidden', {
+              keep: async (db: RefusalKeepDb) => {
+                attempts++;
+                const account = (await db.keep_account.get({ id: 1 }))!;
+                // Guarded by a value the row no longer holds: what a concurrent sign-in leaves behind.
+                const seen = attempts <= failing ? { ...account, failures: 99 } : account;
+                await db.keep_account.update(seen, { failures: Number(account.failures) + 1 });
+              },
+            }),
+          async (f) => {
+            await assert.rejects(f.execute(), refusal(kept ? 'forbidden' : 'stale_record'));
+            assert.equal(attempts, 4, 'the first run and three more');
+            assert.deepEqual(await f.rows('SELECT failures FROM keep_account'), [{ failures: kept ? 1 : 0 }]);
+          },
+        );
+      }
+    });
+
+    test('a keep that fails is answered as a handler that fails, and nothing it wrote stays', async () => {
+      await fixture(
+        engine,
+        () =>
+          refuse('forbidden', {
+            keep: async (db: RefusalKeepDb) => {
+              await db.keep_attempt.insert({ account_id: 1, said: 'half' });
+              throw new Error('the keep broke');
+            },
+          }),
+        async (f) => {
+          await assert.rejects(f.execute(), refusal('temporarily_unavailable'));
+          assert.equal(await count(f.rows, 'keep_attempt'), 0);
+        },
+      );
+    });
+
+    test('a keep on a command that declares no refused writes is a fault in the handler', async () => {
+      let ran = false;
+      await fixture(
+        engine,
+        async ({ db }) => {
+          await writes(db.keep_note).insert({ account_id: 1, body: 'tried' });
+          refuse('forbidden', { keep: async () => void (ran = true) });
+        },
+        async (f) => {
+          await assert.rejects(f.execute(), refusal('invalid_result'));
+          assert.equal(ran, false);
+          assert.equal(await count(f.rows, 'keep_note'), 0);
+        },
+        false,
+      );
+    });
+  });
+}
+
+suite('refusal keep on SQLite', sqliteEngine);
+suite('refusal keep on PostgreSQL', postgresEngine, liveSkip('postgres', LIVE));
+
+test('refused: { writes } names tables the command writes, and a keep needs it', async () => {
+  const base = { source: 'main', target: 'keep_account', input: {}, output: { parse: (value: unknown) => value }, handle: () => ({}) };
+  for (const refused of [{}, { writes: [] }, { writes: ['keep_note'] }, { writes: ['keep_attempt'], also: 1 }, ['keep_attempt']]) {
+    assert.throws(
+      () => defineCommand({ ...base, write: ['keep_attempt'], refused } as never),
+      /\[refused-writes\]/,
+      JSON.stringify(refused),
+    );
+  }
+  const command = defineCommand({ ...base, write: ['keep_attempt'], refused: { writes: ['keep_account', 'keep_attempt'] } });
+  assert.deepEqual(command.refused, { writes: ['keep_account', 'keep_attempt'] });
+  assert.ok(Object.isFrozen(command.refused));
+});
+
+test("a keep under a row policy writes inside the member's rows, and is refused whole outside them", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-refusal-keep-scoped-')),
+    path = join(directory, 'desk.db');
+  const db = new DatabaseSync(path);
+  db.exec(`CREATE TABLE raw_ticket (id INTEGER PRIMARY KEY, desk INTEGER NOT NULL, tries INTEGER NOT NULL DEFAULT 0,
+      version INTEGER NOT NULL DEFAULT 0);
+    INSERT INTO raw_ticket (id, desk) VALUES (1, 1), (2, 2);`);
+  migrateSqliteCommandJournal(path);
+  const adapter = new SqliteAdapter(path, 'desk');
+  t.after(async () => {
+    await adapter.close();
+    db.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+  const runtime = createAppSourceAdapter(
+    { desk: { adapter, schema: await adapter.introspect(), writable: true, resources: { tickets: 'raw_ticket' } } },
+    'desk',
+  );
+  const anchor = runtime.forSource('desk');
+  const resources: RuntimeResources = {
+    adapter: runtime.adapter,
+    schema: runtime.schema,
+    connections: ['desk-db'],
+    connectionFor: () => 'desk-db',
+    toPhysical: (resource) => runtime.resolve(resource).physicalTable,
+    toLogical: (physical) => runtime.catalogs.get('desk')!.toLogical(physical),
+    toLogicalAt: (physical) => runtime.catalogs.get('desk')!.toLogical(physical),
+    forConnection: (connection) => {
+      if (connection !== 'desk-db') throw new Refusal('Unknown connection');
+      return anchor;
+    },
+  };
+  const app = parseTestApp(
+    {
+      id: 'desk',
+      name: 'Desk',
+      sources: { desk: { connection: 'desk-db', default: true } },
+      resources: { tickets: { access: 'write' } },
+      auth: { rows: 'policy', roles: { member: { read: true, commands: ['retry'] } } },
+      views: { tickets: { kind: 'list', from: 'tickets' } },
+      home: 'tickets',
+    },
+    'scoped refusal keep fixture',
+  );
+  let reach = 1;
+  const registry = {
+    retry: defineCommand({
+      source: 'desk',
+      target: 'tickets',
+      write: ['tickets'],
+      refused: { writes: ['tickets'] },
+      input: {},
+      output: { parse: (value: unknown) => value },
+      handle: () =>
+        refuse('forbidden', {
+          keep: async (kept: RefusalKeepDb) => {
+            const mine = (await kept.tickets.get({ id: 1 }))!;
+            await kept.tickets.update(mine, { tries: Number(mine.tries) + 1 });
+            // Another desk's ticket, as the keep might name it from the input: not the member's to write.
+            if (reach === 2) await kept.tickets.update({ id: 2, desk: 2, tries: 0, version: 0 }, { tries: 9 });
+            // The target itself, carried out of the member's rows.
+            if (reach === 3) await kept.tickets.update((await kept.tickets.get({ id: 1 }))!, { desk: 2 });
+          },
+        }),
+    }),
+  };
+  const deskOne: Filter = { groups: [[{ column: 'desk', op: '=', value: 1 }]] };
+  const binding = bindScopedBusinessCommands({
+    app,
+    resources,
+    registry,
+    writableConnection: () => true,
+    resultReferences: { retry: () => [] },
+  }).withScope({ tickets: deskOne }, () => {});
+  const member: BusinessCommandActor = { id: 'desk-one-member', appId: 'desk', roles: ['member'] };
+  let n = 0;
+  const retry = () =>
+    executeBusinessCommand(binding, member, {
+      command: 'retry',
+      commandVersion: 1,
+      key: { id: 1 },
+      expectedVersion: Number(db.prepare('SELECT version FROM raw_ticket WHERE id = 1').get()!.version),
+      idempotencyKey: `retry-ticket-request-${++n}`,
+      input: {},
+    });
+  const tries = () =>
+    db
+      .prepare('SELECT id, tries FROM raw_ticket ORDER BY id')
+      .all()
+      .map((row) => ({ ...row }));
+  await assert.rejects(retry(), refusal('forbidden'));
+  assert.deepEqual(tries(), [
+    { id: 1, tries: 1 },
+    { id: 2, tries: 0 },
+  ]);
+  reach = 2;
+  await assert.rejects(retry(), refusal('forbidden'));
+  assert.deepEqual(
+    tries(),
+    [
+      { id: 1, tries: 1 },
+      { id: 2, tries: 0 },
+    ],
+    'outside the rows the keep is refused whole: its in-scope write is not kept either',
+  );
+  reach = 3;
+  await assert.rejects(retry(), refusal('forbidden'));
+  assert.deepEqual(
+    db
+      .prepare('SELECT id, desk, tries FROM raw_ticket ORDER BY id')
+      .all()
+      .map((row) => ({ ...row })),
+    [
+      { id: 1, desk: 1, tries: 1 },
+      { id: 2, desk: 2, tries: 0 },
+    ],
+    'a keep that carries its target out of the rows is refused whole',
+  );
+});

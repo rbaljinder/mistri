@@ -54,6 +54,10 @@ just before `last 30 days`. Hours and minutes count from the instant:
 April, July, October); there is no fiscal year. A value with a space is quoted:
 `name = "Kereru Coffee"`.
 
+In a [tenant App](/docs/tenant-apps/#what-members-read), `tenant.<column>` is the
+tenant's own value of a profile column `auth.tenancy.shared` lists:
+`tax_rate country = tenant.country`.
+
 ## Follow a reference in a query
 
 A dotted path walks a foreign key, as many steps as the schema has:

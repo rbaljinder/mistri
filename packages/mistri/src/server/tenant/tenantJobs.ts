@@ -31,7 +31,7 @@ import { flowKindCommands } from '../../shared/appFlows.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
 import { appCommandGrants, declaredReferences, physicalBindings, resolveAppAccess, tenantAppShape, type AppDef } from '../../shared/app.js';
 import { calendarDay, zonelessInstant } from '../../shared/appStamps.js';
-import { appZone } from '../../shared/appZone.js';
+import { appZone, readerZone, zoneColumn } from '../../shared/appZone.js';
 import { wallClockText } from '../app/wallClock.js';
 import { assertScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
@@ -295,6 +295,11 @@ function tenantJobProblems(module: CapturedJobModule, app: AppDef, registry: Bus
         `principal "${job.runAs}" runs ${realm} command "${job.command.id}", so every role it holds must be a ${realm}-realm role.`,
       );
     }
+    // Each tenant's zone is the one its profile names: the App says which shared column holds it.
+    if (job.every?.tenantZone && zoneColumn(app.ui)?.resource !== 'tenant')
+      problems.push(
+        `job "${job.id}" runs on each tenant's zone (timezone: 'tenant'), and the App's ui.timezone names no tenant column: say ui.timezone: { column: 'tenant.<column>', default } [job-tenant-zone].`,
+      );
   }
   // Mail is one tenant's, always: its principals hold tenant roles alone.
   for (const { what, runAs } of mailCommands(module)) {
@@ -1017,7 +1022,16 @@ export function bindTenantJobs(options: TenantJobsOptions) {
     bind,
     deliver,
     /** Whom a job at times per tenant runs for at a slot: the tenants active now. */
-    tenants: () => reader.readActiveTenants(),
+    tenants: async () => (await reader.readActiveTenants()).map((tenant) => tenant.id),
+    /** The same, each with its zone: the one its profile row names, else the App's own (`timezone: 'tenant'`). */
+    tenantZones: async () => {
+      const column = zoneColumn(app.ui)!.column,
+        fallback = appZone(app.ui) ?? 'UTC';
+      return (await reader.readActiveTenants({ zone: column })).map((tenant) => ({
+        id: tenant.id,
+        zone: readerZone(tenant.zone) ?? fallback,
+      }));
+    },
     /** The records a machine timer is due on, each with its row's tenant; undefined when the module has no timer. */
     sweep: [...module.jobs.values()].some((job) => job.timer) ? sweep : undefined,
     /** What a workflow's steps run by name; each is bound and refused as stepExtract says. */
@@ -1180,6 +1194,7 @@ export async function openTenantJobHost(
       bind: jobs.bind,
       admit: jobs.admit,
       tenants: jobs.tenants,
+      ...([...jobs.module.jobs.values()].some((job) => job.every?.tenantZone) ? { tenantZones: jobs.tenantZones } : {}),
       commands: jobs.commands,
       ...(jobs.sweep ? { sweep: jobs.sweep } : {}),
       ...(jobs.flowChanges ? { flowChanges: jobs.flowChanges } : {}),

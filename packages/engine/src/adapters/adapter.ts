@@ -623,6 +623,8 @@ export interface InsertRequest {
    * what defaults are for — and refuses what it must, in its own words.
    */
   values: Record<string, string | number | boolean | null>;
+  /** What the write gives its notices to say (`{words.code}` in a notify title): told, never stored on the row. */
+  words?: Readonly<Record<string, string>>;
 }
 
 export interface InsertResult {
@@ -1300,6 +1302,8 @@ export interface UpdateRequest {
   restore?: true;
   /** Original values for exactly the touched fields; checked atomically by UPDATE. */
   expected?: Record<string, string | number | boolean | null>;
+  /** What the write gives its notices to say (`{words.code}` in a notify title): told, never stored on the row. */
+  words?: Readonly<Record<string, string>>;
 }
 
 export interface UpdateResult {

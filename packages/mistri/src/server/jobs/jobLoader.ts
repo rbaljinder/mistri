@@ -588,7 +588,7 @@ export function describeJobs(module: CapturedJobModule): string[] {
       job.timer
         ? `jobs: ${job.id}@${job.version} ${job.timer.at ? `at ${job.timer.at} in ${job.timer.resource}${job.timer.when === undefined ? '' : ` when ${job.timer.when}`}` : `after ${job.timer.after} in ${job.timer.resource} "${job.timer.state}"`} → ${pinned(job.command)} as ${job.runAs}`
         : job.every
-          ? `jobs: ${job.id}@${job.version} every "${job.every.text}" (${job.every.timezone})${job.realm === 'tenant' ? ' per tenant' : job.realm === 'platform' ? ' on the platform' : ''} → ${pinned(job.command)} as ${job.runAs}`
+          ? `jobs: ${job.id}@${job.version} every "${job.every.text}" (${job.every.tenantZone ? "each tenant's zone" : job.every.timezone})${job.realm === 'tenant' ? ' per tenant' : job.realm === 'platform' ? ' on the platform' : ''} → ${pinned(job.command)} as ${job.runAs}`
           : `jobs: ${job.id}@${job.version} on ${job.event!.name}@${job.event!.version} (${pinned(job.from!)}) → ${pinned(job.command)} as ${job.runAs}`,
     ),
     ...workflows,

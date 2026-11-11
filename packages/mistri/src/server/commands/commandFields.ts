@@ -7,8 +7,9 @@
  * one; a pattern is kept as its source, so the declaration stays JSON the
  * server can send the browser; a choice's labels are written out here, once.
  */
+import type { AppMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import type {
-  AppCommandChoice,
+  CommandChoiceOption,
   CommandBooleanField,
   CommandChoiceField,
   CommandChoicesField,
@@ -94,12 +95,14 @@ export const field: {
   ): CommandBooleanField & Optional<O> & (O extends { accept: true } ? { accept: true } : unknown);
   /** One of these values: `choice([36, 48, 60], { each: n => `${n} months` })`, or `{ value, label }` options. A bare string is said as words (`'wont_fix'` is "Wont fix"; an all-caps code stays as written). */
   choice<
-    const V extends readonly (string | number | AppCommandChoice)[],
+    const V extends readonly (string | number | CommandChoiceOption)[],
     const O extends Omit<CommandChoiceField, 'type' | 'options'> = {},
   >(
     values: V,
-    options?: O & { each?: (value: Exclude<V[number], AppCommandChoice>) => string },
-  ): Omit<CommandChoiceField, 'options'> & { options: readonly { value: ChoiceValue<V[number]>; label: string }[] } & Optional<O>;
+    options?: O & { each?: (value: Exclude<V[number], CommandChoiceOption>) => string },
+  ): Omit<CommandChoiceField, 'options'> & {
+    options: readonly { value: ChoiceValue<V[number]>; label: string | AppMessageRef }[];
+  } & Optional<O>;
   /** One of a table's rows, by key: `field.choice({ from: 'category', labelColumn: 'name' })` offers each row's `name` and
       sends its `id` (`by` names another key column), in the order of `name` unless `sort: { column, direction }` says one;
       `label` is the field's own title. The rows are read as the form opens and again as it is sent. */
@@ -108,12 +111,14 @@ export const field: {
   ): CommandChoiceField & { from: O['from'] } & Optional<O>;
   /** Several of these values, or of a table's rows (`{ from, labelColumn, sort }`): `min`/`max` how many, an `exclusive` value chosen alone (`'none'`). */
   choices<
-    const V extends readonly (string | number | AppCommandChoice)[],
+    const V extends readonly (string | number | CommandChoiceOption)[],
     const O extends Omit<CommandChoicesField, 'type' | 'options'> = {},
   >(
     values: V,
-    options?: O & { each?: (value: Exclude<V[number], AppCommandChoice>) => string },
-  ): Omit<CommandChoicesField, 'options'> & { options: readonly { value: ChoiceValue<V[number]>; label: string }[] } & Optional<O>;
+    options?: O & { each?: (value: Exclude<V[number], CommandChoiceOption>) => string },
+  ): Omit<CommandChoicesField, 'options'> & {
+    options: readonly { value: ChoiceValue<V[number]>; label: string | AppMessageRef }[];
+  } & Optional<O>;
   choices<const O extends Omit<CommandChoicesField, 'type' | 'options' | 'from' | 'labelColumn'> & { from: string; labelColumn: string }>(
     source: O,
   ): CommandChoicesField & { from: O['from'] } & Optional<O>;

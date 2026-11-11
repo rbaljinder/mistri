@@ -172,6 +172,43 @@ test('me is the signed-in person: an email beside text, their row beside a refer
   assert.deepEqual(view.filter.groups, [[{ path: 'owner_id.email', op: '=', value: 'ada@x.test' }]]);
 });
 
+test("tenant.<column> is the reader's tenant profile: bound, refused when unlisted or unmeant, the word when quoted", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const db = new DatabaseSync(join(directory, 'tenant.db'));
+  db.exec(`CREATE TABLE tax_rate (id INTEGER PRIMARY KEY, country TEXT, rate REAL, active BOOLEAN);
+    CREATE TABLE note (id INTEGER PRIMARY KEY, tenant TEXT, body TEXT);`);
+  db.close();
+  const adapter = new SqliteAdapter(join(directory, 'tenant.db'), 'tenant');
+  t.after(() => adapter.close());
+  const schema: DatabaseSchema = await adapter.introspect();
+  const member: QueryPerson = { email: 'ada@x.test', tenant: { country: 'NZ', plan: null, vat: true } };
+  const parse = (text: string, me?: QueryPerson) => parseQuery(text, { schema, ...(me === undefined ? {} : { me }) });
+  assert.deepEqual(parse('tax_rate country = tenant.country', member).query!.filter.groups, [
+    [{ column: 'country', op: '=', value: 'NZ' }],
+  ]);
+  // A null profile value matches no row, and is left out of a list.
+  assert.deepEqual(parse('tax_rate country = tenant.plan', member).query!.filter.groups, [[{ column: 'country', op: 'in', value: [] }]]);
+  assert.deepEqual(parse('tax_rate country in (tenant.country, tenant.plan, AU)', member).query!.filter.groups, [
+    [{ column: 'country', op: 'in', value: ['NZ', 'AU'] }],
+  ]);
+  assert.deepEqual(parse('tax_rate active = tenant.vat', member).query!.filter.groups, [[{ column: 'active', op: '=', value: true }]]);
+  assert.match(parse('tax_rate country = tenant.vat', member).errors[0]?.message ?? '', /tenant\.vat is a flag, and country is not/);
+  // Quoted, it is the text.
+  assert.deepEqual(parse('tax_rate country = "tenant.country"', member).query!.filter.groups, [
+    [{ column: 'country', op: '=', value: 'tenant.country' }],
+  ]);
+  // A column the App does not share, and a parse with no tenant meant, are refused, never read as the word.
+  assert.match(parse('tax_rate country = tenant.region', member).errors[0]?.message ?? '', /list "region" in auth\.tenancy\.shared/);
+  assert.match(parse('tax_rate country = tenant.country', { email: 'ada@x.test' }).errors[0]?.message ?? '', /no tenant is meant here/);
+  // A check before any request reads it as the word.
+  assert.deepEqual(parse('tax_rate country = tenant.country', ANYONE).query!.filter.groups, [
+    [{ column: 'country', op: '=', value: 'tenant.country' }],
+  ]);
+  // A table with a `tenant` column of its own reads that column's path, not the profile.
+  assert.equal(parse('note body = tenant.country', member).errors[0]?.message.includes('auth.tenancy.shared') ?? false, false);
+});
+
 test('a record label template is computed in the statement, sorted and searched like a column', async (t) => {
   const { adapter, schema } = await inventory(t);
   const served: DatabaseSchema = {

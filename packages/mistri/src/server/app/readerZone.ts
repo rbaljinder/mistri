@@ -12,6 +12,7 @@ import type { QueryRequest, QueryResult } from '@mistriwork/engine/adapters/adap
 import type { AppDef, AppUi } from '../../shared/appModel.js';
 import { readerZone, zoneColumn } from '../../shared/appUi.js';
 import { columnKind, tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 
 export async function readZone(
   ui: AppUi | undefined,
@@ -27,11 +28,26 @@ export async function readZone(
   return readerZone(rows[0]?.[named.column]);
 }
 
-/** Startup's check of the column against the whole catalog: a declared resource's text column. */
+/**
+ * Startup's check of the column against the whole catalog: a declared resource's text column. In a tenant App the
+ * tenant's own zone is `tenant.<column>`, a column of its profile shared with its members (`auth.tenancy.shared`);
+ * the profile resource itself is not named there, since its members hold no grant on it.
+ */
 export function zoneColumnProblem(app: AppDef, schema: DatabaseSchema): string | undefined {
   const named = zoneColumn(app.ui);
   if (!named) return undefined;
   const where = `"ui.timezone" reads "${named.resource}.${named.column}"`;
+  const tenancy = app.auth?.tenancy;
+  if (tenancy?.profile !== undefined && named.resource === tenancy.profile)
+    return `${where}, the tenant profile: name it "tenant.${named.column}" and list "${named.column}" in auth.tenancy.shared [tenant-shared-column].`;
+  if (named.resource === 'tenant' && tenancy?.profile !== undefined) {
+    if (!tenancy.shared?.includes(named.column))
+      return `${where}, and auth.tenancy.shared does not list "${named.column}" [tenant-shared-column].`;
+    const column = tableNamed(schema, tenancy.profile)?.columns.find((column) => column.name === named.column);
+    if (column && columnKind(column.type) !== 'text')
+      return `${where}, which is ${column.type}; a zone is text like "America/Chicago" [tenant-shared-column].`;
+    return undefined;
+  }
   if (!Object.hasOwn(app.resources ?? {}, named.resource)) return `${where}, and "${named.resource}" is not one of the App's resources.`;
   const column = tableNamed(schema, named.resource)?.columns.find((column) => column.name === named.column);
   if (!column) return `${where}, and "${named.resource}" has no column "${named.column}".`;
@@ -41,7 +57,8 @@ export function zoneColumnProblem(app: AppDef, schema: DatabaseSchema): string |
 
 /**
  * A tenant command's zone: the tenant's own, read as `readZone` reads a reader's
- * (the first row of the `ui.timezone` column, under the tenant's scope), so
+ * (the first row of the `ui.timezone` column, under the tenant's scope, or the
+ * `tenant.<column>` the request read from the profile already), so
  * `today()`, `now()` and a stamp count this tenant's day, not the App's. Without a
  * column form the App's zone stands (undefined here). A column the scope cannot
  * read, or a value this runtime does not know as an IANA zone, falls to the App's
@@ -51,15 +68,15 @@ export function zoneColumnProblem(app: AppDef, schema: DatabaseSchema): string |
 export async function commandZone(
   ui: AppUi | undefined,
   reads: () => Promise<{ query(request: QueryRequest): Promise<QueryResult> }>,
-  /** Where the column is on the platform-owned profile (the scope holds no such table): the platform's own read of it,
-   * so a command counts the day the reads do. */
-  profile?: { readonly resource: string | undefined; read(column: string): Promise<string | undefined> },
+  /** The profile columns the request read (`auth.tenancy.shared`), where the column is `tenant.<column>`: the scope
+   * holds no such table, and a command counts the day the reads do. */
+  tenant?: Readonly<Record<string, TenantValue>>,
 ): Promise<string | undefined> {
   const named = zoneColumn(ui);
   if (!named) return undefined;
   let value: unknown;
   try {
-    if (profile && profile.resource === named.resource) value = await profile.read(named.column);
+    if (tenant && named.resource === 'tenant') value = tenant[named.column];
     else {
       const { rows } = await (await reads()).query({ table: named.resource, columns: [named.column], limit: 1, offset: 0 });
       value = rows[0]?.[named.column];

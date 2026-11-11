@@ -31,12 +31,11 @@ names — their tenant's, their account's. In a tenant App a command's
 `today()`, `now()` and its stamps count the day in the running tenant's own
 zone, read the same way; a name that is not an IANA zone falls to `default`
 (and is logged outside production). Elsewhere writes keep `default`. In a tenant
-App the column may be on the platform-owned tenant profile
-(`auth.tenancy.profile`, say `customer.timezone`): each tenant's people count
-their days in the zone their tenant's profile row holds, read by the platform
-itself, so no role needs a grant on the profile and no other profile column
-becomes readable. An empty, null or unknown value is `default`, and `mistri
-check` refuses a column the profile does not have. A tenant command's `today()`
+App the tenant's own zone is a shared profile column: `timezone: { column:
+'tenant.timezone', default: 'America/New_York' }` with `timezone` listed in
+`auth.tenancy.shared` ([what members read](/docs/tenant-apps/#what-members-read)).
+An empty, null or unknown value is `default`, and `mistri check` refuses a column
+`shared` does not list (`tenant-shared-column`). A tenant command's `today()`
 counts the same day.
 
 `locale` is also the App's own language, the one its `messages/` catalogs are
@@ -44,4 +43,6 @@ written from, and may be read per reader the same way: `locale: { column:
 'person.locale', default: 'en-US' }`. A tenant's tag (`branding.allow:
 ['locale']`) comes before `default`. `messages: fromRecord('tenant_message',
 { by: 'tenant', tenantField, fields: { key, locale, text } })` keeps a
-tenant's own words over the catalogs. See [Languages](/docs/languages/).
+tenant's own words over the catalogs. `catalog: 'tenant.kind'` picks a
+variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
+[Languages](/docs/languages/).

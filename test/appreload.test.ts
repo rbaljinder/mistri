@@ -10,9 +10,9 @@
  */
 import { test, before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, chmodSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import {
   appForConnection,
   appPayload,
@@ -20,10 +20,9 @@ import {
   loadApp,
   mergeAppPages,
   reloadApp,
-  watchApp,
-  loadedFiles,
   type AppHost,
 } from '../packages/mistri/src/server/app/apps.js';
+import { loadedFiles, watchApp, watchedDirs } from '../packages/mistri/src/server/app/appWatch.js';
 import { AUTHORITY_CHANGED } from '../packages/mistri/src/server/app/authorityLock.js';
 import { once } from 'node:events';
 import { createApp } from './support/createApp.js';
@@ -453,6 +452,67 @@ describe('watchApp', () => {
       assert.equal(loaded.app.name, 'Quiet v2');
     } finally {
       stop();
+    }
+  });
+
+  test('a component declared before its module is written loads once the module is, without a restart', async () => {
+    /* A field report: a component added while the server watched loaded only after a restart. Its manifest was saved
+       first, naming a module in a folder nothing had compiled from yet; that load failed, and the watcher, which took
+       its folders from the last good load, never saw the module arrive. */
+    const dir = join(tmp, 'placed');
+    mkdirSync(join(dir, 'node_modules', '@mistriwork'), { recursive: true });
+    symlinkSync(resolve('packages', 'mistri'), join(dir, 'node_modules', '@mistriwork', 'mistri'), 'dir');
+    writeFileSync(join(dir, 'package.json'), '{ "type": "module" }\n');
+    const manifest = (placed: boolean) =>
+      [
+        "import { component, custom, dashboard, defineApp, listView } from '@mistriwork/mistri/app';",
+        placed ? "const hello = component('hello', { module: './widgets/Hello.jsx' });" : '',
+        "export default defineApp({ id: 'placed', name: 'Placed', connection: 'tick', resources: { task: {} },",
+        `  views: { home: ${placed ? "dashboard('Home', [custom('Hello', hello)])" : "listView('Home', 'task')"} }, home: 'home', nav: ['home'] });`,
+      ].join('\n');
+    writeFileSync(join(dir, 'app.mjs'), manifest(false));
+    const host: AppHost = { app: await loadApp(dir), pages: [] };
+    let reloads = 0;
+    let settled = Promise.resolve();
+    const stop = watchApp(
+      dir,
+      () => {
+        settled = settled.then(async () => {
+          await reloadApp(host, dir, []);
+          reloads += 1;
+        });
+      },
+      50,
+      () => watchedDirs(host),
+      () => loadedFiles(host.app),
+    );
+    try {
+      assert.ok(
+        await saveUntilSeen(join(dir, 'app.mjs'), manifest(true), () => reloads >= 1 && host.loadError !== undefined),
+        'the manifest save was never seen',
+      );
+      assert.match(host.loadError ?? '', /names a module that does not exist/);
+      mkdirSync(join(dir, 'widgets'));
+      await new Promise((done) => setTimeout(done, 200));
+      assert.ok(
+        await saveUntilSeen(
+          join(dir, 'widgets', 'Hello.jsx'),
+          'export default function Hello() { return <b>hello</b>; }\n',
+          () => host.app.components?.entries.hello !== undefined,
+        ),
+        `the module was never seen: ${host.loadError}`,
+      );
+      assert.equal(host.loadError, undefined);
+
+      // And taken away again: the declaration and its folder go, and the App loads without them.
+      rmSync(join(dir, 'widgets'), { recursive: true });
+      assert.ok(
+        await saveUntilSeen(join(dir, 'app.mjs'), manifest(false), () => host.app.components === undefined),
+        `the removal was never seen: ${host.loadError}`,
+      );
+    } finally {
+      stop();
+      await settled;
     }
   });
 });

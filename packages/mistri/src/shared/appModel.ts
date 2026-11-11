@@ -208,8 +208,8 @@ export type InferredListPart = 'show' | 'sort' | 'tabs' | 'filters';
  * views it names are `AppDef.views`.
  */
 export type AppNavNode =
-  | { view: string; label?: string; color?: SeriesColor; roles?: string[] }
-  | { label: string; to: import('../../schema/app.js').StaticAppTarget; color?: SeriesColor; roles?: string[] }
+  | { view: string; label?: string; color?: SeriesColor; roles?: string[]; when?: string }
+  | { label: string; to: import('../../schema/app.js').StaticAppTarget; color?: SeriesColor; roles?: string[]; when?: string }
   | {
       group: string;
       label: string;
@@ -221,6 +221,9 @@ export type AppNavNode =
       inline?: true;
       folded?: true;
       workspace?: true;
+      /** The tenants the menu offers it to, by their shared profile (`tenant.plan in (pro, team)`): arrangement only,
+          folded once the App loads and judged per request (appTenantProfile.ts menuFor), never sent to the browser. */
+      when?: string;
       children: AppNavNode[];
     };
 
@@ -286,6 +289,9 @@ export interface AppTenancy {
   /** The platform-owned resource with one row per tenant: the one platform
       resource a tenant row may reference, and only by its ownership column. */
   profile?: string;
+  /** Columns of the tenant's profile row its members read, as `tenant.<column>` in queries, row scopes, `when` and
+      handlers. Read once per request; a tenant with no row reads nulls. Needs `profile`. */
+  shared?: string[];
   /** Declares the platform realm; its label names the platform context ("Lender"). `me` is who the word is there,
       as `auth.me` says it in a tenant's: a row of the platform's table of its staff, by the column holding their
       account id. Absent, `me` in the platform realm is nobody's row. */
@@ -1183,6 +1189,9 @@ export interface AppUi {
   localeColumn?: string;
   /** `ui.messages: fromRecord(...)`: a tenant's own words over the App's catalogs. Never served. */
   messages?: import('./branding.js').RecordMessagesSpec;
+  /** `ui.catalog: 'tenant.<column>'`, as the profile column's name: its value names the tenant's messages/ folder.
+      Never served. */
+  catalog?: string;
   /** IANA zone the app's "today" is reckoned in ("Australia/Sydney"). Date
       phrases — last 30 days, this month — are windows on this calendar.
       Absent means the server's own clock. A TIMESTAMP or DATETIME that carries

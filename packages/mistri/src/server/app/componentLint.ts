@@ -20,10 +20,15 @@
  * one (apps.ts), with the text `check` gives. That is a heuristic over text, not a sandbox: the App's author is trusted
  * with their own browser code, and this stops the accidents.
  *
+ * One problem is check's alone: a quoted `useMessage` key the source catalog
+ * lacks (`component-message`). Served, that key is said as itself, a slip the
+ * page survives, so a load does not refuse it; only `check` passes the catalog.
+ *
  * Text, not a parser: comments are blanked first, so a comment that names a
  * rule does not trip it, and a string that spells one does. A component that
  * needs one of these on purpose is not a component this platform draws yet.
  */
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { AppDef } from '../../shared/appModel.js';
@@ -43,6 +48,11 @@ interface ComponentLint {
   problems: ComponentFinding[];
   warnings: ComponentFinding[];
 }
+/** The App's source catalog, as check holds a component's `useMessage` keys to it: no file where the App has none. */
+interface ComponentMessages {
+  keys: ReadonlySet<string>;
+  file?: string;
+}
 
 /** Comments blanked to spaces, newlines kept, so a finding's line is the source's. */
 function withoutComments(source: string, css: boolean): string {
@@ -52,6 +62,40 @@ function withoutComments(source: string, css: boolean): string {
     : source
         .replace(/\/\*[\s\S]*?\*\//g, blank)
         .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, (match, lead: string) => lead + blank(match.slice(lead.length)));
+}
+
+/**
+ * Each literal key a component's script says with `useMessage`, and its line. A key built from an expression is not
+ * followed: check can only hold what it can read.
+ */
+function messageKeysIn(source: string): Array<{ key: string; line: number }> {
+  const text = withoutComments(source, false);
+  return [...text.matchAll(/\buseMessage\s*\(\s*(['"`])((?:(?!\1)[^\\$\n])+)\1/g)].map((match) => ({
+    key: match[2]!,
+    line: text.slice(0, match.index).split('\n').length,
+  }));
+}
+
+/**
+ * Every key the App's components say, read from their sources; `undefined` where a source cannot be read (a built App
+ * lists no sources), so nobody is told a key is unused that a component may name.
+ */
+export function componentMessageKeys(dir: string, compiled: CompiledComponents): Set<string> | undefined {
+  const keys = new Set<string>();
+  for (const entry of Object.values(compiled.entries)) {
+    const scripts = entry.sources.filter((file) => /\.[cm]?[jt]sx?$/.test(file));
+    if (!scripts.length) return undefined;
+    for (const file of scripts) {
+      let source: string;
+      try {
+        source = readFileSync(join(dir, file), 'utf8');
+      } catch {
+        return undefined;
+      }
+      for (const { key } of messageKeysIn(source)) keys.add(key);
+    }
+  }
+  return keys;
 }
 
 const SCRIPT_PROBLEMS: Array<[RegExp, string]> = [
@@ -333,6 +377,7 @@ export async function lintComponents(
   compiled: CompiledComponents,
   pages: PageManifests = new Map(),
   schema?: DatabaseSchema,
+  messages?: ComponentMessages,
 ): Promise<ComponentLint> {
   const problems: ComponentFinding[] = [];
   const warnings: ComponentFinding[] = [];
@@ -377,6 +422,17 @@ export async function lintComponents(
       iconFindings(text, (line, message) => problems.push({ component: id, file, line, text: message }));
       const manifest = pages.get(id);
       const lang = /\.(tsx?|jsx?)$/.exec(file)?.[1] as 'ts' | 'tsx' | 'js' | 'jsx' | undefined;
+      if (messages && lang)
+        for (const { key, line } of messageKeysIn(raw))
+          if (!messages.keys.has(key))
+            problems.push({
+              component: id,
+              file,
+              line,
+              text: messages.file
+                ? `[component-message] useMessage("${key}"): "${key}" is not in ${messages.file}, so the component shows the key itself`
+                : `[component-message] useMessage("${key}"): the App has no messages/<locale>.ts, so the component shows the key "${key}" itself`,
+            });
       if (unplaced && parse && lang) {
         const links = pageLinks(parse, raw, lang);
         for (const page of links.pages) linked.add(page);

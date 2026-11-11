@@ -38,3 +38,20 @@ export function mayReadTargetColumn(actor: BusinessCommandActor, column: string)
   const columns = readableTarget.get(actor);
   return columns ? columns.has(column) : true;
 }
+
+const readableTables = new WeakMap<BusinessCommandActor, (local: string) => ReadonlySet<string> | undefined>();
+
+/** Record what an issued actor reads of each table the command reads, by its local name. The authorizer's only. */
+export function issueReadColumns(actor: BusinessCommandActor, columns: (local: string) => ReadonlySet<string> | undefined): void {
+  readableTables.set(actor, columns);
+}
+
+/**
+ * Whether this actor reads a column of a table the command reads, by its local name: an input's default that follows
+ * a reference (`customer_id.default_rate`, commandPrepare.ts) prefills a form, so it starts only from what they read.
+ */
+export function mayReadColumn(actor: BusinessCommandActor, local: string, column: string): boolean {
+  if (unreadableTarget.has(actor)) return false;
+  const columns = readableTables.get(actor)?.(local);
+  return columns ? columns.has(column) : true;
+}

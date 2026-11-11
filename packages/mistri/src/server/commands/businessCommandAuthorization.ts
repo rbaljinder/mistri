@@ -1,4 +1,4 @@
-import { recordComparisons } from '../../shared/commandDraft.js';
+import { draftNames, recordComparisons } from '../../shared/commandDraft.js';
 import { isPromise, isProxy } from 'node:util/types';
 import { appZone } from '../../shared/appUi.js';
 import { personTable } from '../../shared/appMe.js';
@@ -31,13 +31,13 @@ import {
   type BusinessCommandRegistry,
 } from './businessCommands.js';
 import { commandCatalog, zonedCatalog, type CommandCatalog } from './commandDb.js';
-import { compileWhen, withDerived, type CommandPeople } from './commandWhen.js';
+import { compileWhen, recordPartEnd, recordPathEnd, withDerived, type CommandPeople } from './commandWhen.js';
 import { sayRefusal } from '@mistriwork/engine/shared/refusal.js';
 import { withSaying } from './commandSaying.js';
 import { versionColumn } from './commandRevision.js';
 import { commandLookupProblem } from './commandLookupRules.js';
 import { captureTenantData, isCapturedTenantData, tenantOptions, tenantRecord } from '@mistriwork/engine/server/evidence.js';
-import { issueTargetColumns, issueTargetUnreadable } from './commandActorColumns.js';
+import { issueReadColumns, issueTargetColumns, issueTargetUnreadable } from './commandActorColumns.js';
 import { genericWriteEntitled, genericWriteOf } from './genericWriteBrand.js';
 import { flowCommandOf } from './flowCommandBrand.js';
 
@@ -579,7 +579,8 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
     const table = findTable(schema, resource);
     if (!table) return;
     /* The command's `when`, and each input's that asks it only of some records: read where a granted role
-       narrows the target's columns, as before. */
+       narrows the target's columns, as before. A `record.<ref>.<column>` part reads the reference on the target,
+       each reference after it on the table it crosses, and its last column on the table it ends on. */
     let judged: Array<{ text: string; said: string }> | undefined;
     const judgedOf = () =>
       (judged ??= [
@@ -596,16 +597,24 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
        compiled again for every role, a large App's ten roles made it a tenth of startup. */
     const logicalOf = (local: string) => logicalResource(app, command.source, local);
     let derived: ReturnType<typeof withDerived> | undefined | null;
-    const readsOf = new Map<string, readonly string[] | undefined>();
-    const readsBy = (text: string): readonly string[] | undefined => {
+    const readsOf = new Map<string, ReadonlyArray<{ local: string; reads: readonly string[] }> | undefined>();
+    const readsBy = (text: string): ReadonlyArray<{ local: string; reads: readonly string[] }> | undefined => {
       if (readsOf.has(text)) return readsOf.get(text);
-      let reads: readonly string[] | undefined;
+      let reads: Array<{ local: string; reads: readonly string[] }> | undefined;
       try {
         if (derived === undefined) {
           const footprint = commandCatalog(schema, command.read, logicalOf);
           derived = footprint ? withDerived(footprint, app, schema, logicalOf) : null;
         }
-        reads = derived ? compileWhen(derived[command.target], text, new Date(), ANYONE).reads : undefined;
+        if (derived) {
+          const end = recordPartEnd(derived, command.target, text);
+          reads = [{ local: end.table, reads: compileWhen(derived[end.table], end.comparison, new Date(), ANYONE).reads }];
+          if (end.path) {
+            const { segments, crossed } = end.path;
+            reads.push({ local: command.target, reads: [segments[0]] });
+            for (const [index, local] of crossed.slice(0, -1).entries()) reads.push({ local, reads: [segments[index + 1]] });
+          }
+        }
       } catch {
         reads = undefined;
       }
@@ -614,16 +623,18 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
     };
     for (const role of declaredRoles) {
       if (!granted([role], id)) continue;
-      const seen = accessOf([role]).fields?.get(resource)?.read;
-      if (!seen) continue;
-      const hidden = (column: string) => !seen.has(column);
+      const fields = accessOf([role]).fields;
+      if (!fields) continue;
       for (const { text, said } of judgedOf()) {
-        const reads = readsBy(text);
-        if (reads?.some(hidden)) {
-          invalid(
-            `Command "${id}" is granted to role "${role}", which does not read a column of "${resource}" its ${said} judges ` +
-              '(a "fields" rule or "hidden" leaves it out). Let the role read it, or judge the state in the handler.',
-          );
+        for (const { local, reads } of readsBy(text) ?? []) {
+          const named = logicalOf(local);
+          const seen = fields.get(named)?.read;
+          if (seen && reads.some((column) => !seen.has(column))) {
+            invalid(
+              `Command "${id}" is granted to role "${role}", which does not read a column of "${named}" its ${said} judges ` +
+                '(a "fields" rule or "hidden" leaves it out). Let the role read it, or judge the state in the handler.',
+            );
+          }
         }
       }
     }
@@ -784,10 +795,44 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           invalid(`Command "${id}" when: ${(error as Error).message}${hint}`);
         }
       }
+      /* An input's `when` and its default may read the tenant's shared profile (`tenant.<column>`) and follow the
+         target's references (`record.<ref>.<column>`, commandWhen.ts recordPathEnd): each column a listed one, each
+         reference one to a table the command reads, judged now. A member reads its tenant's columns as nulls here. */
+      const tenancy = app.auth?.tenancy;
+      const shared = new Set(tenancy?.shared ?? []);
+      const member: QueryPerson =
+        tenancy?.profile === undefined ? someone : { ...someone, tenant: Object.fromEntries([...shared].map((column) => [column, null])) };
+      const tenantProblem = (column: string): string | undefined =>
+        tenancy?.profile === undefined
+          ? `reads "tenant.${column}", and the App has no auth.tenancy.profile [tenant-shared-column].`
+          : command.realm === 'platform'
+            ? `reads "tenant.${column}" in the platform realm, where no tenant is meant [tenant-shared-column].`
+            : shared.has(column)
+              ? undefined
+              : `reads "tenant.${column}", and auth.tenancy.shared does not list "${column}" [tenant-shared-column].`;
       for (const field of command.fields) {
-        if (field.type === 'group' || field.type === 'lines' || field.when === undefined) continue;
+        if (field.type === 'group' || field.type === 'lines') continue;
+        const start =
+          typeof field.default === 'object' && field.default !== null ? (field.default as { record?: string; tenant?: string }) : undefined;
         try {
-          for (const comparison of recordComparisons(field.when)) compileWhen(target, comparison, new Date(), someone);
+          if (start?.tenant !== undefined) {
+            const problem = tenantProblem(start.tenant);
+            if (problem) throw new Error(problem);
+          }
+          if (start?.record?.includes('.')) recordPathEnd(catalog, command.target, start.record);
+        } catch (error) {
+          invalid(`Command "${id}" input "${field.name}" default ${(error as Error).message}`);
+        }
+        if (field.when === undefined) continue;
+        try {
+          for (const column of draftNames(field.when, 'when').tenant) {
+            const problem = tenantProblem(column);
+            if (problem) throw new Error(problem);
+          }
+          for (const comparison of recordComparisons(field.when)) {
+            const end = recordPartEnd(catalog, command.target, comparison);
+            compileWhen(catalog[end.table], end.comparison, new Date(), member);
+          }
         } catch (error) {
           invalid(`Command "${id}" input "${field.name}" when: ${(error as Error).message}`);
         }
@@ -1067,6 +1112,10 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         // A job's service principal prepares no form and presses no button.
         const seen = access.fields?.get(binding.resource)?.read;
         if (seen && identity.kind !== 'service') issueTargetColumns(identity, seen);
+        if (access.fields && identity.kind !== 'service') {
+          const fields = access.fields;
+          issueReadColumns(identity, (local) => fields.get(binding.logical(local))?.read);
+        }
         if (!access.readable.has(binding.resource) && identity.kind !== 'service') issueTargetUnreadable(identity);
       }
       return Object.freeze({

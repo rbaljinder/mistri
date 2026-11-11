@@ -357,8 +357,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
       'service',
       'write',
     ]);
-    /* tenancy says what a tenant is called, its profile table and the platform realm. */
-    assert.deepEqual(props(a.tenancy), ['label', 'platform', 'profile']);
+    /* tenancy says what a tenant is called, its profile table, the profile's columns its members read (`shared`) and
+       the platform realm. */
+    assert.deepEqual(props(a.tenancy), ['label', 'platform', 'profile', 'shared']);
     assert.equal(a.tenancy.additionalProperties, false);
     assert.deepEqual(props(a.tenancy.properties.platform), ['label', 'me']);
     assert.deepEqual(a.auth.properties.tenancy, { $ref: '#/$defs/tenancy' });
@@ -390,8 +391,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
         'placement',
         'realm',
         'roles',
+        'when',
       ] /* `icon` (0.4.0): the group's mark in a top bar; `placement`: the foot of the sidebar; `inline` (0.8.8): its items straight in the top bar;
-           `folded` (0.8.9): a rarely used section starts as its heading. */,
+           `folded` (0.8.9): a rarely used section starts as its heading; `when` (rc.39): the tenants whose shared profile meets it. */,
     );
     /* composition: a feature is content and the grants it needs; the App
        keeps its identity, sources, sign-in, roles and ui. A feature grants
@@ -450,12 +452,14 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
       [...LANDING_SECTION_KINDS],
     );
     assert.deepEqual(a.landingAction.properties.intent.enum, [...LANDING_ACTION_INTENTS]);
-    /* Commands are names; their inputs and targets come from the server registry. */
+    /* Commands are names; their inputs and targets come from the server registry. `given` (rc.39): the inputs the
+       action's page gives, hidden from its form. */
     assert.equal(a.actions.additionalProperties.properties.command.$ref, '#/$defs/commandName');
     assert.deepEqual(props(a.actions.additionalProperties), [
       'bulk',
       'command',
       'confirm',
+      'given',
       'header',
       'inputs',
       'label',
@@ -742,7 +746,10 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // one entry, one new name `reads`): 1737/515.
     // A display rule's `empty` word, what a missing value is said as (one entry; `empty` was already a name): 1738/515.
     // An integrations section's `integrations`, the ones its page shows (one entry, one new name): 1739/516.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1739, names: 516 });
+    // 1.0.0-rc.39: `auth.tenancy.shared`, the profile columns a tenant's members read as `tenant.<col>`; `ui.catalog`,
+    // captions per kind of tenant; a command action's `given`, the inputs its page gives (three entries, three new
+    // names); a nav group's and both entry shapes' `when` (three entries; `when` is a name already): 1745/519.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1745, names: 519 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

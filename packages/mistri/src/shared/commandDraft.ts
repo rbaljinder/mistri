@@ -2,9 +2,10 @@
  * A command's conditions over its draft: a field's `when` and the command's `rules`, judged by one evaluator in the
  * browser as someone types and on the server as the command runs (and at each step's check). The language is the
  * form conditions' (formValues.ts), read against the input's own fields as columns: a bare name is another field of
- * the input, and on a command over one record `record.<column>` is the target's own value — bound where the record
- * is read (prepare in the browser's case, the run's transaction on the server), so the browser is told only whether
- * each record part holds, never a value it was not shown.
+ * the input, and on a command over one record `record.<column>` is the target's own value, `record.<ref>.<column>` a
+ * row it points at (at most two hops), and in a tenant App `tenant.<column>` one of the tenant's shared profile values
+ * (`auth.tenancy.shared`) — each bound where it is read (prepare in the browser's case, the run's transaction on the
+ * server), so the browser is told only whether each such part holds, never a value it was not shown.
  *
  * A condition is kept as its text and compiled where it is judged, so `today` is the day it is judged on. Date
  * arithmetic the query language does not say — `today - 18 years` — is worked out to a day first (`dateWords`).
@@ -12,13 +13,37 @@
 import type { ColumnMeta } from '@mistriwork/engine/shared/schema.js';
 import { compileCondition, conditionResult, type CompiledCondition } from '@mistriwork/engine/shared/formValues.js';
 import { quoteValue } from '@mistriwork/engine/shared/query.js';
-import type { AppCommandField } from './command.js';
+import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
+import { RECORD_HOPS, type AppCommandField } from './command.js';
 
 type Field = AppCommandField;
 type Comparison = CompiledCondition[number][number];
 
-/** The record's own value in a condition: `record.<column>`. */
+/** The record's own value in a condition: `record.<column>`, or `record.<ref>.<column>` through a reference. */
 const RECORD_PREFIX = 'record.';
+/** A tenant's shared profile value: `tenant.<column>`. */
+const TENANT_PREFIX = 'tenant.';
+
+/* The form-condition parser reads a name of two segments at most, so a path and a tenant word are masked into one
+   word before it reads them and said again after: `record.a.b` reads as `record.a__via__b`, `tenant.plan` as
+   `tenant__via__plan` (as a name, and as a value on the right). Quoted text is left as written. */
+const VIA = '__via__';
+const TENANT_MASK = `tenant${VIA}`;
+const MASKED =
+  /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(?<![\w.])record\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)|(?<![\w.])tenant\.([A-Za-z_]\w*)(?![\w.])/g;
+const masked = (text: string): string =>
+  text.replace(MASKED, (whole, quoted: string | undefined, path: string | undefined, column: string | undefined) =>
+    quoted !== undefined ? whole : path !== undefined ? `${RECORD_PREFIX}${path.split('.').join(VIA)}` : `${TENANT_MASK}${column}`,
+  );
+const unmasked = (name: string): string =>
+  name.startsWith(TENANT_MASK) ? `${TENANT_PREFIX}${name.slice(TENANT_MASK.length)}` : name.split(VIA).join('.');
+/** The profile column a value names, where it is `tenant.<column>` on the right of a comparison. */
+const tenantColumn = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.startsWith(TENANT_MASK) ? value.slice(TENANT_MASK.length) : undefined;
+const unmaskedCondition = (condition: CompiledCondition): CompiledCondition =>
+  condition.map((group) =>
+    group.map((c) => ({ ...c, field: unmasked(c.field), ...(c.other === undefined ? {} : { other: unmasked(c.other) }) }) as Comparison),
+  );
 
 const UNITS: Record<string, 'day' | 'month' | 'year'> = {
   day: 'day',
@@ -92,8 +117,8 @@ const today = (now: Date) => now.toISOString().slice(0, 10);
  * as one.
  */
 function draftCondition(text: string, where: string, now = new Date(), fields?: readonly Field[]): CompiledCondition {
-  const said = dateWords(text, today(now));
-  const untyped = compileCondition(said, where, undefined, 'record', true);
+  const said = dateWords(masked(text), today(now));
+  const untyped = unmaskedCondition(compileCondition(said, where, undefined, 'record', true));
   if (!fields) return untyped;
   /* Read again against the fields' own kinds, so a bare word is the kind its field holds: `battery != no` over a
      choice of words compares the word "no", and only a yes-or-no field reads yes and no as true and false. Untyped,
@@ -105,30 +130,65 @@ function draftCondition(text: string, where: string, now = new Date(), fields?: 
     for (const name of [c.field, ...(c.other === undefined ? [] : [c.other])])
       if (!known.has(name)) {
         known.add(name);
-        columns.push({ name, type: '', nullable: true, primaryKey: false });
+        columns.push({ name: masked(name), type: '', nullable: true, primaryKey: false });
       }
   try {
-    return compileCondition(said, where, columns, 'record', true);
+    return unmaskedCondition(compileCondition(said, where, columns, 'record', true));
   } catch {
     return untyped;
   }
 }
 
-/** The names a condition reads: the input's fields, and the record's columns (`record.<column>`). */
-export function draftNames(text: string, where: string): { fields: string[]; record: string[] } {
+/**
+ * The names a condition reads: the input's fields, the record's columns and paths (`record.<column>`,
+ * `record.<ref>.<column>`), and the tenant's profile columns (`tenant.<column>`, compared with a literal, or on the
+ * right of a record part's comparison).
+ */
+export function draftNames(text: string, where: string): { fields: string[]; record: string[]; tenant: string[] } {
   const fields = new Set<string>();
   const record = new Set<string>();
+  const tenant = new Set<string>();
+  const unquoted = text.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""');
   for (const c of draftCondition(text, where).flat()) {
     for (const name of [c.field, ...(c.other === undefined ? [] : [c.other])]) {
-      if (name.startsWith(RECORD_PREFIX)) record.add(name.slice(RECORD_PREFIX.length));
+      if (name.startsWith(RECORD_PREFIX)) {
+        const path = name.slice(RECORD_PREFIX.length);
+        if (path.split('.').length > RECORD_HOPS + 1)
+          throw new Error(
+            `${where}: "${name}" follows more than ${RECORD_HOPS} references; read a nearer column, or judge it in the handler.`,
+          );
+        record.add(path);
+      } else if (name.startsWith(TENANT_PREFIX)) tenant.add(name.slice(TENANT_PREFIX.length));
       else if (name.includes('.'))
         throw new Error(
-          `${where}: "${name}" is a path; a condition here names a field of the input, or record.<column> for the record's own.`,
+          `${where}: "${name}" is a path; a condition here names a field of the input, record.<column> for the record's own, or tenant.<column>.`,
         );
       else fields.add(name);
     }
+    /* `record.<column>` on the right is a bare word to the parser (a path of one hop is not masked), so it is found
+       in the text as written, outside quotes. */
+    const named =
+      c.other ??
+      c.values.find(
+        (value): value is string =>
+          tenantColumn(value) !== undefined ||
+          (typeof value === 'string' &&
+            value.startsWith(RECORD_PREFIX) &&
+            new RegExp(`(?<![\\w.])${value.replace(/\./g, '\\.')}(?![\\w.])`).test(unquoted)),
+      );
+    if (c.field.startsWith(TENANT_PREFIX) && named !== undefined)
+      throw new Error(`${where}: "${c.field}" is compared with "${unmasked(named)}"; compare a tenant's value with a literal.`);
+    for (const value of c.values) {
+      const column = tenantColumn(value);
+      if (column === undefined) continue;
+      if (!c.field.startsWith(RECORD_PREFIX))
+        throw new Error(
+          `${where}: "tenant.${column}" is compared with "${c.field}"; the browser is never told a tenant's value, so compare it with a record part (record.<column>) or a literal.`,
+        );
+      tenant.add(column);
+    }
   }
-  return { fields: [...fields], record: [...record] };
+  return { fields: [...fields], record: [...record], tenant: [...tenant] };
 }
 
 /* A comparison whose one value is a bare word naming another field compares the two fields. */
@@ -142,42 +202,79 @@ function withFields(condition: CompiledCondition, names: ReadonlySet<string>): C
   );
 }
 
-/** One comparison as the query language says it: a record's over the target (its `record.` dropped), a draft's as written. */
+/* A value as the query language says it: a tenant's word bare, so the server binds it; anything else quoted as needed. */
+const sayValue = (value: unknown): string => {
+  const column = tenantColumn(value);
+  return column === undefined ? quoteValue(value) : `${TENANT_PREFIX}${column}`;
+};
+
+/** One comparison as the query language says it: a record's over the target (its `record.` dropped, a path kept
+    dotted), a draft's as written. */
 function recordComparisonText(c: Comparison): string {
   const column = c.field.startsWith(RECORD_PREFIX) ? c.field.slice(RECORD_PREFIX.length) : c.field;
   if (c.other !== undefined) return `${column} ${{ eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>=' }[c.operator]} ${c.other}`;
   if (c.values.length === 1 && c.values[0] === null) return `${column} ${c.operator === 'ne' ? 'is not empty' : 'is empty'}`;
-  if (c.values.length > 1) return `${column} in (${c.values.map((v) => quoteValue(v)).join(', ')})`;
+  if (c.values.length > 1) return `${column} in (${c.values.map(sayValue).join(', ')})`;
   const op = { eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>=' }[c.operator];
-  return `${column} ${op} ${quoteValue(c.values[0])}`;
+  return `${column} ${op} ${sayValue(c.values[0])}`;
 }
 
-/** Each `record.<column>` comparison a condition makes, as the query language says it over the target. */
+/** Each `record.<column>` (or `record.<ref>.<column>`) comparison a condition makes, as the query language says it
+    over the target. */
 export const recordComparisons = (text: string): string[] =>
   draftCondition(text, 'Condition')
     .flat()
     .filter((c) => c.field.startsWith(RECORD_PREFIX))
     .map(recordComparisonText);
 
-/** A condition bound to a record: each `record.<column>` comparison replaced by whether it holds, so what is left
-    reads the draft alone. `[]` holds never; a group of no comparisons always. */
+/** A condition bound to a record: each `record.` and `tenant.` comparison replaced by whether it holds, so what is
+    left reads the draft alone. `[]` holds never; a group of no comparisons always. */
 export type BoundCondition = CompiledCondition;
 
-/** Bind a condition's record parts by `holds` (the server's judgement of each one over the target). */
+/* The column type a tenant's value compares as: a flag, a number, a day, or text. */
+const valueType = (value: TenantValue): string =>
+  typeof value === 'boolean'
+    ? 'BOOLEAN'
+    : typeof value === 'number'
+      ? 'NUMERIC'
+      : /^\d{4}-\d{2}-\d{2}$/.test(String(value))
+        ? 'DATE'
+        : 'TEXT';
+
+/* Whether a `tenant.<column>` comparison holds of the tenant's profile values. A value not read (no tenant, or a
+   column it does not share) holds of nothing; a null is answered only by `is empty`, as a field's is. */
+function tenantHolds(c: Comparison, tenant: Readonly<Record<string, TenantValue>> | undefined): boolean {
+  const column = c.field.slice(TENANT_PREFIX.length);
+  const value = tenant?.[column];
+  if (value === undefined) return false;
+  if (asksEmpty(c)) return (value === null) === (c.operator === 'eq');
+  if (value === null) return false;
+  const columns: ColumnMeta[] = [{ name: c.field, type: valueType(value), nullable: true, primaryKey: false }];
+  return conditionResult([[c]], { [c.field]: value }, columns) === true;
+}
+
+/** Bind a condition's record parts by `holds` (the server's judgement of each one over the target), and its tenant
+    parts by the tenant's profile values. */
 export async function bindRecord(
   text: string,
   where: string,
   holds: (comparison: string) => Promise<boolean>,
   now = new Date(),
   fields?: readonly Field[],
+  tenant?: Readonly<Record<string, TenantValue>>,
 ): Promise<BoundCondition> {
   const groups: Comparison[][] = [];
   for (const group of draftCondition(text, where, now, fields)) {
     const kept: Comparison[] = [];
     let alive = true;
     for (const c of group) {
-      if (!c.field.startsWith(RECORD_PREFIX)) kept.push(c);
-      else if (!(await holds(recordComparisonText(c)))) {
+      const bound = c.field.startsWith(RECORD_PREFIX)
+        ? await holds(recordComparisonText(c))
+        : c.field.startsWith(TENANT_PREFIX)
+          ? tenantHolds(c, tenant)
+          : undefined;
+      if (bound === undefined) kept.push(c);
+      else if (!bound) {
         alive = false;
         break;
       }
@@ -195,8 +292,14 @@ export function boundText(bound: BoundCondition): string | boolean {
   return bound.map((group) => group.map(recordComparisonText).join(' and ')).join(' or ');
 }
 
-/** Whether a condition that names the record has been bound: one with no record part needs no binding. */
+/** Whether a condition must be bound before the browser judges it: one with a record or a tenant part. */
 export const readsRecord = (text: string): boolean =>
+  draftCondition(text, 'Condition')
+    .flat()
+    .some((c) => c.field.startsWith(RECORD_PREFIX) || c.field.startsWith(TENANT_PREFIX));
+
+/** Whether a condition reads the target record itself (a `record.` part): only a command over one record has one. */
+export const readsTarget = (text: string): boolean =>
   draftCondition(text, 'Condition')
     .flat()
     .some((c) => c.field.startsWith(RECORD_PREFIX));

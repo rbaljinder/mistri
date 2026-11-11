@@ -7,6 +7,9 @@ test('group captions humanize declared vocabularies, not arbitrary identifiers',
   expect(groupLabel(null, 'account_id')).toBe('account_id');
   expect(groupLabel(null, '9007199254740993')).toBe('9007199254740993');
   expect(groupLabel(null, null)).toBe('—');
+  // A field that says what its missing value means says it for a group of none, as its cell does.
+  expect(groupLabel({ empty: 'No decision yet' }, null)).toBe('No decision yet');
+  expect(groupLabel({ empty: 'No decision yet' }, undefined)).toBe('No decision yet');
 });
 
 test('a vocabulary is worded one way whichever joiner the schema spelled it with', () => {

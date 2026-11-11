@@ -81,7 +81,7 @@ import {
   tenantPublicForms,
 } from './tenantIntakeModel.js';
 import { observerMounted } from '../observe/mount.js';
-import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
+import { captureTenantReadSource, readSharedProfile, type TenantReadSource } from './tenantReadSource.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { assertTenantSourcePair } from './tenantSourceIdentity.js';
 import { captureTenantWriteSource, TenantIntakeMoved, TenantWriteFailure, type TenantWriteSource } from './tenantWriteSource.js';
@@ -392,6 +392,10 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
     authorizer.authorize(id, principal);
     const flags = await flagsFor(principal, admitted);
     admitted.active();
+    /* The tenant's shared profile, which its handler may pick its reply's words by (a clinic's and a garage's thank-you):
+       only where the submission landed with a tenant. The platform's triage is no one tenant's, so it reads none. */
+    const tenant = place === 'tenant' ? await readSharedProfile(reader, app, evidence.tenantId) : undefined;
+    admitted.active();
     let run: SavedDraftRun | undefined;
     if (draft) {
       const saved = form as SavedIntakeForm,
@@ -416,6 +420,7 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
           ...authorization,
           transaction: deny,
           intake: place,
+          ...(tenant ? { tenant } : {}),
           ...(place === 'tenant'
             ? { receiptOwner: captureTenantData({ storeId: identity.storeId, sourceId: identity.source.id, tenantId: evidence.tenantId }) }
             : {}),

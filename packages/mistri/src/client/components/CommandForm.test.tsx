@@ -904,3 +904,18 @@ test('a verb labeled Cancel dismisses with Close, repeats no subtitle, and links
   expect(within(dialog).getByRole('button', { name: 'Open the loan application' })).toBeVisible();
   expect(within(dialog).queryByRole('button', { name: /Open Cancel/ })).toBeNull();
 });
+
+test("an action's given input is not drawn, and is sent as the page filled it", async () => {
+  const input: AppCommandField[] = [
+    { name: 'reason', label: 'Reason', type: 'textarea', required: true, maxLength: 500 },
+    { name: 'step', label: 'Step', type: 'text', required: true, default: 'intake' },
+  ];
+  draw({ actions: [{ ...action, command: { ...action.command, input }, given: ['step'] }] });
+  const { user, dialog } = await open();
+  expect(within(dialog).queryByLabelText(/Step/)).toBeNull();
+  await user.type(within(dialog).getByLabelText('Reason (required)'), 'North desk');
+  await user.click(within(dialog).getByRole('button', { name: 'Assign reviewer' }));
+  await vi.waitFor(() =>
+    expect(api.mock.calls.find((call) => call[0].endsWith('/execute'))?.[1].input).toEqual({ reason: 'North desk', step: 'intake' }),
+  );
+});

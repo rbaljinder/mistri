@@ -1214,7 +1214,9 @@ const Matrix = memo(function Matrix({ section }: { section: Section }) {
   const sayWhole = sayer(section);
   const say = max >= 1000 ? sayWhole.tick : sayWhole;
   const firstKey = (section.by ?? '').split(',')[0].trim();
-  const sayRow = namedGroups(data.data, rowKey, sayGroup(section.table, firstKey));
+  /* The dash keys a group of no value here, as it does a column: said as the field says its missing value. */
+  const namedRow = namedGroups(data.data, rowKey, sayGroup(section.table, firstKey));
+  const sayRow = (a: string) => namedRow(a === '—' ? null : a);
   const drill = !/\s/.test(firstKey) ? drillFor({ ...section, by: firstKey }) : null;
   const colLabel = (b: string, at: number) => (dated ? periodTick(b, at ? cols[at - 1] : undefined) : sayCol(b === '—' ? null : b));
   /* Folded, the rows and cells are drawn as a grid, which drops a table's own roles: they are said, so a reader

@@ -366,7 +366,7 @@ test('flat frozen deployment exposes only existing operations and a six-method r
     retained = context;
     return context.data.query({ table: 'item', limit: 10, offset: 0 });
   });
-  assert.deepEqual(Object.keys(retained!).sort(), ['capabilities', 'data', 'principal', 'schema', 'together']);
+  assert.deepEqual(Object.keys(retained!).sort(), ['capabilities', 'data', 'principal', 'schema', 'tenant', 'together']);
   assert.ok(Object.isFrozen(retained!.capabilities));
   assert.deepEqual(Object.keys(retained!.capabilities!).sort(), ['grantedCommands', 'resources', 'writable']);
   assert.deepEqual(Object.keys(retained!.data).sort(), [

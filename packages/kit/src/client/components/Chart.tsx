@@ -40,6 +40,10 @@ const f1 = (n: number) => n.toFixed(1);
 const MONTH = /^(\d{4})-(\d{2})$/;
 const DAY = /^(\d{4})-\d{2}-\d{2}$/;
 
+/** A category's key as a chart says it unless told otherwise: a bucket of no value is a dash, never "null". The
+    caller's `label` (a column's groupLabel) says it in the field's own `empty` word where it has one. */
+const keyWord = (key: unknown): string => (key == null ? '—' : String(key));
+
 /**
  * A month bucket as a reader says it, in the App's locale: "Jan 2026" where
  * the year starts or changes from the tick before it, "Feb" after it. The
@@ -792,7 +796,7 @@ const PERIOD = /^\d{4}(-\d{2}(-\d{2})?|-Q[1-4])?$/;
 export function BarChart({
   rows,
   say = String,
-  label = String,
+  label = keyWord,
   wide = 600,
   high,
   target,
@@ -1248,7 +1252,7 @@ export function sliceRing(center: number, radius: number, from: number, length: 
 export function DonutChart({
   rows,
   say = String,
-  label = String,
+  label = keyWord,
   onPick,
   total,
   ordered,
@@ -1269,7 +1273,7 @@ export function DonutChart({
      the keyboard, the moment its ring is drawn: a look is picked while the page is open, and a stylesheet says it. */
   const [sliceWidth, setSliceWidth] = useState(7);
   const all = rows
-    .map((r) => ({ key: r.key == null ? '—' : label(r.key), raw: r.key, value: Number(r.value) }))
+    .map((r) => ({ key: label(r.key), raw: r.key, value: Number(r.value) }))
     .filter((p) => Number.isFinite(p.value) && p.value > 0);
   if (!all.length) return <p className="note">{sayCopy('nothingToDivide')}</p>;
   const MAX_SLICES = 6;
@@ -1427,7 +1431,7 @@ export const TIMED_HEIGHT = 180;
 export function StackedBars({
   rows,
   say = String,
-  label = String,
+  label = keyWord,
   seriesLabel = String,
   target,
   limit = 10,

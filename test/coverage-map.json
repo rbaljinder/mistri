@@ -778,6 +778,14 @@
       ],
       "browser": true
     },
+    {
+      "id": "message-variants",
+      "surface": ["dsl: app: ui.catalog"],
+      "tests": [
+        { "file": "test/app-message-variants.test.ts", "title": "a variant's word comes before the base's, in the reader's language, then in the source's" },
+        { "file": "test/app-message-variants.test.ts", "title": "ui.catalog names a shared text column of the profile, and a variant folder needs one" }
+      ]
+    },
     { "id": "timezone", "surface": ["dsl: app: ui.timezone"], "tests": [{ "file": "test/app-timezone-projection.test.ts" }] },
     {
       "id": "pwa",

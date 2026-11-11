@@ -182,7 +182,7 @@ test('JSON authoring schema describes groups and forbids legacy ownership inside
   /* A child is a reference, never a definition that could name a second owner. */
   const reference = json.$defs.navNode.oneOf.find((entry: { type?: string }) => entry.type === 'object');
   assert.equal(reference.additionalProperties, false);
-  assert.deepEqual(Object.keys(reference.properties), ['to', 'label', 'color', 'roles']);
+  assert.deepEqual(Object.keys(reference.properties), ['to', 'label', 'color', 'roles', 'when']);
 });
 
 test('schema-typed nested groups and helpers retain table checking at every depth', () => {

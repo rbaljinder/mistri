@@ -100,12 +100,14 @@ export function parseAuthGrants(
       throw new Error(`${at} has ${said} in "providers", each tenant's own identity provider, which a tenant App has ("rows": "tenant").`);
     }
   }
-  let tenancy: { label?: string; profile?: string; platform?: { label: string; me?: { from: string; column: string } } } | undefined;
+  let tenancy:
+    | { label?: string; profile?: string; shared?: string[]; platform?: { label: string; me?: { from: string; column: string } } }
+    | undefined;
   if (raw.tenancy !== undefined) {
     const here = `${at}, "tenancy"`;
     if (rows !== 'tenant') throw new Error(`${here} describes a tenant App's tenants; it needs "rows": "tenant".`);
-    if (!isRecord(raw.tenancy)) throw new Error(`${here} is not an object { label?, profile?, platform? }.`);
-    allowKeys(raw.tenancy, ['label', 'profile', 'platform'], here);
+    if (!isRecord(raw.tenancy)) throw new Error(`${here} is not an object { label?, profile?, shared?, platform? }.`);
+    allowKeys(raw.tenancy, ['label', 'profile', 'shared', 'platform'], here);
     const name = (value: unknown, key: string): string => {
       if (typeof value !== 'string' || !value.trim() || value.trim().length > 60)
         throw new Error(`${here} has a "${key}" that is not a name of 1 to 60 characters.`);
@@ -116,6 +118,26 @@ export function parseAuthGrants(
       ...(given.label === undefined ? {} : { label: name(given.label, 'label') }),
       ...(given.profile === undefined ? {} : { profile: name(given.profile, 'profile') }),
     };
+    /* The tenant row's columns its members read as `tenant.<column>`. Shape here; whether each is a scalar column of
+       the profile is the catalog's to say (tenantProfileProblem). A cap keeps the one read per request small. */
+    if (given.shared !== undefined) {
+      const shared = given.shared;
+      if (tenancy.profile === undefined)
+        throw new Error(
+          `${here} has "shared", columns of the tenant's profile row; it needs "profile", the platform resource holding that row.`,
+        );
+      if (
+        !Array.isArray(shared) ||
+        !shared.length ||
+        shared.length > 16 ||
+        shared.some((c) => typeof c !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(c))
+      )
+        throw new Error(
+          `${here} has a "shared" that is not a list of 1 to 16 column names of "${tenancy.profile}", like ['country', 'timezone'].`,
+        );
+      if (new Set(shared).size !== shared.length) throw new Error(`${here} names a column twice in "shared".`);
+      tenancy.shared = [...(shared as string[])];
+    }
     if (given.platform !== undefined) {
       if (!isRecord(given.platform)) throw new Error(`${here} has a "platform" that is not an object { label, me? }.`);
       allowKeys(given.platform, ['label', 'me'], `${here}, "platform"`);

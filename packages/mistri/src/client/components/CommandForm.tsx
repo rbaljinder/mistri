@@ -18,7 +18,7 @@ import {
   asksDraftLogic,
   blankCommandValues,
   draftLogic,
-  readsRecord,
+  askedFields,
   commandInput,
   prefilledCommandValues,
   type CommandQuestions,
@@ -45,24 +45,6 @@ const waitingPickers = (fields: readonly AppCommandField[]): Record<string, null
       field.type === 'reference' && field.query && recordColumnsIn(field.query).length ? [[path, null]] : [],
     ),
   );
-
-/* The fields a prepared record is asked. A `when` that reads the record waits for prepare: left out where the
-   record's part never holds, a plain field where it always does, and otherwise the draft's part prepare left to
-   judge as it is typed. A `when` over the draft alone is the form's own to judge (commandDraft.ts). */
-function asked(
-  input: readonly AppCommandField[],
-  record: { withheld?: string[]; when?: Record<string, string> } | undefined,
-): readonly AppCommandField[] {
-  if (!input.some((field) => field.type !== 'group' && field.type !== 'lines' && field.when !== undefined && readsRecord(field.when)))
-    return input;
-  return input.flatMap((field): AppCommandField[] => {
-    if (field.type === 'group' || field.type === 'lines' || field.when === undefined || !readsRecord(field.when)) return [field];
-    if (!record || record.withheld?.includes(field.name)) return [];
-    const { when: _when, ...plain } = field;
-    const left = record.when?.[field.name];
-    return [(left === undefined ? plain : { ...plain, when: left }) as AppCommandField];
-  });
-}
 
 interface PreparedRecord {
   expectedVersion: number;
@@ -278,7 +260,13 @@ export function CommandForm({
   const record = prepared.data instanceof Map ? undefined : prepared.data;
   /* The inputs this record is asked: one asked only where its `when` holds waits for prepare to say,
      is left out where it does not, and is an ordinary field — required unless optional — where it does. */
-  const fields = useMemo(() => asked(action.command.input, record), [action.command.input, record]);
+  const fields = useMemo(() => askedFields(action.command.input, record), [action.command.input, record]);
+  /* An action's `given` inputs are its page's to fill (useCommand(…).open(record, { step })): not drawn, still sent,
+     since `fields` is what the submit reads. */
+  const drawn = useMemo(
+    () => (action.given?.length ? fields.filter((field) => !action.given!.includes(field.name)) : fields),
+    [fields, action.given],
+  );
   /* Another command applied to this record after this form prepared it: the
      revision it holds is one it knows is old, and submitting it could only
      be refused as stale. The form prepares again and holds its submit until
@@ -439,7 +427,7 @@ export function CommandForm({
       >
         <fieldset className="command-fields" disabled={Boolean(operation)}>
           <CommandFields
-            fields={fields}
+            fields={drawn}
             values={values}
             idPrefix={id}
             disabled={Boolean(operation)}

@@ -1358,6 +1358,38 @@ describe('a matrix', () => {
   });
 });
 
+describe("a field's word for a missing value", () => {
+  /* A field report: a field declared `empty: 'No decision yet'` read so in its list and on its record, and as a dash in
+     the breakdowns over it. */
+  test('names the group of no value in a breakdown and in a matrix, as the field says it', async () => {
+    displays['deal.stage'] = { empty: 'No stage yet' };
+    displays['deal.name'] = { empty: 'Unnamed' };
+    breakdowns['deal count by name, stage limit 400'] = {
+      columns: ['name', 'stage', 'count'],
+      rows: [
+        { name: 'Ada', stage: 'won', count: 9 },
+        { name: null, stage: null, count: 2 },
+      ],
+    };
+    draw({
+      dashboard: {
+        id: 'd',
+        label: 'D',
+        sections: [
+          { kind: 'breakdown', table: 'deal', by: 'stage', title: 'By stage' },
+          { kind: 'matrix', table: 'deal', by: 'name, stage', title: 'Deals by stage' },
+        ],
+      },
+    });
+    await screen.findByText('30');
+    expect([...document.querySelectorAll('.pbd-label')].map((label) => label.textContent)).toEqual(['lead', 'won', 'No stage yet']);
+    await waitFor(() => expect(document.querySelectorAll('.matrix-col').length).toBe(2));
+    expect([...document.querySelectorAll('.matrix-col')].map((head) => head.textContent)).toEqual(['won', 'No stage yet']);
+    expect([...document.querySelectorAll('.matrix-row')].map((head) => head.textContent)).toEqual(['Ada', 'Unnamed']);
+    expect(document.querySelector('.matrix')!.textContent).not.toContain('—');
+  });
+});
+
 describe('the dashboard blocks', () => {
   test('a banner note is drawn as a banner, with its tag and its action', () => {
     draw({

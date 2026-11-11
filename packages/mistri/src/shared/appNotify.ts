@@ -153,7 +153,13 @@ export function parseNotify(raw: unknown, at: string): AppNotifyRule[] {
       title = rule.title.trim();
       if (title.length > 200) throw new Error(`${here}: "title" is ${title.length} characters; a notice is a line, at most 200.`);
       for (const [, path] of title.matchAll(PLACEHOLDER)) {
-        if (!PATH.test(path.trim())) throw new Error(`${here}, "title": {${path}} is not a column or a path of at most two references.`);
+        if (path.trim().startsWith('words.')) {
+          if (!/^words\.[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(path.trim()))
+            throw new Error(
+              `${here}, "title": [notify-words] {${path}} does not name a word: {words.code}, a letter or _ then letters, digits or _.`,
+            );
+        } else if (!PATH.test(path.trim()))
+          throw new Error(`${here}, "title": {${path}} is not a column or a path of at most two references.`);
       }
     }
     if (typeof on === 'object' && 'flow' in on && mentions)
@@ -243,8 +249,9 @@ interface CompiledNotifyRule {
   on: { kind: 'insert' } | { kind: 'update'; columns?: string[] } | { kind: 'action'; label: string } | { kind: 'flow'; audience: string };
   when?: NotifyWhen;
   to: NotifyPath[];
-  /** `{ message: true }`: a flow rule's `{message}`, the notify step's own words. Empty where `say` is the title. */
-  title: Array<string | NotifyPath | { message: true }>;
+  /** `{ message: true }`: a flow rule's `{message}`, the notify step's own words. `{ word }`: `{words.x}`, a word the
+      write gives (`{ words: { x } }`), said by mail or channel and masked in the inbox. Empty where `say` is the title. */
+  title: Array<string | NotifyPath | { message: true } | { word: string }>;
   /** A title said from the App's messages, per recipient: the key and each argument's path off the record. */
   say?: { message: string; args: Array<{ name: string; path: NotifyPath }> };
   open: { resource: string; key?: { column: string; target: string } };
@@ -289,11 +296,14 @@ export interface NotifyMentions {
 }
 
 /** Every path a rule reads off its record: whom it tells, its words and its channel's address, consent and zone. */
+/** Whether a title part says one of the write's own words (`{words.code}`). */
+export const saysWord = (part: CompiledNotifyRule['title'][number]): part is { word: string } => typeof part !== 'string' && 'word' in part;
+
 export function notifyRulePaths(rule: Pick<CompiledNotifyRule, 'to' | 'title' | 'send' | 'say'>): NotifyPath[] {
   const send = rule.send ? [rule.send.to, rule.send.consent, rule.send.timezone].filter((path): path is NotifyPath => !!path) : [];
   return [
     ...rule.to,
-    ...rule.title.filter((part): part is NotifyPath => typeof part !== 'string' && !('message' in part)),
+    ...rule.title.filter((part): part is NotifyPath => typeof part !== 'string' && !('message' in part) && !('word' in part)),
     ...(rule.say?.args.map((arg) => arg.path) ?? []),
     ...send,
   ];
@@ -467,6 +477,13 @@ export function appNotifyRules(app: AppDef, schema: DatabaseSchema): { rules: Ma
           title.push({ message: true });
           continue;
         }
+        const word = /^words\.(.*)$/.exec(match[1].trim());
+        if (word) {
+          if (typeof rule.on === 'object' && 'flow' in rule.on)
+            said.push(`${at}: [notify-words] the title's {${match[1]}} is a write's word, and a flow's notice has no write.`);
+          else title.push({ word: word[1] });
+          continue;
+        }
         const found = walk(match[1].trim(), "the title's");
         if (!found) continue;
         const end = column(found.end.table, found.end.name)!;
@@ -597,6 +614,10 @@ export function appNotifyRules(app: AppDef, schema: DatabaseSchema): { rules: Ma
         if (address) send = { channel: rule.send.channel, to: address, ...(consent ? { consent } : {}), ...(timezone ? { timezone } : {}) };
       }
 
+      if (!rule.email && !send && title.some((part) => typeof part !== 'string' && 'word' in part))
+        said.push(
+          `${at}: [notify-words] the title says a write's word, which the inbox masks; it is said only by email or "send", and this rule has neither.`,
+        );
       problems.push(...said);
       if (said.length || (!to.length && !mentions && !send)) continue;
       compiled.push({

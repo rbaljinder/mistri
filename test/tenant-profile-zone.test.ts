@@ -1,11 +1,12 @@
 /**
- * `ui.timezone: { column }` naming the platform-owned tenant profile: each tenant's person reads their days on the
- * zone their tenant's profile row holds, though no role is granted that resource and the scope catalog does not hold
- * it (the platform reads that one column itself, as it reads the row's name). A null, unknown or empty zone is the
- * App's own, and a column the profile does not have is refused by `zoneColumnProblem`.
+ * `ui.timezone: { column: 'tenant.timezone' }`, a column of the platform-owned tenant profile shared with its members
+ * (`auth.tenancy.shared`): each tenant's person reads their days on the zone their tenant's profile row holds, though
+ * no role is granted that resource and the scope catalog does not hold it (the platform reads the shared columns
+ * itself, once per request). A null, unknown or empty zone is the App's own, and `zoneColumnProblem` refuses a column
+ * `shared` does not list, a zone that is not text, and the profile named as a resource.
  *
  * On SQLite always and on PostgreSQL where `TABLEWALK_TEST_PG` names a server: the platform's read of the profile
- * column is its own statement on the tenant source (readTenantZone), and each engine spells the catalog it reads.
+ * is its own statement on the tenant source (readTenantProfile), and each engine spells the catalog it reads.
  */
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -19,6 +20,8 @@ import { createTenantHttpServer } from '../packages/mistri/src/server/tenant/ten
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { zoneColumnProblem } from '../packages/mistri/src/server/app/readerZone.js';
+import { menuFor, menuWhenProblems, sharedProfileProblems, visitorApp } from '../packages/mistri/src/server/app/appTenantProfile.js';
+import type { AppNavNode } from '../packages/mistri/src/shared/appModel.js';
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { parseTestApp } from './support/commandCatalog.js';
 import { dropDedicatedPostgresDatabase, openTenantEngine, TENANT_DIALECTS, type TenantDialect } from './support/tenantDialects.js';
@@ -39,12 +42,12 @@ const app = parseTestApp(
     name: 'Desk',
     auth: {
       rows: 'tenant',
-      tenancy: { label: 'Customer', profile: 'customer', platform: { label: 'Operator' } },
+      tenancy: { label: 'Customer', profile: 'customer', shared: ['timezone'], platform: { label: 'Operator' } },
       /* No grant on the profile: the zone is the platform's own read of it. */
       roles: { agent: { realm: 'tenant', read: ['ticket'], commands: ['stampToday'] }, operator: { realm: 'platform', read: true } },
     },
     sources: { business: { connection: binding.source.connection } },
-    ui: { timezone: { column: 'customer.timezone', default: OWN } },
+    ui: { timezone: { column: 'tenant.timezone', default: OWN } },
     resources: { customer: { owner: 'platform' }, ticket: { owner: 'tenant', access: 'write' } },
     views: { tickets: { kind: 'list', from: 'ticket', realm: 'tenant' } },
     home: 'tickets',
@@ -70,13 +73,18 @@ const registry = defineCommands({
   }),
 });
 const rows: RowScope = { ticket: true };
+const profilesSeen: Array<Record<string, unknown>> = [];
 const policy = defineAppTenantPolicy({
   kind: 'tenant',
   appId,
   storeId: binding.storeId,
   ownership: { customer: { kind: 'platform' }, ticket: { kind: 'tenant', column: 'tenant_id' } },
   resolveMembershipRows: () => rows,
-  resolveRows: () => rows,
+  /* What each request's row scope was handed: the tenant's shared profile, read before it. */
+  resolveRows: (_member, { tenant }) => {
+    profilesSeen.push({ ...tenant });
+    return rows;
+  },
   resultReferences: { stampToday: () => [] },
   resolvePlatformRows: () => ({ ...rows, customer: true }),
 });
@@ -203,11 +211,12 @@ async function fixture(t: TestContext, dialect: TenantDialect) {
     assert.equal(reply.status, 200, reply.text);
     return String((await engine.get('SELECT CAST(opened_on AS TEXT) AS opened_on FROM ticket WHERE id = ?', [id]))?.opened_on);
   };
-  return { open, served, today, stamp, read, chicago, kiritimati };
+  const ask = async (lease: Context, q: string) => data('/api/run', lease, { q, limit: 50, offset: 0, count: 'none' });
+  return { open, served, today, stamp, read, ask, chicago, kiritimati };
 }
 
-test('check refuses a profile zone column the profile does not have, naming it', () => {
-  const catalog = (columns: string[]): DatabaseSchema => ({
+test('check refuses a zone column shared does not list, one that is not text, and the profile named as a resource', () => {
+  const catalog = (columns: string[], type = 'TEXT'): DatabaseSchema => ({
     label: 'Desk',
     dialect: 'sqlite',
     readAt: '',
@@ -218,12 +227,157 @@ test('check refuses a profile zone column the profile does not have, naming it',
         name: 'customer',
         schema: '',
         isView: false,
-        columns: columns.map((name, index) => ({ name, type: 'TEXT', nullable: index > 0, primaryKey: index === 0 })),
+        columns: columns.map((name, index) => ({ name, type: index ? type : 'TEXT', nullable: index > 0, primaryKey: index === 0 })),
       },
     ],
   });
   assert.equal(zoneColumnProblem(app, catalog(['id', 'timezone'])), undefined);
-  assert.match(zoneColumnProblem(app, catalog(['id', 'name'])) ?? '', /"customer" has no column "timezone"/);
+  assert.match(zoneColumnProblem(app, catalog(['id', 'timezone'], 'INTEGER')) ?? '', /which is INTEGER.*\[tenant-shared-column\]/);
+  const unlisted = { ...app, auth: { ...app.auth!, tenancy: { ...app.auth!.tenancy!, shared: ['name'] } } };
+  assert.match(zoneColumnProblem(unlisted, catalog(['id', 'timezone'])) ?? '', /shared does not list "timezone" \[tenant-shared-column\]/);
+  const direct = { ...app, ui: { ...app.ui, timezone: { column: 'customer.timezone', default: OWN } } };
+  assert.match(zoneColumnProblem(direct, catalog(['id', 'timezone'])) ?? '', /name it "tenant\.timezone".*\[tenant-shared-column\]/);
+});
+
+test('check refuses a shared column that is missing, the key, a reference or a document, and tenant. where no tenant is meant', () => {
+  const column = (name: string, type = 'TEXT', extra: object = {}) => ({ name, type, nullable: true, primaryKey: false, ...extra });
+  const catalog: DatabaseSchema = {
+    label: 'Desk',
+    dialect: 'sqlite',
+    readAt: '',
+    foreignKeys: [
+      { from: { table: 'customer', columns: ['region_id'] }, to: { table: 'region', columns: ['id'] } },
+    ] as DatabaseSchema['foreignKeys'],
+    tables: [
+      {
+        id: 'customer',
+        name: 'customer',
+        schema: '',
+        isView: false,
+        columns: [
+          column('id', 'TEXT', { primaryKey: true, nullable: false }),
+          column('timezone'),
+          column('country'),
+          column('settings', 'JSON'),
+          column('region_id', 'INTEGER', { references: { table: 'region', column: 'id' } }),
+        ],
+      },
+      {
+        id: 'tax_rate',
+        name: 'tax_rate',
+        schema: '',
+        isView: false,
+        columns: [column('id', 'INTEGER', { primaryKey: true }), column('country')],
+      },
+    ],
+  };
+  const sharing = (shared: string[], views: Record<string, unknown> = {}) =>
+    ({
+      ...app,
+      auth: { ...app.auth!, tenancy: { ...app.auth!.tenancy!, shared } },
+      views: { ...app.views, ...views },
+    }) as typeof app;
+  assert.deepEqual(sharedProfileProblems(sharing(['timezone', 'country']), catalog), []);
+  const problems = sharedProfileProblems(sharing(['nowhere', 'id', 'region_id', 'settings']), catalog);
+  assert.equal(problems.length, 4, problems.join('\n'));
+  assert.match(problems[0], /"nowhere", and the profile "customer" has no such column \[tenant-shared-column\]/);
+  assert.match(problems[1], /"id", the profile's key or a reference/);
+  assert.match(problems[2], /"region_id", the profile's key or a reference/);
+  assert.match(problems[3], /"settings", which is JSON/);
+  const views = {
+    rates: { kind: 'list', table: 'tax_rate', query: 'country = tenant.country' },
+    quoted: { kind: 'list', table: 'tax_rate', query: 'country = "tenant.region"' },
+    unlisted: { kind: 'list', table: 'tax_rate', query: 'country = tenant.region' },
+    across: { kind: 'list', table: 'tax_rate', realm: 'platform', query: 'country = tenant.country' },
+  };
+  const read = sharedProfileProblems(sharing(['country'], views), catalog);
+  assert.equal(read.length, 2, read.join('\n'));
+  assert.match(read[0], /view "unlisted" reads tenant\.region, and auth\.tenancy\.shared does not list "region" \[tenant-shared-column\]/);
+  assert.match(read[1], /view "across" reads tenant\.country in the platform realm.*\[tenant-shared-platform\]/);
+});
+
+test("a menu's when folds over a shared flag or vocabulary column, and an entry it does not meet is left out", () => {
+  const column = (name: string, type = 'TEXT', extra: object = {}) => ({ name, type, nullable: true, primaryKey: false, ...extra });
+  const catalog: DatabaseSchema = {
+    label: 'Desk',
+    dialect: 'sqlite',
+    readAt: '',
+    foreignKeys: [],
+    tables: [
+      {
+        id: 'customer',
+        name: 'customer',
+        schema: '',
+        isView: false,
+        columns: [
+          column('id', 'TEXT', { primaryKey: true, nullable: false }),
+          column('timezone'),
+          column('boarding', 'BOOLEAN'),
+          column('plan', 'TEXT', { allowed: ['free', 'pro', 'team'] }),
+          column('country'),
+        ],
+      },
+    ],
+  };
+  const menu = (nav: AppNavNode[], shared = ['timezone', 'boarding', 'plan', 'country'], profile: string | null = 'customer') =>
+    ({
+      ...app,
+      auth: { ...app.auth!, tenancy: profile === null ? undefined : { ...app.auth!.tenancy!, profile, shared } },
+      nav,
+    }) as typeof app;
+  const nav: AppNavNode[] = [
+    { group: 'boarding', label: 'Boarding', realm: 'tenant', when: 'tenant.boarding = true', children: [{ view: 'tickets' }] },
+    {
+      group: 'desk',
+      label: 'Desk',
+      realm: 'tenant',
+      children: [
+        { view: 'tickets', when: 'tenant.plan in (pro, team)' },
+        { label: 'Help', to: { kind: 'view', app: 'desk', view: 'tickets' }, when: 'tenant.plan = free' },
+      ],
+    },
+  ];
+  assert.deepEqual(menuWhenProblems(menu(nav), catalog), []);
+  const refused = (when: string, shared?: string[]) =>
+    menuWhenProblems(menu([{ group: 'desk', label: 'Desk', realm: 'tenant', when, children: [{ view: 'tickets' }] }], shared), catalog);
+  assert.match(refused('tenant.country = US')[0] ?? '', /group "desk" has when "tenant\.country = US".*\[nav-when\]/);
+  assert.match(refused('tenant.boarding = true', ['timezone'])[0] ?? '', /\[nav-when\]/);
+  assert.match(refused('tenant.plan > free')[0] ?? '', /\[nav-when\]/);
+  assert.match(refused('status = open')[0] ?? '', /\[nav-when\]/);
+  assert.match(menuWhenProblems(menu(nav, [], null), catalog)[0] ?? '', /no auth\.tenancy\.profile \[nav-when\]/);
+  const across: AppNavNode[] = [
+    { group: 'all', label: 'All', realm: 'platform', children: [{ view: 'tickets', when: 'tenant.boarding = true' }] },
+  ];
+  assert.match(menuWhenProblems(menu(across), catalog)[0] ?? '', /entry "tickets".*platform realm.*\[nav-when\]/);
+
+  const judged = menuFor(menu(nav), catalog)!;
+  assert.deepEqual([...judged.columns].sort(), ['boarding', 'plan']);
+  assert.deepEqual(judged.prune(nav, { boarding: true, plan: 'pro' }), [
+    { group: 'boarding', label: 'Boarding', realm: 'tenant', children: [{ view: 'tickets' }] },
+    { group: 'desk', label: 'Desk', realm: 'tenant', children: [{ view: 'tickets' }] },
+  ]);
+  assert.deepEqual(judged.prune(nav, { boarding: false, plan: 'free' }), [
+    { group: 'desk', label: 'Desk', realm: 'tenant', children: [{ label: 'Help', to: { kind: 'view', app: 'desk', view: 'tickets' } }] },
+  ]);
+  /* A profile that has none of it, the platform realm and a visitor meet no when; a group left empty goes too. */
+  assert.deepEqual(judged.prune(nav, { boarding: null, plan: null }), []);
+  assert.deepEqual(judged.prune(nav), []);
+  /* One captured copy per App and per set of whens met, so a projection keyed by content finds it again. */
+  const full = menu(nav);
+  const shown = judged.shown(full, { boarding: true, plan: 'team' });
+  assert.equal(judged.shown(full, { boarding: true, plan: 'pro' }), shown);
+  assert.notEqual(judged.shown(full, { boarding: false, plan: 'pro' }), shown);
+  /* What a served projection is remembered by: the whens met, so tenants whose values differ share one entry. */
+  assert.equal(judged.met({ boarding: true, plan: 'team' }), judged.met({ boarding: true, plan: 'pro' }));
+  assert.notEqual(judged.met({ boarding: false, plan: 'pro' }), judged.met({ boarding: true, plan: 'pro' }));
+  assert.match(judged.met(), /^0+$/);
+  assert.equal(judged.met({ boarding: null, plan: null }), judged.met());
+  assert.ok(Object.isFrozen(shown));
+  assert.deepEqual(visitorApp(full).nav, []);
+  assert.equal(visitorApp(full), visitorApp(full));
+  const plain: AppNavNode[] = [{ group: 'desk', label: 'Desk', children: [{ view: 'tickets' }] }];
+  assert.equal(visitorApp(menu(plain)).nav, plain);
+  assert.equal(menuFor(menu(plain), catalog), undefined);
 });
 
 for (const { dialect, skip } of TENANT_DIALECTS)
@@ -242,6 +396,26 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         assert.deepEqual(await f.today(north), expected('north', ZONES.north));
       }
       assert.equal((await f.served(south)).clockZone, OWN, 'writes keep one clock whoever caused them');
+    });
+
+    test("tenant.<column> in a query and resolveRows read the asking tenant's own profile, and an unshared column is refused", async (t) => {
+      const f = await fixture(t, dialect);
+      const north = await f.open('north'),
+        south = await f.open('south');
+      const ids = async (lease: Context, q: string) => {
+        const reply = await f.ask(lease, q);
+        assert.equal(reply.status, 200, reply.text);
+        assert.deepEqual(reply.body.errors ?? [], [], reply.text);
+        return (reply.body.rows as Array<Record<string, unknown>>).map((row) => row.id).sort();
+      };
+      profilesSeen.length = 0;
+      assert.deepEqual(await ids(north, 'ticket id != tenant.timezone'), ['north-chi', 'north-kir']);
+      assert.deepEqual(profilesSeen.at(-1), { timezone: ZONES.north });
+      assert.deepEqual(await ids(south, 'ticket id = tenant.timezone'), []);
+      assert.deepEqual(profilesSeen.at(-1), { timezone: ZONES.south });
+      const unshared = await f.ask(north, 'ticket id = tenant.name');
+      assert.match(unshared.text, /list \\?"name\\?" in auth\.tenancy\.shared/);
+      assert.doesNotMatch(unshared.text, /North/, 'an unshared column is not read out');
     });
 
     test('a null, empty or unknown zone on the profile is the App’s own, silently', async (t) => {

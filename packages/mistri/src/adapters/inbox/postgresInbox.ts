@@ -69,7 +69,8 @@ const definitions: readonly string[] = [
   state text COLLATE "C" NOT NULL,
   attempts integer NOT NULL,
   due_at text COLLATE "C" NOT NULL,
-  last_error text
+  last_error text,
+  words text
 )`,
   `CREATE TABLE ${q(optout)} (
   holder text COLLATE "C" PRIMARY KEY,
@@ -156,6 +157,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       column('attempts', 'integer'),
       column('due_at', 'text', 'C'),
       column('last_error', 'text', 'default', false),
+      column('words', 'text', 'default', false),
     ],
     ['PRIMARY KEY (notice)'],
     [`CREATE UNIQUE INDEX ${mail}_pkey ON ${runtimeSchema('postgres')}.${mail} USING btree (notice)`],
@@ -207,6 +209,16 @@ export async function appendPostgresNotice(client: PgQuery, row: NoticeRow): Pro
   const values = [row.app, row.recipient, row.at, row.resource, row.key, row.title, uses, row.actor, row.actorName, row.action];
   const insert = `INSERT INTO ${q(notice)} (app, recipient, at, resource, key_json, title, uses_json, actor, actor_name, action)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`;
+  /* A mail whose title says a write's words seals them bound to the notice's id, so the id is read back first: one
+     more round trip, on these notices only. */
+  if (row.email && row.sealWords) {
+    const [{ id }] = (await client.query(`${insert} RETURNING id`, values)).rows as Array<{ id: string | number }>;
+    await client.query(
+      `INSERT INTO ${q(mail)} (notice, state, attempts, due_at, last_error, words) VALUES ($1, 'queued', 0, $2, NULL, $3)`,
+      [id, row.at, row.sealWords(Number(id))],
+    );
+    return;
+  }
   /* The notice and its mail in one statement, which nothing reads an answer of:
      on a writer that pipelines it leaves with the COMMIT (beforeCommit). */
   const append = row.email
@@ -218,6 +230,17 @@ export async function appendPostgresNotice(client: PgQuery, row: NoticeRow): Pro
     : { text: insert, values };
   if (beforeCommit(client, [append])) return;
   await client.query(append.text, append.values);
+}
+
+/** Version 1 to 2, as statements for the store upgrade (storeLayouts.ts): the outbox gains `words`, a notice's said
+    title sealed while it waits; every row is kept with none. */
+export function postgresInboxUpgradeFrom1(): readonly string[] {
+  return [
+    `ALTER TABLE ${q(mail)} ADD COLUMN words text`,
+    `ALTER TABLE ${q(meta)} DROP CONSTRAINT ${meta}_version_check`,
+    `UPDATE ${q(meta)} SET version = 2`,
+    `ALTER TABLE ${q(meta)} ADD CONSTRAINT ${meta}_version_check CHECK (version = 2)`,
+  ];
 }
 
 /** One person's notices in one App, newest first. */

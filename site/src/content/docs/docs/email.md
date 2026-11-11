@@ -3,8 +3,7 @@ title: Email
 description: Send an App's notices, sign-in links and form codes through one email service the server's config names, after each write commits.
 ---
 
-Send an App's notices, sign-in links and form codes through one email service
-the server's config names, after each write commits.
+Send an App's notices, sign-in links and form codes through one email service the server's config names, after each write commits.
 
 ```json
 { "name": "mail", "kind": "email", "url": "smtps://smtp.example.com:465",
@@ -12,17 +11,14 @@ the server's config names, after each write commits.
   "auth": { "username": "${SMTP_USER}", "password": "${SMTP_PASSWORD}" } }
 ```
 
-That entry goes in `mistri.json`'s `connections`. An App never names a
-credential or a sender: a `notify` rule says `email: true`, and the server
-does the rest.
+That entry goes in `mistri.json`'s `connections`. An App never names a credential or a sender: a `notify` rule says `email: true`, and the server does the rest.
 
 <!-- no picture: a message arrives in the reader's own mail client; nothing on the App's pages changes. -->
 
 ## What you'll see
 
-- A notice in the inbox and, for a rule with `email: true`, the same notice as an email, sent once the write has committed.
+- A notice in the inbox and, for a rule with `email: true`, the same notice as an email, sent once the write has committed. Nothing is sent for a write that rolled back, and no failed send ever fails a write.
 - "Forgot password?" on the sign-in card, emailing a one-time link valid for an hour.
-- Nothing sent for a write that rolled back, and no failed send ever failing a write.
 
 ## When to use it, and when not
 
@@ -36,7 +32,7 @@ does the rest.
 | --- | --- | --- |
 | `smtps://host:465` | TLS from the first byte | Stable |
 | `smtp://host:587` | Must offer STARTTLS or nothing is sent; `"insecure": true` allows a plain relay on a trusted network | Stable |
-| `log:` or `log:mail.log` | Sends nothing: each message is one JSON line on stdout or in the file, for development and tests | Stable |
+| `log:` or `log:mail.log` | Sends nothing: each message is one JSON line on stdout or in the file, body and all, sign-in links and a write's own words (codes) included; for development and tests only | Stable |
 
 Credentials are `${VARIABLE}` references, expanded when the transport opens and never logged. The host resolves through the same network rules as every connection; link-local addresses are refused unless `"allowLinkLocal": true`.
 
@@ -61,6 +57,10 @@ orders: { notify: [{ on: { changes: 'status' }, when: 'status = shipped', title:
 
 The email service needs `"links": { "secret": "${MAIL_LINK_SECRET}" }`, which signs each message's unsubscribe link; run `mistri migrate stores up --app <dir>` once to create the store that queues the mail. Before each send the server checks, in order: the address has not unsubscribed; the `consent` column is true, or the person opted in again; a visitor's write mails only an address the form proved (`link.email.verified`); and no address gets more than five messages a day, nor an App more than 500 an hour. Every message carries one-click `List-Unsubscribe` headers, and the unsubscribe page asks before it changes anything. In a tenant App each tenant's opt-outs, consent and caps are its own; provision the store with `provisionStores(<the database>, { only: ['integrations'] })` from `@mistriwork/mistri/maintenance`. In a suite the unsubscribe link sits under the App's path.
 
+### A write's own words
+
+A title's `{words.code}` says a value the command's write gives (`db.<table>.insert(row, { words: { code } })`) and stores nowhere: the inbox shows it as "…", and the queued mail or channel message keeps it sealed under `MISTRI_SECRETS_KEY` until it is sent, fails or expires. The `log:` transport writes it out in the clear with the rest of the message, which is why it is for development only. A rule that says words needs `email: true` or `send`, and an App with one does not start without the key. The command's side, `{ words }`, is in [commands](/docs/commands/).
+
 ## Common mistakes
 
 - The server does not start: the App asks for email and the config names no email service → add an entry of `"kind": "email"`.
@@ -70,6 +70,5 @@ The email service needs `"links": { "secret": "${MAIL_LINK_SECRET}" }`, which si
 ## Related
 
 - [Sign-in](/docs/sign-in/): password resets and verified addresses.
-- [Command forms and bulk](/docs/command-forms/): status checks, step-up codes and linking by email.
 - [Tenant mail](/docs/tenant-mail/): a tenant App's mail in and out, DKIM, signed links and providers.
 - [Connections and services](/docs/services/): every other entry in `mistri.json`.
