@@ -12,5 +12,7 @@ export const say = defineMessages({
   lineCouldNotBeRead: 'These lines could not be read.',
   total: 'Total',
   noLines: 'No lines.',
+  noPictures: 'No pictures.',
   more: 'Only the first {count} lines are on this {document}.',
+  morePictures: 'Only the first {count} pictures are on this {document}.',
 });

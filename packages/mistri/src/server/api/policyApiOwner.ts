@@ -69,6 +69,7 @@ import type { ApiCommandRoute } from './apiCommandRoute.js';
 import { commandProblem, projectApiCommandAnswer, refusalHeaders, REFUSAL_STATUS } from './apiCommandResponse.js';
 import { ApiCommandUnauthenticated } from './sqliteApiCommandOwner.js';
 import { ApiReadFailure } from './apiReadFailure.js';
+import { createApiScopeMint } from './apiScopeMint.js';
 import { ApiTokenStoreUnavailable } from '../auth/apiTokenStoreFailure.js';
 import { commandsOf } from '../stores/commandStores.js';
 
@@ -173,11 +174,15 @@ export async function createPolicyApiOwner(input: {
        The deployment's verifier answers only for a request trusted
        composition made (tenantApiRequest.ts); a browser's keeps its session. */
     const requestFor = (credential: unknown, observed: Observation) =>
-      createTenantApiRequest(async (): Promise<Identity> => {
-        const again = await observe(credential);
-        if (JSON.stringify(again.observed) !== JSON.stringify(observed)) return refuse('unauthenticated');
-        return { id: observed.subject.id, who: observed.subject.id, role: observed.roles.join(','), emailUnproven: true };
-      }, observed.roles) as never;
+      createTenantApiRequest(
+        async (): Promise<Identity> => {
+          const again = await observe(credential);
+          if (JSON.stringify(again.observed) !== JSON.stringify(observed)) return refuse('unauthenticated');
+          return { id: observed.subject.id, who: observed.subject.id, role: observed.roles.join(','), emailUnproven: true };
+        },
+        observed.roles,
+        observed.scope,
+      ) as never;
     /** The last token check, then the bytes: on SQLite on this same stack, on
      * PostgreSQL inside the native handoff while its locks are held. `stale`
      * answers a token that no longer observes. */
@@ -467,8 +472,13 @@ export async function createPolicyApiOwner(input: {
       );
     };
 
+    const readItem = (credential: unknown, operationId: string, key: string, send: Send) => read(credential, operationId, { key }, send);
+    // The key is proven readable through this owner's own item read, as the parent token.
+    const mintScope = served.api!.scopes ? createApiScopeMint({ app: served, auth: input.auth, observe, readItem }) : undefined;
+
     return Object.freeze({
-      readItem: (credential: unknown, operationId: string, key: string, send: Send) => read(credential, operationId, { key }, send),
+      readItem,
+      ...(mintScope ? { mintScope } : {}),
       readList: (credential: unknown, operationId: string, query: string, send: Send) => read(credential, operationId, { query }, send),
       /** The `$openapi` document — composed when the App exposes commands — narrowed per token. */
       readSpec: (credential: unknown, send: Send) => read(credential, '$openapi', { spec: true }, send),

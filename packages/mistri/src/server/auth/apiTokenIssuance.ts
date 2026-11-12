@@ -35,6 +35,8 @@ interface AccountTokenIssueInput {
   operations?: readonly string[];
   /** Tenant Apps only: `{ tenantId, membershipId, membershipVersion, roles }` read natively from the business store. */
   tenant?: unknown;
+  /** A row scope (`api.scopes`): `{ name, key }`, and for a `$scope` child its parent's id. */
+  rowScope?: Readonly<{ name: string; key: string; parentId?: string }>;
 }
 
 /**
@@ -50,6 +52,9 @@ export function issueAccountToken(raw: AccountTokenIssueInput) {
   const tenant = input.tenant === undefined ? undefined : captureTenantIssue(input.tenant);
   // A tenant App issues bound tokens only; an `all` App never does.
   if (!app.api || (app.auth?.rows === 'tenant') !== (tenant !== undefined)) return refuse();
+  // A scope the App declares, and only where rows are scoped at all.
+  if (input.rowScope && (app.auth?.rows === 'all' || !app.api.scopes || !Object.hasOwn(app.api.scopes, input.rowScope.name)))
+    return refuse();
   assertApiTokenSecretId(input.tokenId);
   const apiRoles = Object.freeze([...app.api.roles]);
   const record: Readonly<TokenRecord> = captureApiTokenRecord({
@@ -63,6 +68,7 @@ export function issueAccountToken(raw: AccountTokenIssueInput) {
     createdAt: input.createdAt,
     ...(input.operations !== undefined ? { operations: input.operations } : {}),
     ...(tenant ? { tenant: tenant.binding } : {}),
+    ...(input.rowScope ? { rowScope: input.rowScope } : {}),
   });
   const admit = (subject: EligibleAccount, actor: EligibleAccount, now?: number): void => {
     // A tenant App grants by membership: the native account role is not its authority.

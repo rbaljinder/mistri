@@ -43,6 +43,13 @@ const tenantColumns = [
   `${text('membership_version', 128, true)} CHECK (membership_version IS NULL OR (membership_version GLOB '[1-9]*' AND membership_version NOT GLOB '*[^0-9]*'))`,
 ];
 const tenantBound = 'CHECK ((tenant_id IS NULL) = (membership_id IS NULL) AND (tenant_id IS NULL) = (membership_version IS NULL))';
+/** A row-scoped token's scope (version 2): a declared scope's name, its key, and a `$scope` child's parent token. */
+const scopeColumns = [
+  `${text('scope_name', 64, true)} CHECK (scope_name IS NULL OR (scope_name GLOB '[A-Za-z_]*' AND scope_name NOT GLOB '*[^A-Za-z0-9_]*'))`,
+  `${text('scope_key', 256, true)}`,
+  `${uuid('scope_parent_id', true)}`,
+];
+const scopeBound = 'CHECK ((scope_name IS NULL) = (scope_key IS NULL) AND (scope_name IS NOT NULL OR scope_parent_id IS NULL))';
 const tables = SQLITE_API_TOKEN_TABLES;
 const metaDdl = (version: number) => `CREATE TABLE "${tables.meta}" (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -51,7 +58,7 @@ const metaDdl = (version: number) => `CREATE TABLE "${tables.meta}" (
   ${uuid('store_id')},
   ${text('format', 4)} CHECK (format = 'twa1')
 )`;
-const tokenDdl = `CREATE TABLE "${tables.token}" (
+const tokenDdl = (version: number) => `CREATE TABLE "${tables.token}" (
   ${uuid('token_id')} PRIMARY KEY,
   ${text('app_id', 256)},
   ${text('subject_kind', 7)} CHECK (subject_kind IN ('account', 'service')),
@@ -70,13 +77,13 @@ const tokenDdl = `CREATE TABLE "${tables.token}" (
   ${text('version', 128)} CHECK (version GLOB '[1-9]*' AND version NOT GLOB '*[^0-9]*'),
   ${text('tenant_id', 128, true)} CHECK (tenant_id IS NULL OR (tenant_id GLOB '[a-z0-9]*' AND tenant_id NOT GLOB '*[^a-z0-9_-]*')),
   ${text('membership_id', 3072, true)},
-  ${text('membership_version', 128, true)} CHECK (membership_version IS NULL OR (membership_version GLOB '[1-9]*' AND membership_version NOT GLOB '*[^0-9]*')),
+  ${text('membership_version', 128, true)} CHECK (membership_version IS NULL OR (membership_version GLOB '[1-9]*' AND membership_version NOT GLOB '*[^0-9]*')),${version >= 2 ? `\n  ${scopeColumns.join(',\n  ')},` : ''}
   CHECK ((tenant_id IS NULL) = (membership_id IS NULL) AND (tenant_id IS NULL) = (membership_version IS NULL)),
   CHECK (expires_at > created_at),
   CHECK ((revoked_at IS NULL) = (revoked_by IS NULL)),
   CHECK (revoked_at IS NULL OR revoked_at >= created_at),
   CHECK (last_used_at IS NULL OR last_used_at >= created_at),
-  CHECK (subject_kind <> 'service' OR (length(subject_id) BETWEEN 1 AND 63 AND subject_id GLOB '[a-z]*' AND subject_id NOT GLOB '*[^a-z0-9-]*'))
+  CHECK (subject_kind <> 'service' OR (length(subject_id) BETWEEN 1 AND 63 AND subject_id GLOB '[a-z]*' AND subject_id NOT GLOB '*[^a-z0-9-]*'))${version >= 2 ? `,\n  ${scopeBound}` : ''}
 )`;
 /** The OAuth rows (v3), in the order their references need. Clients are
  * public (no secret): `twc1.` and a UUID. Every secret is a digest. */
@@ -137,7 +144,45 @@ const SQLITE_API_TOKEN_OAUTH_DDL = Object.freeze([
   `CREATE INDEX "${tables.refresh}_grant" ON "${tables.refresh}" (grant_id)`,
   `CREATE INDEX "${tables.access}_grant" ON "${tables.access}" (grant_id)`,
 ]);
-export const SQLITE_API_TOKEN_DDL = Object.freeze([metaDdl(API_TOKEN_STORE_VERSION), tokenDdl, ...SQLITE_API_TOKEN_OAUTH_DDL]);
+/** A scoped token's parent is what a scope's reads and a revoke by parent look up (version 2). */
+const SCOPE_PARENT_INDEX = `CREATE INDEX "${tables.token}_scope_parent" ON "${tables.token}" (scope_parent_id)`;
+export const SQLITE_API_TOKEN_DDL = Object.freeze([
+  metaDdl(API_TOKEN_STORE_VERSION),
+  tokenDdl(API_TOKEN_STORE_VERSION),
+  SCOPE_PARENT_INDEX,
+  ...SQLITE_API_TOKEN_OAUTH_DDL,
+]);
+
+const V1_TOKEN_COLUMNS =
+  'token_id, app_id, subject_kind, subject_id, label, roles_json, operations_json, created_at, created_by, expires_at, revoked_at, revoked_by, last_used_at, format, digest, version, tenant_id, membership_id, membership_version';
+
+/* Version 1 to 2, as statements for the store upgrade (storeLayouts.ts) to run in its one transaction. SQLite keeps a
+   table's CREATE text and the attestation compares it whole, so the token table is rebuilt rather than altered: every
+   row copied, with no scope, which version 1 never had. The OAuth access rows reference the token table, and renaming
+   it rewrites that reference to the parked copy, so they are parked and rebuilt beside it; the meta row keeps its
+   binding. A row the new checks refuse fails the step, and the transaction leaves the store as it was. */
+export function sqliteApiTokenUpgradeFrom1(): readonly string[] {
+  const parked = (name: string) => `${name}_v1`;
+  const access = SQLITE_API_TOKEN_OAUTH_DDL.find((sql) => sql.startsWith(`CREATE TABLE "${tables.access}"`))!;
+  const accessIndex = SQLITE_API_TOKEN_OAUTH_DDL.find((sql) => sql.startsWith(`CREATE INDEX "${tables.access}_grant"`))!;
+  return Object.freeze([
+    `DROP INDEX "${tables.access}_grant"`,
+    `ALTER TABLE "${tables.access}" RENAME TO "${parked(tables.access)}"`,
+    `ALTER TABLE "${tables.token}" RENAME TO "${parked(tables.token)}"`,
+    `ALTER TABLE "${tables.meta}" RENAME TO "${parked(tables.meta)}"`,
+    tokenDdl(2),
+    `INSERT INTO "${tables.token}" (${V1_TOKEN_COLUMNS}) SELECT ${V1_TOKEN_COLUMNS} FROM "${parked(tables.token)}"`,
+    access,
+    `INSERT INTO "${tables.access}" (token_id, grant_id, app_id, version) SELECT token_id, grant_id, app_id, version FROM "${parked(tables.access)}"`,
+    `DROP TABLE "${parked(tables.access)}"`,
+    `DROP TABLE "${parked(tables.token)}"`,
+    SCOPE_PARENT_INDEX,
+    accessIndex,
+    metaDdl(2),
+    `INSERT INTO "${tables.meta}" (singleton, version, app_id, store_id, format) SELECT singleton, 2, app_id, store_id, format FROM "${parked(tables.meta)}"`,
+    `DROP TABLE "${parked(tables.meta)}"`,
+  ]);
+}
 
 type Entry = Readonly<{ type: string; name: string; tbl_name: string; sql: string | null }>;
 const byCatalog = (a: Entry, b: Entry) => (a.type < b.type ? -1 : a.type > b.type ? 1 : a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
@@ -151,9 +196,10 @@ export const SQLITE_API_TOKEN_CATALOG: readonly Entry[] = Object.freeze(
   [
     autoindex(tables.token),
     tableEntry(tables.meta, metaDdl(API_TOKEN_STORE_VERSION)),
-    tableEntry(tables.token, tokenDdl),
+    tableEntry(tables.token, tokenDdl(API_TOKEN_STORE_VERSION)),
     ...oauthTables.map((name, index) => tableEntry(name, SQLITE_API_TOKEN_OAUTH_DDL[index])),
     ...oauthTables.map(autoindex),
+    Object.freeze({ type: 'index', name: `${tables.token}_scope_parent`, tbl_name: tables.token, sql: SCOPE_PARENT_INDEX }),
     ...SQLITE_API_TOKEN_OAUTH_DDL.slice(oauthTables.length).map((sql) => {
       const [, name, table] = /^CREATE INDEX "([^"]+)" ON "([^"]+)"/.exec(sql)!;
       return Object.freeze({ type: 'index', name, tbl_name: table, sql });

@@ -8,7 +8,7 @@ import { assertAppApiContext } from '../api/appApiValidation.js';
 import { apiReadTokenCatalog } from '../api/apiEventOperations.js';
 import type { ApiTenantCatalog } from '../api/apiTenantCommandCatalog.js';
 import { apiTokenSecretId, matchesApiTokenSecret } from '../api/apiTokenSecret.js';
-import { narrowApiTokenScope, narrowTenantApiTokenScope, type TokenRecord } from '../api/apiTokenScope.js';
+import { narrowApiTokenScope, narrowTenantApiTokenScope, observedRowScope, type TokenRecord } from '../api/apiTokenScope.js';
 import { createSqliteApiTokenStore } from './sqliteApiTokenStore.js';
 import { readSqliteEligibleAccountRoles } from './nativeAccountObservation.js';
 import { captureApiTokenCommandContext } from './apiTokenCommandContext.js';
@@ -95,7 +95,8 @@ function observeAccountToken(
     // about what is stored, not proof the store is down, and the two cannot be
     // told apart here. The file being unusable at all shows up when the
     // caller's transaction begins or commits, which is where it is reported.
-    const stored = createSqliteApiTokenStore(db, { appId: app.id, storeId }, active).lookup(id);
+    const store = createSqliteApiTokenStore(db, { appId: app.id, storeId }, active);
+    const stored = store.lookup(id);
     active();
     if (!stored || stored.record.subject.kind !== 'account' || !matchesApiTokenSecret(app.id, id, rawCredential, stored.digest))
       return refuse();
@@ -104,6 +105,11 @@ function observeAccountToken(
     if (!account) return refuse();
     const record = oauthRecord(db, stored.record, app, input.oauth, now);
     active();
+    // A `$scope` token stands while its parent does: read in this transaction, so revoking the parent ends it here.
+    const parentId = stored.record.rowScope?.parentId;
+    const parent = parentId === undefined ? undefined : store.lookup(parentId);
+    active();
+    const rowScope = observedRowScope(stored.record, app, parent?.record, now);
     const operations = catalog.operations.map((operation) => ({ id: operation.id, eligibleRoles: operation.eligibleRoles }));
     const bound = tenant
       ? narrowTenantApiTokenScope(record, app, { appId: app.id, subject: stored.record.subject, eligible: true }, operations, now)
@@ -134,6 +140,7 @@ function observeAccountToken(
       roles: scope.roles,
       operations: scope.operations,
       ...(bound ? { tenant: bound.tenant } : {}),
+      ...(rowScope ? { scope: rowScope } : {}),
     });
   } catch (error) {
     // A store that could not answer stays distinguishable; every judgement

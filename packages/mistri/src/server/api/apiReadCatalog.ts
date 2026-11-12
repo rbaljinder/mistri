@@ -15,6 +15,7 @@ import { validateResourceView, type ResourceAccess } from '../app/appAccess.js';
 import { tabKey } from '@mistriwork/engine/shared/addressParams.js';
 import { reservedKeys } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { opensTo } from '../../shared/appViewRoles.js';
+import { checkApiScopes } from './apiRowScope.js';
 
 type Exposure = NonNullable<ReturnType<typeof parseAppApi>>;
 interface Dependency {
@@ -65,6 +66,10 @@ export function checkApiReadCatalog(api: Exposure, app: AppDef, schema: Database
      principal when the read runs (policyApiOwner.ts). A tenant App's grants
      are its tenant-visible ones (apiTenantReadCatalog). */
   if (app.auth?.rows !== 'all' && app.auth?.rows !== 'policy') fail('api', 'tenant contexts are not supported by this read foundation');
+  /* A scope narrows the row scope a request resolves; an App that reads every
+     row resolves none, so there is nothing for a scope to narrow. */
+  if (api.scopes && app.auth?.rows === 'all')
+    fail('api.scopes', 'a token scope narrows a row policy; declare auth.rows "policy" (or a tenant App) to scope tokens');
   return scopedReadCatalog(api, app, schema, (role) => resolveAppAccess(app, schema, [role]));
 }
 
@@ -86,6 +91,7 @@ export function scopedReadCatalog(
   const single = apiSingleDialect(schema);
   if (single !== undefined && !SQL.has(single)) fail('api', 'non-SQL source catalogs are not supported [api-source-unsupported]');
   if (api.commands.length) fail('api.commands', 'command registry validation is not implemented by this read foundation');
+  checkApiScopes(api, schema);
   if (!api.roles.length || api.roles.some((role) => !Object.hasOwn(app.auth?.roles ?? {}, role)))
     fail('api.roles', 'every role must be declared by this App');
   // Resolve all policies eagerly: malformed inactive grants must not be

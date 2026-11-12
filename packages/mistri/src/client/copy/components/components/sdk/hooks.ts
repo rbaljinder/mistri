@@ -17,4 +17,7 @@ export const say = defineMessages({
   noCommands: 'no commands',
   noActions: 'no actions',
   noParameters: 'no parameters',
+  thePageLoadsIsNotOne: 'The page "{label}" loads {map}; "{loader}" is not one of them. Add it to the page\'s loaders.',
+  noLoaders: 'no loaders',
+  useloaderOutsideAPage: "useLoader runs a free-form page's loader; it is drawn on a page (definePage).",
 });

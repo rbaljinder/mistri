@@ -46,6 +46,13 @@ test("the lists waiting are the loader's, first to ship first, a rush said as on
   ]);
 });
 
+test("the page's second loader is asked for by name, and says where the floor stands beside the lists", async () => {
+  const view = renderExample(walk, Lists);
+  expect(await view.findByText('2 to pick · 5 picked, waiting to be packed')).toBeInTheDocument();
+  await view.refresh({ loaders: { pickFigures: { toPick: 1, toPack: 6 } } });
+  expect(await view.findByText('1 to pick · 6 picked, waiting to be packed')).toBeInTheDocument();
+});
+
 test('with nothing waiting, it says so', async () => {
   const view = renderExample(walk, Lists, { loaded: { lists: [] } });
   expect(await view.findByText('Nothing to pick')).toBeInTheDocument();

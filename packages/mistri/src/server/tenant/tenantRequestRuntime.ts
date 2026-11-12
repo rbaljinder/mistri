@@ -30,6 +30,7 @@ import { checkTenantInvocation, revalidateTenantInvocation, type TenantInvocatio
 import { membershipLapsed } from './tenantStoreContract.js';
 import { evidenceRefused, type AdmissionCache } from './tenantAdmissionCache.js';
 import { actingPrincipal } from './tenantApiRequest.js';
+import { admitScopedInserts, apiScopeParents, narrowAuthoredRows, requestApiScope } from '../api/apiRowScope.js';
 import { bindTenantFlagOwner } from './tenantFlagRuntime.js';
 import type { ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
 
@@ -49,7 +50,13 @@ export interface TenantRequestScope {
    * never taken from a request, so it states what happened rather than what a
    * caller claims. Absent, an ordinary write. */
   transaction<T>(run: (records: WriteTransaction) => T | Promise<T>, operation?: TenantWriteOperation): Promise<T>;
-  commandTransaction<T>(run: (records: WriteTransaction, journal: CommandJournal) => T | Promise<T>, read: readonly string[]): Promise<T>;
+  /** `write` is the command's written resources: an API-scoped insert under a path is proven against its parent's rows,
+   * which the command need not read itself (apiRowScope.ts) — the same footprint a single App's policy path uses. */
+  commandTransaction<T>(
+    run: (records: WriteTransaction, journal: CommandJournal) => T | Promise<T>,
+    read: readonly string[],
+    write?: readonly string[],
+  ): Promise<T>;
   /** A command's questions without its transaction: one read snapshot under
    * the same footprint and row scope, whose records refuse every write. Advice
    * only — which commands a record offers — that the command asks again in its
@@ -256,6 +263,8 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
            is held for the release fence below. Kept evidence
            (tenantAdmissionCache.ts) that this refuses is admitted afresh once:
            nothing has been written. */
+        // A row-scoped token (api.scopes) narrows the authored rows to its key and admits only inserts inside it.
+        const apiScope = requestApiScope(app.api, request, denyTenant);
         let rows!: RowScope,
           grants!: ResourceAccess,
           profile!: Readonly<Record<string, TenantValue>>,
@@ -284,7 +293,12 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
               const authored = delivered(authoredRows(acting, Object.freeze({ tenant: profile }))),
                 policy = isPromise(authored) ? await authored : authored;
               active();
-              rows = composeTenantReadScope(ownership, principal, member, policy);
+              rows = composeTenantReadScope(
+                ownership,
+                principal,
+                member,
+                apiScope ? narrowAuthoredRows(ownership.schema, policy, apiScope) : policy,
+              );
               const resolvedGrants = tenantAppAccess(app, ownership.schema, acting.roles);
               grants = validation ? { ...resolvedGrants, validation } : resolvedGrants;
               await session();
@@ -322,6 +336,7 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
             run: (records: WriteTransaction, journal?: CommandJournal) => R | Promise<R>,
             ceiling?: readonly string[],
             operation?: TenantWriteOperation,
+            written?: readonly string[],
           ): Promise<R> => {
             if (!accepting) return Promise.reject(new TenantWriteFailure('not_applied'));
             let invalid = attempted || typeof run !== 'function',
@@ -341,8 +356,12 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
                 // Internal FK/current-row checks must see the command footprint,
                 // not every App-visible row. This intersects, never replaces or
                 // widens, the mandatory membership/authored tenant scope.
+                // A scoped insert under a path is proven against its parent's rows (apiRowScope.ts), still inside this scope.
+                const parents = apiScope ? apiScopeParents(apiScope.scope, ownership.schema, captureTenantData(written ?? [])) : undefined;
                 sourceRows = Object.freeze(
-                  Object.fromEntries(Object.entries(rows).map(([table, row]) => [table, read.includes(table) ? row : false])),
+                  Object.fromEntries(
+                    Object.entries(rows).map(([table, row]) => [table, read.includes(table) || parents?.has(table) ? row : false]),
+                  ),
                 );
               } catch {
                 invalid = true;
@@ -356,7 +375,10 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
                 fenced = true;
                 await session();
                 try {
-                  const result = await run(records, journal);
+                  const result = await run(
+                    apiScope ? admitScopedInserts(records, apiScope.scope, apiScope.key, ownership.schema) : records,
+                    journal,
+                  );
                   await session();
                   return result;
                 } catch (error) {
@@ -424,7 +446,8 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
             who: () => verifiedWho ?? denyTenant(),
             advisoryReads,
             transaction: (run, operation) => transaction(false, run, undefined, operation),
-            commandTransaction: (run, read) => transaction(true, (records, journal) => run(records, journal!), read),
+            commandTransaction: (run, read, write) =>
+              transaction(true, (records, journal) => run(records, journal!), read, undefined, write),
             reads: () => {
               active();
               outside = true;

@@ -19,9 +19,10 @@ import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
 
 /** Version 2 adds the `command` route and the command's id beside it: a command's handler and lookup read audited
     rows too (version 1 never saw them). Version 3 adds the reader's roles and, on a tenant App, the membership it read
-    through: an account id alone could not say what the reader was let read, nor which membership held a token. An
-    older store is upgraded in place by `mistri migrate stores up`. */
-export const READ_AUDIT_VERSION = 3;
+    through: an account id alone could not say what the reader was let read, nor which membership held a token.
+    Version 4 adds a row-scoped API token's scope (`api.scopes`), `name:key`: the actor names the token, and the
+    scope says which one row's world it read. An older store is upgraded in place by `mistri migrate stores up`. */
+export const READ_AUDIT_VERSION = 4;
 export const READ_AUDIT_PREFIX = '__mistri_read_audit_';
 export const READ_AUDIT_TABLES = Object.freeze({
   meta: `${READ_AUDIT_PREFIX}meta`,
@@ -59,6 +60,8 @@ export const READ_AUDIT_LIMITS = Object.freeze({
   membership: 1024,
   /** The roles' JSON array: a role's name is a word, and a reader holds a few. */
   roles: 4096,
+  /** A token's row scope, `name:key`: a scope's name is at most 64 bytes and its key 256 (the API token store's). */
+  scope: 400,
   record: 2048,
   query: 16_384,
   ids: 65_536,
@@ -91,6 +94,8 @@ export interface ReadAuditRow {
   readonly roles?: readonly string[];
   /** On a tenant App, the membership the reader read through: a person's own, or the one that holds the API token. */
   readonly membership?: string;
+  /** A row-scoped API token's scope, `name:key` (`api.scopes`): the one row whose world the token reads. */
+  readonly scope?: string;
   /** A support visit's id, when the read was made under one. */
   readonly visit?: string;
   readonly resource: string;
@@ -142,6 +147,7 @@ export function assertReadAuditRow(row: ReadAuditRow): ReadAuditRow {
     text(JSON.stringify(row.roles), READ_AUDIT_LIMITS.roles, 'roles');
   }
   if (row.membership !== undefined) text(row.membership, READ_AUDIT_LIMITS.membership, 'membership');
+  if (row.scope !== undefined) text(row.scope, READ_AUDIT_LIMITS.scope, 'scope');
   if (row.visit !== undefined) text(row.visit, READ_AUDIT_LIMITS.visit, 'visit');
   text(row.resource, READ_AUDIT_LIMITS.resource, 'resource');
   if (!(READ_ROUTES as readonly string[]).includes(row.route))
@@ -183,6 +189,7 @@ export function storedReadAudit(row: Record<string, unknown>): StoredReadAudit {
     actor: String(row.actor),
     ...(row.roles_json == null ? {} : { roles: Object.freeze(JSON.parse(String(row.roles_json)) as string[]) }),
     ...(row.membership == null ? {} : { membership: String(row.membership) }),
+    ...(row.scope == null ? {} : { scope: String(row.scope) }),
     ...(row.visit == null ? {} : { visit: String(row.visit) }),
     resource: String(row.resource),
     route: row.route as ReadRoute,

@@ -43,6 +43,15 @@ export interface AppApiDef {
   /** The command events the App's event feed carries, by name. */
   events: string[];
   description?: string;
+  /** Row scopes a token can be narrowed to (`--scope name:key`, `$scope`):
+   * one key row of `key`'s resource, and per resource the column (or one-hop
+   * `fk.column` path) holding that key, or `true` for a resource the scope
+   * leaves as the grants have it. A resource left out reads nothing. */
+  scopes?: Record<string, ApiScopeDef>;
+}
+export interface ApiScopeDef {
+  key: string;
+  rows: Record<string, string | true>;
 }
 
 /** Structured segments avoid collisions between qualified resources and paths. */
@@ -80,7 +89,7 @@ export function composeAppApi(
         at = `${where}, ${by}`;
       const raw = record(feature.api, at);
       for (const key of Object.keys(raw)) {
-        if (['version', 'roles', 'description', 'publicSpec', 'network'].includes(key))
+        if (['version', 'roles', 'description', 'publicSpec', 'network', 'scopes'].includes(key))
           fail(at, `"${key}" belongs to the root App only, even when identical`);
         if (!['resources', 'views', 'commands', 'events'].includes(key)) fail(at, `unknown property "${key}"`);
       }
@@ -180,7 +189,8 @@ const MAX_NAME = 128,
   MAX_PATH = 512,
   MAX_TEXT = 2000;
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const ROOT_KEYS = ['version', 'roles', 'publicSpec', 'network', 'description', 'resources', 'views', 'commands', 'events'];
+const ROOT_KEYS = ['version', 'roles', 'publicSpec', 'network', 'description', 'resources', 'views', 'commands', 'events', 'scopes'];
+const MAX_SCOPES = 16;
 const EXPOSURE_KEYS = ['fields', 'filters', 'sorts', 'description', 'create', 'update', 'delete'];
 const WRITE_KEYS = new Set(['actions']);
 // The event grammar (commandEventCapture.ts): dotted identifiers, at least two, at most 128 bytes.
@@ -316,6 +326,7 @@ export function parseAppApi(raw: unknown, declaredRoles: readonly string[], wher
             return fail(at, '"effect." events are the platform\'s record of a webhook post; the feed carries the App\'s own events');
           return name;
         });
+  const scopes = input.scopes === undefined ? undefined : parseScopes(input.scopes, `${where}.scopes`);
   if (new Set(views.map((view) => view.view)).size !== views.length) return fail(where, 'duplicate view exposure');
   if (new Set(commands.map((entry) => entry.command.id)).size !== commands.length) return fail(where, 'duplicate command exposure');
   return {
@@ -328,7 +339,39 @@ export function parseAppApi(raw: unknown, declaredRoles: readonly string[], wher
     commands,
     events,
     ...(input.description === undefined ? {} : { description: prose(input.description, `${where}.description`) }),
+    ...(scopes ? { scopes } : {}),
   };
+}
+
+/* Shape only: whether the resources, columns and types line up is the checked
+   catalog's question (apiReadCatalog.ts). A path is one hop, by default and on
+   purpose: a deeper one is a join per read nobody asked for. */
+function parseScopes(raw: unknown, where: string): Record<string, ApiScopeDef> {
+  const entries = Object.entries(record(raw, where));
+  if (!entries.length || entries.length > MAX_SCOPES) return fail(where, `expected one to ${MAX_SCOPES} scopes`);
+  const scopes: Record<string, ApiScopeDef> = {};
+  for (const [name, value] of entries) {
+    if (!IDENTIFIER.test(name) || name.length > MAX_NAME) return fail(where, `"${name}" is not a scope name`);
+    const at = `${where}.${name}`,
+      entry = record(value, at, ['key', 'rows']);
+    const key = identifier(entry.key, `${at}.key`);
+    const rows: Record<string, string | true> = {};
+    const mapped = Object.entries(record(entry.rows, `${at}.rows`));
+    if (mapped.length > MAX_ENTRIES) return fail(`${at}.rows`, `exceeds ${MAX_ENTRIES} entries`);
+    for (const [resource, column] of mapped) {
+      identifier(resource, `${at}.rows`);
+      if (column === true) rows[resource] = true;
+      else {
+        const path = identifier(column, `${at}.rows.${resource}`, true);
+        if (path.split('.').length > 2)
+          return fail(`${at}.rows.${resource}`, 'a scope path is a column or one hop, such as "appointment_id.patient_id"');
+        rows[resource] = path;
+      }
+    }
+    if (typeof rows[key] !== 'string') return fail(`${at}.rows`, `the key resource "${key}" must name its key column`);
+    scopes[name] = { key, rows };
+  }
+  return scopes;
 }
 
 /* ---------- generic writes, by name (the server defines them: apiGenericWrites.ts) ---------- */

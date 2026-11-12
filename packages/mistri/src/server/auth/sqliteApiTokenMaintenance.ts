@@ -39,6 +39,8 @@ interface IssueOptions {
   tokenId?: string;
   /** Tenant Apps only: `{ tenantId, membershipId, membershipVersion, roles }` read natively from the business store. */
   tenant?: unknown;
+  /** A declared `api.scopes` name and its key. */
+  rowScope?: Readonly<{ name: string; key: string }>;
 }
 interface RevokeOptions extends Owner {
   tokenId: string;
@@ -51,6 +53,12 @@ function exact(raw: unknown, required: string[], optional: string[] = []) {
   if (required.some((key) => !Object.hasOwn(value, key)) || Object.keys(value).some((key) => ![...required, ...optional].includes(key)))
     return refuse();
   return value;
+}
+/** An operator's scope is a name and a key; a parent belongs to `$scope` alone. */
+function operatorScope(raw: unknown): Readonly<{ name: string; key: string }> {
+  const value = exact(raw, ['name', 'key']);
+  if (typeof value.name !== 'string' || typeof value.key !== 'string') return refuse();
+  return Object.freeze({ name: value.name, key: value.key });
 }
 function instant(value: unknown): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || value > 8640000000000000) return refuse();
@@ -171,7 +179,7 @@ function issueSqliteAccountToken(
     const options = exact(
       snapshot(rawOptions, 131072).value,
       ['storeId', 'exclusions', 'subjectId', 'actorId', 'roles', 'label', 'expiresAt'],
-      ['operations', 'tokenId', 'tenant'],
+      ['operations', 'tokenId', 'tenant', 'rowScope'],
     );
     // A tenant App issues from its tenant catalog; any other from its own.
     if ((Object.hasOwn(options, 'tenant') && !commands) || (!Object.hasOwn(options, 'tenant') && !commands && !schema)) return refuse();
@@ -191,6 +199,7 @@ function issueSqliteAccountToken(
       createdAt: clock,
       ...(Object.hasOwn(options, 'operations') ? { operations: options.operations as string[] } : {}),
       ...(Object.hasOwn(options, 'tenant') ? { tenant: options.tenant } : {}),
+      ...(Object.hasOwn(options, 'rowScope') ? { rowScope: operatorScope(options.rowScope) } : {}),
     });
     const { record } = issue;
     return transaction(existingPath, binding, (db, store, current) => {

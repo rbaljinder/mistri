@@ -15,6 +15,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useId,
   useRef,
   useState,
   type ComponentProps,
@@ -674,27 +675,61 @@ export function Table<Row extends Record<string, unknown>>({
   );
 }
 
+/** One run of an `Items` list under a head of its own: `title` is the head's words, `count` a quiet number beside it, and
+    `items` its `Item`s. */
+interface ItemGroup {
+  key?: string;
+  title: ReactNode;
+  count?: ReactNode;
+  items: ReactNode;
+}
+
 /** Rows of a list with no head row: a lead, a title, a quiet note and an action each. `label` names the list for
-    assistive technology; `empty` stands in its place when there are no `Item`s. */
+    assistive technology; `empty` stands in its place when there are no `Item`s. With `groups` the rows come in runs, each
+    under a head that holds the top of the room while its own rows pass beneath it (a run with no rows is not drawn). */
 export function Items({
   label,
   empty,
+  groups,
   children,
   className,
 }: {
   label?: string;
   empty?: ReactNode;
+  groups?: readonly ItemGroup[];
   children?: ReactNode;
   className?: string;
 }) {
   /* In a Card the rows are that box's, not a box in a box: no inset of their own, as a Stat in a Card is plain. */
   const nested = useContext(InCard);
-  if (Children.toArray(children).length === 0)
+  const runs = (groups ?? []).filter((group) => Children.toArray(group.items).length > 0);
+  if (Children.toArray(children).length === 0 && runs.length === 0)
     return given(empty) ? <div className={`kit-items-empty${nested ? ' kit-items-empty-flush' : ''}`}>{empty}</div> : null;
   return (
     <ul className={['kit-items', nested && 'kit-items-flush', className].filter(Boolean).join(' ')} aria-label={label}>
+      {runs.map((group, at) => (
+        <ItemRun key={group.key ?? at} group={group} />
+      ))}
       {children}
     </ul>
+  );
+}
+
+/* A run is one list item holding its head and its own list, labelled by the head: the groups are a list of lists to a
+   screen reader. The run spans the shared columns, so the lead column still lines up down every run, and being the
+   containing block of its sticky head is what lets the next run's head take the place of this one. */
+function ItemRun({ group }: { group: ItemGroup }) {
+  const id = useId();
+  return (
+    <li className="kit-items-run">
+      <div id={id} className="kit-items-head">
+        <span className="kit-items-head-title">{group.title}</span>
+        {given(group.count) && <span className="kit-items-head-count">{group.count}</span>}
+      </div>
+      <ul className="kit-items-run-rows" aria-labelledby={id}>
+        {group.items}
+      </ul>
+    </li>
   );
 }
 

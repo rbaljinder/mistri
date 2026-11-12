@@ -14,16 +14,28 @@
  * own membership, its account looked up again each time it is asked. */
 import type { Identity } from '../auth/auth.js';
 import { captureTenantData, denyTenant } from '@mistriwork/engine/server/evidence.js';
+import type { ApiRowScopeRef } from '../api/apiRowScope.js';
 
-const requests = new WeakMap<object, { verify: () => Promise<Identity>; roles: readonly string[] }>();
+const requests = new WeakMap<object, { verify: () => Promise<Identity>; roles: readonly string[]; scope?: ApiRowScopeRef }>();
 
 /** `roles`: the token's own roles. A token acts under those alone — never the
- * wider grants its member may hold, or gain after it was issued. */
-export function createTenantApiRequest(verify: () => Promise<Identity>, roles: readonly string[]): object {
+ * wider grants its member may hold, or gain after it was issued. `scope`: a
+ * row-scoped token's declared scope and key (api.scopes), narrowing its rows. */
+export function createTenantApiRequest(verify: () => Promise<Identity>, roles: readonly string[], scope?: ApiRowScopeRef): object {
   if (typeof verify !== 'function' || !Array.isArray(roles) || roles.some((role) => typeof role !== 'string')) return denyTenant();
+  if (scope !== undefined && (typeof scope?.name !== 'string' || typeof scope.key !== 'string')) return denyTenant();
   const request = Object.freeze(Object.create(null) as object);
-  requests.set(request, { verify, roles: Object.freeze([...roles]) });
+  requests.set(request, {
+    verify,
+    roles: Object.freeze([...roles]),
+    ...(scope ? { scope: Object.freeze({ name: scope.name, key: scope.key }) } : {}),
+  });
   return request;
+}
+
+/** The row scope an API request's token carries, if any. A browser request never has one. */
+export function requestScope(request: unknown): ApiRowScopeRef | undefined {
+  return request !== null && typeof request === 'object' ? requests.get(request)?.scope : undefined;
 }
 
 /** The enrolled deployment's verifier: an API request answers for itself;

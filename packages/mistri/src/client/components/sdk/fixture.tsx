@@ -150,6 +150,8 @@ export interface RenderOptions {
   address?: Record<string, string>;
   /** What a free-form page's loader answers: the page is drawn with it as `data`. */
   loaded?: unknown;
+  /** What each of a page's other loaders answers (`page.useLoader('dueFigure')`), by name; one left out answers null. */
+  loaders?: Record<string, unknown>;
   /** A list's page: its total and where it is (a custom list's `rows` are its resource's fixture rows). */
   total?: number;
   page?: { index: number; size: number };
@@ -244,6 +246,7 @@ export interface AuthoredPage {
   /** Its address parameters: names, or each name with its kind (`{ class: 'id' }`). */
   params?: readonly string[] | Readonly<Record<string, unknown>>;
   loader?: string;
+  loaders?: readonly string[];
 }
 
 /* An object condition (pageWhere.ts) judged on fixture rows as the server's query would judge it: a list is any of
@@ -554,7 +557,9 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
       refuse(resource);
       return breakdown(data, resource, by, measure, limit);
     },
-    load: async () => options.loaded ?? null,
+    load: async (_page, _params, loader) =>
+      (loader !== undefined && options.loaders && Object.hasOwn(options.loaders, loader) ? options.loaders[loader] : options.loaded) ??
+      null,
     openRecord: (resource, key, { mode = 'page' } = {}) => {
       navigations.push({ kind: 'record', resource, key, mode });
     },
@@ -794,6 +799,9 @@ function useFixturePage(declaration: AuthoredPage, address: Record<string, strin
       actions: declaration.actions ?? [],
       params: Array.isArray(declaration.params) ? declaration.params : Object.keys(declaration.params ?? {}),
       ...(declaration.loader ? { loader: declaration.loader } : {}),
+      ...(declaration.loader || declaration.loaders?.length
+        ? { loaders: [...(declaration.loader ? [declaration.loader] : []), ...(declaration.loaders ?? [])] }
+        : {}),
       ...(record ? { record: { key: record } } : {}),
       get: (name) => place[name],
       set: (name, value) =>

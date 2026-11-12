@@ -487,13 +487,16 @@ interface PageDecl {
   actions: string[];
   /** The address parameters the page keeps its place in: `/{app}/pick-walk?list=12`. */
   params: string[];
-  /** The loader that reads for it on the server, by its name in the commands module (`defineLoaders`). */
+  /** The loader that reads for it on the server, by its name in the commands module (`defineLoaders`); its result is the page's `data`. */
   loader?: string;
+  /** More loaders the page runs by name (`useLoader`), each with a cache entry and a loading state of its own. */
+  loaders?: string[];
   props: Record<string, unknown>;
 }
 
-/** The most address parameters one page keeps. */
+/** The most address parameters one page keeps, and the most loaders it names. */
 const MAX_PAGE_PARAMS = 8;
+const MAX_PAGE_LOADERS = 8;
 const PARAM = /^[a-z][a-z0-9_]{0,31}$/;
 const LOADER = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 
@@ -558,6 +561,21 @@ export function parsePage(raw: Record<string, unknown>, at: string): PageDecl {
       `[page-loader] ${at} has a "loader" that is not a loader's name, as the commands module's defineLoaders() registers it.`,
     );
   }
+  if (raw.loaders !== undefined) {
+    const named = raw.loaders;
+    if (
+      !Array.isArray(named) ||
+      !named.length ||
+      named.length > MAX_PAGE_LOADERS ||
+      named.some((name) => typeof name !== 'string' || !LOADER.test(name))
+    ) {
+      throw new Error(
+        `[page-loader] ${at} has "loaders" that are not up to ${MAX_PAGE_LOADERS} loader names, as the commands module's defineLoaders() registers them: loaders: ['board', 'dueFigure'].`,
+      );
+    }
+    if (new Set(named).size !== named.length || (raw.loader !== undefined && named.includes(raw.loader)))
+      throw new Error(`[page-loader] ${at} names a loader twice: "loader" and "loaders" together name each loader once.`);
+  }
   return {
     component,
     reads: [...new Set(reads.map((name) => name.trim()))],
@@ -565,6 +583,7 @@ export function parsePage(raw: Record<string, unknown>, at: string): PageDecl {
     actions: [...new Set(actions.map((name) => name.trim()))],
     params: [...new Set(params as string[])],
     ...(raw.loader === undefined ? {} : { loader: raw.loader as string }),
+    ...(raw.loaders === undefined ? {} : { loaders: [...(raw.loaders as string[])] }),
     props: componentPropValues(component, raw.props, at),
   };
 }

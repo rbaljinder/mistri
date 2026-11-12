@@ -18,6 +18,7 @@ import { ApiReadFailure } from './apiReadFailure.js';
 import { readApiBearerHeader } from './apiBearerHeader.js';
 import { bearerChallenge, presentsAuthorization } from '../auth/oauthResource.js';
 import { parseApiReadRoute } from './apiReadRoute.js';
+import { API_SCOPE_BODY_BYTES } from './apiScopeMint.js';
 import { createPostgresApiReadOwner } from './postgresApiReadOwner.js';
 import {
   admitApiRequest,
@@ -40,8 +41,43 @@ type HandoffReadOwner = {
   /** The event feed and AsyncAPI document; an owner without them answers 404. */
   readEvents?(credential: string, query: string, send: Send, signal: AbortSignal): Promise<unknown>;
   readAsyncApi?(credential: string, send: Send, signal: AbortSignal): Promise<unknown>;
+  /** `POST $scope` (apiScopeMint.ts): a row-scoped child of the credential; an owner without it answers 404. */
+  mintScope?(credential: string, body: unknown, send: Send): Promise<unknown>;
   retire(): Promise<unknown>;
 };
+function isScopeRoute(url: unknown): boolean {
+  try {
+    return parseApiReadRoute(url).operationId === '$scope';
+  } catch {
+    return false;
+  }
+}
+
+/** A `$scope` body, exactly as long as it said it was. */
+function readBody(req: IncomingMessage, length: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    const done = (error?: Error) => {
+      req.removeListener('data', data);
+      req.removeListener('end', end);
+      req.removeListener('error', done);
+      if (error) reject(error);
+      else if (size !== length) reject(new Error('The body is not the length it declared.'));
+      else resolve(Buffer.concat(chunks).toString('utf8'));
+    };
+    const data = (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > length) return done(new Error('The body is longer than it declared.'));
+      chunks.push(chunk);
+    };
+    const end = () => done();
+    req.on('data', data);
+    req.once('end', end);
+    req.once('error', done);
+  });
+}
+
 function own(value: object, key: string): unknown {
   if (!value || typeof value !== 'object' || isProxy(value)) throw new Error('API transport configuration is unavailable.');
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
@@ -164,14 +200,21 @@ export function createApiReadHandoffHttp<Owner extends HandoffReadOwner>(
             respond(res, admitted.status, admitted.code);
             return true;
           }
-          if (req.method !== 'GET') {
-            res.setHeader('allow', 'GET');
+          // `$scope` is the one address with a body: POST, JSON, small; every other address is a GET without one.
+          const scoping = isScopeRoute(req.url);
+          const method = scoping ? 'POST' : 'GET';
+          if (req.method !== method) {
+            res.setHeader('allow', method);
             respond(res, 405, 'method_not_allowed');
             return true;
           }
           if (
             req.headers['transfer-encoding'] !== undefined ||
-            (req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0')
+            (scoping
+              ? !/^\d{1,4}$/.test(req.headers['content-length'] ?? '') ||
+                Number(req.headers['content-length']) > API_SCOPE_BODY_BYTES ||
+                !/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? '')
+              : req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0')
           ) {
             res.setHeader('connection', 'close');
             respond(res, 400, 'invalid_request');
@@ -238,6 +281,16 @@ export function createApiReadHandoffHttp<Owner extends HandoffReadOwner>(
             return true;
           }
           client = admitted.client;
+          let body: unknown;
+          if (scoping) {
+            try {
+              body = JSON.parse(await readBody(req, Number(req.headers['content-length'])));
+            } catch {
+              res.setHeader('connection', 'close');
+              respond(res, 400, 'invalid_request');
+              return true;
+            }
+          }
           const active = await acquire();
           currentHost();
           // Synchronous and void, as the owner requires: it runs inside the
@@ -252,6 +305,15 @@ export function createApiReadHandoffHttp<Owner extends HandoffReadOwner>(
             res.end(response.body);
           };
           const signal = cancellation.signal;
+          if (scoping) {
+            if (!active.mintScope) {
+              respond(res, 404, 'not_found');
+              return true;
+            }
+            await active.mintScope(credential, body, send);
+            if (!written && !signal.aborted) respond(res, 503, 'temporarily_unavailable');
+            return true;
+          }
           const metadata = route.operationId === '$events' || route.operationId === '$asyncapi';
           if (metadata && !(route.operationId === '$events' ? active.readEvents : active.readAsyncApi)) {
             respond(res, 404, 'not_found');

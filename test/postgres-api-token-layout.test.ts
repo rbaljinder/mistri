@@ -15,7 +15,7 @@ import { liveSkip } from './live.js';
 const live = process.env.TABLEWALK_TEST_PG;
 test('fixed token leaf has independent catalog copies and no caller-defined DDL', () => {
   const first = postgresApiTokenCatalog();
-  assert.equal(first.find((table) => table.name === 'auth_api_token')!.columns.length, 19);
+  assert.equal(first.find((table) => table.name === 'auth_api_token')!.columns.length, 22);
   first[0].constraints.push('foreign');
   assert.equal(postgresApiTokenCatalog()[0].constraints.includes('foreign'), false);
   assert.ok(Object.isFrozen(postgresApiTokenDdl()));
@@ -36,7 +36,7 @@ test('the OAuth rows sit beside the token table, spelled as the token table was 
       'auth_oauth_refresh',
     ],
   );
-  assert.ok(catalog[1].constraints.includes('CHECK ((version = 1))'));
+  assert.ok(catalog[1].constraints.includes('CHECK ((version = 2))'));
   // The OAuth rows are written in the deparsed spelling, not captured: the helper reproduces the captured text checks.
   // The OAuth rows are written in the deparsed spelling, not captured: the helper reproduces v2's captured text checks.
   const captured = catalog[0].constraints.map(foldConstraint);
@@ -50,7 +50,7 @@ test('the OAuth rows sit beside the token table, spelled as the token table was 
   ] as const) {
     assert.ok(captured.includes(foldConstraint(deparsedTextCheck(name, max, nullable))), name);
   }
-  assert.equal(postgresApiTokenDdl().length, 10);
+  assert.equal(postgresApiTokenDdl().length, 11);
 });
 test('fixed API token extension matches pinned native PostgreSQL catalog', { skip: liveSkip('postgres', live) }, async () => {
   const module = 'pg';
@@ -76,7 +76,7 @@ test('fixed API token extension matches pinned native PostgreSQL catalog', { ski
     const id = randomUUID();
     await database.query(
       `INSERT INTO mistri.auth_api_token_meta(singleton,version,app_id,store_id,format)
-      VALUES (1,1,'app',$1,'twa1')`,
+      VALUES (1,2,'app',$1,'twa1')`,
       [randomUUID()],
     );
     const insert = `INSERT INTO mistri.auth_api_token(token_id,app_id,subject_kind,subject_id,label,

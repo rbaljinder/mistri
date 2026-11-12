@@ -35,6 +35,7 @@ import { tenantVisibleFields } from './tenantVisibleFields.js';
 import type { AdmissionCache } from './tenantAdmissionCache.js';
 import { bindTenantFlagOwner } from './tenantFlagRuntime.js';
 import { actingPrincipal } from './tenantApiRequest.js';
+import { apiScopeName, narrowAuthoredRows, requestApiScope } from '../api/apiRowScope.js';
 import { withTenantReadAudit } from './tenantReadAudit.js';
 import type { ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
 import { readZone } from '../app/readerZone.js';
@@ -421,7 +422,14 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
               const authoredResult = delivered(authoredRows(acting, Object.freeze({ tenant })));
               const authored = isPromise(authoredResult) ? await authoredResult : authoredResult;
               assertActive();
-              const rows = composeTenantReadScope(ownership, principal, member, authored);
+              // A row-scoped token (api.scopes) reads inside its key: folded into the authored rows, no read of its own.
+              const apiScope = requestApiScope(app.api, request, denyTenant);
+              const rows = composeTenantReadScope(
+                ownership,
+                principal,
+                member,
+                apiScope ? narrowAuthoredRows(ownership.schema, authored, apiScope) : authored,
+              );
               // No snapshot yet: whatever reads next, an operation or the release fence, revalidates the membership first.
               await revalidateSession();
               const adapter: Adapter = Object.freeze({
@@ -466,6 +474,7 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                     actor: principal.accountId,
                     roles: acting.roles,
                     membership: principal.membershipId,
+                    ...(apiScope ? { scope: apiScopeName(apiScope) } : {}),
                   },
                   readAudit,
                 ),
@@ -566,7 +575,12 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                 liveRows.set(context, rows);
                 keepTenantDraftReader(context, () => {
                   const every = Object.fromEntries(ownership.schema.tables.map((table) => [table.id, true] as const));
-                  const scope = composeTenantReadScope(ownership, principal, member, every);
+                  const scope = composeTenantReadScope(
+                    ownership,
+                    principal,
+                    member,
+                    apiScope ? narrowAuthoredRows(ownership.schema, every, apiScope) : every,
+                  );
                   const reader = authorizeResources(
                     resources,
                     tenantVisibleFields(ownership, { readable: new Set(Object.keys(every)), writable: new Set<string>(), rows: scope }),

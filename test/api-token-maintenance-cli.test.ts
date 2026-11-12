@@ -42,7 +42,7 @@ function fixture() {
     },
     provision(path, owner) {
       calls.push(['provision', path, owner]);
-      return Object.freeze({ migrated: false, version: 1, appId: owner.appId, storeId: owner.storeId });
+      return Object.freeze({ migrated: false, version: 2, appId: owner.appId, storeId: owner.storeId });
     },
     inspect(path, owner) {
       calls.push(['inspect', path, owner]);
@@ -71,7 +71,7 @@ function fixture() {
     },
     async pgProvision(url, owner) {
       calls.push(['pgProvision', url, owner]);
-      return { migrated: false, version: 1, appId: owner.appId, storeId: owner.storeId };
+      return { migrated: false, version: 2, appId: owner.appId, storeId: owner.storeId };
     },
     async pgInspect(url, owner) {
       calls.push(['pgInspect', url, owner]);

@@ -73,7 +73,7 @@ indexes every key). The sample Apps the references and guides link, Tick, Lintel
   Never reseed, migrate or write to an existing database without asking.
 - Prefer a built-in block; a custom component only for a drawing no block makes, after the gap is shown. Spell every key as the docs do; never guess one.
 - A whole screen no view draws is a free-form page: `pages/<path>.page.tsx`, `definePage` from `@mistriwork/mistri/page`,
-  declaring its `reads`, `commands`, `params` and `loader`; a condition is a `where` object, a row's verb a `<CommandButton command row />`; it writes only through those commands, never `fetch`.
+  declaring its `reads`, `commands`, `params` and `loader` (or `loaders`, read by name with `page.useLoader`); a condition is a `where` object, a row's verb a `<CommandButton command row />`; it writes only through those commands, never `fetch`.
 - A branded public site, a flow the person's own React owns, or a route that is not a command takes the general
   path, settled in step 2: [choices.md](references/choices.md#the-general-path), with Ladle as its sample.
 

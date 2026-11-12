@@ -170,6 +170,8 @@ export interface DashboardDef {
     actions?: string[];
     params: string[];
     loader?: string;
+    /** More loaders the page runs by name (`useLoader`), beside `loader`. */
+    loaders?: string[];
     public?: true;
     /** A record's tab (pages/<list view>/[id]/<tab>.page.tsx): drawn in that record's tab strip, never as a room. */
     record?: ServedRecordTab;

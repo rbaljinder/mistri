@@ -25,7 +25,7 @@ import {
   type AppRowPolicy,
   type PublicPlacementIntent,
 } from './appRowPolicy.js';
-import type { RuntimeResources } from '../app/appRuntimeResources.js';
+import { databaseOf, type RuntimeResources } from '../app/appRuntimeResources.js';
 import type { Identity } from '../auth/auth.js';
 import { validateBusinessCommandReferences } from '../commands/businessCommandLoader.js';
 import { defineCommands, type BusinessCommandRegistry } from '../commands/businessCommands.js';
@@ -43,6 +43,7 @@ import { canonicalCommandJson } from '../commands/commandPayload.js';
 import { contractDigest } from '../commands/commandContracts.js';
 import type { BusinessCommandBinding } from '../commands/businessCommandAccess.js';
 import { commandsOf } from '../stores/commandStores.js';
+import { appStoresOf } from '../stores/appStores.js';
 import { appZone } from '../../shared/appZone.js';
 
 /** The suite creates one issuer/epoch before starting any App. Retained readers
@@ -158,9 +159,16 @@ function captureResources(input: RuntimeResources): RuntimeResources {
   const deny = (): never => {
     throw new AppAccessDenied();
   };
-  const capture = (source: Adapter): Adapter => {
+  const capture = (source: Adapter, database: Adapter | undefined = source): Adapter => {
     const commands = commandsOf(source);
+    /* The read audit's append, and only that: an audited read is written on the database its rows live in
+       (server/readAudit.ts), which a lane's adapter may wrap without lending its stores. */
+    const stores = appStoresOf(database) ?? appStoresOf(source);
+    const audit = stores?.appendReadAudit
+      ? { readAuditReady: stores.readAuditReady.bind(stores), appendReadAudit: stores.appendReadAudit.bind(stores), readReadAudit: deny }
+      : {};
     return Object.freeze({
+      ...audit,
       dialect: source.dialect,
       introspect: async () => schema,
       close: async () => {},
@@ -176,7 +184,7 @@ function captureResources(input: RuntimeResources): RuntimeResources {
       ...(source.transaction ? { transaction: source.transaction.bind(source) } : {}),
     });
   };
-  const adapters = new Map(connections.map((owner) => [owner, capture(input.forConnection(owner))]));
+  const adapters = new Map(connections.map((owner) => [owner, capture(input.forConnection(owner), databaseOf(input, owner))]));
   return {
     ...input,
     schema,

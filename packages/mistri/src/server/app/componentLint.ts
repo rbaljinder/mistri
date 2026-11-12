@@ -367,6 +367,8 @@ type PageManifests = ReadonlyMap<
     reads: readonly string[];
     commands: readonly string[];
     actions?: readonly string[];
+    /** The loaders it names, `loader` and `loaders` together: `useLoader('x')` is held to them. */
+    loaders?: readonly string[];
     /** In no menu, no home rule, not public and not a record's tab: only a link opens it (`nav: false`). */
     unplaced?: boolean;
   }
@@ -397,6 +399,7 @@ export function pageManifestsOf(app: { views: AppDef['views']; nav?: AppDef['nav
                 reads: view.page.reads,
                 commands: view.page.commands,
                 actions: view.page.actions ?? [],
+                loaders: [view.page.loader, ...(view.page.loaders ?? [])].filter((name): name is string => name !== undefined),
                 ...(!placed.has(key) && !view.page.public && !view.page.record ? { unplaced: true } : {}),
               },
             ] as const,

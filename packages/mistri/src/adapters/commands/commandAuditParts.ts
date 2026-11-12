@@ -26,6 +26,15 @@ export function splitAudit(changes: readonly unknown[], frame: (head: readonly u
 }
 
 /**
+ * A row-scoped token's audit (`api.scopes`, `$scope`, `--scope`): its changes framed with the scope they were written
+ * under, `name:key`, as a visitor's audit names the visitor. A scoped token is never a public actor, so the two frames
+ * never meet; readers that look through a frame (`stitchAudit`, the console's field names) take either.
+ */
+export function scopedAudit(scope: Readonly<{ name: string; key: string }>, changes: readonly unknown[]): unknown {
+  return Object.freeze({ format: 'mistri.scoped-audit.v1', changes, scope: `${scope.name}:${scope.key}` });
+}
+
+/**
  * One target's whole audit as text: its first pieces, as the receipt row holds them, then each continuation in order.
  * Without continuations it is `changesJson` itself, byte for byte. A reader that shows what a target changed reads
  * the continuations of its target (the audit-part table, `groupAuditParts`) and asks this; one that only looks at what

@@ -37,7 +37,7 @@ The letterhead is the App's own mark and name. A tenant's uploaded logo replaces
 
 ## Sections on paper
 
-A document draws three kinds of section: `fields`, related lists and notes. They are placed side by side with `width` and the offsets, on the same twelve columns a page uses.
+A document draws three kinds of section: `fields`, related lists (as lines, or over a file resource as pictures) and notes. They are placed side by side with `width` and the offsets, on the same twelve columns a page uses.
 
 - **Fields** take the shape their `presentation` names:
   - a summary (the default) is label over value;
@@ -48,11 +48,12 @@ A document draws three kinds of section: `fields`, related lists and notes. They
   - in a summary or `properties`, long text (an order's note, a review's summary) sits under its caption across the
     section's width, as a paragraph.
 - **A related list** is every line of the record, up to 500, found by `whose` or, as on a page, by a match (`{ same: ['sales_order_id'] }`, the lines that share the record's order). It is drawn as a table whose header repeats on each sheet, with figures right-aligned in tabular numerals and money to the cent. Its `totals` are said once, under the last line.
+- **A related list of pictures** is a related list over a [file resource](/docs/file-storage/) with `presentation: 'gallery'`: `related('Photos', 'visit_photo', 'visit_id', { presentation: 'gallery' })`. The pictures are drawn in a grid, each whole in its frame (never cropped) with its text columns as its words, and each is read as the reader reads it: under their grants, and in a tenant App on their lease, so the sheet shows a reader no picture the record's own page would not. A sheet reads the first 24 pictures unless `limit` says otherwise, and says when there are more. There is no lightbox, upload or rename on paper.
 - **A note** holds the terms, a thank-you or how to pay. `variant: 'quiet'` sets it as small print.
 
 A value on paper is said as the App dresses it, with three exceptions. A date is its day ("Sep 4, 2026"), never "yesterday" or "13 days ago", and a moment is its day, time and zone, so the sheet says the same words on any day and for any reader. A status is its plain word. Money is shown to the cent. The sheet is ink on white in every look and in dark mode, and a [custom value component](/docs/custom-components/) drawn on it inherits paper's inks. Printed, it is the sheet alone: no navigation, bar or skip link.
 
-Paper refuses whatever operates a screen: the aside, tabs, actions, row actions, editing, a gallery or cards. `mistri check` names each one under the [`document`](/docs/check-codes/) code.
+Paper refuses whatever operates a screen: the aside, tabs, actions, row actions, editing or cards. `mistri check` names each one under the [`document`](/docs/check-codes/) code.
 
 ## Who sees it
 

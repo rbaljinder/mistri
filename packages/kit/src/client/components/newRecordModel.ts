@@ -78,6 +78,30 @@ export function formColumns(table: TableMeta, form: FormCuration | undefined, ap
   return columns.filter((c) => editable.has(c));
 }
 
+/** The most words a display-only vocabulary may hold and still be a listbox: past it a person types. */
+const DISPLAY_CHOICES = 30;
+
+/**
+ * A text column the database does not constrain (no CHECK, no enum) whose `display.values` names its words is chosen
+ * from them in an App's New form, as a column the database does constrain is: the words are the author's vocabulary
+ * for it, and a box to type one in would let a reader spell "To pick" where the stored word is `to_pick`. The words
+ * are display-only, so the database still takes any other; a value the form starts with that is none of them (an
+ * off-list default) stays in the list so it is not lost. A column with a format of its own, a reference, a rule of
+ * one word or one of more than thirty is left to be typed.
+ */
+export function withDisplayChoices(
+  column: ColumnMeta,
+  rule: { values?: Record<string, string>; format?: string } | null | undefined,
+  starts: readonly unknown[],
+): ColumnMeta {
+  if (column.allowed?.length || column.references || columnKind(column.type) !== 'text' || isFlagColumn(column)) return column;
+  if (!rule?.values || rule.format !== undefined) return column;
+  const words = Object.keys(rule.values);
+  if (words.length < 2 || words.length > DISPLAY_CHOICES) return column;
+  const off = starts.filter((start): start is string => typeof start === 'string' && start !== '' && !words.includes(start));
+  return { ...column, allowed: [...words, ...new Set(off)] };
+}
+
 /** Grouped fields retain authored order; ungrouped fields follow in form order. */
 export function formGroups(table: TableMeta, form: FormCuration | undefined, app: boolean, written?: ReadonlySet<string>): FormGroup[] {
   const columns = formColumns(table, form, app, written);

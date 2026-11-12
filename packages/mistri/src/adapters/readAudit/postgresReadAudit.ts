@@ -59,6 +59,7 @@ const definitions: readonly string[] = [
   command text COLLATE "C" CHECK (octet_length(command) <= ${READ_AUDIT_LIMITS.command}),
   roles_json text CHECK (octet_length(roles_json) <= ${READ_AUDIT_LIMITS.roles}),
   membership text COLLATE "C" CHECK (octet_length(membership) <= ${READ_AUDIT_LIMITS.membership}),
+  scope text COLLATE "C" CHECK (octet_length(scope) <= ${READ_AUDIT_LIMITS.scope}),
   CHECK ((command IS NULL) <> (route = 'command'))
 )`,
   `CREATE INDEX "${READ_AUDIT_RECORD_INDEX}" ON ${q(log)} (resource, record_key, id)`,
@@ -128,6 +129,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       column('command', 'text', 'C', false),
       column('roles_json', 'text', 'default', false),
       column('membership', 'text', 'C', false),
+      column('scope', 'text', 'C', false),
     ],
     [
       bytes('app', READ_AUDIT_LIMITS.app),
@@ -141,6 +143,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       bytes('command', READ_AUDIT_LIMITS.command),
       bytes('roles_json', READ_AUDIT_LIMITS.roles),
       bytes('membership', READ_AUDIT_LIMITS.membership),
+      bytes('scope', READ_AUDIT_LIMITS.scope),
       "CHECK (((command IS NULL) <> (route = 'command'::text)))",
       `CHECK ((route = ANY (ARRAY[${READ_ROUTES.map((route) => `'${route}'::text`).join(', ')}])))`,
       'CHECK ((row_count >= 0))',
@@ -184,6 +187,14 @@ export function postgresReadAuditUpgradeFrom2(): readonly string[] {
   ];
 }
 
+/** Version 3 to 4: a row-scoped token's scope added last. Every existing row keeps it empty: version 3 never recorded it. */
+export function postgresReadAuditUpgradeFrom3(): readonly string[] {
+  return [
+    `ALTER TABLE ${q(log)} ADD COLUMN scope text COLLATE "C" CHECK (octet_length(scope) <= ${READ_AUDIT_LIMITS.scope})`,
+    ...nextVersion(4),
+  ];
+}
+
 /* The version row's own check moved on, pinned to the step's version so an older step never writes a later one. */
 const nextVersion = (to: number) => [
   `ALTER TABLE ${q(meta)} DROP CONSTRAINT ${meta}_version_check`,
@@ -224,7 +235,7 @@ export async function provisionPostgresReadAudit(url: string): Promise<{ version
   });
 }
 
-const COLUMNS = 14;
+const COLUMNS = 15;
 
 /**
  * Rows gathered by a group commit (groupCommit.ts), in one INSERT: one
@@ -237,7 +248,7 @@ export async function appendPostgresReadAudits(client: PgQuery, rows: readonly R
   if (!attested && !(await postgresReadAuditReady(client))) throw new ReadAuditUnavailable(await layoutMessage(client));
   const places = rows.map((_, at) => `(${Array.from({ length: COLUMNS }, (_, column) => `$${at * COLUMNS + column + 1}`).join(', ')})`);
   await client.query(
-    `INSERT INTO ${q(log)} (at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command, roles_json, membership)
+    `INSERT INTO ${q(log)} (at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command, roles_json, membership, scope)
     VALUES ${places.join(', ')}`,
     rows.flatMap((row) => [
       row.at,
@@ -254,6 +265,7 @@ export async function appendPostgresReadAudits(client: PgQuery, rows: readonly R
       row.command ?? null,
       row.roles === undefined ? null : JSON.stringify(row.roles),
       row.membership ?? null,
+      row.scope ?? null,
     ]),
   );
 }
@@ -265,7 +277,7 @@ export async function readPostgresReadAudit(client: PgQuery, query: ReadAuditQue
   const filters = readAuditFilters(query);
   const values = filters.map(([, , value]) => value);
   const result = await client.query(
-    `SELECT id::text AS id, ${AT_ISO} AS at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command, roles_json, membership
+    `SELECT id::text AS id, ${AT_ISO} AS at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command, roles_json, membership, scope
     FROM ${q(log)} ${filters.length ? `WHERE ${filters.map(([name, op], index) => (op === 'shown' ? `(${name} = $${index + 1} OR ids_json::jsonb @> jsonb_build_array($${index + 1}::text))` : `${name} ${op} $${index + 1}`)).join(' AND ')}` : ''}
     ORDER BY id DESC LIMIT $${values.length + 1}`,
     [...values, query.limit],

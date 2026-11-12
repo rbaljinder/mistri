@@ -1,6 +1,7 @@
 /**
  * A free-form page's loader: server code that reads for the page, declared
- * beside the App's commands and named by the page (`definePage({ loader })`).
+ * beside the App's commands and named by the page (`definePage({ loader })`,
+ * or `loaders: [...]` for several, each read with `page.useLoader(name)`).
  *
  *   export const loaders = defineLoaders({
  *     pickWalk: defineLoader({
@@ -15,10 +16,10 @@
  *   - its `db` is the command `db`'s read-only handle (commandDb.ts) over the
  *     request's own reader — the one `/api/view/run` reads through, with the
  *     reader's grants, field projection and row policy already on it
- *     (http/source.ts; a tenant App's host, tenant/tenantHttp.ts, does not
- *     serve the route yet, and refuses it). It has the tables it declares
- *     and no others; a write on one is refused, and there is no transaction,
- *     no adapter and no SQL to reach for;
+ *     (http/source.ts; a tenant App's host serves the same route). It has the
+ *     tables it declares and no others, and `.segment(name)` reads one of
+ *     their segments; a write on one is refused, and there is no
+ *     transaction, no adapter and no SQL to reach for;
  *   - it runs only for a page that names it, whose reads include every one
  *     of its own, for a reader the page is served to: the page is found in
  *     the App as projected for this reader, never named by the request;

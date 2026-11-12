@@ -327,6 +327,9 @@ test('no first paint imports the App manifest parser', () => {
    adding a file here means a new module learned about tenancy, which is a
    decision worth making on purpose. */
 const TENANT_IMPORTERS = [
+  // A row-scoped token's scope rides the API request's brand (tenantApiRequest.ts), which both a tenant's
+  // and a row-policy App's requests carry, so the scope is read where the brand was stamped.
+  'packages/mistri/src/server/api/apiRowScope.ts',
   'packages/mistri/src/server/api/apiTenantCommandCatalog.ts',
   'packages/mistri/src/server/api/apiTenantReadCatalog.ts',
   // A row-policy App's API request is branded the way a tenant's is (tenantApiRequest.ts), so the

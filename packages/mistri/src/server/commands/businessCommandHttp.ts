@@ -65,7 +65,7 @@ export function businessCommandHttpError(error: unknown, statusOnly = false) {
             ? 400
             : safe.code === 'invalid_result'
               ? 500
-              : safe.code === 'consumes_refused'
+              : safe.code === 'consumes_refused' || safe.code === 'out_of_scope'
                 ? 422
                 : [
                       'stale_account',

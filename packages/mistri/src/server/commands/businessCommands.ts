@@ -127,6 +127,14 @@ export interface BusinessCommandActor {
   /** The public form the public principal came through; its id is `public:<form>`. */
   readonly form?: string;
   /**
+   * The row scope an App API token carries (`api.scopes`, `$scope`, `--scope`):
+   * the declared scope's name and the key of the one row it is narrowed to.
+   * Set by the server from the token, never from a request; absent for an
+   * unscoped token and for every session. The command already reads and
+   * writes only inside it.
+   */
+  readonly scope?: Readonly<{ name: string; key: string }>;
+  /**
    * Whether this principal is a lender's operator inside a dealer, under an
    * audited support session. Orthogonal to `kind`, not one of its values: such
    * an operator is a signed-in user holding one of the dealer's own roles, and

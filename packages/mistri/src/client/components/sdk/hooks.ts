@@ -12,7 +12,7 @@
  * sign-out or a switch of account never serves one reader's rows to another.
  */
 import { useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react';
-import { useInfiniteQuery, useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
   defaultCurrency,
   formatAbsolute,
@@ -29,6 +29,7 @@ import { minorFigure } from '@mistriwork/engine/shared/money.js';
 import {
   UiPageContext,
   UiSizeContext,
+  type UiPageFrame,
   type UiAddress,
   useUiHost,
   type OpenMode,
@@ -305,6 +306,44 @@ export function useBreakdown(
       }),
     ),
     optional,
+  );
+}
+
+/** The address parameters a page holds, as its loaders are asked them: only the ones it has a value for. */
+export const pageLoadPlace = (frame: UiPageFrame): Record<string, string> =>
+  Object.fromEntries(frame.params.flatMap((name) => (frame.get(name) === undefined ? [] : [[name, frame.get(name)!]])));
+
+/* One entry per reader, page, loader and place: the page's `data` and `useLoader` of the same loader share it, and a
+   command that commits reads all of them again with `['mistri-page', 'load']` (commands.tsx). */
+export const pageLoadKey = (scope: readonly unknown[], view: string, loader: string, place: Readonly<Record<string, string>>) =>
+  ['mistri-page', 'load', ...scope, view, loader, place] as const;
+
+/**
+ * One of a page's loaders, by its name: `page.useLoader('dueFigure')`. Each loader has its own cache entry and its own
+ * state, so a slow one does not hold another back, and it is asked again as the page's place in the address changes
+ * and after a command the page runs commits, as the page's `data` and its rows are. `data` is undefined while it loads.
+ */
+export function useLoader(name: string): UseQueryResult<unknown> & UiReadState {
+  const host = useUiHost();
+  const frame = useContext(UiPageContext);
+  if (!frame) throw new Error(say('useloaderOutsideAPage'));
+  const named = frame.loaders ?? [];
+  if (!named.includes(name)) {
+    throw new Error(
+      say('thePageLoadsIsNotOne', {
+        label: frame.label,
+        map: named.length ? named.map((each) => `"${each}"`).join(', ') : say('noLoaders'),
+        loader: name,
+      }),
+    );
+  }
+  const place = pageLoadPlace(frame);
+  return withReadState(
+    useQuery({
+      queryKey: pageLoadKey(host.scope, frame.view, name, place),
+      queryFn: async () => (await host.load(frame.view, place, name)) ?? null,
+      placeholderData: keepPreviousData,
+    }),
   );
 }
 

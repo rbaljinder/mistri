@@ -7,7 +7,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as ui from './index.js';
 import type * as PublicUi from '../../../../schema/ui.js';
@@ -493,6 +493,42 @@ describe('a Card with a count or an action, Items, Beside and the nav ground', (
         {false}
       </ui.Items>,
     );
+    expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.getByText('Nothing open')).toBeInTheDocument();
+  });
+
+  test('Items in groups are a list of lists, each under a head its own rows are named by', () => {
+    const { container } = render(
+      <ui.Items
+        label="Work"
+        empty={<span>Nothing open</span>}
+        groups={[
+          { title: 'Overdue', count: 2, items: [<ui.Item key="a" title="Call Ana" />, <ui.Item key="b" title="Send quote" />] },
+          { title: 'Nothing here', items: [] },
+          { key: 'today', title: 'Today', items: <ui.Item title="Ring Sam" lead={<i>9:00</i>} /> },
+        ]}
+      />,
+    );
+    expect(screen.getByRole('list', { name: 'Work' })).toBeInTheDocument();
+    /* A run is named by its head; a run with no rows draws no head to stand over nothing. */
+    const overdue = screen.getByRole('list', { name: /Overdue/ });
+    expect(within(overdue).getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.getByRole('list', { name: 'Today' })).toBeInTheDocument();
+    expect(screen.queryByText('Nothing here')).toBeNull();
+    expect(container.querySelectorAll('.kit-items-head')).toHaveLength(2);
+    expect(container.querySelector('.kit-items-head-count')?.textContent).toBe('2');
+    /* The head is sticky inside its run (the run is its containing block, so the next head takes its place), on the
+       surface so rows do not show through, and a hairline under it: all said in the sheet that draws them. */
+    expect(container.querySelector('.kit-items-head')?.parentElement).toHaveClass('kit-items-run');
+    const css = readFileSync('packages/mistri/src/client/components/sdk/kit.css', 'utf8');
+    const head = /\.kit-items-head \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(head).toMatch(/position: sticky/);
+    expect(head).toMatch(/background: var\(--surface\)/);
+    expect(head).toMatch(/border-bottom: 1px solid var\(--line\)/);
+  });
+
+  test('Items whose groups all have no rows says `empty`', () => {
+    render(<ui.Items label="Work" empty={<span>Nothing open</span>} groups={[{ title: 'Overdue', items: null }]} />);
     expect(screen.queryByRole('list')).toBeNull();
     expect(screen.getByText('Nothing open')).toBeInTheDocument();
   });

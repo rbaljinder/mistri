@@ -26,6 +26,7 @@ import { picked, windowed, type Picks, type Section } from '@mistriwork/kit/clie
 import { COMPACT_BELOW, UiSizeContext, useUiHost, type UiPageFrame, type UiRow, type UiSize } from './context.js';
 import { loadComponent } from './componentLoader.js';
 import { useComponentKey } from './componentKey.js';
+import { pageLoadKey, pageLoadPlace } from './hooks.js';
 import { rowsByPath } from './rows.js';
 import { batchedBreakdown } from '@mistriwork/kit/client/breakdownBatch.js';
 import { breakdownText, measureText } from '@mistriwork/engine/shared/dashboardAsks.js';
@@ -220,10 +221,10 @@ export function CustomPageSection({ page, section, index, plan, base, recordKey,
  */
 export function CustomPageBody({ frame, section }: { frame: UiPageFrame; section: Section }) {
   const host = useUiHost();
-  const place = Object.fromEntries(frame.params.flatMap((name) => (frame.get(name) === undefined ? [] : [[name, frame.get(name)!]])));
+  const place = pageLoadPlace(frame);
   const loaded = useQuery({
-    queryKey: ['mistri-page', 'load', ...host.scope, frame.view, place],
-    queryFn: async () => (await host.load(frame.view, place)) ?? null,
+    queryKey: pageLoadKey(host.scope, frame.view, frame.loader ?? '', place),
+    queryFn: async () => (await host.load(frame.view, place, frame.loader)) ?? null,
     enabled: frame.loader !== undefined,
     placeholderData: keepPreviousData,
   });

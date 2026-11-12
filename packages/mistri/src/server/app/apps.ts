@@ -136,6 +136,7 @@ import {
 import { checkPageLoaders } from './pageLoaderCheck.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
 import { namedChallenge, type HumanCheck } from '../commands/challenges.js';
+import { apiScopeAdvisories } from '../api/apiRowScope.js';
 
 /**
  * Import a module graph in a throwaway worker and hand back its default
@@ -1423,6 +1424,7 @@ export function appAdvisories(loaded: LoadedApp, schema: DatabaseSchema): string
     ...subtitleUnseenWarnings(loaded.app, loaded.pages, schema),
     ...notifyAdvisories(loaded.app, schema),
     ...valueLabelFindings(loaded.app).warnings,
+    ...apiScopeAdvisories(loaded.app.api),
   ].map((w) => `${manifest}: ${locateProblem(loaded.origins, w)}`);
 }
 

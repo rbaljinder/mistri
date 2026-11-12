@@ -816,7 +816,10 @@ interface AppPageManifest {
   /** The fixed actions it runs on what it reads; left out when it runs none. */
   actions?: string[];
   params: string[];
+  /** The loader whose result is the page's `data`. */
   loader?: string;
+  /** More loaders the page runs by name, beside `loader` (`useLoader`): the page's allowlist is both. */
+  loaders?: string[];
   /** The App's form views it opens (`page.useForm`); left out when it opens none. */
   forms?: string[];
   public?: true;

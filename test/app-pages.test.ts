@@ -77,6 +77,8 @@ const LOADERS = defineLoaders({
       return { tickets: tickets.map((row) => String(row.name)), counted: n };
     },
   }),
+  /* A second loader of the board: how many tickets the desk holds, asked for by name beside its `data`. */
+  tally: defineLoader({ reads: ['ticket'], load: async ({ db }) => ({ held: (await db.ticket.where({})).length }) }),
   notes: defineLoader({ reads: ['note'], load: async ({ db }) => ({ notes: (await db.note.where({})).length }) }),
   lobby: defineLoader({ reads: ['desk'], load: async ({ db, viewer }) => ({ desks: (await db.desk.where({})).length, viewer }) }),
 }) as unknown as Readonly<Record<string, PageLoader>>;
@@ -543,6 +545,65 @@ export default definePage({ label: String(typeof process === 'object' && process
     assert.throws(() => checkPageLoaders(app, wide, 'desk'), /\[page-loader\].*reads "note", which the page does not declare/);
   });
 
+  test("page-loader: a page may name several loaders, each exported by the commands module and each held to the page's reads", async (t) => {
+    const several = parse(views({ board: { ...APP.views.board, loaders: ['tally'] } }));
+    assert.deepEqual(
+      several.views.board && 'page' in several.views.board ? (several.views.board.page as { loaders?: string[] }).loaders : [],
+      ['tally'],
+    );
+    assert.doesNotThrow(() => checkPageLoaders(several, LOADERS, 'desk'));
+    const missing = defineLoaders({ board: LOADERS.board }) as never;
+    assert.throws(
+      () => checkPageLoaders(several, missing, 'desk'),
+      /\[page-loader\].*names the loader "tally", which the commands module does not export/,
+    );
+    const wide = parse(views({ board: { ...APP.views.board, loaders: ['notes'] } }));
+    assert.throws(
+      () => checkPageLoaders(wide, LOADERS, 'desk'),
+      /\[page-loader\].*its loader "notes" reads "note", which the page does not declare/,
+    );
+    // The page file says it as a list of names, each once, and never beside the same name as its `loader`.
+    const dir = mkdtempSync(join(tmpdir(), 'mistri-pages-'));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    mkdirSync(join(dir, 'pages'));
+    const source = (fields: string) =>
+      `import { definePage, Empty } from '@mistriwork/mistri/page';\nexport default definePage({ label: 'A', reads: ['desk'], ${fields}, component: () => <Empty title="x" /> });\n`;
+    const read = async (fields: string) => {
+      writeFileSync(join(dir, 'pages', 'a.page.tsx'), source(fields));
+      return readPageFiles(dir, await pageFiles(dir));
+    };
+    assert.deepEqual((await read("loader: 'board', loaders: ['tally']"))[0].fields.loaders, ['tally']);
+    const refused = (change: Record<string, unknown>) => () => parse(views({ board: { ...APP.views.board, ...change } }));
+    assert.throws(refused({ loaders: ['a b'] }), /\[page-loader\].*"loaders" that are not up to 8 loader names/);
+    assert.throws(refused({ loaders: [] }), /\[page-loader\].*"loaders" that are not up to 8 loader names/);
+    assert.throws(refused({ loaders: ['x', 'x'] }), /\[page-loader\].*names a loader twice/);
+    assert.throws(refused({ loader: 'x', loaders: ['x'] }), /\[page-loader\].*names a loader twice/);
+  });
+
+  test("page-undeclared: useLoader names one of the page's loaders", async () => {
+    const source = `import { definePage } from '@mistriwork/mistri/page';
+const page = definePage({ label: 'Board', reads: ['ticket'], loader: 'board', loaders: ['tally'], component: Board });
+export default page;
+function Board() {
+  page.useLoader('tally');
+  page.useLoader('board');
+  page.useLoader('notes');
+  page.useLoader(name);
+  return null;
+}`;
+    const scan = scanPageSource(await astParser(), source, 'tsx', {
+      key: 'board',
+      reads: ['ticket'],
+      commands: [],
+      loaders: ['board', 'tally'],
+    });
+    assert.deepEqual(
+      scan.undeclared.map((problem) => problem.text),
+      ['[page-undeclared] useLoader(…) loads "notes", which the page "board" does not declare in its loader or loaders'],
+    );
+    assert.equal(scan.unread.length, 1, 'a name check cannot read is a warning, not a pass');
+  });
+
   test('page-loader: a surface names a loader the commands module does not export, or one that reads past the surface', () => {
     const surfaced = (reads: string[]) =>
       ({ ...parse(), views: {}, surfaces: { board: { key: 'board', label: 'Board', reads, commands: [], loader: 'board' } } }) as never;
@@ -785,6 +846,12 @@ describe('what the App records of its pages', () => {
       .filter((line) => line.startsWith('page '))
       .map((line) => line.replace(/ — the App$/, ''));
     assert.deepEqual(lines, ['page board loads board', 'page lobby loads lobby', 'page lobby public', 'page notes loads notes']);
+    // Each loader a page names is recorded, `loader` and `loaders` alike.
+    const several = authorityReport(parse(views({ board: { ...APP.views.board, loaders: ['tally'] } })))
+      .split('\n')
+      .filter((line) => line.startsWith('page board'))
+      .map((line) => line.replace(/ — the App$/, ''));
+    assert.deepEqual(several, ['page board loads board', 'page board loads tally']);
   });
 
   test("the generated types carry the loaders, so a page's data is typed from what its loader returns", () => {
@@ -946,6 +1013,32 @@ describe('a loader reads as the reader, never writes, and ends', () => {
     assert.equal((await ask({ page: 'board' }, [], false)).status, 404, 'a signed-out visitor is served no page but a public one');
     const lobby = await ask({ page: 'lobby' }, [], false);
     assert.deepEqual(lobby, { status: 200, body: { data: { desks: 2, viewer: { roles: [] } } } });
+    // Several loaders: the page's `data` is its `loader`; the others are asked for by name, from its own list only.
+    const two = parse(views({ board: { ...APP.views.board, loaders: ['tally'] } }));
+    const askTwo = (body: Record<string, unknown>, roles: string[] = ['clerk']) =>
+      pageLoad({ app: two, roles, signedIn: true, loaders: LOADERS, body, reader: at.adapter, schema: at.schema });
+    assert.deepEqual((await askTwo({ page: 'board', loader: 'tally' })).body, { data: { held: 3 } });
+    assert.deepEqual((await askTwo({ page: 'board', loader: 'board', params: { desk: '2' } })).body, {
+      data: { tickets: ['South one'], counted: 1 },
+    });
+    assert.deepEqual(
+      (await askTwo({ page: 'board', params: { desk: '2' } })).body,
+      { data: { tickets: ['South one'], counted: 1 } },
+      "no name: the page's `loader`",
+    );
+    // The name is looked up in the page's own list, never trusted: another exported loader is not found, as is a name on a page with one.
+    assert.equal((await askTwo({ page: 'board', loader: 'notes' })).status, 404);
+    assert.equal((await askTwo({ page: 'board', loader: 'constructor' })).status, 404);
+    assert.equal((await ask({ page: 'board', loader: 'tally' })).status, 404, 'a page that lists one loader runs no other');
+    assert.equal((await askTwo({ page: 'board', loader: 7 })).status, 400);
+    // A page with `loaders` alone has no default: it must say which.
+    const only = parse(views({ board: { ...APP.views.board, loader: undefined, loaders: ['tally'] } }));
+    const askOnly = (body: Record<string, unknown>) =>
+      pageLoad({ app: only, roles: ['clerk'], signedIn: true, loaders: LOADERS, body, reader: at.adapter, schema: at.schema });
+    assert.equal((await askOnly({ page: 'board' })).status, 400);
+    assert.deepEqual((await askOnly({ page: 'board', loader: 'tally' })).body, { data: { held: 3 } });
+    // A reader the page is not served to is told it is not found, whichever loader they name.
+    assert.equal((await askTwo({ page: 'notes', loader: 'tally' }, ['reader'])).status, 404);
     const unexported = await pageLoad({
       app,
       roles: ['clerk'],

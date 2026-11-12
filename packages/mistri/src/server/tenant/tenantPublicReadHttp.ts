@@ -57,7 +57,7 @@ import type { TenantSearch } from './tenantSearch.js';
 
 /* The fields each body may say, as the member lane's (tenantHttp.ts), and the App it is for. */
 const fields: Record<string, readonly string[]> = {
-  [PAGE_LOAD_PATH]: ['page', 'params'],
+  [PAGE_LOAD_PATH]: ['page', 'params', 'loader'],
   '/api/pages/plan': ['page', 'key'],
   '/api/pages/compose': ['page', 'key', 'rows', 'tab'],
   '/api/references': ['table', 'key'],

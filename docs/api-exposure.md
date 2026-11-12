@@ -229,8 +229,30 @@ the bound version is what makes a change in between safe. An `all` App refuses
 `--tenant`, and a tenant App refuses a token without it. Tenant command
 exposure is not issued for yet.
 
-The token store layout is version 2, which carries that binding. A version 1
-store is refused, not migrated: provision a fresh one.
+The token store layout is version 2, which adds a token's row scope: its
+scope name, key and, for a `$scope` child, the parent token it stands on.
+`mistri migrate stores up` upgrades a version 1 store in place; provisioning
+refuses one until then.
+
+`issue --scope <name>:<key>` narrows a token to one key row of a declared
+`api.scopes` entry (`apiRowScope.ts`). The scope is compiled into the row scope
+each request already resolves (the policy's for a row-policy App, the
+membership's authored rows for a tenant App), so it adds no read of its own: a
+row outside the key is not found, an update or delete of one is not found, an
+insert outside it is refused `out_of_scope` (422), and a resource the scope does
+not map reads and writes nothing. `POST /$scope` mints a child from an unscoped
+token (`apiScopeMint.ts`). The key is proven through the parent's own item
+read, so a key it cannot read answers the same 404 as a missing one. The child
+lives at most an hour and never past its parent, and every observation reads
+the parent in the same transaction, so revoking the parent ends the child with
+no write of its own. A scoped token never re-scopes (409 `scope_fixed`), and an
+OAuth-issued token mints no child, since the child would not answer to the
+grant. A command run with a scoped token is told the scope as
+`context.actor.scope`. The read audit's `scope` column (layout 4) records it as
+`name:key`, and a command receipt's audit is framed with it
+(`{ "format": "mistri.scoped-audit.v1", "scope", "changes" }`, as a visitor's
+audit names its visitor). A scope an App no longer declares leaves its tokens refused, not
+unscoped. An `all` App may not declare scopes.
 
 ### A tenant App's API reads
 
@@ -451,7 +473,8 @@ or `unknown` when the server cannot tell (for example, an answer lost after
 commit). The owner's codes are 403 `forbidden`, 404 `not_found`, 409
 `stale_record`, `duplicate_record`, `ineligible_state` or
 `idempotency_conflict`, 410 `command_version_mismatch`, 422 `invalid_input`
-or `consumes_refused` (a line's `consumes` would take more than is left),
+`consumes_refused` (a line's `consumes` would take more than is left) or
+`out_of_scope` (a scoped token's insert would land outside its scope),
 500 `invalid_result` (the server's own fault: a handler returned what its
 declaration does not hold or wrote outside its footprint, or a stored value
 failed the platform's checks; the same request fails the same way, so it is

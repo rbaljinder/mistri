@@ -43,7 +43,20 @@ const line = table('order_line', [
   col('quantity', 'INTEGER'),
   col('amount', 'NUMERIC'),
 ]);
-const tables: Record<string, TableMeta> = { sales_order: order, order_line: line };
+const photo = table('photo', [
+  col('id', 'INTEGER', { primaryKey: true, nullable: false }),
+  col('sales_order_id', 'INTEGER', { references: { table: 'sales_order', column: 'id' } }),
+  col('name', 'TEXT'),
+  col('type', 'TEXT'),
+  col('content', 'BLOB'),
+  col('size', 'INTEGER'),
+  col('caption', 'TEXT'),
+  col('taken_on', 'DATE'),
+]);
+const tables: Record<string, TableMeta> = { sales_order: order, order_line: line, photo };
+/* What the App says is a file resource: the columns that hold a picture's name, type and bytes. */
+let resources: Record<string, unknown> = {};
+let noPhotos = false;
 let money: Record<string, unknown> = { format: 'money', currency: 'USD' };
 const orderRow = (): Record<string, unknown> => ({
   id: 1042,
@@ -80,6 +93,26 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
     if (path === '/api/breakdown') return { rows: [{ total_0: 4 }] };
     const view = body.view!;
     if (view.base === 'sales_order') return reply(view, [ordered]);
+    if (view.base === 'photo') {
+      const kept: Record<string, unknown>[] = noPhotos
+        ? []
+        : [
+            {
+              id: 7,
+              sales_order_id: 1042,
+              name: 'front.png',
+              type: 'image/png',
+              size: 900,
+              caption: 'Front of the unit',
+              taken_on: '2026-09-04',
+            },
+            { id: 8, sales_order_id: 1042, name: 'rear.png', type: 'image/png', size: 700, caption: '', taken_on: '2026-09-04' },
+          ];
+      return reply(
+        view,
+        kept.map((row) => Object.fromEntries(view.columns.map((c) => [c.alias ?? c.path, row[c.path]]))),
+      );
+    }
     return reply(view, [
       { description: 'Pleated Chino', quantity: 1, amount: 198 },
       { description: 'Waxed Cotton Jacket', quantity: 3, amount: 774 },
@@ -108,11 +141,20 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
 }));
 vi.mock('../appState.js', () => ({
   inAppMode: () => true,
-  activeApp: () => ({ name: 'Atelier', ui: { logo: undefined }, resources: {} }),
+  activeApp: () => ({ name: 'Atelier', ui: { logo: undefined }, resources }),
   appSaveMode: () => 'explicit',
 }));
 /* The kit reads the App through the shell's answers (shellMode.ts), which the mock above gives it. */
 beforeEach(bridgeShell);
+/* A picture's address is the reader's own to draw (the file route, or on a tenant's lease a blob); the test only names it. */
+const drawnFor: Array<{ table: string; key: Record<string, unknown> }> = [];
+vi.mock('../../../../kit/src/client/fileSource.js', () => ({
+  usePictureAddress: (table: string, key: Record<string, unknown>) => {
+    drawnFor.push({ table, key });
+    return `blob:picture/${table}/${JSON.stringify(key)}`;
+  },
+  filesOnLease: () => false,
+}));
 vi.mock('../../../../kit/src/client/recordCompose.js', () => ({ composeRecordPage: () => composed() }));
 
 const { DocumentRoom } = await import('./Document.js');
@@ -159,6 +201,9 @@ function draw() {
 
 beforeEach(() => {
   calls.length = 0;
+  drawnFor.length = 0;
+  resources = {};
+  noPhotos = false;
   ordered = orderRow();
   delete (order as { computed?: unknown }).computed;
   composed = async () => ({ page: invoicePage, plans });
@@ -362,4 +407,82 @@ test('a document that cannot be read says so on the sheet, and offers nothing to
   const { container } = draw();
   await waitFor(() => expect(container.querySelector('.doc-broken')?.textContent).toBe('You cannot read this order.'));
   expect((within(container).getByRole('button', { name: 'Print / Save as PDF' }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+test("a gallery list is the file resource's pictures in a grid, each read as the reader and worded by its caption", async () => {
+  resources = { photo: { file: { name: 'name', content: 'content', type: 'type', size: 'size' } } };
+  const photos: HttpViewDefinition = {
+    id: 'page:invoice:photos',
+    name: 'photo',
+    base: 'photo',
+    columns: [{ path: 'id' }, { path: 'sales_order_id' }, { path: 'name' }, { path: 'type' }, { path: 'caption' }, { path: 'taken_on' }],
+    filter: { groups: [[{ path: 'sales_order_id', op: '=', value: 1042 }]] },
+    limit: 24,
+  };
+  composed = async () => ({
+    page: {
+      ...invoicePage,
+      sections: [{ kind: 'list', from: 'photo', path: 'sales_order_id', title: 'Photos', presentation: 'gallery', limit: 24 }],
+    },
+    plans: [{ index: 0, view: photos }],
+  });
+  const { container } = draw();
+  const pictures = await screen.findAllByRole('img', { name: /./ });
+  /* The frames are the sheet's: a grid of them, not a table of lines. */
+  expect(container.querySelector('table')).toBeNull();
+  expect(container.querySelectorAll('.doc-pictures > .doc-picture')).toHaveLength(2);
+  expect(container.querySelector('.doc-lines > .doc-caption')?.textContent).toBe('Photos');
+  /* Each is asked for by its own key, as the reader: no address of the file's own is made here. */
+  expect(drawnFor).toContainEqual({ table: 'photo', key: { id: 7 } });
+  expect(pictures.map((image) => image.getAttribute('src'))).toEqual(['blob:picture/photo/{"id":7}', 'blob:picture/photo/{"id":8}']);
+  /* The words under a picture are its text columns: not its file name or type, nor a date or the key. A picture with
+     none is named by its file in its alt text. */
+  expect(pictures.map((image) => image.getAttribute('alt'))).toEqual(['Front of the unit', 'rear.png']);
+  expect([...container.querySelectorAll('.doc-picture-caption')].map((node) => node.textContent)).toEqual(['Front of the unit']);
+  /* Every picture is asked for in the list's own read, a few of them rather than every line. */
+  const asked = calls.find((call) => call.path === '/api/view/run' && (call.body.view as HttpViewDefinition).base === 'photo');
+  expect((asked?.body.view as HttpViewDefinition | undefined)?.limit).toBe(24);
+});
+
+test('a gallery list over rows that are not files draws the lines, and a picture list with none says so', async () => {
+  composed = async () => ({
+    page: { ...invoicePage, sections: [{ kind: 'list', from: 'photo', path: 'sales_order_id', title: 'Photos', presentation: 'gallery' }] },
+    plans: [
+      {
+        index: 0,
+        view: {
+          id: 'page:invoice:photos',
+          name: 'photo',
+          base: 'photo',
+          columns: [{ path: 'id' }, { path: 'name' }],
+          limit: 24,
+        },
+      },
+    ],
+  });
+  const { container } = draw();
+  await screen.findByRole('table');
+  expect(container.querySelector('.doc-pictures')).toBeNull();
+});
+
+test('a picture list with no pictures says so, and says nothing where the list hides itself when empty', async () => {
+  resources = { photo: { file: { name: 'name', content: 'content', type: 'type' } } };
+  noPhotos = true;
+  const photos: HttpViewDefinition = {
+    id: 'page:invoice:photos',
+    name: 'photo',
+    base: 'photo',
+    columns: [{ path: 'id' }, { path: 'name' }],
+    limit: 24,
+  };
+  const section = { kind: 'list', from: 'photo', path: 'sales_order_id', title: 'Photos', presentation: 'gallery' };
+  composed = async () => ({ page: { ...invoicePage, sections: [section] }, plans: [{ index: 0, view: photos }] });
+  const first = draw();
+  expect(await screen.findByText('No pictures.')).toBeTruthy();
+  first.unmount();
+  composed = async () => ({ page: { ...invoicePage, sections: [{ ...section, emptyMode: 'hide' }] }, plans: [{ index: 0, view: photos }] });
+  const second = draw();
+  await screen.findByRole('heading', { level: 1 });
+  await waitFor(() => expect(calls.some((call) => (call.body.view as HttpViewDefinition | undefined)?.base === 'photo')).toBe(true));
+  expect(second.container.querySelector('.doc-lines')).toBeNull();
 });

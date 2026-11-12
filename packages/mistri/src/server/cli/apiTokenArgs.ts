@@ -28,6 +28,8 @@ type Parsed =
         /** A tenant App's tenant selector, and its server-only tenant policy file. */
         tenant?: string;
         policy?: string;
+        /** `--scope name:key`: a declared `api.scopes` entry and the key row it reads. */
+        scope?: Readonly<{ name: string; key: string }>;
       }
     >;
 const refuse = (): never => {
@@ -52,6 +54,14 @@ const names = (values: string[] | undefined, max: number): readonly string[] => 
   if (!values || !values.length || values.length > max || new Set(values).size !== values.length) return refuse();
   return Object.freeze(values.map((value) => text(value, 256)));
 };
+/** `name:key`: the scope name's grammar (appApi.ts), then the key as given — it may itself hold a colon. */
+function rowScope(value: string): Readonly<{ name: string; key: string }> {
+  const at = value.indexOf(':');
+  const name = value.slice(0, at),
+    key = value.slice(at + 1);
+  if (at < 1 || !/^[A-Za-z_][A-Za-z0-9_]{0,63}(?![\s\S])/.test(name) || !key) return refuse();
+  return Object.freeze({ name, key: text(key, 256) });
+}
 /** The tenant store's selector grammar; no case or whitespace aliases. */
 const tenantSelector = (value: string): string => (/^[a-z0-9][a-z0-9_-]{0,127}(?![\s\S])/.test(value) ? value : refuse());
 function expiry(value: string): number {
@@ -83,6 +93,7 @@ export function parseApiTokenArgs(raw: unknown): Parsed {
         '--commands',
         '--tenant',
         '--policy',
+        '--scope',
       ],
     };
     const allowed = new Set(['--app', '--config', '--store-id', ...extras[verb as string]]);
@@ -125,6 +136,7 @@ export function parseApiTokenArgs(raw: unknown): Parsed {
         ...(values.has('--commands') ? { commands: one('--commands') } : {}),
         ...(values.has('--tenant') ? { tenant: tenantSelector(one('--tenant')) } : {}),
         ...(values.has('--policy') ? { policy: one('--policy') } : {}),
+        ...(values.has('--scope') ? { scope: rowScope(one('--scope')) } : {}),
       });
     }
     const tokenId = one('--token-id');

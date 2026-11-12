@@ -24,7 +24,18 @@
  */
 import { createContext, createElement, useContext, useMemo, type ComponentType, type ReactNode } from 'react';
 import { Refused } from '@mistriwork/kit/client/components/Notes.js';
-import { resourceOfRow, useAction, useAddressState, useBreakdown, useCommand, useFile, useForm, useRecord, useRows } from './hooks.js';
+import {
+  resourceOfRow,
+  useAction,
+  useAddressState,
+  useBreakdown,
+  useCommand,
+  useFile,
+  useForm,
+  useLoader,
+  useRecord,
+  useRows,
+} from './hooks.js';
 import { Button, Loaded } from './kit.js';
 import {
   scopedCondition,
@@ -136,6 +147,7 @@ const FIELDS = [
   'actions',
   'params',
   'loader',
+  'loaders',
   'forms',
   'public',
   'description',
@@ -173,6 +185,7 @@ export interface PageDefinition<D = unknown> {
   readonly useCommand: typeof useCommand;
   readonly useAction: typeof useAction;
   readonly useForm: typeof useForm;
+  readonly useLoader: typeof useLoader;
   readonly useRecordKey: (resource: string) => Readonly<Record<string, unknown>>;
   readonly useParam: (name: string) => [ParamValue | undefined, (value: string | number | undefined, options?: { push?: boolean }) => void];
   /** The param controls, held to the page's params and reads by the types (schema/page.d.ts); the same components at run time. */
@@ -226,6 +239,7 @@ export function definePage<D = unknown>(
     useCommand,
     useAction,
     useForm,
+    useLoader,
     useRecordKey,
     useParam,
     Choose,
