@@ -31,10 +31,10 @@ export type {
   Action, ActionSetValue, AppAction, AppCommandAction, AppCommandChoice, AppCommandReference, AppCommandField, AppFormCommandReference, AppUpdateAction, AppFlagGate,
   CommandAction,
 } from './command.js';
-import type { AppLinkAction, AppMessageRef, AppTarget, AutoValue, CustomMeasure, FormDefault, RelatedCreate, StaticAppTarget } from '@mistriwork/engine/schema/model.js';
+import type { AppLinkAction, AppMessageRef, AppTarget, AutoValue, CustomMeasure, FormDefault, RelatedCreate, StaticAppTarget, ViewTo } from '@mistriwork/engine/schema/model.js';
 /* The shapes the engine reads as well (model.d.ts), named from @mistriwork/mistri/app as before. */
 export type {
-  AppLinkAction, AppLinkValue, AppMessageRef, AppTarget, AppTenantIntent, AutoValue, CustomMeasure, FormDefault, FormScalar, RelatedCreate,
+  AppLinkAction, AppLinkValue, AppMessageRef, AppTarget, AppTenantIntent, AutoValue, CustomMeasure, FormDefault, FormScalar, RelatedCreate, ViewTo,
   StaticAppTarget,
 } from '@mistriwork/engine/schema/model.js';
 
@@ -1512,12 +1512,12 @@ export interface AppCustomList<Path extends string = string> {
   props?: Readonly<Record<string, unknown>>;
 }
 
-/** Copy for a list whose standing query has no rows. The optional action opens another App list or dashboard, or a signed-in form: "No canned responses: write one". */
+/** Copy for a list whose standing query has no rows. The optional action opens another App list (`{ view, tab }` on one of its tabs) or dashboard, or a signed-in form: "No canned responses: write one". */
 export interface AppListEmpty {
   title: string | AppMessageRef;
   /** A sentence under the title. */
   description?: string | AppMessageRef;
-  action?: { label: string | AppMessageRef; to: string };
+  action?: { label: string | AppMessageRef; to: ViewTo };
 }
 
 /** The rows of one resource: how they read, draw and open. Its key in `views` is its address. */
@@ -2006,8 +2006,8 @@ export interface ActivityResource {
     when, under a segmented Today / Yesterday / This week and a search. Read as the reader reads: a record they cannot
     read is not in their feed, and a field they may not read, or one `audit.redact` names, says that it changed and
     nothing else. Each resource named keeps a history from then on, as a page's `history()` makes its resource keep
-    one, in the store provisioned once (`provisionStores` with `only: ['record-history']`). Not under
-    `auth.rows: 'tenant'`. */
+    one, in the store provisioned once (`provisionStores` with `only: ['record-history']`). Under
+    `auth.rows: 'tenant'` a feed in a tenant's context reads that tenant's changes alone. */
 export interface ActivityDashSection extends DashSectionCommon, DashSectionMark {
   kind: 'activity';
   readonly [madeBy]: 'activity';
@@ -2376,10 +2376,10 @@ export interface HeadlineSection extends SectionCommon {
   readonly [madeBy]: 'headline';
   /** The figure first, then the facts. */
   show: readonly string[];
-  /** One or two calls to action, each opening one of the App's views by key — a public form, a list, a dashboard.
+  /** One or two calls to action, each opening one of the App's views by key — a public form, a list (`{ view, tab }` on one of its tabs), a dashboard.
       A public form may start filled: `prefill` from this record's fields (input → field), `defaults` with your words (input → text). */
   links?: readonly ({ label: string | AppMessageRef; to: AppTarget; intent?: 'primary' | 'secondary'; prefill?: never; defaults?: never; open?: never } | {
-    label: string | AppMessageRef; to: string; intent?: 'primary' | 'secondary';
+    label: string | AppMessageRef; to: ViewTo; intent?: 'primary' | 'secondary';
     prefill?: Readonly<Record<string, string>>;
     defaults?: Readonly<Record<string, string>>;
     /** `'modal'` draws a form over this record instead of leaving for its
@@ -2406,8 +2406,9 @@ export type FactEntry<Path extends string = string> = Path | AppCardFact<Path>;
 /**
  * The record's head as you say it: `header({ status: 'stage', facts: ['account_id', 'amount', 'close_date'] })`.
  * It is drawn in the head wherever it is written — the page's label over the name, the
- * `status` column's tone as a chip beside the name, the `facts` in one line under it (up to six, captions and units
- * from the display rules, a `{ column, after }` word after its value or `{ column, before }` before it),
+ * `status` column's tone as a chip beside the name, the `facts` in one line under it (up to twelve: the first six in
+ * the line and the rest in a More under it; captions and units from the display rules, a `{ column, after }` word
+ * after its value or `{ column, before }` before it),
  * and the record's actions: exactly one filled — `primary`, the id of the verb the record most needs next,
  * else its first action that is not destructive — then the rest quiet, the destructive ones last: those you
  * name in `destructive`, and update actions that ask for a confirmation or set a value the display tones call
@@ -2712,7 +2713,8 @@ export interface HistorySection extends SectionCommon {
 /** The record's row-driven flow runs, newest first: each run's state, its steps, what it waits for and, where it
     failed, why. The page's base resource must declare `flows`. A workflow operator (a role with `operations: ['workflows']`)
     may start a manual flow from here. Flows run only where the server is started with `--jobs`, which the section says.
-    Declaring one keeps no history of its own, and it is not supported under `auth.rows: 'tenant'`. */
+    Declaring one keeps no history of its own. Under `auth.rows: 'tenant'` a record's runs are its own tenant's, and a
+    manual flow started here starts in that tenant. */
 export interface FlowsSection extends SectionCommon {
   kind: 'flows';
   readonly [madeBy]: 'flows';

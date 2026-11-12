@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { columnSizeHint, fitGridColumns, keepFitting, tagsThatFit, twoLineWidth, GRID_EXPANDER_WIDTH } from './gridSizing.js';
+import { columnSizeHint, fitGridColumns, holdFold, keepFitting, tagsThatFit, twoLineWidth, GRID_EXPANDER_WIDTH } from './gridSizing.js';
 
 const catalog = [
   { label: 'Name', kind: 'text', values: ['Managed laptop'] },
@@ -389,5 +389,26 @@ describe('an App head that may wrap to two lines', () => {
     /* The others kept their floors, not their two-line ones. */
     expect(fit.columns[1]).toBeGreaterThanOrEqual(secondary[0]!.minimum);
     expect(fit.columns[2]).toBeGreaterThanOrEqual(secondary[1]!.minimum);
+  });
+});
+
+describe('holdFold', () => {
+  const of = ['name\u0000status\u0000owner', []];
+  const folded = [true, true, false];
+  test('a scrollbar given back does not unfold what its taller rows folded', () => {
+    // Folded at 985 (the scrollbar there), the room back at 1000 would draw every column again: held.
+    const first = holdFold(null, folded, 985, of);
+    expect(first.kept).toBe(folded);
+    const back = holdFold(first.held, null, 1000, of);
+    expect(back.kept).toBe(folded);
+    // And so it stays, measure after measure.
+    expect(holdFold(back.held, null, 985, of).kept).toBe(folded);
+  });
+  test('a real widening unfolds, a narrowing folds at once, other rows are sized afresh', () => {
+    const { held } = holdFold(null, folded, 985, of);
+    expect(holdFold(held, null, 1100, of).kept).toBeNull();
+    const narrower = [true, false, false];
+    expect(holdFold(held, narrower, 990, of).kept).toBe(narrower);
+    expect(holdFold(held, null, 1000, [of[0], []]).kept).toBeNull();
   });
 });

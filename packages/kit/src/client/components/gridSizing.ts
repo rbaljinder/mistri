@@ -322,6 +322,38 @@ export function keepFitting(
   return kept;
 }
 
+/** A fold decided: what it kept, at what width, for which columns and rows (`of`, compared by identity). */
+export interface FoldHeld {
+  kept: boolean[];
+  width: number;
+  of: readonly unknown[];
+}
+
+/* Wider than any scrollbar a browser draws, so the one a fold brings or takes away never unfolds what it folded. */
+const FOLD_SLACK = 24;
+
+/**
+ * The columns an App's list keeps, held against its own scrollbar. A fold changes the rows' height, and with it the
+ * page's scrollbar: the room a scrollbar gave back unfolded the columns, whose taller rows took the scrollbar again,
+ * and the list re-laid itself out without end (a field report). A folded column comes back only once the room grows
+ * past a scrollbar's width from where it folded; a narrower room folds at once, and other columns or other rows are
+ * sized afresh.
+ */
+export function holdFold(
+  held: FoldHeld | null,
+  next: boolean[] | null,
+  width: number,
+  of: readonly unknown[],
+): { kept: boolean[] | null; held: FoldHeld | null } {
+  const same = held !== null && held.of.length === of.length && held.of.every((part, index) => part === of[index]);
+  if (same && width >= held.width && width < held.width + FOLD_SLACK) {
+    const unfolds = next === null || next.some((keep, index) => keep && !held.kept[index]);
+    const foldsMore = next !== null && next.some((keep, index) => !keep && held.kept[index]);
+    if (unfolds && !foldsMore) return { kept: held.kept, held };
+  }
+  return { kept: next, held: next ? { kept: next, width, of } : null };
+}
+
 /* Room past the minima goes first to the columns still cut short — an issue
    title at "Preserve filters when op…" beside a "Cycle 18" column holding
    twice its text's width — and only then, evenly, to everyone. Long text

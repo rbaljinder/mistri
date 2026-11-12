@@ -16,7 +16,7 @@ import type { PaintRooms, RoomBatch, RoomPlan, RoomRead } from '@mistriwork/engi
 import type { AppPayloadApp } from '../../shared/appPayload.js';
 import { appAddressBook, readAppSegments } from '../../shared/appAddress.js';
 import { isFormView, viewOrder } from '../../shared/appModel.js';
-import { tabKey } from '@mistriwork/engine/shared/addressParams.js';
+import { namesTab } from '@mistriwork/engine/shared/addressParams.js';
 import {
   appListQuery,
   groupedQuestion,
@@ -276,7 +276,7 @@ function listReads(input: RoomInput, rules: ListRules, key: string, plan: RoomPl
   if (home ? input.search : [...params.keys()].some((name) => name !== 'tab')) return;
   const tabs = view.tabs?.length ? view.tabs : [];
   const asked = params.get('tab');
-  const found = asked === null ? 0 : tabs.findIndex((tab) => tabKey(tab) === asked);
+  const found = asked === null ? 0 : tabs.findIndex((tab) => namesTab(tab, asked));
   const index = found < 0 ? 0 : found;
   /* A grouped grid reads its rows in its group's order (TableRoom.tsx): the first page is that read. */
   const q = view.group && !board ? groupedQuestion(appListQuery(rules, view, index), view.group) : appListQuery(rules, view, index);

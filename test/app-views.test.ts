@@ -1045,14 +1045,64 @@ describe('dashboards embed list views', () => {
         parse({ views: { ...views, d: { ...DASH, sections: [{ kind: 'view', view: 'tasks', listTab: 'Nope' }] } }, home: 'd', nav: ['d'] }),
       /names the tab "Nope", which the view "tasks" does not have\. Its tabs: open, all\./,
     );
+    // A tab's word is matched in any case, as `?tab=` is; a label that is not its word is named for what it is.
+    parse({ views: { ...views, d: { ...DASH, sections: [{ kind: 'view', view: 'tasks', listTab: 'All' }] } }, home: 'd', nav: ['d'] });
+    const labelled = { ...views.tasks, tabs: ['open', { label: 'All tasks' }] };
     assert.throws(
       () =>
-        parse({ views: { ...views, d: { ...DASH, sections: [{ kind: 'view', view: 'tasks', listTab: 'All' }] } }, home: 'd', nav: ['d'] }),
-      /names the tab "All" by its label\. Name a tab by its address word: "all"\./,
+        parse({
+          views: { ...views, tasks: labelled, d: { ...DASH, sections: [{ kind: 'view', view: 'tasks', listTab: 'All tasks' }] } },
+          home: 'd',
+          nav: ['d'],
+        }),
+      /names the tab "All tasks" by its label\. Name a tab by its address word: "all-tasks"\./,
     );
     assert.throws(
       () => parse({ views: { ...views, d: { ...DASH, sections: [{ kind: 'view', view: 'tasks', tab: 'all' }] } }, home: 'd', nav: ['d'] }),
       /"tab", which is now "listTab"/,
+    );
+  });
+
+  test('an action opens a list on one of its tabs, by its address word', () => {
+    const note = (to: unknown) => ({ ...NOTE, action: { label: 'Open', to } });
+    const app = (to: unknown, more: Record<string, unknown> = {}) =>
+      parse({ views: { ...views, d: { ...DASH, sections: [note(to)] }, ...more }, home: 'd', nav: ['d', 'tasks'] });
+    const action = (to: unknown) => (app(to).views.d as { sections: { action?: unknown }[] }).sections[0]!.action;
+    assert.deepEqual(action({ view: 'tasks', tab: 'all' }), { label: 'Open', view: 'tasks', tab: 'all' });
+    // Matched as `?tab=` is, in any case.
+    assert.deepEqual(action({ view: 'tasks', tab: 'Open' }), { label: 'Open', view: 'tasks', tab: 'Open' });
+    assert.deepEqual(action('tasks'), { label: 'Open', view: 'tasks' });
+    assert.throws(
+      () => app({ view: 'tasks', tab: 'late' }),
+      /names the tab "late", which the view "tasks" does not have\. Its tabs: open, all\./,
+    );
+    assert.throws(() => app({ view: 'q', tab: 'late' }), /which the view "q" does not have\. It has no tabs\./);
+    assert.throws(
+      () => app({ view: 'd2', tab: 'all' }, { d2: DASH }),
+      /names the tab "all" of "d2", which is a dashboard: a tab is a list's\./,
+    );
+    assert.throws(() => app({ view: 'tasks', tab: ' ' }), /has a "tab" that is not a tab's address word/);
+    assert.throws(() => app({ view: 'tasks', tabs: 'all' }), /tabs/);
+    // A list's empty action says it the same way.
+    const empty = (to: unknown) =>
+      parse({ views: { ...views, tasks: { ...views.tasks, empty: { title: 'None', action: { label: 'All', to } } } }, home: 'tasks' });
+    assert.deepEqual((empty({ view: 'tasks', tab: 'all' }).views.tasks as { empty?: { action?: unknown } }).empty?.action, {
+      label: 'All',
+      view: 'tasks',
+      tab: 'all',
+    });
+    assert.throws(() => empty({ view: 'tasks', tab: 'All tasks' }), /names the tab "All tasks", which the view "tasks" does not have/);
+    const labelled = { ...views.tasks, tabs: ['open', { label: 'All tasks' }] };
+    assert.throws(
+      () =>
+        parse({
+          views: {
+            ...views,
+            tasks: { ...labelled, empty: { title: 'None', action: { label: 'All', to: { view: 'tasks', tab: 'All tasks' } } } },
+          },
+          home: 'tasks',
+        }),
+      /names the tab "All tasks" by its label\. Name a tab by its address word: "all-tasks"\./,
     );
   });
 

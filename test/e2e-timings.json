@@ -6,6 +6,7 @@
  "e2e/app-addresses.spec.ts": 26.6,
  "e2e/app-column-menu.spec.ts": 12.3,
  "e2e/app-connection-boundary.spec.ts": 19.7,
+ "e2e/app-drill-addresses.spec.ts": 12,
  "e2e/app-error-shell.spec.ts": 8,
  "e2e/app-live-reload.spec.ts": 14.2,
  "e2e/app-mounts.spec.ts": 33.5,

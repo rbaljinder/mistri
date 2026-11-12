@@ -41,7 +41,9 @@ export interface AppHomeTarget<Value> extends AppTargetBase<Value> { kind: 'home
 export interface AppViewTarget<Value> extends AppTargetBase<Value> { kind: 'view'; view: string; resource?: never; key?: never }
 export interface AppRecordTarget<Value> extends AppTargetBase<Value> { kind: 'record'; resource: string; key: Readonly<Record<string, Value>>; view?: never }
 export type AppTarget<Value = AppLinkValue> = AppHomeTarget<Value> | AppViewTarget<Value> | AppRecordTarget<Value>;
-export type AppLinkAction = { label: string | AppMessageRef; to: AppTarget | string };
+/** One of this App's views by key, or a list on one of its tabs, named by the tab's address word (`?tab=`): `{ view: 'leads', tab: 'working' }`. */
+export type ViewTo = string | { view: string; tab?: string };
+export type AppLinkAction = { label: string | AppMessageRef; to: AppTarget | ViewTo };
 /** A checked destination on a surface with no source row (nav or App switcher). */
 export type StaticAppTarget = AppTarget<string | number>;
 

@@ -11,7 +11,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { readableTypeErrors } from '../packages/mistri/src/server/build/typecheck.js';
-import { checkedRoutes, splitWarnings, warningKind, warningSummary } from '../packages/mistri/src/server/build/check.js';
+import { splitWarnings, warningKind, warningSummary } from '../packages/mistri/src/server/build/check.js';
+import { checkedRoutes } from '../packages/mistri/src/server/build/checkSteps.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { NO_MOUNT } from '../packages/engine/src/shared/mount.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';

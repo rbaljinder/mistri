@@ -25,7 +25,13 @@ import { after, before, describe, test } from 'node:test';
 import type { Filter, QueryRequest, WriteTransaction } from '../packages/engine/src/adapters/adapter.js';
 import { PostgresAdapter, type PostgresTransactionVerifier } from '../packages/engine/src/adapters/postgres.js';
 import { PgConnectionManager, type PgQuery } from '../packages/engine/src/adapters/postgresPool.js';
-import { beforeCommit, RolledBackAtCommit, transactionHandle } from '../packages/engine/src/adapters/postgresTransactionHandle.js';
+import {
+  aheadReport,
+  beforeCommit,
+  RolledBackAtCommit,
+  sendAhead,
+  transactionHandle,
+} from '../packages/engine/src/adapters/postgresTransactionHandle.js';
 import { withWriteAhead, type WriteAhead } from '../packages/engine/src/adapters/writeAhead.js';
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
 import { startLatencyProxy, type LatencyProxy } from '../e2e/support/latencyProxy.js';
@@ -170,6 +176,32 @@ describe('statements sent behind a write transaction’s BEGIN, against a real s
     assert.ok(told.flights < untold.flights, `${told.flights} round trips told, ${untold.flights} untold`);
   });
 
+  /* A lock sent ahead was granted when its answer came back: a write of the transaction's own drops the answer but not
+     the lock, and the row is not locked again. A tenant command that saved its journal before writing a row it had
+     locked ahead warned of that lock as never used (a field report). */
+  test('a lock sent ahead and dropped by an earlier write is held, not asked again, and not reported left', async () => {
+    await withAdapter(async (adapter) => {
+      const since = Date.now();
+      const { reports } = await reported(() =>
+        withWriteAhead(target(1), () =>
+          adapter.scopeTransaction(rowsA(), async (tx) => {
+            await tx.update({ table: ITEM, key: { id: 2 }, values: { name: 'Written first' } });
+            await tx.update({ table: ITEM, key: { id: 1 }, values: { name: 'Then this' } });
+          }),
+        ),
+      );
+      assert.deepEqual(await row(1), { name: 'Then this', version: 0 });
+      const locks = proxy.statements(since).filter((statement) => /^SELECT 1 FROM .*write_ahead_item.* FOR UPDATE/.test(statement.text));
+      assert.equal(locks.length, 2, 'the row sent ahead is locked once, and the other in its turn');
+      assert.equal(reports.length, 1);
+      assert.deepEqual(
+        reports[0].left.filter((key) => key.includes('FOR UPDATE')),
+        [],
+        'the lock the transaction stood on is not reported left',
+      );
+    });
+  });
+
   test('a preparation told its record reads it ahead without a lock: BEGIN and COMMIT, two round trips', async () => {
     const prepare = (tx: WriteTransaction) =>
       Promise.all([tx.query(byKey(1, ['id'])), tx.query(byKey(1, ['version']))].map(async (read) => (await read).rows));
@@ -303,6 +335,34 @@ describe('statements sent behind a write transaction’s BEGIN, against a real s
         beforeCommit(handle, [{ text: 'INSERT INTO public.write_ahead_item (id, tenant) VALUES ($1, $2)', values: [2, 'a'] }]);
         await assert.rejects(handle.query('SELECT 1 AS write_ahead_after'), (error: { code?: string }) => error.code === '23505');
         await handle.query('ROLLBACK');
+      });
+    } finally {
+      await manager.close();
+    }
+  });
+
+  /* A statement its transaction's own write dropped and then asked again in its turn was asked: only one never asked
+     says the hint was wrong. A tenant command's first save after a start was warned of for every statement its journal
+     sent ahead, each of which it asked once it had described the catalog (a field report). */
+  test('what a write dropped and the transaction then asked in its turn is not reported left', async () => {
+    await reset();
+    const manager = new PgConnectionManager(proxy.route(LIVE!));
+    const read = (id: number) => ({ text: 'SELECT name FROM public.write_ahead_item WHERE id = $1', values: [id] });
+    try {
+      await manager.withWriteClient(async (client) => {
+        const handle = transactionHandle(client);
+        await handle.query('BEGIN');
+        assert.equal(sendAhead(handle, [read(1), read(2)]).length, 2);
+        await handle.query("UPDATE public.write_ahead_item SET name = 'Changed' WHERE id = 3");
+        const asked = await handle.query(read(1).text, read(1).values);
+        assert.deepEqual(asked.rows, [{ name: 'Alpha' }]);
+        await handle.query('ROLLBACK');
+        const report = aheadReport(handle)!;
+        assert.equal(report.taken, 0, 'the read after the write was asked again, never answered from before it');
+        assert.deepEqual(
+          report.left.map((key) => JSON.parse(key) as unknown[]).map(([, values]) => values),
+          [[2]],
+        );
       });
     } finally {
       await manager.close();

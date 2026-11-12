@@ -17,7 +17,7 @@ import { APP_PAGE_KEYS } from '@mistriwork/engine/shared/pageConfig.js';
 import { andQuery, splitClauseTail } from '@mistriwork/engine/shared/query.js';
 import { listPresentationColumns } from '@mistriwork/engine/shared/appListColumns.js';
 import { parseRoutePath } from './appAddress.js';
-import { destinationProblem, servedView, servedViewKind } from './appDestinations.js';
+import { destinationProblem, destinationTabProblem, servedView, servedViewKind } from './appDestinations.js';
 import { checkResourceSlot, sourceScopeOf, type SourceScope } from './appResourceBlocks.js';
 import { unfoldSegments } from './appSegments.js';
 import { composeFeatures } from './appFeatures.js';
@@ -165,8 +165,17 @@ export function resolvePageEmbeds(app: AppDef, pages: readonly PageDef[], where:
       const at = `${where}: page "${page.id}", section ${i + 1}`;
       if (section.kind === 'note' && section.action && 'view' in section.action) {
         // A room, by the rule every action's destination answers to (appDestinations.ts), as a dashboard's note opens.
-        const view = section.action.view;
-        const problem = destinationProblem(`${at}, note action`, view, servedViewKind(servedView(app.views, view)));
+        const { view, tab } = section.action;
+        const target = servedView(app.views, view);
+        const problem =
+          destinationProblem(`${at}, note action`, view, servedViewKind(target)) ??
+          destinationTabProblem(
+            `${at}, note action`,
+            view,
+            tab,
+            servedViewKind(target),
+            target && 'tabs' in target ? target.tabs : undefined,
+          );
         if (problem) throw new Error(problem);
         return section;
       }

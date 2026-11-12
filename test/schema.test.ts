@@ -751,7 +751,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // captions per kind of tenant; a command action's `given`, the inputs its page gives (three entries, three new
     // names); a nav group's and both entry shapes' `when` (three entries; `when` is a name already): 1745/519.
     // 1.0.0-rc.40, the UI seam: an App's control kit, `uiKit` (one entry, one new name): 1746/520.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1746, names: 520 });
+    // 1.0.0-rc.41: an action's `to: { view, tab }`, a list on one of its tabs (two entries; both names already): 1748/520.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1748, names: 520 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

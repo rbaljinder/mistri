@@ -15,6 +15,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { watch, type FSWatcher } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
+import { GENERATED_TYPE_FILES } from '../formatterConfig.js';
 
 /** Marks the child: it retires with DEV_CHANGED_EXIT instead of leaving the terminal to restart. Not a flag, not documented. */
 export const DEV_SUPERVISED_ENV = 'MISTRI_DEV_SUPERVISED';
@@ -35,6 +36,8 @@ export function watchForSave(root: string, files: readonly (string | undefined)[
     watchers.push(
       watch(resolve(root), { recursive: true }, (_event, filename) => {
         if (filename !== null && SKIPPED.has(filename.split(/[\\/]/)[0])) return;
+        // The types `mistri check` writes are not a save (formatterConfig.ts).
+        if (filename !== null && GENERATED_TYPE_FILES.has(basename(filename))) return;
         ping();
       }),
     );

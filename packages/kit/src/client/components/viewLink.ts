@@ -43,15 +43,24 @@ function linkTo(entry: Parameters<typeof go>[0], mode: 'push' | 'reset'): ViewLi
   };
 }
 
-/** A list, dashboard or signed-in form this reader is served, by key. `adding` opens a list with its New form over it (`…!new`). */
-export function viewLink(key: string, mode: 'push' | 'reset' = 'push', adding = false): ViewLink | undefined {
+/**
+ * A list, dashboard or signed-in form this reader is served, by key. `adding` opens a list with its New form over it
+ * (`…!new`); `tab` opens it on one of its tabs (`?tab=`), the list that address opens, as `to: { view, tab }` says.
+ */
+export function viewLink(
+  key: string,
+  mode: 'push' | 'reset' = 'push',
+  opened: { adding?: boolean; tab?: string } = {},
+): ViewLink | undefined {
   const app = shell().app() as Parameters<typeof viewRoom>[0] | null;
   const room = app ? viewRoom(app, key) : undefined;
   if (!room) return undefined;
-  const entry = isListRoom(room)
-    ? { ...tableView(room.table, appListQuery(room, 0), adding ? 'new' : undefined), view: key }
-    : pageView(roomPageId(room) ?? dashPageId(key));
-  return linkTo(entry, mode);
+  if (!isListRoom(room)) return linkTo(pageView(roomPageId(room) ?? dashPageId(key)), mode);
+  const asked =
+    opened.tab && !opened.adding
+      ? (shell().addresses?.viewEntry(key, new URLSearchParams({ tab: tabSlug(opened.tab) }).toString()) as Parameters<typeof go>[0] | null)
+      : null;
+  return linkTo(asked ?? { ...tableView(room.table, appListQuery(room, 0), opened.adding ? 'new' : undefined), view: key }, mode);
 }
 
 /**
@@ -62,7 +71,14 @@ export function viewLink(key: string, mode: 'push' | 'reset' = 'push', adding = 
 export function listEntry(key: string, query: string): Parameters<typeof go>[0] | undefined {
   const app = shell().app() as Parameters<typeof viewRoom>[0] | null;
   const room = app ? viewRoom(app, key) : undefined;
-  return room && isListRoom(room) && !room.error ? { ...tableView(room.table, query), view: key } : undefined;
+  if (!room || !isListRoom(room) || room.error) return undefined;
+  /* The list its address opens, not the bare question: a drill walked in on its own text drew every column in key
+     order, and the address it wrote read back as another list (a field report). Said as the view's parameters — the
+     tab's order adopted, as a drill has none of its own — and read back, it has the view's show, order and page size. */
+  const addresses = shell().addresses;
+  const search = addresses?.listParams({ table: room.table, query, view: key }, { adoptOrder: true });
+  const asked = search === undefined ? null : (addresses!.viewEntry(key, search) as Parameters<typeof go>[0] | null);
+  return asked ?? { ...tableView(room.table, query), view: key };
 }
 
 export function listLink(key: string, query: string): ViewLink | undefined {

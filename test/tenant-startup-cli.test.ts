@@ -367,6 +367,24 @@ test('public tenant host retires on authored source change instead of hot-swappi
   assert.match(live.output(), /deployment files changed/);
 });
 
+test(
+  'a tenant host keeps serving through the types mistri check writes, and names the file that retires it',
+  { timeout: 30000 },
+  async (t) => {
+    const f = fixture(t),
+      live = await launch(f);
+    /* What `mistri check` writes beside the App when the database or a declaration moved: types, not the App. */
+    for (const name of ['mistri-schema.d.ts', 'mistri-commands.d.ts', 'mistri-components.d.ts'])
+      writeFileSync(join(f.appDir, name), 'export {};\n');
+    await delay(600);
+    assert.equal(live.child.exitCode, null, live.output());
+    writeFileSync(join(f.appDir, 'helpers.ts'), 'export const helper = 1;\n');
+    const [code] = await live.ended;
+    assert.equal(code, 0, live.output());
+    assert.match(live.output(), /deployment files changed \(helpers\.ts\)/);
+  },
+);
+
 /* An App directory with a free-form page and a catalog is what a service-desk App is: the
    loader names their files (pageFiles, messageFiles), and tenant startup took
    its keys from a list without them, so every such App was refused with the

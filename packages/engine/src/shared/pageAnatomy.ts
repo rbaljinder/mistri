@@ -647,14 +647,27 @@ export function anatomyPage(schema: DatabaseSchema, baseId: string, hints: Anato
  */
 export function withDefaultAside(schema: DatabaseSchema, page: PageDef): PageDef {
   if (!page.defaultAside || page.aside === false || page.error || page.document) return page;
-  if (page.sections.some((section) => section.region === 'aside')) return page;
+  const paths = defaultAsidePaths(schema, page);
+  if (typeof paths === 'string') return page;
+  return {
+    ...page,
+    sections: [...page.sections, { kind: 'fields', title: page.name, presentation: 'properties', region: 'aside', paths }],
+  };
+}
+
+/** The fields a page's default aside draws, or why it draws none: the rule `withDefaultAside` follows, as `mistri check --defaults` says it. */
+export function defaultAsidePaths(schema: DatabaseSchema, page: PageDef): string[] | string {
+  if (page.aside === false) return 'none: the page says aside: false';
+  if (page.document) return 'none: a document has no aside';
+  if (!page.defaultAside) return `none: the '${page.layout ?? 'record'}' layout has no default aside`;
+  if (page.sections.some((section) => section.region === 'aside')) return 'none: the page writes its own aside';
   const base = findTable(schema, page.base);
-  if (!base) return page;
+  if (!base) return 'none: the page names no table';
   const shown = new Set<string>();
   for (const section of page.sections) {
     if (section.kind === 'custom') section.record?.forEach((path) => shown.add(path.split('.')[0]));
     if (section.kind !== 'fields') continue;
-    if (!section.paths?.length && section.presentation !== 'header') return page;
+    if (!section.paths?.length && section.presentation !== 'header') return 'none: a fields section with no paths shows the whole record';
     section.paths?.forEach((path) => shown.add(path.split('.')[0]));
     if (section.status) shown.add(section.status);
     if (section.was) shown.add(section.was.split('.')[0]);
@@ -662,9 +675,5 @@ export function withDefaultAside(schema: DatabaseSchema, page: PageDef): PageDef
   }
   const name = labelColumn(base);
   const paths = railOf(base.columns.filter((column) => readable(base, column) && column.name !== name && !shown.has(column.name)));
-  if (!paths.length) return page;
-  return {
-    ...page,
-    sections: [...page.sections, { kind: 'fields', title: page.name, presentation: 'properties', region: 'aside', paths }],
-  };
+  return paths.length ? paths : 'none: the sections already show every field';
 }

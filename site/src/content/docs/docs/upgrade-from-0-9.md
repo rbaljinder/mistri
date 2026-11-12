@@ -16,7 +16,9 @@ mistri 1.0 reads no 0.9 store. Every store starts at layout 1, the PostgreSQL ru
 
 ## What carries over
 
-Your own tables are your data and are not touched. Dump them with the engine's tool (on PostgreSQL, the `public` schema; on SQLite, `.backup`, then drop the `__tablewalk_*` tables from the copy), restore them where the new App will run, and point a connection at them. The App definition is code: rename the imports, then run `mistri check --app .`, which names every key 1.0 refuses and the key that replaces it.
+Your own tables are your data and are not touched. Dump them with the engine's tool (on PostgreSQL, the `public` schema; on SQLite, `.backup`, then drop the `__tablewalk_*` tables from the copy), restore them where the new App will run, and point a connection at them. The App definition is code: rename the imports, run `mistri upgrade --app .`, which rewrites the renamed keys and stylesheet tokens it knows, then `mistri check --app .`, which refuses a key 1.0 does not take and names what replaces it where it can.
+
+Two changes are not keys. A renamed kit prop, or a hook imported from the wrong entry, is a type error in check's typecheck step where the project installs TypeScript; otherwise the page names the hook's entry when it loads, so open each free-form page once. And a command action that asks nothing now runs at one click, with no dialog; check lists them as information (`one-click`), so give `confirm: true` to the ones that should ask first.
 
 ## What is lost, and what to do
 

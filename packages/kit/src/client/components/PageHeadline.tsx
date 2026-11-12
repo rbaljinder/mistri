@@ -85,7 +85,7 @@ export function PageHeadline({ tableId, row, paths, column, actions, subfigure, 
   /* A call to action into another App of the suite, and a public form over the record, are the App framework's:
      the shell's to draw (shellMode.ts), and not drawn where it has none. */
   const { TargetAction, FormDialog } = shell().slots;
-  const rooms = actions.map((action) => ('view' in action ? viewLink(action.view) : undefined));
+  const rooms = actions.map((action) => ('view' in action ? viewLink(action.view, 'push', { tab: action.tab }) : undefined));
   const signedIn = sessionIdentity().mode === 'authenticated';
   const forms = useQuery({
     queryKey: ['public-forms', state.activeConnection ?? ''],

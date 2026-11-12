@@ -190,7 +190,7 @@ export function sendWriteAhead(
   journal: PostgresTransactionJournal<unknown> | undefined,
   verify: PostgresTransactionVerifier | undefined,
   hint: WriteAhead | undefined,
-  locked: Set<string>,
+  locked: Map<string, { text: string; values: unknown[] }>,
 ): Promise<unknown>[] {
   if (!sendsAhead(write) || (!hint && !verify?.ahead)) return [];
   const opening: PipelinedStatement[] = [];
@@ -216,8 +216,9 @@ export function sendWriteAhead(
     const filter: Filter = { groups: [pk.map((column) => ({ column, op: '=' as const, value: key[column] }))] };
     const where = buildWhere(filter, POSTGRES_STYLE);
     if (!hint!.readOnly) {
-      answers.push(...sendAhead(write, [{ text: `SELECT 1 FROM ${qualified(table)}${where.text} FOR UPDATE`, values: where.params }]));
-      locked.add(rowLockKey(table, filter));
+      const lock = { text: `SELECT 1 FROM ${qualified(table)}${where.text} FOR UPDATE`, values: where.params };
+      answers.push(...sendAhead(write, [lock]));
+      locked.set(rowLockKey(table, filter), lock);
     }
     // With its reference columns' stored text, as the scoped transaction reads its rows (storedText.ts).
     const read = scopedStatement(peeked!.schema, scope, { table: table.id, filter, limit: 2, offset: 0, storedText: true });
@@ -233,21 +234,31 @@ export function sendWriteAhead(
       );
     }
     if (hint!.writes && !hint!.readOnly && capturesWrites(owner, table.id)) {
-      // historyWrites' read: lockRecordNow, then queryOn of the whole row by the key as given.
-      const given = buildWhere(
-        { groups: [Object.entries(key).map(([column, value]) => ({ column, op: '=' as const, value }))] },
-        POSTGRES_STYLE,
-      );
-      const n = given.params.length;
+      // historyWrites' lock: lockRecordNow's statement.
       answers.push(
         ...sendAhead(write, [
           {
             text: `SELECT ${pk.map(POSTGRES_STYLE.quote).join(', ')} FROM ${qualified(table)}${where.text} FOR UPDATE`,
             values: where.params,
           },
-          { text: `SELECT * FROM ${qualified(table)}${given.text} LIMIT $${n + 1} OFFSET $${n + 2}`, values: [...given.params, 2, 0] },
         ]),
       );
+      /* Its read of the row: the whole row by the key as given, kept to answer the before image, which names only the
+         columns the write sets and the rules read (recordHistory.ts). Sent as the statement that read asks, it was
+         never asked, and every command run on a record warned of it (a field report). */
+      const given: Filter = { groups: [Object.entries(key).map(([column, value]) => ({ column, op: '=' as const, value }))] };
+      const whole = plainStatement({ table: table.id, filter: given, limit: 2, offset: 0 });
+      const captured = whole && holdAhead(write, { text: whole.text, values: whole.params });
+      if (captured) {
+        answers.push(captured.answer);
+        keyRows.keep(
+          PLAIN_SCOPE,
+          table,
+          given,
+          captured.answer.then((result) => result.rows),
+          captured.take,
+        );
+      }
     }
   }
   return answers;

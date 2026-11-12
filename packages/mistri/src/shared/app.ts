@@ -25,7 +25,7 @@ import { offerPageCommands } from './appPageOffers.js';
 import { checkNarrowed, narrowedFixedColumns } from './appNarrowed.js';
 import { checkShellNew } from './appNewMenu.js';
 import { servedOverview } from './appOverview.js';
-import { destinationProblem, servedView, servedViewKind } from './appDestinations.js';
+import { destinationProblem, destinationTabProblem, servedView, servedViewKind } from './appDestinations.js';
 import { parseBrandingDeclaration } from './tenantBranding.js';
 import { TAGS_COLUMN } from '@mistriwork/engine/shared/tagLists.js';
 import { stitchedFarProblem, stitchedHop, stitchedListProblem } from '@mistriwork/engine/shared/stitchedPaths.js';
@@ -101,8 +101,9 @@ import {
   type ResolvedFormView,
   type ResolvedListView,
 } from './appModel.js';
-import { allowKeys, humanName, plainRecord, setKeyHomes, type AppNoun } from '@mistriwork/engine/shared/model.js';
-import type { AppCalendarBackdrop, AppChecklist, AppListPresentation } from '@mistriwork/engine/shared/listPresentations.js';
+import { allowKeys, humanName, noteRefusedKeys, plainRecord, setKeyHomes, type AppNoun } from '@mistriwork/engine/shared/model.js';
+import type { AppListPresentation } from '@mistriwork/engine/shared/listPresentations.js';
+import { listProblem } from './appListProblems.js';
 import { fixedActionProblem, parseAuthGrants } from './appAuthGrants.js';
 import { declaredNamesOf, parseDataBlocks } from './appResourceBlocks.js';
 import { appFileRules, appTagRules } from './appResourceRules.js';
@@ -110,7 +111,7 @@ import { appSearchProblem } from './appSearch.js';
 import { checkImports, importProblem } from './appImport.js';
 import { metricCohortQuery, parseContent } from './appViews.js';
 import type { SurfaceFile } from './appSurfaces.js';
-import { cardsProblem, cardsTitled } from '@mistriwork/engine/shared/appCards.js';
+import { cardsTitled } from '@mistriwork/engine/shared/appCards.js';
 import type { InferenceResource } from '@mistriwork/engine/shared/listInference.js';
 import { inferredList } from './appInferredList.js';
 import { declaredDisplayOf, effectiveDisplay } from '@mistriwork/engine/shared/displayDefaults.js';
@@ -121,7 +122,7 @@ import { appZone, parseUi } from './appUi.js';
 import { parseOpenRoles } from './appViewRoles.js';
 import { composeFeatures } from './appFeatures.js';
 import { withProvenance } from './appProvenance.js';
-import { AppProblems, attempt } from './appProblems.js';
+import { AppProblems, attempt, problemsOf } from './appProblems.js';
 import { slug } from '@mistriwork/engine/shared/slug.js';
 import { normalizeFlagCatalog } from './appFlags.js';
 import { captureFlagDeclaration, normalizeExperimentDeclarations } from './appExperiments.js';
@@ -132,9 +133,6 @@ export type { ServedFlowDiagram, ServedMachine, ServedResource } from '@mistriwo
 
 /** Addresses the server answers itself, before any App; `_mistri` and the rest of shared/mount.ts SERVER_SEGMENTS are refused as mounts there. */
 const RESERVED_IDS = new Set(['api', 'healthz', 'readyz']);
-/* A column that holds a moment, not only a day: Postgres's timestamp (with or without its zone), SQLite's declared
-   TIMESTAMP or DATETIME. */
-const TIMESTAMP_TYPE = /timestamp|datetime/i;
 import { keyHomesFor } from './appKeyHomes.js';
 import { apiCrossConnectionProblems, parseAppApi, type AppApiDef } from './appApi.js';
 import { parseAppAssistant } from './appAssistant.js';
@@ -237,7 +235,22 @@ export function parseAppConfig(
      Without features there is nothing to merge: the root still carries it
      raw, and parseRoot parses it. */
   const { root, origins, api } = composeFeatures(raw, where);
-  const app = withProvenance(origins, where, () => parseRoot(root, where, api, options.surfaces));
+  const app = withProvenance(origins, where, () => {
+    /* A key the App's parts do not take is said among their problems and passed over (model.ts noteRefusedKeys):
+       the part still parses, and what depends on it is judged in the same run. One taken after the parts — a root
+       block read once they stand — is said once the root is. */
+    const problems: string[] = [];
+    let parsed: AppDef;
+    try {
+      parsed = noteRefusedKeys(problems, () => parseRoot(root, where, problems, api, options.surfaces));
+    } catch (err) {
+      // A refusal that stops the root (it has no name) still says the keys noted before it.
+      if (!problems.length) throw err;
+      throw new AppProblems([...problems, ...problemsOf(err)], err instanceof AppProblems ? err.partial : undefined);
+    }
+    if (problems.length) throw new AppProblems(problems);
+    return parsed;
+  });
   /* A deprecated key still parses; `check` says what replaces it (deprecations.ts). Read off the raw App, where a
      feature slice still says which keys it wrote. */
   noteDeprecated(app, raw);
@@ -269,7 +282,7 @@ function dataHalfOf(a: Record<string, unknown>, id: string, name: string, ui: ()
   return { id, name, connection: a.connection, resources, views: {}, nav: [], home: [], ui: ui() } as unknown as AppDef;
 }
 
-function parseRoot(raw: unknown, where: string, composed?: AppApiDef, surfaces?: readonly SurfaceFile[]): AppDef {
+function parseRoot(raw: unknown, where: string, problems: string[], composed?: AppApiDef, surfaces?: readonly SurfaceFile[]): AppDef {
   const a = plainRecord(raw, where, 'an object');
   allowKeys(a, ROOT_KEYS, where);
   if (typeof a.name !== 'string' || !a.name.trim()) throw new Error(`${where} has no "name". An app is named after what it is for.`);
@@ -300,7 +313,6 @@ function parseRoot(raw: unknown, where: string, composed?: AppApiDef, surfaces?:
      refusal (appProblems.ts): the resources, the look, then — when those
      parse — the grants, the API and the content; the pages always, since
      they read nothing else. */
-  const problems: string[] = [];
   /* A union is read like a resource (appUnions.ts): a view names it as it names a table. */
   const parsedData = attempt(problems, () => {
     const data = parseDataBlocks(a, where);
@@ -510,12 +522,12 @@ function parseRoot(raw: unknown, where: string, composed?: AppApiDef, surfaces?:
       }
       if (section.kind !== 'list' || !section.empty?.action) continue;
       // A room, by the rule every action's destination answers to (appDestinations.ts).
-      const view = section.empty.action.view;
-      const problem = destinationProblem(
-        `${where}: page "${page.id}" related empty action`,
-        view,
-        servedViewKind(servedView(app.views, view)),
-      );
+      const { view, tab } = section.empty.action;
+      const at = `${where}: page "${page.id}" related empty action`;
+      const target = servedView(app.views, view);
+      const problem =
+        destinationProblem(at, view, servedViewKind(target)) ??
+        destinationTabProblem(at, view, tab, servedViewKind(target), target && 'tabs' in target ? target.tabs : undefined);
       if (problem) throw new Error(problem);
     }
   }
@@ -912,269 +924,6 @@ function withMachineLanes(views: AppDef['views'], resources: AppDef['resources']
     }
   }
   return changed ? out : views;
-}
-
-/** Validate against the readable catalog; callers must not publish these errors after field pruning. */
-function checklistProblem(list: AppChecklist, table: TableMeta): string | undefined {
-  if (!table.columns.some((column) => column.primaryKey)) return 'Checklist requires a complete readable primary key.';
-  const names: Array<[string, string]> = [
-    ['primary', list.primary],
-    ['checked', list.checked],
-    ...(list.lines ?? []).map((line, i): [string, string] => [`lines[${i}]`, line]),
-  ];
-  for (const [key, name] of names) {
-    const column = table.columns.find((column) => column.name === name);
-    if (!column || name.includes('.')) return `Checklist ${key}: "${name}" must be a local readable column.`;
-    if (key === 'primary' && columnKind(column.type) !== 'text') return 'Checklist primary must be a text column.';
-    if (key === 'checked' && columnKind(column.type) !== 'boolean')
-      return 'Checklist checked must be a boolean column (declare BOOLEAN in SQLite).';
-  }
-  return undefined;
-}
-
-/**
- * A calendar's shaded span against the readable catalog: its resource is a table here, its ends are its date
- * columns, and its label is one of its columns. A reader's catalog that lacks any of them is not offered the span
- * (appFieldProjection.ts), and the calendar stands without it.
- */
-export function backdropProblem(span: AppCalendarBackdrop, schema: DatabaseSchema): string | undefined {
-  const table = tableNamed(schema, span.from);
-  if (!table) return `Calendar backdrop: no table "${span.from}" is readable here.`;
-  for (const [key, name] of [
-    ['start', span.start],
-    ['end', span.end],
-  ] as const) {
-    const column = table.columns.find((candidate) => candidate.name === name);
-    if (!column) return `Calendar backdrop ${key}: "${name}" is not a column of "${table.name}" that is readable here.`;
-    if (!/date|time/i.test(column.type ?? ''))
-      return `Calendar backdrop ${key}: "${name}" is ${column.type || 'untyped'}; a span runs between date columns.`;
-  }
-  if (!table.columns.some((candidate) => candidate.name === span.labelColumn))
-    return `Calendar backdrop labelColumn: "${span.labelColumn}" is not a column of "${table.name}" that is readable here.`;
-  if (!primaryKey(table).length) return `Calendar backdrop: "${table.name}" needs a complete readable primary key.`;
-  return undefined;
-}
-
-/** Every list presentation, judged against the readable catalog the same way. */
-export function listProblem(
-  list: AppListPresentation,
-  table: TableMeta,
-  schema?: DatabaseSchema,
-  files?: ReadonlySet<string>,
-  icons?: (column: string) => boolean,
-): string | undefined {
-  if (list.kind === 'checklist') return checklistProblem(list, table);
-  if (list.kind === 'cards') return cardsProblem(list, table, schema, files, icons);
-  /* A split's columns are label paths, judged by the path resolver where the
-     entry's own show is; there is no local column of its own to check here. */
-  if (list.kind === 'split') {
-    if (!list.row) return undefined;
-    /* Its rows are a queue's, judged as a queue's, the avatar being one more name. */
-    const { avatar, ...queue } = list.row;
-    const bad = listProblem({ kind: 'queue', ...queue }, table, schema, files);
-    if (bad) return bad.replace(/^Queue/, 'Split row');
-    if (avatar !== undefined && !avatar.includes('.') && !table.columns.some((column) => column.name === avatar))
-      return `Split row avatar: "${avatar}" must be a readable column.`;
-    return undefined;
-  }
-  /* A custom list reads its label paths as a split's are read: through the path resolver, against this catalog. */
-  if (list.kind === 'custom') {
-    if (!schema) return undefined;
-    for (const path of list.show) {
-      try {
-        resolvePath(schema, table.id, path);
-      } catch (err) {
-        return `Custom list show: "${path}" (${(err as Error).message}).`;
-      }
-    }
-    return undefined;
-  }
-  if (list.kind === 'tree' || list.kind === 'gantt') {
-    const word = list.kind === 'tree' ? 'Tree' : 'Gantt';
-    if (!table.columns.some((column) => column.primaryKey)) return `${word} requires a complete readable primary key.`;
-    if (list.kind === 'tree') {
-      const parent = table.columns.find((column) => column.name === list.parent);
-      if (!parent) return `Tree parent: "${list.parent}" must be a local readable column.`;
-      const self = schema?.foreignKeys.some(
-        (fk) =>
-          fk.from.table === table.id && fk.to.table === table.id && fk.from.columns.length === 1 && fk.from.columns[0] === list.parent,
-      );
-      if (schema && !self) return `Tree parent: "${list.parent}" must reference "${table.name}" itself, the record above each one.`;
-    } else {
-      for (const [key, name] of [
-        ['start', list.start],
-        ['end', list.end],
-      ] as const) {
-        const column = table.columns.find((candidate) => candidate.name === name);
-        if (!column) return `Gantt ${key}: "${name}" must be a local readable column.`;
-        if (!/date|time/i.test(column.type ?? ''))
-          return `Gantt ${key}: "${name}" is ${column.type || 'untyped'}; a bar runs between date columns.`;
-      }
-      if (list.progress !== undefined) {
-        const progress = table.columns.find((candidate) => candidate.name === list.progress);
-        if (!progress || columnKind(progress.type) !== 'number')
-          return `Gantt progress: "${list.progress}" must be a local numeric column (0–100).`;
-      }
-    }
-    const named = [
-      ['primary', list.primary],
-      ...(list.kind === 'tree' ? (list.lines ?? []).map((line, i) => [`lines[${i}]`, line]) : []),
-      ...(list.kind === 'gantt' && list.by !== undefined ? [['by', list.by]] : []),
-    ] as Array<[string, string]>;
-    for (const [key, name] of named) {
-      let column = table.columns.find((candidate) => candidate.name === name);
-      if (name.includes('.')) {
-        if (!schema) continue;
-        try {
-          column = resolvePath(schema, table.id, name).column;
-        } catch (error) {
-          return `${word} ${key}: "${name}" is not a readable one-hop reference label path (${(error as Error).message}).`;
-        }
-      }
-      if (!column) return `${word} ${key}: "${name}" must be a readable column.`;
-    }
-    return undefined;
-  }
-  if (list.kind === 'calendar') {
-    if (!table.columns.some((column) => column.primaryKey)) return 'Calendar requires a complete readable primary key.';
-    const date = table.columns.find((column) => column.name === list.date);
-    if (!date || list.date.includes('.')) return `Calendar date: "${list.date}" must be a local readable column.`;
-    if (!/date|time/i.test(date.type ?? ''))
-      return `Calendar date: "${list.date}" is ${date.type || 'untyped'}; a calendar places records by a date column.`;
-    if (list.end !== undefined) {
-      const end = table.columns.find((column) => column.name === list.end);
-      if (!end || list.end.includes('.')) return `Calendar end: "${list.end}" must be a local readable column.`;
-      if (!/date|time/i.test(end.type ?? ''))
-        return `Calendar end: "${list.end}" is ${end.type || 'untyped'}; a record's last day is a date column.`;
-    }
-    /* A week or a day places a record by its hour, which a column holding only a day does not have: the grid would
-       stand every record at midnight. */
-    if (list.span) {
-      for (const [key, name] of [['date', list.date], ...(list.end === undefined ? [] : [['end', list.end]])] as const) {
-        const type = table.columns.find((column) => column.name === name)?.type ?? '';
-        if (!TIMESTAMP_TYPE.test(type))
-          return `Calendar ${key}: "${name}" is ${type || 'untyped'}; a ${list.span} places records by their time, so it needs a timestamp column.`;
-      }
-    }
-    const named = [
-      ['primary', list.primary],
-      ...(list.badge === undefined ? [] : [['badge', list.badge]]),
-      ...(list.lines ?? []).map((line, i) => [`lines[${i}]`, line]),
-    ] as Array<[string, string]>;
-    for (const [key, name] of named) {
-      let column = table.columns.find((candidate) => candidate.name === name);
-      if (name.includes('.')) {
-        // As a queue's: a caller with the catalog proves the one-hop path.
-        if (!schema) continue;
-        try {
-          column = resolvePath(schema, table.id, name).column;
-        } catch (error) {
-          return `Calendar ${key}: "${name}" is not a readable one-hop reference label path (${(error as Error).message}).`;
-        }
-      }
-      if (!column) return `Calendar ${key}: "${name}" must be a readable column.`;
-      if (key === 'primary' && columnKind(column.type) !== 'text') return 'Calendar primary must be a text column.';
-    }
-    for (const span of schema ? (list.backdrop ?? []) : []) {
-      const problem = backdropProblem(span, schema!);
-      if (problem) return problem;
-    }
-    return undefined;
-  }
-  const word = list.kind === 'queue' ? 'Queue' : 'Board';
-  if (!table.columns.some((column) => column.primaryKey)) return `${word} requires a complete readable primary key.`;
-  const lines = (list.lines ?? []).map((line, i): [string, string] => [`lines[${i}]`, line]);
-  if (list.kind === 'queue') {
-    const named: Array<[string, string]> = [
-      ['primary', list.primary],
-      ...(list.badge === undefined ? [] : [['badge', list.badge] as [string, string]]),
-      ...lines,
-      ...(list.facts ?? []).map((fact, i): [string, string] => [`properties[${i}]`, fact]),
-    ];
-    for (const [key, name] of named) {
-      let column = table.columns.find((candidate) => candidate.name === name);
-      // A fact, a line or the badge may be a rollup of the row: a pick list's lines, a board's open threads.
-      if (!column && key !== 'primary' && columnOrRollup(table, name)) continue;
-      if (name.includes('.')) {
-        /* Callers with a catalog prove the reference path; a local-only caller
-           retains the old local validation without crashing on a path. */
-        if (!schema) continue;
-        try {
-          column = resolvePath(schema, table.id, name).column;
-        } catch (error) {
-          return `Queue ${key}: "${name}" is not a readable one-hop reference label path (${(error as Error).message}).`;
-        }
-      }
-      if (!column) return `Queue ${key}: "${name}" must be a readable column.`;
-      /* A reference column titles the card by the record it names, as a board's does; a path reads one column of it. */
-      if (key === 'primary' && columnKind(column.type) !== 'text' && !(column.references && !name.includes('.')))
-        return `Queue primary must be a text column, a reference (which titles each card by the record it names), or a label path to a text column.`;
-    }
-    return undefined;
-  }
-  const names: Array<[string, string]> = [['by', list.by], ['primary', list.primary], ...lines];
-  for (const [key, name] of names) {
-    let column = table.columns.find((column) => column.name === name);
-    /* A board's title may be read through one reference, as a queue's is: `patient_id.name`. A caller without the
-       catalog cannot prove the path and keeps the local checks. */
-    if (key === 'primary' && name.includes('.')) {
-      if (!schema) continue;
-      try {
-        column = resolvePath(schema, table.id, name).column;
-      } catch (error) {
-        return `Board primary: "${name}" is not a readable one-hop reference label path (${(error as Error).message}).`;
-      }
-      if (columnKind(column.type) !== 'text')
-        return 'Board primary must be a text column, or a reference, which titles each card by the record it names.';
-      continue;
-    }
-    // A board's line may be a rollup or a computed number of the row, as a queue's may: a problem's open tickets.
-    if (!column && key.startsWith('lines[') && columnOrRollup(table, name)) continue;
-    if (!column || name.includes('.')) return `${word} ${key}: "${name}" must be a local readable column.`;
-    /* A reference titles a card by the record it names, as a cell does (listReferenceNames): a fulfillment is
-       its order, `#1042 · Ana Ruiz`, with no copy of the order's name kept on the parcel. */
-    if (key === 'primary' && columnKind(column.type) !== 'text' && !column.references)
-      return `${word} primary must be a text column, or a reference, which titles each card by the record it names.`;
-    if (key === 'by' && column.primaryKey) return 'Board by must not be a primary key column.';
-  }
-  if (list.kind === 'board' && list.lanes) {
-    const allowed = table.columns.find((column) => column.name === list.by)?.allowed;
-    const unknown = allowed && list.lanes.filter((lane) => !allowed.includes(lane));
-    if (unknown?.length)
-      return `Board lanes ${unknown.map((lane) => JSON.stringify(lane)).join(', ')} are not in the declared vocabulary of "${list.by}".`;
-  }
-  if (list.kind === 'board' && list.order !== undefined) {
-    const order = table.columns.find((column) => column.name === list.order);
-    if (!order || list.order.includes('.')) return `Board order: "${list.order}" must be a local readable column.`;
-    if (columnKind(order.type) !== 'number')
-      return `Board order: "${list.order}" is ${order.type || 'untyped'}; a card's place in its lane is a number.`;
-    if (order.primaryKey) return 'Board order must not be a primary key column.';
-    if (list.order === list.by) return 'Board order must be another column than by: one says the lane, the other the place in it.';
-  }
-  if (list.kind === 'board' && list.swimlanes !== undefined) {
-    const rows = table.columns.find((column) => column.name === list.swimlanes);
-    if (!rows || list.swimlanes.includes('.')) return `Board swimlanes: "${list.swimlanes}" must be a local readable column.`;
-    if (rows.primaryKey) return 'Board swimlanes must not be a primary key column: a row per record is a list, not a board.';
-  }
-  if (list.kind === 'board' && list.sum !== undefined) {
-    const sum = table.columns.find((column) => column.name === list.sum);
-    if (!sum || list.sum.includes('.')) return `Board sum: "${list.sum}" must be a local readable column.`;
-    if (columnKind(sum.type) !== 'number') return `Board sum: "${list.sum}" is ${sum.type || 'untyped'}; a lane's sum adds numbers.`;
-  }
-  if (list.kind === 'board' && list.folded && !list.lanes) {
-    const allowed = table.columns.find((column) => column.name === list.by)?.allowed;
-    const unknown = allowed && list.folded.filter((lane) => !allowed.includes(lane));
-    if (unknown?.length)
-      return `Board folded ${unknown.map((lane) => JSON.stringify(lane)).join(', ')} are not in the declared vocabulary of "${list.by}".`;
-  }
-  /* Authored lanes already bound the limits' keys (the parser checks them); otherwise a vocabulary does. */
-  if (list.kind === 'board' && list.limits && !list.lanes) {
-    const allowed = table.columns.find((column) => column.name === list.by)?.allowed;
-    const unknown = allowed && Object.keys(list.limits).filter((lane) => !allowed.includes(lane));
-    if (unknown?.length)
-      return `Board limits ${unknown.map((lane) => JSON.stringify(lane)).join(', ')} are not in the declared vocabulary of "${list.by}".`;
-  }
-  return undefined;
 }
 
 /**

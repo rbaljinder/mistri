@@ -25,7 +25,8 @@ Min and a Max.
 | `dashboard` | `dashboard(label, sections, opts)` | Sections about whole tables. [Dashboards](/docs/dashboards/) |
 | `landing` | `landing(hero, sections, opts)` | The signed-out front page. [Public pages](/docs/landing-pages/) |
 | `form` | `commandForm(label, command, steps, opts)` | One form over one command. [Command forms](/docs/command-forms/) |
-| `room` | `room(label, component, { reads, params })` | A whole view drawn by a [custom component](/docs/custom-components/). |
+
+A screen of its own is not a view: it is a [free-form page](/docs/custom-components/#free-form-pages) in `pages/<path>.page.tsx`.
 
 ## How a list's rows draw
 

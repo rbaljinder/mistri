@@ -30,12 +30,12 @@
  */
 import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { AppDef } from '../../shared/appModel.js';
 import type { CompiledComponents } from './appComponents.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { astParser, pageLinks, scanPageSource } from './appPages.js';
-import { nearestToken, UI_TOKENS } from '@mistriwork/kit/shared/uiTokens.js';
+import { nearestToken, RENAMED_TOKENS, UI_TOKENS } from '@mistriwork/kit/shared/uiTokens.js';
 import { APP_ICONS, parseIcon } from '@mistriwork/engine/shared/appIcons.js';
 
 interface ComponentFinding {
@@ -127,7 +127,10 @@ const SCRIPT_WARNINGS: Array<[RegExp, string]> = [
 ];
 
 /**
- * Where a source names an icon: `<Icon name=…>`, an `icon=…` prop on a kit component and an `icon: …` key. A name chosen at
+ * Where a source names an icon: `<Icon name=…>`, an `icon=…` prop on a kit component and an `icon: …` key in what a prop is
+ * given (`items={[{ label: 'Bell', icon: 'bell' }]}`). An `icon:` key anywhere else is an object of the author's own,
+ * which may mean anything by it: a table of field labels with `{ name: 'Name', icon: 'Icon' }` failed a correct App (a
+ * field report). A name chosen at
  * run time (`<Icon name={done ? 'check-circle' : 'circle-dashed'} />`) escapes the check of the icons an App declares, and the
  * types only see it while the name stays a literal, so each string literal a name can be (a plain one, or either branch of a
  * conditional) is held to the App's icons here. A name built from a variable is the author's to keep right: `mistri dev` says
@@ -158,10 +161,19 @@ function iconFindings(text: string, warn: (line: number, message: string) => voi
     }
     return text.slice(start, end).trim();
   };
+  /* What each JSX prop is given, from its brace to the one that closes it: `name={`, with nothing between the name, the
+     equals sign and the brace, which is how a prop is written and not how a formatted assignment is. */
+  const props: Array<[number, number]> = [];
+  for (const prop of text.matchAll(/(?<=[\s{])[A-Za-z][\w-]*=\{/g)) {
+    const from = prop.index + prop[0].length;
+    props.push([from, from + expressionFrom(from, true).length]);
+  }
+  const inProp = (at: number) => props.some(([from, to]) => at >= from && at <= to);
   const literal = /^(['"`])([^'"`\\\n$]*)\1$/;
   const branch = /(?:^|[?:])\s*(['"`])([^'"`\\\n$]*)\1(?=\s*(?:$|[:,)]))/g;
   // `icon` on its own: not a property of something else (`el.dataset.icon`) or the end of a `$icon` name.
   for (const match of text.matchAll(/(?:<Icon\b(?:[^>{}]|\{[^{}]*\})*?\bname|(?<![.\w$])icon)\s*[=:]\s*/g)) {
+    if (/^icon\s*:/.test(match[0]) && !inProp(match.index)) continue;
     let from = match.index + match[0].length;
     const braced = text[from] === '{';
     if (braced) from++;
@@ -214,9 +226,18 @@ function tokenFindings(
     /* `--c-<id>-*` is the component's own name-space, the way `.c-<id>` is for classes: a data-driven color handed to its stylesheet
        (`style.setProperty`, a spread style object) is declared where no `--x:` can be read. */
     if (UI_TOKENS.includes(name) || own.has(name) || ids.some((id) => name.startsWith(`--c-${id}-`))) continue;
+    const line = text.slice(0, match.index).split('\n').length;
+    const renamed = Object.hasOwn(RENAMED_TOKENS, name) ? RENAMED_TOKENS[name] : undefined;
+    if (renamed) {
+      warn(
+        line,
+        `"${name}" is not a token the looks define: it was renamed ${renamed} before 1.0; write var(${renamed}) (mistri upgrade rewrites it)`,
+      );
+      continue;
+    }
     const near = nearestToken(name);
     warn(
-      text.slice(0, match.index).split('\n').length,
+      line,
       `"${name}" is not a token the looks define, so it resolves to nothing${near ? `; did you mean var(${near})?` : '; the tokens are listed in @mistriwork/mistri/ui as `tokens`'}`,
     );
   }
@@ -250,6 +271,22 @@ async function packagePrefixes(dir: string, file: string): Promise<string[]> {
   return [];
 }
 
+/**
+ * A stylesheet's own name-space, `c-<its name>`: `widgets/ticket-list.css` (or `TicketList.css`) owns `c-ticket-list-…`,
+ * and one called `index`, `style` or `styles` is named for its folder. A widget two pages draw could meet no component's
+ * `c-<id>-` rule, and warned once a class on every page that drew it (a field report). The name is its own only where
+ * no other stylesheet of the App's has it.
+ */
+function stylesheetName(file: string): string {
+  const stem = basename(file).replace(/(\.module)?\.css$/i, '');
+  const named = /^(index|styles?|main)$/i.test(stem) ? basename(dirname(file)) : stem;
+  return named
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/[^A-Za-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+}
+
 /** `ids` is every component that sources this stylesheet: a shared one (a receipt.css two components draw) is linted once, and a class is its own if any of them owns it. */
 function cssFindings(
   ids: readonly string[],
@@ -259,6 +296,7 @@ function cssFindings(
 ): void {
   const prefixes = [...ids.map((id) => `c-${id}`), ...declared];
   const prefix = `c-${ids[0]}`;
+  const sheet = declared.find((own) => own.startsWith('c-'));
   /* Each rule's body with the reduced-motion query it sits in, if any: motion is fine only inside one. */
   const guarded: Array<[number, number]> = [];
   for (const match of text.matchAll(/@media[^{]*prefers-reduced-motion\s*:\s*no-preference[^{]*\{/g)) {
@@ -316,7 +354,7 @@ function cssFindings(
     if (prefixes.some((own) => name === own || name.startsWith(`${own}-`))) continue;
     warn(
       lineAt(match.index),
-      `the class ".${name}" is not this component's: name its classes "${prefix}-…", so no look or other component meets them`,
+      `the class ".${name}" is not this component's: name its classes "${prefix}-…"${sheet ? `, or "${sheet}-…" after the stylesheet` : ''}, so no look or other component meets them`,
     );
   }
 }
@@ -397,6 +435,8 @@ export async function lintComponents(
   const sharers = new Map<string, string[]>();
   for (const [id, entry] of Object.entries(compiled.entries))
     for (const file of entry.sources) if (file.endsWith('.css')) sharers.set(file, [...(sharers.get(file) ?? []), id]);
+  const sheetNames = new Map<string, number>();
+  for (const file of sharers.keys()) sheetNames.set(stylesheetName(file), (sheetNames.get(stylesheetName(file)) ?? 0) + 1);
   const parse = pages.size ? await astParser() : undefined;
   /* The pages any component's source links to, for the pages only a link opens. */
   const linked = new Set<string>();
@@ -415,7 +455,9 @@ export async function lintComponents(
       if (css) {
         const ids = sharers.get(file)!;
         tokenFindings(text, new Set(ids.flatMap((sharer) => [...own.get(sharer)!])), ids, warn);
-        cssFindings(ids, text, warn, await packagePrefixes(dir, file));
+        const name = stylesheetName(file);
+        const ownName = name && sheetNames.get(name) === 1 ? [`c-${name}`] : [];
+        cssFindings(ids, text, warn, [...ownName, ...(await packagePrefixes(dir, file))]);
         continue;
       }
       tokenFindings(text, own.get(id)!, [id], warn);

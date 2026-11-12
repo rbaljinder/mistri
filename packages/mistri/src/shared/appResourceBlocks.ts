@@ -51,6 +51,7 @@ import {
   RESERVED_NAMES,
   allowKeys,
   isRecord,
+  noteRefusedKeys,
   plainRecord,
   humanName,
   type AppNoun,
@@ -375,11 +376,7 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
       }
       if (raw.hidden !== undefined) {
         const hidden = raw.hidden;
-        if (
-          !Array.isArray(hidden) ||
-          !hidden.length ||
-          hidden.some((column) => typeof column !== 'string' || !IDENTIFIER.test(column.trim()))
-        ) {
+        if (!Array.isArray(hidden) || hidden.some((column) => typeof column !== 'string' || !IDENTIFIER.test(column.trim()))) {
           throw new Error(`${at} has a "hidden" that is not a list of the resource's own column names, like hidden: ['password_hash'].`);
         }
         const named = hidden.map((column) => (column as string).trim());
@@ -391,7 +388,8 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
           throw new Error(
             `${at}, "search" indexes "${indexed}", which "hidden" keeps from every reader: the index would hold its values. Drop it from search.fields.`,
           );
-        resource.hidden = named;
+        /* An empty list hides nothing: an App that composes its blocks says so as `hidden: []` (a field report). */
+        if (named.length) resource.hidden = named;
       }
       if (raw.references !== undefined) resource.references = parseReferences(raw.references, at, data);
       if (raw.display !== undefined) {
@@ -705,7 +703,8 @@ export function declaredNamesOf(raw: unknown): {
   const read = <T>(key: string, parse: (value: unknown, here: string) => T): T | undefined => {
     if (block[key] === undefined) return undefined;
     try {
-      return parse(block[key], key);
+      // Thrown, not noted: what does not parse is left out here, and the resource's own parse says why.
+      return noteRefusedKeys(undefined, () => parse(block[key], key));
     } catch {
       return undefined;
     }
@@ -1786,7 +1785,12 @@ function parseForm(raw: unknown, at: string): AppForm {
   /* The values filled in as the form opens are constants as written, and
      their words once read (autoValues.ts); the shared parser reads the words.
      A value from a referenced record (`{ from }`) is kept apart, as `derived`. */
-  const form = raw as Record<string, unknown>;
+  /* While an App is parsed whole, allowKeys notes a key the form does not take and goes on; the shared parser below
+     would refuse that key a second time, with its own longer list (model.ts noteRefusedKeys). */
+  const authored = (key: string) => (AUTHORED_FORM_KEYS as readonly string[]).includes(key) || /^[$_]/.test(key);
+  const form = Object.keys(raw).every(authored)
+    ? (raw as Record<string, unknown>)
+    : Object.fromEntries(Object.entries(raw).filter(([key]) => authored(key)));
   if (!isRecord(form.defaults)) return parseAppForm(form, `${at}, "form"`);
   const entries = Object.entries(form.defaults);
   const from = (value: unknown) => isRecord(value) && Object.hasOwn(value, 'from');

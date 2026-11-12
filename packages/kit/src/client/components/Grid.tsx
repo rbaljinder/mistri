@@ -102,6 +102,8 @@ import {
   GRID_EXPANDER_WIDTH,
   GRID_HEAD_CHAR,
   GRID_SIZE_SAMPLE,
+  holdFold,
+  type FoldHeld,
   GRID_TRAIL_WIDTH,
 } from './gridSizing.js';
 import { applyColumnOrder, applyColumnWidths, clampColumnWidth, columnResizeStep, MIN_COLUMN_WIDTH, moveColumn } from './gridArrange.js';
@@ -211,6 +213,11 @@ export interface GridGroup {
 }
 
 /** A group's value as the folded set and the head's identity hold it: the rows with no value are one group. */
+/** Two measured records alike, so a measure that found nothing new sets no state and draws nothing again. */
+const sameRecord = <T,>(a: Readonly<Record<string, T>>, b: Readonly<Record<string, T>>): boolean => {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => key in b && a[key] === b[key]);
+};
 const groupKey = (value: unknown): string => (value === null || value === undefined ? '\u0000' : String(value));
 
 /** Beyond a few hundred rows the DOM, not the database, is the bottleneck. */
@@ -900,12 +907,14 @@ export function Grid({
   /* The fonts the first row's cells set in, one per cell, so a column is sized
      by what its words measure there rather than a count of their characters
      (gridSizing.ts). Per cell: a look sets the first column heavier, and
-     measured in the others' weight its names ran past the width they got. */
-  const [cellFonts, setCellFonts] = useState<string[]>([]);
+     measured in the others' weight its names ran past the width they got. By column name, read off the head above
+     each cell: the cells drawn are the columns kept and in the reader's order, and read by position against the
+     asked columns a fold moved every later column's font and chip onto its neighbour (a field report). */
+  const [cellFonts, setCellFonts] = useState<Readonly<Record<string, string>>>({});
   /* What a tone chip in the first row draws beyond its words, per cell (its dot, gap, padding): a look that says a
      status as a pill spends 41px there, one that says it as a dot and a word 12, and sizing every column for the
      wider kept 30px of every table's room in a status that never used it. -1: the cell holds no chip. */
-  const [cellChips, setCellChips] = useState<number[]>([]);
+  const [cellChips, setCellChips] = useState<Readonly<Record<string, number>>>({});
   /* Counts the times a face arrived after the columns were sized in its fallback: the sizes are read again, once for
      each, so a table's columns never stay as the fallback face set them (textMeasure.ts). */
   const [faceEpoch, setFaceEpoch] = useState(0);
@@ -943,7 +952,9 @@ export function Grid({
         setHeadFace((was) => (was && was.font === next.font && was.upper === next.upper && was.tracking === next.tracking ? was : next));
       }
       /* A group's head is not a row of values: the first row that is one is sampled. */
-      const first = element.querySelector('tbody tr:not(.grid-group-head)');
+      const valueRowSelector = 'tbody tr:not(.grid-group-head):not(.virtual-spacer):not(.grid-totals)';
+      const first = element.querySelector(valueRowSelector);
+      const heads = [...(element.querySelector('thead tr')?.children ?? [])].map((th) => th.getAttribute('data-col'));
       const cells = first ? [...first.querySelectorAll(':scope > td')] : [];
       if (cells.length) {
         const fonts = cells.map((cell) => {
@@ -951,10 +962,13 @@ export function Grid({
           return `${font.fontStyle} ${font.fontWeight} ${font.fontSize} ${font.fontFamily}`;
         });
         sizedInFallback = sizedInFallback || !fonts.every(fontLoaded);
-        setCellFonts((was) => (was.join('|') === fonts.join('|') ? was : fonts));
+        const byColumn = (values: readonly string[]) =>
+          Object.fromEntries(heads.flatMap((name, index) => (name && values[index] !== undefined ? [[name, values[index]]] : [])));
+        const named = byColumn(fonts);
+        setCellFonts((was) => (sameRecord(was, named) ? was : named));
         /* The widest chip of the sampled rows, not the first row's: a look may draw a neutral state as a bare word
            and the rest as pills, and sized by a first-row "Ready" Sage cut every "In review" pill to "In rev…". */
-        const rows = [...element.querySelectorAll('tbody tr:not(.grid-group-head)')].slice(0, GRID_SIZE_SAMPLE);
+        const rows = [...element.querySelectorAll(valueRowSelector)].slice(0, GRID_SIZE_SAMPLE);
         const chips = cells.map((_, index) => {
           let extra = -1;
           for (const row of rows) {
@@ -968,8 +982,11 @@ export function Grid({
         /* A row with no chip in the cell (a sort moved the empty ones to the top) keeps what was known: the
            columns must not move because of which row happens to be first. */
         setCellChips((was) => {
-          const next = chips.map((extra, index) => (extra >= 0 ? extra : (was[index] ?? -1)));
-          return was.join('|') === next.join('|') ? was : next;
+          const next: Record<string, number> = { ...was };
+          heads.forEach((name, index) => {
+            if (name && (chips[index] ?? -1) >= 0) next[name] = chips[index]!;
+          });
+          return sameRecord(was, next) ? was : next;
         });
       }
     };
@@ -1026,7 +1043,7 @@ export function Grid({
           label: byName.get(name)?.primaryKey && !shell().inApp() ? `${label} ${say('common.key')}` : label,
           title: name === titleName,
           avatar: Boolean(display?.avatar),
-          chipExtra: (cellChips[asked.indexOf(name) + shift] ?? -1) >= 0 ? cellChips[asked.indexOf(name) + shift] : undefined,
+          chipExtra: cellChips[name],
           kind: labelColumn ? 'text' : plan.kind,
           controls: language || Boolean(byName.get(name)?.primaryKey || byName.get(name)?.references),
           /* A reference's arrow stands beside its label in the sort (the head, below), after the sort's 4px gap:
@@ -1099,29 +1116,38 @@ export function Grid({
       titleName,
       headFace,
       cellChips,
-      shift,
       faceEpoch,
       ownLines,
     ],
   );
-  /* Column i's cell follows the expander's when there is one. */
-  const measureText = useMemo(
-    () =>
-      cellFonts.length
-        ? (text: string, column: number) =>
-            textMeasure(cellFonts[Math.min(column + (slotted ? 1 : 0), cellFonts.length - 1)])?.(text) ?? text.length * 8
-        : undefined,
-    [cellFonts, slotted, faceEpoch],
+  /* A column's words in its own cell's font. The sizing reads a column by its place in the list it was handed: the
+     asked columns when it decides what folds, the drawn ones in the reader's order when it fits them. A column not
+     yet drawn (folded) measures in the first one's font. */
+  const measureIn = useCallback(
+    (names: readonly string[]) => {
+      const fallback = Object.values(cellFonts)[0];
+      return fallback === undefined
+        ? undefined
+        : (text: string, column: number) => textMeasure(cellFonts[names[column] ?? ''] ?? fallback)?.(text) ?? text.length * 8;
+    },
+    /* faceEpoch: a face that arrived measures again under the same font string. */
+    [cellFonts, faceEpoch], // eslint-disable-line react-hooks/exhaustive-deps
   );
+  const measureAsked = useMemo(() => measureIn(asked), [measureIn, asked]);
   /* An App's own list folds the columns its room cannot hold under the row's name, as a detail line, once its heads
      and words have wrapped (gridSizing.ts): they are moved, not lost, and the list does not scroll sideways. An
      embedded grid leaves them out, as it did. */
   const folds = !dropColumns && sizing === 'fit' && shell().inApp();
-  const kept = useMemo(
-    () =>
-      (dropColumns || folds) && sizing === 'fit' ? keepFitting(sizeHints, availableWidth, slotted, trailing, headChar, measureText) : null,
-    [dropColumns, folds, sizing, sizeHints, availableWidth, slotted, trailing, headChar, measureText],
-  );
+  /* What folded, and the width it folded at (gridSizing.ts holdFold): a fold changes the rows' height, and the
+     scrollbar that brings or takes away must not unfold it again. */
+  const foldHeld = useRef<FoldHeld | null>(null);
+  const kept = useMemo(() => {
+    if (!((dropColumns || folds) && sizing === 'fit')) return null;
+    const next = keepFitting(sizeHints, availableWidth, slotted, trailing, headChar, measureAsked);
+    const decided = holdFold(foldHeld.current, next, availableWidth, [asked.join('\u0000'), rows]);
+    foldHeld.current = decided.held;
+    return decided.kept;
+  }, [dropColumns, folds, sizing, sizeHints, availableWidth, slotted, trailing, headChar, measureAsked, asked, rows]);
   const drawn = useMemo(() => (kept ? asked.filter((_, index) => kept[index]) : asked), [asked, kept]);
   const drawnHints = useMemo(() => (kept ? sizeHints.filter((_, index) => kept[index]) : sizeHints), [sizeHints, kept]);
   /* The reader's arrangement, over the drawn columns (gridArrange.ts): an
@@ -1132,9 +1158,10 @@ export function Grid({
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const ordered = useMemo(() => applyColumnOrder(drawn, columnOrder), [drawn, columnOrder]);
   const orderedHints = useMemo(() => ordered.map((name) => drawnHints[drawn.indexOf(name)]!), [ordered, drawn, drawnHints]);
+  const measureOrdered = useMemo(() => measureIn(ordered), [measureIn, ordered]);
   const fit = useMemo(
-    () => fitGridColumns(orderedHints, availableWidth, slotted, trailing, headChar, measureText, dropColumns),
-    [orderedHints, availableWidth, slotted, trailing, headChar, measureText, dropColumns],
+    () => fitGridColumns(orderedHints, availableWidth, slotted, trailing, headChar, measureOrdered, dropColumns),
+    [orderedHints, availableWidth, slotted, trailing, headChar, measureOrdered, dropColumns],
   );
   /* A dragged width stands in place of its fitted one. A scrolled grid has
      no colgroup until a width is dragged: then it takes one, and the fixed

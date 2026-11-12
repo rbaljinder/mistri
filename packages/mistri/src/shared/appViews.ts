@@ -26,7 +26,7 @@
  * opens. Every form is kept under its key, public ones too; the landing
  * under its own.
  */
-import { tabKey } from '@mistriwork/engine/shared/addressParams.js';
+import { namesTab, tabKey } from '@mistriwork/engine/shared/addressParams.js';
 import { filterAddressWord, listFilterKey } from '@mistriwork/engine/shared/listFilters.js';
 import { parseViewImport } from './appImport.js';
 import { LABEL_SEGMENT } from '@mistriwork/engine/shared/recordLabel.js';
@@ -38,7 +38,7 @@ import { WIDTHS, type SectionWidth } from '@mistriwork/engine/shared/page.js';
 import { parseTableSizing } from '@mistriwork/engine/shared/tableSizing.js';
 import { parseListEmpty } from '@mistriwork/engine/shared/listEmpty.js';
 import { ASSISTANT_ROOM, parseRoutePath } from './appAddress.js';
-import { destinationProblem, type DestinationKind } from './appDestinations.js';
+import { destinationProblem, destinationTabProblem, type DestinationKind } from './appDestinations.js';
 import { parseAppLinkAction } from '@mistriwork/engine/shared/appLinks.js';
 import { checkGreeting } from './appGreeting.js';
 import {
@@ -373,7 +373,10 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
       if (!action) continue;
       /* A room, by the one rule every action's destination answers to (appDestinations.ts): "No canned responses:
          write one" opens the signed-in form that writes one. */
-      const problem = destinationProblem(at, action.view, parsedKind(views.get(action.view)));
+      const target = views.get(action.view);
+      const problem =
+        destinationProblem(at, action.view, parsedKind(target)) ??
+        destinationTabProblem(at, action.view, action.tab, parsedKind(target), target?.kind === 'list' ? target.view.tabs : undefined);
       if (problem) across.push(problem);
     }
   }
@@ -386,8 +389,25 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
       ...(source.view.aside ?? []).map((section, i) => ({ section, at: `${source.at}, "aside", section ${i + 1}` })),
     ];
     for (const { section, at } of placed) {
+      /* An embedded list's empty action names a tab the same way; only the tab is judged here, the view as before. */
+      const empty = 'empty' in section && section.empty && typeof section.empty === 'object' ? section.empty.action : undefined;
+      if (empty) {
+        const target = views.get(empty.view);
+        const problem = destinationTabProblem(
+          `${at}, empty action`,
+          empty.view,
+          empty.tab,
+          parsedKind(target),
+          target?.kind === 'list' ? target.view.tabs : undefined,
+        );
+        if (problem) across.push(problem);
+      }
       if (section.kind !== 'note' || !section.action || 'to' in section.action) continue;
-      const problem = destinationProblem(`${at}, note action`, section.action.view, parsedKind(views.get(section.action.view)));
+      const { view, tab } = section.action;
+      const target = views.get(view);
+      const problem =
+        destinationProblem(`${at}, note action`, view, parsedKind(target)) ??
+        destinationTabProblem(`${at}, note action`, view, tab, parsedKind(target), target?.kind === 'list' ? target.view.tabs : undefined);
       if (problem) across.push(problem);
     }
   }
@@ -2010,7 +2030,7 @@ function embedSection(
   if (s.listTab !== undefined) {
     /* A tab is named by its address word, the one its URL carries (`?tab=`): a label is said in the reader's
        language and changes with `msg()`, the word does not. */
-    tab = view.tabs?.find((candidate) => tabKey(candidate) === s.listTab);
+    tab = view.tabs?.find((candidate) => namesTab(candidate, s.listTab as string));
     if (!tab) {
       const byLabel = view.tabs?.find((candidate) => candidate.label === s.listTab);
       throw new Error(

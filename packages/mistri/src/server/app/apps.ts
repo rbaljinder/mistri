@@ -45,6 +45,7 @@ import {
 } from '../../shared/app.js';
 import { resolveValidation, resourceValidation, SHORT_NAME_MAX } from '../../shared/app.js';
 import { narrowedOverlaps } from '../../shared/appNarrowed.js';
+import { destinationTabProblem, servedViewKind } from '../../shared/appDestinations.js';
 import { compileAppDefinitionValidation } from './appValidation.js';
 import { compileAppStamps } from './appStamps.js';
 import { cardsColumns, cardsProblem } from '@mistriwork/engine/shared/appCards.js';
@@ -1360,7 +1361,21 @@ export function appProblems(loaded: LoadedApp, schema: DatabaseSchema): string[]
       if (section.kind !== 'fields') continue;
       for (const action of section.actions ?? []) {
         if (!('view' in action)) continue;
-        if (Object.hasOwn(loaded.app.views, action.view)) continue;
+        if (Object.hasOwn(loaded.app.views, action.view)) {
+          const target = loaded.app.views[action.view];
+          const problem = destinationTabProblem(
+            `the headline's "${action.label}"`,
+            action.view,
+            action.tab,
+            servedViewKind(target),
+            'tabs' in target ? target.tabs : undefined,
+          );
+          if (problem)
+            problems.push(
+              `${at(loaded.sources[p.id] ?? loaded.path)}: ${feature ? `features "${feature}", ` : ''}page "${p.name}": ${problem}`,
+            );
+          continue;
+        }
         problems.push(
           `${at(loaded.sources[p.id] ?? loaded.path)}: ${feature ? `features "${feature}", ` : ''}page "${p.name}": ` +
             `the headline's "${action.label}" opens "${action.view}", which is not one of this App's views.`,

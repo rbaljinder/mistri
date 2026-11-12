@@ -90,6 +90,8 @@ test('check --defaults prints what each column is drawn by when the App says not
   assert.match(asked.stdout, /defaults\s+passed\s+1 display rule, 0 form defaults and 0 page layouts inferred/);
   // Tick's one page says its layout; a page that said none would be told the one its sections make, and why.
   assert.match(asked.stdout, /page task\s+layout 'article'\s+the App says its own/);
+  // …and whether a default aside is drawn: an article has none.
+  assert.match(asked.stdout, /page task\s+aside none: the 'article' layout has no default aside/);
   assert.match(asked.stdout, /task\.due_on\s+\{"format":"relative"\}\s+a date named like a due date/);
   const plain = check();
   assert.equal(plain.status, 0, `${plain.stdout}\n${plain.stderr}`);

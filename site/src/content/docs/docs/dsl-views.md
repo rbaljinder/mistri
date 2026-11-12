@@ -34,7 +34,8 @@ Min and a Max.
 | `dashboard` | `dashboard(label, sections, opts)` | Sections about whole tables. [Dashboards](/docs/dashboards/) |
 | `landing` | `landing(hero, sections, opts)` | The signed-out front page. [Public pages](/docs/landing-pages/) |
 | `form` | `commandForm(label, command, steps, opts)` | One form over one command. [Command forms](/docs/command-forms/) |
-| `room` | `room(label, component, { reads, params })` | A whole view drawn by a [custom component](/docs/custom-components/). |
+
+A screen of its own is not a view: it is a [free-form page](/docs/custom-components/#free-form-pages) in `pages/<path>.page.tsx`.
 
 ## How a list's rows draw
 
@@ -204,7 +205,9 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=dashboard].sections[][kind=banner].action` | object | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=dashboard].sections[][kind=banner].action.label` | string | Stable |  |
-| `views.*[kind=dashboard].sections[][kind=banner].action.to` | string | Stable |  One of `&lt;appTarget>`. Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=dashboard].sections[][kind=banner].action.to` | string \| object | Stable | One of this App's views by key, or { view, tab }: a list opened on one of its tabs, the tab named by its address word (?tab=). One of `&lt;appTarget>`. Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=dashboard].sections[][kind=banner].action.to.tab` | string | Stable |  |
+| `views.*[kind=dashboard].sections[][kind=banner].action.to.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=banner].eyebrow` | string | Stable | A banner's short tag over its title. |
 | `views.*[kind=dashboard].sections[][kind=banner].image` | object | Stable | A banner's picture: one row of a file resource, by its record key. Used in `examples/apps/lintel/landing.ts`. |
 | `views.*[kind=dashboard].sections[][kind=banner].image.alt` | string | Stable |  Used in `examples/apps/lintel/landing.ts`. |
@@ -368,7 +371,9 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=dashboard].sections[][kind=note].action` | object | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=dashboard].sections[][kind=note].action.label` | string | Stable |  |
-| `views.*[kind=dashboard].sections[][kind=note].action.to` | string | Stable |  One of `&lt;appTarget>`. Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=dashboard].sections[][kind=note].action.to` | string \| object | Stable | One of this App's views by key, or { view, tab }: a list opened on one of its tabs, the tab named by its address word (?tab=). One of `&lt;appTarget>`. Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=dashboard].sections[][kind=note].action.to.tab` | string | Stable |  |
+| `views.*[kind=dashboard].sections[][kind=note].action.to.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=note].kind` |  | Stable |  One of `note`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `views.*[kind=dashboard].sections[][kind=note].text` | string | Stable | The words. Plain text; blank lines separate paragraphs. Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=dashboard].sections[][kind=note].variant` | `"quiet"` · `"callout"` | Stable | quiet: small print, no mark. callout: a ground of its own. Absent: the plain note. One of `callout`, `quiet`. |
@@ -379,7 +384,9 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=dashboard].sections[][kind=rows].empty.action` | object | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=dashboard].sections[][kind=rows].empty.action.label` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
-| `views.*[kind=dashboard].sections[][kind=rows].empty.action.to` | string | Stable |  Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=dashboard].sections[][kind=rows].empty.action.to` | string \| object | Stable | One of this App's views by key, or { view, tab }: a list opened on one of its tabs, the tab named by its address word (?tab=). Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=dashboard].sections[][kind=rows].empty.action.to.tab` | string | Stable |  |
+| `views.*[kind=dashboard].sections[][kind=rows].empty.action.to.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=rows].empty.description` | string \| object | Stable | A sentence under the title. One of `&lt;presentationCopy>`. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=rows].empty.title` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
 | `views.*[kind=dashboard].sections[][kind=rows].kind` |  | Stable |  One of `rows`. Used in `examples/apps/lintel/blueprint.ts`. |
@@ -394,7 +401,9 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=dashboard].sections[][kind=view].empty.action` | object | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=dashboard].sections[][kind=view].empty.action.label` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
-| `views.*[kind=dashboard].sections[][kind=view].empty.action.to` | string | Stable |  Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=dashboard].sections[][kind=view].empty.action.to` | string \| object | Stable | One of this App's views by key, or { view, tab }: a list opened on one of its tabs, the tab named by its address word (?tab=). Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=dashboard].sections[][kind=view].empty.action.to.tab` | string | Stable |  |
+| `views.*[kind=dashboard].sections[][kind=view].empty.action.to.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=view].empty.description` | string \| object | Stable | A sentence under the title. One of `&lt;presentationCopy>`. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=view].empty.title` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
 | `views.*[kind=dashboard].sections[][kind=view].interactive` | boolean | Stable | The list works as its room does: its search, its filters and, for a reader offered one, its selection with bulk actions. Not in the aside, a board or a calendar. |
@@ -787,7 +796,9 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=list].empty` | object | Stable | Copy for an empty list, with an optional link to another App list, dashboard or signed-in form. The first tab says it too unless the tab has its own; a search or filter past the tab keeps the ordinary no-matches message. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=list].empty.action` | object | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=list].empty.action.label` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
-| `views.*[kind=list].empty.action.to` | string | Stable |  Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=list].empty.action.to` | string \| object | Stable | One of this App's views by key, or { view, tab }: a list opened on one of its tabs, the tab named by its address word (?tab=). Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=list].empty.action.to.tab` | string | Stable |  |
+| `views.*[kind=list].empty.action.to.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=list].empty.description` | string \| object | Stable | A sentence under the title. One of `&lt;presentationCopy>`. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=list].empty.title` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
 
@@ -1095,7 +1106,9 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=list].tabs[].empty` | object | Stable | What the tab says while it holds no row and nothing narrows it further; default: on the first tab the list's own empty, else No {tab}. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=list].tabs[].empty.action` | object | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=list].tabs[].empty.action.label` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
-| `views.*[kind=list].tabs[].empty.action.to` | string | Stable |  Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=list].tabs[].empty.action.to` | string \| object | Stable | One of this App's views by key, or { view, tab }: a list opened on one of its tabs, the tab named by its address word (?tab=). Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=list].tabs[].empty.action.to.tab` | string | Stable |  |
+| `views.*[kind=list].tabs[].empty.action.to.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=list].tabs[].empty.description` | string \| object | Stable | A sentence under the title. One of `&lt;presentationCopy>`. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=list].tabs[].empty.title` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
 | `views.*[kind=list].tabs[].label` | string | Stable |  |

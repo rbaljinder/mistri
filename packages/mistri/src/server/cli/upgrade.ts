@@ -2,7 +2,8 @@
  * `mistri upgrade`: an App's source brought to the names this mistri reads.
  *
  * The import of the package's old name becomes `@mistriwork/mistri/*`, and the keys and names the CHANGELOG renamed
- * are rewritten where they read the same wherever they stand (upgradeRenames.ts, the one table). A rename is a text
+ * are rewritten where they read the same wherever they stand (upgradeRenames.ts, the one table), as are the looks'
+ * renamed tokens in sources and stylesheets. A rename is a text
  * edit at a token the file's own words place: this reads source as tokens, skipping strings, comments and templates,
  * and never as a parse, so it needs no TypeScript installed and cannot be fooled by a name inside a string. What it
  * cannot place with certainty it does not touch: it names the file and line and exits 1, for a person to change.
@@ -12,7 +13,7 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import { KEYS, NAMES, REFUSED, VALUES, renamedModule } from './upgradeRenames.js';
+import { KEYS, NAMES, REFUSED, TOKENS, VALUES, renamedModule } from './upgradeRenames.js';
 
 const UPGRADE_USAGE = 'mistri upgrade [--app <dir>] [--check]';
 
@@ -117,8 +118,36 @@ interface Upgraded {
   refusals: Array<{ line: number; said: string }>;
 }
 
+/**
+ * The looks' tokens renamed before 1.0, where a source or stylesheet reads one: `var(--text)` and `useToken('--text')`.
+ * Neither is ever code, so this reads the text whole. A name the App declares itself (`declared`) may be its own
+ * property and not the look's, so it is refused instead, for a person to tell.
+ */
+function upgradeTokens(source: string, declared: ReadonlySet<string> = new Set()): Upgraded {
+  const changes: Upgraded['changes'] = [];
+  const refusals: Upgraded['refusals'] = [];
+  const text = source.replace(
+    /(var\(\s*|useToken\(\s*['"`])(--[A-Za-z][\w-]*)(?![\w-])/g,
+    (whole, lead: string, name: string, at: number) => {
+      const to = Object.hasOwn(TOKENS, name) ? TOKENS[name]! : undefined;
+      if (!to) return whole;
+      const line = source.slice(0, at).split('\n').length;
+      if (declared.has(name)) {
+        refusals.push({
+          line,
+          said: `${name} is the App's own property here as well as a token renamed ${to}; which one this reads takes a reader`,
+        });
+        return whole;
+      }
+      changes.push({ line, said: `${name} -> ${to}` });
+      return lead + to;
+    },
+  );
+  return { text, changes, refusals };
+}
+
 /** One file's source brought up to date. Pure: the same source in, the same answer out. */
-export function upgradeSource(source: string): Upgraded {
+export function upgradeSource(source: string, declared?: ReadonlySet<string>): Upgraded {
   const tokens = tokenize(source);
   const edits: Array<{ start: number; end: number; text: string }> = [];
   const changes: Upgraded['changes'] = [];
@@ -206,19 +235,35 @@ export function upgradeSource(source: string): Upgraded {
 
   let text = source;
   for (const edit of edits.sort((a, b) => b.start - a.start)) text = text.slice(0, edit.start) + edit.text + text.slice(edit.end);
-  return { text, changes: changes.sort((a, b) => a.line - b.line), refusals: refusals.sort((a, b) => a.line - b.line) };
+  /* After the keys: no rename above adds a line, so the token pass's lines are the file's. */
+  const tokened = upgradeTokens(text, declared);
+  return {
+    text: tokened.text,
+    changes: [...changes, ...tokened.changes].sort((a, b) => a.line - b.line),
+    refusals: [...refusals, ...tokened.refusals].sort((a, b) => a.line - b.line),
+  };
+}
+
+/** The custom properties an App's files set themselves (`--bg: …`, `'--bg': …`, `setProperty('--bg'`). */
+function declaredProperties(texts: readonly string[]): Set<string> {
+  const declared = new Set<string>();
+  for (const text of texts)
+    for (const match of text.matchAll(/(?:^|[\s{;,])['"]?(--[A-Za-z][\w-]*)['"]?\s*:|setProperty\(\s*['"`](--[A-Za-z][\w-]*)/g))
+      declared.add((match[1] ?? match[2])!);
+  return declared;
 }
 
 /* What an App's source folder holds that is not the App's to rewrite. */
 const SKIPPED = new Set(['node_modules', 'dist', 'build', '.git', '.mistri', '.claude', '.agents']);
 const SOURCE = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+const STYLESHEET = /\.css$/;
 
 function sourcesIn(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true })
     .flatMap((entry) => {
       if (entry.isDirectory()) return SKIPPED.has(entry.name) ? [] : sourcesIn(join(dir, entry.name));
       /* The generated types are rewritten by `check`, not by hand. */
-      return SOURCE.test(entry.name) && !entry.name.endsWith('.d.ts') ? [join(dir, entry.name)] : [];
+      return (SOURCE.test(entry.name) && !entry.name.endsWith('.d.ts')) || STYLESHEET.test(entry.name) ? [join(dir, entry.name)] : [];
     })
     .sort();
 }
@@ -247,7 +292,8 @@ export function runUpgrade(
     } else if (arg === '--help' || arg === '-h') {
       out(
         `${UPGRADE_USAGE}\n\nRewrites an App's source to the names this mistri reads: tablewalk/app and the other entry points of the\n` +
-          'old package become @mistriwork/mistri/*, and keys the CHANGELOG renamed are renamed where they mean one thing. What it\n' +
+          'old package become @mistriwork/mistri/*, keys the CHANGELOG renamed are renamed where they mean one thing, and the\n' +
+          "looks' renamed tokens are renamed in sources and stylesheets. What it\n" +
           'cannot place with certainty it leaves alone and names by file and line (exit 1). --check writes nothing and exits 1\n' +
           'when a run would change a file, for CI.\n',
       );
@@ -264,9 +310,11 @@ export function runUpgrade(
   }
   let changed = 0;
   let refused = 0;
-  for (const file of sourcesIn(root)) {
+  const files = sourcesIn(root).map((file) => ({ file, text: readFileSync(file, 'utf8') }));
+  const declared = declaredProperties(files.map((each) => each.text));
+  for (const { file, text } of files) {
     const shown = relative(process.cwd(), file) || file;
-    const result = upgradeSource(readFileSync(file, 'utf8'));
+    const result = STYLESHEET.test(file) ? upgradeTokens(text, declared) : upgradeSource(text, declared);
     if (result.changes.length) {
       changed++;
       if (!check) writeFileSync(file, result.text);

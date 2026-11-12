@@ -1061,6 +1061,17 @@ describe('the screen', () => {
     expect(won.querySelector('.home-card-go')).toBeNull();
   });
 
+  test("a metric without a to opens the one list over its table, as a group would, keeping that list's columns", async () => {
+    app = { ui: {}, nav: [], resources: {}, views: { deals: { table: 'deal', label: 'Deals', query: '' } } };
+    draw({
+      dashboard: { id: 'desk', label: 'Desk', sections: [{ kind: 'metric', table: 'deal', title: 'Deals' }] },
+    });
+    const deals = await screen.findByRole('button', { name: /^42 Deals\b/ });
+    expect(deals).toHaveClass('opens-view');
+    await userEvent.setup().click(deals);
+    expect(gone.at(-1)).toEqual({ table: 'deal', query: 'deal', view: 'deals' });
+  });
+
   test('a metric that says to: false is a figure read where it stands: no button, nothing opens', async () => {
     draw({
       dashboard: { id: 'desk', label: 'Desk', sections: [{ kind: 'metric', table: 'deal', title: 'Deals', noDrill: true }] },

@@ -620,8 +620,8 @@ export declare function useFormat(): {
   money(value: number | string, options?: string | MoneyFormat): string;
   percent(value: number): string;
   date(value: string): string;
-  /** A moment as the App's clock says it; with `timezone` (an IANA zone), the instant said there with the zone's name. */
-  dateTime(value: string, options?: { timezone?: string }): string;
+  /** A moment as the App's clock says it; with `timezone` (an IANA zone), the instant said there with the zone's name. `style: 'short'` is the fewest characters ("3/5/26, 2:30 PM"), for a cell or a card's line. */
+  dateTime(value: string, options?: { timezone?: string; style?: 'short' }): string;
   /** "in 3 days", "yesterday"; undefined for a value that is not a date. */
   relative(value: string): string | undefined;
 };

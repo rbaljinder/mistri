@@ -22,7 +22,9 @@
   --json-punct: var(--ink-subtle);
   /* The caret's gutter: every key at a level starts on one line, folding or not. */
   --json-caret: 1.15em;
-  min-width: 0; max-width: 70rem; font: var(--text-base)/1.55 var(--sans); color: var(--ink);
+  /* The field's whole width: a document's tables and long values are cut short by a measure, and a field report
+     read a 1120px cap as the viewer being broken on a wide screen. */
+  min-width: 0; font: var(--text-base)/1.55 var(--sans); color: var(--ink);
 }
 
 /* ---------- the bar ---------- */
@@ -229,7 +231,6 @@
    dialog's head (the title, the filter, the tools, Close) and stays put while
    a long document scrolls under it. */
 .json-overlay { width: min(72rem, calc(100vw - 2rem)); max-width: none; max-height: 85vh; overflow: auto; padding-top: 0; }
-.json-overlay .json-view { max-width: none; }
 .json-overlay .json-bar {
   position: sticky; top: 0; z-index: 2; margin-bottom: var(--space-3h);
   padding: var(--space-5) 0 var(--space-3); background: var(--surface); border-bottom: 1px solid var(--line);

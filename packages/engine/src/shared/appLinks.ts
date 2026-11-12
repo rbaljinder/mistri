@@ -3,7 +3,9 @@ import type { AppTarget, AppLinkValue } from '../../schema/model.js';
 export type { AppTarget, AppLinkValue, AppTenantIntent } from '../../schema/model.js';
 
 export type BoundAppTarget = AppTarget<string | number>;
-export type AppLinkAction = { label: string; to: AppTarget } | { label: string; view: string };
+/** A view of this App by key, and for a list the tab it opens on (`?tab=`): `to: 'leads'` or `to: { view: 'leads', tab: 'working' }`. */
+export type ViewTo = { view: string; tab?: string };
+export type AppLinkAction = { label: string; to: AppTarget } | ({ label: string } & ViewTo);
 
 function object(value: unknown, keys: readonly string[], at: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value) || ![Object.prototype, null].includes(Object.getPrototypeOf(value)))
@@ -84,14 +86,28 @@ export function parseAppTarget(raw: unknown, at = 'App link', record = false): A
   };
 }
 
-/** `to` is a view's key, or an App link (`appLink({ … })`): one key says where a link goes. */
-function parseLinkTo(to: unknown, at: string, record = false): { view: string } | { to: AppTarget } {
-  if (typeof to === 'string') {
-    const view = to.trim();
-    if (!view || view.length > 1024 || /[\p{Cc}\p{Cs}]/u.test(view)) throw new Error(`${at} needs the key of a view, or an appLink().`);
-    return { view };
+/**
+ * `to` is a view's key, `{ view, tab }` for a list opened on one of its tabs, or an App link (`appLink({ … })`): one
+ * key says where a link goes. An App link says its App and kind; `{ view, tab }` says neither. Whether the view is a
+ * room and the tab one of its tabs is judged where the App is whole (appDestinations.ts).
+ */
+export function parseLinkTo(to: unknown, at: string, record = false): ViewTo | { to: AppTarget } {
+  if (typeof to === 'string') return { view: viewKey(to, at) };
+  if (to && typeof to === 'object' && !Array.isArray(to) && !Object.hasOwn(to, 'app') && !Object.hasOwn(to, 'kind')) {
+    const o = object(to, ['view', 'tab'], at);
+    if (typeof o.view !== 'string') throw new Error(`${at} needs a "view": the key of one of the App's views.`);
+    const tab = o.tab;
+    if (tab === undefined) return { view: viewKey(o.view, at) };
+    if (typeof tab !== 'string' || !tab.trim()) throw new Error(`${at} has a "tab" that is not a tab's address word, like 'working'.`);
+    return { view: viewKey(o.view, at), tab: tab.trim() };
   }
   return { to: parseAppTarget(to, at, record) };
+}
+
+function viewKey(raw: string, at: string): string {
+  const view = raw.trim();
+  if (!view || view.length > 1024 || /[\p{Cc}\p{Cs}]/u.test(view)) throw new Error(`${at} needs the key of a view, or an appLink().`);
+  return view;
 }
 
 export function parseAppLinkAction(raw: unknown, at: string, record = false): AppLinkAction {

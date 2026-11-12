@@ -5,6 +5,26 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.41
+
+Fixes from two field reports: list addresses that keep their view, a list that holds its fold, tab words in any case, an action that opens a list on one of its tabs, and a check that says more in one run.
+
+- **A list address keeps its view.** A date column's window in an address (`?created_on=last+30+days`) reads back as the window; quoted, it opened on an error. A `q=` that says the same is rewritten to the parameter form. A dashboard's drill (a breakdown's group, a funnel's step, a metric card, a section's View all) opens the list its view's address opens, with that list's columns, tabs, page size and standing condition, instead of the bare table. A metric card with no `to` now opens that list and shows the arrow that says so.
+- **A list holds its fold against its own scrollbar.** A folded column comes back only once the room grows past a scrollbar's width from where it folded; before, the scrollbar the taller rows brought made the list re-lay itself out without end. A cell's measured font and chip are kept by column name, not by position.
+- **`to: { view, tab }`** opens a list on one of its tabs from a list's or tab's empty action, a dashboard's note and banner, a record page's note and related-list empty action, and a headline link. A tab the list does not have is refused with the tabs it has.
+- **A tab word is matched without regard to case**, in an address's `tab=`, a section's `tab:` and an embed's `listTab`. A label with a space is not a tab word; it is refused with the word to say instead.
+- **`hidden: []`** is accepted and hides nothing.
+- **A segment may not be named `by`, `count`, `sum`, `avg`, `min`, `max` or `median`**: a dashboard's line reads them as its measure. `check` refuses them by name.
+- **A computed column reads a column named for a unit of time** (`minutes * 60`); a unit is read only after a value. A rollup over a computed column that is not served names the rollup, the column and its problem.
+- **`useFormat().dateTime(value, { style: 'short' })`** says a moment in the fewest characters, never with seconds.
+- **A JSON field fills the record's width.**
+- **An empty related list kept for its Add is the first tab to wait under More**, so a list with rows keeps its place in the strip.
+- **`check` says more in one run.** A refused or renamed key no longer holds back the parts that depend on it; every refused key is said beside the parts' own problems. A tenant App is judged up to its stores before `migrate up` makes them. A feature's finding is placed in the feature's own module. `check --defaults` says what a page's default aside draws, or why it draws none. A header's facts past twelve are refused with the rule behind them. Command actions that run at one click are listed as one `one-click` information finding.
+- **Messages that name the fix.** A renamed look token (`--warn`, `--text-dim`, …) is named by its new name, and `mistri upgrade` rewrites those tokens in `var(…)` and `useToken(…)`. An import of the removed `room`, `similar`, `count` or `sum` says what replaces it. A hook imported from the wrong entry names the entry that exports it. `command-reference-unread` says a helper's writes are not followed.
+- **Component checks read what they mean.** `component-icon` reads an `icon:` key only in what a prop is given; `component-class` accepts a stylesheet's own `c-<name>-` prefix for a widget several pages draw.
+- **Tenant Apps.** A tenant command's history capture is answered from the row sent ahead for it, and a lock or statement the transaction's own write dropped counts as used, so a save no longer warns `MistriWriteAhead`. A mention that reaches nobody is said once in the server's log. `mistri dev` and the tenant watcher keep serving through the types `mistri check` writes. The schema says what a tenant App keeps of notices, feeds, history and flows.
+- The dev client waits for Vite's dependency bundle to finish writing before it closes.
+
 ## 1.0.0-rc.40
 
 The UI seam (Preview): an App plugs in its own control primitives, slot by slot

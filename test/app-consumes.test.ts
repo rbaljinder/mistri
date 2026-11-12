@@ -628,4 +628,6 @@ test('check names the same unread reference when the handler inserts through db.
   const warnings = referenceReadWarnings(app, catalog(SCHEMA), commands);
   assert.equal(warnings.length, 1, warnings.join('\n'));
   assert.match(warnings[0], /sets work_order_part\.part_id, which points at a "part" row.*\[command-reference-unread\]/);
+  /* A field report: a write a helper made passed the check and failed the run. The warning says what it cannot see. */
+  assert.match(warnings[0], /a row a helper it calls writes is not seen here/);
 });

@@ -38,3 +38,12 @@ test('the least a strip is drawn at holds the chosen tab and More beside it, and
   // Nothing chosen: More alone.
   expect(leastStrip(widths, 40, 4, -1)).toBe(40);
 });
+
+test('a tab that yields folds before the others, wherever it stands, and order is kept', () => {
+  // Tabs 1 and 2 are empty lists kept for their Add: they fold, and the list with rows at the end stays drawn.
+  expect(foldTabs(widths, 262, 40, 4, 0, new Set([1, 2]))).toEqual([0, 3, 4]);
+  // A yielding tab that is chosen is drawn all the same.
+  expect(foldTabs(widths, 262, 40, 4, 1, new Set([1, 2]))).toEqual([0, 1]);
+  // Room for every tab: none folds.
+  expect(foldTabs(widths, span, 40, 4, 0, new Set([1]))).toEqual([0, 1, 2, 3, 4]);
+});

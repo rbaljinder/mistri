@@ -38,6 +38,22 @@ test('an App that imports several removed helpers hears all of them at once, wit
   });
 });
 
+test('a removed screen, list or rollup helper names what replaces it, not the nearest spelling', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-removed-imports-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  writeFileSync(
+    join(dir, 'app.mjs'),
+    `import { defineApp, room, similar, count, sum } from '@mistriwork/mistri/app';\nexport default defineApp({ name: 'X' });\n`,
+  );
+  await assert.rejects(loadApp(dir), (error: Error) => {
+    assert.match(error.message, /"room" — a screen of its own is a free-form page: `pages\/<path>\.page\.tsx`/);
+    assert.match(error.message, /"similar" — .*`related\(title, from, \{ same/);
+    assert.match(error.message, /"count" — .*`rollup\.count\('table'\)`/);
+    assert.match(error.message, /"sum" — .*`rollup\.sum\('table', 'column'\)`/);
+    return true;
+  });
+});
+
 test("page('Title', 'resource', [...]) says page() no longer takes a title, in the new form", async () => {
   const { page, document } = await import('../packages/mistri/schema/app.mjs');
   assert.throws(() => page('Leads', 'lead', []), /page\(\) no longer takes a title: it is page\('lead', \[sections\]/);

@@ -962,7 +962,13 @@ export function sectionConfig(s: PageSection): AuthoredSection {
           ...common,
           kind: 'headline',
           show: s.paths ?? [],
-          ...(s.actions ? { links: s.actions.map((a) => ('view' in a ? (({ view, ...rest }) => ({ ...rest, to: view }))(a) : a)) } : {}),
+          ...(s.actions
+            ? {
+                links: s.actions.map((a) =>
+                  'view' in a ? (({ view, tab, ...rest }) => ({ ...rest, to: tab ? { view, tab } : view }))(a) : a,
+                ),
+              }
+            : {}),
           ...(s.subfigure !== undefined ? { subfigure: s.subfigure } : {}),
           ...(s.subtitle !== undefined ? { subtitle: s.subtitle } : {}),
           ...(s.was !== undefined ? { was: s.was } : {}),
@@ -1137,7 +1143,14 @@ export function sectionConfig(s: PageSection): AuthoredSection {
         kind: s.kind,
         text: s.text,
         ...(s.variant ? { variant: s.variant } : {}),
-        ...(s.action ? { action: 'view' in s.action ? { label: s.action.label, to: s.action.view } : s.action } : {}),
+        ...(s.action
+          ? {
+              action:
+                'view' in s.action
+                  ? { label: s.action.label, to: s.action.tab ? { view: s.action.view, tab: s.action.tab } : s.action.view }
+                  : s.action,
+            }
+          : {}),
       };
     case 'custom':
       return {

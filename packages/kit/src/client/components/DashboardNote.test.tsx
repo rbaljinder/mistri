@@ -36,7 +36,7 @@ test('draws authored guidance in reading order, with a curated icon and an avail
   expect(screen.getByText('Choose coverage during enrollment.')).toBeInTheDocument();
   expect(screen.getByText('Changes take effect next month.')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'View benefits' })).toHaveAttribute('href', '/payday/benefits');
-  expect(viewLink).toHaveBeenCalledWith('benefits');
+  expect(viewLink).toHaveBeenCalledWith('benefits', 'push', { tab: undefined });
 });
 
 test('hides an action whose view is unavailable, without adding empty chrome', () => {

@@ -38,14 +38,12 @@ import { placementIn } from '../../shared/appUi.js';
 import { fontBudgetProblem, fontSummary } from '../app/appFonts.js';
 import { writtenAt, type FixedThemeProblem } from '../../shared/themeFix.js';
 import { themePlace, themeSummary, writeThemeFix } from './themeSource.js';
-import { appForRoles, pagesForRoles } from '../../shared/appViewRoles.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
-import { mountClashes, routeTable } from '../../shared/appAddress.js';
-import { appHome, segmentsTakenFrom, settingsMount, type AddressMount } from '@mistriwork/engine/shared/mount.js';
+import { mountClashes } from '../../shared/appAddress.js';
+import { segmentsTakenFrom, settingsMount, type AddressMount } from '@mistriwork/engine/shared/mount.js';
 import { isTenantApp } from '../../shared/appModel.js';
-import { appRealms } from '../../shared/appTenancy.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { getCommandEvents, type BusinessCommandRegistry } from '../commands/businessCommands.js';
+import { getCommandEvents } from '../commands/businessCommands.js';
 import { NO_OUTPUT } from '../commands/commandShapes.js';
 import { AppProblems, homeSourceOf, isFormView, logicalResource, withRollups, type AppDef } from '../../shared/app.js';
 import { parseArgs, postgresPoolFlags, type Options } from '@mistriwork/engine/server/cli/args.js';
@@ -59,27 +57,25 @@ import { checkApp } from './build.js';
 import { documentedFix } from './checkCodes.js';
 import { connectionBudgets, deployFindings } from './checkDeploy.js';
 import { schemaChanges } from './schemaChanges.js';
-import { appConnection, pageQueryFailures } from './checkQueries.js';
 import { readAuditUnrecordable } from './checkReadAudit.js';
 import { commandElevations, commandUnreadable, publicCommandRemovals } from './checkCommands.js';
-import { SMALL_TABLE_ROWS, holdBack, indexFindings, readPgIndexes } from './checkIndexes.js';
 import { asDeployFinding, migrationsToJudge } from './deployMigrations.js';
 import { migrationFindings } from './migrationSafety.js';
-import type { ServedFacts } from './servedHosts.js';
 import { lintComponents, pageManifestsOf } from '../app/componentLint.js';
 import { appCatalogs } from '../app/appMessages.js';
 import { designLint, sayDesignFinding } from '../app/designLint.js';
 import { segmentCost } from '../../shared/appSegments.js';
 import { inferredReport } from '@mistriwork/engine/shared/displayDefaults.js';
 import { chooseLayout } from '@mistriwork/engine/shared/pageLayouts.js';
+import { defaultAsidePaths } from '@mistriwork/engine/shared/pageAnatomy.js';
 import { inferredFormDefaults } from '../../shared/formRules.js';
 import { fixRepeatedQueries, fixRestated } from './checkFix.js';
-import { promiseOf } from './themeContract.js';
+import { checkedRoutes, indexStep, problem, queryStep, servedFactsOf, shown, type Status, type Step } from './checkSteps.js';
 import { previewFieldsUsed, previewKeysUsed } from '../../shared/preview.js';
+import { appCommandOccurrences } from '../../shared/appCommandOccurrences.js';
 import { hint, parseTsc, readableTypeErrors, shorten, typecheckApp } from './typecheck.js';
 import {
   componentCode,
-  docsFor,
   near,
   pathAt,
   pathOfMessage,
@@ -141,28 +137,6 @@ const CHECK_EXIT = {
 
 const CHECK_USAGE =
   'mistri check [--app <dir>] [--app-entry <file>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>] [--routes [--mount <app>=<path>] [--base-path <path>]] [--design] [--fix] [--fail-on-design-warning] [--defaults] [--no-index-check] [--no-query-check] [--warnings] [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]] [--schema-file [<schema.sql>] [--dev-url <url>]] [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]';
-
-/* `pending` is the stores step's alone: what `mistri migrate up --app` makes, which no change to the App fixes. */
-type Status = 'passed' | 'failed' | 'skipped' | 'pending';
-/** A step's verdict, its lines as the text output says them, and its findings as `--json` gives them (checkProblems.ts). */
-interface Step {
-  name: CheckStep;
-  status: Status;
-  detail: string;
-  lines: string[];
-  problems?: CheckProblem[];
-}
-const problem = (
-  step: CheckStep,
-  code: string,
-  message: string,
-  more: Partial<CheckProblem> = {},
-  severity: CheckSeverity = 'error',
-): CheckProblem => {
-  /* Every finding of a contract code says its promise, so an agent reads which promise broke beside the measurement. */
-  const promise = promiseOf(code);
-  return { code, severity, step, ...more, message, ...(promise ? { promise } : {}), docs: docsFor(code, step) };
-};
 
 /** The one JSON document `--json` prints (schema/check.schema.json). */
 interface CheckReport {
@@ -317,11 +291,6 @@ function foundByFile(loaded: LoadedApp, appDir: string): string[] {
   const width = Math.max(0, ...found.map(([file]) => file.length));
   return found.map(([file, what]) => `${file.padEnd(width)}  ${what}`);
 }
-
-const shown = (path: string) => {
-  const near = relative(process.cwd(), path);
-  return !near ? '.' : near.startsWith('..') ? path : near;
-};
 
 /** The source a build was likely made from, where `mistri build` put it by default: `build/<name>` beside the
  * source's parent, or `<name>-build` beside the source. Undefined where neither holds an App source. */
@@ -743,6 +712,8 @@ const AUTOMATION = 'automation';
 const NOT_LOADED = 'not-loaded';
 /** The resources whose reads the App writes down (`audit: { reads: true }`), said as information: the store it needs is the stores step's. */
 const READ_AUDIT = 'read-audit';
+/** The actions whose command asks nothing and that do not say `confirm`, said as information: they run at one click. */
+const ONE_CLICK = 'one-click';
 /** The refusal to check with no database and no --schema-file named (runSteps), coded `catalog-missing`. */
 const NO_DATABASE = /^(?:mistri check: )?no database to check the App against/;
 
@@ -846,7 +817,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
           '  with --design it also deletes each rule the `restated` warnings name: one the platform infers anyway, and names each query the `repeated-query` warnings find as a segment, first, so every step after it says what is left.\n' +
           '--fail-on-design-warning includes design checks and fails with exit 4 when they report warnings.\n' +
           '--warnings lists every warning in full; without it they are one line a kind after the errors (a failing App was buried under ~60 of them).\n' +
-          "--defaults prints every rule the platform infers for each resource (mistri docs conventions) and the layout each page is drawn in, and whether the App's own wins.\n" +
+          "--defaults prints every rule the platform infers for each resource (mistri docs conventions), the layout each page is drawn in and what its default aside draws, and whether the App's own wins.\n" +
           '--no-index-check skips the indexes step: on PostgreSQL, the foreign keys, default sorts, fixed filters, ownership columns and searches the App reads by that no index leads with (index-missing, with the CREATE INDEX that adds it; tables under 10,000 rows are counted in one line, and --warnings lists those too).\n' +
           "--no-query-check skips the queries step: the database EXPLAINs each read the App's pages would make (lists, related and grouped lists, timelines, breakdowns, figures, rollups) and says the ones it refuses (query-invalid, with the page:section); nothing is run, and PostgreSQL plans them in a READ ONLY transaction.\n" +
           '--bump <command> moves a command whose contract changed to its next version in authority.lock (its API route, receipts and jobs follow).\n' +
@@ -1395,12 +1366,19 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
        is the migrate step's to make, not a fault in the App: exit 8 and `store-pending`, whose fix is the migrate
        command, and validation goes on with their attestations set aside, so a real fault shows in the same run
        instead of hiding behind the first absent store. A tenant App's stores are attested where its tenants are
-       enrolled, which cannot be set aside: its validation waits for them. */
+       enrolled, which cannot be set aside; but enrollment is the last thing its startup does, after every check that
+       reads only the App and the schema (tenantStartup.ts). A refusal that names the absent stores is that last step's,
+       so everything before it passed: validation was skipped whole here, and a field report heard of eleven segment
+       names clashing with a column only once `migrate up` had made the stores. */
     const storesStep = loaded && !copy ? await storesPendingStep(registry, loaded, opts, appDir) : undefined;
-    const tenantWaits = storesStep !== undefined && loaded !== undefined && isTenantApp(loaded.app);
-    const checked = tenantWaits
-      ? { code: 0, output: '', stdout: '', stderr: '' }
-      : await checkApp([...rest, '--app', appDir], undefined, storesStep !== undefined);
+    const validated = await checkApp([...rest, '--app', appDir], undefined, storesStep !== undefined);
+    const tenantWaits =
+      storesStep !== undefined &&
+      loaded !== undefined &&
+      isTenantApp(loaded.app) &&
+      validated.code !== 0 &&
+      /^Stores this App needs are absent: /m.test(validated.stderr);
+    const checked = tenantWaits ? { code: 0, output: '', stdout: '', stderr: '' } : validated;
     // Placed only in the modules the App was loaded from, and what they import: never a copy kept beside them.
     const locator = await sourceLocator(appDir, [...(loaded?.path ? [loaded.path] : manifest ? [manifest] : []), ...entries]);
     const verdict = checked.stdout
@@ -1426,6 +1404,16 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     /* Each line's place, once, for the text and the JSON alike: the definition path walked in the module that
        defines the App where the sentence says one, else the sentence's own words found in the App's modules. */
     const places = new Map<string, { file: string; line: number } | undefined>();
+    /* A view or page a feature declares is written in the feature, not in defineApp's object: its path is walked
+       through `features`, so the place is the feature's own module rather than wherever its words also appear. */
+    const origins = named?.origins;
+    const written = (path: string | undefined) => {
+      const declared = path && /^(views|pages)\.("(?:[^"\\]|\\.)*"|[A-Za-z_$][\w$]*)/.exec(path);
+      if (!declared || !origins) return path;
+      const key = declared[2].startsWith('"') ? (JSON.parse(declared[2]) as string) : declared[2];
+      const feature = (declared[1] === 'views' ? origins.views : origins.pages)[key];
+      return feature ? `features.${/^[A-Za-z_$][\w$]*$/.test(feature) ? feature : JSON.stringify(feature)}.${path}` : path;
+    };
     for (const line of [...verdict, ...stderr]) {
       const text = line.replace(/^warning: /, '');
       const own = /^([^\s:]+\.(?:m?ts|mjs|js|json)): /.exec(text);
@@ -1435,13 +1423,14 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
         places.set(line, place ? { file: near(place.file), line: place.line } : locator.at(text));
         continue;
       }
-      const path = pathOfMessage(own ? text.slice(own[0].length) : text, pageIds);
+      const path = written(pathOfMessage(own ? text.slice(own[0].length) : text, pageIds));
       const walked = path && !/\.(m?[tj]s|json):\d+/.test(text) ? await placeOf(locator.files, path, text, appDir) : undefined;
       places.set(line, walked ? { file: near(walked.file), line: walked.line } : locator.at(text));
     }
+    /* One path a line: the place, and the sentence without the file its load prefixed it with. */
     const located = (line: string) => {
       const place = places.get(line);
-      return place ? `${place.file}:${place.line}  ${line}` : line;
+      return place ? `${place.file}:${place.line}  ${line.replace(/^(warning: )?[^\s:]+\.(?:m?ts|mjs|js|json): /, '$1')}` : line;
     };
     const notes = stderr.map(located);
     /* The App's verdict, "<name>: ok" or "<name>: 2 problems": what comes before it is the listing of the automation
@@ -1469,7 +1458,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
         code,
         under.has(line) ? `${message} ${under.get(line)!.join('; ')}` : message,
         {
-          ...(place ? { file: place.file, line: place.line } : own ? { file: near(join(appDir, own[1])) } : {}),
+          ...(place ? { file: place.file, line: place.line } : own ? { file: near(resolve(appDir, own[1])) } : {}),
           ...(path ? { path } : {}),
           ...(theme?.fix ? { fix: `${theme.fix.said} (mistri check --fix writes it)` } : {}),
         },
@@ -1500,6 +1489,22 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
           'info',
         )
       : undefined;
+    /* The verbs that run at one click: a command that asks nothing ran behind a dialog before 1.0, and an upgrader
+       heard it from no one (a field report). Information, since one click is what such a verb is for. */
+    const oneClick = loaded
+      ? appCommandOccurrences(loaded.app).flatMap((at) =>
+          at.surface === 'action' && !at.action.command.input.length && !at.action.confirm ? [`${at.resource}.${at.action.id}`] : [],
+        )
+      : [];
+    const oneClickFinding = oneClick.length
+      ? problem(
+          'validation',
+          ONE_CLICK,
+          `${oneClick.length} command action${oneClick.length === 1 ? ' asks' : 's ask'} nothing and run${oneClick.length === 1 ? 's' : ''} at one click, with no dialog: ${oneClick.join(', ')}. Give one confirm: true to ask first.`,
+          { file: shown(loaded!.path) },
+          'info',
+        )
+      : undefined;
     /* A theme's value past its range refuses the load as the definition is read, so the App did not load and the
        sentence arrives as the load's: it is the themes step's finding, in its own words and place, not an `invalid-app`. */
     const refused = checked.code !== 0 && !tenantWaits;
@@ -1524,7 +1529,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     });
     /* The authority lock's difference, when the App loaded here and the check's own load did not: the lock is judged
        after a load, so a second, unrelated refusal would otherwise hide the change and the one command that accepts it. */
-    const lockSaid = loaded?.authority && head < 0 && refused ? authorityLockProblem(loaded.authority, 'lines') : undefined;
+    const lockSaid =
+      loaded?.authority && ((head < 0 && refused) || tenantWaits) ? authorityLockProblem(loaded.authority, 'lines') : undefined;
     const lockFinding = lockSaid
       ? problem('validation', 'authority-lock', lockSaid.replace(/\n\s+/g, '; '), {
           file: near(loaded!.authority!.lockPath),
@@ -1543,10 +1549,17 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     steps.push(
       tenantWaits
         ? {
+            /* The authority lock is judged after enrollment, so it is judged here. */
             name: 'validation',
-            status: 'skipped',
-            detail: "not judged: a tenant App's stores are attested as its tenants are enrolled, and they are not made yet",
-            lines: [],
+            status: lockFinding ? 'failed' : 'passed',
+            detail: 'judged up to its stores, which are attested as its tenants are enrolled and are not made yet',
+            lines: lockFinding ? [lockFinding.message] : [],
+            problems: [
+              ...(lockFinding ? [lockFinding] : []),
+              ...(previewFinding ? [previewFinding] : []),
+              ...(auditFinding ? [auditFinding] : []),
+              ...(oneClickFinding ? [oneClickFinding] : []),
+            ],
           }
         : checked.code === 0
           ? {
@@ -1558,6 +1571,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
                 ...[...verdict.filter((_, i) => i !== said), ...stderr].flatMap((line) => found(line, false) ?? []),
                 ...(previewFinding ? [previewFinding] : []),
                 ...(auditFinding ? [auditFinding] : []),
+                ...(oneClickFinding ? [oneClickFinding] : []),
               ],
             }
           : rangeProblems.length && rangeProblems.length === failure.length
@@ -1594,9 +1608,9 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
 
     /* A role granted a command whose `read` names a table that role cannot read is refused on every run, as "not
        available to this account" (businessCommandAuthorization.ts), while everything above passed: said here, naming
-       each role, command and table. Judged against the App's own catalog, so a tenant App whose stores are not made
-       yet, or a database that cannot be read, leaves it to the run. */
-    if (loaded?.commands?.registry && Object.keys(loaded.commands.registry).length && !tenantWaits) {
+       each role, command and table. Judged against the App's own catalog, so a database that cannot be read leaves it
+       to the run. */
+    if (loaded?.commands?.registry && Object.keys(loaded.commands.registry).length) {
       const { schema } = await catalogOf(loaded);
       const unreadable = schema ? commandUnreadable(loaded.app, loaded.commands.registry, schema) : [];
       const judged = steps.findLast((step) => step.name === 'validation');
@@ -1622,7 +1636,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
 
     /* A query over a resource whose reads are audited, which the audit could not record, refuses every read through
        it (checkReadAudit.ts): said here, by view and tab. */
-    if (audited.length && !tenantWaits) {
+    if (audited.length) {
       const { schema } = await catalogOf(loaded!);
       const unrecordable = schema ? readAuditUnrecordable(loaded!.app, schema) : [];
       const judged = steps.findLast((step) => step.name === 'validation');
@@ -1806,6 +1820,21 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
               const chosen = written ? undefined : page.layout ? { layout: page.layout, why: page.layoutWhy! } : chooseLayout(page);
               return { name: `page ${page.id}`, layout: page.layout ?? chosen!.layout, why: chosen?.why, written };
             });
+          /* Each record page's default aside (pageAnatomy.ts): which fields it draws, or why none — a field report
+             could not tell when the rail appears. Judged on the whole catalog; a reader who cannot read a column is
+             not offered it. */
+          const asides = loaded.pages
+            .filter((page) => !page.document)
+            .map((page) => {
+              const paths = defaultAsidePaths(stated, page);
+              return {
+                name: `page ${page.id}`,
+                said:
+                  typeof paths === 'string'
+                    ? `aside ${paths}`
+                    : `aside the remaining fields (${paths.join(', ')}); aside: false leaves it out`,
+              };
+            });
           const chosen = layouts.filter((row) => !row.written).length;
           const width = Math.max(
             0,
@@ -1829,6 +1858,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
               ...layouts.map(
                 (row) => `${row.name.padEnd(width)}  layout '${row.layout}'  ${row.written ? 'the App says its own' : row.why}`,
               ),
+              ...asides.map((row) => `${row.name.padEnd(width)}  ${row.said}`),
             ],
           });
         }
@@ -1951,6 +1981,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     if (previewed) write(`  preview: ${previewed.message}`);
     const auditing = steps.flatMap((step) => step.problems ?? []).find((found) => found.code === READ_AUDIT);
     if (auditing) write(`  read audit: ${auditing.message}`);
+    const clicked = steps.flatMap((step) => step.problems ?? []).find((found) => found.code === ONE_CLICK);
+    if (clicked) write(`  one click: ${clicked.message}`);
     /* What the App declares that this run did not load (a jobs module, a policy beside it): said, so a pass is never
        read as a pass of the parts nobody loaded. */
     const notLoaded = loaded ? notLoadedFinding(loaded, opts, appDir) : undefined;
@@ -2023,194 +2055,5 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     console.log = log;
     await registry.closeAll();
     await copy?.cleanup();
-  }
-}
-
-/**
- * The indexes step: the App's declared access paths against the database's index list, on PostgreSQL. It never
- * fails the check. Where it cannot run (SQLite, a role that may not read the catalog) it says one note instead.
- */
-async function indexStep(
-  registry: Registry,
-  loaded: LoadedApp,
-  policyFile: string | undefined,
-  all = false,
-): Promise<{ step?: Step; note?: string }> {
-  const app = loaded.app;
-  const bound = app.connection ?? (app.sources ? app.sources[homeSourceOf(app)!]?.connection : undefined);
-  const connection = bound
-    ? registry.list().find((c) => c.id === bound || c.name === bound)
-    : registry.list().find((c) => c.id === registry.active);
-  if (!connection) return {};
-  try {
-    const { adapter } = await registry.open(connection.id);
-    if (adapter.dialect !== 'postgres')
-      return { note: 'skipped, PostgreSQL only: SQLite reads a table from a file, with no round trip to save.' };
-    const indexes = await readPgIndexes(adapter);
-    if (!indexes) return { note: 'skipped, the database would not list its indexes to this role.' };
-    const { schema } = await loadAppRuntimeResources(registry, app, connection.id);
-    /* A tenant App's ownership columns live in its policy module, which a request reads: with --policy, they are judged too. */
-    let owners: Record<string, string> | undefined;
-    if (app.auth?.rows === 'tenant' && policyFile) {
-      const { loadAppTenantPolicy } = await import('../policy/appTenantPolicy.js');
-      const policy = await loadAppTenantPolicy(resolve(policyFile)).catch(() => undefined);
-      owners = Object.fromEntries(
-        Object.entries(policy?.ownership ?? {}).flatMap(([id, owner]) => (owner.kind === 'tenant' ? [[id, owner.column]] : [])),
-      );
-    }
-    const every = indexFindings({ app, pages: loaded.pages, schema: withRollups(app, schema), indexes, ...(owners ? { owners } : {}) });
-    /* A table too small for an index to matter is not worth a line each: a small local database gave seventy. They are
-       counted in one line, and listed with --warnings. */
-    const { shown: found, held } = holdBack(every, all);
-    const warnings = found.filter((finding) => finding.severity === 'warning').length;
-    return {
-      step: {
-        name: 'indexes',
-        status: 'passed',
-        detail:
-          (found.length
-            ? `${found.length} read${found.length === 1 ? '' : 's'} no index leads (${warnings} on tables of ${SMALL_TABLE_ROWS.toLocaleString('en-US')} rows or more)`
-            : 'every foreign key, sort, filter and search the App reads by is led by an index') +
-          (held.length ? `; ${held.length} held back on smaller tables` : ''),
-        lines: [
-          ...found.map(
-            (finding) => `${finding.severity === 'warning' ? 'warning: ' : 'note: '}${finding.message} Add: ${finding.fix} [index-missing]`,
-          ),
-          ...(held.length
-            ? [
-                `note: ${held.length} index suggestion${held.length === 1 ? '' : 's'} held back on tables under ${SMALL_TABLE_ROWS.toLocaleString('en-US')} rows, where an index rarely matters; mistri check --warnings lists ${held.length === 1 ? 'it' : 'them all'}.`,
-              ]
-            : []),
-        ],
-        problems: found.map((finding) =>
-          problem(
-            'indexes',
-            'index-missing',
-            finding.message,
-            { path: finding.declaration, fix: finding.fix, file: shown(loaded.path) },
-            finding.severity,
-          ),
-        ),
-      },
-    };
-  } catch (error) {
-    return { note: `skipped, could not read the indexes: ${(error as Error).message}` };
-  }
-}
-
-/**
- * The queries step: every read the App's pages would make, planned by its database (checkQueries.ts). A refusal is a
- * `query-invalid` error with the page and section; where the database cannot be asked it says one note instead.
- */
-async function queryStep(registry: Registry, loaded: LoadedApp): Promise<{ step?: Step; note?: string }> {
-  const app = loaded.app;
-  const connection = appConnection(registry, app);
-  if (!connection) return {};
-  if (isTenantApp(app)) return { note: 'skipped, a tenant App reads through its tenants, which this run does not open.' };
-  try {
-    const { failures, statements, skipped, sections } = await pageQueryFailures(registry, app, loaded.pages, connection.id);
-    return {
-      step: {
-        name: 'queries',
-        status: failures.length ? 'failed' : 'passed',
-        detail:
-          (failures.length
-            ? `${failures.length} read${failures.length === 1 ? '' : 's'} the database refused`
-            : `the database planned the ${statements} statement${statements === 1 ? '' : 's'} of the App's lists, dashboards, segments and ${sections} page section${sections === 1 ? '' : 's'}`) +
-          `; ${statements} checked, ${skipped} skipped (a parameter this run cannot supply)`,
-        lines: failures.map((failure) => `${failure.at}: ${failure.message} [query-invalid]`),
-        problems: failures.map((failure) =>
-          problem('queries', 'query-invalid', `${failure.at}: the database refused this read: ${failure.message}`, {
-            path: failure.path,
-            file: shown(loaded.path),
-            fix: "The message is the database's own: a column that two joined tables share, a type that cannot be compared, a function it lacks. Change the section's columns, query, sort or group, or the column it reads.",
-          }),
-        ),
-      },
-    };
-  } catch (error) {
-    return { note: `skipped, could not plan the pages' reads: ${(error as Error).message}` };
-  }
-}
-
-/**
- * The route table `--routes` prints. A tenant App's addresses carry their
- * context after the App's own parameters (client tenantLink.ts): a tenant's
- * `tenant=`, the platform realm's `realm=platform`, each realm with the rooms
- * its own context is served.
- */
-export function checkedRoutes(loaded: LoadedApp, schema: DatabaseSchema, mount: AddressMount): Array<{ path: string; what: string }> {
-  const app = appHome(mount, loaded.app.id);
-  if (!isTenantApp(loaded.app)) {
-    const whole = routeTable(appRoutes(loaded, schema), app);
-    /* A record's address is the first view showing its table among the views
-       the person is served: a role served other views may say a record
-       elsewhere (a resident's repair at /my-requests/12, the office's at
-       /repairs/12). One line per role whose address differs. */
-    const known = new Set(whole.map((row) => row.path));
-    const rows = [
-      ...whole,
-      ...Object.keys(loaded.app.auth?.roles ?? {}).flatMap((role) =>
-        routeTable(appRoutes(loaded, schema, undefined, [role]), app)
-          .filter((row) => row.what.startsWith('one record of') && !known.has(row.path))
-          .map((row) => ({ path: row.path, what: `${row.what}, as the role "${role}" opens it` })),
-      ),
-    ];
-    const open = loaded.app.auth?.public?.read;
-    if (!open) return rows;
-    /* A signed-out visitor is served fewer views, so a record may be
-       addressed under a different list for them (the first they can open):
-       those addresses too, as the sitemap and a public page's canonical
-       link say them (http/sitemap.ts, http/publicHead.ts). */
-    const said = new Set(rows.map((row) => row.path));
-    const visitor = routeTable(
-      appRoutes(
-        { ...loaded, app: appForRoles(loaded.app, []), pages: pagesForRoles(loaded.pages, [], loaded.app.auth) },
-        { ...schema, tables: schema.tables.filter((table) => open.includes(table.id)) },
-      ),
-      app,
-    );
-    return [
-      ...rows,
-      ...visitor
-        .filter((row) => !said.has(row.path))
-        .map((row) => ({ path: row.path, what: `${row.what}, as a signed-out visitor opens it` })),
-    ];
-  }
-  const qualified = (rows: Array<{ path: string; what: string }>, selector: string) =>
-    rows.map((row) => ({ path: `${row.path}${row.path.includes('?') ? '&' : '?'}${selector}`, what: row.what }));
-  const tenant = qualified(routeTable(appRoutes(loaded, schema, 'tenant'), app), 'tenant={tenant}');
-  if (!appRealms(loaded.app).platform) return tenant;
-  return [...tenant, ...qualified(routeTable(appRoutes(loaded, schema, 'platform'), app), 'realm=platform')];
-}
-
-/** What the App and its jobs module declare that makes a served App build more hosts (servedHosts.ts). */
-async function servedFactsOf(
-  app: AppDef,
-  commands: BusinessCommandRegistry | undefined,
-  jobsFile: string | undefined,
-): Promise<ServedFacts> {
-  const { getCommandEffects } = await import('../commands/businessCommands.js');
-  const facts: ServedFacts = {
-    tenant: app.auth?.rows === 'tenant',
-    assistant: app.assistant !== undefined,
-    apiEvents: Boolean(app.api?.events?.length),
-    effects: Object.values(commands ?? {}).some((command) => getCommandEffects(command)),
-  };
-  if (jobsFile === undefined) return facts;
-  try {
-    const { loadJobModule } = await import('../jobs/jobLoader.js');
-    const module = await loadJobModule(jobsFile);
-    return {
-      ...facts,
-      jobs: module.jobs.size + module.workflows.size > 0,
-      decisions: (module.decisions?.size ?? 0) > 0,
-      mail: module.mail !== undefined,
-      integrations: module.integrations !== undefined,
-      inbound: module.inbound.size > 0,
-    };
-  } catch {
-    // A jobs module that does not load is the validation step's to say; the sum then counts without it.
-    return facts;
   }
 }

@@ -10,7 +10,7 @@ import { Empty } from './Notes.js';
 
 export function ListEmpty({ spec }: { spec: AppListEmpty }) {
   const navigate = useListNavigation();
-  const link = spec.action ? navigate?.(spec.action.view, 'reset') : undefined;
+  const link = spec.action ? navigate?.(spec.action.view, 'reset', { tab: spec.action.tab }) : undefined;
   return (
     <Empty
       className="list-empty"

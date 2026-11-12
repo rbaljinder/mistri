@@ -553,14 +553,23 @@ export const Metric = memo(function Metric({
   ].filter((part) => part && part !== goalWords);
   /* A metric that names a list view opens that room — its tabs, its
      presentation — on the rows it counted, and says so with an arrow: the
-     whole card is the way in. One the reader is not served opens the table. */
+     whole card is the way in. One the reader is not served opens the table.
+     Without a `to` it opens the list a group would: the one over its table. */
   const app = activeApp();
-  const opens = section.view && app && viewRoom(app, section.view) ? section.view : undefined;
+  const opens = section.view ? (app && viewRoom(app, section.view) ? section.view : undefined) : drillTarget(section) || undefined;
   /* `to: false`: a figure that is read where it stands, not a way into rows, so nothing in it is a control. */
   const still = section.noDrill === true && !section.error;
   const open = section.error
     ? (onErrorClick ?? (() => {}))
-    : (onOpen ?? (() => go({ ...tableView(section.table, fullQuery(section)), ...(opens ? { view: opens } : {}) }, 'push')));
+    : (onOpen ??
+      (() =>
+        go(
+          (opens && listEntry(opens, fullQuery(section))) || {
+            ...tableView(section.table, fullQuery(section)),
+            ...(opens ? { view: opens } : {}),
+          },
+          'push',
+        )));
   /* A card with its own period holds the picker, and a button cannot hold
      another control: the card is a box, its label the way in. */
   if (period) {
@@ -1292,13 +1301,14 @@ const Matrix = memo(function Matrix({ section }: { section: Section }) {
  */
 function OpenFull({ section }: { section: Section }) {
   useSyncExternalStore(subscribeMessages, messageLanguage, messageLanguage);
+  const view = section.view ?? (drillTarget(section) || undefined);
+  const open = () =>
+    go(
+      (view && listEntry(view, fullQuery(section))) || { ...tableView(section.table, fullQuery(section)), ...(view ? { view } : {}) },
+      'push',
+    );
   return (
-    <button
-      type="button"
-      className="ghost dash-open"
-      title={sayCopy('theFullListWithItsTabs')}
-      onClick={() => go({ ...tableView(section.table, fullQuery(section)), ...(section.view ? { view: section.view } : {}) }, 'push')}
-    >
+    <button type="button" className="ghost dash-open" title={sayCopy('theFullListWithItsTabs')} onClick={open}>
       {message('list.viewAll')}
     </button>
   );

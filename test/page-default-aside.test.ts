@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseAppPage } from '../packages/mistri/src/shared/appPages.js';
 import { validatePage, type PageDef, type PageSection } from '../packages/engine/src/shared/page.js';
+import { defaultAsidePaths } from '../packages/engine/src/shared/pageAnatomy.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 
 const column = (name: string, type: string, extra: object = {}) => ({ name, type, nullable: true, primaryKey: false, ...extra });
@@ -100,4 +101,20 @@ test('a column the reader cannot read is not offered', () => {
 test('validating twice adds the aside once', () => {
   const once = parse({ sections: [{ kind: 'fields', show: ['make'] }] });
   assert.equal(aside(validatePage(schema, once)).length, 1);
+});
+
+test('check --defaults says what the aside draws, or why none (defaultAsidePaths)', () => {
+  const read = (body: object) => defaultAsidePaths(schema, parseAppPage({ base: 'bike', ...body }, 'bike', 'pages "bike"', scope));
+  assert.deepEqual(read({ sections: [{ kind: 'fields', show: ['make', 'model', 'status'] }] }), ['color', 'notes']);
+  assert.equal(read({ aside: false, sections: [{ kind: 'fields', show: ['make'] }] }), 'none: the page says aside: false');
+  assert.equal(
+    read({ sections: [{ kind: 'fields', title: 'Bike', region: 'aside', show: ['color'] }] }),
+    'none: the page writes its own aside',
+  );
+  assert.equal(read({ sections: [{ kind: 'fields' }] }), 'none: a fields section with no paths shows the whole record');
+  assert.equal(
+    read({ sections: [{ kind: 'fields', show: ['make', 'model', 'color', 'notes', 'status'] }] }),
+    // The record's long text and a few facts, nothing else, is read as an article, which has no aside.
+    "none: the 'article' layout has no default aside",
+  );
 });

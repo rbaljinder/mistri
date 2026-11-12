@@ -72,7 +72,8 @@ a section takes it as its source (`metric('Late', 'work_order.overdue')`,
 `related(..., { segment: 'open' })`), and a rollup counts it
 (`rollup.count('work_order', { segment: 'open' })`). A tab's label and its address
 (`?tab=overdue`) are the segment's. A segment may name another, never in a
-loop, and a name a column, rollup or state already holds is refused. It only
+loop, and a name a column, rollup or state already holds, or a word the
+language reads (`today`, `count`, `by`), is refused by name. It only
 ever narrows: a reader who may not read a column it names is served no tab,
 section or word for it. The App API and MCP list it read-only as
 `?segment=overdue`. `check --design` lists each segment with its cost, and
@@ -621,7 +622,7 @@ another door always is. A second process writes its own row.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `resources.*.notify` | array | Stable | Which writes tell which people, kept in each person's inbox and written in the triggering write's own transaction, in reserved tables provisioned once (mistri migrate stores up, or provisionStores from @mistriwork/mistri/maintenance with only: ['inbox']). The person who made the write is never told. Needs sign-in; not under auth.rows 'tenant'. Used in `examples/apps/lintel/resources.ts`. |
+| `resources.*.notify` | array | Stable | Which writes tell which people, kept in each person's inbox and written in the triggering write's own transaction, in reserved tables provisioned once (mistri migrate stores up, or provisionStores from @mistriwork/mistri/maintenance with only: ['inbox']). The person who made the write is never told. Needs sign-in. Under auth.rows 'tenant' a notice is kept in the inbox of the tenant whose record was written, and read only there. Used in `examples/apps/lintel/resources.ts`. |
 
 ## `resources.*.notify[]`
 
