@@ -13,7 +13,7 @@ import { linkUrl, renderLinkRefs } from './linkToken.js';
 export const servesLinks = (app: Pick<AppDef, 'resources'>): boolean =>
   Object.values(app.resources ?? {}).some((resource) => resource.links && Object.keys(resource.links).length > 0);
 
-type JournalLinks = Pick<CommandJournal, 'readLink' | 'openLink'>;
+type JournalLinks = Pick<CommandJournal, 'readLink' | 'openLink' | 'revokeLinks'>;
 
 interface FoundLink {
   readonly row: CommandLinkRow;

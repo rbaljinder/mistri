@@ -76,6 +76,7 @@ tenant App refuses one at startup ([Tenant Apps](/docs/tenant-apps/)).
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `auth.public` | object | Stable | What a signed-out visitor reads: each resource named, read-only, optionally narrowed by fields; the rest of the App still needs a session. Needs roles, and rows 'all'. Used in `examples/apps/lintel/app.ts`. |
+| `auth.public.byKey` | array | Stable | Of read, the resources a visitor opens one record at a time by its key and never lists, counts or searches: a link's page, not a directory. |
 | `auth.public.fields` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `auth.public.fields.*.read` | array | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `auth.public.read` | array | Stable |  Used in `examples/apps/lintel/app.ts`. |

@@ -161,10 +161,12 @@ export function parseEventPayload<Payload extends BusinessEventPayload<Payload>>
 }
 
 /** Explicit projection receives only validated output; it cannot choose any
- * envelope field. The caller must have validated/authorized that output first. */
+ * envelope field. The caller must have validated/authorized that output first.
+ * A projection that returns null or undefined leaves its event out of this run:
+ * the command records what it did record, possibly nothing. */
 export function defineEventProjection<Output, Payload extends object & PayloadShape<Payload>>(
   event: BusinessEvent<Payload>,
-  project: (output: BusinessEventOutput<Output>) => Payload,
+  project: (output: BusinessEventOutput<Output>) => Payload | null | undefined,
 ): BusinessEventProjection<Output> {
   const captured = events.get(event);
   if (!captured || typeof project !== 'function' || isProxy(project)) return definitionError();
@@ -242,17 +244,21 @@ export function projectCommandEvents<Output>(declarations: CapturedCommandEvents
     if (!captured) return projectionError();
     const output = detached(validatedOutput, COMMAND_EVENT_LIMITS.outputBytes);
     let bytes = 0;
-    const projected = captured.map(({ event, project }) => {
+    const projected: { name: string; version: number; payloadJson: string }[] = [];
+    for (const { event, project } of captured) {
+      const payload = project(output);
+      // Skipped: the batch still records, in the declaration's order, the events that did happen.
+      if (payload === null || payload === undefined) continue;
       // Enforce the allowlist before and after the validator: stripping a raw
       // row or secretly appending fields cannot pass as a bounded projection.
       const effect = isEffectEvent(event.name);
-      const selected = payloadJson(project(output), event.fields, effect);
+      const selected = payloadJson(payload, event.fields, effect);
       const parsed = event.parse(detached(JSON.parse(selected), COMMAND_EVENT_LIMITS.payloadBytes));
       const json = payloadJson(parsed, event.fields, effect);
       bytes += Buffer.byteLength(json, 'utf8');
       if (bytes > COMMAND_EVENT_LIMITS.batchPayloadBytes) return projectionError();
-      return Object.freeze({ name: event.name, version: event.version, payloadJson: json });
-    });
+      projected.push(Object.freeze({ name: event.name, version: event.version, payloadJson: json }));
+    }
     const result = Object.freeze(projected);
     canonicalCommandJson(result, COMMAND_EVENT_LIMITS.batchBytes);
     return result;

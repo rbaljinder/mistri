@@ -124,7 +124,7 @@ const app = {
     store: './auth.db',
     rows: 'tenant',
     // Generic CRUD goes to `item` only: a command-owned resource refuses it.
-    roles: { member: { read: true, write: ['item'], commands: ['advance', 'note'] } },
+    roles: { member: { read: true, write: ['item'], commands: ['advance', 'note', 'quiet'] } },
   },
   sources: { business: { connection: binding.source.connection } },
   resources: {
@@ -142,6 +142,7 @@ const app = {
       actions: {
         advance: { label: 'Advance', command: { id: 'advance', version: 1, target: 'task', input: {} } },
         note: { label: 'Note', command: { id: 'note', version: 1, target: 'task', input: {} } },
+        quiet: { label: 'Quiet', command: { id: 'quiet', version: 1, target: 'task', input: {} } },
       },
     },
   },
@@ -155,7 +156,7 @@ const policyModule = `export default {
   resolveMembershipRows: () => ({ item: true, task: true }),
   resolveRows: () => ({ item: true, task: true }),
   authorizeDeletedRecord: () => true,
-  resultReferences: { advance: result => [{ table: 'task', key: { id: result.taskId } }], note: result => [{ table: 'task', key: { id: result.taskId } }] },
+  resultReferences: { advance: result => [{ table: 'task', key: { id: result.taskId } }], note: result => [{ table: 'task', key: { id: result.taskId } }], quiet: result => [{ table: 'task', key: { id: result.taskId } }] },
 };`;
 /** The same two commands, with and without `advance` declaring its fact. */
 const commandsModule = (events: boolean) => `
@@ -178,6 +179,12 @@ export default defineCommands({
   note: defineCommand({ source: 'business', target: 'task', input: {}, output,
     async handle({ db, record }) {
       const { version } = await db.task.update(record, { name: 'Noted', version: record.version + 1 });
+      return { taskId: String(record.id), version };
+    } }),
+  quiet: defineCommand({ source: 'business', target: 'task', input: {}, output,
+    ${events ? 'events: { advanced: defineEventProjection(advanced, () => undefined) },' : ''}
+    async handle({ db, record }) {
+      const { version } = await db.task.update(record, { version: record.version + 1 });
       return { taskId: String(record.id), version };
     } }),
 });`;
@@ -271,13 +278,20 @@ describe('tenant command events on PostgreSQL, against a real server', { skip: l
 
     const port = await reservePort(),
       origin = `http://127.0.0.1:${port}`;
-    const previous = process.env.BETTER_AUTH_SECRET;
+    const names = ['BETTER_AUTH_SECRET', 'MISTRI_TEST_AUTH_LIMITS', 'NODE_ENV'] as const;
+    const previous = names.map((name) => [name, process.env[name]] as const);
     process.env.BETTER_AUTH_SECRET = 'synthetic-postgres-tenant-events-secret-at-least-thirty-two-characters';
+    /* Six accounts sign up from 127.0.0.1, past Better Auth's per-address budget (three a window): test-node.mjs lifts
+       it for every file, and it is lifted here too so the file run on its own (node --test) is the gate's run. */
+    process.env.MISTRI_TEST_AUTH_LIMITS = 'off';
+    process.env.NODE_ENV = 'test';
     try {
       auth = await createAppAuth(loaded, { baseURL: origin, trustedOrigins: [origin] });
     } finally {
-      if (previous === undefined) delete process.env.BETTER_AUTH_SECRET;
-      else process.env.BETTER_AUTH_SECRET = previous;
+      for (const [name, value] of previous) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
     }
     const start = async () =>
       createTenantAuthenticatedHttpServer({
@@ -594,6 +608,33 @@ describe('tenant command events on PostgreSQL, against a real server', { skip: l
     assert.deepEqual(after.batches, before.batches);
     assert.deepEqual(after.events, before.events);
     assert.deepEqual((await f.data('/api/commands/status', context, input)).body, { ...reply.body, replayed: true });
+  });
+
+  test('a command whose every projection skips commits an empty batch that replays without projecting', async (t) => {
+    const f = await host(t),
+      ivy = await f.signup('Ivy');
+    await f.membership(ivy, 'north', 'active', null);
+    const context = await f.open(ivy, 'north'),
+      input = f.command('north-task', 'pg-event-quiet-skip', 0, 'quiet');
+    const reply = await f.data('/api/commands/execute', context, input);
+    assert.equal(reply.status, 200, reply.text);
+    const after = await evidence(f.control);
+    assert.deepEqual(
+      after.batches.map((batch) => [batch.manifest_json, Number(batch.event_count)]),
+      [['[]', 0]],
+      'the receipt records that the declared events were all skipped',
+    );
+    assert.equal(after.events.length, 0);
+    assert.deepEqual((await f.data('/api/commands/execute', context, input)).body, { ...reply.body, replayed: true });
+    assert.deepEqual(await evidence(f.control), after);
+    // A recorded manifest is held to the declaration: one it could not have recorded fails the replay closed.
+    await f.control.query(
+      postgresRuntimeSql(
+        `UPDATE ${runtimeTable('postgres', journal.receipt)} SET manifest_json = '[{"name":"task.other","version":1}]' WHERE manifest_json IS NOT NULL`,
+      ),
+    );
+    const tampered = await f.data('/api/commands/status', context, input);
+    assert.notEqual(tampered.body.replayed, true, tampered.text);
   });
 
   test('PostgreSQL delivery schedules only its named tenant batch, verified against the committed receipt', async (t) => {

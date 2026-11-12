@@ -24,6 +24,7 @@ import type { AppTransitionRules } from './appTransitions.js';
 import type { AppUpdateAction } from '../../shared/app.js';
 import { consumesImage, consumesOf, moveConsumed } from './appConsumes.js';
 import { auditQueryRead, auditViewRead, type AuditedAccess } from '../readAudit.js';
+import { byKeyAdapter } from './publicByKey.js';
 
 import {
   AppAccessDenied,
@@ -67,6 +68,9 @@ export interface ResourceAccess extends ColumnGrant, AuditedAccess {
       footprint does not read (a line's `consumes` parent). Resolved only when a refusal is said; absent, the
       grants above are the reader's. */
   reader?: () => Pick<ResourceAccess, 'readable' | 'fields' | 'internal'>;
+  /** A visitor's `auth.public.byKey`: of `readable`, the tables read one record at a time by its key and never
+      listed (publicByKey.ts), held on every read this facade hands out. */
+  byKey?: ReadonlySet<string>;
 }
 
 /** This call's grant, its App rules copied beside the columns (columnGrants.ts `captureGrant`). */
@@ -608,5 +612,15 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
     // Raw SQL and DDL are deliberately not part of the authorized App adapter.
     return guarded;
   };
-  return { ...resources, schema, adapter: wrap(resources.adapter), forConnection: (owner) => wrap(resources.forConnection(owner), owner) };
+  /* Outside the grant's own checks, so a byKey table is judged before anything is read; held from here, the same
+     sets the grant was resolved with, so no later change to the caller's grant widens it. */
+  const byKey = access.byKey?.size ? new Set(access.byKey) : undefined;
+  const keyed = byKey ? captureAccess(access) : undefined;
+  const fenced = (adapter: Adapter): Adapter => (byKey ? byKeyAdapter(adapter, full, keyed!, byKey) : adapter);
+  return {
+    ...resources,
+    schema,
+    adapter: fenced(wrap(resources.adapter)),
+    forConnection: (owner) => fenced(wrap(resources.forConnection(owner), owner)),
+  };
 }

@@ -26,7 +26,7 @@ import {
   captureCommandEventStoreBinding,
   type CommandEventStoreBinding,
 } from './commandEventSchema.js';
-import { commandEventEnvelopes as shared } from './commandEventStore.js';
+import { commandEventEnvelopes as shared, recordedManifest } from './commandEventStore.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { captureCommandEventBatch, captureCommandEventManifest } from './commandEventCapture.js';
 import { NOTIFY_COMMAND_EVENTS } from './postgresCommandEventWake.js';
@@ -243,7 +243,10 @@ export function postgresCommandEventRows(
   try {
     const batch = captureCommandEventBatch(input),
       runtime = context(source, receipt, audit);
-    const manifest = captureCommandEventManifest(batch.map(({ name, version }) => ({ name, version })));
+    const manifest = captureCommandEventManifest(
+      batch.map(({ name, version }) => ({ name, version })),
+      true,
+    );
     const events = batch.map((_, ordinal) => envelope(runtime, manifest, batch, ordinal, randomUUID()));
     return {
       batch: [canonical(manifest, 65_536), events.length, digest(manifest, events)],
@@ -279,7 +282,7 @@ export async function assertPostgresCommandEvents(
   try {
     if (expected === undefined && !(await hasPostgresCommandEventStore(client))) return Object.freeze([]);
     await assertPostgresCommandEventStore(client, { appId: source.appId, storeId: source.storeId, sourceId: source.sourceId });
-    const manifest = expected === undefined ? undefined : captureCommandEventManifest(expected);
+    const declared = expected === undefined ? undefined : captureCommandEventManifest(expected, true);
     const batch = (
       await client.query(
         `SELECT id AS receipt_id, manifest_json, event_count, digest FROM ${q(COMMAND_JOURNAL_TABLES.receipt)}
@@ -287,13 +290,14 @@ export async function assertPostgresCommandEvents(
         [receipt.id],
       )
     ).rows[0];
-    if (!manifest) {
+    if (!declared) {
       if (batch || (await client.query(`SELECT 1 FROM ${q(tables.event)} WHERE receipt_id = $1 LIMIT 1`, [receipt.id])).rows.length)
         return fail();
       return Object.freeze([]);
     }
+    if (!batch) return fail();
+    const manifest = recordedManifest(batch.manifest_json, declared);
     if (
-      !batch ||
       batch.receipt_id !== receipt.id ||
       batch.event_count !== manifest.length ||
       batch.manifest_json !== canonical(manifest, 65_536) ||

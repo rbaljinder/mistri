@@ -7,7 +7,7 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import type { CommandJournal } from '../../adapters/commands/commandJournal.js';
-import type { CommandJournalAppScope } from '../../adapters/commands/commandJournalTypes.js';
+import type { CommandJournalAppScope, CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
 import { logicalResource, type AppDef } from '../../shared/app.js';
 import { snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
@@ -233,6 +233,9 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
             ...(authorized.insertOnly ? { insertOnly: authorized.insertOnly } : {}),
             ...(authorized.audited ? { audited: authorized.audited } : {}),
             ...(authorized.readAudit ? { readAudit: authorized.readAudit } : {}),
+            // The links it may mint and the linked tables a removal revokes on: the runtime journal above carries both.
+            ...(authorized.links ? { links: authorized.links } : {}),
+            ...(authorized.linkedTables ? { linkedTables: authorized.linkedTables } : {}),
             transaction: deny,
             readsInCommand: true,
             assertTarget: (records: WriteTransaction, key: CommandResultReference['key']) => checks.get(records)?.target(key) ?? deny(),
@@ -331,6 +334,25 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
                       ? {
                           appendReadAudit: (rows: Parameters<NonNullable<CommandJournal['appendReadAudit']>>[0]) =>
                             accept({ rows }, (input) => journal.appendReadAudit!(input.rows)),
+                        }
+                      : {}),
+                    /* A link is minted, re-read and revoked beside the rows, in this transaction, as without a policy: the
+                       link row is the platform's, not the person's, so it is outside the row scope as a sequence is. */
+                    ...(journal.mintLink
+                      ? { mintLink: (row: CommandLinkRow) => accept({ row }, (input) => journal.mintLink!(input.row)) }
+                      : {}),
+                    ...(journal.revokeLinks
+                      ? {
+                          revokeLinks: (appId: string, resource: string, rowKey: string, name: string | undefined, now: number) =>
+                            accept({ appId, resource, rowKey, name, now }, (input) =>
+                              journal.revokeLinks!(input.appId, input.resource, input.rowKey, input.name, input.now),
+                            ),
+                        }
+                      : {}),
+                    ...(journal.readLink
+                      ? {
+                          readLink: (appId: string, id: string, now: number) =>
+                            accept({ appId, id, now }, (input) => readResult(journal.readLink!(input.appId, input.id, input.now))),
                         }
                       : {}),
                   });

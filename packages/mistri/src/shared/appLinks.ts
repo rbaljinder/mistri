@@ -18,7 +18,7 @@
 import { isRecord, plainRecord, allowKeys } from '@mistriwork/engine/shared/model.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { DURATION_WORDS, parseDuration } from '@mistriwork/engine/shared/duration.js';
-import { isRowPolicyApp, isTenantApp, type AppDef } from './appModel.js';
+import { isTenantApp, type AppDef } from './appModel.js';
 import { isRegisteredCommand, registeredCommand } from './command.js';
 
 /** One declared link: what its holder sees and may run. */
@@ -162,6 +162,17 @@ export function parseResourceLinks(raw: unknown, at: string, resource: string): 
   return links;
 }
 
+/** A stored link's record key (commandKeyText: `[[column, value], …]`) as column → value, or undefined when it is not one. */
+export function linkRowKey(rowKey: string): Record<string, string> | undefined {
+  try {
+    const pairs = JSON.parse(rowKey) as unknown;
+    if (!Array.isArray(pairs) || !pairs.length) return undefined;
+    return Object.fromEntries(pairs.map((pair) => [String((pair as unknown[])[0]), String((pair as unknown[])[1])]));
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Each link's columns judged against the database and the resource: every
  * one a column of its table, none `hidden` and none outside the resource's
@@ -177,12 +188,11 @@ export function appLinkProblems(
     problems.push('views "l": a link is served at /l/, so no view can be keyed "l" in an App that declares links.');
   for (const [name, resource] of Object.entries(app.resources ?? {})) {
     if (!resource.links) continue;
-    /* A link's holder is no member and passes no row policy: in an App whose rows are scoped by one, the link would be
-       the only read not held to it. Links are for Apps that grant by role or not at all. */
-    if (isTenantApp(app) || isRowPolicyApp(app)) {
-      problems.push(
-        `resources "${name}", "links": capability links are not served in an App whose rows are scoped by ${isTenantApp(app) ? 'tenant' : 'a row policy'}.`,
-      );
+    /* A link's holder is no member: in an App whose rows are scoped by tenant, the link would be the only read not
+       held to one. A row policy is not asked about a link at all — the link is the grant for its one row
+       (policy/appPolicyContext.ts withLink). */
+    if (isTenantApp(app)) {
+      problems.push(`resources "${name}", "links": capability links are not served in an App whose rows are scoped by tenant.`);
       continue;
     }
     /* The catalog here is the App's, in logical names, as appNotifyRules reads it. */
@@ -211,4 +221,35 @@ export function appLinkProblems(
     }
   }
   return problems;
+}
+
+/**
+ * What `check` says about a links resource's rows outliving, or being outlived by, their links: advice, not a
+ * refusal. A link names its row by key and re-reads it at each open; the door revokes a link whose row is gone
+ * (linkRoutes.ts), but only when someone opens it, so a row deleted outside a command (a cascade, plain SQL) leaves
+ * its links live until then, and a key the database hands out again would have them name the new row.
+ */
+export function appLinkAdvisories(app: Pick<AppDef, 'resources'>, schema: DatabaseSchema): string[] {
+  const advice: string[] = [];
+  for (const [name, resource] of Object.entries(app.resources ?? {})) {
+    if (!resource.links || Object.keys(resource.links).length === 0) continue;
+    const table = schema.tables.find((each) => each.id === name) ?? tableNamed(schema, name);
+    if (!table) continue;
+    const parents = [
+      ...new Set(
+        schema.foreignKeys
+          .filter((fk) => fk.onDelete === 'cascade' && (fk.from.table === table.id || fk.from.table === table.name))
+          .map((fk) => fk.to.table),
+      ),
+    ].sort();
+    if (parents.length > 0)
+      advice.push(
+        `resources "${name}", "links" [link-cascade]: its rows are deleted with their ${parents.map((parent) => `"${parent}"`).join(' or ')} (ON DELETE CASCADE), which revokes none of their links until one is opened. Revoke them in the command that deletes the parent (context.revokeLinks), or accept that they stay live until then.`,
+      );
+    if (table.reusesKeys)
+      advice.push(
+        `resources "${name}", "links" [link-key-reuse]: ${table.name} is keyed by an INTEGER PRIMARY KEY without AUTOINCREMENT, so SQLite may give a deleted row's key to the next insert, and a link to the deleted row would open the new one. Declare the key INTEGER PRIMARY KEY AUTOINCREMENT.`,
+      );
+  }
+  return advice;
 }

@@ -27,7 +27,7 @@ import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isRowPolicyApp, isTenantApp, type AppDef } from '../../shared/app.js';
 import { fieldLabel } from '../../shared/command.js';
-import type { AppLinkDef } from '../../shared/appLinks.js';
+import { linkRowKey, type AppLinkDef } from '../../shared/appLinks.js';
 import { appEntrypoint } from '../app/appEntrypoint.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import { keyFilter } from '../commands/commandDb.js';
@@ -37,7 +37,9 @@ import {
   CommandBodyTooLarge,
   commandBody,
   dispatchBusinessCommandHttp,
+  dispatchScopedBusinessCommandHttp,
 } from '../commands/businessCommandHttp.js';
+import { BusinessCommandExecutionError } from '../commands/commandErrors.js';
 import type { CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
 import { LINK_ID } from '../../adapters/commands/commandLinks.js';
 import { clientAddress, publicFormLimiter } from '@mistriwork/engine/server/http/rateLimit.js';
@@ -88,16 +90,6 @@ function sessionCookie(req: IncomingMessage, id: string): string | undefined {
     .filter((part) => part.startsWith(name));
   return found.length === 1 ? found[0].slice(name.length) : undefined;
 }
-
-const ROW_KEY = (rowKey: string): Record<string, string> | undefined => {
-  try {
-    const pairs = JSON.parse(rowKey) as unknown;
-    if (!Array.isArray(pairs) || !pairs.length) return undefined;
-    return Object.fromEntries(pairs.map((pair) => [String((pair as unknown[])[0]), String((pair as unknown[])[1])]));
-  } catch {
-    return undefined;
-  }
-};
 
 const gatesNeeded = (def: AppLinkDef) => (def.confirm?.length ? GATE_CONFIRMED : 0) | (def.stepUp ? GATE_STEPPED_UP : 0);
 
@@ -160,15 +152,17 @@ export async function linkRoutes(ctx: RequestContext): Promise<boolean> {
     return false;
   };
 
-  /* A link is served only where its principal is the whole story: no row policy, no tenant, a writable entry point
-     and a command host for this App. Anywhere else it opens nothing, as a link that does not exist. */
+  /* A link is served where its principal is the whole story: no tenant, a writable entry point and a command host
+     for this App. In a row-policy App the link is the grant for its one row and the policy is not asked
+     (policy/appPolicyContext.ts withLink); a policy that did not load, or is not this App's, opens nothing, as a
+     link that does not exist. */
   const commands = ctx.commands;
   const connection = appEntrypoint(host as never, registry);
+  const policy = ctx.policy;
   if (
-    ctx.policy ||
     ctx.policyUnavailable ||
+    (policy ? !policy.matches(app) : isRowPolicyApp(app)) ||
     isTenantApp(app) ||
-    isRowPolicyApp(app) ||
     !commands ||
     commands.appId !== appId ||
     !connection ||
@@ -208,12 +202,18 @@ export async function linkRoutes(ctx: RequestContext): Promise<boolean> {
     const presented = posting ? headerOf(req, LINK_SESSION_HEADER) : sessionCookie(req, id);
     const session = readLinkSession(appId, '', id, presented, now);
     const def = found && session ? linkDef(app, found.row) : undefined;
-    const key = found ? ROW_KEY(found.row.rowKey) : undefined;
+    const key = found ? linkRowKey(found.row.rowKey) : undefined;
     if (!found || !session || !def || !key) return await miss();
     const row = found.row;
     const reader = resources.forConnection(resources.connectionFor(row.resource));
     const readRecord = async (columns: readonly string[]): Promise<Record<string, unknown> | undefined> => {
       const read = await reader.query({ table: row.resource, columns: [...columns], filter: keyFilter(key), limit: 2, offset: 0 });
+      /* The row is gone: removed outside a command (a cascade, plain SQL), since a command's delete revokes in its own
+         transaction. Its links are revoked now, before its key can name another row. */
+      if (read.rows.length === 0)
+        await found.journal(
+          (journal) => journal.revokeLinks?.(appId, row.resource, row.rowKey, undefined, Date.now()) ?? Promise.resolve(0),
+        );
       return read.rows.length === 1 ? (read.rows[0] as Record<string, unknown>) : undefined;
     };
     const needed = gatesNeeded(def);
@@ -337,18 +337,29 @@ export async function linkRoutes(ctx: RequestContext): Promise<boolean> {
     /* ---------- the commands, once every gate is passed ---------- */
     if (!passed(needed)) return await miss();
     const run = (route: 'prepare' | 'execute', envelope: Record<string, unknown>) =>
-      dispatchBusinessCommandHttp({
-        req,
-        res,
-        path: `/api/commands/${route}`,
-        registry,
-        app,
-        commands: commands.registry,
-        connection,
-        actor,
-        body: envelope,
-        ...(commands.events ? { events: commands.events } : {}),
-      });
+      policy
+        ? policy.withLink(actor.link!, (context) => {
+            if (!context.commands) throw new BusinessCommandExecutionError('forbidden', 'not_applied');
+            return dispatchScopedBusinessCommandHttp({
+              req,
+              res,
+              path: `/api/commands/${route}`,
+              commands: context.commands,
+              body: envelope,
+            });
+          })
+        : dispatchBusinessCommandHttp({
+            req,
+            res,
+            path: `/api/commands/${route}`,
+            registry,
+            app,
+            commands: commands.registry,
+            connection,
+            actor,
+            body: envelope,
+            ...(commands.events ? { events: commands.events } : {}),
+          });
     if (step === 'prepare') {
       const prepared: Record<string, { expectedVersion: unknown }> = {};
       const refused: Record<string, string> = {};

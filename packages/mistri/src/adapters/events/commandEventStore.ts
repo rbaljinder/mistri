@@ -19,7 +19,7 @@ import {
 } from './commandEventSchema.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { COMMAND_JOURNAL_TABLES } from '../commands/commandJournalSchema.js';
-import { captureCommandEventBatch, captureCommandEventManifest } from './commandEventCapture.js';
+import { captureCommandEventBatch, captureCommandEventManifest, recordedFrom } from './commandEventCapture.js';
 import { commandEventsAppended } from './commandEventSignal.js';
 
 const fail = (): never => {
@@ -152,7 +152,10 @@ export function appendSqliteCommandEvents(
     verify(db, source);
     const batch = captureCommandEventBatch(input),
       runtime = context(source, receipt, audit);
-    const manifest = captureCommandEventManifest(batch.map(({ name, version }) => ({ name, version })));
+    const manifest = captureCommandEventManifest(
+      batch.map(({ name, version }) => ({ name, version })),
+      true,
+    );
     const events = batch.map((_, ordinal) => envelope(runtime, manifest, batch, ordinal, randomUUID()));
     // The batch's manifest, count and digest are its receipt's columns: the journal wrote the row just now, without them.
     const marked = db
@@ -174,6 +177,17 @@ export function appendSqliteCommandEvents(
   commandEventsAppended();
 }
 
+/** The manifest a batch recorded, read back from its receipt: in canonical
+ * form, and what the declaration could have recorded (its events in order,
+ * some left out by a projection that skipped, possibly all). Shared with the
+ * PostgreSQL store. */
+export function recordedManifest(stored: unknown, declared: CommandEventManifest): CommandEventManifest {
+  if (typeof stored !== 'string' || Buffer.byteLength(stored, 'utf8') > 65_536) return fail();
+  const manifest = captureCommandEventManifest(JSON.parse(stored), true);
+  if (canonical(manifest, 65_536) !== stored || !recordedFrom(manifest, declared)) return fail();
+  return manifest;
+}
+
 /** Private exact-receipt inspection, not a public list endpoint. Membership
  * and current result-disclosure checks remain owned by the command invocation.
  * Historical grant/deployment changes do not reidentify committed events. */
@@ -188,21 +202,21 @@ export function assertSqliteCommandEvents(
     if (!db.isTransaction) return fail();
     if (expected === undefined && !hasSqliteCommandEventStore(db)) return Object.freeze([]);
     verify(db, source);
-    const manifest = expected === undefined ? undefined : captureCommandEventManifest(expected);
+    const declared = expected === undefined ? undefined : captureCommandEventManifest(expected, true);
     const batch = db
       .prepare(`SELECT id AS receipt_id, manifest_json, event_count, digest,
       (typeof(manifest_json)='text' AND instr(manifest_json,char(0))=0
        AND typeof(digest)='text' AND instr(digest,char(0))=0) AS intact_text
       FROM main."${COMMAND_JOURNAL_TABLES.receipt}" WHERE id=? COLLATE BINARY AND manifest_json IS NOT NULL`)
       .get(receipt.id);
-    if (!manifest) {
+    if (!declared) {
       if (batch || db.prepare(`SELECT 1 FROM main."${tables.event}" WHERE receipt_id=? COLLATE BINARY LIMIT 1`).get(receipt.id))
         return fail();
       return Object.freeze([]);
     }
+    if (!batch || batch.intact_text !== 1) return fail();
+    const manifest = recordedManifest(batch.manifest_json, declared);
     if (
-      !batch ||
-      batch.intact_text !== 1 ||
       batch.receipt_id !== receipt.id ||
       batch.event_count !== manifest.length ||
       batch.manifest_json !== canonical(manifest, 65_536) ||

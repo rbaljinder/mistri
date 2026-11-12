@@ -289,6 +289,12 @@ function pageRoles(
       throw new Error(`[page-public] ${at} is public, and the App opens nothing to signed-out visitors (auth.public).`);
     const closed = page.reads.find((resource) => !open.has(resource));
     if (closed) throw new Error(`[page-public] ${at} is public and reads "${closed}", which "auth.public" does not open.`);
+    /* A byKey table is read one record at a time by its key (server/app/publicByKey.ts); a page's reads list theirs. */
+    const keyed = page.reads.find((resource) => ctx.auth?.public?.byKey?.includes(resource));
+    if (keyed)
+      throw new Error(
+        `[page-public] ${at} is public and reads "${keyed}", which "auth.public" opens only by a record's key ("byKey"): a page's reads list their rows.`,
+      );
     return undefined;
   }
   if (!grants) return parseOpenRoles(v.roles, at, ctx.auth);

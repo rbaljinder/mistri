@@ -95,9 +95,19 @@ export async function tenantAdministrationFixture(t: TestContext) {
     ),
   };
   const creating = authCreation.then(async () => {
-    const names = ['BETTER_AUTH_SECRET', 'MISTRI_AUTH_ADMIN_EMAIL', 'MISTRI_AUTH_ADMIN_PASSWORD'] as const;
+    const names = [
+      'BETTER_AUTH_SECRET',
+      'MISTRI_AUTH_ADMIN_EMAIL',
+      'MISTRI_AUTH_ADMIN_PASSWORD',
+      'MISTRI_TEST_AUTH_LIMITS',
+      'NODE_ENV',
+    ] as const;
     const environment = names.map((name) => [name, process.env[name]] as const);
     process.env.BETTER_AUTH_SECRET = 'synthetic-tenant-administration-secret-at-least-thirty-two-characters';
+    /* The fixture signs in from 127.0.0.1 more often than Better Auth's per-address budget (three a window) allows.
+       test-node.mjs lifts it for every file; said here too, so a file run on its own (node --test) is the gate's run. */
+    process.env.MISTRI_TEST_AUTH_LIMITS = 'off';
+    process.env.NODE_ENV = 'test';
     delete process.env.MISTRI_AUTH_ADMIN_EMAIL;
     delete process.env.MISTRI_AUTH_ADMIN_PASSWORD;
     try {

@@ -64,8 +64,8 @@ test('command journal migration is explicit, existing-file only, idempotent and 
     const absent = join(path, '..', 'absent.db');
     assert.throws(() => migrateSqliteCommandJournal(absent));
     assert.equal(existsSync(absent), false);
-    assert.deepEqual(migrateSqliteCommandJournal(path), { version: 3, migrated: true });
-    assert.deepEqual(migrateSqliteCommandJournal(path), { version: 3, migrated: false });
+    assert.deepEqual(migrateSqliteCommandJournal(path), { version: 4, migrated: true });
+    assert.deepEqual(migrateSqliteCommandJournal(path), { version: 4, migrated: false });
     assert.equal(name(db), 'Original');
     assert.equal(isCommandJournalTable(tables.receipt), true);
     assert.equal(isCommandJournalTable(tables.receipt.toUpperCase()), true);

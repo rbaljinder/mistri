@@ -89,7 +89,7 @@ test('SQLite: a warm command transaction reads the catalog not at all, and sees 
     await write({ name: 'again' });
     f.db.exec(`DELETE FROM "${COMMAND_JOURNAL_TABLES.meta}"`);
     await assert.rejects(write({ name: 'no meta' }), refusedWith(/journal/i));
-    f.db.exec(`INSERT INTO "${COMMAND_JOURNAL_TABLES.meta}" (singleton, version) VALUES (1, 3)`);
+    f.db.exec(`INSERT INTO "${COMMAND_JOURNAL_TABLES.meta}" (singleton, version) VALUES (1, 4)`);
     await write({ name: 'restored' });
   } finally {
     await adapter.close();
@@ -195,7 +195,7 @@ test(
       } finally {
         await restarted.close();
       }
-      await control.query(`INSERT INTO ${runtimeTable('postgres', COMMAND_JOURNAL_TABLES.meta)} (singleton, version) VALUES (1, 3)`);
+      await control.query(`INSERT INTO ${runtimeTable('postgres', COMMAND_JOURNAL_TABLES.meta)} (singleton, version) VALUES (1, 4)`);
       await write({ name: 'restored' });
 
       // A reserved store is attested once per adapter, and a change underneath is refused by the next adapter to start.

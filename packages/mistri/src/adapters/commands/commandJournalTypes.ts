@@ -99,6 +99,9 @@ export interface CommandLinkRow {
   receipt: string;
   opens: number;
   lastOpenedAt: number | null;
+  /** What the record was when the link was minted, where the App says (layout 4): a link whose record no longer
+   * carries it names a different record that took the same key. Null, or absent on a mint, where none is kept. */
+  rowStamp?: string | null;
 }
 
 export interface CommandJournal {

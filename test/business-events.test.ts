@@ -22,6 +22,7 @@ import type {
   CommandEventJson,
 } from '../packages/mistri/src/adapters/events/commandEventTypes.js';
 import { canonicalCommandJson } from '../packages/mistri/src/server/commands/commandPayload.js';
+import { recordedFrom } from '../packages/mistri/src/adapters/events/commandEventCapture.js';
 
 type Output = { applicationId: string; version: number; privateReason?: string };
 type Payload = { applicationId: string; version: number };
@@ -566,7 +567,6 @@ test('events: replay helpers reject absent/empty/excessive/duplicate/extra-field
     undefined,
     null,
     {},
-    [],
     [draft(), draft()],
     [{ ...draft(), eventId: 'forged' }],
     [{ ...draft(), version: 0 }],
@@ -575,6 +575,47 @@ test('events: replay helpers reject absent/empty/excessive/duplicate/extra-field
   ]) {
     assert.throws(() => captureCommandEventBatch(invalid), BusinessEventProjectionError);
   }
+});
+
+test('events: an empty batch is a recorded fact; an empty manifest is one only where asked for', () => {
+  assert.deepEqual(captureCommandEventBatch([]), []);
+  assert.deepEqual(captureCommandEventManifest([], true), []);
+  assert.throws(() => captureCommandEventManifest([]), BusinessEventProjectionError);
+});
+
+test('events: a projection that answers null or undefined leaves its event out and keeps the others in order', () => {
+  const second = defineEvent({ ...definition(), name: 'application.reviewed' });
+  for (const skipped of [null, undefined]) {
+    const declarations = captureCommandEvents({
+      first: defineEventProjection(defineEvent(definition()), () => skipped as never),
+      second: defineEventProjection(second, select),
+    });
+    assert.deepEqual(declarations.expectation, [
+      { name: 'application.reviewer_assigned', version: 1 },
+      { name: 'application.reviewed', version: 1 },
+    ]);
+    assert.deepEqual(projectCommandEvents(declarations, output), [draft('application.reviewed')]);
+    assert.deepEqual(
+      projectCommandEvents(
+        configured(() => skipped as never),
+        output,
+      ),
+      [],
+    );
+  }
+});
+
+test('events: a recorded manifest must be the declared one with events left out, never reordered or foreign', () => {
+  const a = { name: 'a.done', version: 1 };
+  const b = { name: 'b.done', version: 1 };
+  const c = { name: 'c.done', version: 1 };
+  assert.ok(recordedFrom([], [a, b, c]));
+  assert.ok(recordedFrom([a, c], [a, b, c]));
+  assert.ok(recordedFrom([a, b, c], [a, b, c]));
+  assert.ok(!recordedFrom([c, a], [a, b, c]));
+  assert.ok(!recordedFrom([a, a], [a, b, c]));
+  assert.ok(!recordedFrom([{ name: 'a.done', version: 2 }], [a, b, c]));
+  assert.ok(!recordedFrom([{ name: 'd.done', version: 1 }], [a, b, c]));
 });
 
 test('events: failures redact trusted validator/projector messages and expose no cause or private data', () => {

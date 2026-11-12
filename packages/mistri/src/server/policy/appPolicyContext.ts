@@ -53,7 +53,7 @@ import { collectCommandAvailability, readCommandAvailability } from '../commands
 import { prepareCommandTargets, type PreparedCommandTarget } from '../commands/commandTargets.js';
 import { readPreparedRecord, readPreparedTargetAvailability, withPreparedAhead, type PreparedCommand } from '../commands/commandPrepare.js';
 import { preparesInitial } from '../commands/commandPrepareNeeds.js';
-import { apiScopeName, narrowRowsToApiScope, requestApiScope } from '../api/apiRowScope.js';
+import { apiScopeName, linkRowScope, narrowRowsToApiScope, requestApiScope } from '../api/apiRowScope.js';
 import { bindScopedBusinessCommands, type ScopedCommandOptions } from '../commands/scopedBusinessCommandAccess.js';
 import type { BusinessCommandBinding } from '../commands/businessCommandAccess.js';
 import type { CommandFlags } from '../commands/commandFlags.js';
@@ -71,8 +71,12 @@ export interface PolicyPrincipal {
       with one, and public narrowing may restrict the read grant. 'service': a
       jobs module's principal the policy's `services` names, its id
       `service:<name>`, running a job, timer, workflow step, inbound endpoint
-      or integration webhook; resolveRows says the rows it runs commands in. */
-  readonly kind?: 'service' | 'public';
+      or integration webhook; resolveRows says the rows it runs commands in.
+      'link': whoever holds a capability link, id `link:<link id>`, with no
+      roles; resolveRows is never called with one (withLink). */
+  readonly kind?: 'service' | 'public' | 'link';
+  /** The capability link a link principal holds (BusinessCommandActor['link']). */
+  readonly link?: Readonly<{ id: string; name: string; resource: string; key: string }>;
   /** A row-scoped API token's scope (api.scopes), set here from the token after the policy is asked: a command's `actor.scope`. */
   readonly scope?: Readonly<{ name: string; key: string }>;
 }
@@ -233,6 +237,13 @@ const PUBLIC_VISITOR = (appId: string): PolicyPrincipal =>
 const servicePrincipal = (name: string, roles: readonly string[], appId: string): PolicyPrincipal =>
   Object.freeze({ id: `service:${name}`, appId, roles: Object.freeze([...roles]), kind: 'service' as const });
 
+/** A capability link's holder, as the link door names it (links/linkRoutes.ts): no roles, the link its only grant. */
+const linkPrincipal = (link: LinkHold, appId: string): PolicyPrincipal =>
+  Object.freeze({ id: `link:${link.id}`, appId, roles: Object.freeze([]), kind: 'link' as const, link: Object.freeze({ ...link }) });
+
+/** The link the door found and verified: never a request's word. */
+type LinkHold = NonNullable<PolicyPrincipal['link']>;
+
 /** A service's run: who it is and the roles its module gives it, never a request's. */
 interface ServiceCall {
   readonly name: string;
@@ -240,9 +251,11 @@ interface ServiceCall {
 }
 
 /** A call the server makes for someone, never on a request's word: a jobs
- * module's service, which runs commands in its rows, or an account the server
- * itself found (a notice's recipient, email/outbox.ts), which only reads. */
-type ServerCall = { readonly service: ServiceCall } | { readonly account: Identity };
+ * module's service, which runs commands in its rows, an account the server
+ * itself found (a notice's recipient, email/outbox.ts), which only reads, or a
+ * capability link the link door verified, which runs its declared commands on
+ * its one record. */
+type ServerCall = { readonly service: ServiceCall } | { readonly account: Identity } | { readonly link: LinkHold };
 
 function principalFor(session: Identity | null, appId: string): PolicyPrincipal {
   const identity = snapshotScopedData(session);
@@ -406,7 +419,8 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
     assertDeployed();
     const service = server && 'service' in server ? server.service : undefined;
     const account = server && 'account' in server ? server.account : undefined;
-    const session = publicly || service ? null : (account ?? (await verifySession(request as Request)));
+    const link = server && 'link' in server ? server.link : undefined;
+    const session = publicly || service || link ? null : (account ?? (await verifySession(request as Request)));
     assertDeployed();
     /* Public row narrowing intersects the existing read/field ceiling.
           A public visitor has no account roles, writer or private commands. */
@@ -416,14 +430,20 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
        no fixed action, no transaction of its own. */
     let principal = service
       ? servicePrincipal(service.name, service.roles, app.id)
-      : visitor
-        ? PUBLIC_VISITOR(app.id)
-        : principalFor(session, app.id);
+      : link
+        ? linkPrincipal(link, app.id)
+        : visitor
+          ? PUBLIC_VISITOR(app.id)
+          : principalFor(session, app.id);
     assertDeployed();
     const access = resolveAppAccess(app, schema, visitor ? [] : [...principal.roles], visitor ? 'public' : undefined);
     const validation = compileAppDefinitionValidation(schema, app);
     let rows: RowScope;
-    if (visitor && !resolvePublicRows) {
+    if (link) {
+      /* The link is the grant for its one record, and the policy is not asked: a policy written for people, asked
+         about a key, could widen it to more than its row by accident. Every other table reads nothing. */
+      rows = linkRowScope(schema, link.resource, link.key);
+    } else if (visitor && !resolvePublicRows) {
       // Every resource the grant names, whole. A resource it does not name
       // is absent, which is the same as having no rows in it at all.
       rows = snapshotRowScope(schema, Object.fromEntries([...access.readable].map((id) => [id, true])));
@@ -437,7 +457,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
     /* A row-scoped token (api.scopes) reads and writes inside one key: its
        condition is folded into the rows the policy gave, so it costs no read
        of its own. */
-    const apiScope = visitor || service || account ? undefined : requestApiScope(app.api, request, deniedScope);
+    const apiScope = visitor || service || account || link ? undefined : requestApiScope(app.api, request, deniedScope);
     if (apiScope) {
       rows = snapshotRowScope(schema, narrowRowsToApiScope(rows, apiScope.scope, apiScope.key, schema));
       // What its commands are told (`actor.scope`), after the policy was asked by the person alone.
@@ -634,7 +654,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
               }),
           }
         : {}),
-      ...(commandBinding && !server
+      ...(commandBinding && (!server || link)
         ? {
             commands: Object.freeze<NonNullable<AppPolicyContext['commands']>>({
               availability: (raw, options) =>
@@ -754,8 +774,10 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                     // A visible explicit revision needs only the scoped reader. This
                     // keeps preparation independent of the command journal; opaque or
                     // hidden revisions still use the command's internal row projection.
+                    // A link's holder reads no table generically: its revision is read in the command's transaction below.
                     if (
                       command.targets !== 'none' &&
+                      principal.kind !== 'link' &&
                       authorized.versionField &&
                       !preparesInitial(command) &&
                       (!access.fields?.get(authorized.resource) ||
@@ -986,5 +1008,10 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
      * from the policy, and no writer, action or command. */
     withAccount: <T>(account: Identity, run: (context: AppPolicyContext) => Promise<T>) =>
       withContext(undefined, (context) => run(context), false, Object.freeze({ account })),
+    /** A capability link the link door found and verified (links/linkRoutes.ts): its declared commands on its one
+     * record, in rows narrowed to that record alone. The policy is never asked about it; no writer, action or
+     * generic read of a table. */
+    withLink: <T>(link: LinkHold, run: (context: AppPolicyContext) => Promise<T>) =>
+      withContext(undefined, (context) => run(context), false, Object.freeze({ link: Object.freeze({ ...link }) })),
   });
 }

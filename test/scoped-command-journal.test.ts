@@ -125,8 +125,8 @@ test('scoped command capability requires explicit migration before entering the 
   assert.equal(called, false);
   assert.equal(db.prepare('SELECT name FROM sqlite_master WHERE name LIKE ?').all('__mistri_command_%').length, 0);
   assert.equal(name(db), 'Original');
-  assert.deepEqual(migrateSqliteCommandJournal(path), { version: 3, migrated: true });
-  assert.deepEqual(migrateSqliteCommandJournal(path), { version: 3, migrated: false });
+  assert.deepEqual(migrateSqliteCommandJournal(path), { version: 4, migrated: true });
+  assert.deepEqual(migrateSqliteCommandJournal(path), { version: 4, migrated: false });
   await commandsOf(adapter).scopeCommandTransaction(scopeA(), async (tx, journal) => {
     await tx.update(update);
     await journal.commit(receipt, audit);

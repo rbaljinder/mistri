@@ -182,11 +182,13 @@ export function payloadJson(input: unknown, allowlist?: readonly string[], effec
 }
 
 /** Independent storage/replay check: preserve the exact supplied order. No
- * registry, parser, projector or runtime authority is consulted or manufactured. */
-export function captureCommandEventManifest(input: unknown): CommandEventManifest {
+ * registry, parser, projector or runtime authority is consulted or manufactured.
+ * A declaration is never empty; a recorded batch may be (`empty`), when every
+ * projection skipped its event. */
+export function captureCommandEventManifest(input: unknown, empty = false): CommandEventManifest {
   try {
     const value = detached(input, COMMAND_EVENT_LIMITS.manifestBytes);
-    if (!Array.isArray(value) || !value.length || value.length > COMMAND_EVENT_LIMITS.events) return projectionError();
+    if (!Array.isArray(value) || (!empty && !value.length) || value.length > COMMAND_EVENT_LIMITS.events) return projectionError();
     const seen = new Set<string>();
     return Object.freeze(
       value.map((item) => {
@@ -211,7 +213,7 @@ export function captureCommandEventManifest(input: unknown): CommandEventManifes
 export function captureCommandEventBatch(input: unknown, expected?: CommandEventManifest): CommandEventBatch {
   try {
     const value = detached(input, COMMAND_EVENT_LIMITS.batchBytes);
-    if (!Array.isArray(value) || !value.length || value.length > COMMAND_EVENT_LIMITS.events) return projectionError();
+    if (!Array.isArray(value) || value.length > COMMAND_EVENT_LIMITS.events) return projectionError();
     let bytes = 0;
     const captured = value.map((item) => {
       const draft = exact(item, ['name', 'version', 'payloadJson']);
@@ -225,12 +227,28 @@ export function captureCommandEventBatch(input: unknown, expected?: CommandEvent
       if (bytes > COMMAND_EVENT_LIMITS.batchPayloadBytes) return projectionError();
       return Object.freeze({ ...identity, payloadJson: canonical });
     });
-    const manifest = captureCommandEventManifest(captured.map(({ name, version }) => ({ name, version })));
-    if (expected !== undefined && canonicalCommandJson(captureCommandEventManifest(expected)) !== canonicalCommandJson(manifest)) {
+    const manifest = captureCommandEventManifest(
+      captured.map(({ name, version }) => ({ name, version })),
+      true,
+    );
+    if (expected !== undefined && canonicalCommandJson(captureCommandEventManifest(expected, true)) !== canonicalCommandJson(manifest)) {
       return projectionError();
     }
     return Object.freeze(captured);
   } catch {
     return projectionError();
   }
+}
+
+/** Whether a recorded batch is what a declaration could have recorded: its
+ * events, in the declaration's order, each at most once. A projection that
+ * returned nothing left its event out; nothing else may be missing or moved. */
+export function recordedFrom(recorded: CommandEventManifest, declared: CommandEventManifest): boolean {
+  let at = 0;
+  for (const event of recorded) {
+    while (at < declared.length && (declared[at].name !== event.name || declared[at].version !== event.version)) at++;
+    if (at === declared.length) return false;
+    at++;
+  }
+  return true;
 }

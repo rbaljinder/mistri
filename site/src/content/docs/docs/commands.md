@@ -451,7 +451,7 @@ invite: defineCommand({ source: 'main', target: 'application', output: shape({ l
 
 A public command may mint one too, on the one record it has just inserted, and answer it as `link: text()` beside its `reference`: the visitor reads it in that first answer only (a replay of the same submission leaves it out), and a submission the door turned away as a bot gets a link-shaped URL that opens nothing. Asked before the insert, or after two, `link` refuses.
 
-`revokeLinks('status')` in a handler closes the record's links of that name, every one when it names none; removing the record closes them all in the same transaction. A link needs `MISTRI_FORM_KEY`; `uses`, `confirm` and `stepUp` limit who gets in ([reference](/docs/dsl-resources/)).
+`revokeLinks('status')` in a handler closes the record's links of that name, every one when it names none; removing the record closes them all in the same transaction. A record removed outside a command, by SQL or a cascade, closes its links when one is next opened: the door finds no row and answers as for an unknown link. `mistri check` advises `link-cascade` and `link-key-reuse` where that can happen. A link needs `MISTRI_FORM_KEY`; `uses`, `confirm` and `stepUp` limit who gets in ([reference](/docs/dsl-resources/)).
 
 ## Load and run
 

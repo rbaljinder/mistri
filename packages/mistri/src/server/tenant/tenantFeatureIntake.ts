@@ -4,7 +4,7 @@
  */
 import { homeSourceOf } from '../../shared/appModel.js';
 import type { TenantStartupCheck } from './tenantFeatureContract.js';
-import { tenantPageProblems, tenantPublicPages } from './tenantIntakePages.js';
+import { tenantFormLookupProblems, tenantPageProblems, tenantPublicPages } from './tenantIntakePages.js';
 import { tenantPublicForms } from './tenantIntakeModel.js';
 import { TenantCommandStartupError } from './tenantStartupError.js';
 
@@ -27,8 +27,12 @@ export const intakeCheck = Object.freeze<TenantStartupCheck>({
         "A tenant App's public form or public page needs the platform realm (auth.tenancy.platform): a submission no address places goes to the platform.",
       );
     }
-    /* A public page that intake could not run would be served and then refuse every visitor; say why before it is. */
-    const problems = tenantPageProblems(app, registry, homeSourceOf(app) ?? '', (table) => policy.ownership[table]?.kind);
+    /* A public page or form that intake could not run would be served and then refuse every visitor; say why before it is. */
+    const home = homeSourceOf(app) ?? '';
+    const problems = [
+      ...tenantFormLookupProblems(app, registry, home),
+      ...tenantPageProblems(app, registry, home, (table) => policy.ownership[table]?.kind),
+    ];
     if (problems.length) throw new TenantCommandStartupError(problems.join('\n'));
   },
 });

@@ -38,12 +38,16 @@ import { resetPublicFormLimits } from '../packages/engine/src/server/http/rateLi
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { clearJournal } from '../packages/engine/src/server/journal.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
-import { appLinkProblems } from '../packages/mistri/src/shared/appLinks.js';
+import { appLinkAdvisories, appLinkProblems } from '../packages/mistri/src/shared/appLinks.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { redactLinkTokens } from '../packages/engine/src/server/http/refusalReport.js';
 import { Masker } from '../packages/mistri/src/server/observe/mask.js';
 import { createApp } from './support/createApp.js';
 import { catalogOf } from './support/commandCatalog.js';
+
+// The page carries random tokens (the style nonce, the link and its session) whose base64 can spell a
+// name by chance; a CI run once failed on a nonce that read "ioAda9…". Leaks are looked for with them out.
+const untokened = (html: string) => html.replace(/\b(?:nonce|data-base|data-session)="[^"]*"/g, '');
 
 const SCHEMA = `CREATE TABLE application (id INTEGER PRIMARY KEY, applicant TEXT NOT NULL, status TEXT NOT NULL, zip TEXT, email TEXT, note TEXT);
   INSERT INTO application VALUES (1, 'Ada', 'submitted', '94110', 'ada@example.test', 'private note'),
@@ -569,6 +573,92 @@ test('removing a row ends every link minted on it, in the removal’s own transa
     assert.equal((await get(other.url.slice(origin.length))).status, 303);
   }));
 
+test('a row removed outside any command closes its links the first time one is read, before its key names another row', () =>
+  fixture(async ({ mint, land, get, sql, origin }) => {
+    const first = await mint('status');
+    const second = await mint('brief');
+    const other = await mint('status', 2);
+    const { id, cookie } = await land(first.url);
+    const revokedAt = (url: string) =>
+      (
+        sql
+          .prepare(`SELECT revoked_at FROM ${COMMAND_JOURNAL_TABLES.link} WHERE id = ?`)
+          .get(linkTokenId(url.slice(url.lastIndexOf('/') + 1))!) as {
+          revoked_at: number | null;
+        }
+      ).revoked_at;
+    // Plain SQL, as a cascade would: no command runs, so nothing revokes yet.
+    sql.prepare('DELETE FROM application WHERE id = 1').run();
+    assert.equal(revokedAt(second.url), null);
+    const page = await get(`/l/${id}`, { cookie });
+    assert.equal(page.status, 404);
+    // Every link to the row went with that read; the other row's did not.
+    assert.ok(revokedAt(first.url)! > 0);
+    assert.ok(revokedAt(second.url)! > 0);
+    assert.equal(revokedAt(other.url), null);
+    // The key comes back on a new row (rowid reuse): the links stay closed.
+    sql.prepare("INSERT INTO application (id, applicant, status) VALUES (1, 'Cy', 'submitted')").run();
+    assert.equal((await get(second.url.slice(origin.length))).status, 404);
+    assert.equal((await get(other.url.slice(origin.length))).status, 303);
+  }));
+
+test('check advises where a link outlives its row: a cascade, and a SQLite key the database hands out again', () => {
+  const columns = ['id', 'applicant', 'status', 'zip', 'email', 'note'].map((name) => ({
+    name,
+    type: 'TEXT',
+    nullable: true,
+    primaryKey: name === 'id',
+  }));
+  const schema = (extra: object, foreignKeys: unknown[] = []) =>
+    ({
+      dialect: 'sqlite',
+      tables: [{ id: 'application', name: 'application', columns, ...extra }],
+      foreignKeys,
+    }) as unknown as DatabaseSchema;
+  assert.deepEqual(appLinkAdvisories(parse(), schema({})), []);
+  const cascade = {
+    name: 'fk',
+    onDelete: 'cascade',
+    from: { table: 'application', columns: ['program_id'] },
+    to: { table: 'program', columns: ['id'] },
+  };
+  const advice = appLinkAdvisories(
+    parse(),
+    schema({ reusesKeys: true }, [cascade, { ...cascade, onDelete: 'restrict', to: { table: 'cohort', columns: ['id'] } }]),
+  );
+  assert.equal(advice.length, 2);
+  assert.match(
+    advice[0],
+    /^resources "application", "links" \[link-cascade\]: its rows are deleted with their "program" \(ON DELETE CASCADE\)/,
+  );
+  assert.match(advice[1], /\[link-key-reuse\]: application is keyed by an INTEGER PRIMARY KEY without AUTOINCREMENT/);
+  // A resource that mints no link is not advised.
+  const { links: _links, ...plain } = RAW.resources.application;
+  assert.deepEqual(appLinkAdvisories(parse({ ...RAW, resources: { application: plain } }), schema({ reusesKeys: true }, [cascade])), []);
+});
+
+test('the SQLite catalog marks a rowid key that may be handed out again, and not one declared AUTOINCREMENT', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-links-keys-'));
+  const file = join(directory, 'keys.db');
+  const setup = new DatabaseSync(file);
+  setup.exec(`CREATE TABLE reused (id INTEGER PRIMARY KEY, a TEXT);
+    CREATE TABLE kept (id INTEGER PRIMARY KEY AUTOINCREMENT, a TEXT);
+    CREATE TABLE texted (id TEXT PRIMARY KEY, a TEXT);`);
+  setup.close();
+  const registry = new Registry();
+  try {
+    registry.add({ id: 'keys', name: 'Keys', url: file, source: 'config' });
+    const { schema } = await registry.open('keys');
+    const flag = (name: string) => schema.tables.find((table) => table.name === name)?.reusesKeys;
+    assert.equal(flag('reused'), true);
+    assert.equal(flag('kept'), undefined);
+    assert.equal(flag('texted'), undefined);
+  } finally {
+    await registry.closeAll();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('a public command answers its visitor with a link to the one row it made, once, and a decoy with one that opens nothing', () =>
   fixture(async ({ post, get, land, sql, origin }) => {
     const apply = (applicant: string, submission: string, extra: object = {}) =>
@@ -585,7 +675,7 @@ test('a public command answers its visitor with a link to the one row it made, o
     const { page } = await land(applied.body.link);
     assert.equal(page.status, 200, page.text);
     assert.match(page.text, /Cy/);
-    assert.doesNotMatch(page.text, /Ada|Bea|ada@example\.test/);
+    assert.doesNotMatch(untokened(page.text), /Ada|Bea|ada@example\.test/);
 
     // A replay of the same submission answers its reference again, and never the URL a second time.
     const replayed = await apply('Cy', 'apply-submission-0001');
@@ -628,7 +718,7 @@ test('a confirmation is typed before anything shows, and five wrong ones lock it
     const { id, page, session, cookie } = await land(url);
     assert.match(page.text, /data-gate="confirm"/);
     assert.match(page.text, /ZIP code/);
-    assert.doesNotMatch(page.text, /Ada/);
+    assert.doesNotMatch(untokened(page.text), /Ada/);
     const headers = { 'x-mistri-link': session };
     // Commands wait behind the gate too.
     assert.equal((await post(`/l/${id}/prepare`, {}, headers)).status, 404);
@@ -666,7 +756,7 @@ test('a step-up mails a code to the record’s address, and the code opens the r
     const { url } = await mint('stepped');
     const { id, page, session } = await land(url);
     assert.match(page.text, /data-gate="send"/);
-    assert.doesNotMatch(page.text, /Ada|ada@example/);
+    assert.doesNotMatch(untokened(page.text), /Ada|ada@example/);
     const headers = { 'x-mistri-link': session };
     const early = await post(`/l/${id}/stepup`, { code: '000000' }, headers);
     assert.equal(early.status, 403, early.text);

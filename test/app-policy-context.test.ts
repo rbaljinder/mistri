@@ -189,7 +189,14 @@ test('verified context exposes only frozen logical metadata and scoped capabilit
   const { issue } = await fixture(t);
   const issuer = issue();
   assert.ok(Object.isFrozen(issuer));
-  assert.deepEqual(Reflect.ownKeys(issuer).sort(), ['retire', 'withAccount', 'withContext', 'withPublicContext', 'withService']);
+  assert.deepEqual(Reflect.ownKeys(issuer).sort(), [
+    'retire',
+    'withAccount',
+    'withContext',
+    'withLink',
+    'withPublicContext',
+    'withService',
+  ]);
   await issuer.withContext(signedIn, async (context) => {
     assert.deepEqual(Reflect.ownKeys(context).sort(), [
       'data',

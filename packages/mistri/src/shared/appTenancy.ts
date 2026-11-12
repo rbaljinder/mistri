@@ -268,7 +268,14 @@ export function appForRealm(app: AppDef, pages: readonly PageDef[], realm: AppRe
     ...(staff ? { me: staff } : {}),
     roles,
     ...(grants.public
-      ? { public: { ...grants.public, read: grants.public.read.filter((name) => retained.has(name)), ...fields(grants.public.fields) } }
+      ? {
+          public: {
+            ...grants.public,
+            read: grants.public.read.filter((name) => retained.has(name)),
+            ...fields(grants.public.fields),
+            ...(grants.public.byKey ? { byKey: grants.public.byKey.filter((name) => retained.has(name)) } : {}),
+          },
+        }
       : {}),
   };
   return { app: { ...surface.app, ...(resources === undefined ? {} : { resources }), auth }, pages: surface.pages };

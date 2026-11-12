@@ -109,7 +109,7 @@ import { withMachineSteppers } from '../../shared/appMachine.js';
 import { tabSlug } from '@mistriwork/engine/shared/addressParams.js';
 import { isMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import { appNotifyRules, notifyAdvisories } from '../../shared/appNotify.js';
-import { appLinkProblems } from '../../shared/appLinks.js';
+import { appLinkAdvisories, appLinkProblems } from '../../shared/appLinks.js';
 import { compileComponents, compileUiKit, componentHrefs, uiKitCode, type CompiledComponents } from './appComponents.js';
 import { componentMessageKeys, lintComponents, pageManifestsOf } from './componentLint.js';
 import { pageFiles, placePages, readPageFiles, uiKitModuleProblems } from './appPages.js';
@@ -1425,6 +1425,7 @@ export function appAdvisories(loaded: LoadedApp, schema: DatabaseSchema): string
     ...notifyAdvisories(loaded.app, schema),
     ...valueLabelFindings(loaded.app).warnings,
     ...apiScopeAdvisories(loaded.app.api),
+    ...appLinkAdvisories(loaded.app, schema),
   ].map((w) => `${manifest}: ${locateProblem(loaded.origins, w)}`);
 }
 

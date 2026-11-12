@@ -13,6 +13,8 @@ import { sessionActorWords } from '../app/appStamps.js';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { captureHttpCommandFlags } from '../flags/httpRuntime.js';
 import { stageFileHttp } from '../commands/stagedFileHttp.js';
+import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
+import { servesLinks, withLinkUrls } from '../links/linkLookup.js';
 
 /**
  * `body`: the command's body where it was read already — availability asked
@@ -64,7 +66,7 @@ export async function commandRoutes(ctx: RequestContext, body?: unknown): Promis
         label: (body) => commandActionLabel(signedIn.app.app, body),
         ...given,
       });
-      send(res, 200, result);
+      send(res, 200, path === COMMAND_ROUTES.execute ? await policyLinkUrls(ctx, result) : result);
       return true;
     }
     const connection = appEntrypoint(signedIn, registry);
@@ -107,4 +109,20 @@ export async function commandRoutes(ctx: RequestContext, body?: unknown): Promis
   }
 
   return false;
+}
+
+/* A link a row-policy command minted is said as its URL to whoever ran it, as on the unscoped path
+   (businessCommandHttp.ts): the receipt keeps the reference only. The link's row is the platform's, read by id. */
+async function policyLinkUrls(ctx: RequestContext, result: unknown): Promise<unknown> {
+  const app = ctx.signedIn?.app.app;
+  if (!app || !servesLinks(app)) return result;
+  const connection = appEntrypoint(ctx.signedIn as never, ctx.registry);
+  if (!connection) return result;
+  const releases: Array<() => void> = [];
+  try {
+    const resources = await loadAppRuntimeResources(ctx.registry, app, connection, (owner) => releases.push(ctx.registry.lease(owner)));
+    return await withLinkUrls(app, resources, result);
+  } finally {
+    for (const release of releases.reverse()) release();
+  }
 }

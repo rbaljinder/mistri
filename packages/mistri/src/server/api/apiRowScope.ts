@@ -8,6 +8,7 @@ import { coerceForColumn, columnKind, primaryKey, type DatabaseSchema, type Tabl
 import { resolvePath } from '@mistriwork/engine/shared/viewPaths.js';
 import { Refusal, type InsertRequest, type WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import type { ApiScopeDef, AppApiDef } from '../../shared/appApi.js';
+import { linkRowKey } from '../../shared/appLinks.js';
 import { BusinessCommandExecutionError } from '../commands/commandErrors.js';
 import { requestScope } from '../tenant/tenantApiRequest.js';
 
@@ -162,6 +163,20 @@ export function narrowRowsToApiScope(rows: RowScope, scope: ApiScopeDef, key: st
     }
   }
   return out;
+}
+
+/**
+ * A capability link's rows: its one record of its resource, and nothing of any other table — the grant a link is,
+ * folded as a row-scoped token's is, one key column at a time. A row policy is never asked about a link's holder:
+ * a policy written for people would widen a key to one row by accident (policy/appPolicyContext.ts withLink).
+ */
+export function linkRowScope(schema: DatabaseSchema, resource: string, rowKey: string): RowScope {
+  const key = linkRowKey(rowKey);
+  if (!key) throw new Error('links: the link names no record.');
+  let rows: RowScope = Object.fromEntries(schema.tables.map((table) => [table.id, true]));
+  for (const [column, value] of Object.entries(key))
+    rows = narrowRowsToApiScope(rows, { key: resource, rows: { [resource]: column } }, value, schema);
+  return snapshotRowScope(schema, rows);
 }
 
 /** The parents a path mapping walks to from the given resources: an insert there is proven against its parent's rows. */

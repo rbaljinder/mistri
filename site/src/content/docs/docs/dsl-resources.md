@@ -593,7 +593,7 @@ another door always is. A second process writes its own row.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `resources.*.links` | object | Stable | Capability links by name: a way to hand one record to someone who signs in to nothing. A command on the record mints one (context.link('status')); whoever holds it sees the show columns of that one record and runs the declared commands on it, and nothing else. Not in an App scoped by tenant or a row policy. Used in `examples/apps/lintel/pages/unit.ts`. |
+| `resources.*.links` | object | Stable | Capability links by name: a way to hand one record to someone who signs in to nothing. A command on the record mints one (context.link('status')); whoever holds it sees the show columns of that one record and runs the declared commands on it, and nothing else. Not yet in an App scoped by tenant; in a row-policy App the link is the grant for its one record, and the policy is not asked. Used in `examples/apps/lintel/pages/unit.ts`. |
 | `resources.*.links.*.commands` | array | Stable | Commands the holder may run on the record, at most eight: each registered, targets: 'one' on this resource, not public, its input text, textarea, number, boolean, date or a fixed choice. Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.links.*.confirm` | array \| object | Stable | One to three columns only the holder knows, typed back before anything is shown: ['zip'], or { zip: 'ZIP code' } to say the label asked. Never a column show names. Used in `examples/apps/lintel/resources.ts`. |
 | `resources.*.links.*.expires` | string | Stable | How long a minted link opens: '7 days' unless said, '90 days' at most. |

@@ -58,8 +58,14 @@ export const AUDIT_TARGET_ENTRIES = 4096;
    uses left and revocation, never its secret: the secret is derived from the
    form key and the row's id, so nothing that opens a row is at rest. It names
    the minting receipt without a key to it, so a receipt is forgotten on its
-   own window while the link lives to its expiry. */
-export const JOURNAL_VERSION = 3;
+   own window while the link lives to its expiry.
+
+   Version 4 lets a receipt record an empty event batch (`event_count` 0, the
+   manifest `[]`): a command whose projections all declined still says so, and
+   delivery reads that row as nothing to deliver rather than a missing batch.
+   It also gives a link its row's stamp (`row_stamp`), where the row has one,
+   so a link outlives neither the row it names nor that row's replacement. */
+export const JOURNAL_VERSION = 4;
 const meta = (version: number) => `CREATE TABLE "${COMMAND_JOURNAL_TABLES.meta}" (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
   version INTEGER NOT NULL CHECK (version = ${version})
@@ -84,8 +90,9 @@ export const sqliteJournalUpgradeFrom1 = (): readonly string[] => [
   `INSERT INTO "${COMMAND_JOURNAL_TABLES.meta}" (singleton, version) VALUES (1, 2)`,
 ];
 const LINK_INDEX = `${COMMAND_JOURNAL_TABLES.link}_row`;
-/* The link table as version 3 lays it out: the upgrade from version 2 creates exactly this text. */
-const LINK_DDL = `CREATE TABLE "${COMMAND_JOURNAL_TABLES.link}" (
+/* The link table as version 3 lays it out (the upgrade from version 2 creates exactly this text) and as version 4
+   does, with the row's stamp after the columns version 3 has. */
+const linkDdl = (version: 3 | 4) => `CREATE TABLE "${COMMAND_JOURNAL_TABLES.link}" (
   id TEXT COLLATE BINARY PRIMARY KEY NOT NULL,
   app_id TEXT COLLATE BINARY NOT NULL,
   tenant_id TEXT COLLATE BINARY NOT NULL,
@@ -100,44 +107,24 @@ const LINK_DDL = `CREATE TABLE "${COMMAND_JOURNAL_TABLES.link}" (
   command TEXT COLLATE BINARY NOT NULL,
   receipt TEXT COLLATE BINARY NOT NULL,
   opens INTEGER NOT NULL CHECK (opens >= 0),
-  last_opened_at INTEGER
+  last_opened_at INTEGER${
+    version === 3
+      ? ''
+      : `,
+  row_stamp TEXT CHECK (row_stamp IS NULL OR (typeof(row_stamp) = 'text' AND length(CAST(row_stamp AS BLOB)) BETWEEN 1 AND 512))`
+  }
 )`;
 const LINK_INDEX_DDL = `CREATE INDEX "${LINK_INDEX}" ON "${COMMAND_JOURNAL_TABLES.link}" (app_id, resource, row_key)`;
 /** What the upgrade from version 2 runs: the link table, its index and the version row. */
 export const sqliteJournalUpgradeFrom2 = (): readonly string[] => [
-  LINK_DDL,
+  linkDdl(3),
   LINK_INDEX_DDL,
   `DROP TABLE "${COMMAND_JOURNAL_TABLES.meta}"`,
   meta(3),
   `INSERT INTO "${COMMAND_JOURNAL_TABLES.meta}" (singleton, version) VALUES (1, 3)`,
 ];
 
-/* Old receipts are forgotten under the App's `commands` window
-   (server/retention.ts). A receipt exists only once its command committed, so
-   none is pending; one that carries an event batch stays while its events do,
-   and one an event destination has taken up stays while its marker does. The
-   tables are named, not imported: the event and delivery schemas import this
-   file. */
-registerPrune({
-  id: 'command-receipts',
-  window: 'commands',
-  table: COMMAND_JOURNAL_TABLES.receipt,
-  time: 'completed_at',
-  clock: { sqlite: 'iso-text', postgres: 'timestamp' },
-  where: () => 'manifest_json IS NULL',
-  referencedBy: [
-    { table: '__mistri_event_event', column: 'receipt_id' },
-    { table: '__mistri_delivery_receipt', column: 'receipt_id' },
-    { table: '__mistri_delivery_delivery', column: 'receipt_id' },
-  ],
-});
-/* A link past its expiry opens nothing, whatever the App keeps of anything else: gone with the daily run. */
-registerPrune({ id: 'command-links', window: 'expired', table: COMMAND_JOURNAL_TABLES.link, time: 'expires_at', clock: 'epoch-ms' });
-export const definitions = new Map<string, string>([
-  [COMMAND_JOURNAL_TABLES.meta, meta(JOURNAL_VERSION)],
-  [
-    COMMAND_JOURNAL_TABLES.receipt,
-    `CREATE TABLE "${COMMAND_JOURNAL_TABLES.receipt}" (
+const RECEIPT_DDL = `CREATE TABLE "${COMMAND_JOURNAL_TABLES.receipt}" (
   id TEXT COLLATE BINARY PRIMARY KEY NOT NULL,
   app_id TEXT COLLATE BINARY NOT NULL,
   store_id TEXT COLLATE BINARY NOT NULL,
@@ -162,16 +149,72 @@ export const definitions = new Map<string, string>([
   ${array('keys_json', B.keys)},
   ${array('changes_json', B.changes)},
   manifest_json TEXT CHECK (manifest_json IS NULL OR (typeof(manifest_json) = 'text' AND json_valid(manifest_json) AND json_type(manifest_json) = 'array' AND length(CAST(manifest_json AS BLOB)) BETWEEN 1 AND 65536)),
-  event_count INTEGER CHECK (event_count IS NULL OR (typeof(event_count) = 'integer' AND event_count BETWEEN 1 AND 32)),
+  event_count INTEGER CHECK (event_count IS NULL OR (typeof(event_count) = 'integer' AND event_count BETWEEN 0 AND 32)),
   digest TEXT CHECK (digest IS NULL OR (typeof(digest) = 'text' AND length(digest) = 64 AND digest NOT GLOB '*[^0-9a-f]*')),
   CHECK (realm = 'tenant' OR tenant_id = ''),
   CHECK ((manifest_json IS NULL) = (event_count IS NULL) AND (manifest_json IS NULL) = (digest IS NULL)),
   UNIQUE (app_id, store_id, source_id, realm, tenant_id, actor_id, command_id, command_version, idempotency_key)
-)`,
+)`;
+const COMPLETED_INDEX_DDL = `CREATE INDEX "${COMPLETED_INDEX}" ON "${COMMAND_JOURNAL_TABLES.receipt}" (completed_at)`;
+const LINK_COLUMNS =
+  'id, app_id, tenant_id, resource, row_key, name, expires_at, uses_left, revoked_at, created_at, created_by, command, receipt, opens, last_opened_at';
+const PARKED = (table: string) => `"${table}_v3"`;
+/**
+ * What the upgrade from version 3 runs. SQLite cannot alter a CHECK, so the receipt and link tables are rebuilt: each
+ * is copied aside, dropped, created again in exactly this version's text and filled from the copy. It runs with the
+ * connection's foreign keys off (the migration connection opens so, and the step refuses otherwise): a drop would
+ * otherwise take the audit parts with their receipts, or be refused for the event and delivery rows that name them.
+ * Dropping and creating under the one name, never renaming, leaves the tables that name the receipt as they were
+ * written, and so as their own attestations expect them.
+ */
+export const sqliteJournalUpgradeFrom3 = (): readonly string[] => {
+  const { receipt, link, meta: metaTable } = COMMAND_JOURNAL_TABLES;
+  return [
+    `CREATE TABLE ${PARKED(receipt)} AS SELECT * FROM "${receipt}"`,
+    `DROP TABLE "${receipt}"`,
+    RECEIPT_DDL,
+    `INSERT INTO "${receipt}" SELECT * FROM ${PARKED(receipt)}`,
+    `DROP TABLE ${PARKED(receipt)}`,
+    COMPLETED_INDEX_DDL,
+    `CREATE TABLE ${PARKED(link)} AS SELECT ${LINK_COLUMNS} FROM "${link}"`,
+    `DROP TABLE "${link}"`,
+    linkDdl(4),
+    `INSERT INTO "${link}" (${LINK_COLUMNS}, row_stamp) SELECT ${LINK_COLUMNS}, NULL FROM ${PARKED(link)}`,
+    `DROP TABLE ${PARKED(link)}`,
+    LINK_INDEX_DDL,
+    `DROP TABLE "${metaTable}"`,
+    meta(4),
+    `INSERT INTO "${metaTable}" (singleton, version) VALUES (1, 4)`,
+  ];
+};
+
+/* Old receipts are forgotten under the App's `commands` window
+   (server/retention.ts). A receipt exists only once its command committed, so
+   none is pending; one that carries an event batch stays while its events do,
+   and one an event destination has taken up stays while its marker does. The
+   tables are named, not imported: the event and delivery schemas import this
+   file. */
+registerPrune({
+  id: 'command-receipts',
+  window: 'commands',
+  table: COMMAND_JOURNAL_TABLES.receipt,
+  time: 'completed_at',
+  clock: { sqlite: 'iso-text', postgres: 'timestamp' },
+  where: () => 'manifest_json IS NULL',
+  referencedBy: [
+    { table: '__mistri_event_event', column: 'receipt_id' },
+    { table: '__mistri_delivery_receipt', column: 'receipt_id' },
+    { table: '__mistri_delivery_delivery', column: 'receipt_id' },
   ],
-  [COMPLETED_INDEX, `CREATE INDEX "${COMPLETED_INDEX}" ON "${COMMAND_JOURNAL_TABLES.receipt}" (completed_at)`],
+});
+/* A link past its expiry opens nothing, whatever the App keeps of anything else: gone with the daily run. */
+registerPrune({ id: 'command-links', window: 'expired', table: COMMAND_JOURNAL_TABLES.link, time: 'expires_at', clock: 'epoch-ms' });
+export const definitions = new Map<string, string>([
+  [COMMAND_JOURNAL_TABLES.meta, meta(JOURNAL_VERSION)],
+  [COMMAND_JOURNAL_TABLES.receipt, RECEIPT_DDL],
+  [COMPLETED_INDEX, COMPLETED_INDEX_DDL],
   [COMMAND_JOURNAL_TABLES.auditPart, AUDIT_PART_DDL],
-  [COMMAND_JOURNAL_TABLES.link, LINK_DDL],
+  [COMMAND_JOURNAL_TABLES.link, linkDdl(4)],
   [LINK_INDEX, LINK_INDEX_DDL],
 ]);
 interface CatalogEntry {

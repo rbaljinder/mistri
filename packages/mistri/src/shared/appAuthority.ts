@@ -157,6 +157,7 @@ export function authorityReport(app: AppDef, origins?: AppOrigins, env: readonly
       for (const column of sorted(grants.public!.fields![resource].read))
         fact(`public fields ${resource} read ${column}`, `public.fields.${resource}`);
     }
+    for (const resource of sorted(grants.public?.byKey ?? [])) fact(`public byKey ${resource}`, `public.byKey.${resource}`);
   }
 
   /* A public form runs its command for anyone: which ones an App offers is authority too. */

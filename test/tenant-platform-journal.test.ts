@@ -91,7 +91,7 @@ async function fixture(t: TestContext, dialect: TenantDialect) {
     database: DATABASE,
   });
   t.after(() => engine.close());
-  assert.deepEqual(await engine.migrateCommandJournal(), { version: 3, migrated: true });
+  assert.deepEqual(await engine.migrateCommandJournal(), { version: 4, migrated: true });
   const postgres = dialect === 'postgres';
   // PostgreSQL's journal runs on its writer's leased client: here, one plain connection of its own.
   const connection = postgres ? await engine.session() : undefined;
@@ -161,12 +161,12 @@ for (const { dialect, skip } of TENANT_DIALECTS)
   describe(`the journal and the platform realm on ${dialect}`, { skip }, () => {
     test('v4 is the only layout: a second migration is a no-op, and a journal at another version refuses unchanged', async (t) => {
       const f = await fixture(t, dialect);
-      assert.deepEqual(await f.engine.migrateCommandJournal(), { version: 3, migrated: false });
+      assert.deepEqual(await f.engine.migrateCommandJournal(), { version: 4, migrated: false });
       await f.assertLayout();
-      await f.tamper(tables.meta, `UPDATE "${tables.meta}" SET version = 4`);
+      await f.tamper(tables.meta, `UPDATE "${tables.meta}" SET version = 5`);
       await assert.rejects(f.assertLayout(), CommandJournalUnavailable);
       await assert.rejects(f.engine.migrateCommandJournal(), CommandJournalUnavailable);
-      assert.equal(Number((await f.engine.get(`SELECT version FROM "${tables.meta}"`))!.version), 4);
+      assert.equal(Number((await f.engine.get(`SELECT version FROM "${tables.meta}"`))!.version), 5);
     });
 
     test('the platform realm is its own receipt namespace: one command, actor and key never replays across realms', async (t) => {

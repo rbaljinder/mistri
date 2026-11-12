@@ -86,8 +86,16 @@ function publicCardRoute(host: AppHost | undefined, path: string): boolean {
    catalog (appProjection.ts), so a visitor at `/jobs/1` reads the record
    rather than being drawn the sign-in screen. */
 /* `/api/live`: a visitor is told of changes to the rows the public grant reads (live/liveRoute.ts). */
-const PUBLIC_GETS = new Set(['/api/app', '/api/schema', '/api/pages', '/api/pages/suggested', '/api/runtime', '/api/file', '/api/live']);
-const PUBLIC_POSTS = new Set([
+export const PUBLIC_GETS: ReadonlySet<string> = new Set([
+  '/api/app',
+  '/api/schema',
+  '/api/pages',
+  '/api/pages/suggested',
+  '/api/runtime',
+  '/api/file',
+  '/api/live',
+]);
+export const PUBLIC_POSTS: ReadonlySet<string> = new Set([
   '/api/run',
   '/api/query',
   '/api/count',

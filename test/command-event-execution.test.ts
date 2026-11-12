@@ -138,12 +138,14 @@ async function fixture(t: TestContext, events = true, provision = true) {
     payloadValid: true,
     account: 'alice',
     denyCommitted: false,
+    skip: false,
     after: undefined as (() => void | Promise<void>) | undefined,
   };
   const declarations = {
     changed: defineEventProjection<Output, Output>(selectedEvent, (output) => {
       control.projects++;
       assert.ok(Object.isFrozen(output));
+      if (control.skip) return undefined;
       return { version: control.payloadValid ? output.version : Infinity };
     }),
   };
@@ -235,6 +237,25 @@ test('genuine tenant execution atomically saves events and restart/replay/status
   assert.equal(f.control.projects, 1);
   assert.equal(f.control.handles, 1);
   assert.deepEqual(f.db.prepare(`SELECT * FROM "${COMMAND_EVENT_TABLES.event}"`).all(), rows);
+});
+
+test('a projection that skips commits an empty batch: replay and status read it back and never project again', async (t) => {
+  const f = await fixture(t),
+    service = await f.issue();
+  f.control.skip = true;
+  const first = await service.execute(principal, ['north'], body);
+  assert.equal(f.version(), 1);
+  assert.equal(f.control.projects, 1);
+  assert.equal(f.count(COMMAND_EVENT_TABLES.event), 0);
+  const batch = f.db.prepare(`SELECT manifest_json, event_count FROM "${COMMAND_JOURNAL_TABLES.receipt}"`).get()!;
+  assert.deepEqual({ ...batch }, { manifest_json: '[]', event_count: 0 }, 'the receipt records that its one event was skipped');
+  f.control.skip = false;
+  assert.deepEqual(plain(await service.execute(principal, ['north'], body)), { ...plain(first), replayed: true });
+  assert.deepEqual(plain(await service.status(principal, ['north'], body)), { ...plain(first), replayed: true });
+  assert.equal(f.control.projects, 1);
+  // A recorded manifest is held to the declaration: an event it does not declare fails the replay closed.
+  f.db.exec(`UPDATE "${COMMAND_JOURNAL_TABLES.receipt}" SET manifest_json = '[{"name":"item.other","version":1}]'`);
+  await assert.rejects(service.status(principal, ['north'], body));
 });
 
 test('independent tenant connections collapse duplicate execution into the original event batch', async (t) => {

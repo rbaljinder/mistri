@@ -335,6 +335,7 @@ test('deployment exposes frozen private/public context readers and retire; start
     'services',
     'withAccount',
     'withContext',
+    'withLink',
     'withPublicContext',
     'withService',
   ]);

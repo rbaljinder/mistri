@@ -169,6 +169,7 @@ export function captureScopeCatalog(schema: DatabaseSchema): DatabaseSchema {
         'filterIn',
         'sortable',
         'countable',
+        'reusesKeys',
       ]);
       if (
         !identifier(table.id) ||
@@ -266,6 +267,7 @@ export function captureScopeCatalog(schema: DatabaseSchema): DatabaseSchema {
         )
           return refuse();
       if (table.countable !== undefined && table.countable !== false) return refuse();
+      if (table.reusesKeys !== undefined && table.reusesKeys !== true) return refuse();
       // Index advice, as `unique` is address evidence: only columns this table has.
       if (
         table.trigram !== undefined &&

@@ -26,7 +26,7 @@ import { readSqliteReadAudit } from '../packages/mistri/src/adapters/readAudit/s
 import { ROOT, SESSION_SECRET, serveApi } from './appApiCli.js';
 
 const storeId = '6c1d9f1e-3b5e-4d66-8f2b-4a7e1e7d3c22';
-const COMMANDS = ['rename', 'admit', 'enroll'];
+const COMMANDS = ['rename', 'admit', 'enroll', 'move', 'reassign', 'cancel'];
 
 async function clinics(t: TestContext) {
   const directory = mkdtempSync(join(tmpdir(), 'tw-api-scope-'));
@@ -39,10 +39,12 @@ async function clinics(t: TestContext) {
       'CREATE TABLE clinic(id INTEGER PRIMARY KEY, name TEXT NOT NULL); ' +
         'CREATE TABLE patient(id INTEGER PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 0, clinic_id INTEGER NOT NULL REFERENCES clinic(id), name TEXT NOT NULL); ' +
         'CREATE TABLE visit(id INTEGER PRIMARY KEY, patient_id INTEGER NOT NULL REFERENCES patient(id), note TEXT NOT NULL); ' +
-        'CREATE INDEX patient_clinic ON patient(clinic_id); CREATE INDEX visit_patient ON visit(patient_id); ' +
+        'CREATE TABLE scan(id INTEGER PRIMARY KEY, patient_id INTEGER NOT NULL REFERENCES patient(id), filename TEXT NOT NULL, bytes BLOB NOT NULL); ' +
+        'CREATE INDEX patient_clinic ON patient(clinic_id); CREATE INDEX visit_patient ON visit(patient_id); CREATE INDEX scan_patient ON scan(patient_id); ' +
         "INSERT INTO clinic VALUES (1, 'North'), (2, 'South'); " +
         "INSERT INTO patient(id, clinic_id, name) VALUES (1, 1, 'Ada'), (2, 2, 'Bo'), (3, 1, 'Cy'); " +
-        "INSERT INTO visit VALUES (1, 1, 'checkup'), (2, 2, 'x-ray'), (3, 3, 'cleaning')",
+        "INSERT INTO visit VALUES (1, 1, 'checkup'), (2, 2, 'x-ray'), (3, 3, 'cleaning'); " +
+        "INSERT INTO scan VALUES (1, 1, 'ada.png', x'89504e47'), (2, 2, 'bo.png', x'89504e47')",
     );
   } finally {
     db.close();
@@ -60,11 +62,16 @@ async function clinics(t: TestContext) {
       id: 'clinics',
       name: 'Clinics',
       sources: { business: { connection: 'data', default: true } },
-      resources: { clinic: {}, patient: { access: 'write' }, visit: { audit: { reads: true } } },
+      resources: {
+        clinic: {},
+        patient: { access: 'write' },
+        visit: { access: 'write', delete: true, audit: { reads: true } },
+        scan: { file: { content: 'bytes', name: 'filename' } },
+      },
       auth: {
         store: authPath,
         rows: 'policy',
-        roles: { staff: { read: ['clinic', 'patient', 'visit'], write: false, commands: COMMANDS } },
+        roles: { staff: { read: ['clinic', 'patient', 'visit', 'scan'], write: false, commands: COMMANDS } },
       },
       views: {
         patients: { kind: 'list', from: 'patient' },
@@ -78,11 +85,18 @@ async function clinics(t: TestContext) {
         roles: ['staff'],
         resources: {
           clinic: { fields: ['id', 'name'], sorts: ['id'] },
-          patient: { fields: ['id', 'revision', 'clinic_id', 'name'], sorts: ['id'] },
-          visit: { fields: ['id', 'patient_id', 'note'], sorts: ['id'] },
+          patient: { fields: ['id', 'revision', 'clinic_id', 'name'], filters: ['name', 'clinic_id'], sorts: ['id'] },
+          visit: { fields: ['id', 'patient_id', 'patient_id.name', 'note'], sorts: ['id'] },
+          scan: { fields: ['id', 'patient_id', 'filename'], filters: ['filename'], sorts: ['id'] },
         },
+        views: ['patients'],
         commands: COMMANDS,
-        scopes: { clinic: { key: 'clinic', rows: { clinic: 'id', patient: 'clinic_id', visit: 'patient_id.clinic_id' } } },
+        scopes: {
+          clinic: {
+            key: 'clinic',
+            rows: { clinic: 'id', patient: 'clinic_id', visit: 'patient_id.clinic_id', scan: 'patient_id.clinic_id' },
+          },
+        },
       },
     }),
   );
@@ -111,14 +125,32 @@ export default defineCommands({
       await context.db.patient.insert({ id: Number(input.id), name: input.name });
       return { ok: true };
     } }),
+  // Re-points the patient's own scope column, and a visit's hop to its patient.
+  move: defineCommand({ source: 'business', target: 'patient', read: ['clinic'], input: { clinic: { type: 'text' } }, output: shape({ ok: bool() }),
+    async handle(context, input) {
+      await context.db.patient.update(context.record, { clinic_id: Number(input.clinic) });
+      return { ok: true };
+    } }),
+  reassign: defineCommand({ source: 'business', target: 'visit', read: ['patient'], input: { patient: { type: 'text' } }, output: shape({ ok: bool() }),
+    async handle(context, input) {
+      await context.db.visit.update(context.record, { patient_id: Number(input.patient) });
+      return { ok: true };
+    } }),
+  cancel: defineCommand({ source: 'business', target: 'visit', output: shape({ ok: bool() }),
+    async handle(context) {
+      await context.db.visit.remove(context.record);
+      return { ok: true };
+    } }),
 });
 `,
   );
   writeFileSync(
     policy,
     `export default { appId: 'clinics',
-  resolveRows() { return { clinic: true, patient: true, visit: true }; },
-  resultReferences: { rename: () => [], admit: () => [], enroll: () => [] },
+  resolveRows() { return { clinic: true, patient: true, visit: true, scan: true }; },
+  // Deletes under a row policy are the policy's to allow; this one allows any its rows reach.
+  authorizeDeletedRecord() { return true; },
+  resultReferences: { rename: () => [], admit: () => [], enroll: () => [], move: () => [], reassign: () => [], cancel: () => [] },
 };
 `,
   );
@@ -204,7 +236,18 @@ export default defineCommands({
       check.close();
     }
   };
-  return { appDir, config, commands, policy, issue, revoke, patients, audited, receiptScopes };
+  const visits = () => {
+    const check = new DatabaseSync(business, { readOnly: true });
+    try {
+      return check
+        .prepare('SELECT id, patient_id FROM visit ORDER BY id')
+        .all()
+        .map((row) => ({ ...row })) as { id: number; patient_id: number }[];
+    } finally {
+      check.close();
+    }
+  };
+  return { appDir, config, commands, policy, issue, revoke, patients, visits, audited, receiptScopes };
 }
 
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
@@ -437,3 +480,104 @@ test('mint answers not-found when the proving read returns no key column, withou
     }
   }
 });
+test(
+  'a scoped token reads includes, counts, filters, a view and files of its clinic alone, moves nothing out of it, and deletes inside it',
+  { timeout: 180000 },
+  async (t) => {
+    const f = await clinics(t);
+    const parent = await f.issue('parent', Date.now() + 30 * 60 * 1000);
+    const child = (await f.issue('clinic-1', Date.now() + 30 * 60 * 1000, { name: 'clinic', key: '1' })).token;
+    const served = await serveApi(t, f, 'clinics', ['--policy', f.policy]);
+    await served.started;
+    const get = async (token: string, path: string) => {
+      const res = await fetch(`${served.base}${path}`, { headers: bearer(token) });
+      return { status: res.status, body: await res.json().catch(() => null) };
+    };
+    const ids = (body: { items: { id: string }[] }) => body.items.map((row) => row.id);
+    const prepare = async (token: string, path: string) => {
+      const res = await fetch(`${served.base}${path}/prepare`, { headers: bearer(token) });
+      await res.body?.cancel();
+      return { status: res.status, etag: res.headers.get('etag') };
+    };
+    const run = async (token: string, path: string, key: string, body: object, ifMatch?: string) => {
+      const res = await fetch(`${served.base}${path}`, {
+        method: 'POST',
+        headers: {
+          ...bearer(token),
+          'content-type': 'application/json',
+          'idempotency-key': key,
+          ...(ifMatch ? { 'if-match': ifMatch } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      return { status: res.status, body: await res.text() };
+    };
+
+    // An include walks to the parent of a row in scope, and only such a row.
+    const included = await get(child, '/visit?sort=id&fields=id,patient_id.name');
+    assert.equal(included.status, 200, JSON.stringify(included.body));
+    assert.deepEqual(ids(included.body), ['1', '3']);
+    assert.deepEqual(
+      included.body.items.map((row: Record<string, unknown>) => row['patient_id.name']),
+      ['Ada', 'Cy'],
+    );
+    // A count is the scope's, and so is what a filter finds: another clinic's name, or its key, finds nothing.
+    assert.deepEqual((await get(child, '/patient?count=true')).body.count, { value: 2, exact: true, capped: false });
+    assert.equal((await get(parent.token, '/patient?count=true')).body.count.value, 3);
+    assert.deepEqual(ids((await get(parent.token, '/patient?name=Bo')).body), ['2']);
+    assert.deepEqual(ids((await get(child, '/patient?name=Bo')).body), []);
+    const foreignKey = await get(child, '/patient?clinic_id=2&count=true');
+    assert.deepEqual(ids(foreignKey.body), []);
+    assert.equal(foreignKey.body.count.value, 0);
+    assert.deepEqual(ids((await get(child, '/patient?name=Ada')).body), ['1']);
+    // A view is the list it names, narrowed the same way.
+    const view = await get(child, '/views/patients?sort=id');
+    assert.equal(view.status, 200, JSON.stringify(view.body));
+    assert.deepEqual(ids(view.body), ['1', '3']);
+    // A file resource's rows, through the path to their patient's clinic.
+    assert.deepEqual(ids((await get(parent.token, '/scan?sort=id')).body), ['1', '2']);
+    assert.deepEqual(ids((await get(child, '/scan?sort=id')).body), ['1']);
+    assert.deepEqual(ids((await get(child, '/scan?filename=bo.png')).body), []);
+    assert.equal((await get(child, '/scan/1')).status, 200);
+    assert.equal((await get(child, '/scan/2')).status, 404);
+    // A row-policy App serves no event feed (check refuses `api.events` there), to a scoped token or any other.
+    assert.equal((await get(child, '/$events')).status, 404);
+    assert.equal((await get(parent.token, '/$events')).status, 404);
+
+    // An update may not carry a row out of the scope: not by its own column, nor by the hop its path walks.
+    const moving = await prepare(child, '/patient/1/commands/move/v1');
+    assert.equal(moving.status, 200);
+    const moved = await run(child, '/patient/1/commands/move/v1', 'scope-move-00000001', { clinic: '2' }, moving.etag!);
+    assert.notEqual(moved.status, 200, moved.body);
+    assert.match(moved.body, /not_applied/);
+    assert.equal(f.patients().find((row) => row.id === 1)?.clinic_id, 1);
+    const reassigning = await prepare(child, '/visit/1/commands/reassign/v1');
+    assert.equal(reassigning.status, 200);
+    const away = await run(child, '/visit/1/commands/reassign/v1', 'scope-reassign-001', { patient: '2' }, reassigning.etag!);
+    assert.notEqual(away.status, 200, away.body);
+    assert.match(away.body, /not_applied/);
+    assert.equal(f.visits().find((row) => row.id === 1)?.patient_id, 1);
+    // Inside the scope, the same hop moves.
+    const within = await run(child, '/visit/1/commands/reassign/v1', 'scope-reassign-002', { patient: '3' }, reassigning.etag!);
+    assert.equal(within.status, 200, within.body);
+    assert.equal(f.visits().find((row) => row.id === 1)?.patient_id, 3);
+    // A delete: another clinic's visit is not found; one of its own goes.
+    assert.equal((await prepare(child, '/visit/2/commands/cancel/v1')).status, 404);
+    const foreign = await run(child, '/visit/2/commands/cancel/v1', 'scope-cancel-000001', {}, '"0"');
+    assert.notEqual(foreign.status, 200, foreign.body);
+    assert.ok(f.visits().some((row) => row.id === 2));
+    const leaving = await prepare(child, '/visit/1/commands/cancel/v1');
+    assert.equal(leaving.status, 200);
+    const cancelled = await run(child, '/visit/1/commands/cancel/v1', 'scope-cancel-000002', {}, leaving.etag!);
+    assert.equal(cancelled.status, 200, cancelled.body);
+    assert.equal(
+      f.visits().some((row) => row.id === 1),
+      false,
+    );
+    // The unscoped token's move is the grants' to judge, and they allow it.
+    const open = await prepare(parent.token, '/patient/3/commands/move/v1');
+    const opened = await run(parent.token, '/patient/3/commands/move/v1', 'scope-move-00000002', { clinic: '2' }, open.etag!);
+    assert.equal(opened.status, 200, opened.body);
+    assert.equal(f.patients().find((row) => row.id === 3)?.clinic_id, 2);
+  },
+);

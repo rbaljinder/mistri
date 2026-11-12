@@ -27,6 +27,8 @@ export const postRent = defineCommand({
 See it in the sample (`examples/apps/lintel/commands/ledger.ts:25`).
 `rentPosted` is declared in `events.ts` with `defineEvent('rent.posted', shape({ period, dueOn, posted }))`. It carries the output's fields of the same names, recorded in the command's own transaction.
 
+An event that only sometimes happens is a projection that may say nothing: `events: { posted: defineEventProjection(rentPosted, (out) => (out.posted ? { period: out.period, dueOn: out.dueOn, posted: out.posted } : null)) }`. A run where it returns `null` records the command's other events without it, and one where every event is skipped records an empty batch.
+
 <!-- no picture: events, jobs and workflows run on the server; Console's Operations room shows them. -->
 
 ## What you'll see

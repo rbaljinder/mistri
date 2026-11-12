@@ -51,6 +51,8 @@ export interface HttpAppPolicy {
   withService: AppPolicyDeployment<IncomingMessage>['withService'];
   /** A notice's recipient, read for in the rows the policy gives their account (email/outbox.ts). */
   withAccount: AppPolicyDeployment<IncomingMessage>['withAccount'];
+  /** A capability link's holder, at the link door (links/linkRoutes.ts). */
+  withLink: AppPolicyDeployment<IncomingMessage>['withLink'];
   submitPublicForm?: AppPolicyDeployment<IncomingMessage>['submitPublicForm'];
   holdPublicFile?: AppPolicyDeployment<IncomingMessage>['holdPublicFile'];
   /** After a committed scoped write, the record's search document follows it,
@@ -218,6 +220,7 @@ export async function loadHttpAppPolicy(options: {
     services: deployed.services,
     withService: deployed.withService,
     withAccount: deployed.withAccount,
+    withLink: deployed.withLink,
     ...(deployed.submitPublicForm ? { submitPublicForm: deployed.submitPublicForm } : {}),
     ...(deployed.holdPublicFile ? { holdPublicFile: deployed.holdPublicFile } : {}),
     ...(publicPlacement ? { publicPlacement } : {}),

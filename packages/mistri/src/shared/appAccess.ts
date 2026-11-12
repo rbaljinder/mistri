@@ -76,6 +76,9 @@ interface ResolvedAccess {
   internal?: ReadonlyMap<string, ReadonlySet<string>>;
   /** Of `readable`, the tables whose reads are written to the read audit (server/readAudit.ts). */
   audited?: ReadonlyMap<string, string>;
+  /** Of `readable`, the tables a visitor reads one record at a time by its key (`auth.public.byKey`,
+      server/app/publicByKey.ts). Absent where none is. */
+  byKey?: ReadonlySet<string>;
 }
 
 /**
@@ -282,9 +285,16 @@ function grantedAccess(app: AppDef, schema: DatabaseSchema, roles: readonly stri
       access.public.read,
       (name) => `${app.name}: "auth", "public", "read" names "${name}", which is not a table in this catalog.`,
     );
+    const byKey = access.public.byKey?.length
+      ? resolve(
+          access.public.byKey,
+          (name) => `${app.name}: "auth", "public", "byKey" names "${name}", which is not a table in this catalog.`,
+        )
+      : undefined;
     return {
       readable,
       writable: none,
+      ...(byKey ? { byKey } : {}),
       ...(hasFields
         ? {
             fields: resolveFields(
@@ -615,7 +625,16 @@ export function tenantBusinessApp(app: AppDef): AppDef {
     auth: {
       ...auth,
       roles,
-      ...(auth.public ? { public: { ...auth.public, read: names(auth.public.read) as string[], ...columns(auth.public.fields) } } : {}),
+      ...(auth.public
+        ? {
+            public: {
+              ...auth.public,
+              read: names(auth.public.read) as string[],
+              ...columns(auth.public.fields),
+              ...(auth.public.byKey ? { byKey: names(auth.public.byKey) as string[] } : {}),
+            },
+          }
+        : {}),
     },
   };
 }

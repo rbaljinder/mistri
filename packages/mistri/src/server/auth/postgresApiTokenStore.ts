@@ -65,8 +65,13 @@ export function createPostgresApiTokenStore(
       return result;
     }
     const guarded: PgQuery = { query };
-    const verified = async () => {
-      active();
+    /* The full layout attestation once per store: a store lives inside one transaction, and the ROW EXCLUSIVE lock
+       taken here holds off every ALTER, DROP and CREATE INDEX on the two tables until it ends, so attesting again
+       before and after each operation proved nothing new and cost the whole catalog walk each time (a token request
+       paid it four times). The ownership row is still read around every operation: the lock does not stop an
+       UPDATE of it. A failed attestation stays failed for the store. */
+    let ready: Promise<void> | undefined;
+    const attest = async () => {
       try {
         await assertPostgresAuthStore(guarded);
       } catch (error) {
@@ -77,6 +82,11 @@ export function createPostgresApiTokenStore(
       active();
       // Missing extension refuses, even though core-only native auth is valid.
       await query(`LOCK TABLE ${meta}, ${table} IN ROW EXCLUSIVE MODE`);
+    };
+    const verified = async () => {
+      active();
+      ready ??= attest();
+      await ready;
       active();
       const rows = (
         await query(

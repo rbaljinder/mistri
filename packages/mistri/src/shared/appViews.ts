@@ -412,7 +412,9 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
   /* What a landing may open and show: the public forms, and — with
      `auth.public` — every list and dashboard whose tables the public reads
      all of, as a signed-out home may name (appHome.ts). */
-  const publicReads = new Set(ctx.auth?.public?.read ?? []);
+  const byKey = new Set(ctx.auth?.public?.byKey ?? []);
+  /* A byKey table is opened one record at a time by its key (server/app/publicByKey.ts): no landing lists it. */
+  const publicReads = new Set((ctx.auth?.public?.read ?? []).filter((table) => !byKey.has(table)));
   const openLists = new Map(
     ofKind('list')
       .filter((view) => publicReads.has(view.view.table))
@@ -452,6 +454,16 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
     if (roles)
       across.push(
         `${view!.at} names "roles", and the landing opens it to signed-out visitors, who hold none. Remove "roles", or the landing's link to it.`,
+      );
+  }
+  /* A list or dashboard that names no roles is served to a signed-out visitor too, and would list a table the
+     visitor may read only by a record's key: every read of it would be refused, so say it here instead. */
+  for (const view of [...ofKind('list'), ...ofKind('dashboard')]) {
+    if (view.view.roles) continue;
+    const listed = (view.kind === 'list' ? [view.view.table] : view.tables).find((table) => byKey.has(table));
+    if (listed)
+      across.push(
+        `${view.at} lists "${listed}", which auth.public opens to signed-out visitors only by a record's key ("byKey"), and names no "roles", so they are served it. Name the roles that may open it.`,
       );
   }
   if (landings.length > 1)
