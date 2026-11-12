@@ -161,6 +161,7 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
             writable,
             fields,
             ...(grants.creatable ? { creatable: grants.creatable } : {}),
+            ...(grants.appendOnly ? { appendOnly: grants.appendOnly } : {}),
             // A file's object and hash: written by an upload's insert, named by no request.
             ...(grants.internal ? { internal: grants.internal } : {}),
             ...(validation ? { validation } : {}),

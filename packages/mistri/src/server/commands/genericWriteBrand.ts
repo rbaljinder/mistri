@@ -2,8 +2,8 @@
  * run as commands the platform defines, never the App's commands module. This
  * is their mark, and the one rule that grants them: a role runs a generic
  * write exactly where its signed-in editor could make the same change — the
- * resource writable to it, creatable for a create, deleted from by the App for
- * a delete. The handler then holds each write to that role's own field
+ * resource writable to it, creatable for a create (and the only verb an append-only
+ * resource allows), deleted from by the App for a delete. The handler then holds each write to that role's own field
  * ceilings, validation, transitions and stamps (apiGenericWrites.ts). */
 import { appDeletable, resolveAppAccess, type AppDef } from '../../shared/app.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
@@ -27,6 +27,8 @@ export function genericWriteEntitled(app: AppDef, schema: DatabaseSchema, roles:
   const access = resolveAppAccess(app, schema, [...roles]);
   if (!access.writable.has(write.resource)) return false;
   if (write.verb === 'create') return !access.creatable || access.creatable.has(write.resource);
+  // A table the roles only append to is made into and never edited or removed from (`create` without `write`).
+  if (access.appendOnly?.has(write.resource)) return false;
   if (write.verb === 'delete') return appDeletable(app, schema).has(write.resource);
   return true;
 }

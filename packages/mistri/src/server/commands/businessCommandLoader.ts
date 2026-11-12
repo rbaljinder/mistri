@@ -175,12 +175,38 @@ export function validateBusinessCommandReferences(
       input: structuredClone(command.fields) as AppCommandReference['input'],
     });
   }
+  /* A link's commands are prepared on the link page (server/links/linkRoutes.ts), where no view names them. */
+  let links = false;
+  for (const [name, resource] of Object.entries(app.resources ?? {}))
+    for (const link of Object.values(resource.links ?? {})) {
+      links = true;
+      for (const id of link.commands ?? []) {
+        if (references.has(id)) continue;
+        const command = registry[id];
+        if (!command) return invalid(`Resource "${name}": a link names command "${id}", which the server does not register.`);
+        const problem = commandReferenceCatalogProblem(
+          app,
+          command,
+          { id, version: command.version, input: [...command.fields] },
+          name,
+          resources.schema,
+        );
+        if (problem) invalid(`Command "${id}": ${problem}`);
+        references.set(id, {
+          id,
+          version: command.version,
+          target: name,
+          input: structuredClone(command.fields) as AppCommandReference['input'],
+        });
+      }
+    }
   /* A public form is write-only to whoever fills it in, and a saved one needs
      tables that can hold a draft (forms/savedFormChecks.ts). */
   const problem = publicFormProblems(app, registry, resources.schema) ?? signedInDraftProblems(app, registry, resources.schema);
   if (problem) invalid(problem);
   // A keyed input is hashed under the deployment's form key: without one, refuse to start rather than keep a bare digest.
-  if (publicFormsNeedKey(app, registry)) {
+  // A link's secret is derived from the same key (server/links/linkToken.ts), so a link could not be opened without one.
+  if (links || publicFormsNeedKey(app, registry)) {
     try {
       assertFormKey(app.id);
     } catch (error) {

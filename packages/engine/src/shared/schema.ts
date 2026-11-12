@@ -144,6 +144,8 @@ export interface TableMeta {
   deletable?: boolean;
   /** Server capability projection; omitted retains ordinary insert behavior. */
   insertable?: boolean;
+  /** Server capability projection, never authority: the reader adds rows here and never edits or removes them. */
+  appendOnly?: boolean;
   /** Schema/namespace the table lives in. Empty when the database has none. */
   schema: string;
   /** Qualified name used everywhere as the table's identity. */
@@ -371,6 +373,11 @@ export function referencesFrom(schema: DatabaseSchema, tableId: string): Foreign
    is never indexed, even once frozen later. The first of an id, as the scan finds it. */
 const tableIndexes = new WeakMap<readonly TableMeta[], ReadonlyMap<string, TableMeta> | null>();
 const fixed = (table: TableMeta) => Object.isFrozen(table) && 'value' in (Object.getOwnPropertyDescriptor(table, 'id') ?? {});
+
+/** Whether the reader only adds rows to this table (`appendOnly`): every editor and every Delete is withheld, New stays. */
+export function isAppendOnly(table: Pick<TableMeta, 'appendOnly'> | null | undefined): boolean {
+  return table?.appendOnly === true;
+}
 
 export function findTable(schema: DatabaseSchema, tableId: string): TableMeta | undefined {
   const tables = schema.tables;

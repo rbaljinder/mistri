@@ -83,7 +83,7 @@ export function parseStatusRequest(body: unknown, check: AppStatusCheck): { rece
 }
 
 const digest = (value: string) => createHash('sha256').update(value.normalize('NFKC').toLowerCase(), 'utf8').digest();
-const equalText = (typed: string, stored: unknown) => {
+export const equalText = (typed: string, stored: unknown) => {
   const a = digest(typed),
     b = digest(typeof stored === 'string' || typeof stored === 'number' ? String(stored).trim() : '\u0000missing');
   return timingSafeEqual(a, b) && (typeof stored === 'string' || typeof stored === 'number');

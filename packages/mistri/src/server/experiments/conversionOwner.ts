@@ -185,7 +185,8 @@ async function committedUnit(lease: SourceLease, config: Settings, event: Comman
     return event.actorId;
   }
   ensure(event.actorId.startsWith('public:'), 'Visitor conversions require a public intake actor.');
-  // The receipt row keeps each target's changes in request order; an event's are its first target's.
+  // The receipt row keeps each target's changes in request order; an event's are its first target's. Only the visitor's
+  // frame is read, which the row's first pieces always hold: a long audit's continuation rows (stitchAudit) add nothing to it.
   const rows = await lease.query(`SELECT changes_json FROM ${q(lease, journal.receipt)} WHERE id=$1`, [event.receiptId]);
   ensure(rows.length === 1 && typeof rows[0].changes_json === 'string');
   const first: unknown = (JSON.parse(rows[0].changes_json) as unknown[])[0];

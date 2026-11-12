@@ -248,3 +248,56 @@ test('TS DSL types both ceilings and role grants against logical resource names'
   ].join('\n');
   assert.equal(typecheck(filename, { files: { [filename]: source } }), '');
 });
+
+test('a table a role creates but does not write is append-only for it: read, made into, never edited', () => {
+  const app = parse(
+    { incident: 'read', service: 'write' },
+    {
+      clerk: { read: ['incident'], create: ['service'] },
+      editor: { read: ['service'], write: ['service'] },
+      reader: { read: ['service'] },
+    },
+  );
+  assert.deepEqual(resolveAppAccess(app, schema, ['clerk']), {
+    readable: new Set(['incident', 'service']),
+    writable: new Set(['service']),
+    creatable: new Set(['service']),
+    appendOnly: new Set(['service']),
+  });
+  // Another role of the same principal that genuinely writes the table makes the union writable, not append-only.
+  const both = resolveAppAccess(app, schema, ['clerk', 'editor']);
+  assert.deepEqual(both.writable, new Set(['service']));
+  assert.equal(both.appendOnly, undefined);
+  assert.deepEqual(both.creatable, new Set(['service']));
+  // A role that merely reads it does not: the append stays one.
+  assert.deepEqual(resolveAppAccess(app, schema, ['clerk', 'reader']).appendOnly, new Set(['service']));
+  // A role that never says `create` of its writes is unchanged.
+  assert.equal(resolveAppAccess(app, schema, ['editor']).appendOnly, undefined);
+});
+
+test('an append never exceeds what the resource declares writable, and an unknown name is refused', () => {
+  assert.throws(
+    () => parse({ incident: 'write', service: 'read' }, { clerk: { read: ['incident'], create: ['service'] } }),
+    /role "clerk", "create" names "service", which the role does not write, so it would only append to it, and resources "service" is not written \(it has no access 'write'\) \[outside-ceiling\].*resources\.service\.access: 'write'/,
+  );
+  assert.throws(
+    () => parse({ incident: 'write' }, { clerk: { read: ['incident'], create: ['nope'] } }),
+    /role "clerk", "create" names "nope".*the App declares no resource "nope"/,
+  );
+});
+
+test('append-only survives a role that extends another, and a role that writes it is not narrowed to it', () => {
+  const app = parse(
+    { incident: 'write', service: 'write' },
+    {
+      base: { read: ['incident'], write: ['incident'] },
+      child: { extends: 'base', create: ['service'] },
+      writer: { read: ['service'], write: ['service'], create: ['service'] },
+    },
+  );
+  const child = resolveAppAccess(app, schema, ['child']);
+  assert.deepEqual(child.writable, new Set(['incident', 'service']));
+  assert.deepEqual(child.appendOnly, new Set(['service']));
+  assert.deepEqual(child.creatable, new Set(['incident', 'service']));
+  assert.equal(resolveAppAccess(app, schema, ['writer']).appendOnly, undefined);
+});

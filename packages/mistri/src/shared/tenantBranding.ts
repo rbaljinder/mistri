@@ -314,8 +314,9 @@ function themeOf(declaration: BrandingDeclaration, id: string | undefined): Them
   return declaration.themes.find((theme) => theme.id === id) ?? declaration.themes[0]!;
 }
 
-/** The roles an accent stands for where the theme already wore its accent: the link and the menu's current room. */
-const FOLLOWS_ACCENT = ['link', 'navAccent'] as const;
+/** The roles an accent stands for where the theme already wore its accent: the link, the menu's current room, and a form's
+    primary action (Workshop, Mono and Sage fill it with their accent, so a tenant's teal left every Submit in the look's own). */
+const FOLLOWS_ACCENT = ['link', 'navAccent', 'primary'] as const;
 
 /**
  * The theme a tenant's people wear: the App's chosen theme and palette, with the
@@ -329,7 +330,11 @@ export function tenantTheme(declaration: BrandingDeclaration, value: TenantBrand
     const palette = { ...base[name] };
     const accent = value.accent?.[name];
     if (!accent) return palette;
+    const primaryFollows = palette.primary !== undefined && palette.primary === palette.accent;
     for (const role of FOLLOWS_ACCENT) if (palette[role] === palette.accent) palette[role] = accent;
+    /* The words on the primary action were chosen for its old fill: derived again for this one, and held to 4.5:1 on it
+       with the rest (accentFindings), as the words on the accent are. */
+    if (primaryFollows) delete palette.onPrimary;
     /* The first chart series is the brand's, whatever the theme drew it in: Lumen's navy accent beside its blue
        first series left a tenant's teal on the bar and its charts blue, and the form says the accent colors them.
        Unless that would set it beside the second series for a color-blind reader: then the theme's own first

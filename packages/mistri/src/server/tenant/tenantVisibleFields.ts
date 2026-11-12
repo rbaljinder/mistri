@@ -33,6 +33,8 @@ export function tenantVisibleFields(
     ...access,
     readable,
     writable,
+    // Only what is still written can be an append of it.
+    ...(access.appendOnly ? { appendOnly: new Set([...access.appendOnly].filter((id) => writable.has(id))) } : {}),
     fields: new Map(
       owned.schema.tables
         .filter((table) => readable.has(table.id))
@@ -120,6 +122,8 @@ export function platformDeletable(owned: TenantOwnershipSnapshot, access: Resour
     owned.ownership[id]?.kind !== 'platform' ||
     !access.readable.has(id) ||
     !access.writable.has(id) ||
+    // A table the realm only appends to is never one it removes from.
+    access.appendOnly?.has(id) ||
     !table.columns.some((column) => column.primaryKey)
   )
     return false;

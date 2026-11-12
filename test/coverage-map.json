@@ -56,6 +56,12 @@
     },
     { "id": "computed", "surface": ["dsl: app: resources.*.computed"], "tests": [{ "file": "test/computed-columns.test.ts" }] },
     {
+      "id": "capability-links",
+      "surface": ["dsl: app: resources.*.links"],
+      "tests": [{ "file": "test/capability-links.test.ts" }, { "file": "e2e/capability-links.spec.ts" }],
+      "browser": true
+    },
+    {
       "id": "rollups",
       "surface": ["dsl: app: resources.*.rollups"],
       "tests": [{ "file": "test/app-board-lanes.test.ts" }, { "file": "test/app-typegen.test.ts" }]

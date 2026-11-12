@@ -18,6 +18,7 @@ import { brandingLogoHeaders, createTenantBrandingService } from '../packages/mi
 import {
   audienceBranding,
   BrandingRefused,
+  brandingProblems,
   parseBrandingDeclaration,
   tenantTheme,
   validateTenantBranding,
@@ -490,4 +491,33 @@ test('a tab icon is allowed with the logo key and with nothing else', () => {
     () => validateTenantBranding({ favicon: icon }, declare({ allow: ['name'], editors: ['admin'] })),
     /does not let a customer change "favicon"/,
   );
+});
+
+test("a tenant's accent is its form's primary action too, where the look drew that in its accent, with words that read on it", () => {
+  for (const preset of ['workshop', 'mono', 'sage', 'lumen']) {
+    const declaration = declare({ allow: ['accent'], editors: ['admin'], themes: [preset] });
+    const base = declaration.themes[0]!;
+    const theme = tenantTheme(declaration, { accent: { light: '#0f766e', dark: '#2dd4bf' } });
+    for (const mode of ['light', 'dark'] as const) {
+      const own = base[mode];
+      if (own.primary === undefined) {
+        assert.equal(theme[mode].primary, undefined, `${preset} ${mode}: a look with no primary has none`);
+        continue;
+      }
+      if (own.primary === own.accent) {
+        assert.equal(theme[mode].primary, theme[mode].accent, `${preset} ${mode}: the primary follows the accent`);
+        assert.equal(theme[mode].onPrimary, undefined, `${preset} ${mode}: the words on it are derived again`);
+      } else {
+        assert.equal(theme[mode].primary, own.primary, `${preset} ${mode}: a primary the look chose apart from its accent stays`);
+        assert.equal(theme[mode].onPrimary, own.onPrimary);
+      }
+    }
+    // The pick is held to the words on the primary action with the rest of the accent's pairs: none of them fails here.
+    const problems = brandingProblems(declaration, { accent: { light: '#0f766e', dark: '#2dd4bf' } });
+    assert.deepEqual(
+      problems.filter((problem) => /buttons/.test(problem.message)),
+      [],
+      preset,
+    );
+  }
 });

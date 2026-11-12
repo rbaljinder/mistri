@@ -58,6 +58,7 @@ function fixture(): TenantCapabilityOptions {
           reader: { read: ['item', 'country'] },
           editor: { read: ['item', 'country'], write: ['item'] },
           operator: { read: ['other'], commands: ['advance', 'unregistered'] },
+          clerk: { read: ['item'], create: ['other'] },
           admin: { read: true, write: true },
         },
       },
@@ -110,6 +111,23 @@ test('current membership projects only readable logical resources and never glob
     writable: ['item'],
     grantedCommands: [],
   });
+});
+
+test('a table a member only creates is insertable and append-only: no edit action, no delete, never both with a writer', () => {
+  const input = fixture();
+  const clerk = project({ ...input, principal: { ...input.principal, roles: ['clerk'] } });
+  assert.deepEqual(clerk, {
+    resources: {
+      item: { write: [], insertable: false, deletable: false },
+      other: { write: ['id', 'name', 'note'], insertable: true, deletable: false, appendOnly: true },
+    },
+    writable: ['other'],
+    grantedCommands: [],
+  });
+  // A role of the same member that truly writes the table makes it an ordinary writable one.
+  const both = project({ ...input, principal: { ...input.principal, roles: ['clerk', 'admin'] } });
+  assert.equal(both.resources.other.appendOnly, undefined);
+  assert.equal(both.resources.other.deletable, true);
 });
 
 test('same account in a different membership receives only that membership role capabilities', () => {

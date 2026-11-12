@@ -541,8 +541,8 @@ export function appRoleWarnings(loaded: LoadedApp, schema: DatabaseSchema, comma
       const owned = missing.some((column) => app.resources?.[tableId]?.machine?.column === column);
       warnings.push(
         say(
-          `role "${role}" [new-cannot-form]: it writes "${tableId}" but not ${missing.map((column) => `"${column}"`).join(', ')}, ` +
-            `which a new row needs, so it can edit ${tableId} rows and New is never offered to it. ` +
+          `role "${role}" [new-cannot-form]: it ${access.appendOnly?.has(tableId) ? 'appends to' : 'writes'} "${tableId}" but not ${missing.map((column) => `"${column}"`).join(', ')}, ` +
+            `which a new row needs, so it can ${access.appendOnly?.has(tableId) ? 'read' : 'edit'} ${tableId} rows and New is never offered to it. ` +
             (owned ? '' : `Add ${missing.length === 1 ? 'it' : 'them'} to roles.${role}.fields.${tableId}.write, `) +
             `make the rows with a command, or say the role edits and never creates them (roles.${role}.create).`,
         ),

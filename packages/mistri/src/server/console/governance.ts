@@ -545,6 +545,8 @@ export function consoleCommandAudit(
             }
           };
           // Each target's key and changes are kept as texts, in request order: the first is shown, with how many there are.
+          // Only the names a frame holds are read, which the row's first pieces always do: a long audit's continuation
+          // rows (stitchAudit) are not needed here.
           const list = (text: string | null): unknown[] => {
             const parsed = parse(text);
             return Array.isArray(parsed) ? parsed : [];

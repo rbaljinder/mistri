@@ -13,7 +13,8 @@ import {
   type AppDef,
 } from '../../shared/app.js';
 import { appCommandOccurrences } from '../../shared/appCommandOccurrences.js';
-import { FILE_MAX_BYTES_DEFAULT, isTenantApp, type AppFileDef } from '../../shared/appModel.js';
+import type { AppLinkDef } from '../../shared/appLinks.js';
+import { FILE_MAX_BYTES_DEFAULT, isRowPolicyApp, isTenantApp, type AppFileDef } from '../../shared/appModel.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import { TENANT_FILE_MOST } from '@mistriwork/engine/server/http/reply.js';
@@ -91,6 +92,9 @@ export interface BusinessCommandAuthorization {
   readonly insertOnly?: ReadonlyMap<string, string>;
   /** The resources it reads whose reads are audited (`audit: { reads: true }`); absent where it reads none. */
   readonly audited?: CommandAudited;
+  /** The capability links its handler may mint (`context.link`): its target's declared links, where this actor may
+      mint one at all; absent otherwise. */
+  readonly links?: Readonly<Record<string, AppLinkDef>>;
   table(local: string, writing?: boolean): string;
 }
 
@@ -436,7 +440,8 @@ function unboundedEditors(app: AppDef, schema: DatabaseSchema, table: string, ac
   const all = findTable(schema, table)?.columns.length ?? 0;
   return Object.keys(app.auth?.roles ?? {}).filter((role) => {
     const access = accessOf([role]);
-    if (!access.writable.has(table)) return false;
+    // A role that only appends to the table edits nothing in it.
+    if (!access.writable.has(table) || access.appendOnly?.has(table)) return false;
     const written = access.fields?.get(table)?.write;
     return !written || written.size >= all;
   });
@@ -726,7 +731,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           const editing = Object.keys(app.auth?.roles ?? {}).filter(
             (role) =>
               accessOf([role]).fields?.get(table)?.write.has(versionField) ||
-              (accessOf([role]).writable.has(table) && !accessOf([role]).fields?.get(table)),
+              (accessOf([role]).writable.has(table) && !accessOf([role]).appendOnly?.has(table) && !accessOf([role]).fields?.get(table)),
           );
           if (editing.length) {
             const said = editing.map((role) => `"${role}"`).join(', ');
@@ -973,7 +978,8 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           if (!descriptor?.enumerable || !('value' in descriptor)) throw new Error();
           return descriptor.value;
         };
-        const optional = (key: 'kind' | 'form' | 'support' | 'email' | 'name') => (Object.hasOwn(actor, key) ? own(key) : undefined);
+        const optional = (key: 'kind' | 'form' | 'support' | 'email' | 'name' | 'link') =>
+          Object.hasOwn(actor, key) ? own(key) : undefined;
         const captured = captureTenantData({
           id: own('id'),
           appId: own('appId'),
@@ -983,6 +989,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           support: optional('support'),
           email: optional('email'),
           name: optional('name'),
+          link: optional('link'),
         });
         if (
           typeof captured.id !== 'string' ||
@@ -1007,10 +1014,27 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         // true is malformed. A public or service principal is never inside one,
         // so the combination is refused rather than quietly ignored.
         if (captured.support !== undefined && (captured.support !== true || captured.kind !== undefined)) throw new Error();
+        if (captured.link !== undefined && captured.kind !== 'link') throw new Error();
         if (captured.kind === 'service') {
           // A declared service principal: the id its declaration derives,
           // the roles it declares, and no public form.
           if (captured.form !== undefined || !captured.roles.length || !SERVICE_ID.test(captured.id)) throw new Error();
+        } else if (captured.kind === 'link') {
+          // A link's holder: no roles, no form, the id its link derives, and a
+          // link this App's resource declares (server/links/linkRoutes.ts).
+          const held = captured.link as BusinessCommandActor['link'] | undefined;
+          if (
+            captured.form !== undefined ||
+            captured.roles.length ||
+            !held ||
+            typeof held !== 'object' ||
+            [held.id, held.name, held.resource, held.key].some((part) => typeof part !== 'string' || !part) ||
+            captured.id !== `link:${held.id}` ||
+            isTenantApp(app) ||
+            isRowPolicyApp(app) ||
+            !Object.hasOwn(app.resources?.[held.resource]?.links ?? {}, held.name)
+          )
+            throw new Error();
         } else if (captured.kind !== undefined || captured.form !== undefined) {
           // A public principal is whole or nothing: the kind, the public form
           // it came through, no roles, and the id the form route derives.
@@ -1033,7 +1057,15 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
             ? { kind: 'public' as const, form: captured.form as string }
             : captured.kind === 'service'
               ? { kind: 'service' as const }
-              : {}),
+              : captured.kind === 'link'
+                ? (() => {
+                    const held = captured.link as NonNullable<BusinessCommandActor['link']>;
+                    return {
+                      kind: 'link' as const,
+                      link: Object.freeze({ id: held.id, name: held.name, resource: held.resource, key: held.key }),
+                    };
+                  })()
+                : {}),
           ...(captured.support === true ? { support: true as const } : {}),
           ...(typeof captured.email === 'string' ? { email: captured.email } : {}),
           ...(typeof captured.name === 'string' ? { name: captured.name } : {}),
@@ -1050,6 +1082,22 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
            by the root ceiling at bind time; that is all a public handler gets. */
         if (binding.command.public !== true || publicForms.get(identity.form!)?.has(id) !== true) throw new AppAccessDenied();
         issueTargetUnreadable(identity);
+      } else if (identity.kind === 'link') {
+        /* No role either: the link is the grant. Only a command the link declares, on the resource it was minted on,
+           one record at a time (the executor holds it to the link's own record); what it is told of that record is
+           the link's `show`, and nothing of any other table. */
+        const link = identity.link!;
+        const declared = app.resources?.[link.resource]?.links?.[link.name];
+        if (
+          !declared?.commands?.includes(id) ||
+          binding.resource !== link.resource ||
+          (binding.command.targets ?? 'one') !== 'one' ||
+          binding.command.public === true ||
+          creating.has(id)
+        )
+          throw new AppAccessDenied();
+        issueTargetColumns(identity, declared.show);
+        issueReadColumns(identity, () => new Set());
       } else {
         // A generic write is granted where the role's editor could make the change; a flow's own command, to its runner alone.
         const generic = genericWriteOf(binding.command);
@@ -1118,6 +1166,19 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         }
         if (!access.readable.has(binding.resource) && identity.kind !== 'service') issueTargetUnreadable(identity);
       }
+      /* The links a handler may mint (context.link): its target's, on one existing record, by a signed-in person or a
+         service, in an App that serves links at all (appLinkProblems). A link's holder mints no further link. */
+      const declaredLinks = app.resources?.[binding.resource]?.links;
+      const mints =
+        declaredLinks &&
+        !isTenantApp(app) &&
+        !isRowPolicyApp(app) &&
+        identity.kind !== 'public' &&
+        identity.kind !== 'link' &&
+        (binding.command.targets ?? 'one') === 'one' &&
+        !creating.has(id)
+          ? declaredLinks
+          : undefined;
       return Object.freeze({
         command: binding.command,
         resource: binding.resource,
@@ -1138,6 +1199,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         ...(binding.files ? { files: binding.files } : {}),
         ...(insertOnly.size ? { insertOnly } : {}),
         ...(binding.audited ? { audited: binding.audited } : {}),
+        ...(mints ? { links: mints } : {}),
         table(local: string, writing = false): string {
           if (!(writing ? binding.command.write : binding.command.read).includes(local)) throw new AppAccessDenied();
           return binding.logical(local);

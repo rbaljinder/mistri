@@ -26,6 +26,7 @@ import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
 import type { FlagRequestRuntime } from '../flags/requestRuntime.js';
 import type { HttpAppPolicy } from '../policy/appPolicyHttp.js';
 import { commandsOf } from '../stores/commandStores.js';
+import { renderedLink, servesLinks } from '../links/linkLookup.js';
 import { resolveConnection } from '@mistriwork/engine/server/auth/credentials.js';
 
 /* What hosting needs, loaded only when there is something to host: every
@@ -399,7 +400,21 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
         });
       }
     }
-    if (effects && !aside) effectHost = await openEffectHost({ ...effects, ...(integrations ? { channels: integrations.channel } : {}) });
+    if (effects && !aside) {
+      /* A link an effect carries is said as its URL as it is delivered, read from the journal then (links/linkLookup.ts). */
+      const links = async (id: string) => {
+        const current = options.current();
+        if (!servesLinks(current)) return undefined;
+        const releases: Array<() => void> = [];
+        try {
+          const resources = await loadAppRuntimeResources(registry, current, owner, (lease) => releases.push(registry.lease(lease)));
+          return await renderedLink(current, resources, id);
+        } finally {
+          for (const release of releases.reverse()) release();
+        }
+      };
+      effectHost = await openEffectHost({ ...effects, links, ...(integrations ? { channels: integrations.channel } : {}) });
+    }
     if (integrations) effectHost = withIntegrations(effectHost, integrations);
     if (prepared) {
       // Mail is routed to a tenant by its address; an App without tenants has no one for it to arrive for, yet.

@@ -67,6 +67,8 @@ export interface AuthorizedBusinessCommand {
   readonly audited?: CommandAudited;
   /** Where its reads of those are written (readAudit.ts auditCommandRead). Absent with `audited` present, a read of one is refused. */
   readonly readAudit?: CommandReadAudit;
+  /** The capability links its target resource declares, where this actor may mint them (context.link, appLinks.ts). */
+  readonly links?: Readonly<Record<string, import('../../shared/appLinks.js').AppLinkDef>>;
   /** Private stable namespace; never request-supplied membership/session evidence. */
   readonly receiptOwner?: Readonly<{ storeId: string; sourceId: string; tenantId: string }>;
   /** A tenant App's public intake only: where this submission lands, the
@@ -274,6 +276,7 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
         ...(binding.people ? { people: binding.people } : {}),
         ...(binding.files ? { files: binding.files } : {}),
         ...(binding.insertOnly ? { insertOnly: binding.insertOnly } : {}),
+        ...(binding.links ? { links: binding.links } : {}),
         /* A read of an audited resource is written to the database its rows came from, as a page's is (http/source.ts). */
         ...(binding.audited
           ? {
@@ -370,5 +373,6 @@ export function actorReader(
   actor: BusinessCommandActor,
 ): () => Pick<ResourceAccess, 'readable' | 'fields' | 'internal'> {
   let resolved: Pick<ResourceAccess, 'readable' | 'fields' | 'internal'> | undefined;
-  return () => (resolved ??= resolveAppAccess(app, schema, actor.roles, actor.kind === 'public' ? 'public' : undefined));
+  return () =>
+    (resolved ??= resolveAppAccess(app, schema, actor.roles, actor.kind === 'public' || actor.kind === 'link' ? 'public' : undefined));
 }

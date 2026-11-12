@@ -54,6 +54,7 @@ import { commandsOf } from '../packages/mistri/src/server/stores/commandStores.j
 import { postgresAuditRows } from './support/commandTargets.js';
 import { postgresPruneDb, pruneAll, prunes } from '../packages/mistri/src/adapters/retention/pruner.js';
 import { retentionMs } from '../packages/mistri/src/shared/appRetention.js';
+import { groupAuditParts, splitAudit, stitchAudit } from '../packages/mistri/src/adapters/commands/commandAuditParts.js';
 
 /** Whether the live half runs: the skip decision, and nothing else. */
 const LIVE = process.env.TABLEWALK_TEST_PG;
@@ -129,7 +130,7 @@ describe('business commands on PostgreSQL, against a real server', { skip: liveS
   const loan = async () => (await control.query('SELECT version, assignee, confidential_note FROM public.loans WHERE id = 1')).rows[0];
   const reset = async (migrate = true) => {
     for (const statement of [...RESET, ...SETUP]) await control.query(statement);
-    if (migrate) assert.deepEqual(await migratePostgresCommandJournal(url), { version: 1, migrated: true });
+    if (migrate) assert.deepEqual(await migratePostgresCommandJournal(url), { version: 3, migrated: true });
   };
 
   before(async () => {
@@ -250,8 +251,8 @@ describe('business commands on PostgreSQL, against a real server', { skip: liveS
       (await control.query(`SELECT count(*) AS n FROM pg_class WHERE relname LIKE '\\_\\_mistri\\_command\\_%'`)).rows[0].n,
       '0',
     );
-    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 1, migrated: true });
-    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 1, migrated: false });
+    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 3, migrated: true });
+    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 3, migrated: false });
     await assertPostgresCommandJournal(control);
     assert.equal(await count(tables.meta), 1);
     await assert.rejects(migratePostgresCommandJournal('sqlite:./loans.db'), /postgres:\/\/ URL/);
@@ -270,7 +271,15 @@ describe('business commands on PostgreSQL, against a real server', { skip: liveS
 
   test('attestation refuses missing, altered, extended, triggered and colliding journal tables', async () => {
     const alterations: Array<[string, string[]]> = [
-      ['a missing table', [`DROP TABLE ${runtimeTable('postgres', tables.receipt)}`]],
+      ['a missing table', [`DROP TABLE ${runtimeTable('postgres', tables.receipt)} CASCADE`]],
+      ['a missing audit-part table', [`DROP TABLE ${runtimeTable('postgres', tables.auditPart)}`]],
+      [
+        'an audit-part key that does not cascade',
+        [
+          `ALTER TABLE ${runtimeTable('postgres', tables.auditPart)} DROP CONSTRAINT ${runtimeName('postgres', tables.auditPart)}_receipt_id_fkey`,
+          `ALTER TABLE ${runtimeTable('postgres', tables.auditPart)} ADD FOREIGN KEY (receipt_id) REFERENCES ${runtimeTable('postgres', tables.receipt)} (id)`,
+        ],
+      ],
       ['an added column', [`ALTER TABLE ${runtimeTable('postgres', tables.receipt)} ADD COLUMN extra text`]],
       [
         'a dropped constraint',
@@ -677,6 +686,56 @@ describe('business commands on PostgreSQL, against a real server', { skip: liveS
     } finally {
       await connection.end();
     }
+  });
+
+  test('a target past 256 changes keeps the rest in audit parts: written with the receipt, once, in order, and gone with it', async () => {
+    await reset();
+    const long = (count: number) => ({
+      ...audit,
+      ...splitAudit(Array.from({ length: count }, (_, at) => ({ field: `f${at}` }))),
+    });
+    await journalRun(undefined, async (journal) => {
+      assert.equal(await journal.insert!(receipt, long(300)), true);
+    });
+    const parts = (
+      await control.query(`SELECT target_index, part, changes_json FROM ${runtimeTable('postgres', tables.auditPart)} ORDER BY part`)
+    ).rows;
+    assert.deepEqual(
+      parts.map((part) => [part.target_index, part.part, (JSON.parse(part.changes_json as string) as unknown[]).length]),
+      [[0, 1, 44]],
+    );
+    const head = (
+      JSON.parse(
+        (await control.query(`SELECT changes_json FROM ${runtimeTable('postgres', tables.receipt)}`)).rows[0].changes_json as string,
+      ) as string[]
+    )[0];
+    assert.equal((JSON.parse(head) as unknown[]).length, 256);
+    const whole = JSON.parse(stitchAudit(head, groupAuditParts(parts).get(0))) as Array<{ field: string }>;
+    assert.deepEqual(
+      whole.map((change) => change.field),
+      Array.from({ length: 300 }, (_, at) => `f${at}`),
+    );
+    // The same scope again finds its receipt taken, and writes no piece of its own.
+    await journalRun(undefined, async (journal) => {
+      assert.equal(await journal.insert!({ ...receipt, id: 'receipt-replay' }, long(300)), false);
+    });
+    assert.equal(await count(tables.auditPart), 1);
+    // The commit path writes them too, in its transaction; one that fails leaves none.
+    await journalRun(undefined, (journal) =>
+      journal.commit({ ...receipt, id: 'receipt-2', idempotencyKey: 'assignment-0000002' }, long(600)),
+    );
+    assert.equal(await count(tables.auditPart, `receipt_id = 'receipt-2'`), 2);
+    await assert.rejects(
+      journalRun(undefined, async (journal) => {
+        await journal.commit({ ...receipt, id: 'receipt-3', idempotencyKey: 'assignment-0000003' }, long(300));
+        throw new Error('business rule refused');
+      }),
+    );
+    assert.equal(await count(tables.auditPart, `receipt_id = 'receipt-3'`), 0);
+    // Forgotten with its receipt.
+    await control.query(`DELETE FROM ${runtimeTable('postgres', tables.receipt)} WHERE id = 'receipt-2'`);
+    assert.equal(await count(tables.auditPart, `receipt_id = 'receipt-2'`), 0);
+    assert.equal(await count(tables.auditPart), 1);
   });
 
   test('an owner-bound journal commits its event batch with the receipt and validates it on lookup', async () => {

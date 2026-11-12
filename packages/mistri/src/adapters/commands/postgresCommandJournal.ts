@@ -54,6 +54,7 @@ export {
 };
 import type {
   CommandAudit,
+  CommandLinkRow,
   CommandJournal,
   CommandJournalAppScope,
   CommandJournalPlatform,
@@ -73,24 +74,26 @@ import { commandEventsAppended } from '../events/commandEventSignal.js';
 import { nextPostgresCommandNumber, provisionPostgresCommandSequences } from './postgresCommandSequences.js';
 import { provisionPostgresCommandStaging, stagePostgresFile, takePostgresStaged } from './postgresCommandStaging.js';
 import type { StagedFileRow, StagedLimits, StagedTake } from './commandStaging.js';
+import { mintPostgresLink, openPostgresLink, readPostgresLink, revokePostgresLinks } from './commandLinks.js';
 import { appendPostgresReadAudits } from '../readAudit/postgresReadAudit.js';
 import type { ReadAuditRow } from '../readAudit/readAudit.js';
 
 /** Explicit maintenance operation. Never called implicitly when opening an App.
- * No journal gets version 1; any other layout is refused, not altered. */
-export async function migratePostgresCommandJournal(url: string): Promise<{ version: 1; migrated: boolean }> {
+ * No journal gets the current version; any other layout is refused, not altered
+ * (an older journal is brought forward by `mistri migrate stores up`). */
+export async function migratePostgresCommandJournal(url: string): Promise<{ version: typeof JOURNAL_VERSION; migrated: boolean }> {
   return withPostgresMaintenanceTransaction(url, async (client) => {
     const described = await describePostgresRelations(client, PREFIX);
-    let result: { version: 1; migrated: boolean } = { version: 1, migrated: false };
+    let result: { version: typeof JOURNAL_VERSION; migrated: boolean } = { version: JOURNAL_VERSION, migrated: false };
     if (!described.length) {
       for (const ddl of definitions) await client.query(ddl);
       await client.query(`INSERT INTO ${q(tables.meta)} (singleton, version) VALUES (1, $1)`, [JOURNAL_VERSION]);
-      result = { version: 1, migrated: true };
+      result = { version: JOURNAL_VERSION, migrated: true };
     }
     await assertPostgresCommandJournal(client);
     // The sequences a handler numbers from live beside the journal.
-    if (await provisionPostgresCommandSequences(client)) result = { version: 1, migrated: true };
-    if (await provisionPostgresCommandStaging(client)) result = { version: 1, migrated: true };
+    if (await provisionPostgresCommandSequences(client)) result = { version: JOURNAL_VERSION, migrated: true };
+    if (await provisionPostgresCommandStaging(client)) result = { version: JOURNAL_VERSION, migrated: true };
     return result;
   });
 }
@@ -116,6 +119,18 @@ const FIND_RECEIPT = `SELECT ${rules.receiptRowColumns(COMPLETED_AT)} FROM ${q(t
           AND actor_id = $6 AND command_id = $7 AND command_version = $8 AND idempotency_key = $9`;
 
 type JournalOwner = CommandJournalTenant | CommandJournalPlatform | CommandJournalAppScope;
+
+/** The statement that writes a receipt's audit-part rows, one INSERT for all of them; none for a receipt with none. */
+function auditPartStatement(receiptId: string, audits: readonly CommandAudit[]) {
+  const rows = rules.auditPartRows(receiptId, audits);
+  if (!rows.length) return undefined;
+  return {
+    text: `INSERT INTO ${q(tables.auditPart)} (${rules.AUDIT_PART_COLUMNS}) VALUES ${rows
+      .map((_, at) => `($${at * 4 + 1}, $${at * 4 + 2}, $${at * 4 + 3}, $${at * 4 + 4})`)
+      .join(', ')}`,
+    values: rows.flat(),
+  };
+}
 
 /** A receipt scope's uniqueness columns under `owner`: refused (thrown) for a scope of another App or actor. */
 function receiptValues(owner: JournalOwner | undefined) {
@@ -261,12 +276,15 @@ export function createPostgresCommandJournal(client: PgQuery, operations: Transa
         const columns = events ? `${rules.RECEIPT_COLUMNS}, manifest_json, event_count, digest, xact_id` : rules.RECEIPT_COLUMNS;
         const placeholders = row.map((_, at) => `$${at + 1}`);
         if (events) placeholders.push(...events.batch.map((_, at) => `$${row.length + at + 1}`), 'pg_current_xact_id()');
+        const parts = auditPartStatement(receipt.id, audits);
         return [
           { text: SCOPE_LOCK, values: [scopeLock(scope)] },
           {
             text: `INSERT INTO ${q(tables.receipt)} (${columns}) VALUES (${placeholders.join(', ')})`,
             values: events ? [...row, ...events.batch] : row,
           },
+          // After the receipt, in its transaction: the pieces name it.
+          ...(parts ? [parts] : []),
           ...(events?.statements ?? []),
         ];
       };
@@ -335,6 +353,28 @@ export function createPostgresCommandJournal(client: PgQuery, operations: Transa
             return invalid();
         await appendPostgresReadAudits(client, input.rows);
       }),
+    // Links in the journal's namespace: a tenant's are its own, and none is read across Apps.
+    mintLink: (row: CommandLinkRow) =>
+      invoke({ row }, async ({ row }) => {
+        if ((member && row?.app !== member.appId) || (appScope && row?.app !== appScope.appId) || row?.tenant !== namespace[3])
+          return invalid();
+        await mintPostgresLink(client, row);
+      }),
+    revokeLinks: (appId: string, resource: string, rowKey: string, name: string | undefined, now: number) =>
+      invoke({ appId, resource, rowKey, name, now }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return revokePostgresLinks(client, input.appId, namespace[3], input.resource, input.rowKey, input.name, input.now);
+      }),
+    openLink: (appId: string, id: string, now: number) =>
+      invoke({ appId, id, now }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return openPostgresLink(client, input.appId, namespace[3], input.id, input.now);
+      }),
+    readLink: (appId: string, id: string, now: number) =>
+      invoke({ appId, id, now }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return readPostgresLink(client, input.appId, namespace[3], input.id, input.now);
+      }),
     /* No advisory lock and no savepoint probe (which proves a transaction
        block for the lock's sake): a new key is the common case, and a
        delivery of the same request still in flight is caught by the insert
@@ -400,7 +440,11 @@ export function createPostgresCommandJournal(client: PgQuery, operations: Transa
           VALUES (${row.map((_, at) => `$${at + 1}`).join(', ')}) ON CONFLICT DO NOTHING RETURNING id`,
           row,
         );
-        return Number(written.rowCount ?? 0) === 1;
+        // The receipt's pieces only where its receipt is: a replay found it taken and writes none of them.
+        if (Number(written.rowCount ?? 0) !== 1) return false;
+        const parts = auditPartStatement(receipt.id, audits);
+        if (parts) await client.query(parts.text, parts.values);
+        return true;
       });
     },
   });

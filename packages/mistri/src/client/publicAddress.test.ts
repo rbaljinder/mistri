@@ -329,6 +329,9 @@ test("a date window in an address is the window, read back unquoted, and round-t
   expect(addressQuestion(recent as never, new URLSearchParams('created_on=today'))).toBe('created_on = today');
   // A column that is not a date keeps the word as a value.
   expect(addressQuestion(recent as never, new URLSearchParams('status=today'))).toBe('status = "today"');
+  // Said the same way beside other values: a window is never quoted in a list on a date column, and always is on any other.
+  expect(addressQuestion(recent as never, new URLSearchParams('created_on=today,yesterday'))).toContain('created_on in (today, yesterday)');
+  expect(addressQuestion(recent as never, new URLSearchParams('status=today,yesterday'))).toContain('status in ("today", "yesterday")');
   for (const search of ['created_on=today', 'created_on=last+30+days', 'status=new&created_on=this+week']) {
     const entry = listEntry('recent', search);
     expect(entry.query).toMatch(/ show name, status/);

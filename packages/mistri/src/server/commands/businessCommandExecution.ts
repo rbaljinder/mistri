@@ -19,7 +19,8 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
-import { COMMAND_TARGET_BOUNDS } from '../../adapters/commands/commandJournalSchema.js';
+import { AUDIT_PART_ENTRIES, AUDIT_TARGET_ENTRIES, COMMAND_TARGET_BOUNDS } from '../../adapters/commands/commandJournalSchema.js';
+import { splitAudit } from '../../adapters/commands/commandAuditParts.js';
 import type { CommandEventBatch } from '../../adapters/events/commandEventTypes.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
 import { ScopeRefusal } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
@@ -97,6 +98,7 @@ import { openSavedDraft, type SavedDraftRun } from '../forms/savedForms.js';
 import { currentSpan, errorCode, inSpan, tracing } from '@mistriwork/engine/adapters/telemetry/trace.js';
 import { authorFault, isRequestFault, refusalCause, refusalReasons } from '@mistriwork/engine/shared/refusal.js';
 import { handlerNextNumber } from '../../adapters/commands/commandSequences.js';
+import { handlerLinks, mintQueued } from '../links/linkMint.js';
 import { commandFlagEnabled, commandFlagsReader, executeWithCommandFlags, type CommandFlags } from './commandFlags.js';
 
 // Keep existing internal imports compatible; handlers and metadata use the leaf directly.
@@ -348,6 +350,13 @@ async function executeUntraced(
             authorized.command.public === true ||
             (authorized.actor.kind !== undefined && authorized.actor.kind !== 'service') ||
             authorized.keyColumns.length !== 0))
+    )
+      throw new AppAccessDenied();
+    /* A link's holder runs on the one record the link was minted for, and on nothing else: the authorizer proved the
+       command is the link's, and the key the request names is held to the link's here, where the target is read. */
+    if (
+      authorized.actor.kind === 'link' &&
+      (creating || list.multi || list.keys.length !== 1 || commandKeyText(list.keys[0]) !== authorized.actor.link?.key)
     )
       throw new AppAccessDenied();
     if (scoped && (typeof authorized.assertTarget !== 'function' || typeof authorized.assertResult !== 'function'))
@@ -872,6 +881,8 @@ async function executeUntraced(
           // record by record leaves each record's dependents on its own row.
           const keyTexts = list.keys.map(commandKeyText);
           const changes: unknown[][] = list.keys.map(() => []);
+          // The bytes each target's entries come to as one array, kept as they are added so a long audit is not walked again.
+          const changeBytes: number[] = list.keys.map(() => 1);
           let attributed = 0;
           // What the audit keeps of each image. A public command's default is
           // keys and column names only: an applicant's input is not the journal's
@@ -895,10 +906,11 @@ async function executeUntraced(
           const recordChange = (change: { resource: string; key?: unknown } & Record<string, unknown>) => {
             if (change.resource === command.target) attribute(change.key);
             const list = changes[attributed];
-            if (list.length >= 256) {
+            if (list.length >= AUDIT_TARGET_ENTRIES) {
               throw recordRefusalCause(
                 new BusinessCommandExecutionError('invalid_result'),
-                `Command "${request.command}" made more than 256 changes for one target; its audit keeps at most 256.`,
+                `Command "${request.command}" made more than ${AUDIT_TARGET_ENTRIES.toLocaleString('en-US')} changes for one target; ` +
+                  `its audit keeps at most ${AUDIT_TARGET_ENTRIES.toLocaleString('en-US')} (and 4 MiB).`,
               );
             }
             try {
@@ -906,7 +918,11 @@ async function executeUntraced(
               const entry = JSON.parse(canonicalCommandJson(change, AUDIT_TARGET_BYTES)) as Record<string, unknown>;
               for (const side of ['before', 'after']) if (Object.hasOwn(entry, side)) entry[side] = image(entry[side]);
               list.push(entry);
-              canonicalCommandJson(list, AUDIT_TARGET_BYTES);
+              // Stored in pieces of AUDIT_PART_ENTRIES, each serialized alone (the canonical walk is bounded in nodes, so
+              // a whole list of thousands is not one walk): the piece this entry joins, and the target's bytes in all.
+              canonicalCommandJson(list.slice(list.length - 1 - ((list.length - 1) % AUDIT_PART_ENTRIES)), AUDIT_TARGET_BYTES);
+              changeBytes[attributed] += Buffer.byteLength(canonicalCommandJson(entry, AUDIT_TARGET_BYTES), 'utf8') + 1;
+              if (changeBytes[attributed] > AUDIT_TARGET_BYTES) throw new Error('over the audit');
             } catch {
               throw developerError(auditRefusal(request.command, change));
             }
@@ -1466,6 +1482,28 @@ async function executeUntraced(
               now: now().getTime(),
             });
             const handed = Object.keys(held.files).length ? { ...held.files, ...revealed } : revealed;
+            /* A link's run is read again in the transaction that runs it: one revoked or expired since the page
+               opened runs nothing, whatever session its holder still carries. */
+            if (authorized.actor.kind === 'link') {
+              const holds = authorized.actor.link;
+              const live = holds && (await journal.readLink?.(authorized.actor.appId, holds.id, now().getTime()));
+              if (!holds || !live || live.resource !== holds.resource || live.rowKey !== holds.key || live.name !== holds.name)
+                throw new AppAccessDenied();
+            }
+            const links = handlerLinks({
+              journal,
+              appId: authorized.actor.appId,
+              tenant: receiptOwner?.tenantId ?? '',
+              resource: authorized.resource,
+              command: request.command,
+              actorId: authorized.actor.id,
+              links: authorized.links,
+              rowKey:
+                (command.targets ?? 'one') === 'one' && !creating && !many && list.keys.length === 1
+                  ? commandKeyText(list.keys[0])
+                  : undefined,
+              now,
+            });
             const output = await withoutRevealed(revealed, () =>
               executeWithCommandFlags(flags, command.enabledBy, (executionFlags) =>
                 command.handle(
@@ -1483,6 +1521,8 @@ async function executeUntraced(
                     db,
                     tx: audit(tx),
                     nextNumber: handlerNextNumber(journal, authorized.actor.appId),
+                    link: links.link,
+                    revokeLinks: links.revokeLinks,
                     ...named,
                     ...(lookupRun ? { lookup } : {}),
                     ...(intake ? { intake } : {}),
@@ -1630,12 +1670,10 @@ async function executeUntraced(
             const audits = list.keys.map((key, index) => ({
               target: receiptOwner ? resource : authorized.resource,
               keyJson: canonicalCommandJson(key, 8192),
-              changesJson: canonicalCommandJson(
-                publicActor && eventBatch?.length ? commandVisitorAudit(flags, changes[index]) : changes[index],
-                AUDIT_TARGET_BYTES,
-              ),
+              ...splitAudit(changes[index], (head) => (publicActor && eventBatch?.length ? commandVisitorAudit(flags, head) : head)),
             }));
             const receipt = { ...scope, id, fingerprint, resultJson, requestId, completedAt };
+            await mintQueued(journal, links, id);
             if (track === undefined) await journal.commit(receipt, audits.length === 1 ? audits[0] : audits, eventBatch);
             // The receipt, its audit and the replay check are one statement: taken, this attempt rolls back and replays it.
             else if (track !== 'none' && !(await journal.insert!(receipt, audits.length === 1 ? audits[0] : audits)))

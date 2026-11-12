@@ -143,6 +143,9 @@ function journal(query: Query, dialect: Dialect, operations: TransactionOperatio
         const values = scopeValues(owner, receipt),
           entries = rules.auditEntries(audit, undefined);
         if (entries.some((entry) => entry.owner !== undefined && entry.owner !== owner.tenant)) refuse();
+        // Its receipt is one row of its own store, which has no audit-part table: a longer audit is refused rather than cut.
+        if (entries.some((entry) => entry.changesParts !== undefined))
+          throw new Refusal('A public placement receipt keeps at most 256 changes for one target.');
         const [target, , keysJson, changesJson] = rules.packTargets(
           entries,
           entries.map(() => owner.tenant),

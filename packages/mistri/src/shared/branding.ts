@@ -12,6 +12,7 @@ import {
 } from '@mistriwork/engine/shared/theme.js';
 import { effectiveThemeDefinition, headingWeight, themePreset } from '@mistriwork/engine/shared/themePresets.js';
 import { typeTokens } from '@mistriwork/engine/shared/themeType.js';
+import { BRANDING_RENAMED, renamedMessages } from './renamedWords.js';
 
 type Immutable<T> = T extends object ? { readonly [K in keyof T]: Immutable<T[K]> } : T;
 const BRANDING_FONT_PAIRS = Object.freeze(['system', 'editorial', 'classic'] as const);
@@ -156,7 +157,7 @@ function imageBinding(raw: unknown): BrandingImageBinding {
 
 /* Spellings renamed before 1.0: the look is a `preset` and the brand color the `accent`, as `ui.theme` says them.
    Named here, before the strict reader's generic refusal, so the message says the word that replaced them. */
-const RENAMED: Readonly<Record<string, string>> = { base: 'preset', brandColor: 'accent' };
+const RENAMED = renamedMessages(BRANDING_RENAMED);
 function renamed(raw: unknown, at: string): void {
   if (!raw || typeof raw !== 'object') return;
   for (const [old, now] of Object.entries(RENAMED)) {

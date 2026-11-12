@@ -27,6 +27,7 @@
  "e2e/board-planning.spec.ts": 13.2,
  "e2e/built-samples.spec.ts": 8,
  "e2e/calendar-week.spec.ts": 7.1,
+ "e2e/capability-links.spec.ts": 4,
  "e2e/chart-auto-bucket.spec.ts": 7.1,
  "e2e/chosen-look.spec.ts": 12.4,
  "e2e/command-actions.spec.ts": 27.9,

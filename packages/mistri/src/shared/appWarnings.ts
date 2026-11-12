@@ -229,7 +229,8 @@ export function appReachWarnings(app: AppDef, schema: DatabaseSchema): string[] 
   let writable: ReadonlySet<string>;
   try {
     const access = resolveAppAccess(app, schema, roles);
-    writable = access.writable;
+    // What a role only appends to is not one an action edits.
+    writable = new Set([...access.writable].filter((id) => !access.appendOnly?.has(id)));
   } catch {
     return warnings; // An invalid grant is refused on its own, with its own reason.
   }

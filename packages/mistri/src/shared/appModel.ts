@@ -360,7 +360,9 @@ export interface AppRoleGrant {
   read: boolean | string[];
   write: boolean | string[];
   /** Of what it writes, what the role makes new rows in: absent, all of it;
-      false, none (it edits and never creates); a list, those. */
+      false, none (it edits and never creates); a list, those. A table the list
+      names that `write` does not is append-only for the role: it reads it and
+      makes new rows there, and never edits or removes one. */
   create?: false | string[];
   /** Tables the role may export (a CSV/JSON file of every matching row) beyond those it writes, which it may always
       export. Of what it reads. Absent: only what it writes. */
@@ -1076,6 +1078,8 @@ export interface ResourceDef {
   consumes?: AppConsumes[];
   /** The parent balances a row of this resource adds to (a receipt's line, a return): `consumes` the other way round. */
   restocks?: AppConsumes[];
+  /** Capability links by name (appLinks.ts): one record, its declared columns and commands, to whoever holds the link. */
+  links?: Record<string, import('./appLinks.js').AppLinkDef>;
 }
 
 /** A segment as authored: its conditions in the query language, and what a tab over it is called. */

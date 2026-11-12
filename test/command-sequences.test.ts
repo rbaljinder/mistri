@@ -69,11 +69,11 @@ async function inTransaction<T>(
 
 test('the journal migration provisions the sequence store, and adds it to a journal that predates it', (t) => {
   const { path, db } = database(t);
-  assert.deepEqual(migrateSqliteCommandJournal(path), { version: 1, migrated: true });
+  assert.deepEqual(migrateSqliteCommandJournal(path), { version: 3, migrated: true });
   assert.ok(db.prepare('SELECT 1 FROM sqlite_schema WHERE name = ?').get(COMMAND_SEQUENCE_TABLE));
-  assert.deepEqual(migrateSqliteCommandJournal(path), { version: 1, migrated: false });
+  assert.deepEqual(migrateSqliteCommandJournal(path), { version: 3, migrated: false });
   db.exec(`DROP TABLE "${COMMAND_SEQUENCE_META_TABLE}"; DROP TABLE "${COMMAND_SEQUENCE_TABLE}"`);
-  assert.deepEqual(migrateSqliteCommandJournal(path), { version: 1, migrated: true });
+  assert.deepEqual(migrateSqliteCommandJournal(path), { version: 3, migrated: true });
   assert.ok(db.prepare('SELECT 1 FROM sqlite_schema WHERE name = ?').get(COMMAND_SEQUENCE_TABLE));
 });
 

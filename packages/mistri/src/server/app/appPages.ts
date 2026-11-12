@@ -37,6 +37,7 @@ import {
 } from '../../shared/uiSdk.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { strayRead } from '../http/tablesReached.js';
+import { PAGE_NAV_RENAMED, PAGE_RENAMED, renamedMessages } from '../../shared/renamedWords.js';
 import { compilePageModule } from './appComponents.js';
 import { exportNames } from './componentSdk.js';
 
@@ -64,11 +65,8 @@ const PAGE_KEYS = [
 ];
 const NAV_KEYS = ['group', 'position'];
 /* Spellings renamed before 1.0, refused with the word that replaced them. */
-const RENAMED: Readonly<Record<string, string>> = {
-  title: '"label", as a view says it',
-  path: "the file's name: pages/pick-walk.page.tsx is the page at /pick-walk, so leave it out",
-};
-const NAV_RENAMED: Readonly<Record<string, string>> = { icon: 'the page\'s own "icon", beside its "label"', order: 'nav.position' };
+const RENAMED = renamedMessages(PAGE_RENAMED);
+const NAV_RENAMED = renamedMessages(PAGE_NAV_RENAMED);
 /** The key `definePage` keeps its fields under, for the worker to find them on the default export. */
 const FIELDS = 'mistri.page';
 /** The key `defineSurface` keeps its fields under (appSurfaces.ts). */
@@ -495,6 +493,13 @@ function jsxAttribute(opening: AstNode, name: string): AstNode | undefined {
   return value?.type === 'JSXExpressionContainer' ? (value.expression as AstNode) : value;
 }
 const SDK = new Set(['@mistriwork/mistri/ui', '@mistriwork/mistri/page', '@mistriwork/mistri/ui', '@mistriwork/mistri/page']);
+/* Names an author reaches for from other frameworks' permission hooks. A name is refused only when it is in this table
+   and not exported: a type imported without `type` is no concern of the scan, and the bundler says every other miss. */
+const SDK_ALIASES: Readonly<Record<string, string>> = {
+  useGranted: "useCommand('x').granted",
+  usePermission: "useCommand('x').granted",
+  useCan: "useCommand('x').granted",
+};
 
 /** What a page's sources ask of its manifest, by file and line: what it does not declare, and what check cannot read. */
 interface PageScan {
@@ -542,6 +547,12 @@ export function scanPageSource(
       const local = (spec.local as AstNode | undefined)?.name;
       const name = ((spec.imported as AstNode | undefined)?.name ?? local) as string | undefined;
       if (typeof local === 'string' && typeof name === 'string') imported.set(local, name);
+      const instead = typeof name === 'string' && Object.hasOwn(SDK_ALIASES, name) ? SDK_ALIASES[name] : undefined;
+      if (instead && !(PAGE_EXPORTS as readonly string[]).includes(name as string))
+        scan.undeclared.push({
+          line: lineOf(spec.start as number | undefined),
+          text: `${name} is not exported by ${source}; write ${instead}. Declaring the command in definePage({ commands: [...] }) grants nothing: .granted says whether this reader may run it.`,
+        });
     }
   });
   const literal = (node: AstNode | undefined): string | undefined => {
@@ -562,7 +573,7 @@ export function scanPageSource(
     if (!(manifest[what] ?? []).includes(name)) {
       scan.undeclared.push({
         line: lineOf(at),
-        text: `[page-undeclared] ${said} ${what === 'reads' ? 'reads' : 'runs'} "${name}", which the page "${manifest.key}" does not declare in its ${what}`,
+        text: `[page-undeclared] ${said} ${what === 'reads' ? 'reads' : 'runs'} "${name}", which the page "${manifest.key}" does not declare in its ${what}${what === 'commands' ? `. Add it to definePage({ commands: [...] }). Declaring grants nothing: useCommand('${name}').granted then says whether this reader may run it` : ''}`,
       });
     }
   };

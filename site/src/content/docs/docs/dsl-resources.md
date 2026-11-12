@@ -589,6 +589,19 @@ another door always is. A second process writes its own row.
 | --- | --- | --- | --- |
 | `resources.*.labels` | object | Stable | One caption per column or label path: literal text, or a message of the App's catalogs (msg('lead.title')) said in each reader's language. Used in `examples/apps/lintel/resources.ts`. |
 
+## `resources.*.links`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `resources.*.links` | object | Stable | Capability links by name: a way to hand one record to someone who signs in to nothing. A command on the record mints one (context.link('status')); whoever holds it sees the show columns of that one record and runs the declared commands on it, and nothing else. Not in an App scoped by tenant or a row policy. Used in `examples/apps/lintel/pages/unit.ts`. |
+| `resources.*.links.*.commands` | array | Stable | Commands the holder may run on the record, at most eight: each registered, targets: 'one' on this resource, not public, its input text, textarea, number, boolean, date or a fixed choice. Used in `examples/apps/lintel/app.ts`. |
+| `resources.*.links.*.confirm` | array \| object | Stable | One to three columns only the holder knows, typed back before anything is shown: ['zip'], or { zip: 'ZIP code' } to say the label asked. Never a column show names. Used in `examples/apps/lintel/resources.ts`. |
+| `resources.*.links.*.expires` | string | Stable | How long a minted link opens: '7 days' unless said, '90 days' at most. |
+| `resources.*.links.*.says` | object | Stable | Words for a shown column's stored values, keyed by column: { status: { review: 'Under review' } }. Sixty characters at most. |
+| `resources.*.links.*.show` | array | Stable | The record's columns the link page shows, in order: one to twelve. |
+| `resources.*.links.*.stepUp` | string | Stable | An email column of the record: a one-time code is sent to it and typed back before anything is shown. |
+| `resources.*.links.*.uses` | integer | Stable | How many opens spend the link; left out, it opens until it expires. Used in `examples/apps/lintel/resources.ts`. |
+
 ## `resources.*.live`
 
 | Key | Type | Status | What it does |

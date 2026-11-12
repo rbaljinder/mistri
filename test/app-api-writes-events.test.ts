@@ -24,7 +24,7 @@ import { SHOP_TABLES, shelfThroughApi, writeShopApp } from './appApiShop.js';
 
 const storeId = '6c2e1d63-8d2f-4d66-8f1b-5b4f4f1d3e22';
 
-async function shop(t: TestContext, narrowed = false) {
+async function shop(t: TestContext, narrowed = false, appendOnly = false) {
   const directory = mkdtempSync(join(tmpdir(), 'tw-api-writes-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const business = join(directory, 'business.db'),
@@ -38,7 +38,7 @@ async function shop(t: TestContext, narrowed = false) {
   }
   migrateSqliteCommandJournal(business);
   await provisionStores({ sqlite: business }, { app: { id: 'shop', source: 'business' } });
-  const { appDir, config, commands } = writeShopApp(directory, { business, authStore: authPath, narrowed });
+  const { appDir, config, commands } = writeShopApp(directory, { business, authStore: authPath, narrowed, appendOnly });
   const loaded = await loadApp(appDir);
   writeFileSync(join(appDir, 'authority.lock'), loaded.authority!.report);
   const names = ['BETTER_AUTH_SECRET', 'MISTRI_AUTH_ADMIN_EMAIL', 'MISTRI_AUTH_ADMIN_PASSWORD'] as const;
@@ -56,7 +56,7 @@ async function shop(t: TestContext, narrowed = false) {
   }
   const accounts = new DatabaseSync(authPath);
   try {
-    for (const role of ['operator', 'editor', 'auditor']) {
+    for (const role of ['operator', 'editor', 'auditor', ...(appendOnly ? ['clerk'] : [])]) {
       accounts
         .prepare('INSERT INTO "user" (id,name,email,emailVerified,createdAt,updatedAt,role,banned) VALUES (?,?,?,1,?,?,?,0)')
         .run(role, role, `${role}@example.test`, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', role);
@@ -95,6 +95,7 @@ async function shop(t: TestContext, narrowed = false) {
     tokens.operator = issue('operator');
     tokens.editor = issue('editor');
     tokens.auditor = issue('auditor');
+    if (appendOnly) tokens.clerk = issue('clerk');
     tokens.readsOnly = issue('operator', ['item:item', 'list:item']);
     tokens.renamedOnly = issue('auditor', ['event:ticket.renamed']);
   } finally {
@@ -209,6 +210,42 @@ test("generic writes: create, update and delete run as commands under the role's
   });
   assert.equal(removed.status, 200, await removed.clone().text());
   assert.deepEqual(f.row(`SELECT COUNT(*) AS n FROM item`), { n: 1 });
+  s.child.kill('SIGTERM');
+  assert.equal(await s.closed, 0);
+});
+
+test('an append-only role creates through the API and is refused every update and delete', { timeout: 120000 }, async (t) => {
+  const f = await shop(t, false, true);
+  const s = await serveApi(t, f, 'shop');
+  await s.started;
+  const clerk = auth(f.tokens.clerk);
+  // The API offers the clerk the create and neither of the writes that would edit or remove.
+  const paths = Object.keys((await (await fetch(`${s.base}/$openapi`, { headers: clerk })).json()).paths);
+  assert.ok(paths.includes('/item/commands/create-item/v1'), JSON.stringify(paths));
+  assert.ok(!paths.some((path) => path.includes('update-item') || path.includes('delete-item')), JSON.stringify(paths));
+  const created = await fetch(`${s.base}/item/commands/create-item/v1`, {
+    method: 'POST',
+    headers: { ...clerk, ...json, 'idempotency-key': 'append-create-000000001' },
+    body: JSON.stringify({ name: 'Gift' }),
+  });
+  assert.equal(created.status, 200, await created.clone().text());
+  const id = Number((await created.json()).result.key.id);
+  assert.deepEqual(f.row(`SELECT name FROM item WHERE id=${id}`), { name: 'Gift' });
+  // The commands exist on the App (the operator and editor hold them): a role that only appends is refused each.
+  for (const [path, attempt] of [
+    [`item/${id}/commands/update-item/v1`, 'append-update-000000001'],
+    [`item/${id}/commands/delete-item/v1`, 'append-delete-000000001'],
+  ]) {
+    const refused = await fetch(`${s.base}/${path}`, {
+      method: 'POST',
+      headers: { ...clerk, ...json, 'if-match': '"1"', 'idempotency-key': attempt },
+      body: JSON.stringify(path.includes('update') ? { name: 'Changed' } : {}),
+    });
+    assert.ok(refused.status === 403 || refused.status === 404, `${path}: ${refused.status}`);
+    await refused.body?.cancel();
+  }
+  assert.deepEqual(f.row(`SELECT name FROM item WHERE id=${id}`), { name: 'Gift' });
+  assert.deepEqual(f.row(`SELECT COUNT(*) AS n FROM item`), { n: 2 });
   s.child.kill('SIGTERM');
   assert.equal(await s.closed, 0);
 });

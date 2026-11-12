@@ -109,6 +109,7 @@ import { withMachineSteppers } from '../../shared/appMachine.js';
 import { tabSlug } from '@mistriwork/engine/shared/addressParams.js';
 import { isMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import { appNotifyRules, notifyAdvisories } from '../../shared/appNotify.js';
+import { appLinkProblems } from '../../shared/appLinks.js';
 import { compileComponents, compileUiKit, componentHrefs, uiKitCode, type CompiledComponents } from './appComponents.js';
 import { componentMessageKeys, lintComponents, pageManifestsOf } from './componentLint.js';
 import { pageFiles, placePages, readPageFiles, uiKitModuleProblems } from './appPages.js';
@@ -1168,6 +1169,7 @@ export function appProblems(loaded: LoadedApp, schema: DatabaseSchema): string[]
   problems.push(...resolveResources(loaded.app, schema).problems.map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));
   problems.push(...appTransitionRules(loaded.app, schema).problems.map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));
   problems.push(...appNotifyRules(loaded.app, schema).problems.map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));
+  problems.push(...appLinkProblems(loaded.app, schema).map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));
   const files = appFileRules(loaded.app, schema, { strict: true });
   problems.push(...files.problems.map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));
   problems.push(...appTagRules(loaded.app, schema).problems.map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));

@@ -20,6 +20,8 @@ export function writeShopApp(
     events?: readonly string[];
     physical?: boolean;
     narrowed?: boolean;
+    /** A `clerk` that creates items and does not write them: append-only (`create` without `write`). */
+    appendOnly?: boolean;
     /** Resources that audit their reads (`audit: { reads: true }`). */
     audited?: readonly string[];
   },
@@ -68,13 +70,14 @@ export function writeShopApp(
             fields: { item: { read: ['id', 'revision', 'name', 'note'], write: ['id', 'revision', 'name', 'note'] } },
           },
           auditor: { read: true, write: false, commands: ['rename', 'flag'] },
+          ...(options.appendOnly ? { clerk: { read: ['ticket'], write: false, create: ['item'] } } : {}),
         },
       },
       views: { items: { kind: 'list', from: 'item' } },
       home: 'items',
       api: {
         version: 1,
-        roles: ['operator', 'editor', 'auditor'],
+        roles: ['operator', 'editor', 'auditor', ...(options.appendOnly ? ['clerk'] : [])],
         resources: {
           item: { fields: ['id', 'revision', 'name', 'note'], sorts: ['id'], create: true, update: true, delete: true },
           ticket: { fields: ['id', 'revision', 'name'], sorts: ['id'] },

@@ -215,7 +215,8 @@ test('genuine tenant execution atomically saves events and restart/replay/status
   assert.equal(f.version(), 1);
   assert.equal(f.control.projects, 1);
   assert.equal(f.control.handles, 1);
-  for (const table of [...Object.values(COMMAND_JOURNAL_TABLES).slice(1), COMMAND_EVENT_TABLES.event]) {
+  // Audit parts and capability links are written only past a long audit or when a command mints one.
+  for (const table of [COMMAND_JOURNAL_TABLES.receipt, COMMAND_EVENT_TABLES.event]) {
     assert.equal(f.count(table), 1);
   }
   assert.equal(f.batches(), 1);

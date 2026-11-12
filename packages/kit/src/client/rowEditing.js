@@ -5,6 +5,7 @@
  * ask them without loading the draft machinery and its boot-time wiring.
  * write.js re-exports both; the rules are these, once.
  */
+import { isAppendOnly } from '@mistriwork/engine/shared/schema.js';
 import { prefersPages, state, writeAllowed } from './core.js';
 import { planColumn } from './columns.js';
 import { pageBridge } from './uiBridge.js';
@@ -46,6 +47,8 @@ function frozenRow(tableId, row) {
 /** True when this row can be edited at all: write mode on, and a full key; a frozen row (`row`, where the caller has it) is not. */
 export function canEditRow(table, key, row) {
   if (!state.canWrite || !table || table.isView) return false;
+  // An append-only table takes new rows and no edit (`create` without `write`): the server refuses one, so none is drawn.
+  if (isAppendOnly(table)) return false;
   if (frozenRow(table.id, row)) return false;
   if (prefersPages() && !writableConnection()) return false;
   if (!writeAllowed(table.id)) return false;

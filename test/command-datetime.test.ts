@@ -131,7 +131,9 @@ describe('PostgreSQL keeps it in timestamptz and timestamp', { skip: liveSkip('p
     await control.connect();
     const reset = [
       `DROP TABLE IF EXISTS public.visit CASCADE`,
-      `DROP TABLE IF EXISTS ${runtimeTable('postgres', tables.receipt)}, ${runtimeTable('postgres', tables.meta)} CASCADE`,
+      `DROP TABLE IF EXISTS ${Object.values(tables)
+        .map((table) => runtimeTable('postgres', table))
+        .join(', ')} CASCADE`,
     ];
     const registry = new Registry();
     try {

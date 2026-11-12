@@ -41,7 +41,7 @@ import {
   suspendDraft,
   takeFieldFocus,
 } from '../write.js';
-import { columnKind, type ColumnMeta, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { columnKind, isAppendOnly, type ColumnMeta, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { columnDisplay, columnLabel, findTable, prefersPages, refsFrom, state, toast } from '../core.js';
 import { RichTextField, mentionSearch, pictureKeeper } from './RichTextField.js';
 import { booleanWords, choiceWord, linkFor, type DisplayRule } from './valueModel.js';
@@ -163,6 +163,7 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
       app &&
       shell().saveMode() === 'blur' &&
       column.writable !== false &&
+      !isAppendOnly(table) &&
       column.changesBy !== 'actions' &&
       !applying &&
       editorCurrent(isCurrent),
@@ -271,7 +272,7 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
 
   // A mounted editor can receive a narrower policy while a field is open; a
   // declared transition is the record's actions' to make, never an editor's.
-  if (column.writable === false || column.changesBy === 'actions')
+  if (column.writable === false || column.changesBy === 'actions' || isAppendOnly(table))
     return <>{display ? display(value) : <span>{value === null || value === undefined ? '—' : String(value)}</span>}</>;
   /* A document is not a line of text: a box would show `[object Object]`
      and stage it back over the value. JSON is read here, never edited. */
@@ -279,7 +280,7 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
   if (json) return <JsonView value={json.value} label={column.name} />;
 
   const onEdit = (next: string) => {
-    if (applying || column.writable === false || column.changesBy === 'actions' || !editorCurrent(isCurrent)) return;
+    if (applying || column.writable === false || column.changesBy === 'actions' || isAppendOnly(table) || !editorCurrent(isCurrent)) return;
     setSaved(false);
     // An empty box on a nullable column means NULL, not the empty string.
     stage(table, recordKey, column, next === '' && column.nullable ? null : next, original);

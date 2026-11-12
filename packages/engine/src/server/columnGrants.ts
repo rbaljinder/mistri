@@ -52,6 +52,10 @@ export interface ColumnGrant {
   writable: ReadonlySet<string>;
   /** Of `writable`, where a generic insert may make a row (`roles.<role>.create`). Absent: all of it. */
   creatable?: ReadonlySet<string>;
+  /** Of `writable`, what the principal only appends to: a row is made there and never edited or removed
+      (update, delete, lock and a file's replacement are refused). Absent: none. Carried wherever
+      `creatable` is, so no copy of a grant can leave such a table editable. */
+  appendOnly?: ReadonlySet<string>;
   /** Missing entries retain unrestricted columns within the resource grants. */
   fields?: ReadonlyMap<string, { read: ReadonlySet<string>; write: ReadonlySet<string> }>;
   /** Columns read and written by the server for its own work (a file's object
@@ -70,6 +74,7 @@ export function captureGrant<G extends ColumnGrant>(grant: G): G {
     readable: new Set(grant.readable),
     writable: new Set(grant.writable),
     ...(grant.creatable ? { creatable: new Set(grant.creatable) } : {}),
+    ...(grant.appendOnly ? { appendOnly: new Set(grant.appendOnly) } : {}),
     ...(grant.fields
       ? {
           fields: new Map(
@@ -102,12 +107,15 @@ export function markStableGrant<T extends ColumnGrant>(grant: T): T {
    grant is kept per role set and handed each request with that person's own
    scope beside it (tenantReadRuntime.ts), so the scope itself is never the
    key, and never kept here past its request. */
-type PrunedFrom = Pick<ColumnGrant, 'writable' | 'creatable' | 'fields' | 'internal'> & { scoped: boolean; pruned: DatabaseSchema };
+type PrunedFrom = Pick<ColumnGrant, 'writable' | 'creatable' | 'appendOnly' | 'fields' | 'internal'> & {
+  scoped: boolean;
+  pruned: DatabaseSchema;
+};
 const prunedCatalogs = new WeakMap<DatabaseSchema, WeakMap<object, PrunedFrom>>();
 /* A tenant request resolves its grant afresh each time, so its sets are never
    the same objects twice, and every read in it pruned the catalog again
    (G118). A captured catalog is frozen, and pruning reads nothing of the grant
-   but the five things in this key, so the answer for a catalog and a key is
+   but the six things in this key, so the answer for a catalog and a key is
    kept — bounded, oldest out first — and frozen, so no caller can change the
    copy another one is handed. */
 const prunedByContent = new WeakMap<DatabaseSchema, Map<string, DatabaseSchema>>();
@@ -118,6 +126,7 @@ function grantKey(access: ColumnGrant): string {
     sorted(access.readable),
     sorted(access.writable),
     access.creatable ? sorted(access.creatable) : null,
+    access.appendOnly ? sorted(access.appendOnly) : null,
     access.fields
       ? [...access.fields].map(([table, { read, write }]) => [table, sorted(read), sorted(write)]).sort((a, b) => (a[0] < b[0] ? -1 : 1))
       : null,
@@ -152,6 +161,7 @@ export function accessibleSchema(schema: DatabaseSchema, access: ColumnGrant): D
     kept &&
     kept.writable === access.writable &&
     kept.creatable === access.creatable &&
+    kept.appendOnly === access.appendOnly &&
     kept.fields === access.fields &&
     kept.internal === access.internal &&
     kept.scoped === scoped
@@ -160,8 +170,8 @@ export function accessibleSchema(schema: DatabaseSchema, access: ColumnGrant): D
   // Frozen over a captured catalog, as the content path's is: what reads it later (resourceChecks) may then keep by its identity.
   const made = pruneCatalog(schema, access);
   const pruned = isCapturedScopeCatalog(schema) ? freezeDerivedCatalog(made) : made;
-  const { writable, creatable, fields, internal } = access;
-  byGrant.set(access.readable, { writable, creatable, fields, internal, scoped, pruned });
+  const { writable, creatable, appendOnly, fields, internal } = access;
+  byGrant.set(access.readable, { writable, creatable, appendOnly, fields, internal, scoped, pruned });
   return pruned;
 }
 
@@ -253,6 +263,10 @@ function pruneCatalog(schema: DatabaseSchema, access: ColumnGrant): DatabaseSche
                   ),
               }
             : {}),
+          /* Append-only: the reader adds rows here and never edits or removes them. Said last so it outranks the
+           deletable above; the columns stay writable, for the New form. Capability only, never the authority
+           (authorizeColumnWrites is). */
+          ...(access.appendOnly?.has(table.id) ? { appendOnly: true, deletable: false } : {}),
           ...(table.indexed ? { indexed: table.indexed.filter((column) => listed(table.id, column)) } : {}),
           // Like `indexed`: a hidden column is not named, even as unique.
           ...(table.unique ? { unique: table.unique.filter((column) => listed(table.id, column)) } : {}),
@@ -755,6 +769,13 @@ export function authorizeColumnWrites<G extends ColumnGrant>(
   const updateVia = (input: UpdateRequest, write: WriteTransaction['update']): Promise<UpdateResult> => {
     const request = jsonWritten(full, requestData(input));
     const operation = capture(grant);
+    /* An append-only table is in `writable` so its rows can be made, and edited by nothing generic: what answers an
+       update to a table the principal does not write (a granted fixed action) answers it, else it is refused. */
+    if (operation.appendOnly?.has(request.table)) {
+      const answered = product?.unwritable?.(request, operation, write);
+      if (answered) return answered;
+      throw new AppAccessDenied();
+    }
     if (!operation.writable.has(request.table)) {
       const answered = product?.unwritable?.(request, operation, write);
       if (answered) return answered;
@@ -774,7 +795,13 @@ export function authorizeColumnWrites<G extends ColumnGrant>(
       ? {
           lockRecord: async (input: DeleteRequest) => {
             const request = requestData(input);
-            if (grant.writable.has(request.table) || !product?.locksUnwritable?.(request.table, grant)) assertWrite(request.table);
+            // A lock is the first step of an edit or a removal: an append-only table is locked only as a table not written is.
+            if (grant.appendOnly?.has(request.table) && !product?.locksUnwritable?.(request.table, grant)) throw new AppAccessDenied();
+            if (
+              (grant.writable.has(request.table) && !grant.appendOnly?.has(request.table)) ||
+              !product?.locksUnwritable?.(request.table, grant)
+            )
+              assertWrite(request.table);
             else assertRead(request.table);
             keyFields(request.table, request.key);
             await writer.lockRecord!(request);
@@ -807,6 +834,7 @@ export function authorizeColumnWrites<G extends ColumnGrant>(
     remove: (input) => {
       const request = requestData(input);
       assertWrite(request.table);
+      if (grant.appendOnly?.has(request.table)) throw new AppAccessDenied();
       keyFields(request.table, request.key);
       // Delete/Undo requires a complete readable before-image and permission
       // to remove all fields, including those protected from ordinary updates.

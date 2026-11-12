@@ -56,6 +56,8 @@ import { closeDevClientHmr, retireDevClient } from '@mistriwork/engine/server/de
 import { refusalReasons } from '@mistriwork/engine/server/evidence.js';
 import { authoringApp } from '@mistriwork/engine/server/http/refusalReport.js';
 import { appHome, outward, publicRoot, settingsMount, type AddressMount } from '@mistriwork/engine/shared/mount.js';
+import { servesLinks } from '../links/linkLookup.js';
+import { configureLinkBase } from '../links/linkToken.js';
 import { adviseConnectionLimits } from '@mistriwork/engine/adapters/connectionBudget.js';
 import { startTelemetry } from '@mistriwork/engine/adapters/telemetry/start.js';
 import { runtimeVersion } from '@mistriwork/engine/server/packageVersion.js';
@@ -1100,6 +1102,13 @@ export async function startServing(
         opts.port = address.port;
         serving.bound.port = address.port;
       }
+      /* A capability link is minted for the address a recipient opens, which is known once the port is (links/linkToken.ts). */
+      const origin = publicUrl(opts, mount.base).replace(/\/+$/, '');
+      for (const host of serving.apps)
+        if (servesLinks(host.app.app))
+          stopWatchers.push(
+            configureLinkBase(host.app.app.id, origin + outward(mount, `/${encodeURIComponent(host.app.app.id)}/l`).slice(0, -2)),
+          );
       if (!startBackground()) return;
       /* One question per database, once the pools are open and serving has not waited for it: whether this process's
          pools fit what the server allows. A warning only; a failed question says nothing. */

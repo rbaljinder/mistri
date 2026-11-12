@@ -257,7 +257,7 @@ export async function verifyEmailReply(linking: Linking): Promise<SavedFormReply
   const address = email.trim().toLowerCase();
   const subject = `verify\u0000${key}\u0000${token}`;
   if (code === undefined) {
-    const issued = issueCode(subject, Date.now(), address);
+    const issued = await issueCode(subject, Date.now(), address);
     if ('limited' in issued) {
       const message = 'Several codes were sent for this application in the last hour. Use the newest one, or try again later.';
       return { status: 429, body: { code: 'rate_limited', message, error: message } };
@@ -276,7 +276,7 @@ export async function verifyEmailReply(linking: Linking): Promise<SavedFormReply
     }
     return { status: 200, body: { sent: true } };
   }
-  if (!spendCode(subject, code, Date.now(), address))
+  if (!(await spendCode(subject, code, Date.now(), address)))
     return { status: 404, body: { code: 'code_refused', message: VERIFY_REFUSED, error: VERIFY_REFUSED } };
   const stamped = await reading((records) => stampVerifiedEmail(records, catalog, roots, form, token, address));
   if (!stamped) return { status: 404, body: { code: 'not_found', message: 'Start the application first: the address is proved for it.' } };

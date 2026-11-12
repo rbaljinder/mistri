@@ -45,13 +45,23 @@ export function configureFormKey(appId: string, environment: NodeJS.ProcessEnv):
 }
 
 function formKey(appId?: string): Buffer {
+  return purposeKey('keyed-input.v1', appId);
+}
+
+/**
+ * A key for one purpose derived from the App's form key: `keyed-input.v1` for a keyed input, `mistri link v1` for a
+ * capability link's MAC. Each purpose has its own key, so a value made for one can never stand for another; all of
+ * them change when the form key does. Throws FormKeyMissing without a key: a caller fails closed.
+ */
+export function purposeKey(purpose: string, appId?: string): Buffer {
   const secret = appId !== undefined && configured.has(appId) ? configured.get(appId) : process.env[FORM_KEY_VARIABLE];
   if (typeof secret !== 'string' || Buffer.byteLength(secret, 'utf8') < 32) throw new FormKeyMissing();
-  let key = derived.get(secret);
+  const cacheKey = `${purpose}\u0000${secret}`;
+  let key = derived.get(cacheKey);
   if (!key) {
-    key = Buffer.from(hkdfSync('sha256', Buffer.from(secret, 'utf8'), 'mistri.form-key', 'keyed-input.v1', 32));
+    key = Buffer.from(hkdfSync('sha256', Buffer.from(secret, 'utf8'), 'mistri.form-key', purpose, 32));
     if (derived.size > 64) derived.clear();
-    derived.set(secret, key);
+    derived.set(cacheKey, key);
   }
   return key;
 }

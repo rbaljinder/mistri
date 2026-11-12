@@ -46,12 +46,13 @@ function copyAccess(access: Access): Access {
     if (!made) sets.set(value, (made = new Set(value)));
     return made;
   };
-  const { readable, writable, creatable, fields, internal } = access;
+  const { readable, writable, creatable, appendOnly, fields, internal } = access;
   return {
     ...access,
     readable: set(readable),
     writable: set(writable),
     ...(creatable ? { creatable: set(creatable) } : {}),
+    ...(appendOnly ? { appendOnly: set(appendOnly) } : {}),
     ...(fields ? { fields: new Map([...fields].map(([id, scope]) => [id, { read: set(scope.read), write: set(scope.write) }])) } : {}),
     ...(internal ? { internal: new Map([...internal].map(([id, columns]) => [id, set(columns)])) } : {}),
   };

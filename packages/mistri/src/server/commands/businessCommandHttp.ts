@@ -28,6 +28,7 @@ import { attributeAction } from '@mistriwork/engine/adapters/writeAttribution.js
 import { MAX_COMMAND_BYTES, snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import type { CaptureCommandFlags, CommandFlags } from './commandFlags.js';
 import { authorizedCommandFlags, commandFlagsOnce } from './commandFlagCapture.js';
+import { servesLinks, withLinkUrls } from '../links/linkLookup.js';
 
 export const isBusinessCommandPath = (path: string): boolean => path.startsWith('/api/commands/');
 
@@ -362,11 +363,13 @@ export async function dispatchBusinessCommandHttp(options: {
     if (path === '/api/commands/prepare')
       return await prepareBusinessCommand({ body, app, binding, references, resources, actor, execution, captureFlags: admittedFlags });
     const captured = await authorizedCommandFlags(binding, actor, body, admittedFlags, path === '/api/commands/status');
-    return path === '/api/commands/status'
-      ? await lookupBusinessCommandStatus(binding, actor, body, { ...execution, flags: captured })
-      : await attributeAction(options.label?.(body), () =>
-          executeBusinessCommand(binding, actor, body, { ...execution, flags: captured, door: browserDoor(req) }),
-        );
+    if (path === '/api/commands/status') return await lookupBusinessCommandStatus(binding, actor, body, { ...execution, flags: captured });
+    const answer = await attributeAction(options.label?.(body), () =>
+      executeBusinessCommand(binding, actor, body, { ...execution, flags: captured, door: browserDoor(req) }),
+    );
+    /* A link the command minted (context.link) is said here, to whoever ran it, as its URL; the receipt keeps the
+       reference only, so a status read or a replay elsewhere never holds the secret (links/linkToken.ts). */
+    return servesLinks(app) && actor.kind !== 'link' ? await withLinkUrls(app, resources, answer) : answer;
   } catch (error) {
     if (error instanceof CommandInputError) throw new BusinessCommandExecutionError('invalid_input', 'not_applied', error.field);
     if (error instanceof AppAccessDenied) throw forbiddenBy(error);

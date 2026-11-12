@@ -102,6 +102,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'import',
       'inputs',
       'labels',
+      'links',
       'live',
       'machine',
       'notify',
