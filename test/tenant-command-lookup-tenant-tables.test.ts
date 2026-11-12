@@ -3,7 +3,8 @@
  * checked before a model is called), read only, as the person running the command could read them: a table their
  * role reads is read through their row filter and their column rule, inside their tenant; a table their role does
  * not read is refused in words that name it, and the refusal fails that command, not the next; a lookup has no
- * writes, in its type or at runtime; what it reads of an audited resource is written under the command; and it knows
+ * writes, in its type or at runtime; what it reads of an audited resource is written under the command (and a command
+ * with no lookup still writes its audited target, the field report's case); and it knows
  * its tenant, so slow per-tenant work can happen there rather than holding the writer in the handler.
  * SQLite always, PostgreSQL live-gated (support/tenantDialects.ts).
  */
@@ -32,19 +33,19 @@ const SCHEMA = {
   sqlite: `PRAGMA journal_mode=WAL; PRAGMA busy_timeout = 0;
     CREATE TABLE parcel (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL, subject TEXT NOT NULL);
     CREATE TABLE consent (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL, subject TEXT NOT NULL, owner_id TEXT NOT NULL,
-      granted INTEGER NOT NULL, memo TEXT);
+      granted INTEGER NOT NULL, memo TEXT, version INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE vault (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL, body TEXT NOT NULL);`,
   postgres: `
     CREATE TABLE public.parcel (id text PRIMARY KEY, tenant_id text NOT NULL, subject text NOT NULL);
     CREATE TABLE public.consent (id text PRIMARY KEY, tenant_id text NOT NULL, subject text NOT NULL, owner_id text NOT NULL,
-      granted integer NOT NULL, memo text);
+      granted integer NOT NULL, memo text, version integer NOT NULL DEFAULT 0);
     CREATE TABLE public.vault (id text PRIMARY KEY, tenant_id text NOT NULL, body text NOT NULL);`,
 };
 /* c1 is Alice's and in her tenant; c2 is in her tenant but another owner's, outside her row filter; c3 is the
    other tenant's, under her own name, so only the tenant scope keeps it out. */
 const ROWS = `
     INSERT INTO parcel VALUES ('p1', 'north', 'ada'), ('p2', 'south', 'ada');
-    INSERT INTO consent VALUES ('c1', 'north', 'ada', 'alice', 1, 'north note'), ('c2', 'north', 'ada', 'bob', 1, 'bob note'),
+    INSERT INTO consent (id, tenant_id, subject, owner_id, granted, memo) VALUES ('c1', 'north', 'ada', 'alice', 1, 'north note'), ('c2', 'north', 'ada', 'bob', 1, 'bob note'),
       ('c3', 'south', 'ada', 'alice', 1, 'south note');
     INSERT INTO vault VALUES ('v1', 'north', 'sealed');`;
 const OWNERSHIP = {
@@ -53,9 +54,21 @@ const OWNERSHIP = {
   vault: { kind: 'tenant', column: 'tenant_id' },
 } as const;
 
+/* No lookup, and its handler reads nothing: the read of its audited target is the command's only read. */
+const confirm = defineCommand({
+  source: 'business',
+  target: 'consent',
+  input: {},
+  output: { parse: (value: unknown) => value as { id: string } },
+  async handle({ record }) {
+    return { id: String(record!.id) };
+  },
+});
+
 type Consent = { id: string; subject: string; owner_id: string; granted: number; memo: string | null };
 const said: { write?: string } = {};
 const registry = defineCommands({
+  confirm,
   check: defineCommand({
     source: 'business',
     target: 'parcel',
@@ -132,7 +145,7 @@ const policy = defineAppTenantPolicy({
   ownership: OWNERSHIP,
   resolveMembershipRows: () => ROWS_OF_ALICE,
   resolveRows: () => ROWS_OF_ALICE,
-  resultReferences: { check: () => [], peek: () => [], scribble: () => [] },
+  resultReferences: { check: () => [], peek: () => [], scribble: () => [], confirm: () => [] },
 });
 const manifest = () => ({
   id: binding.appId,
@@ -140,7 +153,7 @@ const manifest = () => ({
   sources: { business: { connection: binding.source.connection } },
   resources: {
     parcel: { owner: 'tenant', access: 'write' },
-    consent: { owner: 'tenant', audit: { reads: true } },
+    consent: { owner: 'tenant', access: 'write', audit: { reads: true } },
     vault: { owner: 'tenant' },
   },
   auth: {
@@ -150,7 +163,7 @@ const manifest = () => ({
       clerk: {
         read: ['parcel', 'consent'],
         fields: { consent: { read: ['id', 'subject', 'owner_id', 'granted'] } },
-        commands: ['check', 'peek', 'scribble'],
+        commands: ['check', 'peek', 'scribble', 'confirm'],
       },
       keeper: { read: true, commands: ['peek'] },
     },
@@ -202,11 +215,11 @@ async function enrolled(t: TestContext, dialect: TenantDialect) {
   });
   const deployment = service.deployment;
   let attempt = 0;
-  const run = (command: 'check' | 'peek' | 'scribble') =>
+  const run = (command: 'check' | 'peek' | 'scribble' | 'confirm', key: Record<string, string> = {}) =>
     deployment.execute(alice, ['north'], {
       command,
       commandVersion: 1,
-      key: {},
+      key,
       expectedVersion: 0,
       idempotencyKey: `${command}-attempt-${String(++attempt).padStart(4, '0')}`,
       input: {},
@@ -264,6 +277,26 @@ for (const { dialect, skip } of TENANT_DIALECTS)
           ['c2', null],
           ['c3', null],
         ],
+      );
+    });
+
+    test('a command with no lookup on an audited record writes its target as one named-record line, in its tenant', async (t) => {
+      const f = await enrolled(t, dialect);
+      forgetReadAuditCoalescing();
+      const done = await f.run('confirm', { id: 'c1' });
+      assert.equal(done.status, 'applied');
+      assert.deepEqual(
+        (await f.audited()).map((row) => [
+          row.route,
+          row.command,
+          row.resource,
+          row.actor,
+          row.tenant,
+          row.membership,
+          row.record_key,
+          row.ids_json,
+        ]),
+        [['command', 'confirm', 'consent', 'alice', 'north', 'north-alice', 'c1', null]],
       );
     });
 

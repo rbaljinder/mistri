@@ -27,10 +27,13 @@ const SHEET_TOKENS = [
   '--space-6',
   '--space-7',
   '--space-8',
+  '--space-1h',
   '--space-2h',
   '--space-3h',
   '--space-4h',
+  '--control-h',
   '--section-seam',
+  '--page-head-gap',
   '--page-measure',
   '--room-inset',
   '--row-h',
@@ -140,7 +143,8 @@ export const RENAMED_TOKENS: Readonly<Record<string, string>> = {
 export function nearestToken(name: string): string | undefined {
   if (Object.hasOwn(RENAMED_TOKENS, name)) return RENAMED_TOKENS[name];
   const bare = name.replace(/^--/, '').toLowerCase();
-  const said = WORDS[bare];
+  /* Own keys only: `--constructor` is not a word another system uses, whatever Object.prototype holds. */
+  const said = Object.hasOwn(WORDS, bare) ? WORDS[bare] : undefined;
   if (said) return said;
   let best: string | undefined;
   let bestDistance = 3;

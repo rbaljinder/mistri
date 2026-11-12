@@ -18,6 +18,8 @@ interface Secret {
   name: string;
   set: boolean;
   savedAt: number | null;
+  /** The fewest characters the server saves it with: a webhook's signing secret. */
+  least?: number;
 }
 interface Integration {
   name: string;
@@ -80,8 +82,14 @@ function IntegrationCard({ integration, editor, saved }: { integration: Integrat
       ) : null}
       {integration.secrets.map((secret) => {
         const status = secret.set && secret.savedAt ? say('set', { date: new Date(secret.savedAt).toLocaleDateString() }) : say('notSet');
+        const said = secret.set ? `${status}. ${say('keep')}` : status;
         return editor ? (
-          <Field key={secret.name} label={secret.name} hint={secret.set ? `${status}. ${say('keep')}` : status} size="compact">
+          <Field
+            key={secret.name}
+            label={secret.name}
+            hint={secret.least ? `${said}${secret.set ? '' : '.'} ${say('least', { count: String(secret.least) })}` : said}
+            size="compact"
+          >
             <input
               className="field-control"
               type="password"

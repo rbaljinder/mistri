@@ -117,3 +117,11 @@ test('a startup headline states the recorded cause, and a refusal with none keep
   assert.equal(refusalHeadline(deeper), `${sentence} Cause: The store is not provisioned.`);
   assert.deepEqual(refusalReasonsBelow(deeper), ['no such table']);
 });
+
+test("a reason that quotes a capability link's token is logged with its id only", () => {
+  const token = 'mstl1.AAAAAAAAAAAAAAAAAAAAAA.secretmac_value';
+  const logged = heard(() =>
+    reportRefusal(request(), 500, 'data_unavailable', 'The data could not be loaded.', new Error(`bad link ${token}`)),
+  );
+  assert.deepEqual(logged.lines.slice(1), ['  because: bad link mstl1.AAAAAAAAAAAAAAAAAAAAAA.[redacted]']);
+});

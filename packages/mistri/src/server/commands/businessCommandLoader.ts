@@ -74,6 +74,19 @@ export async function loadBusinessCommands(file: string): Promise<BusinessComman
 }
 
 /**
+ * A refusal for a command nothing offers, with why recorded for the operator's console alone: the caller still hears
+ * "not available to this account", and the server said nothing more (a field report: a custom section's `useCommand`
+ * answered 403 until the command was also an action, and no log said so).
+ */
+export function unofferedRefusal<E extends object>(error: E, command: string): E {
+  return recordRefusalCause(
+    error,
+    `the command "${command}" names a record and no action, form, import, page's commands or api.commands entry offers it, ` +
+      `so it cannot be prepared whatever the role grants. Offer it on its target: action('…', { command: '${command}', header: false })`,
+  );
+}
+
+/**
  * What the App's command names resolved to, checked against the catalog it
  * runs on: each served reference by id (what prepare and execution find a
  * request's command by). The references were resolved from this registry

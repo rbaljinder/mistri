@@ -11,7 +11,7 @@
  * declaration changes; the file says so, and is the tool's own to rewrite.
  */
 import type { AppDef } from '../shared/appModel.js';
-import type { ComponentDecl, ComponentPropDecl } from '@mistriwork/engine/shared/appComponents.js';
+import { totalMeasureText, type ComponentDecl, type ComponentPropDecl } from '@mistriwork/engine/shared/appComponents.js';
 import type { PageDef } from '@mistriwork/engine/shared/pageModel.js';
 
 const quote = (text: string) => JSON.stringify(text);
@@ -109,7 +109,7 @@ function found(app: AppDef, pages: readonly PageDef[]): Map<string, Found> {
             Object.fromEntries(
               Object.entries(section.aggregates).map(([name, total]) => [
                 name,
-                { from: total.from, measure: total.column === undefined ? total.fn : `${total.fn} ${total.column}`, by: total.by },
+                { from: total.from, measure: totalMeasureText(total), by: total.by },
               ]),
             ),
         }),

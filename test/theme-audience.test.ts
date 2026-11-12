@@ -57,11 +57,11 @@ test('a signed-out visitor is told the public theme, worn whatever a reader pick
 
 test("a page's first paint is guessed for its audience: a visitor's public theme, a member's role's", () => {
   const ui = app({ preset: 'lumen', for: FOR }).ui;
-  assert.deepEqual(lookSheetsFor(ui), ['lumen']);
+  assert.deepEqual(lookSheetsFor(ui), ['lumen', 'inter']);
   assert.deepEqual(lookSheetsFor(ui, { public: true }), ['sage']);
   assert.equal(lookDensityFor(ui, { public: true }), 'spacious');
   assert.deepEqual(lookSheetsFor(ui, { roles: ['mechanic'] }), []);
-  assert.deepEqual(lookSheetsFor(ui, { roles: ['manager'] }), ['lumen']);
+  assert.deepEqual(lookSheetsFor(ui, { roles: ['manager'] }), ['lumen', 'inter']);
 });
 
 test('an audience names a theme the App offers and a role it declares', () => {

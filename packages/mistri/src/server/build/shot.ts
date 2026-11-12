@@ -59,8 +59,12 @@ const SHOT_USAGE =
   '               [--full] [--scale <1-3>] [--as <role|email> [--tenant <id>]] [--out <dir>] [--text] [--browser <path>]';
 const SHOT_EXIT = { shot: 0, couldNotShoot: 1, pageErrors: 2 } as const;
 const SIZES = { desk: { width: 1280, height: 900 }, phone: { width: 390, height: 844 } } as const;
-/* A whole page is captured up to this tall: past it, a list is its pager's job. */
+/* A whole page is one window up to this tall. Past it, or past what one picture can hold (Chromium's texture limit is
+   16384 device pixels, and a taller window crashed the page's target), the rest is taken in pieces: `<name>-2.png`. */
 const TALLEST = 8000;
+const MOST_DEVICE_PIXELS = 16384;
+/** The most pieces one page is taken in; past it a list is its pager's job. */
+const MOST_PIECES = 12;
 /* shot launches Chromium headless, which is Playwright's headless shell: the one browser it needs installed. */
 const SHELL = 'install --only-shell chromium';
 const INSTALL_HINT = `mistri shot needs Playwright: npm i -D playwright && npx playwright ${SHELL}`;
@@ -550,8 +554,15 @@ export async function addresses(
         );
       /* A public form is drawn only on its own page, `/{app}/form/{view}`, which no route of the book names; a
          visitor opens it signed out, so it is shot as one. */
-      if (segment === 'form') {
-        const key = deeper.length === 1 ? deeper[0] : undefined;
+      /* The form by its view's name (`ask`) is the same page: the view is what the author wrote, `/form/` is where it is drawn. */
+      const byName =
+        segment !== undefined &&
+        !deeper.length &&
+        !book.routes.has(segment) &&
+        Object.hasOwn(loaded.app.views, segment) &&
+        isPublicForm(loaded.app.views[segment]);
+      if (segment === 'form' || byName) {
+        const key = byName ? segment : deeper.length === 1 ? deeper[0] : undefined;
         if (key === undefined || !Object.hasOwn(loaded.app.views, key) || !isPublicForm(loaded.app.views[key])) {
           const forms = Object.entries(loaded.app.views)
             .filter(([, view]) => isPublicForm(view))
@@ -690,8 +701,19 @@ async function serve(args: string[], env: Record<string, string>): Promise<{ ori
     env: { ...process.env, ...env },
   });
   let said = '';
+  /* MISTRI_SHOT_START_SECONDS: how long a busy machine is given (a test sets it small). */
+  const seconds = Number(process.env.MISTRI_SHOT_START_SECONDS) > 0 ? Number(process.env.MISTRI_SHOT_START_SECONDS) : 90;
   const origin = await new Promise<string>((done, fail) => {
-    const timer = setTimeout(() => fail(new Refusal('the App did not start within 90 seconds.')), 90_000);
+    const timer = setTimeout(() => {
+      /* The run has no handle on this server yet, so a refusal that left it running left it on its port until killed by hand. */
+      child.removeAllListeners('exit');
+      child.kill('SIGKILL');
+      fail(
+        new Refusal(
+          `the App did not start within ${seconds} seconds (a busy machine is the usual reason; its server was stopped). Run it again, or mistri check --app says whether the App itself is at fault.`,
+        ),
+      );
+    }, seconds * 1000);
     const hear = (chunk: Buffer) => {
       said += String(chunk);
       const port = /Listening on http:\/\/[^:\s]+:(\d+)/.exec(said)?.[1];
@@ -861,13 +883,14 @@ async function capture(
   choice?: string,
   variant?: { theme: ThemeDefinition; region?: readonly string[] },
   reader?: { pick?: 'light' | 'dark'; steps?: readonly ShotStep[] },
-): Promise<{ errors: string[]; text?: string; picture?: Buffer }> {
+): Promise<{ errors: string[]; text?: string; picture?: Buffer; pieces?: string[] }> {
   const viewport = { width: width ?? SIZES[size].width, height: SIZES[size].height };
   let taken: Buffer | undefined;
   /* A public form is a visitor's page: no session, and no tenant to choose. */
   if (shot.signedOut) [session, choice] = [undefined, undefined];
   const context = await shotContext(browser, origin, { viewport, scale, dark, look, pick: reader?.pick, session });
   const errors: string[] = [];
+  const pieces: string[] = [];
   let text: string | undefined;
   try {
     const page = await context.newPage();
@@ -886,7 +909,7 @@ async function capture(
       text = sayPage(shot.path, await readPage(page), errors, status);
       return { errors, text };
     }
-    if (full) await growToContent(page, viewport.width, viewport.height);
+    if (full) await growToContent(page, viewport.width, viewport.height, scale);
     let picture: Buffer | undefined;
     /* Two shots alike, of one document: a page that started a new one while it was taken is settled again and
        taken again. */
@@ -913,10 +936,11 @@ async function capture(
     if (!picture) throw new Error(`${shot.path} kept loading itself again: it was not still long enough to take`);
     await writeFile(file, picture);
     taken = picture;
+    if (full) pieces.push(...(await restOfPage(page, page.viewportSize()?.height ?? viewport.height, file)));
   } finally {
     await context.close();
   }
-  return { errors, text, ...(taken ? { picture: taken } : {}) };
+  return { errors, text, ...(taken ? { picture: taken } : {}), ...(pieces.length ? { pieces } : {}) };
 }
 
 /**
@@ -1223,10 +1247,12 @@ async function sideBySide(
  * Grown once, a record page still ended where its main column did and cut
  * the aside: a taller window lays the page out again (the pane's chrome and a
  * list sized to the window grow with it), so it grows until nothing is left
- * below — in any scrolling box, the aside's own included — up to TALLEST.
+ * below — in any scrolling box, the aside's own included — up to TALLEST, or what one picture holds at `scale`
+ * device pixels to the pixel (the rest is `restOfPage`'s).
  */
-export async function growToContent(page: Page, width: number, height: number): Promise<number> {
-  for (let round = 0; round < 4 && height < TALLEST; round++) {
+export async function growToContent(page: Page, width: number, height: number, scale = 1): Promise<number> {
+  const tallest = Math.min(TALLEST, Math.floor(MOST_DEVICE_PIXELS / scale));
+  for (let round = 0; round < 4 && height < tallest; round++) {
     const below = await page.evaluate(() =>
       Math.max(
         0,
@@ -1239,11 +1265,42 @@ export async function growToContent(page: Page, width: number, height: number): 
       ),
     );
     if (below <= 1) break;
-    height = Math.min(TALLEST, height + below);
+    height = Math.min(tallest, height + below);
     await page.setViewportSize({ width, height });
     await settle(page);
   }
   return height;
+}
+
+/**
+ * What a window as tall as the cap left below: the pane scrolled by a window's height and taken again, one file for
+ * each (`<name>-2.png`, `-3.png`), so a page too tall for one picture is not cut off and no window is made so tall
+ * that Chromium's target crashes. Returns the files it wrote.
+ */
+export async function restOfPage(page: Page, height: number, file: string): Promise<string[]> {
+  const written: string[] = [];
+  for (let n = 2; n <= MOST_PIECES; n++) {
+    /* These run in the page: the scrolling box with the most left below is moved on by a window. */
+    const moved = await page.evaluate((step) => {
+      let best: Element | undefined;
+      let left = 1;
+      for (const element of globalThis.document.querySelectorAll('*')) {
+        if (!/auto|scroll/.test(globalThis.getComputedStyle(element).overflowY)) continue;
+        const rest = element.scrollHeight - element.clientHeight - element.scrollTop;
+        if (rest > left) [best, left] = [element, rest];
+      }
+      if (!best) return 0;
+      const before = best.scrollTop;
+      best.scrollTop = before + step;
+      return best.scrollTop - before;
+    }, height);
+    if (moved <= 1) break;
+    await settle(page);
+    const piece = file.replace(/\.png$/, `-${n}.png`);
+    await writeFile(piece, await page.screenshot({ caret: 'hide', animations: 'disabled' }));
+    written.push(piece);
+  }
+  return written;
 }
 
 /** How long a page must stand still — no new document, no request — before it is taken as settled. */
@@ -1602,6 +1659,8 @@ class ShotRun {
         [...options.rest, ...(config.configPath && !opts.config ? ['--config', config.configPath] : []), '--app', appDir],
         {
           XDG_CONFIG_HOME: this.xdg,
+          /* A look is not a change: a scheduled job would write to the database the pages are read from (a field report). */
+          MISTRI_JOBS: 'off',
           ...(auth ? { BETTER_AUTH_SECRET: randomBytes(32).toString('base64url') } : {}),
           ...(admin ? { MISTRI_AUTH_ADMIN_EMAIL: admin.email, MISTRI_AUTH_ADMIN_PASSWORD: admin.password } : {}),
         },
@@ -1689,7 +1748,9 @@ export async function runShot(
   if (argv.includes('--help') || argv.includes('-h')) {
     write(
       `${SHOT_USAGE}\n\nServe the App on a free port with a temporary config directory, open each address in Chromium once it\n` +
-        "has settled, and write a PNG of it; each file's path is printed. With no route, every view and page the App\n" +
+        "has settled, and write a PNG of it; each file's path is printed. The App runs with its jobs, effects and retention sweep\n" +
+        'off (nothing is scheduled), so a look never changes the database it reads; a public form is shot by its view or its /form/ address,\n' +
+        'signed out. With no route, every view and page the App\n' +
         "declares (a page on its first record). --theme <id> shoots a built-in look or one of the App's own themes\n" +
         "instead of the theme it wears (all: every built-in look, then the App's); --palette <id> one of that theme's palettes;\n" +
         "--compare <look> shoots the App's theme (or --theme) beside that look and writes one picture of the two,\n" +
@@ -1702,7 +1763,7 @@ export async function runShot(
         '<page>-<look>-<light|dark>-<desk|phone>.png with an index.html;\n' +
         "--desk (1280 wide, the default), --phone (390) or --both; --width <px> the window's\n" +
         'width instead (320 to 2560, with --desk or --phone); --full the whole page, not\n' +
-        'the window; --scale <1-3> device pixels per CSS pixel (default 1; 2 is sharp); --as <role> signs in as a fresh account with that role (admin: the bootstrapped one), on a tenant App\n' +
+        'the window (a page taller than one picture holds, 16384 device pixels, is written in pieces: <name>-2.png, <name>-3.png); --scale <1-3> device pixels per CSS pixel (default 1; 2 is sharp); --as <role> signs in as a fresh account with that role (admin: the bootstrapped one), on a tenant App\n' +
         'in the tenant --tenant <id> names (a temporary membership in its tenant store, journaled, revoked when the shot ends;\n' +
         'a platform role needs no --tenant); --text prints what each page shows (title, headings, table columns and row count,\n' +
         'actions, empty states, errors) as compact text instead of writing PNGs; --out the\n' +
@@ -1739,7 +1800,7 @@ export async function runShot(
               for (const size of MATRIX_SIZES) {
                 const look = shotLooks(loaded, [preset.id])[0]!;
                 const file = join(folder, matrixFile(shot.name, preset.id, scheme, size));
-                const { errors } = await capture(
+                const { errors, pieces } = await capture(
                   browser,
                   origin,
                   shot,
@@ -1756,6 +1817,7 @@ export async function runShot(
                   { pick: scheme, steps: options.steps },
                 );
                 write(file);
+                for (const piece of pieces ?? []) write(piece);
                 for (const error of errors) warn(`warning: ${shot.path} (${look.label}, ${scheme}) ${size}: ${error}`);
                 if (errors.length) broken++;
               }
@@ -1873,7 +1935,7 @@ export async function runShot(
           for (const size of options.sizes) {
             const named = look ? `-${look.theme}${look.palette ? `-${look.palette}` : ''}` : '';
             const file = options.text ? undefined : join(out, `${shot.name}${named}${options.dark ? '-dark' : ''}-${size}.png`);
-            const { errors, text } = await capture(
+            const { errors, text, pieces } = await capture(
               browser,
               origin,
               shot,
@@ -1890,6 +1952,7 @@ export async function runShot(
               reader,
             );
             write(text ?? file!);
+            for (const piece of pieces ?? []) write(piece);
             // --text already says each error under its page.
             if (!options.text) for (const error of errors) warn(`warning: ${shot.path}${look ? ` (${look.label})` : ''} ${size}: ${error}`);
             if (errors.length) broken++;

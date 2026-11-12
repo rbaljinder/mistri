@@ -14,8 +14,9 @@ import { appExportable } from '../packages/mistri/src/shared/appAccess.js';
 import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 
-/* Export is a grant of its own: a person exports a table any of their roles writes or lists in `export`, a visitor
-   never, and an App without role grants keeps its one switch. The server refuses the file, not only the menu. */
+/* Export is a grant of its own: a person exports a table one of their roles lists in `export` — writing it does not
+   imply that — a visitor never, and an App without role grants keeps its one switch. The server refuses the file, not
+   only the menu. */
 const connection = 'export-grant-database';
 const appId = 'export-teller';
 const person = (role: string): Identity => ({
@@ -25,6 +26,7 @@ const person = (role: string): Identity => ({
 });
 const sessions: Record<string, Identity> = {
   writer: person('writer'),
+  editor: person('editor'),
   auditor: person('auditor'),
   reader: person('reader'),
   both: person('writer,auditor'),
@@ -41,7 +43,9 @@ const appOver = (ui?: Record<string, unknown>) =>
         providers: ['email'],
         defaultRole: 'reader',
         roles: {
-          writer: { read: ['incident', 'service'], write: ['incident'] },
+          writer: { read: ['incident', 'service'], write: ['incident'], export: ['incident'] },
+          // Edits the incidents and may not take them out as a file: writing is not exporting.
+          editor: { read: ['incident', 'service'], write: ['incident'], export: false },
           // Reads both tables, and may take the services out as a file.
           auditor: { read: ['incident', 'service'], export: ['service'] },
           reader: { read: ['incident', 'service'] },
@@ -126,10 +130,11 @@ const exportOf = async (base: string, who: string | undefined, q: string) => {
   return response.status;
 };
 
-test('a writer exports what they write, a listed reader what is listed, any other reader nothing, a visitor nothing', async () => {
+test('a role exports what its export lists, a writer nothing more for writing, any other reader nothing, a visitor nothing', async () => {
   await served(async (base) => {
-    assert.equal(await exportOf(base, 'writer', 'incident'), 200, 'a writer exports their table');
+    assert.equal(await exportOf(base, 'writer', 'incident'), 200, 'a writer whose export lists their table');
     assert.equal(await exportOf(base, 'writer', 'service'), 403, 'and not one they only read');
+    assert.equal(await exportOf(base, 'editor', 'incident'), 403, 'writing a table does not grant its export');
     assert.equal(await exportOf(base, 'auditor', 'service'), 200, 'a reader exports the table export lists');
     assert.equal(await exportOf(base, 'auditor', 'incident'), 403, 'and not another');
     assert.equal(await exportOf(base, 'reader', 'incident'), 403, 'a reader who is granted nothing is refused');
@@ -161,7 +166,10 @@ test("a CSV says money to its currency's minor digits, exactly: whole, zero, neg
           },
         },
       },
-      auth: { providers: ['email'], roles: { writer: { read: ['incident', 'service', 'charge'], write: ['incident', 'charge'] } } },
+      auth: {
+        providers: ['email'],
+        roles: { writer: { read: ['incident', 'service', 'charge'], write: ['incident', 'charge'], export: ['charge'] } },
+      },
       views: { incidents: { kind: 'list', from: 'incident' } },
       home: 'incidents',
     },
@@ -229,6 +237,7 @@ test('the app payload offers Export only for the tables the person may export', 
       exportOff: false,
       exportable: ['service'],
     });
+    assert.deepEqual(await tables('editor'), { exportOff: true, exportable: [] }, 'a writer is offered no Export for writing');
     assert.deepEqual(await tables('both'), {
       exportOff: false,
       exportable: ['incident', 'service'],
@@ -255,7 +264,8 @@ test('appExportable: role export is inherited through extends, and an App withou
         providers: ['email'],
         roles: {
           auditor: { read: ['incident', 'service'], export: ['service'] },
-          lead: { extends: 'auditor', write: ['incident'] },
+          lead: { extends: 'auditor', write: ['incident'], export: ['incident'] },
+          editor: { extends: 'auditor', write: ['incident'] },
         },
       },
       views: {
@@ -266,6 +276,7 @@ test('appExportable: role export is inherited through extends, and an App withou
     'export grant extends',
   );
   assert.deepEqual([...appExportable(extending, schema, ['lead'], true)!].sort(), ['incident', 'service']);
+  assert.deepEqual([...appExportable(extending, schema, ['editor'], true)!], ['service'], 'what it writes is not added');
   const open = parseAppConfig(
     {
       id: appId,
@@ -302,6 +313,7 @@ test('export names a table the role reads', () => {
   assert.throws(() => grant({ export: ['service'] }), /"export" names "service", which the role does not read/);
   assert.throws(() => grant({ export: 'incident' }), /"export" must be a list/);
   assert.ok(grant({ export: ['incident'] }));
+  assert.ok(grant({ export: false }));
 });
 
 test('a role that may export incident but not service cannot take service columns through a reference path', async () => {
@@ -364,7 +376,7 @@ test('a rollup carries the table it counts into the file, and the export grant h
         providers: ['email'],
         defaultRole: 'reader',
         roles: {
-          writer: { read: ['incident', 'service'], write: ['incident'] },
+          writer: { read: ['incident', 'service'], write: ['incident'], export: ['incident'] },
           auditor: { read: ['incident', 'service'], export: ['service'] },
         },
       },

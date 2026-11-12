@@ -292,7 +292,9 @@ function fieldAccessibleRecordLabels(app: AppDef, schema: DatabaseSchema): AppDe
 /** Project write presentation before view resolution, only for field-controlled
  * requests: the resources' actions and forms, and the lists' presentations.
  * Omitting an unsafe form keeps its owning list readable and restores the
- * existing schema-derived form; partial default sets would change intent.
+ * existing schema-derived form. A default on a column this reader does not
+ * write is left out alone, value and all: the form's description, steps and
+ * help still serve, and `mistri check` names the role the default skips.
  * `granted` is this reader's fixed actions without write (`roles.<role>.actions`)
  * by table id: kept although their columns are not the reader's to write,
  * since the grant, judged inside the write, is what lets them run. */
@@ -302,16 +304,25 @@ export function fieldAccessibleApp(
   granted?: ReadonlyMap<string, readonly { label: string }[]>,
 ): AppDef {
   const labelled = fieldAccessibleRecordLabels(app, schema);
-  const safeForm = (resource: string, form: AppForm): boolean => {
+  /* The form as this reader is served it, or none: a field it asks that the reader does not write leaves the
+     form out whole, a default on such a column only that default (a field report: one role's fields.write left
+     out a defaulted column, and the whole form went with it). */
+  const servedForm = (resource: string, form: AppForm): AppForm | undefined => {
     const table = tableNamed(schema, resource);
-    return [...(formShownFields(form) ?? []), ...Object.keys(form.defaults ?? {})].every((name) => writable(table, name));
+    if (!(formShownFields(form) ?? []).every((name) => writable(table, name))) return undefined;
+    const defaults = Object.entries(form.defaults ?? {});
+    const kept = defaults.filter(([name]) => writable(table, name));
+    if (kept.length === defaults.length) return form;
+    const { defaults: _defaults, ...rest } = form;
+    return kept.length ? { ...rest, defaults: Object.fromEntries(kept) } : rest;
   };
   const resources =
     labelled.resources &&
     Object.fromEntries(
       Object.entries(labelled.resources).map(([name, resource]) => {
         const table = tableNamed(schema, name);
-        const { actions, form, segments: declared, ...rest } = resource;
+        const { actions, form: declaredForm, segments: declared, ...rest } = resource;
+        const form = declaredForm && servedForm(name, declaredForm);
         /* A segment whose conditions read a column this reader is not granted is not served to them
            (appSegments.ts servedSegments), and its text, which names that column, is not sent either. */
         const segments = declared && Object.fromEntries(Object.entries(declared).filter(([key]) => Boolean(table?.segments?.[key])));
@@ -328,7 +339,7 @@ export function fieldAccessibleApp(
           {
             ...rest,
             ...(visibleActions === undefined ? {} : { actions: visibleActions }),
-            ...(form && safeForm(name, form) ? { form } : {}),
+            ...(form ? { form } : {}),
             ...(segments && Object.keys(segments).length ? { segments } : {}),
           },
         ];
@@ -385,7 +396,7 @@ export function fieldAccessibleApp(
         !table.isView &&
         table.insertable !== false &&
         table.columns.some((column) => column.writable !== false) &&
-        (!form || safeForm(view.table, form));
+        (!form || servedForm(view.table, form) !== undefined);
       /* A suggestion reads a column's values: one this reader cannot read is not offered, and a box left with none
          searches as it always did. */
       const readable = (name: string) => Boolean(table?.columns.some((column) => column.name === name));

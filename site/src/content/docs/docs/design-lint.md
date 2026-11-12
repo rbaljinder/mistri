@@ -54,7 +54,7 @@ makes the picture sharper without changing the layout.
 | `no-forward-verb` | A record's only actions end it (cancel, deactivate, end) | add the verb its work moves on by, or a related `create` |
 | `thin-workflow` | A workflow of 2 steps, or most values outside it | 3–6 ordered steps; tones for side exits |
 | `undressed-vocabulary` | A status without tones reads as body text | `{ tone: { open: 'info', '*': 'neutral' } }` |
-| `raw-label` | A `recordLabel` template names a time, money, or a date with no parent beside it | words and references; a day may tell siblings apart beside its parent: `'{lease_id} · rent due {due_on}'` |
+| `raw-label` | A `recordLabel` template names an amount, which it prints raw (a date or a timestamp is said as its day, so it is no smell) | words and references: `'{lease_id} · {kind}'` |
 | `required-unfilled` | A New form or a related `create` leaves a required column empty, or a status unchosen | `show` it, or `defaults: { status: 'new' }` |
 | `calendar-address` | Records are addressed under a calendar or board | `view: 'the-grid'` on the resource |
 | `default-shell` | No look, no logo, a flat menu or table icons | `ui.theme`, `ui.logo`, `navGroup`, `icon:` |

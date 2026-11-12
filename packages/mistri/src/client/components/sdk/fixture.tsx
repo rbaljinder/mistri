@@ -126,7 +126,7 @@ export interface RenderOptions {
   /** Token values `useToken` answers, by name. */
   tokens?: Record<string, string>;
   /** Who is reading; signed out unless said. */
-  viewer?: UiViewer;
+  viewer?: Omit<UiViewer, 'roles'> & { roles?: readonly string[] };
   /**
    * The commands the reader is served, by id, each with its label, whether it is available on a record
    * (true unless said) and what a run answers (applied unless said). A command not named here is not granted.
@@ -434,7 +434,7 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
   /* A fresh page says nothing yet: an announcement left by the test before is not this one's. */
   // host-global: the test's own document, where the fixture said what it announced.
   if (typeof document !== 'undefined') document.getElementById('mistri-fixture-announce')?.remove();
-  const viewer = options.viewer ?? { signedIn: false };
+  const viewer: UiViewer = { roles: [], ...(options.viewer ?? { signedIn: false }) };
   const served = options.commands ?? {};
   const values =
     options.flags === undefined

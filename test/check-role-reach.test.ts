@@ -11,7 +11,13 @@
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appDestinationWarnings, appRoleReach, appRoleWarnings, sectionReads } from '../packages/mistri/src/server/app/appRoleChecks.js';
+import {
+  appDestinationWarnings,
+  appRoleFormDefaultProblems,
+  appRoleReach,
+  appRoleWarnings,
+  sectionReads,
+} from '../packages/mistri/src/server/app/appRoleChecks.js';
 import { accessibleSchema } from '../packages/mistri/src/server/app/appAccess.js';
 import { publicFormProblems } from '../packages/mistri/src/server/forms/savedFormChecks.js';
 import { defineCommand, defineCommands, type BusinessCommandRegistry } from '../packages/mistri/src/server/commands/businessCommands.js';
@@ -316,6 +322,31 @@ describe('grants that do less than they say', () => {
       said({ clerk: { read: ['saved'], write: ['saved'], fields: { saved: { read: ['id', 'vehicle_id'], write: ['id'] } } } }),
       [],
     );
+  });
+
+  /* A field report: one role's fields.write left out a column the New form defaults, and that role was served
+     no form at all, its description and help with it, while check passed. Served without the default, and said. */
+  test('a New form default on a column a role makes rows without writing is refused, naming the role', () => {
+    const manager = {
+      read: true,
+      write: ['vehicle'],
+      fields: { vehicle: { read: ['id', 'stock_number', 'price', 'featured'], write: ['stock_number', 'price'] } },
+    };
+    const form = { show: ['stock_number', 'price'], defaults: { featured: 1, price: 0 } };
+    const loaded = lender({ roles: { manager, clerk: manager }, resources: { vehicle: { access: 'write', form } } });
+    assert.deepEqual(appRoleFormDefaultProblems(loaded, schema), [
+      'app.ts: resources "vehicle", form [form-default-unwritable]: its defaults name "featured", which roles "manager" and "clerk" ' +
+        'make rows with and do not write, so they are served the form without that default and the database fills it. ' +
+        "Add it to fields.vehicle.write in each role's grant, or take the default out of the form.",
+    ]);
+    // A role that edits and never makes vehicles is never served the New form: nothing to say.
+    const editsOnly = lender({
+      roles: { manager: { ...manager, create: false as const } },
+      resources: { vehicle: { access: 'write', form } },
+    });
+    assert.deepEqual(appRoleFormDefaultProblems(editsOnly, schema), []);
+    // Nor for a role whose grant writes every column.
+    assert.deepEqual(appRoleFormDefaultProblems(lender({ resources: { vehicle: { access: 'write', form } } }), schema), []);
   });
 
   test('a role writing a resource that is only read is told the resource is why', () => {

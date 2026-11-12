@@ -646,6 +646,7 @@ export function CommandFieldControl({
         {...common}
         rows={3}
         maxLength={field.maxLength}
+        placeholder={field.placeholder}
         value={String(value ?? '')}
         onChange={(event) => onChange(event.target.value)}
       />
@@ -753,6 +754,7 @@ export function CommandFieldControl({
         max={field.max}
         step={field.step ?? (field.integer ? 1 : 'any')}
         inputMode={whole ? 'numeric' : 'decimal'}
+        placeholder={field.placeholder}
         value={String(value ?? '')}
         onChange={(event) => onChange(event.target.value)}
       />,
@@ -767,6 +769,7 @@ export function CommandFieldControl({
       type={type}
       minLength={field.minLength}
       maxLength={field.maxLength}
+      placeholder={field.placeholder}
       {...(field.case === 'upper' ? { autoCapitalize: 'characters' } : {})}
       value={String(value ?? '')}
       onChange={(event) => onChange(event.target.value)}

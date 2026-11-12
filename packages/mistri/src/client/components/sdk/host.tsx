@@ -300,7 +300,9 @@ const pageHost: UiHost = {
   },
   viewer() {
     const identity = sessionIdentity();
-    return identity.mode === 'authenticated' && identity.accountId ? { signedIn: true, account: identity.accountId } : { signedIn: false };
+    if (identity.mode !== 'authenticated' || !identity.accountId) return { signedIn: false, roles: [] };
+    const app = pageBridge.activeApp() as { viewerRoles?: readonly string[] } | null;
+    return { signedIn: true, account: identity.accountId, roles: app?.viewerRoles ?? [] };
   },
   subscribeViewer: (listener) => subscribeSessionIdentity(listener),
   column(resource, name) {

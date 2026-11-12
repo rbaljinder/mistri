@@ -3,7 +3,12 @@
 /* Audited support ("enter as dealer"). The banner is a warn-toned strip in
    the ground's own colours: a dot and its word carry the tone, no box, no
    motion. Dialogs are the shared Modal's; nothing here animates. */
-.tenant-control-with-support { display: inline-flex; align-items: center; gap: var(--space-3); }
+/* The picker and the buttons beside it wrap rather than run past the box that holds them: in a 240px side menu's
+   foot or a tablet's top bar the row was wider than its place and cut off, or covered what stood beside it
+   (a field report). Each button keeps its words on one line; the row breaks between them. */
+.tenant-control-with-support { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-width: 0; max-width: 100%; }
+.tenant-control-with-support > :is(.tenant-support-log, .tenant-support-entry, .tenant-support-sessions) { white-space: nowrap; }
+.tenant-control-with-support > .tenant-control-inner { min-width: 0; max-width: 100%; }
 .support-banner { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); padding: var(--space-3h) var(--space-5);
   border-bottom: 1px solid var(--line); background: var(--surface); color: var(--ink); font-family: var(--sans); }
 .support-banner p { margin: 0; overflow-wrap: anywhere; }

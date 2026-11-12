@@ -18,7 +18,7 @@ import {
   type BusinessCommandResult,
   type BusinessCommandStatus,
 } from '../commands/businessCommandExecution.js';
-import { validateBusinessCommandReferences } from '../commands/businessCommandLoader.js';
+import { unofferedRefusal, validateBusinessCommandReferences } from '../commands/businessCommandLoader.js';
 import { StagedFilesFull } from '../../adapters/commands/commandStaging.js';
 import { StageRefusal, stageCommandFile, stagedFullRefusal } from '../commands/stagedFiles.js';
 import {
@@ -299,7 +299,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                 authorize: (command) => {
                   own(command);
                   const authorization = authorizer.authorize(command, actor);
-                  if (!references.has(command)) return deny();
+                  if (!references.has(command)) throw unofferedRefusal(new AppAccessDenied(), command);
                   return authorization;
                 },
                 extractor: (command) => extractors.get(command)!,
@@ -310,7 +310,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
               const authorization = authorizer.authorize(prepared.command, actor);
               if (prepared.commandVersion !== authorization.command.version)
                 throw new BusinessCommandExecutionError('command_version_mismatch', 'unknown');
-              if (!references.has(prepared.command)) return deny();
+              if (!references.has(prepared.command)) throw unofferedRefusal(new AppAccessDenied(), prepared.command);
               const capturedFlags = await flags();
               return await withPreparedAhead(authorization.command, authorization.catalog, prepared.key, () =>
                 scope.commandTransaction(

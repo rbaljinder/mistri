@@ -66,7 +66,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `branding.allow` | array | Stable | What each tenant may set. preset (which of themes it starts from) needs more than one of themes; locale is the tenant's language, under each person's own. |
+| `branding.allow` | array | Stable | What each tenant may set. preset (which of themes it starts from) needs more than one of themes; font is the face of the interface's text, one of Inter, Barlow or a face a theme of themes ships; locale is the tenant's language, under each person's own. |
 
 ## `branding.editors`
 

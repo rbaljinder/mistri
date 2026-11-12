@@ -170,8 +170,16 @@ function capture<T>(input: T): T {
     }
   };
   check(input);
-  return snapshotScopedData(input);
+  return snapshotScopedData(input, JOURNAL_CAPTURE);
 }
+/* What one journal call is given is copied under the receipt's own bounds (every target's owners, keys and changes,
+   and 1 MiB for the receipt and its events), not the scoped read's 1M characters: an audit of 4,096 changes inside
+   4 MiB must reach the bound that names it, not fail an anonymous one first. */
+const JOURNAL_CAPTURE_CHARACTERS = COMMAND_TARGET_BOUNDS.owners + COMMAND_TARGET_BOUNDS.keys + COMMAND_TARGET_BOUNDS.changes + 1_048_576;
+const JOURNAL_CAPTURE = Object.freeze({
+  characters: JOURNAL_CAPTURE_CHARACTERS,
+  overflow: `A command's journal keeps at most ${JOURNAL_CAPTURE_CHARACTERS.toLocaleString('en-US')} characters from one call.`,
+});
 function validateTenant(input: CommandJournalTenant): void {
   record(input, [
     'appId',

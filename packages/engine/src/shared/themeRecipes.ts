@@ -91,6 +91,11 @@ export type ResolvedRecipes = { [K in keyof ThemeRecipes]-?: NonNullable<ThemeRe
 /** Every part at its first value: the plain structure a theme that extends nothing starts from. */
 export const DEFAULT_RECIPES = Object.fromEntries(RECIPE_PARTS.map((part) => [part, Object.keys(RECIPE_MENU[part])[0]])) as ResolvedRecipes;
 
+/** The sheet that declares each face the kit ships for an interface, by the family a stack begins with: a sheet of its
+    own (interFace.css, barlowFace.css), apart from the look it was made for, so a theme set in the face fetches its
+    declaration and not the whole of that look's rules. */
+const KIT_FACE_SHEETS: Readonly<Record<string, string>> = { Inter: 'inter', Barlow: 'barlow', 'Barlow Semi Condensed': 'barlow' };
+
 /** The attributes a worn theme sets on the root, and the look sheets they need. */
 export function recipeAttributes(
   theme: ThemeDefinition,
@@ -116,6 +121,20 @@ export function recipeAttributes(
   attributes['data-look-float'] = theme.lifts?.float ?? (ownShadow ? 'low' : 'look');
   const lifted = ELEVATIONS[elevation];
   if (lifted) sheets.add(lifted);
+  /* A face the kit ships is declared by a sheet of its own (interFace.css, barlowFace.css), brought by the stacks that
+     begin with it: Lumen's and Workshop's own are set in Inter and Barlow, so they bring theirs, and so does a theme
+     that sets its interface in one — a tenant's pick, or an App's stack that names it — which else would draw its
+     first line in the fallback and never receive the face. */
+  for (const stack of [theme.fonts?.ui, theme.fonts?.heading, theme.fonts?.data]) {
+    const face =
+      KIT_FACE_SHEETS[
+        stack
+          ?.split(',')[0]
+          ?.trim()
+          .replace(/^["']|["']$/g, '') ?? ''
+      ];
+    if (face) sheets.add(face);
+  }
 
   Object.assign(attributes, typeAttributes(theme.type));
   const side = sideNavWords(theme.type, lookNav);

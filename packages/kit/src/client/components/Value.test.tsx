@@ -167,6 +167,21 @@ describe("the app's dress", () => {
     expect(dressFor({ format: 'relative' }, today)).toEqual({ kind: 'relative', text: 'today', title: today });
   });
 
+  test('a toned day says what it would untoned: a relative one from today, a plain one as a date (a field report)', () => {
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const tone = { '<= today': 'warning', '*': 'neutral' };
+    expect(dressFor({ format: 'relative', tone }, today)).toEqual({ kind: 'tone', tone: 'warning', text: today, label: 'today' });
+    // A date far off is its date under `relative` too, as the untoned cell says it.
+    expect(dressFor({ format: 'relative', tone }, '2020-03-04')).toMatchObject({ kind: 'tone', label: 'Mar 4, 2020' });
+    // No format: the day as a date column says it, never the stored ISO day.
+    expect(dressFor({ tone }, '2020-03-04')).toMatchObject({ kind: 'tone', tone: 'warning', text: '2020-03-04', label: 'Mar 4, 2020' });
+    expect(dressFor({ tone: { '*': 'good' } }, '2020-03-04 00:00:00')).toMatchObject({ label: 'Mar 4, 2020' });
+    // A word the rule gives the day still wins, and a value that is no day keeps its vocabulary word.
+    expect(dressFor({ tone, values: { '2020-03-04': 'Launch' } }, '2020-03-04')).toMatchObject({ label: 'Launch' });
+    expect(dressFor({ tone: { open: 'good' } }, 'in_progress')).toMatchObject({ label: 'In progress' });
+  });
+
   test('a due date passed on a row still open is drawn in the warning tone, and only then', () => {
     const day = (offset: number) => {
       const d = new Date();

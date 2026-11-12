@@ -268,3 +268,25 @@ test("a tenant App's public form is told the App's own logo, glyph and all, as t
     assert.ok(form.body.app.icons?.wrench, `${path} carries the glyph the page cannot fetch before it draws`);
   }
 });
+
+/* A tenant's font: the page that wears the tenant's look says its face from the first byte — the @font-face and a preload of
+   the file — so the first paint is set in it rather than swapped after, which is what a layout shift is. */
+test("a tenant's picked font is declared and preloaded in its public page's head, and another tenant's page carries none", async (t) => {
+  const f = await openTenantPublicForms(t, 'sqlite', publicFormsDatabase(), { tenantBranding: true, tenantFont: true });
+  const north = await f.call(`/yard/form/apply${via(NORTH)}`);
+  assert.equal(north.status, 200, north.text);
+  const file = /rel="preload" as="font" type="font\/woff2" crossorigin href="(\/yard\/_fonts\/figtree-[0-9a-f]{12}\.woff2)"/.exec(
+    north.text,
+  )?.[1];
+  assert.ok(file, 'the picked face is preloaded');
+  assert.match(north.text, new RegExp(`@font-face\\{font-family:"Figtree";src:url\\("${file.replace('.', '\\.')}"\\)`));
+  // The file is the App's own, served from its origin.
+  const served = await f.call(file);
+  assert.equal(served.status, 200);
+  // South saved no font: nothing of Figtree in its head.
+  const south = await f.call(`/yard/form/apply${via(SOUTH)}`);
+  assert.doesNotMatch(south.text, /Figtree/);
+  // And a page that names no tenant is the App's own.
+  const bare = await f.call('/yard/form/apply');
+  assert.doesNotMatch(bare.text, /Figtree/);
+});

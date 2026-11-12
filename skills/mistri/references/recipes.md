@@ -12,12 +12,12 @@ page. Every recipe shares a spine:
   any trend, calendar or `relative` ([choices.md](choices.md)).
 - **Look**: `ui.theme` written out (Workshop unless [design-language.md](design-language.md)
   says otherwise), `ui.logo`, `locale`, `timezone`, `currency` —
-  [lintel/app.ts:171](../../../examples/apps/lintel/app.ts#L171).
+  [lintel/app.ts:173](../../../examples/apps/lintel/app.ts#L173).
 - **Home**: a dashboard, first in the menu, as the day's starting page: three
   or four figures of one width, the flow or trend, charts in pairs, the waiting
   work as a pair of half `rows`; a `firstRun` for an empty database. Under a
   side menu, an `aside` only beside metrics with no `width` ([design-language.md](design-language.md)).
-  A different home for each role: `home` takes a view per role, a `signedOut: true` one first — [lintel/app.ts:163](../../../examples/apps/lintel/app.ts#L163).
+  A different home for each role: `home` takes a view per role, a `signedOut: true` one first — [lintel/app.ts:166](../../../examples/apps/lintel/app.ts#L166).
 - **A board's cards**: the record's own columns only.
 - **Every value drawn**: a tone on each status, `money` on each amount, an
   `avatar` on each person, `relative` on each due date, a unit on each count.
@@ -79,7 +79,7 @@ Look: Lumen with the brand's `accent`, top menu.
 
 ## Service desk or ticketing: requests worked through states
 
-Look: Lumen, side menu with `rail: true` ([lintel/app.ts:177](../../../examples/apps/lintel/app.ts#L177)).
+Look: Lumen, side menu with `rail: true` ([lintel/app.ts:179](../../../examples/apps/lintel/app.ts#L179)).
 
 - **Home** "Workspace": opened and closed metrics compared to the previous
   period, a "Needs attention" `rows` of urgent open work; add a `shape: 'steps'`
@@ -101,7 +101,7 @@ Look: Lumen, side menu with `rail: true` ([lintel/app.ts:177](../../../examples/
 ## Inventory or warehouse: stock that moves
 
 Look: Lumen, side menu, `shell: { placement: 'side', counts: true }`
-([lintel/app.ts:175](../../../examples/apps/lintel/app.ts#L175)).
+([lintel/app.ts:177](../../../examples/apps/lintel/app.ts#L177)).
 
 - **Home** "Operations": `firstRun` for an empty depot; metrics with an `icon`
   and a `to` list ([lintel/dashboards.ts:24](../../../examples/apps/lintel/dashboards.ts#L24)); the floor's flow as `steps` with
@@ -125,7 +125,7 @@ more than they operate; top menu, `width: 'wide'`.
 
 - **Home** by role: signed-out readers a landing, members the latest threads,
   moderators a health `dashboard`, the `home` list choosing by `roles`
-  ([lintel/app.ts:166](../../../examples/apps/lintel/app.ts#L166)). The dashboard is metrics with sparks, posts by
+  ([lintel/app.ts:165](../../../examples/apps/lintel/app.ts#L165)). The dashboard is metrics with sparks, posts by
   month, busiest boards beside a donut, the queues at half, an `aside` of
   `activity` and guidance notes.
 - **Lists** as `cards`: threads with their board and author; members by name
@@ -142,7 +142,7 @@ Lintel's public side is this recipe. Look: Lumen or its own theme on Lumen
 (`customThemes`), top menu, `width: 'wide'`.
 
 - **Access**: the catalog is `public`, read signed out, and sign-up gives the
-  smallest role — [lintel/app.ts:138](../../../examples/apps/lintel/app.ts#L138).
+  smallest role — [lintel/app.ts:140](../../../examples/apps/lintel/app.ts#L140).
 - **Front page**: a `landing` whose `hero` is a photograph with the heading
   over it, then rows of photo cards as `embed`s —
   [lintel/landing.ts:7](../../../examples/apps/lintel/landing.ts#L7).

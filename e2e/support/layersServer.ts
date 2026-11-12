@@ -10,9 +10,9 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-const FIXTURE = resolve('test/fixtures/apps/layers');
-
-export async function startLayersApp() {
+/** A fixture App of this shape (a local App with free-form pages over a SQLite seed): Layers unless another is named. */
+export async function startLayersApp(fixture = 'layers') {
+  const FIXTURE = resolve('test/fixtures/apps', fixture);
   const directory = mkdtempSync(join(tmpdir(), 'mistri-layers-'));
   let child: ReturnType<typeof spawn> | undefined;
   const stop = async () => {
@@ -29,7 +29,7 @@ export async function startLayersApp() {
     rmSync(directory, { recursive: true, force: true });
   };
   try {
-    const database = join(directory, 'layers.db');
+    const database = join(directory, `${fixture}.db`);
     execFileSync(process.execPath, ['--import', 'tsx', join(FIXTURE, 'seed.mjs'), database], { stdio: 'pipe' });
     const reservation = createServer();
     await new Promise<void>((done, reject) => {

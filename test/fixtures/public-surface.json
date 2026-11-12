@@ -144,6 +144,7 @@
         "app: auth.roles.*.create",
         "app: auth.roles.*.create = false",
         "app: auth.roles.*.export",
+        "app: auth.roles.*.export = false",
         "app: auth.roles.*.extends",
         "app: auth.roles.*.fields",
         "app: auth.roles.*.fields.*.read",
@@ -187,6 +188,7 @@
         "app: branding.allow",
         "app: branding.allow[] = \"accent\"",
         "app: branding.allow[] = \"density\"",
+        "app: branding.allow[] = \"font\"",
         "app: branding.allow[] = \"locale\"",
         "app: branding.allow[] = \"logo\"",
         "app: branding.allow[] = \"name\"",
@@ -1919,6 +1921,8 @@
         "app: views.*[kind=dashboard].sections[][kind=breakdown].kind = \"breakdown\"",
         "app: views.*[kind=dashboard].sections[][kind=breakdown].limit",
         "app: views.*[kind=dashboard].sections[][kind=breakdown].measure",
+        "app: views.*[kind=dashboard].sections[][kind=breakdown].minor",
+        "app: views.*[kind=dashboard].sections[][kind=breakdown].minor = true",
         "app: views.*[kind=dashboard].sections[][kind=breakdown].notes",
         "app: views.*[kind=dashboard].sections[][kind=breakdown].shape",
         "app: views.*[kind=dashboard].sections[][kind=breakdown].shape = \"bars\"",
@@ -1946,6 +1950,8 @@
         "app: views.*[kind=dashboard].sections[][kind=chart].kind = \"chart\"",
         "app: views.*[kind=dashboard].sections[][kind=chart].limit",
         "app: views.*[kind=dashboard].sections[][kind=chart].measure",
+        "app: views.*[kind=dashboard].sections[][kind=chart].minor",
+        "app: views.*[kind=dashboard].sections[][kind=chart].minor = true",
         "app: views.*[kind=dashboard].sections[][kind=chart].shape",
         "app: views.*[kind=dashboard].sections[][kind=chart].shape = \"bar\"",
         "app: views.*[kind=dashboard].sections[][kind=chart].shape = \"donut\"",
@@ -2019,6 +2025,8 @@
         "app: views.*[kind=dashboard].sections[][kind=matrix].kind",
         "app: views.*[kind=dashboard].sections[][kind=matrix].kind = \"matrix\"",
         "app: views.*[kind=dashboard].sections[][kind=matrix].measure",
+        "app: views.*[kind=dashboard].sections[][kind=matrix].minor",
+        "app: views.*[kind=dashboard].sections[][kind=matrix].minor = true",
         "app: views.*[kind=dashboard].sections[][kind=matrix].to",
         "app: views.*[kind=dashboard].sections[][kind=matrix].to = false",
         "app: views.*[kind=dashboard].sections[][kind=matrix].unit",
@@ -2034,6 +2042,8 @@
         "app: views.*[kind=dashboard].sections[][kind=metric].kind",
         "app: views.*[kind=dashboard].sections[][kind=metric].kind = \"metric\"",
         "app: views.*[kind=dashboard].sections[][kind=metric].measure",
+        "app: views.*[kind=dashboard].sections[][kind=metric].minor",
+        "app: views.*[kind=dashboard].sections[][kind=metric].minor = true",
         "app: views.*[kind=dashboard].sections[][kind=metric].spark",
         "app: views.*[kind=dashboard].sections[][kind=metric].target",
         "app: views.*[kind=dashboard].sections[][kind=metric].target.from",
@@ -3313,6 +3323,7 @@
         "app: views.*[kind=dashboard].sections[][kind=metric].figure",
         "app: views.*[kind=dashboard].sections[][kind=metric].figure = \"compact\"",
         "app: views.*[kind=dashboard].sections[][kind=metric].figure = \"exact\"",
+        "app: views.*[kind=dashboard].sections[][kind=metric].figure = \"whole\"",
         "app: views.*[kind=list].group",
         "app: views.*[kind=list].presentation[kind=calendar].span",
         "app: views.*[kind=list].presentation[kind=calendar].span = \"day\"",
@@ -4138,6 +4149,7 @@
         "./page: SectionWidth",
         "./page: Segmented",
         "./page: Select",
+        "./page: Skeleton",
         "./page: Slider",
         "./page: SliderProps",
         "./page: Split",
@@ -4347,6 +4359,8 @@
         "./ui: Beside",
         "./ui: Button",
         "./ui: Card",
+        "./ui: Checkbox",
+        "./ui: ChoiceCards",
         "./ui: Cluster",
         "./ui: Columns",
         "./ui: CommandInput",
@@ -4360,6 +4374,7 @@
         "./ui: Field",
         "./ui: FigureGroup",
         "./ui: FigureValue",
+        "./ui: FileField",
         "./ui: Fragment",
         "./ui: Heading",
         "./ui: Icon",
@@ -4382,12 +4397,17 @@
         "./ui: SectionProps",
         "./ui: SectionWidth",
         "./ui: Segmented",
+        "./ui: Select",
+        "./ui: Skeleton",
+        "./ui: Slider",
         "./ui: SplitListDetail",
         "./ui: Stack",
         "./ui: Stat",
+        "./ui: Switch",
         "./ui: Table",
         "./ui: TableColumn",
         "./ui: Text",
+        "./ui: TextField",
         "./ui: Token",
         "./ui: Tone",
         "./ui: ToneName",
@@ -4400,6 +4420,7 @@
         "./ui: ValueDisplay",
         "./ui: ValueProps",
         "./ui: VisuallyHidden",
+        "./ui: YesNo",
         "./ui: layoutPoint",
         "./ui: parseMoney",
         "./ui: tokens",
@@ -4574,26 +4595,16 @@
       ]
     },
     "package @mistriwork/engine": {
-      "preview": [
-        "entry @mistriwork/engine",
-        "entry @mistriwork/engine/host"
-      ]
+      "preview": ["entry @mistriwork/engine", "entry @mistriwork/engine/host"]
     },
     "package @mistriwork/ui": {
-      "preview": [
-        "entry @mistriwork/ui"
-      ]
+      "preview": ["entry @mistriwork/ui"]
     },
     "package @mistriwork/cloudflare": {
-      "preview": [
-        "entry @mistriwork/cloudflare"
-      ]
+      "preview": ["entry @mistriwork/cloudflare"]
     },
     "package @mistriwork/kit": {
-      "preview": [
-        "entry @mistriwork/kit",
-        "entry @mistriwork/kit/vite"
-      ]
+      "preview": ["entry @mistriwork/kit", "entry @mistriwork/kit/vite"]
     },
     "cli": {
       "public": [
@@ -4851,6 +4862,7 @@
         "empty-run",
         "env-not-passed",
         "experiment-eligibility-audiences-only",
+        "form-default-unwritable",
         "form-lines",
         "form-live",
         "http-column-missing",
@@ -4942,6 +4954,7 @@
         "role-extends",
         "role-label",
         "route-clash",
+        "schema-trigger",
         "schema-types",
         "schema-types-stale",
         "scim-no-auth",
@@ -4950,6 +4963,7 @@
         "scim-role-service",
         "scim-role-unknown",
         "scim-tenant-roles",
+        "section-command-unoffered",
         "short-name",
         "skill-stale",
         "stitched-fanout",
@@ -4992,14 +5006,7 @@
         "write-generated",
         "write-unreadable-parent"
       ],
-      "preview": [
-        "command-trigger",
-        "narrowed-overlap",
-        "query-invalid",
-        "trigger-double-write",
-        "trigger-lock",
-        "trigger-unknown"
-      ]
+      "preview": ["command-trigger", "narrowed-overlap", "query-invalid", "trigger-double-write", "trigger-lock", "trigger-unknown"]
     }
   }
 }

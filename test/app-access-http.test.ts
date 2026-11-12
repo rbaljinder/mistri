@@ -46,7 +46,7 @@ function definition(viewerWritable = false, agentWritable = true) {
         roles: {
           // A resource reads by default; the private ones are forbidden because no role reads them.
           viewer: { read: ['incident', 'service'], ...(viewerWritable ? { write: true } : {}) },
-          agent: { read: ['incident', 'service'], ...(agentWritable ? { write: true } : {}) },
+          agent: { read: ['incident', 'service'], export: ['incident'], ...(agentWritable ? { write: true } : {}) },
           limited: { read: ['service'] },
         },
       },

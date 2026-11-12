@@ -31,7 +31,7 @@ test.describe('Thread editable issue modal', () => {
       const input = modal.getByRole('textbox', { name: 'Name', exact: true });
       await input.fill('A manually saved Thread issue');
       await modal.getByRole('button', { name: '+ Add update', exact: true }).click();
-      const form = page.getByRole('dialog', { name: 'New comment', exact: true });
+      const form = page.getByRole('dialog', { name: 'New update', exact: true });
       await form.getByLabel('Name', { exact: true }).fill('Update from an issue modal');
       await form.getByLabel('Body', { exact: true }).fill('The modal uses the shared related-record form.');
       await form.locator('.picker-input').fill('Maya');
@@ -64,7 +64,7 @@ test.describe('Thread editable issue modal', () => {
       .click();
     const modal = page.locator('.record-modal');
     await modal.getByRole('button', { name: '+ Add update', exact: true }).click();
-    const form = page.getByRole('dialog', { name: 'New comment', exact: true });
+    const form = page.getByRole('dialog', { name: 'New update', exact: true });
     await form.getByLabel('Name', { exact: true }).fill('Unconfirmed modal update');
     await form.getByLabel('Body', { exact: true }).fill('Committed once, acknowledgement lost.');
     await form.locator('.picker-input').fill('Maya');
@@ -104,7 +104,7 @@ test.describe('Thread editable issue modal', () => {
     const parentInput = modal.locator('input[aria-label="Name"]');
     await parentInput.fill('Parent draft survives a background failure');
     await modal.getByRole('button', { name: '+ Add update', exact: true }).click();
-    const form = page.getByRole('dialog', { name: 'New comment', exact: true });
+    const form = page.getByRole('dialog', { name: 'New update', exact: true });
     const name = form.getByLabel('Name', { exact: true });
     // Body is the rich text editor (a contenteditable), typed into and read as text.
     const body = form.getByRole('textbox', { name: 'Body' });

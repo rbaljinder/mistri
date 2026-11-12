@@ -29,12 +29,15 @@
 .field-note { display: flex; align-items: center; gap: var(--space-3); margin: 0; font-size: var(--text-sm); line-height: 1.45; color: var(--ink-muted); }
 .field-note > svg { flex: none; width: 14px; height: 14px; }
 
-/* The file picker is the browser's own input in a field's box (`field-control`); only its button is dressed, in the
-   quiet button's tokens, and the box's own padding keeps the button off its edge. */
-.field-control.field-file { padding: calc(var(--space-2) - var(--control-border-w)) var(--space-2); color: var(--ink-muted); cursor: pointer; }
-.field-control.field-file::file-selector-button { margin-inline-end: var(--space-3); padding: var(--space-1h) var(--space-3); font: inherit; font-size: var(--text-sm); color: var(--ink); background: var(--raised); border: 1px solid var(--line-control); border-radius: var(--field-radius, var(--radius)); cursor: pointer; }
-.field-control.field-file:is(:disabled, [aria-disabled="true"]) { cursor: not-allowed; }
-.field-control.field-file:is(:disabled, [aria-disabled="true"])::file-selector-button { color: var(--ink-muted); cursor: not-allowed; }
+/* The file field (FileField.tsx): the kit's button and the chosen names, over the browser's input, which is clipped, not
+   removed, so the label names it and Tab and Enter reach it. Its focus is drawn on the button, the control a sighted
+   reader sees. A field's control is one control tall, whatever the button inside it. */
+.field-file { position: relative; display: flex; align-items: center; gap: var(--space-3); min-width: 0; min-height: var(--control-h); }
+.field-file-input { position: absolute; inset-block-start: 0; inset-inline-start: 0; width: 1px; height: 1px; margin: 0; opacity: 0; overflow: hidden; clip-path: inset(50%); }
+.field-file-input:focus-visible ~ .field-file-button { outline: var(--focus-width, 2px) solid var(--focus); outline-offset: 2px; }
+.field-file-button { flex: none; }
+.field-file-names { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-base); color: var(--ink); }
+.field-file-names.is-none { color: var(--ink-muted); }
 
 /* The form's listbox is the Dropdown dressed as a field box. */
 .dd-button.field-select { min-height: var(--control-h); border-width: var(--control-border-w); padding: var(--space-2h) var(--space-3h); font: inherit; font-size: var(--text-base); background: var(--field-fill); border-radius: var(--field-radius, var(--radius)); text-align: start; }
@@ -193,13 +196,25 @@ a:active { opacity: 0.7; }
   .btn { transition: transform var(--t-press) var(--ease-out); }
   .btn:not(:disabled, [aria-disabled="true"]):active, .choice-pick:active, .choice-card:active { transform: scale(0.97); }
 }
-@media (pointer: coarse) {
-  /* A finger needs 44px (WCAG 2.5.5) whatever height the theme draws, through the density's zoom (--row-h does the same). */
+/* A finger needs 44px (WCAG 2.5.5) whatever height the theme draws, through the density's zoom (--row-h does the same):
+   under any coarse pointer, and at a phone's width, where a narrow window on a desk is read as a phone is (grade measures
+   the targets at 390px with no touch). A compact button stays compact: it is the one a toolbar asks for. */
+@media (pointer: coarse), (max-width: 40rem) {
   /* A form's listbox may be the shell's (.form-field .dd-button) rather than @mistriwork/ui's Select: the same field, so the
      same height as the box beside it in a row. */
   .field-control, .dd-button.field-select, .form-field .dd-button, .choice-pick, .choice-card, .date-field .date-field-input, .btn:not(.btn-compact) {
     min-height: max(var(--control-h), calc(44px / var(--density-zoom, 1)));
   }
+  /* The calendar's button is the input's own height, not two pixels short of it on each side, and wide enough to be hit. */
+  .date-field .date-field-input {
+    padding-inline-end: calc(44px / var(--density-zoom, 1));
+  }
+  .date-field .date-field-trigger {
+    inset: 0 0 0 auto;
+    width: calc(44px / var(--density-zoom, 1));
+  }
+}
+@media (pointer: coarse) {
   /* iOS Safari zooms the page when a field under 16px is focused, and does not zoom back. The density zoom only
      enlarges (1, 1.12, 1.24), so a flat 16px is at least 16px drawn. Not verified on WebKit: it is not installed
      where this was written, so a real iPhone is the test of this rule. */

@@ -17,7 +17,7 @@ technician: {
     resident: { read: ['id', 'name', 'email', 'phone', 'language'] },
 ```
 
-See it in the sample (`examples/apps/lintel/app.ts:69`).
+See it in the sample (`examples/apps/lintel/app.ts:71`).
 
 <!-- no picture: a grant changes which rows, columns and buttons a page offers, not how the page is drawn. -->
 
@@ -56,7 +56,7 @@ reads nothing, and a role the App does not declare grants nothing.
 | `read` | `true` for every declared resource, or a list | nothing | Stable |
 | `write` | `true` for every `'write'` resource, or a list, within what the role reads | nothing | Stable |
 | `create` | Of what it writes, where it makes new rows: `false` edits only, or a list | all it writes | Stable |
-| `export` | Tables it may export as a file, beyond those it writes (which it always may): `export: ['charge']`. A signed-out visitor never may | what it writes | Stable |
+| `export` | Tables it may export as a file, of what it reads: `export: ['charge']`, or `false`. Writing a table does not grant it. A signed-out visitor never may | nothing | Stable |
 | `commands` | The [commands](/docs/commands/) it may run; grants no Save, New or Delete | none | Stable |
 | `actions` | Fixed [actions](/docs/actions/#who-may-click-it) by id on a resource it does not write | none | Stable |
 | `fields` | Narrows the columns it reads and writes, per resource | every column | Stable |
@@ -159,7 +159,7 @@ public: {
     // …
 ```
 
-See it in the sample (`examples/apps/lintel/app.ts:138`).
+See it in the sample (`examples/apps/lintel/app.ts:140`).
 
 Each resource is named; `read: true` is refused, so nothing is public by
 accident. A public resource's record opens for a visitor at its own address

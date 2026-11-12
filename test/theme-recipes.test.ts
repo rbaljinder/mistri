@@ -9,9 +9,12 @@ import {
   MOTIONS,
   RECIPE_MENU,
   RECIPE_PARTS,
+  recipeAttributes,
   RHYTHMS,
   TYPE_ATTRIBUTES,
 } from '../packages/engine/src/shared/themeRecipes.js';
+import { themePreset } from '../packages/engine/src/shared/themePresets.js';
+import { compileAppTheme } from '../packages/mistri/src/shared/themeSpec.js';
 import { TYPE_ROLES } from '../packages/engine/src/shared/themeType.js';
 
 /**
@@ -197,4 +200,23 @@ test('every type role property is answered by a rule in an always-loaded sheet',
     const text = readFileSync(at(sheet), 'utf8');
     assert.doesNotMatch(text, /data-look-(?:scale|labels|figures|headings)\b/, sheet);
   }
+});
+
+test('a face the kit ships is a sheet of its own: a theme set in it brings the face, not the look it was made for', () => {
+  const set = (id: string, preset: string, ui: string) =>
+    compileAppTheme({ kind: 'theme', id, label: id, extends: preset, type: { font: { ui } } }, 'theme');
+  // Sage's recipes, set in Inter: Inter's sheet, and neither Lumen's nor Workshop's.
+  const sage = recipeAttributes(set('probe', 'sage', 'Inter, sans-serif')).sheets;
+  assert.ok(sage.includes('inter'));
+  assert.ok(!sage.includes('lumen') && !sage.includes('workshop'), sage.join());
+  const barlow = recipeAttributes(set('probe', 'sage', '"Barlow", sans-serif')).sheets;
+  assert.ok(barlow.includes('barlow'));
+  assert.ok(!barlow.includes('lumen') && !barlow.includes('workshop'), barlow.join());
+  assert.ok(!recipeAttributes(set('probe', 'sage', 'Georgia, serif')).sheets.some((sheet) => sheet === 'inter' || sheet === 'barlow'));
+  // The looks the faces were made for are set in them, so they still bring theirs.
+  assert.ok(recipeAttributes(themePreset('lumen')!).sheets.includes('inter'));
+  assert.ok(recipeAttributes(themePreset('workshop')!).sheets.includes('barlow'));
+  // And each face sheet exists, declaring the family its stack names.
+  assert.match(readFileSync(at('interFace.css'), 'utf8'), /font-family: Inter;/);
+  assert.match(readFileSync(at('barlowFace.css'), 'utf8'), /font-family: Barlow;/);
 });

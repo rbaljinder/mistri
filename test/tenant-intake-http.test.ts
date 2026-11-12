@@ -21,6 +21,8 @@ import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/com
 import type { LoadedApp } from '../packages/mistri/src/server/app/apps.js';
 import { createAppAuth, type AppAuthRuntime } from '../packages/mistri/src/server/auth/auth.js';
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
+import type { UntypedRow, WriteTable } from '../packages/mistri/src/server/commands/commandDb.js';
+import { refuse, type RefusalKeepDb } from '../packages/mistri/src/server/commands/commandErrors.js';
 import { literal, shape, text } from '../packages/mistri/src/server/commands/commandShapes.js';
 import { resetPublicFormLimits } from '../packages/engine/src/server/http/rateLimit.js';
 import { defineAppTenantPolicy } from '../packages/mistri/src/server/policy/appTenantPolicy.js';
@@ -214,11 +216,23 @@ async function fixture(t: TestContext, mount = '') {
       source: 'business',
       target: 'lead',
       write: ['intake_submission'],
+      // A wrong try a signed-out visitor makes is counted where the submission would have landed (refuse keep).
+      refused: { writes: ['intake_submission', 'lead'] },
       public: true,
       input,
       output: shape({ reference: text(), message: literal('Application received.') }),
       async handle({ db, intake }, value) {
         const reference = `IGN-${value.name}`;
+        if (value.name === 'Wrong') {
+          const table = (intake === 'tenant' ? db.lead : db.intake_submission) as unknown as WriteTable<UntypedRow>;
+          if ((await table.count({ reference: 'TRY' })) >= 2) refuse('Too many tries; ask the dealer.');
+          refuse('That code is not right.', {
+            keep: async (kept: RefusalKeepDb) => {
+              const counted = (intake === 'tenant' ? kept.lead : kept.intake_submission) as unknown as WriteTable<UntypedRow>;
+              await counted.insert({ id: randomUUID(), reference: 'TRY', name: 'Wrong', status: 'wrong try' });
+            },
+          });
+        }
         if (intake === 'tenant') await db.lead.insert({ id: randomUUID(), reference, name: value.name });
         else await db.intake_submission.insert({ id: randomUUID(), reference, name: value.name });
         return { reference, message: 'Application received.' };
@@ -366,6 +380,31 @@ test('the submission key replays; refusals come before anything is counted or re
     assert.equal(Object.hasOwn(detail, 'outcome'), false);
   }
   assert.deepEqual(f.count("SELECT count(*) AS n FROM lead WHERE name = 'Mallory'"), [{ n: 0 }]);
+});
+
+test("a signed-out wrong try is counted with refuse's keep, in the place its address names, and the count locks", async (t) => {
+  const f = await fixture(t);
+  const said = async (query: string) => {
+    const response = await f.submit(query, { input: { name: 'Wrong' }, submission: randomUUID() });
+    return { status: response.status, body: await response.json() };
+  };
+  const wrong = { status: 409, body: { code: 'ineligible_state', message: 'That code is not right.', error: 'That code is not right.' } };
+  // The handler's writes roll back with its refusal; the keep's stay, stamped with the dealer the address placed it in.
+  assert.deepEqual(await said(via(NORTH)), wrong);
+  assert.deepEqual(await said(via(NORTH)), wrong);
+  assert.deepEqual(f.count("SELECT tenant_id, status FROM lead WHERE reference = 'TRY'"), [
+    { tenant_id: 'north', status: 'wrong try' },
+    { tenant_id: 'north', status: 'wrong try' },
+  ]);
+  // The third try reads the two kept and is refused without keeping more.
+  const locked = await said(via(NORTH));
+  assert.equal(locked.status, 409);
+  assert.equal(locked.body.message, 'Too many tries; ask the dealer.');
+  assert.deepEqual(f.count("SELECT count(*) AS n FROM lead WHERE reference = 'TRY'"), [{ n: 2 }]);
+  // An address that places no dealer counts in the platform's triage, answered as a placed one is.
+  assert.deepEqual(await said(via(UNKNOWN)), wrong);
+  assert.deepEqual(f.count("SELECT status FROM intake_submission WHERE reference = 'TRY'"), [{ status: 'wrong try' }]);
+  assert.deepEqual(f.count("SELECT count(*) AS n FROM lead WHERE name = 'Wrong' AND reference <> 'TRY'"), [{ n: 0 }]);
 });
 
 test('the ordinary public form limits apply to tenant intake, per client', async (t) => {

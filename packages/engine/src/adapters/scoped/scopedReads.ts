@@ -29,20 +29,26 @@ import { storedTextOf, storedTextSelect } from './storedText.js';
 
 /** Structured read arguments must not retain mutable values across driver
  * waits. This is deliberately separate from stricter nonempty policy filters:
- * an empty user filter is fine, because it never replaces the bound policy. */
-export function snapshotScopedData<T>(input: T): T {
+ * an empty user filter is fine, because it never replaces the bound policy.
+ * A caller whose input has a larger bound of its own (the command journal's
+ * receipt) names it, and the refusal past it, in `limits`. */
+export function snapshotScopedData<T>(input: T, limits?: { readonly characters: number; readonly overflow: string }): T {
   let nodes = 0;
   let characters = 0;
   let bytes = 0;
+  const most = limits?.characters ?? 1_048_576;
   const fail = (): never => {
     throw new Refusal('Invalid structured operation.');
+  };
+  const tooLong = (): never => {
+    throw new Refusal(limits?.overflow ?? 'Invalid structured operation.');
   };
   const copy = (value: unknown, depth = 0): unknown => {
     if (++nodes > 32_768 || depth > 16) return fail();
     if (value === undefined || value === null || typeof value === 'boolean') return value;
     if (typeof value === 'string') {
       characters += value.length;
-      if (characters > 1_048_576) return fail();
+      if (characters > most) return tooLong();
       return value;
     }
     if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -74,7 +80,7 @@ export function snapshotScopedData<T>(input: T): T {
       const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
       if (typeof key !== 'string' || !descriptor.enumerable || !('value' in descriptor)) return fail();
       characters += key.length;
-      if (characters > 1_048_576) return fail();
+      if (characters > most) return tooLong();
       result[key] = copy(descriptor.value, depth + 1);
     }
     return result;

@@ -241,10 +241,11 @@ export interface UiChoice {
   readonly label: string;
 }
 
-/** Who is reading: signed in or not, and the signed-in account's id. Browser-side knowledge only; the server decides every request. */
+/** Who is reading: signed in or not, the signed-in account's id and the roles they hold here (none when signed out, and in an App that grants by no role). Browser-side knowledge only, to choose what to offer; the server decides every request. */
 export interface UiViewer {
   signedIn: boolean;
   account?: string;
+  roles: readonly string[];
 }
 
 /** What `useHref` asks a host to address: the sign-in, a list or dashboard by its key, a record under a list view, a page by its path. */

@@ -11,8 +11,9 @@ vi.mock('../core.js', () => ({
   columnLabel: () => null,
   columnDisplay: () => null,
   // A link table has no name of its own: its label falls to its key.
-  labelPath: (table: TableMeta) => (table.id === 'campaign_member' ? 'campaign_id' : table.id === 'ticket' ? '$label' : 'name'),
-  recordLabel: (table: TableMeta) => (table.id === 'contact' ? '{first} {last}' : undefined),
+  labelPath: (table: TableMeta) =>
+    table.id === 'campaign_member' ? 'campaign_id' : table.id === 'ticket' || table.id === 'issue' ? '$label' : 'name',
+  recordLabel: (table: TableMeta) => (table.id === 'contact' ? '{first} {last}' : table.id === 'issue' ? 'kind' : undefined),
   state: { schema: undefined },
   keyOf: (_table: TableMeta, row: Record<string, unknown>) => (row.id == null ? null : { tenant: row.tenant, id: row.id }),
   rowLabel: (_table: TableMeta, row: Record<string, unknown>) => row.name ?? row.title,
@@ -252,6 +253,22 @@ test('the columns a record label is built from are not said again under it', () 
   expect(screen.getByText('555-0100')).toBeInTheDocument();
   // Nothing the Table would add: its columns are the title and one fact.
   expect(tableSaysMore(contact, ['first', 'last', 'phone'], rows)).toBe(false);
+});
+
+test('a vocabulary column that names the record is not said again under it, in its stored code', () => {
+  // The title is the column's words ("Defect"); the row carries its code ("defect"). Compared raw they differ, so the
+  // card said the same word twice.
+  const issue: TableMeta = {
+    ...table,
+    id: 'issue',
+    columns: ['id', 'kind', 'owner'].map((name) => ({ name, type: 'TEXT', nullable: false, primaryKey: name === 'id' })),
+  };
+  const rows = [{ id: 1, name: 'Defect', kind: 'defect', owner: 'Ada' }];
+  expect(tableSaysMore(issue, ['kind', 'owner'], rows)).toBe(false);
+  render(<RecordSummaries table={issue} data={{ rows }} columns={['kind', 'owner']} />);
+  expect(screen.getAllByText('Defect')).toHaveLength(1);
+  expect(screen.queryByText('defect')).not.toBeInTheDocument();
+  expect(screen.getByText('Ada')).toBeInTheDocument();
 });
 
 test('the Table is a choice only where it says more than the records: more than four facts, or one a title or a question hides', () => {

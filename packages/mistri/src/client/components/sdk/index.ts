@@ -12,6 +12,7 @@
  * which a test holds to this list.
  */
 import * as React from 'react';
+import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 
 export { React };
 export { UI_TOKENS as tokens } from '@mistriwork/kit/shared/uiTokens.js';
@@ -32,6 +33,7 @@ export {
   Meter,
   Row,
   Segmented,
+  Skeleton,
   SplitListDetail,
   Stack,
   Stat,
@@ -41,6 +43,19 @@ export {
   Value,
   VisuallyHidden,
 } from './kit.js';
+/* The platform's fields, as the shell dresses its own (pageControls.ts): a part of their own with their rules, fetched
+   the first time a component draws one, so one that draws none carries none. A record section that asks a question
+   draws the platform's field here, not a native input dressed to look like one. The rest of the house controls (a
+   modal, a drawer, a date picker) are a free-form page's, from `@mistriwork/mistri/page`. */
+const controls = () => import('./pageControls.js');
+export const Checkbox = onDemand(controls, 'Checkbox', { quiet: true });
+export const ChoiceCards = onDemand(controls, 'ChoiceCards', { quiet: true });
+export const FileField = onDemand(controls, 'FileField', { quiet: true });
+export const Select = onDemand(controls, 'Select', { quiet: true });
+export const Slider = onDemand(controls, 'Slider', { quiet: true });
+export const Switch = onDemand(controls, 'Switch', { quiet: true });
+export const TextField = onDemand(controls, 'TextField', { quiet: true });
+export const YesNo = onDemand(controls, 'YesNo', { quiet: true });
 export {
   useAction,
   useAnalytics,

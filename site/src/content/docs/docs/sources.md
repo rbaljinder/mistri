@@ -12,7 +12,7 @@ Bind an App to one database or several, by connection name, and name each table 
   resources,
 ```
 
-See it in the sample (`examples/apps/lintel/app.ts:54`) (the resources are declared in `resources.ts`); [Sample Apps](/docs/examples/) says how to run Lintel.
+See it in the sample (`examples/apps/lintel/app.ts:56`) (the resources are declared in `resources.ts`); [Sample Apps](/docs/examples/) says how to run Lintel.
 
 <!-- no picture: a source is configuration; nothing on screen changes with it. -->
 

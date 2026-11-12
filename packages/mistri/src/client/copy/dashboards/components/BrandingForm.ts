@@ -29,6 +29,7 @@ export const say = defineMessages({
   compact: 'Compact',
   comfortable: 'Comfortable',
   spacious: 'Spacious',
+  font: 'Font',
   appDefault: 'The App’s',
   save: 'Save',
   saving: 'Saving…',

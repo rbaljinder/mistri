@@ -58,13 +58,16 @@ export async function serveSupportFixture({ directory, appId, port }: { director
       app: parseAppConfig(
         {
           id: appId,
-          name: 'Lender desk',
+          name: process.env.MISTRI_E2E_APP_NAME ?? 'Lender desk',
           auth: {
             store: join(directory, 'auth.db'),
             signUp: 'open',
             rows: 'tenant',
             tenancy: { label: 'Dealer', profile: 'dealer', platform: { label: 'Lender' } },
-            roles: { dealer_staff: { realm: 'tenant', read: true }, lender_admin: { realm: 'platform', read: true } },
+            roles: {
+              dealer_staff: { realm: 'tenant', read: true, operations: ['support'] },
+              lender_admin: { realm: 'platform', read: true, operations: ['support'] },
+            },
           },
           sources: { business: { connection: source.connection } },
           resources: { dealer: { owner: 'platform' }, lead: { owner: 'tenant' } },
@@ -77,7 +80,8 @@ export async function serveSupportFixture({ directory, appId, port }: { director
             { id: 'desk', label: 'Desk', realm: 'tenant', children: ['leads'] },
             { id: 'underwriting', label: 'Underwriting', realm: 'platform', children: ['dealers'] },
           ],
-          ui: { shell: { placement: 'top' } },
+          // A side menu is the other shell whose foot holds the tenant control (the shell-fit spec reads it).
+          ui: { shell: { placement: process.env.MISTRI_E2E_SHELL === 'side' ? 'side' : 'top' } },
         },
         'disposable audited support fixture',
       ),

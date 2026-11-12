@@ -17,6 +17,8 @@
  *   the auth secret, a token in the environment — replaced wherever it
  *   appears, in a log line as much as in a body.
  */
+import { redactLinkTokens } from '@mistriwork/engine/server/http/refusalReport.js';
+
 export const MASKED_CREDENTIAL = '[masked: credential]';
 export const MASKED_HIDDEN = '[masked: hidden column]';
 
@@ -30,6 +32,7 @@ const CREDENTIAL_HEADERS = new Set([
   'x-api-key',
   'x-auth-token',
   'x-mistri-account',
+  'x-mistri-link',
   'x-csrf-token',
 ]);
 /* An OpenID Connect sign-in's query parameters, in a request's address or a redirect's Location. */
@@ -83,7 +86,8 @@ export class Masker {
   }
 
   text(value: string): string {
-    let out = value;
+    // A capability link's address opens its record to whoever holds it: its MAC never reaches the buffer.
+    let out = redactLinkTokens(value);
     for (const secret of this.secrets) if (out.includes(secret)) out = out.split(secret).join('••••••');
     /* A sign-in's addresses carry what signs someone in: an authorization
        code, its state and nonce, a token. Only a sign-in's: a list's `?code=`

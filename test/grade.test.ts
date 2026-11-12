@@ -30,6 +30,7 @@ import type { Probe } from '../packages/mistri/src/server/build/gradeProbe.js';
 import { widestRole } from '../packages/mistri/src/server/build/shot.js';
 import { runGrade } from '../packages/mistri/src/server/build/grade.js';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { asRoleRefusal, shotsFor } from '../packages/mistri/src/server/build/shotRoles.js';
@@ -606,6 +607,32 @@ describe('grade --as all: what each role reads', () => {
       assert.equal(code, 1);
       assert.match(heard.join('\n'), /--as all makes a fresh account for each role; --store goes with --as <role\|email>/);
     } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('grade when the App does not start', () => {
+  test('it says so and exits non-zero, with its server stopped, rather than hang or leave one running', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'grade-no-start-'));
+    const fixture = join(process.cwd(), 'test/fixtures/apps/layers');
+    const database = join(dir, 'layers.db');
+    execFileSync(process.execPath, ['--import', 'tsx', join(fixture, 'seed.mjs'), database], { stdio: 'pipe' });
+    const heard: string[] = [];
+    const before = process.env.MISTRI_SHOT_START_SECONDS;
+    // No server starts in a thousandth of a second.
+    process.env.MISTRI_SHOT_START_SECONDS = '0.001';
+    try {
+      const code = await runGrade(
+        ['--app', fixture, '--config', `${database}.json`],
+        () => {},
+        (line) => heard.push(line),
+      );
+      assert.equal(code, 1);
+      assert.match(heard.join('\n'), /the App did not start within 0\.001 seconds .*its server was stopped/);
+    } finally {
+      if (before === undefined) delete process.env.MISTRI_SHOT_START_SECONDS;
+      else process.env.MISTRI_SHOT_START_SECONDS = before;
       await rm(dir, { recursive: true, force: true });
     }
   });

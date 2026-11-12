@@ -15,7 +15,7 @@ sources: { lintel: { connection: 'lintel', default: true }, carrier: { connectio
 resources,
 ```
 
-See it in the sample (`examples/apps/lintel/app.ts:53`).
+See it in the sample (`examples/apps/lintel/app.ts:55`).
 
 Provision the change store and every write the App serves (a Save, a
 command, a job, an agent's) tells the pages that may read it:

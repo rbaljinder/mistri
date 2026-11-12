@@ -17,7 +17,7 @@ export default defineApp({
   // …
 ```
 
-See it in the sample (`examples/apps/lintel/app.ts:49`).
+See it in the sample (`examples/apps/lintel/app.ts:51`).
 
 ## The App file
 

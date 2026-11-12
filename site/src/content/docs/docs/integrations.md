@@ -47,6 +47,7 @@ export const fakepay = () =>
       },
     },
     webhooks: {
+      signing: 'webhookSecret',
       verify: ({ headers, body }, { secrets }) => verifySignature(headers, body, secrets.webhookSecret),
       events: {
         paid: { type: 'charge.succeeded', payload: shape({ charge: text(), amount: int() }) },
@@ -67,6 +68,11 @@ declare module '@mistriwork/mistri/integration' {
 `verify` returns the event (`{ id, type, at, data }`) or `null` for a
 signature that does not hold. `refuse(reason)` is a definite no, recorded and
 not retried; any other throw is retried.
+
+`signing` names the secret the provider signs its deliveries with, when it
+signs with a shared secret. The settings screen says beside it that it is at
+least 24 characters and refuses a shorter one, since a short secret lets a
+forged delivery be signed by guessing.
 
 The signature must cover the event time, and `at` must be read from what it
 covers, never from a header of its own: core refuses a delivery more than five

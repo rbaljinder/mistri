@@ -155,3 +155,30 @@ test('a whole page grows until nothing is below, the aside beside a shorter main
   expect(height).toBeGreaterThan(1492);
   expect(await page.evaluate(() => document.getElementById('aside')!.getBoundingClientRect().bottom)).toBeLessThanOrEqual(height + 1);
 });
+
+/* One window as tall as the page crashed Chromium's target on a tall page at a sharp scale (a field report): a window
+   holds what one picture can (16384 device pixels), and the rest is taken in pieces, each a window further down. */
+test('a page taller than one picture holds is taken in pieces, the window capped by the scale', async ({ page }) => {
+  const { growToContent, restOfPage } = await import('../packages/mistri/src/server/build/shot.ts');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setContent(`<body style="margin:0;height:100vh;display:flex;flex-direction:column">
+    <main id="content" style="flex:1;overflow:auto"><div style="height:30000px;background:linear-gradient(red,blue)"></div></main></body>`);
+  const height = await growToContent(page, 390, 844, 3);
+  // 16384 device pixels at three to the pixel, not the 8000 of one-to-one.
+  expect(height).toBe(Math.floor(16384 / 3));
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-pieces-'));
+  try {
+    const written = await restOfPage(page, height, join(directory, 'tall.png'));
+    // 30000 of content in windows of 5461: the first picture is the window as it stands, so five more follow.
+    expect(written.map((file) => file.slice(directory.length + 1))).toEqual([
+      'tall-2.png',
+      'tall-3.png',
+      'tall-4.png',
+      'tall-5.png',
+      'tall-6.png',
+    ]);
+    for (const file of written) expect(existsSync(file)).toBe(true);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

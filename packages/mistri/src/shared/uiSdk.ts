@@ -56,6 +56,7 @@ export const UI_EXPORTS = [
   'Loaded',
   'Icon',
   'Segmented',
+  'Skeleton',
   'Stat',
   'Columns',
   'Table',
@@ -63,6 +64,14 @@ export const UI_EXPORTS = [
   'Item',
   'Text',
   'VisuallyHidden',
+  'Checkbox',
+  'ChoiceCards',
+  'FileField',
+  'Select',
+  'Slider',
+  'Switch',
+  'TextField',
+  'YesNo',
   'useRows',
   'useRecord',
   'useBreakdown',
@@ -91,7 +100,7 @@ export const UI_EXPORTS = [
 
 /**
  * What `@mistriwork/mistri/page` adds to the SDK: `definePage` and `defineSurface`, the platform's command form and per-row buttons,
- * `Scope` and `List`, the platform's sections as blocks (components/sdk/page.tsx) and the house controls.
+ * `Scope` and `List`, and the platform's sections as blocks (components/sdk/page.tsx), and the rest of the house controls (the fields are the SDK's own).
  */
 const PAGE_ONLY = [
   'definePage',
@@ -124,20 +133,12 @@ const PAGE_ONLY = [
   'Steps',
   'Avatar',
   'CheckCards',
-  'Checkbox',
-  'ChoiceCards',
   'DateField',
   'Drawer',
-  'FileField',
   'Modal',
   'Pagination',
   'Popover',
-  'Select',
-  'Slider',
-  'Switch',
-  'TextField',
   'Tooltip',
-  'YesNo',
   'defineUiKit',
   'defaultUiKit',
 ] as const;

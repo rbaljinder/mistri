@@ -61,11 +61,20 @@ export function noteAuthorRequest(
     authors.add(req);
 }
 
+/* A capability link's token (`mstl1.<id>.<mac>`, mistri's links/linkToken.ts) is a bearer credential in a path: a log
+   keeps the id, which names the stored row an operator can look up and revoke, and never the MAC that opens it. */
+const LINK_TOKEN = /\b(mstls?1\.[A-Za-z0-9_-]{22})\.[A-Za-z0-9_.-]+/g;
+const LINK_TOKEN_REDACTED = '[redacted]';
+/** A text with every link token and link session cut down to its id. */
+export const redactLinkTokens = (text: string): string =>
+  text.includes('mstl') ? text.replace(LINK_TOKEN, `$1.${LINK_TOKEN_REDACTED}`) : text;
+
 /** What the operator is told: the error's own words when it is no refusal at
     all (a driver's, a bug), then each reason recorded beneath it. */
 function reasonsFor(error: unknown, heard: string | undefined): string[] {
   const own = error instanceof Error && error.message && error.message !== heard ? [error.message] : [];
-  return [...new Set([...own, ...recorded(error)])].filter((reason) => reason !== heard && !OPAQUE.has(reason));
+  /* A reason can quote a request's path or a stored value that carries a link token: every sink here is a log. */
+  return [...new Set([...own, ...recorded(error)].map(redactLinkTokens))].filter((reason) => reason !== heard && !OPAQUE.has(reason));
 }
 const recorded = (error: unknown) => refusalReasons(error).filter((reason) => !OPAQUE.has(reason));
 
@@ -96,7 +105,7 @@ export function reportRefusal(
   /* A refusal that said its rule (sayRefusal) is the operator's business too: a role or a policy that refuses
      what its author meant it to allow is found here, not first with diagnostics on (field report TR7). */
   if (status < 500 && !recorded(error).length && !refusalSaid(error) && !always) return undefined;
-  const path = (req.url ?? '').split('?')[0];
+  const path = redactLinkTokens((req.url ?? '').split('?')[0]);
   const refused = `${product()}: ${req.method ?? 'GET'} ${path} refused (${status}${code ? ` ${code}` : ''})`;
   /* The author's own mistake leads with what to fix; the sentence its caller was told follows, as what it was. */
   const fault = isAuthorFault(error) ? reasons.at(-1) : undefined;

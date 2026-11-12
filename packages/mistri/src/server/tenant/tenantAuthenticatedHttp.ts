@@ -1020,9 +1020,9 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       tenant: true as const,
       /* `ui.microphone` is the App's, whichever host serves it (http/handler.ts says the same of an ordinary App). */
       ...(loaded.app.ui.microphone ? { microphone: true as const } : {}),
-      looks: lookSheetsFor(worn().ui),
-      faces: lookFacesFor(worn().ui),
-      appFaces: appFaceHead(worn().ui, (href) => outward(mount, href)),
+      looks: lookSheetsFor(worn().ui, undefined, hosted?.value.theme),
+      faces: lookFacesFor(worn().ui, undefined, hosted?.value.theme),
+      appFaces: appFaceHead(worn().ui, (href) => outward(mount, href), undefined, hosted?.value.theme),
       density: hosted?.value.theme.density ?? lookDensityFor(worn().ui),
       scheme: hosted ? hosted.value.theme.scheme : lookSchemeFor(worn().ui),
       grounds: hosted ? groundsOf(hosted.value.theme) : lookGroundsFor(worn().ui),

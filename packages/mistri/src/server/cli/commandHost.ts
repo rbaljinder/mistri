@@ -532,8 +532,9 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
       }
     }
     /* An App that runs no jobs opens no job host, and the host is what schedules its retention (a job store is what
-       it needs): the same daily prune then runs on its own timer, over the connections the App writes to. */
-    if (!jobHost && !checkApp) {
+       it needs): the same daily prune then runs on its own timer, over the connections the App writes to. With
+       MISTRI_JOBS=off (shot and grade serve so, to look and not to change) nothing is scheduled at all. */
+    if (!jobHost && !checkApp && process.env.MISTRI_JOBS !== 'off') {
       const { retentionJob, retentionPrunes, startRetentionTimer } = await import('../retention.js');
       const targets = appConnections
         .filter((id) => registry.configOf(id)?.writable === true)

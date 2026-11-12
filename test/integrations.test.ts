@@ -37,6 +37,8 @@ import {
   createIntegrationRuntime,
   integrationCalls,
   registerIntegrationRuntime,
+  IntegrationSettingsRefusal,
+  readIntegrationSettings,
   saveIntegrationSettings,
 } from '../packages/mistri/src/server/integrations/integrationRuntime.js';
 import { integrationRoutes } from '../packages/mistri/src/server/http/integrationRoutes.js';
@@ -71,6 +73,10 @@ test('defineIntegration refuses what an App could not use, and a lookalike is no
     /lowercase letters/,
   );
   refused({ name: 'quiet', secrets: [], client }, /declares no actions, webhooks or channel/);
+  refused(
+    { name: 'signer', secrets: ['apiKey'], client, webhooks: { signing: 'webhookSecret', verify: () => null, events: {} } },
+    /webhooks\.signing names the secret the provider signs with, one of: apiKey\./,
+  );
   refused({ name: 'mailer', secrets: [], client, channel: { name: 'email', send: () => ({}) } }, /not "email"/);
   refused(
     { name: 'loose', secrets: [], client, actions: { ping: { input: { kind: 'object' }, output: shape({}), run: () => ({}) } } },
@@ -258,7 +264,7 @@ test('a channel message waits out quiet hours, in the recipient zone when it nam
   const runtime = await openRuntime(t, declared, clock);
   await saveIntegrationSettings(runtime, 't1', 'owner', {
     integration: 'fakepay',
-    secrets: { apiKey: 'sk_t1', webhookSecret: 'whsec_t1' },
+    secrets: { apiKey: 'sk_t1', webhookSecret: 'whsec_t1_0123456789abcdef' },
   });
   const sender = channelSender(runtime, 'sms');
   const transport = sender.transport(new Set(['notify\neffect.text']));
@@ -317,7 +323,11 @@ test('a channel message waits out quiet hours, in the recipient zone when it nam
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
-  const start = signDelivery('whsec_t1', { id: 'evt_start', type: 'sms.start', data: { from: '+1 (555) 000-3' } }, clock.now);
+  const start = signDelivery(
+    'whsec_t1_0123456789abcdef',
+    { id: 'evt_start', type: 'sms.start', data: { from: '+1 (555) 000-3' } },
+    clock.now,
+  );
   const response = await fetch(`http://127.0.0.1:${(server.address() as { port: number }).port}/api/inbound/fakepay/t1`, {
     method: 'POST',
     headers: start.headers,
@@ -335,7 +345,7 @@ test('a held message the provider never takes is tried eight times, a minute apa
   const runtime = await openRuntime(t, declared, clock);
   await saveIntegrationSettings(runtime, 't1', 'owner', {
     integration: 'fakepay',
-    secrets: { apiKey: 'sk_t1', webhookSecret: 'whsec_t1' },
+    secrets: { apiKey: 'sk_t1', webhookSecret: 'whsec_t1_0123456789abcdef' },
   });
   const sender = channelSender(runtime, 'sms');
   const transport = sender.transport(new Set(['notify\neffect.text']));
@@ -371,7 +381,7 @@ test("a command's integration call is tried 3 times, then refuses temporarily_un
   t.after(registerIntegrationRuntime(runtime));
   await saveIntegrationSettings(runtime, 't1', 'owner', {
     integration: 'fakepay',
-    secrets: { apiKey: 'sk_t1', webhookSecret: 'whsec_t1' },
+    secrets: { apiKey: 'sk_t1', webhookSecret: 'whsec_t1_0123456789abcdef' },
   });
   const { fakepay: pay } = integrationCalls({
     appId: 'shop',
@@ -405,10 +415,10 @@ test("an integration's webhooks lower onto an inbound endpoint named after it: t
   assert.equal(await endpoint.secrets(''), undefined, 'no secrets set: the address answers as one that names nothing');
   await saveIntegrationSettings(runtime, '', 'owner', {
     integration: 'fakepay',
-    secrets: { apiKey: 'sk_app', webhookSecret: 'whsec_app' },
+    secrets: { apiKey: 'sk_app', webhookSecret: 'whsec_app_0123456789abcdef' },
   });
   const secrets = (await endpoint.secrets(''))!;
-  const delivered = (event: { id: string; type: string; data: unknown }, secret = 'whsec_app') => {
+  const delivered = (event: { id: string; type: string; data: unknown }, secret = 'whsec_app_0123456789abcdef') => {
     const signed = signDelivery(secret, event, clock.now);
     return endpoint.verify({ headers: signed.headers, body: Buffer.from(signed.body) }, secrets, clock.now);
   };
@@ -492,7 +502,7 @@ test('on a single-App server the settings route says which secrets are set, neve
         name: 'fakepay',
         secrets: [
           { name: 'apiKey', set: false, savedAt: null },
-          { name: 'webhookSecret', set: false, savedAt: null },
+          { name: 'webhookSecret', set: false, savedAt: null, least: 24 },
         ],
         webhook: '/api/inbound/fakepay',
         channel: 'sms',
@@ -604,7 +614,7 @@ test('a notify rule that sends on a channel queues its message with the write, a
   });
   await saveIntegrationSettings(runtime, '', 'owner', {
     integration: 'fakepay',
-    secrets: { apiKey: 'sk_app', webhookSecret: 'whsec_app' },
+    secrets: { apiKey: 'sk_app', webhookSecret: 'whsec_app_0123456789abcdef' },
   });
   const sender = channelSender(runtime, 'sms');
   assert.equal(await sender.sendDue(), true);
@@ -657,4 +667,35 @@ test("a command's calls are typed by the package's actions, and only the ones it
       handle: async () => ({}),
     });
   assert.equal(typeof undeclared, 'function');
+});
+
+test("a webhook's signing secret is saved only at 24 characters or more, and the settings screen says so beside it", async (t) => {
+  const declared = capture({ use: [fakepay()] });
+  const runtime = await openRuntime(t, declared, { now: Date.now() });
+  const save = (webhookSecret: string) =>
+    saveIntegrationSettings(runtime, 't1', 'owner', { integration: 'fakepay', secrets: { apiKey: 'sk', webhookSecret } });
+  for (const short of ['whsec', 'x'.repeat(23), `  ${'y'.repeat(22)}  `])
+    await assert.rejects(
+      save(short),
+      (error: unknown) =>
+        error instanceof IntegrationSettingsRefusal &&
+        error.message.startsWith("webhookSecret signs fakepay's webhooks, so it is at least 24 characters"),
+    );
+  const before = await readIntegrationSettings(runtime, 't1', (name) => `/api/inbound/${name}`);
+  assert.deepEqual(
+    before.integrations[0]!.secrets.map((secret) => [secret.name, secret.set, secret.least]),
+    [
+      ['apiKey', false, undefined],
+      ['webhookSecret', false, 24],
+    ],
+    'nothing of a refused save is kept, the API key with it; only the signing secret carries a least',
+  );
+  await save('z'.repeat(24));
+  const after = await readIntegrationSettings(runtime, 't1', (name) => `/api/inbound/${name}`);
+  assert.deepEqual(
+    after.integrations[0]!.secrets.map((secret) => secret.set),
+    [true, true],
+  );
+  await saveIntegrationSettings(runtime, 't1', 'owner', { integration: 'fakepay', secrets: { apiKey: 'sk2' } });
+  assert.equal((await readIntegrationSettings(runtime, 't1', () => '')).integrations[0]!.secrets[1]!.set, true, 'an API key alone saves');
 });

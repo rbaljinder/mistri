@@ -44,15 +44,18 @@ const TIME = /^(timestamp|timestamptz|datetime|date ?time|timestamp with(out)? t
  * always) and `message` (a literal: fixed words, if it likes), and nothing
  * else. The reference is what the visitor quotes and what the form's reply
  * carries, so a submit without one would fail every submission at runtime
- * (formHttp.ts); it is refused here instead. A step of a saved form answers
- * `message` at most — the receipt is the submit's. A value that could have
- * been typed or read never fits either.
+ * (formHttp.ts); it is refused here instead. A submit may also answer
+ * `link` (text): the capability link its handler minted with `context.link`
+ * on the one row it made. The door passes it on only as a rendered link URL,
+ * on the first answer, so nothing typed or read rides in it. A step of a
+ * saved form answers `message` at most — the receipt is the submit's. A value
+ * that could have been typed or read never fits either.
  */
 function publicOutputProblem(id: string, command: AnyBusinessCommand, role: 'submit' | 'step'): string | undefined {
   const shape: ShapeDescriptor = describeShape(command.output);
   const refused =
     role === 'submit'
-      ? `Command "${id}" answers a public form, which answers { reference: text(), message: literal(…) } and nothing else: ` +
+      ? `Command "${id}" answers a public form, which answers { reference: text(), message: literal(…), link: text() } and nothing else (link only as context.link minted it): ` +
         'a public form is write-only, and its reply must never carry back what was typed or stored.'
       : `Command "${id}" saves a step of a public form, which answers nothing but an optional message: literal(…). The receipt is the submit's.`;
   if (shape.kind !== 'object') return refused;
@@ -66,6 +69,7 @@ function publicOutputProblem(id: string, command: AnyBusinessCommand, role: 'sub
     const inner = member.kind === 'optional' ? member.item : member;
     if (name === 'message' && inner.kind === 'literal' && inner.values.every((value) => typeof value === 'string')) continue;
     if (role === 'submit' && name === 'reference' && member.kind === 'text') continue;
+    if (role === 'submit' && name === 'link' && inner.kind === 'text') continue;
     return refused;
   }
   return undefined;

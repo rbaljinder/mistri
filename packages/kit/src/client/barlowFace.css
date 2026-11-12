@@ -1,0 +1,66 @@
+/* Barlow, Workshop's face and any theme's that names it first (themeRecipes.ts recipeAttributes): a sheet of its own,
+   as interFace.css is Lumen's, so a theme set in Barlow does not fetch the whole of Workshop's look for the
+   declaration, nor wear a rule of it that is not scoped to a recipe. A stack that begins with the face brings this sheet, as Workshop's does. */
+/* Barlow, a grotesk cut from road and workshop signage (SIL Open Font
+   License; its text in fonts/Barlow-OFL.txt and dist/client/fonts/): the
+   regular and semibold for the interface, data and labels, the semi-condensed
+   bold for titles, figures and the App's name. Declared here so only a
+   page wearing Workshop, or a stack that names Barlow, asks for it; the server preloads the regular and the
+   condensed bold beside it (server/clientSurface.ts, lookPreloads).
+   `swap`, as Lumen's Inter: the page is held until this sheet is in, and the
+   fallback below is cut to Barlow's measure, so the swap barely moves a line. */
+@font-face {
+  font-family: Barlow;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/barlow-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: Barlow;
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/barlow-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Semi Condensed';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/barlow-semi-condensed-700.woff2') format('woff2');
+}
+/* The faces that stand in until Barlow arrives: Arial (Liberation Sans, its
+   metric twin, on Linux) scaled to Barlow's width and given Barlow's ascent and
+   descent (1.0 and 0.2 of the em, no line gap), as Lumen cuts Arial to Inter's.
+   Measured in Chromium over a line of interface text with its figures:
+   Barlow's regular is 92.3% of Arial's, its semibold 89.5% of Arial Bold's,
+   and the semi-condensed bold 82.1% of Arial Bold's. An override is said of
+   the adjusted size, so each is Barlow's ratio over the face's size-adjust. */
+@font-face {
+  font-family: 'Barlow Fallback';
+  font-weight: 100 500;
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Helvetica');
+  size-adjust: 92.3%;
+  ascent-override: 108.34%;
+  descent-override: 21.67%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Barlow Fallback';
+  font-weight: 600 900;
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Helvetica Bold');
+  size-adjust: 89.5%;
+  ascent-override: 111.73%;
+  descent-override: 22.35%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Barlow Semi Condensed Fallback';
+  font-weight: 100 900;
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Helvetica Bold');
+  size-adjust: 82.1%;
+  ascent-override: 121.8%;
+  descent-override: 24.36%;
+  line-gap-override: 0%;
+}

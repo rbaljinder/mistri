@@ -108,6 +108,14 @@ test('a metric card says money exact by default, a balance to the cent; compact 
   expect(compact(950)).toBe('$950.00');
   // Its title, and what a screen reader hears, are exact either way.
   expect(sayer({ ...section, figure: 'compact' } as Section, undefined, { whole: true })(28_123.45)).toBe('$28,123.45');
+  // A six-figure sum with cents wrapped in a quarter-width card: `figure: 'whole'` rounds to the major unit, at any size.
+  const whole = sayer({ ...section, figure: 'whole' } as Section, undefined, { card: true });
+  expect(whole(412_380.49)).toBe('$412,380');
+  expect(whole(1_250_000.6)).toBe('$1,250,001');
+  expect(whole(950.4)).toBe('$950');
+  expect(whole(-12.5)).toBe('-$13');
+  // Its title and what a screen reader hears keep the cents.
+  expect(sayer({ ...section, figure: 'whole' } as Section, undefined, { whole: true })(412_380.49)).toBe('$412,380.49');
   // Outside a card a figure is read against its neighbours: exact to a hundred thousand, compact past it.
   expect(sayer(section)(27_300)).toBe('$27,300.00');
   expect(sayer(section)(414_100)).toBe('$414.1K');
@@ -146,4 +154,32 @@ test("a stacked chart's figures are one form, the compact threshold held in the 
   const compact = legendSayer(section, [20_000_000, 1_423_474]);
   expect(compact(20_000_000)).toBe('$200K');
   expect(compact(1_423_474)).toBe('$14.2K');
+});
+
+test("a measure counted in cents is said in dollars: the section's `minor`, or the column's own rule under a format", () => {
+  // A field report: a cents column drawn by a value component has no money rule, and its sum said a hundred times too large.
+  installShell({ display: () => ({ component: 'price' }) });
+  const section = { kind: 'metric', title: 'Billed', table: 'invoice', measure: 'sum total_cents' } as Section;
+  expect(sayer({ ...section, format: 'money', minor: true } as Section, undefined, { card: true })(41_238_049)).toBe('$412,380.49');
+  // `minor` alone says money: cents are never anything else.
+  expect(sayer({ ...section, minor: true } as Section)(1_999)).toBe('$19.99');
+  // A column whose rule counts cents keeps counting them where the section says money.
+  installShell({ display: () => ({ format: 'money', minor: true, currency: 'EUR' }) });
+  expect(sayer({ ...section, format: 'money' } as Section, undefined, { card: true })(1_999)).toBe('€19.99');
+  // Another word for the figure stands alone.
+  expect(sayer({ ...section, format: 'number' } as Section)(1_999)).toBe('1,999');
+});
+
+test("a breakdown's figures are one form: every one compact where one reaches a hundred thousand", () => {
+  installShell({ display: () => ({ format: 'money', minor: true, currency: 'USD' }) });
+  const section = { kind: 'breakdown', table: 'invoice', measure: 'sum amount', by: 'status' } as Section;
+  // $412,380.49 beside $27,300 and $512.40, stored as cents.
+  const mixed = sayer(section).among([41_238_049, 2_730_000, 51_240]);
+  expect(mixed(41_238_049)).toBe('$412.4K');
+  expect(mixed(2_730_000)).toBe('$27.3K');
+  expect(mixed(51_240)).toBe('$512');
+  // Nothing past a hundred thousand: exact, cents where one has some.
+  const exact = sayer(section).among([2_730_000, 51_240]);
+  expect(exact(2_730_000)).toBe('$27,300.00');
+  expect(exact(51_240)).toBe('$512.40');
 });

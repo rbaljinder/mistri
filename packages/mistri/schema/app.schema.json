@@ -136,8 +136,8 @@
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "enum": ["logo", "name", "accent", "palette", "radius", "density", "preset", "locale"] },
-          "description": "What each tenant may set. preset (which of themes it starts from) needs more than one of themes; locale is the tenant's language, under each person's own."
+          "items": { "enum": ["logo", "name", "accent", "palette", "radius", "density", "preset", "font", "locale"] },
+          "description": "What each tenant may set. preset (which of themes it starts from) needs more than one of themes; font is the face of the interface's text, one of Inter, Barlow or a face a theme of themes ships; locale is the tenant's language, under each person's own."
         },
         "editors": {
           "type": "array",
@@ -2585,8 +2585,15 @@
           "description": "Of what the role writes, what it makes new records in. Absent: everything it writes. false: it edits and never creates (no New, quick add or related add, and the server refuses the insert). A list names the few it creates, and a table it names that the role does not write is append-only: the role adds rows there and never edits or deletes them."
         },
         "export": {
-          "$ref": "#/$defs/accessResources",
-          "description": "Tables the role may export (the whole matching list as a CSV or JSON file) beyond those it writes, which it always may. Of what it reads. A signed-out visitor never may. An App without role grants keeps its one switch, ui.export."
+          "oneOf": [
+            {
+              "const": false
+            },
+            {
+              "$ref": "#/$defs/accessResources"
+            }
+          ],
+          "description": "Tables the role may export (the whole matching list as a CSV or JSON file), of what it reads: a grant of its own, which writing a table does not imply. Absent or false: none. A signed-out visitor never may. An App without role grants keeps its one switch, ui.export."
         },
         "commands": {
           "$ref": "#/$defs/commandGrants",
@@ -3007,16 +3014,16 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 4,
-          "description": "Facts along the card's foot, each a column with an optional icon; a person stands at the right end.",
+          "description": "Facts along the card's foot, each a column or a one-hop label path with an optional icon; a person stands at the right end.",
           "items": {
             "oneOf": [
-              { "type": "string", "minLength": 1, "pattern": "^[^.]*[^.\\s][^.]*$" },
+              { "$ref": "#/$defs/oneHopName" },
               {
                 "type": "object",
                 "additionalProperties": false,
                 "required": ["column"],
                 "properties": {
-                  "column": { "type": "string", "minLength": 1, "pattern": "^[^.]*[^.\\s][^.]*$" },
+                  "column": { "$ref": "#/$defs/oneHopName" },
                   "icon": { "$ref": "#/$defs/appIcon" }
                 }
               }
@@ -3063,11 +3070,7 @@
           "type": "array",
           "minItems": 1,
           "maxItems": 1,
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^[^.]*[^.\\s][^.]*$"
-          }
+          "items": { "$ref": "#/$defs/oneHopName" }
         }
       },
       "description": "Lanes of cards by one local column; a card moves only through an update that sets exactly that column, judged by its when, or a machine's command verb that leads there from the card's state (told the lane where its command asks for the column), run as its button runs it."
@@ -4075,6 +4078,10 @@
               "type": "boolean",
               "description": "Draw the measure\u2019s monthly trend (last 12 months of \"over\") inside the card while no window stands; a windowed metric draws its trend across the window unless this is false. Composes with the card\u2019s own query \u2014 best on cards whose query carries no time clause, and whose clock points backward (an opened_on, not an open deal\u2019s close_date)."
             },
+            "minor": {
+              "const": true,
+              "description": "The measure counts a currency's minor units (cents), said in its major unit: money where format is unsaid. For a measure whose column has no money rule to say so, such as one drawn by a component."
+            },
             "format": {
               "type": "string",
               "enum": ["percent", "number", "money", "duration"],
@@ -4088,8 +4095,8 @@
             },
             "figure": {
               "type": "string",
-              "enum": ["exact", "compact"],
-              "description": "How money is said on the card: exact (the default), to the currency's minor digits at any size (\"$28,123.45\", a balance read to the cent), or compact from a thousand (\"$28.1K\"). Its change and goal follow it; the card's title and what a screen reader hears are exact either way."
+              "enum": ["exact", "compact", "whole"],
+              "description": "How money is said on the card: exact (the default), to the currency's minor digits at any size (\"$28,123.45\", a balance read to the cent), compact from a thousand (\"$28.1K\"), or whole, rounded to the currency's major unit at any size (\"$28,123\"). Its change and goal follow it; the card's title and what a screen reader hears are exact either way."
             },
             "target": {
               "oneOf": [
@@ -4215,6 +4222,10 @@
                 "half",
                 "third"
               ]
+            },
+            "minor": {
+              "const": true,
+              "description": "The measure counts a currency's minor units (cents), said in its major unit: money where format is unsaid. For a measure whose column has no money rule to say so, such as one drawn by a component."
             },
             "format": {
               "type": "string",
@@ -4465,6 +4476,10 @@
                 "third"
               ]
             },
+            "minor": {
+              "const": true,
+              "description": "The measure counts a currency's minor units (cents), said in its major unit: money where format is unsaid. For a measure whose column has no money rule to say so, such as one drawn by a component."
+            },
             "format": {
               "type": "string",
               "enum": ["percent", "number", "money", "duration"],
@@ -4669,6 +4684,10 @@
                 "half",
                 "third"
               ]
+            },
+            "minor": {
+              "const": true,
+              "description": "The measure counts a currency's minor units (cents), said in its major unit: money where format is unsaid. For a measure whose column has no money rule to say so, such as one drawn by a component."
             },
             "format": {
               "type": "string",
@@ -5015,8 +5034,8 @@
                   },
                   "measure": {
                     "type": "string",
-                    "pattern": "^(count|(sum|avg|min|max)\\s+[A-Za-z_][A-Za-z0-9_]*)$",
-                    "description": "count, or an aggregate and a column: sum amount, avg amount, min due_on, max due_on."
+                    "pattern": "^(count|count\\s+distinct\\s+[A-Za-z_][A-Za-z0-9_]*|(sum|avg|min|max)\\s+[A-Za-z_][A-Za-z0-9_]*)$",
+                    "description": "count, count distinct and a column (count distinct patient_id), or an aggregate and a column: sum amount, avg amount, min due_on, max due_on."
                   },
                   "by": {
                     "type": "string",

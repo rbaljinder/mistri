@@ -90,7 +90,7 @@ test('a renamed key is renamed where it means one thing, and a key of the same n
   assert.match(text, /body: \{ face: 'code' \}/);
   assert.match(text, /label: \{ face: 'ui' \}/);
   assert.match(text, /CustomFigure/);
-  assert.equal(upgradeSource('defineTheme({ palette: { light: {}, dark: {} } })').text, 'defineTheme({ colors: { light: {}, dark: {} } })');
+  assert.equal(upgraded('defineTheme({ palette: { light: {}, dark: {} } })'), 'defineTheme({ colors: { light: {}, dark: {} } })');
   assert.equal(upgradeSource("ui: { theme: { palette: 'sage' } }").text, "ui: { theme: { palette: 'sage' } }");
   assert.equal(upgradeSource("const list = { head: 1, layout: 'record' };").text, "const list = { head: 1, layout: 'record' };");
 });
@@ -180,8 +180,16 @@ test('a flag it does not take, or a folder that is not there, is exit 2', () => 
 });
 
 /** `source` upgraded, as its text; and the lines it refused. */
-const text = (source: string) => upgradeSource(source).text;
-const refusedLines = (source: string) => upgradeSource(source).refusals.map((each) => each.line);
+/* The DSL's calls and a type of its own, imported on the fixture's first line so the line numbers are the fixture's. */
+const DSL =
+  "import { calendar, defineApp, definePage, defineTheme, embed, fromRecord, metric, page, stream, type View } from '@mistriwork/mistri/app'; ";
+function upgraded(source: string): string {
+  const upgraded = upgradeSource(DSL + source).text;
+  assert.ok(upgraded.startsWith(DSL));
+  return upgraded.slice(DSL.length);
+}
+const text = upgraded;
+const refusedLines = (source: string) => upgradeSource(DSL + source).refusals.map((each) => each.line);
 
 test('every word a loader refuses as renamed is a KEYS row or a REFUSED one, so check and upgrade cannot drift', () => {
   const unhandled: string[] = [];
@@ -228,31 +236,32 @@ test('dashboard sections: a metric view is to, an embed tab is listTab, a custom
 
 test('views: table and keys on a list, table on a dashboard, with the kind they say they are; refresh is refused', () => {
   assert.equal(
-    text("const v = { kind: 'list', table: 'task', keys: { e: 'edit' }, totals: ['amount'] };"),
-    "const v = { kind: 'list', from: 'task', shortcuts: { e: 'edit' }, totals: ['amount'] };",
+    text("const v: View = { kind: 'list', table: 'task', keys: { e: 'edit' }, totals: ['amount'] };"),
+    "const v: View = { kind: 'list', from: 'task', shortcuts: { e: 'edit' }, totals: ['amount'] };",
   );
   assert.equal(
-    text("const d = { sections: [], table: 'task', kind: 'dashboard' };"),
-    "const d = { sections: [], from: 'task', kind: 'dashboard' };",
+    text("const d = { sections: [], table: 'task', kind: 'dashboard' } satisfies View;"),
+    "const d = { sections: [], from: 'task', kind: 'dashboard' } satisfies View;",
   );
-  const same = "const f = { kind: 'form', table: 'task' }; const g = { table: 'task' }; const h = { kind: 'list', view: { table: 1 } };";
+  const same =
+    "const f: View = { kind: 'form', table: 'task' }; const g: View = { table: 'task' }; const h: View = { kind: 'list', view: { table: 1 } };";
   assert.equal(text(same), same);
-  assert.deepEqual(refusedLines("const d = {\n  kind: 'dashboard',\n  refresh: 30,\n};"), [3]);
-  assert.deepEqual(refusedLines("const d = { kind: 'list', refresh: 30 };"), []);
+  assert.deepEqual(refusedLines("defineApp({\n  kind: 'dashboard',\n  refresh: 30,\n});"), [3]);
+  assert.deepEqual(refusedLines("defineApp({ kind: 'list', refresh: 30 });"), []);
 });
 
 test('presentations and backdrops: facts on a queue, lines on cards, and the span words of a backdrop', () => {
   assert.equal(
-    text("const q = { kind: 'queue', primary: 'a', facts: ['b'], lines: ['c'] };"),
-    "const q = { kind: 'queue', primary: 'a', properties: ['b'], lines: ['c'] };",
+    text("const q: View = { kind: 'queue', primary: 'a', facts: ['b'], lines: ['c'] };"),
+    "const q: View = { kind: 'queue', primary: 'a', properties: ['b'], lines: ['c'] };",
   );
   assert.equal(
-    text("const c = { kind: 'cards', primary: 'a', lines: ['b'], facts: ['c'] };"),
-    "const c = { kind: 'cards', primary: 'a', properties: ['b'], facts: ['c'] };",
+    text("const c: View = { kind: 'cards', primary: 'a', lines: ['b'], facts: ['c'] };"),
+    "const c: View = { kind: 'cards', primary: 'a', properties: ['b'], facts: ['c'] };",
   );
   assert.equal(
-    text("const k = { backdrop: [{ resource: 'holiday', to: 'ends', label: 'name' }], resource: 'x', to: 'y' };"),
-    "const k = { backdrop: [{ from: 'holiday', end: 'ends', labelColumn: 'name' }], resource: 'x', to: 'y' };",
+    text("calendar('x', 'y', { backdrop: [{ resource: 'holiday', to: 'ends', label: 'name' }], resource: 'x', to: 'y' });"),
+    "calendar('x', 'y', { backdrop: [{ from: 'holiday', end: 'ends', labelColumn: 'name' }], resource: 'x', to: 'y' });",
   );
 });
 
@@ -268,8 +277,33 @@ test("a tenant's branding row: base is preset and brandColor is accent, under fr
 
 test('a timeline stream detail or show is refused, not renamed: the positional word needs a reader', () => {
   assert.deepEqual(refusedLines("stream('email', 'ticket_id', 'sent_at', 'subject', {\n  detail: 'status',\n});"), [2]);
-  assert.deepEqual(refusedLines("const page = { streams: [{ from: 'email', show: 'subject', detail: 'status' }] };"), [1, 1]);
+  assert.deepEqual(refusedLines("page('x', { streams: [{ from: 'email', show: 'subject', detail: 'status' }] });"), [1, 1]);
   assert.deepEqual(refusedLines("const a = { show: ['x'], detail: 1 }; other('x', { detail: 1 });"), []);
+});
+
+test("a record page's section words: renamed where they read the same, refused where the new word is an argument or another shape", () => {
+  const SECTIONS = "import { fields, headline, related, stream, timeline } from '@mistriwork/mistri/app';\n";
+  const up = (source: string) => upgradeSource(SECTIONS + source);
+  assert.equal(
+    up("fields(['name'], { edit: true }); related('Notes', 'note', 'ticket_id', { of: 'site_id', orderBy: 'due_on desc' });").text,
+    SECTIONS + "fields(['name'], { editable: true }); related('Notes', 'note', 'ticket_id', { about: 'site_id', sort: 'due_on desc' });",
+  );
+  assert.equal(
+    up("headline('price', { links: [{ label: 'Ask', to: 'inquire', kind: 'primary' }] });").text,
+    SECTIONS + "headline('price', { links: [{ label: 'Ask', to: 'inquire', intent: 'primary' }] });",
+  );
+  const refused = up(
+    [
+      "fields([], { paths: ['name'] });",
+      "related('Notes', 'note', 'x', { path: 'ticket_id' });",
+      "timeline('Activity', [stream('email', 'ticket_id', 'sent_at', 'subject', { tint: 'warn' })], { order: 'asc' });",
+    ].join('\n'),
+  ).refusals.map((each) => each.line);
+  assert.deepEqual(refused, [2, 3, 4, 4]);
+  /* The same words in an App's own objects, or a call that is not mistri's, are left alone. */
+  const own = "const q = { edit: true, of: 'x', orderBy: 'y', path: 'z', kind: 'a', links: [{ kind: 'b' }] }; other({ order: 1 });";
+  assert.equal(up(own).text, SECTIONS + own);
+  assert.deepEqual(up(own).refusals, []);
 });
 
 test('a kit prop is renamed on a component imported from the kit, by whatever name, and on nothing else', () => {
@@ -290,8 +324,7 @@ test('a kit prop is renamed on a component imported from the kit, by whatever na
     `${kit.replace('tablewalk/ui', '@mistriwork/mistri/ui')}export default () => (<>\n${body
       .replace('<Rows resource', '<Rows from')
       .replace('  resource={name}', '  from={name}')
-      .replace('<Kit.Board resource', '<Kit.Board from')
-      .replace('<Mine resource', '<Mine from')}\n</>);\n`,
+      .replace('<Kit.Board resource', '<Kit.Board from')}\n</>);\n`,
   );
   assert.deepEqual(result.refusals, []);
   /* The key form of the same word is not a prop. */
@@ -395,6 +428,7 @@ test('every rule is idempotent: a second run of the new rewrites finds nothing a
       "import { definePage } from '@mistriwork/mistri/page';",
       "import { Rows } from '@mistriwork/mistri/ui';",
       "export default definePage({ title: 'A', nav: { order: 1 }, views: { v: { kind: 'list', table: 'task', keys: {} } } });",
+      "import { metric } from '@mistriwork/mistri/app';",
       "export const m = metric('x', 'y', { view: 'z' });",
       'export const e = <Rows resource="task" />;',
       "export const t = 'var(--ok)';",
@@ -414,4 +448,148 @@ test('every rule is idempotent: a second run of the new rewrites finds nothing a
   assert.equal(again.code, 0, again.out);
   assert.equal(readFileSync(join(dir, 'pages/a.page.tsx'), 'utf8'), once);
   assert.equal(upgradeSource(once).text, once);
+});
+
+/* A field report: upgrade wrote a built-in function's source into a file, renamed the App's own object key, and
+   renamed a prop `<Value>` still takes. Only a site that is mistri's (its import, a call of a name imported from it,
+   an object typed as one of its types, a block's renamed prop, a token) is rewritten. */
+test('a word Object.prototype holds is not a rename, and nothing is stringified into the file', () => {
+  const source = [
+    "import { defineApp } from '@mistriwork/mistri/app';",
+    "import { constructor, toString as text } from '@mistriwork/mistri/ui';",
+    'class Shelf { constructor(public toString: () => string, valueOf = 1) {} }',
+    "const words = { constructor: 1, toString: 'x', valueOf: [], hasOwnProperty: {}, __proto__: null };",
+    'export default defineApp({ constructor: 1, toString: { valueOf: 2 }, views: { valueOf: { kind: "list" } } });',
+    'export const n = words.constructor + text() + constructor + valueOf + toString;',
+    '',
+  ].join('\n');
+  const result = upgradeSource(source);
+  assert.equal(result.text, source);
+  assert.deepEqual(result.changes, []);
+  assert.deepEqual(result.refusals, []);
+});
+
+test("the App's own objects, calls and types keep their keys and names, even where mistri renamed the same word", () => {
+  const source = [
+    "import { defineApp } from '@mistriwork/mistri/app';",
+    "import { helper } from './helper';",
+    'type TotalValue = number;',
+    'interface CustomTotal { open: TotalValue }',
+    "const view = { kind: 'list', table: 'task', keys: { e: 1 }, layout: 'listing' };",
+    "const board = { layout: [['a']], totals: { open: 'count' }, face: 'sans', palette: { light: {}, dark: {} } };",
+    "const theme = { recipes: { head: 'quiet' }, nav: { currentInk: '#fff' } };",
+    "const nested = defineApp({ access: () => ({ layout: [['a']] }), rows: helper({ kind: 'list', table: 'task' }) });",
+    "function make() { return { kind: 'dashboard', table: 'task', layout: [['a']] }; }",
+    "export const parts = [view, board, theme, nested, make, { kind: 'queue', facts: ['a'] }] as CustomTotal[];",
+    '',
+  ].join('\n');
+  const result = upgradeSource(source);
+  assert.equal(result.text, source);
+  assert.deepEqual(result.changes, []);
+});
+
+test("the same words inside mistri's own call, or typed as its type, are still rewritten; a renamed type only as mistri's", () => {
+  const source = [
+    "import { defineApp as app, defineTheme, type View } from '@mistriwork/mistri/app';",
+    "import type { CustomTotal, TotalValue as Figure } from '@mistriwork/mistri/ui';",
+    "import * as ui from '@mistriwork/mistri/ui';",
+    "export const v: View = { kind: 'list', table: 'task' };",
+    "export default app({ pages: { order: { layout: 'listing' } }, views: { d: { kind: 'dashboard', layout: [['a']] } } });",
+    "export const t = defineTheme<'x'>({ palette: { light: {}, dark: {} } });",
+    'export type A = CustomTotal | Figure | ui.TotalGroup;',
+    '',
+  ].join('\n');
+  const result = upgradeSource(source);
+  assert.equal(
+    result.text,
+    source
+      .replace('import type { CustomTotal, TotalValue as', 'import type { CustomFigure, FigureValue as')
+      .replace("table: 'task'", "from: 'task'")
+      .replace("layout: 'listing'", "layout: 'showcase'")
+      .replace("layout: [['a']]", "areas: [['a']]")
+      .replace('palette:', 'colors:')
+      .replace('CustomTotal | Figure | ui.TotalGroup', 'CustomFigure | Figure | ui.FigureGroup'),
+  );
+  assert.equal(upgradeSource(result.text).text, result.text);
+});
+
+test('<Value> keeps every prop it takes; a block that took `resource` has it renamed', () => {
+  const source = [
+    "import { Value, Rows, Gallery } from '@mistriwork/mistri/ui';",
+    'export const a = <Value value={row.total} resource="invoice" column="total" display={{ format: "money" }} compact />;',
+    'export const b = <Value resource="invoice" {...rest} />;',
+    'export const c = <Rows resource="invoice" />;',
+    'export const d = <Gallery resource="unit" image="photo" />;',
+    '',
+  ].join('\n');
+  const result = upgradeSource(source);
+  assert.equal(result.text, source.replace('<Rows resource', '<Rows from').replace('<Gallery resource', '<Gallery from'));
+  assert.deepEqual(result.refusals, []);
+  assert.equal(upgradeSource(result.text).text, result.text);
+});
+
+test("an object typed by the App's own schema, or returned from a function inside a mistri call, is mistri's; one that only looks like it is refused by line", () => {
+  const typed = [
+    "import type { Views } from './mistri-schema.d.ts';",
+    "export const views = { leads: { kind: 'list', table: 'lead', keys: [] } } satisfies Views;",
+    '',
+  ].join('\n');
+  const result = upgradeSource(typed);
+  assert.equal(result.text, typed.replace("table: 'lead', keys: []", "from: 'lead', shortcuts: []"));
+  assert.deepEqual(result.refusals, []);
+  assert.equal(upgradeSource(result.text).text, result.text);
+  /* The schema is imported under whichever specifier the module says it by, and as a namespace or an annotation too. */
+  for (const specifier of ['./mistri-schema', '../mistri-schema.js']) {
+    const other = `import type { Views } from '${specifier}';\nexport const v: Views = { kind: 'list', table: 'lead' };\n`;
+    assert.equal(upgradeSource(other).text, other.replace('table:', 'from:'));
+  }
+  const space = "import type * as S from './mistri-schema.d.ts';\nexport const v = { kind: 'list', table: 'lead' } as S.Views;\n";
+  assert.equal(upgradeSource(space).text, space.replace('table:', 'from:'));
+  /* A module that only has the schema's name in its path is not the schema. */
+  const other = "import type { Views } from './not-mistri-schema-at-all';\nexport const v: Views = { kind: 'list', table: 'lead' };\n";
+  assert.equal(upgradeSource(other).text, other);
+
+  const untyped = ['export const views = {', "  leads: { kind: 'list', table: 'lead' },", '};', ''].join('\n');
+  const refused = upgradeSource(untyped);
+  assert.equal(refused.text, untyped);
+  assert.equal(refused.refusals.length, 1);
+  assert.equal(refused.refusals[0]!.line, 2);
+  assert.match(
+    refused.refusals[0]!.said,
+    /`table` is now `from`.*looks like a mistri list view.*by hand, or type it with the App's schema/,
+  );
+
+  const returned = [
+    "import { defineApp } from '@mistriwork/mistri/app';",
+    "export default defineApp({ views: () => ({ leads: { kind: 'list', table: 'lead' } }) });",
+    "export const b = defineApp({ views: function () { return { leads: { kind: 'list', table: 'lead' } }; } });",
+    "export const c = defineApp({ views() { if (x) { return { leads: { kind: 'list', table: 'lead' } }; } return {}; } });",
+    '',
+  ].join('\n');
+  const fromReturned = upgradeSource(returned);
+  assert.equal(fromReturned.text, returned.replaceAll("table: 'lead'", "from: 'lead'"));
+  assert.deepEqual(fromReturned.refusals, []);
+  assert.equal(upgradeSource(fromReturned.text).text, fromReturned.text);
+
+  /* An App's own function inside a mistri call is still the App's. */
+  const own = [
+    "import { defineApp } from '@mistriwork/mistri/app';",
+    "export default defineApp({ views: () => ownViews({ leads: { table: 'lead', keys: [] } }) });",
+    '',
+  ].join('\n');
+  assert.equal(upgradeSource(own).text, own);
+  assert.deepEqual(upgradeSource(own).refusals, []);
+});
+
+test('an App object with no mistri kind and no mistri type is left alone, and said nothing of', () => {
+  const own = [
+    "export const row = { table: 'lead', keys: ['a'], title: 'x', refresh: 30 };",
+    "export const form = { kind: 'form', table: 'lead' };",
+    "export const mine = { kind: 'widget', facts: [], lines: [] };",
+    '',
+  ].join('\n');
+  const result = upgradeSource(own);
+  assert.equal(result.text, own);
+  assert.deepEqual(result.refusals, []);
+  assert.deepEqual(result.changes, []);
 });

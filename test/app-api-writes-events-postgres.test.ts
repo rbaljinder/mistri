@@ -26,7 +26,7 @@ interface Client extends PgQuery {
   on(event: 'error', listener: (error: Error) => void): unknown;
 }
 
-async function pgShop(t: TestContext, narrowed = false) {
+async function pgShop(t: TestContext, narrowed = false, appendOnly = false) {
   const module = 'pg';
   const pg = (await import(module)) as { default: { Client: new (options: unknown) => Client } };
   const control = new pg.default.Client({ connectionString: LIVE, statement_timeout: 10000 });
@@ -63,7 +63,7 @@ async function pgShop(t: TestContext, narrowed = false) {
   const accounts = new pg.default.Client({ connectionString: authUrl, statement_timeout: 10000 });
   await accounts.connect();
   try {
-    for (const role of ['operator', 'editor', 'auditor']) {
+    for (const role of ['operator', 'editor', 'auditor', ...(appendOnly ? ['clerk'] : [])]) {
       await accounts.query(
         `INSERT INTO mistri.auth_user(id,name,email,"emailVerified","createdAt","updatedAt",role,banned)
         VALUES($1,$1,$2,true,now(),now(),$1,false)`,
@@ -73,7 +73,13 @@ async function pgShop(t: TestContext, narrowed = false) {
   } finally {
     await accounts.end();
   }
-  const { appDir, config, commands } = writeShopApp(directory, { business: businessUrl, authStore: authUrl, physical: true, narrowed });
+  const { appDir, config, commands } = writeShopApp(directory, {
+    business: businessUrl,
+    authStore: authUrl,
+    physical: true,
+    narrowed,
+    appendOnly,
+  });
   writeFileSync(join(appDir, 'authority.lock'), (await loadApp(appDir)).authority!.report);
   const common = ['--app', appDir, '--config', config, '--store-id', randomUUID()];
   const provisioned = await tokenCli(['provision', ...common]);
@@ -232,6 +238,46 @@ test(
     const document = await (await fetch(`${s.base}/$asyncapi`, { headers: auth(operator) })).json();
     assert.equal(document.asyncapi, '3.0.0');
     assert.deepEqual(Object.keys(document.components.messages).sort(), ['event.ticket.renamed', 'event.vault.flagged']);
+    s.child.kill('SIGTERM');
+    assert.equal(await s.closed, 0);
+  },
+);
+
+test(
+  'PostgreSQL: an append-only role creates through the API and is refused every update and delete',
+  { skip: liveSkip('postgres', LIVE), timeout: 300000 },
+  async (t) => {
+    const f = await pgShop(t, false, true);
+    const clerk = auth(await f.issue('clerk'));
+    const s = await serveApi(t, f, 'shop');
+    await s.started;
+    // The clerk reads only tickets: the table it appends to is not one it reads, and the create is still offered.
+    const paths = Object.keys((await (await fetch(`${s.base}/$openapi`, { headers: clerk })).json()).paths);
+    assert.ok(paths.includes('/item/commands/create-item/v1'), JSON.stringify(paths));
+    assert.ok(!paths.some((path) => path.includes('update-item') || path.includes('delete-item')), JSON.stringify(paths));
+    const created = await fetch(`${s.base}/item/commands/create-item/v1`, {
+      method: 'POST',
+      headers: { ...clerk, ...json, 'idempotency-key': 'pg-append-create-0001' },
+      body: JSON.stringify({ name: 'Gift' }),
+    });
+    assert.equal(created.status, 200, await created.clone().text());
+    const id = Number((await created.json()).result.key.id);
+    const named = async () => (await f.sql(`SELECT name FROM item WHERE id=${id}`)).rows[0];
+    assert.deepEqual(await named(), { name: 'Gift' });
+    for (const [path, attempt] of [
+      [`item/${id}/commands/update-item/v1`, 'pg-append-update-0001'],
+      [`item/${id}/commands/delete-item/v1`, 'pg-append-delete-0001'],
+    ]) {
+      const refused = await fetch(`${s.base}/${path}`, {
+        method: 'POST',
+        headers: { ...clerk, ...json, 'if-match': '"1"', 'idempotency-key': attempt },
+        body: JSON.stringify(path.includes('update') ? { name: 'Changed' } : {}),
+      });
+      assert.ok(refused.status === 403 || refused.status === 404, `${path}: ${refused.status}`);
+      await refused.body?.cancel();
+    }
+    assert.deepEqual(await named(), { name: 'Gift' });
+    assert.equal((await f.sql('SELECT count(*)::int AS n FROM item')).rows[0].n, 2);
     s.child.kill('SIGTERM');
     assert.equal(await s.closed, 0);
   },

@@ -34,7 +34,7 @@ import {
 } from '../packages/engine/src/adapters/scoped/scopeTriggers.js';
 import { readSqliteTrigger } from '../packages/engine/src/adapters/scoped/sqliteTriggers.js';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
-import { refusalCause } from '../packages/engine/src/shared/refusal.js';
+import { isAuthorFault, refusalCause } from '../packages/engine/src/shared/refusal.js';
 
 /** The field report's trigger, as written. */
 const REPRODUCER = `CREATE TRIGGER example_validation_only
@@ -530,6 +530,24 @@ test('SQLite: a writing trigger still blocks the writes that fire it, and only t
   // An update of a column no UPDATE OF names fires nothing.
   await adapter.scopeTransaction(ada(), (tx) => tx.update({ table: 'account', key: { id: 1 }, values: { status: 'frozen' } }));
   assert.equal(accounts(db)[0].status, 'frozen');
+});
+
+test("a blocking trigger's refusal is the author's to fix: the operator's terminal leads with it, the caller's words name nothing", async (t) => {
+  const { adapter } = await fixture(
+    t,
+    `CREATE TRIGGER stock_check BEFORE UPDATE ON account BEGIN
+       SELECT RAISE(ABORT, 'no stock') WHERE (SELECT count(*) FROM activity) > 99; END`,
+  );
+  const error = await adapter
+    .scopeTransaction(ada(), (tx) => tx.update({ table: 'account', key: { id: 1 }, values: { status: 'open' } }))
+    .then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+  assert.ok(error instanceof Refusal);
+  assert.equal(error.message, 'This operation is not available in the current row scope.');
+  assert.ok(isAuthorFault(error), 'a schema trigger is no fault of the person pressing the button');
+  assert.match(String(refusalCause(error)), /the trigger "stock_check" \(it reads another table\)/);
 });
 
 test('SQLite: a trigger reading another table, or disguised as validation, still blocks', async (t) => {

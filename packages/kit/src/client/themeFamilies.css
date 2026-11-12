@@ -176,7 +176,7 @@
 /* Figures that stand in columns or beside each other are tabular in every look: a table's cells and heads, a
    metric, a change, a chart's axis and legend, a record's values. Proportional figures set "1,111" narrower
    than "8,888", and a column of amounts did not align. The faces the looks wear turn only their ten figures
-   tabular (lumenLook.css, the shipped Inter), so words under it set as they did. */
+   tabular (interFace.css, the shipped Inter), so words under it set as they did. */
 /* A menu count of work past its date (counts: 'work', sidebarModel.ts) is the one said in the danger's ink. */
 :root[data-theme-style] #table-list .rows.is-overdue { color: var(--status-critical); }
 :root[data-theme-style] :is(td, th, .home-card-value, .dash-delta, .chart-tick, .chart-legend, .chart-tip-card, .pbd-count, .page-field > dd, .page-fact, .matrix-cell) { font-variant-numeric: tabular-nums; }

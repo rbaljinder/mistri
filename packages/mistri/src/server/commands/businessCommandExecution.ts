@@ -681,9 +681,11 @@ async function executeUntraced(
         const said = authorized.insertOnly?.get(table);
         if (said !== undefined) throw new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, undefined, said);
       };
+      // A binding that opens its command's transaction once per request (a public intake's) opens a keep's apart.
+      const transaction = authorized.refusalTransaction ?? authorized.commandTransaction!;
       return inWriteLanes(lanes, () =>
         attributeAction(action, () =>
-          authorized.commandTransaction!(async (records) => {
+          transaction(async (records) => {
             /* The targets as the handler's transaction held them (assertTargets): this one is fresh, and the person's
                rows may have moved since. What the keep writes the row scope holds as it holds any write. */
             const targets = async () => {
@@ -938,6 +940,8 @@ async function executeUntraced(
           const guardTarget = (key: Record<string, string | number>) => {
             if (owed.delete(commandKeyText(key))) throw new BusinessCommandExecutionError('stale_record', 'not_applied', undefined, key);
           };
+          /* The rows this command has made on its target, by key text: a public command's link names the one it made. */
+          const madeOnTarget: string[] = [];
           /* One insert as the handler asked it, written through `write`: the store's own insert for one row, one row of
              one statement for a batch (adapter.ts gathered), with the same stamps, footprint and audit either way. */
           const insertVia = async (
@@ -955,6 +959,7 @@ async function executeUntraced(
               if (unproved(error)) footprintFault ??= footprintFailure(commandId, authorized, request);
               throw error;
             }
+            if (request.table === command.target && result.key !== undefined) madeOnTarget.push(commandKeyText(result.key));
             if (auditing)
               recordChange({
                 operation: 'insert',
@@ -1117,6 +1122,10 @@ async function executeUntraced(
                   held.delete(own);
                   if (result.affected === 1) removed.add(own);
                 }
+                // A removed row's links end with it, in this transaction: a key reused later opens nothing minted before.
+                const linked = authorized.linkedTables?.get(request.table);
+                if (linked !== undefined && result.affected > 0 && typeof journal.revokeLinks === 'function')
+                  await journal.revokeLinks(authorized.actor.appId, linked, commandKeyText(request.key), undefined, now().getTime());
                 if (auditing) recordChange({ operation: 'delete', resource: request.table, key: request.key });
                 return result;
               }),
@@ -1451,6 +1460,44 @@ async function executeUntraced(
                   }
                 : {}),
             });
+            /* The rows of the machines that move with this command, read before its handler runs: the move at its end
+             is of the rows that stood then, so a row the handler inserts (the new one a "replace the earlier ones"
+             verb adds) is not moved with the old. */
+            const carriedRows = async (at: number, index: number, limit = 257) => {
+              const carried = authorized.machine!.carried![at];
+              const parent: Record<string, unknown> = { ...targets[index], ...canonicalKey(table, list.keys[index]) };
+              return (
+                await tx.query({
+                  table: carried.table,
+                  columns: [...(authorized.catalog?.[carried.table]?.key ?? []), carried.column],
+                  filter: {
+                    groups: [
+                      carried.reference.from.map((column, at) => ({
+                        column,
+                        op: '=' as const,
+                        value: parent[carried.reference.to[at]] as string | number,
+                      })),
+                    ],
+                  },
+                  limit,
+                  offset: 0,
+                })
+              ).rows;
+            };
+            const stood: Set<string>[][] = [];
+            for (const [at, carried] of (authorized.machine?.carried ?? []).entries()) {
+              const key = authorized.catalog?.[carried.table]?.key ?? [];
+              stood[at] = [];
+              for (const index of targets.keys()) {
+                const rows = await carriedRows(at, index);
+                if (rows.length > 256)
+                  throw recordRefusalCause(
+                    new BusinessCommandExecutionError('invalid_result'),
+                    `Command "${request.command}" moves more than 256 "${carried.table}" rows of one "${command.target}" with it; its audit keeps at most 256.`,
+                  );
+                stood[at][index] = new Set(rows.map((row) => carriedKey(key, row)));
+              }
+            }
             const named = command.targets === 'none' || creating ? {} : many ? { records: Object.freeze(targets) } : { record: targets[0] };
             /* A flow's notify step tells of the record its command runs on and no other, in this transaction: the
              notice is kept with the step's receipt, so a replay tells nobody twice (flowCommand.ts). */
@@ -1499,9 +1546,11 @@ async function executeUntraced(
               actorId: authorized.actor.id,
               links: authorized.links,
               rowKey:
-                (command.targets ?? 'one') === 'one' && !creating && !many && list.keys.length === 1
-                  ? commandKeyText(list.keys[0])
-                  : undefined,
+                authorized.actor.kind === 'public'
+                  ? () => (madeOnTarget.length === 1 ? madeOnTarget[0] : undefined)
+                  : (command.targets ?? 'one') === 'one' && !creating && !many && list.keys.length === 1
+                    ? commandKeyText(list.keys[0])
+                    : undefined,
               now,
             });
             const output = await withoutRevealed(revealed, () =>
@@ -1559,32 +1608,23 @@ async function executeUntraced(
              record moves along its edge, through the same writes a handler's go through — the graph, `since`
              and the audit. A row already final, or already where the command leads, stays; any other means
              the command does not apply to it, and the whole command is refused. */
-            for (const carried of authorized.machine?.carried ?? []) {
+            for (const [at, carried] of (authorized.machine?.carried ?? []).entries()) {
               const key = authorized.catalog?.[carried.table]?.key ?? [];
-              for (const [index, before] of targets.entries()) {
+              for (const index of targets.keys()) {
                 attribute(list.keys[index]);
-                const parent: Record<string, unknown> = { ...before, ...canonicalKey(table, list.keys[index]) };
-                const rows = await tx.query({
-                  table: carried.table,
-                  columns: [...key, carried.column],
-                  filter: {
-                    groups: [
-                      carried.reference.from.map((column, at) => ({
-                        column,
-                        op: '=' as const,
-                        value: parent[carried.reference.to[at]] as string | number,
-                      })),
-                    ],
-                  },
-                  limit: 257,
-                  offset: 0,
-                });
-                if (rows.rows.length > 256)
+                // What stood, and room for what the handler added beside it; past that, a row that stood could be unread.
+                const limit = stood[at][index].size + 257;
+                const rows = await carriedRows(at, index, limit);
+                const seen = new Set(rows.map((row) => carriedKey(key, row)));
+                if (rows.length === limit && [...stood[at][index]].some((row) => !seen.has(row)))
                   throw recordRefusalCause(
                     new BusinessCommandExecutionError('invalid_result'),
-                    `Command "${request.command}" moves more than 256 "${carried.table}" rows of one "${command.target}" with it; its audit keeps at most 256.`,
+                    `Command "${request.command}" inserted more than 256 "${carried.table}" rows of one "${command.target}" that moves them with it; ` +
+                      'its move reads at most 256 beside the ones that stood.',
                   );
-                for (const row of rows.rows) {
+                for (const row of rows) {
+                  // A row the command made itself is where the command meant it to be.
+                  if (!stood[at][index].has(carriedKey(key, row))) continue;
                   const state = String(row[carried.column]);
                   const to = carried.moves.get(state);
                   if (to !== undefined) {
@@ -1888,6 +1928,9 @@ function auditRefusal(command: string, change: Record<string, unknown>): string 
 }
 
 /* ---------- what a new row may carry ---------- */
+
+/** One carried row's key, as one string: a row is the same row before and after its handler. */
+const carriedKey = (key: readonly string[], row: Record<string, unknown>) => JSON.stringify(key.map((column) => String(row[column])));
 
 type Authorized = import('./businessCommandAccess.js').AuthorizedBusinessCommand;
 const developerError = (cause: string) => authorFault(new BusinessCommandExecutionError('invalid_result'), cause);

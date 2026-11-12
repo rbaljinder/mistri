@@ -208,7 +208,7 @@ try {
     },
   );
   servers.push(forecourt);
-  // Tick wears Workshop, the look an App wears by default, and so Workshop's faces (workshopLook.css).
+  // Tick wears Workshop, the look an App wears by default, and so Workshop's faces (barlowFace.css).
   const tickDb = join(scratch, 'tick.db');
   execFileSync(process.execPath, [join(root, 'examples/databases/tick/seed.mjs'), tickDb], { cwd: root, stdio: 'ignore' });
   const tick = await start('tick', ['--config', `${tickDb}.json`, '--app', 'examples/apps/tick']);

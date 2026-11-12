@@ -30,7 +30,8 @@ const agent: Identity = { id: 'account-agent', who: 'agent@example.test', role: 
 
 const partMachine = (states: Record<string, unknown>) => ({ column: 'status', since: 'moved_at', states });
 const PART = {
-  pending: { on: { install: 'installed', cancelJob: 'void' } },
+  // A refit replaces a job's parts: the earlier ones are void, and the one it adds stays pending.
+  pending: { on: { install: 'installed', cancelJob: 'void', refit: 'void' } },
   // Held parts wait on a supplier: cancelling the job does not decide what happens to them.
   held: { on: { release: 'pending' } },
   installed: { final: true },
@@ -43,11 +44,11 @@ const app = (part: Record<string, unknown> = PART) => ({
   resources: {
     job: {
       access: 'write',
-      machine: { column: 'status', states: { open: { on: { cancelJob: 'cancelled' } }, cancelled: { final: true } } },
+      machine: { column: 'status', states: { open: { on: { cancelJob: 'cancelled', refit: 'open' } }, cancelled: { final: true } } },
     },
     part: { access: 'write', machine: partMachine(part) },
   },
-  auth: { providers: ['email'], roles: { agent: { read: true, write: ['part'], commands: ['cancelJob'] } } },
+  auth: { providers: ['email'], roles: { agent: { read: true, write: ['part'], commands: ['cancelJob', 'refit'] } } },
   views: { jobs: { kind: 'list', from: 'job' } },
   home: 'jobs',
   nav: ['jobs'],
@@ -64,6 +65,15 @@ const cancelJob = (extra: Record<string, unknown> = {}) =>
     },
     ...extra,
   } as Parameters<typeof defineCommand>[0]);
+
+const refit = defineCommand({
+  source: 'shop',
+  target: 'job',
+  write: ['part'],
+  async handle({ db, record }) {
+    await db.part.insert({ job_id: record.id, status: 'pending' });
+  },
+} as Parameters<typeof defineCommand>[0]);
 
 async function database(directory: string) {
   const file = join(directory, 'shop.db');
@@ -84,11 +94,13 @@ test('the binding judges a machine that moves with a command: written, one refer
   const { db, registry } = await database(directory);
   try {
     const bound = async (part: Record<string, unknown>, command: ReturnType<typeof cancelJob>) => {
-      const manifest = parseAppConfig(app(part), 'carried', { commands: catalogOf({ cancelJob: { target: 'job' } }) });
+      const manifest = parseAppConfig(app(part), 'carried', {
+        commands: catalogOf({ cancelJob: { target: 'job' }, refit: { target: 'job' } }),
+      });
       const resources = await loadAppRuntimeResources(registry, manifest, 'shop-db');
       const binding = bindBusinessCommands({
         app: manifest,
-        registry: defineCommands({ cancelJob: command }),
+        registry: defineCommands({ cancelJob: command, refit }),
         resources,
         writableConnection: () => true,
       });
@@ -118,7 +130,7 @@ test('the binding judges a machine that moves with a command: written, one refer
 test('a run moves each of the record’s rows along its edge, leaves a finished one, and is refused whole over one that cannot move', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-carried-run-'));
   const { db, file, registry } = await database(directory);
-  const manifest = parseAppConfig(app(), 'carried', { commands: catalogOf({ cancelJob: { target: 'job' } }) });
+  const manifest = parseAppConfig(app(), 'carried', { commands: catalogOf({ cancelJob: { target: 'job' }, refit: { target: 'job' } }) });
   const pages = parsePagesConfig({ pages: [] }, 'carried pages');
   const host: AppHost = {
     app: { app: manifest, path: '/private/shop/app.ts', pages, sources: {} },
@@ -131,7 +143,7 @@ test('a run moves each of the record’s rows along its edge, leaves a finished 
     bound,
     apps: [host],
     pages,
-    commands: { appId: 'shop', registry: defineCommands({ cancelJob: cancelJob() }) },
+    commands: { appId: 'shop', registry: defineCommands({ cancelJob: cancelJob(), refit }) },
   });
   server.listen(0, bound.host);
   await once(server, 'listening');
@@ -147,11 +159,11 @@ test('a run moves each of the record’s rows along its edge, leaves a finished 
     return { status: response.status, body: (await response.json()) as Record<string, unknown> };
   };
   let requests = 0;
-  const cancel = async (id: number) => {
-    const prepared = await post('/api/commands/prepare', { command: 'cancelJob', commandVersion: 1, key: { id } });
+  const cancel = async (id: number, command = 'cancelJob') => {
+    const prepared = await post('/api/commands/prepare', { command, commandVersion: 1, key: { id } });
     assert.equal(prepared.status, 200, JSON.stringify(prepared.body));
     return post('/api/commands/execute', {
-      command: 'cancelJob',
+      command,
       commandVersion: 1,
       key: { id },
       expectedVersion: prepared.body.expectedVersion,
@@ -184,6 +196,14 @@ test('a run moves each of the record’s rows along its edge, leaves a finished 
     ]);
     // Another job's parts are its own.
     assert.deepEqual(parts(3), [[6, 'pending', false]]);
+    // A part the command inserts did not stand before it: the move is of the earlier ones alone (a field report).
+    const refitted = await cancel(3, 'refit');
+    assert.equal(refitted.status, 200, JSON.stringify(refitted.body));
+    assert.deepEqual(parts(3), [
+      [6, 'void', true],
+      // Its `since` is its entry's, stamped by the insert.
+      [7, 'pending', true],
+    ]);
   } finally {
     check.close();
     const closed = new Promise<void>((resolve) => server.close(() => resolve()));

@@ -361,3 +361,111 @@ export async function triggersAt(
   }
   return (logical) => found.get(logical);
 }
+
+/** A trigger schema.sql declares: its table, and the other tables its body (or its function's) names. */
+interface DeclaredTrigger {
+  readonly name: string;
+  readonly table: string;
+  readonly names: readonly string[];
+}
+
+const SQL_NAME = String.raw`(?:"[^"]+"|[\w$]+)(?:\.(?:"[^"]+"|[\w$]+))?`;
+/* A name's last part, unquoted and case-folded: `public."Order"` and `orders` are compared as the catalog's are loosely
+   enough that a trigger the database read is never said twice. */
+const sqlName = (name: string) => {
+  const last = /(?:"([^"]+)"|([\w$]+))$/.exec(name.trim());
+  return (last?.[1] ?? last?.[2] ?? name).toLowerCase();
+};
+
+/** `from` to the END that closes a SQLite trigger's BEGIN, counting the CASE … END inside it; undefined when it never does. */
+function sqliteBody(text: string, from: number): string | undefined {
+  let depth = 1;
+  for (const word of text.slice(from).matchAll(/\b(CASE|BEGIN|END)\b/gi)) {
+    depth += word[1]!.toUpperCase() === 'END' ? -1 : 1;
+    if (depth === 0) return text.slice(from, from + word.index);
+  }
+  return undefined;
+}
+
+/**
+ * The triggers a schema.sql declares whose body names a table but their own: SQLite's `BEGIN … END`, PostgreSQL's by
+ * the dollar-quoted body of the function it executes. A text reading, not a parse: a name counts only where it follows
+ * FROM, JOIN, INTO or UPDATE and is a table or view the same file creates (a PL/pgSQL `SELECT … INTO n` is no table),
+ * and a body it cannot find — a function in single quotes, or in another file — is left out.
+ */
+export function declaredTriggers(sql: string): DeclaredTrigger[] {
+  const text = sql.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\n]*/g, '');
+  const functions = new Map<string, string>();
+  for (const found of text.matchAll(new RegExp(String.raw`\bCREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(${SQL_NAME})\s*\(`, 'gi'))) {
+    const body = /\bAS\s+(\$[\w]*\$)([\s\S]*?)\1/i.exec(text.slice(found.index));
+    if (body) functions.set(sqlName(found[1]!), body[2]!);
+  }
+  // Strings and dollar-quoted bodies out of the way: a message that says "FROM orders" names no table.
+  const plain = (code: string) => code.replace(/'(?:[^']|'')*'/g, "''");
+  const outside = plain(text.replace(/(\$[\w]*\$)[\s\S]*?\1/g, ' '));
+  const tables = new Set(
+    [
+      ...outside.matchAll(
+        new RegExp(
+          String.raw`\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+|UNLOGGED\s+|MATERIALIZED\s+)?(?:TABLE|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?(${SQL_NAME})`,
+          'gi',
+        ),
+      ),
+    ].map((found) => sqlName(found[1]!)),
+  );
+  const declared: DeclaredTrigger[] = [];
+  const header = new RegExp(
+    String.raw`\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:CONSTRAINT\s+)?(?:TEMP(?:ORARY)?\s+)?TRIGGER\s+(?:IF\s+NOT\s+EXISTS\s+)?(${SQL_NAME})[\s\S]*?\bON\s+(${SQL_NAME})`,
+    'gi',
+  );
+  for (const found of outside.matchAll(header)) {
+    const rest = outside.slice(found.index + found[0].length);
+    const executes = new RegExp(String.raw`^[^;]*?\bEXECUTE\s+(?:FUNCTION|PROCEDURE)\s+(${SQL_NAME})`, 'i').exec(rest);
+    const begin = executes ? undefined : /^[^;]*?\bBEGIN\b/i.exec(rest);
+    const body = executes ? functions.get(sqlName(executes[1]!)) : begin ? sqliteBody(rest, begin[0].length) : undefined;
+    if (body === undefined) continue;
+    const table = sqlName(found[2]!);
+    const names = new Set<string>();
+    for (const named of plain(body).matchAll(new RegExp(String.raw`\b(?:FROM|JOIN|INTO|UPDATE)\s+(?:ONLY\s+)?(${SQL_NAME})`, 'gi'))) {
+      const name = sqlName(named[1]!);
+      if (name !== table && tables.has(name)) names.add(name);
+    }
+    if (names.size) declared.push({ name: sqlName(found[1]!), table, names: [...names] });
+  }
+  return declared;
+}
+
+/**
+ * `[schema-trigger]`: a command of a row-policy or tenant App writes a table whose trigger, as schema.sql declares it,
+ * names another table — the write is refused with 403 when it fires, and the database check read did not have the
+ * trigger to say so (a tenant App's is often made fresh, its triggers added by the migration that has not run). A
+ * trigger the database read already has is `[command-trigger]`'s to judge, and one the App names is triggerLock.ts's.
+ */
+export function schemaTriggerWarnings(
+  app: Pick<AppDef, 'auth' | 'sources' | 'resources'>,
+  commands: BusinessCommandRegistry | undefined,
+  sql: string,
+  triggersOf: (logical: string) => readonly ScopeTrigger[] | undefined,
+): string[] {
+  if (!commands || !commandsRunScoped(app)) return [];
+  const declared = declaredTriggers(sql);
+  if (!declared.length) return [];
+  const warnings: string[] = [];
+  for (const [id, command] of Object.entries(commands)) {
+    for (const table of new Set(command.write)) {
+      const logical = logicalResource(app, command.source, table);
+      const physical = sqlName(app.resources?.[logical]?.physical ?? table);
+      const known = new Set((triggersOf(logical) ?? []).map((trigger) => sqlName(trigger.name)));
+      const named = new Set((app.resources?.[logical]?.triggers ?? []).map(sqlName));
+      for (const trigger of declared) {
+        if (trigger.table !== physical || known.has(trigger.name) || named.has(trigger.name)) continue;
+        warnings.push(
+          `command "${id}" writes "${table}", whose trigger "${trigger.name}" in schema.sql names ${trigger.names.map((name) => `"${name}"`).join(', ')} ` +
+            `[schema-trigger]: under the row policy a write that fires it is refused with 403, and the database this check read ` +
+            `does not have the trigger to say which writes. ${REMEDY}`,
+        );
+      }
+    }
+  }
+  return warnings;
+}

@@ -364,8 +364,8 @@ export interface AppRoleGrant {
       names that `write` does not is append-only for the role: it reads it and
       makes new rows there, and never edits or removes one. */
   create?: false | string[];
-  /** Tables the role may export (a CSV/JSON file of every matching row) beyond those it writes, which it may always
-      export. Of what it reads. Absent: only what it writes. */
+  /** Tables the role may export (a CSV/JSON file of every matching row): a grant of its own, which writing does not
+      imply. Of what it reads. Absent (or authored `false`): none. */
   export?: string[];
   /** Explicit server command IDs only. Absent denies; never grants generic CRUD. */
   commands?: string[];
@@ -646,6 +646,9 @@ export interface AppDashSection {
   /** metric: draw the measure's last twelve months inside the card while no window stands. Needs `over`. A windowed
       metric draws its trend across the window unless this is false (dashboardTrend.ts, sparkText). */
   spark?: boolean;
+  /** metric, breakdown, chart and matrix: the measure counts a currency's minor units (cents), said in its major unit.
+      Money where `format` is unsaid; for a measure whose column has no money rule to say so (a component's). */
+  minor?: true;
   /** metric, breakdown, chart and matrix: how its figures are said where the measure is not one column's (a computed
       or averaged one has no display rule): percent — the figure is 0–100, said with % — number, money in the
       App's currency, or duration — the figure is seconds, said as "10h 2m". */
@@ -654,7 +657,7 @@ export interface AppDashSection {
   unit?: string;
   /** metric: money said exact, to the currency's minor digits at any size (the default: a balance is read to the
       cent), or `compact` from a thousand ("$28.1K"), for a revenue card glanced at. */
-  figure?: 'exact' | 'compact';
+  figure?: 'exact' | 'compact' | 'whole';
   /** metric and chart: a goal — a meter and the share reached on a card, a
       rule in the ink on a line or stacked bars. Never on a donut, which has
       no scale to rule. A metric's goal may be read from data: a second
@@ -1586,6 +1589,7 @@ export const SECTION_KEYS: Record<AppDashSection['kind'] | 'banner', readonly st
     'width',
     'target',
     'to',
+    'minor',
     'format',
     'unit',
     'figure',
@@ -1606,6 +1610,7 @@ export const SECTION_KEYS: Record<AppDashSection['kind'] | 'banner', readonly st
     'windows',
     'limit',
     'width',
+    'minor',
     'format',
     'unit',
     'target',
@@ -1633,6 +1638,7 @@ export const SECTION_KEYS: Record<AppDashSection['kind'] | 'banner', readonly st
     'width',
     'height',
     'target',
+    'minor',
     'format',
     'unit',
     'to',
@@ -1652,6 +1658,7 @@ export const SECTION_KEYS: Record<AppDashSection['kind'] | 'banner', readonly st
     'over',
     'windows',
     'width',
+    'minor',
     'format',
     'unit',
     'to',

@@ -121,10 +121,23 @@ function servedName(src: string, bytes: Buffer): string {
 }
 
 /** Every face of every theme the App registers, with where it is said: `ui.customThemes[0].type.faces[1]`. */
-function appFaces(app: Pick<AppDef, 'ui'>): Array<{ theme: ThemeDefinition; face: ThemeFaceDefinition; where: string }> {
-  return (app.ui.customThemes ?? []).flatMap((theme, t) =>
+function appFaces(app: Pick<AppDef, 'ui'> & { branding?: Pick<NonNullable<AppDef['branding']>, 'themes'> }): Array<{
+  theme: ThemeDefinition;
+  face: ThemeFaceDefinition;
+  where: string;
+}> {
+  const own = (app.ui.customThemes ?? []).flatMap((theme, t) =>
     (theme.faces ?? []).map((face, f) => ({ theme, face, where: `ui.customThemes[${t}] ("${theme.id}") type.faces[${f}]` })),
   );
+  /* The themes a tenant may pick (`branding.themes`) ship faces too, and a tenant may set its text in one: served as the
+     App's own are. A theme the App also wears is the same object, so its faces are not read twice. */
+  const worn = new Set(app.ui.customThemes ?? []);
+  const offered = (app.branding?.themes ?? [])
+    .filter((theme) => !worn.has(theme))
+    .flatMap((theme, t) =>
+      (theme.faces ?? []).map((face, f) => ({ theme, face, where: `branding.themes[${t}] ("${theme.id}") type.faces[${f}]` })),
+    );
+  return [...own, ...offered];
 }
 
 /**
@@ -134,7 +147,7 @@ function appFaces(app: Pick<AppDef, 'ui'>): Array<{ theme: ThemeDefinition; face
  * file, or past 1 MB. Undefined for an App whose themes ship no faces.
  */
 export async function readAppFonts(
-  app: Pick<AppDef, 'id' | 'ui'>,
+  app: Pick<AppDef, 'id' | 'ui' | 'branding'>,
   dir: string | undefined,
   manifest: string,
 ): Promise<AppFonts | undefined> {
@@ -203,7 +216,7 @@ export async function readAppFonts(
 }
 
 /** A build's fonts, read back from its `fonts/` folder by the names its definition carries. */
-export async function readBuiltFonts(app: Pick<AppDef, 'ui'>, dir: string, rebuild: string): Promise<AppFonts | undefined> {
+export async function readBuiltFonts(app: Pick<AppDef, 'ui' | 'branding'>, dir: string, rebuild: string): Promise<AppFonts | undefined> {
   const faces = appFaces(app);
   if (!faces.length) return undefined;
   const fonts: AppFonts = { files: {}, sources: {} };

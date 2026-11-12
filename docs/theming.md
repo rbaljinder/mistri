@@ -595,8 +595,13 @@ branding: { allow: ['logo', 'name', 'accent', 'density'], editors: ['admin'], th
 ```
 
 `allow` is a closed list: `logo`, `name`, `accent`, `palette`, `radius`,
-`density`, and `preset` (only with two or more `themes`; omitted, the one theme
-is the App's own look with its accent). Grounds, ink and recipes are never a
+`density`, `font` and `preset` (only with two or more `themes`; omitted, the one
+theme is the App's own look with its accent). `font` is a name from a closed set —
+Inter, Barlow, and each family a theme of `themes` ships in `type.faces` — and
+sets the interface's face alone, never a stack or a file. The page of a tenant that
+picked one declares the face and preloads its file in the head from the first byte
+(Inter and Barlow bring the sheet whose Arial fallback is cut to their measure), so
+the first paint is set in it and the layout does not shift. Grounds, ink and recipes are never a
 tenant's: what a tenant changes is a brand, not a design. `editors` are tenant
 roles; only their members save, never a support operator and never the
 platform realm. A `brandingForm()` dashboard section is the editor: a form

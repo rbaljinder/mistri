@@ -73,11 +73,13 @@ export interface Section {
   comparePeriod?: boolean;
   better?: 'up' | 'down';
   spark?: boolean;
+  /** metric, breakdown, chart and matrix: the measure counts a currency's minor units (cents), said in its major unit. */
+  minor?: true;
   /** metric: how its figure is said, and the word after it, where its measure has no column's rule to say it. */
   format?: FigureFormat;
   unit?: string;
   /** metric: money said exact, to the currency's minor digits at any size (the default), or compact from a thousand. */
-  figure?: 'exact' | 'compact';
+  figure?: 'exact' | 'compact' | 'whole';
   shape?: string;
   /** funnel: the stages a row reaches in order (shared/funnel.ts). */
   stages?: import('@mistriwork/engine/shared/funnel.js').FunnelStage[];
@@ -213,11 +215,19 @@ export function figure(value: unknown): string {
  * subtracts keeps its first term's dress.
  */
 function measureRule(section: Section): DisplayRule | null {
-  /* The author's word for the figure stands over the column's: "avg resolution_met * 100" is a share. */
-  if (section.format) return { format: section.format };
-  if (/\s[*/]\s/.test(section.measure ?? '')) return null;
   const m = /^(?:sum|avg|min|max|median)\s+([A-Za-z0-9_.]+)/i.exec(section.measure ?? '');
-  const rule = m && section.table ? (columnDisplay(section.table, m[1]) as DisplayRule | null) : null;
+  const column = m && section.table ? (columnDisplay(section.table, m[1]) as DisplayRule | null) : null;
+  /* The author's word for the figure stands over the column's: "avg resolution_met * 100" is a share. Money said so,
+     or counted in cents (`minor`), still keeps how the column counts it and in what currency: a cents column whose
+     display is a component has no money rule to read, and its sum said "$412,380" was a hundred times too large
+     (a field report). */
+  if (section.format || section.minor) {
+    if (section.format && section.format !== 'money') return { format: section.format };
+    const minor = section.minor || column?.minor;
+    return { format: 'money', ...(minor ? { minor: true } : {}), ...(column?.currency ? { currency: column.currency } : {}) };
+  }
+  if (/\s[*/]\s/.test(section.measure ?? '')) return null;
+  const rule = column;
   /* A query kept to one currency says its figures in it. */
   const path = rule?.format === 'money' ? currencyPath(rule, m![1]) : undefined;
   const pinned = path ? pinnedCurrency(section.query, path) : undefined;
@@ -295,7 +305,7 @@ export function sayer(
   section: Section,
   measured?: unknown,
   /* A metric card's own figure, its change and its goal: money exact, or compact from a thousand (CARD_COMPACT) where
-     the metric says `figure: 'compact'`; `whole`, exact at any size, for the card's title; `compact`, a legend's
+     the metric says `figure: 'compact'`, or whole, to the major unit, where it says `figure: 'whole'`; `whole`, exact at any size, for the card's title; `compact`, a legend's
      figures compact from a thousand. */
   { card = false, whole = false, compact = false }: { card?: boolean; whole?: boolean; compact?: boolean } = {},
 ): ((value: unknown) => string) & { tick: (value: unknown) => string; among: (values: readonly unknown[]) => (value: unknown) => string } {
@@ -307,6 +317,8 @@ export function sayer(
     dress,
     section.unit,
     whole ? EXACT : compact ? CARD_COMPACT : card ? (section.figure === 'compact' ? CARD_COMPACT : EXACT) : COMPACT_FROM,
+    /* `figure: 'whole'` rounds a card's money to the major unit: a six-figure sum with cents wrapped in a quarter-width card. */
+    card && !whole && section.figure === 'whole' ? false : undefined,
   );
   /* Figures said side by side, in one form: where every one is a thousand or more, money drops its cents, so
      "$67,713.40" never stands beside "$17,970" in one breakdown; else every figure says cents if one has some. */
@@ -315,9 +327,12 @@ export function sayer(
     const minor = dress.minor ? 10 ** currencyDigits(dress.currency || defaultCurrency()) : 1;
     const majors = values.filter((v) => v !== null && v !== undefined && v !== '').map((v) => Number(v) / minor);
     const large = majors.length > 0 && majors.every((n) => Math.abs(n) >= 1000);
-    /* Cents for every figure where one has some and none is large; else none. */
-    const cents = !large && majors.some((n) => Number.isFinite(n) && Math.round(n * 100) % 100 !== 0);
-    const one = (v: unknown) => dressedFigure(dress, v, cents) ?? said(v);
+    /* Where one figure reaches a hundred thousand every one goes compact from a thousand, as a legend's do: "$412.4K"
+       beside "$27,300.00" read as two formats in one breakdown, and grade said so (a field report). */
+    const compact = majors.some((n) => Number.isFinite(n) && Math.abs(n) >= COMPACT_FROM);
+    /* Cents for every figure where one has some and none is large or compact; else none. */
+    const cents = !large && !compact && majors.some((n) => Number.isFinite(n) && Math.round(n * 100) % 100 !== 0);
+    const one = (v: unknown) => dressedFigure(dress, v, cents, compact ? CARD_COMPACT : COMPACT_FROM) ?? said(v);
     return section.unit ? (v: unknown) => withUnit(one(v), section.unit!) : one;
   };
   return Object.assign(said, { tick: tickSayer(dress, section.unit), among });
@@ -359,9 +374,15 @@ function tickSayer(rule: DisplayRule | null, unit?: string): ((value: unknown) =
  * average or a ratio to a headline's precision; then the unit. A dashboard's
  * metric and a record page's say a figure the same way.
  */
-export function figureSayer(rule: DisplayRule | null, unit?: string, compactFrom = COMPACT_FROM): (value: unknown) => string {
+export function figureSayer(
+  rule: DisplayRule | null,
+  unit?: string,
+  compactFrom = COMPACT_FROM,
+  /** `false`: money to the currency's major unit, no minor digits (a metric's `figure: 'whole'`). */
+  cents?: boolean,
+): (value: unknown) => string {
   const said = (v: unknown) =>
-    dressedFigure(rule, v, undefined, compactFrom) ?? sharedFigure(rule, v) ?? durationFigure(rule, v) ?? measuredFraction(v) ?? figure(v);
+    dressedFigure(rule, v, cents, compactFrom) ?? sharedFigure(rule, v) ?? durationFigure(rule, v) ?? measuredFraction(v) ?? figure(v);
   return unit ? (v) => withUnit(said(v), unit) : said;
 }
 

@@ -80,7 +80,8 @@ before(async () => {
   put('assets/tiny-Zz9_yY8w.css', CSS, false);
   put('assets/lumenLook-Lm1_x.css', CSS, false);
   put('assets/sageLook-Sg2_y.css', CSS, false);
-  /* Lumen's face (lumenLook.css): a font is compressed already, so the build writes no copy beside it. */
+  put('assets/interFace-If4_w.css', CSS, false);
+  /* Lumen's face (interFace.css): a font is compressed already, so the build writes no copy beside it. */
   put('assets/inter-latin-In3_z.woff2', FONT, false);
   writeFileSync(join(root, 'secret.txt'), SECRET);
   const serve = builtClient(dir);
@@ -93,7 +94,7 @@ before(async () => {
         : url.startsWith('/voice-app/')
           ? { title: 'Voice App', microphone: true as const }
           : url.startsWith('/lumen-app/')
-            ? { title: 'Lumen App', looks: ['lumen'], faces: ['lumen'] }
+            ? { title: 'Lumen App', looks: ['lumen', 'inter'], faces: ['inter'] }
             : url.startsWith('/borrowing-app/')
               ? { title: "A theme on Sage with one of Lumen's recipes", looks: ['sage', 'lumen'] }
               : undefined;
@@ -391,6 +392,8 @@ test("an App's page asks for its look's sheet beside the entry, and for no other
   // Ahead of the entry's own script, so the two are fetched together rather than one after the other.
   assert.ok(preload < page.indexOf(`src="/${ENTRY}"`));
   assert.doesNotMatch(page, /sageLook/);
+  // Its face is a sheet of its own, asked for beside it.
+  assert.ok(page.includes('<link rel="preload" as="style" crossorigin href="/assets/interFace-If4_w.css">'), page.slice(0, 600));
   // And for the face the sheet declares, beside it: a font's preload is in CORS mode, as its fetch always is.
   const face = page.indexOf('<link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/inter-latin-In3_z.woff2">');
   assert.ok(face > 0, page.slice(0, 600));
@@ -408,14 +411,15 @@ test("the face is asked for where the App's look is set in it, not wherever its 
   const { lookFacesFor, lookSheetsFor } = await import('../packages/engine/src/server/clientSurface.js');
   const { compileTheme } = await import('../packages/mistri/src/shared/themeSpec.js');
   const { themePreset } = await import('../packages/engine/src/shared/themePresets.js');
-  assert.deepEqual(lookFacesFor({}), ['workshop'], 'an App that names no look wears Workshop, set in Barlow');
-  assert.deepEqual(lookFacesFor({ theme: { preset: 'lumen' } }), ['lumen']);
+  assert.deepEqual(lookFacesFor({}), ['barlow'], 'an App that names no look wears Workshop, set in Barlow');
+  assert.deepEqual(lookFacesFor({ theme: { preset: 'lumen' } }), ['inter']);
   assert.deepEqual(lookFacesFor({ theme: { preset: 'sage' } }), []);
   assert.deepEqual(lookFacesFor({ theme: { preset: 'mono' } }), []);
   assert.deepEqual(lookFacesFor(undefined), [], 'the Workbench');
   const borrowing = compileTheme({ id: 'harbor', label: 'Harbor', extends: 'sage', recipes: { avatar: 'round' } }, 'harbor', themePreset);
   const harbor = { theme: { preset: 'harbor' }, customThemes: [borrowing] };
   assert.ok(lookSheetsFor(harbor).includes('lumen'), "Lumen's round avatars are in Lumen's sheet");
+  assert.ok(!lookSheetsFor(harbor).includes('inter'), "but Harbor is not set in Inter, so Inter's sheet stays unfetched");
   assert.deepEqual(lookFacesFor(harbor), [], "but Harbor is set in Sage's face");
   const serif = compileTheme(
     { id: 'paper', label: 'Paper', extends: 'lumen', type: { font: { ui: 'Georgia, serif', heading: 'Georgia, serif' } } },

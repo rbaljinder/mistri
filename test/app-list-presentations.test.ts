@@ -127,7 +127,10 @@ test('queue and board parsers refuse unknown kinds, keys, paths and malformed la
       () => parse({ presentation: { ...board, primary: value } }),
       /presentation: "primary" must be a local column or a one-hop label path/,
     );
-    assert.throws(() => parse({ presentation: { ...board, lines: [value] } }), /presentation, lines: "0" must name a local column/);
+    assert.throws(
+      () => parse({ presentation: { ...board, lines: [value] } }),
+      /presentation, lines: "0" must be a local column or a one-hop label path/,
+    );
   }
   /* A queue with no `primary` says the record's name (42297f25); one that names it still names a column. */
   assert.equal(
@@ -226,6 +229,21 @@ test('a queue or a board titles its cards by a reference, or by a label path thr
   assert.throws(() => parse({ presentation: { ...board, primary: 'a.b.c' } }), /"primary" must be a local column or a one-hop label path/);
   assert.match(problem({ ...queue, primary: 'count' })!, /Queue primary must be a text column/);
   assert.match(problem({ ...board, primary: 'count' })!, /Board primary must be a text column, or a reference/);
+  /* A board's line and footer facts read through a reference too, one hop, as a queue's lines do. */
+  assert.equal(
+    problem({ ...board, lines: ['owner_id.title'], footer: ['owner_id.title', { column: 'owner_id.count', icon: 'calendar' }] }),
+    undefined,
+  );
+  assert.deepEqual(
+    (
+      (parse({ presentation: { ...board, footer: ['owner_id.title', { column: 'count' }] } }).views.tasks as AppListView)
+        .presentation as AppBoardList
+    ).footer,
+    [{ column: 'owner_id.title' }, { column: 'count' }],
+  );
+  assert.match(problem({ ...board, lines: ['owner_id.nope'] })!, /Board lines\[0\]: "owner_id.nope" is not a readable one-hop/);
+  assert.match(problem({ ...board, footer: ['owner_id.nope'] })!, /Board footer\[0\]: "owner_id.nope" is not a readable one-hop/);
+  assert.throws(() => parse({ presentation: { ...board, footer: ['a.b.c'] } }), /one-hop label path/);
 });
 
 test("a join table's list opens the record a reference names: a reference column, from a grid only", () => {
@@ -500,7 +518,7 @@ test("JSON schema offers the list kinds and names a bulk action's command", () =
     for (const key of ['primary', 'checked', 'by', 'lines']) {
       if (!option.properties[key]) continue;
       // Cards, queues, calendars, trees and gantt charts may follow one reference (a card's title too, since 0.8.14).
-      if (key === 'lines' && ['cards', 'queue', 'calendar', 'tree'].includes(option.properties.kind.const)) continue;
+      if (key === 'lines' && ['cards', 'queue', 'calendar', 'tree', 'board'].includes(option.properties.kind.const)) continue;
       if (key === 'primary' && ['cards', 'queue', 'calendar', 'tree', 'gantt', 'board'].includes(option.properties.kind.const)) continue;
       // A gantt chart's rows may be named through one reference (`owner_id.name`); a board's lanes stay its own column.
       if (key === 'by' && option.properties.kind.const === 'gantt') continue;

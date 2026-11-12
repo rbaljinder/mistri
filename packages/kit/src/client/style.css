@@ -1698,6 +1698,9 @@ button.danger { background: var(--status-critical); color: var(--surface); borde
   }
   body.app-mode .record-summary dl > div { position: relative; block-size: var(--summary-line); align-items: center; overflow: hidden; }
   body.app-mode .record-summary dl > div[data-empty] { display: none; }
+  /* A fact is one line, cut at its end with an ellipsis: a long value wrapped inside the line box and, centred in it,
+     showed its middle two lines over the card's rule (a field report). The whole value is a click away, in the record. */
+  body.app-mode .record-summary dd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   body.app-mode .record-summary dt {
     position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; overflow: hidden;
     clip-path: inset(50%); white-space: nowrap; border: 0;

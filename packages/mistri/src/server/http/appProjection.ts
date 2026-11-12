@@ -139,6 +139,8 @@ export function browserApp(ctx: RequestContext, source: ResolvedSource) {
       host.app.app.auth && !identity.id ? { signedIn: false } : { signedIn: true, roles: host.app.app.auth ? roles : [] },
     );
   if (app && host?.app.app.auth && !identity.id) app = withoutSignedInParts(app, schema);
+  /* The roles the reader holds, for a component that offers by role (`useViewer().roles`); the server still decides every request. */
+  if (app && host?.app.app.auth && identity.id) app = { ...app, viewerRoles: [...roles] };
   /* Export is a grant of its own in an App that grants by role (appExportable): the tables this reader may export,
      and no Export menu at all when there are none. The export route refuses the same. */
   const exportable = app && host ? appExportable(host.app.app, schema!, roles, Boolean(identity.id)) : undefined;

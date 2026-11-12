@@ -418,6 +418,7 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
       'type',
       'label',
       'help',
+      'placeholder',
       'optional',
       'min',
       'max',
@@ -472,10 +473,19 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
     throw new Error(
       `${where} (a lines field) ${unknownKey('help', ['type', 'label', 'from', 'show', 'copy', 'query', 'min', 'max', 'description'])}.`,
     );
+  /* Example text inside an empty box: only a box has one, as a resource form's field takes it. */
+  if (f.placeholder !== undefined) {
+    if (!(['text', 'textarea', 'number', 'money'] as unknown[]).includes(f.type) || f.as === 'rating' || f.as === 'slider')
+      return fail(
+        where,
+        `placeholder is example text inside an empty text, number or money box; a ${String(f.as ?? f.type)} field has none`,
+      );
+  }
   const base = {
     name: key,
     label: f.label === undefined ? fieldLabel(key) : caption(f.label, where, 120),
     ...(f.help === undefined ? {} : { help: caption(f.help, where) }),
+    ...(f.placeholder === undefined ? {} : { placeholder: caption(f.placeholder, where, 256) }),
     ...((f.type === 'group' || f.type === 'lines') && f.description !== undefined ? { help: caption(f.description, where) } : {}),
     ...(f.optional === true ? {} : { required: true }),
     ...(f.when === undefined ? {} : { when: fieldWhen(f, where, rules) }),
@@ -490,7 +500,7 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
   };
   const sibling = (key: 'below' | 'above') => (f[key] === undefined ? {} : { [key]: name(f[key], where) });
   if (f.type === 'text' || f.type === 'textarea') {
-    only(['min', 'max', 'format', 'pattern', 'message', 'case', 'mask', 'sensitive']);
+    only(['placeholder', 'min', 'max', 'format', 'pattern', 'message', 'case', 'mask', 'sensitive']);
     /* A code the camera reads is typed through no mask and never hidden: what was read is shown, to be corrected. A
        color is its own format, `#rrggbb`, which the picker writes and nothing else needs to say. */
     if (base.as === 'scan' && (f.mask !== undefined || f.sensitive !== undefined))
@@ -601,8 +611,8 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
   if (f.type === 'number' || f.type === 'money') {
     only(
       f.type === 'money'
-        ? ['min', 'max', 'step', 'minor', 'currency', 'below', 'above', 'live']
-        : ['min', 'max', 'integer', 'step', 'below', 'above', 'live', 'outOf'],
+        ? ['placeholder', 'min', 'max', 'step', 'minor', 'currency', 'below', 'above', 'live']
+        : ['placeholder', 'min', 'max', 'integer', 'step', 'below', 'above', 'live', 'outOf'],
     );
     /* Stars: a whole number from one to the scale, which is its bounds, so it is said once (`outOf`) and the parser
        below holds it to them as it holds any integer field. */

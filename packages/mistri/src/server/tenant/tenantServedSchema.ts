@@ -10,6 +10,7 @@ import { computedConstants } from '../../shared/appComputed.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { foldConstants, readStatementInstantFrom, type ComputedNode } from '@mistriwork/engine/shared/computed.js';
 import { readsOf } from '@mistriwork/engine/shared/query.js';
+import { literalDefault } from '@mistriwork/engine/shared/formValues.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { captureTenantData, denyTenant } from '@mistriwork/engine/server/evidence.js';
 import type { TenantCapabilities } from './tenantCapabilities.js';
@@ -242,20 +243,31 @@ function servedAfresh(context: ServedContext, app: AppDef, now: Date, me: string
       insertable: context.capabilities?.resources[table.id]?.insertable ?? false,
       deletable: context.capabilities?.resources[table.id]?.deletable ?? false,
       ...(context.capabilities?.resources[table.id]?.appendOnly ? { appendOnly: true } : {}),
-      columns: table.columns.map((column) => ({
-        name: column.name,
-        type: column.type,
-        nullable: column.nullable,
-        primaryKey: column.primaryKey,
-        writable: context.capabilities?.resources[table.id]?.write.includes(column.name) ?? false,
-        ...(column.identity === undefined ? {} : { identity: column.identity }),
-        ...(column.default === undefined ? {} : { hasDefault: true }),
-        ...(column.references === undefined ? {} : { references: column.references }),
-        ...(column.allowed === undefined ? {} : { allowed: column.allowed }),
-        ...(column.flag ? { flag: true } : {}),
-        ...(column.scale === undefined ? {} : { scale: column.scale }),
-        ...(column.text === undefined ? {} : { text: column.text }),
-      })),
+      columns: table.columns.map((column) => {
+        const writable = context.capabilities?.resources[table.id]?.write.includes(column.name) ?? false;
+        /* The SQL default stays private (a sequence, a function, a physical name), but a plain value on a column this
+           reader writes is only what the New form would write for them: served, it is the choice the form opens on
+           or the value it says, where a bare presence could only say "the database supplies one" (a field report). */
+        const literal = writable ? literalDefault(column.default) : undefined;
+        return {
+          name: column.name,
+          type: column.type,
+          nullable: column.nullable,
+          primaryKey: column.primaryKey,
+          writable,
+          ...(column.identity === undefined ? {} : { identity: column.identity }),
+          ...(literal !== undefined
+            ? { default: `'${literal.replace(/'/g, "''")}'` }
+            : column.default === undefined
+              ? {}
+              : { hasDefault: true }),
+          ...(column.references === undefined ? {} : { references: column.references }),
+          ...(column.allowed === undefined ? {} : { allowed: column.allowed }),
+          ...(column.flag ? { flag: true } : {}),
+          ...(column.scale === undefined ? {} : { scale: column.scale }),
+          ...(column.text === undefined ? {} : { text: column.text }),
+        };
+      }),
     })),
     foreignKeys,
   };

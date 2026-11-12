@@ -9,7 +9,7 @@ grants or sign-in needs a restart (`mistri docs reload-and-restart`).
 
 - **A stable `id`** before anyone signs in: it names the account store and,
   beside other Apps, every address —
-  [lintel/app.ts:50](../../../examples/apps/lintel/app.ts#L50).
+  [lintel/app.ts:52](../../../examples/apps/lintel/app.ts#L52).
 - **A foreign key in the database, not a declared reference.** Reference
   links, label paths, related lists, rollups and `whose` all follow foreign
   keys: add a missing one by migration. Declare `references` only when the
@@ -21,11 +21,11 @@ grants or sign-in needs a restart (`mistri docs reload-and-restart`).
   `source.table` in every view, path and grant, and sources on different
   connections share no joins or transactions; one PostgreSQL database with
   several schemas is a source per `{ connection, schema }` (`mistri docs sources`) —
-  [lintel/app.ts:54](../../../examples/apps/lintel/app.ts#L54).
+  [lintel/app.ts:57](../../../examples/apps/lintel/app.ts#L57).
 - **Declare resources one by one** when they carry access, display or forms
   (`{}` for a table read only as a label); `resources: 'all'` suits a
   read-mostly source. Every declared table is served whole to whoever reads it —
-  [lintel/app.ts:56](../../../examples/apps/lintel/app.ts#L56).
+  [lintel/app.ts:58](../../../examples/apps/lintel/app.ts#L58).
 - **Dates stored as text** (SQLite `TEXT`) are declared on the resource,
   `types: { due_on: 'date', created_at: 'datetime' }`: without it a date is a
   string, so `month due_on`, `relative` and the calendar have nothing to read
@@ -39,7 +39,7 @@ grants or sign-in needs a restart (`mistri docs reload-and-restart`).
 | --- | --- | --- |
 | No `auth` | one person on loopback, or behind a proxy that signs people in; every declared column reaches every browser | `mistri docs access-model` |
 | `auth` without `roles` | everyone signed in may read and write the same things | `mistri docs roles` |
-| `auth.roles` | people differ by what they may read, write or decide; each role grants within the resources' `access` ceilings | [lintel/app.ts:62](../../../examples/apps/lintel/app.ts#L62) |
+| `auth.roles` | people differ by what they may read, write or decide; each role grants within the resources' `access` ceilings | [lintel/app.ts:64](../../../examples/apps/lintel/app.ts#L64) |
 | `rows: 'policy'` | a reader sees only their own rows; a server-only `defineAppRowPolicy` says which | [lintel/policy.ts:91](../../../examples/apps/lintel/policy.ts#L91) |
 | `rows: 'tenant'` | one App serves several organizations, each seeing only its own | `mistri docs tenant-apps` |
 
@@ -50,9 +50,9 @@ is shown, not what is served.
   `defaultRole` is what a stranger gets, so name the role with the fewest
   grants (`mistri docs roles`).
 - **Who "me" is**: `auth.me` matches an account to its row —
-  [lintel/app.ts:60](../../../examples/apps/lintel/app.ts#L60).
+  [lintel/app.ts:63](../../../examples/apps/lintel/app.ts#L63).
 - **A column a role must not read**: a `fields` ceiling —
-  [lintel/app.ts:88](../../../examples/apps/lintel/app.ts#L88).
+  [lintel/app.ts:90](../../../examples/apps/lintel/app.ts#L90).
 - **Decisions only through commands**: `access: 'write'` on the resource as
   the commands' ceiling, no role granted `write`, each role its `commands` —
   [lintel/app.ts:24](../../../examples/apps/lintel/app.ts#L24) (a lease moves only by its commands).
@@ -71,7 +71,7 @@ is shown, not what is served.
 - **Leave `track` out**; `track: 'audit'` only where every change must be kept
   (`mistri docs commands`).
 - **Open pages that follow other people's changes**: `live: true` at the App's
-  top — [lintel/app.ts:53](../../../examples/apps/lintel/app.ts#L53); off
+  top — [lintel/app.ts:55](../../../examples/apps/lintel/app.ts#L55); off
   unless asked. A resource whose writes nobody watches stays out with
   `live: false`.
 - **A field a model may fill**: a `defineDecision` in the jobs module, answered
@@ -84,7 +84,7 @@ is shown, not what is served.
 
 - **Signed-out reads are named per resource**: `auth.public.read`, needs
   `auth.roles`; `read: true` is refused —
-  [lintel/app.ts:138](../../../examples/apps/lintel/app.ts#L138).
+  [lintel/app.ts:141](../../../examples/apps/lintel/app.ts#L141).
 - **A public form is write-only**: `public: true` on the `commandForm`
   ([lintel/views.ts:38](../../../examples/apps/lintel/views.ts#L38)) and its command, whose `output`
   is a reference and a fixed sentence

@@ -28,7 +28,8 @@ interface HandlerLinks {
 
 /**
  * `links` is what the authorizer let this actor mint (AuthorizedBusinessCommand.links); `rowKey` is the record's key
- * text (commandKeyText), absent where the command names no one existing record.
+ * text (commandKeyText), absent where the command names no one existing record. A public command names none: its
+ * `rowKey` is asked when it mints, and answers the one row it has made on its target by then, or nothing.
  */
 export function handlerLinks(options: {
   journal: CommandJournal;
@@ -38,25 +39,31 @@ export function handlerLinks(options: {
   command: string;
   actorId: string;
   links: Readonly<Record<string, AppLinkDef>> | undefined;
-  rowKey: string | undefined;
+  rowKey: string | undefined | (() => string | undefined);
   now: () => Date;
 }): HandlerLinks {
   const queued: Omit<CommandLinkRow, 'receipt'>[] = [];
-  const declared = (name: unknown): AppLinkDef => {
+  const made = typeof options.rowKey === 'function';
+  const rowKey = (): string | undefined => (typeof options.rowKey === 'function' ? options.rowKey() : options.rowKey);
+  const declared = (name: unknown): { def: AppLinkDef; rowKey: string } => {
     const def = typeof name === 'string' && options.links && Object.hasOwn(options.links, name) ? options.links[name] : undefined;
-    if (!def || options.rowKey === undefined)
+    const key = rowKey();
+    if (!def || key === undefined)
       throw new TypeError(
-        options.links && options.rowKey !== undefined
+        options.links && key !== undefined
           ? `Command "${options.command}" asked for a link "${String(name)}", which resource "${options.resource}" does not declare (links).`
-          : `Command "${options.command}" cannot mint a link: one is minted by a person or a service, on the one existing record a ` +
-              `command targets, in an App that serves links.`,
+          : made && options.links
+            ? `Command "${options.command}" cannot mint a link yet: a public command mints one on the one record it has made on ` +
+              `"${options.resource}", so it inserts exactly one first.`
+            : `Command "${options.command}" cannot mint a link: one is minted by a person or a service, on the one existing record a ` +
+              `command targets, or by a public command on the one record it made, in an App that serves links.`,
       );
-    return def;
+    return { def, rowKey: key };
   };
   return {
     queued,
     async link(name) {
-      const def = declared(name);
+      const { def, rowKey } = declared(name);
       if (typeof options.journal.mintLink !== 'function') throw new CommandLinkUnavailable();
       const at = options.now().getTime();
       const row = {
@@ -64,7 +71,7 @@ export function handlerLinks(options: {
         app: options.appId,
         tenant: options.tenant,
         resource: options.resource,
-        rowKey: options.rowKey!,
+        rowKey,
         name,
         expiresAt: at + def.expires,
         usesLeft: def.uses ?? null,
@@ -79,12 +86,12 @@ export function handlerLinks(options: {
       return new LinkRef(row.id);
     },
     async revokeLinks(name) {
-      if (name !== undefined) declared(name);
-      else if (!options.links || options.rowKey === undefined) declared(undefined);
+      const key = name !== undefined ? declared(name).rowKey : options.links ? rowKey() : undefined;
+      if (key === undefined) declared(undefined);
       if (typeof options.journal.revokeLinks !== 'function') throw new CommandLinkUnavailable();
       // A mint queued in this command and revoked in it is never written.
       for (let at = queued.length - 1; at >= 0; at--) if (name === undefined || queued[at].name === name) queued.splice(at, 1);
-      return options.journal.revokeLinks(options.appId, options.resource, options.rowKey!, name, options.now().getTime());
+      return options.journal.revokeLinks(options.appId, options.resource, key!, name, options.now().getTime());
     },
   };
 }

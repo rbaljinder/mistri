@@ -4,16 +4,19 @@
  * refuse them. One table means a rename cannot reach `check` without reaching `upgrade`; test/upgrade.test.ts holds
  * that every row here is handled there.
  *
- * Kept free of imports so the browser's block reader (client/components/sdk/blocks.tsx) and the CLI can both read it.
+ * Kept free of imports but the engine's own tables and the theme's recipe menu, which are free of them too, so the
+ * browser's block reader (client/components/sdk/blocks.tsx) and the CLI can both read it.
  */
 
-/** A word renamed: what it is now (`to`, absent when it is gone or moved), and the sentence the loader says. */
-interface RenamedWord {
-  from: string;
-  to?: string;
-  /** What follows "which is now" in the loader's refusal. */
-  now: string;
-}
+import {
+  CUSTOM_SECTION_RENAMED,
+  LINK_INTENT_RENAMED,
+  SECTION_RENAMED,
+  type RenamedWord,
+} from '@mistriwork/engine/shared/renamedSectionWords.js';
+import { RECIPES_RENAMED } from '@mistriwork/engine/shared/themeRecipes.js';
+
+export { CUSTOM_SECTION_RENAMED };
 
 /** The loader's `{ old: sentence }` form of a table. */
 export function renamedMessages(rows: readonly RenamedWord[]): Record<string, string> {
@@ -64,13 +67,6 @@ export const CARDS_RENAMED: readonly RenamedWord[] = [
 export const METRIC_SECTION_RENAMED: readonly RenamedWord[] = [
   { from: 'view', to: 'to', now: '"to": metric(title, from, { to: \'overdue_list\' }) opens the list view it names' },
 ];
-export const CUSTOM_SECTION_RENAMED: readonly RenamedWord[] = [
-  {
-    from: 'totals',
-    to: 'figures',
-    now: '"figures": the named aggregate reads its component receives as figures.<name> ("totals" is a list\'s footer of sums)',
-  },
-];
 export const VIEW_SECTION_RENAMED: readonly RenamedWord[] = [
   { from: 'tab', to: 'listTab', now: 'is now "listTab": the list tab\'s address word' },
 ];
@@ -93,6 +89,9 @@ const STREAM_RENAMED: readonly RenamedWord[] = [
   { from: 'detail', to: 'badge', now: 'badge' },
 ];
 
+/* A theme's recipe parts (themeRecipes.ts keeps them as `{ old: new }`, the menu the first paint reads). */
+const RECIPES_RENAMED_WORDS: readonly RenamedWord[] = Object.entries(RECIPES_RENAMED).map(([from, to]) => ({ from, to, now: to }));
+
 /** Every table above by the name `mistri upgrade` files its rows under, for the test that holds none is dropped. */
 export const RENAMED_TABLES: Readonly<Record<string, readonly RenamedWord[]>> = {
   page: PAGE_RENAMED,
@@ -108,4 +107,9 @@ export const RENAMED_TABLES: Readonly<Record<string, readonly RenamedWord[]>> = 
   branding: BRANDING_RENAMED,
   block: BLOCK_RENAMED,
   stream: STREAM_RENAMED,
+  /* The engine's: a record page's sections and a call to action's link. A config file's page (`onlyOn`) is not here:
+     no App source writes one. */
+  section: SECTION_RENAMED,
+  link: LINK_INTENT_RENAMED,
+  recipes: RECIPES_RENAMED_WORDS,
 };

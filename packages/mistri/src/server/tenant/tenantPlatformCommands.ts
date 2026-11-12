@@ -34,7 +34,7 @@ import {
   type BusinessCommandResult,
   type BusinessCommandStatus,
 } from '../commands/businessCommandExecution.js';
-import { validateBusinessCommandReferences } from '../commands/businessCommandLoader.js';
+import { unofferedRefusal, validateBusinessCommandReferences } from '../commands/businessCommandLoader.js';
 import { defineCommands, type AnyBusinessCommand, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { readCommandInput } from '../../shared/commandInput.js';
 import { assertLookupOwners, scopedLookupReader } from '../commands/commandLookup.js';
@@ -630,7 +630,7 @@ export function bindPlatformCommands<Request>(runtime: PlatformRequestRuntime<Re
                 authorize: (command) => {
                   own(command);
                   const authorization = authorizer.authorize(command, actor);
-                  if (!references.has(command)) return deny();
+                  if (!references.has(command)) throw unofferedRefusal(new AppAccessDenied(), command);
                   return authorization;
                 },
                 extractor: (command) => extractors.get(command)!,
@@ -641,7 +641,7 @@ export function bindPlatformCommands<Request>(runtime: PlatformRequestRuntime<Re
               const authorization = authorizer.authorize(prepared.command, actor);
               if (prepared.commandVersion !== authorization.command.version)
                 throw new BusinessCommandExecutionError('command_version_mismatch', 'unknown');
-              if (!references.has(prepared.command)) return deny();
+              if (!references.has(prepared.command)) throw unofferedRefusal(new AppAccessDenied(), prepared.command);
               const capturedFlags = await flags();
               return await withPreparedAhead(authorization.command, authorization.catalog, prepared.key, () =>
                 scope.commandTransaction(

@@ -1032,10 +1032,14 @@ export async function startServing(
        host's server is already taking traffic. */
     const startBackground = (): boolean => {
       try {
+        /* MISTRI_JOBS=off: shot and grade look at an App and must not change its database, which a scheduled job does.
+           The endpoints inbound jobs answer still answer; nothing is scheduled or sent. */
+        const jobsOff = process.env.MISTRI_JOBS === 'off';
+        if (jobsOff && (jobHost || effectHost)) console.log('mistri: jobs and effects are off (MISTRI_JOBS=off): nothing is scheduled.');
         if (jobHost || inbound) {
           jobApp.current = () => serving.apps[0].app.app;
-          for (const line of jobLines) console.log(`mistri: ${line}`);
-          jobHost?.start();
+          if (!jobsOff) for (const line of jobLines) console.log(`mistri: ${line}`);
+          if (!jobsOff) jobHost?.start();
         }
         /* Objects no row names (deleted records', refused uploads') are the sweep's: the jobs host runs it daily; without one, cron does. */
         for (const line of unsweptBuckets(
@@ -1045,7 +1049,7 @@ export async function startServing(
           console.log(`mistri: ${line}`);
         analytics?.start();
         contactMail?.start();
-        if (effectHost) {
+        if (effectHost && !jobsOff) {
           for (const line of effectLines) console.log(`mistri: ${line}`);
           effectHost.start();
         }

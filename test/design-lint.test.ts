@@ -168,7 +168,7 @@ describe('mistri check --design', () => {
         customer: {},
         line: {},
         sales_order: {
-          recordLabel: 'Order of {ordered_on}',
+          recordLabel: 'Order of {total}',
           view: undefined,
           form: { show: ['status', 'total'] },
           actions: [
@@ -702,7 +702,7 @@ describe('mistri check --design', () => {
     assert.equal(forward({ destructive: ['withdraw'] }).length, 0);
   });
 
-  test('a day beside the parent it tells apart is a name; a day alone is not', () => {
+  test('a date or a timestamp in a record label is said as its day by the platform, so it is no smell; an amount still is', () => {
     const label = (recordLabel: string) =>
       designLint(
         { ...composed, resources: { ...composed.resources, sales_order: { ...composed.resources!.sales_order, recordLabel } } } as AppDef,
@@ -710,7 +710,8 @@ describe('mistri check --design', () => {
         schema,
       ).filter((finding) => finding.code === 'raw-label');
     assert.equal(label('{customer_id.name} · ordered {ordered_on}').length, 0, 'a periodic record by its parent and its day');
-    assert.equal(label('Order of {ordered_on}').length, 1);
+    assert.equal(label('Order of {ordered_on}').length, 0, 'a day alone is formatted too');
+    assert.equal(label('Order of {total}').length, 1);
   });
 
   test('a heading that names no content is said, on a page and in a New form', () => {

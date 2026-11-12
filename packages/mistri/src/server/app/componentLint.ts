@@ -34,7 +34,7 @@ import { basename, dirname, join } from 'node:path';
 import type { AppDef } from '../../shared/appModel.js';
 import type { CompiledComponents } from './appComponents.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { astParser, pageLinks, scanPageSource } from './appPages.js';
+import { astParser, componentCommands, pageLinks, scanPageSource } from './appPages.js';
 import { nearestToken, RENAMED_TOKENS, UI_TOKENS } from '@mistriwork/kit/shared/uiTokens.js';
 import { APP_ICONS, parseIcon } from '@mistriwork/engine/shared/appIcons.js';
 
@@ -408,7 +408,8 @@ export function pageManifestsOf(app: { views: AppDef['views']; nav?: AppDef['nav
 
 /**
  * Every finding in an App's component sources; a free-form page's are also held to the reads and commands it declares,
- * and with the App's catalog to the tables its literal paths reach.
+ * and with the App's catalog to the tables its literal paths reach. `unprepared` names the targeted commands nothing
+ * offers (appCommandOfferChecks.ts): a section that runs one is refused in the browser, so it is a problem here.
  */
 export async function lintComponents(
   dir: string,
@@ -416,6 +417,7 @@ export async function lintComponents(
   pages: PageManifests = new Map(),
   schema?: DatabaseSchema,
   messages?: ComponentMessages,
+  unprepared: ReadonlySet<string> = new Set(),
 ): Promise<ComponentLint> {
   const problems: ComponentFinding[] = [];
   const warnings: ComponentFinding[] = [];
@@ -437,7 +439,7 @@ export async function lintComponents(
     for (const file of entry.sources) if (file.endsWith('.css')) sharers.set(file, [...(sharers.get(file) ?? []), id]);
   const sheetNames = new Map<string, number>();
   for (const file of sharers.keys()) sheetNames.set(stylesheetName(file), (sheetNames.get(stylesheetName(file)) ?? 0) + 1);
-  const parse = pages.size ? await astParser() : undefined;
+  const parse = pages.size || unprepared.size ? await astParser() : undefined;
   /* The pages any component's source links to, for the pages only a link opens. */
   const linked = new Set<string>();
   const unplaced = [...pages.values()].some((manifest) => manifest.unplaced);
@@ -485,6 +487,21 @@ export async function lintComponents(
         for (const finding of scan.undeclared) problems.push({ component: id, file, line: finding.line, text: finding.text });
         for (const finding of scan.unread) warn(finding.line, finding.text);
       }
+      /* A section declares no commands, so what it runs is offered by an action or nothing: the browser's prepare
+         answers 403 "not available to this account" for a command nothing offers, whatever a role is granted, and
+         check passed (a field report). A page's declared commands are offered for it (shared/appPageOffers.ts). */
+      if (!manifest && unprepared.size && parse && lang)
+        for (const { name, line, said } of componentCommands(parse, raw, lang))
+          if (unprepared.has(name))
+            problems.push({
+              component: id,
+              file,
+              line,
+              text:
+                `[section-command-unoffered] ${said} runs a command that names a record and that no action, form, import or ` +
+                `api.commands entry offers, so the browser is refused it (403, "not available to this account") whatever a role ` +
+                `is granted. Offer it on its target: actions: [action('…', { command: '${name}', header: false })] keeps it off the record's bar`,
+            });
       text.split('\n').forEach((line, i) => {
         for (const [pattern, message] of SCRIPT_PROBLEMS)
           if (pattern.test(line)) problems.push({ component: id, file, line: i + 1, text: message });

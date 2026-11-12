@@ -6,6 +6,8 @@ import './pageControls.css';
 import { createElement, type ComponentProps } from 'react';
 import { Drawer as UiDrawer } from '@mistriwork/ui/Drawer.js';
 import { message } from '@mistriwork/kit/client/messages.js';
+import { FileField as UiFileField } from '@mistriwork/ui/FileField.js';
+import { say } from '../../copy/components/components/sdk/pageControls.js';
 
 /* By module, as the kit's Button is reached (kit.tsx): the package's index carries every primitive, these only the page's. */
 export { Avatar } from '@mistriwork/ui/Avatar.js';
@@ -16,7 +18,14 @@ export { DateField } from '@mistriwork/ui/DateField.js';
 export function Drawer(props: ComponentProps<typeof UiDrawer>) {
   return createElement(UiDrawer, { ...props, closeLabel: props.closeLabel ?? message('common.close') });
 }
-export { FileField } from '@mistriwork/ui/FileField.js';
+/* The same for the file field's button and its empty words. */
+export function FileField(props: ComponentProps<typeof UiFileField>) {
+  return createElement(UiFileField, {
+    ...props,
+    chooseLabel: props.chooseLabel ?? say(props.multiple ? 'chooseFiles' : 'chooseFile'),
+    noneLabel: props.noneLabel ?? say('noFileChosen'),
+  } as ComponentProps<typeof UiFileField>);
+}
 export { Modal } from '@mistriwork/ui/Modal.js';
 export { Pagination } from '@mistriwork/ui/Pagination.js';
 export { Popover } from '@mistriwork/ui/Popover.js';

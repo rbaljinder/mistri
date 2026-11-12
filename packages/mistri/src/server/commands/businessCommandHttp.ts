@@ -3,7 +3,7 @@ import type { AppDef } from '../../shared/app.js';
 import type { BusinessCommandActor, BusinessCommandRegistry } from './businessCommands.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
-import { bindHttpBusinessCommands, bulkCommandWhen } from './businessCommandLoader.js';
+import { bindHttpBusinessCommands, bulkCommandWhen, unofferedRefusal } from './businessCommandLoader.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { CommandInputError, parseCommandPrepareTargets, parseCommandAvailability } from './commandPayload.js';
 import { forbiddenBy } from './commandErrors.js';
@@ -329,7 +329,7 @@ export async function dispatchBusinessCommandHttp(options: {
         parseCommandAvailability(body),
         async (check) => {
           const authorized = binding.authorize(check.command, actor);
-          if (!references.has(check.command)) throw new AppAccessDenied();
+          if (!references.has(check.command)) throw unofferedRefusal(new AppAccessDenied(), check.command);
           const flags = await admittedFlags(authorized.actor);
           const ask = (reader: Parameters<Parameters<typeof authorized.transaction>[0]>[0]) =>
             readCommandAvailability({
@@ -353,7 +353,7 @@ export async function dispatchBusinessCommandHttp(options: {
       const request = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
       if (typeof request.command !== 'string') throw new CommandInputError('command');
       const authorized = binding.authorize(request.command, actor);
-      if (!references.has(request.command)) throw new AppAccessDenied();
+      if (!references.has(request.command)) throw unofferedRefusal(new AppAccessDenied(), request.command);
       if (request.commandVersion !== authorized.command.version)
         throw new BusinessCommandExecutionError('command_version_mismatch', 'unknown');
       const asked = checkedNames(authorized.command, request.fields);
@@ -402,7 +402,7 @@ async function prepareBusinessCommand(options: {
   const authorized = binding.authorize(request.command, actor);
   if (request.commandVersion !== authorized.command.version) throw new BusinessCommandExecutionError('command_version_mismatch', 'unknown');
   const reference = references.get(request.command);
-  if (!reference) throw new BusinessCommandExecutionError('forbidden');
+  if (!reference) throw unofferedRefusal(new BusinessCommandExecutionError('forbidden'), request.command);
   // A command that names one record refuses a list, as execution does.
   if (request.multi && authorized.command.targets !== 'many') throw new CommandInputError('keys');
   for (const key of request.keys) {

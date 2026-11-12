@@ -20,10 +20,12 @@ import { compileAppTheme } from './themeSpec.js';
 import type { AppAuth, AppUi } from './appModel.js';
 import { canonicalLocale } from '@mistriwork/engine/shared/appLocale.js';
 import { audienceThemes as audienceThemeIds, resolveTheme, type ThemeAudiences } from '@mistriwork/engine/shared/themeResolve.js';
+import { BARLOW, INTER } from '@mistriwork/engine/shared/themeLooks.js';
+import { families } from '@mistriwork/engine/shared/themeFaces.js';
 
 /** What a tenant may change, when the App allows it. `preset` (the theme it starts from) needs more than one theme to
- * pick from, and names it as `ui.theme.preset` does. */
-const BRANDING_KEYS = ['logo', 'name', 'accent', 'palette', 'radius', 'density', 'preset', 'locale'] as const;
+ * pick from, and names it as `ui.theme.preset` does. `font` is the face of the interface's text (`brandingFonts`). */
+const BRANDING_KEYS = ['logo', 'name', 'accent', 'palette', 'radius', 'density', 'preset', 'font', 'locale'] as const;
 export type BrandingKey = (typeof BRANDING_KEYS)[number];
 
 /** The App's declaration, parsed: its themes compiled (the first is the tenants' default), and the keys a tenant may set. */
@@ -58,6 +60,8 @@ export interface TenantBrandingValue {
   readonly density?: ThemeDensity;
   /** One of `branding.themes`, by id. */
   readonly preset?: string;
+  /** The face the interface's text is set in: one of `brandingFonts`, by its family name. */
+  readonly font?: string;
   /** The tenant's language and figures for its people whose own row names none (shared/appLocale.ts `resolveLocale`). */
   readonly locale?: string;
 }
@@ -179,6 +183,40 @@ function ownLook(ui: AppUi): ThemeDefinition {
   const theme = tenantTheme({ themes: [base], allow: [], editors: [] }, value);
   return { ...theme, id: base.id, label: base.label };
 }
+/** A face a tenant may set its interface in: the family it is named by, and the stack that draws it. */
+interface BrandingFont {
+  readonly id: string;
+  readonly stack: string;
+}
+
+/** The faces the kit ships for an interface (Inter, Lumen's; Barlow, Workshop's), each with the stack that cuts Arial to
+    its measure while it arrives (interFace.css, barlowFace.css: sheets of their own, so a tenant's pick brings its declaration and not a whole look). */
+const KIT_FONTS: readonly BrandingFont[] = Object.freeze([
+  { id: 'Inter', stack: INTER },
+  { id: 'Barlow', stack: BARLOW },
+]);
+const GENERIC_SANS = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+
+/**
+ * The closed set of faces a tenant may pick for its interface: the kit's own, then each family a theme of
+ * `branding.themes` ships (`type.faces`), under the stack that theme draws it with where one leads with it. Nothing
+ * else: a tenant names a face, never a stack or a file.
+ */
+export function brandingFonts(
+  declaration: Pick<BrandingDeclaration, 'themes'>,
+): readonly { readonly id: string; readonly stack: string }[] {
+  const out = [...KIT_FONTS];
+  for (const theme of declaration.themes)
+    for (const face of theme.faces ?? []) {
+      if (out.some((font) => font.id.toLowerCase() === face.family.toLowerCase())) continue;
+      const own = [theme.fonts?.ui, theme.fonts?.data, theme.fonts?.heading].find(
+        (stack) => stack && families(stack)[0]?.toLowerCase() === face.family.toLowerCase(),
+      );
+      out.push({ id: face.family, stack: own ?? `"${face.family}", ${GENERIC_SANS}` });
+    }
+  return out;
+}
+
 const RADIUS = /^(?:[0-7]|8)px$/;
 const SLUG = /^[a-z][a-z0-9-]{0,47}$/;
 
@@ -292,6 +330,11 @@ export function parseTenantBranding(raw: unknown, declaration: BrandingDeclarati
           refusals.push({ field: 'preset', message: 'Pick one of the themes offered.' });
         else out.preset = value;
         break;
+      case 'font':
+        if (typeof value !== 'string' || !brandingFonts(declaration).some((font) => font.id === value))
+          refusals.push({ field: 'font', message: 'Pick one of the fonts offered.' });
+        else out.font = value;
+        break;
       case 'locale': {
         const tag = canonicalLocale(value);
         if (!tag) refusals.push({ field: 'locale', message: 'Pick a language like "en-US" or "es-MX".' });
@@ -353,8 +396,18 @@ export function tenantTheme(declaration: BrandingDeclaration, value: TenantBrand
     return palette;
   };
   const { palettes: _palettes, defaultPalette: _default, ...rest } = base;
+  const font = value.font ? brandingFonts(declaration).find((candidate) => candidate.id === value.font) : undefined;
+  /* The face's files come with it: the chosen theme's own, and any another theme of the declaration ships under that family. */
+  const faces = font
+    ? [...(rest.faces ?? [])].concat(
+        declaration.themes
+          .filter((theme) => theme !== chosen)
+          .flatMap((theme) => (theme.faces ?? []).filter((face) => face.family.toLowerCase() === font.id.toLowerCase())),
+      )
+    : undefined;
   return {
     ...rest,
+    ...(font ? { fonts: { ...rest.fonts, ui: font.stack }, ...(faces?.length ? { faces } : {}) } : {}),
     id: 'tenant',
     startedFrom: chosen.id,
     label: value.name ?? chosen.label,

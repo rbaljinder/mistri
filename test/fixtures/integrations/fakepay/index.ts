@@ -89,6 +89,7 @@ export const fakepay = () =>
       },
     },
     webhooks: {
+      signing: 'webhookSecret',
       verify({ headers, body }, { secrets }) {
         const parts = Object.fromEntries(
           String(headers['fakepay-signature'] ?? '')

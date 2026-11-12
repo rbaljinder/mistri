@@ -188,6 +188,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'supportAudit',
       'supportLog',
       'ui',
+      'viewerRoles',
       'views',
       'writableTables',
     ],

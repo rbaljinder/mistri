@@ -13,6 +13,7 @@ export const say = defineMessages({
   channel: 'Sends {channel} messages.',
   newValue: 'New value',
   keep: 'Leave empty to keep the saved value.',
+  least: 'It signs the webhooks, so it is at least {count} characters.',
   remove: 'Remove',
   save: 'Save',
   saving: 'Saving…',

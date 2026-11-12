@@ -53,8 +53,8 @@ async function fixture(
       },
       auth: {
         roles: {
-          operator: { read: true, write: true, fields: { lead: { read: ['id', 'name', 'status'], write: ['name'] } } },
-          admin: { read: true, write: true },
+          operator: { read: true, write: true, export: ['lead'], fields: { lead: { read: ['id', 'name', 'status'], write: ['name'] } } },
+          admin: { read: true, write: true, export: ['lead'] },
         },
       },
       views: { leads: { kind: 'list', from: 'lead', label: 'Leads' } },

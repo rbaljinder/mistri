@@ -203,6 +203,29 @@ test('the field helpers write the plain declaration they stand for', () => {
   );
 });
 
+test('a text, number or money input takes a placeholder, and no other field does', () => {
+  const read = (declared: Record<string, unknown>) => parseCommandInput(declared, 'fixture');
+  const [plate, notes, miles, price, masked] = read({
+    plate: { type: 'text', placeholder: 'e.g. ABC 123' },
+    notes: { type: 'textarea', placeholder: 'Anything we should know' },
+    miles: { type: 'number', placeholder: 'e.g. 42000' },
+    price: { type: 'money', placeholder: 'e.g. 12500' },
+    ssn: { type: 'text', mask: '000-00-0000', placeholder: 'Nine digits' },
+  });
+  assert.equal((plate as { placeholder?: string }).placeholder, 'e.g. ABC 123');
+  assert.equal((notes as { placeholder?: string }).placeholder, 'Anything we should know');
+  assert.equal((miles as { placeholder?: string }).placeholder, 'e.g. 42000');
+  assert.equal((price as { placeholder?: string }).placeholder, 'e.g. 12500');
+  assert.equal((masked as { placeholder?: string }).placeholder, 'Nine digits');
+  assert.equal('placeholder' in read({ plain: { type: 'text' } })[0], false);
+  assert.throws(
+    () => read({ day: { type: 'date', placeholder: 'x' } }),
+    /placeholder is example text inside an empty text, number or money box; a date field has none/,
+  );
+  assert.throws(() => read({ stars: { type: 'number', as: 'rating', placeholder: 'x' } }), /a rating field has none/);
+  assert.throws(() => read({ plate: { type: 'text', placeholder: 'x'.repeat(257) } }), /256|too long|at most/i);
+});
+
 test('a public form takes a reference at every depth, judged against auth.public where the App is known, and repeats at most ten rows', () => {
   const reference = { type: 'reference', from: 'person', by: 'id', labelColumn: 'name' };
   const publicForm = (input: unknown) => parseCommandInput(input, 'public form', { publicForm: true });

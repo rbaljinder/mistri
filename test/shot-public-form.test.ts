@@ -27,7 +27,7 @@ const mount = { base: '', apps: {} } as never;
 const run = (asked: string) => addresses([asked], loaded, book, async () => '1', undefined, mount, [], []);
 
 test("a public form's page opens, signed out", async () => {
-  for (const asked of ['/shop/form/apply', 'form/apply', '/shop/form/apply?utm=x']) {
+  for (const asked of ['/shop/form/apply', 'form/apply', '/shop/form/apply?utm=x', 'apply', '/shop/apply']) {
     const [shot] = await run(asked);
     assert.equal(shot.path, '/shop/form/apply', asked);
     assert.equal(shot.signedOut, true, asked);

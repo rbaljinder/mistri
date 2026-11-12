@@ -174,3 +174,8 @@ export function linkUrl(appId: string, row: Granted, base = linkBase(appId)): st
     return undefined;
   }
 }
+
+/** A URL shaped as a link's that names no link: a decoy's answer (formHttp.ts decoyReply), which opens to the one miss. */
+export function decoyLinkUrl(appId: string, base = linkBase(appId)): string | undefined {
+  return base === undefined ? undefined : `${base}/l/${LINK_TOKEN_PREFIX}${newLinkId()}.${randomBytes(32).toString('base64url')}`;
+}

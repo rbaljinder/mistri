@@ -69,6 +69,8 @@ export interface AuthorizedBusinessCommand {
   readonly readAudit?: CommandReadAudit;
   /** The capability links its target resource declares, where this actor may mint them (context.link, appLinks.ts). */
   readonly links?: Readonly<Record<string, import('../../shared/appLinks.js').AppLinkDef>>;
+  /** The tables it writes whose resource declares links, by local name → resource: a row removed from one ends its links. */
+  readonly linkedTables?: ReadonlyMap<string, string>;
   /** Private stable namespace; never request-supplied membership/session evidence. */
   readonly receiptOwner?: Readonly<{ storeId: string; sourceId: string; tenantId: string }>;
   /** A tenant App's public intake only: where this submission lands, the
@@ -92,6 +94,12 @@ export interface AuthorizedBusinessCommand {
   advise?<T>(run: (tx: WriteTransaction) => Promise<T>): Promise<T>;
   /** Runtime only: never pass the journal to an application handler. */
   commandTransaction?<T>(run: (tx: WriteTransaction, journal: CommandJournal) => Promise<T>): Promise<T>;
+  /**
+   * Where a refusal's keep (`refuse(code, { keep })`) writes, for a binding whose `commandTransaction` opens once
+   * per request: a signed-out intake's, so a wrong try counts where the submission would have landed. Absent, the
+   * keep opens `commandTransaction` again.
+   */
+  refusalTransaction?<T>(run: (tx: WriteTransaction, journal: CommandJournal) => Promise<T>): Promise<T>;
 }
 
 export interface BusinessCommandBinding {
@@ -277,6 +285,7 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
         ...(binding.files ? { files: binding.files } : {}),
         ...(binding.insertOnly ? { insertOnly: binding.insertOnly } : {}),
         ...(binding.links ? { links: binding.links } : {}),
+        ...(binding.linkedTables ? { linkedTables: binding.linkedTables } : {}),
         /* A read of an audited resource is written to the database its rows came from, as a page's is (http/source.ts). */
         ...(binding.audited
           ? {
