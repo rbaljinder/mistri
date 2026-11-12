@@ -1,6 +1,6 @@
 import { Refusal, type Filter, type ScopedReads, type WriteTransaction } from '../adapter.js';
 import { buildWhere, type Condition, type ConditionEquality, type SqlFragment, type SqlStyle } from '../../shared/filter.js';
-import { recordRefusalCause } from '../../shared/refusal.js';
+import { authorFault, recordRefusalCause } from '../../shared/refusal.js';
 import type { RowScope, RowScopeFilter, ViaCondition } from '../../shared/rowScope.js';
 import { coerceForColumn, columnKind, type DatabaseSchema, type ForeignKey, type TableMeta } from '../../shared/schema.js';
 import { blockingTriggers, firedBy, sayRuns, sayTriggers, sayWrite, type ScopeTrigger, type TriggeringWrite } from './scopeTriggers.js';
@@ -400,8 +400,11 @@ export function createScopedTransaction(
       const blocking = blockingTriggers(triggers, write, foldCase)
         .filter((trigger) => !proof?.accepts(id, trigger))
         .map((trigger) => ({ ...trigger, why: proof?.unaccepted(id, trigger) ?? trigger.why }));
+      /* The schema's choice, not the person's: the operator's terminal leads with the trigger's name rather than a
+         `because:` beneath an opaque line (a field report). The caller's sentence stays value-free. */
       if (blocking.length)
-        return refuse(
+        throw authorFault(
+          new ScopeRefusal('This operation is not available in the current row scope.'),
           `"${id}" cannot be written under a row policy: ${sayWrite(write)} ${sayRuns(blocking)} ${sayTriggers(blocking)}, whose effects the policy cannot bound. ` +
             `A trigger that only checks NEW and OLD and raises does not block a write; mistri check names each command one blocks.`,
         );

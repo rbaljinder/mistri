@@ -158,6 +158,8 @@ export type TenantIntake = ReturnType<typeof bindTenantIntake>;
 const deny = (): never => {
   throw new AppAccessDenied();
 };
+// A refusal's keep and the executor's retries of one the record moved under (businessCommandExecution.ts).
+const KEEP_TRANSACTIONS = 4;
 
 /**
  * The public intake owner over the deployment's genuine sources: resolution
@@ -410,7 +412,8 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
         owned: Object.freeze(platformColumns(saved)),
       });
     }
-    let transacted = false;
+    let transacted = false,
+      kept = 0;
     const binding = Object.freeze<BusinessCommandBinding>({
       scoped: true,
       authorize: (commandId, actor) => {
@@ -454,6 +457,13 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
           commandTransaction: async (work) => {
             if (transacted) return deny();
             transacted = true;
+            return inPlace(admitted, authorization, extractor, state, async (records, journal) => work(records, journal!));
+          },
+          /* A refusal's keep, after the submission's own transaction rolled back: fenced in the same place again,
+             inserts only, as the submission's is. Never before it, and at most once with the executor's retries. */
+          refusalTransaction: async (work) => {
+            if (!transacted || kept >= KEEP_TRANSACTIONS) return deny();
+            kept++;
             return inPlace(admitted, authorization, extractor, state, async (records, journal) => work(records, journal!));
           },
         });

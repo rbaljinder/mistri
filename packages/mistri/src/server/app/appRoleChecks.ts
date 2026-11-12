@@ -553,6 +553,54 @@ export function appRoleWarnings(loaded: LoadedApp, schema: DatabaseSchema, comma
 }
 
 /**
+ * A New form's default on a column some role that makes rows here does not
+ * write. That role is served the form without the default (appFieldProjection
+ * fieldAccessibleApp), so the column is left to the database for it, while the
+ * author meant the form to fill it: refused here, naming the role, and not
+ * first found by signing in as it (a field report).
+ */
+export function appRoleFormDefaultProblems(loaded: LoadedApp, schema: DatabaseSchema, jobRoles: ReadonlySet<string> = new Set()): string[] {
+  const app = loaded.app;
+  if (!grantsByRole(app)) return [];
+  const service = serviceRoles(app, jobRoles);
+  const manifest = relative(loaded.dir ?? dirname(loaded.path), loaded.path) || loaded.path;
+  const found = new Map<string, { name: string; tableId: string; columns: string[]; roles: string[] }>();
+  for (const role of Object.keys(app.auth?.roles ?? {})) {
+    if (service.has(role)) continue;
+    let access: ReturnType<typeof resolveAppAccess>;
+    try {
+      access = resolveAppAccess(app, schema, [role]);
+    } catch {
+      continue; // An invalid grant is refused on its own, with its own reason.
+    }
+    for (const [name, resource] of Object.entries(app.resources ?? {})) {
+      const table = tableNamed(schema, name);
+      const writes = table && access.fields?.get(table.id)?.write;
+      if (!table || !writes || !access.writable.has(table.id) || (access.creatable && !access.creatable.has(table.id))) continue;
+      // A column the database computes is said on its own (write-generated, and the form's check).
+      const columns = Object.keys(resource.form?.defaults ?? {}).filter(
+        (column) => !writes.has(column) && table.columns.some((candidate) => candidate.name === column && candidate.writable !== false),
+      );
+      if (!columns.length) continue;
+      const key = `${name}\n${columns.join('\n')}`;
+      const held = found.get(key);
+      if (held) held.roles.push(role);
+      else found.set(key, { name, tableId: table.id, columns, roles: [role] });
+    }
+  }
+  return [...found.values()].map(({ name, tableId, columns, roles }) => {
+    const them = columns.length === 1 ? 'it' : 'them';
+    const where = roles.length === 1 ? `roles.${roles[0]}.fields.${tableId}.write` : `fields.${tableId}.write in each role's grant`;
+    return (
+      `${manifest}: ${locateProblem(loaded.origins, `resources "${name}", form [form-default-unwritable]`)}: its defaults name ` +
+      `${columns.map((column) => `"${column}"`).join(', ')}, which ${whose(roles)} ${roles.length === 1 ? 'makes rows with and does' : 'make rows with and do'} not write, so ` +
+      `${roles.length === 1 ? 'that role is' : 'they are'} served the form without ${columns.length === 1 ? 'that default' : 'those defaults'} ` +
+      `and the database fills ${them}. Add ${them} to ${where}, or take ${columns.length === 1 ? 'the default' : 'the defaults'} out of the form.`
+    );
+  });
+}
+
+/**
  * An action whose destination some role that sees it cannot open. Every surface that opens a room by its key — a
  * dashboard's note or banner, a record page's note, a list's or a related list's empty action — is drawn for a
  * reader only where its destination is among the rooms that reader is served (appDestinations.ts): a view's

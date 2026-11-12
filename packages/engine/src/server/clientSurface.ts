@@ -21,10 +21,11 @@
  * test/client-surface.test.ts holds the two readings together.
  */
 import type { ThemeDefinition } from '../shared/theme.js';
+import type { ThemeFaceDefinition } from '../../schema/theme.js';
 import { recipeAttributes } from '../shared/themeRecipes.js';
 import { effectiveThemeDefinition, themePreset } from '../shared/themePresets.js';
 import { resolveTheme, type ThemeAudiences } from '../shared/themeResolve.js';
-import { faceRules, headingFace } from '../shared/themeFaces.js';
+import { faceRules, headingFace, uiFace } from '../shared/themeFaces.js';
 
 type ClientSurface = 'shell' | 'public' | 'workbench';
 
@@ -61,9 +62,9 @@ export function surfaceFor(pathname: string): Exclude<ClientSurface, 'workbench'
  * that, and the guess costs one sheet fetched and not used. It stays out of
  * the first-paint bundle — a preload is a request, not bytes in the entry.
  */
-export function lookSheetsFor(ui: LookChoice | undefined, audience?: Audience): readonly string[] {
+export function lookSheetsFor(ui: LookChoice | undefined, audience?: Audience, branded?: ThemeDefinition): readonly string[] {
   const theme = wornTheme(ui, audience);
-  return theme ? recipeAttributes(theme).sheets : [];
+  return [...new Set([...(theme ? recipeAttributes(theme).sheets : []), ...(branded ? recipeAttributes(branded).sheets : [])])];
 }
 
 /**
@@ -125,25 +126,29 @@ function wornTheme(ui: LookChoice | undefined, audience: Audience = {}) {
   return ui.customThemes?.find((item) => item.id === id) ?? themePreset(id) ?? themePreset('workshop');
 }
 
-/** The faces each look sheet declares, by the families a stack begins with to be set in them (lumenLook.css,
-    workshopLook.css), and the files preloaded: Workshop's regular and its condensed bold, which every page draws;
-    its semibold comes when a line asks for it. */
+/** The faces each sheet declares, by the families a stack begins with to be set in them (interFace.css, barlowFace.css,
+    ledgerLook.css), and the files preloaded: Barlow's regular and its condensed bold, which every Workshop page
+    draws; its semibold comes when a line asks for it. */
 const SHEET_FACES: Readonly<Record<string, { families: readonly string[]; file: RegExp; data?: true }>> = {
-  workshop: { families: ['Barlow', 'Barlow Semi Condensed'], file: /^assets\/barlow-(?:400|semi-condensed-700)-[\w-]+\.woff2$/ },
-  lumen: { families: ['Inter'], file: /^assets\/inter-latin-[\w-]+\.woff2$/ },
+  barlow: { families: ['Barlow', 'Barlow Semi Condensed'], file: /^assets\/barlow-(?:400|semi-condensed-700)-[\w-]+\.woff2$/ },
+  inter: { families: ['Inter'], file: /^assets\/inter-latin-[\w-]+\.woff2$/ },
   ledger: { families: ['IBM Plex Mono'], data: true, file: /^assets\/ibm-plex-mono-400-[\w-]+\.woff2$/ },
 };
 
 /**
  * The sheets whose face the App's look is set in, so its page can ask for
- * the face beside the sheet. A sheet is worn for its recipes, and a theme on
- * Sage that borrows one of Lumen's wears Lumen's sheet with its own stack:
+ * the face beside the sheet. A face is a sheet of its own (interFace.css, barlowFace.css), worn where a stack
+ * names it, so a theme on Sage that borrows one of Lumen's recipes wears Lumen's sheet and not Inter's:
  * the face is preloaded only where the interface or its headings begin with it
  * (and, for a sheet whose face is the data's own, as Ledger's monospace figures are, where the data does), never
  * fetched for a page that would not draw a line in it.
  */
-export function lookFacesFor(ui: LookChoice | undefined, audience?: Audience): readonly string[] {
-  const theme = wornTheme(ui, audience);
+export function lookFacesFor(ui: LookChoice | undefined, audience?: Audience, branded?: ThemeDefinition): readonly string[] {
+  /* The branded theme a request wears (a tenant's, with the face it picked) as well as the App's own guess. */
+  return [...new Set([...kitFaces(wornTheme(ui, audience)), ...kitFaces(branded)])];
+}
+
+function kitFaces(theme: ThemeDefinition | undefined): readonly string[] {
   if (!theme) return [];
   const first = (stack: string | undefined) =>
     stack
@@ -169,20 +174,32 @@ export function lookFacesFor(ui: LookChoice | undefined, audience?: Audience): r
  * stands outside the first-paint budgets (scripts/bundle-budget.mjs). `shown`
  * says an inside address the way the browser asks for it (shared/mount.ts).
  */
-export function appFaceHead(ui: LookChoice | undefined, shown: (href: string) => string, audience?: Audience): string {
-  const theme = wornTheme(ui, audience);
+export function appFaceHead(
+  ui: LookChoice | undefined,
+  shown: (href: string) => string,
+  audience?: Audience,
+  branded?: ThemeDefinition,
+): string {
+  /* A request's branded theme that ships faces is the one the client will wear (visualTheme.ts wearFaces replaces the
+     first paint's rules with its own), so it is the one declared here; a tenant's pick of a face (`font`) is the
+     interface's, drawn on every line, so that face is preloaded as the heading's is. */
+  const picked = Boolean(branded?.faces?.length);
+  const theme = picked ? branded : wornTheme(ui, audience);
   const rules = faceRules(theme, shown);
   if (!rules) return '';
+  const preload = (face: ThemeFaceDefinition | undefined) =>
+    face?.href
+      ? `    <link rel="preload" as="font" type="${face.href.endsWith('.woff') ? 'font/woff' : 'font/woff2'}" crossorigin href="${shown(face.href)}">\n`
+      : '';
   const heading = theme && headingFace(theme);
-  const type = heading?.href?.endsWith('.woff') ? 'font/woff' : 'font/woff2';
+  const body = picked && theme ? uiFace(theme) : undefined;
   return (
     /* A face is fetched in CORS mode, so its preload says `crossorigin`, or it is fetched twice (lookPreloads). */
-    (heading ? `    <link rel="preload" as="font" type="${type}" crossorigin href="${shown(heading.href!)}">\n` : '') +
-    `    <style id="mistri-theme-faces">${rules}</style>\n`
+    preload(heading) + (body && body !== heading ? preload(body) : '') + `    <style id="mistri-theme-faces">${rules}</style>\n`
   );
 }
 
-/** A built look sheet's file, `assets/lumenLook-<hash>.css`, by the sheet's name. */
+/** A built look sheet's file, `assets/lumenLook-<hash>.css`, or a face's, `assets/interFace-<hash>.css`, by the sheet's name. */
 /** The chrome's words in one language (vite.config.ts LOCALE_GROUP): `assets/copy.es-<hash>.js`. */
 const WORDS_FILE = /^assets\/copy\.([a-z]{2,3})-[\w-]+\.js$/;
 
@@ -220,7 +237,7 @@ export function tenantPreloads(files: Iterable<string>): string {
   return links;
 }
 
-const LOOK_FILE = /^assets\/([a-z]+)Look-[\w-]+\.css$/;
+const LOOK_FILE = /^assets\/([a-z]+)(?:Look|Face)-[\w-]+\.css$/;
 
 /**
  * The preload links for the look sheets a page will wear, and the faces they

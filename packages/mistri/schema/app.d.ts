@@ -1180,10 +1180,11 @@ export interface AppRoleGrant<Resource extends string = string, Role extends str
       does not write is append-only: the role adds rows there and never edits or deletes them. Commands still create
       what they write; this limits the generic insert only. */
   create?: false | readonly Resource[];
-  /** Tables the role may export (the whole matching list as a CSV or JSON file) beyond those it writes, which it
-      always may. Of what it reads. A person may export a table if any of their roles writes it or lists it here; a
-      signed-out visitor never may. `{ read: ['charge'], export: ['charge'] }`. Enforced by the server. An App without role grants keeps its one switch, `ui.export`. */
-  export?: readonly Resource[];
+  /** Tables the role may export (the whole matching list as a CSV or JSON file), of what it reads: a grant of its
+      own, which writing a table does not imply. Absent or `false`: none. A person may export a table if any of their
+      roles lists it here; a signed-out visitor never may. `{ read: ['charge'], export: ['charge'] }`. Enforced by the
+      server. An App without role grants keeps its one switch, `ui.export`. */
+  export?: false | readonly Resource[];
   /** The commands the role runs, by name. Default: none. Does not grant generic CRUD access. */
   commands?: readonly CommandName[];
   /** Fixed actions the role runs on a resource it reads and does not write, by action id:
@@ -1352,16 +1353,18 @@ export interface AppBoardList<Column extends string = string, OneHop extends str
       `lines` or `footer` says its record's name too, never its key. Absent, the card says its record's name: the
       resource's `recordLabel` column. */
   primary?: OneHop;
-  /** One line under the title: a column, or a rollup or computed column of the row — a problem's open tickets. */
-  lines?: readonly [Column];
+  /** One line under the title: a column, a rollup or computed column of the row — a problem's open tickets — or a
+      one-hop label path (`owner_id.name`). */
+  lines?: readonly [OneHop];
   /** A column whose value is the card's kind — design, research, ops: a chip over the title, in the color its
       display rule's `colors` gives the value (else one fixed by its text), and the card's stripe where the look draws
       one. */
   category?: Column;
   /** Up to four facts along the card's foot — a due date, a count of comments, the people on it — each a column,
       with an App icon before it where given: `footer: [{ column: 'due_on', icon: 'calendar' }, 'assignees']`. A
-      person (an `avatar` or `avatars` column) stands at the right end. */
-  footer?: readonly (Column | { column: Column; icon?: AppIcon })[];
+      fact may be a one-hop label path (`owner_id.name`). A person (an `avatar` or `avatars` column) stands at the
+      right end. */
+  footer?: readonly (OneHop | { column: OneHop; icon?: AppIcon })[];
   /** A numeric column summed in each lane's head beside its count: "Discovery · 3 · $92.8K". Absent, the first money
       column the card shows (a line, a fact) is summed; a card and a lane say money short ($240K), whole in the title. */
   sum?: Column;
@@ -1722,6 +1725,10 @@ interface DashFigureWords {
       (`measure: 'avg first_response_seconds'` reads "10h 2m"). Absent, a measure of one column takes that column's
       display rule. */
   format?: 'percent' | 'number' | 'money' | 'duration';
+  /** The measure counts a currency's minor units: `measure: 'sum total_cents', minor: true` says 41238049 as
+      "$412,380.49". Money where `format` is unsaid. A measure of a column whose rule says `minor` needs none; one
+      whose column is drawn by a component, or a computed measure, does. */
+  minor?: true;
   /** A word said after each figure: `'days'`, `'/mo'`. */
   unit?: string | AppMessageRef;
 }
@@ -1754,10 +1761,11 @@ export interface MetricDashSection extends DashTableSection, DashFigureWords {
       draws its trend across the window unless this is false. */
   spark?: boolean;
   /** How money is said on the card: `'exact'` (the default), to the currency's minor digits at any size —
-      "$28,123.45", a balance read to the cent — or `'compact'` from a thousand, "$28.1K", for a revenue card
-      glanced at beside its trend. Its change and its goal follow it; the card's title and what a screen reader
-      hears are exact either way. @preview */
-  figure?: 'exact' | 'compact';
+      "$28,123.45", a balance read to the cent — `'compact'` from a thousand, "$28.1K", for a revenue card
+      glanced at beside its trend — or `'whole'`, rounded to the currency's major unit at any size, "$28,123",
+      for a six-figure sum that would wrap in a narrow card with its cents. Its change and its goal follow it;
+      the card's title and what a screen reader hears are exact either way. @preview */
+  figure?: 'exact' | 'compact' | 'whole';
   /** A goal for the measure: a meter under the number, and the share reached said beside it. A number, or a goal
       read from data in the metric's own words — `{ from: 'quota', query: 'period = this quarter', measure: 'sum amount' }`;
       an unwritten `from` or `measure` is the metric's. Where the goal counts the same measure over the same table with
@@ -1999,7 +2007,7 @@ export interface CustomDashRead {
     number with no `by`, a group for each value (`{ key, value, label? }`) with one. */
 export interface CustomDashFigure {
   from: string;
-  /** "count", "sum amount", "avg amount", "min due_on" or "max due_on". */
+  /** "count", "count distinct patient_id", "sum amount", "avg amount", "min due_on" or "max due_on". */
   measure: CustomMeasure;
   /** Group the figure: a column, a path or a period and a date column ("status", "month opened_on"). */
   by?: string;
@@ -2061,9 +2069,10 @@ export interface FindDashSection<Resource extends string = string> extends DashS
 }
 
 /** What a tenant may change: never the grounds, the ink or the recipes, which stay the App's. */
-export type BrandingKey = 'logo' | 'name' | 'accent' | 'palette' | 'radius' | 'density' | 'preset' | 'locale';
+export type BrandingKey = 'logo' | 'name' | 'accent' | 'palette' | 'radius' | 'density' | 'preset' | 'font' | 'locale';
 export interface AppBranding {
-  /** What each tenant may set. `preset` (which of `themes` it starts from) needs more than one of `themes` to pick from; `palette`, a theme with palettes. */
+  /** What each tenant may set. `preset` (which of `themes` it starts from) needs more than one of `themes` to pick from; `palette`, a theme with palettes. `font` is the face the interface's text is set in, one of Inter, Barlow or a face a theme of
+      `themes` ships (`type.faces`); the page declares and preloads it from its first byte. */
   allow: readonly BrandingKey[];
   /** The tenant roles (auth.roles with `realm: 'tenant'`) whose members may save it: a tenant's admins. */
   editors: readonly string[];
@@ -2848,7 +2857,7 @@ export interface CustomRead {
     with one. */
 export interface CustomFigure {
   from: string;
-  /** "count", "sum amount", "avg amount", "min due_on" or "max due_on". */
+  /** "count", "count distinct patient_id", "sum amount", "avg amount", "min due_on" or "max due_on". */
   measure: CustomMeasure;
   /** Group the figure: a column, a path or a period and a date column ("status", "month opened_on"). */
   by?: string;

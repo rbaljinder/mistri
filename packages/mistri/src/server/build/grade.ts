@@ -355,7 +355,7 @@ export async function runGrade(
 ): Promise<number> {
   if (argv.includes('--help') || argv.includes('-h')) {
     write(
-      `${GRADE_USAGE}\n\nServe the App as mistri shot does and open every view, a record of each page and each of its documents at 1280, 768,\n` +
+      `${GRADE_USAGE}\n\nServe the App as mistri shot does (jobs, effects and the retention sweep off: nothing is scheduled, so grading never changes\nthe database it reads; a public form is graded by its view or its /form/ address) and open every view, a record of each page and each of its documents at 1280, 768,\n` +
         '390 and 320 wide, and at 390 in the dark scheme. Each is measured, not looked at: sideways scroll, figures and words cut off,\n' +
         `controls drawn over each other, targets under ${TAP}px on a phone, text and field edges below the contrast rule, layout shift\n` +
         'after the first paint, page errors and failed requests, empty sections, two number formats in one surface, chart axes in\n' +

@@ -3,7 +3,7 @@
    Semi Condensed, IBM Plex Mono or Inter in a stack, as Workshop, Ledger and Lumen do. Each is under the SIL Open Font
    License, whose text travels beside it (the *-OFL.txt files here; the kit's Vite preset copies them into the build).
    A rule costs nothing until a line is drawn in its family, so importing this sheet fetches no font a page does not
-   set. The looks' own sheets (workshopLook.css, ledgerLook.css, lumenLook.css) keep their own rules and their cut
+   set. The kit's own face sheets (barlowFace.css, interFace.css, ledgerLook.css) keep their own rules and their cut
    fallbacks, so a page wearing a kit look never loads this one. `swap`, as theirs: a host holds its page until its
    look's sheet is in (visualTheme.ts registerHostLooks), so the face is mostly there by the first paint. */
 @font-face {
@@ -41,7 +41,7 @@
   font-display: swap;
   src: url('./ibm-plex-mono-500.woff2') format('woff2');
 }
-/* Latin, variable from 100 to 900, its `tnum` cut to the ten figures (lumenLook.css says why). */
+/* Latin, variable from 100 to 900, its `tnum` cut to the ten figures (interFace.css says why). */
 @font-face {
   font-family: Inter;
   font-style: normal;

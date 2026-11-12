@@ -24,6 +24,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { AppIconName } from '@mistriwork/engine/shared/appIcons.js';
+import { Button as UiButton, ButtonLink } from '@mistriwork/ui/Button.js';
 import { Icon as PlatformIcon } from '@mistriwork/kit/client/components/Icon.js';
 import { Empty as PlatformEmpty, Problem } from '@mistriwork/kit/client/components/Notes.js';
 import { Dressed, Said } from '@mistriwork/kit/client/components/Dressed.js';
@@ -34,7 +35,6 @@ import { useHostIfAny, useUiHost } from './context.js';
 import { say as sayKit } from '../../copy/components/components/sdk/kit.js';
 import { Sparkline, StackedColumns } from '@mistriwork/kit/client/components/Chart.js';
 
-export { Button } from '@mistriwork/ui/Button.js';
 export { Dropdown } from '@mistriwork/kit/client/components/Dropdown.js';
 export { SplitListDetail } from '../SplitListDetail.js';
 
@@ -51,7 +51,8 @@ const given = (slot: ReactNode): boolean => slot !== undefined && slot !== null 
  * `count` (a quiet number beside the title) and `action` (right-aligned in the same row) turn the title into a header
  * row; with neither it is the heading alone. `ground="nav"` is the box on the look's navigation ground (see
  * `data-ground` in kit.css): everything the kit draws inside it takes that ground's inks.
- * The title is an h3 unless `level` says another: a page of the App's own has the platform's h1 above it, and an
+ * `description` is one quiet line under the title (what the part holds), and `tone` says the title in a status ink
+ * (a part about trouble). The title is an h3 unless `level` says another: a page of the App's own has the platform's h1 above it, and an
  * h3 straight under it skips a level of the outline (WCAG 1.3.1), so a card that is a section of the page is `level={2}`.
  */
 export function Card({
@@ -59,6 +60,8 @@ export function Card({
   level = 3,
   count,
   action,
+  description,
+  tone,
   ground,
   children,
   className,
@@ -67,6 +70,8 @@ export function Card({
   level?: 2 | 3 | 4;
   count?: ReactNode;
   action?: ReactNode;
+  description?: ReactNode;
+  tone?: ToneName;
   ground?: 'nav';
   children?: ReactNode;
   className?: string;
@@ -74,7 +79,9 @@ export function Card({
   const nested = useContext(InCard);
   const classes = [nested ? 'kit-group' : 'kit-card', className].filter(Boolean).join(' ');
   const Tag = `h${level}` as 'h2' | 'h3' | 'h4';
-  const heading = title !== undefined && <Tag className="kit-card-title">{title}</Tag>;
+  const heading = title !== undefined && (
+    <Tag className={['kit-card-title', tone && `kit-card-title-${tone}`].filter(Boolean).join(' ')}>{title}</Tag>
+  );
   return (
     <div className={classes} {...(ground ? { 'data-ground': ground } : {})}>
       {given(count) || given(action) ? (
@@ -84,8 +91,9 @@ export function Card({
           {given(action) && <span className="kit-card-action">{action}</span>}
         </div>
       ) : (
-        heading
+        <>{heading}</>
       )}
+      {given(description) && <p className="kit-card-description">{description}</p>}
       <InCard.Provider value={true}>{children}</InCard.Provider>
     </div>
   );
@@ -306,6 +314,30 @@ export function Empty({ title, description, action }: { title: ReactNode; descri
   return <PlatformEmpty text={title} detail={description} action={action} />;
 }
 
+/**
+ * A placeholder block: the platform's skeleton bar, at the size what is coming will take (`height`, and `width` where
+ * it is not the box's), so nothing under it moves when it lands. `lines` draws that many, one under another, the last
+ * shorter, for a paragraph. It is for `<Loaded loading={…}>`, and says nothing to assistive technology itself: the
+ * wait is announced once, by what holds it.
+ */
+export function Skeleton({ height, width, lines = 1 }: { height?: number | string; width?: number | string; lines?: number }) {
+  const count = Math.max(1, Math.floor(lines));
+  return (
+    <span className="kit-skeleton" aria-hidden="true">
+      {Array.from({ length: count }, (_, at) => (
+        <span
+          key={at}
+          className="sk-bar kit-skeleton-bar"
+          style={{
+            ...(height === undefined ? {} : { blockSize: height }),
+            ...(width !== undefined ? { inlineSize: width } : count > 1 && at === count - 1 ? { inlineSize: '60%' } : {}),
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
 /** What `<Loaded>` reads of a read: a hook's query (`useRows`, `useRecord`, `useBreakdown`) as it stands. */
 interface LoadedQuery<T> {
   data: T | undefined;
@@ -318,8 +350,9 @@ interface LoadedQuery<T> {
 
 /**
  * A read's states before its drawing, said as every section says them: the platform's placeholder while it is asked
- * (at `height`, the size the drawing will take, so nothing under it moves when it lands), `Empty` for no rows or no
- * record (`empty`, or the house sentence), and the house problem with Try again when it could not be read — focus on
+ * (at `height`, the size the drawing will take, so nothing under it moves when it lands, or what `loading` draws in its
+ * place: a `Skeleton` shaped like the drawing), `Empty` for no rows or no record (`empty`, or the house sentence;
+ * `empty={null}` draws nothing), and the house problem with Try again when it could not be read — focus on
  * Try again when the drawing it replaced held it, so focus is never dropped. Then `children(data)`, the App's own.
  * What was read stays drawn when a later refresh fails: a finished screen is never swapped for a note. Domain states
  * ("not eligible", "unavailable") are the App's to draw inside it.
@@ -327,11 +360,13 @@ interface LoadedQuery<T> {
 export function Loaded<T>({
   query,
   empty,
+  loading,
   height,
   children,
 }: {
   query: LoadedQuery<T>;
   empty?: ReactNode;
+  loading?: ReactNode;
   height?: number | string;
   children: (data: NonNullable<T>) => ReactNode;
 }) {
@@ -349,7 +384,15 @@ export function Loaded<T>({
         <Problem text={query.error?.message || sayKit('notRead')} retry={() => void query.refetch()} />
       </div>
     );
-  if (query.data === undefined && query.refused) return <>{empty ?? <Empty title={sayKit('nothingHereYet')} />}</>;
+  /* `empty={null}` says draw nothing; only an `empty` left out is the house sentence. */
+  const nothing = empty === undefined ? <Empty title={sayKit('nothingHereYet')} /> : empty;
+  if (query.data === undefined && query.refused) return <>{nothing}</>;
+  if (query.data === undefined && loading !== undefined)
+    return (
+      <div role="status" aria-label={sayKit('common.loading')}>
+        {loading}
+      </div>
+    );
   if (query.data === undefined)
     return (
       <div
@@ -359,8 +402,7 @@ export function Loaded<T>({
         {...(height === undefined ? {} : { style: { blockSize: height } })}
       />
     );
-  if (query.data === null || (Array.isArray(query.data) && query.data.length === 0))
-    return <>{empty ?? <Empty title={sayKit('nothingHereYet')} />}</>;
+  if (query.data === null || (Array.isArray(query.data) && query.data.length === 0)) return <>{nothing}</>;
   return <>{children(query.data as NonNullable<T>)}</>;
 }
 
@@ -647,7 +689,8 @@ export function Items({
 }) {
   /* In a Card the rows are that box's, not a box in a box: no inset of their own, as a Stat in a Card is plain. */
   const nested = useContext(InCard);
-  if (Children.toArray(children).length === 0) return given(empty) ? <div className="kit-items-empty">{empty}</div> : null;
+  if (Children.toArray(children).length === 0)
+    return given(empty) ? <div className={`kit-items-empty${nested ? ' kit-items-empty-flush' : ''}`}>{empty}</div> : null;
   return (
     <ul className={['kit-items', nested && 'kit-items-flush', className].filter(Boolean).join(' ')} aria-label={label}>
       {children}
@@ -656,16 +699,21 @@ export function Items({
 }
 
 /**
- * One row of `Items`. `lead` is a slot before the text (an icon, an avatar, a `Value`), `title` the row's words, `note`
- * one quiet line under it and `action` a slot at the row's end (buttons, a menu, a `Value`). With `href` or `onClick`
- * the title is the row's one link or button (a single target for the keyboard) and the whole row answers a pointer,
- * as a table's rows do; a click inside `action` is the action's own and never opens the row.
+ * One row of `Items`. `lead` is a slot before the text (an icon, an avatar, a time, a `Value`), `title` the row's words,
+ * `note` one quiet line under it and `action` a slot at the row's end (buttons, a menu, a `Value`). The lead is one
+ * column the rows of an `Items` share, as wide as its widest, so a time or a mark lines up down the list whichever rows
+ * carry one. `tone` puts a mark of that tone in the column (a dot, as a status is one), or, beside a `lead`, says the
+ * lead in the tone's ink; the words that mean it are the row's own. With `href` or `onClick` the title is the row's one
+ * link or button (a single target for the keyboard) and the whole row answers a pointer, as a table's rows do: the
+ * target reaches across the row, so a finger anywhere on it is the target's own. A click inside `action` is the
+ * action's and never opens the row; at a narrow width the action wraps under the note rather than squeeze it.
  */
 export function Item({
   lead,
   title,
   note,
   action,
+  tone,
   href,
   onClick,
 }: {
@@ -673,21 +721,13 @@ export function Item({
   title: ReactNode;
   note?: ReactNode;
   action?: ReactNode;
+  tone?: ToneName;
   href?: string;
   onClick?: () => void;
 }) {
-  const host = useHostIfAny();
   const target = useRef<HTMLAnchorElement & HTMLButtonElement>(null);
   const interactive = href !== undefined || onClick !== undefined;
-  /* An address in this App is followed in place, as `useNavigate` does: a plain `<a>` would load the whole page again.
-     A modified or middle click keeps the browser's own meaning (a new tab, a download), and so does another origin. */
-  const follow = (event: MouseEvent<HTMLAnchorElement>) => {
-    onClick?.();
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    if (!host || href === undefined || !href.startsWith('/') || href.startsWith('//')) return;
-    event.preventDefault();
-    host.follow(href);
-  };
+  const follow = useFollow(href, onClick);
   const words =
     href !== undefined ? (
       <a ref={target} className="kit-item-target" href={href} onClick={follow}>
@@ -700,22 +740,62 @@ export function Item({
     ) : (
       title
     );
+  const marked = given(lead) || tone !== undefined;
   return (
     <li
       className={`kit-item${interactive ? ' kit-item-clickable' : ''}`}
       /* The pointer's click is the target's own, run once: one that began in the target already is. */
       onClick={interactive ? (event) => void (target.current?.contains(event.target as Node) || target.current?.click()) : undefined}
     >
-      {given(lead) && <span className="kit-item-lead">{lead}</span>}
-      <span className="kit-item-body">
-        <span className="kit-item-title">{words}</span>
-        {given(note) && <span className="kit-item-note">{note}</span>}
-      </span>
-      {given(action) && (
-        <span className="kit-item-action" onClick={(event) => event.stopPropagation()}>
-          {action}
+      {marked && (
+        <span className={`kit-item-lead${tone ? ` kit-item-lead-${tone}` : ''}`}>
+          {given(lead) ? lead : <span className="kit-item-mark" aria-hidden="true" />}
         </span>
       )}
+      <span className="kit-item-main">
+        <span className="kit-item-body">
+          <span className="kit-item-title">{words}</span>
+          {given(note) && <span className="kit-item-note">{note}</span>}
+        </span>
+        {given(action) && (
+          <span className="kit-item-action" onClick={(event) => event.stopPropagation()}>
+            {action}
+          </span>
+        )}
+      </span>
     </li>
   );
+}
+
+/**
+ * An address in this App is followed in place, as `useNavigate` does: a plain `<a>` would load the whole page again.
+ * A modified or middle click keeps the browser's own meaning (a new tab, a download), and so does another origin.
+ */
+function useFollow(href: string | undefined, onClick?: () => void) {
+  const host = useHostIfAny();
+  return (event: MouseEvent<HTMLAnchorElement>) => {
+    onClick?.();
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (!host || href === undefined || !href.startsWith('/') || href.startsWith('//')) return;
+    event.preventDefault();
+    host.follow(href);
+  };
+}
+
+type ButtonProps = ComponentProps<typeof UiButton>;
+type LinkProps = Omit<ComponentProps<typeof ButtonLink>, 'onClick'> & { href: string; onClick?: () => void };
+
+/**
+ * The platform's one button. With `href` it is an `<a>` in the button's dress, so the action that opens another page
+ * has an address: a new tab, a copied link, and the page still follows an address of this App in place. Without it, a
+ * `<button>`; `busy` is the button's alone.
+ */
+export function Button(props: ButtonProps | LinkProps) {
+  if ('href' in props && props.href !== undefined) return <LinkedButton {...(props as LinkProps)} />;
+  return <UiButton {...(props as ButtonProps)} />;
+}
+
+function LinkedButton({ href, onClick, ...rest }: LinkProps) {
+  const follow = useFollow(href, onClick);
+  return <ButtonLink {...rest} href={href} onClick={follow} />;
 }

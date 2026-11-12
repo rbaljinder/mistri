@@ -387,6 +387,20 @@ export function formDefaultWord(column: ColumnMeta, value: unknown): 'today' | '
 }
 
 /**
+ * A column DEFAULT that is a plain value — `'booked'`, `'booked'::text`, `0`, `(-1)::integer`, `true` — as the value
+ * a form would write; undefined for an expression (a clock, a sequence, a function), which is the database's to fill.
+ */
+export function literalDefault(sql: string | undefined): string | undefined {
+  const text = sql?.trim();
+  if (!text) return undefined;
+  const quoted = /^'((?:[^']|'')*)'(?:::[\w\s."[\](),]+)?$/.exec(text);
+  if (quoted) return quoted[1]!.replace(/''/g, "'");
+  const number = /^\(?(-?\d+(?:\.\d+)?)\)?(?:::[\w\s."[\](),]+)?$/.exec(text);
+  if (number) return number[1];
+  return /^(?:true|false)$/i.test(text) ? text.toLowerCase() : undefined;
+}
+
+/**
  * A New form's starting values the schema already says: a vocabulary column's
  * literal DEFAULT (`status … default 'booked'`) is the choice the form opens
  * on, so the person sees what the database would write. A clock or a sequence

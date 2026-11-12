@@ -51,6 +51,8 @@ interface FieldBase {
 
 export interface CommandTextField extends FieldBase {
   type: 'text' | 'textarea';
+  /** Example text inside the empty box: `placeholder: 'e.g. 2018 Honda Civic'`. At most 256 characters. */
+  placeholder?: string | AppMessageRef;
   /** Fewest characters, after trimming. */
   min?: number;
   /** Most characters, after trimming: at most 65536. */
@@ -78,6 +80,8 @@ export interface CommandTextField extends FieldBase {
 }
 export interface CommandNumberField extends FieldBase {
   type: 'number';
+  /** Example text inside the empty box: `placeholder: 'e.g. 2018 Honda Civic'`. At most 256 characters. */
+  placeholder?: string | AppMessageRef;
   min?: number;
   max?: number;
   /** A whole number, or refused. */
@@ -104,6 +108,8 @@ export interface CommandNumberField extends FieldBase {
     unit, and `step` is not taken: the currency sets the precision. */
 export interface CommandMoneyField extends FieldBase {
   type: 'money';
+  /** Example text inside the empty box: `placeholder: 'e.g. 2018 Honda Civic'`. At most 256 characters. */
+  placeholder?: string | AppMessageRef;
   min?: number;
   max?: number;
   step?: number;

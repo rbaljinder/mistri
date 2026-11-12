@@ -1194,3 +1194,25 @@ describe("a form's lines are the shell's part", () => {
     expect(screen.getByRole('textbox', { name: 'Name' })).toBeTruthy();
   });
 });
+
+test("a database default is said only where it is a plain value, in the column's own words", () => {
+  /* A field report: a tenant App's New form said "Default supplied by the database" under every column with a
+     DEFAULT, and a Postgres literal (`'walk'::text`) was said with its cast and its stored word. */
+  const table: TableMeta = {
+    ...lead,
+    columns: [
+      col('id', 'INTEGER', { primaryKey: true, nullable: false, identity: 'by-default' }),
+      col('kind', 'TEXT', { default: "'walk'::text" }),
+      col('tier', 'TEXT', { hasDefault: true }),
+      col('code', 'TEXT', { default: 'upper(md5(random()::text))' }),
+      col('seats', 'INTEGER', { default: '(-1)::integer' }),
+    ],
+  };
+  const rule = { values: { walk: 'Walk-in' } };
+  draw(<NewRecordForm {...props()} table={table} display={(c: ColumnMeta) => (c.name === 'kind' ? rule : null) as never} />);
+  expect(screen.getByRole('textbox', { name: 'Kind' })).toHaveAttribute('placeholder', 'Default: Walk-in');
+  expect(screen.getByRole('textbox', { name: 'Tier' })).toHaveAttribute('placeholder', '');
+  expect(screen.getByRole('textbox', { name: 'Code' })).toHaveAttribute('placeholder', '');
+  expect(screen.getByLabelText('Seats')).toHaveAttribute('placeholder', 'Default: -1');
+  expect(document.body.textContent).not.toMatch(/supplied by the database/);
+});

@@ -1151,6 +1151,7 @@ async function fixture(
           operator: {
             read: true,
             write: ['item', ...(setup.files ? ['attachment'] : []), ...(setup.tags ? ['item_tag'] : [])],
+            export: ['item'],
             commands: [...(setup.twoCommands ? ['advance', 'hold'] : ['advance']), ...(setup.unversioned ? ['rename'] : [])],
           },
           viewer: { read: setup.metadata ? ['item'] : true },

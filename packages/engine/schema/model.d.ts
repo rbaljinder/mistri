@@ -31,7 +31,7 @@ export interface RelatedCreate<Label extends string | AppMessageRef = string | A
 }
 
 /** What an aggregate read of a custom section measures: "count", or an aggregate and a column of the resource. */
-export type CustomMeasure = 'count' | `${'sum' | 'avg' | 'min' | 'max'} ${string}`;
+export type CustomMeasure = 'count' | `count distinct ${string}` | `${'sum' | 'avg' | 'min' | 'max'} ${string}`;
 
 /** A scalar key, or a field of the source record. Never a URL or authority. */
 export type AppLinkValue = string | number | { column: string };
@@ -165,15 +165,15 @@ export interface AppCommandGroup {
   required?: never;
 }
 export type AppCommandField = (CommandValueBase & (
-  | { type: 'text' | 'textarea'; minLength?: number; maxLength?: number; format?: CommandTextFormat; pattern?: string; message?: string; case?: 'upper' | 'lower';
+  | { type: 'text' | 'textarea'; placeholder?: string; minLength?: number; maxLength?: number; format?: CommandTextFormat; pattern?: string; message?: string; case?: 'upper' | 'lower';
       /** A mask the value is typed through: `0` a digit, `a` a letter, `*` either, anything else drawn as written
           (`'000-00-0000'`). The value is what the mask's places hold (`123456789`), and the mask is its pattern. */
       mask?: string; sensitive?: CommandSensitive }
   | { type: 'richText'; minLength?: number; maxLength?: number; mentions?: CommandRichTextMentions; images?: string }
   /** `outOf`: with `as: 'rating'`, the stars of its scale; the field is then a whole number from 1 to it. */
-  | { type: 'number'; min?: number; max?: number; integer?: boolean; step?: number; below?: string; above?: string; live?: CommandLiveLines; outOf?: number }
+  | { type: 'number'; placeholder?: string; min?: number; max?: number; integer?: boolean; step?: number; below?: string; above?: string; live?: CommandLiveLines; outOf?: number }
   /** An amount of money in the App's currency (`ui.currency`), from 0 unless `min` says less, on cents unless `step` says otherwise. */
-  | { type: 'money'; min?: number; max?: number; step?: number; minor?: boolean; currency?: string; below?: string; above?: string; live?: CommandLiveLines }
+  | { type: 'money'; placeholder?: string; min?: number; max?: number; step?: number; minor?: boolean; currency?: string; below?: string; above?: string; live?: CommandLiveLines }
   /** `statement`: the long words a consent box stands beside (at most 2,000 characters), drawn as one paragraph. */
   | { type: 'boolean'; accept?: true; statement?: string }
   | { type: 'date'; min?: string; max?: string; below?: string; above?: string }

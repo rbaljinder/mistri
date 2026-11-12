@@ -217,6 +217,22 @@ test("a server refusal naming a nested path is said beside that field, once, in 
   expect(screen.getByLabelText('Full name (required)')).not.toHaveAttribute('aria-invalid');
 });
 
+test('a text, a number, an amount and a masked text draw their placeholder in the empty box', async () => {
+  const fields: AppCommandField[] = [
+    { name: 'plate', label: 'Plate', type: 'text', placeholder: 'e.g. ABC 123' },
+    { name: 'notes', label: 'Notes', type: 'textarea', placeholder: 'Anything we should know' },
+    { name: 'miles', label: 'Miles', type: 'number', placeholder: 'e.g. 42000' },
+    { name: 'price', label: 'Price', type: 'money', placeholder: 'e.g. 12500' },
+    { name: 'ssn', label: 'SSN', type: 'text', mask: '000-00-0000', placeholder: 'Nine digits' },
+  ];
+  render(<FormSurface form={{ id: 'p', label: 'P', input: fields }} appName="Ignition" submit={vi.fn()} />);
+  expect(screen.getByPlaceholderText('e.g. ABC 123')).toBeInTheDocument();
+  expect(screen.getByPlaceholderText('Anything we should know').tagName).toBe('TEXTAREA');
+  expect(screen.getByPlaceholderText('e.g. 42000')).toHaveAttribute('type', 'number');
+  expect(await screen.findByPlaceholderText('e.g. 12500')).toBeInTheDocument();
+  expect(await screen.findByPlaceholderText('Nine digits')).toBeInTheDocument();
+});
+
 test('`as` decides radios or a listbox whatever the count: select for a few, radios for many', () => {
   const options = (words: string[]) => words.map((value) => ({ value, label: value }));
   const few: AppCommandField = {

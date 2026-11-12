@@ -289,7 +289,9 @@ in `refused: { writes }`: they are inserted or updated in a fresh transaction
 once the handler's own writes are rolled back, and the refusal is answered
 after that commits. A refusal keeps no receipt, so a retry with the same
 idempotency key runs the command, and its `keep`, again: an attempt is
-counted once more, never skipped.
+counted once more, never skipped. A public command counts wrong tries with
+refuse keep too: on a tenant App's signed-out form the keep writes in the place
+the address names, inserts only, so list every table it may write there.
 
 ```ts
 defineCommand({ /* … */ write: ['attempt'], refused: { writes: ['attempt'] },
@@ -445,7 +447,9 @@ invite: defineCommand({ source: 'main', target: 'application', output: shape({ l
   async handle({ link }) { return { link: await link('status') }; } }),
 ```
 
-`revokeLinks('status')` in a handler closes the record's links of that name, every one when it names none. A link needs `MISTRI_FORM_KEY`; `uses`, `confirm` and `stepUp` limit who gets in ([reference](/docs/dsl-resources/)).
+A public command may mint one too, on the one record it has just inserted, and answer it as `link: text()` beside its `reference`: the visitor reads it in that first answer only (a replay of the same submission leaves it out), and a submission the door turned away as a bot gets a link-shaped URL that opens nothing. Asked before the insert, or after two, `link` refuses.
+
+`revokeLinks('status')` in a handler closes the record's links of that name, every one when it names none; removing the record closes them all in the same transaction. A link needs `MISTRI_FORM_KEY`; `uses`, `confirm` and `stepUp` limit who gets in ([reference](/docs/dsl-resources/)).
 
 ## Load and run
 

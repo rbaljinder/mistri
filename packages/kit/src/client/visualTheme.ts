@@ -290,6 +290,9 @@ export function validVisualTheme(value: unknown): string {
 const LOOK_SHEETS: Readonly<Record<string, () => Promise<unknown>>> = {
   workshop: () => import('./workshopLook.css'),
   lumen: () => import('./lumenLook.css'),
+  /* The faces the kit ships, each apart from its look (themeRecipes.ts KIT_FACE_SHEETS). */
+  inter: () => import('./interFace.css'),
+  barlow: () => import('./barlowFace.css'),
   sage: () => import('./sageLook.css'),
   ledger: () => import('./ledgerLook.css'),
   brand: () => import('./brandLook.css'),

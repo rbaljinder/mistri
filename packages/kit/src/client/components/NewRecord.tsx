@@ -33,7 +33,8 @@ import { ConfirmDialog } from './Prompt.js';
 import { useForm } from '@tanstack/react-form';
 import { columnKind, isFlagColumn, primaryKey, type ColumnMeta, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { humanName, vocabularyWord } from '@mistriwork/engine/shared/model.js';
-import { inferredFormDefaults } from '@mistriwork/engine/shared/formValues.js';
+import { recordNoun } from '@mistriwork/engine/shared/appNoun.js';
+import { inferredFormDefaults, literalDefault } from '@mistriwork/engine/shared/formValues.js';
 import { sessionIdentity } from '../sessionIdentity.js';
 import { Dropdown, readsAsName } from './Dropdown.js';
 import { RecordPicker } from './RecordPicker.js';
@@ -995,27 +996,25 @@ export function PlatformControl({
     }
     register(node);
   };
-  /* The default as the database spells it in the workbench — `'open'`,
-     `CURRENT_TIMESTAMP` — and as a person would in an app: quotes off,
-     capitalised, no arrow to a table name. */
-  const plainDefault = String(column.default ?? '').replace(/^'(.*)'$/, '$1');
   const allowed = (column as ColumnMeta & { allowed?: string[] }).allowed;
   /* A stored word as the App says it everywhere else: its `values`, else the vocabulary's words. */
   const word = (stored: string) => (app ? (wordFor(rule, stored) ?? vocabularyWord(stored)) : stored);
+  /* The default as the database spells it in the workbench — `'open'`, `CURRENT_TIMESTAMP` — and in an App only a
+     plain value, said as the column says it: an expression (a clock, a sequence) or a default the server keeps
+     private is the database's to fill, and a field has nothing useful to say about it (a field report). */
+  const literal = app ? literalDefault(column.default) : undefined;
   const hint = explicitNull
     ? app
       ? say('common.noValue')
       : 'null'
     : column.identity || column.name === assigned
       ? say('assignedByTheDatabase')
-      : column.default !== undefined
-        ? app
-          ? say('defaultValue', {
-              value: allowed?.includes(plainDefault) ? word(plainDefault) : plainDefault,
-            })
-          : `default: ${column.default}`
-        : column.hasDefault === true
-          ? say('defaultSuppliedByTheDatabase')
+      : literal !== undefined
+        ? say('defaultValue', { value: allowed?.includes(literal) ? word(literal) : (wordFor(rule, literal) ?? literal) })
+        : column.default !== undefined || column.hasDefault === true
+          ? app
+            ? ''
+            : `default: ${column.default ?? ''}`
           : column.references
             ? `→ ${column.references.table}`
             : '';
@@ -1328,7 +1327,9 @@ const TAB_STOPS =
 /** The form's heading, the way both frames say it. */
 function newRecordTitle(table: TableMeta, app: boolean): string {
   return say('newThing', {
-    thing: app ? humanName(table.name).toLowerCase() : table.name,
+    /* The resource's noun, as the list's New button says it ("New order", not "New purchase_orders"): the form is
+       headed by the word the button that opened it wore. */
+    thing: app ? recordNoun(resourceOf(shell().app(), table.id)?.noun, table.name) : table.name,
   });
 }
 

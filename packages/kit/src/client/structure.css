@@ -1211,6 +1211,19 @@
   .free-page-body.is-own > .page-section {
     padding-top: 0;
   }
+  /* The first part of a free-form page that has a head stands one gap under it (--page-head-gap), as a list's controls
+     do. It was the head's own margin, the body's (the sidebar shell's rule below) and the section's, three spaces said
+     one on another: 62px under the head against a list's 27. */
+  .dash-head:has(+ .free-page-body:not(.is-own)) {
+    margin-bottom: 0;
+  }
+  .free-page-body:not(.is-own, .is-bare),
+  body.app-sidebar-shell #content > .applist-head:first-child + .free-page-body:not(.is-own, .is-bare) {
+    padding-top: var(--page-head-gap);
+  }
+  .free-page-body:not(.is-own, .is-bare) > .page-section:first-child {
+    padding-top: 0;
+  }
   /* A section's page-row basis (100%) is a width in a row and would be a height in a column. */
   .dash-area > .page-section {
     flex: 0 0 auto;
@@ -1493,6 +1506,17 @@
       background: color-mix(in srgb, var(--ink) 14%, transparent);
     }
   }
+  /* The foot is as wide as the menu (240px): the picker takes its row and the buttons stand under it, each as wide as
+     its words, not three boxes in one row that ran past the menu's edge (a field report, 330/360). */
+  body.app-sidebar-shell .sidebar-account .tenant-control-host {
+    display: flex;
+    max-width: 100%;
+    min-width: 0;
+  }
+  body.app-sidebar-shell .sidebar-account .tenant-control-inner,
+  body.app-sidebar-shell .sidebar-account .tenant-control-inner .tenant-control-trigger {
+    max-width: 100%;
+  }
   body.app-sidebar-shell .sidebar-account + #sidebar-app-footer .sidebar-identity {
     padding-top: var(--space-3);
   }
@@ -1547,7 +1571,7 @@
     border-bottom: 1px solid var(--line);
   }
   body.app-sidebar-shell #content > .applist-host:first-child > .applist-head + .applist-controls {
-    padding-top: var(--space-3);
+    padding-top: var(--page-head-gap);
   }
   body.app-sidebar-shell #content > .applist-head:first-child + * {
     padding-top: var(--space-4);

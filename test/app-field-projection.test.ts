@@ -286,11 +286,16 @@ test('step-derived selections cannot publish hidden or read-only form fields', (
 test('quickAdd projection follows curated form visibility and create affordances without widening writes', () => {
   const definition = app({ quickAdd: true, form: { show: ['name'] } });
   assert.deepEqual(fieldAccessibleApp(definition, schema), definition);
-  for (const form of [{ show: ['hidden_secret'] }, { defaults: { readonly: literal } }]) {
+  for (const form of [{ show: ['hidden_secret'] }, { show: ['readonly'] }]) {
     const projected = fieldAccessibleApp(app({ quickAdd: true, form }), schema);
     assert.equal(Object.hasOwn(projected.views.incidents, 'quickAdd'), false);
     assert.doesNotMatch(JSON.stringify(projected), /hidden_secret|PRIVATE_LITERAL/);
   }
+  // A default the reader does not write is left out alone, so the quick add stays.
+  const defaulted = fieldAccessibleApp(app({ quickAdd: true, form: { show: ['name'], defaults: { readonly: literal } } }), schema);
+  assert.equal((defaulted.views.incidents as { quickAdd?: boolean }).quickAdd, true);
+  assert.deepEqual(defaulted.resources?.incident.form, { show: ['name'] });
+  assert.doesNotMatch(JSON.stringify(defaulted), /PRIVATE_LITERAL/);
   for (const mode of ['insertable', 'readonly', 'view', 'missing']) {
     const catalog = structuredClone(schema);
     if (mode === 'insertable') catalog.tables[0].insertable = false;
@@ -320,10 +325,29 @@ test('App projection drops entire unsafe actions while preserving the owning lis
   assert.deepEqual(definition, before);
 });
 
+test('a default on a column the reader does not write is left out alone; the form keeps the rest', () => {
+  const cases: Array<[AppForm, AppForm]> = [
+    [{ defaults: { hidden_secret: literal, name: 'public' } }, { defaults: { name: 'public' } }],
+    [{ defaults: { readonly: literal } }, {}],
+    [
+      { description: 'Tell us', show: ['name'], defaults: { readonly: literal, name: 'n' } },
+      { description: 'Tell us', show: ['name'], defaults: { name: 'n' } },
+    ],
+  ];
+  for (const [form, served] of cases) {
+    const definition = app({ form });
+    const before = structuredClone(definition);
+    const projected = fieldAccessibleApp(definition, schema);
+    assert.deepEqual(projected.resources!.incident.form, served);
+    assert.doesNotMatch(JSON.stringify(projected), /hidden_secret|PRIVATE_LITERAL/);
+    assert.deepEqual(definition, before);
+    // A curated show over this fixture leaves out its required revision, which the check says for everyone.
+    if (!served.show) clean(projected, schema);
+  }
+});
+
 test('unsafe form curation is omitted whole, including all defaults, without dropping the list', () => {
   const forms: AppForm[] = [
-    { defaults: { hidden_secret: literal, name: 'public' } },
-    { defaults: { readonly: literal } },
     { show: ['hidden_secret'], defaults: { name: literal } },
     { show: ['readonly'], defaults: { name: literal } },
   ];

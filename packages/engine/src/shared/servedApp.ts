@@ -689,6 +689,7 @@ export interface ServedApp<View extends object = ServedDashboardView | ServedFor
   ui: ServedAppUi;
   writableTables?: string[] | false;
   exportableTables?: string[];
+  viewerRoles?: string[];
   grantedCommands?: string[];
   grantedActions?: Record<string, string[]>;
   assistant?: { page?: true; record?: true };

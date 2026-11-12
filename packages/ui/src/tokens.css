@@ -74,6 +74,9 @@
      words, a list's controls and rows, a board's first lane, a calendar and a
      record all start here, so nothing in a room starts a step off the rest. */
   --room-inset: 14px;
+  /* The one space under a room's head, to its first control or part: a list's filter bar and a free-form page's first
+     part stand this far below the head's rule, so no kind of page starts further down than another. */
+  --page-head-gap: var(--space-3);
   /* The space scale (docs/design.md, Space and text): every padding, margin
      and gap is a step of it or a semantic token over it. The steps from 16px
      up are the layout's and move with a theme's rhythm (themeFamilies.css);

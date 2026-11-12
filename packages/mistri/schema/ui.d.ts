@@ -205,22 +205,28 @@ export type ValueDisplay = import('./app.js').Plain<import('./app.js').AppDispla
     quiet number beside the title and `action` a slot at the title row's end (buttons, a menu): given either, the title
     row is a header row. `ground="nav"` puts the box on the look's navigation ground: a Stat, Value, Meter, Table, Items,
     Segmented or Empty inside it takes that ground's inks. Any element with `data-ground="nav"` is the same scope. The title is an h3; `level` makes it
-    an h2 or an h4 where the page's outline needs one (a card that is a section of a page under the platform's h1 is `level={2}`). */
+    an h2 or an h4 where the page's outline needs one (a card that is a section of a page under the platform's h1 is `level={2}`).
+    `description` is one quiet line under the title, what the part holds; `tone` says the title in a status ink, for a part about trouble. */
 export declare function Card(
-  props: Children & { title?: ReactTypes.ReactNode; level?: 2 | 3 | 4; count?: ReactTypes.ReactNode; action?: ReactTypes.ReactNode; ground?: 'nav'; className?: string },
+  props: Children & {
+    title?: ReactTypes.ReactNode; level?: 2 | 3 | 4; count?: ReactTypes.ReactNode; action?: ReactTypes.ReactNode;
+    description?: ReactTypes.ReactNode; tone?: ToneName; ground?: 'nav'; className?: string;
+  },
 ): ReactTypes.ReactElement;
 /** A main column beside a rail (notes, filters, facts). The rail is `railWidth` wide (a CSS length, `'20rem'` by default,
     never past half the box) at the `side` edge (`'end'` by default); the main takes the rest. Where the box itself is
-    under 40rem wide it stacks, main first, and it never scrolls sideways. Cluster makes equal columns; this makes two unequal ones. */
+    under 40rem wide, or the main would be left under 24rem, it stacks, main first, and it never scrolls sideways. Cluster makes equal columns; this makes two unequal ones. */
 export declare function Beside(props: Children & { rail: ReactTypes.ReactNode; railWidth?: string; side?: 'start' | 'end'; className?: string }): ReactTypes.ReactElement;
 /** Rows with no head row, each an `Item`. `label` names the list for assistive technology; `empty` is drawn when there are no rows. */
 export declare function Items(props: Children & { label?: string; empty?: ReactTypes.ReactNode; className?: string }): ReactTypes.ReactElement | null;
-/** One row of `Items`: `lead` a slot before the text (icon, avatar, a Value), `title` its words, `note` one quiet line
-    under it, `action` a slot at the row's end. With `href` or `onClick` the title is the row's one link or button and the
-    whole row answers a pointer; a click inside `action` never opens the row. */
+/** One row of `Items`: `lead` a slot before the text (icon, avatar, a time, a Value), `title` its words, `note` one quiet
+    line under it, `action` a slot at the row's end. The lead is one column the rows share, as wide as the widest, so a
+    time or a mark lines up down the list. `tone` puts a mark of that tone in the column, or says a `lead` in the tone's ink.
+    With `href` or `onClick` the title is the row's one link or button, reaching across the whole row, which answers a
+    pointer; a click inside `action` never opens the row. At a narrow width the action wraps under the note. */
 export declare function Item(props: {
   lead?: ReactTypes.ReactNode; title: ReactTypes.ReactNode; note?: ReactTypes.ReactNode; action?: ReactTypes.ReactNode;
-  href?: string; onClick?: () => void;
+  tone?: ToneName; href?: string; onClick?: () => void;
 }): ReactTypes.ReactElement;
 /** Children one under another: a field's 20px apart (default), a section's 40px, or tight. */
 export declare function Stack(props: Children & { gap?: Gap; as?: 'div' | 'ul' | 'ol'; className?: string }): ReactTypes.ReactElement;
@@ -239,8 +245,9 @@ export declare function Text(props: { tone?: 'default' | 'muted' | 'danger'; siz
 export declare function VisuallyHidden(props: { children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
 /** A heading inside a section, whose own title is its h2. */
 export declare function Heading(props: Children & { level?: 3 | 4; className?: string }): ReactTypes.ReactElement;
-/** The platform's one button. */
-export declare function Button(props: Omit<ReactTypes.ButtonHTMLAttributes<HTMLButtonElement>, 'type'> & {
+/** The platform's one button: 44px tall on a coarse pointer or at a phone's width. With `href` it is an `<a>` in the
+    button's dress (a new tab, a copied link, an address of this App followed in place); without, a `<button>`. */
+export declare function Button(props: (Omit<ReactTypes.ButtonHTMLAttributes<HTMLButtonElement>, 'type'> & {
   intent?: 'primary' | 'secondary' | 'quiet' | 'danger';
   size?: 'compact' | 'default' | 'large';
   busy?: boolean;
@@ -248,7 +255,15 @@ export declare function Button(props: Omit<ReactTypes.ButtonHTMLAttributes<HTMLB
   block?: boolean;
   type?: 'button' | 'submit' | 'reset';
   ref?: ReactTypes.Ref<HTMLButtonElement>;
-}): ReactTypes.ReactElement;
+  href?: undefined;
+}) | (Omit<ReactTypes.AnchorHTMLAttributes<HTMLAnchorElement>, 'onClick'> & {
+  href: string;
+  intent?: 'primary' | 'secondary' | 'quiet' | 'danger';
+  size?: 'compact' | 'default' | 'large';
+  block?: boolean;
+  onClick?: () => void;
+  ref?: ReactTypes.Ref<HTMLAnchorElement>;
+})): ReactTypes.ReactElement;
 /** The platform's themed listbox, with optional actions beneath its choices. */
 export declare function Dropdown(props: {
   items: Array<{ value: string; label: string; detail?: string; badge?: string; disabled?: boolean; tone?: ToneName; swatches?: string[] }>;
@@ -286,13 +301,68 @@ export declare function Tone(props: Children & { tone: ToneName }): ReactTypes.R
 export declare function Meter(props: { value: number; max?: number; tone?: ToneName; label?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
 /** What a component says when it has nothing to draw. */
 export declare function Empty(props: { title: ReactTypes.ReactNode; description?: ReactTypes.ReactNode; action?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
+/* The platform's fields, drawn as the shell draws its own (their stylesheet is fetched with them): a label, a hint and a
+   problem wired to the control. Preview, as they are in @mistriwork/ui. Typed here by what a component passes (this file
+   reaches only react: see LoaderPageProps), and by the package's own types from `@mistriwork/mistri/page`. */
+type FieldFrame = {
+  label: ReactTypes.ReactNode; hint?: ReactTypes.ReactNode; problem?: ReactTypes.ReactNode; required?: boolean; labelHidden?: boolean;
+  optional?: ReactTypes.ReactNode; reserve?: boolean; id?: string; className?: string;
+};
+/** A text box in a field. */
+export declare function TextField(props: FieldFrame & {
+  value: string; onChange: (value: string) => void; onBlur?: () => void; type?: 'text' | 'email' | 'tel' | 'url';
+  inputMode?: 'text' | 'email' | 'tel' | 'numeric' | 'url'; autoComplete?: string; placeholder?: string; name?: string;
+  disabled?: boolean; readOnly?: boolean; valid?: boolean; after?: ReactTypes.ReactNode; inputRef?: ReactTypes.Ref<HTMLInputElement>;
+}): ReactTypes.ReactElement;
+/** One choice from a list, in a field. */
+export declare function Select(props: FieldFrame & {
+  options: Array<{ value: string; label: string; detail?: string; badge?: string; disabled?: boolean }>;
+  value: string; onChange: (value: string) => void; placeholder?: string; disabled?: boolean;
+}): ReactTypes.ReactElement;
+/** A checkbox with its label. */
+export declare function Checkbox(props: Omit<FieldFrame, 'label'> & {
+  label: ReactTypes.ReactNode; checked: boolean; onChange: (on: boolean) => void; disabled?: boolean;
+}): ReactTypes.ReactElement;
+/** Two choices, yes or no, as a pair. */
+export declare function YesNo(props: Omit<FieldFrame, 'label'> & {
+  label: ReactTypes.ReactNode; value: 'yes' | 'no' | ''; onChange: (value: 'yes' | 'no') => void; yes: string; no: string;
+}): ReactTypes.ReactElement;
+/** A switch with its label. */
+export declare function Switch(props: {
+  label?: ReactTypes.ReactNode; description?: ReactTypes.ReactNode; checked?: boolean; defaultChecked?: boolean;
+  onCheckedChange?: (checked: boolean, event: unknown) => void; disabled?: boolean; busy?: boolean; id?: string; className?: string;
+}): ReactTypes.ReactElement;
+/** A number on a range, said by `format`. */
+export declare function Slider(props: FieldFrame & {
+  value: number; onChange: (value: number) => void; min: number; max: number; step?: number; format?: (n: number) => string; disabled?: boolean;
+}): ReactTypes.ReactElement;
+/** Cards to choose from: one (`value` holds at most one key) or, with `multiple`, several; `exclusive` is the option that clears the rest. */
+export declare function ChoiceCards(props: FieldFrame & {
+  options: Array<{ value: string; label: string; icon?: ReactTypes.ReactNode }>; value: string[]; onChange: (value: string[]) => void;
+  multiple?: boolean; exclusive?: string;
+}): ReactTypes.ReactElement;
+/** A file chosen in the browser, handed up as a `File` (or null), or with `multiple` a `File[]`; nothing is sent. Drawn with the
+    kit's button and the chosen names; the label and the keyboard are the platform's. */
+export declare function FileField(props: FieldFrame & {
+  accept?: string; name?: string; disabled?: boolean; inputRef?: ReactTypes.Ref<HTMLInputElement>;
+  /** The button's words and what the names say with no file, in the reader's language where not said. */
+  chooseLabel?: string; noneLabel?: string;
+} & (
+  | { multiple?: false; value: File | null; onChange: (file: File | null) => void }
+  | { multiple: true; value: File[]; onChange: (files: File[]) => void }
+)): ReactTypes.ReactElement;
+/** A placeholder block at the size what is coming will take (`height`, and `width` where it is not the box's); `lines`
+    draws that many, the last shorter, for a paragraph. For `<Loaded loading={…}>`; the wait is announced by what holds it. */
+export declare function Skeleton(props: { height?: number | string; width?: number | string; lines?: number }): ReactTypes.ReactElement;
 /** A read's states before its drawing, as every section says them: the platform's placeholder while it is asked (at
-    `height`, the size the drawing takes, so nothing moves when it lands), `empty` (or the house sentence) for no rows
+    `height`, the size the drawing takes, so nothing moves when it lands, or what `loading` draws instead: a `Skeleton`
+    shaped like the drawing), `empty` (or the house sentence; `empty={null}` draws nothing) for no rows
     or no record, and the house problem with Try again when it could not be read. Then `children(data)`:
     `<Loaded query={useRows('payment')} empty={<Empty title="No payments yet" />}>{(rows) => …}</Loaded>`. */
 export declare function Loaded<T>(props: {
   query: { data: T | undefined; isError: boolean; error: Error | null; refetch(): unknown };
   empty?: ReactTypes.ReactNode;
+  loading?: ReactTypes.ReactNode;
   height?: number | string;
   children: (data: NonNullable<T>) => ReactTypes.ReactNode;
 }): ReactTypes.ReactElement;
@@ -414,8 +484,9 @@ export declare function useComposer(): { fill(text: string, options?: { mode?: '
 export declare function layoutPoint(event: { clientX: number; clientY: number }, element: Element): { x: number; y: number };
 /** Where a file resource's row is served, for an `<img>`: `const file = useFile('member_avatar'); file({ id: 4 }, { thumbnail: true })`. */
 export declare function useFile(resource: string): (key: Readonly<Record<string, unknown>>, options?: { thumbnail?: boolean }) => string | undefined;
-/** Who is reading: signed in or not, and the signed-in account's id. What a component knows of the reader; the server decides every request. */
-export declare function useViewer(): { signedIn: boolean; account?: string };
+/** Who is reading: signed in or not, the signed-in account's id and the roles the reader holds here (empty when signed
+    out, and in an App that grants by no role). What a component knows of the reader, to choose what to offer; the server decides every request. */
+export declare function useViewer(): { signedIn: boolean; account?: string; roles: readonly string[] };
 /** What this server presents the App as, read-only: the deployment's name, mark, theme and language (its config's `"presentation"` is already in them) and the path it is served under. Presentation only, never a credential or a connection. */
 export declare function useDeployment(): {
   /** The program's name, as the bar and the page title say it. */
@@ -698,10 +769,13 @@ export type Token =
   | '--space-6'
   | '--space-7'
   | '--space-8'
+  | '--space-1h'
   | '--space-2h'
   | '--space-3h'
   | '--space-4h'
+  | '--control-h'
   | '--section-seam'
+  | '--page-head-gap'
   | '--page-measure'
   | '--room-inset'
   | '--row-h'

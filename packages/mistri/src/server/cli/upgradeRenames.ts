@@ -69,6 +69,8 @@ interface KeyRename extends Guards {
   table?: string;
   /** Only as an attribute of a component imported from the kit (`<Rows resource="…" />`), through whatever name it is imported as. */
   component?: boolean;
+  /** The kit components that took the old word; another keeps it as its own (`<Value resource>` is Value's). */
+  components?: readonly string[];
   /** Only when its value starts as this: a dashboard's `layout: [areas]` is not a page's `layout: 'showcase'`. */
   shape?: 'array' | 'object';
   /** Only when the object it names starts with one of these keys (`palette: { light, dark }`, not a variation). */
@@ -86,7 +88,7 @@ export const KEYS: readonly KeyRename[] = [
     table: 'custom',
     note: "A custom section's `totals: { … }` is `figures: { … }`; a list's `totals: [columns]` is unchanged",
   },
-  { from: 'head', to: 'header', inside: 'recipes', note: "A theme's `recipes.head` is `recipes.header`" },
+  { from: 'head', to: 'header', inside: 'recipes', table: 'recipes', note: "A theme's `recipes.head` is `recipes.header`" },
   { from: 'currentInk', to: 'onCurrent', note: "A theme's `nav.currentInk` is `nav.onCurrent`" },
   {
     from: 'palette',
@@ -141,7 +143,47 @@ export const KEYS: readonly KeyRename[] = [
     table: 'branding',
     note: "A tenant branding row's `brandColor` is `accent`",
   },
-  { from: 'resource', to: 'from', component: true, table: 'block', note: "A kit block's `resource` is `from`" },
+  {
+    from: 'resource',
+    to: 'from',
+    component: true,
+    /* The blocks that read a table by `from` (sdk/blocks.tsx); their `takes` refuses `resource`. */
+    components: [
+      'Metric',
+      'Chart',
+      'Breakdown',
+      'Rows',
+      'RecordCard',
+      'Timeline',
+      'Tree',
+      'Gantt',
+      'Board',
+      'Calendar',
+      'Gallery',
+      'Split',
+    ],
+    table: 'block',
+    note: "A kit block's `resource` is `from`",
+  },
+  /* A record page's sections, renamed before the helpers wrote them (engine renamedSectionWords.ts): read the same
+     wherever the helper or the section's own `kind` places them. */
+  ...(
+    [
+      ['edit', 'editable', { call: 'fields' }, "A fields section's `edit` is `editable`"],
+      ['edit', 'editable', { kind: 'fields' }, "A fields section's `edit` is `editable`"],
+      ['of', 'about', { call: 'related' }, "A related list's `of` is `about`"],
+      ['of', 'about', { call: 'stream' }, "A timeline stream's `of` is `about`"],
+      ['of', 'about', { inside: 'streams[]' }, "A timeline stream's `of` is `about`"],
+      ['orderBy', 'sort', { call: 'related' }, "A related list's `orderBy` is `sort`, written like the query bar"],
+    ] as const
+  ).map(([from, to, guards, note]) => ({ from, to, ...guards, table: 'section', note })),
+  {
+    from: 'kind',
+    to: 'intent',
+    inside: 'links[]',
+    table: 'link',
+    note: "A headline link's emphasis `kind` is `intent`, as a button says it: 'primary' or 'secondary'",
+  },
 ];
 
 /** Where a kit component comes from: the one place an App imports the blocks. A package under this name is the kit's. */
@@ -231,6 +273,19 @@ export const REFUSED: readonly Refusal[] = [
       ['detail', { inside: 'streams[]' }],
     ] as const
   ).map(([name, context]) => ({ name, context, table: 'stream', reason: STREAM_REASON })),
+  /* A record page's section words whose new spelling is an argument, or takes another shape: a person writes it. */
+  ...(
+    [
+      ['paths', { call: 'fields' }, "is the first argument now: `fields(['name', 'account_id.name'], { … })`, so move it there"],
+      ['path', { call: 'related' }, 'is `whose`, the third argument now: `related(title, from, whose, { … })`, so move it there'],
+      ['path', { call: 'stream' }, 'is `whose`, the second argument now: `stream(from, whose, at, text, { … })`, so move it there'],
+      ['path', { inside: 'streams[]' }, "is `whose` now: the column on the stream's table that names this record"],
+      ['tint', { call: 'timeline' }, "is `tone`, said as a display rule: `{ kind: { internal: 'warn' } }`"],
+      ['tint', { call: 'stream' }, 'is `tone`: one tone for every row of the stream'],
+      ['tint', { inside: 'streams[]' }, 'is `tone`: one tone for every row of the stream'],
+      ['order', { call: 'timeline' }, "is `newest`, and says it as 'first' (the default) or 'last'"],
+    ] as const
+  ).map(([name, context, reason]) => ({ name, context, table: 'section', reason })),
 ];
 
 /**

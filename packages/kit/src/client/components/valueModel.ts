@@ -444,7 +444,7 @@ export function dressFor(rule: DisplayRule | null | undefined, value: unknown): 
       kind: 'tone',
       tone,
       text,
-      label: figure ?? wordFor(rule, text) ?? vocabularyWord(text),
+      label: figure ?? wordFor(rule, text) ?? tonedDay(rule, value, text) ?? vocabularyWord(text),
       ...(icon ? { icon } : {}),
       ...(figure !== null ? { figure: true as const } : {}),
     };
@@ -489,19 +489,57 @@ export function dressFor(rule: DisplayRule | null | undefined, value: unknown): 
     if (items.length) return { kind: 'items', items, text: items.join(', ') };
   }
   if (rule.format === 'relative') {
-    const said = formatRelativeDay(text);
-    /* Said from today only while it is near: "2 weeks ago" on a ledger hides the date an accountant needs, and
-       "6 months ago" is never what a due date is for. Past about two weeks the date is the text and the relative
-       phrase its tooltip. */
+    const said = relativeSaid(rule, text);
     const days = daysFromToday(text);
     /* Passed while its row is still open: drawn in the warning tone, however it is said. */
     const overdue = rule.open === true && days !== null && days < 0 ? { overdue: true as const } : {};
-    if (said && days !== null && (rule.absolute || Math.abs(days) > NEAR_DAYS))
-      return { kind: 'relative', text: formatDate(text), title: said, ...overdue };
-    if (said) return { kind: 'relative', text: said, title: text, ...overdue };
+    if (said) return { kind: 'relative', ...said, ...overdue };
   }
   if (rule.avatar && text.trim()) return { kind: 'avatar', text, initials: initialsOf(text), hue: hueOf(text) };
   return null;
+}
+
+/**
+ * A relative day in words: from today while it is near, since "2 weeks ago" on a ledger hides the date an accountant
+ * needs and "6 months ago" is never what a due date is for. Past about two weeks the date is the text and the
+ * relative phrase its tooltip.
+ */
+function relativeSaid(rule: DisplayRule, text: string): { text: string; title: string } | null {
+  const said = formatRelativeDay(text);
+  if (!said) return null;
+  const days = daysFromToday(text);
+  return days !== null && (rule.absolute || Math.abs(days) > NEAR_DAYS)
+    ? { text: formatDate(text), title: said }
+    : { text: said, title: text };
+}
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?)?$/;
+
+/**
+ * A toned day says what it would say untoned: its tone is the pill it wears, not a reason to draw the stored ISO day.
+ * A `relative` rule says it from today while near; no format says it as a date column does (daySaid). A field report
+ * found the tone dropped both. Undefined for a value that is no day.
+ */
+function tonedDay(rule: DisplayRule, value: unknown, text: string): string | undefined {
+  if (typeof value !== 'string' || !ISO_DAY.test(text.trim())) return undefined;
+  if (rule.format === 'relative') return relativeSaid(rule, text.trim())?.text;
+  if (rule.format !== undefined) return undefined;
+  const said = daySaid(text.trim()).text;
+  return said === text ? undefined : said;
+}
+
+/**
+ * A stored day or moment in the reader's words, as a date column says it: Postgres hands back an ISO wire format,
+ * precise and unreadable. A midnight is the day it is, the original kept in the title; a midnight with a zone is an
+ * instant, not a day, as the grid reads it (columns.js). An App says a near day from today, the rest as the date,
+ * and the whole of it on hover, as its grid does.
+ */
+function daySaid(text: string): { text: string; title: string | undefined } {
+  const midnight = /[ T]00:00(:00(\.0+)?)?$/.test(text);
+  const near = shellBody().classList.contains('app-mode') ? sayNearDay(text, !midnight) : null;
+  if (near) return { text: near.text, title: near.title };
+  const shown = midnight ? formatDate(text) : formatDateTime(text);
+  return { text: shown, title: shown === text ? undefined : text };
 }
 
 const HEX = /^#[0-9a-f]{6}$|^#[0-9a-f]{3}$/i;
@@ -634,17 +672,7 @@ export function sayValue(col: ColumnMeta | undefined, value: unknown): Said {
         : formatNumber(n, { maximumFractionDigits: 6, useGrouping: !YEAR_NAME.test((col?.name ?? '').split('.').pop() ?? '') });
     return { kind: 'number', text: shown, title: shown === text ? undefined : text };
   }
-  if (plan.kind === 'date' || /date|time/.test(type)) {
-    /* Postgres hands back an ISO wire format, precise and unreadable: shown
-       in the reader's words, a midnight as the day it is, the original kept
-       in the title. A midnight with a zone is an instant, not a day, as the grid reads it (columns.js). */
-    const midnight = /[ T]00:00(:00(\.0+)?)?$/.test(text);
-    /* An App says a near day from today, the rest as the date, and the whole of it on hover, as its grid does. */
-    const near = shellBody().classList.contains('app-mode') ? sayNearDay(text, !midnight) : null;
-    if (near) return { kind: 'date', text: near.text, title: near.title };
-    const shown = midnight ? formatDate(text) : formatDateTime(text);
-    return { kind: 'date', text: shown, title: shown === text ? undefined : text };
-  }
+  if (plan.kind === 'date' || /date|time/.test(type)) return { kind: 'date', ...daySaid(text) };
   /* Long text gets its own block; a value with a space is prose, one
      without is a token. */
   /* An unbroken run of key or ciphertext characters — base64, hex, a token

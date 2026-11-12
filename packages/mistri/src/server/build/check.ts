@@ -73,6 +73,7 @@ import { fixRepeatedQueries, fixRestated } from './checkFix.js';
 import { checkedRoutes, indexStep, problem, queryStep, servedFactsOf, shown, type Status, type Step } from './checkSteps.js';
 import { previewFieldsUsed, previewKeysUsed } from '../../shared/preview.js';
 import { appCommandOccurrences } from '../../shared/appCommandOccurrences.js';
+import { unpreparedCommands } from '../app/appCommandOfferChecks.js';
 import { hint, parseTsc, readableTypeErrors, shorten, typecheckApp } from './typecheck.js';
 import {
   componentCode,
@@ -1689,7 +1690,15 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       const messages = catalogs
         ? { keys: new Set(Object.keys(catalogs.locales[catalogs.source] ?? {})), file: catalogs.files[catalogs.source] }
         : { keys: new Set<string>() };
-      const lint = await lintComponents(appDir, loaded.components, pages, schema, messages);
+      // A section's literal command that nothing offers is refused in the browser: held to the App's offers.
+      const lint = await lintComponents(
+        appDir,
+        loaded.components,
+        pages,
+        schema,
+        messages,
+        unpreparedCommands(loaded.app, loaded.commands?.registry),
+      );
       const said = (finding: { file: string; line: number; text: string }) =>
         `${shown(join(appDir, finding.file))}:${finding.line}  ${finding.text}`;
       const count = Object.keys(loaded.components.entries).length;

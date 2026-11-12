@@ -17,7 +17,6 @@ export const say = defineMessages({
   cannotAddThisRecord: 'Cannot add this record. Required fields hidden by this form need valid defaults or visible controls: {map}.',
   assignedByTheDatabase: 'assigned by the database',
   defaultValue: 'Default: {value}',
-  defaultSuppliedByTheDatabase: 'Default supplied by the database',
   one: ' (one of {allowed})',
   newThing: 'New {thing}',
   discardNewRecord: 'Discard new record?',

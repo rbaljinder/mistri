@@ -255,6 +255,29 @@ test('audit parts belong to their receipt: a replay writes none, a rolled-back c
   });
 });
 
+/* The journal's own copy of what it is given is bounded by the receipt's bounds, not the scoped-read snapshot's
+   1M characters: a long audit inside 4 MiB is kept whole, and one past every bound is refused by name. */
+test('an audit of 4,096 changes and 2M characters is kept whole; a copy past the receipt bounds is refused by name', async () => {
+  await fixture(async (adapter, db) => {
+    const wide = (count: number, width: number) => ({
+      ...audit,
+      ...splitAudit(Array.from({ length: count }, (_, at) => ({ field: `f${at}`, note: 'n'.repeat(width) }))),
+    });
+    await commandsOf(adapter).commandTransaction(async (_tx, journal) => {
+      await journal.commit(receipt, wide(4096, 480));
+    });
+    assert.equal(count(db, tables.receipt), 1);
+    assert.equal(partsOf(db).length, 15);
+    await assert.rejects(
+      commandsOf(adapter).commandTransaction(async (_tx, journal) => {
+        await journal.commit({ ...receipt, id: 'receipt-2', idempotencyKey: 'attempt-2' }, wide(4096, 2048));
+      }),
+      (error: Error & { cause?: Error }) => /journal keeps at most 7,405,568 characters/.test(String(error.cause?.message)),
+    );
+    assert.equal(count(db, tables.receipt), 1);
+  });
+});
+
 test('audit parts are refused when they are not whole pieces or run past 4,096 changes, and none of them is written', async () => {
   await fixture(async (adapter, db) => {
     const whole = (count: number) => JSON.stringify(Array.from({ length: count }, (_, at) => ({ field: `f${at}` })));

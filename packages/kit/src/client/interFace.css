@@ -1,0 +1,61 @@
+/* Inter, Lumen's face and any theme's that names it first (themeRecipes.ts recipeAttributes): a sheet of its own so
+   a theme that sets its interface in Inter does not fetch the whole of Lumen's look for the declaration, nor wear a
+   rule of Lumen's that is not scoped to a recipe. A stack that begins with the face brings this sheet, as Lumen's does. The server preloads the
+   file beside it (server/clientSurface.ts, SHEET_FACES, lookPreloads). */
+/* Lumen's face, shipped with it rather than hoped for: named and not
+   fetched, Inter drew only where it was installed, and elsewhere the system
+   sans stood in (DejaVu Sans on most Linux, wider, so a Lumen screen set
+   differently on every machine). Inter's variable face, its Latin subset
+   (48 KB, weights 100 to 900 in one file; SIL Open Font License, its text in
+   fonts/Inter-OFL.txt and dist/client/fonts/), declared here so only a page
+   wearing Lumen, or a stack that names Inter, asks for it. `swap`, not `optional`: the page
+   is held until this sheet is in and the face is fetched beside it, so a
+   first visit mostly reveals in Inter already, and where it does not the
+   fallback below is cut to Inter's measure, so the swap moves almost nothing.
+   `optional` would keep a slow first visit in the fallback for the whole
+   page, and the next page in Inter: the same screen set two ways.
+   One change from Inter as released: its `tnum` turns the ten figures
+   tabular and also the hyphen, comma, period, colon, the brackets, the
+   operators and the space, each set a figure wide. Text under
+   `tabular-nums` (a document, a record's values) then read "Sign - ins",
+   "SR - 1". The file's `tnum` lookup is cut to the ten figures (fontTools:
+   the GSUB lookup `tnum` names keeps zero to nine), as the system faces the
+   other looks wear already have it; e2e/tabular-figures.spec.ts holds it. */
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./fonts/inter-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* The face that stands in until Inter arrives, and past its Latin range:
+   Arial (Liberation Sans, its metric twin, on Linux), scaled to Inter's width
+   and given Inter's ascent and descent (1984 and 494 of 2048 units, no line
+   gap), so the swap barely rewraps a line and never moves a baseline. The
+   widths are measured in Chromium over a line of interface text with its
+   figures: Inter's regular is 106.1% of Arial's, and its 600 and 700 are
+   101.1% and 102.1% of Arial Bold's, so the heavier weights take Arial's own
+   bold at 101.6% rather than a regular thickened and widened. An override is
+   said of the adjusted size, so each is Inter's ratio over the face's
+   size-adjust. */
+@font-face {
+  font-family: 'Inter Fallback';
+  font-weight: 100 500;
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans'), local('LiberationSans'), local('Helvetica');
+  size-adjust: 106.1%;
+  ascent-override: 91.3%;
+  descent-override: 22.73%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Inter Fallback';
+  font-weight: 600 900;
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Helvetica Bold');
+  size-adjust: 101.6%;
+  ascent-override: 95.35%;
+  descent-override: 23.74%;
+  line-gap-override: 0%;
+}

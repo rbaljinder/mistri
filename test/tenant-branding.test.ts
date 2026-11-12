@@ -18,12 +18,16 @@ import { brandingLogoHeaders, createTenantBrandingService } from '../packages/mi
 import {
   audienceBranding,
   BrandingRefused,
+  brandingFonts,
   brandingProblems,
   parseBrandingDeclaration,
   tenantTheme,
   validateTenantBranding,
 } from '../packages/mistri/src/shared/tenantBranding.js';
 import { withHead } from '../packages/engine/src/server/clientHttp.js';
+import { appFaceHead, lookFacesFor, lookSheetsFor } from '../packages/engine/src/server/clientSurface.js';
+import { compileAppTheme } from '../packages/mistri/src/shared/themeSpec.js';
+import { recipeAttributes } from '../packages/engine/src/shared/themeRecipes.js';
 import { fillMailBrand, mailLinkPage, mailLinkPolicy, type MailBrand } from '../packages/mistri/src/server/email/mailLinkPage.js';
 
 const tenantAuth = { rows: 'tenant', roles: { admin: {}, agent: {}, staff: { realm: 'platform' } } } as never;
@@ -520,4 +524,102 @@ test("a tenant's accent is its form's primary action too, where the look drew th
       preset,
     );
   }
+});
+
+/* The tenant's font: a name from a closed set, never a stack or a file, and it sets the interface's face alone. */
+const shippedSpec = {
+  kind: 'theme',
+  id: 'yard',
+  label: 'Yard',
+  extends: 'mono',
+  type: {
+    font: { ui: '"Figtree", Georgia, serif', heading: 'Georgia, serif' },
+    faces: [{ family: 'Figtree', src: './fonts/figtree.woff2', weight: '300 900' }],
+  },
+};
+/* An App's own theme, registered in `ui.customThemes`, is what ships font files; branding.themes offers it by id. */
+const yard = compileAppTheme(shippedSpec, 'test', new Set(), { faces: true });
+const declareYard = (allow: string[], themes: unknown[]) =>
+  parseBrandingDeclaration(
+    { allow, editors: ['admin'], themes },
+    { ui: { theme: { preset: 'mono' }, customThemes: [yard] } as never, auth: tenantAuth },
+    'test',
+  );
+
+test('a tenant picks its interface font from a closed set: the kit faces and the faces its themes ship', () => {
+  const declaration = declareYard(['font'], ['mono', shippedSpec]);
+  assert.deepEqual(
+    brandingFonts(declaration).map((font) => font.id),
+    ['Inter', 'Barlow', 'Figtree'],
+  );
+  // A face the theme names a stack for is drawn with that stack, whatever else the tenant picked.
+  assert.equal(brandingFonts(declaration)[2]!.stack, '"Figtree", Georgia, serif');
+  assert.equal(validateTenantBranding({ font: 'Inter' }, declaration).font, 'Inter');
+  assert.equal(validateTenantBranding({ font: 'Figtree' }, declaration).font, 'Figtree');
+  // Anything outside the set, a stack, a rule or a file name included, is refused in a sentence.
+  for (const font of ['Comic Sans', 'inter', 'Inter, serif', 'x"}body{display:none}', './fonts/x.woff2', 12, ['Inter']]) {
+    assert.throws(
+      () => validateTenantBranding({ font }, declaration),
+      (error) =>
+        error instanceof BrandingRefused && error.refusals[0]!.field === 'font' && /Pick one of the fonts offered/.test(error.message),
+      String(font),
+    );
+  }
+  // The App that does not allow it refuses it, and the key is one an App may name in `allow`.
+  assert.throws(
+    () => validateTenantBranding({ font: 'Inter' }, declare({ allow: ['name'], editors: ['admin'] })),
+    /does not let a customer change "font"/,
+  );
+});
+
+test("a tenant's font sets the interface face only, with the face's files and the sheet that declares a kit face", () => {
+  const declaration = declareYard(['font', 'preset'], ['mono', shippedSpec]);
+  const base = tenantTheme(declaration, {});
+  const inter = tenantTheme(declaration, { font: 'Inter' });
+  assert.match(inter.fonts!.ui!, /^Inter, "Inter Fallback", /);
+  assert.equal(inter.fonts!.heading, base.fonts!.heading);
+  assert.equal(inter.fonts!.data, base.fonts!.data);
+  // A kit face is a sheet of its own, not its look's: a theme set in Inter brings the face and not the whole of Lumen's
+  // sheet (the rules of it that are not scoped to a recipe would draw on a theme that never asked for Lumen).
+  assert.ok(recipeAttributes(inter).sheets.includes('inter'));
+  assert.ok(!recipeAttributes(inter).sheets.includes('lumen'));
+  assert.ok(!recipeAttributes(base).sheets.includes('inter'));
+  assert.ok(lookSheetsFor({}, undefined, inter).includes('inter'));
+  assert.ok(lookFacesFor({}, undefined, inter).includes('inter'));
+  const barlow = tenantTheme(declaration, { font: 'Barlow' });
+  assert.ok(recipeAttributes(barlow).sheets.includes('barlow'));
+  assert.ok(!recipeAttributes(barlow).sheets.includes('workshop'));
+  assert.ok(lookFacesFor({}, undefined, barlow).includes('barlow'));
+  // A page of an App on Mono: only the tenant's pick asks for a face.
+  const mono = { theme: { preset: 'mono' } };
+  assert.deepEqual(lookFacesFor(mono, undefined, undefined), []);
+  assert.deepEqual(lookFacesFor(mono, undefined, inter), ['inter']);
+  // A face another theme ships comes with the tenant's own theme, though the tenant started from a different one.
+  const figtree = tenantTheme(declaration, { font: 'Figtree', preset: 'mono' });
+  assert.equal(figtree.fonts!.ui, '"Figtree", Georgia, serif');
+  assert.deepEqual(
+    figtree.faces?.map((face) => face.family),
+    ['Figtree'],
+  );
+});
+
+test("a tenant's font is preloaded in the head beside its @font-face, the interface face first", () => {
+  const declaration = declareYard(['font'], [shippedSpec]);
+  // The server names each served face (appFonts.ts); the theme here is as it is once it has.
+  for (const theme of declaration.themes)
+    for (const face of theme.faces ?? []) {
+      face.file = 'figtree-abc123abc123.woff2';
+      face.href = '/yard/_fonts/figtree-abc123abc123.woff2';
+    }
+  const tenant = tenantTheme(declaration, { font: 'Figtree' });
+  const head = appFaceHead({}, (href) => href, undefined, tenant);
+  assert.match(head, /<link rel="preload" as="font" type="font\/woff2" crossorigin href="\/yard\/_fonts\/figtree-abc123abc123\.woff2">/);
+  assert.match(head, /@font-face\{font-family:"Figtree";src:url\("\/yard\/_fonts\/figtree-abc123abc123\.woff2"\)/);
+  // Once: the heading's face and the interface's are one file here.
+  assert.equal(head.match(/rel="preload"/g)?.length, 1);
+  // A tenant that picked none, on an App that ships none, adds nothing.
+  assert.equal(
+    appFaceHead({}, (href) => href, undefined, tenantTheme(declare({ allow: ['font'], editors: ['admin'] }), {})),
+    '',
+  );
 });

@@ -470,9 +470,10 @@ export function appAllowsWrite(app: AppDef | undefined, schema: DatabaseSchema, 
 /**
  * The tables this reader may export, or undefined where the App does not
  * grant by role (its one switch, `ui.export`, is all there is). Exporting is a
- * grant of its own beside read and write: a person may export a table any of
- * their roles writes, or lists in `export`. A signed-out visitor exports
- * nothing. `roles` are the verified server roles.
+ * grant of its own beside read and write: a person may export a table one of
+ * their roles lists in `export`, and writing one does not imply it — a file is
+ * every matching row leaving at once, which an edit grant never meant. A
+ * signed-out visitor exports nothing. `roles` are the verified server roles.
  */
 export function appExportable(
   app: AppDef,
@@ -488,9 +489,7 @@ export function appExportable(
   const out = new Set<string>();
   for (const role of roles) {
     if (!Object.hasOwn(access.roles, role)) continue;
-    const grant = access.roles[role];
-    const writes = grant.write === true ? realmResources(app, grant.realm, access.write) : grant.write === false ? [] : grant.write;
-    for (const name of [...writes, ...(grant.export ?? [])]) {
+    for (const name of access.roles[role].export ?? []) {
       const table = findTable(schema, name);
       if (table) out.add(table.id);
     }

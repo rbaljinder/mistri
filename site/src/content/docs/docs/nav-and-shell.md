@@ -16,7 +16,7 @@ Say where each visitor starts, arrange the menu in groups with icons, and place 
   nav: navigation,
 ```
 
-See it in the sample (`examples/apps/lintel/app.ts:163`). The menu itself is arrangement only:
+See it in the sample (`examples/apps/lintel/app.ts:165`). The menu itself is arrangement only:
 
 ```ts title="examples/apps/lintel/navigation.ts"
 export const navigation = [

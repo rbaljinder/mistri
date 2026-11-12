@@ -314,11 +314,12 @@ export function parseAuthGrants(
             reads.add(resource);
           }
         });
-      /* What the role may export beyond what it writes (which it always may): of what it reads. */
+      /* What the role may export, a grant of its own: writing a table does not imply taking it away as a file. Of
+         what it reads; `false` says none in so many words. */
       let exports: string[] | undefined;
       if (rawGrant.export !== undefined)
         gather(mine, () => {
-          exports = accessResources(rawGrant.export, `${here}, "export"`);
+          exports = rawGrant.export === false ? [] : accessResources(rawGrant.export, `${here}, "export"`);
           for (const resource of exports) {
             if (!reads.has(resource)) throw new Error(`${here}, "export" names "${resource}", which the role does not read.`);
           }
@@ -888,7 +889,7 @@ export function checkedGrants(app: Pick<AppDef, 'name' | 'resources' | 'auth' | 
       }
       let exports: string[] | undefined;
       if (rawGrant.export !== undefined) {
-        exports = accessResources(rawGrant.export, `${here}, "export"`);
+        exports = (rawGrant.export as unknown) === false ? [] : accessResources(rawGrant.export, `${here}, "export"`);
         assertAccessSubset(exports, new Set(readable), `${here}, "export" requires read`);
       }
       /* Its parent's grants are already its own (inheritedGrants): the name is kept only to say where they came from. */

@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEv
 import type { ThemeDefinition, ThemeDensity } from '@mistriwork/engine/schema/theme.js';
 import {
   accentFor,
+  brandingFonts,
   brandingProblems,
   tenantTheme,
   type BrandingKey,
@@ -390,6 +391,20 @@ export function BrandingForm() {
                 { value: 'spacious', label: say('spacious') },
               ]}
               onChange={(next) => set({ density: (next || undefined) as ThemeDensity | undefined })}
+            />
+          </Field>
+        )}
+        {allowed('font') && (
+          <Field label={say('font')} problem={problemFor('font')} size="compact" group>
+            <Dropdown
+              ariaLabel={say('font')}
+              disabled={disabled}
+              value={draft.font ?? ''}
+              items={[
+                { value: '', label: say('appDefault') },
+                ...brandingFonts(declaration).map((font) => ({ value: font.id, label: font.id })),
+              ]}
+              onChange={(next) => set({ font: next || undefined })}
             />
           </Field>
         )}

@@ -12,14 +12,14 @@ import { LOOK_PALETTES, paletteColors } from './lookPalettes.js';
     nothing is bundled. A look's identity is its type roles: size, weight and tracking. */
 const SANS = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
 const HELVETICA = '"Helvetica Neue", Helvetica, Arial, ui-sans-serif, sans-serif';
-/** Lumen's face: Inter, shipped with Lumen's sheet (lumenLook.css) and so
-    fetched only by a page wearing it, never in the first paint; then Arial
+/** Lumen's face: Inter, shipped as a sheet of its own (interFace.css) and so
+    fetched only by a page set in it, never in the first paint; then Arial
     cut to Inter's measure while it arrives (docs/design.md, Faces). */
-const INTER = `Inter, "Inter Fallback", ${SANS}`;
+export const INTER = `Inter, "Inter Fallback", ${SANS}`;
 /** Workshop's faces: Barlow for the interface and data, its semi-condensed bold for titles and labels, shipped with
-    Workshop's sheet (workshopLook.css) and fetched only by a page wearing it; each with Arial cut to its measure
+    a sheet of their own (barlowFace.css) and fetched only by a page set in them; each with Arial cut to its measure
     while it arrives. */
-const BARLOW = `Barlow, "Barlow Fallback", "Helvetica Neue", Arial, sans-serif`;
+export const BARLOW = `Barlow, "Barlow Fallback", "Helvetica Neue", Arial, sans-serif`;
 const BARLOW_CONDENSED = `"Barlow Semi Condensed", "Barlow Semi Condensed Fallback", Barlow, "Arial Narrow", sans-serif`;
 /** Ledger's figures and labels: IBM Plex Mono, shipped with Ledger's sheet (ledgerLook.css) and fetched only by a page
     wearing it; the platform's monospace stands in until it arrives. */

@@ -7,7 +7,7 @@ import { expect, test } from './support/harness';
  * Lumen ships, set its hyphen, comma, period, colon, brackets, operators and
  * space a figure wide under `tnum` too, so text under `tabular-nums` (a
  * document, a record's values) read "Sign - ins" and "SR - 1". The shipped
- * file's `tnum` is cut to the ten figures (packages/kit/src/client/lumenLook.css); this
+ * file's `tnum` is cut to the ten figures (packages/kit/src/client/interFace.css); this
  * loads that file and measures.
  *
  * No server and no database: the face is read from the source tree.

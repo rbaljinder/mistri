@@ -104,6 +104,12 @@ export interface IntegrationDefinition<
   client(context: Readonly<{ secrets: Readonly<Record<Secret, string>> }>): Client;
   readonly actions?: Actions;
   readonly webhooks?: Readonly<{
+    /**
+     * The secret the provider signs its deliveries with, when it signs with a
+     * shared secret: saving one shorter than SIGNING_SECRET_LEAST characters is
+     * refused, since a short one lets a forged callback be signed by guessing.
+     */
+    readonly signing?: Secret;
     /** The provider's signature checked against the raw body: the event, or null for a delivery that does not verify. */
     verify(
       delivery: IntegrationDelivery,
@@ -181,6 +187,7 @@ export interface CapturedIntegration {
   client(secrets: Readonly<Record<string, string>>): unknown;
   readonly actions: ReadonlyMap<string, CapturedAction>;
   readonly webhooks?: Readonly<{
+    readonly signing?: string;
     verify(delivery: IntegrationDelivery, context: Readonly<{ secrets: Readonly<Record<string, string>>; now: number }>): unknown;
     readonly events: ReadonlyMap<string, Readonly<{ type: string; payload: Shape<unknown>; optOut?: string; optIn?: string }>>;
   }>;
@@ -206,6 +213,8 @@ export const INTEGRATION_NAME = /^[a-z][a-z0-9-]{0,39}$/;
 const MEMBER = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const SECRET = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const EVENT_TYPE = /^[\x21-\x7e]{1,128}$/;
+/** The fewest characters a webhook's signing secret is saved with: about 144 bits when the provider's are random. */
+export const SIGNING_SECRET_LEAST = 24;
 
 const captured = new WeakMap<object, CapturedIntegration>();
 
@@ -285,7 +294,9 @@ export function defineIntegration<
   let webhooks: CapturedIntegration['webhooks'];
   if (value.webhooks !== undefined) {
     const declared = record(value.webhooks, `${where} webhooks`);
-    only(declared, `${where} webhooks`, ['verify', 'events']);
+    only(declared, `${where} webhooks`, ['verify', 'events'], ['signing']);
+    if (declared.signing !== undefined && (typeof declared.signing !== 'string' || !(secrets as string[]).includes(declared.signing)))
+      fail(`${where} webhooks.signing names the secret the provider signs with, one of: ${(secrets as string[]).join(', ') || 'none'}.`);
     const events = new Map<string, Readonly<{ type: string; payload: Shape<unknown>; optOut?: string; optIn?: string }>>();
     const types = new Set<string>();
     for (const [event, given] of Object.entries(record(declared.events, `${where} webhooks.events`))) {
@@ -316,6 +327,7 @@ export function defineIntegration<
     }
     if (!events.size) fail(`${where} webhooks.events names at least one event.`);
     webhooks = Object.freeze({
+      ...(declared.signing === undefined ? {} : { signing: declared.signing as string }),
       verify: fn<NonNullable<CapturedIntegration['webhooks']>['verify']>(declared.verify, `${where} webhooks.verify`),
       events,
     });

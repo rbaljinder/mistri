@@ -43,7 +43,7 @@
  * folded Done lane, present where the list can hold a finished record; a drop
  * on it writes the one final state the card's moves lead to.
  */
-import { namedCell } from '@mistriwork/kit/client/components/listColumn.js';
+import { listColumn, namedCell } from '@mistriwork/kit/client/components/listColumn.js';
 import { secondLine } from '@mistriwork/kit/client/components/Value.js';
 import { ReasonForm } from './Actions.js';
 import { Suspense, lazy, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -733,7 +733,7 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
                     ? { node: String(named.value), text: String(named.value), person: false }
                     : cardFact(
                         table.id,
-                        columnNamed(fact.column),
+                        columnNamed(fact.column) ?? listColumn(table, fact.column),
                         fact.column,
                         /* A person drawn as an initials disc is the one the reference names ("MO" for Maya Okafor), whose
                            name stands as its title: the disc of a staff key read as a number nobody could place. */

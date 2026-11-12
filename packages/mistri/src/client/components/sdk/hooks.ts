@@ -471,7 +471,7 @@ export function useFile(
   return useCallback((key, options) => host.fileAddress(resource, key, options, drawn), [host, resource, landed]);
 }
 
-/** Who is reading: signed in or not, and the signed-in account's id. Redraws when that changes. */
+/** Who is reading: signed in or not, the signed-in account's id and the roles they hold here. Redraws when that changes. */
 export function useViewer(): UiViewer {
   const host = useUiHost();
   const said = useSyncExternalStore(
@@ -479,7 +479,9 @@ export function useViewer(): UiViewer {
     () => JSON.stringify(host.viewer()),
     () => '',
   );
-  return said ? (JSON.parse(said) as UiViewer) : host.viewer();
+  /* Parsed once for each reading, so `roles` (and the viewer) is the same array until who is reading, or what they hold,
+     changes: an effect that depends on it runs when the reading changes, not on every draw. */
+  return useMemo(() => (said ? (JSON.parse(said) as UiViewer) : host.viewer()), [said, host]);
 }
 
 const keyText = (key: Readonly<Record<string, unknown>>) =>

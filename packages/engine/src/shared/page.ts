@@ -50,7 +50,7 @@ import type { DateUnit } from './filter.js';
 import type { AuthoredPage, AuthoredSection, CustomMeasure, RelatedCreate } from '../../schema/model.js';
 import { authoredSpelling } from './autoValues.js';
 import { createSaysMore, relatedCreatePlan } from './relatedCreate.js';
-import { groupsAsked, type PageCustomTotal } from './appComponents.js';
+import { groupsAsked, totalMeasureText, type PageCustomTotal } from './appComponents.js';
 import {
   type PageCustom,
   type PageList,
@@ -864,7 +864,13 @@ export function customTotalPlan(
     def: {
       base,
       by,
-      measures: [total.fn === 'count' ? { fn: 'count', alias: 'value' } : { fn: total.fn, path: total.column, alias: 'value' }],
+      measures: [
+        total.distinct
+          ? { fn: 'count', path: total.column, distinct: true, alias: 'value' }
+          : total.fn === 'count'
+            ? { fn: 'count', alias: 'value' }
+            : { fn: total.fn, path: total.column, alias: 'value' },
+      ],
       ...(filter ? { filter } : {}),
       // Biggest first, like a breakdown on a page: "mostly what?".
       ...(by.length ? { orderBy: [{ name: 'value', direction: 'desc' as const }] } : {}),
@@ -1182,7 +1188,7 @@ export function sectionConfig(s: PageSection): AuthoredSection {
                   name,
                   {
                     from: total.from,
-                    measure: (total.column === undefined ? total.fn : `${total.fn} ${total.column}`) as CustomMeasure,
+                    measure: totalMeasureText(total) as CustomMeasure,
                     ...(total.by ? { by: total.by } : {}),
                     ...(total.path ? { whose: total.path } : {}),
                     ...(total.filter ? { query: total.filter } : {}),

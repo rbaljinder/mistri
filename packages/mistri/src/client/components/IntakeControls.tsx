@@ -244,6 +244,7 @@ export function IntakeControl(props: IntakeControlProps) {
           }
           enterKeyHint="next"
           autoComplete="off"
+          placeholder={field.placeholder}
           disabled={disabled}
           required={field.required}
           value={typing ? String(value ?? '') : places === undefined ? amountShown(value) : minorShown(value, places)}
@@ -327,6 +328,7 @@ export function IntakeControl(props: IntakeControlProps) {
           spellCheck={false}
           data-1p-ignore
           data-lpignore="true"
+          placeholder={field.placeholder}
           disabled={disabled}
           required={field.required}
           value={drawn}
@@ -349,7 +351,7 @@ export function IntakeControl(props: IntakeControlProps) {
         inputMode={maskKeys(mask)}
         enterKeyHint="next"
         autoComplete="off"
-        placeholder={mask.replace(/[0a*]/g, '_')}
+        placeholder={field.placeholder ?? mask.replace(/[0a*]/g, '_')}
         disabled={disabled}
         required={field.required}
         value={maskShown(mask, typeof value === 'string' ? value : '')}

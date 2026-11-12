@@ -2523,8 +2523,8 @@
               },
               "measure": {
                 "type": "string",
-                "pattern": "^(count|(sum|avg|min|max)\\s+[A-Za-z_][A-Za-z0-9_]*)$",
-                "description": "count, or an aggregate and a column: sum amount, avg amount, min due_on, max due_on."
+                "pattern": "^(count|count\\s+distinct\\s+[A-Za-z_][A-Za-z0-9_]*|(sum|avg|min|max)\\s+[A-Za-z_][A-Za-z0-9_]*)$",
+                "description": "count, count distinct and a column (count distinct patient_id), or an aggregate and a column: sum amount, avg amount, min due_on, max due_on."
               },
               "by": {
                 "type": "string",

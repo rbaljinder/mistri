@@ -25,10 +25,27 @@ test('the published types list exactly the tokens', () => {
   );
 });
 
+/** A field report: the sheet defined --space-1h and check refused it, and --control-h was the kit's own height that a page's control could not read by name: two lists, one the sheet's and one check's. The sheet's scales and semantic steps are read off it. */
+test('every step of the space and text scales and every semantic size the base sheet defines is a token a component may read', () => {
+  const base = readFileSync(`${ROOT}packages/ui/src/tokens.css`, 'utf8');
+  const defined = [
+    ...base.matchAll(/^\s*(--(?:space-[0-9a-z]+|text-[a-z]+|control-h|section-seam|room-inset|row-h|page-[a-z-]+))\s*:/gm),
+  ].map((match) => match[1]!);
+  assert.ok(defined.length > 15, 'the scales were found');
+  assert.deepEqual(
+    defined.filter((token) => !UI_TOKENS.includes(token)),
+    [],
+  );
+});
+
 test('a borrowed or misspelt name is steered to the real token', () => {
   assert.equal(nearestToken('--negative'), '--status-critical');
   assert.equal(nearestToken('--ink-mutd'), '--ink-muted');
   assert.equal(nearestToken('--zzzzzzzzzz'), undefined);
+  /* A word Object.prototype holds is not a borrowed name: no function's source as a token. */
+  for (const word of ['--constructor', '--toString', '--valueOf', '--hasOwnProperty']) {
+    assert.equal(nearestToken(word), undefined, word);
+  }
 });
 
 /** Roles a look says only when it has its own idea of them: the sheets read them with a fallback (`var(--primary, var(--accent))`)

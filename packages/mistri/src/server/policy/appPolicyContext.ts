@@ -41,7 +41,7 @@ import {
   type BusinessCommandResult,
   type BusinessCommandStatus,
 } from '../commands/businessCommandExecution.js';
-import { bulkCommandWhen, validateBusinessCommandReferences } from '../commands/businessCommandLoader.js';
+import { bulkCommandWhen, unofferedRefusal, validateBusinessCommandReferences } from '../commands/businessCommandLoader.js';
 import { defineCommands } from '../commands/businessCommands.js';
 import {
   CommandInputError,
@@ -632,7 +632,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                       checks,
                       async (check) => {
                         const authorized = commandBinding.authorize(check.command, principal);
-                        if (!commandReferences!.has(check.command)) throw new AppAccessDenied();
+                        if (!commandReferences!.has(check.command)) throw unofferedRefusal(new AppAccessDenied(), check.command);
                         const capturedFlags = await flags();
                         return await authorized.commandTransaction!((reader) =>
                           readCommandAvailability({
@@ -673,7 +673,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                       throw new BusinessCommandExecutionError('command_version_mismatch', 'unknown');
                     }
                     const reference = commandReferences!.get(request.command);
-                    if (!reference) throw new BusinessCommandExecutionError('forbidden');
+                    if (!reference) throw unofferedRefusal(new BusinessCommandExecutionError('forbidden'), request.command);
                     if (request.multi && authorized.command.targets !== 'many') throw new CommandInputError('keys');
                     for (const key of request.keys) {
                       // The member, never its columns: an ownership column belongs to
@@ -825,7 +825,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                   try {
                     if (typeof request.command !== 'string') throw new CommandInputError('command');
                     const authorized = commandBinding.authorize(request.command, principal);
-                    if (!commandReferences!.has(request.command)) throw new AppAccessDenied();
+                    if (!commandReferences!.has(request.command)) throw unofferedRefusal(new AppAccessDenied(), request.command);
                     if (request.commandVersion !== authorized.command.version)
                       throw new BusinessCommandExecutionError('command_version_mismatch', 'unknown');
                     const asked = checkedNames(authorized.command, request.fields);

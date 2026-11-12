@@ -608,7 +608,7 @@ export function kitClientConfig({ workspace, main, clients = [], build, plugins 
     },
     /* A script names the files it loads (a lazy chunk's stylesheet, its preloads) relative to itself, not from the
        root: a server behind a reverse proxy under a path (`--base-path /tools`, shared/mount.ts) is at /tools/assets/,
-       and the page the server sends says so in its own tags. A stylesheet names its face (lumenLook.css) beside
+       and the page the server sends says so in its own tags. A stylesheet names its face (interFace.css) beside
        itself the same way. The pages keep `/assets/`, which the server rewrites. */
     experimental: { renderBuiltUrl: (_file, { hostType }) => (hostType === 'js' || hostType === 'css' ? { relative: true } : undefined) },
     build: {

@@ -24,6 +24,8 @@ export const STAMP_ZONE = 'America/Los_Angeles';
 export async function startSessionApp(
   options: {
     fieldPolicy?: boolean;
+    /** The agent creates tickets and writes nothing (`create` without `write`): an append-only grant. */
+    appendOnly?: boolean;
     rowPolicy?: boolean;
     deletedPolicy?: boolean;
     stamps?: boolean;
@@ -124,7 +126,7 @@ export default defineApp({
   id: '${SESSION_APP_ID}', name: 'Session workspace',${options.live ? ' live: true,' : ''}
   ${options.rowPolicy || options.notes ? "sources:{operations:{connection:'private-session-data'}}," : "connection:'private-session-data',"}
   auth: { providers: ['email'], signUp: 'open', defaultRole: 'agent',${options.brokenPublic ? " public: { read: ['ticket'], fields: { ticket: { read: ['name'] } } }," : ''} store: ${JSON.stringify(join(directory, 'sessions.db'))},
-    ${options.rowPolicy ? "rows:'policy'," : ''} roles: { agent: { read: true, write: true${options.notes ? ", commands: ['addNote', 'closeTicket']" : ''}${options.notes && !options.fieldPolicy ? ", fields: {ticket: {read:['id','name','status'],write:['name','status']}, ticket_note: {read:['id','ticket_id','body','at'],write:[]}}" : ''}${options.fieldPolicy ? ", fields: {ticket: {read:['id','name','status'],write:['name']}}" : ''} }${options.viewRoles ? `, requester: { read: ${options.portal ? "['article']" : 'true'} }` : ''} } },
+    ${options.rowPolicy ? "rows:'policy'," : ''} roles: { agent: { read: true, ${options.appendOnly ? "write: false, create: ['ticket']" : 'write: true'}${options.notes ? ", commands: ['addNote', 'closeTicket']" : ''}${options.notes && !options.fieldPolicy ? ", fields: {ticket: {read:['id','name','status'],write:['name','status']}, ticket_note: {read:['id','ticket_id','body','at'],write:[]}}" : ''}${options.fieldPolicy ? ", fields: {ticket: {read:['id','name','status'],write:['name']}}" : ''} }${options.viewRoles ? `, requester: { read: ${options.portal ? "['article']" : 'true'} }` : ''} } },
   resources: {${options.portal ? ' article: {},' : ''}${options.notes ? " ticket_note: { access: 'write' }," : ''} ticket: { access: 'write', delete: true, favorite: true${
     options.notes
       ? ", actions: { addNote: action('Add note', { command: 'addNote', header: false }), closeTicket: action('Close', { command: 'closeTicket' }) }"

@@ -56,7 +56,7 @@ import { dropDedicatedPostgresDatabase, openTenantEngine, TENANT_DIALECTS, type 
 import { fakepay, signDelivery } from './fixtures/integrations/fakepay/index.js';
 
 process.env.MISTRI_SECRETS_KEY ??= 'a-secrets-key-for-tests-that-is-long-enough';
-const WEBHOOK_SECRET = 'whsec_inbound_parity';
+const WEBHOOK_SECRET = 'whsec_inbound_parity_0123456789abcdef';
 
 const SECRET = 'inbound-test-secret-value';
 const sign = (body: string, timestamp: string, secret = SECRET) =>

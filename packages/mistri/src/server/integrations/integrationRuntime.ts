@@ -26,7 +26,7 @@ import { createHash } from 'node:crypto';
 import type { IntegrationStore } from '../../adapters/integrations/integrationStore.js';
 import { BusinessCommandExecutionError, isBusinessCommandExecutionError } from '../commands/commandErrors.js';
 import type { CapturedIntegrations } from './integrationDeclaration.js';
-import type { IntegrationCalls } from './integrationModule.js';
+import { SIGNING_SECRET_LEAST, type IntegrationCalls } from './integrationModule.js';
 import { openSecret, sealSecret } from './integrationSecrets.js';
 
 /* Three tries, 250 ms then 500 ms apart, each given 12 s: the effects' per-request bound, inside a request someone waits on. */
@@ -235,7 +235,8 @@ async function call(
 export interface IntegrationSettings {
   readonly integrations: readonly Readonly<{
     name: string;
-    secrets: readonly Readonly<{ name: string; set: boolean; savedAt: number | null }>[];
+    /** `least`: the fewest characters the secret is saved with, said beside its input (a webhook's signing secret). */
+    secrets: readonly Readonly<{ name: string; set: boolean; savedAt: number | null; least?: number }>[];
     webhook: string | null;
     channel: string | null;
   }>[];
@@ -252,7 +253,12 @@ export async function readIntegrationSettings(
       name: integration.name,
       secrets: integration.secrets.map((name) => {
         const row = rows.find((candidate) => candidate.integration === integration.name && candidate.name === name);
-        return { name, set: !!row, savedAt: row?.savedAt ?? null };
+        return {
+          name,
+          set: !!row,
+          savedAt: row?.savedAt ?? null,
+          ...(integration.webhooks?.signing === name ? { least: SIGNING_SECRET_LEAST } : {}),
+        };
       }),
       webhook: integration.webhooks ? webhookPath(integration.name) : null,
       channel: integration.channel?.name ?? null,
@@ -284,6 +290,10 @@ export async function saveIntegrationSettings(runtime: IntegrationRuntime, tenan
     if (!integration.secrets.includes(name)) refuse(`${integration.name} has no secret "${name}".`);
     if (given !== null && (typeof given !== 'string' || !given.trim() || given.length > 4096))
       refuse(`${name} is from 1 to 4,096 characters, or null to remove it.`);
+    if (given !== null && integration.webhooks?.signing === name && (given as string).trim().length < SIGNING_SECRET_LEAST)
+      refuse(
+        `${name} signs ${integration.name}'s webhooks, so it is at least ${SIGNING_SECRET_LEAST} characters: a shorter one lets a forged delivery be signed by guessing. Ask the provider for a longer one.`,
+      );
   }
   const at = runtime.now();
   for (const [name, given] of entries) {

@@ -124,9 +124,10 @@ test.describe('private tenant membership-driven write UI', () => {
     await expect(form.getByRole('textbox', { name: /Tenant/i })).toHaveCount(0);
     await form.getByRole('textbox', { name: 'Business ID', exact: true }).fill('new-business');
     await form.getByRole('textbox', { name: 'Name', exact: true }).fill('New north item');
-    // Leave Status blank: public hasDefault, not SQL default text, tells the
-    // shared form to omit it and lets SQLite produce the actual stored value.
+    // Leave Status blank: its plain DEFAULT is served (an expression stays a bare
+    // hasDefault) and said, the form omits it, and SQLite stores the actual value.
     await expect(form.getByRole('textbox', { name: 'Status', exact: true })).toHaveValue('');
+    await expect(form.getByRole('textbox', { name: 'Status', exact: true })).toHaveAttribute('placeholder', 'Default: open');
     const insertion = page.waitForResponse((reply) => new URL(reply.url()).pathname === '/api/insert');
     await form.getByRole('button', { name: 'Add', exact: true }).click();
     const insertedResponse = await insertion,

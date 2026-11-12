@@ -272,12 +272,12 @@ describe('an unknown key is offered the key it is a slip of, or told where it be
     [
       'a slip in a command field',
       input({ lable: 'A' }),
-      /input "a" has no "lable"\. Did you mean "label"\? It takes: type, label, help, optional, /,
+      /input "a" has no "lable"\. Did you mean "label"\? It takes: type, label, help, placeholder, optional, /,
     ],
     [
       'an option of another field type',
       input({ integer: true }),
-      /input "a" \(a text field\) has no "integer"\. It takes: type, label, help, optional, default, when, as, input, min, max, format, pattern, message, case, mask, sensitive\.$/,
+      /input "a" \(a text field\) has no "integer"\. It takes: type, label, help, optional, default, when, as, input, placeholder, min, max, format, pattern, message, case, mask, sensitive\.$/,
     ],
   ];
   for (const [what, app, expected] of HINTS) {

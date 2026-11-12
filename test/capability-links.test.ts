@@ -40,6 +40,8 @@ import { clearJournal } from '../packages/engine/src/server/journal.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { appLinkProblems } from '../packages/mistri/src/shared/appLinks.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
+import { redactLinkTokens } from '../packages/engine/src/server/http/refusalReport.js';
+import { Masker } from '../packages/mistri/src/server/observe/mask.js';
 import { createApp } from './support/createApp.js';
 import { catalogOf } from './support/commandCatalog.js';
 
@@ -54,6 +56,8 @@ const CONTRACTS = {
   withdraw: { target: 'application', input: { reason: { type: 'text', optional: true } } },
   approve: { target: 'application' },
   revoke: { target: 'application' },
+  discard: { target: 'application' },
+  apply: { public: true, input: { applicant: { type: 'text', max: 80 } } },
 };
 
 const RAW = {
@@ -67,6 +71,7 @@ const RAW = {
         invite: { label: 'Invite', command: 'invite' },
         revoke: { label: 'Revoke', command: 'revoke' },
         approve: { label: 'Approve', command: 'approve' },
+        discard: { label: 'Discard', command: 'discard' },
       },
       links: {
         status: { show: ['applicant', 'status'], says: { status: { submitted: 'Received' } }, commands: ['withdraw'] },
@@ -77,8 +82,11 @@ const RAW = {
       },
     },
   },
-  auth: { providers: ['email'], roles: { clerk: { read: true, commands: ['invite', 'revoke', 'approve'] } } },
-  views: { applications: { kind: 'list', from: 'application' } },
+  auth: { providers: ['email'], roles: { clerk: { read: true, commands: ['invite', 'revoke', 'approve', 'discard'] } } },
+  views: {
+    applications: { kind: 'list', from: 'application' },
+    apply: { kind: 'form', label: 'Apply', public: true, done: { title: 'Thanks' }, command: 'apply' },
+  },
   home: 'applications',
   nav: ['applications'],
 };
@@ -96,7 +104,7 @@ async function fixture(
   run: (f: {
     origin: string;
     mint: (name: string, id?: number) => Promise<{ url: string; answer: Answer }>;
-    command: (name: 'invite' | 'revoke' | 'approve', id: number, input?: object) => Promise<Answer>;
+    command: (name: 'invite' | 'revoke' | 'approve' | 'discard', id: number, input?: object) => Promise<Answer>;
     get: (path: string, headers?: Record<string, string>) => Promise<Answer>;
     post: (path: string, body: object, headers?: Record<string, string>) => Promise<Answer>;
     land: (url: string) => Promise<{ id: string; cookie: string; session: string; page: Answer }>;
@@ -155,6 +163,31 @@ async function fixture(
         return { link: String(await revokeLinks()) };
       },
     }),
+    discard: defineCommand({
+      source: 'main',
+      target: 'application',
+      async handle({ tx, record }) {
+        await tx.remove({ table: 'application', key: { id: Number(record.id) } });
+      },
+    }),
+    /* A public command answers its visitor with a link to the application it made; asked before it has made one, or
+       for a name the resource does not declare, it is refused. */
+    apply: defineCommand({
+      targets: 'none',
+      source: 'main',
+      target: 'application',
+      read: ['application'],
+      write: ['application'],
+      public: true,
+      input: CONTRACTS.apply.input as never,
+      output: shape({ reference: text(), link: text() }),
+      async handle({ tx, link }, input) {
+        const { applicant } = input as { applicant: string };
+        if (applicant === 'early') await link('status');
+        const made = await tx.insert({ table: 'application', values: { applicant, status: 'submitted' } });
+        return { reference: `A-${made.key.id}`, link: (await link(applicant === 'undeclared' ? 'nope' : 'status')) as unknown as string };
+      },
+    }),
   });
   const app = parse();
   const clerk: Identity = { id: 'account-clerk', who: 'clerk@example.test', role: 'clerk' };
@@ -184,7 +217,7 @@ async function fixture(
   const call = async (path: string, init: RequestInit = {}) =>
     answer(await fetch(`${origin}${path}`, { redirect: 'manual', signal: AbortSignal.timeout(10_000), ...init }));
   let keys = 0;
-  const command = async (name: 'invite' | 'revoke' | 'approve', id: number, input: object = {}) => {
+  const command = async (name: 'invite' | 'revoke' | 'approve' | 'discard', id: number, input: object = {}) => {
     const headers = { 'content-type': 'application/json', 'x-mistri-account': clerk.id, origin };
     const prepared = await call('/api/commands/prepare?app=intake', {
       method: 'POST',
@@ -289,6 +322,27 @@ test('a token is the id and a MAC over the grant; any other grant, key or id doe
   } finally {
     dispose();
   }
+});
+
+test('a log keeps a link’s id and never its MAC: the refusal report and the observer both cut a token down', () => {
+  const id = 'A'.repeat(21) + 'b';
+  const mac = 'M'.repeat(42) + 'x';
+  const token = `mstl1.${id}.${mac}`;
+  const session = `mstls1.${id}.1760000000000.1.1760000000000.${mac}`;
+  for (const said of [
+    redactLinkTokens(`GET /intake/l/${token} refused (404)`),
+    new Masker().text(`/intake/l/${token}?x=1`),
+    new Masker().text(`{"link":"http://127.0.0.1/intake/l/${token}"}`),
+    redactLinkTokens(session),
+  ]) {
+    assert.ok(said.includes(id), said);
+    assert.ok(!said.includes(mac), said);
+    assert.match(said, /\[redacted\]/);
+  }
+  // A link's session header is masked whole, as a cookie is.
+  assert.equal(new Masker().headers({ 'x-mistri-link': session })['x-mistri-link'], '[masked: credential]');
+  // A path that holds no token is left alone.
+  assert.equal(redactLinkTokens('/intake/l/abc/prepare'), '/intake/l/abc/prepare');
 });
 
 test('a reference renders as its URL, and a text holding one that does not render renders nothing', async () => {
@@ -492,6 +546,71 @@ test('every miss is one answer on one floor: unknown, wrong MAC, revoked, expire
       revoked_at: number;
     };
     assert.ok(row.revoked_at > 0);
+  }));
+
+test('removing a row ends every link minted on it, in the removal’s own transaction', () =>
+  fixture(async ({ mint, get, command, sql, origin }) => {
+    const first = await mint('status');
+    const second = await mint('brief');
+    const other = await mint('status', 2);
+    const live = () =>
+      (
+        sql.prepare(`SELECT id FROM ${COMMAND_JOURNAL_TABLES.link} WHERE revoked_at IS NULL ORDER BY created_at`).all() as {
+          id: string;
+        }[]
+      ).map((row) => row.id);
+    const idOf = (url: string) => linkTokenId(url.slice(url.lastIndexOf('/') + 1))!;
+    assert.equal(live().length, 3);
+    const discarded = await command('discard', 1);
+    assert.equal(discarded.status, 200, discarded.text);
+    // Both of row 1's links are revoked; row 2's is untouched and still opens.
+    assert.deepEqual(live(), [idOf(other.url)]);
+    for (const { url } of [first, second]) assert.equal((await get(url.slice(origin.length))).status, 404);
+    assert.equal((await get(other.url.slice(origin.length))).status, 303);
+  }));
+
+test('a public command answers its visitor with a link to the one row it made, once, and a decoy with one that opens nothing', () =>
+  fixture(async ({ post, get, land, sql, origin }) => {
+    const apply = (applicant: string, submission: string, extra: object = {}) =>
+      post('/api/forms/apply', { input: { applicant }, submission, ...extra });
+    const applied = await apply('Cy', 'apply-submission-0001');
+    assert.equal(applied.status, 200, applied.text);
+    assert.equal(applied.body.reference, 'A-3');
+    assert.match(applied.body.link, new RegExp(`^${origin}/l/mstl1\\.[A-Za-z0-9_-]{22}\\.[A-Za-z0-9_-]{43}$`));
+    const receipts = JSON.stringify(sql.prepare(`SELECT * FROM ${COMMAND_JOURNAL_TABLES.receipt}`).all());
+    assert.doesNotMatch(receipts, /mstl1\./, 'the journal keeps the reference, never the URL');
+    const row = sql.prepare(`SELECT row_key, created_by FROM ${COMMAND_JOURNAL_TABLES.link}`).get() as Record<string, string>;
+    assert.equal(row.created_by, 'public:apply');
+    // It opens the row the command made, and shows what the link declares of it alone.
+    const { page } = await land(applied.body.link);
+    assert.equal(page.status, 200, page.text);
+    assert.match(page.text, /Cy/);
+    assert.doesNotMatch(page.text, /Ada|Bea|ada@example\.test/);
+
+    // A replay of the same submission answers its reference again, and never the URL a second time.
+    const replayed = await apply('Cy', 'apply-submission-0001');
+    assert.equal(replayed.status, 200, replayed.text);
+    assert.equal(replayed.body.reference, 'A-3');
+    assert.equal(replayed.body.link, undefined);
+
+    // A filled honeypot is answered with a link-shaped URL, and it opens to the one miss.
+    const decoy = await apply('Dee', 'apply-submission-0002', { trap: 'filled' });
+    assert.equal(decoy.status, 200, decoy.text);
+    assert.match(decoy.body.link, new RegExp(`^${origin}/l/mstl1\\.[A-Za-z0-9_-]{22}\\.[A-Za-z0-9_-]{43}$`));
+    assert.equal((await get(decoy.body.link.slice(origin.length))).status, 404);
+    assert.equal((sql.prepare('SELECT count(*) AS n FROM application').get() as { n: number }).n, 3, 'a decoy writes nothing');
+
+    // Asked before it has made its row, or for a name the resource does not declare, the command is refused whole.
+    for (const [applicant, n] of [
+      ['early', 3],
+      ['undeclared', 4],
+    ] as const) {
+      const refused = await apply(applicant, `apply-submission-000${n}`);
+      assert.notEqual(refused.status, 200, refused.text);
+      assert.doesNotMatch(refused.text, /mstl1\./);
+    }
+    assert.equal((sql.prepare('SELECT count(*) AS n FROM application').get() as { n: number }).n, 3);
+    assert.equal((sql.prepare(`SELECT count(*) AS n FROM ${COMMAND_JOURNAL_TABLES.link}`).get() as { n: number }).n, 1);
   }));
 
 test('a link of one use opens once, however many ask at the same moment', () =>

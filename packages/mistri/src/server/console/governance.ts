@@ -491,6 +491,7 @@ export function consoleCommandAudit(
       import('@mistriwork/engine/server/migrate/database.js'),
       import('../../adapters/commands/commandJournalSchema.js'),
     ]);
+    const { groupAuditParts, stitchAudit } = await import('../../adapters/commands/commandAuditParts.js');
     const found: ConsoleAuditRow[] = [];
     for (const { name, url } of databases()) {
       if (url === undefined) continue;
@@ -536,6 +537,28 @@ export function consoleCommandAudit(
           ORDER BY r.completed_at DESC, r.id DESC LIMIT ${Math.max(1, Math.min(query.limit, 500))}`,
           params,
         );
+        /* The first target's continuation pieces, for the receipts read: a long audit's later entries name fields its
+           first pieces do not, so they are stitched on, in order, before the names are taken. A journal laid out before
+           the audit-part table has none. */
+        const parts = new Map<string, Array<Readonly<Record<string, unknown>>>>();
+        if (rows.length) {
+          const partsPresent = await db.all(
+            dialect === 'postgres'
+              ? `SELECT 1 AS present FROM pg_catalog.pg_tables WHERE schemaname = '${runtimeRelation('postgres', tables.auditPart).schema}' AND tablename = ?`
+              : `SELECT 1 AS present FROM main.sqlite_schema WHERE type = 'table' AND name = ?`,
+            [tables.auditPart],
+          );
+          if (partsPresent.length)
+            for (const part of await db.all<{ receipt_id: string; target_index: number; part: number; changes_json: string }>(
+              `SELECT receipt_id, target_index, part, changes_json FROM ${table(tables.auditPart)}
+                WHERE target_index = 0 AND receipt_id IN (${rows.map(() => '?').join(', ')})`,
+              rows.map((row) => row.id),
+            )) {
+              const held = parts.get(part.receipt_id) ?? [];
+              held.push(part);
+              parts.set(part.receipt_id, held);
+            }
+        }
         for (const row of rows) {
           const parse = (text: string | null): unknown => {
             try {
@@ -545,14 +568,18 @@ export function consoleCommandAudit(
             }
           };
           // Each target's key and changes are kept as texts, in request order: the first is shown, with how many there are.
-          // Only the names a frame holds are read, which the row's first pieces always do: a long audit's continuation
-          // rows (stitchAudit) are not needed here.
           const list = (text: string | null): unknown[] => {
             const parsed = parse(text);
             return Array.isArray(parsed) ? parsed : [];
           };
           const keys = list(row.keys_json);
-          const changes = parse(typeof list(row.changes_json)[0] === 'string' ? (list(row.changes_json)[0] as string) : null);
+          const first = typeof list(row.changes_json)[0] === 'string' ? (list(row.changes_json)[0] as string) : null;
+          let whole: string | null = first;
+          try {
+            if (first !== null) whole = stitchAudit(first, groupAuditParts(parts.get(row.id) ?? []).get(0));
+          } catch {
+            // A damaged continuation names what the first pieces do, and no more.
+          }
           found.push(
             Object.freeze({
               id: row.id,
@@ -564,7 +591,7 @@ export function consoleCommandAudit(
               resource: row.target,
               key: parse(typeof keys[0] === 'string' ? keys[0] : null),
               // The names of what changed, never the values.
-              fields: Object.freeze(changes && typeof changes === 'object' && !Array.isArray(changes) ? Object.keys(changes).sort() : []),
+              fields: Object.freeze(auditFields(parse(whole), row.target)),
               targets: keys.length,
               database: name,
             }),
@@ -576,4 +603,26 @@ export function consoleCommandAudit(
     }
     return found.sort((a, b) => (a.at === b.at ? (a.id < b.id ? 1 : a.id > b.id ? -1 : 0) : a.at < b.at ? 1 : -1)).slice(0, query.limit);
   };
+}
+
+/**
+ * The columns a target's audit wrote, by name and never by value: each entry on the target's own resource names the
+ * columns its `after` image holds (an insert's row, an update's applied values). A visitor's audit frames its entries
+ * (`{ visitor, changes }`); a change set kept as one object of columns names its own keys.
+ */
+function auditFields(changes: unknown, target: string | null): string[] {
+  const entries = Array.isArray(changes)
+    ? changes
+    : changes && typeof changes === 'object' && Array.isArray((changes as { changes?: unknown }).changes)
+      ? (changes as { changes: unknown[] }).changes
+      : undefined;
+  if (!entries) return changes && typeof changes === 'object' ? Object.keys(changes).sort() : [];
+  const names = new Set<string>();
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { resource, after } = entry as { resource?: unknown; after?: unknown };
+    if (target !== null && resource !== undefined && resource !== target) continue;
+    if (after && typeof after === 'object' && !Array.isArray(after)) for (const name of Object.keys(after)) names.add(name);
+  }
+  return [...names].sort();
 }

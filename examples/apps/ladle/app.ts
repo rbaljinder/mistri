@@ -18,7 +18,8 @@ export default defineApp({
     roles: {
       // The front desk: everything read, bookings kept, guests checked in at the door. Classes are the manager's.
       desk: { label: 'Front desk', read: true, write: ['booking'], commands: ['checkIn'] },
-      manager: { label: 'Manager', extends: 'desk', write: ['class_session'] },
+      // Writing is not exporting: the manager alone takes the timetable and the bookings away as a file.
+      manager: { label: 'Manager', extends: 'desk', write: ['class_session'], export: ['class_session', 'booking'] },
       // The account a first start makes (MISTRI_AUTH_ADMIN_EMAIL).
       admin: { label: 'Admin', extends: 'manager' },
     },

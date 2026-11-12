@@ -15,7 +15,7 @@ import { MAX_CUSTOM_FIGURES } from '../packages/engine/src/shared/appComponents.
 import { parseAppConfig, resolveViews, type AppDashboardView } from '../packages/mistri/src/shared/app.js';
 import { totalFigure, totalGroups } from '../packages/mistri/src/shared/customTotals.js';
 import { withBreakdownComputed, withGroupNames } from '../packages/engine/src/shared/breakdown.js';
-import { parsePagesConfig, validatePage, type PageDef } from '../packages/engine/src/shared/page.js';
+import { parsePagesConfig, sectionConfig, validatePage, type PageDef } from '../packages/engine/src/shared/page.js';
 import { planPageSections } from '../packages/engine/src/shared/pagePlans.js';
 
 const summary = { id: 'sales-summary', module: './widgets/SalesSummary.tsx', kind: 'section' };
@@ -207,6 +207,73 @@ test('a dashboard section declares aggregate reads that follow the window and na
     (resolveViews(dashboard({ n: { from: 'sale', measure: 'sum amount' } }), schema).board as AppDashboardView).error,
     undefined,
   );
+});
+
+test('a figure and a metric count the different values of a column: "N sales across M accounts"', async (t) => {
+  const { adapter, schema } = await database(t, 1300);
+  const definition = validatePage(
+    schema,
+    page({
+      accounts: { from: 'sale', measure: 'count distinct account_id' },
+      byStatus: { from: 'sale', measure: 'count  distinct   account_id', by: 'status' },
+    }),
+  );
+  assert.equal(definition.error, undefined);
+  assert.deepEqual(section(definition).aggregates, {
+    accounts: { from: 'sale', fn: 'count', column: 'account_id', distinct: true },
+    byStatus: { from: 'sale', fn: 'count', column: 'account_id', distinct: true, by: 'status' },
+  });
+  // Spelled back as it was written, so a scaffold or the editor writes what parses.
+  const spelled = (sectionConfig(definition.sections[0]) as { figures: Record<string, { measure: string }> }).figures;
+  assert.equal(spelled.accounts.measure, 'count distinct account_id');
+  assert.throws(() => page({ x: { from: 'sale', measure: 'count distinct' } }), /no "measure"/);
+  assert.throws(() => page({ x: { from: 'sale', measure: 'sum distinct amount' } }), /no "measure"/);
+  assert.match(
+    validatePage(schema, page({ x: { from: 'sale', measure: 'count distinct acount_id' } })).error ?? '',
+    /figures "x": "acount_id" is not a column/,
+  );
+
+  const [plan] = planPageSections(schema, definition, { id: 1 }, {}, new Date());
+  const aggregates = (plan as { aggregates: Record<string, { breakdown?: Parameters<typeof withBreakdownComputed>[1] }> }).aggregates;
+  const run = async (name: string) => (await adapter.runBreakdown!(withBreakdownComputed(schema, aggregates[name].breakdown!))).rows;
+  // 1300 sales name two accounts.
+  assert.equal(Number(totalFigure(await run('accounts'))), 2);
+  const groups = totalGroups(await run('byStatus'));
+  assert.deepEqual(groups.map((group) => [group.key, Number(group.value)]).sort(), [
+    ['open', 2],
+    ['won', 2],
+  ]);
+
+  // A dashboard's figure and metric take the same words, judged in the grammar they run in.
+  const board = (figures: object, metric: string) =>
+    parseAppConfig(
+      {
+        ...base,
+        views: {
+          ...base.views,
+          board: {
+            kind: 'dashboard',
+            label: 'Board',
+            sections: [
+              { kind: 'custom', title: 'Summary', component: summary, figures },
+              { kind: 'metric', title: 'Accounts', from: 'sale', measure: metric },
+            ],
+          },
+        },
+        nav: ['board', 'sales'],
+      },
+      'fixture',
+    );
+  const good = resolveViews(board({ n: { from: 'sale', measure: 'count distinct account_id' } }, 'count distinct account_id'), schema)
+    .board as AppDashboardView;
+  assert.equal(good.error, undefined);
+  assert.deepEqual(
+    good.sections.map((each) => (each as { error?: string }).error),
+    [undefined, undefined],
+  );
+  const bad = resolveViews(board({ n: { from: 'sale', measure: 'count distinct acount_id' } }, 'count distinct account_id'), schema)
+    .board as AppDashboardView;
+  assert.match(bad.error ?? '', /figures "n".*"acount_id" is not a column on sale/);
 });
 
 test('a custom section\'s old "totals" is refused with "figures", on a page and on a dashboard', () => {

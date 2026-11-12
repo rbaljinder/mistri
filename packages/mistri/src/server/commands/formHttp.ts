@@ -24,6 +24,9 @@ import { BusinessCommandExecutionError, executeBusinessCommand, type BusinessCom
 import { forbiddenBy } from './commandErrors.js';
 import type { CaptureCommandFlags } from './commandFlags.js';
 import { commandFlagsOnce } from './commandFlagCapture.js';
+import { describeShape } from './commandShapes.js';
+import { servesLinks, withLinkUrls } from '../links/linkLookup.js';
+import { LINK_TOKEN_PREFIX, decoyLinkUrl, holdsLinkRef } from '../links/linkToken.js';
 
 import { componentHrefs, type CompiledComponents } from '../app/appComponents.js';
 import { publicFormInputIds } from '../../shared/appComponentPlaces.js';
@@ -123,8 +126,22 @@ export function publicPrincipal(appId: string, form: string): BusinessCommandAct
   return Object.freeze({ id: `public:${form}`, appId, roles: Object.freeze([]), kind: 'public' as const, form });
 }
 
-/** What a public door answers a submission with: the reference the applicant quotes, and the receipt. */
-type PublicSubmissionReply = { reference: string; receipt: { id: string; status: 'applied' }; message?: string };
+/** What a public door answers a submission with: the reference the applicant quotes, and the receipt; a link to the
+    record the command made, where its handler minted one (context.link). */
+type PublicSubmissionReply = { reference: string; receipt: { id: string; status: 'applied' }; message?: string; link?: string };
+
+/** A public command's link for its visitor, as a reply member: a rendered URL on the first answer alone. A replay
+    answers without it: the URL is said once, and the receipt keeps only its reference. */
+function publicLink(result: BusinessCommandResult): { link?: string } {
+  const link = (result.result as { link?: unknown } | null)?.link;
+  return !result.replayed && typeof link === 'string' && !holdsLinkRef(link) && link.includes(`/l/${LINK_TOKEN_PREFIX}`) ? { link } : {};
+}
+
+/** Whether a command's declared output carries a `link`: its door's decoy then answers with one too. */
+function answersLink(output: unknown): boolean {
+  const described = describeShape(output);
+  return described.kind === 'object' && Object.hasOwn(described.fields, 'link');
+}
 
 /** The longest thank-you a handler may return for its visitor: a sentence, not a page. */
 const PUBLIC_MESSAGE_MOST = 280;
@@ -187,7 +204,7 @@ export async function dispatchPublicFormHttp(options: {
         const actor = publicPrincipal(app.id, key);
         const authorized = binding.authorize(command.id, actor);
         const flags = await commandFlagsOnce(() => captureFlags?.(authorized.actor))();
-        return executeBusinessCommand(
+        const result = await executeBusinessCommand(
           binding,
           actor,
           {
@@ -200,7 +217,10 @@ export async function dispatchPublicFormHttp(options: {
           },
           { ...execution, flags, ...(options.visitor ? { visitor: options.visitor } : {}) },
         );
+        // A link the handler minted on the row it made is said to its visitor as a URL, in this answer alone.
+        return servesLinks(app) && !result.replayed ? withLinkUrls(app, resources, result) : result;
       },
+      ...(options.admit && servesLinks(app) && answersLink(commands[command.id]?.output) ? { decoyLink: () => decoyLinkUrl(app.id) } : {}),
     });
   } finally {
     for (const release of releases.reverse()) release();
@@ -209,8 +229,12 @@ export async function dispatchPublicFormHttp(options: {
 
 /* A decoy's answer: shaped as an accepted submission's, its reference and receipt random, so a script that filled the
    honeypot learns nothing — and nothing was written, journalled or counted as a receipt. */
-export function decoyReply(): PublicSubmissionReply {
-  return { reference: randomBytes(6).toString('hex').toUpperCase(), receipt: { id: randomUUID(), status: 'applied' } };
+export function decoyReply(link?: string): PublicSubmissionReply {
+  return {
+    reference: randomBytes(6).toString('hex').toUpperCase(),
+    receipt: { id: randomUUID(), status: 'applied' },
+    ...(link ? { link } : {}),
+  };
 }
 
 /** Shared transport, with the writer supplied by its deployment. The policy
@@ -225,6 +249,8 @@ export async function dispatchPublicFormSubmissionHttp(options: {
   extra?: readonly SubmissionExtra[];
   admit?: SubmissionAdmission;
   tooLarge?: 'thrown';
+  /** A link-shaped URL for a decoy, where the door's command answers with a link: it opens to the one miss. */
+  decoyLink?: () => string | undefined;
 }): Promise<PublicSubmissionReply> {
   const { req, res, submit } = options;
   const controller = new AbortController();
@@ -235,7 +261,7 @@ export async function dispatchPublicFormSubmissionHttp(options: {
     if (req.aborted || res.destroyed) abort();
     const { input, submission, extra } = parseSubmission(await commandBody(req), options.extra);
     if (controller.signal.aborted) throw new BusinessCommandExecutionError('cancelled');
-    if ((await options.admit?.(extra)) === 'decoy') return decoyReply();
+    if ((await options.admit?.(extra)) === 'decoy') return decoyReply(options.decoyLink?.());
     const execution = {
       signal: controller.signal,
       ...(typeof res.getHeader('x-request-id') === 'string' ? { requestId: String(res.getHeader('x-request-id')) } : {}),
@@ -252,6 +278,7 @@ export async function dispatchPublicFormSubmissionHttp(options: {
       reference,
       receipt: { id: result.receiptId, status: result.status },
       ...(!options.admit ? publicMessage(result.result) : {}),
+      ...publicLink(result),
     };
   } catch (error) {
     if (error instanceof CommandBodyTooLarge && options.tooLarge === 'thrown') throw error;

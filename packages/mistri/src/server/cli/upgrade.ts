@@ -246,37 +246,81 @@ interface Frame {
   at: number;
   /** What `kind: '…'` the object declares itself, once asked for. */
   kind?: string | null;
+  /**
+   * Whether it is mistri's to read: a call of a name imported from `@mistriwork/*`, an object typed as one of its
+   * types, or what is written straight inside one of those. Only there is a key mistri's word rather than the App's own.
+   */
+  api: boolean;
+  /** A function body written inside mistri's: what it `return`s is mistri's too. */
+  returns?: boolean;
+  /**
+   * Mistri's only because a function handed it back (`views: () => ({ … })`): the function may as well be the App's own
+   * callback (`access: () => ({ layout })`), so only a word its object's kind or call places is rewritten there, not one that reads
+   * the same anywhere.
+   */
+  weak?: boolean;
 }
 
 const OPENERS: Readonly<Record<string, Frame['open']>> = { '(': '(', '[': '[', '{': '{' };
 const CLOSERS: Readonly<Record<string, Frame['open']>> = { ')': '(', ']': '[', '}': '{' };
 
-/** The local name of each import, to the module it is from (`import { Rows as Table } from '…'` is `Table`). */
-function importedNames(tokens: readonly Token[]): Map<string, string> {
-  const names = new Map<string, string>();
+/** What one local name of an import stands for: the module, the name that module exports it under, and where that name is written. */
+interface Imported {
+  module: string;
+  /** The exported name (`Rows` in `import { Rows as Table }`); `default` for a default import, `*` for a namespace. */
+  name: string;
+  /** The token of the exported name inside the import, or -1 for a default or namespace import. */
+  at: number;
+}
+
+/** Each local name an import brings in, to what it stands for (`import { Rows as Table } from '…'` is `Table`). */
+function importedNames(tokens: readonly Token[]): Map<string, Imported> {
+  const names = new Map<string, Imported>();
   for (let t = 0; t < tokens.length; t++) {
     if (tokens[t]!.kind !== 'id' || tokens[t]!.text !== 'import' || tokens[t - 1]?.text === '.') continue;
-    const locals: string[] = [];
-    let segment: string[] = [];
+    const pieces: Array<{ local: string; name: string; at: number }> = [];
+    let segment: number[] = [];
     let braces = false;
+    /** One `name`, `name as local`, `type name`, `Default` or `* as local` between the commas. */
+    const close = () => {
+      if (!segment.length) return;
+      const words = segment.map((at) => tokens[at]!.text);
+      const local = words.at(-1)!;
+      /* `import type { … }`: the word before the braces says what kind of import, it names nothing. */
+      if (!braces && words.length === 1 && local === 'type') return void (segment = []);
+      const as = words.indexOf('as');
+      if (!braces) pieces.push({ local, name: as >= 0 ? '*' : 'default', at: -1 });
+      else if (as > 0) pieces.push({ local, name: words[as - 1]!, at: segment[as - 1]! });
+      else pieces.push({ local, name: local, at: segment.at(-1)! });
+      segment = [];
+    };
     let j = t + 1;
     for (; j < tokens.length && j < t + 400; j++) {
       const token = tokens[j]!;
       if (token.kind === 'punct' && ';(='.includes(token.text) && token.text !== '=') break;
       if (token.kind === 'id' && token.text === 'from' && !braces && tokens[j + 1]?.kind === 'string') break;
       if (token.kind === 'punct' && (token.text === '{' || token.text === '}' || token.text === ',')) {
+        close();
         braces = token.text === '{' ? true : token.text === '}' ? false : braces;
-        if (segment.length) locals.push(segment.at(-1)!);
-        segment = [];
-      } else if (token.kind === 'id') segment.push(token.text);
+      } else if (token.kind === 'id') segment.push(j);
     }
     const module = tokens[j + 1];
     if (tokens[j]?.text !== 'from' || module?.kind !== 'string') continue;
-    if (segment.length) locals.push(segment.at(-1)!);
-    for (const local of locals) names.set(local, renamedModule(module.text) ?? module.text);
+    close();
+    for (const piece of pieces)
+      names.set(piece.local, { module: renamedModule(module.text) ?? module.text, name: piece.name, at: piece.at });
   }
   return names;
 }
+
+/** A module of mistri's own, under its new name or (`renamedModule`) its old one: what an App imports from it is mistri's API. */
+const isMistriModule = (specifier: string) => specifier.startsWith('@mistriwork/');
+
+/**
+ * The App's generated types (`mistri-schema.d.ts`, written by `mistri check`), which an App's own modules type their
+ * views and pages against: an object typed by one of them is mistri's as surely as one typed from the package.
+ */
+const isSchemaModule = (specifier: string) => /^\.{1,2}(?:\/|$)(?:.*\/)?mistri-schema(?:\.d\.ts|\.js|\.ts)?$/.test(specifier);
 
 /** A module specifier the App's own code stands behind rather than a package. */
 const isOwnModule = (specifier: string) => /^(?:\.|\/|#|~\/|@\/)/.test(specifier);
@@ -292,6 +336,63 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
   const is = (index: number, text: string) => tokens[index]?.text === text && tokens[index]!.kind !== 'string';
   const imports = importedNames(tokens);
   const componentRows = KEYS.filter((each) => each.component);
+  /** The name mistri exports the word at `j` under, when it is one of mistri's: imported from it, or a member of a namespace that is. */
+  const mistriAt = (j: number, types = false): string | undefined => {
+    const token = tokens[j];
+    if (token?.kind !== 'id') return undefined;
+    /* A type, not a call, may also come from the App's generated schema. */
+    const ours = (module: string) => isMistriModule(module) || (types && isSchemaModule(module));
+    if (is(j - 1, '.')) {
+      const space = tokens[j - 2]?.kind === 'id' && !is(j - 3, '.') ? imports.get(tokens[j - 2]!.text) : undefined;
+      return space?.name === '*' && ours(space.module) ? token.text : undefined;
+    }
+    const imported = imports.get(token.text);
+    return imported && ours(imported.module) ? imported.name : undefined;
+  };
+  /** The name a call at the `(` at `t` calls, past a type argument (`definePage<Ctx>(`), or -1 when none is written there. */
+  const calleeOf = (t: number): number => {
+    let j = t - 1;
+    if (is(j, '>')) {
+      for (let depth = 0, stop = Math.max(0, j - 40); j >= stop; j--) {
+        if (is(j, '>')) depth++;
+        else if (is(j, '<') && --depth === 0) break;
+        else if (is(j, ';') || is(j, '(') || is(j, ')') || is(j, '=')) return -1;
+      }
+      j--;
+    }
+    return tokens[j]?.kind === 'id' ? j : -1;
+  };
+  /** The type the object at the `{` at `t` is declared as or checked against (`const v: View = {`, `} satisfies View`), if mistri's. */
+  const typedAsMistri = (t: number): boolean => {
+    const typeAt = (end: number): number => {
+      let j = end;
+      if (is(j, '>'))
+        for (let depth = 0, stop = Math.max(0, j - 40); j >= stop; j--) {
+          if (is(j, '>')) depth++;
+          else if (is(j, '<') && --depth === 0) {
+            j--;
+            break;
+          }
+        }
+      return j;
+    };
+    if (is(t - 1, '=')) {
+      const name = typeAt(t - 2);
+      const head = is(name - 1, '.') ? name - 2 : name;
+      if (is(head - 1, ':') && mistriAt(name, true)) return true;
+    }
+    let after = closeOf(t) + 1;
+    if (is(after, 'as') && is(after + 1, 'const')) after += 2;
+    return (is(after, 'satisfies') || is(after, 'as')) && mistriAt(is(after + 2, '.') ? after + 3 : after + 1, true) !== undefined;
+  };
+  /* A type mistri renamed, only where the file means mistri's: its import, and its uses under the name it was imported as. */
+  const renamedSites = new Set<number>();
+  const renamedLocals = new Map<string, string>();
+  for (const [local, imported] of imports) {
+    if (!isMistriModule(imported.module) || !Object.hasOwn(NAMES, imported.name)) continue;
+    if (imported.at >= 0) renamedSites.add(imported.at);
+    if (local === imported.name) renamedLocals.set(local, NAMES[imported.name]!);
+  }
   /* The calls a row names an object of: what is spread or computed into one of them can carry a renamed key unseen. */
   const guardedCalls = new Set(
     [...KEYS, ...REFUSED.flatMap((each) => (each.context ? [each.context] : []))].flatMap((each: Guards) =>
@@ -365,15 +466,38 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
       const before = tokens[t - 1];
       let key: string | null = null;
       let call: string | null = null;
-      if (open === '(') call = before?.kind === 'id' ? before.text : null;
-      else {
+      /* Written straight inside its parent (an argument, a key's value, an item, a branch), not a block or a function's body. */
+      const within = before?.kind === 'punct' && ['(', '[', ',', ':', '?'].includes(before.text) && parent?.api === true;
+      let api = within;
+      let returns = false;
+      let weak = within && parent?.weak === true;
+      /* A function written where mistri reads it (`views: () => ({ … })`, `function () { return { … } }`): what it hands back is read as the call is. */
+      const arrow = is(t - 1, '>') && is(t - 2, '=');
+      const reading = parent?.api === true || parent?.returns === true;
+      if (open === '{') {
+        returns =
+          (arrow && parent?.api === true) ||
+          (is(t - 1, ')') && reading) ||
+          (parent?.returns === true && ['else', 'try', 'finally', 'do'].includes(before?.text ?? ''));
+        if (is(t - 1, 'return') && parent?.returns === true) api = weak = true;
+      } else if (arrow ? parent?.api === true : is(t - 1, 'return') && parent?.returns === true) api = weak = true;
+      if (open === '(') {
+        const callee = is(t - 1, 'return') ? -1 : calleeOf(t);
+        if (callee >= 0) {
+          const named = mistriAt(callee);
+          call = named ?? tokens[callee]!.text;
+          api = named !== undefined;
+          weak = false;
+        }
+      } else {
         if (before?.text === ':' && tokens[t - 2] && tokens[t - 2]!.kind !== 'punct') key = tokens[t - 2]!.text;
         else if (parent?.open === '[' && (before?.text === '[' || before?.text === ',') && parent.key !== null) key = `${parent.key}[]`;
         if (open === '{' && parent?.open === '(' && (before?.text === '(' || before?.text === ',')) call = parent.call;
+        if (open === '{' && !api && !returns) api = typedAsMistri(t);
       }
-      const frame: Frame = { open, key, call, at: t };
+      const frame: Frame = { open, key, call, at: t, api, returns, weak };
       frames.push(frame);
-      if (open === '{' && call && guardedCalls.has(call)) {
+      if (open === '{' && api && call && guardedCalls.has(call)) {
         const hidden = opaqueMember(frame);
         if (hidden)
           refusals.push({
@@ -415,7 +539,7 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
     }
     if (token.kind !== 'id') continue;
 
-    if (token.text === 'definePage' && is(t + 1, '(') && !is(t + 2, '{') && !is(t + 2, ')') && !is(t - 1, '.')) {
+    if (mistriAt(t) === 'definePage' && is(t + 1, '(') && !is(t + 2, '{') && !is(t + 2, ')')) {
       refusals.push({
         line: token.line,
         said: 'definePage is given something other than an object written here, so a renamed key in it takes a reader',
@@ -427,13 +551,14 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
     const keyPosition = frame?.open === '{' && (is(t - 1, '{') || is(t - 1, ','));
     const keyed = keyPosition && is(t + 1, ':');
     const shorthand = keyPosition && (is(t + 1, ',') || is(t + 1, '}'));
-    if ((keyed || shorthand) && frame) {
+    if ((keyed || shorthand) && frame?.api) {
       const parent = frames.at(-2);
       const value = tokens[t + 2];
       /* A shorthand `{ title }` is `{ label: title }`, the name staying the variable's; only where the words around it place it. */
       const written = (to: string) => (shorthand ? `${to}: ${token.text}` : to);
       const rename = KEYS.find((each) => {
         if (each.from !== token.text || each.component) return false;
+        if (frame.weak && !guarded(each)) return false;
         if (shorthand && (!guarded(each) || each.shape || each.firstKey)) return false;
         if (!holds(each, frame, parent)) return false;
         if (each.shape === 'array' && value?.text !== '[') return false;
@@ -453,7 +578,7 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
         continue;
       }
       const valued = keyed
-        ? VALUES.find((each) => each.key === token.text && value?.kind === 'string' && value.text === each.from)
+        ? VALUES.find((each) => !frame.weak && each.key === token.text && value?.kind === 'string' && value.text === each.from)
         : undefined;
       if (valued) {
         edits.push({ start: value!.start, end: value!.end, text: valued.to });
@@ -462,9 +587,45 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
       }
     }
 
-    if (NAMES[token.text] && !is(t - 1, '.')) {
-      edits.push({ start: token.start, end: token.end, text: NAMES[token.text]! });
-      changes.push({ line: token.line, said: `${token.text} -> ${NAMES[token.text]}` });
+    /* An object that says it is one of mistri's kinds but that nothing proves is: its renamed word is not rewritten on a guess, and not skipped unseen. */
+    if ((keyed || shorthand) && frame && !frame.api) {
+      const parent = frames.at(-2);
+      const kind =
+        KEYS.some((each) => each.kind !== undefined && each.from === token.text) ||
+        REFUSED.some((each) => each.context?.kind !== undefined && each.name === token.text)
+          ? kindOf(frame)
+          : null;
+      if (kind !== null) {
+        const row = KEYS.find((each) => each.kind === kind && each.from === token.text && !each.component && holds(each, frame, parent));
+        const refusedRow = REFUSED.find(
+          (each) => each.context?.kind === kind && each.name === token.text && holds(each.context, frame, parent),
+        );
+        if (row)
+          refusals.push({
+            line: token.line,
+            said: `\`${row.from}\` is now \`${row.to}\`, and this object looks like a mistri ${kind} view that nothing here types as mistri's; rename \`${row.from}\` to \`${row.to}\` by hand, or type it with the App's schema (\`satisfies Views\`) so \`mistri upgrade\` can`,
+          });
+        else if (refusedRow)
+          refusals.push({
+            line: token.line,
+            said: `${refusedRow.name} ${refusedRow.reason} (this object looks like a mistri ${kind} view that nothing here types as mistri's, so it is not changed for you)`,
+          });
+      }
+    }
+
+    const spaced = is(t - 1, '.') ? mistriAt(t) : undefined;
+    const newName = renamedSites.has(t)
+      ? NAMES[token.text]
+      : spaced !== undefined
+        ? Object.hasOwn(NAMES, spaced)
+          ? NAMES[spaced]
+          : undefined
+        : !is(t - 1, '.')
+          ? renamedLocals.get(token.text)
+          : undefined;
+    if (newName !== undefined) {
+      edits.push({ start: token.start, end: token.end, text: newName });
+      changes.push({ line: token.line, said: `${token.text} -> ${newName}` });
       continue;
     }
     for (const refused of REFUSED) {
@@ -492,20 +653,24 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
       name.push(tokens[j + 2]!.text);
       j += 2;
     }
-    const specifier = imports.get(name[0]!);
-    const kit = specifier !== undefined && isKitModule(specifier);
-    const own = specifier !== undefined && isOwnModule(specifier);
+    const imported = imports.get(name[0]!);
+    const kit = imported !== undefined && isKitModule(imported.module);
+    const own = imported !== undefined && isOwnModule(imported.module);
     if (!kit && !own) return;
+    /* The name the kit exports the component under: `Figure` imported as `Metric as Figure` is Metric, `Kit.Board` is Board. */
+    const exported = imported!.name === '*' ? (name.length === 2 ? name[1]! : '') : name.length === 1 ? imported!.name : '';
+    /* Only the props a component takes that were renamed: `<Value resource>` is still Value's own word. */
+    const renamedHere = componentRows.filter((each) => own || each.components?.includes(exported));
     const shown = name.join('.');
     for (j++; j < tokens.length; j++) {
       const token = tokens[j]!;
       if (is(j, '>') || (is(j, '/') && is(j + 1, '>'))) return;
       if (is(j, '{')) {
         /* `{...props}` among the attributes: any word could be in it. */
-        if (kit && is(j + 1, '.') && is(j + 2, '.') && is(j + 3, '.')) {
+        if (kit && renamedHere.length && is(j + 1, '.') && is(j + 2, '.') && is(j + 3, '.')) {
           refusals.push({
             line: token.line,
-            said: `<${shown} {...spread}> spreads props into a kit component, so ${componentRows.map((each) => `\`${each.from}\` (now \`${each.to}\`)`).join(', ')} may be in it; which it is takes a reader`,
+            said: `<${shown} {...spread}> spreads props into a kit component, so ${renamedHere.map((each) => `\`${each.from}\` (now \`${each.to}\`)`).join(', ')} may be in it; which it is takes a reader`,
           });
         }
         j = closeOf(j);
@@ -518,7 +683,7 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
         attribute += tokens[j + 1]!.text + tokens[j + 2]!.text;
         j += 2;
       }
-      const rename = componentRows.find((each) => each.from === attribute);
+      const rename = renamedHere.find((each) => each.from === attribute);
       if (rename && kit) {
         edits.push({ start: tokens[first]!.start, end: tokens[first]!.end, text: rename.to });
         changes.push({ line: token.line, said: `<${shown} ${rename.from}> -> ${rename.to}` });

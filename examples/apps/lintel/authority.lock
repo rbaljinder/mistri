@@ -65,6 +65,10 @@ role admin write request_part — the App
 role admin write resident — the App
 role admin write unit — the App
 role admin write viewing — the App
+role admin export maintenance_request — the App
+role admin export part — the App
+role admin export resident — the App
+role admin export unit — the App
 role admin command addCharge — the App
 role admin command addNote — the App
 role admin command assignTechnician — the App
@@ -160,6 +164,10 @@ role manager write request_part — the App
 role manager write resident — the App
 role manager write unit — the App
 role manager write viewing — the App
+role manager export maintenance_request — the App
+role manager export part — the App
+role manager export resident — the App
+role manager export unit — the App
 role manager command addCharge — the App
 role manager command addNote — the App
 role manager command assignTechnician — the App
@@ -294,7 +302,7 @@ contract postRent v1 093d4704700e
 contract recordPayment v1 8cbb7afe63d3
 contract replyToResident v1 06e717f79b8a
 contract reportIssue v1 59f64cdf7961
-contract requestViewing v1 aa4b3e46a834
+contract requestViewing v1 a5a2d207dd5a
 contract scheduleVisit v1 ef34b8de7203
 contract settleCharge v1 b17c3db7792a
 contract signLease v1 e82ddebf7b62

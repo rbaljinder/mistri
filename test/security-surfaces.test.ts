@@ -58,8 +58,13 @@ const APP = {
   auth: {
     roles: {
       // Exports person too: a file with a column through owner_id reads that table, so it needs the grant for it.
-      admin: { read: true, write: true, export: ['person'] },
-      clerk: { read: true, write: true, fields: { task: { read: ['id', 'title', 'status', 'owner_id'], write: ['title', 'status'] } } },
+      admin: { read: true, write: true, export: ['task', 'person'] },
+      clerk: {
+        read: true,
+        write: true,
+        export: ['task'],
+        fields: { task: { read: ['id', 'title', 'status', 'owner_id'], write: ['title', 'status'] } },
+      },
       outsider: { read: ['person'] },
     },
     public: { read: ['task'], fields: { task: { read: ['id', 'title'] } } },

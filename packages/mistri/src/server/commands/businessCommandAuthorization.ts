@@ -95,6 +95,8 @@ export interface BusinessCommandAuthorization {
   /** The capability links its handler may mint (`context.link`): its target's declared links, where this actor may
       mint one at all; absent otherwise. */
   readonly links?: Readonly<Record<string, AppLinkDef>>;
+  /** The tables it writes whose resource declares links, by local name → resource: a row removed from one ends its links. */
+  readonly linkedTables?: ReadonlyMap<string, string>;
   table(local: string, writing?: boolean): string;
 }
 
@@ -1166,19 +1168,21 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         }
         if (!access.readable.has(binding.resource) && identity.kind !== 'service') issueTargetUnreadable(identity);
       }
-      /* The links a handler may mint (context.link): its target's, on one existing record, by a signed-in person or a
-         service, in an App that serves links at all (appLinkProblems). A link's holder mints no further link. */
+      /* The links a handler may mint (context.link): its target's, in an App that serves links at all
+         (appLinkProblems) — on one existing record, by a signed-in person or a service, or on the one record a public
+         command made, for its visitor alone (the execution finds that row). A link's holder mints no further link. */
       const declaredLinks = app.resources?.[binding.resource]?.links;
+      const onRecord =
+        identity.kind !== 'public' && identity.kind !== 'link' && (binding.command.targets ?? 'one') === 'one' && !creating.has(id);
       const mints =
-        declaredLinks &&
-        !isTenantApp(app) &&
-        !isRowPolicyApp(app) &&
-        identity.kind !== 'public' &&
-        identity.kind !== 'link' &&
-        (binding.command.targets ?? 'one') === 'one' &&
-        !creating.has(id)
-          ? declaredLinks
-          : undefined;
+        declaredLinks && !isTenantApp(app) && !isRowPolicyApp(app) && (identity.kind === 'public' || onRecord) ? declaredLinks : undefined;
+      /* A row removed ends the links minted on it, whoever removes it and under whichever command: each written
+         table whose resource declares links is named here, and the removal revokes in its own transaction. */
+      const linkedTables = new Map<string, string>();
+      for (const local of binding.command.write) {
+        const resource = binding.logical(local);
+        if (app.resources?.[resource]?.links) linkedTables.set(local, resource);
+      }
       return Object.freeze({
         command: binding.command,
         resource: binding.resource,
@@ -1200,6 +1204,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         ...(insertOnly.size ? { insertOnly } : {}),
         ...(binding.audited ? { audited: binding.audited } : {}),
         ...(mints ? { links: mints } : {}),
+        ...(linkedTables.size ? { linkedTables } : {}),
         table(local: string, writing = false): string {
           if (!(writing ? binding.command.write : binding.command.read).includes(local)) throw new AppAccessDenied();
           return binding.logical(local);

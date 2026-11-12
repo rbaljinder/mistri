@@ -364,6 +364,19 @@ describe('a picker narrowed by an earlier field', () => {
   });
 });
 
+describe('the heading', () => {
+  test("is the resource's noun, as the list's New button says it, not the table's name", async () => {
+    const { installShell, resetShell } = await import('../shellMode.js');
+    installShell({ app: () => ({ resources: { task: { noun: { one: 'job', many: 'jobs' } } } }) as never });
+    try {
+      draw(<NewRecordDrawer {...props()} />);
+      expect(screen.getByRole('heading', { level: 2, name: 'New job' })).toBeInTheDocument();
+    } finally {
+      resetShell();
+    }
+  });
+});
+
 describe('the frame', () => {
   test('a long form is a page in the content pane, the list kept but not drawn', () => {
     const pane = Object.assign(document.createElement('main'), { id: 'content' });

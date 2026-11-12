@@ -5,12 +5,15 @@
  * App, its own tenant administration read with the caller's grant. */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { authorityReport } from '../packages/mistri/src/shared/appAuthority.js';
 import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/commands/commandJournal.js';
 import { COMMAND_JOURNAL_TABLES } from '../packages/mistri/src/adapters/commands/commandJournalSchema.js';
+import { splitAudit } from '../packages/mistri/src/adapters/commands/commandAuditParts.js';
 import { authorityChanges, authoritySentences } from '../packages/mistri/src/server/app/authoritySentences.js';
 import { consoleCommandAudit, type ConsoleTenantAccounts } from '../packages/mistri/src/server/console/governance.js';
 import type { AdministrationMembershipPage, AdministrationTenantPage } from '../packages/mistri/src/shared/tenantAdministration.js';
@@ -422,4 +425,44 @@ test("a record's link is the address the administrator reading the room is serve
   });
   assert.equal(governance.recordHref?.('items', { id: 7 }), '/tools/depot/desk/7');
   assert.equal(governance.recordHref?.('items', { id: 7 }, ['admin']), '/tools/depot/items/7');
+});
+
+test('the audit reads a long change set whole: the fields only its continuation pieces name are named too', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-audit-parts-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const path = join(dir, 'journal.sqlite');
+  new DatabaseSync(path).close();
+  migrateSqliteCommandJournal(path);
+  // 300 updates on one item: the first 299 write its count, the last its state, which only a continuation piece holds.
+  const entries = Array.from({ length: 300 }, (_, at) => ({
+    operation: 'update',
+    resource: 'items',
+    key: { id: 1 },
+    before: {},
+    after: at === 299 ? { state: 'secret-state' } : { count: at },
+  }));
+  const split = splitAudit(entries);
+  assert.ok(split.changesParts?.length, 'the audit is long enough to continue');
+  const db = new DatabaseSync(path);
+  db.prepare(`INSERT INTO "${COMMAND_JOURNAL_TABLES.receipt}" (id, app_id, store_id, source_id, realm, tenant_id, actor_id,
+    command_id, command_version, idempotency_key, fingerprint, result_json, request_id, completed_at, membership_id, membership_version,
+    realm_version, roles_json, deployment, target, owners_json, keys_json, changes_json)
+    VALUES ('receipt-long', 'depot', 'store', 'source', 'tenant', '', 'alice', 'count_item', 1, 'key-long', 'f', '{}', 'request',
+      '2026-10-01T09:00:00.000Z', '', '', '', '[]', 'production', 'items', '[""]', ?, ?)`).run(
+    JSON.stringify([JSON.stringify({ id: 1 })]),
+    JSON.stringify([split.changesJson]),
+  );
+  // Written out of order: the reader puts the pieces back in order.
+  const parts = [...(split.changesParts ?? [])].map((text, at) => [at + 1, text] as const).reverse();
+  for (const [part, text] of parts)
+    db.prepare(`INSERT INTO "${COMMAND_JOURNAL_TABLES.auditPart}" (receipt_id, target_index, part, changes_json) VALUES (?, 0, ?, ?)`).run(
+      'receipt-long',
+      part,
+      text,
+    );
+  db.close();
+  const rows = await consoleCommandAudit('depot', () => [{ name: 'main', url: path }])({ limit: 10 });
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0].fields, ['count', 'state']);
+  assert.doesNotMatch(JSON.stringify(rows), /secret-state/, 'names, never values');
 });

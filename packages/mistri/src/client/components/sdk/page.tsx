@@ -84,25 +84,18 @@ export const Choose = reserved(onDemand(paramControls, 'Choose', { quiet: true }
 export const Search = reserved(onDemand(paramControls, 'Search', { quiet: true }));
 export const DateRange = reserved(onDemand(paramControls, 'DateRange', { quiet: true }));
 
-/* The house controls, as the shell dresses its own (pageControls.ts): a part of their own with their rules, fetched
-   the first time a page draws one, so a page that draws none carries none. */
+/* The rest of the house controls, as the shell dresses its own (pageControls.ts), the fields being the SDK's own
+   (index.ts): a part of their own with their rules, fetched the first time a page draws one, so a page that draws
+   none carries none. */
 const controls = () => import('./pageControls.js');
 export const Avatar = onDemand(controls, 'Avatar', { quiet: true });
 export const CheckCards = onDemand(controls, 'CheckCards', { quiet: true });
-export const Checkbox = onDemand(controls, 'Checkbox', { quiet: true });
-export const ChoiceCards = onDemand(controls, 'ChoiceCards', { quiet: true });
 export const DateField = onDemand(controls, 'DateField', { quiet: true });
 export const Drawer = onDemand(controls, 'Drawer', { quiet: true });
-export const FileField = onDemand(controls, 'FileField', { quiet: true });
 export const Modal = onDemand(controls, 'Modal', { quiet: true });
 export const Pagination = onDemand(controls, 'Pagination', { quiet: true });
 export const Popover = onDemand(controls, 'Popover', { quiet: true });
-export const Select = onDemand(controls, 'Select', { quiet: true });
-export const Slider = onDemand(controls, 'Slider', { quiet: true });
-export const Switch = onDemand(controls, 'Switch', { quiet: true });
-export const TextField = onDemand(controls, 'TextField', { quiet: true });
 export const Tooltip = onDemand(controls, 'Tooltip', { quiet: true });
-export const YesNo = onDemand(controls, 'YesNo', { quiet: true });
 
 /** The page's grid: blocks and panels side by side by their `width`, wrapping as a dashboard's sections do. */
 export function Grid({ children }: { children?: ReactNode }) {

@@ -16,6 +16,7 @@ import type { AppDashSection, AppDef, AppDisplayRule, AppListView, ResourceDef }
 import {
   columnKind,
   labelColumn,
+  momentColumn,
   primaryKey,
   rowName,
   stateStampColumn,
@@ -577,25 +578,23 @@ function resourceFindings(catalog: Catalog, shown: Map<string, Set<string>>, pag
       }
     }
 
-    // 15. A template that prints a timestamp or a decimal raw.
+    // 15. A template that prints a decimal raw (a date or a timestamp is said as its day by the platform).
     if (typeof resource.recordLabel === 'string' && resource.recordLabel.includes('{')) {
       const fields = [...resource.recordLabel.matchAll(/\{([^}]+)\}/g)].flatMap((match) => match[1].split(/\s\?\?\s/));
-      /* A day beside the parent it tells apart is a name: a monthly charge is
-         "Cole Moreau · rent due 2026-08-31", and refused it became "Cole Moreau ·
-         rent", six times on one screen. A date alone, a time or an amount is not. */
-      const parented = fields.some((path) => path.includes('.') || catalog.resolve(tableId, path)?.column.references);
+      /* A date or a timestamp is said as its day in a name ("Oct 23, 2026"), by the platform, wherever the template
+         names it (appRecordLabels.ts saysDay), so it is not printed raw and is no smell: only an amount, or a column
+         the App declared a type for, still is. */
       const raw = fields.filter((path) => {
         const landed = catalog.resolve(tableId, path);
         if (!landed || landed.column.references) return false;
-        const type = landed.column.type;
-        const day = /date/i.test(type) && !/time/i.test(type);
-        return day ? !parented : /time/i.test(type) || MONEY.test(landed.column.name) || Boolean(resource.types?.[path]);
+        if (columnKind(landed.column.type ?? '') === 'date' || momentColumn(landed.column)) return false;
+        return MONEY.test(landed.column.name) || Boolean(resource.types?.[path]);
       });
       if (raw.length)
         say(
           'raw-label',
-          `recordLabel ${quote(resource.recordLabel)} names ${list(raw)}, which a template prints raw (2026-08-31 14:03:00, 1450.5) ` +
-            "→ name the record by words and references: '{…_id} · {kind}'; a day may tell siblings apart beside its parent: '{lease_id} · rent due {due_on}'.",
+          `recordLabel ${quote(resource.recordLabel)} names ${list(raw)}, which a template prints raw (1450.5) ` +
+            "→ name the record by words and references: '{…_id} · {kind}'. A date or a timestamp is said as its day, so '{lease_id} · rent due {due_on}' is fine.",
         );
     }
 

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { userEvent } from '@testing-library/user-event';
 import { themePreset } from '../../../../engine/src/shared/themePresets.js';
 
 const api = vi.hoisted(() => vi.fn());
@@ -96,4 +97,25 @@ test("the preview's record is called by the App's own name, not a stock company"
   const preview = screen.getByRole('region', { name: 'Preview' });
   expect(within(preview).getAllByText('Depot').length).toBeGreaterThan(1);
   expect(within(preview).queryByText('Acme Corporation')).toBeNull();
+});
+
+test('a font is offered where the App allows it, from the closed set, and a save sends its name alone', async () => {
+  api.mockResolvedValueOnce({ ...state(true), allow: ['font'] });
+  render(<BrandingForm />);
+  const trigger = await screen.findByRole('button', { name: /^Font\b/ });
+  expect(trigger).toHaveTextContent('The App’s');
+  await userEvent.click(trigger);
+  expect(screen.getAllByRole('option').map((option) => option.textContent?.replace('✓', ''))).toEqual(['The App’s', 'Inter', 'Barlow']);
+  await userEvent.click(screen.getByRole('option', { name: 'Inter' }));
+  api.mockResolvedValueOnce({ ...state(true, { font: 'Inter' }), allow: ['font'], revision: 1 });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await vi.waitFor(() => expect(api).toHaveBeenCalledTimes(2));
+  expect(api.mock.calls[1]![1]).toEqual({ branding: { font: 'Inter' } });
+});
+
+test('a form whose App does not allow a font shows none', async () => {
+  api.mockResolvedValueOnce(state(true));
+  render(<BrandingForm />);
+  await screen.findByRole('textbox', { name: /Name/ });
+  expect(screen.queryByRole('button', { name: /^Font\b/ })).toBeNull();
 });

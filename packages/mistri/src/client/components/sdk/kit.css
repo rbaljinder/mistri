@@ -53,6 +53,33 @@
     letter-spacing: var(--track-title, -0.012em);
     color: var(--ink);
   }
+  /* A part about trouble says so in its title: the status ink as the looks draw a tone's words (features.css .tone-*). */
+  .kit-card-title-good {
+    color: color-mix(in srgb, var(--status-good) 78%, var(--ink));
+  }
+  .kit-card-title-warn {
+    color: color-mix(in srgb, var(--status-warning) 78%, var(--ink));
+  }
+  .kit-card-title-bad {
+    color: color-mix(in srgb, var(--status-critical) 78%, var(--ink));
+  }
+  .kit-card-title-info {
+    color: color-mix(in srgb, var(--status-info) 78%, var(--ink));
+  }
+  .kit-card-title-neutral {
+    color: var(--ink-muted);
+  }
+  /* What the part holds, one quiet line under its title: the title's own gap to the body moves under it. */
+  .kit-card-description {
+    margin: 0 0 var(--space-3h);
+    color: var(--ink-muted);
+    font-size: var(--text-sm);
+    line-height: 1.4;
+  }
+  .kit-card-title:has(+ .kit-card-description),
+  .kit-card-head:has(+ .kit-card-description) {
+    margin-bottom: var(--space-1);
+  }
   /* A title row with a count or an action: it wraps rather than push a phone's box wider, the action keeps the row's end. */
   .kit-card-head {
     display: flex;
@@ -137,42 +164,39 @@
     grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--kit-cluster-min, 16rem)), 1fr));
     min-width: 0;
   }
-  /* A main beside a rail. The host is the container the stacking asks about; the rail is never past half the box. */
+  /* A main beside a rail. The host is the container the stacking asks about. The two wrap: the main asks for at least
+     24rem, so where the box cannot hold that beside the rail (which is never past half of it) the rail drops under the
+     main, and a main holding a board or a long list is never squeezed to a strip. Under 40rem the box stacks whatever
+     the rail asks. The main grows 999 to the rail's 1, so beside it the rail stays the width it was given. */
   .kit-beside-host {
     container: kit-beside / inline-size;
     min-width: 0;
   }
   .kit-beside {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) min(var(--kit-beside-rail, 20rem), 50%);
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--section-seam);
-    align-items: start;
+    align-items: flex-start;
     min-width: 0;
   }
+  /* The start rail stands first beside the main, and under it once they wrap: the DOM order is the main's. */
   .kit-beside-start {
-    grid-template-columns: min(var(--kit-beside-rail, 20rem), 50%) minmax(0, 1fr);
+    flex-direction: row-reverse;
   }
-  .kit-beside-start > .kit-beside-main {
-    grid-column: 2;
-    grid-row: 1;
+  .kit-beside-main {
+    flex: 999 1 24rem;
   }
-  .kit-beside-start > .kit-beside-rail {
-    grid-column: 1;
-    grid-row: 1;
+  .kit-beside-rail {
+    flex: 1 1 min(var(--kit-beside-rail, 20rem), 50%);
   }
   .kit-beside-main,
   .kit-beside-rail {
     min-width: 0;
   }
   @container kit-beside (max-width: 40rem) {
-    .kit-beside,
-    .kit-beside-start {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .kit-beside-start > .kit-beside-main,
-    .kit-beside-start > .kit-beside-rail {
-      grid-column: auto;
-      grid-row: auto;
+    .kit-beside-main,
+    .kit-beside-rail {
+      flex-basis: 100%;
     }
   }
   .kit-gap-tight {
@@ -208,6 +232,16 @@
   /* A read on its way (Loaded): one line of body text unless the caller holds the drawing's own size. */
   .kit-loading {
     block-size: calc(var(--text-base) * 1.45);
+  }
+  /* A placeholder block (Skeleton): the platform's bar, at the size the drawing will take. */
+  .kit-skeleton {
+    display: grid;
+    gap: var(--space-2h);
+    min-width: 0;
+  }
+  .kit-skeleton-bar {
+    block-size: calc(var(--text-base) * 1.45);
+    max-inline-size: 100%;
   }
   .kit-segmented {
     display: inline-flex;
@@ -247,12 +281,14 @@
     color: var(--ink);
   }
   .kit-segment[aria-checked='true'] {
-    background: var(--accent);
-    color: var(--on-accent);
+    --kit-segment-fill: var(--accent);
+    --kit-segment-ink: var(--on-accent);
+    background: var(--kit-segment-fill);
+    color: var(--kit-segment-ink);
   }
   /* As an activity feed's periods: the ink, not the accent, where a look fills its chosen tab in the ink (Mono). */
   :root[data-look-tabs='inverted'] .kit-segment[aria-checked='true'] {
-    background: var(--ink);
+    --kit-segment-fill: var(--ink);
   }
   .kit-segment:focus-visible {
     outline: var(--focus-width, 2px) solid var(--focus);
@@ -288,9 +324,12 @@
     font-variant-numeric: tabular-nums;
     text-align: center;
   }
+  /* The chosen segment's count is the segment's own pair turned over (the fill's ink as its ground, the fill as its
+     words), so it reads as the segment does, 4.5:1 at least, in every look; a tint of the surface over the fill fell
+     under it. */
   .kit-segment[aria-checked='true'] .kit-segment-count {
-    background: color-mix(in srgb, var(--surface) 22%, transparent);
-    color: inherit;
+    background: var(--kit-segment-ink);
+    color: var(--kit-segment-fill);
   }
   /* A stat: the label over the figure, the change under it, the trend across its foot. */
   .kit-stat {
@@ -351,18 +390,29 @@
   .kit-columns {
     min-width: 0;
   }
-  /* Items: a list with no head row. Hairlines as a table's rows have them, the hover a clickable row's. The title is the
-     one target; the action holds its own width and the note wraps, so a phone never scrolls sideways. */
+  /* Items: a list with no head row. Hairlines as a table's rows have them, the hover a clickable row's. The list is a grid
+     of two columns the rows share (a subgrid each): the lead's, as wide as the widest lead, so a time or a mark lines up
+     down the list, and the rest. A row with no lead leaves the first column to the rows that have one, and a list with
+     none draws it nothing wide. The title is the one target and reaches across the row; the action holds its own width
+     and the note wraps, so a phone never scrolls sideways. */
   .kit-items {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
     margin: 0;
     padding: 0;
     list-style: none;
     min-width: 0;
   }
+  /* An element of the App's own among the items spans the row; left to the grid it would sit in the lead's narrow column. */
+  .kit-items > :not(.kit-item) {
+    grid-column: 1 / -1;
+  }
   .kit-item {
-    display: flex;
+    position: relative;
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
     align-items: center;
-    gap: var(--space-3);
     min-width: 0;
     padding: var(--space-3) var(--space-3h);
     border-bottom: 1px solid var(--line);
@@ -378,13 +428,49 @@
     cursor: pointer;
   }
   .kit-item-lead {
+    position: relative;
+    z-index: 1;
+    grid-column: 1;
     display: inline-flex;
-    flex: none;
     align-items: center;
+    margin-inline-end: var(--space-3);
+    font-variant-numeric: tabular-nums;
+  }
+  /* A tone is a dot, and says a lead in its ink; the status inks are the looks' own (features.css .tone-*). */
+  .kit-item-mark {
+    inline-size: 8px;
+    block-size: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .kit-item-lead-good {
+    color: color-mix(in srgb, var(--status-good) 78%, var(--ink));
+  }
+  .kit-item-lead-warn {
+    color: color-mix(in srgb, var(--status-warning) 78%, var(--ink));
+  }
+  .kit-item-lead-bad {
+    color: color-mix(in srgb, var(--status-critical) 78%, var(--ink));
+  }
+  .kit-item-lead-info {
+    color: color-mix(in srgb, var(--status-info) 78%, var(--ink));
+  }
+  .kit-item-lead-neutral {
+    color: var(--ink-subtle);
+  }
+  /* The words and the action: they wrap, so where the body's 12rem and the action do not fit side by side the action
+     goes under the note, at the row's end, rather than squeeze the words into a column. */
+  .kit-item-main {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    min-width: 0;
   }
   .kit-item-body {
     display: grid;
-    flex: 1 1 0;
+    flex: 1 1 12rem;
     gap: var(--space-1);
     min-width: 0;
   }
@@ -398,7 +484,10 @@
     line-height: 1.4;
     overflow-wrap: anywhere;
   }
+  /* Above the target's reach (below), so a button in the action is its own. */
   .kit-item-action {
+    position: relative;
+    z-index: 1;
     display: inline-flex;
     flex: 0 1 auto;
     flex-wrap: wrap;
@@ -406,7 +495,8 @@
     justify-content: flex-end;
     gap: var(--space-2);
     min-width: 0;
-    max-width: 60%;
+    max-width: 100%;
+    margin-inline-start: auto;
     cursor: default;
   }
   .kit-item-target {
@@ -420,6 +510,18 @@
     text-decoration: none;
     overflow-wrap: anywhere;
     cursor: pointer;
+  }
+  /* The target reaches across the whole row (the row is its containing block), so a finger anywhere on it is the target's
+     own, and grade measures the row's height, not the title's words. A phone's row is a finger tall. */
+  .kit-item-clickable .kit-item-target::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+  @media (max-width: 760px), (pointer: coarse) {
+    .kit-item-clickable {
+      min-height: 44px;
+    }
   }
   @media (hover: hover) {
     .kit-item-clickable:hover {
@@ -437,6 +539,10 @@
   .kit-items-empty {
     padding: var(--space-4) var(--space-4h);
     color: var(--ink-muted);
+  }
+  /* In a Card the rows are flush with the box's edge, so the empty line starts where they do. */
+  .kit-items-empty-flush {
+    padding-inline: 0;
   }
   /* A kit table is the look's table (style.css): only its row link and its empty note are the kit's own. The link reads as
    the cell's text, ruled on hover, so a row does not become a column of accent-coloured words. */

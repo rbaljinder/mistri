@@ -11,8 +11,8 @@ import { startupReport } from '@mistriwork/engine/shared/refusal.js';
 import { fontWarnings } from '../app/appFonts.js';
 import { themeBandWarnings, themeShadowWarnings, themeShapeWarnings, themeTypeWarnings } from '@mistriwork/engine/shared/theme.js';
 import { brandWarnings } from '../app/appBrand.js';
-import { writeFile } from 'node:fs/promises';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { readFile, writeFile } from 'node:fs/promises';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { type Registry } from '@mistriwork/engine/server/connections.js';
 import { labelColumn, primaryKey, tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { PageDef } from '@mistriwork/engine/shared/pageModel.js';
@@ -28,7 +28,7 @@ import {
   type AppDef,
 } from '../../shared/app.js';
 import { appAdvisories, appProblems, type LoadedApp } from '../app/apps.js';
-import { appDestinationWarnings, appRoleReach, appRoleWarnings } from '../app/appRoleChecks.js';
+import { appDestinationWarnings, appRoleFormDefaultProblems, appRoleReach, appRoleWarnings } from '../app/appRoleChecks.js';
 import { commandRestatedWarnings } from '../commands/commandRestated.js';
 import { snapshotCommandChecks } from '../app/appSnapshotChecks.js';
 import { consumesCommandWarnings, machineCommandWarnings, referenceReadWarnings } from '../app/appMachineChecks.js';
@@ -741,6 +741,8 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
         ...appProblems(app, schema),
         ...recordTabCollisions(app.app, app.pages, schema),
         ...reach.problems,
+        // A New form's default on a column a role that makes the rows does not write: served without it.
+        ...appRoleFormDefaultProblems(app, schema, jobRoles),
         ...snapshots.problems,
         /* A reference a command's write sets to a table it does not read is refused on every run (invalid_result): a problem, not advice. */
         ...referenceReadWarnings(app.app, schema, commandHosting?.registry ?? app.commands?.registry).map(
@@ -794,14 +796,15 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
       ];
       /* A command whose writes fire a trigger the row policy cannot bound: refused when it runs, said here. */
       const commands = commandHosting?.registry ?? app.commands?.registry;
-      const { commandTriggerFindings, commandTriggers } = await import('../commands/commandTriggerChecks.js');
-      const triggered = commandTriggerFindings(
-        app.app,
-        commands,
-        await commandTriggers(app.app, resources, commands, async (id) => (await registry.open(id)).adapter),
-      );
+      const { commandTriggerFindings, commandTriggers, schemaTriggerWarnings } = await import('../commands/commandTriggerChecks.js');
+      const triggersOf = await commandTriggers(app.app, resources, commands, async (id) => (await registry.open(id)).adapter);
+      const triggered = commandTriggerFindings(app.app, commands, triggersOf);
       lines.push(...triggered.problems);
       advice.push(...triggered.warnings);
+      /* And those the App's schema.sql (where --schema-file and migrate diff read it) declares and the database read
+         lacks: a tenant App's is often made fresh, its triggers not yet migrated in (a field report). */
+      const declared = app.dir ? await readFile(join(app.dir, 'schema.sql'), 'utf8').catch(() => undefined) : undefined;
+      if (declared) advice.push(...schemaTriggerWarnings(app.app, commands, declared, triggersOf));
       /* Its decisions' inputs against the schema served, and their contracts against decisions.lock. */
       if (decisions.size && commandRegistry && app === loadedApps[0]) {
         const { checkDecisions, decisionLockDirectory } = await import('../decide/decisionCheck.js');

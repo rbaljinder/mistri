@@ -183,6 +183,8 @@ on its parent. Its README names the nearest first-shot recipe, and why.
    a record, a filled box or an opened menu first, and `--matrix` shoots every
    look, light and dark, at a desk and on a phone, with an index page. Install the browser once
    with `npm install --save-dev playwright && npx playwright install --only-shell chromium`, before the first shot.
+   A shot serves the App with its jobs off, so looking never changes the database; `--full` writes a page taller than one
+   picture holds in pieces (`name-2.png`); a public form is shot by its view or its `/form/` address.
 5. **Compare and fix** against the guide's worked example, then go round again.
 6. **Grade it**: `npx @mistriwork/mistri grade --config ../mistri.json` measures
    every page at a desk, on a phone and in the dark ([below](#grade-before-handing-back)).

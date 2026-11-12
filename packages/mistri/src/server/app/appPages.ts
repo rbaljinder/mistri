@@ -727,6 +727,59 @@ export function scanPageSource(
   return scan;
 }
 
+/**
+ * The commands one source file of a component that is not a page runs by a literal name: `useCommand('x')` and a
+ * `<CommandForm>`'s, `<CommandButton>`'s or `<Steps>`' `command`, the SDK's names as the file imports them. A section
+ * declares no commands, so these are held to what the App offers instead (componentLint.ts).
+ */
+export function componentCommands(
+  parseAst: Parse,
+  code: string,
+  lang: 'ts' | 'tsx' | 'js' | 'jsx',
+): Array<{ name: string; line: number; said: string }> {
+  let program: unknown;
+  try {
+    program = parseAst(code, { lang });
+  } catch {
+    return [];
+  }
+  const lineOf = (offset: number | undefined) => (offset === undefined ? 1 : code.slice(0, offset).split('\n').length);
+  const imported = new Map<string, string>();
+  walk(program, (node) => {
+    if (node.type !== 'ImportDeclaration') return;
+    const source = (node.source as AstNode).value;
+    if (typeof source !== 'string' || !SDK.has(source)) return;
+    for (const spec of (node.specifiers as AstNode[]) ?? []) {
+      const local = (spec.local as AstNode | undefined)?.name;
+      const name = ((spec.imported as AstNode | undefined)?.name ?? local) as string | undefined;
+      if (typeof local === 'string' && typeof name === 'string') imported.set(local, name);
+    }
+  });
+  const literal = (node: AstNode | undefined): string | undefined => {
+    if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
+    if (node?.type === 'TemplateLiteral' && !(node.expressions as unknown[]).length)
+      return ((node.quasis as AstNode[])[0]?.value as { cooked?: string })?.cooked;
+    return undefined;
+  };
+  const found: Array<{ name: string; line: number; said: string }> = [];
+  walk(program, (node) => {
+    if (node.type === 'CallExpression') {
+      const callee = node.callee as AstNode;
+      const hook = callee.type === 'Identifier' ? imported.get(callee.name as string) : undefined;
+      const name = hook && COMMAND_HOOKS.has(hook) ? literal((node.arguments as AstNode[])[0]) : undefined;
+      if (name !== undefined) found.push({ name, line: lineOf(node.start), said: `${hook}('${name}')` });
+      return;
+    }
+    if (node.type !== 'JSXOpeningElement') return;
+    const tag = node.name as AstNode;
+    const block = tag.type === 'JSXIdentifier' ? imported.get(tag.name as string) : undefined;
+    if (!block || !BLOCK_NAMES.command.on!.has(block)) return;
+    const name = literal(jsxAttribute(node, 'command'));
+    if (name !== undefined) found.push({ name, line: lineOf(node.start), said: `<${block} command="${name}">` });
+  });
+  return found;
+}
+
 /** The calls by which a component sends the reader to a free-form page by its key (`useNavigate()`, sdk/hooks.ts). */
 const PAGE_LINKS = new Set(['pageHref', 'openPage']);
 

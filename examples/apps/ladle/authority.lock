@@ -16,6 +16,8 @@ role admin read booking — the App
 role admin read class_session — the App
 role admin write booking — the App
 role admin write class_session — the App
+role admin export booking — the App
+role admin export class_session — the App
 role admin command checkIn — the App
 role desk read booking — the App
 role desk read class_session — the App
@@ -26,6 +28,8 @@ role manager read booking — the App
 role manager read class_session — the App
 role manager write booking — the App
 role manager write class_session — the App
+role manager export booking — the App
+role manager export class_session — the App
 role manager command checkIn — the App
 
 contract checkIn v1 4e4c132380ea

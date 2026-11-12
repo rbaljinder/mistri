@@ -204,11 +204,11 @@ ink darker than its hairlines and still quieter than its text.
   Barlow, its labels in the semibold, and its titles, a stat's figures and the
   App's name in Barlow Semi Condensed's bold (the name in capitals, the only
   capitals it sets): the regular, the semibold and the condensed bold ship with
-  Workshop's sheet (`workshopLook.css`, about 65 KB together, SIL Open Font
+  a sheet of its own (`barlowFace.css`, about 65 KB together, SIL Open Font
   License) and the regular and the condensed bold are preloaded beside it,
   so only a page wearing Workshop fetches them; until they arrive Workshop
   draws Arial cut to each face's measure, as Lumen does. Lumen is set in Inter, which ships
-  with Lumen's sheet (`lumenLook.css`, the variable face's Latin subset, 48
+  as a sheet of its own (`interFace.css`, the variable face's Latin subset, 48
   KB) and is preloaded beside it, so only a page wearing Lumen fetches it and
   no first-paint bundle carries it. Named and not shipped, Inter drew only
   where it was installed, and a Lumen screen was set in a different face on

@@ -55,7 +55,7 @@ See it in the sample (`examples/apps/lintel/theme.ts:7`). That is the smallest t
 | `recipes` | Each part's treatment from a closed menu: `nav`, `bar`, `tabs`, `stat`, `table`, `buttons` and more, each value pictured in [Theme recipes](/docs/theme-recipes/) | the base's | Stable |
 | `shell.placement` | Where the menu goes, `'side'` or `'top'`, when this is the App's theme; `ui.shell.placement` wins | the App's | Stable |
 | `ui.theme.for` | A theme per audience: `public` for every page a signed-out visitor sees, worn whatever a reader picked, and `roles: { rider: 'cadence' }`, the first entry the account holds, over a tenant's saved theme; a reader's own pick still wins in the shell | none | Stable |
-| `branding.allow` | What a tenant may change (`logo` includes the dark logo and the tab icon): `logo`, `name`, `accent`, `palette`, `radius`, `density`, `preset`, `locale` | required | Stable |
+| `branding.allow` | What a tenant may change (`logo` includes the dark logo and the tab icon): `logo`, `name`, `accent`, `palette`, `radius`, `density`, `preset`, `font` (the interface's face: Inter, Barlow, or a face a theme of `branding.themes` ships), `locale` | required | Stable |
 | `branding.editors` | The tenant roles whose members may save it | required | Stable |
 | `branding.themes` | One to six themes a tenant picks from (`preset` needs two) | the App's own look | Stable |
 | `brandingForm()` | A dashboard section: the form beside a live preview | none | Stable |

@@ -425,6 +425,8 @@ export default definePage({ label: { message: 'ticket.plural' }, description: { 
       /* A command's input rules are parsed when defineCommand runs, before any catalog is read. */
       'command.d.ts CommandTextField.message',
       'model.d.ts AppCommandField.message',
+      /* The field as it is served: its placeholder is said already (authored, command.d.ts takes msg() for it). */
+      'model.d.ts AppCommandField.placeholder',
       'command.d.ts CommandRule.message',
       'model.d.ts AppCommandRule.message',
       /* A display's subtitle names a column of the record, not words. */

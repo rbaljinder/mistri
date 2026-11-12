@@ -244,6 +244,21 @@ test("a line and a footer fact that are references say their record's name, and 
   expect(screen.queryByRole('button', { name: /Edit/ })).toBeNull();
 });
 
+test('a line and a footer fact may read one column of a reference, one hop', () => {
+  const client = new QueryClient();
+  render(
+    <QueryClientProvider client={client}>
+      <BoardList
+        table={table}
+        rows={[{ id: 7, name: 'x', status: 'new', owner: null, cycle_id: 3, 'cycle_id.name': 'Sprint 12' }]}
+        spec={{ ...spec, lines: ['owner'], footer: [{ column: 'cycle_id.name' }] }}
+        actions={[]}
+      />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText('Sprint 12')).toBeInTheDocument();
+});
+
 /* The list's server: a count of every lane in one breakdown, and each lane's
    cards as many as asked for. `counts` maps a lane value (null for none) to its size. */
 function serveLanes(counts: Array<[string | null, number]>) {

@@ -66,6 +66,11 @@
     justify-self: end; min-height: 28px; margin-inline-end: var(--space-1h); padding-inline: var(--space-3); font-weight: 600; border-radius: var(--radius-item);
   }
   :is(.form-page, .command-form, .insert-form-app) .field-with-action .field-control { padding-inline-end: calc(5.5em + var(--space-3)); }
+  /* On a phone or under a finger Show is the box's own height, 44px (forms.css: the rule for the rest of a form's controls
+     is less specific than this one). It stands over the box's end, so it is the box tall, not a chip inside it. */
+  @media (pointer: coarse), (max-width: 40rem) {
+    :is(.form-page, .command-form, .insert-form-app) .field-with-action > .btn { min-height: calc(44px / var(--density-zoom, 1)); margin-inline-end: 0; }
+  }
 
   /* The one thing to press fills in the theme's primary-action color (`colors.primary`): Lumen's ink, so a form says
      "next" by weight, not by hue; the accent where a theme names none. Back is a quiet word in the muted ink. */

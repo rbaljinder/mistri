@@ -331,8 +331,8 @@ async function openShop(t: TestContext, lab: Lab): Promise<Shop> {
   };
 }
 
-const NORTH = { apiKey: 'sk_north', webhookSecret: 'whsec_north' };
-const SOUTH = { apiKey: 'sk_south', webhookSecret: 'whsec_south' };
+const NORTH = { apiKey: 'sk_north', webhookSecret: 'whsec_north_0123456789abcdef' };
+const SOUTH = { apiKey: 'sk_south', webhookSecret: 'whsec_south_0123456789abcdef' };
 
 test("each tenant's secrets are its own: North's call uses North's key, South is not set up, and a sealed value opens nowhere else", async (t) => {
   const lab = await openLab(t),
@@ -376,7 +376,7 @@ test("each tenant's secrets are its own: North's call uses North's key, South is
       },
     ],
   );
-  assert.doesNotMatch(JSON.stringify(settings), /sk_north|whsec_north/);
+  assert.doesNotMatch(JSON.stringify(settings), /sk_north|whsec_north_0123456789abcdef/);
   assert.equal(
     (await shop.integrations.settings!.read('south')).integrations[0].secrets.every((secret) => !secret.set),
     true,

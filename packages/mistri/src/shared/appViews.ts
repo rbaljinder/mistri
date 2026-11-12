@@ -1246,11 +1246,12 @@ export function parsePresentation(raw: unknown, at: string): AppListPresentation
     if (!Array.isArray(rawLines) || rawLines.length > max) {
       throw new Error(`${here}: "${linesKey}" must be a list of at most ${max} local column${max === 1 ? '' : 's'} beneath the primary.`);
     }
-    /* Cards, queues and calendars may say a referenced record's name; the
+    /* Cards, queues, calendars and boards may say a referenced record's name; the
        other presentations' lines stay the row's own columns. */
     lines = rawLines.map((_, i) => {
       const line = (rawLines as unknown[])[i];
-      if (kind === 'queue' || kind === 'calendar' || kind === 'tree') return queueColumn(line, String(i), `${here}, lines`);
+      if (kind === 'queue' || kind === 'calendar' || kind === 'tree' || kind === 'board')
+        return queueColumn(line, String(i), `${here}, lines`);
       if (kind !== 'cards') return localColumn(rawLines as unknown as Record<string, unknown>, String(i), `${here}, lines`);
       if (typeof line !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/.test(line.trim())) {
         throw new Error(`${here}, properties: a card's property is a local column or a one-hop label path like "dealer_id.name".`);
@@ -1399,14 +1400,15 @@ export function parsePresentation(raw: unknown, at: string): AppListPresentation
 /** A card's foot: one to four local columns, each bare or `{ column, icon }`. */
 function parseBoardFooter(raw: unknown, here: string): AppBoardFact[] {
   if (!Array.isArray(raw) || !raw.length || raw.length > 4)
-    throw new Error(`${here}: "footer" must be one to four local columns, each a name or { column, icon }.`);
+    throw new Error(`${here}: "footer" must be one to four local columns or one-hop label paths, each a name or { column, icon }.`);
   const facts = raw.map((item, index): AppBoardFact => {
     const at = `${here}, footer[${index}]`;
-    if (typeof item === 'string') return { column: localColumn({ column: item }, 'column', at) };
+    /* A fact may say a referenced record's own column (`owner_id.name`), as a list's `show` does. */
+    if (typeof item === 'string') return { column: queueColumn(item, 'column', at) };
     if (!isRecord(item)) throw new Error(`${at} must be a local column or { column, icon }.`);
     allowKeys(item, ['column', 'icon'], at);
     return {
-      column: localColumn(item, 'column', at),
+      column: queueColumn(item.column, 'column', at),
       ...(item.icon === undefined ? {} : { icon: parseIcon(item.icon, at) }),
     };
   });
@@ -1861,13 +1863,17 @@ function parseDashSections(
         /* Without "compare" there is no change to colour: advice (appAdvisories), not a refusal. */
       }
       if (s.spark !== undefined && typeof s.spark !== 'boolean') throw new Error(`${here} has a "spark" that is not true or false.`);
+      if (s.minor !== undefined && s.minor !== true)
+        throw new Error(`${here} has a "minor" that is not true: say it where the measure counts cents, else leave it out.`);
+      if (s.minor === true && s.format !== undefined && s.format !== 'money')
+        throw new Error(`${here} says "minor" with a "format" of "${String(s.format)}": minor units are money's.`);
       if (s.format !== undefined && !(FIGURE_FORMATS as readonly string[]).includes(String(s.format)))
         throw new Error(`${here} has a "format" of "${String(s.format)}". Use ${FIGURE_FORMAT_WORDS}.`);
       if (s.unit !== undefined && (typeof s.unit !== 'string' || !s.unit.trim() || s.unit.length > 24))
         throw new Error(`${here} has a "unit" that is not a short word said after the figure, like "days".`);
-      if (s.figure !== undefined && s.figure !== 'exact' && s.figure !== 'compact')
+      if (s.figure !== undefined && s.figure !== 'exact' && s.figure !== 'compact' && s.figure !== 'whole')
         throw new Error(
-          `${here} has a "figure" of ${JSON.stringify(s.figure)}. Use "exact" (to the cent, the default) or "compact" ("$28.1K").`,
+          `${here} has a "figure" of ${JSON.stringify(s.figure)}. Use "exact" (to the cent, the default), "compact" ("$28.1K") or "whole" (to the major unit, "$28,123").`,
         );
       const windows = parseSectionWindows(s, here);
       /* A metric counts its own query. The list it opens (`to:`) adds only its
@@ -1957,9 +1963,10 @@ function parseDashSections(
         compare,
         better: s.better as AppDashSection['better'],
         spark: s.spark as boolean | undefined,
+        ...(s.minor === true ? { minor: true as const } : {}),
         ...(s.format === undefined ? {} : { format: s.format as AppDashSection['format'] }),
         ...(s.unit === undefined ? {} : { unit: (s.unit as string).trim() }),
-        ...(s.figure === undefined ? {} : { figure: s.figure as 'exact' | 'compact' }),
+        ...(s.figure === undefined ? {} : { figure: s.figure as 'exact' | 'compact' | 'whole' }),
         by: s.by === undefined ? undefined : (s.by as string).trim(),
         ...(stages ? { stages } : {}),
         ...(s.lanes === undefined ? {} : { lanes: [...(s.lanes as string[])] }),

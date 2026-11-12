@@ -1,3 +1,9 @@
+/**
+ * A list read as summaries: a title and up to four facts a row, the dress a narrow screen and a related list wear in
+ * place of the grid. This module owns which columns say what: the facts a question already fixes are left out
+ * (`fixedColumns`), the title a row's link takes when the row names nothing itself (`linkTitleColumn`), and whether the
+ * table has more to say than the summaries do (`tableSaysMore`).
+ */
 import { Fragment, type ReactNode } from 'react';
 import { useMessageLanguage } from './useMessageLanguage.js';
 import { columnLabel, keyOf, labelPath, openRecord, recordLabel, rowLabel, state } from '../core.js';
@@ -85,6 +91,13 @@ function shownValue(row: Record<string, unknown>, name: string, referenceLabels?
  */
 function labelColumns(table: TableMeta): string[] {
   const template = recordLabel(table);
+  /* A column that names the record (`recordLabel: 'kind'`) is its own label, even where a display rule says its codes as
+     words and the catalog computes the name (the title is "Identity", the stored code "identity"): the fact under the
+     title would say the same word again, and the raw-value comparison below could not tell. */
+  if (typeof template === 'string' && template !== '' && !isLabelTemplate(template)) {
+    const column: string = template;
+    return column.includes('.') ? [column, column.split('.')[0]] : [column];
+  }
   const parsed = isLabelTemplate(template) ? parseLabelTemplate(template) : undefined;
   if (!parsed || 'problem' in parsed) return [];
   return parsed.paths.flatMap((path: string) => (path.includes('.') ? [path, path.split('.')[0]] : [path]));

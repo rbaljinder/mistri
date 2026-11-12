@@ -235,6 +235,16 @@ export function listProblem(
         return 'Board primary must be a text column, or a reference, which titles each card by the record it names.';
       continue;
     }
+    // A board's line or footer fact may say a referenced record's column, one hop, as a queue's line may.
+    if (key.startsWith('lines[') && name.includes('.')) {
+      if (!schema) continue;
+      try {
+        resolvePath(schema, table.id, name);
+      } catch (error) {
+        return `Board ${key}: "${name}" is not a readable one-hop reference label path (${(error as Error).message}).`;
+      }
+      continue;
+    }
     // A board's line may be a rollup or a computed number of the row, as a queue's may: a problem's open tickets.
     if (!column && key.startsWith('lines[') && columnOrRollup(table, name)) continue;
     if (!column || name.includes('.')) return `${word} ${key}: "${name}" must be a local readable column.`;
@@ -243,6 +253,16 @@ export function listProblem(
     if (key === 'primary' && columnKind(column.type) !== 'text' && !column.references)
       return `${word} primary must be a text column, or a reference, which titles each card by the record it names.`;
     if (key === 'by' && column.primaryKey) return 'Board by must not be a primary key column.';
+  }
+  if (schema) {
+    for (const [i, fact] of (list.footer ?? []).entries()) {
+      if (!fact.column.includes('.')) continue;
+      try {
+        resolvePath(schema, table.id, fact.column);
+      } catch (error) {
+        return `Board footer[${i}]: "${fact.column}" is not a readable one-hop reference label path (${(error as Error).message}).`;
+      }
+    }
   }
   if (list.kind === 'board' && list.lanes) {
     const allowed = table.columns.find((column) => column.name === list.by)?.allowed;

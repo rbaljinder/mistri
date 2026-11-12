@@ -40,9 +40,26 @@ export function headingFace(theme: ThemeDefinition): ThemeFaceDefinition | undef
 }
 
 /**
+ * The face a theme's interface text is drawn in: the first served face of the family its `ui` stack leads with, at the
+ * regular weight where it ships one. Preloaded where a tenant picked it (clientSurface.ts appFaceHead), since every
+ * line of the page is set in it; a theme's headings are the App's author's call and preload on their own.
+ */
+export function uiFace(theme: ThemeDefinition): ThemeFaceDefinition | undefined {
+  const lead = families(theme.fonts?.ui ?? '')[0]?.toLowerCase();
+  if (!lead) return undefined;
+  const faces = (theme.faces ?? []).filter((face) => face.family.toLowerCase() === lead && face.style === 'normal' && face.href);
+  return (
+    faces.find((face) => {
+      const [low, high = low] = face.weight.split(' ').map(Number);
+      return 400 >= low! && 400 <= high!;
+    }) ?? faces[0]
+  );
+}
+
+/**
  * The `@font-face` rules for a theme's served faces, each `url()` the
  * browser's own form of its address (`shown`). `swap`, as Inter's is
- * (lumenLook.css): the text is drawn at once in the stack's next family and
+ * (interFace.css): the text is drawn at once in the stack's next family and
  * set again when the face lands, never held invisible. The family and the
  * address are both checked to a character set that cannot close the rule
  * (themeSpec.ts, appFonts.ts), so nothing a theme says becomes a stylesheet.

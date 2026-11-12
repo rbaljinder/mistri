@@ -220,7 +220,7 @@ export function buildTheme(spec: ThemeSpec, base?: ThemeDefinition): ThemeDefini
   const type = mergeType(base?.type, spec.type && { base: spec.type.base, roles: spec.type.roles });
   const steps = typeof spec.shape?.elevation === 'object' ? spec.shape.elevation : undefined;
   const lifts = base?.lifts || steps ? { ...base?.lifts, ...steps } : undefined;
-  /* A face is a theme's own file: a built-in ships none (Lumen's Inter is its sheet's); a theme value it extends (a
+  /* A face is a theme's own file: a built-in ships none (Inter is interFace.css's); a theme value it extends (a
      package's look) may, and its faces stand under this theme's own, which win at a family, weight and style. */
   const own = spec.type?.faces?.map((face) => ({
     family: face.family,

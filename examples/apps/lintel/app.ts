@@ -34,6 +34,8 @@ const manager = {
   extends: 'leasing',
   // Repairs and the storeroom too: a part used or received moves the shelf (resources.ts `consumes`).
   write: ['maintenance_request', 'request_part', 'part', 'part_receipt', 'property'],
+  // Writing a table is not exporting it; the manager takes the rent roll, the repairs and the shelf away as files.
+  export: ['unit', 'resident', 'maintenance_request', 'part'],
   commands: ['assignTechnician', 'scheduleVisit', 'completeRequest', 'cancelRequest', 'postRent', 'recordPayment', 'addCharge'],
   actions: { charge: ['waive'] },
   /* A repair is filed and moved along its road in place; who goes and when is booked by scheduleVisit, what was done is

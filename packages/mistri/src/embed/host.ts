@@ -450,8 +450,9 @@ export function embedHost({ surface, endpoint, authorization, navigator, basePat
           return withParams(`${base}/${to.path.split('/').map(encodeURIComponent).join('/')}`, to.params);
       }
     },
-    /* The boot answered only a signed-in reader: the Provider draws its fallback otherwise. */
-    viewer: () => ({ signedIn: true }),
+    /* The boot answered only a signed-in reader: the Provider draws its fallback otherwise. A headless surface is not
+       told the reader's roles, so a front end that offers by role reads them from its own session. */
+    viewer: () => ({ signedIn: true, roles: [] }),
     subscribeViewer: () => () => {},
     column(name, column) {
       const table = tableNamed(surface.schema, name);

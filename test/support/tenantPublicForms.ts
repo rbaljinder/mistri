@@ -10,7 +10,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
@@ -30,6 +30,7 @@ import { provisionPostgresLiveChange } from '../../packages/mistri/src/adapters/
 import { provisionSqliteLiveChange } from '../../packages/mistri/src/adapters/live/sqliteLiveChange.js';
 import { provisionSqliteBranding, writeSqliteBranding } from '../../packages/mistri/src/adapters/branding/sqliteBranding.js';
 import { settingsMount } from '../../packages/engine/src/shared/mount.js';
+import { readAppFonts } from '../../packages/mistri/src/server/app/appFonts.js';
 import { parseTestApp } from './commandCatalog.js';
 import { openTenantEngine, type TenantDialect, type TenantEngine } from './tenantDialects.js';
 
@@ -86,6 +87,9 @@ export interface TenantPublicFormOptions {
   readonly brandingPresets?: true;
   /** The App wears a theme of its own that ships a font file (`type.faces`), as an App with its own look may. */
   readonly ownFaces?: true;
+  /** With `tenantBranding`: each tenant may pick its interface font (`branding.allow: ['font']`), from the kit's faces and
+      Figtree, which a theme of the App ships (a real WOFF2 file, served) and which north has picked. */
+  readonly tenantFont?: true;
   /** The App served at the root, as `mistri tenant` serves its one App: a form's page is `/form/{key}`. */
   readonly atRoot?: true;
   /** A public command page, `lobby`, that runs `apply` (with `publicReads`, it reads `make` too). */
@@ -170,7 +174,7 @@ export async function openTenantPublicForms(
       writeSqliteBranding(db, {
         app: APP_ID,
         tenant: 'north',
-        value: JSON.stringify({ name: NORTH_BRAND }),
+        value: JSON.stringify({ name: NORTH_BRAND, ...(options.tenantFont ? { font: 'Figtree' } : {}) }),
         logoHash: null,
         by: 'north-owner',
         at: new Date().toISOString(),
@@ -196,10 +200,26 @@ export async function openTenantPublicForms(
           lead: { access: 'write', owner: 'tenant' },
           intake_submission: { access: 'write', owner: 'platform' },
         },
-        ...(options.ownFaces || options.logo
+        ...(options.ownFaces || options.logo || options.tenantFont
           ? {
               ui: {
                 ...(options.logo ? { logo: options.logo } : {}),
+                ...(options.tenantFont
+                  ? {
+                      customThemes: [
+                        {
+                          kind: 'theme',
+                          id: 'figtree',
+                          label: 'Figtree',
+                          extends: 'workshop',
+                          type: {
+                            font: { ui: '"Figtree", Georgia, serif' },
+                            faces: [{ family: 'Figtree', src: './fonts/figtree.woff2', weight: '300 900', subset: false }],
+                          },
+                        },
+                      ],
+                    }
+                  : {}),
                 ...(options.ownFaces
                   ? {
                       theme: { preset: 'yard' },
@@ -220,9 +240,18 @@ export async function openTenantPublicForms(
         ...(options.tenantBranding
           ? {
               branding: {
-                allow: ['name', 'logo', 'accent', 'radius', 'density', ...(options.brandingPresets ? ['preset'] : [])],
+                allow: [
+                  'name',
+                  'logo',
+                  'accent',
+                  'radius',
+                  'density',
+                  ...(options.brandingPresets ? ['preset'] : []),
+                  ...(options.tenantFont ? ['font'] : []),
+                ],
                 editors: ['staff'],
                 ...(options.brandingPresets ? { themes: ['workshop', 'sage'] } : {}),
+                ...(options.tenantFont ? { themes: ['workshop', { kind: 'theme', id: 'figtree' }] } : {}),
               },
             }
           : {}),
@@ -279,6 +308,15 @@ export async function openTenantPublicForms(
     ),
     ...(options.challenge ? { challenges: defineChallenges({ verifyHuman: options.challenge }) } : {}),
   };
+  if (options.tenantFont) {
+    /* The face is a real file in the App's directory, read and served as a loaded App's are (appFonts.ts). */
+    mkdirSync(join(directory, 'fonts'));
+    copyFileSync(
+      new URL('../../packages/kit/src/client/fonts/inter-latin.woff2', import.meta.url),
+      join(directory, 'fonts', 'figtree.woff2'),
+    );
+    Object.assign(loaded, { dir: directory, fonts: await readAppFonts(loaded.app, directory, loaded.path) });
+  }
   const places = ['lead', 'intake_submission'];
   const root = (intake: unknown) => (intake === 'tenant' ? 'lead' : 'intake_submission');
   const received = shape({ reference: text(), message: literal('Application received.') });

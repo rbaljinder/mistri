@@ -92,7 +92,7 @@ Figures first, then how they move and divide, then what waits ([Design a dashboa
 | When | Use | Not when | In a sample |
 | --- | --- | --- | --- |
 | The menu has more than six entries | `navGroup` in the order the day runs, each with an icon | — | `examples/apps/lintel/navigation.ts:15` |
-| Roles start in different places | `home` as a list of rules | — | `examples/apps/lintel/app.ts:163` |
+| Roles start in different places | `home` as a list of rules | — | `examples/apps/lintel/app.ts:165` |
 | A front page for signed-out visitors | a [`landing(...)`](/docs/landing-pages/) with a `hero`, embedded lists and a call to action | an App without sign-in | `examples/apps/lintel/landing.ts:6` |
 
 ## Later or elsewhere

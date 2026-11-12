@@ -13,6 +13,7 @@ import { CARDS_MAX_LINES, HEADER_FACTS_SHOWN, HEADER_MAX_FACTS, parseCards, pars
 import { parseIcon } from './appIcons.js';
 import { slug } from './slug.js';
 import { parsePageLayout } from './pageLayouts.js';
+import { CONFIG_PAGE_RENAMED, CUSTOM_SECTION_RENAMED, LINK_INTENT_RENAMED, SECTION_RENAMED, refusedAsNow } from './renamedSectionWords.js';
 import { parseSortText } from './sortText.js';
 import { componentPropValues, parseComponentDecl, parsePageReads, parsePageTotals, parseRecordFields } from './appComponents.js';
 import { parseAppLinkAction, parseAppTarget, parseLinkTo, type AppLinkAction } from './appLinks.js';
@@ -93,13 +94,10 @@ export function parsePagesConfig(raw: unknown, where: string): PageDef[] {
   });
 }
 
-/* Spellings renamed before 1.0, refused with the word that replaced them (allowKeys' `refused`). */
-/* A call to action's emphasis is its `intent`, as a button's is; `kind` names what a thing is. */
-const CUSTOM_RENAMED = {
-  totals: 'is now "figures": the named aggregate reads its component receives as figures.<name> ("totals" is a list\'s footer of sums)',
-} as const;
-const INTENT_RENAMED = { kind: 'is now "intent", as a button says it: "primary" or "secondary"' } as const;
-const PAGE_RENAMED = { onlyOn: 'is now "connection", as the root of the config file says it' } as const;
+/* Spellings renamed before 1.0, refused with the word that replaced them (allowKeys' `refused`): renamedSectionWords.ts. */
+const CUSTOM_RENAMED = refusedAsNow(CUSTOM_SECTION_RENAMED);
+const INTENT_RENAMED = refusedAsNow(LINK_INTENT_RENAMED);
+const PAGE_RENAMED = refusedAsNow(CONFIG_PAGE_RENAMED);
 /** The keys a page takes. A tablewalk.json page also names its `id`; an App page is keyed by it. */
 export const PAGE_KEYS = ['label', 'base', 'connection', 'listTabs', 'empty', 'sections', 'aside', 'layout'] as const;
 /** An App page has no `connection`: the App names its one connection, and a page scoped to another would never show. Nor a `label`: it is called its resource's `noun`. */
@@ -303,21 +301,10 @@ function parseFlag(raw: unknown, at: string, key: string): boolean | undefined {
 }
 
 /* The spellings a section may not use any more, each mapped to the word
-   that replaced it. Refused by name, in the parser's usual voice, so a page
-   written against the pre-rename format fails with its fix rather than
-   half-working. The renames (docs/apps.md, "The respelling"): `whose`
-   says the direction `path` hid, `about` moves the subject the
-   way `of` only implied, `show` and `sort` are the query
-   language's own words. */
-const RENAMED: Record<string, string> = {
-  tint: '"tone", as a display rule says it: { kind: { internal: \'warn\' } } on the timeline, or one tone on a stream',
-  order: "\"newest\": 'first' (the default) or 'last', the way a conversation reads",
-  edit: '"editable", as a list view says it',
-  path: '"whose" — the column on the section\'s table that names this record, e.g. "customer_id" or "invoice_id.customer_id"',
-  of: '"about" — the record this section is about, named by a reference column of the base, e.g. "site_id"',
-  paths: '"show" — the fields to show, e.g. ["name", "account_id.name"]',
-  orderBy: '"sort" — written like the query bar, e.g. "due_on desc, name"',
-};
+   that replaced it (renamedSectionWords.ts). Refused by name, in the parser's
+   usual voice, so a page written against the pre-rename format fails with its
+   fix rather than half-working. */
+const RENAMED: Record<string, string> = Object.fromEntries(SECTION_RENAMED.map((row) => [row.from, row.now]));
 
 function refuseRenamed(s: Record<string, unknown>, at: string, keys: string[]): void {
   for (const key of keys) {

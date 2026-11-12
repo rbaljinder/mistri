@@ -69,10 +69,13 @@ export const DASH_READ_KEYS = ['from', 'query', 'show', 'sort', 'limit', 'over']
 /** The keys a declared aggregate read takes, on a page and on a dashboard. */
 const PAGE_TOTAL_KEYS = ['from', 'measure', 'by', 'whose', 'query', 'limit'] as const;
 const DASH_TOTAL_KEYS = ['from', 'measure', 'by', 'query', 'over', 'limit'] as const;
-/** What a total measures: the breakdown grammar's aggregates over one column of the resource (count takes none). */
+/**
+ * What a total measures: the breakdown grammar's aggregates over one column of the resource (count takes none, and
+ * `count distinct` takes the column whose different values it counts: "N across M people").
+ */
 const TOTAL_FUNCTIONS = ['count', 'sum', 'avg', 'min', 'max'] as const;
 type TotalFunction = (typeof TOTAL_FUNCTIONS)[number];
-const TOTAL_MEASURE = /^(count|(?:sum|avg|min|max)\s+[A-Za-z_][A-Za-z0-9_]*)$/;
+const TOTAL_MEASURE = /^(count|count distinct [A-Za-z_][A-Za-z0-9_]*|(?:sum|avg|min|max) [A-Za-z_][A-Za-z0-9_]*)$/;
 /** The most groups one total returns, and what it returns when it says none. */
 const MAX_TOTAL_GROUPS = 500;
 const DEFAULT_TOTAL_GROUPS = 100;
@@ -327,8 +330,10 @@ export function parseDashReads(raw: unknown, at: string): Record<string, DashCus
 export interface PageCustomTotal {
   from: string;
   fn: TotalFunction;
-  /** The column measured; absent for a count. */
+  /** The column measured; absent for a count of rows. */
   column?: string;
+  /** A count of the column's different values (`count distinct patient_id`), not of rows. */
+  distinct?: true;
   /** What the figure is grouped by, in the breakdown grammar ("status", "month opened_on"); absent, one figure. */
   by?: string;
   /** Config `whose`: the path from `from` back to the page's record. Absent, the resource's own rows. */
@@ -355,7 +360,9 @@ function totalShape(raw: unknown, at: string, keys: readonly string[]): Record<s
   allowKeys(raw, keys, at);
   if (typeof raw.from !== 'string' || !raw.from.trim()) throw new Error(`${at} has no "from": the resource it measures.`);
   if (typeof raw.measure !== 'string' || !TOTAL_MEASURE.test(raw.measure.trim().replace(/\s+/g, ' '))) {
-    throw new Error(`${at} has no "measure": "count", or ${TOTAL_FUNCTIONS.slice(1).join(', ')} and a column — 'sum amount'.`);
+    throw new Error(
+      `${at} has no "measure": "count", "count distinct" and a column, or ${TOTAL_FUNCTIONS.slice(1).join(', ')} and a column — 'sum amount'.`,
+    );
   }
   for (const key of ['by', 'query', 'whose', 'over'] as const) {
     if (raw[key] !== undefined && (typeof raw[key] !== 'string' || !(raw[key] as string).trim()))
@@ -371,17 +378,27 @@ function totalShape(raw: unknown, at: string, keys: readonly string[]): Record<s
 
 const totalReads = { key: 'figures', most: MAX_CUSTOM_FIGURES, noun: 'figures' };
 
+/** A page figure's measure as it is written: "count", "count distinct patient_id", "sum amount". */
+export function totalMeasureText(total: Pick<PageCustomTotal, 'fn' | 'column' | 'distinct'>): string {
+  if (total.column === undefined) return total.fn;
+  return total.distinct ? `${total.fn} distinct ${total.column}` : `${total.fn} ${total.column}`;
+}
+
 export function parsePageTotals(raw: unknown, at: string): Record<string, PageCustomTotal> | undefined {
   return reads(
     raw,
     at,
     (entry, here) => {
       const r = totalShape(entry, here, PAGE_TOTAL_KEYS);
-      const [fn, column] = r.measure.split(' ') as [TotalFunction, string | undefined];
+      const words = r.measure.split(' ');
+      const distinct = words[1] === 'distinct';
+      const fn = words[0] as TotalFunction;
+      const column = distinct ? words[2] : words[1];
       return {
         from: (r.from as string).trim(),
         fn,
         ...(column === undefined ? {} : { column }),
+        ...(distinct ? { distinct: true as const } : {}),
         ...(r.by === undefined ? {} : { by: (r.by as string).trim() }),
         ...(r.whose === undefined ? {} : { path: (r.whose as string).trim() }),
         ...(r.query === undefined ? {} : { filter: (r.query as string).trim() }),

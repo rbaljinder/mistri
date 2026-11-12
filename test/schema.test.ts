@@ -754,7 +754,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.41: an action's `to: { view, tab }`, a list on one of its tabs (two entries; both names already): 1748/520.
     // 1.0.0-rc.42: a resource's capability `links` and a link's show, says, commands, expires, uses, confirm and
     // stepUp (eight entries, one new name): 1756/521.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1756, names: 521 });
+    // 1.0.0-rc.43: a measured section's `minor`, on a metric, breakdown, chart and matrix (four entries; the name
+    // was a display rule's already): 1760/521.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1760, names: 521 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {
