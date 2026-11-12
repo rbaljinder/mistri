@@ -145,7 +145,9 @@ const postgres: Engine = {
     const control = await pgControl(url);
     for (const sql of [
       `DROP TABLE IF EXISTS ${runtimeTable('postgres', eventTables.event)}, ${runtimeTable('postgres', eventTables.meta)} CASCADE`,
-      `DROP TABLE IF EXISTS ${runtimeTable('postgres', journal.receipt)}, ${runtimeTable('postgres', journal.meta)} CASCADE`,
+      `DROP TABLE IF EXISTS ${Object.values(journal)
+        .map((table) => runtimeTable('postgres', table))
+        .join(', ')} CASCADE`,
       'DROP TABLE IF EXISTS public.loans CASCADE',
       'CREATE TABLE public.loans (id integer PRIMARY KEY, version integer NOT NULL, reviewer text NOT NULL)',
       "INSERT INTO public.loans VALUES (1, 0, 'Unassigned')",

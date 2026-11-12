@@ -1,3 +1,12 @@
+/** The platform's event name prefix for effects; no command event may use it. */
+export const EFFECT_EVENT_PREFIX = 'effect.';
+/** An effect's body is a webhook's request, not a domain fact: its strings are as long as the body allows, so a
+ * 5 KB description is a valid post and a refused domain event. */
+export const isEffectEvent = (name: string): boolean => name.startsWith(EFFECT_EVENT_PREFIX);
+
+/** An effect's body was over what one post carries. Named, so the projection's catch says it and not "projection". */
+export class EffectBodyTooLarge extends Error {}
+
 /** Internal portable DTO proposal. No storage capability, public wire contract,
  * authentication or event delivery is supplied by these types. */
 type CommandEventScalar = string | number | boolean | null;

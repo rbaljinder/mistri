@@ -148,7 +148,7 @@ async function fixture(t: TestContext, dialect: TenantDialect, journal: 'v2' | '
     }
   });
   await engine.provisionStore(owner);
-  if (journal === 'v2') assert.deepEqual(await engine.migrateCommandJournal(), { version: 1, migrated: true });
+  if (journal === 'v2') assert.deepEqual(await engine.migrateCommandJournal(), { version: 3, migrated: true });
   if (journal === 'v1') await engine.exec(v1[dialect]);
   const maintenance = (run: (admin: TenantStoreAdministration) => Promise<void>) => engine.maintenance(owner, run);
   const grant = {

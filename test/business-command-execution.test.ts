@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { migrateSqliteCommandJournal, COMMAND_JOURNAL_TABLES } from '../packages/mistri/src/adapters/commands/commandJournal.js';
 import { sqliteAuditRows } from './support/commandTargets.js';
+import { groupAuditParts, stitchAudit } from '../packages/mistri/src/adapters/commands/commandAuditParts.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { loadAppRuntimeResources } from '../packages/mistri/src/server/app/appRuntimeResources.js';
 import { bindBusinessCommands } from '../packages/mistri/src/server/commands/businessCommandAccess.js';
@@ -510,6 +511,90 @@ test('a 65,536-character text of four-byte characters is a change the audit keep
       await context.tx.insert({ table: 'assignment_history', values: { tenant: 'retail', loan_id: 1, reviewer: 'Ada', note } });
       return { version: 1 };
     },
+  );
+});
+
+/* A bulk handler writes as many rows as it needs: one target's audit keeps 4,096 changes, the first 256 in the receipt
+   row as they always were and the rest in continuation rows of 256, written with the receipt and read back whole. */
+const insertRows =
+  (count: number, note = (at: number) => `n${at}`) =>
+  async (context: BusinessCommandContext) => {
+    for (let at = 0; at < count; at++)
+      await context.tx.insert({ table: 'assignment_history', values: { tenant: 'retail', loan_id: 1, reviewer: 'Ada', note: note(at) } });
+    return { version: 1 };
+  };
+const auditOf = (db: DatabaseSync) => {
+  const receipts = db.prepare(`SELECT id, changes_json FROM "${COMMAND_JOURNAL_TABLES.receipt}"`).all() as Array<Record<string, string>>;
+  assert.equal(receipts.length, 1);
+  const parts = db
+    .prepare(
+      `SELECT target_index, part, changes_json FROM "${COMMAND_JOURNAL_TABLES.auditPart}" WHERE receipt_id = ? ORDER BY target_index, part`,
+    )
+    .all(receipts[0].id) as Array<Record<string, unknown>>;
+  const first = (JSON.parse(receipts[0].changes_json) as string[])[0];
+  return { first, parts, whole: JSON.parse(stitchAudit(first, groupAuditParts(parts).get(0))) as Array<Record<string, unknown>> };
+};
+
+test('a command that makes 300 changes keeps all of them: 256 in the receipt, 44 in its first audit part, read back in order', async () => {
+  await fixture(async (f) => {
+    const first = await executeBusinessCommand(f.binding, actor, request());
+    assert.equal(rows(f.db, 'assignment_history').length, 300);
+    const { first: head, parts, whole } = auditOf(f.db);
+    assert.equal((JSON.parse(head) as unknown[]).length, 256);
+    assert.deepEqual(
+      parts.map((part) => [Number(part.target_index), Number(part.part), (JSON.parse(part.changes_json as string) as unknown[]).length]),
+      [[0, 1, 44]],
+    );
+    assert.equal(whole.length, 300);
+    whole.forEach((change, at) => assert.ok(JSON.stringify(change).includes(`"n${at}"`), `change ${at} is in its place`));
+    // The same request again is the same receipt: nothing is written twice.
+    const replay = await executeBusinessCommand(f.binding, actor, request());
+    assert.equal(replay.replayed, true);
+    assert.equal(replay.receiptId, first.receiptId);
+    assert.equal(auditOf(f.db).parts.length, 1);
+    assert.equal(rows(f.db, 'assignment_history').length, 300);
+  }, insertRows(300));
+});
+
+test('a command that makes 4,096 changes keeps them in sixteen pieces; one more is refused, naming both bounds', async () => {
+  await fixture(async (f) => {
+    await executeBusinessCommand(f.binding, actor, request());
+    const { parts, whole } = auditOf(f.db);
+    assert.deepEqual(
+      parts.map((part) => Number(part.part)),
+      Array.from({ length: 15 }, (_, at) => at + 1),
+    );
+    assert.equal(whole.length, 4096);
+  }, insertRows(4096));
+  await fixture(async (f) => {
+    const refused: unknown = await executeBusinessCommand(f.binding, actor, request()).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    errorCode('invalid_result')(refused);
+    assert.match(
+      refusalReasons(refused).join('\n'),
+      /made more than 4,096 changes for one target; its audit keeps at most 4,096 \(and 4 MiB\)/,
+    );
+    assert.equal(rows(f.db, 'assignment_history').length, 0);
+    assert.equal(rows(f.db, COMMAND_JOURNAL_TABLES.receipt).length, 0);
+    assert.equal(rows(f.db, COMMAND_JOURNAL_TABLES.auditPart).length, 0);
+  }, insertRows(4097));
+});
+
+test('the 4 MiB a target keeps is over its whole audit, the pieces after the first included', async () => {
+  await fixture(
+    async (f) => {
+      const refused: unknown = await executeBusinessCommand(f.binding, actor, request()).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      errorCode('invalid_result')(refused);
+      assert.match(refusalReasons(refused).join('\n'), /changes to assignment_history are over the 4 MiB its audit keeps for one target/);
+      assert.equal(rows(f.db, COMMAND_JOURNAL_TABLES.auditPart).length, 0);
+    },
+    // Each change is about 16 KB, so the first 256 fit (about 4.1 MB) and the target passes 4 MiB inside its second piece.
+    insertRows(300, (at) => `${at}`.padEnd(16_000, 'x')),
   );
 });
 

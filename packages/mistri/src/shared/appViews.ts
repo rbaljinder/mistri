@@ -26,7 +26,7 @@
  * opens. Every form is kept under its key, public ones too; the landing
  * under its own.
  */
-import { namesTab, tabKey } from '@mistriwork/engine/shared/addressParams.js';
+import { namesTab, tabKey, tabSlug } from '@mistriwork/engine/shared/addressParams.js';
 import { filterAddressWord, listFilterKey } from '@mistriwork/engine/shared/listFilters.js';
 import { parseViewImport } from './appImport.js';
 import { LABEL_SEGMENT } from '@mistriwork/engine/shared/recordLabel.js';
@@ -93,6 +93,17 @@ import { landingViews, parseLandingView } from './appLanding.js';
 import { CARDS_MAX_LINES, parseCards } from '@mistriwork/engine/shared/appCards.js';
 import { checkDeclaredResource, checkResourceSlot, type ParsedData } from './appResourceBlocks.js';
 import { parseHome, type HomeView } from './appHome.js';
+import {
+  BACKDROP_RENAMED as BACKDROP_RENAMES,
+  CARDS_RENAMED,
+  CUSTOM_SECTION_RENAMED,
+  DASHBOARD_VIEW_RENAMED as DASHBOARD_VIEW_RENAMES,
+  LIST_VIEW_RENAMED as LIST_VIEW_RENAMES,
+  METRIC_SECTION_RENAMED,
+  QUEUE_RENAMED,
+  VIEW_SECTION_RENAMED,
+  renamedMessages,
+} from './renamedWords.js';
 import { OVERVIEW } from './appOverview.js';
 import { parseIcon } from '@mistriwork/engine/shared/appIcons.js';
 import { unknownKey } from '@mistriwork/engine/shared/suggest.js';
@@ -169,29 +180,15 @@ interface ParsedContent {
 }
 
 /* Spellings renamed before 1.0, refused with the word that replaced them (allowKeys' `refused`). */
-const LIST_VIEW_RENAMED = {
-  table: 'is now "from": the resource whose rows the list shows',
-  keys: 'is now "shortcuts": a split\'s single keys for the picked record\'s actions',
-} as const;
-const BACKDROP_RENAMED = {
-  resource: 'is now "from", and the date columns a span runs between are "start" and "end"',
-  to: 'is now "end"',
-  label: 'is now "labelColumn": the column whose value names a span',
-} as const;
+const LIST_VIEW_RENAMED = renamedMessages(LIST_VIEW_RENAMES);
+const BACKDROP_RENAMED = renamedMessages(BACKDROP_RENAMES);
 /* Captioned values are `properties` (a fields section's presentation of that name); `facts` is the dotted line only. */
 const PRESENTATION_RENAMED = {
-  queue: {
-    facts: 'is now "properties": the captioned values under the title (a dotted line is a card\'s "facts")',
-  },
-  cards: {
-    lines: 'is now "properties": the captioned values under the title ("facts" stays the dotted line)',
-  },
+  queue: renamedMessages(QUEUE_RENAMED),
+  cards: renamedMessages(CARDS_RENAMED),
 } as const;
-const DASHBOARD_VIEW_RENAMED = {
-  table: 'is now "from": the resource every section that names none reads',
-  layout: 'is now "areas": the rows of area names its sections stand in ("layout" is a page\'s archetype)',
-  refresh: 'is gone: a dashboard follows changes as they happen and re-reads what depends on the time each minute',
-} as const;
+const DASHBOARD_VIEW_RENAMED = renamedMessages(DASHBOARD_VIEW_RENAMES);
+const VIEW_SECTION_REFUSED = renamedMessages(VIEW_SECTION_RENAMED);
 export const LIST_VIEW_KEYS = [
   'kind',
   'from',
@@ -1075,6 +1072,25 @@ function labelsFor(show: readonly string[] | undefined, labels: Record<string, s
 
 function parseTabs(raw: unknown, at: string): AppListTab[] {
   if (!Array.isArray(raw)) throw new Error(`${at} has "tabs" that are not an array.`);
+  const tabs = parseEachTab(raw, at);
+  /* An address word is matched without regard to case (namesTab), so an `Open` segment and a tab labelled "open" are one
+     word: the first would win and the second never open. Refused with both, rather than left to the order. */
+  const said = new Map<string, number>();
+  tabs.forEach((tab, i) => {
+    const word = tabSlug(tabKey(tab));
+    if (!word) return;
+    const first = said.get(word);
+    if (first === undefined) said.set(word, i);
+    else
+      throw new Error(
+        `${at}, tab ${first + 1} ("${tabs[first].label}") and tab ${i + 1} ("${tab.label}") are both the address word "${word}", ` +
+          `which is matched without regard to case, so the second could never open. Rename one: a tab's label, or the segment it names.`,
+      );
+  });
+  return tabs;
+}
+
+function parseEachTab(raw: unknown[], at: string): AppListTab[] {
   return raw.map((entry, i) => {
     const here = `${at}, tab ${i + 1}`;
     if (!isRecord(entry)) throw new Error(`${here} is not an object.`);
@@ -1557,10 +1573,8 @@ function withOpenRoles<V extends object>(view: V, raw: Record<string, unknown>, 
 /** A section kind as a noun: "a metric", "a rows section" — "a rows" is not English. */
 /** Keys a dashboard section kind took under another name, with what they are now. */
 const RENAMED_SECTION_KEYS: Record<string, Record<string, string>> = {
-  metric: { view: '"to": metric(title, from, { to: \'overdue_list\' }) opens the list view it names' },
-  custom: {
-    totals: '"figures": the named aggregate reads its component receives as figures.<name> ("totals" is a list\'s footer of sums)',
-  },
+  metric: renamedMessages(METRIC_SECTION_RENAMED),
+  custom: renamedMessages(CUSTOM_SECTION_RENAMED),
 };
 
 const sectionWord = (kind: string) => (kind === 'rows' ? 'rows section' : kind);
@@ -2009,7 +2023,7 @@ function embedSection(
   data: ParsedData,
   aside: boolean,
 ): AppDashSection {
-  allowKeys(s, VIEW_SECTION_KEYS, `${at} (a view)`, { tab: 'is now "listTab": the list tab\'s address word' });
+  allowKeys(s, VIEW_SECTION_KEYS, `${at} (a view)`, VIEW_SECTION_REFUSED);
   const listViews = [...views.values()].filter((view) => view.kind === 'list').map((view) => view.key);
   const parsed = typeof s.view === 'string' ? views.get(s.view) : undefined;
   if (!parsed || parsed.kind !== 'list') {

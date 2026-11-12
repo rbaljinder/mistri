@@ -5,6 +5,22 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.42
+
+Capability links, tabs that name a state or a yes/no column, a primary action that follows a tenant's accent, an append-only grant, an audit that keeps past 256 changes, effect bodies with long strings, and the rest of the upgrade rewriter.
+
+- **Run `mistri migrate stores up`.** The command journal's layout moves to version 3: a continuation table for an audit's changes past 256 per target (version 2), and a table for capability links (version 3). Existing receipts are untouched.
+- **A capability link hands one record to someone who signs in to nothing.** A resource declares `links: { status: { show, says?, commands?, expires?, uses?, confirm?, stepUp? } }`; a command on the record mints one with `link('status')` and closes them with `revokeLinks()`. Its holder sees the shown columns of that record and runs the named commands on it, and nothing else; the URL is said only in the minting answer and in an effect's delivery. A wrong, revoked, expired or spent link answers one page in one time, and one open lasts at most half an hour however often the page is reloaded. Not yet in an App scoped by tenant or a row policy; needs `MISTRI_FORM_KEY`.
+- **One-time codes and a status check's step-up live in the shared sign-in state**: a code sent by one instance is spent on another, its wrong tries count everywhere, and a right code opens once.
+- **A tab can name a machine state, a group, or a yes/no column.** `tabs: ['archived']` on a resource with a machine reads the state (`status = archived`, labeled as the state is); a group reads `status is <group>`; a boolean column reads the column. A declared segment still wins. A word two readings claim is refused with the readings to choose between, and a tab whose word no reading claims is refused at check with the nearest word.
+- **A tenant's accent colors the primary action** under looks whose primary is their accent (Workshop, Mono, Sage); the words on it are derived again and held to 4.5:1, as the accent's are.
+- **A table in a role's `create` but not in its `write` is append-only.** The role sees it and adds rows through New, quick add and the API, and never edits or deletes them: the server refuses the update, the delete and a file's replacement, and the pencil and Delete are not drawn.
+- **An audit keeps up to 4,096 changes for one target** (it refused at 256). The first 256 stay in the receipt; the rest go to continuation parts written in the same transaction and are read back in order. The 4 MiB bound stays; a command over either refuses with both numbers.
+- **An effect body keeps its long strings** (a domain event's strings still stop at 1,024 bytes) and is refused by name past 15,360 bytes: `post "crm" body is 15,361 bytes; one post carries at most 15,360.`
+- **Check.** A page that runs a command it did not declare says how to declare it, and a hook imported from the SDK under another name is read as the hook. Two tabs whose labels differ only in case or punctuation are refused: they share an address word. A refused key keeps the App the rest of the manifest made, so check and the schema types still read it; loading still refuses.
+- **`mistri upgrade` rewrites more**, from one list of renamed words: a renamed word in a stylesheet's `var(...)`, in `useToken(...)` and in a component's `className` is rewritten, one a dependency's own CSS declares is reported instead, and a positional rename is refused rather than guessed.
+- **An address's date windows** are said the same way beside other values (`?created_on=today,yesterday`).
+
 ## 1.0.0-rc.41
 
 Fixes from two field reports: list addresses that keep their view, a list that holds its fold, tab words in any case, an action that opens a list on one of its tabs, and a check that says more in one run.

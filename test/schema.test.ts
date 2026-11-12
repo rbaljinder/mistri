@@ -752,7 +752,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // names); a nav group's and both entry shapes' `when` (three entries; `when` is a name already): 1745/519.
     // 1.0.0-rc.40, the UI seam: an App's control kit, `uiKit` (one entry, one new name): 1746/520.
     // 1.0.0-rc.41: an action's `to: { view, tab }`, a list on one of its tabs (two entries; both names already): 1748/520.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1748, names: 520 });
+    // 1.0.0-rc.42: a resource's capability `links` and a link's show, says, commands, expires, uses, confirm and
+    // stepUp (eight entries, one new name): 1756/521.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1756, names: 521 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

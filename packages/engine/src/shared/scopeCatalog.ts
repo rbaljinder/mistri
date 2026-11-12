@@ -163,6 +163,7 @@ export function captureScopeCatalog(schema: DatabaseSchema): DatabaseSchema {
         'trigram',
         'deletable',
         'insertable',
+        'appendOnly',
         'sourceDialect',
         'filterable',
         'filterIn',

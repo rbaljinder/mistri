@@ -99,15 +99,15 @@ test(
   { skip: liveSkip('postgres', LIVE), timeout: 60_000 },
   async (t) => {
     const { url, connect } = await database(t);
-    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 1, migrated: true });
-    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 1, migrated: false });
+    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 3, migrated: true });
+    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 3, migrated: false });
     const client = await connect();
     // A journal that predates the store has neither relation.
     await client.query(
       `DROP TABLE ${runtimeTable('postgres', COMMAND_SEQUENCE_TABLE)}, ${runtimeTable('postgres', COMMAND_SEQUENCE_META_TABLE)}`,
     );
     await assert.rejects(take(client), CommandSequenceUnavailable);
-    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 1, migrated: true });
+    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 3, migrated: true });
     assert.deepEqual([await take(client), await take(client), await take(client, { per: 2 })], [1001, 1002, 1001]);
     assert.deepEqual([await take(client, { owner: tenant('north') }), await take(client, { owner: tenant('south') })], [1001, 1001]);
     // A foreign layout is refused and left as it is.

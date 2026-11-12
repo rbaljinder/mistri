@@ -292,9 +292,11 @@ export function parseAuthGrants(
       for (const resource of roleWrite === true ? write : roleWrite === false ? [] : roleWrite) {
         if (!reads.has(resource)) mine.push(`${here}, "write" names "${resource}", which the role does not read.`);
       }
-      /* What the role makes new rows in, of what it writes: every one unless
-       it says. `false` is a role that edits and never creates; a list names
-       the few it creates. Said here, New, quick add, related create and the
+      /* What the role makes new rows in: of what it writes, every one unless it
+       says. `false` is a role that edits and never creates; a list names the
+       few it creates. A table the list names that the role does not write is
+       APPEND-ONLY for it: it reads it and makes new rows there, and never
+       edits or removes one. Said here, New, quick add, related create and the
        generic insert all answer to it. */
       let create: false | string[] | undefined;
       if (rawGrant.create !== undefined)
@@ -302,10 +304,14 @@ export function parseAuthGrants(
           const writes = new Set(roleWrite === true ? write : roleWrite === false ? [] : roleWrite);
           if (rawGrant.create === true)
             throw new Error(`${here}, "create": true is what a role that writes already does; drop it, or say false or a list.`);
-          if (!writes.size) throw new Error(`${here}, "create" limits what the role creates of what it writes, and it writes nothing.`);
+          if (rawGrant.create === false && !writes.size)
+            throw new Error(`${here}, "create" limits what the role creates of what it writes, and it writes nothing.`);
           create = rawGrant.create === false ? false : accessResources(rawGrant.create, `${here}, "create"`);
           for (const resource of create === false ? [] : create) {
-            if (!writes.has(resource)) throw new Error(`${here}, "create" names "${resource}", which the role does not write.`);
+            if (writes.has(resource)) continue;
+            // An append never exceeds what the App declares writable: the ceiling a `write` answers to.
+            if (!writable.has(resource)) throw new Error(appendOutsideCeiling(here, resource, readable.has(resource)));
+            reads.add(resource);
           }
         });
       /* What the role may export beyond what it writes (which it always may): of what it reads. */
@@ -635,6 +641,15 @@ function accessResources(raw: unknown, where: string): string[] {
   return names;
 }
 
+/** Why a role's `create` cannot append to a resource its own `write` leaves out: an append is a write, so the resource has to be one the App declares writable. */
+function appendOutsideCeiling(here: string, resource: string, declared: boolean): string {
+  return (
+    `${here}, "create" names "${resource}", which the role does not write, so it would only append to it, and ` +
+    (declared ? `resources "${resource}" is not written (it has no access 'write')` : `the App declares no resource "${resource}"`) +
+    ` [outside-ceiling]: an append never exceeds what the resource declares. Give it resources.${resource}.access: 'write'.`
+  );
+}
+
 function assertAccessSubset(scope: Iterable<string>, ceiling: ReadonlySet<string>, where: string): void {
   for (const resource of scope) {
     if (!ceiling.has(resource)) throw new Error(`${where}: resource "${resource}" is outside its access ceiling.`);
@@ -863,7 +878,13 @@ export function checkedGrants(app: Pick<AppDef, 'name' | 'resources' | 'auth' | 
         if (rawGrant.create !== false && !Array.isArray(rawGrant.create))
           throw new Error(`${here}, "create" is false or a list of resources it writes.`);
         create = rawGrant.create === false ? false : accessResources(rawGrant.create, `${here}, "create"`);
-        if (create !== false) assertAccessSubset(create, new Set(writable), `${here}, "create" requires write`);
+        if (create !== false) {
+          // A table it names and does not write is an append: within the write ceiling, and read by the grant itself.
+          for (const resource of create) {
+            if (writable.includes(resource)) continue;
+            if (!writeCeiling.has(resource)) throw new Error(appendOutsideCeiling(here, resource, ceiling.has(resource)));
+          }
+        }
       }
       let exports: string[] | undefined;
       if (rawGrant.export !== undefined) {
@@ -1022,7 +1043,11 @@ function foldGrant(
       grant.create === undefined ? reach(grant, 'write') : grant.create === false ? [] : list(grant.create);
     const made = union(creates(base), creates(own));
     const writes = new Set([...reach(base, 'write'), ...reach(own, 'write')]);
-    if (!writes.size || [...writes].every((resource) => made.includes(resource))) {
+    /* A table made and not written is an append (one side's `create` names it): it stays said, whatever the writes. */
+    if (
+      (!writes.size && !made.length) ||
+      ([...writes].every((resource) => made.includes(resource)) && made.every((resource) => writes.has(resource as string)))
+    ) {
       /* all it writes: the default */
     } else merged.create = made.length ? made : false;
   }

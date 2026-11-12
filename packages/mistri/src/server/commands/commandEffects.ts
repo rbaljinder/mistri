@@ -20,9 +20,16 @@
  */
 import { createHash } from 'node:crypto';
 import { isProxy } from 'node:util/types';
-import type { CommandEventEnvelope, CommandEventJson } from '../../adapters/events/commandEventTypes.js';
+import {
+  COMMAND_EVENT_LIMITS,
+  EFFECT_EVENT_PREFIX,
+  EffectBodyTooLarge,
+  type CommandEventEnvelope,
+  type CommandEventJson,
+} from '../../adapters/events/commandEventTypes.js';
 import { HttpSourceError } from '@mistriwork/engine/adapters/http/egress.js';
 import type { EventPublicationTransport } from '../events/eventPublisher.js';
+import { LINK_REF_PREFIX } from '../links/linkToken.js';
 import { defineOpaqueEvent, defineEventProjection, type BusinessEventOutput, type BusinessEventProjection } from './businessEvents.js';
 
 declare const effectType: unique symbol;
@@ -36,10 +43,32 @@ export interface CommandEffect<Output> {
   readonly [effectType]: (output: Output) => void;
 }
 
-/** The platform's event name prefix for effects; no command event may use it. */
-export const EFFECT_EVENT_PREFIX = 'effect.';
+export { EFFECT_EVENT_PREFIX };
+/** What one effect carries, in one place. The body travels in an event payload, so it is bounded by that payload less
+ * 1 KiB for what wraps it (`{"body":…}`, and a bare effect's call headers); the number is named here so the refusal
+ * says it and a later raise of the payload limit moves this one with it. */
+export const EFFECT_LIMITS = Object.freeze({ bodyBytes: COMMAND_EVENT_LIMITS.payloadBytes - 1024 });
+/** What a link's URL may add over its `mistri-link:<id>` reference: an origin and base path of up to ~250 bytes. */
+const LINK_URL_RESERVE = 320 - (LINK_REF_PREFIX.length + 22);
+/** The refusal for a body over `EFFECT_LIMITS.bodyBytes`; it reaches the author through the command's refusal cause. */
+function boundBody(destination: string, body: unknown): void {
+  const text = JSON.stringify(body) ?? '';
+  // A capability link rides as its reference and is delivered as its URL; each is counted at its delivered size.
+  const links = text.split(LINK_REF_PREFIX).length - 1;
+  const bytes = Buffer.byteLength(text, 'utf8') + links * LINK_URL_RESERVE;
+  if (bytes > EFFECT_LIMITS.bodyBytes) {
+    throw new EffectBodyTooLarge(
+      `post "${destination}" body is ${bytes.toLocaleString('en-US')} bytes; one post carries at most ${EFFECT_LIMITS.bodyBytes.toLocaleString('en-US')}.`,
+    );
+  }
+}
 /** How many effects one command may declare; they share the event batch's limits. */
 const MAX_EFFECTS = 8;
+function projected(captured: DeclaredEffect, output: unknown): EffectPayload {
+  const body = captured.project(output) as EffectPayload;
+  boundBody(captured.destination, body);
+  return body;
+}
 /* A webhook connection's name: what `post` names and the config file declares. */
 export const WEBHOOK_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 const EFFECT_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
@@ -247,13 +276,13 @@ export function captureCommandEffects(effects: unknown): CapturedEffects {
         { parse: parseBare },
       );
       slots[`effect-${name}`] = defineEventProjection(event, (output) => ({
-        body: captured.project(output) as EffectPayload,
+        body: projected(captured, output),
         headers: callHeaders(bare.headers ? bare.headers(output) : {}),
         bare: true as const,
       }));
     } else {
       const event = defineOpaqueEvent<{ body: EffectPayload }>(`${EFFECT_EVENT_PREFIX}${name}`, ['body'], { parse: parseBody });
-      slots[`effect-${name}`] = defineEventProjection(event, (output) => ({ body: captured.project(output) as EffectPayload }));
+      slots[`effect-${name}`] = defineEventProjection(event, (output) => ({ body: projected(captured, output) }));
     }
     targets.push(Object.freeze({ name, destination: captured.destination }));
   }

@@ -6,7 +6,7 @@
  */
 import type { ReactNode } from 'react';
 import { refsFrom } from '../core.js';
-import type { ColumnMeta, TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { isAppendOnly, type ColumnMeta, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 
 /** How a cell draws a value: with no argument, as the grid drew it; with one, another value in the same dress. */
 export type CellDraw = (next?: { value: unknown; label?: unknown }) => ReactNode;
@@ -30,7 +30,8 @@ export function editableCells(
   shown: readonly string[],
 ): Map<string, string> {
   const cells = new Map<string, string>();
-  if (!table || !editable || table.isView) return cells;
+  // A table the reader only adds rows to has no cell to edit in place.
+  if (!table || !editable || table.isView || isAppendOnly(table)) return cells;
   for (const drawn of shown) {
     const hop = drawn.indexOf('.');
     const local = hop < 0 ? drawn : drawn.slice(0, hop);

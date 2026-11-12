@@ -771,3 +771,72 @@ test('tabs that write their own query are all told at once, a language word rena
       ),
   );
 });
+
+/* ---------- a tab that names a state or a yes/no column (C3) ---------- */
+
+test('a tab names a state, a group or a yes/no column when no segment has the word', () => {
+  const machine = {
+    column: 'status',
+    states: { open: { on: { finish: 'done' } }, in_review: { on: { approve: 'done' } }, done: { final: true } },
+    groups: { active: ['open', 'in_review'] },
+  };
+  const parsed = app(
+    { work_order: { access: 'write', machine, segments: { late: 'due_on < today' } } },
+    {
+      views: { orders: { kind: 'list', from: 'work_order', tabs: [{ label: 'All' }, 'late', 'in_review', 'active', 'archived'] } },
+    },
+  );
+  const tabs = (parsed.views.orders as { tabs: unknown[] }).tabs;
+  assert.deepEqual(tabs.slice(1), [
+    { label: 'Late', query: 'late', segment: 'late', slug: 'late' },
+    { label: 'In review', query: 'status = in_review', segment: 'in_review', slug: 'in_review' },
+    { label: 'Active', query: 'status is active', segment: 'active', slug: 'active' },
+    { label: 'Archived', query: 'archived = true', segment: 'archived', slug: 'archived' },
+  ]);
+  const flagged: DatabaseSchema = {
+    ...schema,
+    tables: schema.tables.map((table) =>
+      table.id === 'work_order' ? { ...table, columns: [...table.columns, column('archived', 'BOOLEAN')] } : table,
+    ),
+  };
+  const view = (catalog: DatabaseSchema) => resolveViews(parsed, withRollups(parsed, catalog)).orders as unknown as { error?: string };
+  assert.equal(view(flagged).error, undefined, 'the word is a yes/no column of the catalog, and a state');
+  assert.match(
+    String(view(schema).error),
+    /Tab "Archived": "archived" is not a segment, a state or a yes\/no column of work_order\. Its segments: late; its states: .*; its yes\/no columns: none\./,
+  );
+});
+
+test('a tab word that is a state and a yes/no column is refused, naming both; a word of the language never resolves', () => {
+  const machine = { column: 'status', states: { open: { on: { archive: 'archived' } }, archived: { final: true } } };
+  const parsed = app(
+    { work_order: { access: 'write', machine } },
+    { views: { orders: { kind: 'list', from: 'work_order', tabs: [{ label: 'All' }, 'archived'] } } },
+  );
+  const flagged: DatabaseSchema = {
+    ...schema,
+    tables: schema.tables.map((table) =>
+      table.id === 'work_order' ? { ...table, columns: [...table.columns, column('archived', 'BOOLEAN')] } : table,
+    ),
+  };
+  const catalog = withRollups(parsed, flagged);
+  assert.match(
+    String((resolveViews(parsed, catalog).orders as unknown as { error?: string }).error),
+    /"archived" is a state and a yes\/no column of work_order; declare a segment/,
+  );
+  assert.throws(
+    () => app({}, { views: { orders: { kind: 'list', from: 'work_order', tabs: ['today'] } } }),
+    /names the segment "today" of "work_order", which it does not declare/,
+  );
+});
+
+test('two tabs that are one address word, whichever case their segment or label spell it in, are refused with both', () => {
+  assert.throws(
+    () =>
+      app(
+        { work_order: { segments: { Open: 'status = open' } } },
+        { views: { orders: { kind: 'list', from: 'work_order', tabs: ['Open', { label: 'open', query: undefined }] } } },
+      ),
+    /tab 1 \("Open"\) and tab 2 \("open"\) are both the address word "open"/,
+  );
+});

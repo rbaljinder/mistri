@@ -833,7 +833,9 @@ test('native list cursor rejects tampering, query/operation/scope and owner rebi
   const first = JSON.parse(f.reader.consumeResult(await f.reader.readList(f.token.token, 'list:person', 'limit=1')).body);
   assert.equal(typeof first.next, 'string');
   const query = `limit=1&cursor=${encodeURIComponent(first.next)}`;
-  const tampered = first.next.slice(0, -1) + (first.next.endsWith('A') ? 'B' : 'A');
+  // Not the last character: in base64url its low bits may not count.
+  const at = first.next.length - 10;
+  const tampered = first.next.slice(0, at) + (first.next[at] === 'A' ? 'B' : 'A') + first.next.slice(at + 1);
   await assert.rejects(f.reader.readList(f.token.token, 'list:person', `limit=1&cursor=${encodeURIComponent(tampered)}`), unavailable);
   await assert.rejects(f.reader.readList(f.token.token, 'list:person', query + '&id=2'), unavailable);
   await assert.rejects(f.reader.readList(f.token.token, 'view:people', query), unavailable);

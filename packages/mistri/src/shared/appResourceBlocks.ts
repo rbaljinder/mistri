@@ -70,6 +70,7 @@ import { parseFieldAccess } from './appAuthGrants.js';
 import { unknownKey } from '@mistriwork/engine/shared/suggest.js';
 import { parseImportDef } from './appImport.js';
 import { parseNotify } from './appNotify.js';
+import { parseResourceLinks } from './appLinks.js';
 import { parseTextRules } from '@mistriwork/engine/shared/textRules.js';
 import { parseDefined } from '@mistriwork/engine/shared/definedFields.js';
 import { parseFlows } from './appFlows.js';
@@ -118,6 +119,7 @@ export const RESOURCE_BLOCK_KEYS = [
   'segments',
   'consumes',
   'restocks',
+  'links',
 ] as const;
 
 /* The database triggers a resource names (docs/trigger-effects.md): each by its name in the catalog, exactly, once. */
@@ -258,7 +260,7 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
       const raw = plainRecord(
         value,
         at,
-        'an object. A resource block is { physical?, query?, access?, delete?, favorite?, fields?, hidden?, references?, display?, types?, validation?, triggers?, text?, defined?, labels?, recordLabel?, form?, actions?, machine?, file?, tags?, search?, page?, view?, address?, slug?, noun?, rollups?, computed?, segments?, consumes?, restocks?, audit?, settings?, import?, notify? }',
+        'an object. A resource block is { physical?, query?, access?, delete?, favorite?, fields?, hidden?, references?, display?, types?, validation?, triggers?, text?, defined?, labels?, recordLabel?, form?, actions?, machine?, file?, tags?, search?, page?, view?, address?, slug?, noun?, rollups?, computed?, segments?, consumes?, restocks?, audit?, settings?, import?, notify?, links? }',
       );
       allowKeys(raw, [...RESOURCE_BLOCK_KEYS, 'owner', 'clone', 'live'], at);
       if (dot < 0 && data.sources && !data.defaultSource) {
@@ -665,6 +667,11 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
       if (raw.notify !== undefined) {
         const notify = parseNotify(raw.notify, `${at}, "notify"`);
         if (notify.length) resource.notify = notify;
+      }
+      /* Capability links (appLinks.ts): commands against the catalog here, columns once the App is whole (appLinkProblems). */
+      if (raw.links !== undefined) {
+        const links = parseResourceLinks(raw.links, `${at}, "links"`, key);
+        if (Object.keys(links).length) resource.links = links;
       }
       resources[key] = resource;
     } catch (err) {

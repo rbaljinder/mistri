@@ -578,14 +578,18 @@ export async function applyFixture(engine: Engine, url: string, text: string): P
  * held by its own fixtures and version, so a comparison with this store's fixture leaves its objects out of both sides. */
 const SEQUENCES = { store: 'command-sequences', only: /^(\w+\.)?(__mistri_)?sequence_/ } as const;
 const STAGING = { store: 'command-staging', only: /^(\w+\.)?(__mistri_)?staged_/ } as const;
+const JOURNAL = { store: 'command-journal', only: /^(\w+\.)?(__mistri_)?command_(meta|receipt|audit_part|link)$/ } as const;
 const BENEATH: Readonly<Record<string, readonly { readonly store: string; readonly only?: RegExp }[]>> = {
   'api-tokens': [{ store: 'auth' }],
   // Provisioning a journal also leaves its sequences and its held files, which have versions of their own; the
   // fixture of the journal's store does not change when theirs do, nor the sequences' when the held files' do.
   'command-journal': [SEQUENCES, STAGING],
-  'command-events': [SEQUENCES, STAGING],
-  'event-delivery': [SEQUENCES, STAGING],
-  'command-sequences': [STAGING],
+  // The stores that stand on the journal hold the version of it they were written at, which a later journal layout
+  // moves on: the journal's own fixtures hold it, so a comparison leaves its tables out of both sides.
+  'command-events': [JOURNAL, SEQUENCES, STAGING],
+  'event-delivery': [JOURNAL, SEQUENCES, STAGING],
+  'command-sequences': [JOURNAL, STAGING],
+  'command-staging': [JOURNAL],
 };
 
 /** The tables a fixture creates, as the lines of `describeLayout` name them: bare on SQLite, schema-qualified on PostgreSQL. */

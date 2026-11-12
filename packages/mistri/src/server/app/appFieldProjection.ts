@@ -26,7 +26,7 @@ import {
 import { ANYONE, parseQuery } from '@mistriwork/engine/shared/query.js';
 import { relatedCreatePlan } from '@mistriwork/engine/shared/relatedCreate.js';
 import { findTable, tableNamed, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
-import { compileView, resolvePath } from '@mistriwork/engine/shared/view.js';
+import { compileView, parseViewQuery, resolvePath } from '@mistriwork/engine/shared/view.js';
 
 const writable = (table: TableMeta | undefined, name: string): boolean =>
   Boolean(table?.columns.some((column) => column.name === name && column.writable !== false));
@@ -358,8 +358,14 @@ export function fieldAccessibleApp(
       const table = tableNamed(schema, view.table);
       const form = labelled.resources && Object.hasOwn(labelled.resources, view.table) ? labelled.resources[view.table].form : undefined;
       const { presentation: shown, quickAdd, suggest: suggesting, tabs: every, ...rest } = view;
-      // A tab is its segment: one not served to this reader is no tab of theirs.
-      const tabs = every?.filter((tab) => !tab.segment || Boolean(table?.segments?.[tab.segment]));
+      /* A tab is its segment: one not served to this reader is no tab of theirs. A tab naming a state or a yes/no column
+         (appSegments.ts implicitTab) is its condition, served while this reader's catalog reads it. */
+      const tabs = every?.filter(
+        (tab) =>
+          !tab.segment ||
+          Boolean(table?.segments?.[tab.segment]) ||
+          Boolean(table && tab.query && !parseViewQuery(schema, table.id, tab.query, undefined, { me: ANYONE }).errors.length),
+      );
       /* A calendar's span this reader cannot read is left out, and the calendar stands without it: the spans are
          another resource's rows, read through this reader's own grants. */
       const spans = shown?.kind === 'calendar' ? shown.backdrop?.filter((span) => !backdropProblem(span, schema)) : undefined;

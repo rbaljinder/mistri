@@ -5,6 +5,8 @@ import { Refusal, type TransactionOperations } from '@mistriwork/engine/adapters
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
 import {
   assertSqliteCommandJournal,
+  AUDIT_PART_ENTRIES,
+  AUDIT_TARGET_ENTRIES,
   catalog,
   COMMAND_JOURNAL_TABLES,
   COMMAND_TARGET_BOUNDS,
@@ -19,6 +21,7 @@ import type { CommandEventBatch, CommandEventManifest, CommandEventOwner } from 
 import { captureCommandEventManifest } from '../events/commandEventCapture.js';
 import { BULK_LIMIT } from '../../shared/command.js';
 import { nextSqliteCommandNumber, provisionSqliteCommandSequences } from './commandSequences.js';
+import { mintSqliteLink, openSqliteLink, readSqliteLink, revokeSqliteLinks } from './commandLinks.js';
 import { appendSqliteReadAudit } from '../readAudit/sqliteReadAudit.js';
 import type { ReadAuditRow } from '../readAudit/readAudit.js';
 import {
@@ -33,6 +36,7 @@ import type {
   CommandReceiptScope,
   StoredCommandReceipt,
   CommandAudit,
+  CommandLinkRow,
   CommandJournal,
   CommandJournalAppScope,
   CommandJournalPlatform,
@@ -64,26 +68,27 @@ const inMain = (ddl: string) => ddl.replace(/^CREATE (TABLE|INDEX) /, 'CREATE $1
 
 /**
  * Explicit maintenance operation. Never called implicitly when opening an App.
- * A file without a journal gets version 1; anything else under the prefix is
- * refused unchanged.
+ * A file without a journal gets the current version; anything else under the
+ * prefix is refused unchanged (an older journal is brought forward by
+ * `mistri migrate stores up`).
  */
-export function migrateSqliteCommandJournal(existingPath: string): { version: 1; migrated: boolean } {
+export function migrateSqliteCommandJournal(existingPath: string): { version: typeof JOURNAL_VERSION; migrated: boolean } {
   if (!statSync(existingPath).isFile()) throw new Refusal('Command journal migration requires an existing SQLite file.');
   const db = new DatabaseSync(existingPath);
   try {
     db.exec('PRAGMA busy_timeout = 5000');
     db.exec('BEGIN IMMEDIATE');
     try {
-      let result: { version: 1; migrated: boolean } = { version: 1, migrated: false };
+      let result: { version: typeof JOURNAL_VERSION; migrated: boolean } = { version: JOURNAL_VERSION, migrated: false };
       if (catalog(db).length === 0) {
         for (const ddl of definitions.values()) db.exec(inMain(ddl));
         db.prepare(`INSERT INTO main."${COMMAND_JOURNAL_TABLES.meta}" (singleton, version) VALUES (1, ?)`).run(JOURNAL_VERSION);
-        result = { version: 1, migrated: true };
+        result = { version: JOURNAL_VERSION, migrated: true };
       }
       assertSqliteCommandJournal(db);
       // The sequences a handler numbers from live beside the journal, and the files a form holds for its command.
-      if (provisionSqliteCommandSequences(db)) result = { version: 1, migrated: true };
-      if (provisionSqliteCommandStaging(db)) result = { version: 1, migrated: true };
+      if (provisionSqliteCommandSequences(db)) result = { version: JOURNAL_VERSION, migrated: true };
+      if (provisionSqliteCommandStaging(db)) result = { version: JOURNAL_VERSION, migrated: true };
       db.exec('COMMIT');
       return result;
     } catch (error) {
@@ -333,11 +338,27 @@ function validateReceipt(receipt: StoredCommandReceipt): void {
   json(receipt.resultJson, 'result', 16 * 1024);
 }
 function validateAudit(audit: CommandAudit): void {
-  record(audit, ['target', 'keyJson', 'changesJson', 'owner']);
+  record(audit, ['target', 'keyJson', 'changesJson', 'changesParts', 'owner']);
   if (audit.owner !== undefined && typeof audit.owner !== 'string') return invalid();
   text(audit.target, 'audit target', 256);
   json(audit.keyJson, 'audit key', 8 * 1024);
   json(audit.changesJson, 'audit changes', COMMAND_TARGET_BOUNDS.changes);
+  if (audit.changesParts === undefined) return;
+  // The continuation of a full first piece: whole pieces in order, up to the target's most.
+  const parts = audit.changesParts;
+  if (!Array.isArray(parts) || !parts.length || parts.length > AUDIT_TARGET_ENTRIES / AUDIT_PART_ENTRIES - 1) return invalid();
+  for (const [at, part] of parts.entries()) {
+    json(part, 'audit changes', COMMAND_TARGET_BOUNDS.changes);
+    const entries: unknown = JSON.parse(part);
+    // Every piece but the last is full: the entries of a target are counted by position.
+    if (
+      !Array.isArray(entries) ||
+      !entries.length ||
+      entries.length > AUDIT_PART_ENTRIES ||
+      (at < parts.length - 1 && entries.length < AUDIT_PART_ENTRIES)
+    )
+      return invalid();
+  }
 }
 /** One audit or a list, one per target: at least one, at most BULK_LIMIT.
  * An event batch belongs to exactly one target. */
@@ -416,7 +437,8 @@ function provenanceOf(
 const mib = (bytes: number) => (bytes / 1_048_576).toFixed(1);
 /** A command's targets as its receipt row keeps them: the one resource, and per
  * target in request order its owner, key and changes, each an array of the
- * exact texts given. Refused past the row's bounds, which are over all targets. */
+ * exact texts given. Refused past the row's bounds, which are over all targets:
+ * a target's continuation pieces (the audit-part table) count in the changes. */
 function packTargets(audits: readonly CommandAudit[], owners: readonly string[]): readonly [string, string, string, string] {
   const [{ target }] = audits;
   // One resource per receipt: recovery, governance and an event's context name it once.
@@ -424,7 +446,9 @@ function packTargets(audits: readonly CommandAudit[], owners: readonly string[])
   const ownersJson = JSON.stringify(owners),
     keysJson = JSON.stringify(audits.map((entry) => entry.keyJson)),
     changesJson = JSON.stringify(audits.map((entry) => entry.changesJson));
-  const changes = Buffer.byteLength(changesJson, 'utf8');
+  const changes =
+    Buffer.byteLength(changesJson, 'utf8') +
+    audits.reduce((sum, entry) => sum + (entry.changesParts ?? []).reduce((all, part) => all + Buffer.byteLength(part, 'utf8'), 0), 0);
   if (changes > COMMAND_TARGET_BOUNDS.changes)
     throw new Refusal(
       `A command keeps at most ${mib(COMMAND_TARGET_BOUNDS.changes)} MiB of changes across its targets, and this one would keep ` +
@@ -439,6 +463,11 @@ function packTargets(audits: readonly CommandAudit[], owners: readonly string[])
     );
   return [target, ownersJson, keysJson, changesJson];
 }
+/** The audit-part rows of a receipt: per target and piece, in order, `[receipt id, target position, piece from 1, text]`. */
+function auditPartRows(receiptId: string, audits: readonly CommandAudit[]): (string | number)[][] {
+  return audits.flatMap((entry, target) => (entry.changesParts ?? []).map((part, at) => [receiptId, target, at + 1, part]));
+}
+const AUDIT_PART_COLUMNS = 'receipt_id, target_index, part, changes_json';
 /** The columns a receipt row is written with, in the order receiptRow gives them. */
 const RECEIPT_COLUMNS = `id, app_id, store_id, source_id, realm, tenant_id, actor_id, command_id, command_version, idempotency_key,
   fingerprint, result_json, request_id, completed_at, membership_id, membership_version, realm_version, roles_json, deployment,
@@ -578,6 +607,8 @@ export const commandJournalValidation = Object.freeze({
   validateAuditRows,
   provenanceOf,
   packTargets,
+  auditPartRows,
+  AUDIT_PART_COLUMNS,
   receiptRow,
   RECEIPT_COLUMNS,
   receiptRowColumns,
@@ -667,6 +698,13 @@ export function createSqliteCommandJournal(
       return result;
     });
   };
+  // In the receipt's own transaction, so a command's audit is whole or not there.
+  const writeParts = (receiptId: string, audits: readonly CommandAudit[]) => {
+    const insert = auditPartRows(receiptId, audits);
+    if (!insert.length) return;
+    const statement = db.prepare(`INSERT INTO main."${COMMAND_JOURNAL_TABLES.auditPart}" (${AUDIT_PART_COLUMNS}) VALUES (?, ?, ?, ?)`);
+    for (const row of insert) statement.run(...(row as SQLInputValue[]));
+  };
   const lookup = (scope: CommandReceiptScope, expectedManifest?: CommandEventManifest): ReceiptRecovery | undefined => {
     const lookup = values(scope);
     // Prove event storage before establishing absence. A missing receipt in a
@@ -710,6 +748,7 @@ export function createSqliteCommandJournal(
           const row = receiptRow(receipt, scope, member, audits, owners);
           db.prepare(`INSERT INTO main."${COMMAND_JOURNAL_TABLES.receipt}" (${RECEIPT_COLUMNS})
         VALUES (${row.map(() => '?').join(', ')})`).run(...(row as SQLInputValue[]));
+          writeParts(receipt.id, audits);
           // The synchronous helper runs inside this same fail-stop operation and
           // writer transaction. Even a caught append error must roll back effects.
           if (eventBatch !== undefined)
@@ -755,6 +794,28 @@ export function createSqliteCommandJournal(
           appendSqliteReadAudit(db, row);
         }
       }),
+    // Links in the journal's namespace: a tenant's are its own, and none is read across Apps.
+    mintLink: (row: CommandLinkRow) =>
+      invoke({ row }, async ({ row }) => {
+        if ((member && row?.app !== member.appId) || (appScope && row?.app !== appScope.appId) || row?.tenant !== namespace[3])
+          return invalid();
+        mintSqliteLink(db, row);
+      }),
+    revokeLinks: (appId: string, resource: string, rowKey: string, name: string | undefined, now: number) =>
+      invoke({ appId, resource, rowKey, name, now }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return revokeSqliteLinks(db, input.appId, namespace[3], input.resource, input.rowKey, input.name, input.now);
+      }),
+    openLink: (appId: string, id: string, now: number) =>
+      invoke({ appId, id, now }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return openSqliteLink(db, input.appId, namespace[3], input.id, input.now);
+      }),
+    readLink: (appId: string, id: string, now: number) =>
+      invoke({ appId, id, now }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return readSqliteLink(db, input.appId, namespace[3], input.id, input.now);
+      }),
     kept: (appId: string, commandId: string, commandVersion: number) =>
       invoke({ appId, commandId, commandVersion }, async (input) => {
         text(input.appId, 'application', 128);
@@ -792,7 +853,10 @@ export function createSqliteCommandJournal(
           .prepare(`INSERT INTO main."${COMMAND_JOURNAL_TABLES.receipt}" (${RECEIPT_COLUMNS})
         VALUES (${row.map(() => '?').join(', ')}) ON CONFLICT DO NOTHING`)
           .run(...(row as SQLInputValue[]));
-        return Number(written.changes) === 1;
+        // The receipt's pieces only where its receipt is: a replay found it taken and writes none of them.
+        if (Number(written.changes) !== 1) return false;
+        writeParts(receipt.id, audits);
+        return true;
       }),
   });
   if (!member)

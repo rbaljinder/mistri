@@ -12,6 +12,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { LATER } from '../packages/mistri/src/shared/app.js';
+import { AppProblems } from '../packages/mistri/src/shared/appProblems.js';
 import { parseTestApp } from './support/commandCatalog.js';
 
 const WHERE = 'test/app.json';
@@ -420,5 +421,17 @@ describe("a wrong shape gets the shape's refusal", () => {
       assert.match(message, expected);
       assert.doesNotMatch(message, WORK_LABEL);
     });
+  }
+});
+
+test('a refused key still hands check and the schema types the App the rest of the manifest made', () => {
+  try {
+    parse({ views: { tasks: { ...LIST, list: {} } } });
+    assert.fail('the unknown key is refused');
+  } catch (error) {
+    assert.ok(error instanceof AppProblems);
+    const partial = error.partial as { name?: string; resources?: Record<string, unknown> } | undefined;
+    assert.equal(partial?.name, 'x');
+    assert.ok(partial?.resources && 'task' in partial.resources);
   }
 });

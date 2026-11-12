@@ -73,6 +73,7 @@ import { operationsRoutes } from './operationsRoutes.js';
 import { commandRoutes } from './commandRoutes.js';
 import { challengeOf, publicFormRoutes } from './formRoutes.js';
 import { pageCommandRoutes } from './pageCommandRoutes.js';
+import { linkRoutes } from '../links/linkRoutes.js';
 import {
   addressedApp,
   HEADLESS_SCREEN,
@@ -346,6 +347,8 @@ const OPEN_ROUTES: readonly Route<Admitted>[] = [
   (ctx) => readsAs(ctx.freshness, () => attributeWrites({ via: 'form' }, () => publicFormRoutes(ctx))),
   /* A public page's door (pageCommandRoutes.ts): the public principal again, whoever asks. */
   (ctx) => readsAs(ctx.freshness, () => attributeWrites({ via: 'form' }, () => pageCommandRoutes(ctx))),
+  /* A capability link (links/linkRoutes.ts): the link's own principal, whoever asks. */
+  (ctx) => readsAs(ctx.freshness, () => attributeWrites({ via: 'form' }, () => linkRoutes(ctx))),
 ];
 
 /** The routes under the row policy, when the deployment has one. The last answers whatever is left. */

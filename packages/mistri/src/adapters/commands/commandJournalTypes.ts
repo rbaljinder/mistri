@@ -68,12 +68,37 @@ export interface StoredCommandReceipt extends CommandReceiptScope {
  * single-target command one, a multi-target command one for each key.
  * `owner` is the tenant that owns the target row, which the server reads
  * from the stored row: required in the platform realm ('' for a
- * platform-owned target), and in a tenant's realm, if given, that tenant. */
+ * platform-owned target), and in a tenant's realm, if given, that tenant.
+ * `changesJson` is the target's first changes and `changesParts` the rest, in
+ * order, each a JSON array text (commandAuditParts.ts); a target with few
+ * changes has no parts. */
 export interface CommandAudit {
   target: string;
   keyJson: string;
   changesJson: string;
+  changesParts?: readonly string[];
   owner?: string;
+}
+
+/** One capability link as the journal keeps it (server/links/): its scope, expiry, uses left and revocation, never its
+ * secret. Times are epoch milliseconds; `tenant` is '' outside a tenant. */
+export interface CommandLinkRow {
+  id: string;
+  app: string;
+  tenant: string;
+  resource: string;
+  rowKey: string;
+  name: string;
+  expiresAt: number;
+  /** Null for a link with no use limit. */
+  usesLeft: number | null;
+  revokedAt: number | null;
+  createdAt: number;
+  createdBy: string;
+  command: string;
+  receipt: string;
+  opens: number;
+  lastOpenedAt: number | null;
 }
 
 export interface CommandJournal {
@@ -121,6 +146,16 @@ export interface CommandJournal {
    * at the same version (commandContracts.ts). Reads no receipt's contents.
    */
   kept?(appId: string, commandId: string, commandVersion: number): Promise<boolean>;
+  /** Writes a capability link a command minted, in the owner's transaction: kept with the command or rolled back with
+   * it. Absent where the store keeps no links; a handler's link() then refuses. */
+  mintLink?(row: CommandLinkRow): Promise<void>;
+  /** Revokes the live links of one row (of one declared name, or every name), in the owner's transaction. The count revoked. */
+  revokeLinks?(appId: string, resource: string, rowKey: string, name: string | undefined, now: number): Promise<number>;
+  /** Opens a live link: one statement that takes a use (where it counts them) and records the open, so two opens of a
+   * single-use link take it once. Undefined for a link that is unknown, revoked, expired or used up. */
+  openLink?(appId: string, id: string, now: number): Promise<CommandLinkRow | undefined>;
+  /** A live link, read without taking a use: what a run under an opened link checks. */
+  readLink?(appId: string, id: string, now: number): Promise<CommandLinkRow | undefined>;
 }
 
 /*

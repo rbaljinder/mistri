@@ -36,6 +36,7 @@ import { andQuery } from '@mistriwork/engine/shared/query.js';
 import { compileWhere } from '@mistriwork/engine/shared/pageWhere.js';
 import { scopedCondition, UiPageContext, UiScopeContext, type UiPageFrame, type UiScope } from './context.js';
 import { say } from '../../copy/components/components/sdk/blocks.js';
+import { BLOCK_RENAMED, renamedMessages } from '../../../shared/renamedWords.js';
 import { useRows } from './hooks.js';
 import { Value } from './kit.js';
 
@@ -55,7 +56,7 @@ const noop = () => {};
 type Props = Readonly<Record<string, unknown>>;
 
 /* Words a block once took, refused with the one that replaced them. */
-const RENAMED: Readonly<Record<string, string>> = { resource: 'from' };
+const RENAMED = renamedMessages(BLOCK_RENAMED);
 
 /* Each prop a block takes is one of its DSL words; anything else is a typo the author should hear about. */
 function takes(block: string, props: Props, words: readonly string[]): void {

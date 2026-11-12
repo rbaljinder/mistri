@@ -733,6 +733,27 @@ export interface AppTextRule {
   message?: string | AppMessageRef;
 }
 
+/** A capability link a resource declares (`resources.<name>.links.<link>`): a way to hand one record to someone who
+    signs in to nothing. A command on the record mints one (`context.link('status')`); whoever holds it sees the
+    `show` columns of that one record and runs the `commands` on it, and nothing else. */
+export interface AppResourceLink<Column extends string = string> {
+  /** The record's columns the link page shows, in order: one to twelve. */
+  show: readonly Column[];
+  /** Words for a shown column's stored values: `{ status: { review: 'Under review' } }`. */
+  says?: Partial<Record<Column, Readonly<Record<string, string>>>>;
+  /** Commands the holder may run on the record, at most eight, each `targets: 'one'` on this resource. */
+  commands?: readonly CommandName[];
+  /** How long a minted link opens: `'7 days'` unless said, `'90 days'` at most. */
+  expires?: Duration;
+  /** How many opens spend the link, 1 to 1000; left out, it opens until it expires. */
+  uses?: number;
+  /** One to three columns only the holder knows, typed back before anything is shown: `['zip']`, or
+      `{ zip: 'ZIP code' }` to say the label asked. Never a column `show` names. */
+  confirm?: readonly Column[] | Partial<Record<Column, string>>;
+  /** An email column of the record: a one-time code is sent to it and typed back before anything is shown. */
+  stepUp?: Column;
+}
+
 /**
  * One logical resource and everything the App says about it. Keyed by its
  * logical name: bare for the default source (or the single connection),
@@ -890,6 +911,9 @@ export interface AppResource<Column extends string = string, Page extends string
       read from the trigger; authority.lock records each definition, and a changed one is refused until approved
       again. A trigger that only validates needs no name. @preview */
   triggers?: readonly string[];
+  /** Capability links by name: what a link to one record shows its holder and lets them run (`AppResourceLink`).
+      Not in an App scoped by tenant or a row policy. */
+  links?: Readonly<Record<string, AppResourceLink<Column>>>;
   /** How long a text column's value may be and what form it takes, keyed by column:
       `text: { code: { pattern: '^[A-Z]{3}$', message: 'Three capital letters.' }, name: { min: 2 } }` — the words a
       command's text input uses. The New form says the rule under the field as someone types, and the server holds
@@ -1152,7 +1176,8 @@ export interface AppRoleGrant<Resource extends string = string, Role extends str
   write?: boolean | readonly Resource[];
   /** Of what the role writes, what it makes new records in. Absent: everything it writes. `false`: it edits and
       never creates, so New, quick add and a related list's add are not offered and the server refuses the insert.
-      A list names the few it creates: `{ write: ['lead', 'note'], create: ['note'] }`. Commands still create
+      A list names the few it creates: `{ write: ['lead', 'note'], create: ['note'] }`. A table it names that the role
+      does not write is append-only: the role adds rows there and never edits or deletes them. Commands still create
       what they write; this limits the generic insert only. */
   create?: false | readonly Resource[];
   /** Tables the role may export (the whole matching list as a CSV or JSON file) beyond those it writes, which it
@@ -1575,6 +1600,9 @@ export interface AppListView<Table extends string = string, Column extends strin
   /** Shown when the list as it opens (its first tab) has no rows; a tab says its own with its `empty`, and a search or
       filter past the tab keeps its ordinary no-matches message. */
   empty?: AppListEmpty;
+  /** Tabs over the rows: a segment of the table by name, a segment with its own sort, or every row (`{ label }`). A
+      word that is no segment names the resource's machine state or group (its label is the state's) or a yes/no
+      column (its label is the column's); a word two of these claim is refused with the readings to choose between. */
   tabs?: readonly AppTab[];
   /** Columns offered as quick filter boxes — a rollup or computed column too, a number's Min and Max (`'spent'`).
       A path up a reference filters by the record it names (`'account_id.industry_id'`); `{ has: 'opportunity',

@@ -58,6 +58,8 @@ export function retentionJob(options: RetentionJobOptions): BuiltInJob {
             const db = new DatabaseSync(target.sqlite);
             try {
               db.exec('PRAGMA busy_timeout = 5000');
+              // A receipt's audit-part rows are deleted with it by the foreign key's cascade, which SQLite runs only when asked.
+              db.exec('PRAGMA foreign_keys = ON');
               await pruneAll(sqlitePruneDb(db), rules(), windows, prune);
             } finally {
               db.close();

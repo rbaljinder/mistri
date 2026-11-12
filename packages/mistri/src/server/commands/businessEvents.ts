@@ -8,6 +8,8 @@ import { isProxy } from 'node:util/types';
 import { describeShape, type Shape, type ShapeDescriptor } from './commandShapes.js';
 import {
   COMMAND_EVENT_LIMITS,
+  EffectBodyTooLarge,
+  isEffectEvent,
   type CommandEventBatch,
   type CommandEventExpectation,
   type CommandEventJson,
@@ -148,7 +150,7 @@ export function parseEventPayload<Payload extends BusinessEventPayload<Payload>>
     const captured = events.get(event);
     if (!captured || typeof json !== 'string' || Buffer.byteLength(json, 'utf8') > COMMAND_EVENT_LIMITS.payloadBytes)
       return projectionError();
-    const selected = payloadJson(JSON.parse(json), captured.fields);
+    const selected = payloadJson(JSON.parse(json), captured.fields, isEffectEvent(captured.name));
     return detached(
       captured.parse(detached(JSON.parse(selected), COMMAND_EVENT_LIMITS.payloadBytes)),
       COMMAND_EVENT_LIMITS.payloadBytes,
@@ -243,9 +245,10 @@ export function projectCommandEvents<Output>(declarations: CapturedCommandEvents
     const projected = captured.map(({ event, project }) => {
       // Enforce the allowlist before and after the validator: stripping a raw
       // row or secretly appending fields cannot pass as a bounded projection.
-      const selected = payloadJson(project(output), event.fields);
+      const effect = isEffectEvent(event.name);
+      const selected = payloadJson(project(output), event.fields, effect);
       const parsed = event.parse(detached(JSON.parse(selected), COMMAND_EVENT_LIMITS.payloadBytes));
-      const json = payloadJson(parsed, event.fields);
+      const json = payloadJson(parsed, event.fields, effect);
       bytes += Buffer.byteLength(json, 'utf8');
       if (bytes > COMMAND_EVENT_LIMITS.batchPayloadBytes) return projectionError();
       return Object.freeze({ name: event.name, version: event.version, payloadJson: json });
@@ -253,7 +256,9 @@ export function projectCommandEvents<Output>(declarations: CapturedCommandEvents
     const result = Object.freeze(projected);
     canonicalCommandJson(result, COMMAND_EVENT_LIMITS.batchBytes);
     return result;
-  } catch {
+  } catch (error) {
+    // The one refusal the author can act on, by name; every other failure stays the opaque projection error.
+    if (error instanceof EffectBodyTooLarge) throw error;
     return projectionError();
   }
 }

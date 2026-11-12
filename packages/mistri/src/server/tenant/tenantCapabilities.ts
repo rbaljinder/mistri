@@ -36,6 +36,8 @@ interface TenantResourceCapabilities {
   readonly write: readonly string[];
   readonly insertable: boolean;
   readonly deletable: boolean;
+  /** Rows are made here and never edited or removed by this member (`create` names the table, `write` does not). */
+  readonly appendOnly?: true;
 }
 export interface TenantCapabilities {
   readonly resources: Readonly<Record<string, TenantResourceCapabilities>>;
@@ -180,18 +182,21 @@ export function projectTenantCapabilities(input: TenantCapabilityOptions): Tenan
           primary.every((column) => read.has(column.name)) &&
           (grants.creatable?.has(table.id) ?? true),
         deletable: false,
+        ...(grants.appendOnly?.has(table.id) ? { appendOnly: true as const } : {}),
       };
     }
     const access: ResourceAccess = {
       readable: grants.readable,
       writable,
+      ...(grants.appendOnly ? { appendOnly: grants.appendOnly } : {}),
       fields,
     };
     const deletes = appDeletable(app, owned.schema);
     for (const [id, resource] of Object.entries(resources)) {
       resources[id] = {
         ...resource,
-        deletable: deletes.has(id) && !!tenantDeleteEligible(owned, access, id, services.deletedRecordPolicy),
+        // An append-only table is never one a row is removed from.
+        deletable: !resource.appendOnly && deletes.has(id) && !!tenantDeleteEligible(owned, access, id, services.deletedRecordPolicy),
       };
     }
     const grantedCommands = [...appCommandGrants(app, principal.roles)].filter((id) => registered.has(id)).sort();
@@ -305,6 +310,7 @@ export function projectPlatformCapabilities(input: PlatformCapabilityOptions): T
         write,
         insertable: platformInsertable(owned, access, id),
         deletable: deletes.has(id) && platformDeletable(owned, access, id),
+        ...(access.appendOnly?.has(id) ? { appendOnly: true as const } : {}),
       };
     }
     return captureTenantData({

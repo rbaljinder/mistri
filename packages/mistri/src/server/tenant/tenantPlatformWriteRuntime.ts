@@ -72,6 +72,8 @@ function platformEditAccess(
     readable: visible.readable,
     writable: visible.writable,
     creatable,
+    // Carried with `creatable`: a table the member only appends to is never edited or removed.
+    ...(visible.appendOnly ? { appendOnly: visible.appendOnly } : {}),
     ...(visible.fields ? { fields: visible.fields } : {}),
   };
 }

@@ -131,7 +131,7 @@ test('tab address spellings match existing browser behavior and ambiguous IDs re
   assert.equal(tabSlug('  OPEN!  '), 'open');
   assert.equal(tabSlug('Réview'), 're-view');
   for (const tabs of [[{ label: 'Open!' }, { label: 'Open' }], [{ label: '!!!' }], [{ label: 'constructor' }]]) {
-    assert.throws(() => fixture({ tabs }).read(), /address identifiers/);
+    assert.throws(() => fixture({ tabs }).read(), /address identifiers|address word/);
   }
 });
 

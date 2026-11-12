@@ -40,7 +40,7 @@ export function tenantDeleteEligible(
   id: unknown,
   hasPolicy: boolean,
 ): TableMeta | undefined {
-  const { readable, writable, fields } = access;
+  const { readable, writable, fields, appendOnly } = access;
   const canRead = (table: string, column: string) => readable.has(table) && (fields?.get(table)?.read.has(column) ?? true);
   if (
     !hasPolicy ||
@@ -48,7 +48,9 @@ export function tenantDeleteEligible(
     !Object.hasOwn(owned.resources, id) ||
     owned.ownership[id].kind !== 'tenant' ||
     !readable.has(id) ||
-    !writable.has(id)
+    !writable.has(id) ||
+    // A table the member only appends to is never one a row is taken from, nor one an undo puts back or removes.
+    appendOnly?.has(id)
   )
     return undefined;
   const table = owned.schema.tables.find((table) => table.id === id)!;
@@ -141,7 +143,7 @@ export function createTenantInverseImages(
   )
     return denyTenant();
   const policy = authorizeDeletedRecord;
-  /* `validation`, `transitions`, `creatable`, `internal` (a file's object and
+  /* `validation`, `transitions`, `creatable`, `appendOnly`, `internal` (a file's object and
      hash), and `stamp` and `fill` (an action's and a New form's `me`/`now`) ride on
      the access an App with write rules, a machine, per-role create, files, stamps or a role's granted
      actions (`actions`, and the `me` they read) is given; an inverse image puts back a before-image and reads none of them. */
@@ -153,6 +155,7 @@ export function createTenantInverseImages(
     'validation',
     'transitions',
     'creatable',
+    'appendOnly',
     'internal',
     'stamp',
     'fill',
@@ -170,7 +173,8 @@ export function createTenantInverseImages(
     }
   };
   const readable = strings(raw.readable),
-    writable = strings(raw.writable);
+    writable = strings(raw.writable),
+    appendOnly = raw.appendOnly === undefined ? undefined : strings(raw.appendOnly);
   const fields = new Map<string, { read: Set<string>; write: Set<string> }>();
   if (raw.fields !== undefined) {
     try {
@@ -197,7 +201,8 @@ export function createTenantInverseImages(
     insert = method('insert'),
     remove = method('remove');
   const reader = { query };
-  const eligible = (id: unknown) => tenantDeleteEligible(owned, { readable, writable, fields }, id, policy !== undefined);
+  const eligible = (id: unknown) =>
+    tenantDeleteEligible(owned, { readable, writable, fields, ...(appendOnly ? { appendOnly } : {}) }, id, policy !== undefined);
   const key = (table: TableMeta, input: unknown): Record<string, string | number> => {
     tenantRecord(input);
     const primary = table.columns.filter((column) => column.primaryKey);

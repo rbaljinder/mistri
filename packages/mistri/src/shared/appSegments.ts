@@ -26,9 +26,10 @@ import { parseViewQuery } from '@mistriwork/engine/shared/view.js';
 import { tryResolvePath } from '@mistriwork/engine/shared/viewPaths.js';
 import { type AppDef, type ResourceDef } from './appModel.js';
 import { humanName, isRecord } from '@mistriwork/engine/shared/model.js';
-import { findTable, tableNamed, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { fieldLabel } from './command.js';
+import { columnKind, findTable, tableNamed, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { TAGS_COLUMN } from '@mistriwork/engine/shared/tagLists.js';
-import { nearest } from '@mistriwork/engine/shared/suggest.js';
+import { distance, nearest } from '@mistriwork/engine/shared/suggest.js';
 
 /** Words the language already reads where a condition stands, or a clause: never a segment's name. */
 export const LANGUAGE_WORDS = new Set([
@@ -262,21 +263,61 @@ const SOURCED = new Set([
 /** Every resource by name, with its segments' labels by name: what the sugar below needs to know. */
 export type SegmentBook = Readonly<Record<string, Readonly<Record<string, string>>>>;
 
+/** A resource's machine as a tab may name it: the column, each state's label by name, and its groups. */
+interface BookedMachine {
+  column: string;
+  states: Readonly<Record<string, string>>;
+  groups: readonly string[];
+}
+/* The machines beside a book rather than in it: a book's entries are the segments consumers read by label, and a
+   state is a word only a tab may name (C3). The same object travels, so every place a book goes carries them. */
+const machinesOf = new WeakMap<SegmentBook, Readonly<Record<string, BookedMachine>>>();
+const withMachines = (book: SegmentBook, machines: Record<string, BookedMachine>): SegmentBook => {
+  if (Object.keys(machines).length) machinesOf.set(book, machines);
+  return book;
+};
+
 /** The book from parsed resources. */
 export const segmentBookOf = (resources: Readonly<Record<string, ResourceDef>> | undefined): SegmentBook =>
-  Object.fromEntries(
-    Object.entries(resources ?? {}).map(([name, block]) => [
-      name,
-      Object.fromEntries(Object.entries(block.segments ?? {}).map(([key, segment]) => [key, segment.label])),
-    ]),
+  withMachines(
+    Object.fromEntries(
+      Object.entries(resources ?? {}).map(([name, block]) => [
+        name,
+        Object.fromEntries(Object.entries(block.segments ?? {}).map(([key, segment]) => [key, segment.label])),
+      ]),
+    ),
+    Object.fromEntries(
+      Object.entries(resources ?? {}).flatMap(([name, block]) =>
+        block.machine
+          ? [
+              [
+                name,
+                {
+                  column: block.machine.column,
+                  states: Object.fromEntries(block.machine.states.map((state) => [state.name, state.label])),
+                  groups: Object.keys(block.machine.groups ?? {}),
+                },
+              ] as const,
+            ]
+          : [],
+      ),
+    ),
   );
 
 /** The book from an authored root, read leniently (a page is parsed apart from its App's resources). */
 export function segmentBookFromRaw(raw: unknown): SegmentBook {
   const blocks = isRecord(raw) && isRecord(raw.resources) ? raw.resources : {};
-  return Object.fromEntries(
+  const machines: Record<string, BookedMachine> = {};
+  const book = Object.fromEntries(
     Object.entries(blocks).map(([name, block]) => {
       const segments = isRecord(block) && isRecord(block.segments) ? block.segments : {};
+      const machine = isRecord(block) && isRecord(block.machine) ? block.machine : undefined;
+      if (machine && typeof machine.column === 'string' && isRecord(machine.states))
+        machines[name] = {
+          column: machine.column,
+          states: Object.fromEntries(Object.keys(machine.states).map((state) => [state, fieldLabel(state)])),
+          groups: isRecord(machine.groups) ? Object.keys(machine.groups) : [],
+        };
       return [
         name,
         Object.fromEntries(
@@ -288,6 +329,7 @@ export function segmentBookFromRaw(raw: unknown): SegmentBook {
       ];
     }),
   );
+  return withMachines(book, machines);
 }
 
 /** The resource and segment a dotted `from` names, where it is not a resource itself. */
@@ -299,16 +341,19 @@ function segmentSource(from: string, book: SegmentBook): { resource: string; seg
   return Object.hasOwn(book, resource) ? { resource, segment: from.slice(dot + 1) } : undefined;
 }
 
-function knownSegment(book: SegmentBook, resource: string, segment: string, at: string): void {
+function knownSegment(book: SegmentBook, resource: string, segment: string, at: string, tab = false): void {
   const segments = book[resource] ?? {};
   if (Object.hasOwn(segments, segment)) return;
   const names = Object.keys(segments);
-  const near = nearest(segment, names);
+  const machine = tab ? machinesOf.get(book)?.[resource] : undefined;
+  const states = machine ? [...Object.keys(machine.states), ...machine.groups] : [];
+  const near = nearest(segment, [...names, ...states]);
   throw new Error(
     `${at} names the segment "${segment}" of "${resource}", which it does not declare.` +
-      (names.length
-        ? ` Its segments: ${names.join(', ')}.${near ? ` Did you mean "${near}"?` : ''}`
-        : ` Declare it: resources.${resource}.segments: { ${segment}: '…' }.`),
+      (names.length || states.length
+        ? ` Its segments: ${names.join(', ') || 'none'}.${states.length ? ` Its states: ${states.join(', ')}.` : ''}${near ? ` Did you mean "${near}"?` : ''}`
+        : ` Declare it: resources.${resource}.segments: { ${segment}: '…' }.`) +
+      (tab ? " A tab may also name a state of the resource's machine or one of its yes/no columns." : ''),
   );
 }
 
@@ -356,6 +401,65 @@ export function unfoldSegments(raw: unknown, book: SegmentBook, at: string, tabl
   return node;
 }
 
+/**
+ * A tab's word that no segment declares: a machine's state or group of its resource (the machine's column is that
+ * state; a group is `is`), else a yes/no column (`archived = true`). The parse has no catalog, so a yes/no column is
+ * assumed for any other word that could be one, and the catalog says whether it is (tabNameProblem). A word near a
+ * declared segment or a state is a typing slip, and is refused as one, with the names.
+ */
+function implicitTab(book: SegmentBook, resource: string, word: string, at: string): { label: string; query: string } | undefined {
+  if (!Object.hasOwn(book, resource) || LANGUAGE_WORDS.has(word.toLowerCase())) return undefined;
+  const machine = machinesOf.get(book)?.[resource];
+  const state = machine !== undefined && Object.hasOwn(machine.states, word);
+  const group = machine !== undefined && machine.groups.includes(word);
+  if (machine && state && group)
+    throw new Error(
+      `${at} names "${word}", which is both a state and a group of the machine over "${machine.column}". Rename the group, or declare a segment.`,
+    );
+  if (machine && (state || group)) {
+    const value = /^\w+$/.test(word) ? word : JSON.stringify(word);
+    return {
+      label: state ? machine.states[word] : humanName(word),
+      query: state ? `${machine.column} = ${value}` : `${machine.column} is ${word}`,
+    };
+  }
+  /* One edit off, or two letters swapped, from a word the resource has (`opne`) is a slip; a nearer-than-three guess would take `archived` for `active`. */
+  const slip = [...Object.keys(book[resource]), ...Object.keys(machine?.states ?? {}), ...(machine?.groups ?? [])].some((known) => {
+    const [a, b] = [word.toLowerCase(), known.toLowerCase()];
+    const apart = distance(a, b);
+    return apart <= 1 || (apart === 2 && [...a].sort().join('') === [...b].sort().join(''));
+  });
+  if (slip || !/^[A-Za-z_]\w*$/.test(word)) return undefined;
+  return { label: humanName(word), query: `${word} = true` };
+}
+
+/**
+ * A tab that names no declared segment, judged against the catalog the App serves: its word is a state or group of
+ * the resource's machine, or a yes/no column, and never both ("`archived` is a state and a yes/no column; declare a
+ * segment"). Said as a problem naming every word the tab could have been.
+ */
+export function tabNameProblem(table: TableMeta, word: string): string | undefined {
+  if (LANGUAGE_WORDS.has(word.toLowerCase()))
+    return `"${word}" is a word of the query language, so a tab cannot name it. Declare a segment under another name and name that.`;
+  const stated = table.columns.filter(
+    (column) =>
+      column.states &&
+      (column.states.open.includes(word) ||
+        column.states.final.includes(word) ||
+        (column.states.groups !== undefined && Object.hasOwn(column.states.groups, word))),
+  );
+  const flag = table.columns.find((column) => column.name === word && columnKind(column.type) === 'boolean');
+  if (stated.length && flag) return `"${word}" is a state and a yes/no column of ${table.name}; declare a segment and name that.`;
+  if (stated.length || flag) return undefined;
+  const states = table.columns.flatMap((column) => (column.states ? [...column.states.open, ...column.states.final] : []));
+  const flags = table.columns.filter((column) => columnKind(column.type) === 'boolean').map((column) => column.name);
+  const segments = Object.keys(table.segments ?? {});
+  return (
+    `"${word}" is not a segment, a state or a yes/no column of ${table.name}. ` +
+    `Its segments: ${segments.join(', ') || 'none'}; its states: ${states.join(', ') || 'none'}; its yes/no columns: ${flags.join(', ') || 'none'}.`
+  );
+}
+
 function unfoldTabs(tabs: readonly unknown[], book: SegmentBook, resource: string, at: string): unknown[] {
   /* Every tab that writes its own query, said at once: renaming them one load at a time is how a field report
      met `today` (a word of the language) after the others were done. */
@@ -374,7 +478,8 @@ function unfoldTabs(tabs: readonly unknown[], book: SegmentBook, resource: strin
     const here = `${at}, tab ${i + 1}`;
     const named = typeof tab === 'string' ? tab.trim() : isRecord(tab) && typeof tab.segment === 'string' ? tab.segment.trim() : undefined;
     if (named === undefined) return tab;
-    knownSegment(book, resource, named, here);
+    const implicit = Object.hasOwn(book[resource] ?? {}, named) ? undefined : implicitTab(book, resource, named, here);
+    if (implicit === undefined) knownSegment(book, resource, named, here, true);
     if (isRecord(tab)) {
       const extra = Object.keys(tab).find((key) => key !== 'segment' && key !== 'sort' && key !== 'empty');
       if (extra)
@@ -383,8 +488,8 @@ function unfoldTabs(tabs: readonly unknown[], book: SegmentBook, resource: strin
         );
     }
     return {
-      label: book[resource][named],
-      query: named,
+      label: implicit?.label ?? book[resource][named],
+      query: implicit?.query ?? named,
       segment: named,
       ...(isRecord(tab) && tab.sort !== undefined ? { sort: tab.sort } : {}),
       ...(isRecord(tab) && tab.empty !== undefined ? { empty: tab.empty } : {}),

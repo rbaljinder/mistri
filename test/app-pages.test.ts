@@ -574,10 +574,27 @@ function Board() {
       scan.undeclared.map((problem) => problem.text),
       [
         '[page-undeclared] useRows(…) reads "note", which the page "board" does not declare in its reads',
-        '[page-undeclared] useCommand(…) runs "refund", which the page "board" does not declare in its commands',
+        `[page-undeclared] useCommand(…) runs "refund", which the page "board" does not declare in its commands. Add it to definePage({ commands: [...] }). Declaring grants nothing: useCommand('refund').granted then says whether this reader may run it`,
       ],
     );
     assert.equal(scan.unread.length, 1, 'a name check cannot read is a warning, not a pass');
+  });
+
+  test('page-import: a permission hook the SDK does not export is refused with what to write instead', async () => {
+    const source = `import { definePage } from '@mistriwork/mistri/page';
+import { useGranted, useCan as can, useRows } from '@mistriwork/mistri/ui';
+export default definePage({ label: 'Board', reads: ['ticket'], component: Board });
+function Board() {
+  return null;
+}`;
+    const scan = scanPageSource(await astParser(), source, 'tsx', { key: 'board', reads: ['ticket'], commands: [] });
+    assert.deepEqual(
+      scan.undeclared.map((problem) => `${problem.line}: ${problem.text}`),
+      [
+        "2: useGranted is not exported by @mistriwork/mistri/ui; write useCommand('x').granted. Declaring the command in definePage({ commands: [...] }) grants nothing: .granted says whether this reader may run it.",
+        "2: useCan is not exported by @mistriwork/mistri/ui; write useCommand('x').granted. Declaring the command in definePage({ commands: [...] }) grants nothing: .granted says whether this reader may run it.",
+      ],
+    );
   });
 
   test('page-undeclared: a block, Scope or List reading, or a CommandButton, Steps or ActionButton running, what the page does not declare', async () => {
@@ -609,9 +626,9 @@ function Board() {
       [
         '[page-undeclared] <Scope from> reads "note", which the page "board" does not declare in its reads',
         '[page-undeclared] <List from> reads "reply", which the page "board" does not declare in its reads',
-        '[page-undeclared] <CommandButton command> runs "refund", which the page "board" does not declare in its commands',
+        `[page-undeclared] <CommandButton command> runs "refund", which the page "board" does not declare in its commands. Add it to definePage({ commands: [...] }). Declaring grants nothing: useCommand('refund').granted then says whether this reader may run it`,
         '[page-undeclared] <ActionButton action> runs "finish", which the page "board" does not declare in its actions',
-        '[page-undeclared] <Steps command> runs "reopen", which the page "board" does not declare in its commands',
+        `[page-undeclared] <Steps command> runs "reopen", which the page "board" does not declare in its commands. Add it to definePage({ commands: [...] }). Declaring grants nothing: useCommand('reopen').granted then says whether this reader may run it`,
       ],
     );
     assert.equal(scan.unread.length, 0, '<Empty action> is a button and <Value resource> reads nothing: neither is a name to hold');

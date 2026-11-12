@@ -47,7 +47,9 @@ async function on<T>(work: (store: CacheStore) => Promise<T>, kind?: string): Pr
 /** Bounded so a crafted key cannot make an entry outlive the cache's own ceiling. */
 const ttl = (ms: number) => Math.max(1, Math.min(Math.ceil(ms), 30 * 24 * 3_600_000));
 
-export const signInState = {
+type Run = <T>(work: (store: CacheStore) => Promise<T>, kind?: string) => Promise<T>;
+
+const stateOn = (on: Run) => ({
   /** The failures counted under `key` in its current window. */
   failures: (key: string): Promise<number> =>
     on(async (store) => {
@@ -82,4 +84,11 @@ export const signInState = {
     }
   },
   remove: (kind: string, key: string): Promise<void> => on((store) => store.delete(`${kind}:${key}`), kind),
-};
+});
+
+export type SignInState = ReturnType<typeof stateOn>;
+export const signInState: SignInState = stateOn(on);
+
+/** The same state over one store, as every instance of a deployment sees its shared cache: tests stand two instances
+    up over one store with it. */
+export const signInStateIn = (store: CacheStore): SignInState => stateOn((work) => work(store));

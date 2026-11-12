@@ -58,6 +58,7 @@ export { appLabelTemplates, labelTemplateProblem, withLabelTemplates } from './a
 export { appCatalog, appRollupRules, withRollups } from './appRollups.js';
 export { zonedNow } from './appZone.js';
 export { segmentProblems, servedSegments } from './appSegments.js';
+import { tabNameProblem } from './appSegments.js';
 export { appConsumesRules } from './appConsumes.js';
 import { ANYONE, andQuery, expandSegments, parseQuery, saidAt, topLevelConditions } from '@mistriwork/engine/shared/query.js';
 import { funnelChains, funnelText } from '@mistriwork/engine/shared/funnel.js';
@@ -248,7 +249,9 @@ export function parseAppConfig(
       if (!problems.length) throw err;
       throw new AppProblems([...problems, ...problemsOf(err)], err instanceof AppProblems ? err.partial : undefined);
     }
-    if (problems.length) throw new AppProblems(problems);
+    // The App the parts did parse rides on the refusal: check and the schema types read it (a mere unknown key no longer
+    // costs them the whole App), and loading still refuses, as it only ever serves what is returned.
+    if (problems.length) throw new AppProblems(problems, parsed);
     return parsed;
   });
   /* A deprecated key still parses; `check` says what replaces it (deprecations.ts). Read off the raw App, where a
@@ -1703,6 +1706,13 @@ function resolveListView(
       }
       for (const tab of view.tabs ?? []) {
         if (error || !tab.query) continue;
+        /* A tab that names no declared segment named a state or a yes/no column (appSegments.ts implicitTab), assumed
+           at load, where there is no catalog to ask: said here, with every word it could have been. */
+        const unnamed = tab.segment && !table.segments?.[tab.segment] ? tabNameProblem(table, tab.segment) : undefined;
+        if (unnamed) {
+          error = `Tab "${tab.label}": ${unnamed}`;
+          break;
+        }
         /* Composed by the same helper the client runs, so what is judged
            here is the text that will run — `a or b` narrowed by a tab is
            `(a or b) and c`, not `a or (b and c)`. */

@@ -117,17 +117,26 @@ export const NO_OUTPUT: Shape<void> = make<void>(
   { kind: 'object', projection: 'declared-keys', fields: Object.freeze({}) },
 );
 
+/* A capability link's reference (server/links/linkToken.ts LinkRef) is text where an output keeps it: a handler
+   returns `{ link: await context.link('status') }` and the receipt keeps `mistri-link:<id>`. Branded by a registered
+   symbol rather than imported, so the shapes stay free of the link machinery. */
+const LINK_REF = Symbol.for('mistri.link-ref');
+const asText = (value: unknown): unknown =>
+  value !== null && typeof value === 'object' && (value as Record<symbol, unknown>)[LINK_REF] === true ? String(value) : value;
+
 /** Text, at most `max` characters, matching `pattern` when given. */
 export function text(options: { max?: number; pattern?: RegExp } = {}): Shape<string> {
   const { max, pattern } = options;
   const captured = pattern === undefined ? undefined : Object.freeze({ source: pattern.source, flags: pattern.flags.replace(/[gy]/g, '') });
   return make(
-    (value) =>
-      typeof value === 'string' &&
-      (max === undefined || value.length <= max) &&
-      (captured === undefined || new RegExp(captured.source, captured.flags).test(value))
+    (raw) => {
+      const value = asText(raw);
+      return typeof value === 'string' &&
+        (max === undefined || value.length <= max) &&
+        (captured === undefined || new RegExp(captured.source, captured.flags).test(value))
         ? value
-        : invalid('expected text'),
+        : invalid('expected text');
+    },
     jsonBounds({ max })
       ? { kind: 'text', lengthUnit: 'utf16', ...(max === undefined ? {} : { max }), ...(captured ? { pattern: captured } : {}) }
       : NON_JSON,

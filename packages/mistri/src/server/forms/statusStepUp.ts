@@ -17,7 +17,8 @@
  *
  * Passing mints a session for that one application: a random token in an
  * HttpOnly, SameSite=Strict cookie scoped to the form's API path for fifteen
- * minutes, kept in this process as a digest. It shows the declared details
+ * minutes, kept as a digest in the sign-in state every instance shares, as
+ * the code and its tries are. It shows the declared details
  * (`stepUp.show`) and nothing else, and only while the application is not an
  * account's — once linked, it is read by its owner's session alone.
  */
@@ -183,7 +184,7 @@ export async function stepUpReply({
     if (!answer.found) return { status: 404, body: statusNotFound(Boolean(form.link)) };
     const subject = receiptSubject(key, answer.receipt, appId);
     if (code === undefined) {
-      const issued = issueCode(subject);
+      const issued = await issueCode(subject);
       if ('limited' in issued) {
         const message = 'Several codes were sent for this application in the last hour. Use the newest one, or try again later.';
         return { status: 429, body: { code: 'rate_limited', message, error: message } };
@@ -192,7 +193,7 @@ export async function stepUpReply({
       return { status: 200, body: { sent: true } };
     }
     const lockKey = statusLockKey(key, request.receipt, appId);
-    if (!spendCode(subject, code)) {
+    if (!(await spendCode(subject, code))) {
       await wrongStepUpCodes.count(lockKey);
       return { status: 404, body: { code: 'code_refused', message: CODE_REFUSED, error: CODE_REFUSED } };
     }

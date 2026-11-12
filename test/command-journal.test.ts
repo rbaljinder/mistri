@@ -17,6 +17,7 @@ import {
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
 import { commandsOf } from '../packages/mistri/src/server/stores/commandStores.js';
 import { sqliteAuditRows } from './support/commandTargets.js';
+import { groupAuditParts, splitAudit, stitchAudit } from '../packages/mistri/src/adapters/commands/commandAuditParts.js';
 
 const receipt: StoredCommandReceipt = {
   id: 'receipt-1',
@@ -63,8 +64,8 @@ test('command journal migration is explicit, existing-file only, idempotent and 
     const absent = join(path, '..', 'absent.db');
     assert.throws(() => migrateSqliteCommandJournal(absent));
     assert.equal(existsSync(absent), false);
-    assert.deepEqual(migrateSqliteCommandJournal(path), { version: 1, migrated: true });
-    assert.deepEqual(migrateSqliteCommandJournal(path), { version: 1, migrated: false });
+    assert.deepEqual(migrateSqliteCommandJournal(path), { version: 3, migrated: true });
+    assert.deepEqual(migrateSqliteCommandJournal(path), { version: 3, migrated: false });
     assert.equal(name(db), 'Original');
     assert.equal(isCommandJournalTable(tables.receipt), true);
     assert.equal(isCommandJournalTable(tables.receipt.toUpperCase()), true);
@@ -186,6 +187,92 @@ test('records, receipt and paired audit commit together and receipt survives reo
     } finally {
       await reopened.close();
     }
+  });
+});
+
+/* A target's changes past the first 256 are continuation rows of the receipt: written in its transaction, one set per
+   receipt (a replay writes none), stitched back in order, and gone with the receipt. */
+const longAudit = (count: number) => ({
+  ...audit,
+  ...splitAudit(Array.from({ length: count }, (_, at) => ({ field: `f${at}` }))),
+});
+const partsOf = (db: DatabaseSync, id = receipt.id) =>
+  db
+    .prepare(
+      `SELECT receipt_id, target_index, part, changes_json FROM "${tables.auditPart}" WHERE receipt_id = ? ORDER BY target_index, part`,
+    )
+    .all(id);
+
+test('300 changes on one target are 256 in the receipt and 44 in audit part 1, and read back as 300 in order', async () => {
+  await fixture(async (adapter, db) => {
+    await commandsOf(adapter).commandTransaction(async (_tx, journal) => {
+      await journal.commit(receipt, longAudit(300));
+    });
+    const row = db.prepare(`SELECT changes_json FROM "${tables.receipt}"`).get() as { changes_json: string };
+    const [head] = JSON.parse(row.changes_json) as string[];
+    assert.equal((JSON.parse(head) as unknown[]).length, 256);
+    const parts = partsOf(db);
+    assert.deepEqual(
+      parts.map((part) => [part.target_index, part.part, (JSON.parse(part.changes_json as string) as unknown[]).length]),
+      [[0, 1, 44]],
+    );
+    const whole = JSON.parse(stitchAudit(head, groupAuditParts(parts).get(0))) as Array<{ field: string }>;
+    assert.deepEqual(
+      whole.map((change) => change.field),
+      Array.from({ length: 300 }, (_, at) => `f${at}`),
+    );
+    // A target with no more than 256 has no parts, and its text stitches to itself.
+    assert.equal(stitchAudit(audit.changesJson), audit.changesJson);
+    assert.equal(stitchAudit(head, []), head);
+  });
+});
+
+test('audit parts belong to their receipt: a replay writes none, a rolled-back commit leaves none, deleting the receipt takes them', async () => {
+  await fixture(async (adapter, db) => {
+    await commandsOf(adapter).commandTransaction(async (_tx, journal) => {
+      assert.equal(await journal.insert!(receipt, longAudit(600)), true);
+    });
+    assert.equal(partsOf(db).length, 2);
+    // The same scope again finds its receipt taken: false, and the pieces already there are the only ones.
+    await commandsOf(adapter).commandTransaction(async (_tx, journal) => {
+      assert.equal(await journal.insert!({ ...receipt, id: 'receipt-replay' }, longAudit(600)), false);
+      assert.equal(await journal.taken!(receipt), true);
+    });
+    assert.equal(partsOf(db).length, 2);
+    assert.equal(partsOf(db, 'receipt-replay').length, 0);
+    // A command that fails after its commit takes the pieces back with everything else.
+    await assert.rejects(
+      commandsOf(adapter).commandTransaction(async (_tx, journal) => {
+        await journal.commit({ ...receipt, id: 'receipt-2', idempotencyKey: 'attempt-2' }, longAudit(300));
+        throw new Error('business rule refused');
+      }),
+    );
+    assert.equal(partsOf(db, 'receipt-2').length, 0);
+    // Forgotten with its receipt (retention deletes with foreign keys on, as the job opens the file).
+    db.exec('PRAGMA foreign_keys = ON');
+    db.prepare(`DELETE FROM "${tables.receipt}" WHERE id = ?`).run(receipt.id);
+    assert.equal(count(db, tables.auditPart), 0);
+  });
+});
+
+test('audit parts are refused when they are not whole pieces or run past 4,096 changes, and none of them is written', async () => {
+  await fixture(async (adapter, db) => {
+    const whole = (count: number) => JSON.stringify(Array.from({ length: count }, (_, at) => ({ field: `f${at}` })));
+    const refusals: Array<[string, readonly string[]]> = [
+      ['a piece that is not an array', ['{"field":"f0"}']],
+      ['an empty piece', ['[]']],
+      ['a piece of more than 256', [whole(257)]],
+      ['a piece short of 256 before the last', [whole(10), whole(10)]],
+      ['more than sixteen pieces in all', Array.from({ length: 16 }, () => whole(256))],
+    ];
+    for (const [, parts] of refusals)
+      await assert.rejects(
+        commandsOf(adapter).commandTransaction(async (_tx, journal) => {
+          await journal.commit(receipt, { ...audit, changesParts: parts });
+        }),
+      );
+    assert.equal(count(db, tables.receipt), 0);
+    assert.equal(count(db, tables.auditPart), 0);
   });
 });
 

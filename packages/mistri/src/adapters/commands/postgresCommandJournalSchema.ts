@@ -18,13 +18,45 @@ export const q = (name: string) => runtimeTable('postgres', name);
    `toISOString()` text (COMPLETED_AT), and dates the row for retention.
    `xact_id` is the writing transaction's id where the row carries an event
    batch: PostgreSQL assigns ids at insert, not at commit, so delivery
-   discovery walks batches by transaction (postgresEventDeliveryStore.ts). */
-export const JOURNAL_VERSION = 1;
+   discovery walks batches by transaction (postgresEventDeliveryStore.ts).
+   Version 2 adds the audit-part table and version 3 the link table (see the
+   SQLite journal). A link's times are epoch milliseconds in both engines. */
+export const JOURNAL_VERSION = 3;
 const B = COMMAND_TARGET_BOUNDS;
 const COMPLETED_INDEX = `${tables.receipt}_completed`;
 const XACT_INDEX = `${tables.receipt}_xact`;
 /** The completion time as the receipt says it, `toISOString()` text. */
 export const COMPLETED_AT = `to_char(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
+/* The audit-part table as version 2 lays it out: the upgrade from version 1 creates exactly this text. */
+const AUDIT_PART_DDL = `CREATE TABLE ${q(tables.auditPart)} (
+  receipt_id text COLLATE "C" NOT NULL REFERENCES ${q(tables.receipt)} (id) ON DELETE CASCADE,
+  target_index integer NOT NULL CHECK (target_index >= 0),
+  part integer NOT NULL CHECK (part >= 1),
+  changes_json text NOT NULL CHECK (octet_length(changes_json) <= ${B.changes} AND json_typeof(changes_json::json) = 'array'),
+  PRIMARY KEY (receipt_id, target_index, part)
+)`;
+const LINK_INDEX = `${tables.link}_row`;
+/* The link table as version 3 lays it out: the upgrade from version 2 creates exactly this text. */
+const LINK_DDL = [
+  `CREATE TABLE ${q(tables.link)} (
+  id text COLLATE "C" PRIMARY KEY,
+  app_id text COLLATE "C" NOT NULL,
+  tenant_id text COLLATE "C" NOT NULL,
+  resource text COLLATE "C" NOT NULL,
+  row_key text COLLATE "C" NOT NULL,
+  name text COLLATE "C" NOT NULL,
+  expires_at bigint NOT NULL CHECK (expires_at > 0),
+  uses_left integer CHECK (uses_left >= 0),
+  revoked_at bigint,
+  created_at bigint NOT NULL,
+  created_by text COLLATE "C" NOT NULL,
+  command text COLLATE "C" NOT NULL,
+  receipt text COLLATE "C" NOT NULL,
+  opens integer NOT NULL CHECK (opens >= 0),
+  last_opened_at bigint
+)`,
+  `CREATE INDEX "${LINK_INDEX}" ON ${q(tables.link)} (app_id, resource, row_key)`,
+];
 export const definitions: readonly string[] = [
   `CREATE TABLE ${q(tables.meta)} (
   singleton integer PRIMARY KEY CHECK (singleton = 1),
@@ -64,6 +96,24 @@ export const definitions: readonly string[] = [
 )`,
   `CREATE INDEX "${COMPLETED_INDEX}" ON ${q(tables.receipt)} (completed_at)`,
   `CREATE INDEX "${XACT_INDEX}" ON ${q(tables.receipt)} (xact_id) WHERE xact_id IS NOT NULL`,
+  AUDIT_PART_DDL,
+  ...LINK_DDL,
+];
+
+/** What the upgrade from version 1 runs (storeLayouts.ts, in its one transaction under the store's lock): the new
+ * table, and the version row's own check moved on. */
+export const postgresJournalUpgradeFrom1 = (): readonly string[] => [
+  AUDIT_PART_DDL,
+  `ALTER TABLE ${q(tables.meta)} DROP CONSTRAINT ${tables.meta}_version_check`,
+  `UPDATE ${q(tables.meta)} SET version = 2`,
+  `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT ${tables.meta}_version_check CHECK (version = 2)`,
+];
+/** What the upgrade from version 2 runs: the link table and its index, and the version row moved on. */
+export const postgresJournalUpgradeFrom2 = (): readonly string[] => [
+  ...LINK_DDL,
+  `ALTER TABLE ${q(tables.meta)} DROP CONSTRAINT ${tables.meta}_version_check`,
+  `UPDATE ${q(tables.meta)} SET version = 3`,
+  `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT ${tables.meta}_version_check CHECK (version = 3)`,
 ];
 
 /* ---------- catalog description ---------- */
@@ -114,6 +164,44 @@ const REALM = `CHECK ((realm = ANY (ARRAY['tenant'::text, 'platform'::text])))`;
 const PLATFORM_TENANTLESS = `CHECK (((realm = 'tenant'::text) OR (tenant_id = ''::text)))`;
 const on = (index: string) => index.replace(' ON ', ` ON ${runtimeSchema('postgres')}.`);
 const LAYOUT: readonly PostgresRelationDescription[] = [
+  // Sorted by name, as the description reads back.
+  table(
+    tables.auditPart,
+    [id('receipt_id'), c('target_index', 'integer'), c('part', 'integer'), text('changes_json')],
+    [
+      `CHECK (((octet_length(changes_json) <= ${B.changes}) AND (json_typeof((changes_json)::json) = 'array'::text)))`,
+      `CHECK ((part >= 1))`,
+      `CHECK ((target_index >= 0))`,
+      `FOREIGN KEY (receipt_id) REFERENCES ${tables.receipt}(id) ON DELETE CASCADE`,
+      `PRIMARY KEY (receipt_id, target_index, part)`,
+    ],
+    [on(`CREATE UNIQUE INDEX ${tables.auditPart}_pkey ON ${tables.auditPart} USING btree (receipt_id, target_index, part)`)],
+  ),
+  table(
+    tables.link,
+    [
+      id('id'),
+      id('app_id'),
+      id('tenant_id'),
+      id('resource'),
+      id('row_key'),
+      id('name'),
+      c('expires_at', 'bigint'),
+      c('uses_left', 'integer', null, false),
+      c('revoked_at', 'bigint', null, false),
+      c('created_at', 'bigint'),
+      id('created_by'),
+      id('command'),
+      id('receipt'),
+      c('opens', 'integer'),
+      c('last_opened_at', 'bigint', null, false),
+    ],
+    [`CHECK ((expires_at > 0))`, `CHECK ((opens >= 0))`, `CHECK ((uses_left >= 0))`, `PRIMARY KEY (id)`],
+    [
+      on(`CREATE INDEX ${LINK_INDEX} ON ${tables.link} USING btree (app_id, resource, row_key)`),
+      on(`CREATE UNIQUE INDEX ${tables.link}_pkey ON ${tables.link} USING btree (id)`),
+    ],
+  ),
   table(
     tables.meta,
     [c('singleton', 'integer'), c('version', 'integer')],

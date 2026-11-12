@@ -194,6 +194,10 @@ const SURFACES: Record<string, { rules: string[]; why: string }> = {
   'packages/mistri/src/server/experiments/http.ts': { rules: ["{ writing, origin: 'always' }"], why: 'As flags.' },
   'packages/mistri/src/server/experiments/exposureHttp.ts': { rules: ['{ writing: true, sameSite: true }'], why: 'A beacon-shaped POST.' },
   'packages/mistri/src/server/experiments/visitorHttp.ts': { rules: ['{ writing: true, sameSite: true }'], why: 'POST only.' },
+  'packages/mistri/src/server/links/linkRoutes.ts': {
+    rules: ["{ writing: true, origin: 'always', sameSite: true }"],
+    why: 'A capability link’s confirm and command: POST only, from its own page.',
+  },
   'packages/mistri/src/server/analytics/beaconHttp.ts': { rules: ['{ writing: true, sameSite: true }'], why: 'POST only, same page.' },
 };
 

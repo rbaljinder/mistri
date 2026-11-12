@@ -309,14 +309,14 @@ test(
     });
     resetOneTimeCodes();
     const now = Date.parse('2026-09-25T12:00:00.000Z');
-    const issued = issueCode('subject', now) as { code: string };
-    assert.equal(spendCode('subject', issued.code, now + 10 * 60_000), false, 'ten minutes, then gone');
-    const second = issueCode('subject', now) as { code: string };
+    const issued = (await issueCode('subject', now)) as { code: string };
+    assert.equal(await spendCode('subject', issued.code, now + 10 * 60_000), false, 'ten minutes, then gone');
+    const second = (await issueCode('subject', now)) as { code: string };
     const wrong = second.code === '123456' ? '654321' : '123456';
-    for (let i = 0; i < 5; i++) assert.equal(spendCode('subject', wrong, now), false);
-    assert.equal(spendCode('subject', second.code, now), false, 'five wrong tries burn it');
-    const bound = issueCode('bound', now, 'ada@example.test') as { code: string };
-    assert.equal(spendCode('bound', bound.code, now, 'mallory@example.test'), false, 'a code proves the address it was sent to');
+    for (let i = 0; i < 5; i++) assert.equal(await spendCode('subject', wrong, now), false);
+    assert.equal(await spendCode('subject', second.code, now), false, 'five wrong tries burn it');
+    const bound = (await issueCode('bound', now, 'ada@example.test')) as { code: string };
+    assert.equal(await spendCode('bound', bound.code, now, 'mallory@example.test'), false, 'a code proves the address it was sent to');
     resetOneTimeCodes();
   },
 );
@@ -341,8 +341,8 @@ test(
         const refused = await visitor.post('/api/forms/apply/stepup', { receipt, confirm: { last_name: 'Lovelace' }, code: wrong });
         assert.equal(refused.body.code, 'code_refused', refused.raw);
       }
-      // Another instance holds none of this process's codes or tries; the reference is locked there too.
-      resetOneTimeCodes();
+      // The code and its tries are kept where the lockout is, in the state every instance shares
+      // (test/one-time-codes.test.ts stands two instances up over one store); the reference is locked, not only the code.
       resetPublicFormLimits();
       const again = await visitor.post('/api/forms/apply/stepup', { receipt, confirm: { last_name: 'Lovelace' } });
       assert.equal(again.status, 404, again.raw);

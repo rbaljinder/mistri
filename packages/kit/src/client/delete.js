@@ -18,6 +18,7 @@
  * The button and its dialog are a component (components/DeleteButton.tsx); what
  * stays here is the gate every write affordance shares.
  */
+import { isAppendOnly } from '@mistriwork/engine/shared/schema.js';
 import { state, writeAllowed } from './core.js';
 
 /**
@@ -28,7 +29,7 @@ import { state, writeAllowed } from './core.js';
  * would refuse.
  */
 export function canDelete(table) {
-  if (!state.canWrite || !table || table.isView || table.deletable === false) return false;
+  if (!state.canWrite || !table || table.isView || table.deletable === false || isAppendOnly(table)) return false;
   if (!writeAllowed(table.id)) return false;
   return Boolean(state.connections?.find((c) => c.id === state.activeConnection)?.writable);
 }

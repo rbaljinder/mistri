@@ -328,7 +328,12 @@ export function addressQuestion(spec: ListSpec, params: URLSearchParams): string
       conditions.push(`${name} has ${values.length > 1 ? `(${values.map(literal).join(', ')})` : literal(values[0])}`);
       continue;
     }
-    conditions.push(values.length > 1 ? `${name} in (${values.map(literal).join(', ')})` : `${name} = ${valueFor(spec, name, values[0])}`);
+    // A window is a phrase of the language wherever it stands, so the list's values say it as the single value does.
+    conditions.push(
+      values.length > 1
+        ? `${name} in (${values.map((value) => valueFor(spec, name, value)).join(', ')})`
+        : `${name} = ${valueFor(spec, name, values[0])}`,
+    );
   }
   // The tab's words as the list writes them, so the tab lights; the boxes after them.
   const where = conditions.length ? andQuery(tab.query, ...conditions) : tab.query;

@@ -241,6 +241,7 @@ function servedAfresh(context: ServedContext, app: AppDef, now: Date, me: string
       isView: table.isView,
       insertable: context.capabilities?.resources[table.id]?.insertable ?? false,
       deletable: context.capabilities?.resources[table.id]?.deletable ?? false,
+      ...(context.capabilities?.resources[table.id]?.appendOnly ? { appendOnly: true } : {}),
       columns: table.columns.map((column) => ({
         name: column.name,
         type: column.type,

@@ -28,8 +28,20 @@ import {
   refuse,
 } from '../packages/mistri/src/server/commands/businessCommandExecution.js';
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
-import { defineEvent, defineEventProjection } from '../packages/mistri/src/server/commands/businessEvents.js';
-import { callHeaders, effectIdempotencyKey, post, webhookTransport } from '../packages/mistri/src/server/commands/commandEffects.js';
+import {
+  captureCommandEvents,
+  defineEvent,
+  defineEventProjection,
+  projectCommandEvents,
+} from '../packages/mistri/src/server/commands/businessEvents.js';
+import {
+  callHeaders,
+  captureCommandEffects,
+  EFFECT_LIMITS,
+  effectIdempotencyKey,
+  post,
+  webhookTransport,
+} from '../packages/mistri/src/server/commands/commandEffects.js';
 import { id, literal, shape } from '../packages/mistri/src/server/commands/commandShapes.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { effectDeployment, openEffectHost } from '../packages/mistri/src/server/effects/effectHost.js';
@@ -138,6 +150,33 @@ test("an effect is a post() to a named webhook, and the effect. event names are 
         handle: () => ({ id: 1, status: 'reserved' as const }),
       }),
     /"effect\." is the platform's/,
+  );
+});
+
+test('an effect body keeps its long strings and is refused by name past what one post carries', () => {
+  const project = (text: string, extra = '') => {
+    const { slots } = captureCommandEffects({ crm: post<{ id: number }>('crm', () => ({ note: text, extra })) });
+    return projectCommandEvents(captureCommandEvents(slots), { id: 1 });
+  };
+  // 5 KB in one string passes in an effect, where a domain event's strings stop at 1 KB.
+  const batch = project('x'.repeat(5000));
+  assert.equal(batch.length, 1);
+  assert.equal(JSON.parse(batch[0].payloadJson).body.note.length, 5000);
+  const domain = defineEvent('thing.said', shape({ note: literal('x'.repeat(5000)) }));
+  assert.throws(() =>
+    projectCommandEvents(
+      captureCommandEvents({
+        said: defineEventProjection<{ id: number }, { note: string }>(domain as never, () => ({ note: 'x'.repeat(5000) })),
+      }),
+      { id: 1 },
+    ),
+  );
+  // One byte over the limit names the post and both numbers; at the limit it passes.
+  const overhead = JSON.stringify({ note: '', extra: '' }).length;
+  assert.equal(project('x'.repeat(EFFECT_LIMITS.bodyBytes - overhead)).length, 1);
+  assert.throws(
+    () => project('x'.repeat(EFFECT_LIMITS.bodyBytes - overhead + 1)),
+    /post "crm" body is 15,361 bytes; one post carries at most 15,360\./,
   );
 });
 

@@ -93,6 +93,7 @@ export async function explainAccess(context: ObserverContext, question: AccessQu
           ? `auth.roles.${question.role}.${kind} is [${value.map((name) => `"${name}"`).join(', ')}]`
           : `auth.roles.${question.role} grants no ${kind}`;
     };
+    const appendOnly = access.appendOnly?.has(table.id) === true;
     if (!question.column) {
       return {
         app: app.id,
@@ -100,7 +101,8 @@ export async function explainAccess(context: ObserverContext, question: AccessQu
         table: table.id,
         read: readable,
         write: writable,
-        because: `${ceiling}; ${roleRule('read')}; ${roleRule('write')}.`,
+        ...(appendOnly ? { appendOnly: true } : {}),
+        because: `${ceiling}; ${roleRule('read')}; ${roleRule('write')}${appendOnly ? `; auth.roles.${question.role}.create names it, so it only makes new rows here and never edits or removes one` : ''}.`,
         declared,
       };
     }

@@ -119,14 +119,14 @@ function fixture(t: TestContext, migrate = true) {
   };
 }
 
-test('fresh explicit migration creates version 1 only, is idempotent, and never creates missing files', (t) => {
+test('fresh explicit migration creates the current version only, is idempotent, and never creates missing files', (t) => {
   const f = fixture(t, false),
     missing = join(f.directory, 'missing.db');
   assert.throws(() => migrateSqliteCommandJournal(missing));
   assert.equal(existsSync(missing), false);
-  assert.deepEqual(migrateSqliteCommandJournal(f.path), { version: 1, migrated: true });
-  assert.deepEqual(migrateSqliteCommandJournal(f.path), { version: 1, migrated: false });
-  assert.equal(f.db.prepare(`SELECT version FROM "${tables.meta}"`).get()!.version, 1);
+  assert.deepEqual(migrateSqliteCommandJournal(f.path), { version: 3, migrated: true });
+  assert.deepEqual(migrateSqliteCommandJournal(f.path), { version: 3, migrated: false });
+  assert.equal(f.db.prepare(`SELECT version FROM "${tables.meta}"`).get()!.version, 3);
   assertSqliteCommandJournal(f.db);
   f.unchanged();
 });

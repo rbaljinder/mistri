@@ -68,6 +68,9 @@ interface ResolvedAccess {
       it: present only when some role says `create`, and then every insert,
       New and quick add answers to it. */
   creatable?: ReadonlySet<string>;
+  /** Of `writable`, what a role only appends to (its `create` names the table and its `write` does not): rows are made there and
+      never edited or removed. Absent where none is. Carried wherever `creatable` is, so no copy can leave a table editable. */
+  appendOnly?: ReadonlySet<string>;
   fields?: ReadonlyMap<string, { read: ReadonlySet<string>; write: ReadonlySet<string> }>;
   /** Columns the server reads and writes for its own work, by table id: never in a served catalog, named by no request but its own. */
   internal?: ReadonlyMap<string, ReadonlySet<string>>;
@@ -302,12 +305,26 @@ function grantedAccess(app: AppDef, schema: DatabaseSchema, roles: readonly stri
       // A tenant role's `true` is its realm's whole ceiling: a platform-owned
       // resource is never a tenant's, whatever the word covers.
       const realm = (names: Set<string>) => new Set(realmResources(app, grant.realm, names));
-      const readable =
+      const allowed =
         grant.read === true ? realm(read) : grant.read === false ? new Set<string>() : resolve(grant.read, unknownGrant('read'));
-      const writable =
+      const written =
         grant.write === true ? realm(write) : grant.write === false ? new Set<string>() : resolve(grant.write, unknownGrant('write'));
+      const made = grant.create === undefined || grant.create === false ? undefined : resolve(grant.create, unknownGrant('write'));
+      /* A table `create` names that the role does not write is APPEND-ONLY for it: read, and new rows made there, never
+         edited or removed. It rides the role's `writable` so every insert path and the column rules accept the
+         insert, and `appendOnly` says what the guard refuses afterwards. It never exceeds the App's own write
+         ceiling, whatever the grant says. */
+      const appended = new Set(
+        realmResources(
+          app,
+          grant.realm,
+          [...(made ?? [])].filter((id) => !written.has(id) && write.has(id)),
+        ),
+      );
+      const readable = new Set([...allowed, ...appended]);
+      const writable = new Set([...written, ...appended]);
       const creatable =
-        grant.create === undefined ? writable : grant.create === false ? new Set<string>() : resolve(grant.create, unknownGrant('write'));
+        grant.create === undefined ? written : made === undefined ? new Set<string>() : new Set([...made].filter((id) => writable.has(id)));
       // Judged here so an unknown name fails closed with the rest of the policy; appMayExport reads the same list.
       if (grant.export) resolve(grant.export, unknownGrant('export'));
       return [
@@ -315,6 +332,8 @@ function grantedAccess(app: AppDef, schema: DatabaseSchema, roles: readonly stri
         {
           readable,
           writable,
+          written,
+          appended,
           creatable,
           fields: hasFields
             ? resolveFields(grant.fields, readable, writable, (resource) => `${roleAt(name)}, "fields" for "${resource}"`, ceiling)
@@ -325,13 +344,15 @@ function grantedAccess(app: AppDef, schema: DatabaseSchema, roles: readonly stri
   );
   const creates = Object.values(access.roles).some((grant) => grant.create !== undefined);
   const readable = new Set<string>();
-  const writable = new Set<string>();
   const creatable = new Set<string>();
+  const written = new Set<string>();
+  const appended = new Set<string>();
   const fields: Fields = new Map();
   for (const role of roles) {
     const grant = grants.get(role);
     grant?.readable.forEach((id) => readable.add(id));
-    grant?.writable.forEach((id) => writable.add(id));
+    grant?.written.forEach((id) => written.add(id));
+    grant?.appended.forEach((id) => appended.add(id));
     grant?.creatable.forEach((id) => creatable.add(id));
     grant?.fields?.forEach((scope, resource) => {
       const combined = fields.get(resource) ?? { read: new Set<string>(), write: new Set<string>() };
@@ -340,7 +361,16 @@ function grantedAccess(app: AppDef, schema: DatabaseSchema, roles: readonly stri
       fields.set(resource, combined);
     });
   }
-  return { readable, writable, ...(creates ? { creatable } : {}), ...(hasFields ? { fields } : {}) };
+  /* What one role only appends to, another of the same person may truly write: the union is then writable, and an append only where no role edits. */
+  const appendOnly = new Set([...appended].filter((id) => !written.has(id)));
+  const writable = new Set([...written, ...appendOnly]);
+  return {
+    readable,
+    writable,
+    ...(creates ? { creatable } : {}),
+    ...(appendOnly.size ? { appendOnly } : {}),
+    ...(hasFields ? { fields } : {}),
+  };
 }
 
 /** Named command grants are independent of CRUD ceilings; callers supply verified server roles only. */

@@ -400,7 +400,7 @@ answer is `temporarily_unavailable`.
 - `label: 'Book an appointment'` on `defineCommand` is the title of the command's dialog and its buttons; without it they say the command's key as words (`book` is "Book"). It is text of 1 to 120 characters.
 - A public command's `output` may carry `message` only as `literal('…')`; that sentence is what the public page's outcome says in place of the platform's thank-you (at most 280 characters), beside the receipt's reference. A public form's reply stays the platform's. On a tenant App, a submission placed with a tenant hands the handler that tenant's shared profile as `tenant`, so it may pick among the sentences its output declares: `message: literal('We will call you.', 'We will text you.')` and `return { reference, message: tenant?.contact === 'sms' ? 'We will text you.' : 'We will call you.' }`. The platform's triage has no `tenant`.
 - `lookup({ sources, record }, input)` runs before the transaction opens and hands its JSON to the handler as `lookup`; a failure is `temporarily_unavailable`. It reads the other sources (a database or an HTTP connection) its `sources` names, `{ valuations: ['estimate'] }`. A lookup that reads none, one that works from its input or the record alone, declares no `sources`; `sources` without a `lookup` is refused. Its tables offer `get`, `find` and `where` only: there is no `insert`, `update` or `remove`, in the type or at run time, so a write belongs in the handler. What it reads of a resource that audits reads is recorded under the command, as the handler's reads are. In a [tenant App](/docs/tenant-apps/#a-commands-lookup) it reads global tables and its own tenant's, as the person running it could read them, and `tenant` is the id of the tenant it runs in.
-- `effects: { notify: post('dealer-hooks', output => ({ id: output.applicationId })) }` posts to a `"kind": "webhook"` connection after commit, with retries; nothing is sent on rollback. `{ envelope: false, headers }` sends your own body shape; a delivery whose headers name one the request owns, the connection's `auth.header` among them, is rejected for an operator, not sent. On a tenant App each delivery carries its tenant.
+- `effects: { notify: post('dealer-hooks', output => ({ id: output.applicationId })) }` posts to a `"kind": "webhook"` connection after commit, with retries; nothing is sent on rollback. A body is at most 15,360 bytes of JSON, and a string in it may be as long as that: a body over it refuses the command, naming the post, its size and the limit (a domain event's strings stop at 1,024 bytes). `{ envelope: false, headers }` sends your own body shape; a delivery whose headers name one the request owns, the connection's `auth.header` among them, is rejected for an operator, not sent. On a tenant App each delivery carries its tenant.
 - `effects: { text: send('sms', output => ({ to: output.phone, text: 'Shipped.', consent: true })) }` sends on an [integration's](/docs/integrations/) channel after commit.
 
 ### How it ends
@@ -431,6 +431,21 @@ command reads one under its own authority:
 whole; the caller sees only the declared `output`, never the rows. An
 elevation never makes a command an [App API](/docs/app-api/) operation for a
 role that cannot read the table, and `mistri check --design` lists every one.
+
+## A link to one record
+
+A capability link hands one record to someone who signs in to nothing: they see the columns it shows and run the commands it names, on that record only.
+
+```ts
+// resources.application
+links: { status: { show: ['applicant', 'status'], commands: ['withdraw'], expires: '30 days' } },
+
+// a command on the record mints one; the URL is said only in this answer and in an effect's mail
+invite: defineCommand({ source: 'main', target: 'application', output: shape({ link: text() }),
+  async handle({ link }) { return { link: await link('status') }; } }),
+```
+
+`revokeLinks('status')` in a handler closes the record's links of that name, every one when it names none. A link needs `MISTRI_FORM_KEY`; `uses`, `confirm` and `stepUp` limit who gets in ([reference](/docs/dsl-resources/)).
 
 ## Load and run
 
@@ -464,6 +479,8 @@ loopback.
 | `none`     | nothing                                        | runs against the record as it is now, usually refused as `stale_record` |
 | `receipts` | a receipt per request                          | replays the first answer; the handler does not run again                |
 | `audit`    | the receipt and every change, before and after | as `receipts`, and the audit keeps the changes (`audit.redact` applies) |
+
+The audit keeps up to 4,096 changes for one target and at most 4 MiB across them: the first 256 sit in the receipt and the rest in continuation parts written in the same transaction, read back in order. A command that makes more refuses with both numbers, and keeps nothing.
 
 Without `track`, an action clicked in the browser keeps nothing, a signed-in
 form or a request with an `Idempotency-Key` keeps a receipt, and the App API,

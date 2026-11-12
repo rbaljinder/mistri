@@ -6,7 +6,7 @@
  * what they keep by exactly the rules the runtime wrote it by.
  */
 import { isPromise, isProxy } from 'node:util/types';
-import { COMMAND_EVENT_LIMITS, type CommandEventBatch, type CommandEventManifest } from './commandEventTypes.js';
+import { COMMAND_EVENT_LIMITS, isEffectEvent, type CommandEventBatch, type CommandEventManifest } from './commandEventTypes.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 
 export class BusinessEventDefinitionError extends Error {
@@ -150,10 +150,10 @@ export function detached<Value>(input: Value, maxBytes: number): Value {
 
 /** Only visit detached JSON after the shared bounded descriptor walk. This
  * traversal adds scalar safety without invoking hooks on application objects. */
-function scalarSafety(value: unknown): void {
+function scalarSafety(value: unknown, stringBytes: number): void {
   if (typeof value === 'string') {
     if (
-      Buffer.byteLength(value, 'utf8') > COMMAND_EVENT_LIMITS.stringBytes ||
+      Buffer.byteLength(value, 'utf8') > stringBytes ||
       [...value].some((character) => {
         const point = character.codePointAt(0)!;
         return point >= 0xd800 && point <= 0xdfff;
@@ -164,20 +164,20 @@ function scalarSafety(value: unknown): void {
     if (!Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value))) return projectionError();
   } else if (value && typeof value === 'object') {
     for (const [key, child] of Object.entries(value)) {
-      scalarSafety(key);
-      scalarSafety(child);
+      scalarSafety(key, stringBytes);
+      scalarSafety(child, stringBytes);
     }
   }
 }
 
-export function payloadJson(input: unknown, allowlist?: readonly string[]): string {
+export function payloadJson(input: unknown, allowlist?: readonly string[], effect = false): string {
   const selected = synchronous(input);
   const value = allowlist ? exact(selected, allowlist) : record(selected, COMMAND_EVENT_LIMITS.fields);
   const keys = Object.keys(value);
   if (!keys.length) return projectionError();
   for (const key of keys) fieldName(key);
   const json = canonicalCommandJson(value, COMMAND_EVENT_LIMITS.payloadBytes);
-  scalarSafety(JSON.parse(json));
+  scalarSafety(JSON.parse(json), effect ? COMMAND_EVENT_LIMITS.payloadBytes : COMMAND_EVENT_LIMITS.stringBytes);
   return json;
 }
 
@@ -219,7 +219,7 @@ export function captureCommandEventBatch(input: unknown, expected?: CommandEvent
       if (typeof draft.payloadJson !== 'string' || Buffer.byteLength(draft.payloadJson, 'utf8') > COMMAND_EVENT_LIMITS.payloadBytes) {
         return projectionError();
       }
-      const canonical = payloadJson(JSON.parse(draft.payloadJson));
+      const canonical = payloadJson(JSON.parse(draft.payloadJson), undefined, isEffectEvent(identity.name));
       if (canonical !== draft.payloadJson) return projectionError();
       bytes += Buffer.byteLength(canonical, 'utf8');
       if (bytes > COMMAND_EVENT_LIMITS.batchPayloadBytes) return projectionError();

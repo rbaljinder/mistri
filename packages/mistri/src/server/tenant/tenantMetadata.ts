@@ -464,7 +464,8 @@ function projectAfresh(
               const available = actions?.filter((action) =>
                 action.command
                   ? granted.has(action.command.id)
-                  : capabilities?.writable.includes(name) || Boolean(capabilities?.grantedActions?.[name]?.includes(action.id)),
+                  : (capabilities?.writable.includes(name) && !capabilities.resources[name]?.appendOnly) ||
+                    Boolean(capabilities?.grantedActions?.[name]?.includes(action.id)),
               );
               return [
                 name,

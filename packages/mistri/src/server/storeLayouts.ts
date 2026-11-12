@@ -368,11 +368,42 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
   },
   {
     id: 'command-journal',
-    title: 'command receipts and audit',
+    title: 'command receipts, audit and links',
     tables: { prefix: '__mistri_command_' },
-    current: both(1),
+    current: both(3),
     read: marked({ sqlite: { table: '__mistri_command_meta' }, postgres: { table: '__mistri_command_meta' } }),
-    upgrades: {},
+    upgrades: {
+      sqlite: {
+        1: {
+          says: "adds the audit-part table: a target's changes past the first 256 are kept in continuation rows, up to 4,096",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/commands/commandJournalSchema.js')).sqliteJournalUpgradeFrom1()) await db.run(sql);
+          },
+        },
+        2: {
+          says: 'adds the link table: the capability links a command mints, their expiry, uses and revocation',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/commands/commandJournalSchema.js')).sqliteJournalUpgradeFrom2()) await db.run(sql);
+          },
+        },
+      },
+      postgres: {
+        1: {
+          says: "adds the audit-part table: a target's changes past the first 256 are kept in continuation rows, up to 4,096",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/commands/postgresCommandJournalSchema.js')).postgresJournalUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+        2: {
+          says: 'adds the link table: the capability links a command mints, their expiry, uses and revocation',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/commands/postgresCommandJournalSchema.js')).postgresJournalUpgradeFrom2())
+              await db.run(sql);
+          },
+        },
+      },
+    },
   },
   {
     id: 'command-sequences',

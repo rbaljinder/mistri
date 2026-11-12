@@ -116,9 +116,14 @@ export interface BusinessCommandActor {
    * marked `public`. `'service'`: a principal the server's jobs module
    * declares, id `service:<name>`, holding the role names it declares; it
    * runs a job's command, never a public one, and a role granting generic
-   * writes or operations is refused for it.
+   * writes or operations is refused for it. `'link'`: whoever holds a
+   * capability link (shared/appLinks.ts), id `link:<link id>`, with no roles;
+   * it runs only the commands the link declares, on the one record it was
+   * minted for, and reads only the columns it shows.
    */
-  readonly kind?: 'public' | 'service';
+  readonly kind?: 'public' | 'service' | 'link';
+  /** The capability link a link principal holds: its id, name, resource and the record's key (commandKeyText). */
+  readonly link?: Readonly<{ id: string; name: string; resource: string; key: string }>;
   /** The public form the public principal came through; its id is `public:<form>`. */
   readonly form?: string;
   /**
@@ -176,6 +181,16 @@ export interface BusinessCommandContext extends CommandContextBase {
    * Counted per `per` and, in a tenant App, per tenant; it reads no rows, so a row policy does not hide the count.
    * `after` is the highest number rows already hold (a seed's, an import's): the number taken is past it too. */
   readonly nextNumber: CommandNextNumber;
+  /**
+   * Mints a capability link to the record this command runs on, as its resource declares it (`links.<name>`), in this
+   * transaction: kept if the command commits. Answers a reference that reads `mistri-link:<id>` wherever it is
+   * stored — a receipt, an effect's body — and becomes the link's URL only in the command's HTTP answer and when an
+   * effect is delivered. A one-target command on an existing record, run by a person or a service, mints one; any
+   * other refuses.
+   */
+  readonly link: CommandLinkMint;
+  /** Revokes this record's live links of one declared name, or of every name: the count revoked. */
+  readonly revokeLinks: CommandLinkRevoke;
   /** What `lookup` returned, when the command looks up. */
   readonly lookup?: unknown;
   /**
@@ -269,6 +284,15 @@ type Reads<Target extends string, Read extends readonly string[], Write extends 
   | Write[number];
 type Writes<Target extends string, Write extends readonly string[]> = LocalName<Target> | Write[number];
 
+/** A minted capability link: see BusinessCommandContext.link. Its JSON and text are `mistri-link:<id>`. */
+interface CommandLinkRef {
+  readonly id: string;
+  toJSON(): string;
+  toString(): string;
+}
+type CommandLinkMint = (name: string) => Promise<CommandLinkRef>;
+type CommandLinkRevoke = (name?: string) => Promise<number>;
+
 /** A handler's sequence: see BusinessCommandContext.nextNumber. */
 type CommandNextNumber = (
   name: string,
@@ -290,6 +314,8 @@ type CommandHandlerContext<
   readonly db: CommandTables<Tables<Src, Target>, Reads<Target, Read, Write>, Writes<Target, Write>>;
   readonly tx: WriteTransaction;
   readonly nextNumber: CommandNextNumber;
+  readonly link: CommandLinkMint;
+  readonly revokeLinks: CommandLinkRevoke;
   readonly intake?: BusinessCommandContext['intake'];
   readonly tenant?: BusinessCommandContext['tenant'];
   readonly placement?: BusinessCommandContext['placement'];
