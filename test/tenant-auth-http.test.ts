@@ -60,6 +60,7 @@ const PAGE_LOADERS = defineLoaders({
     load: async ({ db }) =>
       (db.item as never as { update: (...args: unknown[]) => unknown }).update({ id: 'north-id' }, { name: 'WRITTEN' }),
   }),
+  tally: defineLoader({ reads: ['item'], load: async ({ db }) => ({ how_many: (await db.item.where({})).length }) }),
 }) as unknown as Readonly<Record<string, PageLoader>>;
 const pageView = (key: string) => ({
   kind: 'page',
@@ -68,6 +69,8 @@ const pageView = (key: string) => ({
   reads: ['item'],
   loader: key,
 });
+/* A page that names two loaders: `board` is its data, `tally` another it asks for by name. */
+const desk = { ...pageView('board'), component: { id: 'page-desk', module: './pages/desk.page.tsx', kind: 'page' }, loaders: ['tally'] };
 
 async function fixture(t: TestContext, start = true, pages = false) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-auth-http-'));
@@ -132,9 +135,12 @@ async function fixture(t: TestContext, start = true, pages = false) {
             fields: { read: ['id', 'business_id', 'name'], write: ['id', 'business_id', 'name'] },
           },
         },
-        views: { item: { kind: 'list', from: 'item' }, ...(pages ? { board: pageView('board'), scribble: pageView('scribble') } : {}) },
+        views: {
+          item: { kind: 'list', from: 'item' },
+          ...(pages ? { board: pageView('board'), scribble: pageView('scribble'), desk } : {}),
+        },
         home: 'item',
-        nav: ['item', ...(pages ? ['board', 'scribble'] : [])],
+        nav: ['item', ...(pages ? ['board', 'scribble', 'desk'] : [])],
       },
       'PRIVATE_APP_PATH',
     ),
@@ -1178,6 +1184,18 @@ test("a page's loader on the tenant host reads the member's own tenant through i
   // Only a page this realm serves, with only what the route takes, and only on a lease.
   assert.equal((await load(north, 'north', { page: 'item' })).status, 404, 'a view that is not a page has no loader');
   assert.equal((await load(north, 'north', { page: 'nowhere' })).status, 404);
+  // Several loaders on one page: each is run by its name, for this member's tenant, and only from the page's own list.
+  assert.deepEqual((await load(north, 'north', { page: 'desk', loader: 'tally' })).body, { data: { how_many: 1 } });
+  assert.deepEqual((await load(north, 'north', { page: 'desk' })).body, { data: { items: ['North item'], roles: ['member'] } });
+  assert.deepEqual((await load(south, 'south', { page: 'desk', loader: 'board' })).body, {
+    data: { items: ['South item'], roles: ['member'] },
+  });
+  assert.equal(
+    (await load(north, 'north', { page: 'desk', loader: 'scribble' })).status,
+    404,
+    'a loader the page does not list is not found',
+  );
+  assert.equal((await load(north, 'north', { page: 'board', loader: 'tally' })).status, 404, 'nor is one another page lists');
   denied(await load(north, 'north', { page: 'board', extra: true }));
   denied(await load(f.authHeaders(ada), 'north', { page: 'board' }));
   denied(await load({ ...south, ...f.authHeaders(ada) }, 'south', { page: 'board' }));

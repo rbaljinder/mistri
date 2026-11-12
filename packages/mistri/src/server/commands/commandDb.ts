@@ -32,7 +32,15 @@ import { FORBIDDEN_ANSWER_NAMES } from '@mistriwork/engine/shared/aggregate.js';
 import { compileWhere as compilePageWhere } from '@mistriwork/engine/shared/pageWhere.js';
 import { authorFault } from '@mistriwork/engine/shared/refusal.js';
 import { asksAboutRows, type DateUnit } from '@mistriwork/engine/shared/filter.js';
-import { ANY_CONDITION, anyConditions, parseQuery, splitClauseTail, type QueryPerson } from '@mistriwork/engine/shared/query.js';
+import {
+  ANY_CONDITION,
+  anyConditions,
+  expandSegments,
+  parseQuery,
+  splitClauseTail,
+  type QueryPerson,
+} from '@mistriwork/engine/shared/query.js';
+import { nearest } from '@mistriwork/engine/shared/suggest.js';
 import { parseViewQuery } from '@mistriwork/engine/shared/view.js';
 import {
   columnKind,
@@ -129,6 +137,8 @@ type AnyMeasures = Readonly<Record<string, Measure>>;
 
 /** A query over one table in a command's transaction, run when awaited: rows, sums, groups and pages. */
 export interface Query<Row> extends RowQuery<Row> {
+  /** Narrows the rows further: every where this query has been given must hold (`db.lead.segment('open').where({ owner: 7 })`). */
+  where(where: WhereInput<Row>): Query<Row>;
   orderBy(column: keyof Row & string, direction?: 'asc' | 'desc'): Query<Row>;
   /** At most this many rows. Without it, more than 1,000 is refused rather than cut. */
   limit(count: number): Query<Row>;
@@ -217,6 +227,14 @@ export interface ReadTable<Row> {
   /** The query language with values, each quoted: ``where`make = ${make}` ``. */
   where(template: TemplateStringsArray, ...values: readonly (string | number | boolean)[]): Query<Row>;
   count(where?: WhereInput<Row>): Promise<number>;
+  /**
+   * The rows of one of this resource's segments (`segments: { open: 'status = open' }` on the App's resource): the
+   * conditions the segment's name stands for, read through the same grants, field projection and row policy as any
+   * other read here, and chained as a `where` is (`.where(…)`, `.orderBy`, `.limit`). A name the resource does not
+   * have is refused, with the ones it has. A segment that names what a handler's `db` does not read (a rollup, a
+   * path, `me`) is refused as such at the call.
+   */
+  segment(name: string): Query<Row>;
 }
 /**
  * The constants `now`, `today` and `me` from `@mistriwork/mistri/app`, written as an
@@ -877,6 +895,191 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
     return key;
   };
   const stale = (key: Record<string, string | number>) => refuse('stale_record', name === options.target ? { key } : undefined);
+  /* Every where a query has been given must hold, as one: their groups multiplied out (an AND of two ORs), the order and
+     the limit of each kept. */
+  type Part = { readonly where: unknown; readonly values: readonly unknown[] };
+  const compileParts = (parts: readonly Part[]): Compiled => {
+    const compiled = parts.map((part) => compileWhere(table, part.where, now(), part.values, undefined, HANDLE));
+    if (compiled.length === 1) return compiled[0];
+    const filled = compiled.map((each) => each.filter.groups).filter((groups) => groups.length);
+    const groups = filled.reduce<Condition[][]>((all, next) => all.flatMap((left) => next.map((right) => [...left, ...right])), [[]]);
+    const limits = compiled.flatMap((each) => (each.limit === undefined ? [] : [each.limit]));
+    return {
+      filter: { groups: filled.length ? groups : [] },
+      none: compiled.some((each) => each.none),
+      orderBy: compiled.flatMap((each) => each.orderBy),
+      ...(limits.length ? { limit: Math.min(...limits) } : {}),
+    };
+  };
+  const queryOver = (parts: Part[]): Query<UntypedRow> => {
+    const order: { column: string; direction: 'asc' | 'desc' }[] = [];
+    let cap: number | undefined;
+    const run = async (limit?: number): Promise<UntypedRow[]> => {
+      const compiled = compileParts(parts);
+      const bound = limit ?? cap ?? compiled.limit;
+      const found = await rows(compiled, bound ?? DEFAULT_CAP + 1, [...compiled.orderBy, ...order]);
+      if (bound === undefined && found.length > DEFAULT_CAP) {
+        throw new Error(`${name}: more than ${DEFAULT_CAP} rows match; say how many with .limit(n).`);
+      }
+      return found;
+    };
+    /* Sums and groups: every row the where matches, so the rows' own order and limit mean nothing here; the
+         groups have their own, after aggregate(). */
+    const measured = async (
+      keys: readonly unknown[],
+      given: unknown,
+      grouped: boolean,
+      groupOrder: readonly { name: string; direction: 'asc' | 'desc' }[] = [],
+      groupCap?: number,
+    ): Promise<Readonly<Record<string, unknown>>[]> => {
+      if (order.length || cap !== undefined)
+        authorMistake(`${name}: .orderBy and .limit order and count rows, and an aggregate reads every row its where matches.`);
+      const plan = planAggregate(table, keys, given);
+      const compiled = compileParts(parts);
+      if (compiled.orderBy.length || compiled.limit !== undefined)
+        authorMistake(`${name}: an aggregate's where says which rows; leave "sort" and "limit" out of it.`);
+      if (asksAboutRows(compiled.filter))
+        authorMistake(`${name}: a sum or a group reads rows by their own columns; read the rows with an "any"/"no" where, or count them.`);
+      const orderBy = groupOrder.map((o) => ({ name: plan.orderName(o.name), direction: o.direction }));
+      if (compiled.none) return grouped ? [] : [plan.decode({})];
+      /* Fail closed: a transaction that cannot say an aggregate under its scope (an HTTP source, a facade that
+           does not carry one) has none, and nothing here reads the rows to add them up instead. */
+      if (typeof tx.aggregate !== 'function') return authorMistake(`${name}: this command's source cannot sum or group rows.`);
+      const result = await tx.aggregate({
+        table: name,
+        filter: compiled.filter,
+        by: plan.by,
+        measures: plan.measures(new Set(orderBy.map((o) => o.name))),
+        ...(orderBy.length ? { orderBy } : {}),
+        limit: grouped ? (groupCap ?? DEFAULT_CAP + 1) : 1,
+      });
+      if (grouped && groupCap === undefined && result.rows.length > DEFAULT_CAP)
+        authorMistake(`${name}: more than ${DEFAULT_CAP} groups; say how many with .limit(n).`);
+      return result.rows.map((row) => plan.decode(row));
+    };
+    /* A page: the key appended to the order so it is total, the boundary an AND on the where, so every scope and
+         grant beneath checks it as it checks the where (keysetPage.ts). */
+    const pageOrder = (compiled: Compiled): { column: string; direction: 'asc' | 'desc' }[] => {
+      if (cap !== undefined || compiled.limit !== undefined)
+        authorMistake(`${name}: a page's size says how many rows; leave out the limit.`);
+      if (!table.key.length) authorMistake(`${name}: has no primary key, so a page cannot say where it ends.`);
+      const paged = [...compiled.orderBy, ...order];
+      if (new Set(paged.map((o) => o.column)).size !== paged.length) authorMistake(`${name}: a page orders by each column once.`);
+      for (const column of table.key) if (!paged.some((o) => o.column === column)) paged.push({ column, direction: 'asc' });
+      for (const o of paged) {
+        const meta = table.meta.columns.find((column) => column.name === o.column);
+        /* NULL sorts first on SQLite and last on PostgreSQL, so a boundary past an empty value would mean a
+             different row on each: a page orders by columns that always hold one. */
+        if (meta?.nullable && !meta.primaryKey)
+          authorMistake(
+            `${name}: a page orders by columns that are never empty, and "${o.column}" can be; order by the key or a NOT NULL column.`,
+          );
+      }
+      if (!keysetOrder(table.meta, paged, 'sqlite'))
+        authorMistake(
+          `${name}: a page orders by columns read back exactly as stored, and ${paged.map((o) => o.column).join(', ')} are not all.`,
+        );
+      return paged;
+    };
+    const page = async (after: unknown, size: unknown): Promise<Page<UntypedRow>> => {
+      if (typeof size !== 'number' || !Number.isSafeInteger(size) || size < 1 || size > MOST_PAGE)
+        authorMistake(`${name}: a page's size is a whole number from 1 to ${MOST_PAGE}.`);
+      const compiled = compileParts(parts);
+      const paged = pageOrder(compiled);
+      let filter = compiled.filter;
+      if (after !== undefined) {
+        /* A position, not a capability: whoever asks reads the page past it under their own scope. One that names
+             other columns than the order is the caller's input, refused as such. */
+        const boundary = after as Record<string, unknown> | null;
+        if (
+          !boundary ||
+          typeof boundary !== 'object' ||
+          Array.isArray(boundary) ||
+          Object.keys(boundary).length !== paged.length ||
+          paged.some((o) => !Object.hasOwn(boundary, o.column)) ||
+          Object.values(boundary).some(
+            (value) => typeof value !== 'string' && typeof value !== 'boolean' && !(typeof value === 'number' && Number.isFinite(value)),
+          )
+        )
+          return refuse('invalid_input');
+        const tail = keysetAfter(table.meta, paged, boundary as Boundary, 'sqlite');
+        if (!tail) return refuse('invalid_input');
+        filter = { groups: continueGroups(compiled.filter.groups, tail) as Condition[][] };
+      }
+      const found = await rows({ filter, none: compiled.none, orderBy: [] }, (size as number) + 1, paged);
+      const shown = found.slice(0, size as number);
+      const last = shown.at(-1);
+      return found.length > shown.length && last
+        ? {
+            rows: shown,
+            next: Object.freeze(Object.fromEntries(paged.map((o) => [o.column, last[o.column] as string | number | boolean]))),
+          }
+        : { rows: shown };
+    };
+    const query: Query<UntypedRow> = {
+      where(more) {
+        parts.push({ where: more, values: [] });
+        return query;
+      },
+      orderBy(column, direction = 'asc') {
+        if (!Object.hasOwn(table.kinds, column)) throw new Error(`${name}: "${column}" is not one of its columns.`);
+        order.push({ column, direction: direction === 'desc' ? 'desc' : 'asc' });
+        return query;
+      },
+      limit(count) {
+        if (!Number.isSafeInteger(count) || count < 1) throw new RangeError(`${name}: a limit is a positive whole number.`);
+        cap = count;
+        return query;
+      },
+      first: async () => (await run(1))[0],
+      sum: async (column) => (await measured([], { total: sum(column) }, false))[0].total as string | number,
+      aggregate: async (measures) => (await measured([], measures, false))[0] as never,
+      groupBy(...keys) {
+        return {
+          aggregate(measures) {
+            const groupOrder: { name: string; direction: 'asc' | 'desc' }[] = [];
+            let groupCap: number | undefined;
+            const grouped: Grouped<never> = {
+              orderBy(answer, direction = 'asc') {
+                groupOrder.push({ name: answer, direction: direction === 'desc' ? 'desc' : 'asc' });
+                return grouped;
+              },
+              limit(count) {
+                if (!Number.isSafeInteger(count) || count < 1 || count > MOST_ROWS)
+                  authorMistake(`${name}: a limit on groups is a whole number from 1 to ${MOST_ROWS}.`);
+                groupCap = count;
+                return grouped;
+              },
+              // eslint-disable-next-line unicorn/no-thenable -- read when awaited, after the chain is written, as a query is.
+              then: (resolve, reject) => measured(keys, measures, true, groupOrder, groupCap).then(resolve as never, reject),
+            };
+            return grouped;
+          },
+        };
+      },
+      page: (options) => page(options?.after, options?.size),
+      async *iterate(options) {
+        const size = options?.size;
+        let after: Boundary | undefined;
+        let read = 0;
+        for (;;) {
+          const next = await page(after, iterateSize(size, read));
+          read += next.rows.length;
+          yield* next.rows;
+          if (!next.next) return;
+          /* The bound is on what one command holds the writer for: past it, a walk pages across commands, its
+               place kept by a workflow (docs: commands). Refused, never cut short. */
+          if (read >= MOST_ROWS)
+            authorMistake(`${name}: iterate reads at most ${MOST_ROWS} rows in one command; page across commands with .page({ after }).`);
+          after = next.next;
+        }
+      },
+      // Awaiting the query runs it: `await db.vehicle.where(...).limit(5)` reads once, after the chain is written.
+      // eslint-disable-next-line unicorn/no-thenable -- the lazy thenable is the query's whole interface.
+      then: (resolve, reject) => run().then(resolve, reject),
+    };
+    return query;
+  };
   const read: ReadTable<UntypedRow> = {
     async get(key) {
       const given =
@@ -906,171 +1109,31 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
         authorMistake(
           `${name}: where("...", value) does not bind values; write the template form where\`id <= \${x}\` or the object form where({ id: x }).`,
         );
-      const order: { column: string; direction: 'asc' | 'desc' }[] = [];
-      let cap: number | undefined;
-      const run = async (limit?: number): Promise<UntypedRow[]> => {
-        const compiled = compileWhere(table, where, now(), values, undefined, HANDLE);
-        const bound = limit ?? cap ?? compiled.limit;
-        const found = await rows(compiled, bound ?? DEFAULT_CAP + 1, [...compiled.orderBy, ...order]);
-        if (bound === undefined && found.length > DEFAULT_CAP) {
-          throw new Error(`${name}: more than ${DEFAULT_CAP} rows match; say how many with .limit(n).`);
-        }
-        return found;
-      };
-      /* Sums and groups: every row the where matches, so the rows' own order and limit mean nothing here; the
-         groups have their own, after aggregate(). */
-      const measured = async (
-        keys: readonly unknown[],
-        given: unknown,
-        grouped: boolean,
-        groupOrder: readonly { name: string; direction: 'asc' | 'desc' }[] = [],
-        groupCap?: number,
-      ): Promise<Readonly<Record<string, unknown>>[]> => {
-        if (order.length || cap !== undefined)
-          authorMistake(`${name}: .orderBy and .limit order and count rows, and an aggregate reads every row its where matches.`);
-        const plan = planAggregate(table, keys, given);
-        const compiled = compileWhere(table, where, now(), values, undefined, HANDLE);
-        if (compiled.orderBy.length || compiled.limit !== undefined)
-          authorMistake(`${name}: an aggregate's where says which rows; leave "sort" and "limit" out of it.`);
-        if (asksAboutRows(compiled.filter))
-          authorMistake(
-            `${name}: a sum or a group reads rows by their own columns; read the rows with an "any"/"no" where, or count them.`,
-          );
-        const orderBy = groupOrder.map((o) => ({ name: plan.orderName(o.name), direction: o.direction }));
-        if (compiled.none) return grouped ? [] : [plan.decode({})];
-        /* Fail closed: a transaction that cannot say an aggregate under its scope (an HTTP source, a facade that
-           does not carry one) has none, and nothing here reads the rows to add them up instead. */
-        if (typeof tx.aggregate !== 'function') return authorMistake(`${name}: this command's source cannot sum or group rows.`);
-        const result = await tx.aggregate({
-          table: name,
-          filter: compiled.filter,
-          by: plan.by,
-          measures: plan.measures(new Set(orderBy.map((o) => o.name))),
-          ...(orderBy.length ? { orderBy } : {}),
-          limit: grouped ? (groupCap ?? DEFAULT_CAP + 1) : 1,
-        });
-        if (grouped && groupCap === undefined && result.rows.length > DEFAULT_CAP)
-          authorMistake(`${name}: more than ${DEFAULT_CAP} groups; say how many with .limit(n).`);
-        return result.rows.map((row) => plan.decode(row));
-      };
-      /* A page: the key appended to the order so it is total, the boundary an AND on the where, so every scope and
-         grant beneath checks it as it checks the where (keysetPage.ts). */
-      const pageOrder = (compiled: Compiled): { column: string; direction: 'asc' | 'desc' }[] => {
-        if (cap !== undefined || compiled.limit !== undefined)
-          authorMistake(`${name}: a page's size says how many rows; leave out the limit.`);
-        if (!table.key.length) authorMistake(`${name}: has no primary key, so a page cannot say where it ends.`);
-        const paged = [...compiled.orderBy, ...order];
-        if (new Set(paged.map((o) => o.column)).size !== paged.length) authorMistake(`${name}: a page orders by each column once.`);
-        for (const column of table.key) if (!paged.some((o) => o.column === column)) paged.push({ column, direction: 'asc' });
-        for (const o of paged) {
-          const meta = table.meta.columns.find((column) => column.name === o.column);
-          /* NULL sorts first on SQLite and last on PostgreSQL, so a boundary past an empty value would mean a
-             different row on each: a page orders by columns that always hold one. */
-          if (meta?.nullable && !meta.primaryKey)
-            authorMistake(
-              `${name}: a page orders by columns that are never empty, and "${o.column}" can be; order by the key or a NOT NULL column.`,
-            );
-        }
-        if (!keysetOrder(table.meta, paged, 'sqlite'))
-          authorMistake(
-            `${name}: a page orders by columns read back exactly as stored, and ${paged.map((o) => o.column).join(', ')} are not all.`,
-          );
-        return paged;
-      };
-      const page = async (after: unknown, size: unknown): Promise<Page<UntypedRow>> => {
-        if (typeof size !== 'number' || !Number.isSafeInteger(size) || size < 1 || size > MOST_PAGE)
-          authorMistake(`${name}: a page's size is a whole number from 1 to ${MOST_PAGE}.`);
-        const compiled = compileWhere(table, where, now(), values, undefined, HANDLE);
-        const paged = pageOrder(compiled);
-        let filter = compiled.filter;
-        if (after !== undefined) {
-          /* A position, not a capability: whoever asks reads the page past it under their own scope. One that names
-             other columns than the order is the caller's input, refused as such. */
-          const boundary = after as Record<string, unknown> | null;
-          if (
-            !boundary ||
-            typeof boundary !== 'object' ||
-            Array.isArray(boundary) ||
-            Object.keys(boundary).length !== paged.length ||
-            paged.some((o) => !Object.hasOwn(boundary, o.column)) ||
-            Object.values(boundary).some(
-              (value) => typeof value !== 'string' && typeof value !== 'boolean' && !(typeof value === 'number' && Number.isFinite(value)),
-            )
-          )
-            return refuse('invalid_input');
-          const tail = keysetAfter(table.meta, paged, boundary as Boundary, 'sqlite');
-          if (!tail) return refuse('invalid_input');
-          filter = { groups: continueGroups(compiled.filter.groups, tail) as Condition[][] };
-        }
-        const found = await rows({ filter, none: compiled.none, orderBy: [] }, (size as number) + 1, paged);
-        const shown = found.slice(0, size as number);
-        const last = shown.at(-1);
-        return found.length > shown.length && last
-          ? {
-              rows: shown,
-              next: Object.freeze(Object.fromEntries(paged.map((o) => [o.column, last[o.column] as string | number | boolean]))),
-            }
-          : { rows: shown };
-      };
-      const query: Query<UntypedRow> = {
-        orderBy(column, direction = 'asc') {
-          if (!Object.hasOwn(table.kinds, column)) throw new Error(`${name}: "${column}" is not one of its columns.`);
-          order.push({ column, direction: direction === 'desc' ? 'desc' : 'asc' });
-          return query;
-        },
-        limit(count) {
-          if (!Number.isSafeInteger(count) || count < 1) throw new RangeError(`${name}: a limit is a positive whole number.`);
-          cap = count;
-          return query;
-        },
-        first: async () => (await run(1))[0],
-        sum: async (column) => (await measured([], { total: sum(column) }, false))[0].total as string | number,
-        aggregate: async (measures) => (await measured([], measures, false))[0] as never,
-        groupBy(...keys) {
-          return {
-            aggregate(measures) {
-              const groupOrder: { name: string; direction: 'asc' | 'desc' }[] = [];
-              let groupCap: number | undefined;
-              const grouped: Grouped<never> = {
-                orderBy(answer, direction = 'asc') {
-                  groupOrder.push({ name: answer, direction: direction === 'desc' ? 'desc' : 'asc' });
-                  return grouped;
-                },
-                limit(count) {
-                  if (!Number.isSafeInteger(count) || count < 1 || count > MOST_ROWS)
-                    authorMistake(`${name}: a limit on groups is a whole number from 1 to ${MOST_ROWS}.`);
-                  groupCap = count;
-                  return grouped;
-                },
-                // eslint-disable-next-line unicorn/no-thenable -- read when awaited, after the chain is written, as a query is.
-                then: (resolve, reject) => measured(keys, measures, true, groupOrder, groupCap).then(resolve as never, reject),
-              };
-              return grouped;
-            },
-          };
-        },
-        page: (options) => page(options?.after, options?.size),
-        async *iterate(options) {
-          const size = options?.size;
-          let after: Boundary | undefined;
-          let read = 0;
-          for (;;) {
-            const next = await page(after, iterateSize(size, read));
-            read += next.rows.length;
-            yield* next.rows;
-            if (!next.next) return;
-            /* The bound is on what one command holds the writer for: past it, a walk pages across commands, its
-               place kept by a workflow (docs: commands). Refused, never cut short. */
-            if (read >= MOST_ROWS)
-              authorMistake(`${name}: iterate reads at most ${MOST_ROWS} rows in one command; page across commands with .page({ after }).`);
-            after = next.next;
-          }
-        },
-        // Awaiting the query runs it: `await db.vehicle.where(...).limit(5)` reads once, after the chain is written.
-        // eslint-disable-next-line unicorn/no-thenable -- the lazy thenable is the query's whole interface.
-        then: (resolve, reject) => run().then(resolve, reject),
-      };
-      return query;
+      return queryOver([{ where, values }]);
+    },
+    segment(segment: string): Query<UntypedRow> {
+      const segments = table.meta.segments;
+      if (typeof segment !== 'string' || !segments || !Object.hasOwn(segments, segment)) {
+        const names = Object.keys(segments ?? {});
+        const near = typeof segment === 'string' ? nearest(segment, names) : undefined;
+        throw new Error(
+          `${name}: ${typeof segment === 'string' ? `"${segment}"` : 'that'} is not a segment of ${name}.` +
+            (names.length ? ` Its segments: ${names.join(', ')}.${near ? ` Did you mean "${near}"?` : ''}` : ' It has none.'),
+        );
+      }
+      /* Written out before it is read, as the language writes a segment's name (query.ts expandSegments): an `any` or `no`
+         inside it is then judged as one a handler wrote, and what the segment names that this `db` does not read is
+         refused here, at the call, in the segment's name rather than where the rows are awaited. */
+      const expanded = expandSegments(segment, segments);
+      if (expanded.error) throw new Error(`${name}: ${expanded.error.message}`);
+      try {
+        compileWhere(table, expanded.text, now(), [], undefined, HANDLE);
+      } catch (error) {
+        throw new Error(
+          `${name}: the segment "${segment}" cannot be read here: ${(error as Error).message.replace(`${name}: `, '')} A handler reads a table's own columns and the tables it declares, not its rollups, computed columns or paths.`,
+        );
+      }
+      return queryOver([{ where: expanded.text, values: [] }]);
     },
     async count(where) {
       const compiled = compileWhere(table, where, now(), [], undefined, HANDLE);

@@ -56,6 +56,7 @@ const PAGE_KEYS = [
   'actions',
   'params',
   'loader',
+  'loaders',
   'forms',
   'public',
   'description',
@@ -243,6 +244,7 @@ export function placePages(raw: Record<string, unknown>, pages: readonly PageFil
         'actions',
         'params',
         'loader',
+        'loaders',
         'forms',
         'roles',
         'public',
@@ -469,6 +471,7 @@ function walk(node: unknown, visit: (node: AstNode) => void): void {
 const READ_HOOKS = new Set(['useRows', 'useRecord', 'useRecordKey', 'useBreakdown', 'useFile']);
 const COMMAND_HOOKS = new Set(['useCommand']);
 const ACTION_HOOKS = new Set(['useAction']);
+const LOADER_HOOKS = new Set(['useLoader']);
 /* The props by which a block names what it reads or runs: a block's, a `<Scope>`'s and a `<List>`'s `from` (a block
    that names none reads its Scope's, held where the Scope names it), `<CommandForm>`'s and `<CommandButton>`'s
    `command`, `<ActionButton>`'s `action` (`<Empty action>` is a button, not a name). `resource` is the word blocks
@@ -526,7 +529,13 @@ export function scanPageSource(
   parseAst: Parse,
   code: string,
   lang: 'ts' | 'tsx' | 'js' | 'jsx',
-  manifest: { key: string; reads: readonly string[]; commands: readonly string[]; actions?: readonly string[] },
+  manifest: {
+    key: string;
+    reads: readonly string[];
+    commands: readonly string[];
+    actions?: readonly string[];
+    loaders?: readonly string[];
+  },
   schema?: DatabaseSchema,
 ): PageScan {
   const scan: PageScan = { undeclared: [], unread: [] };
@@ -561,19 +570,19 @@ export function scanPageSource(
       return ((node.quasis as AstNode[])[0]?.value as { cooked?: string })?.cooked;
     return undefined;
   };
-  const hold = (what: 'reads' | 'commands' | 'actions', said: string, node: AstNode | undefined, at: number | undefined) => {
+  const hold = (what: 'reads' | 'commands' | 'actions' | 'loaders', said: string, node: AstNode | undefined, at: number | undefined) => {
     const name = literal(node);
     if (name === undefined) {
       scan.unread.push({
         line: lineOf(at),
-        text: `${said} names its ${what === 'reads' ? 'resource' : what === 'actions' ? 'action' : 'command'} with an expression, which check cannot hold to the page "${manifest.key}"'s ${what}`,
+        text: `${said} names its ${what === 'reads' ? 'resource' : what === 'actions' ? 'action' : what === 'loaders' ? 'loader' : 'command'} with an expression, which check cannot hold to the page "${manifest.key}"'s ${what}`,
       });
       return;
     }
     if (!(manifest[what] ?? []).includes(name)) {
       scan.undeclared.push({
         line: lineOf(at),
-        text: `[page-undeclared] ${said} ${what === 'reads' ? 'reads' : 'runs'} "${name}", which the page "${manifest.key}" does not declare in its ${what}${what === 'commands' ? `. Add it to definePage({ commands: [...] }). Declaring grants nothing: useCommand('${name}').granted then says whether this reader may run it` : ''}`,
+        text: `[page-undeclared] ${said} ${what === 'reads' ? 'reads' : what === 'loaders' ? 'loads' : 'runs'} "${name}", which the page "${manifest.key}" does not declare in its ${what === 'loaders' ? 'loader or loaders' : what}${what === 'commands' ? `. Add it to definePage({ commands: [...] }). Declaring grants nothing: useCommand('${name}').granted then says whether this reader may run it` : ''}`,
       });
     }
   };
@@ -687,6 +696,7 @@ export function scanPageSource(
         crossings(name, literal(first), node.arguments as AstNode[], node.start);
       } else if (COMMAND_HOOKS.has(name)) hold('commands', `${name}(…)`, first, node.start);
       else if (ACTION_HOOKS.has(name)) hold('actions', `${name}(…)`, first, node.start);
+      else if (LOADER_HOOKS.has(name)) hold('loaders', `${name}(…)`, first, node.start);
       return;
     }
     if (node.type === 'JSXOpeningElement') {

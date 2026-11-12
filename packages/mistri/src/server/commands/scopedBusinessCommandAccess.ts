@@ -19,6 +19,8 @@ import { actorReader, bindBusinessCommands, registerScopedAppEventBinding, type 
 import { defineCommands, BusinessCommandDefinitionError, getCommandEvents, type BusinessCommandRegistry } from './businessCommands.js';
 import { commandsOf } from '../stores/commandStores.js';
 import { pinnedDigest } from './triggerLock.js';
+import { admitScopedInserts, apiScopeParents } from '../api/apiRowScope.js';
+import type { ApiScopeDef } from '../../shared/appApi.js';
 
 export interface CommandResultReference {
   readonly table: string;
@@ -152,7 +154,12 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
   }
 
   return Object.freeze({
-    withScope(input: RowScope, assertActive: () => void): BusinessCommandBinding {
+    /** `apiScope`: the token's row scope (`api.scopes`), already folded into `input`; inserts must land inside it too. */
+    withScope(
+      input: RowScope,
+      assertActive: () => void,
+      apiScope?: { name: string; scope: ApiScopeDef; key: string },
+    ): BusinessCommandBinding {
       if (typeof assertActive !== 'function') throw new AppAccessDenied();
       assertActive();
       const rows = snapshotRowScope(schema, input);
@@ -166,6 +173,9 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
           const authorized = base.authorize(id, actor);
           const command = authorized.command;
           if (command.public === true) throw new AppAccessDenied();
+          // The actor says the scope its rows were narrowed to (`actor.scope`), and only that one.
+          const said = authorized.actor.scope;
+          if (apiScope ? said?.name !== apiScope.name || said.key !== apiScope.key : said !== undefined) throw new AppAccessDenied();
           const owner = resources.connectionFor(authorized.resource);
           const source = resources.forConnection(owner);
           const logical = (local: string) => logicalResource(app, command.source, local);
@@ -183,11 +193,13 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
              command's (authorizeTransaction below). */
           const named = triggersOf(owner);
           const triggered = [...write].some((resource) => named.has(resource));
+          // A scoped insert under a path is proven against its parent's rows, which the command need not read itself.
+          const parents = apiScope ? apiScopeParents(apiScope.scope, schema, write) : new Set<string>();
           const policy = Object.freeze(
             Object.fromEntries(
               Object.entries(rows)
                 .filter(([resource]) => owners.get(resource) === owner)
-                .map(([resource, rule]) => [resource, read.has(resource) || triggered ? rule : false]),
+                .map(([resource, rule]) => [resource, read.has(resource) || triggered || parents.has(resource) ? rule : false]),
             ),
           );
           const triggers = triggered ? Object.freeze({ named }) : undefined;
@@ -235,11 +247,14 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
                 async (raw, journal, evidence) => {
                   current();
                   assertScopeCatalog(expected, evidence);
-                  const tx = authorizeTransaction(
+                  const authorizedTx = authorizeTransaction(
                     schema,
                     { readable: read, writable: write, validation, reader: actorReader(app, schema, authorized.actor) },
                     raw,
                   );
+                  const tx = apiScope
+                    ? admitScopedInserts(authorizedTx, apiScope.scope, apiScope.key, schema, (table, filter) => raw.count(table, filter))
+                    : authorizedTx;
                   // Reads asked together go on together, in their order (TransactionOperations.read).
                   const operations = new TransactionOperations(true);
                   const accept = <A, R>(input: A, work: (snapshot: A) => Promise<R>, read = false): Promise<R> => {

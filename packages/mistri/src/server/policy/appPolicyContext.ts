@@ -53,6 +53,7 @@ import { collectCommandAvailability, readCommandAvailability } from '../commands
 import { prepareCommandTargets, type PreparedCommandTarget } from '../commands/commandTargets.js';
 import { readPreparedRecord, readPreparedTargetAvailability, withPreparedAhead, type PreparedCommand } from '../commands/commandPrepare.js';
 import { preparesInitial } from '../commands/commandPrepareNeeds.js';
+import { apiScopeName, narrowRowsToApiScope, requestApiScope } from '../api/apiRowScope.js';
 import { bindScopedBusinessCommands, type ScopedCommandOptions } from '../commands/scopedBusinessCommandAccess.js';
 import type { BusinessCommandBinding } from '../commands/businessCommandAccess.js';
 import type { CommandFlags } from '../commands/commandFlags.js';
@@ -72,6 +73,8 @@ export interface PolicyPrincipal {
       `service:<name>`, running a job, timer, workflow step, inbound endpoint
       or integration webhook; resolveRows says the rows it runs commands in. */
   readonly kind?: 'service' | 'public';
+  /** A row-scoped API token's scope (api.scopes), set here from the token after the policy is asked: a command's `actor.scope`. */
+  readonly scope?: Readonly<{ name: string; key: string }>;
 }
 
 type PolicyData = ScopedReads & Partial<Pick<WriteTransaction, 'insert' | 'update' | 'remove'>>;
@@ -287,6 +290,10 @@ function scopedAdapter(adapter: Adapter, schema: DatabaseSchema): Adapter {
 /** One issuer per deployed authenticated App. Replacement must retire the old
  * issuer; operations never refresh/rebind its catalog or source ownership.
  * This private entry point does not install an HTTP route, journal, or tenant DSL. */
+const deniedScope = (): never => {
+  throw new AppAccessDenied();
+};
+
 export function createAppPolicyContext<Request>(options: AppPolicyContextOptions<Request>) {
   const app = freeze(snapshotScopedData(options.app));
   const schema = captureScopeCatalog(options.resources.schema);
@@ -407,7 +414,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
     /* A service is asked of the policy like a person, by its own principal; it
        runs commands in the rows it gets and nothing else — no generic writer,
        no fixed action, no transaction of its own. */
-    const principal = service
+    let principal = service
       ? servicePrincipal(service.name, service.roles, app.id)
       : visitor
         ? PUBLIC_VISITOR(app.id)
@@ -426,6 +433,15 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
       // mutate its object. Native async results transfer it on delivery. Custom
       // thenables are not policy data and fail strict scope validation.
       rows = snapshotRowScope(schema, isPromise(resolved) ? await resolved : resolved);
+    }
+    /* A row-scoped token (api.scopes) reads and writes inside one key: its
+       condition is folded into the rows the policy gave, so it costs no read
+       of its own. */
+    const apiScope = visitor || service || account ? undefined : requestApiScope(app.api, request, deniedScope);
+    if (apiScope) {
+      rows = snapshotRowScope(schema, narrowRowsToApiScope(rows, apiScope.scope, apiScope.key, schema));
+      // What its commands are told (`actor.scope`), after the policy was asked by the person alone.
+      principal = Object.freeze({ ...principal, scope: Object.freeze({ name: apiScope.name, key: apiScope.key }) });
     }
     // Slow, not wrong: said once to the operator, who owns the indexes (a `check` cannot see a policy's rows).
     for (const line of rowScopeViaAdvisories(schema, rows)) warnOnce(`row-scope-via ${app.id} ${line}`, line);
@@ -461,6 +477,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                 tenant: '',
                 actor: principal.id || 'public',
                 ...(!visitor && principal.roles.length ? { roles: [...principal.roles] } : {}),
+                ...(principal.scope ? { scope: apiScopeName(principal.scope) } : {}),
                 append: (row, connection) =>
                   readAuditStoreOf(options.resources.forConnection(connection), `connection "${connection}"`).appendReadAudit(row),
               },
@@ -561,7 +578,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
          under a row policy is a separate question from whether a visitor may
          read the catalogue — the question this path answers. Until it is
          answered, a row-policy App's public surface is reads. */
-    const commandBinding = visitor || account ? undefined : commands?.withScope(rows, assertActive);
+    const commandBinding = visitor || account ? undefined : commands?.withScope(rows, assertActive, apiScope);
     const context: AppPolicyContext = Object.freeze({
       principal,
       sources,

@@ -1,13 +1,16 @@
 /**
  * A free-form page's two server routes beside the reads every room makes.
  *
- * `POST /api/pages/load { page, params }` runs the loader the page names
- * (commands/pageLoaders.ts) for this reader. The request names a page, never
- * a loader: the page is found in the App as projected for the reader's roles
- * (a page they may not open is not found, the way a view that does not exist
- * is not), its reads must all be in their catalog, a signed-out visitor is
- * served only a page that says `public: true`, and only the parameters the
- * page keeps may be passed. A page that names no loader has none to run.
+ * `POST /api/pages/load { page, params, loader? }` runs a loader the page names
+ * (commands/pageLoaders.ts) for this reader. The page is found in the App as
+ * projected for the reader's roles (a page they may not open is not found, the
+ * way a view that does not exist is not), its reads must all be in their
+ * catalog, a signed-out visitor is served only a page that says `public: true`,
+ * and only the parameters the page keeps may be passed. The loader is the
+ * page's `loader` unless the request names one of its `loaders`; the name is
+ * looked up in the page's own list, as projected for this reader, and never
+ * trusted alone: a name the page does not list is not found, as a page is not.
+ * A page that names no loader has none to run.
  *
  * `x-mistri-page: <path>` on a read or a command says the request is a
  * page's: a resource outside the page's `reads`, or a command outside its
@@ -66,13 +69,19 @@ export async function pageLoad(options: {
   if (!surface && (typeof body.page !== 'string' || body.page.length > 64))
     return { status: 400, body: { error: 'Name the page: { page }.' } };
   const view = surface
-    ? { page: { reads: surface.reads, loader: surface.loader, params: [] as string[], public: false } }
+    ? { page: { reads: surface.reads, loader: surface.loader, loaders: undefined, params: [] as string[], public: false } }
     : pageFor(app, options.roles, body.page as string);
   const named = surface ? `The surface "${surface.key}"` : `The page "${String(body.page)}"`;
   if (!view || (!options.signedIn && !view.page.public)) return notFound;
   if (!view.page.reads.every((resource) => tableNamed(schema, resource))) return notFound;
-  const name = view.page.loader;
-  if (!name) return { status: 400, body: { error: `${named} declares no loader.`, code: 'page_undeclared' } };
+  const allowed = [view.page.loader, ...(view.page.loaders ?? [])].filter((each): each is string => each !== undefined);
+  if (!allowed.length) return { status: 400, body: { error: `${named} declares no loader.`, code: 'page_undeclared' } };
+  if (body.loader !== undefined && (typeof body.loader !== 'string' || body.loader.length > 64))
+    return { status: 400, body: { error: 'Name the loader: { loader }.' } };
+  const name = (body.loader as string | undefined) ?? view.page.loader;
+  if (name === undefined)
+    return { status: 400, body: { error: `${named} names several loaders; say which one: { loader }.`, code: 'page_undeclared' } };
+  if (!allowed.includes(name)) return notFound;
   const loader = options.loaders && Object.hasOwn(options.loaders, name) ? options.loaders[name] : undefined;
   if (!loader) return notFound;
   const given = body.params ?? {};

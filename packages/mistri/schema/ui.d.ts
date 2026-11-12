@@ -217,8 +217,16 @@ export declare function Card(
     never past half the box) at the `side` edge (`'end'` by default); the main takes the rest. Where the box itself is
     under 40rem wide, or the main would be left under 24rem, it stacks, main first, and it never scrolls sideways. Cluster makes equal columns; this makes two unequal ones. */
 export declare function Beside(props: Children & { rail: ReactTypes.ReactNode; railWidth?: string; side?: 'start' | 'end'; className?: string }): ReactTypes.ReactElement;
-/** Rows with no head row, each an `Item`. `label` names the list for assistive technology; `empty` is drawn when there are no rows. */
-export declare function Items(props: Children & { label?: string; empty?: ReactTypes.ReactNode; className?: string }): ReactTypes.ReactElement | null;
+/** Rows with no head row, each an `Item`. `label` names the list for assistive technology; `empty` is drawn when there are no rows.
+    `groups` draws the rows in runs, `{ title, count?, items, key? }` each, under a head that holds the top of the room while
+    its own rows pass beneath it (the next run's head takes its place); a run with no `Item`s is not drawn, and the lead
+    column is still one width down every run. */
+export declare function Items(
+  props: Children & {
+    label?: string; empty?: ReactTypes.ReactNode; className?: string;
+    groups?: readonly { key?: string; title: ReactTypes.ReactNode; count?: ReactTypes.ReactNode; items: ReactTypes.ReactNode }[];
+  },
+): ReactTypes.ReactElement | null;
 /** One row of `Items`: `lead` a slot before the text (icon, avatar, a time, a Value), `title` its words, `note` one quiet
     line under it, `action` a slot at the row's end. The lead is one column the rows share, as wide as the widest, so a
     time or a mark lines up down the list. `tone` puts a mark of that tone in the column, or says a `lead` in the tone's ink.

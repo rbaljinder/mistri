@@ -22,7 +22,7 @@ See it in the sample (`examples/apps/tick/app.ts:36`). The resource says `access
 ## What you'll see
 
 - **New** opens the list's `open` surface (a modal in Tick; a drawer by default for eight fields or fewer, a page for more or for `steps`), the inputs in the groups' order, `completed` filled with its default.
-- Each input drawn from its column: a vocabulary of four words or fewer as radios, a longer one as a listbox, a reference as a typeahead, a date as a picker, prose as several lines. An input that may be left empty says "(optional)" right after its label.
+- Each input drawn from its column: a vocabulary of four words or fewer as radios, a longer one as a listbox (a text column the database does not constrain, with `display` `values` for two to thirty words, is a vocabulary here too), a reference as a typeahead, a date as a picker, prose as several lines. An input that may be left empty says "(optional)" right after its label.
 - An existing record edits with Save and Discard (Tick saves on blur instead, `editing: { save: 'blur' }`); a refusal marks the field it names, in the server's words.
 
 ## When to use it, and when not

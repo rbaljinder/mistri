@@ -93,7 +93,7 @@ test(
           provisionPostgresApiTokenStore(connection, binding),
         ]);
         assert.deepEqual(results.map((result) => result.migrated).sort(), [false, true]);
-        assert.ok(results.every((result) => result.version === 1 && result.storeId === binding.storeId));
+        assert.ok(results.every((result) => result.version === 2 && result.storeId === binding.storeId));
         assert.equal((await catalog()).length, core.length + 7);
         assert.deepEqual(
           (await catalog()).filter((table) => !table.name.startsWith('auth_api_token') && !table.name.startsWith('auth_oauth_')),

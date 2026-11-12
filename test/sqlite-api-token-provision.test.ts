@@ -113,7 +113,7 @@ test('explicit provision is idempotent, preserves native accounts and allows coo
   const body = (await signup.json()) as { user: { id: string } };
   f.stop();
   const before = f.inspect(coreRows);
-  assert.deepEqual(provisionSqliteApiTokenStore(f.path, options()), { migrated: true, version: 1, appId: 'layout', storeId });
+  assert.deepEqual(provisionSqliteApiTokenStore(f.path, options()), { migrated: true, version: 2, appId: 'layout', storeId });
   assert.deepEqual(f.inspect(coreRows), before);
   assert.equal(provisionSqliteApiTokenStore(f.path, options()).migrated, false);
   assert.deepEqual(f.inspect(coreRows), before);

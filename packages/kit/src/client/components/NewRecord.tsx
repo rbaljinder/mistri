@@ -71,6 +71,7 @@ import {
   narrowingCondition,
   presetValue,
   SEGMENTED_WORDS,
+  withDisplayChoices,
   type FieldInput,
   type FormCuration,
 } from './newRecordModel.js';
@@ -192,8 +193,11 @@ function NewRecordFormBody({
   useMessageLanguage();
   const assigned = autoKey(table);
   const written = app ? newFormWritten(table) : undefined;
-  const columns = formColumns(table, form, app, written);
-  const groups = formGroups(table, form, app, written);
+  /* A display-only vocabulary is chosen from in an App's form (withDisplayChoices). */
+  const choosing = (column: ColumnMeta) =>
+    app ? withDisplayChoices(column, display?.(column), [form?.defaults?.[column.name], literalDefault(column.default)]) : column;
+  const columns = formColumns(table, form, app, written).map(choosing);
+  const groups = formGroups(table, form, app, written).map((group) => ({ ...group, columns: group.columns.map(choosing) }));
   /* A switch is on or off, never "leave it": a flag it draws starts where the
      form, else the database, says — off for one that must be answered — and
      that start is sent like any default. */

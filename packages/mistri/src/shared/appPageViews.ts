@@ -43,6 +43,7 @@ const PAGE_VIEW_KEYS = [
   'actions',
   'params',
   'loader',
+  'loaders',
   'forms',
   'props',
   'roles',
@@ -176,6 +177,7 @@ export function parsePageView(
         ...(page.actions.length ? { actions: page.actions } : {}),
         params: page.params,
         ...(page.loader ? { loader: page.loader } : {}),
+        ...(page.loaders?.length ? { loaders: page.loaders } : {}),
         ...(forms.length ? { forms: forms.map((form) => form.key) } : {}),
         ...(v.public === true ? { public: true as const } : {}),
         ...(record ? { record } : {}),
@@ -216,7 +218,7 @@ function pageRecord(
     throw new Error(
       `[page-file] ${at}: "${record.tab}" is not a record's tab word — lowercase letters, digits and hyphens, and not ${[...RECORD_WORDS].join(' or ')}.`,
     );
-  for (const name of ['params', 'loader', 'public', 'favorite', 'head', 'layout'] as const)
+  for (const name of ['params', 'loader', 'loaders', 'public', 'favorite', 'head', 'layout'] as const)
     if (v[name] !== undefined)
       throw new Error(
         `[page-file] ${at} is a record's tab and has "${name}": a tab is drawn on its record's page, at its record's address, so it takes none.`,

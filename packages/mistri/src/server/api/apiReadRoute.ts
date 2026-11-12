@@ -28,6 +28,11 @@ export function parseApiReadRoute(raw: unknown): Readonly<{
     if (parts.length !== 6 || hasQuery) return refuse();
     return Object.freeze({ appId, version, operationId: '$asyncapi', rawQuery: '' });
   }
+  // `$scope` mints a child token (apiScopeMint.ts): POST, its request in the body.
+  if (resource === '$scope') {
+    if (parts.length !== 6 || hasQuery) return refuse();
+    return Object.freeze({ appId, version, operationId: '$scope', rawQuery: '' });
+  }
   // The feed's own parameters (`after`, `limit`) are judged by the feed (apiEventFeed.ts).
   if (resource === '$events') {
     if (parts.length !== 6) return refuse();

@@ -28,6 +28,7 @@ import {
   type BusinessCommandRegistry,
 } from '../commands/businessCommands.js';
 import { assertLookupOwners, scopedLookupReader } from '../commands/commandLookup.js';
+import { apiScopeName } from '../api/apiRowScope.js';
 import {
   CommandInputError,
   parseCommandPrepareRequest,
@@ -51,7 +52,7 @@ import { narrowTenantInvocation, type TenantInvocationGuard } from './tenantInvo
 import type { CommandFlags } from '../commands/commandFlags.js';
 import { authorizedCommandFlags, commandFlagsOnce } from '../commands/commandFlagCapture.js';
 import type { TenantMembershipEvidence } from './tenantMembership.js';
-import { actingPrincipal } from './tenantApiRequest.js';
+import { actingPrincipal, requestScope } from './tenantApiRequest.js';
 import { runDraftRoute } from '../forms/draftHttp.js';
 import { tenantCommandReadAudit } from './tenantReadAudit.js';
 import { PLATFORM_TENANT_ID } from './tenantPlatform.js';
@@ -273,11 +274,14 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
           // A token's command acts under the token's own roles (tenantApiRequest.ts).
           // Its email is the verified session's (scope.who), as a single App's actor carries: what `me` writes
           // beside a text column, and what a stamp needs to know someone proven is signed in (appStamps.ts written).
+          // A row-scoped token's scope (api.scopes) is what its commands are told (`actor.scope`); the runtime already narrowed the rows.
+          const rowScope = requestScope(request);
           const actor = captureTenantData({
             id: scope.principal.accountId,
             appId: app.id,
             roles: actingPrincipal(request, scope.principal).roles,
             ...sessionActorWords({ id: scope.principal.accountId, who: scope.who() }),
+            ...(rowScope ? { scope: { name: rowScope.name, key: rowScope.key } } : {}),
           });
           /* This tenant's zone for `today()` and `now()` (readerZone.ts), where `ui.timezone` names a column. */
           const zone = mode === 'execute' || mode === 'draft' ? await commandZone(app.ui, () => scope.reads(), scope.tenant) : undefined;
@@ -344,6 +348,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                       },
                     ),
                   authorization.read,
+                  authorization.write,
                 ),
               );
             }
@@ -376,6 +381,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                         actor: scope.principal.accountId,
                         roles: actor.roles,
                         membership: scope.principal.membershipId,
+                        ...(actor.scope ? { scope: apiScopeName(actor.scope) } : {}),
                       },
                       identity.source.connection,
                       scope.appendReadAudit,
@@ -401,6 +407,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                             }
                           }),
                         authorization.read,
+                        authorization.write,
                       ),
                   });
                 },

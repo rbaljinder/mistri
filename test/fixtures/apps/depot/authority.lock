@@ -260,6 +260,7 @@ role purchaser fields supplier write phone — the App
 role purchaser fields supplier write state — the App
 role purchaser fields supplier write terms — the App
 page pick-walk loads pickWalk — the App
+page pick-walk loads pickFigures — the App
 api version 1 — the App
 api public-spec false — the App
 api role admin — the App

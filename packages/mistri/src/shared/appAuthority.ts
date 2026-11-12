@@ -179,7 +179,7 @@ export function authorityReport(app: AppDef, origins?: AppOrigins, env: readonly
     if (!('sections' in view) || !view.page) continue;
     const by = `${SEPARATOR}${origins?.views[key] ? `features "${origins.views[key]}"` : THE_APP}`;
     if (view.page.public) for (const command of sorted(view.page.commands)) lines.push(`page ${key} runs ${command}${by}`);
-    if (view.page.loader) lines.push(`page ${key} loads ${view.page.loader}${by}`);
+    for (const loader of [view.page.loader, ...(view.page.loaders ?? [])]) if (loader) lines.push(`page ${key} loads ${loader}${by}`);
     if (view.page.public) lines.push(`page ${key} public${by}`);
   }
   /* A surface is the whole of what a front end the App does not draw may ask of it: what it reads, runs and loads is

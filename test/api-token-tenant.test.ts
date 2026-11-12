@@ -74,7 +74,7 @@ test('the codec and the v2 layout keep a tenant binding whole, and refuse a part
     for (const change of [{ membership_version: null }, { tenant_id: null }, { tenant_id: 'North' }, { membership_version: '01' }]) {
       assert.throws(() => insert({ ...row, ...change }));
     }
-    assert.throws(() => db.prepare(`INSERT INTO "${SQLITE_API_TOKEN_TABLES.meta}" VALUES(1,2,'depot',?,'twa1')`).run(tokenId));
+    assert.throws(() => db.prepare(`INSERT INTO "${SQLITE_API_TOKEN_TABLES.meta}" VALUES(1,3,'depot',?,'twa1')`).run(tokenId));
   } finally {
     db.close();
   }

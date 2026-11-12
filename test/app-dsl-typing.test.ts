@@ -908,6 +908,40 @@ test("PageProps is keyed by the page's path, so a loader may be named anything",
   assert.notEqual(named.status, 0);
 });
 
+test("a page's several loaders are named in loaders and read by name, each typed by what it returns", () => {
+  const types = commandTypes({}, 'Helpdesk', './commands.ts', ['pick-walk'], [], [], { pageLoaders: { 'pick-walk': 'pickWalk' } });
+  const commands = `
+    export const loaders = {
+      pickWalk: { load: async () => ({ stops: 3 }) },
+      pickFigures: { load: async () => ({ waiting: 5 }) },
+      elsewhere: { load: async () => ({ other: true }) },
+    } as const;
+    export default {};
+  `;
+  const files = { 'mistri-commands.d.ts': types, 'commands.ts': commands };
+  const compiled = compile(
+    `
+    import './mistri-commands.d.ts';
+    import { definePage } from '@mistriwork/mistri/page';
+    const page = definePage({ label: 'Walk', reads: [], loader: 'pickWalk', loaders: ['pickFigures'], component: () => null });
+    export default page;
+    export const figure = () => {
+      const waiting: number | undefined = page.useLoader('pickFigures').data?.waiting;
+      const stops: number | undefined = page.useLoader('pickWalk').data?.stops;
+      page.useLoader('pickFigures').refetch();
+      // @ts-expect-error A loader's data is what its load returns.
+      page.useLoader('pickFigures').data?.stops;
+      // @ts-expect-error The page does not name this loader, though the App has it.
+      page.useLoader('elsewhere');
+      return [waiting, stops];
+    };
+  `,
+    {},
+    files,
+  );
+  assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+});
+
 test('PageProps names a page that has no loader, its data null', () => {
   const types = commandTypes({}, 'Helpdesk', './commands.ts', ['pick-walk', 'about'], [], [], {
     pageLoaders: { 'pick-walk': 'pickWalk' },

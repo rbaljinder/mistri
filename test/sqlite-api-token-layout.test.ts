@@ -54,7 +54,7 @@ test('fixed token extension DDL matches its exact native catalog and has no fore
   }));
 test('SQL extension roundtrips exact codec values, UUID metadata and NULL versus empty operations', () =>
   fixture((db) => {
-    db.prepare(`INSERT INTO "${SQLITE_API_TOKEN_TABLES.meta}" VALUES(1,1,?,?,?)`).run('é'.repeat(128), id, 'twa1');
+    db.prepare(`INSERT INTO "${SQLITE_API_TOKEN_TABLES.meta}" VALUES(1,2,?,?,?)`).run('é'.repeat(128), id, 'twa1');
     for (const operations of [undefined, []]) {
       const value = token(),
         row = encodeApiTokenSqlRow({
@@ -101,7 +101,7 @@ test('physical scalar constraints refuse malformed UUID/revision/digest/time/nul
   }));
 test('App metadata SQL trim/control and UTF8 limits match the private credential validator', () =>
   fixture((db) => {
-    const sql = db.prepare(`INSERT INTO "${SQLITE_API_TOKEN_TABLES.meta}" VALUES(1,1,?,?,?)`);
+    const sql = db.prepare(`INSERT INTO "${SQLITE_API_TOKEN_TABLES.meta}" VALUES(1,2,?,?,?)`);
     for (const value of ['app', 'é'.repeat(128), '😀'.repeat(64), 'a\u200bb']) {
       assert.doesNotThrow(() => assertApiTokenAppId(value));
       sql.run(value, id, 'twa1');

@@ -7,6 +7,7 @@ import {
   isFormFieldVisible,
   missingFields,
   presetValue,
+  withDisplayChoices,
 } from './newRecordModel.js';
 import { parseComputed } from '../../../../engine/src/shared/computedParse.js';
 import { autoKey, enteredNow, platformWritten } from '../../../../engine/src/shared/form.js';
@@ -302,4 +303,28 @@ test('a later picker is narrowed by an earlier required pick its table points at
   expect(inferredNarrowing(optional, target)).toEqual({});
   const contact = column('contact_id', { type: 'INTEGER', references: { table: 'contact', column: 'id' } });
   expect(inferredNarrowing([job.columns[3], contact], target)).toEqual({});
+});
+
+test('a column whose display words the database does not constrain is chosen from them, keeping a start that is none of them', () => {
+  const kind = column('kind');
+  const words = { values: { walk: 'Walk-in', phone: 'Phone call', web: 'Web form' } };
+  expect(withDisplayChoices(kind, words, [])).toMatchObject({ allowed: ['walk', 'phone', 'web'] });
+  /* An off-list default stays in the list, once, so the form does not lose it. */
+  expect(withDisplayChoices(kind, words, ['visit', 'visit', 'walk', undefined, ''])).toMatchObject({
+    allowed: ['walk', 'phone', 'web', 'visit'],
+  });
+  /* The database's own list wins, and so does anything that is not plain text or is dressed as something else. */
+  const constrained = column('kind', { allowed: ['a', 'b'] });
+  expect(withDisplayChoices(constrained, words, [])).toBe(constrained);
+  const reference = column('owner_id', { references: { table: 'owner', column: 'id' } });
+  expect(withDisplayChoices(reference, words, [])).toBe(reference);
+  const count = column('seats', { type: 'INTEGER' });
+  expect(withDisplayChoices(count, words, [])).toBe(count);
+  expect(withDisplayChoices(kind, { ...words, format: 'money' }, [])).toBe(kind);
+  /* One word is a label, not a vocabulary; thirty-one is a list nobody scrolls. */
+  expect(withDisplayChoices(kind, { values: { walk: 'Walk-in' } }, [])).toBe(kind);
+  expect(withDisplayChoices(kind, { values: Object.fromEntries(Array.from({ length: 31 }, (_, i) => [`w${i}`, `W ${i}`])) }, [])).toBe(
+    kind,
+  );
+  expect(withDisplayChoices(kind, undefined, [])).toBe(kind);
 });

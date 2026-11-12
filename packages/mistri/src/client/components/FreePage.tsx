@@ -60,6 +60,7 @@ export function FreePage({
     ...(page.actions ? { actions: page.actions } : {}),
     params: page.params,
     ...(page.loader ? { loader: page.loader } : {}),
+    ...(page.loader || page.loaders?.length ? { loaders: [...(page.loader ? [page.loader] : []), ...(page.loaders ?? [])] } : {}),
     get: (name) => place[name],
     set: (name, value, options = {}) => {
       const owned = entry ?? initial.current;

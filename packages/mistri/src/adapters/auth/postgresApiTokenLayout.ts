@@ -9,7 +9,7 @@ import type { PostgresRelationDescription } from '../commands/postgresCommandJou
 /* Both dialects' token stores are at this version. It is said here rather than in sqliteApiTokenLayout.ts because the
    PostgreSQL auth store loads this module on every startup path, `--mcp` included, and SQLite's layout need not come
    with it. */
-export const API_TOKEN_STORE_VERSION = 1;
+export const API_TOKEN_STORE_VERSION = 2;
 
 /* The tables sit in the runtime schema beside the sign-in store's, under the same `auth_` prefix
    (postgresAuthStore.ts), so the one attestation of `auth_` relations covers both. */
@@ -36,6 +36,36 @@ const tenantColumns = `${text('tenant_id', 128, true)} CHECK (tenant_id IS NULL 
   ${text('membership_id', 3072, true)},
   ${text('membership_version', 128, true)} CHECK (membership_version IS NULL OR membership_version ~ '^[1-9][0-9]{0,127}$')`;
 const tenantBound = 'CHECK ((tenant_id IS NULL) = (membership_id IS NULL) AND (tenant_id IS NULL) = (membership_version IS NULL))';
+
+/** A row-scoped token's scope (version 2): a declared scope's name, its key, and a `$scope` child's parent token. */
+const scopeColumns = [
+  `${text('scope_name', 64, true)} CHECK (scope_name IS NULL OR scope_name ~ '^[A-Za-z_][A-Za-z0-9_]{0,63}$')`,
+  `${text('scope_key', 256, true)}`,
+  `${text('scope_parent_id', 36, true)} CHECK (scope_parent_id IS NULL OR scope_parent_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')`,
+];
+const scopeBound = 'CHECK ((scope_name IS NULL) = (scope_key IS NULL) AND (scope_name IS NOT NULL OR scope_parent_id IS NULL))';
+
+/** A row-scoped token's parent is what a scope's reads and a revoke by parent look up. */
+const scopeParentIndex = `CREATE INDEX auth_api_token_scope_parent_idx ON ${t('auth_api_token')} (scope_parent_id)`;
+
+/** Version 1 to 2, in the store upgrade's one transaction (storeLayouts.ts): the scope columns, added last as a fresh
+   table has them, and the version row's pin moved. PostgreSQL adds a column in place, so nothing is copied. */
+export function postgresApiTokenUpgradeFrom1(): readonly string[] {
+  return Object.freeze([
+    ...scopeColumns.map((column) => `ALTER TABLE ${t('auth_api_token')} ADD COLUMN ${column}`),
+    `ALTER TABLE ${t('auth_api_token')} ADD ${scopeBound}`,
+    // The version pin was created unnamed, so the server chose its name; find it by what it checks, not by a guess at
+    // the spelling, and drop whatever is there (none is fine). The new pin is named, so a later move can say so.
+    `DO $drop$ DECLARE c record; BEGIN
+  FOR c IN SELECT conname FROM pg_constraint WHERE conrelid = '${t('auth_api_token_meta')}'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) ~ '\\mversion\\M' LOOP
+    EXECUTE format('ALTER TABLE ${t('auth_api_token_meta')} DROP CONSTRAINT %I', c.conname);
+  END LOOP;
+END $drop$`,
+    `UPDATE ${t('auth_api_token_meta')} SET version = 2`,
+    `ALTER TABLE ${t('auth_api_token_meta')} ADD CONSTRAINT auth_api_token_meta_version_check CHECK (version = 2)`,
+    scopeParentIndex,
+  ]);
+}
 
 /** The version row's table. */
 const metaDdl = (version: number) => `CREATE TABLE ${t('auth_api_token_meta')} (
@@ -130,13 +160,16 @@ export function postgresApiTokenDdl(): readonly string[] {
   ${text('tenant_id', 128, true)} CHECK (tenant_id IS NULL OR tenant_id ~ '^[a-z0-9][a-z0-9_-]{0,127}$'),
   ${text('membership_id', 3072, true)},
   ${text('membership_version', 128, true)} CHECK (membership_version IS NULL OR membership_version ~ '^[1-9][0-9]{0,127}$'),
+  ${scopeColumns.join(',\n  ')},
   CHECK ((tenant_id IS NULL) = (membership_id IS NULL) AND (tenant_id IS NULL) = (membership_version IS NULL)),
   CHECK (expires_at > created_at),
   CHECK ((revoked_at IS NULL) = (revoked_by IS NULL)),
   CHECK (revoked_at IS NULL OR revoked_at >= created_at),
   CHECK (last_used_at IS NULL OR last_used_at >= created_at),
-  CHECK (subject_kind <> 'service' OR subject_id ~ '^[a-z][a-z0-9-]{0,62}$')
+  CHECK (subject_kind <> 'service' OR subject_id ~ '^[a-z][a-z0-9-]{0,62}$'),
+  ${scopeBound}
 )`,
+    scopeParentIndex,
     // The OAuth rows follow the token table.
     ...postgresApiTokenOauthDdl(),
   ]);
@@ -147,10 +180,11 @@ export function postgresApiTokenDdl(): readonly string[] {
  * OAuth rows are written in the same deparsed spelling by the helpers below
  * (test/postgres-api-token-layout.test.ts). A fresh copy on every call. */
 export function postgresApiTokenCatalog(): readonly PostgresRelationDescription[] {
-  return structuredClone([...pinned, ...oauthPinned()]);
+  return structuredClone([...pinned(), ...oauthPinned()]);
 }
 
-const pinned: readonly PostgresRelationDescription[] = [
+// A function, not a constant: version 2's scope checks are spelled by the helpers declared below it.
+const pinned = (): readonly PostgresRelationDescription[] => [
   {
     schema: RUNTIME_SCHEMA,
     name: 'auth_api_token',
@@ -290,6 +324,13 @@ const pinned: readonly PostgresRelationDescription[] = [
         collation: 'C',
         default: null,
       },
+      ...['scope_name', 'scope_key', 'scope_parent_id'].map((name) => ({
+        name,
+        type: 'text',
+        notnull: false,
+        collation: 'C',
+        default: null,
+      })),
     ],
     constraints: [
       "CHECK ((((octet_length(app_id) >= 1) AND (octet_length(app_id) <= 256)) AND (app_id = btrim(app_id, ((((((((((((((((((((((((chr(9) || chr(10)) || chr(11)) || chr(12)) || chr(13)) || chr(32)) || chr(160)) || chr(5760)) || chr(8192)) || chr(8193)) || chr(8194)) || chr(8195)) || chr(8196)) || chr(8197)) || chr(8198)) || chr(8199)) || chr(8200)) || chr(8201)) || chr(8202)) || chr(8232)) || chr(8233)) || chr(8239)) || chr(8287)) || chr(12288)) || chr(65279)))) AND (app_id !~ ((((((('['::text || chr(1)) || '-'::text) || chr(31)) || chr(127)) || '-'::text) || chr(159)) || ']'::text))))",
@@ -327,8 +368,13 @@ const pinned: readonly PostgresRelationDescription[] = [
       "CHECK ((token_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text))",
       "CHECK ((version ~ '^[1-9][0-9]{0,127}$'::text))",
       'PRIMARY KEY (token_id)',
+      // Version 2's scope columns, in the deparsed spelling the helpers below write.
+      ...scopePinned(),
+    ].sort(),
+    indexes: [
+      `CREATE INDEX auth_api_token_scope_parent_idx ON ${RUNTIME_SCHEMA}.auth_api_token USING btree (scope_parent_id)`,
+      `CREATE UNIQUE INDEX auth_api_token_pkey ON ${RUNTIME_SCHEMA}.auth_api_token USING btree (token_id)`,
     ],
-    indexes: [`CREATE UNIQUE INDEX auth_api_token_pkey ON ${RUNTIME_SCHEMA}.auth_api_token USING btree (token_id)`],
     triggers: 0,
     rules: 0,
     policies: 0,
@@ -382,7 +428,7 @@ const pinned: readonly PostgresRelationDescription[] = [
       "CHECK ((format = 'twa1'::text))",
       'CHECK ((singleton = 1))',
       "CHECK ((store_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text))",
-      'CHECK ((version = 1))',
+      `CHECK ((version = ${API_TOKEN_STORE_VERSION}))`,
       'PRIMARY KEY (singleton)',
     ],
     indexes: [`CREATE UNIQUE INDEX auth_api_token_meta_pkey ON ${RUNTIME_SCHEMA}.auth_api_token_meta USING btree (singleton)`],
@@ -442,6 +488,17 @@ const primary = (table: string, column: string) => [
 ];
 const secondary = (table: string, column: string, name: string) =>
   `CREATE INDEX ${name} ON ${RUNTIME_SCHEMA}.${table} USING btree (${column})`;
+
+function scopePinned(): string[] {
+  return [
+    textCheck('scope_name', 64, true),
+    matchCheck('scope_name', '^[A-Za-z_][A-Za-z0-9_]{0,63}$', true),
+    textCheck('scope_key', 256, true),
+    textCheck('scope_parent_id', 36, true),
+    matchCheck('scope_parent_id', UUID, true),
+    'CHECK ((((scope_name IS NULL) = (scope_key IS NULL)) AND ((scope_name IS NOT NULL) OR (scope_parent_id IS NULL))))',
+  ];
+}
 
 /** Exported for the spelling check against version 2's captured token table. */
 export const deparsedTextCheck = textCheck;

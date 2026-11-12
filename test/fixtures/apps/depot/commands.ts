@@ -13,6 +13,7 @@ import {
   defineEvent,
   defineLoader,
   defineLoaders,
+  count,
   defineSource,
   field,
   int,
@@ -679,13 +680,16 @@ export const completeCount = defineCommand({
 /* The pick walk's first screen (pages/pick-walk.page.tsx): the lists waiting
    on the floor, first to ship first, each with its warehouse and its order's
    ship-by date and priority. Run on the server as the reader, read-only: a
-   list, an order or a warehouse their grants do not show is not in it. */
+   list, an order or a warehouse their grants do not show is not in it.
+
+   "Waiting" is the pick_list resource's own segment (`to_pick_lists`, resources.ts), read by name, so the rule that says
+   which lists are waiting is stated once: the list view's tab, the figures below and this loader all read it. */
 export const loaders = defineLoaders({
   pickWalk: defineLoader({
     source,
     reads: ['pick_list', 'sales_order', 'warehouse'],
     async load({ db }) {
-      const waiting = await db.pick_list.where({ status: 'to_pick' }).orderBy('released_at').limit(40);
+      const waiting = await db.pick_list.segment('to_pick_lists').orderBy('released_at').limit(40);
       const warehouses = new Map<number, string | null>();
       for (const id of new Set(waiting.map((list) => list.warehouse_id)))
         warehouses.set(id, (await db.warehouse.find({ id }))?.name ?? null);
@@ -703,6 +707,19 @@ export const loaders = defineLoaders({
       }
       /* First to ship first; a list whose order this reader cannot see goes last. Released order breaks a tie (the read's order). */
       return { lists: lists.sort((a, b) => (a.shipBy ?? '\uffff').localeCompare(b.shipBy ?? '\uffff')) };
+    },
+  }),
+  /* The page's second loader, asked for by name (`page.useLoader('pickFigures')`): how many lists stand at each step, from
+     the same segments the list view's tabs use. It reads on its own, so a slow count never holds the lists back. */
+  pickFigures: defineLoader({
+    source,
+    reads: ['pick_list'],
+    async load({ db }) {
+      const [toPick, toPack] = await Promise.all([
+        db.pick_list.segment('to_pick_lists').aggregate({ n: count() }),
+        db.pick_list.segment('to_pack').aggregate({ n: count() }),
+      ]);
+      return { toPick: toPick.n, toPack: toPack.n };
     },
   }),
 });

@@ -35,7 +35,10 @@ export const data = fixtures({
 });
 const floor = { viewer: { signedIn: true, account: 'picker' }, commands: { pickList: { label: 'Pick' } } };
 
-export default examples(page, page.definition, { data, loaded, width: 360, ...floor });
+/* What its second loader (pickFigures) answers: where the floor stands. */
+const loaders = { pickFigures: { toPick: 2, toPack: 5 } };
+
+export default examples(page, page.definition, { data, loaded, loaders, width: 360, ...floor });
 
 /** The lists waiting, first to ship first. */
 export const Lists = example({});

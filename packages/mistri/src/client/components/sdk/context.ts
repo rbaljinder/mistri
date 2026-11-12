@@ -265,8 +265,9 @@ export interface UiHost {
      reads to say `refused` (hooks.ts), so a host surfaces a refusal as it always has and adds nothing. */
   rows(resource: string, options: UiRowsOptions): Promise<UiRowsPage>;
   record(resource: string, key: Readonly<Record<string, unknown>>, show?: readonly string[], asking?: UiAsking): Promise<UiRow | undefined>;
-  /** A free-form page's loader, run on the server for this reader: what the page is drawn with. */
-  load(page: string, params: Readonly<Record<string, string>>): Promise<unknown>;
+  /** A free-form page's loader, run on the server for this reader: what the page is drawn with. `loader` names one of
+      the page's `loaders`; without it the page's own `loader` runs. */
+  load(page: string, params: Readonly<Record<string, string>>, loader?: string): Promise<unknown>;
   breakdown(resource: string, options: UiBreakdownOptions): Promise<UiRow[]>;
   openRecord(resource: string, key: Readonly<Record<string, unknown>>, options?: { mode?: OpenMode; label?: string }): void;
   openView(view: string, options?: UiOpenViewOptions): void;
@@ -344,6 +345,8 @@ export interface UiPageFrame {
   actions?: readonly string[];
   params: readonly string[];
   loader?: string;
+  /** Every loader the page names, `loader` first: what `useLoader` is held to. */
+  loaders?: readonly string[];
   /**
    * The record a page is a tab of (`pages/accounts/[id]/map.page.tsx`): its resource and key, what `useRecordKey` gives.
    * A test's frame (`renderPage(page, { record })`) knows no file and so no resource: any the page reads is answered.

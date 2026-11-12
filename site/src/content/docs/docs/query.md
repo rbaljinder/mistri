@@ -96,6 +96,7 @@ they declare, and refuse a path.
 | Resource queries: a list's `where`, segments, `q=`, the App API | yes                                                  | yes                                 | yes                                                                                          |
 | `useRows` (`query`)                                             | yes                                                  | yes                                 | yes                                                                                          |
 | A command's or a page loader's `db.<table>.where`               | yes                                                  | no                                  | yes, within the declared reads                                                               |
+| A command's or a page loader's `db.<table>.segment(name)`       | yes, the segment's conditions as written out         | no                                  | yes, within the declared reads                                                               |
 | A policy's `db.<table>.where`                                   | yes                                                  | no                                  | yes, among the App's resources                                                               |
 | A row scope (`RowScope`)                                        | local columns only, as a structured filter, not text | no                                  | no                                                                                           |
 | A row scope's `via(column, resource)`                           | the target's key, among the rows the person may see  | no                                  | a relationship test, not text ([row access](/docs/row-access/#scope-through-a-relationship)) |
@@ -109,6 +110,7 @@ not satisfy an `any`. A child outside the declared reads is refused by name.
 A sum or a group over such a `where` is refused (read the rows, or count them),
 and a command in a tenant App does not take `any`/`no` yet: it reads the child by
 its own column (`db.invoice.where({ customer_id })`).
+`db.<table>.segment(name)` is the segment's conditions read by the same rules, so a segment that names a path, a rollup or a computed column works in a list and not in a handler's `db`, and is refused there by name.
 
 ## Group and measure
 

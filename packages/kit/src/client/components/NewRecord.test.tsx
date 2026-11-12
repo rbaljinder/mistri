@@ -1216,3 +1216,49 @@ test("a database default is said only where it is a plain value, in the column's
   expect(screen.getByLabelText('Seats')).toHaveAttribute('placeholder', 'Default: -1');
   expect(document.body.textContent).not.toMatch(/supplied by the database/);
 });
+
+test('a column whose display words are only display is chosen from them as a vocabulary is, opening on its default in its word', async () => {
+  /* A field report: a text column dressed with `values` (no CHECK behind it) was a box to type "walk" into. */
+  const user = userEvent.setup();
+  const table: TableMeta = {
+    ...lead,
+    columns: [
+      col('id', 'INTEGER', { primaryKey: true, nullable: false, identity: 'by-default' }),
+      col('kind', 'TEXT', { nullable: false, default: "'walk'::text" }),
+      col('channel', 'TEXT', { nullable: false, default: "'fax'::text" }),
+      col('note', 'TEXT'),
+    ],
+  };
+  const kinds = { values: { walk: 'Walk-in', phone: 'Phone call', web: 'Web form', mail: 'By mail', event: 'At an event' } };
+  const channels = { values: { phone: 'Phone call', web: 'Web form' } };
+  const display = (c: ColumnMeta) => (c.name === 'kind' ? kinds : c.name === 'channel' ? channels : null) as never;
+  const insert = vi.fn().mockResolvedValue({ key: { id: 5 } });
+  draw(<NewRecordForm {...props()} table={table} display={display} insert={insert} />);
+  /* Five words are a listbox, which starts on the database's default said as the rule says it. */
+  const kind = screen.getByRole('button', { name: /Kind/ });
+  expect(kind).toHaveTextContent('Walk-in');
+  expect(screen.queryByRole('textbox', { name: 'Kind' })).toBeNull();
+  await user.click(kind);
+  /* The first entry is the unchosen one, which says the default; the rest are the words, the chosen one ticked. */
+  expect(screen.getAllByRole('option').map((option) => option.textContent?.replace('✓', ''))).toEqual([
+    'Default: Walk-in',
+    'Walk-in',
+    'Phone call',
+    'Web form',
+    'By mail',
+    'At an event',
+  ]);
+  await user.click(screen.getByRole('option', { name: 'Phone call' }));
+  /* Fewer, with a start, are radios; a default the words do not name is still a choice, so it is not lost. */
+  const channel = screen.getByRole('radiogroup', { name: 'Channel' });
+  expect(
+    within(channel)
+      .getAllByRole('radio')
+      .map((radio) => (radio.parentElement as HTMLElement).textContent),
+  ).toEqual(['Phone call', 'Web form', 'Fax']);
+  expect(within(channel).getByRole('radio', { name: 'Fax' })).toBeChecked();
+  expect(screen.queryByRole('textbox', { name: 'Note' })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Add' }));
+  /* The stored word goes to the database, not the one the reader read. */
+  expect(insert).toHaveBeenCalledWith(expect.objectContaining({ kind: 'phone', channel: 'fax' }));
+});

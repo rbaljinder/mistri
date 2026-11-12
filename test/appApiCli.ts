@@ -41,12 +41,13 @@ export function cliArgs(args: readonly string[]) {
 }
 
 /** The real CLI serving an App's API over loopback HTTP; killed at test end.
- * `extra`: more startup flags, such as a tenant App's `--policy`. */
+ * `extra`: more startup flags, such as a tenant App's `--policy`; `env`: more of its environment. */
 export async function serveApi(
   t: TestContext,
   f: { config: string; appDir: string; commands?: string },
   appId = 'ledger',
   extra: readonly string[] = [],
+  env: Record<string, string> = {},
 ) {
   const port = await freePort();
   const child = spawn(
@@ -68,7 +69,7 @@ export async function serveApi(
       '--api-requests-per-minute',
       '1000',
     ]),
-    { cwd: ROOT, env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] },
+    { cwd: ROOT, env: childEnv(env), stdio: ['ignore', 'pipe', 'pipe'] },
   );
   let output = '';
   const closed = new Promise<number | null>((done) => child.once('close', (code) => done(code)));
@@ -271,13 +272,24 @@ export const DEPOT_TABLE = (physical: string) =>
 export const DEPOT_ROWS = (physical: string) =>
   `INSERT INTO ${physical}(id, tenant_id, name) VALUES ('north-1','north','North one'),` +
   `('north-2','north','North two'),('south-1','south','South one'),('south-2','south','South two')`;
+/** A note belongs to an item: a table a command can write that is mapped to a scope by one hop (`note: 'item_id.id'`). */
+export const DEPOT_NOTE_TABLE = (physical: string, item: string) =>
+  `CREATE TABLE ${physical}(id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL, item_id TEXT NOT NULL REFERENCES ${item}(id), body TEXT NOT NULL)`;
 export const DEPOT_STORE = 'depot-store';
 /** `commands`: the App also exposes `touch`, a targeted tenant command that
  * bumps an item's version, and `stock`, a signed-in form's keyless command
  * that adds one, with its registry beside the policy. */
 export function writeDepotApp(
   directory: string,
-  options: { business: string; authStore: string; physical: string; api?: Record<string, unknown>; commands?: boolean },
+  options: {
+    business: string;
+    authStore: string;
+    physical: string;
+    api?: Record<string, unknown>;
+    commands?: boolean;
+    /** The physical name of the note table (DEPOT_NOTE_TABLE): adds the `note` resource and its `annotate` command. */
+    notes?: string;
+  },
 ) {
   const appDir = join(directory, 'depot');
   mkdirSync(appDir);
@@ -287,6 +299,8 @@ export function writeDepotApp(
     policy = join(directory, 'policy.mjs'),
     commands = join(appDir, 'commands.mjs');
   const running = options.commands === true;
+  const notes = running ? options.notes : undefined;
+  const names = ['touch', 'stock', ...(notes ? ['annotate'] : [])];
   writeFileSync(
     join(appDir, 'app.json'),
     JSON.stringify({
@@ -296,7 +310,7 @@ export function writeDepotApp(
         providers: ['email'],
         store: options.authStore,
         rows: 'tenant',
-        roles: { member: { read: true, ...(running ? { commands: ['touch', 'stock'] } : {}) } },
+        roles: { member: { read: true, ...(running ? { commands: names } : {}) } },
       },
       sources: { business: { connection: 'data' } },
       // A command cannot yet run on a resource with field rules, so the command
@@ -304,18 +318,20 @@ export function writeDepotApp(
       // and the tenant column is never one (tenantAuthoringSchema).
       resources: {
         item: { physical: options.physical, owner: 'tenant', ...(running ? { access: 'write' } : { fields: { read: ['id', 'name'] } }) },
+        ...(notes ? { note: { physical: notes, owner: 'tenant', access: 'write' } } : {}),
       },
       views: {
         items: { kind: 'list', from: 'item' },
         ...(running ? { 'stock-item': { kind: 'form', label: 'Stock an item', command: 'stock' } } : {}),
+        ...(notes ? { 'annotate-item': { kind: 'form', label: 'Annotate an item', command: 'annotate' } } : {}),
       },
       home: 'items',
-      ...(running ? { nav: ['items', 'stock-item'] } : {}),
+      ...(running ? { nav: ['items', 'stock-item', ...(notes ? ['annotate-item'] : [])] } : {}),
       api: options.api ?? {
         version: 1,
         roles: ['member'],
         resources: { item: { fields: running ? ['id', 'version', 'name'] : ['id', 'name'], sorts: ['id'] } },
-        ...(running ? { commands: ['touch', 'stock'] } : {}),
+        ...(running ? { commands: names } : {}),
       },
     }),
   );
@@ -328,8 +344,8 @@ export function writeDepotApp(
     policy,
     `import { defineAppTenantPolicy } from '${source('packages/mistri/src/server/policy/appTenantPolicy.ts')}';
 export default defineAppTenantPolicy({ kind: 'tenant', appId: 'depot', storeId: '${DEPOT_STORE}',
-  ownership: { item: { kind: 'tenant', column: 'tenant_id' } },
-  resolveMembershipRows: () => ({ item: true }), resolveRows: () => ({ item: true })${running ? ',\n  resultReferences: { touch: () => [], stock: () => [] }' : ''} });
+  ownership: { item: { kind: 'tenant', column: 'tenant_id' }${notes ? ", note: { kind: 'tenant', column: 'tenant_id' }" : ''} },
+  resolveMembershipRows: () => ({ item: true${notes ? ', note: true' : ''} }), resolveRows: () => ({ item: true${notes ? ', note: true' : ''} })${running ? `,\n  resultReferences: { ${names.map((name) => `${name}: () => []`).join(', ')} }` : ''} });
 `,
   );
   if (running)
@@ -345,7 +361,15 @@ export default defineCommands({ touch: defineCommand({ source: 'business', targe
   input: { id: { type: 'text' }, name: { type: 'text' } }, output: shape({ ok: bool() }), async handle(context, input) {
     await context.tx.insert({ table: 'item', values: { id: input.id, name: input.name } });
     return { ok: true };
-  } }) });
+  } })${
+    notes
+      ? `, annotate: defineCommand({ source: 'business', target: 'note', targets: 'none', read: ['item'],
+  input: { id: { type: 'text' }, item: { type: 'text' }, body: { type: 'text' } }, output: shape({ ok: bool() }), async handle(context, input) {
+    await context.tx.insert({ table: 'note', values: { id: input.id, item_id: input.item, body: input.body } });
+    return { ok: true };
+  } })`
+      : ''
+  } });
 `,
     );
   return { appDir, config, policy, ...(running ? { commands } : {}) };

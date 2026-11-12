@@ -119,6 +119,8 @@ export async function runApiTokenMaintenance(
           ? 'a tenant App needs both --tenant and --policy to issue a token'
           : 'only a tenant App takes --tenant and --policy; this App is not one',
       );
+    if (args.verb === 'issue' && args.scope && !Object.hasOwn(app.app.api?.scopes ?? {}, args.scope.name))
+      return refuse(`--scope names "${args.scope.name}", which is not one of this App's api.scopes`);
     let evidence: TokenCommandEvidence | undefined;
     const capture = (captured: TokenCommandEvidence) => {
       evidence = captured;
@@ -156,6 +158,7 @@ export async function runApiTokenMaintenance(
           expiresAt: args.expiresAt,
           ...(args.operations === undefined ? {} : { operations: args.operations }),
           ...(tenant ? { tenant: tenant.tenant } : {}),
+          ...(args.scope ? { rowScope: args.scope } : {}),
         };
         return Object.freeze({
           verb: args.verb,
@@ -213,6 +216,7 @@ export async function runApiTokenMaintenance(
         expiresAt: args.expiresAt,
         ...(args.operations === undefined ? {} : { operations: args.operations }),
         ...(tenant ? { tenant: tenant.tenant } : {}),
+        ...(args.scope ? { rowScope: args.scope } : {}),
       };
       return Object.freeze({
         verb: args.verb,

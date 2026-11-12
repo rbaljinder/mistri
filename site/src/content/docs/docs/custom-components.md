@@ -170,6 +170,18 @@ Without `by`, a figure is one value: a number, a string (a sum or id past 2^53) 
 
 `Items` is a list of rows with no head row, where `Table` always draws one. Each `Item` has a `title`, and may have a `lead` (an icon, an avatar, a time, a `Value`), a `tone` (a dot in the lead column, or, beside a `lead`, the lead in that tone's ink), one quiet `note` under the title and an `action` at the row's end. With `href` or `onClick` the title is the row's one link or button, the whole row answers a pointer as a table's rows do, and a click inside `action` never opens it. On a phone the action stays on the row and the note wraps. The lead is one column the rows share, as wide as its widest, so times and marks line up down the list. `empty` is drawn when there are no rows; inside a `Card` it is flush with the card, not a box in a box.
 
+A long list in runs (overdue, today, later) takes `groups`: `{ title, count?, items }` each, `key` optional. Each run's head holds the top of the room while its own rows pass beneath it, and the next run's head takes its place; the lead column is still one width down every run, and a run with no rows draws no head. A screen reader hears a list of lists, each named by its head.
+
+```tsx
+<Items
+  label="Work"
+  groups={[
+    { title: 'Overdue', count: overdue.length, items: overdue.map((task) => <Item key={task.id} title={task.title} note={task.due} />) },
+    { title: 'Today', count: today.length, items: today.map((task) => <Item key={task.id} title={task.title} lead={task.time} />) },
+  ]}
+/>
+```
+
 ```tsx
 <Items label="Open work" empty={<Empty title="Nothing open" />}>
   {tasks.map((task) => (
@@ -243,12 +255,16 @@ export const loaders = defineLoaders({
     source,
     reads: ['pick_list', 'sales_order', 'warehouse'],
     async load({ db }) {
-      const waiting = await db.pick_list.where({ status: 'to_pick' }).orderBy('released_at').limit(40);
+      const waiting = await db.pick_list.segment('to_pick_lists').orderBy('released_at').limit(40);
 // …
       return { lists: lists.sort((a, b) => (a.shipBy ?? '\uffff').localeCompare(b.shipBy ?? '\uffff')) };
 ```
 
 `reads: []` declares a loader that reads no table, such as one that hands the page its program's settings. Its `db` is read-only, holds only the tables it declares (each one the page reads too) and reads through the reader's grants, row policy and tenant. It has `params`, `viewer`, `now` (a function, as in a command: `now()`) and `signal`, ends after its `timeout` (`'5 seconds'` by default, at most ten) and returns at most 256 KiB of JSON. `mistri check` types `data` from what `load` returns. The page also receives `refresh()` beside `data`: it runs the loader again and draws the new result. A command the page runs, a public one included, does that itself when it commits, and so reads the page's rows again, so `refresh()` is for a change the page did not make (a timer, a scan that arrived, a save somewhere else): `function Tally({ data, refresh }: PageProps<'tally'>): ReactNode`, where `'tally'` is the page's own path (`pages/tally.page.tsx`), not its loader's name; `mistri check` writes the pairing into `mistri-commands.d.ts`, and a path that has no loader does not compile. Give the component its own return type (`function PickWalk(): ReactNode`); without it TypeScript reports "'page' implicitly has type 'any'".
+
+A page may name several loaders: `loaders: ['pickFigures']` beside, or instead of, `loader`. `data` stays the one `loader`'s result (null when only `loaders` is named); `page.useLoader('pickFigures')` reads another by name, typed from what it returns, as a read's `{ data, isPending, isError, refetch }`. Each has its own cache entry, loading state and refetch, so a slow one never holds the others back, and each is read again when a command the page runs commits. The server finds the name in the page's own list for the reader it projects the App for and never trusts the name alone: a loader the page does not name is refused as if it did not exist, and a `useLoader` of one it does not name is a type error and a `[page-undeclared]` problem in `check`. A tenant App's pages use them the same way.
+
+A loader's `db` also reads a resource's segment by name, `db.pick_list.segment('to_pick_lists')`, under the same grants, field projection and row policy, and it chains `where`, `orderBy` and `limit` as any read does. The rule that says which lists are waiting is then written once, in the resource, and the list's tab, a figure and the loader all read it. A segment that uses a rollup, a computed column, a path or `me` cannot be read in a handler, and the call says so by the segment's name.
 
 ### Blocks
 

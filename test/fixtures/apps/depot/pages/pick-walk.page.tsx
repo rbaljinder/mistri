@@ -27,6 +27,8 @@ const page = definePage({
   commands: ['pickList'],
   params: ['list', 'line'],
   loader: 'pickWalk',
+  // A second loader, asked for by name below (`page.useLoader`): its own result, loading state and refetch.
+  loaders: ['pickFigures'],
   component: PickWalk,
 });
 export default page;
@@ -183,6 +185,18 @@ function Walk({
   );
 }
 
+/* Where the floor stands, from the page's second loader: it arrives on its own, so the lists are drawn without waiting on it. */
+function Figures(): ReactNode {
+  const figures = page.useLoader('pickFigures');
+  if (!figures.data) return null;
+  const { toPick, toPack } = figures.data;
+  return (
+    <p className="c-page-pick-walk-quiet">
+      {toPick} to pick · {toPack} picked, waiting to be packed
+    </p>
+  );
+}
+
 function PickWalk({ data }: PageProps<'pick-walk'>): ReactNode {
   const [listId, setList] = page.useParam('list');
   const [line, setLine] = page.useParam('line');
@@ -206,6 +220,7 @@ function PickWalk({ data }: PageProps<'pick-walk'>): ReactNode {
             {said}
           </p>
         ) : null}
+        <Figures />
         <Choose
           lists={data.lists}
           onChoose={(list) => {

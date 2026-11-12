@@ -97,6 +97,8 @@ export interface RenderOptions {
   address?: Record<string, string>;
   /** What a free-form page's loader answers: the page is drawn with it as `data`. */
   loaded?: unknown;
+  /** What each of a page's other loaders answers (`page.useLoader('dueFigure')`), by name; one left out answers null. */
+  loaders?: Readonly<Record<string, unknown>>;
   /** A custom list's page and its total; its rows are its resource's fixture rows in the view's sort. */
   page?: { index: number; size: number };
   total?: number;
@@ -150,7 +152,12 @@ export interface FixtureForm {
 }
 
 /** What changed on the server between two reads: a resource's rows now, and the whole refused set now (a resource left out is readable again). */
-export interface FixtureChange { data?: Record<string, readonly UiRow[]>; refused?: Record<string, 401 | 403> }
+export interface FixtureChange {
+  data?: Record<string, readonly UiRow[]>;
+  refused?: Record<string, 401 | 403>;
+  /** What each of the page's loaders answers now, by name (`page.useLoader`); the page's own `loader` answers `loaded`. */
+  loaders?: Readonly<Record<string, unknown>>;
+}
 
 type Drawn = RenderResult & {
   navigations: Navigation[];

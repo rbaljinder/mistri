@@ -341,6 +341,17 @@ export async function acquirePostgresApiTenantTokenObservation(runtime: AppAuthR
   return acquirePostgresTokenObservation(nativePoolOwner, runtime, app, undefined, undefined, catalog);
 }
 
+/** One operation in one transaction of the native store this runtime's API tokens live in (oauthStore.ts): how a
+ * `$scope` child token (apiScopeMint.ts) is read against its parent and inserted beside it. Trusted composition only. */
+export async function acquireApiTokenStoreOperation(runtime: AppAuthRuntime, appId: string) {
+  captureAppAuthRuntime(runtime);
+  const { sqliteOAuthStore, postgresOAuthStore } = await import('./oauthStore.js');
+  const file = nativeTokenFiles.get(runtime);
+  if (file) return sqliteOAuthStore(file, appId);
+  const pool = nativeTokenPools.get(runtime);
+  return pool ? postgresOAuthStore(pool, appId) : denyTenant();
+}
+
 /** Explicit private capability acquisition, not bearer admission. Only a
  * genuinely registered runtime supplies the native file; App/schema are the
  * trusted host's captured catalog, not proof of a serving deployment epoch. */

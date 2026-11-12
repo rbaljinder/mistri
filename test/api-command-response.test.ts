@@ -108,6 +108,7 @@ test('the refusal table is the design table, and titles are the platform message
       command_version_mismatch: 410,
       invalid_input: 422,
       consumes_refused: 422,
+      out_of_scope: 422,
       stale_record: 409,
       duplicate_record: 409,
       ineligible_state: 409,

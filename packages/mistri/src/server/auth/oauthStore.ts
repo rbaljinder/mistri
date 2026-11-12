@@ -80,6 +80,7 @@ export function sqliteOAuthStore(db: DatabaseSync, appId: string): OAuthStore {
           if (asked.kind === 'all') answer = db.prepare(asked.sql).all(...(asked.params as SQLInputValue[]));
           else if (asked.kind === 'run') answer = Number(db.prepare(asked.sql).run(...(asked.params as SQLInputValue[])).changes);
           else if (asked.kind === 'eligible') answer = readSqliteEligibleAccountRoles(db, asked.accountId);
+          else if (asked.kind === 'token') answer = store.lookup(asked.tokenId);
           else answer = store.insert(asked.stored);
         } catch (error) {
           operation.return(undefined as never);
@@ -131,6 +132,7 @@ export function postgresOAuthStore(pool: PgPool, appId: string): OAuthStore {
           if (asked.kind === 'all') answer = (await client.query(numbered(asked.sql), [...asked.params])).rows;
           else if (asked.kind === 'run') answer = (await client.query(numbered(asked.sql), [...asked.params])).rowCount ?? 0;
           else if (asked.kind === 'eligible') answer = await readPostgresEligibleAccountRoles(client, asked.accountId);
+          else if (asked.kind === 'token') answer = await store.lookup(asked.tokenId);
           else answer = await store.insert(asked.stored);
         } catch (error) {
           operation.return(undefined as never);

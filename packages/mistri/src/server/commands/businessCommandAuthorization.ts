@@ -980,7 +980,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           if (!descriptor?.enumerable || !('value' in descriptor)) throw new Error();
           return descriptor.value;
         };
-        const optional = (key: 'kind' | 'form' | 'support' | 'email' | 'name' | 'link') =>
+        const optional = (key: 'kind' | 'form' | 'support' | 'email' | 'name' | 'link' | 'scope') =>
           Object.hasOwn(actor, key) ? own(key) : undefined;
         const captured = captureTenantData({
           id: own('id'),
@@ -992,6 +992,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           email: optional('email'),
           name: optional('name'),
           link: optional('link'),
+          scope: optional('scope'),
         });
         if (
           typeof captured.id !== 'string' ||
@@ -1017,6 +1018,16 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         // so the combination is refused rather than quietly ignored.
         if (captured.support !== undefined && (captured.support !== true || captured.kind !== undefined)) throw new Error();
         if (captured.link !== undefined && captured.kind !== 'link') throw new Error();
+        // A token's row scope belongs to a signed-in account's token: a name and a key, nothing else.
+        const scoped = captured.scope as BusinessCommandActor['scope'] | undefined;
+        if (
+          scoped !== undefined &&
+          (captured.kind !== undefined ||
+            !scoped ||
+            typeof scoped !== 'object' ||
+            [scoped.name, scoped.key].some((part) => typeof part !== 'string' || !part))
+        )
+          throw new Error();
         if (captured.kind === 'service') {
           // A declared service principal: the id its declaration derives,
           // the roles it declares, and no public form.
@@ -1071,6 +1082,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           ...(captured.support === true ? { support: true as const } : {}),
           ...(typeof captured.email === 'string' ? { email: captured.email } : {}),
           ...(typeof captured.name === 'string' ? { name: captured.name } : {}),
+          ...(scoped ? { scope: Object.freeze({ name: scoped.name, key: scoped.key }) } : {}),
         });
       } catch {
         throw new AppAccessDenied();

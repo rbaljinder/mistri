@@ -12,7 +12,7 @@ import { assertAppApiContext } from '../api/appApiValidation.js';
 import { apiReadTokenCatalog } from '../api/apiEventOperations.js';
 import type { ApiTenantCatalog } from '../api/apiTenantCommandCatalog.js';
 import { apiTokenSecretId, matchesApiTokenSecret } from '../api/apiTokenSecret.js';
-import { narrowApiTokenScope, narrowTenantApiTokenScope } from '../api/apiTokenScope.js';
+import { narrowApiTokenScope, narrowTenantApiTokenScope, observedRowScope } from '../api/apiTokenScope.js';
 import { createPostgresApiTokenStore } from './postgresApiTokenStore.js';
 import { readPostgresEligibleAccountRoles } from './nativeAccountObservation.js';
 import { ApiTokenStoreUnavailable, throughApiTokenStoreAsync } from './apiTokenStoreFailure.js';
@@ -137,8 +137,12 @@ export async function observePostgresAccountToken(
           ])
         ).rows;
         if (tokenLock.length !== 1 || tokenLock[0].token_id !== id) return refuse();
-        const stored = await store.lookup(id);
+        // A `$scope` token stands while its parent does: the parent read with it, in this transaction, so revoking
+        // the parent ends it here and costs no statement of its own.
+        const found = await store.lookupWithParent(id);
         current();
+        const stored = found?.token,
+          parent = found?.parent;
         if (
           !stored ||
           stored.record.subject.kind !== 'account' ||
@@ -190,6 +194,7 @@ export async function observePostgresAccountToken(
               instant,
             )
           : undefined;
+        const rowScope = observedRowScope(stored.record, scopedApp, parent?.record, instant);
         const scope =
           bound ??
           narrowApiTokenScope(
@@ -216,6 +221,7 @@ export async function observePostgresAccountToken(
           roles: scope.roles,
           operations: scope.operations,
           ...(bound ? { tenant: bound.tenant } : {}),
+          ...(rowScope ? { scope: rowScope } : {}),
         });
       } finally {
         try {

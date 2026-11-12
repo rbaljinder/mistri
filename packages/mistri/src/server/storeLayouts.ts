@@ -174,9 +174,27 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'api-tokens',
     title: 'API tokens, beside the accounts',
     tables: { prefix: '__mistri_auth_', own: true },
-    current: both(1),
+    current: both(2),
     read: marked({ sqlite: { table: '__mistri_api_token_meta' }, postgres: { table: 'auth_api_token_meta' } }),
-    upgrades: {},
+    upgrades: {
+      sqlite: {
+        1: {
+          says: "adds a token's row scope (api.scopes): its scope's name and key, and a $scope token's parent",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/auth/sqliteApiTokenLayout.js')).sqliteApiTokenUpgradeFrom1()) await db.run(sql);
+          },
+        },
+      },
+      postgres: {
+        1: {
+          says: "adds a token's row scope (api.scopes): its scope's name and key, and a $scope token's parent",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/auth/postgresApiTokenLayout.js')).postgresApiTokenUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+      },
+    },
   },
   {
     id: 'record-history',
@@ -198,7 +216,7 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'read-audit',
     title: "read audit: who read an audited resource's rows, append-only, never pruned",
     tables: { prefix: '__mistri_read_audit_' },
-    current: both(3),
+    current: both(4),
     read: marked(everywhere('__mistri_read_audit_meta')),
     upgrades: {
       sqlite: {
@@ -214,6 +232,12 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
             for (const sql of (await import('../adapters/readAudit/sqliteReadAudit.js')).sqliteReadAuditUpgradeFrom2()) await db.run(sql);
           },
         },
+        3: {
+          says: "adds a row-scoped API token's scope",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/readAudit/sqliteReadAudit.js')).sqliteReadAuditUpgradeFrom3()) await db.run(sql);
+          },
+        },
       },
       postgres: {
         1: {
@@ -227,6 +251,13 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
           says: "adds the reader's roles and, on a tenant App, its membership",
           run: async ({ db }) => {
             for (const sql of (await import('../adapters/readAudit/postgresReadAudit.js')).postgresReadAuditUpgradeFrom2())
+              await db.run(sql);
+          },
+        },
+        3: {
+          says: "adds a row-scoped API token's scope",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/readAudit/postgresReadAudit.js')).postgresReadAuditUpgradeFrom3())
               await db.run(sql);
           },
         },

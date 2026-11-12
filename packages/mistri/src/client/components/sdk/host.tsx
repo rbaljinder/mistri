@@ -198,9 +198,12 @@ const pageHost: UiHost = {
       : await batchedBreakdown<{ rows?: UiRow[] }>({ text, limit });
     return got.rows ?? [];
   },
-  async load(page, params) {
+  async load(page, params, loader) {
     /* A tenant's lease answers a refusal as a reply, not a throw (tenantTransport.ts): it is the page's error either way. */
-    const got = (await pageApi(page, PAGE_LOAD_PATH, { page, params })) as { data?: unknown; error?: unknown };
+    const got = (await pageApi(page, PAGE_LOAD_PATH, { page, params, ...(loader === undefined ? {} : { loader }) })) as {
+      data?: unknown;
+      error?: unknown;
+    };
     if (typeof got.error === 'string') throw new Error(got.error);
     return got.data;
   },

@@ -54,6 +54,8 @@ export interface ReadAuditSink {
   readonly roles?: readonly string[];
   /** On a tenant App, the membership the read comes through: the person's own, or the one that holds the API token. */
   readonly membership?: string;
+  /** A row-scoped API token's scope, `name:key` (`api.scopes`): the one row whose world the token reads. */
+  readonly scope?: string;
   /** One row, durable before it resolves, on the database that holds `connection`'s rows. */
   append(row: ReadAuditRow, connection: string): Promise<void>;
   /** Rows written in a transaction that may yet roll back (a command handler's reads): never coalesced, since a row
@@ -265,6 +267,7 @@ async function record(read: Read, sink: ReadAuditSink | undefined): Promise<void
     /* Sorted and once each, so the same grant reads as the same line and coalesces with it. */
     ...(sink.roles?.length ? { roles: [...new Set(sink.roles)].sort() } : {}),
     ...(sink.membership ? { membership: sink.membership } : {}),
+    ...(sink.scope ? { scope: sink.scope } : {}),
     resource: read.resource,
     route: door.route,
     ...(door.route === 'command' && door.command !== undefined ? { command: door.command } : {}),
@@ -287,6 +290,7 @@ async function record(read: Read, sink: ReadAuditSink | undefined): Promise<void
     row.visit ?? '',
     row.roles ? JSON.stringify(row.roles) : '',
     row.membership ?? '',
+    row.scope ?? '',
     row.resource,
     row.route,
     row.command ?? '',

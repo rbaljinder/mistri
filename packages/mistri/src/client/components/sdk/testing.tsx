@@ -52,6 +52,8 @@ export interface FixtureChange {
   data?: Record<string, readonly UiRow[]>;
   /** The whole refused set after the change: a resource left out is readable again. */
   refused?: Record<string, 401 | 403>;
+  /** What each of the page's loaders answers now, by name (`page.useLoader`); the page's own `loader` answers `loaded`. */
+  loaders?: Record<string, unknown>;
 }
 
 type Drawn = RenderResult & {
@@ -83,10 +85,15 @@ function refresher(options: RenderOptions, client: QueryClient) {
   return async (change: FixtureChange = {}) => {
     for (const [resource, rows] of Object.entries(change.data ?? {})) options.data!.tables[resource] = rows;
     if (change.refused) options.refused = change.refused;
+    if (change.loaders) options.loaders = change.loaders;
     /* A table that changed stales every review of it, as live sync does a record's (liveInvalidate.ts). */
     await act(() => {
       for (const resource of Object.keys(change.data ?? {})) staleReviews(resource, 'many');
-      return client.invalidateQueries({ queryKey: ['mistri-ui'] });
+      // A page's loaders are read again too, as a committed command reads them (commands.tsx).
+      return Promise.all([
+        client.invalidateQueries({ queryKey: ['mistri-ui'] }),
+        client.invalidateQueries({ queryKey: ['mistri-page', 'load'] }),
+      ]).then(() => undefined);
     });
   };
 }

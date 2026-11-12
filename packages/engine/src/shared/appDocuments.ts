@@ -33,6 +33,8 @@ export type DocumentSize = (typeof DOCUMENT_SIZES)[number];
 const DOCUMENT_SECTION_KINDS = ['fields', 'list', 'note'] as const;
 /** Every line is on paper, up to the most a related list reads at once; a page that would be longer says so. */
 const DOCUMENT_LINES = 500;
+/** A list of pictures is read on the reader's lease one file at a time, and each takes a sheet's room: fewer by default. */
+const DOCUMENT_PICTURES = 24;
 
 export interface PageDocument {
   /** "Invoice", "Packing slip", "Payslip": the verb on the record, and the sheet's heading. */
@@ -72,9 +74,10 @@ export function parseDocument(raw: unknown, at: string): PageDocument {
 /**
  * What a document's sections may be, refused section by section: paper has no
  * aside, no tabs and nothing to operate, and a list on it is every line — a
- * table whose header repeats on each sheet — never a gallery, a card or a
- * page of rows. Its lists read every line, up to DOCUMENT_LINES, unless the
- * author says fewer.
+ * table whose header repeats on each sheet — or, over a file resource, its
+ * pictures (a gallery, drawn as a grid, with no lightbox to open), never
+ * cards or a page of rows. Its lists read every line, up to DOCUMENT_LINES
+ * (DOCUMENT_PICTURES for pictures), unless the author says fewer.
  */
 export function documentSections(sections: readonly PageSection[], at: string): PageSection[] {
   return sections.map((section, i) => {
@@ -88,8 +91,9 @@ export function documentSections(sections: readonly PageSection[], at: string): 
     if (section.tab !== undefined) throw new Error(`${where} has a "tab"; paper has no tabs, so every section of a document is drawn.`);
     if (section.kind === 'fields' && section.actions?.length) throw new Error(`${where} has "actions"; paper has nothing to press.`);
     if (section.kind !== 'list') return section;
-    if (section.presentation !== undefined || section.create || section.rowActions)
-      throw new Error(`${where} is a list of the record's lines on paper: no presentation, create or row actions.`);
+    if ((section.presentation !== undefined && section.presentation !== 'gallery') || section.create || section.rowActions)
+      throw new Error(`${where} is a list of the record's lines on paper: no cards, create or row actions.`);
+    if (section.presentation === 'gallery') return section.limit === undefined ? { ...section, limit: DOCUMENT_PICTURES } : section;
     return section.limit === undefined ? { ...section, limit: DOCUMENT_LINES } : section;
   });
 }

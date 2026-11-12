@@ -35,6 +35,7 @@ import { appResourceVerifiedCommandRunner } from '../app/appResources.js';
 import { appSourceVerifiedCommandRunner } from '../app/appSourceAdapter.js';
 import { isProxy } from 'node:util/types';
 import { commandsOf } from '../stores/commandStores.js';
+import { apiScopeName } from '../api/apiRowScope.js';
 
 export interface AuthorizedBusinessCommand {
   readonly command: AnyBusinessCommand;
@@ -296,6 +297,7 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
                   tenant: '',
                   actor: binding.actor.kind === 'public' ? 'public' : binding.actor.id,
                   ...(binding.actor.kind !== 'public' && binding.actor.roles.length ? { roles: binding.actor.roles } : {}),
+                  ...(binding.actor.kind !== 'public' && binding.actor.scope ? { scope: apiScopeName(binding.actor.scope) } : {}),
                   append: async (row, connection) =>
                     readAuditStoreOf(
                       databaseOf(resources, connection) ?? resources.forConnection(connection),

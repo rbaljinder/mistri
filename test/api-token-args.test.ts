@@ -137,3 +137,14 @@ test('hostile argv, sparse arrays and excessive values refuse before coercion or
   denied(tooLong);
   assert.equal(calls, 0);
 });
+
+test('issue takes one --scope as a declared name and a key, split at the first colon', () => {
+  const scoped = parseApiTokenArgs([...issue, '--scope', 'clinic:7:a']);
+  assert.ok(scoped.verb === 'issue');
+  assert.deepEqual(scoped.scope, { name: 'clinic', key: '7:a' });
+  assert.equal(Object.hasOwn(parseApiTokenArgs(issue), 'scope'), false);
+  for (const bad of ['clinic', 'clinic:', ':7', '1clinic:7', 'bad name:7', `${'a'.repeat(65)}:7`, `clinic:${'k'.repeat(1025)}`])
+    denied([...issue, '--scope', bad]);
+  denied([...issue, '--scope', 'clinic:7', '--scope', 'clinic:8']);
+  denied(['inspect', ...common, '--token-id', id, '--scope', 'clinic:7']);
+});

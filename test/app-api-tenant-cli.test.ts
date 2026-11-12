@@ -38,6 +38,7 @@ import {
   allPages,
   childEnv,
   cliArgs,
+  DEPOT_NOTE_TABLE,
   DEPOT_ROWS,
   DEPOT_STORE,
   DEPOT_TABLE,
@@ -62,7 +63,11 @@ interface Client extends PgQuery {
 /** The depot deployment on one engine, provisioned as an operator would: its
  * tenant store, journal, native accounts and token store, and a way to change
  * memberships and to make the business database stop answering. */
-async function depot(t: TestContext, dialect: 'sqlite' | 'postgres', options: { tokens?: boolean; commands?: boolean } = {}) {
+async function depot(
+  t: TestContext,
+  dialect: 'sqlite' | 'postgres',
+  options: { tokens?: boolean; commands?: boolean; notes?: boolean; api?: Record<string, unknown> } = {},
+) {
   const directory = mkdtempSync(join(tmpdir(), `tw-tenant-cli-${dialect}-`));
   const cleanup: Array<() => unknown> = [() => rmSync(directory, { recursive: true, force: true })];
   t.after(async () => {
@@ -72,7 +77,7 @@ async function depot(t: TestContext, dialect: 'sqlite' | 'postgres', options: { 
         .catch(() => {});
   });
   const store = { appId: 'depot', source: { id: 'business', connection: 'data' }, storeId: DEPOT_STORE };
-  let business: string, authStore: string, physical: string;
+  let business: string, authStore: string, physical: string, notes: string | undefined;
   let maintenance: (run: (admin: TenantStoreAdministration) => Promise<void>) => Promise<void>;
   let accounts: (ids: string[]) => Promise<void>;
   let outage: (down: boolean) => Promise<void>;
@@ -85,6 +90,7 @@ async function depot(t: TestContext, dialect: 'sqlite' | 'postgres', options: { 
     cleanup.push(() => db.close());
     // Beside two serving processes: wait for their locks rather than fail.
     db.exec(`PRAGMA busy_timeout = 10000; ${DEPOT_TABLE(physical)}; ${DEPOT_ROWS(physical)}`);
+    if (options.notes) db.exec(DEPOT_NOTE_TABLE((notes = 'physical_note'), physical));
     migrateSqliteCommandJournal(business);
     provisionSqliteTenantStore(business, store);
     maintenance = async (run) => {
@@ -146,6 +152,10 @@ async function depot(t: TestContext, dialect: 'sqlite' | 'postgres', options: { 
     await client.connect();
     cleanup.push(() => client.end());
     await client.query(`${DEPOT_TABLE('physical_item')}; ${DEPOT_ROWS('physical_item')}`);
+    if (options.notes) {
+      await client.query(DEPOT_NOTE_TABLE('physical_note', 'physical_item'));
+      notes = 'public.physical_note';
+    }
     await migratePostgresCommandJournal(business);
     await migratePostgresTenantStore(business, store);
     maintenance = async (run) => {
@@ -208,7 +218,14 @@ async function depot(t: TestContext, dialect: 'sqlite' | 'postgres', options: { 
       });
     }
   });
-  const written = writeDepotApp(directory, { business, authStore, physical, commands: options.commands !== false });
+  const written = writeDepotApp(directory, {
+    business,
+    authStore,
+    physical,
+    commands: options.commands !== false,
+    ...(notes ? { notes } : {}),
+    ...(options.api ? { api: options.api } : {}),
+  });
   writeFileSync(join(written.appDir, 'authority.lock'), (await loadApp(written.appDir, { lock: 'report' })).authority!.report);
   if (dialect === 'sqlite') {
     // The native auth store as the tenant host creates it, then the accounts.
@@ -229,7 +246,7 @@ async function depot(t: TestContext, dialect: 'sqlite' | 'postgres', options: { 
     const provisioned = await tokenCli(['provision', ...common]);
     assert.equal(provisioned.code, 0, provisioned.err);
   }
-  const issue = async (subject: string, tenant: string) => {
+  const issue = async (subject: string, tenant: string, scope?: string) => {
     const issued = await tokenCli([
       'issue',
       ...common,
@@ -249,11 +266,16 @@ async function depot(t: TestContext, dialect: 'sqlite' | 'postgres', options: { 
       'Tenant CLI',
       '--expires-at',
       new Date(Date.now() + 600000).toISOString(),
+      ...(scope ? ['--scope', scope] : []),
     ]);
     assert.equal(issued.code, 0, issued.err);
     return (JSON.parse(issued.out) as { result: { token: string; tokenId: string } }).result;
   };
-  return { ...written, commands: written.commands!, issue, maintenance, outage, version };
+  const revoke = async (tokenId: string) => {
+    const revoked = await tokenCli(['revoke', ...common, '--token-id', tokenId, '--expected-version', '1', '--actor', 'operator']);
+    assert.equal(revoked.code, 0, revoked.err);
+  };
+  return { ...written, commands: written.commands!, issue, revoke, maintenance, outage, version };
 }
 
 for (const { dialect, skip } of [
@@ -591,3 +613,194 @@ test("a tenant App served from a build reports that build's id on /readyz", { ti
   assert.equal(probe.status, 200);
   assert.deepEqual(await probe.json(), { status: 'ok', deploy: null, build: built.manifest.id });
 });
+
+// A row-scoped token in a tenant App: the scope narrows the membership's rows,
+// never widens them. `item` is its own key, so a child sees one row.
+const SCOPED_API = {
+  version: 1,
+  roles: ['member'],
+  resources: { item: { fields: ['id', 'version', 'name'], sorts: ['id'] } },
+  commands: ['touch', 'stock'],
+  scopes: { item: { key: 'item', rows: { item: 'id' } } },
+};
+for (const { dialect, skip } of [
+  { dialect: 'sqlite' as const, skip: false as const },
+  { dialect: 'postgres' as const, skip: liveSkip('postgres', LIVE) },
+]) {
+  test(
+    `a tenant App's row-scoped tokens on ${dialect}: a child and an issued scope read and write one row of their membership, and the child ends with its parent`,
+    { skip, timeout: 600000 },
+    async (t) => {
+      const f = await depot(t, dialect, { api: SCOPED_API });
+      const alice = await f.issue('alice', 'north');
+      const s = await serveApi(t, { config: f.config, appDir: f.appDir, commands: f.commands }, 'depot', ['--policy', f.policy], {
+        MISTRI_SERVER_TIMING: '1',
+      });
+      await s.started;
+      const as = (token: string) => ({ authorization: `Bearer ${token}` });
+      const status = async (token: string, path: string) => {
+        const response = await fetch(`${s.base}${path}`, { headers: as(token) });
+        await response.body?.cancel();
+        return response.status;
+      };
+      const ids = async (token: string) => (await allPages(s.base, as(token), 'limit=1&sort=id')).map((row) => row.id);
+      const mint = async (token: string, body: object) => {
+        const response = await fetch(`${s.base}/$scope`, {
+          method: 'POST',
+          headers: { ...as(token), 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        return { status: response.status, body: (await response.json()) as Record<string, any> };
+      };
+      let counter = 0;
+      const run = async (token: string, path: string, body: object, ifMatch?: string) => {
+        const response = await fetch(`${s.base}${path}`, {
+          method: 'POST',
+          headers: {
+            ...as(token),
+            'content-type': 'application/json',
+            'idempotency-key': `tenant-scope-${dialect}-${String(++counter).padStart(8, '0')}`,
+            ...(ifMatch ? { 'if-match': ifMatch } : {}),
+          },
+          body: JSON.stringify(body),
+        });
+        return { status: response.status, body: await response.text() };
+      };
+
+      assert.deepEqual(await ids(alice.token), ['north-1', 'north-2']);
+      // Another tenant's key answers exactly as a key that is not there.
+      const foreign = await mint(alice.token, { scope: 'item', key: 'south-1' });
+      const missing = await mint(alice.token, { scope: 'item', key: 'nope' });
+      assert.deepEqual([foreign.status, foreign.body], [missing.status, missing.body]);
+      assert.equal(missing.status, 404);
+
+      const minted = await mint(alice.token, { scope: 'item', key: 'north-1' });
+      assert.equal(minted.status, 201, JSON.stringify(minted.body));
+      const child = minted.body.token as string;
+      assert.deepEqual(await ids(child), ['north-1']);
+      assert.equal(await status(child, '/item/north-1'), 200);
+      assert.equal(await status(child, '/item/north-2'), 404);
+      assert.equal(await status(child, '/item/south-1'), 404);
+      assert.equal((await mint(child, { scope: 'item', key: 'north-1' })).status, 409);
+      // The scope is compiled into the statement the read already makes: a child's read costs the round trips its
+      // parent's does, each database alike (the parent row its observation reads rides the same transaction).
+      const flights = async (token: string, path: string) => {
+        const response = await fetch(`${s.base}${path}`, { headers: as(token) });
+        await response.body?.cancel();
+        const out: Record<string, number> = {};
+        for (const match of (response.headers.get('server-timing') ?? '').matchAll(/(?:^|, )db-([a-z-]+);[^,]*?desc="flights=(\d+)/g))
+          out[match[1]!] = Number(match[2]);
+        return out;
+      };
+      // The least of a few interleaved reads: the server's own periodic work can land a flight on any one of them.
+      const least = (samples: Record<string, number>[]) =>
+        Object.fromEntries(Object.keys(samples[0]!).map((label) => [label, Math.min(...samples.map((each) => each[label] ?? Infinity))]));
+      for (const path of ['/item/north-1', '/item?sort=id&limit=10']) {
+        const parentCost: Record<string, number>[] = [],
+          childCost: Record<string, number>[] = [];
+        for (let round = 0; round < 3; round++) {
+          parentCost.push(await flights(alice.token, path));
+          childCost.push(await flights(child, path));
+        }
+        assert.deepEqual(least(childCost), least(parentCost), path);
+      }
+
+      // Writes: a row of the membership outside the scope is not found, the key's row applies,
+      // and an insert outside the scope is refused.
+      // A tenant App answers a row out of reach as it answers another tenant's and one that is not there: the
+      // same refusal, nothing applied.
+      const outside = await run(child, '/item/north-2/commands/touch/v1', {}, '"0"');
+      const elsewhere = await run(child, '/item/south-1/commands/touch/v1', {}, '"0"');
+      const absent = await run(child, '/item/nope/commands/touch/v1', {}, '"0"');
+      assert.deepEqual([outside, elsewhere], [absent, absent]);
+      assert.equal(await f.version('north-2'), 0);
+      const inside = await run(child, '/item/north-1/commands/touch/v1', {}, '"0"');
+      assert.equal(inside.status, 200, inside.body);
+      assert.equal(await f.version('north-1'), 1);
+      const stocked = await run(child, '/item/commands/stock/v1', { id: 'north-9', name: 'North nine' });
+      assert.equal(stocked.status, 422, stocked.body);
+      assert.match(stocked.body, /out_of_scope/);
+
+      // An operator's scope at issue narrows the same way.
+      const issued = await f.issue('alice', 'north', 'item:north-2');
+      assert.deepEqual(await ids(issued.token), ['north-2']);
+
+      // Revoking the parent ends its child.
+      await f.revoke(alice.tokenId);
+      assert.equal(await status(child, '/item/north-1'), 401);
+      assert.deepEqual(await ids(issued.token), ['north-2']);
+    },
+  );
+}
+
+// A scope that reaches a table by one hop (`note: 'item_id.id'`): an insert there is proven against its parent item's
+// rows, inside the token's membership and scope alike. The parents come from the command's written resources, as a
+// single App's policy path takes them (a command's read footprint always holds what it writes, and the reference the
+// insert sets must point into it), so a table the command writes is where the proof is looked for.
+const HOP_API = {
+  version: 1,
+  roles: ['member'],
+  resources: {
+    item: { fields: ['id', 'version', 'name'], sorts: ['id'] },
+    note: { fields: ['id', 'item_id', 'body'], sorts: ['id'] },
+  },
+  commands: ['annotate'],
+  scopes: { item: { key: 'item', rows: { item: 'id', note: 'item_id.id' } } },
+};
+for (const { dialect, skip } of [
+  { dialect: 'sqlite' as const, skip: false as const },
+  { dialect: 'postgres' as const, skip: liveSkip('postgres', LIVE) },
+]) {
+  test(
+    `a tenant App's scoped token inserts into a hop-mapped table only under an item in its scope, on ${dialect}`,
+    { skip, timeout: 600000 },
+    async (t) => {
+      const f = await depot(t, dialect, { api: HOP_API, notes: true });
+      const alice = await f.issue('alice', 'north');
+      const s = await serveApi(t, { config: f.config, appDir: f.appDir, commands: f.commands }, 'depot', ['--policy', f.policy]);
+      await s.started;
+      const as = (token: string) => ({ authorization: `Bearer ${token}` });
+      const minted = await fetch(`${s.base}/$scope`, {
+        method: 'POST',
+        headers: { ...as(alice.token), 'content-type': 'application/json' },
+        body: JSON.stringify({ scope: 'item', key: 'north-1' }),
+      });
+      assert.equal(minted.status, 201);
+      const child = ((await minted.json()) as { token: string }).token;
+      let counter = 0;
+      const annotate = async (token: string, id: string, item: string) => {
+        const response = await fetch(`${s.base}/note/commands/annotate/v1`, {
+          method: 'POST',
+          headers: {
+            ...as(token),
+            'content-type': 'application/json',
+            'idempotency-key': `tenant-hop-${dialect}-${String(++counter).padStart(8, '0')}`,
+          },
+          body: JSON.stringify({ id, item, body: `about ${item}` }),
+        });
+        return { status: response.status, body: await response.text() };
+      };
+      const notes = async (token: string) => {
+        const response = await fetch(`${s.base}/note?sort=id`, { headers: as(token) });
+        return ((await response.json()) as { items: { id: string }[] }).items.map((row) => row.id);
+      };
+      // Under the item in scope: admitted.
+      const inside = await annotate(child, 'n-1', 'north-1');
+      assert.equal(inside.status, 200, inside.body);
+      // Under another item of the same membership, and under another tenant's: refused as out of scope, nothing applied.
+      for (const [id, item] of [
+        ['n-2', 'north-2'],
+        ['n-3', 'south-1'],
+      ] as const) {
+        const refused = await annotate(child, id, item);
+        assert.equal(refused.status, 422, refused.body);
+        assert.match(refused.body, /out_of_scope/);
+      }
+      assert.deepEqual(await notes(child), ['n-1']);
+      // The parent token is not narrowed to the item: it may annotate the membership's other one.
+      assert.equal((await annotate(alice.token, 'n-4', 'north-2')).status, 200);
+      assert.deepEqual(await notes(alice.token), ['n-1', 'n-4']);
+      assert.deepEqual(await notes(child), ['n-1']);
+    },
+  );
+}

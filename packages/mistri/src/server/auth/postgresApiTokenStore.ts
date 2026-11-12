@@ -141,11 +141,39 @@ export function createPostgresApiTokenStore(
       if (result.record.id !== id || result.record.appId !== owner.appId) return refuse();
       return result;
     };
+    /* A token and, when it is a `$scope` child, its parent: one statement, so the parent an observation must read
+       (observedRowScope) costs no round trip of its own. */
+    const lookupWithParent = async (id: string) => {
+      assertApiTokenSecretId(id);
+      const projection = apiTokenSqlColumns.map((name) => `${name}${times.has(name) ? '::float8' : ''} AS "${name}"`).join(',');
+      const rows = (
+        await query(
+          `SELECT ${projection} FROM ${table} WHERE app_id=$2 COLLATE "C" AND (token_id=$1 COLLATE "C"
+            OR token_id=(SELECT scope_parent_id FROM ${table} WHERE token_id=$1 COLLATE "C" AND app_id=$2 COLLATE "C"))`,
+          [id, owner.appId],
+        )
+      ).rows;
+      active();
+      if (rows.length > 2) return refuse();
+      const decoded = rows.map((row) => decodeApiTokenSqlRow(row));
+      if (decoded.some((each) => each.record.appId !== owner.appId)) return refuse();
+      const token = decoded.find((each) => each.record.id === id);
+      if (!token) return decoded.length ? refuse() : null;
+      const parentId = token.record.rowScope?.parentId;
+      const parent = parentId === undefined ? undefined : decoded.find((each) => each.record.id === parentId);
+      if (decoded.length !== 1 + (parent ? 1 : 0)) return refuse();
+      return Object.freeze({ token, parent });
+    };
     return Object.freeze({
       lookup: (id: string) =>
         invoke(id, async (value) => {
           assertApiTokenSecretId(value);
           return lookup(value);
+        }),
+      lookupWithParent: (id: string) =>
+        invoke(id, async (value) => {
+          assertApiTokenSecretId(value);
+          return lookupWithParent(value);
         }),
       /** Historical snapshots allowed; issuance/restore authority is not here. */
       insert: (raw: unknown) =>

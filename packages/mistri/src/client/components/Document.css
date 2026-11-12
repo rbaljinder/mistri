@@ -157,6 +157,14 @@
 .doc-lines > .doc-caption { color: var(--doc-ink); font-size: var(--text-base); letter-spacing: 0; text-transform: none; margin-bottom: var(--space-3h); }
 .doc-more, .doc-empty { margin: var(--space-3) 0 0; color: var(--doc-dim); font-size: var(--text-xs); }
 
+/* Pictures: a grid of frames, each picture whole inside its own (an X-ray is not cropped to look tidy), a hairline round it,
+   its words small under it. A picture stays on one sheet, and the frame holds its place before the picture arrives. */
+.doc-pictures { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: var(--space-4) var(--space-3h); margin: 0; padding: 0; list-style: none; }
+.doc-picture { display: grid; gap: var(--space-1h); align-content: start; min-width: 0; break-inside: avoid; }
+.doc-picture-frame { display: block; aspect-ratio: 4 / 3; border: 1px solid var(--doc-rule); }
+.doc-picture-frame img { display: block; inline-size: 100%; block-size: 100%; object-fit: contain; }
+.doc-picture-caption { color: var(--doc-dim); font-size: var(--text-xs); overflow-wrap: anywhere; }
+
 /* The author's words: terms, a thank-you. Quiet is small print. */
 .doc-note p { margin: 0 0 var(--space-2h); max-width: 72ch; white-space: pre-line; }
 .doc-note--quiet { color: var(--doc-dim); font-size: var(--text-xs); }

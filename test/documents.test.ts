@@ -88,6 +88,21 @@ test("a document's lines are every line, up to the most a list reads at once, un
   assert.equal((documentSections([{ ...lines, limit: 20 } as PageSection], where)[0] as { limit?: number }).limit, 20);
 });
 
+test("a document may draw a file resource's pictures, a few by default, and refuses cards", () => {
+  const photos = { kind: 'list', from: 'photo', path: 'sales_order_id', presentation: 'gallery' } as PageSection;
+  const [kept] = documentSections([photos], where) as Array<{ presentation?: string; limit?: number }>;
+  assert.equal(kept.presentation, 'gallery');
+  assert.equal(kept.limit, 24);
+  assert.equal((documentSections([{ ...photos, limit: 6 } as PageSection], where)[0] as { limit?: number }).limit, 6);
+  const [page] = pagesOf({ invoice: invoice({}, [{ kind: 'list', from: 'photo', whose: 'sales_order_id', presentation: 'gallery' }]) });
+  assert.equal((page.sections[0] as { presentation?: string }).presentation, 'gallery');
+  const cards = refusal({
+    invoice: invoice({}, [{ kind: 'list', from: 'order_line', whose: 'sales_order_id', presentation: { kind: 'cards', primary: 'item' } }]),
+  });
+  assert.match(cards.message, /is a list of the record's lines on paper: no cards, create or row actions/);
+  assert.equal(cards.code, 'document');
+});
+
 test("a document's lines may be matched on the record's own values, read by the page's one match parser", () => {
   const [page] = pagesOf({
     slip: invoice({}, [{ kind: 'list', from: 'order_line', same: ['sales_order_id'], totals: ['quantity'], empty: 'hide' }]),

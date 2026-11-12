@@ -20,7 +20,7 @@ import {
 } from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
 import { AUDIT_PART_ENTRIES, AUDIT_TARGET_ENTRIES, COMMAND_TARGET_BOUNDS } from '../../adapters/commands/commandJournalSchema.js';
-import { splitAudit } from '../../adapters/commands/commandAuditParts.js';
+import { scopedAudit, splitAudit } from '../../adapters/commands/commandAuditParts.js';
 import type { CommandEventBatch } from '../../adapters/events/commandEventTypes.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
 import { ScopeRefusal } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
@@ -1710,7 +1710,13 @@ async function executeUntraced(
             const audits = list.keys.map((key, index) => ({
               target: receiptOwner ? resource : authorized.resource,
               keyJson: canonicalCommandJson(key, 8192),
-              ...splitAudit(changes[index], (head) => (publicActor && eventBatch?.length ? commandVisitorAudit(flags, head) : head)),
+              ...splitAudit(changes[index], (head) =>
+                publicActor && eventBatch?.length
+                  ? commandVisitorAudit(flags, head)
+                  : authorized.actor.scope
+                    ? scopedAudit(authorized.actor.scope, head)
+                    : head,
+              ),
             }));
             const receipt = { ...scope, id, fingerprint, resultJson, requestId, completedAt };
             await mintQueued(journal, links, id);

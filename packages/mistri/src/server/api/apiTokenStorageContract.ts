@@ -55,6 +55,9 @@ export const apiTokenSqlColumns = Object.freeze([
   'tenant_id',
   'membership_id',
   'membership_version',
+  'scope_name',
+  'scope_key',
+  'scope_parent_id',
 ] as const);
 
 /** SQL NULL is absence, not JSON null or []. Drivers must supply exact numeric
@@ -82,6 +85,9 @@ export function encodeApiTokenSqlRow(raw: unknown) {
     tenant_id: row.tenant?.tenantId ?? null,
     membership_id: row.tenant?.membershipId ?? null,
     membership_version: row.tenant?.membershipVersion ?? null,
+    scope_name: row.rowScope?.name ?? null,
+    scope_key: row.rowScope?.key ?? null,
+    scope_parent_id: row.rowScope?.parentId ?? null,
   });
 }
 
@@ -94,6 +100,9 @@ export function decodeApiTokenSqlRow(raw: unknown) {
     // All three or none: a partial binding is not a weaker one, it is corrupt.
     const bound = [row.tenant_id, row.membership_id, row.membership_version];
     if (bound.some((value) => value !== null) && bound.some((value) => typeof value !== 'string')) return refuse();
+    // A scope is its name and key together; a parent without them is corrupt.
+    if ((row.scope_name === null) !== (row.scope_key === null) || (row.scope_name === null && row.scope_parent_id !== null))
+      return refuse();
     const token = captureStoredApiToken({
       format: row.format,
       digest: row.digest,
@@ -111,6 +120,15 @@ export function decodeApiTokenSqlRow(raw: unknown) {
         ...(row.tenant_id === null
           ? {}
           : { tenant: { tenantId: row.tenant_id, membershipId: row.membership_id, membershipVersion: row.membership_version } }),
+        ...(row.scope_name === null
+          ? {}
+          : {
+              rowScope: {
+                name: row.scope_name,
+                key: row.scope_key,
+                ...(row.scope_parent_id === null ? {} : { parentId: row.scope_parent_id }),
+              },
+            }),
         ...(row.revoked_at === null ? {} : { revokedAt: row.revoked_at }),
         ...(row.revoked_by === null ? {} : { revokedBy: row.revoked_by }),
         ...(row.last_used_at === null ? {} : { lastUsedAt: row.last_used_at }),

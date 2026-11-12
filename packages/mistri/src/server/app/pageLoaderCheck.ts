@@ -7,7 +7,7 @@ import type { AppDef } from '../../shared/app.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
 
 /**
- * Each free-form page's loader, held to what the page declares: one the
+ * Each free-form page's loaders (`loader` and `loaders`), each held to what the page declares: one the
  * commands module exports, reading only resources the page reads. The page
  * names it, so a loader no page names never runs. A surface's loader is held to
  * the surface's reads the same way: the runtime limits the loader's db to its own
@@ -16,21 +16,23 @@ import type { PageLoader } from '../commands/pageLoaders.js';
  */
 export function checkPageLoaders(app: AppDef, loaders: Readonly<Record<string, PageLoader>> | undefined, where: string): void {
   for (const [key, view] of Object.entries(app.views)) {
-    const name = 'sections' in view ? view.page?.loader : undefined;
-    if (!name) continue;
+    if (!('sections' in view) || !view.page) continue;
     const at = `${where}: pages/${key}.page.tsx`;
-    const loader = loaders && Object.hasOwn(loaders, name) ? loaders[name] : undefined;
-    if (!loader) {
-      throw new Error(
-        `[page-loader] ${at} names the loader "${name}", which the commands module does not export: export const loaders = defineLoaders({ ${name}: defineLoader({ … }) }).`,
-      );
-    }
-    const page = (view as { page: { reads: string[] } }).page;
-    const stray = loader.reads.find((resource) => !page.reads.includes(resource));
-    if (stray) {
-      throw new Error(
-        `[page-loader] ${at}: its loader "${name}" reads "${stray}", which the page does not declare in its reads. A loader reads what its page reads.`,
-      );
+    /* The page's allowlist is its `loader` and its `loaders`: each held to the page's reads, a loader reading what its page reads. */
+    for (const name of [view.page.loader, ...(view.page.loaders ?? [])]) {
+      if (!name) continue;
+      const loader = loaders && Object.hasOwn(loaders, name) ? loaders[name] : undefined;
+      if (!loader) {
+        throw new Error(
+          `[page-loader] ${at} names the loader "${name}", which the commands module does not export: export const loaders = defineLoaders({ ${name}: defineLoader({ … }) }).`,
+        );
+      }
+      const stray = loader.reads.find((resource) => !view.page!.reads.includes(resource));
+      if (stray) {
+        throw new Error(
+          `[page-loader] ${at}: its loader "${name}" reads "${stray}", which the page does not declare in its reads. A loader reads what its page reads.`,
+        );
+      }
     }
   }
   for (const [key, surface] of Object.entries(app.surfaces ?? {})) {

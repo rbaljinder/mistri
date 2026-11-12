@@ -37,11 +37,13 @@ export type OAuthTables = Readonly<{ client: string; code: string; grant: string
 type Row = Record<string, unknown>;
 type AccountRoles = Readonly<{ accountId: string; roles: readonly string[] }> | null;
 /** One thing a driver does for an operation: `?` placeholders, in order. */
-type OAuthStep =
+export type OAuthStep =
   | Readonly<{ kind: 'all'; sql: string; params: readonly unknown[] }>
   | Readonly<{ kind: 'run'; sql: string; params: readonly unknown[] }>
   | Readonly<{ kind: 'eligible'; accountId: string }>
-  | Readonly<{ kind: 'insert'; stored: unknown }>;
+  | Readonly<{ kind: 'insert'; stored: unknown }>
+  /** The stored token by its id, read through the token store: null when there is none. */
+  | Readonly<{ kind: 'token'; tokenId: string }>;
 export type OAuthWork<T> = Generator<OAuthStep, T, unknown>;
 
 /** Unconsented clients at most: registration is open, so it is bounded. */

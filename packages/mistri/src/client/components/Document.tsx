@@ -36,7 +36,9 @@ import { humanName } from '@mistriwork/engine/shared/model.js';
 import { paperSize, SHEET_SPAN, type DocumentSize, type PageDocument } from '@mistriwork/engine/shared/appDocuments.js';
 import { fieldsColumns, listView, rowBody } from '@mistriwork/engine/shared/recordReads.js';
 import type { AppPayloadDocument } from '../../shared/appPayload.js';
-import type { ColumnMeta, TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { columnKind, type ColumnMeta, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { recordViewKey } from '@mistriwork/engine/shared/referenceModel.js';
+import type { AppFileDef } from '@mistriwork/engine/shared/servedApp.js';
 import { composeRecordPage } from '@mistriwork/kit/client/recordCompose.js';
 import { defaultCurrency, formatLocale, formatMoney, formatWholeMoney } from '@mistriwork/kit/client/locale.js';
 import { minorFigure, rowCurrency } from '@mistriwork/engine/shared/money.js';
@@ -47,6 +49,7 @@ import { brandMark } from '../appBrand.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Value } from '@mistriwork/kit/client/components/Value.js';
+import { usePictureAddress } from '@mistriwork/kit/client/fileSource.js';
 import { presentationColumns } from '@mistriwork/kit/client/components/columnPresentation.js';
 import { PageRenderContext, recordReadNames, usePageApi } from '@mistriwork/kit/client/components/pageContext.js';
 import {
@@ -492,18 +495,29 @@ function PaperList({ section, plan, label }: { section: List; plan: SectionPlan 
   });
   const title = section.title ? <h2 className="doc-caption">{section.title}</h2> : null;
   if (!plan || plan.error || !view || !table) return <p className="doc-broken">{plan?.error ?? say('lineCouldNotBeRead')}</p>;
+  /* A gallery on paper is the file resource's pictures, in the grid: the App's own `file` says which columns hold them. */
+  const file =
+    section.presentation === 'gallery' ? (activeApp()?.resources?.[table.id] as { file?: AppFileDef } | undefined)?.file : undefined;
   if (plan.empty || (lines.data && 'rows' in lines.data && !lines.data.rows.length)) {
     if (section.emptyMode) return null;
     return (
       <section className="doc-lines">
         {title}
-        <p className="doc-empty">{say('noLines')}</p>
+        <p className="doc-empty">{say(file ? 'noPictures' : 'noLines')}</p>
       </section>
     );
   }
   if (!lines.data) return null;
   if (!('rows' in lines.data)) return <p className="doc-broken">{lines.data.errors[0]?.message ?? say('lineCouldNotBeRead')}</p>;
   const got = lines.data;
+  if (file)
+    return (
+      <section className="doc-lines">
+        {title}
+        <PaperPictures table={table} file={file} presentation={presentation!} reply={got} />
+        {got.more && <p className="doc-more">{say('morePictures', { count: got.rows.length, document: label.toLocaleLowerCase() })}</p>}
+      </section>
+    );
   /* The column that points back at the record holds one value on every line: said nowhere, as on its page. */
   const back = section.path && !section.path.includes('.') ? section.path : undefined;
   const held = new Set<string>([...(presentation!.hidden as string[]), ...(back ? [back] : [])]);
@@ -573,6 +587,81 @@ function PaperList({ section, plan, label }: { section: List; plan: SectionPlan 
       </table>
       {got.more && <p className="doc-more">{say('more', { count: got.rows.length, document: label.toLocaleLowerCase() })}</p>}
     </section>
+  );
+}
+
+/**
+ * A related list over a file resource, as pictures: a grid, each picture whole in its frame with its words under it
+ * (the file's own columns, its key and what the list hides are not words). Each is read on the reader's own request
+ * (usePictureAddress): the file route under their grants, or on a tenant's lease a blob no other page can open, so a
+ * sheet shows a reader no picture the record's page would not.
+ */
+function PaperPictures({
+  table,
+  file,
+  presentation,
+  reply,
+}: {
+  table: TableMeta;
+  file: AppFileDef;
+  presentation: NonNullable<ReturnType<typeof listView>>;
+  reply: ViewReply;
+}) {
+  const connection = (state as { activeConnection?: string }).activeConnection ?? '';
+  const own = new Set<string>([
+    file.name,
+    file.content,
+    ...[file.type, file.size, file.thumbnail].filter((name): name is string => !!name),
+  ]);
+  const keys = new Set(presentation.keyColumns.map(({ column }) => column));
+  const hidden = new Set(presentation.hidden as string[]);
+  /* A caption is words: a reference or a number says nothing under a picture. */
+  const wordsOf = (column: string) => {
+    const meta = table.columns.find((candidate) => candidate.name === column);
+    return Boolean(meta && !(meta as Column).references && columnKind(meta.type) === 'text');
+  };
+  const captioned = reply.columns.filter((column) => !own.has(column) && !keys.has(column) && !hidden.has(column) && wordsOf(column));
+  return (
+    <ul className="doc-pictures">
+      {reply.rows.flatMap((row, i) => {
+        const rowKey = recordViewKey(presentation.keyColumns, reply.columns, row);
+        if (!rowKey) return [];
+        const words = captioned.filter((column) => row[column] != null && row[column] !== '').map((column) => String(row[column]));
+        return [
+          <PaperPicture
+            key={i}
+            table={table.id}
+            rowKey={rowKey}
+            connection={connection}
+            alt={words[0] ?? String(row[file.name] ?? '')}
+            caption={words.join(' · ')}
+          />,
+        ];
+      })}
+    </ul>
+  );
+}
+
+function PaperPicture({
+  table,
+  rowKey,
+  connection,
+  alt,
+  caption,
+}: {
+  table: string;
+  rowKey: Record<string, unknown>;
+  connection: string;
+  alt: string;
+  caption: string;
+}) {
+  const src = usePictureAddress(table, rowKey, connection);
+  return (
+    <li className="doc-picture">
+      {/* The frame is there before the picture is, so the sheet does not move as pictures arrive. */}
+      <span className="doc-picture-frame">{src ? <img src={src} alt={alt} decoding="async" /> : null}</span>
+      {caption && <span className="doc-picture-caption">{caption}</span>}
+    </li>
   );
 }
 

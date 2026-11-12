@@ -542,8 +542,8 @@ mistri audit reads [--app <dir>] [--resource <name>] [--record <id>] [--actor <w
                 [<db> | --db <target> | --config <path>]
 Prints the reads recorded for the App's resources with audit: { reads: true },
 newest first, one JSON object a line: when, the actor, the roles it read
-under and, on a tenant App, its membership, the tenant, the resource, the
-route (page, api, mcp, assistant, export, picker, custom-page,
+under and, on a tenant App, its membership, a row-scoped token's scope
+(name:key), the tenant, the resource, the route (page, api, mcp, assistant, export, picker, custom-page,
 related, or command with the command's id) and the one record read or the
 query with the count and ids it returned; never a field's value. Each flag
 narrows: --record by the record's key, read alone or among the ids a list read

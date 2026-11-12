@@ -84,7 +84,7 @@ export const TENANT_METADATA_POSTS: ReadonlySet<string> = new Set([
   TENANT_BOOT_PATH,
 ]);
 export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = {
-  [PAGE_LOAD_PATH]: ['page', 'params'],
+  [PAGE_LOAD_PATH]: ['page', 'params', 'loader'],
   [TENANT_BOOT_PATH]: ['path', 'search', 'reads'],
   '/api/pages/plan': ['page', 'key'],
   '/api/pages/compose': ['page', 'key', 'rows', 'tab'],

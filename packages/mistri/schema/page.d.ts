@@ -51,6 +51,7 @@ import type {
   CommandReview,
   CommandRunOptions,
   CommandUnavailable,
+  LoaderData,
   LoaderPageProps,
   PageProps,
   UiQuery,
@@ -361,10 +362,15 @@ export interface PageDefinition<
   A extends string = never,
   K extends { readonly [N in P]?: ParamKind } = { readonly [N in P]: 'text' },
   F extends string = never,
+  LS extends string = never,
 > {
   (props: LoaderPageProps<L>): ReactTypes.ReactNode;
   readonly definition: { readonly label: string | AppMessageRef; readonly reads: readonly R[]; readonly commands?: readonly C[];
-    readonly actions?: readonly A[]; readonly forms?: readonly F[]; readonly params?: readonly P[] | K; readonly loader?: L };
+    readonly actions?: readonly A[]; readonly forms?: readonly F[]; readonly params?: readonly P[] | K; readonly loader?: L;
+    readonly loaders?: readonly LS[] };
+  /** One of the page's loaders by its name, `loader` or one of `loaders`: `page.useLoader('dueFigure')`, its `data` typed by what
+      the loader returns. Each has its own query, loading state and refetch, and is read again after a command the page runs commits. */
+  useLoader<const N extends L | LS>(name: N): UiQuery<LoaderData<N>>;
   /** Rows of one of the page's reads, each typed by what `show` names:
       `page.useRows('pick_list', { show: ['id', 'reference'], where: { status: 'to_pick' }, sort: 'reference' })`. */
   useRows<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(resource: T, options: RowsOptions<T, S> & { optional: true }): UiRowsQuery<PageRow<T, S>> & UiRefusable;
@@ -490,6 +496,7 @@ export declare function definePage<
   const L extends LoaderName = never,
   const A extends ActionName = never,
   const F extends string = never,
+  const LS extends LoaderName = never,
 >(definition: {
   label: string | AppMessageRef;
   icon?: PageIcon;
@@ -516,9 +523,13 @@ export declare function definePage<
   /** The address parameters it keeps its place in: names (each read as text), or each name with its kind,
       `{ class: 'id', day: 'date', view: ['list', 'board'] }`. */
   params?: PD & LowercaseNames<PD>;
+  /** The loader whose result is the page's `data`. */
   loader?: L;
+  /** More loaders the page runs by name (`page.useLoader('name')`), beside `loader`: each reads what the page reads, and has
+      its own result, loading state and refetch. */
+  loaders?: readonly LS[];
   component: (props: LoaderPageProps<L>) => ReactTypes.ReactNode;
-}): PageDefinition<R, C, ParamNames<PD>, L, A, ParamKinds<PD>, F>;
+}): PageDefinition<R, C, ParamNames<PD>, L, A, ParamKinds<PD>, F, LS>;
 
 /** A surface as `defineSurface` makes it: its declaration, typed to the App, for the server to read and a front end's types to follow. */
 export interface SurfaceDefinition<R extends string, C extends string = never, L extends string = never, F extends string = never> {

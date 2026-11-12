@@ -7,6 +7,10 @@ type Subject = Readonly<{ kind: 'account' | 'service'; id: string }>;
  * version it was issued against: any later change to that membership (roles,
  * status, a reissue) leaves the token without authority rather than following it. */
 type TokenTenantBinding = Readonly<{ tenantId: string; membershipId: string; membershipVersion: string }>;
+/** A row-scoped token (api.scopes): the declared scope's name, its key as text,
+ * and — for a child minted by `$scope` — the token it was minted from, whose
+ * revocation or expiry ends the child with it. */
+type TokenRowScope = Readonly<{ name: string; key: string; parentId?: string }>;
 export interface TokenRecord {
   id: string;
   appId: string;
@@ -15,6 +19,7 @@ export interface TokenRecord {
   roles: readonly string[];
   operations?: readonly string[];
   tenant?: TokenTenantBinding;
+  rowScope?: TokenRowScope;
   createdAt: number;
   createdBy: string;
   expiresAt: number;
@@ -77,6 +82,16 @@ const tenantBinding = (raw: unknown): TokenTenantBinding => {
   });
 };
 
+const rowScope = (raw: unknown): TokenRowScope => {
+  const value = record(raw, ['name', 'key'], ['parentId']);
+  if (typeof value.name !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]{0,63}(?![\s\S])/.test(value.name)) return refuse();
+  return Object.freeze({
+    name: value.name,
+    key: text(value.key),
+    ...(Object.hasOwn(value, 'parentId') ? { parentId: text(value.parentId) } : {}),
+  });
+};
+
 /** Issuance input for a tenant App: the binding read natively from the business
  * store, and the roles that membership holds, which bound the token's roles. */
 export function captureTenantIssue(raw: unknown): Readonly<{ binding: TokenTenantBinding; roles: readonly string[] }> {
@@ -91,7 +106,7 @@ export function captureApiTokenRecord(raw: unknown): Readonly<TokenRecord> {
   const value = record(
     snapshot(raw, 131072).value,
     ['id', 'appId', 'subject', 'label', 'roles', 'createdAt', 'createdBy', 'expiresAt'],
-    ['operations', 'tenant', 'revokedAt', 'revokedBy', 'lastUsedAt'],
+    ['operations', 'tenant', 'rowScope', 'revokedAt', 'revokedBy', 'lastUsedAt'],
   );
   const createdAt = instant(value.createdAt),
     expiresAt = instant(value.expiresAt);
@@ -113,9 +128,43 @@ export function captureApiTokenRecord(raw: unknown): Readonly<TokenRecord> {
     expiresAt,
     ...(Object.hasOwn(value, 'operations') ? { operations: names(value.operations, 1024) } : {}),
     ...(Object.hasOwn(value, 'tenant') ? { tenant: tenantBinding(value.tenant) } : {}),
+    ...(Object.hasOwn(value, 'rowScope') ? { rowScope: rowScope(value.rowScope) } : {}),
     ...(revokedAt === undefined ? {} : { revokedAt, revokedBy: accountId(value.revokedBy) }),
     ...(lastUsedAt === undefined ? {} : { lastUsedAt }),
   });
+}
+
+/**
+ * The row scope an observed token acts under, or a refusal. The scope must
+ * still be declared (a scope the App dropped leaves its tokens without
+ * authority, not unscoped); a child's parent — read by the same observation, in
+ * the same transaction — must still stand: the same App and subject, unrevoked,
+ * unexpired and itself unscoped. Revoking the parent ends every child at once,
+ * with no fan-out write.
+ */
+export function observedRowScope(
+  record: Readonly<TokenRecord>,
+  app: AppDef,
+  parent: Readonly<TokenRecord> | undefined,
+  now: number,
+): Readonly<{ name: string; key: string }> | undefined {
+  const scope = record.rowScope;
+  if (!scope) return parent === undefined ? undefined : refuse();
+  if (!app.api?.scopes || !Object.hasOwn(app.api.scopes, scope.name)) return refuse();
+  if (scope.parentId !== undefined) {
+    if (
+      !parent ||
+      parent.id !== scope.parentId ||
+      parent.appId !== record.appId ||
+      parent.subject.kind !== record.subject.kind ||
+      parent.subject.id !== record.subject.id ||
+      parent.rowScope !== undefined ||
+      parent.revokedAt !== undefined ||
+      !(parent.expiresAt > now)
+    )
+      return refuse();
+  } else if (parent !== undefined) return refuse();
+  return Object.freeze({ name: scope.name, key: scope.key });
 }
 
 /** All inputs must be freshly observed by a trusted host per request. This

@@ -66,6 +66,48 @@ A token carries exact roles, an expiry and optionally the operations it may
 use (`--operation item:item`, `--operation command:change`). Every request
 checks it again, so a revocation applies to the next one.
 
+### A token for one row
+
+`scopes` narrows a token to one key row, such as one clinic's records for an
+agent that works on that clinic. A scope names its key resource and, for each
+resource, the column that holds the key or a one-hop path through a reference:
+
+```ts
+api: {
+  // …
+  scopes: {
+    clinic: { key: 'clinic', rows: { clinic: 'id', patient: 'clinic_id', visit: 'patient_id.clinic_id' } },
+  },
+}
+```
+
+Issue a scoped token with `--scope clinic:1`, or get one from an unscoped token:
+
+```sh
+curl -X POST "http://127.0.0.1:4111/api/apps/clinics/v1/\$scope" -H "Authorization: Bearer $TOKEN" \
+  -d '{"scope":"clinic","key":1,"ttl":600}'
+```
+
+The child token keeps its parent's roles and operations. It lives `ttl`
+seconds (15 minutes unless said, at most an hour), never longer than its
+parent, and revoking the parent ends it. A key the parent cannot read answers
+404, as a missing one does. A scoped token that asks again answers 409
+`scope_fixed`.
+
+The scope joins the row scope of every read, write and command, so it costs no
+round trip:
+
+- a row outside the scope is not found;
+- an insert outside it answers 422 `out_of_scope`, and a mapped column the
+  insert leaves out takes the key;
+- a resource the scope does not map reads and writes nothing (`mistri check`
+  names each one);
+- a command sees the scope as `context.actor.scope` (`{ name, key }`);
+- the read audit and each command receipt record it as `clinic:1`.
+
+Scopes are for Apps whose rows are already limited: a row-policy App
+(`auth.rows: 'policy'`) or a tenant App.
+
 ## Serve it over HTTP
 
 ```sh
@@ -86,6 +128,7 @@ defaults. Leave out `--commands` when the App exposes none. Routes live under
 | `GET /<resource>/<key>/commands/<id>/v<n>/prepare` | Reads `{ version }` and an `ETag` through the command's authorized reader; runs no command |
 | `POST /<resource>/<key>/commands/<id>/v<n>` | Runs a command, with `If-Match: "<revision>"` and an `Idempotency-Key` |
 | `POST /<resource>/commands/<id>/v<n>` | Runs a `targets: 'many'` command: `{ "targets": [{ "key", "version" }], "input" }` |
+| `POST /$scope` | Mints a token narrowed to one row: `{ "scope", "key", "ttl"? }` ([a token for one row](#a-token-for-one-row)) |
 | `GET /commands/<id>/v<n>/receipts/<idempotency-key>` | Recovers a receipt |
 | `POST /<resource>/commands/<id>/v<n>` | Runs a signed-in form's command: the input as the body, an `Idempotency-Key` and no `If-Match` |
 | `POST /<resource>/commands/create-<resource>/v1` | A generic create, with an `Idempotency-Key`; answers the new record's key |
