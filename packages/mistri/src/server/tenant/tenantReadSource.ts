@@ -57,6 +57,7 @@ import {
   assertPublicResolved,
   capturePublicEvidence,
   capturePublicLookup,
+  intakeVisitor,
   publicLookupOf,
   publicResolution,
   publicTenantOf,
@@ -106,9 +107,11 @@ import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { suspectsStores } from '@mistriwork/engine/adapters/postgresTransactionHandle.js';
 import {
   captureAddressesLookup,
+  captureIntakeEvidence,
   captureIntakeLookup,
   heldAddress,
   intakeAddressQuery,
+  intakePlace,
   intakeTenantOf,
   tenantAddressQuery,
   tenantOwnAddress,
@@ -125,6 +128,7 @@ import {
   type ActiveTenantsQuery,
   tenantProfileColumnQuery,
   tenantProfileQuery,
+  type TenantIntakeEvidence,
   type TenantIntakeLookup,
   type TenantIntakeResolution,
 } from './tenantIntakeModel.js';
@@ -249,6 +253,10 @@ export interface TenantReadSource {
    * its own snapshot and requires the same tenant at the same versions before
    * its SQL, so a rotated address or a suspended tenant reads nothing more. */
   bindPublicReads(evidence: TenantPublicEvidence, rows: RowScope): Promise<ScopedReads>;
+  /** Reads for a public command's lookup in a tenant's intake (tenantIntake.ts): the submission read as the
+   * visitor it is (tenantPublicRead.ts intakeVisitor), under the same scope and the same fence as
+   * `bindPublicReads`. Triage is refused: it lands in no tenant, so no tenant's rows are its to look up. */
+  bindIntakeReads(evidence: TenantIntakeEvidence, rows: RowScope): Promise<ScopedReads>;
   /** Reads under a tenant service's scope (tenantServiceModel.ts composeServiceScope), as `bindReads` is a
    * member's: the source recomposes the scope from the evidence (never a caller's predicate), and every
    * operation re-reads the service anchors in its own snapshot and requires the same tenant and platform at
@@ -835,6 +843,13 @@ export function openSqliteTenantReadSource(
         bindLater({ evidence, rows }, (captured) =>
           bind(composePublicReadScope(owned, captured.evidence, captured.rows), () => currentPublic(captured.evidence)),
         ),
+      bindIntakeReads: (evidence: TenantIntakeEvidence, rows: RowScope) =>
+        bindLater({ evidence, rows }, (captured) => {
+          const value = captureIntakeEvidence(captured.evidence, owned);
+          if (intakePlace(value) !== 'tenant') throw new AppAccessDenied();
+          const visitor = intakeVisitor(value);
+          return bind(composePublicReadScope(owned, visitor, captured.rows), () => currentPublic(visitor));
+        }),
       // The source recomposes the service's scope itself, as it does a visitor's.
       bindServiceReads: (evidence: TenantServiceEvidence, rows: RowScope) =>
         bindLater({ evidence, rows }, (captured) => {
@@ -1975,6 +1990,13 @@ export async function openPostgresTenantReadSource(
         bindLater({ evidence, rows }, (captured) =>
           bind(composePublicReadScope(owned, captured.evidence, captured.rows), (next) => currentPublic(next, captured.evidence)),
         ),
+      bindIntakeReads: (evidence: TenantIntakeEvidence, rows: RowScope) =>
+        bindLater({ evidence, rows }, (captured) => {
+          const value = captureIntakeEvidence(captured.evidence, owned);
+          if (intakePlace(value) !== 'tenant') throw new AppAccessDenied();
+          const visitor = intakeVisitor(value);
+          return bind(composePublicReadScope(owned, visitor, captured.rows), (next) => currentPublic(next, visitor));
+        }),
       // The source recomposes the service's scope itself, as on SQLite.
       bindServiceReads: (evidence: TenantServiceEvidence, rows: RowScope) =>
         bindLater({ evidence, rows }, (captured) => {

@@ -194,6 +194,32 @@ test(
         });
         await assert.rejects(escaped!.lookup(expected.record.id), unavailable);
       });
+      await t.test('the layout is attested once per store, not around every operation', async () => {
+        const input = token();
+        await transaction(c, (ops) => createPostgresApiTokenStore(c, ops, binding, () => {}).insert(input));
+        const sent: string[] = [];
+        function query(sql: string, values?: unknown[]): Promise<PgResult<Record<string, unknown>>>;
+        function query(sql: { text: string; values?: unknown[]; rowMode?: string }): Promise<PgResult<unknown[]>>;
+        async function query(sql: string | { text: string; values?: unknown[]; rowMode?: string }, values?: unknown[]) {
+          sent.push(typeof sql === 'string' ? sql : sql.text);
+          return typeof sql === 'string' ? await c.query(sql, values) : await c.query(sql);
+        }
+        const counted = (run: (store: ReturnType<typeof createPostgresApiTokenStore>) => Promise<unknown>) =>
+          transaction(c, (ops) => run(createPostgresApiTokenStore({ query }, ops, binding, () => {})));
+        await counted((store) => store.lookup(input.record.id));
+        const one = sent.length;
+        sent.length = 0;
+        // What a token request asks of its store: a lookup, then the token with its parent.
+        await counted(async (store) => {
+          assert.ok(await store.lookup(input.record.id));
+          assert.ok(await store.lookupWithParent(input.record.id));
+        });
+        const attestations = sent.filter((sql) => sql.startsWith('SAVEPOINT auth_store_attest')).length;
+        assert.equal(attestations, 1, 'one attestation for the store');
+        assert.equal(sent.filter((sql) => sql.startsWith('LOCK TABLE')).length, 1);
+        // The second operation costs its own statement and the ownership reads around it, never another catalog walk.
+        assert.ok(sent.length - one <= 3, `second operation took ${sent.length - one} flights`);
+      });
     } finally {
       try {
         await db?.end();

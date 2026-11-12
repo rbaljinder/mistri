@@ -31,6 +31,13 @@
  * token and the tenant it was issued in, and it is looked for only among that
  * place's rows. A step that arrives under another address — another tenant's,
  * a rotated one, none — finds no draft and is answered as a forged token is.
+ *
+ * A public command's answer must not carry what its lookup read back to the
+ * applicant. A placed submission's lookup finds the tenant's rows and a triaged
+ * one finds none, so a handler that echoed lookup output would tell an intake
+ * address that places someone from one that does not, which the identical
+ * answers above exist to hide. The lookup is for the handler's decisions; what
+ * the applicant is told is the same either way.
  */
 import { createHash } from 'node:crypto';
 import { isPromise, isProxy } from 'node:util/types';
@@ -57,6 +64,7 @@ import { formCommands, isSavedForm, platformColumns, type AppFormSave } from '..
 import type { AppFormView } from '../../shared/app.js';
 import { savedFormRoots } from '../forms/savedFormChecks.js';
 import { readDraftProgress, type SavedDraftRun } from '../forms/savedForms.js';
+import { tenantVisibleFields } from './tenantVisibleFields.js';
 import { intakeCommandProblem, tenantPageProblems, tenantPublicPages } from './tenantIntakePages.js';
 import { publicPrincipal } from '../commands/formHttp.js';
 import type { CommandResultReference } from '../commands/scopedBusinessCommandAccess.js';
@@ -82,6 +90,10 @@ import {
 } from './tenantIntakeModel.js';
 import { observerMounted } from '../observe/mount.js';
 import { captureTenantReadSource, readSharedProfile, type TenantReadSource } from './tenantReadSource.js';
+import { scopedLookupReader, type CommandLookupReader } from '../commands/commandLookup.js';
+import { intakeVisitor } from './tenantPublicRead.js';
+import type { PublicReadRuntimeOptions } from './tenantPublicReadRuntime.js';
+import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { assertTenantSourcePair } from './tenantSourceIdentity.js';
 import { captureTenantWriteSource, TenantIntakeMoved, TenantWriteFailure, type TenantWriteSource } from './tenantWriteSource.js';
@@ -104,6 +116,9 @@ interface TenantIntakeOptions {
   readonly registry: BusinessCommandRegistry;
   readonly resultReferences: Readonly<Record<string, (result: unknown) => readonly CommandResultReference[]>>;
   readonly now?: () => number;
+  /** The visitor's rows (the deployment's `publicReads`): what a public command's lookup reads, in a tenant's
+   * place only. Without it a command that looks up is refused, as one in triage is. */
+  readonly resolvePublicRows?: PublicReadRuntimeOptions['resolvePublicRows'];
 }
 /** A saved form's step or submit, as the route planned it from the cookie (forms/savedFormHttp.ts). */
 interface TenantIntakeDraft {
@@ -179,8 +194,12 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
     'resultReferences',
     'now',
     'captureFlags',
+    'resolvePublicRows',
   ]);
   if (raw.captureFlags !== undefined && (typeof raw.captureFlags !== 'function' || isProxy(raw.captureFlags))) return denyTenant();
+  if (raw.resolvePublicRows !== undefined && (typeof raw.resolvePublicRows !== 'function' || isProxy(raw.resolvePublicRows)))
+    return denyTenant();
+  const resolvePublicRows = raw.resolvePublicRows as TenantIntakeOptions['resolvePublicRows'];
   const captureFlags = raw.captureFlags as TenantIntakeOptions['captureFlags'];
   const reader = captureTenantReadSource(raw.reader as TenantReadSource),
     writer = captureTenantWriteSource(raw.writer as TenantWriteSource);
@@ -222,13 +241,17 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
     writableConnection: (connection) => connection === identity.source.connection,
     transactionalConnection: (connection) => connection === identity.source.connection,
     managedOwnership: ownerFields,
+    /* What a public read shows (tenantPublicReadRuntime.ts): a lookup sees exactly those columns, not the owner
+       column or a platform table's. */
+    visitorAccess: (access) => tenantVisibleFields(ownership, { ...access, writable: new Set(), creatable: new Set() }),
   });
   const declarations = tenantOptions(raw.resultReferences, Object.keys(registry));
   const extractors = new Map<string, (result: unknown) => readonly CommandResultReference[]>();
   /* A public intake command inserts into a tenant's tables or the platform's,
-     never a global one; it runs no lookup, emits no event or effect, and
-     belongs to no realm of its own: where it lands is decided per submission
-     (tenantIntakePages.ts says so in words, for startup and `check`). */
+     never a global one; it emits no event or effect, and belongs to no realm
+     of its own: where it lands is decided per submission (tenantIntakePages.ts
+     says so in words, for startup and `check`). Its lookup, if any, reads its
+     own source's tables `auth.public` opens, as the visitor would. */
   const kindOf = (table: string) => ownership.ownership[table]?.kind;
   const extract = (id: string): boolean => {
     const extractor = declarations[id];
@@ -239,13 +262,15 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
   for (const form of forms.values()) {
     // A saved form's steps are public commands of the same kind as its submit.
     for (const { id } of formCommands(form)) {
-      if (intakeCommandProblem(registry[id], identity.source.id, kindOf) !== undefined || !extract(id)) return denyTenant();
+      if (intakeCommandProblem(app, registry[id], identity.source.id, kindOf) !== undefined || !extract(id)) return denyTenant();
     }
   }
   // A public page's commands are held to the same rule, and each to a picker it can fill.
   const pageProblem = tenantPageProblems(app, registry, identity.source.id, kindOf)[0];
   if (pageProblem !== undefined) return denyTenant(pageProblem);
   for (const commands of pages.values()) for (const id of commands) if (!extract(id)) return denyTenant();
+  // A lookup reads as the visitor would, so it needs the visitor's rows.
+  if (!resolvePublicRows && [...extractors.keys()].some((id) => typeof registry[id].lookup === 'function')) return denyTenant();
   const validation = compileAppDefinitionValidation(ownership.schema, app);
   // No role: the footprint bounds a public handler, and its place bounds the footprint.
   const grants: ResourceAccess = { readable: new Set(), writable: new Set(), ...(validation ? { validation } : {}) };
@@ -336,6 +361,29 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
   const footprintOf = (authorization: BusinessCommandAuthorization) =>
     Object.freeze(Object.fromEntries(Object.keys(ownership.ownership).map((table) => [table, authorization.read.includes(table)])));
 
+  /** A lookup's rows: the visitor's own (`resolvePublicRows`) on the tables it looks up, and nothing else. The
+   * source composes the placed tenant's fence over them (tenantReadSource.ts bindIntakeReads). */
+  const lookupRows = async (authorization: BusinessCommandAuthorization, evidence: Admitted['evidence']): Promise<RowScope> => {
+    const tables = authorization.lookupTables!;
+    const looked = new Set<string>();
+    for (const [source, catalog] of Object.entries(tables.catalogs))
+      for (const local of Object.keys(catalog)) looked.add(tables.logical(source, local));
+    const rows = await resolvePublicRows!(intakeVisitor(evidence));
+    return Object.freeze(
+      Object.fromEntries(
+        Object.keys(ownership.ownership).map((table) => [table, looked.has(table) && Object.hasOwn(rows, table) ? rows[table] : false]),
+      ),
+    );
+  };
+
+  /** Triage's lookup: the same tables, and no row in any of them. Nothing is read. */
+  const nothingToLookUp = (authorization: BusinessCommandAuthorization): CommandLookupReader =>
+    Object.freeze<CommandLookupReader>({
+      catalogs: authorization.lookupTables!.catalogs,
+      query: async () => ({ columns: [], rows: [], ms: 0, sql: { text: '', params: [] } }),
+      target: async () => undefined,
+    });
+
   /** One fenced writer transaction in the admitted place, under the command's authorization. `moved` is set
    * when the writer found what was resolved changed before the work ran, with nothing applied. */
   const inPlace = async <T>(
@@ -423,6 +471,19 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
           ...authorization,
           transaction: deny,
           intake: place,
+          /* Before the transaction, as a member's lookup is. Triage lands in no tenant and a visitor there is no one's,
+             so its lookup finds nothing — it is not refused, which would answer an unknown address apart from a
+             known one (this file's header). */
+          ...(authorization.lookupTables
+            ? {
+                lookup:
+                  place === 'tenant'
+                    ? scopedLookupReader(authorization, async () =>
+                        reader.bindIntakeReads(evidence, await lookupRows(authorization, evidence)),
+                      )
+                    : nothingToLookUp(authorization),
+              }
+            : {}),
           ...(tenant ? { tenant } : {}),
           ...(place === 'tenant'
             ? { receiptOwner: captureTenantData({ storeId: identity.storeId, sourceId: identity.source.id, tenantId: evidence.tenantId }) }

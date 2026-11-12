@@ -168,6 +168,19 @@ outside `auth.public`. A visitor writes nothing except through a
 [public form](/docs/command-forms/#public-forms). It needs `auth.roles`, and a
 tenant App refuses it: a visitor has no tenant.
 
+`byKey` names resources of `read` a visitor opens one record at a time by its
+key and never lists, as a link sent to one buyer opens one quote:
+
+```ts
+public: { read: ['dealer', 'quote'], byKey: ['quote'] }
+```
+
+A read of a `byKey` resource answers only one row asked for by its whole
+primary key. A list, a search, a count, a breakdown, a reference count or a
+read of another table that reaches it is refused, whichever route asked. `check`
+refuses a list or dashboard over it that names no `roles` (it would be served
+to visitors) and a public page that reads it.
+
 Anything else a visitor asks for (a list, a record, a dashboard section over a
 table `auth.public` does not name) is answered `401` with the sign-in card, the
 same answer for a private table and for a name that is no table.

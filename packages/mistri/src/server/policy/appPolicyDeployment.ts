@@ -99,6 +99,9 @@ export interface AppPolicyDeployment<Request> {
   /** A read for an account the server found itself (a notice's recipient), in
    * the rows the policy gives that account: no writer, action or command. Drained on retirement. */
   withAccount<T>(account: Identity, run: (context: AppPolicyContext) => Promise<T>): Promise<T>;
+  /** A capability link the link door verified (links/linkRoutes.ts): its declared commands on its one record, in
+   * rows narrowed to that record, the policy not asked. Drained on retirement. */
+  withLink<T>(link: NonNullable<AppPolicyContext['principal']['link']>, run: (context: AppPolicyContext) => Promise<T>): Promise<T>;
   submitPublicForm?: (
     form: string,
     ...args: Parameters<ReturnType<typeof bindPolicyPublicIntake>['submit']>
@@ -544,6 +547,8 @@ export async function createAppPolicyDeployment<Request>(
       },
       withAccount: <T>(account: Identity, run: (context: AppPolicyContext) => Promise<T>) =>
         tracked(() => deployed.withAccount(account, run)),
+      withLink: <T>(link: NonNullable<AppPolicyContext['principal']['link']>, run: (context: AppPolicyContext) => Promise<T>) =>
+        tracked(() => deployed.withLink(link, run)),
       ...(placements
         ? {
             placedPublicForm: (form: string) => placed.has(form),

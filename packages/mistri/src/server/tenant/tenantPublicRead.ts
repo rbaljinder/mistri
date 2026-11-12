@@ -19,7 +19,7 @@
  * predicate itself, so no callback can widen past its tenant.
  */
 import { captureTenantData, denyTenant, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
-import { intakeAddress } from './tenantIntakeModel.js';
+import { intakeAddress, type TenantIntakeEvidence } from './tenantIntakeModel.js';
 import { parseTenantSelector } from './tenantMembership.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
 import { PLATFORM_TENANT_ID } from './tenantPlatform.js';
@@ -120,6 +120,27 @@ export function capturePublicEvidence(value: unknown, owned: Pick<TenantOwnershi
   )
     return denyTenant();
   return evidence as unknown as TenantPublicEvidence;
+}
+
+/** The visitor a tenant's intake submission is, for its command's lookup (tenantIntake.ts): the same tenant,
+ * anchors, window and address, read as `auth.public` reads. A lookup is data the applicant sees, so it reads what
+ * a visitor may and no more; the address re-resolves in the intake column, as the submission's own fence does.
+ * Triage lands in no tenant and has no visitor: it is refused. */
+export function intakeVisitor(evidence: TenantIntakeEvidence): TenantPublicEvidence {
+  if (evidence.tenantId === PLATFORM_TENANT_ID || evidence.address === null) return denyTenant();
+  return {
+    realm: 'public',
+    appId: evidence.appId,
+    source: evidence.source,
+    deployment: evidence.deployment,
+    tenantId: evidence.tenantId,
+    tenantVersion: evidence.tenantVersion,
+    platformVersion: evidence.platformVersion,
+    column: evidence.column,
+    address: evidence.address,
+    verifiedAt: evidence.verifiedAt,
+    validUntil: evidence.validUntil,
+  };
 }
 
 /** The lookup that re-resolves this evidence: its own address, or its tenant when a mapped host placed it. */

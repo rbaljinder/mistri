@@ -442,7 +442,7 @@ describe('the command audit on PostgreSQL, against a real server', { skip: liveS
         `INSERT INTO public.enrolment (name, email, reference) VALUES ('First', 'first@example.invalid', 'ENR-FIRST')`,
       ])
         await control.query(statement);
-      assert.equal((await migratePostgresCommandJournal(LIVE!)).version, 3);
+      assert.equal((await migratePostgresCommandJournal(LIVE!)).version, 4);
       return LIVE!;
     },
     async rows(sql) {

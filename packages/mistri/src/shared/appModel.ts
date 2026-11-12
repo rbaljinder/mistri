@@ -346,6 +346,8 @@ export interface AppPublicGrant {
   read: string[];
   /** A narrowing of the column ceiling for signed-out visitors; reads only. */
   fields?: Record<string, AppFieldAccess>;
+  /** Of `read`, the resources a visitor reads one record at a time, by its key, and never lists: a link's page, not a directory. */
+  byKey?: string[];
 }
 
 export interface AppRoleGrant {

@@ -206,7 +206,14 @@ async function fixture(t: TestContext) {
 test('omitting commands preserves issuer and context own keys', async (t) => {
   const f = await fixture(t);
   const issuer = f.issue({ commands: undefined });
-  assert.deepEqual(Reflect.ownKeys(issuer).sort(), ['retire', 'withAccount', 'withContext', 'withPublicContext', 'withService']);
+  assert.deepEqual(Reflect.ownKeys(issuer).sort(), [
+    'retire',
+    'withAccount',
+    'withContext',
+    'withLink',
+    'withPublicContext',
+    'withService',
+  ]);
   await issuer.withContext(signedIn, async (context) => {
     assert.deepEqual(Reflect.ownKeys(context).sort(), [
       'data',
@@ -225,7 +232,14 @@ test('omitting commands preserves issuer and context own keys', async (t) => {
 test('commands expose frozen availability/prepare/execute/status bound to verified principal and preserve generic grants', async (t) => {
   const f = await fixture(t);
   const issuer = f.issue();
-  assert.deepEqual(Reflect.ownKeys(issuer).sort(), ['retire', 'withAccount', 'withContext', 'withPublicContext', 'withService']);
+  assert.deepEqual(Reflect.ownKeys(issuer).sort(), [
+    'retire',
+    'withAccount',
+    'withContext',
+    'withLink',
+    'withPublicContext',
+    'withService',
+  ]);
   const applied = await issuer.withContext(
     { ...signedIn, body: { actor: { id: 'forged', appId: 'other', roles: ['admin'] } } },
     async (context) => {

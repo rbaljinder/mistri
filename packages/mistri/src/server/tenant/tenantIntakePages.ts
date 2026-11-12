@@ -9,7 +9,9 @@
  * would answer a visitor "Sign in to do that" or fail on submit.
  */
 import type { AppCommandField } from '../../../schema/command.js';
-import { isPublicCommandPage, type AppDef } from '../../shared/app.js';
+import { isPublicCommandPage, logicalResource, type AppDef } from '../../shared/app.js';
+import { tenantPublicForms } from './tenantIntakeModel.js';
+import { formCommands } from '../../shared/appSavedForms.js';
 import { getCommandEvents, type AnyBusinessCommand, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 
 /** The public command pages of an App, by view key, with the commands each names. */
@@ -22,10 +24,12 @@ export function tenantPublicPages(app: Pick<AppDef, 'views'>): ReadonlyMap<strin
 /**
  * Why a public command cannot take a signed-out submission on a tenant App, in plain words (completing "it …"), or
  * nothing when it can. A public form's command and a public page's are held to the same rule: it inserts into a
- * tenant's tables or the platform's, never a global one; it runs no lookup, emits no event or effect, and belongs to
- * no realm of its own, since where it lands is decided per submission.
+ * tenant's tables or the platform's, never a global one; it emits no event or effect, and belongs to no realm of its
+ * own, since where it lands is decided per submission. Its lookup, when it has one, reads as the visitor reads
+ * (intakeLookupProblem).
  */
 export function intakeCommandProblem(
+  app: Pick<AppDef, 'auth' | 'sources'>,
   command: AnyBusinessCommand | undefined,
   home: string,
   kindOf: (table: string) => string | undefined,
@@ -34,11 +38,61 @@ export function intakeCommandProblem(
   if (command.realm !== undefined) return `belongs to the ${command.realm} realm, and where a submission lands is decided per submission`;
   if (command.source !== home) return `writes the source "${command.source}", not the App's own "${home}"`;
   if (getCommandEvents(command) !== undefined) return 'emits events or effects';
-  if (typeof command.lookup === 'function') return 'runs a lookup';
-  if (command.sources !== undefined) return 'reads other sources';
+  const lookup = intakeLookupProblem(app, command, home);
+  if (lookup !== undefined) return lookup;
   const shared = command.write.find((table) => !['tenant', 'platform'].includes(kindOf(table) ?? ''));
   if (shared !== undefined) return `writes "${shared}", which is neither a tenant's table nor the platform's`;
   return undefined;
+}
+
+/**
+ * Why a public command's lookup cannot run on a tenant App's intake, in plain words (completing "it …"), or nothing.
+ * The lookup is data the applicant sees, so it reads under `auth.public` — what a visitor may read, in the tenant the
+ * submission landed in (tenantIntake.ts) — never under the command's own read list. So the App must say `auth.public`,
+ * every table looked up must be one it opens, and none one it opens only by a record's key (`byKey`): a lookup is a
+ * query, and a query over such a table would list it. It reads the App's own source, which is the tenant's; it calls
+ * no integration, since a stranger's submission would spend the tenant's calls; and it names its sources, since a
+ * lookup that reads none has no visitor's read to be given.
+ */
+function intakeLookupProblem(app: Pick<AppDef, 'auth' | 'sources'>, command: AnyBusinessCommand, home: string): string | undefined {
+  if (command.integrations !== undefined) return 'calls integrations from its lookup';
+  if (typeof command.lookup !== 'function') return command.sources !== undefined ? 'reads other sources' : undefined;
+  if (command.sources === undefined) return 'runs a lookup that names no "sources" to read';
+  const opened = app.auth?.public;
+  for (const [source, locals] of Object.entries(command.sources)) {
+    if (source !== home) return `looks up the source "${source}", not the App's own "${home}"`;
+    for (const local of locals) {
+      const table = logicalResource(app, source, local);
+      if (!opened)
+        return `looks up "${table}", but the App declares no "auth.public": a signed-out submission's lookup reads what a visitor may`;
+      if (opened.byKey?.includes(table))
+        return `looks up "${table}", which "auth.public" opens only by a record's key ("byKey"): a lookup would list it`;
+      if (!opened.read.includes(table))
+        return `looks up "${table}", which "auth.public" does not open: a signed-out submission's lookup reads what a visitor may`;
+    }
+  }
+  return undefined;
+}
+
+/** Each public form whose command's lookup intake cannot run, in plain words, for startup and `mistri check`: what
+    else a form's command may not do is refused where intake binds, but a lookup's reason is the author's to fix. */
+export function tenantFormLookupProblems(
+  app: Pick<AppDef, 'views' | 'auth' | 'sources'>,
+  registry: BusinessCommandRegistry | undefined,
+  home: string,
+): string[] {
+  const problems: string[] = [];
+  for (const [key, form] of tenantPublicForms(app)) {
+    for (const { id } of formCommands(form)) {
+      const command = registry && Object.hasOwn(registry, id) ? registry[id] : undefined;
+      const problem = command ? intakeLookupProblem(app, command, home) : undefined;
+      if (problem)
+        problems.push(
+          `Public form "${key}" runs "${id}", which ${problem}: a tenant App cannot take that command's signed-out submissions.`,
+        );
+    }
+  }
+  return problems;
 }
 
 const sourcedChoice = (field: AppCommandField): boolean =>
@@ -47,7 +101,7 @@ const sourcedChoice = (field: AppCommandField): boolean =>
 /** Each thing about the App's public command pages that tenant intake cannot serve, in plain words. A page's key is
     already a form's (a view key is its address), so a submission's evidence can name it as its door. */
 export function tenantPageProblems(
-  app: Pick<AppDef, 'views'>,
+  app: Pick<AppDef, 'views' | 'auth' | 'sources'>,
   registry: BusinessCommandRegistry | undefined,
   home: string,
   kindOf: (table: string) => string | undefined,
@@ -56,7 +110,7 @@ export function tenantPageProblems(
   for (const [key, commands] of tenantPublicPages(app)) {
     for (const id of commands) {
       const command = registry && Object.hasOwn(registry, id) ? registry[id] : undefined;
-      const problem = intakeCommandProblem(command, home, kindOf);
+      const problem = intakeCommandProblem(app, command, home, kindOf);
       if (problem) {
         problems.push(
           `Public page "${key}" runs "${id}", which ${problem}: a tenant App cannot take that command's signed-out submissions.`,

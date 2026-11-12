@@ -130,7 +130,7 @@ describe('business commands on PostgreSQL, against a real server', { skip: liveS
   const loan = async () => (await control.query('SELECT version, assignee, confidential_note FROM public.loans WHERE id = 1')).rows[0];
   const reset = async (migrate = true) => {
     for (const statement of [...RESET, ...SETUP]) await control.query(statement);
-    if (migrate) assert.deepEqual(await migratePostgresCommandJournal(url), { version: 3, migrated: true });
+    if (migrate) assert.deepEqual(await migratePostgresCommandJournal(url), { version: 4, migrated: true });
   };
 
   before(async () => {
@@ -251,8 +251,8 @@ describe('business commands on PostgreSQL, against a real server', { skip: liveS
       (await control.query(`SELECT count(*) AS n FROM pg_class WHERE relname LIKE '\\_\\_mistri\\_command\\_%'`)).rows[0].n,
       '0',
     );
-    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 3, migrated: true });
-    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 3, migrated: false });
+    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 4, migrated: true });
+    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 4, migrated: false });
     await assertPostgresCommandJournal(control);
     assert.equal(await count(tables.meta), 1);
     await assert.rejects(migratePostgresCommandJournal('sqlite:./loans.db'), /postgres:\/\/ URL/);
@@ -749,7 +749,11 @@ describe('business commands on PostgreSQL, against a real server', { skip: liveS
     assert.deepEqual(await provisionPostgresCommandEventStore(url, binding), { version: 1, provisioned: false });
     await assert.rejects(provisionPostgresCommandEventStore(url, { ...binding, sourceId: 'other' }), CommandEventStoreUnavailable);
     // An invalid batch fails the whole operation: the receipt written before it is rolled back too.
-    await assert.rejects(journalRun(tenant, (journal) => journal.commit(receipt, audit, [])));
+    await assert.rejects(
+      journalRun(tenant, (journal) =>
+        journal.commit(receipt, audit, [{ ...batch[0], payloadJson: '{ "applicationId": 1, "reviewerId": "reviewer-one" }' }]),
+      ),
+    );
     assert.equal(await count(tables.receipt), 0);
     await assert.rejects(
       journalRun(undefined, (journal) => journal.commit(receipt, audit, batch)),

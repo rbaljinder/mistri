@@ -215,6 +215,7 @@ organizations from one App. Each feature's own page has the detail.
 | List exports | Yes | Yes, the person's rows | Yes, the tenant's rows |
 | The [assistant](/docs/assistant/) | Yes | Yes, reading as the person, under the policy | Yes, where the platform owner turns it on for that customer |
 | [Live sync](/docs/live-sync/) | Yes | Yes, naming only changes to the person's rows | Yes, naming only the tenant's own changes |
+| Capability links (`resources.*.links`) | Yes | Yes: the link is the grant for its one record, and the policy is not asked | Not yet |
 <!-- capability-table:end -->
 
 ## Common mistakes

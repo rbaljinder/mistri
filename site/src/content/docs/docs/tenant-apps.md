@@ -403,6 +403,18 @@ so slow work for that tenant (an outside service keyed by it) happens in
 handler. A `realm: 'platform'` command's lookup has none: one acting in a tenant
 reads it from the input field its `tenant` names.
 
+A public command's lookup on the signed-out intake reads what a visitor of the
+placed tenant may see: the `auth.public` grant, its `fields`, and the rows
+`resolvePublicRows` chooses, in that tenant only, never under the command's own
+read list. A submission the platform triages (an address that places nobody)
+finds nothing, and answers as a placed one does, so a public command's answer
+must not carry lookup data back to the applicant: a placed submission would
+show rows and a triaged one none, and the applicant could tell a valid intake
+address from an unknown one. `mistri check` refuses such a
+lookup when the App declares no `auth.public`, when it reads a table the grant
+does not open or opens only by a record's key (`byKey`), reads a source other
+than the App's own, or calls an integration.
+
 ### Public intake
 
 A tenant App's [public form](/docs/command-forms/#public-forms) lands in
@@ -451,7 +463,7 @@ with the same ticket, origin, budgets and human check as on an ordinary App, and
 the same triage for an address that places nobody. `mistri check` and the
 start refuse, in words naming the page, what intake cannot take: a command that is not
 public, belongs to a realm, writes another source or a table that is neither
-a tenant's nor the platform's, runs a lookup or reads other sources, or emits
+a tenant's nor the platform's, runs a lookup a visitor's grant cannot carry, or emits
 events or effects; and a field that chooses from a table (give it fixed
 options). Without `intake.address` such a page is refused as a public form is.
 

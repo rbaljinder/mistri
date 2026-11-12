@@ -489,6 +489,8 @@ export class SqliteAdapter implements Adapter {
         columns,
         approxRows: approxRowsOf(t.name, t.type),
         isView: t.type === 'view',
+        /* AUTOINCREMENT is only in the statement: the catalog says nothing else about it. */
+        ...(identity && !/\bAUTOINCREMENT\b/i.test(t.sql ?? '') ? { reusesKeys: true as const } : {}),
         indexed: t.type === 'view' ? [] : this.leadingIndexColumns(columns, indexes),
         ...(() => {
           const unique = t.type === 'view' ? [] : this.uniqueColumns(indexes);

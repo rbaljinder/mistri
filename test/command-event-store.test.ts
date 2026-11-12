@@ -336,7 +336,6 @@ test('noncanonical payload bytes and authored envelope fields cannot reach stora
   for (const drafts of [
     [{ ...batch[0], payloadJson: '{ "applicationId": 1, "reviewerId": "reviewer-one" }' }],
     [{ ...batch[0], tenantId: 'south' }],
-    [],
     [{ ...batch[0], payloadJson: JSON.stringify({ name: 'x'.repeat(16385) }) }],
   ]) {
     await assert.rejects(

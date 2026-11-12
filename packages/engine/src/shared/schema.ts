@@ -197,6 +197,12 @@ export interface TableMeta {
   sortable?: string[];
   /** `false` when the source reports no totals (an API): lists page without one, and nothing asks for a count. */
   countable?: false;
+  /**
+   * Set on a SQLite table whose key is a rowid alias declared without AUTOINCREMENT: SQLite may hand a deleted row's
+   * key to the next insert, so whatever outlives the row and names it by key (a capability link) may come to name a
+   * new one. Absent elsewhere, AUTOINCREMENT and every other engine included.
+   */
+  reusesKeys?: true;
   /** True for views — read-only, and worth saying so rather than surprising. */
   isView: boolean;
   /** An App's union (appUnions.ts): read by asking each branch it holds, never as a table. */

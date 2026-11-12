@@ -281,6 +281,8 @@ async function ordinaryAuthority(ctx: RequestContext, host: AppHost): Promise<Re
     const tables = new Map<string, Map<string, LiveGrant>>(resources.connections.map((connection) => [connection, new Map()]));
     for (const table of served.tables) {
       if (app.resources?.[table.id]?.live === false) continue;
+      /* A visitor's byKey table (publicByKey.ts) is never listed, and the keys of its changed rows would list it. */
+      if (access.byKey?.has(table.id)) continue;
       const physical = resources.toPhysical(table.id);
       const grant = grantFor(served, table.id, columns.get(table.id)!, true, app.id, physical);
       const into = tables.get(resources.connectionFor(table.id));

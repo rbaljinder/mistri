@@ -401,7 +401,7 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'command-journal',
     title: 'command receipts, audit and links',
     tables: { prefix: '__mistri_command_' },
-    current: both(3),
+    current: both(4),
     read: marked({ sqlite: { table: '__mistri_command_meta' }, postgres: { table: '__mistri_command_meta' } }),
     upgrades: {
       sqlite: {
@@ -417,6 +417,15 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
             for (const sql of (await import('../adapters/commands/commandJournalSchema.js')).sqliteJournalUpgradeFrom2()) await db.run(sql);
           },
         },
+        3: {
+          says: "lets a receipt record an empty event batch, and gives a link its row's stamp",
+          run: async ({ db }) => {
+            /* The receipt is rebuilt by drop and create; with keys enforced, the drop would take its audit parts too. */
+            const [keys] = await db.all<{ foreign_keys: number }>('PRAGMA foreign_keys');
+            if (Number(keys?.foreign_keys) !== 0) throw new StoreRefused('the journal is rebuilt with foreign keys off, and they are on');
+            for (const sql of (await import('../adapters/commands/commandJournalSchema.js')).sqliteJournalUpgradeFrom3()) await db.run(sql);
+          },
+        },
       },
       postgres: {
         1: {
@@ -430,6 +439,13 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
           says: 'adds the link table: the capability links a command mints, their expiry, uses and revocation',
           run: async ({ db }) => {
             for (const sql of (await import('../adapters/commands/postgresCommandJournalSchema.js')).postgresJournalUpgradeFrom2())
+              await db.run(sql);
+          },
+        },
+        3: {
+          says: "lets a receipt record an empty event batch, and gives a link its row's stamp",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/commands/postgresCommandJournalSchema.js')).postgresJournalUpgradeFrom3())
               await db.run(sql);
           },
         },

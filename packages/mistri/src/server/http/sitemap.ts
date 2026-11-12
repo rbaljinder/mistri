@@ -155,7 +155,11 @@ async function sitemap(ctx: RequestContext, origin: string): Promise<string | nu
   /* Each record route with a plain id (`{id}`, `{id}[-slug]`, a natural `{sku}`); one under a parent's address is that parent's page's to link. */
   const said = new Set(routeTable(book, home).map((row) => row.path));
   const records: Records[] = [];
+  /* A byKey table's rows are opened by key and never listed (publicByKey.ts): the read that lists them is refused,
+     which would turn the whole sitemap away, and a row nobody may list has no place in one. */
+  const byKey = new Set(ctx.signedIn!.app.app.auth?.public?.byKey ?? []);
   for (const [tableId, route] of book.records) {
+    if (byKey.has(tableId)) continue;
     const table = findTable(schema, tableId);
     const target = book.routes.get(route.segment);
     /* A record a list or a page shows; a bare table's rows (a photo's, a log's) are not a page anyone reads. */

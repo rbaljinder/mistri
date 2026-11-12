@@ -436,6 +436,7 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
     // public forms. Without it no public form runs: a tenant App declaring
     // one without intake is refused here rather than answering 503 later.
     let intake: TenantIntake | undefined;
+    const publicDeclared = raw.publicReads !== undefined ? tenantOptions(raw.publicReads, ['address', 'resolvePublicRows']) : undefined;
     if (raw.intake !== undefined) {
       const declared = tenantOptions(raw.intake, ['address']);
       if (!platform || !registry || !resultReferences) throw new Error();
@@ -450,13 +451,15 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
         registry,
         resultReferences,
         now,
+        /* A public command's lookup reads what a visitor may: the visitor's own rows, as the public reads say them. */
+        ...(publicDeclared ? { resolvePublicRows: publicDeclared.resolvePublicRows as PublicReadRuntimeOptions['resolvePublicRows'] } : {}),
       });
     } else if (tenantPublicForms(requests.app).size || tenantPublicPages(requests.app).size) throw new Error();
     // A visitor's reads over the same genuine reader, under their own owner:
     // exactly when the App opens resources to visitors.
     let publicReads: ReturnType<typeof bindPublicReadRuntime> | undefined;
-    if (raw.publicReads !== undefined) {
-      const declared = tenantOptions(raw.publicReads, ['address', 'resolvePublicRows']);
+    if (publicDeclared !== undefined) {
+      const declared = publicDeclared;
       if (!requests.app.auth?.public) throw new Error();
       publicReads = bindPublicReadRuntime({
         app: requests.app,

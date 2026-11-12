@@ -31,6 +31,7 @@ import {
 } from '../packages/mistri/src/server/tenant/tenantStore.js';
 import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
+import { PUBLIC_READ_GETS, PUBLIC_READ_POSTS } from '../packages/mistri/src/shared/tenantPublicReads.js';
 import { parseTestApp } from './support/commandCatalog.js';
 
 const appId = 'lot';
@@ -141,6 +142,8 @@ interface FixtureOptions {
   readonly components?: true;
   /** The App is loaded from a directory with English and Spanish catalogs, its list's label a message. */
   readonly words?: true;
+  /** `auth.public.byKey`: of what the grant reads, the tables a visitor opens one record at a time by its key. */
+  readonly byKey?: readonly string[];
 }
 /* The fixture's App as an App directory loads it: a manifest whose list says a message, and its catalogs. */
 async function wordsApp(directory: string) {
@@ -237,7 +240,13 @@ async function fixture(t: TestContext, options: FixtureOptions = {}) {
       'public reads pages',
     ),
     sources: {},
-    app: options.words ? await wordsApp(directory) : app(directory, {}, options.components ? COMPONENT_VIEWS : {}),
+    app: options.words
+      ? await wordsApp(directory)
+      : app(
+          directory,
+          options.byKey ? { public: { ...appConfig(directory).auth.public, byKey: options.byKey } } : {},
+          options.components ? COMPONENT_VIEWS : {},
+        ),
     ...(options.components ? { components: COMPONENT_FILES } : {}),
   };
   const names = ['BETTER_AUTH_SECRET', 'MISTRI_AUTH_ADMIN_EMAIL', 'MISTRI_AUTH_ADMIN_PASSWORD'] as const;
@@ -717,4 +726,74 @@ test('a visitor’s list pages by key, within the placed tenant’s published ro
     rows(back).map((row) => row.title),
     ['North Corolla'],
   );
+});
+
+/* `auth.public.byKey` (server/app/publicByKey.ts): a photo is the visitor's one record at a time by its key, and never
+   a list. Every door a visitor reads by is asked to list photos, and each refuses or answers one row; a door added to
+   the visitor's routes without a case here fails the test, so no new route reaches a byKey table unjudged. */
+test('a byKey table answers every visitor door with a refusal or one row by its key', async (t) => {
+  const f = await fixture(t, { byKey: ['photo'] });
+  const captions = /North front|North draft photo|West front/g;
+  const one = (answer: { status: number; text: string; body: any }) => {
+    assert.equal(answer.status, 200, answer.text);
+    assert.deepEqual(
+      rows(answer).map((row) => row.id),
+      ['p-n1'],
+    );
+    assert.deepEqual(answer.text.match(captions), ['North front']);
+  };
+  const refused = (answer: { status: number; text: string; body: any }) => {
+    assert.ok(answer.status !== 200 || (answer.body?.errors?.length > 0 && !answer.body?.rows?.length), answer.text);
+    assert.doesNotMatch(answer.text, captions);
+  };
+  /* What lists no row of a photo: the App, its catalog and pages say tables and columns, never a caption. */
+  const unlisted = (answer: { status: number; text: string }) => assert.doesNotMatch(answer.text, captions);
+  const photoKey = { groups: [[{ column: 'id', op: '=', value: 'p-n1' }]] };
+  const cases: Array<[string, unknown, (answer: { status: number; text: string; body: any }) => void]> = [
+    ['/api/app', undefined, unlisted],
+    ['/api/schema', undefined, unlisted],
+    ['/api/pages', undefined, unlisted],
+    ['/api/runtime', undefined, unlisted],
+    ['/api/query', { table: 'photo', filter: photoKey, limit: 1 }, one],
+    ['/api/query', { table: 'photo' }, refused],
+    ['/api/query', { table: 'photo', filter: photoKey }, refused],
+    ['/api/query', { table: 'photo', filter: { groups: [[{ column: 'listing_id', op: '=', value: 'n-1' }]] }, limit: 1 }, refused],
+    ['/api/count', { table: 'photo', filter: photoKey }, refused],
+    ['/api/counts', { items: ['photo id = p-n1'] }, refused],
+    ['/api/run', { q: 'photo id = p-n1' }, refused],
+    ['/api/view/run', { text: 'photo id = p-n1 show id, caption' }, refused],
+    [
+      '/api/view/run',
+      {
+        count: 'none',
+        view: {
+          base: 'photo',
+          columns: [{ path: 'id' }, { path: 'caption' }],
+          filter: { groups: [[{ path: 'id', op: '=', value: 'p-n1' }]] },
+          limit: 1,
+        },
+      },
+      one,
+    ],
+    ['/api/view/run', { count: 'none', view: { base: 'photo', columns: [{ path: 'id' }, { path: 'caption' }], limit: 50 } }, refused],
+    ['/api/breakdown', { text: 'photo count by caption' }, refused],
+    ['/api/breakdowns', { items: [{ text: 'photo count by caption' }] }, refused],
+    /* A listing's references count its photos: that count says something of rows the visitor holds no key to. */
+    ['/api/references', { table: 'listing', key: { id: 'n-1' } }, refused],
+    /* The listing's page lists its photos: the page is served, the list of photos is not. */
+    ['/api/pages/plan', { page: 'listing', key: { id: 'n-1' } }, unlisted],
+    ['/api/pages/compose', { page: 'listing', key: { id: 'n-1' } }, unlisted],
+    ['/api/pages/load', { page: 'listing', params: { id: 'n-1' } }, unlisted],
+    ['/api/file/read', { table: 'photo', key: { id: 'p-n1' }, variant: 'original', inline: true }, refused],
+  ];
+  const routes = new Set(cases.map(([path]) => path));
+  assert.deepEqual(
+    [...PUBLIC_READ_GETS, ...PUBLIC_READ_POSTS].filter((path) => !routes.has(path)),
+    [],
+    'every route a visitor reads by has a case here',
+  );
+  for (const [path, body, expect] of cases) {
+    const answer = await f.call(via(NORTH, path === '/api/app' ? `${path}?app=${appId}` : path), body);
+    await t.test(`${path} ${JSON.stringify(body) ?? ''}`, () => expect(answer));
+  }
 });

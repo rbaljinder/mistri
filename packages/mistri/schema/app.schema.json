@@ -1892,7 +1892,7 @@
         "links": {
           "type": "object",
           "minProperties": 1,
-          "description": "Capability links by name: a way to hand one record to someone who signs in to nothing. A command on the record mints one (context.link('status')); whoever holds it sees the show columns of that one record and runs the declared commands on it, and nothing else. Not in an App scoped by tenant or a row policy.",
+          "description": "Capability links by name: a way to hand one record to someone who signs in to nothing. A command on the record mints one (context.link('status')); whoever holds it sees the show columns of that one record and runs the declared commands on it, and nothing else. Not yet in an App scoped by tenant; in a row-policy App the link is the grant for its one record, and the policy is not asked.",
           "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$" },
           "additionalProperties": {
             "type": "object",
@@ -2848,6 +2848,15 @@
                 "type": "string",
                 "minLength": 1
               }
+            },
+            "byKey": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Of read, the resources a visitor opens one record at a time by its key and never lists, counts or searches: a link's page, not a directory."
             },
             "fields": {
               "type": "object",

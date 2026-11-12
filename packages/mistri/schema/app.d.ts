@@ -912,7 +912,7 @@ export interface AppResource<Column extends string = string, Page extends string
       again. A trigger that only validates needs no name. @preview */
   triggers?: readonly string[];
   /** Capability links by name: what a link to one record shows its holder and lets them run (`AppResourceLink`).
-      Not in an App scoped by tenant or a row policy. */
+      Not yet in an App scoped by tenant; in a row-policy App the link is the grant for its one record, and the policy is not asked. */
   links?: Readonly<Record<string, AppResourceLink<Column>>>;
   /** How long a text column's value may be and what form it takes, keyed by column:
       `text: { code: { pattern: '^[A-Z]{3}$', message: 'Three capital letters.' }, name: { min: 2 } }` — the words a
@@ -1264,8 +1264,14 @@ export interface AppAuth<Resource extends string = string, Role extends string =
   roles?: Record<Role, AppRoleGrant<Resource, Role>>;
   /** What a signed-out visitor reads: each resource named (never `true`),
       read-only, optionally narrowed by `fields`. The rest of the App still
-      needs a session. Needs `roles`, and `rows` 'all'. */
-  public?: { read: readonly Resource[]; fields?: Partial<Record<Resource, { read: readonly string[] }>> };
+      needs a session. Needs `roles`, and `rows` 'all'. `byKey` names those of
+      `read` a visitor opens one record at a time by its key and never lists,
+      counts or searches: a link's page, not a directory. */
+  public?: {
+    read: readonly Resource[];
+    fields?: Partial<Record<Resource, { read: readonly string[] }>>;
+    byKey?: readonly Resource[];
+  };
   /** The human check every public door asks before it reads a submission — a public form's submit, a public page's
       command: the name of a verifier the commands module exports in `challenges` (`defineChallenges` from
       @mistriwork/mistri/commands; a provider such as Turnstile comes from its pack). A missing or refused token is a 403. */
@@ -4628,7 +4634,11 @@ type TypedFieldGrants<S extends SchemaShape, H> = { [T in TableOf<S>]?: AppRoleF
     names a table and one of its columns. */
 export type TypedAuth<S extends SchemaShape, H extends SchemaHidden = {}> = Omit<AppAuth<TableOf<S>>, 'roles' | 'public' | 'me'> & {
   roles?: Record<string, Omit<AppRoleGrant<TableOf<S>>, 'fields'> & { fields?: TypedFieldGrants<S, H> }>;
-  public?: { read: readonly TableOf<S>[]; fields?: { [T in TableOf<S>]?: { read: readonly GovernedOf<S, H, T>[] } } };
+  public?: {
+    read: readonly TableOf<S>[];
+    fields?: { [T in TableOf<S>]?: { read: readonly GovernedOf<S, H, T>[] } };
+    byKey?: readonly TableOf<S>[];
+  };
   me?: { [T in TableOf<S>]: { from: T; column: GovernedOf<S, H, T> } }[TableOf<S>];
 };
 

@@ -14,7 +14,7 @@ import {
 } from '../../shared/app.js';
 import { appCommandOccurrences } from '../../shared/appCommandOccurrences.js';
 import type { AppLinkDef } from '../../shared/appLinks.js';
-import { FILE_MAX_BYTES_DEFAULT, isRowPolicyApp, isTenantApp, type AppFileDef } from '../../shared/appModel.js';
+import { FILE_MAX_BYTES_DEFAULT, isTenantApp, type AppFileDef } from '../../shared/appModel.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import { TENANT_FILE_MOST } from '@mistriwork/engine/server/http/reply.js';
@@ -51,6 +51,10 @@ export interface BusinessCommandAuthorizationOptions {
   transactionalConnection: (connection: string) => boolean;
   /** Private, already-attested logical ownership, never an App field grant. */
   managedOwnership?: Readonly<Record<string, string>>;
+  /** A tenant host's reading of what a visitor may see (tenantVisibleFields): the owner column and every platform
+      table leave it, as in a public read. A public command's lookup narrows by the result, never by the raw
+      `auth.public` grant, which has no `fields` rule to hide them with. */
+  visitorAccess?: (access: ReturnType<typeof resolveAppAccess>) => ReturnType<typeof resolveAppAccess>;
   /** The people table's `auth.me` column holds the actor's account id, not an email: a tenant App's, whose
       people are the tenant's own rows (appMe.ts lookupTenantPerson). The tenant host says so, never the App; an
       App that binds `auth.me.by: 'account'` says so itself. */
@@ -486,6 +490,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
       'writableConnection',
       'transactionalConnection',
       'managedOwnership',
+      'visitorAccess',
       'peopleByAccount',
     ]) as unknown as BusinessCommandAuthorizationOptions;
     app = captureTenantData(options.app);
@@ -527,6 +532,16 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
   // Normal App validation includes all inactive roles, root ceilings and the
   // complete-readable-PK rule. Managed ownership never relaxes any of these.
   const accessOf = accessMemo(app, schema);
+  /* What a signed-out visitor reads (`auth.public`), resolved once: a tenant App's public lookup reads under it. */
+  let visitorAccess: ReturnType<typeof resolveAppAccess> | undefined;
+  const publicAccess = () => {
+    if (visitorAccess) return visitorAccess;
+    const granted = resolveAppAccess(app, schema, [], 'public');
+    /* A tenant host narrows it as it narrows a public read (tenantVisibleFields); a tenant App's public lookup with
+       no host to say so reads nothing rather than the columns the host would have hidden. */
+    if (app.auth?.rows === 'tenant' && typeof options.visitorAccess !== 'function') throw new AppAccessDenied();
+    return (visitorAccess = options.visitorAccess ? options.visitorAccess(granted) : granted);
+  };
   const declaredRoles = Object.keys(app.auth!.roles!);
   accessOf(declaredRoles);
   /* Each declared role's command grants, read once. `appCommandGrants`
@@ -854,6 +869,8 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
             reader: NonNullable<BusinessCommandAuthorization['lookupTables']>;
             /** The tenant's own tables it looks up, which the actor's column rule narrows (narrowedLookup). */
             tenantOwned: readonly Readonly<{ source: string; local: string; logical: string }>[];
+            /** Every table it looks up: a visitor's column rule narrows them all, reference data too. */
+            every: readonly Readonly<{ source: string; local: string; logical: string }>[];
           }>
         | undefined;
       if (command.sources) {
@@ -862,7 +879,8 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         const sources = command.sources;
         const catalogs: Record<string, CommandCatalog> = {},
           tables: string[] = [],
-          tenantOwned: { source: string; local: string; logical: string }[] = [];
+          tenantOwned: { source: string; local: string; logical: string }[] = [],
+          every: { source: string; local: string; logical: string }[] = [];
         for (const [source, locals] of Object.entries(sources)) {
           const named = (local: string) => logicalResource(app, source, local);
           for (const local of locals) {
@@ -874,6 +892,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
             // transaction: a column rule never narrows it (as above). A tenant's
             // own table is read as the person could read it, column rule and all.
             tables.push(looked);
+            every.push({ source, local, logical: looked });
             if (app.auth?.rows === 'tenant' && app.resources?.[looked]?.owner === 'tenant')
               tenantOwned.push({ source, local, logical: looked });
           }
@@ -885,6 +904,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         lookup = Object.freeze({
           tables: Object.freeze(tables),
           tenantOwned: Object.freeze(tenantOwned),
+          every: Object.freeze(every),
           reader: Object.freeze({
             catalogs: Object.freeze(catalogs),
             logical(source: string, local: string): string {
@@ -899,6 +919,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         lookup = Object.freeze({
           tables: Object.freeze([]),
           tenantOwned: Object.freeze([]),
+          every: Object.freeze([]),
           reader: Object.freeze({
             catalogs: Object.freeze({}),
             logical(): string {
@@ -1044,7 +1065,6 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
             [held.id, held.name, held.resource, held.key].some((part) => typeof part !== 'string' || !part) ||
             captured.id !== `link:${held.id}` ||
             isTenantApp(app) ||
-            isRowPolicyApp(app) ||
             !Object.hasOwn(app.resources?.[held.resource]?.links ?? {}, held.name)
           )
             throw new Error();
@@ -1096,6 +1116,15 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
            by the root ceiling at bind time; that is all a public handler gets. */
         if (binding.command.public !== true || publicForms.get(identity.form!)?.has(id) !== true) throw new AppAccessDenied();
         issueTargetUnreadable(identity);
+        /* A tenant App's public lookup shows the visitor what it finds, so it reads what a visitor may (`auth.public`),
+           never the command's own reads: a table the public grant does not open, or opens only by a record's key, is
+           refused (tenantIntakePages.ts says so at startup), and every table it reads is narrowed to the visitor's
+           columns. The tenant's rows it reads are the placed tenant's alone (tenantIntake.ts). */
+        if (app.auth?.rows === 'tenant' && binding.lookup?.tables.length) {
+          const visitor = publicAccess();
+          if (binding.lookup.tables.some((table) => !visitor.readable.has(table) || visitor.byKey?.has(table))) throw new AppAccessDenied();
+          lookupTables = narrowedLookup(binding.lookup.reader, binding.lookup.every, visitor.fields);
+        }
       } else if (identity.kind === 'link') {
         /* No role either: the link is the grant. Only a command the link declares, on the resource it was minted on,
            one record at a time (the executor holds it to the link's own record); what it is told of that record is
@@ -1186,8 +1215,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
       const declaredLinks = app.resources?.[binding.resource]?.links;
       const onRecord =
         identity.kind !== 'public' && identity.kind !== 'link' && (binding.command.targets ?? 'one') === 'one' && !creating.has(id);
-      const mints =
-        declaredLinks && !isTenantApp(app) && !isRowPolicyApp(app) && (identity.kind === 'public' || onRecord) ? declaredLinks : undefined;
+      const mints = declaredLinks && !isTenantApp(app) && (identity.kind === 'public' || onRecord) ? declaredLinks : undefined;
       /* A row removed ends the links minted on it, whoever removes it and under whichever command: each written
          table whose resource declares links is named here, and the removal revokes in its own transaction. */
       const linkedTables = new Map<string, string>();

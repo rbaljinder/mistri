@@ -756,7 +756,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // stepUp (eight entries, one new name): 1756/521.
     // 1.0.0-rc.43: a measured section's `minor`, on a metric, breakdown, chart and matrix (four entries; the name
     // was a display rule's already): 1760/521.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1760, names: 521 });
+    // 1.0.0-rc.45: a public read's `byKey`, the tables a visitor opens one row of by its key (one entry, one new
+    // name): 1761/522.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1761, names: 522 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

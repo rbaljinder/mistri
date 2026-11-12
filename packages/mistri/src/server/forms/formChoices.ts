@@ -58,6 +58,9 @@ export async function withTableChoices(options: {
         try {
           const source = sourceOf(field.name);
           const resource = source === undefined ? field.source.from : logicalResource(app, source, field.source.from);
+          /* A table the public opens only by a record's key is never listed (publicByKey.ts), and this read is not
+             through that fence: its field is left as it was, so the page's own read, which is, finds it refused. */
+          if (app.auth?.public?.byKey?.includes(resource)) return field;
           const physical = resources.toPhysical(resource);
           const owner = resources.connectionFor(resource);
           const choices = await sharedChoices({

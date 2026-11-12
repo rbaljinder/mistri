@@ -292,13 +292,15 @@ for (const { dialect, skip } of TENANT_DIALECTS)
        row rather than a membership, reading the dealer's own scope.
        `readTenantNames`: what the chooser calls each tenant, from its profile row.
        `readDueTimers`: a machine timer's due records across the active tenants, each with its row's tenant.
-       `assertPublicCurrent`/`bindPublicReads`/`resolvePublic`: a public page's reads; `readTenantAddresses`: a tenant's
+       `assertPublicCurrent`/`bindPublicReads`/`resolvePublic`: a public page's reads, and `bindIntakeReads` an intake
+       submission's lookup read as that visitor; `readTenantAddresses`: a tenant's
        own addresses (G75); `readSandboxes`/`readSandboxClocks`: which tenants are sandboxes, and their clocks (G47). */
       assert.deepEqual(Object.keys(source).sort(), [
         'assertCurrent',
         'assertPlatformCurrent',
         'assertPublicCurrent',
         'assertSupportCurrent',
+        'bindIntakeReads',
         'bindPlatformReads',
         'bindPublicReads',
         'bindReads',

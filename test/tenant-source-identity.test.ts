@@ -86,7 +86,8 @@ test('genuine same-file read/write pair returns captured immutable namespace wit
   /* `assertSupportCurrent`/`scopeSupportReads` (0.5.0): a support session's
      twins of the member and platform pairs — fenced on the support row, reading
      the dealer's own scope. `assertPublicCurrent`/`bindPublicReads`/`resolvePublic`
-     (1.0): a visitor's, placed by a tenant's public address and fenced on it.
+     (1.0): a visitor's, placed by a tenant's public address and fenced on it; `bindIntakeReads` (rc.45) reads an
+     intake submission's lookup as that visitor.
      `readSandboxClocks`/`readSandboxes` (G47): which tenants are sandboxes, for the
      timer sweep's dev clock and discovery's mark. */
   assert.deepEqual(Object.keys(read).sort(), [
@@ -94,6 +95,7 @@ test('genuine same-file read/write pair returns captured immutable namespace wit
     'assertPlatformCurrent',
     'assertPublicCurrent',
     'assertSupportCurrent',
+    'bindIntakeReads',
     'bindPlatformReads',
     'bindPublicReads',
     'bindReads',

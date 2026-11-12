@@ -586,7 +586,9 @@ const ROLE_RENAMED = {
 
 /**
  * `auth.public`: the resources a signed-out visitor reads, each one named —
- * never `true`, so nothing is public by accident — and none written.
+ * never `true`, so nothing is public by accident — and none written. One
+ * that `byKey` names is read a record at a time by its key and never listed,
+ * counted or searched (server/app/publicByKey.ts): a link's page, not a directory.
  *
  * With `rows: 'policy'` the two answer different readers and do not meet: a
  * visitor is scoped by this grant, which names its resources and narrows
@@ -604,8 +606,8 @@ const ROLE_RENAMED = {
  * one is refused where ownership is read (appTenancy.ts).
  */
 function parsePublicGrant(raw: unknown, here: string, readable: ReadonlySet<string>): AppPublicGrant {
-  if (!isRecord(raw)) throw new Error(`${here} is not an object { read, fields? }.`);
-  allowKeys(raw, ['read', 'fields'], here);
+  if (!isRecord(raw)) throw new Error(`${here} is not an object { read, fields?, byKey? }.`);
+  allowKeys(raw, ['read', 'fields', 'byKey'], here);
   if (raw.read === true)
     throw new Error(`${here}, "read" is true; name each resource a signed-out visitor reads, so none is public by accident.`);
   const read = accessResources(raw.read, `${here}, "read"`);
@@ -622,7 +624,11 @@ function parsePublicGrant(raw: unknown, here: string, readable: ReadonlySet<stri
     if (!read.includes(resource)) throw new Error(`${here}, "fields" names "${resource}", which "read" does not.`);
     if (rule.write?.length) throw new Error(`${here}, "fields" for "${resource}" writes; a signed-out visitor writes nothing.`);
   }
-  return { read, ...(fields ? { fields } : {}) };
+  /* A resource read by key alone is still one `read` names: the list says what a visitor reads, this how. */
+  const byKey = raw.byKey === undefined ? undefined : accessResources(raw.byKey, `${here}, "byKey"`);
+  for (const resource of byKey ?? [])
+    if (!read.includes(resource)) throw new Error(`${here}, "byKey" names "${resource}", which "read" does not.`);
+  return { read, ...(fields ? { fields } : {}), ...(byKey?.length ? { byKey } : {}) };
 }
 
 /* ---------- the policy, as the resolve-time readers re-read it ---------- */

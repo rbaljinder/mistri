@@ -1,9 +1,9 @@
 /**
  * The command journal's upgrades, version 1 to 2 (the audit-part table: a target's changes past the first 256) and 2
- * to 3 (the link table: the capability links a command mints), as an
+ * to 3 (the link table: the capability links a command mints) and 3 to 4 (an empty event batch, a link's row stamp), as an
  * operator meets it: a database holding the committed version 1 fixture with a receipt in it, `upgradeStores` (what
  * `mistri migrate stores up` calls) taking it forward, the receipt kept, the result the layout a fresh store of this
- * version has, and a start's own attestation accepting it where it refused the old one. A fresh store is at version 3.
+ * version has, and a start's own attestation accepting it where it refused the old one. A fresh store is at version 4.
  *
  * SQLite always; PostgreSQL when TABLEWALK_TEST_PG names a server where the role may create databases.
  */
@@ -104,7 +104,7 @@ for (const engine of ENGINES)
           await insertReceipt(db, receipt, RECEIPT.id);
           const [status] = await storeStatuses(db, layouts);
           assert.equal(status.found, 1);
-          assert.deepEqual(status.pending, [1, 2]);
+          assert.deepEqual(status.pending, [1, 2, 3]);
         });
         // A start refuses version 1 and says how to bring it forward; it never upgrades it itself.
         await assert.rejects(attest(engine, where.url), (error: unknown) => {
@@ -120,6 +120,7 @@ for (const engine of ENGINES)
           [
             ['command-journal', 1, 2],
             ['command-journal', 2, 3],
+            ['command-journal', 3, 4],
           ],
         );
         await attest(engine, where.url);
@@ -174,7 +175,7 @@ for (const engine of ENGINES)
 
 for (const engine of ENGINES)
   test(
-    `${engine}: a version 2 command journal upgrades to version 3, the link table usable, and a start accepts it`,
+    `${engine}: a version 2 command journal upgrades to the current version, the link table usable, and a start accepts it`,
     { skip: engine === 'postgres' ? liveSkip('postgres', LIVE) : false },
     async () => {
       const { receipt, link, meta } = names(engine);
@@ -185,14 +186,17 @@ for (const engine of ENGINES)
         await applyFixture(engine, where.url, readFileSync(v2.path, 'utf8'));
         await withDb(where.url, async (db) => {
           await insertReceipt(db, receipt, RECEIPT.id);
-          assert.deepEqual((await storeStatuses(db, layouts))[0].pending, [2]);
+          assert.deepEqual((await storeStatuses(db, layouts))[0].pending, [2, 3]);
         });
         await assert.rejects(attest(engine, where.url), CommandJournalUnavailable);
         const done = await withDb(where.url, (db) => upgradeStores(db, where.url, layouts));
         assert.deepEqual(done.failed, []);
         assert.deepEqual(
           done.applied.map((each) => [each.id, each.from, each.to]),
-          [['command-journal', 2, 3]],
+          [
+            ['command-journal', 2, 3],
+            ['command-journal', 3, 4],
+          ],
         );
         await attest(engine, where.url);
         await PROVISION['command-journal'][engine]!(fresh.url);
@@ -229,3 +233,129 @@ for (const engine of ENGINES)
       }
     },
   );
+
+const LINK_V3 = `INSERT INTO %s (id, app_id, tenant_id, resource, row_key, name, expires_at, uses_left, revoked_at, created_at,
+   created_by, command, receipt, opens, last_opened_at)
+ VALUES ('link-1', 'lending', 'acme', 'loan', '{"id":1}', 'status', 2000000000000, 3, NULL, 1700000000000, 'reviewer', 'assign', 'receipt-1', 1, 1700000000500)`;
+
+for (const engine of ENGINES)
+  test(
+    `${engine}: a version 3 command journal upgrades to version 4 (an empty event batch, a link's row stamp), its receipts, audit parts and links kept, twice harmlessly`,
+    { skip: engine === 'postgres' ? liveSkip('postgres', LIVE) : false },
+    async () => {
+      const { receipt, part, link, meta } = names(engine);
+      const where = await scratch(engine, 'journal_v4'),
+        fresh = await scratch(engine, 'journal_v4_fresh');
+      try {
+        const v3 = fixtureFiles('command-journal', engine).find((file) => file.version === 3)!;
+        await applyFixture(engine, where.url, readFileSync(v3.path, 'utf8'));
+        await withDb(where.url, async (db) => {
+          await insertReceipt(db, receipt, RECEIPT.id);
+          await db.run(`INSERT INTO ${part} (receipt_id, target_index, part, changes_json) VALUES (?, 0, 1, '[]')`, [RECEIPT.id]);
+          await db.run(LINK_V3.replace('%s', link));
+          // Version 3 refuses an empty batch: the very thing version 4 allows.
+          await assert.rejects(
+            db.run(
+              `UPDATE ${receipt} SET manifest_json = '[]', event_count = 0, digest = ?${engine === 'postgres' ? ', xact_id = pg_current_xact_id()' : ''} WHERE id = ?`,
+              ['0'.repeat(64), RECEIPT.id],
+            ),
+          );
+          assert.deepEqual((await storeStatuses(db, layouts))[0].pending, [3]);
+        });
+        await assert.rejects(attest(engine, where.url), CommandJournalUnavailable);
+        const done = await withDb(where.url, (db) => upgradeStores(db, where.url, layouts));
+        assert.deepEqual(done.failed, []);
+        assert.deepEqual(
+          done.applied.map((each) => [each.id, each.from, each.to]),
+          [['command-journal', 3, 4]],
+        );
+        await attest(engine, where.url);
+        await PROVISION['command-journal'][engine]!(fresh.url);
+        assert.deepEqual(
+          withoutBeneath('command-journal', engine, await describeUrl(where.url)),
+          withoutBeneath('command-journal', engine, await describeUrl(fresh.url)),
+        );
+        await withDb(where.url, async (db) => {
+          assert.deepEqual(
+            (await db.all<{ version: number }>(`SELECT version FROM ${meta}`)).map((row) => Number(row.version)),
+            [4],
+          );
+          assert.deepEqual(
+            (await db.all<{ id: string; changes_json: string }>(`SELECT id, changes_json FROM ${receipt}`)).map((row) => [
+              row.id,
+              row.changes_json,
+            ]),
+            [[RECEIPT.id, RECEIPT.changes]],
+          );
+          assert.equal((await db.all(`SELECT 1 FROM ${part}`)).length, 1, 'the audit part kept: the rebuild cascaded nothing');
+          const [kept] = await db.all<Record<string, unknown>>(
+            `SELECT tenant_id, uses_left, opens, last_opened_at, row_stamp FROM ${link}`,
+          );
+          assert.deepEqual(
+            [kept.tenant_id, Number(kept.uses_left), Number(kept.opens), Number(kept.last_opened_at), kept.row_stamp],
+            ['acme', 3, 1, 1700000000500, null],
+          );
+          // An empty batch is a row of its own now; the presence check still holds the three together.
+          await db.run(
+            `UPDATE ${receipt} SET manifest_json = '[]', event_count = 0, digest = ?${engine === 'postgres' ? ', xact_id = pg_current_xact_id()' : ''} WHERE id = ?`,
+            ['0'.repeat(64), RECEIPT.id],
+          );
+          await assert.rejects(db.run(`UPDATE ${receipt} SET event_count = NULL WHERE id = ?`, [RECEIPT.id]));
+          await assert.rejects(db.run(`UPDATE ${receipt} SET event_count = 33 WHERE id = ?`, [RECEIPT.id]));
+          await db.run(`UPDATE ${link} SET row_stamp = 'v1' WHERE id = 'link-1'`);
+          await assert.rejects(db.run(`UPDATE ${link} SET row_stamp = '' WHERE id = 'link-1'`), 'a stamp is never empty');
+          // Keys still bind the audit parts to a receipt there is.
+          if (engine === 'sqlite') await db.run('PRAGMA foreign_keys = ON');
+          await assert.rejects(
+            db.run(`INSERT INTO ${part} (receipt_id, target_index, part, changes_json) VALUES ('no-such-receipt', 0, 1, '[]')`),
+          );
+          assert.ok(storeIsCurrent((await storeStatuses(db, layouts))[0]));
+        });
+        assert.deepEqual((await withDb(where.url, (db) => upgradeStores(db, where.url, layouts))).applied, []);
+        await attest(engine, where.url);
+      } finally {
+        await where.drop();
+        await fresh.drop();
+      }
+    },
+  );
+
+/* SQLite rebuilds the receipt table to widen a CHECK, beneath the event and delivery tables whose rows RESTRICT it. It
+   never renames (a rename rewrites the children's REFERENCES text, and their attestation is exact), so their
+   definitions are as they were and every key still finds its parent. */
+test('sqlite: the version 4 rebuild leaves the event and delivery stores beneath the journal as they were', async () => {
+  const where = await scratch('sqlite', 'journal_v4_beneath');
+  try {
+    const v1 = fixtureFiles('event-delivery', 'sqlite').find((file) => file.version === 1)!;
+    await applyFixture('sqlite', where.url, readFileSync(v1.path, 'utf8'));
+    const others = () => {
+      const db = new DatabaseSync(where.url);
+      try {
+        return db
+          .prepare(`SELECT type, name, sql FROM sqlite_master WHERE instr(name, 'mistri_command') = 0 ORDER BY name`)
+          .all()
+          .map((row) => ({ ...row }));
+      } finally {
+        db.close();
+      }
+    };
+    const before = others();
+    assert.ok(
+      before.some((row) => String(row.sql).includes('__mistri_command_receipt')),
+      'the fixture holds a child of the receipt',
+    );
+    const done = await withDb(where.url, (db) => upgradeStores(db, where.url, layouts));
+    assert.deepEqual(done.failed, []);
+    assert.equal(done.applied.at(-1)?.to, 4);
+    assert.deepEqual(others(), before);
+    const db = new DatabaseSync(where.url);
+    try {
+      assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+    } finally {
+      db.close();
+    }
+    await attest('sqlite', where.url);
+  } finally {
+    await where.drop();
+  }
+});

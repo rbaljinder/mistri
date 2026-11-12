@@ -19,9 +19,10 @@ export const q = (name: string) => runtimeTable('postgres', name);
    `xact_id` is the writing transaction's id where the row carries an event
    batch: PostgreSQL assigns ids at insert, not at commit, so delivery
    discovery walks batches by transaction (postgresEventDeliveryStore.ts).
-   Version 2 adds the audit-part table and version 3 the link table (see the
-   SQLite journal). A link's times are epoch milliseconds in both engines. */
-export const JOURNAL_VERSION = 3;
+   Version 2 adds the audit-part table, version 3 the link table and version 4
+   the empty event batch and a link's row stamp (see the SQLite journal). A
+   link's times are epoch milliseconds in both engines. */
+export const JOURNAL_VERSION = 4;
 const B = COMMAND_TARGET_BOUNDS;
 const COMPLETED_INDEX = `${tables.receipt}_completed`;
 const XACT_INDEX = `${tables.receipt}_xact`;
@@ -36,8 +37,10 @@ const AUDIT_PART_DDL = `CREATE TABLE ${q(tables.auditPart)} (
   PRIMARY KEY (receipt_id, target_index, part)
 )`;
 const LINK_INDEX = `${tables.link}_row`;
-/* The link table as version 3 lays it out: the upgrade from version 2 creates exactly this text. */
-const LINK_DDL = [
+const ROW_STAMP = `row_stamp text COLLATE "C" CHECK (octet_length(row_stamp) BETWEEN 1 AND 512)`;
+/* The link table as version 3 lays it out (the upgrade from version 2 creates exactly this text) and as version 4
+   does, where the upgrade from version 3 adds the row stamp as the last column. */
+const linkDdl = (version: 3 | 4) => [
   `CREATE TABLE ${q(tables.link)} (
   id text COLLATE "C" PRIMARY KEY,
   app_id text COLLATE "C" NOT NULL,
@@ -53,7 +56,12 @@ const LINK_DDL = [
   command text COLLATE "C" NOT NULL,
   receipt text COLLATE "C" NOT NULL,
   opens integer NOT NULL CHECK (opens >= 0),
-  last_opened_at bigint
+  last_opened_at bigint${
+    version === 3
+      ? ''
+      : `,
+  ${ROW_STAMP}`
+  }
 )`,
   `CREATE INDEX "${LINK_INDEX}" ON ${q(tables.link)} (app_id, resource, row_key)`,
 ];
@@ -87,7 +95,7 @@ export const definitions: readonly string[] = [
   keys_json text NOT NULL CHECK (octet_length(keys_json) <= ${B.keys} AND json_typeof(keys_json::json) = 'array'),
   changes_json text NOT NULL CHECK (octet_length(changes_json) <= ${B.changes} AND json_typeof(changes_json::json) = 'array'),
   manifest_json text COLLATE "C" CHECK (octet_length(manifest_json) BETWEEN 1 AND 65536 AND json_typeof(manifest_json::json) = 'array'),
-  event_count integer CHECK (event_count BETWEEN 1 AND 32),
+  event_count integer CHECK (event_count BETWEEN 0 AND 32),
   digest text COLLATE "C" CHECK (digest ~ '^[0-9a-f]{64}$'),
   xact_id xid8,
   CHECK (realm = 'tenant' OR tenant_id = ''),
@@ -97,7 +105,7 @@ export const definitions: readonly string[] = [
   `CREATE INDEX "${COMPLETED_INDEX}" ON ${q(tables.receipt)} (completed_at)`,
   `CREATE INDEX "${XACT_INDEX}" ON ${q(tables.receipt)} (xact_id) WHERE xact_id IS NOT NULL`,
   AUDIT_PART_DDL,
-  ...LINK_DDL,
+  ...linkDdl(4),
 ];
 
 /** What the upgrade from version 1 runs (storeLayouts.ts, in its one transaction under the store's lock): the new
@@ -110,10 +118,20 @@ export const postgresJournalUpgradeFrom1 = (): readonly string[] => [
 ];
 /** What the upgrade from version 2 runs: the link table and its index, and the version row moved on. */
 export const postgresJournalUpgradeFrom2 = (): readonly string[] => [
-  ...LINK_DDL,
+  ...linkDdl(3),
   `ALTER TABLE ${q(tables.meta)} DROP CONSTRAINT ${tables.meta}_version_check`,
   `UPDATE ${q(tables.meta)} SET version = 3`,
   `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT ${tables.meta}_version_check CHECK (version = 3)`,
+];
+/** What the upgrade from version 3 runs: a receipt's event count may be 0 (an empty batch), a link gains its row's
+ * stamp, and the version row moves on. The count's check is replaced under the name PostgreSQL gave it. */
+export const postgresJournalUpgradeFrom3 = (): readonly string[] => [
+  `ALTER TABLE ${q(tables.receipt)} DROP CONSTRAINT ${tables.receipt}_event_count_check`,
+  `ALTER TABLE ${q(tables.receipt)} ADD CONSTRAINT ${tables.receipt}_event_count_check CHECK (event_count BETWEEN 0 AND 32)`,
+  `ALTER TABLE ${q(tables.link)} ADD COLUMN ${ROW_STAMP}`,
+  `ALTER TABLE ${q(tables.meta)} DROP CONSTRAINT ${tables.meta}_version_check`,
+  `UPDATE ${q(tables.meta)} SET version = 4`,
+  `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT ${tables.meta}_version_check CHECK (version = 4)`,
 ];
 
 /* ---------- catalog description ---------- */
@@ -195,8 +213,15 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       id('receipt'),
       c('opens', 'integer'),
       c('last_opened_at', 'bigint', null, false),
+      c('row_stamp', 'text', 'C', false),
     ],
-    [`CHECK ((expires_at > 0))`, `CHECK ((opens >= 0))`, `CHECK ((uses_left >= 0))`, `PRIMARY KEY (id)`],
+    [
+      `CHECK ((expires_at > 0))`,
+      `CHECK ((opens >= 0))`,
+      `CHECK ((uses_left >= 0))`,
+      `CHECK (((octet_length(row_stamp) >= 1) AND (octet_length(row_stamp) <= 512)))`,
+      `PRIMARY KEY (id)`,
+    ],
     [
       on(`CREATE INDEX ${LINK_INDEX} ON ${tables.link} USING btree (app_id, resource, row_key)`),
       on(`CREATE UNIQUE INDEX ${tables.link}_pkey ON ${tables.link} USING btree (id)`),
@@ -241,7 +266,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
     ],
     [
       'CHECK ((((manifest_json IS NULL) = (event_count IS NULL)) AND ((manifest_json IS NULL) = (digest IS NULL)) AND ((manifest_json IS NULL) = (xact_id IS NULL))))',
-      'CHECK (((event_count >= 1) AND (event_count <= 32)))',
+      'CHECK (((event_count >= 0) AND (event_count <= 32)))',
       `CHECK (((octet_length(changes_json) <= ${B.changes}) AND (json_typeof((changes_json)::json) = 'array'::text)))`,
       `CHECK (((octet_length(keys_json) <= ${B.keys}) AND (json_typeof((keys_json)::json) = 'array'::text)))`,
       "CHECK (((octet_length(manifest_json) >= 1) AND (octet_length(manifest_json) <= 65536) AND (json_typeof((manifest_json)::json) = 'array'::text)))",

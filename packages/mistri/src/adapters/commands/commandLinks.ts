@@ -1,5 +1,5 @@
 /**
- * Capability links in the command journal (layout 3, commandJournalSchema.ts):
+ * Capability links in the command journal (layout 4, commandJournalSchema.ts):
  * the statements behind a journal's mintLink, revokeLinks, openLink and
  * readLink, one per engine. A link is minted in the command's own transaction,
  * so a command that rolls back leaves no link behind; it is opened in one
@@ -20,7 +20,7 @@ import type { CommandLinkRow } from './commandJournalTypes.js';
 /** A link id: 22 characters of base64url, 128 random bits (server/links/linkToken.ts). */
 export const LINK_ID = /^[A-Za-z0-9_-]{22}$/;
 const COLUMNS =
-  'id, app_id, tenant_id, resource, row_key, name, expires_at, uses_left, revoked_at, created_at, created_by, command, receipt, opens, last_opened_at';
+  'id, app_id, tenant_id, resource, row_key, name, expires_at, uses_left, revoked_at, created_at, created_by, command, receipt, opens, last_opened_at, row_stamp';
 
 const refuse = (): never => {
   throw new Refusal('Invalid capability link.');
@@ -50,7 +50,8 @@ function checkLinkRow(row: CommandLinkRow): readonly SQLInputValue[] {
     !bounded(row.command, 128) ||
     !bounded(row.receipt, 128) ||
     row.opens !== 0 ||
-    row.lastOpenedAt !== null
+    row.lastOpenedAt !== null ||
+    !(row.rowStamp === undefined || row.rowStamp === null || bounded(row.rowStamp, 512))
   )
     return refuse();
   return [
@@ -69,6 +70,7 @@ function checkLinkRow(row: CommandLinkRow): readonly SQLInputValue[] {
     row.receipt,
     0,
     null,
+    row.rowStamp ?? null,
   ];
 }
 
@@ -92,6 +94,7 @@ function rowOf(raw: Record<string, unknown> | undefined): CommandLinkRow | undef
     receipt: String(raw.receipt),
     opens: Number(raw.opens),
     lastOpenedAt: nullable(raw.last_opened_at),
+    rowStamp: raw.row_stamp === null || raw.row_stamp === undefined ? null : String(raw.row_stamp),
   };
 }
 
