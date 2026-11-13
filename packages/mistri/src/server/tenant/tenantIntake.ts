@@ -67,6 +67,8 @@ import { readDraftProgress, type SavedDraftRun } from '../forms/savedForms.js';
 import { tenantVisibleFields } from './tenantVisibleFields.js';
 import { intakeCommandProblem, tenantPageProblems, tenantPublicPages } from './tenantIntakePages.js';
 import { publicPrincipal } from '../commands/formHttp.js';
+import { isTokenActorId, tokenActorId } from '../../shared/publicActor.js';
+import { apiPublicActor } from '../api/apiPublicLane.js';
 import type { CommandResultReference } from '../commands/scopedBusinessCommandAccess.js';
 import { captureTenantCommandExecution, tenantCommandDomain, type TenantCommandExecutionOptions } from './tenantCommands.js';
 import { STAGED_FILE_ID } from '../../shared/command.js';
@@ -142,6 +144,14 @@ export interface TenantIntakeSubmission {
   readonly draft?: TenantIntakeDraft;
   /** The visitor's token from their own cookie: whose held files (commands/stagedFiles.ts) the submission may take. */
   readonly visitor?: string;
+  /** An App API token calling the form's command as a verb (api/apiPublicLane.ts): it lands in the token's own tenant,
+   * never one an address names and never triage, and runs under the token's id. It carries no address, draft or file. */
+  readonly caller?: TenantIntakeCaller;
+}
+/** The token a public verb's call comes from, and the tenant it was issued in. */
+interface TenantIntakeCaller {
+  readonly tokenId: string;
+  readonly tenantId: string;
 }
 /** A file sent to be held for a public form's command, in the place its address resolves to. */
 export interface TenantIntakeHold {
@@ -308,17 +318,22 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
 
   /** One resolution: where a submission to this form lands now, the
    * evidence it is admitted under, and its lifetime. */
-  const admit = async (form: string, raw: unknown, drafting: boolean) => {
+  const admit = async (form: string, raw: unknown, drafting: boolean, caller?: TenantIntakeCaller) => {
     const started = now();
     // One read snapshot: the address's tenant when it names one active
     // tenant, else the platform. A platform that is not active refuses
-    // every submission alike, whatever address it carried.
-    const address = intakeAddress(raw) ?? null;
-    const resolved = captureTenantData(await reader.resolveIntake({ appId: app.id, source: identity.source, deployment, column, address }));
+    // every submission alike, whatever address it carried. A token's call
+    // reads its own tenant alone, and is refused when that is not active.
+    const address = caller ? null : (intakeAddress(raw) ?? null);
+    const resolved = captureTenantData(
+      caller
+        ? await reader.resolveIntakeByTenant({ appId: app.id, source: identity.source, deployment, tenantId: caller.tenantId })
+        : await reader.resolveIntake({ appId: app.id, source: identity.source, deployment, column, address }),
+    );
     if (retired) throw new BusinessCommandExecutionError('temporarily_unavailable');
     /* `mistri dev` (the observer is mounted under --dev alone) says why a submission went to triage: the usual reason is an
        address no tenant holds, and a visitor's page cannot say it. The shape's problem is named, never the address. */
-    if (observerMounted() && intakePlace(resolved) === 'platform') {
+    if (!caller && observerMounted() && intakePlace(resolved) === 'platform') {
       const shape = address === null ? intakeAddressProblem(raw) : undefined;
       if (shape !== undefined || (address !== null && raw !== undefined))
         console.warn(
@@ -339,6 +354,7 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
         platformVersion: resolved.platformVersion,
         column,
         address: intakePlace(resolved) === 'tenant' ? address : null,
+        ...(caller ? { caller: tokenActorId(caller.tokenId) } : {}),
         verifiedAt: started,
         validUntil: started + maxLifetimeMs,
         drafting,
@@ -436,9 +452,9 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
     const id = reference.id,
       command = registry[id],
       extractor = extractors.get(id)!;
-    const admitted = await admit(request.form, request.address, draft !== undefined);
+    const admitted = await admit(request.form, request.address, draft !== undefined, request.caller);
     const { evidence, place } = admitted;
-    const principal = publicPrincipal(app.id, request.form);
+    const principal = request.caller ? apiPublicActor(app.id, request.form, request.caller.tokenId) : publicPrincipal(app.id, request.form);
     authorizer.authorize(id, principal);
     const flags = await flagsFor(principal, admitted);
     admitted.active();
@@ -490,7 +506,7 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
             : {}),
           ...tenantCommandReadAudit(
             authorization,
-            { app: app.id, tenant: place === 'tenant' ? evidence.tenantId : '', actor: 'public' },
+            { app: app.id, tenant: place === 'tenant' ? evidence.tenantId : '', actor: request.caller ? principal.id : 'public' },
             identity.source.connection,
             (row) => writer.appendReadAudit(row),
           ),
@@ -675,10 +691,22 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
       let request: TenantIntakeSubmission;
       try {
         request = captureTenantData(
-          tenantOptions(input, ['form', 'command', 'address', 'input', 'submission', 'draft', 'visitor']),
+          tenantOptions(input, ['form', 'command', 'address', 'input', 'submission', 'draft', 'visitor', 'caller']),
         ) as unknown as TenantIntakeSubmission;
         if (request.visitor !== undefined && (typeof request.visitor !== 'string' || !STAGED_FILE_ID.test(request.visitor)))
           throw new Error();
+        if (request.caller !== undefined) {
+          const caller = tenantOptions(request.caller, ['tokenId', 'tenantId']);
+          if (
+            typeof caller.tokenId !== 'string' ||
+            !isTokenActorId(tokenActorId(caller.tokenId)) ||
+            typeof caller.tenantId !== 'string' ||
+            request.address !== undefined ||
+            request.draft !== undefined ||
+            request.visitor !== undefined
+          )
+            throw new Error();
+        }
         if (request.draft !== undefined) {
           const draft = tenantOptions(request.draft, ['phase', 'step', 'token']);
           if (
@@ -697,6 +725,8 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
       /* A form runs its own command and names none; a page runs one it names, with no draft and no held file: it
          saves no step, and holds nothing for a visitor (a stock form's `hold` is a form's alone). */
       const page = pages.get(request.form);
+      // A token calls a form's command as a verb; a page's commands are its own page's alone.
+      if (request.caller !== undefined && !forms.has(request.form)) throw new BusinessCommandExecutionError('forbidden');
       if (
         forms.has(request.form)
           ? request.command !== undefined
@@ -707,8 +737,9 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
             request.visitor !== undefined
       )
         throw new BusinessCommandExecutionError('forbidden');
-      // A saved form runs only as its steps and its submit, each with its draft; any other form never with one.
-      const saved = drafts.has(request.form),
+      /* A saved form runs only as its steps and its submit, each with its draft; any other form never with one. A token
+         calls its submit command whole, with no draft, as a single-tenant App's verb does. */
+      const saved = drafts.has(request.form) && request.caller === undefined,
         draft = request.draft;
       if (
         saved !== (draft !== undefined) ||

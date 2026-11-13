@@ -1160,10 +1160,11 @@ export function parseCommandReference(raw: unknown, where: string): AppCommandRe
   };
 }
 
-/** A command an API exposes, by name: one on a record, or a signed-in form's, as its registration says. */
+/** A command an API exposes, by name: one on a record, or a form's, as its registration says. A public one is its
+    public form's verb; the server's catalog checks that form exists (api/apiCommandCatalog.ts). */
 export function parseExposedCommandReference(raw: unknown, where: string): AppCommandReference | AppFormCommandReference {
   const [, entry] = registered(raw, where);
-  return entry.targets === 'none' ? parseFormCommandReference(raw, where, false) : parseCommandReference(raw, where);
+  return entry.targets === 'none' ? parseFormCommandReference(raw, where, entry.public === true) : parseCommandReference(raw, where);
 }
 
 /**

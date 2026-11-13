@@ -13,7 +13,16 @@
  * as in the database browser, no write is captured.
  */
 import type { DatabaseSync } from 'node:sqlite';
-import type { DeleteRequest, DeleteResult, InsertRequest, InsertResult, TellRequest, UpdateRequest, UpdateResult } from './adapter.js';
+import type {
+  DeleteRequest,
+  DeleteResult,
+  InsertRequest,
+  InsertResult,
+  NoteRequest,
+  TellRequest,
+  UpdateRequest,
+  UpdateResult,
+} from './adapter.js';
 import type { PgQuery } from './postgresPool.js';
 import type { TriggerChange } from './scoped/triggerProof.js';
 
@@ -49,6 +58,8 @@ interface WriteCapture {
   remove(request: DeleteRequest, write: (request: DeleteRequest) => Promise<DeleteResult>): Promise<DeleteResult>;
   /** A flow's notify step (WriteTransaction.tell). */
   tell(request: TellRequest): Promise<void>;
+  /** A record's history told of what changed none of its fields (WriteTransaction.noted); absent where nothing keeps one. */
+  noted?(request: NoteRequest): Promise<void>;
   /**
    * A row a trigger the App accepts changed, once the proof reached it (scoped/triggerProof.ts): the database wrote
    * it, not a statement of the transaction, so nothing above passes through the three writes. Kept and announced as

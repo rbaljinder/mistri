@@ -108,6 +108,8 @@ import type { AppHost } from '../app/apps.js';
 import { createTenantApiOwner, tenantApiScopeCatalog } from '../api/tenantApiReadOwner.js';
 import { createTenantTokenService } from './tenantTokenService.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
+import { LINK_PATH, linkDoor, type LinkStep } from '../links/linkDoor.js';
+import { servesLinks } from '../links/linkLookup.js';
 import { openTenantSearch, type TenantSearch } from './tenantSearch.js';
 import { createAppMcpHttp } from '../api/appMcpHttp.js';
 import { answerOAuthWellKnown, bearerChallenge, bindOAuthTenancy } from '../auth/oauthResource.js';
@@ -132,7 +134,7 @@ import { brandRoute } from '../http/brandRoutes.js';
 import { attachDevClient, closeDevClientHmr, SOURCE_CLIENT, retireDevClient } from '@mistriwork/engine/server/devclient.js';
 import { endAdmissionSession, noteAdmissionSession } from './tenantAdmissionCache.js';
 import { admitAs } from '@mistriwork/engine/adapters/poolAdmission.js';
-import { getTenantHostIntent } from '../http/tenantHosts.js';
+import { getTenantHostIntent, type TenantHostIntent } from '../http/tenantHosts.js';
 import { baseRecordBranding } from '../http/recordBranding.js';
 import { createSuiteLinkAccess } from './suiteLinkAccess.js';
 import { createTenantAssistant, type TenantAssistant } from './tenantAssistant.js';
@@ -179,6 +181,9 @@ interface TenantAuthenticatedHttpOptions {
   readonly registry?: Registry;
   /** The public origin people reach this host by: where a signed mail link starts. */
   readonly publicURL?: string;
+  /** The suite's hosts mapped to a tenant of this App (http/tenantHosts.ts): where that tenant's capability links are
+      written, so its customer opens them on its own address. Presentation only: the door still finds the tenant by the link. */
+  readonly hosts?: readonly TenantHostIntent[];
   /** A test host's setup (http/testControl.ts): present only in a process startTestApp started, never in a deployment. */
   readonly testControl?: TestControl;
 }
@@ -243,6 +248,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       'sourceClient',
       'registry',
       'publicURL',
+      'hosts',
       'testControl',
       'trustedProxies',
     ]);
@@ -496,15 +502,46 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         names: enrollment.names,
       });
     }
+    /* Where a tenant's capability links are written: its own mapped host when the suite maps one to it, else the
+       shared address, so a tenant's customer is sent to the address that tenant gave them. Either host opens it
+       (the door finds the tenant by the link); only another tenant's host misses. */
+    const linkHosts = new Map<string, string>();
+    if (raw.hosts !== undefined) {
+      if (!Array.isArray(raw.hosts)) return denyTenant();
+      for (const intent of captureTenantData(raw.hosts) as readonly TenantHostIntent[]) {
+        tenantRecord(intent, ['host', 'app', 'tenant']);
+        if (typeof intent.host !== 'string' || typeof intent.tenant !== 'string') return denyTenant();
+        if (!linkHosts.has(intent.tenant)) linkHosts.set(intent.tenant, intent.host);
+      }
+    }
+    const linkOrigin = String(raw.publicURL ?? `http://localhost`).replace(/\/+$/, '');
+    const linkPath = outward(
+      raw.mount === undefined ? NO_MOUNT : (raw.mount as AddressMount),
+      `/${encodeURIComponent(loaded.app.id)}/l`,
+    ).slice(0, -2);
+    const linkBase = (tenant: string): string | undefined => {
+      const host = linkHosts.get(tenant);
+      if (host === undefined) return `${linkOrigin}${linkPath}`;
+      try {
+        const url = new URL(linkOrigin);
+        url.hostname = host;
+        return `${url.origin}${linkPath}`;
+      } catch {
+        return undefined;
+      }
+    };
     /* Effects and integrations: deliveries after commit, the signed webhooks, the channels and the settings
-       screen's secrets (tenantIntegrations.ts). Opened now, their loops started with the job host. */
+       screen's secrets (tenantIntegrations.ts). Opened now, their loops started with the job host. An effect's
+       link renders for the link's own tenant: the delivery names none, and the link's row is what says it. */
     {
       const registry = raw.registry as Registry | undefined;
       const base = raw.mount === undefined ? '' : (raw.mount as AddressMount).base;
+      const links = enrollment.deployment.links;
       integrations = await openTenantIntegrations({
         enrollment,
         webhookConfig: (name) => registry && webhookConfigOf(registry, name),
         webhookBase: `${String(raw.publicURL ?? `http://localhost`).replace(/\/+$/, '')}${base}`,
+        ...(links ? { links: (id: string) => links.render(id, undefined, linkBase) } : {}),
       });
     }
     auth.assertCurrent();
@@ -616,6 +653,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         return false;
       }
     };
+    const mintedLinks = enrollment.deployment.links;
     data = createTenantHttpServer({
       app: loaded.app,
       look: () => look,
@@ -632,6 +670,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       ...(search ? { search } : {}),
       ...(branding ? { branding } : {}),
       ...(integrations?.settings ? { integrations: integrations.settings } : {}),
+      ...(mintedLinks ? { renderLinks: (value: unknown, tenantId: string) => mintedLinks.rendered(value, tenantId, linkBase) } : {}),
       // Asked once the assistant below exists; it is made on this server's own listener.
       ...(loaded.app.assistant
         ? {
@@ -1080,6 +1119,8 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
               req.headers[EXPERIMENT_FORM_HEADER]
             ) &&
             path !== '/api/whoami' &&
+            /* A capability link: its holder has no account, and its tenant's own host is where the link names it. */
+            !(deployment.links && LINK_PATH.test(insidePaths.get(req) ?? path)) &&
             !(browser && path === SHARE_CARD_PATH) &&
             !(browser && path.startsWith('/') && path !== '/api' && !path.startsWith('/api/'))
           )
@@ -1152,6 +1193,30 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         /* The Host, for everything below. A write's Origin and body are each dispatcher's own door further in: the
            data server's (tenantHttp.ts), a public form's, a visitor's read, the assistant's and native auth's below. */
         if (doorRefusal(req, bound, { writing: false })) return refuse(403);
+        /* A capability link (links/linkDoor.ts): its own principal, before any session is read. The door misses
+           alike for an id that is not a link, a link of another tenant asked on this tenant's host, and a deployment
+           that serves no links; on the shared host the link's own row names its tenant. */
+        {
+          const link = LINK_PATH.exec(insidePaths.get(req) ?? path);
+          let linkApp: string | undefined;
+          try {
+            linkApp = link ? decodeURIComponent(link[1]) : undefined;
+          } catch {
+            linkApp = undefined;
+          }
+          if (link && linkApp === loaded.app.id && servesLinks(loaded.app)) {
+            const registry = raw.registry as Registry | undefined;
+            // A host mapped to another App names no tenant of this one: nothing opens there.
+            const host = getTenantHostIntent(req);
+            const backend =
+              host && !mappedHost(req)
+                ? undefined
+                : deployment.links?.backend(mappedHost(req)?.tenant, () => (registry ? emailOf(registry) : undefined));
+            await linkDoor({ req, res, bound, mount, app: loaded.app, segment: link[2], step: link[3] as LinkStep | undefined }, backend);
+            active();
+            return;
+          }
+        }
         if (visitorRead(req, path, url)) {
           // A visitor names no lease, tenant or realm, and holds no bearer: a request that does is a member's, or no one's.
           if (req.headers.authorization !== undefined) return refuse(403);

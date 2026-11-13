@@ -40,7 +40,7 @@ import { assertApiTokenSecretId } from '../api/apiTokenSecret.js';
 import type { TenantMembershipEvidence } from './tenantMembership.js';
 import type { AdministrationPolicy } from './tenantAdministrationModel.js';
 
-type Catalog = Readonly<{ operations: readonly Readonly<{ id: string; eligibleRoles: readonly string[] }>[] }>;
+type Catalog = Readonly<{ operations: readonly Readonly<{ id: string; eligibleRoles: readonly string[]; door?: 'public' }>[] }>;
 
 /** What a member is told about a token: never its secret or digest. */
 interface TenantTokenSummary {
@@ -201,7 +201,8 @@ export function createTenantTokenService(
       return Object.freeze({
         roles,
         operations: input.catalog.operations
-          .filter((operation) => operation.eligibleRoles.some((role) => roles.includes(role)))
+          // A public door's verb is offered to name: no role reaches it, and naming it is its grant.
+          .filter((operation) => operation.door === 'public' || operation.eligibleRoles.some((role) => roles.includes(role)))
           .map((o) => o.id),
         maxDays: TENANT_TOKEN_MAX_DAYS,
       });
@@ -227,7 +228,9 @@ export function createTenantTokenService(
       if (
         operations?.some(
           (id) =>
-            !input.catalog.operations.some((operation) => operation.id === id && operation.eligibleRoles.some((r) => roles.includes(r))),
+            !input.catalog.operations.some(
+              (operation) => operation.id === id && (operation.door === 'public' || operation.eligibleRoles.some((r) => roles.includes(r))),
+            ),
         )
       )
         return refusal(400, 'invalid_input', 'An operation is not one these roles can use.');

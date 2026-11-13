@@ -1366,6 +1366,28 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
         bound.previewRemove(request, selected, captured),
       );
     },
+    /* A record's live links are counted in the writer's transaction a revoke would take, so the record page asks
+       only where the member may revoke them: answered as a preview is, which changes nothing. */
+    countLinks(
+      request: Request,
+      selectors: readonly string[],
+      expected: TenantContextAssertion,
+      value: Parameters<TenantDeployment<Request>['countLinks']>[2],
+    ) {
+      return execute('preview', request, selectors, expected, value, (bound, selected, captured) =>
+        bound.countLinks(request, selected, captured),
+      );
+    },
+    revokeLinks(
+      request: Request,
+      selectors: readonly string[],
+      expected: TenantContextAssertion,
+      value: Parameters<TenantDeployment<Request>['revokeLinks']>[2],
+    ) {
+      return execute('write', request, selectors, expected, value, (bound, selected, captured) =>
+        bound.revokeLinks(request, selected, captured),
+      );
+    },
     preview(
       request: Request,
       selectors: readonly string[],

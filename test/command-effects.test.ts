@@ -27,7 +27,8 @@ import {
   executeBusinessCommand,
   refuse,
 } from '../packages/mistri/src/server/commands/businessCommandExecution.js';
-import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
+import { defineCommand, defineCommands, type AnyBusinessCommand } from '../packages/mistri/src/server/commands/businessCommands.js';
+import type { CommandDb } from '../packages/mistri/src/server/commands/commandDb.js';
 import {
   captureCommandEvents,
   defineEvent,
@@ -44,11 +45,18 @@ import {
 } from '../packages/mistri/src/server/commands/commandEffects.js';
 import { id, literal, shape } from '../packages/mistri/src/server/commands/commandShapes.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
+import { refusalCause } from '../packages/engine/src/server/evidence.js';
 import { effectDeployment, openEffectHost } from '../packages/mistri/src/server/effects/effectHost.js';
 import { inspectEventDeliveries, provisionStores, redriveEventDeliveries } from '../packages/mistri/src/server/maintenance.js';
 import { openWebhook, webhookConnectionOf } from '../packages/mistri/src/server/webhooks.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
-import { dropDedicatedPostgresDatabase, openTenantEngine, TENANT_DIALECTS, type TenantDialect } from './support/tenantDialects.js';
+import {
+  dropDedicatedPostgresDatabase,
+  openTenantEngine,
+  TENANT_DIALECTS,
+  type TenantDialect,
+  type TenantEngine,
+} from './support/tenantDialects.js';
 
 test('a webhook connection is https, or http to this machine, with its credential in auth', () => {
   const at = 'config.json: connection "dealer-hooks"';
@@ -106,6 +114,89 @@ const reserve = (effects = true, options?: Parameters<typeof post>[2]) =>
       return { id: updated.id as number, status: 'reserved' as const };
     },
   });
+
+type Reserved = { id: number; status: 'reserved' };
+/** A note row, and the read a post's projection makes of them. */
+type NotesDb = { readonly note: { where(): PromiseLike<readonly { readonly body?: unknown }[]> } };
+const NOTE = 'n'.repeat(51_200);
+/** The notes a projection read, joined, and `extra` characters more of them: a body made from rows and sized by them. */
+const fromNotes = (rows: readonly { readonly body?: unknown }[], extra = 0) => {
+  const text = rows.map((row) => String(row.body)).join('');
+  return { text: text + text.slice(0, extra) };
+};
+/** How often a projection ran, and the bytes of each body it made. */
+const projections = { count: 0, bytes: [] as number[] };
+const reserveFromNotes = (posts: number, extra: number) =>
+  defineCommand({
+    source: 'shop',
+    target: 'vehicle',
+    read: ['note'],
+    when: 'status = available',
+    input: {},
+    output,
+    effects: Object.fromEntries(
+      Array.from({ length: posts }, (_, at) => [
+        at ? `crm${at + 1}` : 'crm',
+        post<Reserved, NotesDb>('dealer-hooks', async (_reserved, { db }) => {
+          projections.count++;
+          const body = fromNotes(await db.note.where(), extra);
+          projections.bytes.push(Buffer.byteLength(JSON.stringify(body)));
+          return body;
+        }),
+      ]),
+    ),
+    async handle({ db, record }) {
+      const updated = await db.vehicle.update(record!, { status: 'reserved' });
+      return { id: updated.id as number, status: 'reserved' as const };
+    },
+  });
+/** A projection that reaches for a write, or for a table the command does not read: each refused by name. */
+const reserveReaching = (reach: 'write' | 'outside') =>
+  defineCommand({
+    source: 'shop',
+    target: 'vehicle',
+    when: 'status = available',
+    input: {},
+    output,
+    effects: {
+      crm: post<Reserved>('dealer-hooks', async (reserved, { db }) => {
+        const tables = db as Record<string, Record<string, (...args: unknown[]) => PromiseLike<unknown>>>;
+        if (reach === 'write') await tables.vehicle.update({ id: reserved.id }, { status: 'sold' });
+        else await tables.note.where();
+        return { id: reserved.id };
+      }),
+    },
+    async handle({ db, record }) {
+      const updated = await db.vehicle.update(record!, { status: 'reserved' });
+      return { id: updated.id as number, status: 'reserved' as const };
+    },
+  });
+
+// A post nested in a command's definition is resolved before the command's own types are, so its projection names
+// them: the output, and the db as `CommandDb` of the tables the command reads.
+test("a post's projection is typed by the command's reads: its db has the tables the command reads and no others", () => {
+  const typed = defineCommand({
+    source: 'shop',
+    target: 'vehicle',
+    read: ['note'],
+    input: {},
+    output,
+    effects: {
+      crm: post<Reserved, CommandDb<string, 'vehicle' | 'note'>>('dealer-hooks', async (reserved, { db }) => {
+        // @ts-expect-error -- the command reads no "ledger", so its projection's db has none
+        void db.ledger;
+        return { id: reserved.id, ...fromNotes(await db.note.where()) };
+      }),
+    },
+    handle: () => ({ id: 1, status: 'reserved' as const }),
+  });
+  assert.deepEqual(Object.keys(typed.effects ?? {}), ['crm']);
+});
+
+test('an async projection is resolved before its batch is made; projected without that, it is refused, never stored as a promise', () => {
+  const { slots } = captureCommandEffects({ crm: post<{ id: number }>('crm', async (out) => ({ id: out.id })) });
+  assert.throws(() => projectCommandEvents(captureCommandEvents(slots), { id: 1 }));
+});
 
 test('post() takes envelope: false and per-call headers, and nothing else', () => {
   const bare = (options: unknown) => () => post('slack', () => ({ text: 'hi' }), options as never);
@@ -176,7 +267,7 @@ test('an effect body keeps its long strings and is refused by name past what one
   assert.equal(project('x'.repeat(EFFECT_LIMITS.bodyBytes - overhead)).length, 1);
   assert.throws(
     () => project('x'.repeat(EFFECT_LIMITS.bodyBytes - overhead + 1)),
-    /post "crm" body is 15,361 bytes; one post carries at most 15,360\./,
+    /post "crm" body is 262,145 bytes; one post carries at most 262,144\./,
   );
 });
 
@@ -204,12 +295,19 @@ async function fixture(
     execute: (key: number | string, request?: Record<string, unknown>) => Promise<{ receiptId: string; replayed: boolean }>;
     host: Awaited<ReturnType<typeof openEffectHost>>;
     deployment: NonNullable<ReturnType<typeof effectDeployment>>;
+    engine: TenantEngine;
+    /** The host stops, as a process does, and a new one opens on the same store. */
+    restart: () => Promise<void>;
   }) => Promise<void>,
   options?: Parameters<typeof post>[2],
+  command: AnyBusinessCommand = reserve(true, options),
 ) {
   const setup = `CREATE TABLE db_item (id INTEGER PRIMARY KEY, stock TEXT NOT NULL, status TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 0);
-    INSERT INTO db_item VALUES (1, 'FC-1', 'available', 0), (2, 'HOLD', 'available', 0), (3, 'FC-3', 'available', 0), (4, 'FC-4', 'available', 0);`;
-  const engine = await openTenantEngine(dialect, { tables: ['db_item'], sqlite: setup, postgres: setup, database: DATABASE });
+    INSERT INTO db_item VALUES (1, 'FC-1', 'available', 0), (2, 'HOLD', 'available', 0), (3, 'FC-3', 'available', 0), (4, 'FC-4', 'available', 0);
+    CREATE TABLE db_note (id INTEGER PRIMARY KEY, body TEXT NOT NULL);`;
+  const engine = await openTenantEngine(dialect, { tables: ['db_item', 'db_note'], sqlite: setup, postgres: setup, database: DATABASE });
+  // Four 50 KiB notes: what a post's projection reads to build a body far past an event's 16 KiB.
+  for (const note of [1, 2, 3, 4]) await engine.exec('INSERT INTO db_note (id, body) VALUES (?, ?)', [note, NOTE]);
   const target = dialect === 'sqlite' ? { sqlite: engine.path } : { postgres: engine.url };
   const registry = new Registry();
   const received: Received[] = [];
@@ -231,7 +329,7 @@ async function fixture(
   let host: Awaited<ReturnType<typeof openEffectHost>> | undefined;
   try {
     await engine.migrateCommandJournal();
-    const commands = defineCommands({ reserve: reserve(true, options) });
+    const commands = defineCommands({ reserve: command });
     const provisioned =
       dialect === 'sqlite'
         ? await provisionStores({ sqlite: engine.path }, { app: { id: 'shop', commands } })
@@ -246,7 +344,7 @@ async function fixture(
         id: 'shop',
         name: 'Shop',
         sources: { shop: { connection: 'private-db' } },
-        resources: { vehicle: { physical: engine.id('db_item'), access: 'write' } },
+        resources: { vehicle: { physical: engine.id('db_item'), access: 'write' }, note: { physical: engine.id('db_note') } },
         auth: { roles: { staff: { read: true, commands: ['reserve'] } } },
         views: { vehicles: { kind: 'list', from: 'vehicle' } },
         home: 'vehicles',
@@ -282,12 +380,31 @@ async function fixture(
         'effects fixture',
       ),
     );
-    host = await openEffectHost({ deployment, target, webhooks: new Map([['dealer-hooks', webhook]]), now: () => clock.now });
+    const webhooks = new Map([['dealer-hooks', webhook]]);
+    host = await openEffectHost({ deployment, target, webhooks, now: () => clock.now });
+    const restart = async () => {
+      await host?.stop();
+      host = undefined;
+      host = await openEffectHost({ deployment, target, webhooks, now: () => clock.now });
+    };
     const effectRows = async () =>
       (await engine.all(`SELECT envelope_json FROM "${COMMAND_EVENT_TABLES.event}"`)).map(
         (row) => JSON.parse(String(row.envelope_json)).name,
       );
-    await run({ effectRows, target, received, answer: (...statuses) => queue.push(...statuses), clock, execute, host, deployment });
+    await run({
+      effectRows,
+      target,
+      received,
+      answer: (...statuses) => queue.push(...statuses),
+      clock,
+      execute,
+      get host() {
+        return host!;
+      },
+      deployment,
+      engine,
+      restart,
+    });
   } finally {
     await host?.stop();
     delete process.env.EFFECTS_TEST_TOKEN;
@@ -419,6 +536,135 @@ for (const { dialect, skip } of TENANT_DIALECTS)
           assert.equal(f.received.length, 0);
         },
         { envelope: false, headers: () => ({ 'content-length': '1' }) },
+      );
+    });
+
+    /** Every message a refusal carries, the owner's reasons under it included. */
+    const reasons = (error: unknown) => {
+      const said: string[] = [];
+      for (let at: unknown = error; at !== undefined; at = refusalCause(at)) said.push(String((at as Error).message));
+      return said.join('\n');
+    };
+    const refusedBy = (pattern: RegExp) => (error: unknown) => {
+      assert.ok(error instanceof BusinessCommandExecutionError && error.code === 'invalid_result', String(error));
+      assert.match(reasons(error), pattern);
+      return true;
+    };
+    /** The body each stored effect event carries, as it was stored. */
+    const storedBodies = async (engine: TenantEngine) =>
+      (await engine.all(`SELECT envelope_json FROM "${COMMAND_EVENT_TABLES.event}"`)).map(
+        (row) => JSON.parse(JSON.parse(String(row.envelope_json)).payloadJson).body as { text: string },
+      );
+    const statusOf = async (engine: TenantEngine) => (await engine.get('SELECT status FROM db_item WHERE id = 1'))?.status;
+
+    test("a 200 KiB body built from rows through the projection's db is stored as projected and delivered", async () => {
+      projections.count = 0;
+      projections.bytes = [];
+      await fixture(
+        dialect,
+        async (f) => {
+          await f.execute(1);
+          const [stored] = await storedBodies(f.engine);
+          assert.equal(stored.text.length, 4 * NOTE.length, 'the four notes the projection read');
+          assert.deepEqual(projections.bytes, [Buffer.byteLength(JSON.stringify(stored))], 'stored bytes are the projected bytes');
+          assert.ok(projections.bytes[0] > 200 * 1024 && projections.bytes[0] <= EFFECT_LIMITS.bodyBytes);
+          await f.host.tick();
+          assert.equal(f.received.length, 1);
+          assert.deepEqual((f.received[0].body as { payload: unknown }).payload, stored);
+          const [delivered] = (await inspectEventDeliveries(f.target, f.deployment.destinations[0].policy)).rows;
+          assert.equal(delivered.state, 'delivered');
+        },
+        undefined,
+        reserveFromNotes(1, 0),
+      );
+    });
+
+    test('a 300 KiB body is refused by name, and the command writes nothing', async () => {
+      await fixture(
+        dialect,
+        async (f) => {
+          await assert.rejects(
+            f.execute(1),
+            refusedBy(/Command "reserve": post "dealer-hooks" body is 307,211 bytes; one post carries at most 262,144\./),
+          );
+          assert.deepEqual(await f.effectRows(), []);
+          assert.equal(await statusOf(f.engine), 'available', 'the command rolled back');
+        },
+        undefined,
+        reserveFromNotes(1, 2 * NOTE.length),
+      );
+    });
+
+    test("five 250 KiB posts are each within a post's limit and together past a command's", async () => {
+      await fixture(
+        dialect,
+        async (f) => {
+          await assert.rejects(
+            f.execute(1),
+            refusedBy(/Command "reserve": its 5 posts carry 1,280,055 bytes; one command carries at most 1,048,576\./),
+          );
+          assert.deepEqual(await f.effectRows(), []);
+          assert.equal(await statusOf(f.engine), 'available');
+        },
+        undefined,
+        reserveFromNotes(5, NOTE.length),
+      );
+    });
+
+    test("a projection's db reads: a write through it is refused, and the command writes nothing", async () => {
+      await fixture(
+        dialect,
+        async (f) => {
+          await assert.rejects(
+            f.execute(1),
+            refusedBy(/Command "reserve": an effect's projection reads through db and cannot write; it called db\.vehicle\.update\(\)\./),
+          );
+          assert.deepEqual(await f.effectRows(), []);
+          assert.equal(await statusOf(f.engine), 'available');
+        },
+        undefined,
+        reserveReaching('write'),
+      );
+    });
+
+    test("a projection's db reads only what the command reads", async () => {
+      await fixture(
+        dialect,
+        async (f) => {
+          await assert.rejects(
+            f.execute(1),
+            refusedBy(/Command "reserve": an effect's projection reads only what the command reads; "note" is not in its read\./),
+          );
+          assert.deepEqual(await f.effectRows(), []);
+          assert.equal(await statusOf(f.engine), 'available');
+        },
+        undefined,
+        reserveReaching('outside'),
+      );
+    });
+
+    test('after a crash the stored body is delivered as it was projected, and neither delivery nor a replay projects again', async () => {
+      projections.count = 0;
+      projections.bytes = [];
+      await fixture(
+        dialect,
+        async (f) => {
+          const first = await f.execute(1);
+          assert.equal(projections.count, 1);
+          const [stored] = await storedBodies(f.engine);
+          // The host stops before it sends anything, and a new one opens on the same store.
+          await f.restart();
+          await f.host.tick();
+          assert.equal(f.received.length, 1);
+          assert.deepEqual((f.received[0].body as { payload: unknown }).payload, stored);
+          assert.equal(f.received[0].headers['idempotency-key'], effectIdempotencyKey(first.receiptId, 'crm'));
+          assert.equal((await f.execute(1)).replayed, true);
+          await f.host.tick();
+          assert.equal(projections.count, 1, 'the replay answered its receipt and projected nothing');
+          assert.equal(f.received.length, 1);
+        },
+        undefined,
+        reserveFromNotes(1, 0),
       );
     });
   });

@@ -314,6 +314,8 @@ export function refreshAfterCommand(
 export const KEYED_SECTION_READS: Readonly<Record<string, { table: number; key: number }>> = {
   'page-history': { table: 1, key: 2 },
   'page-flows': { table: 1, key: 2 },
+  /* How many of the record's capability links still open (Actions.tsx): a command that mints one leaves it stale. */
+  'record-links': { table: 1, key: 2 },
   'page-link-fields': { table: 3, key: 4 },
   'record-children': { table: 1, key: 2 },
   'record-children-page': { table: 1, key: 2 },

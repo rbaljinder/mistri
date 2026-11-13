@@ -188,11 +188,14 @@ export function appLinkProblems(
     problems.push('views "l": a link is served at /l/, so no view can be keyed "l" in an App that declares links.');
   for (const [name, resource] of Object.entries(app.resources ?? {})) {
     if (!resource.links) continue;
-    /* A link's holder is no member: in an App whose rows are scoped by tenant, the link would be the only read not
-       held to one. A row policy is not asked about a link at all — the link is the grant for its one row
+    /* A link's holder is no member: in an App whose rows are scoped by tenant, a link is held to the tenant it was
+       minted in (tenant/tenantLinks.ts), so only a tenant's own rows carry one — a global or platform row has no
+       tenant to hold it to. A row policy is not asked about a link at all — the link is the grant for its one row
        (policy/appPolicyContext.ts withLink). */
-    if (isTenantApp(app)) {
-      problems.push(`resources "${name}", "links": capability links are not served in an App whose rows are scoped by tenant.`);
+    if (isTenantApp(app) && resource.owner !== 'tenant') {
+      problems.push(
+        `resources "${name}", "links": in an App whose rows are scoped by tenant, only a tenant's own rows (owner: 'tenant') carry links.`,
+      );
       continue;
     }
     /* The catalog here is the App's, in logical names, as appNotifyRules reads it. */

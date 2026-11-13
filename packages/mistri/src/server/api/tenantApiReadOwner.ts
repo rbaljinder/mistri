@@ -69,6 +69,7 @@ import { ApiCommandUnauthenticated } from './sqliteApiCommandOwner.js';
 import { ApiReadFailure } from './apiReadFailure.js';
 import { createApiScopeMint } from './apiScopeMint.js';
 import { ApiTokenStoreUnavailable } from '../auth/apiTokenStoreFailure.js';
+import { apiPublicForm, shapeApiPublicResult, spendApiPublicBudget } from './apiPublicLane.js';
 
 type Answer = Readonly<{ status: 200 | 404; body: string }>;
 type Send = (answer: Answer) => void;
@@ -417,7 +418,54 @@ export async function createTenantApiOwner(input: {
               return 'refused';
             }
           };
+          /** A public verb through the deployment's intake: its answer, or its refusal as the executor classified it. */
+          const submitPublic = async (
+            form: string,
+          ): Promise<{ status: number; headers?: Readonly<Record<string, string>>; value: unknown }> => {
+            const call = captured as {
+              commandVersion?: unknown;
+              key?: unknown;
+              expectedVersion?: unknown;
+              input?: unknown;
+              idempotencyKey?: unknown;
+            };
+            try {
+              if (call.commandVersion !== registry![named]!.version)
+                throw new BusinessCommandExecutionError('command_version_mismatch', 'not_applied');
+              if (
+                !call.key ||
+                typeof call.key !== 'object' ||
+                Object.keys(call.key).length ||
+                call.expectedVersion !== 0 ||
+                typeof call.idempotencyKey !== 'string'
+              )
+                throw new BusinessCommandExecutionError('invalid_input', 'not_applied');
+              const result = await deployment.submitIntake(
+                {
+                  form,
+                  address: undefined,
+                  input: call.input,
+                  submission: call.idempotencyKey,
+                  caller: { tokenId: observed.tokenId, tenantId: binding.tenantId },
+                },
+                { ...(signal ? { signal } : {}), entry: door },
+              );
+              return projectApiCommandAnswer('execute', await shapeApiPublicResult(enrolled, undefined, result));
+            } catch (error) {
+              const code = isBusinessCommandExecutionError(error) ? error.code : undefined;
+              if (!code || !Object.hasOwn(REFUSAL_STATUS, code))
+                return { status: 503, value: commandProblem('temporarily_unavailable', 'unknown') };
+              const refusal = error as BusinessCommandExecutionError;
+              return {
+                status: REFUSAL_STATUS[code]!,
+                value: commandProblem(code, refusal.outcome, refusal.field),
+                headers: refusalHeaders(code),
+              };
+            }
+          };
           let outcome: { status: number; headers?: Readonly<Record<string, string>>; value: unknown };
+          // A public form's command, named by this token, takes the door's lane (apiPublicLane.ts).
+          const publicForm = apiPublicForm(enrolled, registry!, named);
           if (!observed.operations.includes(`command:${named}`)) {
             // No business work ran, so nothing was applied.
             outcome = {
@@ -437,6 +485,14 @@ export async function createTenantApiOwner(input: {
                 before === 'refused'
                   ? { status: 403, value: commandProblem('forbidden', 'not_applied') }
                   : { status: 503, value: commandProblem('temporarily_unavailable', 'unknown') };
+            } else if (publicForm !== undefined) {
+              /* The door's verb, in the token's own tenant (`token.tenant`) and no other: the intake lane, placed by
+                 that tenant rather than an address, as the form's principal under the token's id. The membership was
+                 admitted above, so a token outlives no member; its roles widen nothing the door grants. */
+              outcome =
+                mode === 'prepare'
+                  ? { status: REFUSAL_STATUS.invalid_input!, value: commandProblem('invalid_input', 'not_applied') }
+                  : ((await spendApiPublicBudget(observed.tokenId)) ?? (await submitPublic(publicForm)));
             } else {
               // The same binding, on the runtime's own admission of this call.
               // Its principal is fixed for the call, so a refusal here comes at

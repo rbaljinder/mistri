@@ -48,6 +48,9 @@ export const flowRunnersOf = (workflows: ReadonlyMap<string, CapturedWorkflow>):
 /** A row as a change a runner may start on, or undefined where it names no record the runner can target.
  * `owner`: a tenant App's owner column, whose value in the stored key is the change's tenant. */
 function flowChangeOf(row: StoredRecordChange, runner: FlowRunnerRef, keyColumn: string, owner?: string): FlowChange | undefined {
+  /* An update that moved no field is something done to the record, noted in its history (its links revoked), and not
+     a change a flow starts on. */
+  if (row.kind === 'update' && !row.changes.length) return undefined;
   let key: unknown;
   try {
     key = JSON.parse(row.key);

@@ -14,7 +14,7 @@ const refuse = (): never => {
 };
 
 /** The operations a token may name, each with the roles that may run it. */
-export type IssueCatalog = Readonly<{ operations: readonly Readonly<{ id: string; eligibleRoles: readonly string[] }>[] }>;
+export type IssueCatalog = Readonly<{ operations: readonly Readonly<{ id: string; eligibleRoles: readonly string[]; door?: 'public' }>[] }>;
 /** An account as the native store reads it: eligible (not banned), with its roles. Null when it is not. */
 type EligibleAccount = Readonly<{ accountId: string; roles: readonly string[] }> | null;
 
@@ -86,7 +86,9 @@ export function issueAccountToken(raw: AccountTokenIssueInput) {
       record.operations?.some(
         (id) =>
           !catalog.operations.some(
-            (operation) => operation.id === id && operation.eligibleRoles.some((role) => record.roles.includes(role)),
+            // A public door's verb has no role to match: naming it is the grant (apiTokenScope.ts).
+            (operation) =>
+              operation.id === id && (operation.door === 'public' || operation.eligibleRoles.some((role) => record.roles.includes(role))),
           ),
       )
     )

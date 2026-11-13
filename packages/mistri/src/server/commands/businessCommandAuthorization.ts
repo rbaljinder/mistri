@@ -36,6 +36,7 @@ import { compileWhen, recordPartEnd, recordPathEnd, withDerived, type CommandPeo
 import { sayRefusal } from '@mistriwork/engine/shared/refusal.js';
 import { withSaying } from './commandSaying.js';
 import { versionColumn } from './commandRevision.js';
+import { isPublicActorId } from '../../shared/publicActor.js';
 import { commandLookupProblem } from './commandLookupRules.js';
 import { captureTenantData, isCapturedTenantData, tenantOptions, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import { issueReadColumns, issueTargetColumns, issueTargetUnreadable } from './commandActorColumns.js';
@@ -1064,7 +1065,6 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
             typeof held !== 'object' ||
             [held.id, held.name, held.resource, held.key].some((part) => typeof part !== 'string' || !part) ||
             captured.id !== `link:${held.id}` ||
-            isTenantApp(app) ||
             !Object.hasOwn(app.resources?.[held.resource]?.links ?? {}, held.name)
           )
             throw new Error();
@@ -1076,7 +1076,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
             typeof captured.form !== 'string' ||
             !publicForms.has(captured.form) ||
             captured.roles.length ||
-            captured.id !== `public:${captured.form}`
+            !isPublicActorId(captured.id, captured.form)
           )
             throw new Error();
         }
@@ -1211,11 +1211,13 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
       }
       /* The links a handler may mint (context.link): its target's, in an App that serves links at all
          (appLinkProblems) — on one existing record, by a signed-in person or a service, or on the one record a public
-         command made, for its visitor alone (the execution finds that row). A link's holder mints no further link. */
+         command made, for its visitor alone (the execution finds that row). A link's holder mints no further link. In a
+         tenant App only a member or a service mints, on one existing record of its own tenant: a visitor's run lands
+         through intake, which places a tenant by an address, and a link is held to the tenant whose row it names. */
       const declaredLinks = app.resources?.[binding.resource]?.links;
       const onRecord =
         identity.kind !== 'public' && identity.kind !== 'link' && (binding.command.targets ?? 'one') === 'one' && !creating.has(id);
-      const mints = declaredLinks && !isTenantApp(app) && (identity.kind === 'public' || onRecord) ? declaredLinks : undefined;
+      const mints = declaredLinks && (isTenantApp(app) ? onRecord : identity.kind === 'public' || onRecord) ? declaredLinks : undefined;
       /* A row removed ends the links minted on it, whoever removes it and under whichever command: each written
          table whose resource declares links is named here, and the removal revokes in its own transaction. */
       const linkedTables = new Map<string, string>();

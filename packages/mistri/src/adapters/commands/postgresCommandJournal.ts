@@ -74,7 +74,7 @@ import { commandEventsAppended } from '../events/commandEventSignal.js';
 import { nextPostgresCommandNumber, provisionPostgresCommandSequences } from './postgresCommandSequences.js';
 import { provisionPostgresCommandStaging, stagePostgresFile, takePostgresStaged } from './postgresCommandStaging.js';
 import type { StagedFileRow, StagedLimits, StagedTake } from './commandStaging.js';
-import { mintPostgresLink, openPostgresLink, readPostgresLink, revokePostgresLinks } from './commandLinks.js';
+import { countPostgresLinks, mintPostgresLink, openPostgresLink, readPostgresLink, revokePostgresLinks } from './commandLinks.js';
 import { appendPostgresReadAudits } from '../readAudit/postgresReadAudit.js';
 import type { ReadAuditRow } from '../readAudit/readAudit.js';
 
@@ -364,6 +364,11 @@ export function createPostgresCommandJournal(client: PgQuery, operations: Transa
       invoke({ appId, resource, rowKey, name, now }, async (input) => {
         if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
         return revokePostgresLinks(client, input.appId, namespace[3], input.resource, input.rowKey, input.name, input.now);
+      }),
+    countLinks: (appId: string, resource: string, rowKey: string, now: number) =>
+      invoke({ appId, resource, rowKey, now }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return countPostgresLinks(client, input.appId, namespace[3], input.resource, input.rowKey, input.now);
       }),
     openLink: (appId: string, id: string, now: number) =>
       invoke({ appId, id, now }, async (input) => {

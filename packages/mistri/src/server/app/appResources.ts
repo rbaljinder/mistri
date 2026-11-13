@@ -4,6 +4,7 @@ import {
   type Adapter,
   type AggregateRequest,
   type DeleteRequest,
+  type NoteRequest,
   type ScopedReads,
   type TellRequest,
   type WriteTransaction,
@@ -641,6 +642,8 @@ export function createAppResourcesOver(physicalAdapter: Adapter, catalog: AppRes
       update: (request) => through(request.table)?.update(request) ?? tx.update(mapWrite(request)),
       remove: (request) => through(request.table)?.remove(request) ?? tx.remove(mapWrite(request)),
       ...(tx.tell ? { tell: (request: TellRequest) => through(request.table)?.tell(request) ?? tx.tell!(mapWrite(request)) } : {}),
+      // Writes no row, so a narrowed resource has nothing to keep inside its query: the caller read the row through it.
+      ...(tx.noted ? { noted: (request: NoteRequest) => tx.noted!(mapWrite(request)) } : {}),
     };
     if (tx.insertMany)
       mapped.insertMany = (requests) =>

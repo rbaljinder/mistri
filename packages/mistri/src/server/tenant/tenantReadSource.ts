@@ -109,6 +109,7 @@ import {
   captureAddressesLookup,
   captureIntakeEvidence,
   captureIntakeLookup,
+  captureIntakeTenantLookup,
   heldAddress,
   intakeAddressQuery,
   intakePlace,
@@ -130,11 +131,24 @@ import {
   tenantProfileQuery,
   type TenantIntakeEvidence,
   type TenantIntakeLookup,
+  type TenantIntakeTenantLookup,
   type TenantIntakeResolution,
 } from './tenantIntakeModel.js';
 import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import type { AppDef } from '../../shared/app.js';
 import { PLATFORM_TENANT_ID } from './tenantPlatform.js';
+import { findPostgresLink, findSqliteLink, readPostgresLink, readSqliteLink } from '../../adapters/commands/commandLinks.js';
+import {
+  assertLinkReadCurrent,
+  assertLinkRowCurrent,
+  captureLinkEvidence,
+  captureLinkLookup,
+  composeLinkScope,
+  linkResolution,
+  type TenantLinkEvidence,
+  type TenantLinkLookup,
+  type TenantLinkResolution,
+} from './tenantLinkModel.js';
 import { readSqliteActiveTenants, readSqliteIntakeAnchor } from './tenantStore.js';
 import { dueTimersPlan, type DueTimer, type DueTimersQuery } from './tenantDueTimers.js';
 import { TENANT_NAMES_MAX, tenantNamePlan, tenantNamesOf, tenantNamesQuery } from './tenantNames.js';
@@ -241,6 +255,10 @@ export interface TenantReadSource {
    * profile row alone holds the address, else the platform when it is active.
    * Reads the profile by the policy's column only; admits nobody. */
   resolveIntake(lookup: TenantIntakeLookup): Promise<TenantIntakeResolution>;
+  /** A token's public verb's placement, in one snapshot: the token's own
+   * tenant when it and the platform are both active, else refused — never
+   * triage, and never another tenant, whatever the request says. */
+  resolveIntakeByTenant(lookup: TenantIntakeTenantLookup): Promise<TenantIntakeResolution>;
   /** A visitor's placement, in one snapshot: the active tenant whose profile
    * row alone holds the address (or the mapped host's tenant, when active),
    * with `@platform` active too; else null, whatever the reason, so no
@@ -262,6 +280,14 @@ export interface TenantReadSource {
    * operation re-reads the service anchors in its own snapshot and requires the same tenant and platform at
    * the same versions, inside the attempt's window. A platform place is refused: it runs outside any tenant. */
   bindServiceReads(evidence: TenantServiceEvidence, rows: RowScope): Promise<ScopedReads>;
+  /** A capability link's placement, in one snapshot: the live link by this App and its id alone — the one read a
+   * tenant App's shared door makes before it knows the tenant — with its tenant and `@platform` each active; else
+   * null, whatever the reason. Admits nobody: the door checks the token or session against the tenant it names. */
+  resolveLink(lookup: TenantLinkLookup): Promise<TenantLinkResolution | null>;
+  /** Reads under a link's scope (tenantLinkModel.ts composeLinkScope): its one record within its tenant. Every
+   * operation re-reads the anchors and the link row in its own snapshot and requires the same tenant at the same
+   * versions, inside the request's window, with the link still live: a revoke or a suspension reads nothing more. */
+  bindLinkReads(evidence: TenantLinkEvidence, rows: RowScope): Promise<ScopedReads>;
   /** What these tenants are called: each one's profile row said by the App's
    * template for that resource (tenantNames.ts), for the ids a caller already
    * holds. Reads the profile's key and the name's columns only; admits nobody. */
@@ -325,6 +351,14 @@ function intakeResolution(tenantId: string | undefined, anchor: (id: string) => 
   return tenantId !== undefined && version !== null
     ? { tenantId, tenantVersion: version, platformVersion: platform }
     : { tenantId: PLATFORM_TENANT_ID, tenantVersion: platform, platformVersion: platform };
+}
+
+/** The token's tenant when it and the platform are both active; refused otherwise, as no token is triaged. */
+function intakeResolutionByTenant(tenantId: string, anchor: (id: string) => string | null): TenantIntakeResolution {
+  const platform = anchor(PLATFORM_TENANT_ID);
+  const version = platform === null ? null : anchor(tenantId);
+  if (platform === null || version === null) return denyTenant();
+  return { tenantId, tenantVersion: version, platformVersion: platform };
 }
 
 /** The profile's record-name template, as the App's catalog serves it, and the tenants to name. */
@@ -688,6 +722,18 @@ export function openSqliteTenantReadSource(
       assertServiceReadCurrent(evidence, found, instant);
       active();
     };
+    // A link's anchors and its row as this snapshot finds them, against the versions its request read.
+    const currentLink = (evidence: TenantLinkEvidence) => {
+      const found = {
+        tenantVersion: readSqliteIntakeAnchor(db, owner, evidence.tenantId),
+        platformVersion: readSqliteIntakeAnchor(db, owner, PLATFORM_TENANT_ID),
+      };
+      const instant = now();
+      active();
+      assertLinkReadCurrent(evidence, found, instant);
+      assertLinkRowCurrent(readSqliteLink(db, owner.appId, evidence.tenantId, evidence.linkId, instant), evidence);
+      active();
+    };
     const currentPublic = (evidence: TenantPublicEvidence) => {
       const value = capturePublicEvidence(evidence, owned);
       const resolved = resolvePublicIn(publicLookupOf(value));
@@ -857,12 +903,35 @@ export function openSqliteTenantReadSource(
           if (value.place !== 'tenant') throw new AppAccessDenied();
           return bind(composeServiceScope(owned, value, captured.rows), () => currentService(value));
         }),
+      // The source recomposes the link's scope itself: its one record, never a caller's predicate.
+      bindLinkReads: (evidence: TenantLinkEvidence, rows: RowScope) =>
+        bindLater({ evidence, rows }, (captured) => {
+          const value = captureLinkEvidence(captured.evidence, owned);
+          return bind(composeLinkScope(owned, value, captured.rows), () => currentLink(value));
+        }),
+      resolveLink: (lookup: TenantLinkLookup) =>
+        invoke(lookup, (query) => {
+          const { id } = captureLinkLookup(query);
+          let row;
+          try {
+            row = findSqliteLink(db, owner.appId, id, now());
+          } catch {
+            // A store no command has written to yet has no link table: no link, as any other miss.
+            return null;
+          }
+          return linkResolution(row, (tenant) => readSqliteIntakeAnchor(db, owner, tenant));
+        }),
       resolveIntake: (lookup: TenantIntakeLookup) =>
         invoke(lookup, (query) => {
           const value = captureIntakeLookup(query, owner),
             sql = intakeAddressQuery(owned, value.column);
           const tenantId = value.address === null ? undefined : intakeTenantOf(db.prepare(sql).all(value.address));
           return intakeResolution(tenantId, (id) => readSqliteIntakeAnchor(db, owner, id));
+        }),
+      resolveIntakeByTenant: (lookup: TenantIntakeTenantLookup) =>
+        invoke(lookup, (query) => {
+          const value = captureIntakeTenantLookup(query, owner);
+          return intakeResolutionByTenant(value.tenantId, (id) => readSqliteIntakeAnchor(db, owner, id));
         }),
       readTenantNames: (lookup: TenantNamesLookup) =>
         invoke(lookup, (query) => {
@@ -1546,6 +1615,16 @@ export async function openPostgresTenantReadSource(
       assertServiceReadCurrent(evidence, found, clock());
       active();
     };
+    const currentLink = async (lease: PostgresReadSnapshot, evidence: TenantLinkEvidence) => {
+      const found = {
+        tenantVersion: await readPostgresIntakeAnchor(lease.client, owner, evidence.tenantId),
+        platformVersion: await readPostgresIntakeAnchor(lease.client, owner, PLATFORM_TENANT_ID),
+      };
+      const instant = clock();
+      assertLinkReadCurrent(evidence, found, instant);
+      assertLinkRowCurrent(await readPostgresLink(lease.client, owner.appId, evidence.tenantId, evidence.linkId, instant), evidence);
+      active();
+    };
     const currentPublic = async (lease: PostgresReadSnapshot, evidence: TenantPublicEvidence) => {
       const value = capturePublicEvidence(evidence, owned);
       const resolved = await resolvePublicIn(lease, publicLookupOf(value));
@@ -2004,6 +2083,22 @@ export async function openPostgresTenantReadSource(
           if (value.place !== 'tenant') throw new AppAccessDenied();
           return bind(composeServiceScope(owned, value, captured.rows), (next) => currentService(next, value));
         }),
+      // The source recomposes the link's scope itself, as on SQLite.
+      bindLinkReads: (evidence: TenantLinkEvidence, rows: RowScope) =>
+        bindLater({ evidence, rows }, (captured) => {
+          const value = captureLinkEvidence(captured.evidence, owned);
+          return bind(composeLinkScope(owned, value, captured.rows), (next) => currentLink(next, value));
+        }),
+      resolveLink: (lookup: TenantLinkLookup) =>
+        invoke(lookup, async (query, lease) => {
+          const { id } = captureLinkLookup(query);
+          const row = await findPostgresLink(lease.client, owner.appId, id, clock());
+          if (!row) return null;
+          const anchors = new Map<string, string | null>();
+          for (const tenant of [PLATFORM_TENANT_ID, row.tenant])
+            anchors.set(tenant, await readPostgresIntakeAnchor(lease.client, owner, tenant));
+          return linkResolution(row, (tenant) => anchors.get(tenant) ?? null);
+        }),
       resolveIntake: (lookup: TenantIntakeLookup) =>
         invoke(lookup, async (query, lease) => {
           const value = captureIntakeLookup(query, owner),
@@ -2014,6 +2109,13 @@ export async function openPostgresTenantReadSource(
             anchors.set(id, await readPostgresIntakeAnchor(lease.client, owner, id));
           }
           return intakeResolution(tenantId, (id) => anchors.get(id) ?? null);
+        }),
+      resolveIntakeByTenant: (lookup: TenantIntakeTenantLookup) =>
+        invoke(lookup, async (query, lease) => {
+          const value = captureIntakeTenantLookup(query, owner);
+          const anchors = new Map<string, string | null>();
+          for (const id of [value.tenantId, PLATFORM_TENANT_ID]) anchors.set(id, await readPostgresIntakeAnchor(lease.client, owner, id));
+          return intakeResolutionByTenant(value.tenantId, (id) => anchors.get(id) ?? null);
         }),
       readTenantNames: (lookup: TenantNamesLookup) =>
         invoke(lookup, async (query, lease) => {

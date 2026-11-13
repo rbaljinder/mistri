@@ -4,6 +4,7 @@ import { isProxy } from 'node:util/types';
 import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
 import { layoutRefusal, sqliteLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
 import { assertSqliteCommandJournal, COMMAND_JOURNAL_TABLES } from '../commands/commandJournalSchema.js';
+import { EFFECT_ENVELOPE_MAX } from './commandEventTypes.js';
 
 /** Stable private source identity, not a filename or request-selected tenant. */
 export interface CommandEventStoreBinding {
@@ -24,7 +25,7 @@ const fail = (message?: string): never => {
 const prefix = '__mistri_event_';
 /* Envelopes name their scope, 'app' or 'tenant', and carry a
    tenant only in tenant scope. */
-const COMMAND_EVENT_STORE_VERSION = 1;
+const COMMAND_EVENT_STORE_VERSION = 2;
 export const COMMAND_EVENT_TABLES = Object.freeze({
   meta: `${prefix}meta`,
   event: `${prefix}event`,
@@ -51,11 +52,31 @@ const definitions = new Map<string, string>([
   ${textColumn('event_id', 36)} PRIMARY KEY,
   ${textColumn('receipt_id', 128)} REFERENCES "${COMMAND_JOURNAL_TABLES.receipt}" (id) ON DELETE RESTRICT,
   ordinal INTEGER NOT NULL CHECK (typeof(ordinal) = 'integer' AND ordinal BETWEEN 0 AND 31),
-  ${textColumn('envelope_json', 131072)} CHECK (json_valid(envelope_json) AND json_type(envelope_json) = 'object'),
+  ${textColumn('envelope_json', EFFECT_ENVELOPE_MAX)} CHECK (json_valid(envelope_json) AND json_type(envelope_json) = 'object'),
   UNIQUE (receipt_id, ordinal)
 )`,
   ],
 ]);
+
+/* Layout 1 → 2: the envelope's CHECK moves from 131,072 bytes to EFFECT_ENVELOPE_MAX, so an effect's post can carry a
+   body of up to 256 KiB. SQLite cannot alter a CHECK, so both tables are rebuilt by copy: the event table, and the meta
+   table, whose CHECK names the version. The delivery store's rows point at event_id; the runner holds foreign keys off
+   (storeLayouts.ts), so the drop leaves them, and they point at the rebuilt table by name. */
+const PARKED = (table: string) => `"${table}_v1"`;
+export const sqliteEventUpgradeFrom1 = (): readonly string[] => [
+  `CREATE TABLE ${PARKED(tables.event)} AS SELECT * FROM "${tables.event}"`,
+  `DROP TABLE "${tables.event}"`,
+  definitions.get(tables.event)!,
+  `INSERT INTO "${tables.event}" (event_id, receipt_id, ordinal, envelope_json)
+  SELECT event_id, receipt_id, ordinal, envelope_json FROM ${PARKED(tables.event)}`,
+  `DROP TABLE ${PARKED(tables.event)}`,
+  `CREATE TABLE ${PARKED(tables.meta)} AS SELECT * FROM "${tables.meta}"`,
+  `DROP TABLE "${tables.meta}"`,
+  definitions.get(tables.meta)!,
+  `INSERT INTO "${tables.meta}" (singleton, version, app_id, store_id, source_id)
+  SELECT singleton, ${COMMAND_EVENT_STORE_VERSION}, app_id, store_id, source_id FROM ${PARKED(tables.meta)}`,
+  `DROP TABLE ${PARKED(tables.meta)}`,
+];
 
 /** Capture this small scalar contract without evaluating configuration hooks. */
 export function captureCommandEventStoreBinding(input: CommandEventStoreBinding): CommandEventStoreBinding {
@@ -145,7 +166,7 @@ export function assertSqliteCommandEventStore(db: DatabaseSync, input: CommandEv
 export function provisionSqliteCommandEventStore(
   existingPath: string,
   input: CommandEventStoreBinding,
-): { version: 1; provisioned: boolean } {
+): { version: 2; provisioned: boolean } {
   let db: DatabaseSync | undefined;
   try {
     const owner = captureCommandEventStoreBinding(input);

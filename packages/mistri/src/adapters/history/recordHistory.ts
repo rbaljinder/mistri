@@ -38,6 +38,7 @@ import {
   type DeleteResult,
   type InsertRequest,
   type InsertResult,
+  type NoteRequest,
   type TellRequest,
   type UpdateRequest,
   type UpdateResult,
@@ -302,6 +303,8 @@ interface RecordHistoryCapture {
   tell(request: TellRequest): Promise<void>;
   /** A row an accepted trigger changed (writeCapture.ts): its history, attributed to the trigger and the command that fired it. */
   triggered(change: TriggerChange): Promise<void>;
+  /** Something done to a record that changed none of its fields (WriteTransaction.noted): an entry with no changes. */
+  noted(request: NoteRequest): Promise<void>;
 }
 
 /** What a trigger's change is called in a history: the trigger, and the action or command whose write fired it. */
@@ -488,6 +491,14 @@ export function captureRecordHistory(
           moved.map((column) => change(rule, column, before[column], after[column], 'update')),
           said,
         );
+    },
+    /* Kept where the record keeps a history and nowhere else: declaring `links` does not turn one on. Nobody is told,
+       as no field moved. The owner is read off the row, so a tenant's record files it under that tenant. */
+    async noted(request) {
+      const rule = binding?.get(request.table);
+      if (!rule) return;
+      const row = rule.owner ? await sink.read(request.table, request.key, [rule.owner]) : undefined;
+      await append(request.table, owned(rule, request.key, row), 'update', [], request.action.slice(0, RECORD_HISTORY_LIMITS.action));
     },
     async tell(request) {
       const watched = notices?.columns(request.table);

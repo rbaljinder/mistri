@@ -22,6 +22,7 @@ import { defineCommand, defineCommands } from '../packages/mistri/src/server/com
 import { shape, text } from '../packages/mistri/src/server/commands/commandShapes.js';
 import type { EmailMessage, EmailTransport } from '../packages/mistri/src/server/email/email.js';
 import { configureFormKey } from '../packages/mistri/src/server/forms/formKey.js';
+import { provisionSqliteRecordHistory } from '../packages/mistri/src/adapters/history/sqliteRecordHistory.js';
 import {
   configureLinkBase,
   LinkRef,
@@ -39,6 +40,8 @@ import { Registry } from '../packages/engine/src/server/connections.js';
 import { clearJournal } from '../packages/engine/src/server/journal.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { appLinkAdvisories, appLinkProblems } from '../packages/mistri/src/shared/appLinks.js';
+import { linkHistoryWarnings } from '../packages/mistri/src/server/recordHistory.js';
+import type { PageDef } from '../packages/engine/src/shared/pageModel.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { redactLinkTokens } from '../packages/engine/src/server/http/refusalReport.js';
 import { Masker } from '../packages/mistri/src/server/observe/mask.js';
@@ -86,7 +89,20 @@ const RAW = {
       },
     },
   },
-  auth: { providers: ['email'], roles: { clerk: { read: true, commands: ['invite', 'revoke', 'approve', 'discard'] } } },
+  auth: {
+    providers: ['email'],
+    roles: {
+      clerk: { read: true, commands: ['invite', 'revoke', 'approve', 'discard'] },
+      // Edits an application's note in place, and so may revoke its links from its page; its status is the commands'.
+      editor: {
+        read: true,
+        write: ['application'],
+        fields: { application: { read: ['id', 'applicant', 'status', 'note'], write: ['note'] } },
+      },
+      // Makes applications and edits none, so ends no link of one.
+      intake: { read: true, create: ['application'] },
+    },
+  },
   views: {
     applications: { kind: 'list', from: 'application' },
     apply: { kind: 'form', label: 'Apply', public: true, done: { title: 'Thanks' }, command: 'apply' },
@@ -114,7 +130,10 @@ async function fixture(
     land: (url: string) => Promise<{ id: string; cookie: string; session: string; page: Answer }>;
     sql: DatabaseSync;
     mail: EmailMessage[];
+    /** Signs the next requests in as this role (`clerk` until said). */
+    as: (role: string) => void;
   }) => Promise<void>,
+  options: { history?: boolean } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-links-'));
   const file = join(directory, 'intake.db');
@@ -122,6 +141,7 @@ async function fixture(
   setup.exec(SCHEMA);
   setup.close();
   migrateSqliteCommandJournal(file);
+  if (options.history) provisionSqliteRecordHistory(file);
   const registry = new Registry();
   registry.add({ id: 'intake-db', name: 'Intake', url: file, writable: true, source: 'config' });
   const mail: EmailMessage[] = [];
@@ -195,10 +215,23 @@ async function fixture(
   });
   const app = parse();
   const clerk: Identity = { id: 'account-clerk', who: 'clerk@example.test', role: 'clerk' };
+  let role = 'clerk';
+  const pages: PageDef[] = options.history
+    ? [{ id: 'application', name: 'Application', base: 'application', sections: [{ kind: 'history' }] }]
+    : [];
   const host: AppHost = {
-    app: { app, path: '/private/intake/app.ts', pages: [], sources: {} },
+    app: { app, path: '/private/intake/app.ts', pages, sources: {} },
     pages: [],
-    auth: { spec: app.auth!, store: '/private/intake/auth.db', close() {}, handler: async () => {}, session: async () => clerk },
+    auth: {
+      spec: app.auth!,
+      store: '/private/intake/auth.db',
+      close() {},
+      handler: async () => {},
+      session: async () =>
+        role === 'clerk'
+          ? clerk
+          : { id: `account-${role}`, who: `${role}@example.test`, name: `${role[0].toUpperCase()}${role.slice(1)} Person`, role },
+    },
   };
   const bound = { host: '127.0.0.1', port: 0 };
   const server = createApp({ registry, bound, apps: [host], pages: [], commands: { appId: 'intake', registry: commands } });
@@ -271,6 +304,9 @@ async function fixture(
       },
       sql,
       mail,
+      as: (next) => {
+        role = next;
+      },
     });
   } finally {
     sql.close();
@@ -637,6 +673,76 @@ test('check advises where a link outlives its row: a cascade, and a SQLite key t
   assert.deepEqual(appLinkAdvisories(parse({ ...RAW, resources: { application: plain } }), schema({ reusesKeys: true }, [cascade])), []);
 });
 
+test('check advises where a record page revokes links and the record keeps no history to say who did', () => {
+  const page = (sections: object[]) => [{ label: 'Application', base: 'application', sections }] as unknown as PageDef[];
+  const [advice, ...more] = linkHistoryWarnings(parse(), page([]));
+  assert.deepEqual(more, []);
+  assert.match(advice, /^resources "application", "links" \[link-history\]: its record page can revoke its links/);
+  // A history section keeps the log the revoke is noted in.
+  assert.deepEqual(linkHistoryWarnings(parse(), page([{ kind: 'history' }])), []);
+  // A resource that mints no link is not advised.
+  const { links: _links, ...plain } = RAW.resources.application;
+  assert.deepEqual(linkHistoryWarnings(parse({ ...RAW, resources: { application: plain } }), page([])), []);
+});
+
+test('a person who edits a record revokes its links from its page, and its history says who did', () =>
+  fixture(
+    async ({ mint, get, post, sql, as, origin }) => {
+      const first = await mint('status');
+      await mint('brief');
+      await mint('status', 2);
+      const record = { app: 'intake', table: 'application', key: { id: 1 } };
+      const revokedAt = (url: string) =>
+        (
+          sql
+            .prepare(`SELECT revoked_at FROM ${COMMAND_JOURNAL_TABLES.link} WHERE id = ?`)
+            .get(linkTokenId(url.slice(url.lastIndexOf('/') + 1))!) as {
+            revoked_at: number | null;
+          }
+        ).revoked_at;
+      const offered = async () => (await get('/api/app?app=intake', { origin })).body?.app?.revokesLinks;
+      // Running commands on the record, or only making new ones, is not editing it: neither counts nor revokes.
+      for (const role of ['clerk', 'intake']) {
+        as(role);
+        assert.equal(await offered(), undefined, role);
+        assert.equal((await post('/api/record-links', record)).status, 403, role);
+        assert.equal((await post('/api/record-links/revoke', record)).status, 403, role);
+      }
+      assert.equal(revokedAt(first.url), null);
+      as('editor');
+      assert.deepEqual(await offered(), ['application']);
+      const counted = await post('/api/record-links', record);
+      assert.equal(counted.status, 200, counted.text);
+      assert.deepEqual(counted.body, { live: 2 });
+      // A record this reader cannot find, and a resource that declares no links, have none for them.
+      assert.equal((await post('/api/record-links', { ...record, key: { id: 99 } })).status, 403);
+      assert.equal((await post('/api/record-links', { ...record, table: 'nope' })).status, 403);
+      const revoked = await post('/api/record-links/revoke', record);
+      assert.equal(revoked.status, 200, revoked.text);
+      assert.deepEqual(revoked.body, { revoked: 2 });
+      assert.ok(Number(revokedAt(first.url)) > 0);
+      assert.equal((await get(first.url.slice(origin.length))).status, 404);
+      // The other application's link is its own; nothing is left on this one, and a revoke of none notes nothing.
+      assert.deepEqual((await post('/api/record-links', { ...record, key: { id: 2 } })).body, { live: 1 });
+      assert.deepEqual((await post('/api/record-links/revoke', record)).body, { revoked: 0 });
+      const history = await post('/api/record-history', record);
+      assert.equal(history.status, 200, history.text);
+      const entries = history.body.entries as Array<Record<string, unknown>>;
+      assert.deepEqual(
+        entries.filter((entry) => String(entry.action ?? '').startsWith('Revoked')).map((entry) => [entry.action, entry.fields]),
+        [['Revoked 2 links', []]],
+        history.text,
+      );
+      assert.equal(entries.find((entry) => entry.action === 'Revoked 2 links')?.by, 'Editor Person');
+      // Nothing about the record itself moved.
+      assert.deepEqual(
+        { ...sql.prepare('SELECT status, note FROM application WHERE id = 1').get() },
+        { status: 'submitted', note: 'private note' },
+      );
+    },
+    { history: true },
+  ));
+
 test('the SQLite catalog marks a rowid key that may be handed out again, and not one declared AUTOINCREMENT', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-links-keys-'));
   const file = join(directory, 'keys.db');
@@ -701,6 +807,40 @@ test('a public command answers its visitor with a link to the one row it made, o
     }
     assert.equal((sql.prepare('SELECT count(*) AS n FROM application').get() as { n: number }).n, 3);
     assert.equal((sql.prepare(`SELECT count(*) AS n FROM ${COMMAND_JOURNAL_TABLES.link}`).get() as { n: number }).n, 1);
+  }));
+
+test('a revoke from the page racing a link’s run leaves the run after it, or a miss that ran nothing', () =>
+  fixture(async ({ mint, land, post, get, sql, as }) => {
+    const { url } = await mint('status', 1);
+    const { id, session } = await land(url);
+    const headers = { 'x-mistri-link': session };
+    const prepared = await post(`/l/${id}/prepare`, {}, headers);
+    assert.equal(prepared.status, 200, prepared.text);
+    as('editor');
+    const status = () => (sql.prepare('SELECT status FROM application WHERE id = 1').get() as { status: string }).status;
+    const [ran, revoked] = await Promise.all([
+      post(
+        `/l/${id}/run`,
+        {
+          command: 'withdraw',
+          expectedVersion: prepared.body.commands.withdraw.expectedVersion,
+          idempotencyKey: 'withdraw-race-0001',
+          input: {},
+        },
+        headers,
+      ),
+      post('/api/record-links/revoke', { app: 'intake', table: 'application', key: { id: 1 } }),
+    ]);
+    assert.equal(revoked.status, 200, revoked.text);
+    // Whichever side of the revoke the run fell on, the link is gone, and the revoke counted it.
+    assert.deepEqual(revoked.body, { revoked: 1 });
+    if (ran.status === 200) assert.equal(status(), 'withdrawn');
+    else {
+      // The miss the link's next request gets, never a command refusal: nothing ran.
+      assert.equal(ran.status, 404, ran.text);
+      assert.equal(status(), 'submitted');
+    }
+    assert.equal((await get(`/l/${id}`)).status, 404);
   }));
 
 test('a link of one use opens once, however many ask at the same moment', () =>

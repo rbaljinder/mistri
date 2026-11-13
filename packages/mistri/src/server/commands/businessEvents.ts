@@ -8,7 +8,12 @@ import { isProxy } from 'node:util/types';
 import { describeShape, type Shape, type ShapeDescriptor } from './commandShapes.js';
 import {
   COMMAND_EVENT_LIMITS,
+  EFFECT_BATCH_MAX,
+  EFFECT_BATCH_PAYLOAD_MAX,
+  EFFECT_LIMITS,
+  EFFECT_PAYLOAD_MAX,
   EffectBodyTooLarge,
+  EffectProjectionRefused,
   isEffectEvent,
   type CommandEventBatch,
   type CommandEventExpectation,
@@ -83,10 +88,26 @@ interface CapturedEvent {
 interface CapturedProjection {
   readonly event: CapturedEvent;
   project(output: unknown): unknown;
+  /** An effect's: its projection may wait, reading through the command's db, and `bytes` is its post's body size. */
+  readonly effect?: CapturedEffect;
+}
+interface CapturedEffect {
+  resolve(output: unknown, context: EffectProjectionContext): unknown;
+  bytes(payload: unknown): number;
+}
+/** What an effect's projection is handed beside the output: the command's db, read-only, in its transaction. */
+export interface EffectProjectionContext {
+  readonly db: unknown;
+}
+declare const resolvedType: unique symbol;
+/** A command's effects, projected before its events: opaque, read only by projectCommandEvents. */
+interface ResolvedCommandEffects {
+  readonly [resolvedType]: true;
 }
 const events = new WeakMap<object, CapturedEvent>();
 const projections = new WeakMap<object, CapturedProjection>();
 const commands = new WeakMap<object, readonly (CapturedProjection & { readonly slot: string })[]>();
+const resolutions = new WeakMap<object, ReadonlyMap<string, unknown>>();
 
 /** An event: its name and the shape of its payload, `defineEvent('ticket.solved', shape({ ticketId: int(), note: text() }))`.
  * The payload's fields are the shape's keys, so they are written once; each is a required field of the payload (say
@@ -148,13 +169,11 @@ export function isBusinessEvent(value: unknown): value is BusinessEvent<Record<s
 export function parseEventPayload<Payload extends BusinessEventPayload<Payload>>(event: BusinessEvent<Payload>, json: string): Payload {
   try {
     const captured = events.get(event);
-    if (!captured || typeof json !== 'string' || Buffer.byteLength(json, 'utf8') > COMMAND_EVENT_LIMITS.payloadBytes)
-      return projectionError();
-    const selected = payloadJson(JSON.parse(json), captured.fields, isEffectEvent(captured.name));
-    return detached(
-      captured.parse(detached(JSON.parse(selected), COMMAND_EVENT_LIMITS.payloadBytes)),
-      COMMAND_EVENT_LIMITS.payloadBytes,
-    ) as Payload;
+    const effect = !!captured && isEffectEvent(captured.name);
+    const bound = effect ? EFFECT_PAYLOAD_MAX : COMMAND_EVENT_LIMITS.payloadBytes;
+    if (!captured || typeof json !== 'string' || Buffer.byteLength(json, 'utf8') > bound) return projectionError();
+    const selected = payloadJson(JSON.parse(json), captured.fields, effect);
+    return detached(captured.parse(detached(JSON.parse(selected), bound)), bound) as Payload;
   } catch {
     return projectionError();
   }
@@ -177,6 +196,27 @@ export function defineEventProjection<Output, Payload extends object & PayloadSh
   );
   return declaration as BusinessEventProjection<Output>;
 }
+
+/** The platform's own projection for an effect's event (commandEffects.ts): `resolve` may return a promise and is
+ * handed the command's read-only db; `bytes` measures what its post carries, for the command's total. Called without
+ * a db (projectCommandEvents alone), a projection that waits is refused as any async projection is. */
+export function defineEffectProjection<Output, Payload extends object & PayloadShape<Payload>>(
+  event: BusinessEvent<Payload>,
+  resolve: (output: BusinessEventOutput<Output>, context: EffectProjectionContext) => Payload | Promise<Payload>,
+  bytes: (payload: Payload) => number,
+): BusinessEventProjection<Output> {
+  const captured = events.get(event);
+  if (!captured || !isEffectEvent(captured.name) || typeof resolve !== 'function' || typeof bytes !== 'function') return definitionError();
+  const effect: CapturedEffect = Object.freeze({
+    resolve: (output: unknown, context: EffectProjectionContext) => Reflect.apply(resolve, undefined, [output, context]),
+    bytes: (payload: unknown) => Reflect.apply(bytes, undefined, [payload]),
+  });
+  const declaration = Object.freeze({});
+  projections.set(declaration, Object.freeze({ event: captured, effect, project: (output: unknown) => effect.resolve(output, NO_DB) }));
+  return declaration as BusinessEventProjection<Output>;
+}
+/* Outside a command's run there is no transaction to read in. */
+const NO_DB: EffectProjectionContext = Object.freeze({ db: Object.freeze({}) });
 
 /** An event named alone carries the output fields it declares, by name. A field the output lacks is refused
  * here, where the command is defined, rather than when the command first runs. */
@@ -234,37 +274,98 @@ export function commandEventContracts(declarations: CapturedCommandEvents<unknow
   return captured.map(({ slot, event }) => ({ slot, name: event.name, fields: event.fields, payload: event.shape }));
 }
 
-/** Fresh execution only. Replay/status must validate stored batch associations
- * without running this function, a handler, or an application validator again.
- * No partial batch is returned on failure; transaction rollback is the caller's
- * obligation. This module performs no writes and generates no IDs/timestamps. */
-export function projectCommandEvents<Output>(declarations: CapturedCommandEvents<Output>, validatedOutput: Output): CommandEventBatch {
+/* The refusals an author can act on, by name; every other failure stays the opaque projection error. */
+const named = (error: unknown): boolean => error instanceof EffectBodyTooLarge || error instanceof EffectProjectionRefused;
+
+/** A command's effects projected, each awaited in declaration order, inside the command's transaction: a post's body
+ * may be read from rows through `open().db`, which is opened only when the command has an effect. Fresh execution
+ * only; a replay keeps the stored bodies and never runs this. */
+export async function resolveCommandEffects<Output>(
+  declarations: CapturedCommandEvents<Output>,
+  validatedOutput: Output,
+  open: () => EffectProjectionContext,
+): Promise<ResolvedCommandEffects> {
+  const resolved = new Map<string, unknown>();
   try {
     const captured = commands.get(declarations);
     if (!captured) return projectionError();
     const output = detached(validatedOutput, COMMAND_EVENT_LIMITS.outputBytes);
-    let bytes = 0;
+    let context: EffectProjectionContext | undefined;
+    for (const { slot, effect } of captured) {
+      if (!effect) continue;
+      context ??= open();
+      resolved.set(slot, await effect.resolve(output, context));
+    }
+  } catch (error) {
+    if (named(error)) throw error;
+    return projectionError();
+  }
+  const token = Object.freeze({});
+  resolutions.set(token, resolved);
+  return token as ResolvedCommandEffects;
+}
+
+/* Every body one command posts, together: each was held to its own limit as it was projected. */
+function boundPosts(posts: readonly number[]): void {
+  const total = posts.reduce((sum, bytes) => sum + bytes, 0);
+  if (total > EFFECT_LIMITS.totalBytes)
+    throw new EffectBodyTooLarge(
+      `its ${posts.length} posts carry ${total.toLocaleString('en-US')} bytes; one command carries at most ${EFFECT_LIMITS.totalBytes.toLocaleString('en-US')}.`,
+    );
+}
+
+/** Fresh execution only. Replay/status must validate stored batch associations
+ * without running this function, a handler, or an application validator again.
+ * No partial batch is returned on failure; transaction rollback is the caller's
+ * obligation. This module performs no writes and generates no IDs/timestamps.
+ * `resolved` holds the effects resolveCommandEffects projected; without it an effect is projected here, and one that
+ * waits is refused. */
+export function projectCommandEvents<Output>(
+  declarations: CapturedCommandEvents<Output>,
+  validatedOutput: Output,
+  resolved?: ResolvedCommandEffects,
+): CommandEventBatch {
+  try {
+    const captured = commands.get(declarations);
+    if (!captured) return projectionError();
+    const effects = resolved === undefined ? undefined : resolutions.get(resolved);
+    if (resolved !== undefined && !effects) return projectionError();
+    const output = detached(validatedOutput, COMMAND_EVENT_LIMITS.outputBytes);
+    /* Every post's body first, so a total over its limit is refused by name before any one payload's checks run. A
+       plain event is projected in its turn below, so a batch past 64 KiB stops the projectors after it. */
+    const bodies = new Map<string, unknown>();
+    const posts: number[] = [];
+    for (const { slot, project, effect } of captured) {
+      if (!effect) continue;
+      const payload = effects ? effects.get(slot) : project(output);
+      bodies.set(slot, payload);
+      if (payload !== null && payload !== undefined) posts.push(effect.bytes(payload));
+    }
+    boundPosts(posts);
+    // Plain events and effects are counted apart: a post's body does not spend the log's 64 KiB.
+    let bytes = 0,
+      effectBytes = 0;
     const projected: { name: string; version: number; payloadJson: string }[] = [];
-    for (const { event, project } of captured) {
-      const payload = project(output);
+    for (const { slot, project, event, effect: post } of captured) {
+      const payload = post ? bodies.get(slot) : project(output);
       // Skipped: the batch still records, in the declaration's order, the events that did happen.
       if (payload === null || payload === undefined) continue;
       // Enforce the allowlist before and after the validator: stripping a raw
       // row or secretly appending fields cannot pass as a bounded projection.
       const effect = isEffectEvent(event.name);
       const selected = payloadJson(payload, event.fields, effect);
-      const parsed = event.parse(detached(JSON.parse(selected), COMMAND_EVENT_LIMITS.payloadBytes));
+      const parsed = event.parse(detached(JSON.parse(selected), effect ? EFFECT_PAYLOAD_MAX : COMMAND_EVENT_LIMITS.payloadBytes));
       const json = payloadJson(parsed, event.fields, effect);
-      bytes += Buffer.byteLength(json, 'utf8');
-      if (bytes > COMMAND_EVENT_LIMITS.batchPayloadBytes) return projectionError();
+      if (effect) effectBytes += Buffer.byteLength(json, 'utf8');
+      else bytes += Buffer.byteLength(json, 'utf8');
+      if (bytes > COMMAND_EVENT_LIMITS.batchPayloadBytes || effectBytes > EFFECT_BATCH_PAYLOAD_MAX) return projectionError();
       projected.push(Object.freeze({ name: event.name, version: event.version, payloadJson: json }));
     }
     const result = Object.freeze(projected);
-    canonicalCommandJson(result, COMMAND_EVENT_LIMITS.batchBytes);
+    canonicalCommandJson(result, effectBytes ? EFFECT_BATCH_MAX : COMMAND_EVENT_LIMITS.batchBytes);
     return result;
   } catch (error) {
-    // The one refusal the author can act on, by name; every other failure stays the opaque projection error.
-    if (error instanceof EffectBodyTooLarge) throw error;
+    if (named(error)) throw error;
     return projectionError();
   }
 }

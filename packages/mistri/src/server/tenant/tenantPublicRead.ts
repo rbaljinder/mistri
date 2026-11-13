@@ -127,7 +127,8 @@ export function capturePublicEvidence(value: unknown, owned: Pick<TenantOwnershi
  * a visitor may and no more; the address re-resolves in the intake column, as the submission's own fence does.
  * Triage lands in no tenant and has no visitor: it is refused. */
 export function intakeVisitor(evidence: TenantIntakeEvidence): TenantPublicEvidence {
-  if (evidence.tenantId === PLATFORM_TENANT_ID || evidence.address === null) return denyTenant();
+  // A token's verb has no address: its tenant is the token's, and the visitor re-resolves by that tenant alone.
+  if (evidence.tenantId === PLATFORM_TENANT_ID || (evidence.address === null && evidence.caller === undefined)) return denyTenant();
   return {
     realm: 'public',
     appId: evidence.appId,

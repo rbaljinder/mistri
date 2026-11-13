@@ -20,8 +20,9 @@ import { appendSqliteCommandEvents, assertSqliteCommandEvents, tenantCommandEven
 import type { CommandEventBatch, CommandEventManifest, CommandEventOwner } from '../events/commandEventTypes.js';
 import { captureCommandEventManifest } from '../events/commandEventCapture.js';
 import { BULK_LIMIT } from '../../shared/command.js';
+import { isTokenActorId } from '../../shared/publicActor.js';
 import { nextSqliteCommandNumber, provisionSqliteCommandSequences } from './commandSequences.js';
-import { mintSqliteLink, openSqliteLink, readSqliteLink, revokeSqliteLinks } from './commandLinks.js';
+import { countSqliteLinks, mintSqliteLink, openSqliteLink, readSqliteLink, revokeSqliteLinks } from './commandLinks.js';
 import { appendSqliteReadAudit } from '../readAudit/sqliteReadAudit.js';
 import type { ReadAuditRow } from '../readAudit/readAudit.js';
 import {
@@ -207,7 +208,7 @@ function validateTenant(input: CommandJournalTenant): void {
   const publicIntake =
     input.membershipVersion === '0' &&
     typeof input.actorId === 'string' &&
-    /^public:[a-z0-9][a-z0-9-]{0,63}$/.test(input.actorId) &&
+    (/^public:[a-z0-9][a-z0-9-]{0,63}$/.test(input.actorId) || isTokenActorId(input.actorId)) &&
     input.membershipId === input.actorId &&
     Array.isArray(input.roles) &&
     input.roles.length === 0;
@@ -220,7 +221,16 @@ function validateTenant(input: CommandJournalTenant): void {
     input.membershipId === input.actorId &&
     Array.isArray(input.roles) &&
     input.roles.length > 0;
-  for (const revision of publicIntake || service ? [input.tenantVersion] : [input.membershipVersion, input.tenantVersion]) {
+  // A capability link's holder has none either: `link:<id>` in its place, at
+  // revision 0, with no role; the link's own row is its grant.
+  const link =
+    input.membershipVersion === '0' &&
+    typeof input.actorId === 'string' &&
+    /^link:[A-Za-z0-9_-]{22}$/.test(input.actorId) &&
+    input.membershipId === input.actorId &&
+    Array.isArray(input.roles) &&
+    input.roles.length === 0;
+  for (const revision of publicIntake || service || link ? [input.tenantVersion] : [input.membershipVersion, input.tenantVersion]) {
     if (typeof revision !== 'string' || revision.length > 128 || !/^[1-9][0-9]*$/.test(revision)) return invalid();
   }
   if (!Array.isArray(input.roles) || input.roles.length > 256 || new Set(input.roles).size !== input.roles.length) return invalid();
@@ -813,6 +823,11 @@ export function createSqliteCommandJournal(
       invoke({ appId, resource, rowKey, name, now }, async (input) => {
         if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
         return revokeSqliteLinks(db, input.appId, namespace[3], input.resource, input.rowKey, input.name, input.now);
+      }),
+    countLinks: (appId: string, resource: string, rowKey: string, now: number) =>
+      invoke({ appId, resource, rowKey, now }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return countSqliteLinks(db, input.appId, namespace[3], input.resource, input.rowKey, input.now);
       }),
     openLink: (appId: string, id: string, now: number) =>
       invoke({ appId, id, now }, async (input) => {

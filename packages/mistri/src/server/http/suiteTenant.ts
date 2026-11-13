@@ -7,6 +7,7 @@ import type { ConnectionConfig, Registry } from '@mistriwork/engine/server/conne
 import { prepareTenantStartup } from '../tenant/tenantStartup.js';
 import { createTenantAuthenticatedHttpServer } from '../tenant/tenantAuthenticatedHttp.js';
 import type { SuiteHost } from './suite.js';
+import type { TenantHostIntent } from './tenantHosts.js';
 import { captureAppFlagCatalog } from '../flags/appCatalog.js';
 import { createFlagRequestRuntime, type FlagRequestRuntime } from '../flags/requestRuntime.js';
 import { bindFlagHttpServer } from '../flags/httpRuntime.js';
@@ -23,6 +24,8 @@ export async function openSuiteTenant(options: {
   port: number;
   suiteAuth?: AppAuthRuntime;
   allowedHosts?: readonly string[];
+  /** The suite's hosts mapped to this App's tenants: where each one's capability links are written. */
+  hosts?: readonly TenantHostIntent[];
   /** The App's email and search services, as `mistri tenant` passes them; closed with the App. */
   registry?: Registry;
   /** A suite account's email, for the Console's Governance room to name members by. */
@@ -67,6 +70,7 @@ export async function openSuiteTenant(options: {
       mount: { base: basePath, apps: { [app.app.id]: '' } },
       ...(options.registry ? { registry: options.registry } : {}),
       publicURL,
+      ...(options.hosts?.length ? { hosts: options.hosts } : {}),
     });
     let stopping = false;
     let flags: FlagRequestRuntime | undefined;

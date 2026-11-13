@@ -129,6 +129,7 @@ for (const mode of modes) {
       assert.deepEqual(Reflect.ownKeys(journal).sort(), [
         'appendReadAudit',
         'commit',
+        'countLinks',
         'find',
         'insert',
         'kept',

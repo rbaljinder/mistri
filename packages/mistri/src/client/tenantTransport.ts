@@ -64,6 +64,9 @@ const reads = new Set([
   '/api/commands/availability',
   // A record's history, read on the lease like its page: the tenant host derives the owner from the lease.
   '/api/record-history',
+  // A record's live links and revoking them, for a member who may write it, in their own tenant (server tenantLinkRevoke.ts).
+  '/api/record-links',
+  '/api/record-links/revoke',
   // A record's suggestions, its list's marks, "Why this?" and settling one: the tenant host reads them on the lease,
   // its own tenant's alone, for a member granted the answer command (server http/decisionRoutes.ts).
   '/api/record-decisions',

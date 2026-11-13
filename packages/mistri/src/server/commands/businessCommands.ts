@@ -469,8 +469,11 @@ export interface CommandDefinition<
   readonly output?: Shape<Output>;
   /** Named facts projected only from validated, authorized fresh output. */
   readonly events?: Readonly<Record<string, BusinessEventProjection<NoInfer<Output>> | BusinessEventPick<NoInfer<Output>>>>;
-  /** What to ask of other systems once the command commits, by name: `post(webhook, project)`. */
-  readonly effects?: Readonly<Record<string, CommandEffect<NoInfer<Output>>>>;
+  /** What to ask of other systems once the command commits, by name: `post(webhook, project)`. A post's projection
+      may read rows through `{ db }`, the command's db, read-only. */
+  readonly effects?: Readonly<
+    Record<string, CommandEffect<NoInfer<Output>, CommandTables<Tables<Src, Target>, Reads<Target, Read, Write>, never>>>
+  >;
   readonly public?: Pub;
   readonly realm?: 'tenant' | 'platform';
   /** A platform command acting in one tenant: the input field that names it (`tenant: 'customer_id'`). Its handler

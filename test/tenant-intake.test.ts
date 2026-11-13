@@ -209,7 +209,7 @@ async function enrolled(t: TestContext, dialect: TenantDialect, patch: Record<st
   const submit = (address: unknown, name: string, submission = randomUUID()) =>
     service!.deployment.submitIntake({ form: 'apply', address, input: { name }, submission });
   const rows = (sql: string) => engine.all(sql);
-  return { engine, service, submit, rows };
+  return { engine, service, deployment: service.deployment, submit, rows };
 }
 
 async function sources(t: TestContext, dialect: TenantDialect) {
@@ -596,6 +596,72 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         { tenant_id: 'south' },
       ]);
       assert.deepEqual(told, ['tenant', 'platform', 'tenant']);
+    });
+
+    test("a tenant token writes only into token.tenant: never an address's tenant, never triage", async (t) => {
+      told.length = 0;
+      mode = 'place';
+      const f = await enrolled(t, dialect);
+      const [first, second] = [randomUUID(), randomUUID()];
+      const call = (tokenId: string, tenantId: string, name: string, submission = randomUUID(), extra: Record<string, unknown> = {}) =>
+        f.deployment.submitIntake({
+          form: 'apply',
+          address: undefined,
+          input: { name },
+          submission,
+          caller: { tokenId, tenantId },
+          ...extra,
+        });
+      // The token's tenant is where it lands, whatever the dealer's intake address would have said.
+      const key = randomUUID();
+      const north = await call(first, 'north', 'Hedy', key);
+      assert.equal(north.status, 'applied');
+      await call(second, 'south', 'Hedy');
+      // The same key from another token is another caller: its own receipt (the lead's reference is unique per tenant).
+      const other = await call(second, 'north', 'Ada', key);
+      assert.notEqual(other.receiptId, north.receiptId);
+      assert.equal((await call(first, 'north', 'Hedy', key)).receiptId, north.receiptId);
+      assert.deepEqual(told, ['tenant', 'tenant', 'tenant']);
+      assert.deepEqual(
+        await f.rows("SELECT reference, tenant_id FROM lead WHERE reference IN ('IGN-Hedy', 'IGN-Ada') ORDER BY reference, tenant_id"),
+        [
+          { reference: 'IGN-Ada', tenant_id: 'north' },
+          { reference: 'IGN-Hedy', tenant_id: 'north' },
+          { reference: 'IGN-Hedy', tenant_id: 'south' },
+        ],
+      );
+      // A suspended tenant, a profile with no tenant, one that does not exist and the platform refuse: none is triaged.
+      for (const tenantId of ['west', 'ghost', 'nowhere', '@platform'])
+        await assert.rejects(
+          call(first, tenantId, 'Mallory'),
+          (error: unknown) => error instanceof BusinessCommandExecutionError,
+          tenantId,
+        );
+      // A token's call carries no address, no draft and no file, and its id is a token's.
+      await assert.rejects(call(first, 'north', 'Mallory', randomUUID(), { address: NORTH }), refused('invalid_input'));
+      await assert.rejects(call(first, 'north', 'Mallory', randomUUID(), { visitor: 'a'.repeat(43) }), refused('invalid_input'));
+      await assert.rejects(call('not-a-token', 'north', 'Mallory'), refused('invalid_input'));
+      assert.deepEqual(told, ['tenant', 'tenant', 'tenant']);
+      assert.deepEqual(await f.rows("SELECT count(*) AS n FROM lead WHERE name = 'Mallory'").then((rows) => Number(rows[0].n)), 0);
+      assert.deepEqual(await f.rows(counted('intake_submission')), [{ n: 0 }]);
+      // Each receipt and audit row names its token, in the membership's place, with no role.
+      const receipts = await f.rows(`SELECT realm, tenant_id, actor_id FROM "${journal.receipt}" ORDER BY tenant_id, actor_id`);
+      assert.deepEqual(
+        receipts.map((row) => ({ ...row })),
+        [
+          ...[first, second].sort().map((id) => ({ realm: 'tenant', tenant_id: 'north', actor_id: `token:${id}` })),
+          { realm: 'tenant', tenant_id: 'south', actor_id: `token:${second}` },
+        ],
+      );
+      const audits = await f.rows(
+        `SELECT DISTINCT actor_id, membership_id, membership_version, roles_json FROM ${auditRows(f.engine.dialect)} a ORDER BY actor_id`,
+      );
+      assert.deepEqual(
+        audits.map((row) => ({ ...row })),
+        [first, second]
+          .sort()
+          .map((id) => ({ actor_id: `token:${id}`, membership_id: `token:${id}`, membership_version: '0', roles_json: '[]' })),
+      );
     });
 
     test('the transaction refuses a handler that writes outside its place, and nothing it tried stays', async (t) => {

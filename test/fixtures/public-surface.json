@@ -4887,6 +4887,7 @@
         "layout-conversation",
         "layout-showcase",
         "link-cascade",
+        "link-history",
         "link-key-reuse",
         "live-unused",
         "machine-command-outside",

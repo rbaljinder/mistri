@@ -15,7 +15,7 @@ import { defineCommand, defineCommands } from '../packages/mistri/src/server/com
 import { shape, text } from '../packages/mistri/src/server/commands/commandShapes.js';
 import { defineAppTenantPolicy } from '../packages/mistri/src/server/policy/appTenantPolicy.js';
 import { createTenantEnrollment, type TenantEnrollment } from '../packages/mistri/src/server/tenant/tenantEnrollment.js';
-import { tenantFormLookupProblems } from '../packages/mistri/src/server/tenant/tenantIntakePages.js';
+import { intakeCommandProblem, tenantFormLookupProblems } from '../packages/mistri/src/server/tenant/tenantIntakePages.js';
 import { dropDedicatedPostgresDatabase, openTenantEngine, TENANT_DIALECTS, type TenantDialect } from './support/tenantDialects.js';
 import { parseTestApp } from './support/commandCatalog.js';
 
@@ -216,4 +216,47 @@ test('check refuses a public form whose lookup the visitor grant cannot carry, w
   assert.match(problems({ read: ['lead'] }).join('\n'), /Public form "apply" runs "apply", which .*"make"/);
   assert.match(problems({ read: ['lead', 'make'], byKey: ['lead'] }).join('\n'), /Public form "apply" runs "apply", which .*byKey/);
   assert.match(problems({ read: ['lead', 'make'] }, { desk: ['contacts'] }).join('\n'), /source "desk", not the App's own "business"/);
+});
+
+test('check refuses a public form whose command mints a capability link, by name, and not one that only names a link', () => {
+  type Handle = Parameters<typeof defineCommand>[0]['handle'];
+  type Link = { link: (name: string) => Promise<unknown> };
+  const command = (handle: unknown) =>
+    defineCommand({
+      targets: 'none',
+      source: 'business',
+      target: 'lead',
+      write: ['intake_submission'],
+      public: true,
+      input,
+      output: shape({ reference: text() }),
+      handle: handle as Handle,
+    } as never);
+  const app = () => parseTestApp(manifest(), 'lending.ts');
+  const problems = (handle: unknown) => tenantFormLookupProblems(app(), defineCommands({ apply: command(handle) }), binding.source.id);
+  const destructured = async ({ link }: Link) => {
+    await link('status');
+    return { reference: 'x' };
+  };
+  const member = async (context: Link) => {
+    await context.link('status');
+    return { reference: 'x' };
+  };
+  assert.match(
+    problems(destructured).join('\n'),
+    /Public form "apply" runs "apply", which mints a capability link .*only lets a member or a service.*: a tenant App cannot take that command's signed-out submissions/,
+  );
+  assert.match(problems(member).join('\n'), /mints a capability link/);
+  // A handler that names a link without minting one, or reads one off another object, is not refused.
+  assert.deepEqual(
+    problems(async () => ({ reference: 'https://example.test'.link('x') })),
+    [],
+  );
+  assert.deepEqual(
+    problems(async () => ({ reference: 'no link(s) here' })),
+    [],
+  );
+  // The page and the bind rule say the same, so a form's command and a page's are held alike.
+  const kindOf = (table: string) => (table === 'intake_submission' ? 'platform' : 'tenant');
+  assert.match(intakeCommandProblem(app(), command(destructured), binding.source.id, kindOf) ?? '', /^mints a capability link/);
 });

@@ -68,6 +68,8 @@ export async function openTenantIntegrations<Request = IncomingMessage>(
     webhookBase?: string;
     now?: () => number;
     warn?: (message: string) => void;
+    /** A capability link's URL, for an effect that carries one (tenantLinks.ts render): absent, it is held as it was. */
+    links?: (id: string) => Promise<string | undefined>;
   }>,
 ): Promise<TenantIntegrations | undefined> {
   const captured = captureTenantEnrollment(options.enrollment);
@@ -108,6 +110,7 @@ export async function openTenantIntegrations<Request = IncomingMessage>(
         webhooks,
         ...(channels ? { channels: channels.transport } : {}),
         ...(options.now ? { now: options.now } : {}),
+        ...(options.links ? { links: options.links } : {}),
       });
     }
     let webhookRoutes: InboundHost | undefined;

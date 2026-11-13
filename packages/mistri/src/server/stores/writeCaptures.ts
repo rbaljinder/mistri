@@ -79,6 +79,7 @@ function composed(history: HistoryCapture | undefined, live: LiveChangeCapture |
     update: ((request, write) => live.update(request, (inner) => history.update(inner, write))) as HistoryCapture['update'],
     remove: ((request, write) => live.remove(request, (inner) => history.remove(inner, write))) as HistoryCapture['remove'],
     tell: (request: Parameters<HistoryCapture['tell']>[0]) => history.tell(request),
+    noted: (request: Parameters<HistoryCapture['noted']>[0]) => history.noted(request),
     triggered: async (change: Parameters<HistoryCapture['triggered']>[0]) => {
       await history.triggered(change);
       await live.triggered(change);

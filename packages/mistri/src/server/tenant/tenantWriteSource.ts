@@ -7,6 +7,7 @@ import {
   TransactionOperations,
   TransactionOutcomeUnknown,
   type AggregateRequest,
+  type NoteRequest,
   type TellRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
@@ -95,7 +96,7 @@ const paused = (): never => {
    It is answered as busy, a 503 to try again, and the writer stays open. */
 const refusedCheckout = (error: unknown): boolean => isPoolBusy(error);
 
-export { TenantIntakeMoved, TenantWriteFailure } from './tenantWriteKindContract.js';
+export { TenantIntakeMoved, TenantLinkMoved, TenantWriteFailure } from './tenantWriteKindContract.js';
 
 /** Private writer authority, not an accepted credential or a request issuer.
  * Its transaction methods are its kinds' (tenantWriteKind*.ts): each takes
@@ -245,6 +246,7 @@ function recording(records: WriteTransaction, wrote: TenantCommittedWrite[], own
     },
     // A notice writes no record of the App's, so nothing follows it.
     ...(records.tell ? { tell: records.tell.bind(records) } : {}),
+    ...(records.noted ? { noted: records.noted.bind(records) } : {}),
   });
 }
 
@@ -508,7 +510,8 @@ export async function openSqliteTenantWriteSource(
             // uses this exact handle, not a second reader/connection. Failing
             // before the handler starts, it may mean the kind's anchor moved.
             try {
-              kind.sqliteFence(db, input.evidence, fence);
+              if (started && kind.sqliteFenceAfter) kind.sqliteFenceAfter(db, input.evidence, fence);
+              else kind.sqliteFence(db, input.evidence, fence);
             } catch (error) {
               if (!started) moved = true;
               throw error;
@@ -554,6 +557,9 @@ export async function openSqliteTenantWriteSource(
               update: (request) => records.update({ ...request, table: toPhysical(request.table) }),
               remove: (request) => records.remove({ ...request, table: toPhysical(request.table) }),
               ...(records.tell ? { tell: (request: TellRequest) => records.tell!({ ...request, table: toPhysical(request.table) }) } : {}),
+              ...(records.noted
+                ? { noted: (request: NoteRequest) => records.noted!({ ...request, table: toPhysical(request.table) }) }
+                : {}),
             });
             const outcome = await kind.run(
               owned,
@@ -959,6 +965,14 @@ export async function openPostgresTenantWriteSource(
                     },
                   }
                 : {}),
+              ...(records.noted
+                ? {
+                    noted: (request: NoteRequest) => {
+                      live();
+                      return records.noted!({ ...request, table: toPhysical(request.table) });
+                    },
+                  }
+                : {}),
             });
             const receipts =
               journal &&
@@ -1003,6 +1017,47 @@ export async function openPostgresTenantWriteSource(
                       appendReadAudit: (...args: Parameters<NonNullable<CommandJournal['appendReadAudit']>>) => {
                         live();
                         return journal.appendReadAudit!(...args);
+                      },
+                    }
+                  : {}),
+                // A tenant's links live in its journal, behind the same fence as its receipts.
+                ...(journal.mintLink
+                  ? {
+                      mintLink: (...args: Parameters<NonNullable<CommandJournal['mintLink']>>) => {
+                        live();
+                        return journal.mintLink!(...args);
+                      },
+                    }
+                  : {}),
+                ...(journal.revokeLinks
+                  ? {
+                      revokeLinks: (...args: Parameters<NonNullable<CommandJournal['revokeLinks']>>) => {
+                        live();
+                        return journal.revokeLinks!(...args);
+                      },
+                    }
+                  : {}),
+                ...(journal.countLinks
+                  ? {
+                      countLinks: (...args: Parameters<NonNullable<CommandJournal['countLinks']>>) => {
+                        live();
+                        return journal.countLinks!(...args);
+                      },
+                    }
+                  : {}),
+                ...(journal.openLink
+                  ? {
+                      openLink: (...args: Parameters<NonNullable<CommandJournal['openLink']>>) => {
+                        live();
+                        return journal.openLink!(...args);
+                      },
+                    }
+                  : {}),
+                ...(journal.readLink
+                  ? {
+                      readLink: (...args: Parameters<NonNullable<CommandJournal['readLink']>>) => {
+                        live();
+                        return journal.readLink!(...args);
                       },
                     }
                   : {}),

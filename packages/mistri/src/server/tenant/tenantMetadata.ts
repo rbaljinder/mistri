@@ -491,10 +491,19 @@ function projectAfresh(
   // read their tenant's support log. It travels here, beside the other runtime
   // answers, because roles are per-tenant: nothing before a lease can know it.
   const supportLog = roles.some((role) => app.auth?.roles?.[role]?.supportLog === true);
+  /* Revoking a record's links is a write to it, in the tenant's own realm (tenantLinkRevoke.ts): the tables this member
+     edits whose resource declares links. The route refuses the rest, and the platform realm holds no tenant's links. */
+  const revokesLinks =
+    realm === 'tenant'
+      ? (capabilities?.writable ?? []).filter(
+          (table) => !capabilities?.resources[table]?.appendOnly && Object.keys(app.resources?.[table]?.links ?? {}).length > 0,
+        )
+      : [];
   const answer: AppPayloadApp = {
     ...(signedOut ? withoutSignedInParts(served, schema) : served),
     ui: { ...servedLanguages(servedLocale(servedZone(served.ui, zone), locale), catalogLocales(app)), export: false },
     writableTables: [...(capabilities?.writable ?? [])],
+    ...(revokesLinks.length ? { revokesLinks: [...revokesLinks] } : {}),
     grantedCommands: [...granted],
     ...(capabilities?.grantedActions && Object.keys(capabilities.grantedActions).length
       ? { grantedActions: Object.fromEntries(Object.entries(capabilities.grantedActions).map(([table, ids]) => [table, [...ids]])) }

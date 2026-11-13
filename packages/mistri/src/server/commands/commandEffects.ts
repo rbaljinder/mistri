@@ -10,7 +10,10 @@
  *
  * An effect rides the command's events. Each is captured at definition as an
  * event the platform owns, `effect.<name>` version 1, whose one field, `body`,
- * is the projection of the validated output. So it is written in the
+ * is the projection of the validated output. A post's projection may also read
+ * rows through the command's db, read-only and in its transaction, and wait
+ * for them: a body of up to 256 KiB is built from rows, not carried through
+ * the 16 KiB output. Its body is still stored once, so it is written in the
  * command's own transaction beside its receipt — nothing is sent unless the
  * command commits, and a replay writes nothing again — and delivered by event
  * delivery: a lease, an attempt budget, backoff, `failed`, and redrive from
@@ -19,55 +22,139 @@
  * has something to report calls a command.
  */
 import { createHash } from 'node:crypto';
-import { isProxy } from 'node:util/types';
+import { isPromise, isProxy } from 'node:util/types';
 import {
-  COMMAND_EVENT_LIMITS,
   EFFECT_EVENT_PREFIX,
+  EFFECT_LIMITS,
   EffectBodyTooLarge,
+  EffectProjectionRefused,
   type CommandEventEnvelope,
   type CommandEventJson,
 } from '../../adapters/events/commandEventTypes.js';
 import { HttpSourceError } from '@mistriwork/engine/adapters/http/egress.js';
 import type { EventPublicationTransport } from '../events/eventPublisher.js';
 import { LINK_REF_PREFIX } from '../links/linkToken.js';
-import { defineOpaqueEvent, defineEventProjection, type BusinessEventOutput, type BusinessEventProjection } from './businessEvents.js';
+import {
+  defineEffectProjection,
+  defineOpaqueEvent,
+  type BusinessEventOutput,
+  type BusinessEventProjection,
+  type EffectProjectionContext,
+} from './businessEvents.js';
 
 declare const effectType: unique symbol;
+declare const effectDbType: unique symbol;
 
 /** A JSON object: what a webhook receives as the effect's `payload`. */
 export type EffectPayload = { readonly [key: string]: CommandEventJson };
 
-/** What `post` returns: an effect, captured when the command is defined. */
-export interface CommandEffect<Output> {
+/** What `post` returns: an effect, captured when the command is defined. `Db` is the command's read-only db, taken
+ * from where the effect is declared; it is compared both ways, so an effect is never refused for the db it reads. */
+export interface CommandEffect<Output, Db = unknown> {
   readonly destination: string;
   readonly [effectType]: (output: Output) => void;
+  readonly [effectDbType]: { bivariant(db: Db): void }['bivariant'];
+}
+
+/** What a post's projection is handed beside the output: the command's db, read-only, in the command's transaction,
+ * reading only what the command reads. A write through it, or a read of another table, refuses the command. */
+interface EffectContext<Db> {
+  readonly db: Db;
 }
 
 export { EFFECT_EVENT_PREFIX };
-/** What one effect carries, in one place. The body travels in an event payload, so it is bounded by that payload less
- * 1 KiB for what wraps it (`{"body":…}`, and a bare effect's call headers); the number is named here so the refusal
- * says it and a later raise of the payload limit moves this one with it. */
-export const EFFECT_LIMITS = Object.freeze({ bodyBytes: COMMAND_EVENT_LIMITS.payloadBytes - 1024 });
+/** What one effect carries, in one place: a post's body, and every body one command posts. Each body travels in an
+ * event payload counted apart from the command's plain events (commandEventTypes.ts), so the numbers are named there
+ * and the stores' envelope bound moves with them. */
+export { EFFECT_LIMITS };
 /** What a link's URL may add over its `mistri-link:<id>` reference: an origin and base path of up to ~250 bytes. */
 const LINK_URL_RESERVE = 320 - (LINK_REF_PREFIX.length + 22);
+/** A body's size as delivered: a capability link rides as its reference and is delivered as its URL, so each is
+ * counted at its delivered size. */
+export function bodyBytes(body: unknown): number {
+  const text = JSON.stringify(body) ?? '';
+  const links = text.split(LINK_REF_PREFIX).length - 1;
+  return Buffer.byteLength(text, 'utf8') + links * LINK_URL_RESERVE;
+}
 /** The refusal for a body over `EFFECT_LIMITS.bodyBytes`; it reaches the author through the command's refusal cause. */
 function boundBody(destination: string, body: unknown): void {
-  const text = JSON.stringify(body) ?? '';
-  // A capability link rides as its reference and is delivered as its URL; each is counted at its delivered size.
-  const links = text.split(LINK_REF_PREFIX).length - 1;
-  const bytes = Buffer.byteLength(text, 'utf8') + links * LINK_URL_RESERVE;
+  const bytes = bodyBytes(body);
   if (bytes > EFFECT_LIMITS.bodyBytes) {
     throw new EffectBodyTooLarge(
       `post "${destination}" body is ${bytes.toLocaleString('en-US')} bytes; one post carries at most ${EFFECT_LIMITS.bodyBytes.toLocaleString('en-US')}.`,
     );
   }
 }
+/* What a table handle writes with: a projection that reaches for one is told so by name, not by "not a function". */
+const WRITE_METHODS = new Set(['insert', 'insertFile', 'update', 'remove', 'insertMany', 'updateWhere']);
+/** The db an effect's projection reads through: the command's read handles, each read passed through, a write and a
+ * table outside the command's read refused by name. Built over fresh targets, so a frozen handle is never proxied. */
+export function effectProjectionDb(handles: Readonly<Record<string, object>>): object {
+  const tables = new Map(
+    Object.entries(handles).map(([name, handle]) => [
+      name,
+      new Proxy(
+        {},
+        {
+          get(_target, method) {
+            if (typeof method === 'string' && WRITE_METHODS.has(method))
+              throw new EffectProjectionRefused(
+                `an effect's projection reads through db and cannot write; it called db.${name}.${method}().`,
+              );
+            const value: unknown = Reflect.get(handle, method);
+            return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(handle) : value;
+          },
+          has: (_target, method) => !(typeof method === 'string' && WRITE_METHODS.has(method)) && Reflect.has(handle, method),
+          ownKeys: () => Reflect.ownKeys(handle).filter((key) => !(typeof key === 'string' && WRITE_METHODS.has(key))),
+          getOwnPropertyDescriptor(_target, key) {
+            const own = typeof key === 'string' && WRITE_METHODS.has(key) ? undefined : Reflect.getOwnPropertyDescriptor(handle, key);
+            return own && { ...own, configurable: true };
+          },
+          set: () => false,
+          defineProperty: () => false,
+          deleteProperty: () => false,
+        },
+      ),
+    ]),
+  );
+  return new Proxy(
+    {},
+    {
+      get(_target, table) {
+        // A symbol, or `then` when the db passes through a promise, is not a table read.
+        if (typeof table !== 'string' || table === 'then') return undefined;
+        const handle = tables.get(table);
+        if (!handle)
+          throw new EffectProjectionRefused(`an effect's projection reads only what the command reads; "${table}" is not in its read.`);
+        return handle;
+      },
+      has: (_target, table) => typeof table === 'string' && tables.has(table),
+      ownKeys: () => [...tables.keys()],
+      getOwnPropertyDescriptor: (_target, table) =>
+        typeof table === 'string' && tables.has(table)
+          ? { value: tables.get(table), enumerable: true, configurable: true, writable: false }
+          : undefined,
+      set: () => false,
+      defineProperty: () => false,
+      deleteProperty: () => false,
+    },
+  );
+}
 /** How many effects one command may declare; they share the event batch's limits. */
 const MAX_EFFECTS = 8;
-function projected(captured: DeclaredEffect, output: unknown): EffectPayload {
-  const body = captured.project(output) as EffectPayload;
-  boundBody(captured.destination, body);
-  return body;
+/* An effect's projection, bounded: at once when it returns its body, after it when it waits for one. */
+function projected<Payload>(
+  captured: DeclaredEffect,
+  output: unknown,
+  context: EffectProjectionContext,
+  wrap: (body: EffectPayload) => Payload,
+): Payload | Promise<Payload> {
+  const finish = (body: unknown): Payload => {
+    boundBody(captured.destination, body);
+    return wrap(body as EffectPayload);
+  };
+  const body = captured.project(output, context);
+  return isPromise(body) ? body.then(finish) : finish(body);
 }
 /* A webhook connection's name: what `post` names and the config file declares. */
 export const WEBHOOK_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
@@ -75,7 +162,7 @@ const EFFECT_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 
 interface DeclaredEffect {
   destination: string;
-  project: (output: unknown) => unknown;
+  project: (output: unknown, context: EffectProjectionContext) => unknown;
   /** `envelope: false`: the body is the projection itself, and `headers` ride with each call. */
   bare?: { headers?: (output: unknown) => unknown };
 }
@@ -93,14 +180,17 @@ export interface PostOptions<Output> {
 /**
  * One POST of the projected output to the webhook named `destination`, after
  * the command commits. `project` receives the validated output, as an event
- * projection does, and returns a JSON object. By default it is sent inside
- * the platform's envelope; `{ envelope: false }` sends the projection alone.
+ * projection does, and returns a JSON object of up to 256 KiB. It may also
+ * read rows through `{ db }`, the command's db, read-only and in its
+ * transaction, and return a promise: a body built from rows is not limited by
+ * the 16 KiB output. By default it is sent inside the platform's envelope;
+ * `{ envelope: false }` sends the projection alone.
  */
-export function post<Output>(
+export function post<Output, Db = unknown>(
   destination: string,
-  project: (output: BusinessEventOutput<Output>) => EffectPayload,
+  project: (output: BusinessEventOutput<Output>, context: EffectContext<Db>) => EffectPayload | Promise<EffectPayload>,
   options?: PostOptions<Output>,
-): CommandEffect<Output> {
+): CommandEffect<Output, Db> {
   if (typeof destination !== 'string' || !WEBHOOK_NAME.test(destination)) {
     throw new TypeError('post() names a webhook connection: letters, digits, underscores and hyphens, starting with a letter.');
   }
@@ -123,8 +213,12 @@ export function post<Output>(
     bare = Object.freeze(headers ? { headers: (output: unknown) => Reflect.apply(headers, undefined, [output]) } : {});
   }
   const effect = Object.freeze({ destination });
-  declared.set(effect, { destination, project: (output) => Reflect.apply(project, undefined, [output]), ...(bare ? { bare } : {}) });
-  return effect as CommandEffect<Output>;
+  declared.set(effect, {
+    destination,
+    project: (output, context) => Reflect.apply(project, undefined, [output, context]),
+    ...(bare ? { bare } : {}),
+  });
+  return effect as CommandEffect<Output, Db>;
 }
 
 /** What a channel message's projection returns: who it goes to, what it says, and whether they agreed to hear it. */
@@ -275,14 +369,23 @@ export function captureCommandEffects(effects: unknown): CapturedEffects {
         ['body', 'headers', 'bare'],
         { parse: parseBare },
       );
-      slots[`effect-${name}`] = defineEventProjection(event, (output) => ({
-        body: projected(captured, output),
-        headers: callHeaders(bare.headers ? bare.headers(output) : {}),
-        bare: true as const,
-      }));
+      slots[`effect-${name}`] = defineEffectProjection(
+        event,
+        (output, context) =>
+          projected(captured, output, context, (body) => ({
+            body,
+            headers: callHeaders(bare.headers ? bare.headers(output) : {}),
+            bare: true as const,
+          })),
+        (payload) => bodyBytes(payload.body),
+      );
     } else {
       const event = defineOpaqueEvent<{ body: EffectPayload }>(`${EFFECT_EVENT_PREFIX}${name}`, ['body'], { parse: parseBody });
-      slots[`effect-${name}`] = defineEventProjection(event, (output) => ({ body: projected(captured, output) }));
+      slots[`effect-${name}`] = defineEffectProjection(
+        event,
+        (output, context) => projected(captured, output, context, (body) => ({ body })),
+        (payload) => bodyBytes(payload.body),
+      );
     }
     targets.push(Object.freeze({ name, destination: captured.destination }));
   }

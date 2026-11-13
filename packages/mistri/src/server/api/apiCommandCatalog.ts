@@ -11,12 +11,18 @@ import { commandReferenceCatalogProblem } from '../commands/businessCommandRefer
 import { describeShape } from '../commands/commandShapes.js';
 import { renderApiOutputSchema } from './apiOutputSchema.js';
 import { genericWriteOf } from '../commands/genericWriteBrand.js';
+import { publicActorId } from '../../shared/publicActor.js';
 
 type Evidence = Pick<BusinessCommandAuthorizationOptions, 'connectionFor' | 'writableConnection' | 'transactionalConnection'>;
 type Authority = Evidence & Pick<BusinessCommandAuthorizationOptions, 'managedOwnership'>;
 const fail = (id: string, message: string): never => {
   throw new Error(`api.commands.${id}: ${message}.`);
 };
+
+/** The public form that submits a command: the view key whose grants its API verb runs with. */
+export function publicFormOf(app: Pick<AppDef, 'views'>, id: string): string | undefined {
+  return Object.entries(app.views).find(([, view]) => isFormView(view) && view.public && view.command.id === id)?.[0];
+}
 
 /** App/API are normalized, schema is logical, registry is declaration-only.
  * Evidence MUST come from trusted host binding metadata, never a request or
@@ -69,13 +75,20 @@ export function scopedCommandCatalog(
     const id = ref.id,
       command = registry[id];
     if (!command) return fail(id, 'unregistered command');
-    if (command.public) fail(id, 'public commands cannot be API exposures');
     const resource = logicalResource(app, command.source, command.target);
     // The exposure was resolved from a registration when the App loaded; it must be this one's.
     if (ref.version !== command.version) fail(id, 'the App was loaded with another commands module');
     const targeted = 'target' in ref;
     const targets = targeted ? commandTargets(ref) : 'none';
-    if (targeted) {
+    /* A public command is its door's verb: it runs with the grants its public
+       form names, as `token:<id>`, never a role's. A token gains it only by
+       naming it (apiTokenScope.ts), so no role list is published for it. */
+    const form = command.public ? publicFormOf(app, id) : undefined;
+    if (command.public) {
+      if (app.auth?.rows === 'policy') fail(id, 'a row-policy App cannot expose a public command yet');
+      if (targeted) fail(id, 'a public command is exposed untargeted, as its form submits it');
+      if (form === undefined) fail(id, 'a public command is exposed through its public form; this one has none');
+    } else if (targeted) {
       if (authorizer.creates(id)) fail(id, 'targeted exposure conflicts with existing untargeted form semantics');
     } else {
       if (!authorizer.creates(id)) fail(id, 'API-only untargeted commands require future shared reference integration');
@@ -106,16 +119,27 @@ export function scopedCommandCatalog(
        API role must read the whole of it. Elevation stays an App-form matter,
        reviewed in `mistri check --design`. */
     const elevated = (command.elevate?.read ?? []).map((local) => logicalResource(app, command.source, local));
-    const eligibleRoles = api.roles.filter((role) => {
+    if (form !== undefined) {
       try {
-        authorizer.authorize(id, { id: 'api-catalog-check', appId: app.id, roles: [role] });
+        authorizer.authorize(id, { id: publicActorId(form), appId: app.id, roles: [], kind: 'public', form });
       } catch (error) {
-        if (error instanceof AppAccessDenied) return false;
+        if (error instanceof AppAccessDenied) fail(id, `its public form "${form}" does not authorize it`);
         throw error;
       }
-      return !elevated.length || elevated.every((table) => resolveAppAccess(app, schema, [role]).readable.has(table));
-    });
-    if (!eligibleRoles.length) fail(id, 'no declared API role authorizes the whole command footprint');
+    }
+    const eligibleRoles =
+      form !== undefined
+        ? []
+        : api.roles.filter((role) => {
+            try {
+              authorizer.authorize(id, { id: 'api-catalog-check', appId: app.id, roles: [role] });
+            } catch (error) {
+              if (error instanceof AppAccessDenied) return false;
+              throw error;
+            }
+            return !elevated.length || elevated.every((table) => resolveAppAccess(app, schema, [role]).readable.has(table));
+          });
+    if (form === undefined && !eligibleRoles.length) fail(id, 'no declared API role authorizes the whole command footprint');
     return Object.freeze({
       id: `command:${id}`,
       command: id,
@@ -125,6 +149,7 @@ export function scopedCommandCatalog(
       source: command.source,
       realm: command.realm ?? 'tenant',
       eligibleRoles: Object.freeze(eligibleRoles),
+      ...(form === undefined ? {} : { door: 'public' as const, form }),
       read: Object.freeze(read),
       write: Object.freeze(command.write.map((local) => logicalResource(app, command.source, local))),
       output,

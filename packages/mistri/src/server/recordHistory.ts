@@ -90,6 +90,21 @@ export function historyRules(app: AppDef, pages: readonly PageDef[]): Map<string
   return rules;
 }
 
+/** `mistri check`'s advice: a resource whose commands mint capability links and that keeps no history. Its links can
+ * still be revoked from the record page; there is only nowhere to say who did it. Declaring links does not turn a
+ * log on, since a log nobody reads is a cost every write pays. */
+export function linkHistoryWarnings(app: AppDef, pages: readonly PageDef[]): string[] {
+  const kept = historyRules(app, pages);
+  return Object.entries(app.resources ?? {}).flatMap(([resource, def]) =>
+    def.links && Object.keys(def.links).length && !kept.has(resource)
+      ? [
+          `resources "${resource}", "links" [link-history]: its record page can revoke its links, and the record keeps ` +
+            `no history to note who did. Add a history section to its page to keep one.`,
+        ]
+      : [],
+  );
+}
+
 /** Every dashboard section of the App that is an activity feed, main flow and aside alike. */
 function activitySections(app: AppDef): AppDashSection[] {
   return Object.values(app.views ?? {}).flatMap((view) =>

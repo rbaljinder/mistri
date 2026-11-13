@@ -9,7 +9,7 @@ import { primaryKey } from '@mistriwork/engine/shared/schema.js';
 import { defineCommands, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 import type { TenantOwnershipSnapshot } from '../tenant/tenantOwnership.js';
 import { tenantAuthoringSchema } from '../tenant/tenantVisibleFields.js';
-import { scopedCommandCatalog } from './apiCommandCatalog.js';
+import { publicFormOf, scopedCommandCatalog } from './apiCommandCatalog.js';
 
 /** The operations a tenant token's scope is drawn from: reads, and commands
  * when the App exposes them. Only identity and eligibility — never grants. */
@@ -31,6 +31,23 @@ export function tenantCommandEvidence(owned: TenantOwnershipSnapshot) {
   });
 }
 
+/** Why a public form's command cannot be a tenant App's API verb when it writes a platform table, or nothing. A form's
+ * submission may land in the platform's triage; a token's verb runs in its own tenant and never there, so the table
+ * is not one it can write. Said by name, here and in `mistri check` (tenantFeatureCommands.ts), rather than with the
+ * generic tenant-table sentence below. */
+export function publicVerbPlatformWrite(
+  app: Pick<AppDef, 'views'>,
+  id: string,
+  command: { readonly public?: boolean; readonly write: readonly string[] },
+  owned: Pick<TenantOwnershipSnapshot, 'ownership'>,
+): string | undefined {
+  if (command.public !== true) return undefined;
+  const table = command.write.find((each) => owned.ownership[each]?.kind === 'platform');
+  if (table === undefined) return undefined;
+  const form = publicFormOf(app, id);
+  return `${form === undefined ? `public command "${id}"` : `public form "${form}" (command "${id}")`} writes platform table "${table}", so it cannot be a tenant App API verb: a token's verb runs in its own tenant and never reaches the platform's triage`;
+}
+
 export function checkApiTenantCommandCatalog(app: AppDef, owned: TenantOwnershipSnapshot, declared: BusinessCommandRegistry) {
   const api = app.api;
   if (!api || !isTenantApp(app) || !tenantAppShape(app) || owned.appId !== app.id)
@@ -49,6 +66,8 @@ export function checkApiTenantCommandCatalog(app: AppDef, owned: TenantOwnership
     // One membership's commands: the platform realm acts across tenants.
     if ((command.realm ?? 'tenant') !== 'tenant') fail(at, "a platform-realm command is not a tenant token's");
     // The runtime's own rule (bindTenantCommands), stated before publication.
+    const platformWrite = publicVerbPlatformWrite(app, ref.id, command, owned);
+    if (platformWrite !== undefined) fail(at, platformWrite);
     if (command.source !== owned.source.id || command.write.some((table) => owned.ownership[table]?.kind !== 'tenant')) {
       fail(at, 'a tenant command writes only tenant-owned tables on the tenant source');
     }

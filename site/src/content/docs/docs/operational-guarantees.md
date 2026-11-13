@@ -106,6 +106,7 @@ after commit: never for a refusal, never again for a replay.
 - **Retries.** A request is given 12 seconds. A non-2xx answer is asked again after 1 second, doubling to 5 minutes, up to 8 attempts, then waits for an operator. A 5xx is asked again with the same key; a 4xx is asked again until its attempts are spent, then fails, readiness says so, and a redrive sends it again.
 - **Idempotency.** The `Idempotency-Key` is the same on every attempt. The receiver must deduplicate by it: delivery is at least once.
 - **Order.** Declaration order within a command; none between commands.
+- **What is sent.** The body a post's projection built inside the command's transaction, stored with the receipt (at most 262,144 bytes a post and 1,048,576 a command). A retry, a redrive or a restart sends the stored body; the projection never runs again.
 - **After a restart.** The delivery rows keep their attempt counts and backoff.
 
 ## Workflows

@@ -137,6 +137,14 @@ export function revokeSqliteLinks(
     .run(now, appId, tenant, resource, rowKey, ...(name === undefined ? [] : [name]));
   return Number(result.changes);
 }
+/** How many links of one row still open: what decides whether its page offers to revoke them. */
+export function countSqliteLinks(db: DatabaseSync, appId: string, tenant: string, resource: string, rowKey: string, now: number): number {
+  checkRevoke(appId, resource, rowKey, undefined, now);
+  const row = db
+    .prepare(`SELECT COUNT(*) AS n FROM ${S} WHERE app_id = ? AND tenant_id = ? AND resource = ? AND row_key = ? AND ${LIVE}`)
+    .get(appId, tenant, resource, rowKey, now) as { n: number | bigint } | undefined;
+  return Number(row?.n ?? 0);
+}
 /* BEGIN IMMEDIATE serialises writers in the file, and the guard is in the UPDATE itself: the last use is taken once. */
 export function openSqliteLink(db: DatabaseSync, appId: string, tenant: string, id: string, now: number): CommandLinkRow | undefined {
   checkLookup(appId, id, now);
@@ -156,6 +164,38 @@ export function readSqliteLink(db: DatabaseSync, appId: string, tenant: string, 
       .prepare(`SELECT ${COLUMNS} FROM ${S} WHERE id = ? AND app_id = ? AND tenant_id = ? AND revoked_at IS NULL AND expires_at > ?`)
       .get(id, appId, tenant, now) as Record<string, unknown> | undefined,
   );
+}
+
+/* A link by its App and id alone, whichever tenant minted it: the one lookup a tenant App's shared host makes before
+   it knows the tenant (server/tenant/tenantReadSource.ts resolveLink). Everything after it runs in that tenant's own
+   journal, by the tenant this answers. */
+export function findSqliteLink(db: DatabaseSync, appId: string, id: string, now: number): CommandLinkRow | undefined {
+  checkLookup(appId, id, now);
+  return rowOf(
+    db.prepare(`SELECT ${COLUMNS} FROM ${S} WHERE id = ? AND app_id = ? AND revoked_at IS NULL AND expires_at > ?`).get(id, appId, now) as
+      | Record<string, unknown>
+      | undefined,
+  );
+}
+/** The link a tenant transaction acts for, as it was resolved: the same row, still live. */
+export interface HeldLink {
+  readonly id: string;
+  readonly app: string;
+  readonly tenant: string;
+  readonly resource: string;
+  readonly rowKey: string;
+  readonly name: string;
+}
+const HOLD = `id = ? AND app_id = ? AND tenant_id = ? AND resource = ? AND row_key = ? AND name = ? AND revoked_at IS NULL AND expires_at > ?`;
+const held = (link: HeldLink, now: number) => {
+  checkLookup(link?.app, link?.id, now);
+  checkRevoke(link.app, link.resource, link.rowKey, link.name, now);
+  if (!bounded(link.tenant, 128, true)) refuse();
+  return [link.id, link.app, link.tenant, link.resource, link.rowKey, link.name, now] as const;
+};
+/* Read inside BEGIN IMMEDIATE, which already shuts every other writer out of the file until COMMIT. */
+export function holdSqliteLink(db: DatabaseSync, link: HeldLink, now: number): boolean {
+  return db.prepare(`SELECT 1 AS live FROM ${S} WHERE ${HOLD}`).get(...held(link, now)) !== undefined;
 }
 
 const P = () => q(tables.link);
@@ -178,6 +218,22 @@ export async function revokePostgresLinks(
     [now, appId, tenant, resource, rowKey, ...(name === undefined ? [] : [name])],
   );
   return Number(result.rowCount ?? 0);
+}
+export async function countPostgresLinks(
+  client: PgQuery,
+  appId: string,
+  tenant: string,
+  resource: string,
+  rowKey: string,
+  now: number,
+): Promise<number> {
+  checkRevoke(appId, resource, rowKey, undefined, now);
+  const result = await client.query(
+    `SELECT COUNT(*) AS n FROM ${P()} WHERE app_id = $2 AND tenant_id = $3 AND resource = $4 AND row_key = $5
+      AND revoked_at IS NULL AND expires_at > $1 AND (uses_left IS NULL OR uses_left > 0)`,
+    [now, appId, tenant, resource, rowKey],
+  );
+  return Number((result.rows[0] as { n?: unknown } | undefined)?.n ?? 0);
 }
 /* The row lock the UPDATE takes makes a second open wait, then re-check the guard against the first one's use. */
 export async function openPostgresLink(
@@ -209,4 +265,22 @@ export async function readPostgresLink(
     [id, appId, tenant, now],
   );
   return rowOf(result.rows[0] as Record<string, unknown> | undefined);
+}
+export async function findPostgresLink(client: PgQuery, appId: string, id: string, now: number): Promise<CommandLinkRow | undefined> {
+  checkLookup(appId, id, now);
+  const result = await client.query(
+    `SELECT ${COLUMNS} FROM ${P()} WHERE id = $1 AND app_id = $2 AND revoked_at IS NULL AND expires_at > $3`,
+    [id, appId, now],
+  );
+  return rowOf(result.rows[0] as Record<string, unknown> | undefined);
+}
+/* FOR SHARE, held to COMMIT: a revoke's UPDATE of this row waits for the transaction that acts for it, or is seen
+   first and this finds nothing. */
+export async function holdPostgresLink(client: PgQuery, link: HeldLink, now: number): Promise<boolean> {
+  const values = held(link, now);
+  const result = await client.query(
+    `SELECT 1 AS live FROM ${P()} WHERE id = $1 AND app_id = $2 AND tenant_id = $3 AND resource = $4 AND row_key = $5 AND name = $6 AND revoked_at IS NULL AND expires_at > $7 FOR SHARE`,
+    [...values],
+  );
+  return result.rows.length === 1;
 }

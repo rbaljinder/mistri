@@ -400,7 +400,7 @@ describe('tenant command events on PostgreSQL, against a real server', { skip: l
       assert.ok(batch);
       const event = after.events.find((row) => row.receipt_id === receipt.id);
       assert.ok(event);
-      assert.deepEqual(after.meta, [{ version: 1, app_id: appId, store_id: binding.storeId, source_id: binding.source.id }]);
+      assert.deepEqual(after.meta, [{ version: 2, app_id: appId, store_id: binding.storeId, source_id: binding.source.id }]);
       assert.deepEqual(JSON.parse(String(batch.manifest_json)), manifest);
       assert.equal(batch.event_count, 1);
       assert.equal(event.ordinal, 0);

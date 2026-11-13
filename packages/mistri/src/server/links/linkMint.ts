@@ -40,6 +40,8 @@ export function handlerLinks(options: {
   actorId: string;
   links: Readonly<Record<string, AppLinkDef>> | undefined;
   rowKey: string | undefined | (() => string | undefined);
+  /** The command runs in a tenant App, where a link is held to the tenant whose row it names. */
+  tenantApp?: boolean;
   now: () => Date;
 }): HandlerLinks {
   const queued: Omit<CommandLinkRow, 'receipt'>[] = [];
@@ -55,8 +57,11 @@ export function handlerLinks(options: {
           : made && options.links
             ? `Command "${options.command}" cannot mint a link yet: a public command mints one on the one record it has made on ` +
               `"${options.resource}", so it inserts exactly one first.`
-            : `Command "${options.command}" cannot mint a link: one is minted by a person or a service, on the one existing record a ` +
-              `command targets, or by a public command on the one record it made, in an App that serves links.`,
+            : options.tenantApp
+              ? `Command "${options.command}" cannot mint a link: in a tenant App a link is minted only by a member or a service, on the one ` +
+                `existing record a command targets in their own tenant, never by a public command or on a record it makes.`
+              : `Command "${options.command}" cannot mint a link: one is minted by a person or a service, on the one existing record a ` +
+                `command targets, or by a public command on the one record it made, in an App that serves links.`,
       );
     return { def, rowKey: key };
   };

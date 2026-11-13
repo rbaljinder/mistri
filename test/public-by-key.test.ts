@@ -16,6 +16,7 @@ import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
 import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/commands/commandJournal.js';
 import type { AppHost } from '../packages/mistri/src/server/app/apps.js';
 import { byKeyAdapter } from '../packages/mistri/src/server/app/publicByKey.js';
+import { publicFormProblems } from '../packages/mistri/src/server/forms/savedFormChecks.js';
 import { defineCommand, defineCommands, type BusinessCommandRegistry } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { shape, text } from '../packages/mistri/src/server/commands/commandShapes.js';
 import { PUBLIC_GETS, PUBLIC_POSTS } from '../packages/mistri/src/server/http/gate.js';
@@ -418,4 +419,48 @@ test('a public form offers no choices from a byKey table', async (t) => {
       offset: 0,
     }),
   );
+});
+
+test('check refuses a public form whose picker or choice lists a byKey table, by name; a table the public lists is served', async (t) => {
+  const call = await serve(t);
+  const { adapter } = await call.registry.open(owner);
+  const schema = await adapter.introspect();
+  const form = (input: Record<string, unknown>) => {
+    const { connection: _connection, ...rest } = APP;
+    const definition = parseTestApp(
+      {
+        ...rest,
+        sources: { main: { connection: owner } },
+        resources: { ...APP.resources, inquiry: { access: 'write' } },
+        views: { ...APP.views, ask: { kind: 'form', label: 'Ask', public: true, done: { title: 'Thanks' }, command: 'ask' } },
+      },
+      'lot picker fixture',
+      { ask: { public: true, input } },
+    );
+    const commands = defineCommands({
+      ask: defineCommand({
+        targets: 'none',
+        source: 'main',
+        target: 'inquiry',
+        read: ['vehicle', 'dealer', 'inquiry'],
+        write: ['inquiry'],
+        public: true,
+        input: input as never,
+        output: shape({ reference: text() }),
+        async handle() {
+          return { reference: 'ASK-1' };
+        },
+      }),
+    });
+    return publicFormProblems(definition, commands, schema);
+  };
+  assert.match(
+    form({ vehicle: { label: 'Vehicle', type: 'reference', from: 'vehicle', by: 'id', labelColumn: 'make' } }) ?? '',
+    /Form "ask": Command "ask" input "vehicle" \[public-form-picker\] is a picker over "vehicle" on a public form, and "auth.public.byKey" opens "vehicle" only one record at a time by its key, never as a list/,
+  );
+  assert.match(
+    form({ vehicle: { label: 'Vehicle', type: 'choice', from: 'vehicle', labelColumn: 'make' } }) ?? '',
+    /\[public-form-picker\] offers the rows over "vehicle" on a public form, and "auth.public.byKey" opens "vehicle" only one record at a time/,
+  );
+  assert.equal(form({ dealer: { label: 'Dealer', type: 'reference', from: 'dealer', by: 'id', labelColumn: 'name' } }), undefined);
 });

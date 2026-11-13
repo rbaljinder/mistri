@@ -24,7 +24,7 @@ export function tenantPublicPages(app: Pick<AppDef, 'views'>): ReadonlyMap<strin
 /**
  * Why a public command cannot take a signed-out submission on a tenant App, in plain words (completing "it …"), or
  * nothing when it can. A public form's command and a public page's are held to the same rule: it inserts into a
- * tenant's tables or the platform's, never a global one; it emits no event or effect, and belongs to no realm of its
+ * tenant's tables or the platform's, never a global one; it emits no event or effect, mints no link, and belongs to no realm of its
  * own, since where it lands is decided per submission. Its lookup, when it has one, reads as the visitor reads
  * (intakeLookupProblem).
  */
@@ -40,9 +40,36 @@ export function intakeCommandProblem(
   if (getCommandEvents(command) !== undefined) return 'emits events or effects';
   const lookup = intakeLookupProblem(app, command, home);
   if (lookup !== undefined) return lookup;
+  const minting = intakeLinkProblem(command);
+  if (minting !== undefined) return minting;
   const shared = command.write.find((table) => !['tenant', 'platform'].includes(kindOf(table) ?? ''));
   if (shared !== undefined) return `writes "${shared}", which is neither a tenant's table nor the platform's`;
   return undefined;
+}
+
+/* `link(`, bare as a destructured context member or as `context.link(`/`ctx.link(`: what a handler's text shows of a
+   mint. A mint through a helper elsewhere is not seen, and the run refuses it all the same (links/linkMint.ts). */
+const HANDLER_MINTS = /(?<![\w$.])link\s*\(|\b(?:context|ctx)\s*\.\s*link\s*\(/;
+/* Comments and string literals, which may say `link(` without calling it: taken out before the text is read. */
+const COMMENTS_AND_STRINGS = /\/\*[\s\S]*?\*\/|\/\/[^\n]*|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`/g;
+
+/**
+ * Why a public command that mints a capability link cannot run on a tenant App's intake, or nothing. A link is held to
+ * the tenant whose row it names, and a signed-out submission is placed by an address (or lands with the platform's
+ * triage) and mints on no existing record of a tenant: a link is minted there only by a member or a service, on one
+ * existing record of their own tenant (businessCommandAuthorization.ts). Said from the handler's own text.
+ */
+function intakeLinkProblem(command: AnyBusinessCommand): string | undefined {
+  if (command.public !== true || typeof command.handle !== 'function') return undefined;
+  let text: string;
+  try {
+    text = Function.prototype.toString.call(command.handle);
+  } catch {
+    return undefined;
+  }
+  return HANDLER_MINTS.test(text.replace(COMMENTS_AND_STRINGS, ' '))
+    ? 'mints a capability link (link(…)), which a tenant App only lets a member or a service do, on an existing record of their own tenant'
+    : undefined;
 }
 
 /**
@@ -85,7 +112,7 @@ export function tenantFormLookupProblems(
   for (const [key, form] of tenantPublicForms(app)) {
     for (const { id } of formCommands(form)) {
       const command = registry && Object.hasOwn(registry, id) ? registry[id] : undefined;
-      const problem = command ? intakeLookupProblem(app, command, home) : undefined;
+      const problem = command ? (intakeLookupProblem(app, command, home) ?? intakeLinkProblem(command)) : undefined;
       if (problem)
         problems.push(
           `Public form "${key}" runs "${id}", which ${problem}: a tenant App cannot take that command's signed-out submissions.`,

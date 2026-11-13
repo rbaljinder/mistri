@@ -480,9 +480,31 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'command-events',
     title: 'events a command emits',
     tables: { prefix: '__mistri_event_' },
-    current: both(1),
+    current: both(2),
     read: marked({ sqlite: { table: '__mistri_event_meta' }, postgres: { table: '__mistri_event_meta' } }),
-    upgrades: {},
+    upgrades: {
+      sqlite: {
+        1: {
+          says: "lets an effect's post carry a body of up to 256 KiB: an event's stored envelope may hold it",
+          run: async ({ db }) => {
+            /* The event table is rebuilt by drop and create; with keys enforced, the drop would refuse the deliveries that point at it. */
+            const [keys] = await db.all<{ foreign_keys: number }>('PRAGMA foreign_keys');
+            if (Number(keys?.foreign_keys) !== 0)
+              throw new StoreRefused('the event store is rebuilt with foreign keys off, and they are on');
+            for (const sql of (await import('../adapters/events/commandEventSchema.js')).sqliteEventUpgradeFrom1()) await db.run(sql);
+          },
+        },
+      },
+      postgres: {
+        1: {
+          says: "lets an effect's post carry a body of up to 256 KiB: an event's stored envelope may hold it",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/events/postgresCommandEventStore.js')).postgresEventUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+      },
+    },
   },
   {
     id: 'event-delivery',

@@ -13,7 +13,7 @@ import { humanName } from '@mistriwork/engine/shared/model.js';
 import { subtitlePath } from '@mistriwork/engine/shared/subtitlePath.js';
 import { historyRules } from '../recordHistory.js';
 import type { PageDef } from '@mistriwork/engine/shared/page.js';
-import { appAllowsWrite, grantsByRole, type AppDef } from '../../shared/app.js';
+import { appAllowsWrite, grantsByRole, isRowPolicyApp, type AppDef } from '../../shared/app.js';
 import { appCommandGrants, appExportable } from '../../shared/appAccess.js';
 import { servedCommandIds } from '../../shared/appCommandIds.js';
 import { appForConnection, appPayload, localizedApp, schemaStamp, type AppHost } from '../app/apps.js';
@@ -277,6 +277,14 @@ export async function appProjectionRoutes(ctx: RequestContext, source: ResolvedS
               : appAllowsWrite(host.app.app, schema!, table.id, identity.role)),
         )
         .map((table) => table.id);
+      /* Revoking a record's links is a write to it (recordLinkRoutes.ts): a table this reader edits, not one it only
+         appends to, whose resource declares links. A row-policy App is not offered it; the route refuses the same. */
+      const revokesLinks = writableTables.filter(
+        (table) =>
+          !isRowPolicyApp(host.app.app) &&
+          !access?.appendOnly?.has(table) &&
+          Object.keys(host.app.app.resources?.[table]?.links ?? {}).length > 0,
+      );
       /* The fixed actions a role runs without write, by table and id: the
          bar offers these beside a table it cannot otherwise edit. */
       const grantedActions =
@@ -291,6 +299,7 @@ export async function appProjectionRoutes(ctx: RequestContext, source: ResolvedS
         answer({
           ...app,
           writableTables,
+          ...(revokesLinks.length ? { revokesLinks } : {}),
           ...(grantedActions && Object.keys(grantedActions).length ? { grantedActions } : {}),
           ...(commands?.appId === host.app.app.id ? { grantedCommands, ...unformed } : {}),
         }),

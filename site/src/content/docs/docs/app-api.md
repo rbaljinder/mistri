@@ -33,7 +33,7 @@ and the operator both choose the network. It works on SQLite and PostgreSQL.
 | `events` | Command events the feed serves (`task.completed`); each is a token operation, `event:<name>`. Apps whose roles read all rows only. |
 | `network` | `true` lets the API answer beyond loopback when the server listens there. Off by default. |
 | `publicSpec` | `true` serves the whole OpenAPI document to a request with no token. Off by default. |
-| `commands` | Commands by name, from the App's commands module, that name a record; preparation returns its opaque revision to send back as `If-Match`, with no required version column, or `{ command, label, description }`. Each route carries the command's version from `authority.lock` (`…/commands/change/v2`). A signed-in form's command (`targets: 'none'`) is exposed too, on its resource with no record; a public form's is refused. |
+| `commands` | Commands by name, from the App's commands module, that name a record; preparation returns its opaque revision to send back as `If-Match`, with no required version column, or `{ command, label, description }`. Each route carries the command's version from `authority.lock` (`…/commands/change/v2`). A signed-in form's command (`targets: 'none'`) is exposed too, on its resource with no record. A public form's is served as well: the token alone grants it, and its scope must name `command:<id>`. It runs with the public door's grants, never the token's roles, is marked `x-mistri-door: public`, and the door's submit budget applies (429). In a tenant App it runs in the token's tenant. |
 
 The declaration is checked against the catalog and the App's grants and
 recorded in `authority.lock`. Features may add resources, views and commands.

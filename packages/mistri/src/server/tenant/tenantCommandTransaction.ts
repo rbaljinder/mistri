@@ -7,7 +7,7 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
-import type { CommandAudit, CommandJournal } from '../../adapters/commands/commandJournalTypes.js';
+import type { CommandAudit, CommandJournal, CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
 import { AppAccessDenied, authorizeTransaction, type ResourceAccess } from '../app/appAccess.js';
 import type { BusinessCommandAuthorization } from '../commands/businessCommandAuthorization.js';
 import { BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
@@ -18,6 +18,7 @@ import { intakeCommandKind } from './tenantCommandKindIntake.js';
 import { memberCommandKind } from './tenantCommandKindMember.js';
 import { platformCommandKind } from './tenantCommandKindPlatform.js';
 import { platformTenantCommandKind } from './tenantCommandKindPlatformTenant.js';
+import { linkCommandKind } from './tenantCommandKindLink.js';
 import { serviceCommandKind } from './tenantCommandKindService.js';
 import { captureTenantData, recordRefusalCause, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
@@ -47,6 +48,7 @@ const TENANT_COMMAND_KINDS = Object.freeze([
   platformTenantCommandKind,
   intakeCommandKind,
   serviceCommandKind,
+  linkCommandKind,
 ] as const);
 type TenantCommandPrincipal = Parameters<(typeof TENANT_COMMAND_KINDS)[number]['place']>[0];
 /** The principal's kind, by its own `realm` data property. A tenant member's
@@ -369,6 +371,29 @@ export async function runTenantCommandTransaction<T>(
             // A command's audited reads are written in this place's store too, kept or rolled back with its commit.
             ...(journal.appendReadAudit
               ? { appendReadAudit: (rows) => invoke({ rows }, (input) => journal.appendReadAudit!(input.rows)) }
+              : {}),
+            /* Links are this place's too: minted with the command's commit, opened and re-read under its fence, and
+               revoked with a delete in the same transaction. The row is the platform's, outside the row scope. */
+            ...(journal.mintLink ? { mintLink: (row: CommandLinkRow) => invoke({ row }, (input) => journal.mintLink!(input.row)) } : {}),
+            ...(journal.revokeLinks
+              ? {
+                  revokeLinks: (appId: string, resource: string, rowKey: string, name: string | undefined, now: number) =>
+                    invoke({ appId, resource, rowKey, name, now }, (input) =>
+                      journal.revokeLinks!(input.appId, input.resource, input.rowKey, input.name, input.now),
+                    ),
+                }
+              : {}),
+            ...(journal.openLink
+              ? {
+                  openLink: (appId: string, id: string, now: number) =>
+                    invoke({ appId, id, now }, (input) => journal.openLink!(input.appId, input.id, input.now)),
+                }
+              : {}),
+            ...(journal.readLink
+              ? {
+                  readLink: (appId: string, id: string, now: number) =>
+                    invoke({ appId, id, now }, (input) => journal.readLink!(input.appId, input.id, input.now)),
+                }
               : {}),
           }),
         }
