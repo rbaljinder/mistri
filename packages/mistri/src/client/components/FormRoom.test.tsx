@@ -5,11 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const calls: Array<[string, Record<string, unknown>]> = [];
 let answered: unknown = { reference: 'CALL-7' };
+let refused: Error | undefined;
 vi.mock('../../../../kit/src/client/core.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../../kit/src/client/core.js')>()),
   api: vi.fn(async (path: string, body: Record<string, unknown>) => {
     calls.push([path, body]);
     if (path === '/api/commands/prepare') return { expectedVersion: 0, initial: { subject: 'Evening window', minutes: 30 } };
+    if (refused) throw refused;
     return { status: 'applied', receiptId: 'r1', command: 'logCall', commandVersion: 2, result: answered };
   }),
 }));
@@ -44,6 +46,7 @@ afterEach(() => {
   cleanup();
   calls.length = 0;
   answered = { reference: 'CALL-7' };
+  refused = undefined;
 });
 
 test('steps and a done screen, submitted as the signed-in command envelope that names no record', async () => {
@@ -102,4 +105,15 @@ test('what the command said it did is the done message, and an action with nothi
   fireEvent.click(await screen.findByRole('button', { name: 'Submit' }));
   expect(await screen.findByText('Posted 55 rent charges for October 2026.')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Fill in another' })).toBeNull();
+});
+
+test("a signed-in form's state refusal keeps the record's wording, where a public form's reads for the answers", async () => {
+  refused = Object.assign(new Error('This call is already closed.'), { status: 409, code: 'ineligible_state', outcome: 'not_applied' });
+  draw({ id: 'post-rent', label: 'Post rent', command: { id: 'postRent', version: 1, input: [] } } as unknown as Parameters<
+    typeof draw
+  >[0]);
+  fireEvent.click(await screen.findByRole('button', { name: 'Submit' }));
+  expect(await screen.findByText('This call is already closed.')).toBeVisible();
+  expect(screen.getByText(/Refresh to see where it stands/)).toBeVisible();
+  expect(screen.queryByText(/Review your answers/)).toBeNull();
 });

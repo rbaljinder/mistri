@@ -50,8 +50,10 @@ const IMMUTABLE = 'public, max-age=31536000, immutable';
    and grouped grid each moved a ceiling by what they measured, about 0.5% above. The Workbench left for its own
    repository, and its ceiling with it. Complete cold visits at rc.16, measured: 252.2 KB the staff sign-in, 457.7 KB
    Forecourt's list, 570.5 KB Tick's list. rc.23's pages, steps, page presentations and form drafts (the App script's
-   ceiling moved with them in bundle-budget.mjs) took Forecourt's list to 473.9 KB. */
-const FIRST_PAINT_WIRE_KB = { public: 260, app: 488, workshop: 590 };
+   ceiling moved with them in bundle-budget.mjs) took Forecourt's list to 473.9 KB. rc.47's public-form refusal and
+   reply words, radios from a table and the dark bar's workspace tab took the staff sign-in to 260.3 KB and Tick's list to
+   590.4 KB; both moved about 0.5% above. */
+const FIRST_PAINT_WIRE_KB = { public: 262, app: 488, workshop: 594 };
 const NEVER = {
   public: ['/assets/shell', '/assets/chrome', '/assets/tenant'],
   app: ['/assets/tenant', '/assets/public'],

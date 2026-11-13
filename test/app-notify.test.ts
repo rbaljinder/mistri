@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
+import { parseAppConfig, resolveResources } from '../packages/mistri/src/shared/app.js';
+import { tenantPersonColumnProblem } from '../packages/mistri/src/shared/appMe.js';
 import { appKeepsInbox, appNotifyRules, notifyAdvisories } from '../packages/mistri/src/shared/appNotify.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 
@@ -228,8 +229,37 @@ test("in a tenant App a person is told by account id, and the check says when au
     [true, false],
   );
   assert.equal(rule.to[1].account, undefined);
-  // auth.me names "email" in a tenant App: every person reached would be nobody, silently. Advice, not a refusal.
-  assert.match(notifyAdvisories(tenant, schema)[0], /looks like an email column\. In a tenant App it holds each person's account id/);
+  // auth.me names "email" in a tenant App: every person reached would be nobody, silently. The App is refused, not advised.
+  assert.deepEqual(notifyAdvisories(tenant, schema), []);
+  const refusal = /auth\.me: "email" holds an email, and a tenant App finds each person by their account's id/;
+  assert.match(tenantPersonColumnProblem(tenant)!, refusal);
+  assert.ok(resolveResources(tenant, schema).problems.some((problem) => refusal.test(problem)));
+  assert.equal(tenantPersonColumnProblem(signed), undefined, "an App's people hold emails");
+  for (const column of ['account_id', 'mailbox_id', 'owner'])
+    assert.equal(tenantPersonColumnProblem({ auth: { ...tenant.auth, me: { from: 'person', column } } }), undefined, column);
+  // A name with "mail" in it, however it is cased or joined, and a column the App itself formats as an email, are refused.
+  for (const column of ['work_mail', 'gmail_id', 'userMail', 'EMAIL_ADDRESS'])
+    assert.match(
+      tenantPersonColumnProblem({ auth: { ...tenant.auth, me: { from: 'person', column } } })!,
+      new RegExp(`"${column}" holds an email`),
+      column,
+    );
+  assert.match(
+    tenantPersonColumnProblem({
+      auth: { ...tenant.auth, me: { from: 'person', column: 'contact' } },
+      resources: { person: { display: { contact: { format: 'email' } } } },
+    } as never)!,
+    /"contact" holds an email/,
+  );
+  assert.equal(
+    tenantPersonColumnProblem({
+      auth: { ...tenant.auth, me: { from: 'person', column: 'contact' } },
+      resources: { person: { display: { contact: { format: 'phone' } } } },
+    } as never),
+    undefined,
+  );
+  // A non-tenant App's people are found by email, so none of it applies.
+  assert.equal(tenantPersonColumnProblem({ auth: { ...signed.auth!, me: { from: 'person', column: 'gmail_id' } } }), undefined);
   // An App's people hold emails: "email" is right there, and an id-like column is named.
   assert.deepEqual(notifyAdvisories(signed, schema), []);
   const byId = { ...signed, auth: { ...signed.auth!, me: { from: 'person', column: 'account_id' } } };

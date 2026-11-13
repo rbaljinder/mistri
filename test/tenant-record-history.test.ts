@@ -41,6 +41,7 @@ const names = {
   parent: 'db_parent',
   child: 'db_child',
   country: 'db_country',
+  file: 'db_file',
 };
 const insert = (id = 'created', name = 'Created'): InsertRequest => ({ table: 'item', values: { id, business_id: id, name } });
 const remove = (id = 'existing', table = 'item'): DeleteRequest => ({ table, key: { id } });
@@ -70,7 +71,7 @@ function gate() {
 }
 
 const SCHEMA = {
-  tables: ['db_child', 'db_parent', 'db_item', 'db_hidden', 'db_fixed', 'db_local', 'db_country'],
+  tables: ['db_child', 'db_parent', 'db_item', 'db_hidden', 'db_fixed', 'db_local', 'db_country', 'db_file'],
   sqlite: `PRAGMA foreign_keys=ON;
     CREATE TABLE db_item (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT COLLATE NOCASE NOT NULL,
       business_id TEXT NOT NULL, name TEXT COLLATE NOCASE NOT NULL, note TEXT DEFAULT NULL,
@@ -84,7 +85,9 @@ const SCHEMA = {
     CREATE TABLE db_parent (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL, name TEXT NOT NULL);
     CREATE TABLE db_child (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL,
       parent_id TEXT NOT NULL REFERENCES db_parent(id), name TEXT NOT NULL);
-    CREATE TABLE db_country (code TEXT PRIMARY KEY NOT NULL, name TEXT);`,
+    CREATE TABLE db_country (code TEXT PRIMARY KEY NOT NULL, name TEXT);
+    CREATE TABLE db_file (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL, name TEXT NOT NULL, data BLOB);
+    INSERT INTO db_file VALUES ('file-row','north','front.png',X'89504E470D0A1A0A'),('empty-file','north','none.png',NULL);`,
   postgres: `
     CREATE TABLE public.db_item (id text PRIMARY KEY, tenant_id text NOT NULL,
       business_id text NOT NULL, name text COLLATE ${CASE_INSENSITIVE} NOT NULL, note text DEFAULT NULL,
@@ -98,7 +101,10 @@ const SCHEMA = {
     CREATE TABLE public.db_parent (id text PRIMARY KEY, tenant_id text NOT NULL, name text NOT NULL);
     CREATE TABLE public.db_child (id text PRIMARY KEY, tenant_id text NOT NULL,
       parent_id text NOT NULL REFERENCES public.db_parent(id), name text NOT NULL);
-    CREATE TABLE public.db_country (code text PRIMARY KEY, name text);`,
+    CREATE TABLE public.db_country (code text PRIMARY KEY, name text);
+    CREATE TABLE public.db_file (id text PRIMARY KEY, tenant_id text NOT NULL, name text NOT NULL, data bytea);
+    INSERT INTO public.db_file VALUES ('file-row','north','front.png',decode('89504e470d0a1a0a','hex')),
+      ('empty-file','north','none.png',NULL);`,
 };
 const ROWS = `
     INSERT INTO db_item VALUES ('existing','north','same-business','Original',NULL),
@@ -357,6 +363,45 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         assert.equal((await f.row('created', names[table]))!.name, 'Created');
       });
     }
+
+    test('a row holding file bytes is judged without them, deleted, and kept with no Undo; one without bytes keeps its Undo', async (t) => {
+      const f = await fixture(t, dialect);
+      const seen: TenantHistoryImage[] = [];
+      let allowed = true;
+      const service = await f.issue({
+        authorizeDeletedRecord: (_principal, image) => {
+          seen.push(image);
+          return allowed;
+        },
+      });
+      // The policy decides: a refusal leaves the row and its bytes.
+      allowed = false;
+      await assert.rejects(service.remove(request, north, remove('file-row', 'file')), safe('not_applied'));
+      assert.ok(await f.row('file-row', 'db_file'));
+      allowed = true;
+      assert.deepEqual(plain(await service.previewRemove(request, north, remove('file-row', 'file'))), { impact: [], deleted: false });
+      seen.length = 0;
+      const deleted = await service.remove(request, north, remove('file-row', 'file'));
+      assert.deepEqual(plain(deleted.result), { affected: 1 });
+      assert.equal(await f.row('file-row', 'db_file'), null);
+      assert.ok(seen.length > 0);
+      for (const image of seen)
+        assert.deepEqual(plain(image), {
+          table: 'file',
+          key: { id: 'file-row' },
+          row: { id: 'file-row', tenant_id: 'north', name: 'front.png' },
+        });
+      // The bytes are gone with the row: no Undo is offered, and the entry stands as a barrier.
+      assert.equal(deleted.undoId, undefined);
+      const preview = await service.preview(request, north);
+      assert.equal(preview.next, undefined);
+      assert.deepEqual([preview.writes[0].kind, preview.writes[0].blocksUndo], ['delete', true]);
+      assert.doesNotMatch(JSON.stringify(preview), /front\.png|tenant_id|db_file/);
+      // A row whose bytes column is empty is whole, and keeps its Undo.
+      const whole = await service.remove(request, north, remove('empty-file', 'file'));
+      await service.undo(request, north, { expectedId: token(whole) });
+      assert.equal((await f.row('empty-file', 'db_file'))!.name, 'none.png');
+    });
 
     for (const kind of ['insert', 'delete'] as const) {
       test(`${kind} historical policy revocation blocks disclosure and inverse; missing row is no substitute for permission`, async (t) => {

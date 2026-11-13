@@ -138,7 +138,7 @@ import { keyHomesFor } from './appKeyHomes.js';
 import { apiCrossConnectionProblems, parseAppApi, type AppApiDef } from './appApi.js';
 import { parseAppAssistant } from './appAssistant.js';
 import { actionStamps, checkStamps } from './appStamps.js';
-import { checkMe, checkedPerson, personTable } from './appMe.js';
+import { checkMe, checkedPerson, personTable, tenantPersonColumnProblem } from './appMe.js';
 import { textRulesProblem } from '@mistriwork/engine/shared/textRules.js';
 import { servedDefined } from '@mistriwork/engine/shared/definedFields.js';
 import { flowsProblem } from './appFlows.js';
@@ -1811,7 +1811,8 @@ export function resolveResources(app: AppDef, schema: DatabaseSchema): { resourc
   const seen = new Set<string>();
   const person = checkedPerson(app, schema);
   const people = personTable(app, schema);
-  const personProblem = people.problem;
+  // A column that is not there is said as itself; only one that is can be judged by its name.
+  const personProblem = people.problem ?? tenantPersonColumnProblem(app);
   if (personProblem) problems.push(personProblem);
   /* Who a form's `me` default can be: nobody without sign-in, else a row of auth.me's table or an email. */
   const formPerson = app.auth ? { ...(people.table ? { table: people.table.id } : {}) } : null;

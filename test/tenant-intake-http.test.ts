@@ -347,7 +347,7 @@ test('a submission lands in the dealer its address names; every other address an
   for (const answer of answers) assert.deepEqual(answer, answers[0]);
   assert.equal(answers[0].status, 200);
   assert.equal(answers[0].reference, 'IGN-Ada');
-  assert.deepEqual(answers[0].keys, ['receipt', 'reference']);
+  assert.deepEqual(answers[0].keys, ['message', 'receipt', 'reference']);
   assert.equal(
     answers[0].headers.some((name) => name.startsWith('x-tablewalk')),
     false,

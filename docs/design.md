@@ -1319,6 +1319,7 @@ every look, so the picture it keeps reads on whatever page shows it.
     the shortest first, each to its words (a title up to 360px), and only then
     evenly to every column; a relative date and a number's chip are as wide as
     their words, not their longest possible form. The row's name
+    (the App's `recordLabel` where it says one, not the table's `number`)
     keeps 240px (its avatar's disc counted) before any other text column keeps
     more than 120px, so when a table is tight the secondary columns are cut
     first (a text title gives up the 240px to its own words where they are

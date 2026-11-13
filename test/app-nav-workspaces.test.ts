@@ -7,6 +7,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { servedApp } from '../packages/mistri/src/shared/appPayload.js';
 import { placePages } from '../packages/mistri/src/server/app/appPages.js';
+import { appAddressBook } from '../packages/mistri/src/shared/appAddress.js';
+import { viewOrder } from '../packages/mistri/src/shared/appModel.js';
 import { parseTestApp } from './support/commandCatalog.js';
 
 const LIST = { kind: 'list', from: 'task' } as const;
@@ -123,6 +125,49 @@ describe('nav workspaces', () => {
       /\[page-nav\] x: pages\/forecast\.page\.tsx: the App's nav is split into workspaces.*nav: \{ group: 'desk' \}.*The workspaces: desk, crm/,
     );
     assert.deepEqual(placePages(raw, [page(false)], 'x').nav, raw.nav, 'nav: false keeps it out of every workspace');
+  });
+
+  test('a view or a page standing in two workspaces is one room at one address, not a collision with itself', () => {
+    /* A field report: a page with nav: { group: ['work', 'mine'] } failed check with "Two routes cannot share a
+       path", because the menu's order listed its key twice and its second claim found its first. */
+    const raw = {
+      name: 'x',
+      views,
+      home: 'tickets',
+      resources: { task: {} },
+      nav: [space('desk', ['tickets', 'shared']), space('crm', ['leads', 'shared'])],
+    };
+    const forecast = {
+      key: 'forecast',
+      module: './pages/forecast.page.tsx',
+      fields: { label: 'Forecast', reads: ['task'], nav: { group: ['desk', 'crm'] } },
+    };
+    const app = parseTestApp(placePages(raw, [forecast], 'x'), 'test/app.json');
+    const schema = {
+      label: 'demo',
+      dialect: 'sqlite' as const,
+      readAt: '',
+      tables: [{ id: 'task', name: 'task', columns: [{ name: 'id', type: 'integer', primaryKey: true }] }],
+      foreignKeys: [],
+    };
+    const served = servedApp(app, schema as never);
+    const order = viewOrder(served);
+    assert.deepEqual(
+      order.filter((key) => key === 'shared' || key === 'forecast'),
+      ['shared', 'forecast'],
+    );
+    const book = appAddressBook({
+      views: served.views as never,
+      order,
+      resources: served.resources,
+      pages: served.pages ?? [],
+      tables: schema.tables as never,
+      inbox: false,
+      assistant: false,
+      directory: false,
+    });
+    assert.deepEqual(book.problems, []);
+    assert.equal(book.views.get('shared'), 'shared');
   });
 
   test("workspaces stand in the bar across the window, so a header held in the sidebar's head is refused", () => {

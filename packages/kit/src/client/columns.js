@@ -92,7 +92,9 @@ export function planColumn(meta, name, rows) {
        them turns invoice 1001 into "1,001", which reads as a quantity and is
        not what the value means. */
     const identifier = Boolean(meta?.primaryKey || meta?.references || meta?.identifier);
-    const decimals = identifier ? 0 : Math.max(0, ...values.map(countDecimals));
+    /* A worked-out figure (an average, a computed number) says its places, never the six an average of whole
+       numbers carries: `places` (shared/rollups.ts DERIVED_PLACES). */
+    const decimals = identifier ? 0 : Math.min(meta?.places ?? 6, Math.max(0, ...values.map(countDecimals)));
     const group = !identifier && values.some((v) => Math.abs(Number(v)) >= 10000);
     return { ...plan, kind: 'number', align: 'right', decimals, group, identifier };
   }

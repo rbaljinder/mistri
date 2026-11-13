@@ -37,6 +37,7 @@ import { Button } from '@mistriwork/ui/Button.js';
 import { Field, type AnswerKind } from '@mistriwork/ui/Field.js';
 import { InputSlot, builtInInputId } from '@mistriwork/kit/client/components/inputRenderers.js';
 import { say } from '../copy/forms/components/CommandFields.js';
+import { ChoiceRadios } from './ChoiceRadios.js';
 import type { DefinedField } from '@mistriwork/engine/shared/definedFields.js';
 import type { HeldTarget } from './HeldFiles.js';
 import { forgetHeldFile } from '../heldFileNames.js';
@@ -656,22 +657,16 @@ export function CommandFieldControl({
     const chosen = field.options.findIndex((option) => option.value === value);
     if (asRadios(field)) {
       return (
-        <div
-          className="command-choices"
-          role="radiogroup"
+        <ChoiceRadios
           id={id}
-          aria-labelledby={`${id}-label`}
-          aria-describedby={describedBy}
-          aria-required={field.required || undefined}
-          aria-invalid={invalid || undefined}
-        >
-          {field.options.map((option, index) => (
-            <label className="command-choice" key={`${typeof option.value}:${option.value}`}>
-              <input type="radio" name={id} checked={index === chosen} disabled={disabled} onChange={() => onChange(option.value)} />
-              {option.label}
-            </label>
-          ))}
-        </div>
+          options={field.options}
+          value={value}
+          describedBy={describedBy}
+          required={field.required}
+          invalid={invalid}
+          disabled={disabled}
+          onChange={onChange}
+        />
       );
     }
     // The tool's listbox, by position: a value may be a number, and a listbox's values are text.

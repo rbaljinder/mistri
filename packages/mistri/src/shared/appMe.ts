@@ -184,6 +184,24 @@ export function peopleByAccount(app: Pick<AppDef, 'auth'>): boolean {
 }
 
 /**
+ * Why a tenant App's `auth.me.column` cannot be the column its people are found by, or undefined. A tenant App
+ * finds each person by their account's id (one account, a row in each of its tenants), so a column of emails
+ * matches nobody: a mention, a notice and `me` reach no one, and nothing says so at run time. The catalog cannot
+ * say what a text column holds; the App's display rule for it (`format: 'email'`) or its name can: anything with
+ * "mail" in it (`email`, `gmail_id`, `userMail`), bar a mailbox, which is a place and not an address.
+ */
+export function tenantPersonColumnProblem(app: Pick<AppDef, 'auth' | 'resources'>): string | undefined {
+  const me = app.auth?.me;
+  if (!me || !isTenantApp(app)) return undefined;
+  const declared = app.resources?.[me.from]?.display?.[me.column]?.format === 'email';
+  if (!declared && !/mail(?!box)/i.test(me.column)) return undefined;
+  return (
+    `auth.me: "${me.column}" holds an email, and a tenant App finds each person by their account's id, so a mention, ` +
+    "a notice and me would reach nobody. Name the column holding the account's id (what a membership names), and keep the email in a column of its own."
+  );
+}
+
+/**
  * `auth.me` against one catalog: the table people are rows of, with one key and a text column holding the
  * email — or, in a tenant App, the account's id, which is what a membership names (one account, a row in each
  * of its tenants).

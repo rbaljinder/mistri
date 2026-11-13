@@ -238,8 +238,9 @@ export function MultiStepForm<Field extends string = string>({
     void (last ? complete() : move('next'));
   };
   /* The bar and its count beside it. The count is the bar's own name said again for the eye, so it is hidden from
-     assistive technology, which hears the bar's. */
-  const progressRow = (
+     assistive technology, which hears the bar's. A form of one step has no way through to show: "Step 1 of 1" over a
+     full bar said nothing, so neither is drawn. */
+  const progressRow = boundedSteps.length > 1 && (
     <div className="multi-step-progress">
       <ProgressBar
         min={1}

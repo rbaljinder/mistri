@@ -34,6 +34,7 @@
  */
 import type { SqlStyle } from './filter.js';
 import { noteRead } from './query.js';
+import { DERIVED_PLACES } from './rollups.js';
 import type { ColumnMeta, DatabaseSchema } from './schema.js';
 
 export const COMPUTED_TYPES = ['boolean', 'number', 'date', 'text'] as const;
@@ -102,7 +103,8 @@ export interface ComputedPath extends ComputedColumn {
   on: string;
 }
 
-/** What a computed column is to anything that reads columns: typed, never written, never a key. */
+/** What a computed column is to anything that reads columns: typed, never written, never a key. A number is said to
+    DERIVED_PLACES, as an average is: `minutes / 60` read 1.3333333. */
 export function computedColumnMeta(name: string, computed: Pick<ComputedColumn, 'type'>): ColumnMeta {
   return {
     name,
@@ -110,6 +112,7 @@ export function computedColumnMeta(name: string, computed: Pick<ComputedColumn, 
     nullable: computed.type !== 'boolean',
     primaryKey: false,
     writable: false,
+    ...(computed.type === 'number' ? { places: DERIVED_PLACES } : {}),
   };
 }
 

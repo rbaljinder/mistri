@@ -147,6 +147,7 @@
 :root[data-visual-theme] .app-mode .topbar button.account:hover { background: color-mix(in srgb, var(--nav-ink) 5%, transparent); }
 :root[data-visual-theme] .app-mode .topbar .tn-group.active > .tn-group-button { color: var(--nav-accent); }
 :root[data-visual-theme] .app-mode .topbar .tn-group.active > .tn-group-button::after { background: var(--nav-accent); }
+:root[data-visual-theme] .app-mode .topbar .workspace-tab[aria-current="page"]::after { background: var(--nav-accent); }
 :root[data-visual-theme] .app-mode .topbar .tn-group-button[aria-expanded="true"] { color: var(--nav-ink); background: color-mix(in srgb, var(--nav-ink) 7%, transparent); }
 :root[data-visual-theme] .app-mode .topbar .mode { background: transparent; border-color: var(--nav-line); }
 /* Danger is checked against the palette's surface, not an unrelated nav
@@ -329,8 +330,10 @@
   color: var(--nav-ink);
 }
 /* A top bar's menu: its entries and the folded Menu stand on the bar, which wears nav.ground (above), so the same
-   inks; only the menu, since the search beside it is a field on the page's surface. */
-:root[data-visual-theme] .app-mode .topbar .tn-links {
+   inks; only the menu, since the search beside it is a field on the page's surface. The workspaces' tabs stand on
+   the same bar (appChrome.js renderWorkspaces): left the page's ink, the current one was dark on a dark bar, and no
+   pair check read was the one drawn (a field report). */
+:root[data-visual-theme] .app-mode .topbar :is(.tn-links, .workspace-host) {
   --ink: var(--nav-ink);
   --ink-muted: var(--nav-muted);
   --ink-subtle: var(--nav-muted);

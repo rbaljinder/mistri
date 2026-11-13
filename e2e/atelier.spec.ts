@@ -104,11 +104,11 @@ test.describe('Atelier back office', () => {
       await form.getByRole('button', { name: 'Continue' }).click();
       await form.getByRole('button', { name: 'Place order' }).click();
 
-      // The handler refuses the line by its cell: said on this step, kept on the cell, and nothing is placed.
-      await expect(form.getByRole('alert')).toContainText('Products, row 1, Quantity: A line takes a whole number from 1 to 20.');
-      expect(Number(scalar(sample.db, 'SELECT count(*) FROM sales_order'))).toBe(orders);
-      await form.getByRole('button', { name: 'Items' }).click();
+      // The handler refuses the line by its cell: the form opens the step that holds it and says it beside the cell, and nothing is placed.
+      await expect(form.getByRole('progressbar')).toHaveAccessibleName('Step 2 of 3: Items');
       await expect(items.locator('td.is-invalid')).toHaveCount(1);
+      await expect(items.locator('td.is-invalid')).toContainText('A line takes a whole number from 1 to 20.');
+      expect(Number(scalar(sample.db, 'SELECT count(*) FROM sales_order'))).toBe(orders);
       await items.getByRole('textbox', { name: 'Quantity, 1' }).fill('2');
       await form.getByRole('button', { name: 'Continue' }).click();
       await form.getByRole('button', { name: 'Place order' }).click();

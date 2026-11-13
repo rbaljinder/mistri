@@ -290,6 +290,18 @@ describe('the statement, on each engine', () => {
     assert.match(compileBreakdown(served, grouped, ANSI_STYLE).text, /GROUP BY[\s\S]*|CASE WHEN/);
   });
 
+  test("a list's tab over a computed yes/no column is that column's `= true`, a WHERE on each engine", () => {
+    for (const [dialect, style, yes] of [
+      ['sqlite', ANSI_STYLE, /WHERE \(+CASE WHEN[\s\S]*THEN 1 ELSE 0 END\)+ = \?/],
+      ['postgres', POSTGRES_STYLE, /WHERE \(+CASE WHEN[\s\S]*THEN TRUE ELSE FALSE END\)+ = \$\d/],
+    ] as const) {
+      const served = withRollups(app(), catalog(dialect), NOW);
+      const parsed = textToView(served, 'task is_overdue = true show name');
+      assert.deepEqual(parsed.errors, [], dialect);
+      assert.match(compileView(served, withViewComputed(served, parsed.view!), style).text, yes, dialect);
+    }
+  });
+
   test('its name and type reach the generated types', () => {
     const text = typesForSchema(withRollups(app(), catalog('sqlite'), NOW));
     assert.match(text, /task: [^;]*"is_overdue" \| "days_open"/);

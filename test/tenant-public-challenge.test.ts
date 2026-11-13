@@ -109,7 +109,9 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
         headers: { 'x-mistri-challenge': 'person-4' },
       });
       assert.equal(decoy.status, 200, decoy.text);
-      assert.deepEqual(Object.keys(decoy.body).sort(), ['receipt', 'reference']);
+      // Shaped as a person's answer is: the thank-you the command declares included.
+      assert.deepEqual(Object.keys(decoy.body).sort(), ['message', 'receipt', 'reference']);
+      assert.equal(decoy.body.message, 'Application received.');
       assert.deepEqual((await written(f)).lead, [{ tenant_id: 'north', name: 'Dee' }]);
     });
 

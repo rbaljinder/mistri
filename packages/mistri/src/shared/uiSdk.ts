@@ -84,6 +84,7 @@ export const UI_EXPORTS = [
   'tokens',
   'useSectionSize',
   'useCommand',
+  'useGranted',
   'useAction',
   'useViewer',
   'useFile',

@@ -218,11 +218,17 @@ const require = createRequire(join(ROOT, 'package.json'));
    instantiations hold, as do synthetic's and Ignition's.
    rc.34: Ignition measures 193,923 symbols, 23 past: the command `db` gains `insertMany` and `updateWhere`, two
    methods on the table writer every table shares, read once, nothing per table. Symbols rise to about 1.5% above;
-   types and instantiations hold. */
+   types and instantiations hold.
+   rc.47: a tab now names a segment, a state or a yes/no column and nothing else, so the types are judged against the
+   segments the App declares. The synthetic App registers its root's two, and Ignition's committed types file gained the
+   `Segments` block the real generator writes for its four tables with them (it was written before the block existed, and
+   a tab then had no segments to be judged against). Ignition measures 66,238 types, 338 past, and 242,299
+   instantiations; the block is one name list per table, nothing a table's columns multiply. Types rise to about 1.5%
+   above; the rest hold. */
 export const BUDGET = {
   synthetic: { types: 184_400, instantiations: 991_600, symbols: 480_200 },
   compass: { types: 32_500, instantiations: 149_000, symbols: 104_600 },
-  ignition: { types: 65_900, instantiations: 242_300, symbols: 196_800 },
+  ignition: { types: 67_200, instantiations: 242_300, symbols: 196_800 },
 };
 
 /* Seconds of an unloaded core, scaled from the process's wall time (`calibrate`): a

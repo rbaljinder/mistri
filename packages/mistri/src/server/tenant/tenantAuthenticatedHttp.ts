@@ -962,6 +962,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       assertActive: active,
       basePath: mount.base,
       ...(deployment.intake ? { submit: deployment.submitIntake, resume: deployment.resumeIntake, hold: deployment.holdIntake } : {}),
+      ...(captured.registry ? { commands: captured.registry } : {}),
     });
     /* A visitor's reads (`auth.public`): placed with one tenant by its public
        address (`?via=`) or by this App's mapped host, and answered by the

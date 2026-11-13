@@ -101,6 +101,8 @@ describe('a plain value', () => {
   test("is classified by the grid's planner on a row of one", () => {
     expect(sayValue(col('active', 'INTEGER'), 1)).toEqual({ kind: 'boolean', on: true, title: '1' });
     expect(sayValue(col('total', 'NUMERIC'), 12345.5)).toEqual({ kind: 'number', text: '12,345.5', title: '12345.5' });
+    // An average says its places (a field report: "3.333"); the value itself rides in the title.
+    expect(sayValue(col('mean_score', 'integer', { places: 2 }), 3.3333333)).toEqual({ kind: 'number', text: '3.33', title: '3.3333333' });
     // A key is an identifier and is never grouped.
     expect(sayValue(col('id', 'INTEGER', { primaryKey: true }), 17901)).toEqual({ kind: 'number', text: '17901', title: undefined });
     // One value cannot tell a price from a year, so a figure is grouped under 10,000 too; a year column is not.

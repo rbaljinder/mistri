@@ -31,7 +31,7 @@ import { say } from '../copy/forms/components/CommandForm.js';
 import { liveKeyText, registerEditing, releaseEditNotice, useEditNotice } from '@mistriwork/kit/client/liveState.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { CommandOutcome } from './CommandOutcome.js';
-import { outcomeOfOperation } from './outcomeModel.js';
+import { fieldWord, outcomeOfOperation } from './outcomeModel.js';
 import { dismissLabel, recordNounOf, repeatsTitle, theRecord } from './verbDialog.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 
@@ -363,7 +363,8 @@ export function CommandForm({
     close();
     go(rowView(owner.target, owner.key, named ?? headingOf(recordNounOf(owner.target))));
   };
-  const fieldLabel = operation?.field ? action.command.input.find((field) => field.name === operation.field)?.label : undefined;
+  const refusedInput = operation?.field ? action.command.input.find((field) => field.name === operation.field) : undefined;
+  const fieldLabel = refusedInput ? fieldWord(refusedInput.label, refusedInput) : undefined;
   const outcome =
     operation &&
     outcomeOfOperation(

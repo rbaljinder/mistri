@@ -58,7 +58,7 @@ import {
   viewportScale,
 } from '../core.js';
 import { opensRecord } from '../recordIntent.js';
-import { labelColumn as namingColumn } from '@mistriwork/engine/shared/schema.js';
+import { labelColumn as namingColumn, labelPath as namingPath } from '@mistriwork/engine/shared/schema.js';
 import { ListSubtitles } from './listSubtitles.js';
 import { datesAmong, dressFor, leadTonePath, maskedText, ruleSays, subtitlePath, type DisplayRule } from './valueModel.js';
 import { currencyPath } from '@mistriwork/engine/shared/money.js';
@@ -73,7 +73,7 @@ import { pinnedFor, pinsVersion, subscribePins } from '../pins.js';
 import { hasChildren } from '../nested.js';
 import { openFilterMenu, sortBy } from '../thmenu.js';
 import { AppColumnMenuButton, useAppColumnMenu } from './AppColumnMenu.js';
-import type { ColumnMeta, TableMeta } from '@mistriwork/engine/shared/schema.js';
+import type { ColumnMeta, DatabaseSchema, TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { DetailRow, Expander } from './Nested.js';
 import { Icon } from './Icon.js';
 import {
@@ -114,7 +114,7 @@ import { jsonValueOf, previewOf } from './jsonModel.js';
 import { vocabularyWord } from '@mistriwork/engine/shared/model.js';
 import { shell } from '../shellMode.js';
 import type { CellDraw } from './gridCellModel.js';
-import { parseLabelTemplate } from '@mistriwork/engine/shared/recordLabel.js';
+import { LABEL_SEGMENT, parseLabelTemplate } from '@mistriwork/engine/shared/recordLabel.js';
 import { say } from '../copy/lists/components/Grid.js';
 import { TAGS_TYPE, tagChips } from '@mistriwork/engine/shared/tagLists.js';
 import { addHostListener, removeHostListener, shellBody } from '../shellHost.js';
@@ -303,6 +303,31 @@ function drawnWords(display: DisplayRule | null, plan: Plan, value: unknown, lab
     return near?.text ?? (plan.showTime ? formatDateTime(raw) : formatDate(raw));
   }
   return (dress?.kind === 'tone' || dress?.kind === 'word' || dress?.kind === 'mark' ? dress.label : dress?.text) ?? value;
+}
+
+/**
+ * The column a list names its rows by, among those it draws: the App's record name where it says one, else the
+ * table's label, else the first column of words. The App's name comes first: a field report's tickets, named by their
+ * title, were cut to fifteen characters beside a wide `number` column, which the schema alone calls the name.
+ */
+export function rowNameColumn(
+  named: { schema: DatabaseSchema; table: TableMeta; authored: string | false | undefined } | undefined,
+  asked: readonly string[],
+  words: (name: string) => boolean,
+): string | undefined {
+  const naming = !named
+    ? undefined
+    : named.authored === undefined && !named.table.labelTemplate
+      ? namingColumn(named.table)
+      : namingPath(named.schema, named.table, named.authored);
+  if (naming === LABEL_SEGMENT) {
+    /* A name the catalog computes is the `$label` the grid is handed, where it asks for it; where it does not, the
+       template's own first column, which is what the name leads with. Neither: the first column of words, as before. */
+    const parsed = named?.table.labelTemplate ? parseLabelTemplate(named.table.labelTemplate) : undefined;
+    const first = parsed && 'paths' in parsed ? parsed.paths.find((path) => asked.includes(path)) : undefined;
+    return asked.includes(LABEL_SEGMENT) ? LABEL_SEGMENT : (first ?? asked.find(words));
+  }
+  return naming && asked.includes(naming) ? naming : asked.find(words);
 }
 
 /** A row's folded columns, each drawn as its own cell would draw it, for the detail line under the row's name. */
@@ -1010,14 +1035,17 @@ export function Grid({
       removeHostListener(window, VISUAL_THEME_EVENT, themeChanged);
     };
   }, [sizing]);
-  /* The column that names the row — the table's label where it is drawn,
-     else the first text — is read whole before the others (gridSizing.ts). */
-  const titleName = useMemo(() => {
-    const naming = table ? namingColumn(table) : undefined;
-    return naming && asked.includes(naming)
-      ? naming
-      : asked.find((name) => plans.get(name)?.kind === 'text' || Boolean(referenceLabels?.[name]));
-  }, [table, asked, plans, referenceLabels]);
+  /* The column that names the row is read whole before the others (gridSizing.ts). */
+  const recordLabel = table ? shell().recordLabel(table.id) : undefined;
+  const titleName = useMemo(
+    () =>
+      rowNameColumn(
+        table && { schema: state.schema, table, authored: recordLabel },
+        asked,
+        (name) => plans.get(name)?.kind === 'text' || Boolean(referenceLabels?.[name]),
+      ),
+    [table, state.schema, recordLabel, asked, plans, referenceLabels],
+  );
   const sizeHints = useMemo(
     () =>
       asked.map((name) => {

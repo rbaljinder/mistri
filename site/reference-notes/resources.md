@@ -31,7 +31,7 @@ account: {
 ```
 
 `rollup.count`, `rollup.sum`, `rollup.avg`, `rollup.min` and `rollup.max` read the rows that point at the
-record (an average of no rows is empty, and none runs through two references), and
+record (an average of no rows is empty, is said to two places, and none runs through two references), and
 `rollup.latest` reads a column of the newest of them: an order's
 `financial_status: rollup.latest('payment', 'status')` is its payment's own word,
 read where the payment writes it, so no command keeps a copy on the order in
@@ -126,7 +126,7 @@ functions: `coalesce(a, b, …)` (the first with a value), `round(x)` or
 `max(a, b, …)` of numbers or dates, which have no value where one of theirs has
 none (`computed.number('max(owed - paid, 0)')`). It is
 written into the statement, so it shows, sorts, filters and tones like a
-column, and a rollup sums it (`rollup.sum('task', 'overrun')`) or a dashboard
+column (a number is said to at most two places, its value kept whole), and a rollup sums it (`rollup.sum('task', 'overrun')`) or a dashboard
 window reads a computed date (`over: 'renews_on'`) when it reads only its
 row's own columns; it is never written, and `fields.write`, `form.show` and an action's
 `set` refuse it. A role is served it only where every column it reads is

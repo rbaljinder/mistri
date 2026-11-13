@@ -830,6 +830,19 @@ test('a tab word that is a state and a yes/no column is refused, naming both; a 
   );
 });
 
+test('a computed yes/no column is a tab word as a stored one is, and the list of yes/no columns names it', () => {
+  const resources = { work_order: { computed: { past_due: { type: 'boolean', value: 'due_on < today' } } } };
+  const parsed = app(resources, { views: { orders: { kind: 'list', from: 'work_order', tabs: [{ label: 'All' }, 'past_due'] } } });
+  const view = resolveViews(parsed, withRollups(parsed, schema)).orders as unknown as { error?: string; tabs: unknown[] };
+  assert.equal(view.error, undefined);
+  assert.deepEqual(view.tabs[1], { label: 'Past due', query: 'past_due = true', segment: 'past_due', slug: 'past_due' });
+  const stray = app(resources, { views: { orders: { kind: 'list', from: 'work_order', tabs: [{ label: 'All' }, 'archived'] } } });
+  assert.match(
+    String((resolveViews(stray, withRollups(stray, schema)).orders as unknown as { error?: string }).error),
+    /its yes\/no columns: past_due\./,
+  );
+});
+
 test('two tabs that are one address word, whichever case their segment or label spell it in, are refused with both', () => {
   assert.throws(
     () =>

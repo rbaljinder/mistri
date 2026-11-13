@@ -454,7 +454,8 @@ const CONTRAST_PAIRS: ReadonlyArray<readonly [keyof ThemePalette, keyof ThemePal
   ['inkSubtle', 'ground', 4.5, 'a faint caption on the page'],
   ['link', 'ground', 4.5],
   ['link', 'raised', 4.5],
-  ['navAccent', 'navGround', 4.5, "the menu's current entry"],
+  // The same accent underlines the current workspace and room on the bar (visualThemes.css), so one pair measures both.
+  ['navAccent', 'navGround', 4.5, "the menu's current entry and the underline marking the current workspace"],
   /* The accent is a fill, and is read as text in its ink (`accentInk`, the accent itself where a theme names none and
      it reads); the words drawn on a fill are `onAccent`. A bright brand accent can be a good fill and a poor text. */
   ['accentInk', 'surface', 4.5],
@@ -464,8 +465,8 @@ const CONTRAST_PAIRS: ReadonlyArray<readonly [keyof ThemePalette, keyof ThemePal
   ['onAccent', 'accent', 4.5, 'the words on an accent fill'],
   ['onPrimary', 'primary', 4.5, "the words on a form's primary action"],
   ['link', 'surface', 4.5],
-  ['navInk', 'navGround', 4.5, "the menu's entries"],
-  ['navMuted', 'navGround', 4.5, "the menu's group headings, counts and icons"],
+  ['navInk', 'navGround', 4.5, "the menu's entries and the current workspace"],
+  ['navMuted', 'navGround', 4.5, "the menu's group headings, counts and icons, and the other workspaces"],
   ...(['statusGood', 'statusWarning', 'statusCritical', 'statusInfo'] as const).flatMap(
     (role) =>
       [

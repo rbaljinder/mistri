@@ -712,10 +712,12 @@ export function navViewKeys(nav: readonly ServedNavNode[]): string[] {
  * Every view key in the order rooms are listed: the menu's, then the views
  * nav does not reference (a home nav does not list, and a list view only a
  * dashboard embeds). Never the keys'
- * own order — an object puts a key like "2024" before every other.
+ * own order — an object puts a key like "2024" before every other. Each key
+ * once: a view or page standing in two workspaces is one room, and listed
+ * twice it would claim its own address a second time (appAddress.ts).
  */
 export function viewOrder(app: { views: Readonly<Record<string, unknown>>; nav: readonly ServedNavNode[] }): string[] {
-  const keys = navViewKeys(app.nav).filter((key) => Object.hasOwn(app.views, key));
+  const keys = [...new Set(navViewKeys(app.nav))].filter((key) => Object.hasOwn(app.views, key));
   return [...keys, ...Object.keys(app.views).filter((key) => !keys.includes(key))];
 }
 

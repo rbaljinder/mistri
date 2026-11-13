@@ -21,6 +21,8 @@ export const say = defineMessages({
   nextIneligible: 'It is no longer in a state this applies to. Refresh to see where it stands.',
   nextForbidden: 'Your role may not do this. Ask someone who may.',
   nextNotFound: 'It is no longer there. Refresh to see what is.',
+  sentIneligible: 'Nothing was kept. Review your answers and send again, or come back later.',
+  sentNotFound: 'Something your answers name is no longer there. Change it and send again.',
   nextWait: 'Wait a moment and send again.',
   nextDuplicate: 'One like it already exists. Find that one instead of making another.',
   nextDefault: 'Nothing was changed. Review and send again.',

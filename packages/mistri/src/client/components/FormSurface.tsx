@@ -41,7 +41,7 @@ import { answered, maskedLast4, sensitiveText, stepSaid, type NameOf } from './r
 import { knownReferenceName } from './referenceNames.js';
 import './FormSurface.css';
 import { CommandOutcome } from './CommandOutcome.js';
-import { refusalNext, unknownNext, type Outcome } from './outcomeModel.js';
+import { fieldWord, refusalNext, unknownNext, type FieldWord, type Outcome } from './outcomeModel.js';
 import type { HeldTarget } from './HeldFiles.js';
 import { ReviewValue, type ReviewSource } from './ReviewValue.js';
 import { say } from '../copy/forms/components/FormSurface.js';
@@ -234,12 +234,24 @@ export function formRefusal(failure: Failure, fields: readonly AppCommandField[]
 /**
  * A failed send as the outcome view reads it (outcomeModel.ts): no answer, or a server fault with no refusal code,
  * is unknown — the submission key makes a second send a read of what was kept, never a second record; anything
- * else is a refusal in its own words, with the way on by its code.
+ * else is a refusal in its own words, with the way on by its code. Only a public door (`submission`) changes no record
+ * to refresh; a signed-in command form keeps the record's wording.
  */
-export function formFailureOutcome(failure: Failure, said: string, fieldLabel?: string): Outcome {
+export function formFailureOutcome(failure: Failure, said: string, fieldLabel?: FieldWord, submission = false): Outcome {
   if (failure.status === undefined || (failure.status >= 500 && !failure.code)) return { state: 'unknown', said, next: unknownNext() };
-  return { state: 'refused', said, next: refusalNext(failure.status === 429 ? 'rate_limited' : failure.code, fieldLabel) };
+  return { state: 'refused', said, next: refusalNext(failure.status === 429 ? 'rate_limited' : failure.code, fieldLabel, submission) };
 }
+
+/** The field a refusal names, as the sentence "Change … and send again" says it. */
+const refusedWord = (fields: readonly AppCommandField[], path: string): FieldWord | undefined => {
+  const label = commandPathLabel(fields, path);
+  return label === undefined
+    ? undefined
+    : fieldWord(
+        label,
+        fields.find((field) => field.name === path.split(/[.[]/)[0]),
+      );
+};
 
 /** The top-level names a set of fields draws: whether a refusal's field is on screen is whether its root is one. */
 export const drawsField = (fields: readonly AppCommandField[], path: string | undefined): boolean =>
@@ -517,16 +529,26 @@ export function FormSurface({
         refusal.field,
       );
       if (refusal.field) setProblems((before) => ({ ...before, [refusal.field!]: refusal.beside }));
-      // A host holding the step opens the one that asks for the refused field, where it is said beside it.
-      const holder = cursor && refusal.field ? (form.steps ?? []).findIndex((step) => step.fields.includes(rootOf(refusal.field!))) : -1;
+      // The step that asks for the refused field opens, where it is said beside it: the host's, when it holds the step.
+      const holder = refusal.field ? (form.steps ?? []).findIndex((step) => step.fields.includes(rootOf(refusal.field!))) : -1;
       if (cursor && holder >= 0 && holder !== cursor.step) {
         cursor.onStep(holder, refusal.beside);
+        return;
+      }
+      if (!cursor && holder >= 0 && !shown) {
+        setCurrent(holder);
+        requestFocus('invalid');
         return;
       }
       if (!shown) {
         setFailure(refusal.alone);
         setOutcome(
-          formFailureOutcome(error as Failure, refusal.alone, refusal.field ? commandPathLabel(fields, refusal.field) : undefined),
+          formFailureOutcome(
+            error as Failure,
+            refusal.alone,
+            refusal.field ? refusedWord(fields, refusal.field) : undefined,
+            visitor !== undefined,
+          ),
         );
       }
       requestFocus('invalid');
@@ -545,6 +567,7 @@ export function FormSurface({
     setFailure('');
     setOutcome(undefined);
     setReceipt(null);
+    setCurrent(0);
     requestFocus('first');
   };
 
@@ -824,9 +847,9 @@ export function FormSurface({
               onStepChange={(index: number) => {
                 setFailure('');
                 if (cursor) cursor.onStep(index);
-                else if (reviewing) setCurrent(index);
+                else setCurrent(index);
               }}
-              {...(cursor ? { step: cursor.step } : reviewing ? { step: current } : {})}
+              step={cursor ? cursor.step : current}
               validateStep={validateStep}
               onComplete={complete}
               presentation={inDialog ? 'dialog' : 'page'}

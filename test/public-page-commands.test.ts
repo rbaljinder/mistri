@@ -38,6 +38,7 @@ const enrolInput = { name: { label: 'Name', type: 'text', max: 20 } } as const;
 const component = (key: string) => ({ id: `page-${key}`, module: `./pages/${key}.page.tsx`, kind: 'page' });
 const CONTRACTS = {
   enrol: { public: true, input: enrolInput },
+  greet: { public: true, input: enrolInput },
   logEnrolment: { input: enrolInput },
 };
 
@@ -61,6 +62,13 @@ const RAW = {
       public: true,
       done: { title: 'Thanks' },
       command: 'enrol',
+    },
+    greeting: {
+      kind: 'form',
+      label: 'Greeting',
+      public: true,
+      done: { title: 'Thanks' },
+      command: 'greet',
     },
   },
   home: [{ view: 'lobby', signedOut: true }, { view: 'enrolments' }],
@@ -109,6 +117,24 @@ async function fixture(run: (f: Fixture) => Promise<void>, options: { challenge?
         const reference = `ENR-${actors.length.toString().padStart(4, '0')}`;
         await context.tx.insert({ table: 'enrolment', values: { name: input.name, reference } });
         return { reference, message: 'You are enrolled. Please take a seat.' };
+      },
+    }),
+    // Declares no message, and says one anyway, built from the visitor's own typing: the shape of a handler that says more
+    // than it declared.
+    greet: defineCommand({
+      targets: 'none',
+      source: 'main',
+      target: 'enrolment',
+      read: ['enrolment'],
+      write: ['enrolment'],
+      public: true,
+      input: enrolInput,
+      output: shape({ reference: text() }),
+      async handle(context, input) {
+        actors.push(context.actor.id);
+        const reference = `GRT-${actors.length.toString().padStart(4, '0')}`;
+        await context.tx.insert({ table: 'enrolment', values: { name: input.name, reference } });
+        return { reference, message: `Welcome, ${input.name}.` } as never;
       },
     }),
     logEnrolment: defineCommand({
@@ -413,17 +439,33 @@ test("the stock public form's decoy: filled, it is answered as accepted and noth
   await fixture(async (f) => {
     const decoy = await call(f.base, '/api/forms/apply', { input: { name: 'Bot' }, submission: key(70), trap: 'http://spam.example' });
     assert.equal(decoy.status, 200);
-    assert.deepEqual(Object.keys(decoy.body).sort(), ['receipt', 'reference']);
+    // Shaped as a real answer is, the words included: the thank-you the command declares, never one it returned.
+    assert.deepEqual(Object.keys(decoy.body).sort(), ['message', 'receipt', 'reference']);
+    assert.equal(decoy.body.message, 'You are enrolled. Please take a seat.');
     assert.equal(rows(f), 0);
     assert.deepEqual(f.actors, []);
     const person = await call(f.base, '/api/forms/apply', { input: { name: 'Ada' }, submission: key(71), trap: '' });
     assert.equal(person.status, 200);
+    assert.equal(person.body.message, 'You are enrolled. Please take a seat.');
     assert.equal(rows(f), 1);
     // Counted as a command's outcome, `decoy`, where an operator reads them; the value it typed is not.
     const outcomes = ended.filter((span) => span['mistri.command.id'] === 'enrol').map((span) => span['mistri.command.outcome']);
     assert.deepEqual(outcomes, ['decoy', 'applied']);
     assert.doesNotMatch(JSON.stringify(ended), /spam\.example/);
   }).finally(stop);
+});
+
+test('a door with a decoy says only a message its command declares: a templated one is left out, as the decoy leaves it out', async () => {
+  await fixture(async (f) => {
+    const decoy = await call(f.base, '/api/forms/greeting', { input: { name: 'Bot' }, submission: key(72), trap: 'x' });
+    const real = await call(f.base, '/api/forms/greeting', { input: { name: 'Ada' }, submission: key(73), trap: '' });
+    assert.equal(real.status, 200, real.text);
+    assert.deepEqual(Object.keys(real.body).sort(), Object.keys(decoy.body).sort(), 'the real reply and the decoy have the same keys');
+    assert.doesNotMatch(real.text, /Welcome/, 'the templated sentence is not returned');
+    // A declared literal is still said, by the real reply and the decoy alike.
+    const declared = await call(f.base, '/api/forms/apply', { input: { name: 'Ada' }, submission: key(74), trap: '' });
+    assert.equal(declared.body.message, 'You are enrolled. Please take a seat.');
+  });
 });
 
 test(

@@ -4,7 +4,7 @@
  * and a tenant App's (tenantPublicHttp.ts); only the writer differs.
  *
  *   POST /api/forms/<key>/steps/<step>  save one step          → { saved: '<step>' }
- *   POST /api/forms/<key>               submit the application → { reference, receipt }
+ *   POST /api/forms/<key>               submit the application → { reference, receipt, message? }
  *   POST /api/forms/<key>/resume        which steps are saved  → { saved: ['<step>', …] }
  *   POST /api/forms/<key>/status        the status check       → { status: { … } }
  *   POST /api/forms/<key>/claim         this browser's claim   → { claim } · { linked }   (formLinkHttp.ts)
@@ -35,7 +35,7 @@ import type { CaptureCommandFlags } from '../commands/commandFlags.js';
 import { commandFlagsOnce } from '../commands/commandFlagCapture.js';
 import { commandCatalog, type CommandCatalog } from '../commands/commandDb.js';
 import { CommandInputError } from '../commands/commandPayload.js';
-import { parseSubmission, publicPrincipal } from '../commands/formHttp.js';
+import { parseSubmission, publicMessage, publicPrincipal } from '../commands/formHttp.js';
 import { logicalResource } from '../../shared/app.js';
 import {
   DRAFT_GONE,
@@ -193,7 +193,7 @@ function savedFormReply(
     const claim = plan.claim && !result.replayed ? [claimCookie(key, plan.claim.token, secure)] : [];
     return {
       status: 200,
-      body: { reference, receipt: { id: result.receiptId, status: result.status } },
+      body: { reference, receipt: { id: result.receiptId, status: result.status }, ...publicMessage(result.result) },
       cookies: [draftCookie(key, null, days, secure), ...claim],
     };
   }

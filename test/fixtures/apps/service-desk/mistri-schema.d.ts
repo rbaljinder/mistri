@@ -155,6 +155,12 @@ export type Columns = {
   vendor: { id: 'number'; name: 'text'; contact_email: 'text'; support_tier: 'text' };
 };
 
+/** Each table's segments, by name: what a tab, a `table.segment` source and a bare word in a query may name. */
+export type Segments = {
+  change_request: "active" | "under_review";
+  incident: "active" | "critical" | "resolved_incidents";
+};
+
 /** The app config with this schema’s own names: use `satisfies App`
     (TS) or a JSDoc `@type` line (JS) on the default export. */
 export type App = TypedAppConfig<Tables, References>;
@@ -175,5 +181,5 @@ export type Flags<Manifest> = AppFlagValues<Manifest>;
 export type FlagName<Manifest> = keyof Flags<Manifest>;
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys } }
+  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments } }
 }

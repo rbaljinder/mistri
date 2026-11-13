@@ -62,6 +62,7 @@ export {
   useBreakdown,
   useComposer,
   useCommand,
+  useGranted,
   useFile,
   useFlags,
   useFormat,

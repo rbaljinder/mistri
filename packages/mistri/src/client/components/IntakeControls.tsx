@@ -25,6 +25,7 @@ import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { isAppIcon } from '@mistriwork/engine/shared/appIcons.js';
 import { say } from '../copy/forms/components/IntakeControls.js';
 import { amountIn, maskShown, moneySymbol, PLACE } from './fieldShown.js';
+import { ChoiceRadios } from './ChoiceRadios.js';
 
 type Field = AppCommandField;
 type Choice = Extract<Field, { type: 'choice' | 'choices' }>['options'][number];
@@ -156,6 +157,20 @@ function SourcedControl(props: IntakeControlProps) {
   if (!sourced) return null;
   const options = sourced;
   const drawn = { ...field, options, source: undefined } as typeof field;
+  /* Radios when the field says so, as a written choice's are (CommandFields), whatever the rows number. */
+  if (field.type === 'choice' && field.as === 'radios')
+    return (
+      <ChoiceRadios
+        id={id}
+        options={options}
+        value={value}
+        describedBy={props['aria-describedby']}
+        required={field.required}
+        invalid={props['aria-invalid'] === true || props['aria-invalid'] === 'true'}
+        disabled={disabled}
+        onChange={onChange}
+      />
+    );
   // A few rows are cards; more are the listbox (one) or checks (several), unless the field says how.
   if (field.type === 'choice' && field.as !== 'cards' && field.as !== 'buttons' && (field.as === 'select' || options.length > CARDS_MOST)) {
     const chosen = options.findIndex((option) => option.value === value);

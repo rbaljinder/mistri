@@ -616,6 +616,19 @@ export function useCommandHandle(ref: UiCommandRef, viewer: UiViewer): UiCommand
 }
 
 /**
+ * Whether this reader may run one of the App's commands, without running it: `useGranted('raiseInvoice')`. It reads
+ * what `useCommand(…).granted` reads (signed in, granted the command, and served the action or form that offers it),
+ * but a free-form page need not declare the command in `commands` to ask, since asking writes nothing: a page that
+ * shows an entry only to a role that may use it lists the commands it runs, not the ones it only asks about.
+ */
+export function useGranted(ref: UiCommandRef): boolean {
+  const host = useUiHost();
+  const viewer = useViewer();
+  const page = useContext(UiPageContext);
+  return useMemo(() => host.command(ref, page?.view).granted, [host, ref, page?.view, viewer.signedIn, viewer.account]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+/**
  * One of the App's fixed actions, a machine's verb or `action(label, { set })`, by its id: `useAction('startVisit')`. It
  * is held as a command is (`granted`, `available`, `reason`, `pending`, `run`, `open`, and the same outcome), but it is
  * the record page's own button: `run(record)` writes the action's `set` to that record by its key through the update

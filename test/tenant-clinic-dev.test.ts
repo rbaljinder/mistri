@@ -1,12 +1,12 @@
 /**
  * `mistri dev` on a tenant App (the clinic fixture): it serves, and once it answers it prints a sign-in per role,
  * each a member where its role works — a clinic role in every clinic, the operator in the platform realm —
- * and a restart signs the same people in again.
+ * and a restart signs the same people in again, even when dev.json names accounts the sign-in store does not hold.
  */
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import { cpSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
@@ -112,5 +112,54 @@ test('mistri dev serves a tenant App and prints a sign-in per role, each a membe
   assert.match(
     again.output,
     new RegExp(`reception +reception@example\\.test +${signIns.get('reception')!.password.replace(/[-]/g, '\\-')}`),
+  );
+  await again.stop();
+
+  // A held address dev.json names another id for is that account: the one the store holds is used, and it is given the
+  // password dev.json keeps, so the sign-in printed is the one that works.
+  const devFile = join(dir, '.mistri', 'dev.json');
+  const dev = JSON.parse(readFileSync(devFile, 'utf8')) as { accounts: Record<string, string>; passwords: Record<string, string> };
+  const kept = 'kept-in-dev-json-4821';
+  dev.accounts.reception = 'another-tree';
+  dev.passwords.reception = kept;
+  writeFileSync(devFile, JSON.stringify(dev));
+  const adopted = await start();
+  assert.doesNotMatch(adopted.output, /could not make the dev accounts/, adopted.output);
+  assert.match(adopted.output, /reception@example\.test in the sign-in store is not the reception account .* named; that account is used/);
+  assert.match(adopted.output, new RegExp(`reception +reception@example\\.test +${kept}`));
+  const signInAs = (origin: string, password: string) =>
+    fetch(`${origin}/api/auth/sign-in/email`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin },
+      body: JSON.stringify({ email: 'reception@example.test', password }),
+    });
+  assert.equal((await signInAs(adopted.origin, kept)).status, 200, 'the printed password signs the adopted account in');
+  assert.notEqual((await signInAs(adopted.origin, signIns.get('reception')!.password)).status, 200, 'the password it had is no longer one');
+  await adopted.stop();
+
+  // dev.json naming accounts the sign-in store does not hold (the store deleted, or another tree's) makes them again
+  // with the kept passwords, where it once refused every role (a field report).
+  rmSync(join(dir, '.mistri', 'config'), { recursive: true, force: true });
+  const remade = await start();
+  assert.doesNotMatch(remade.output, /could not make the dev accounts/, remade.output);
+  assert.match(remade.output, /the sign-in store does not hold the reception account .* named; it is made again/);
+  const session = await fetch(`${remade.origin}/api/auth/sign-in/email`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: remade.origin },
+    body: JSON.stringify({ email: 'reception@example.test', password: kept }),
+  });
+  assert.equal(session.status, 200, await session.clone().text());
+  const { user } = (await session.json()) as { user: { id: string } };
+  const member = await tenantTestClient(
+    remade.origin,
+    'clinic',
+    { accountId: user.id, email: 'reception@example.test', password: kept },
+    'north',
+  );
+  assert.equal((await member.enter('east')).ok, true);
+  assert.equal(
+    (JSON.parse(readFileSync(devFile, 'utf8')) as typeof dev).accounts.reception,
+    user.id,
+    'dev.json names the account made again',
   );
 });

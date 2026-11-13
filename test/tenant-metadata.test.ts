@@ -888,6 +888,14 @@ const hiddenSections: Array<[string, PageSection]> = [
   ['metric column', { kind: 'metric', from: 'note', path: 'item_id', fn: 'sum', column: 'hidden_secret' }],
   ['breakdown key', { kind: 'breakdown', from: 'note', path: 'item_id', by: 'hidden_secret' }],
   ['timeline detail', { kind: 'timeline', streams: [{ from: 'note', path: 'item_id', at: 'at', text: 'name', badge: 'hidden_secret' }] }],
+  [
+    'timeline stream side',
+    { kind: 'timeline', streams: [{ from: 'note', path: 'item_id', at: 'at', text: 'name', side: `hidden_secret = ${secret}` }] },
+  ],
+  [
+    'timeline side',
+    { kind: 'timeline', side: `hidden_secret = ${secret}`, streams: [{ from: 'note', path: 'item_id', at: 'at', text: 'name' }] },
+  ],
 ];
 for (const [name, section] of hiddenSections)
   test(`page projection omits hidden ${name} even in inactive sections`, () => {
@@ -1047,6 +1055,49 @@ test("a timeline's compact rows, one stream's or the section's, survive capture 
     ],
   );
   assert.equal(projectTenantMetadata(definition, [captured], schema()).pages.length, 1);
+});
+
+test("a timeline's far side, one stream's or the section's, survives capture and projection in a tenant App", () => {
+  /* A field report: a stream's `side` was refused by capture, so a tenant App's conversation could not set the
+     requester's rows against the desk's. The side is the stream's own read narrowed by one more condition, planned
+     on the context's scoped adapter as the stream is (tenantPageOperations.ts), so it reads only the tenant's rows. */
+  const input = parsePagesConfig(
+    {
+      pages: [
+        {
+          id: 'item-detail',
+          label: 'Item detail',
+          base: 'item',
+          sections: [
+            {
+              kind: 'timeline',
+              title: 'Conversation',
+              side: 'name = record.name',
+              streams: [
+                { from: 'note', whose: 'item_id', at: 'at', text: 'name' },
+                { from: 'note', whose: 'item_id', at: 'at', text: 'name', side: 'amount > 0' },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    'PAGE_FILE',
+  );
+  const definition = app();
+  const [captured] = captureTenantPages(definition, input);
+  const section = plain(captured.sections[0]) as { side?: string; streams: Array<{ side?: string }> };
+  assert.equal(section.side, 'name = record.name');
+  assert.deepEqual(
+    section.streams.map((stream) => stream.side),
+    [undefined, 'amount > 0'],
+  );
+  const projected = projectTenantMetadata(definition, [captured], schema()).pages[0].sections[0] as {
+    side?: string;
+    streams: Array<{ side?: string }>;
+  };
+  assert.equal(projected.side, 'name = record.name');
+  assert.equal(projected.streams[1].side, 'amount > 0');
 });
 
 test('read-only page projection strips related creation without losing the readable page', () => {

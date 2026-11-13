@@ -48,8 +48,21 @@ for (const name of ['relay', 'thread', 'service-desk']) {
         );
         assert.equal(
           readFileSync(resolve('test/fixtures/apps/service-desk/mistri-schema.d.ts'), 'utf8'),
-          typesForSchema({ ...schema, label: 'service-desk' }),
-          'Regenerate Service Atlas types when its seeded schema changes',
+          typesForSchema({
+            ...schema,
+            label: 'service-desk',
+            // The App's segments are typed beside its columns (a tab names one, or the checker refuses the word), as `mistri --export types` writes them.
+            tables: schema.tables.map((table) => ({
+              ...table,
+              segments: Object.fromEntries(
+                Object.entries(loaded.app.resources?.[table.name]?.segments ?? {}).map(([key, said]) => [
+                  key,
+                  typeof said === 'string' ? said : said.query,
+                ]),
+              ),
+            })),
+          }),
+          'Regenerate Service Atlas types when its seeded schema or its segments change',
         );
         execFileSync(
           process.execPath,

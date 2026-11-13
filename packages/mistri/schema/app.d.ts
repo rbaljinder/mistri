@@ -1611,7 +1611,7 @@ export interface AppListView<Table extends string = string, Column extends strin
   empty?: AppListEmpty;
   /** Tabs over the rows: a segment of the table by name, a segment with its own sort, or every row (`{ label }`). A
       word that is no segment names the resource's machine state or group (its label is the state's) or a yes/no
-      column (its label is the column's); a word two of these claim is refused with the readings to choose between. */
+      column, stored or computed (its label is the column's); a word two of these claim is refused with the readings to choose between. */
   tabs?: readonly AppTab[];
   /** Columns offered as quick filter boxes — a rollup or computed column too, a number's Min and Max (`'spent'`).
       A path up a reference filters by the record it names (`'account_id.industry_id'`); `{ has: 'opportunity',

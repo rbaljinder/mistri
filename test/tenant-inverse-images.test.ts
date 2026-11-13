@@ -173,10 +173,10 @@ function fake(options: { owned?: TenantOwnershipSnapshot; grants?: ResourceAcces
   };
 }
 
-test('private helper exposes five frozen methods and captures complete owner image without SQL', async () => {
+test('private helper exposes six frozen methods and captures complete owner image without SQL', async () => {
   const f = fake(),
     captured = await f.inverse.capture(request());
-  assert.deepEqual(Object.keys(f.inverse).sort(), ['capture', 'removeCreated', 'removeCurrent', 'restoreDeleted', 'visible']);
+  assert.deepEqual(Object.keys(f.inverse).sort(), ['capture', 'removable', 'removeCreated', 'removeCurrent', 'restoreDeleted', 'visible']);
   assert.ok(Object.isFrozen(f.inverse));
   assert.ok(Object.isFrozen(captured));
   assert.ok(Object.isFrozen(captured!.row));
@@ -320,7 +320,7 @@ test('remove and restore use one invocation each; restore omits only managed own
       return true;
     },
   });
-  const removed = await f.inverse.removeCurrent(request());
+  const { image: removed } = await f.inverse.removeCurrent(request());
   assert.equal(policies, 2);
   assert.equal(f.guard.calls(), 1);
   await f.inverse.restoreDeleted(removed);
@@ -410,7 +410,7 @@ test('image and request capture precede the delegated queue wait', async () => {
     input = request(),
     removal = f.inverse.removeCurrent(input);
   input.key.id = 'foreign';
-  const captured = await removal;
+  const { image: captured } = await removal;
   const restoring = structuredClone(captured),
     pending = f.inverse.restoreDeleted(restoring);
   restoring.row.tenant_id = 'south';
@@ -563,7 +563,7 @@ async function sqlite(t: TestContext) {
 
 test('SQLite delete and restore use actual complete owned image, preserving hidden owner and nullable values', async (t) => {
   const f = await sqlite(t);
-  const captured = await f.run((images) => images.removeCurrent(request()));
+  const { image: captured } = await f.run((images) => images.removeCurrent(request()));
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM item WHERE id='one'").get()!.n, 0);
   assert.equal(captured.row.tenant_id, 'north');
   assert.equal(captured.row.optional, null);
@@ -595,7 +595,7 @@ for (const [table, owner] of [
     const f = await sqlite(t);
     await assert.rejects(f.run((images) => images.removeCurrent({ table, key: { tenant_id: owner, id: 1 } })));
     assert.equal(f.db.prepare(`SELECT name FROM ${table}`).get()!.name, 'Original');
-    const captured = await f.run((images) => images.removeCurrent({ table, key: { tenant_id: 'north', id: 1 } }));
+    const { image: captured } = await f.run((images) => images.removeCurrent({ table, key: { tenant_id: 'north', id: 1 } }));
     await f.run((images) => images.restoreDeleted(captured));
   });
 
@@ -638,7 +638,7 @@ test('SQLite policy revocation after removal rolls back the actual deletion', as
 
 test('SQLite deleted-image policy remains required; restore refuses changed parent tenant', async (t) => {
   const f = await sqlite(t),
-    captured = await f.run((images) => images.removeCurrent(request()));
+    captured = (await f.run((images) => images.removeCurrent(request()))).image;
   assert.equal(
     await f.run(
       (images) => images.visible(captured, true),
@@ -653,7 +653,7 @@ test('SQLite deleted-image policy remains required; restore refuses changed pare
 
 test('SQLite hidden replacement cannot be overwritten by schema ON CONFLICT REPLACE', async (t) => {
   const f = await sqlite(t),
-    captured = await f.run((images) => images.removeCurrent(request()));
+    captured = (await f.run((images) => images.removeCurrent(request()))).image;
   f.db.exec("INSERT INTO item VALUES ('one','south','Hidden',9,NULL,'south-parent','us')");
   assert.equal(await f.run((images) => images.visible(captured, false)), false);
   await assert.rejects(f.run((images) => images.restoreDeleted(captured)));
@@ -674,7 +674,7 @@ test('SQLite current-row scope loss blocks removal and restored afterimage outsi
 
 test('SQLite policy loss after restoration rolls back the actual insert', async (t) => {
   const f = await sqlite(t),
-    captured = await f.run((images) => images.removeCurrent(request()));
+    captured = (await f.run((images) => images.removeCurrent(request()))).image;
   let calls = 0;
   await assert.rejects(
     f.run(

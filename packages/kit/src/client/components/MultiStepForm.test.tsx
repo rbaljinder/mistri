@@ -172,6 +172,17 @@ describe('MultiStepForm', () => {
     expect(screen.getByRole('progressbar', { name: 'Step 1 of 2: Identity' })).toBeTruthy();
     expect(screen.getByText('Step 1 of 2')).toBeTruthy();
   });
+
+  it('draws no bar and no count over a form of one step, in either style', () => {
+    for (const style of ['stepper', 'intake'] as const) {
+      const { unmount } = view({ steps: [steps[0]], style, completeLabel: 'Send' });
+      expect(screen.queryByRole('progressbar')).toBeNull();
+      expect(screen.queryByText(/Step 1 of 1/)).toBeNull();
+      expect(screen.getByRole('heading', { name: 'Identity' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy();
+      unmount();
+    }
+  });
 });
 
 describe('MultiStepForm, the intake style', () => {
