@@ -107,6 +107,19 @@ test('each step is saved on Continue and the review is drawn from memory; nothin
   expect(document.cookie).toBe('');
 });
 
+test("the done screen says the handler's own words when its reply carries them", async () => {
+  fetchMock.mockImplementation(async (url: string) => {
+    if (url.endsWith('/resume')) return answer(200, { saved: ['about-you', 'address'] });
+    return answer(200, { reference: 'APP-7K2M-QX4T-9BRD', receipt: { id: 'r1', status: 'applied' }, message: 'We will call you.' });
+  });
+  render(<SavedFormSurface form={{ ...form, done: { title: 'Application received', description: 'Thanks.' } }} appName="Ignition" />);
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: 'Submit application' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Application received' })).toBeInTheDocument());
+  expect(screen.getByText('We will call you.')).toBeInTheDocument();
+  expect(screen.queryByText('Thanks.')).toBeNull();
+});
+
 test('the leave guard is armed once a step is saved, and released on submit', async () => {
   server();
   render(<SavedFormSurface form={form} appName="Ignition" />);

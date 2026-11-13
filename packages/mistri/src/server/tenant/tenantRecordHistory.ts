@@ -360,7 +360,9 @@ export function bindTenantRecordHistory<Request>(input: TenantRequestRuntime<Req
         async (context, input) => {
           tenantRecord(input, ['table', 'key']);
           tenantRecord(input.key);
-          const image = await tenantInverseImages(context).removeCurrent(input);
+          const { image, complete } = await tenantInverseImages(context).removeCurrent(input);
+          // A row that held file bytes is gone with them: nothing could put it back.
+          if (!complete) return { result: { affected: 1 }, entry: unavailable('delete') };
           const steps: WriteStep[] = [{ table: image.table, key: image.key, before: image.row, wholeRow: true }];
           return { result: { affected: 1 }, entry: { kind: 'delete', summary: summarise('delete', steps), revertible: true, steps } };
         },
@@ -428,7 +430,7 @@ export function bindTenantRecordHistory<Request>(input: TenantRequestRuntime<Req
           async (context) => {
             // The same inverse eligibility/full-image policy as confirmed Delete,
             // without removing a row or publishing an Undo entry.
-            if (!(await tenantInverseImages(context).capture(input))) return denyTenant();
+            if (!(await tenantInverseImages(context).removable(input))) return denyTenant();
             return { impact: [] as [], deleted: false as const };
           },
           guard,

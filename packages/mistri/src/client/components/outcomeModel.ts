@@ -15,6 +15,7 @@
  * The body is the App's: the handler's `message`, its `refuse(...)` sentence,
  * a public form's `done` words. The title and the next step are the platform's.
  */
+import { fieldLabel as humanized } from '../../shared/command.js';
 import { say } from '../copy/forms/components/outcomeModel.js';
 
 type Waiting = 'sending' | 'checking' | 'queued' | 'approval';
@@ -30,9 +31,29 @@ export function pendingOf(result: unknown): 'queued' | 'approval' | undefined {
   return pending === 'queued' || pending === 'approval' ? pending : undefined;
 }
 
-/** What to do after a refusal, by its code: the words of the refusal are the App's, the way on is the platform's. */
-export function refusalNext(code: string | undefined, field?: string): string {
-  if (field) return say('nextField', { field });
+/** A field as a refusal names it: its label, and whether the label was read from the field's name (the author wrote none). */
+export type FieldWord = { label: string; derived: boolean };
+
+/** A field's word for a refusal: `derived` when the field's label is what its name reads as, which no author chose. */
+export const fieldWord = (label: string, field?: { name: string; label: string }): FieldWord => ({
+  label,
+  derived: field !== undefined && field.label === humanized(field.name),
+});
+
+/** A label inside a sentence: "Applicant name", read from a column's name, reads "applicant name". What an author wrote
+    ("Toyota model") stays as written, and a word that is all capitals ("VIN") or has a capital inside it keeps them. */
+const inSentence = ({ label, derived }: FieldWord) =>
+  derived && /^[A-Z][a-z]+(?![A-Z])/.test(label) ? label.charAt(0).toLowerCase() + label.slice(1) : label;
+
+/**
+ * What to do after a refusal, by its code: the words of the refusal are the App's, the way on is the platform's.
+ * A submission (a public form) changes no record the person can refresh to see, so a refusal of its state or of
+ * something it names says to look at the answers instead.
+ */
+export function refusalNext(code: string | undefined, field?: string | FieldWord, submission = false): string {
+  if (field) return say('nextField', { field: inSentence(typeof field === 'string' ? { label: field, derived: false } : field) });
+  if (submission && code === 'ineligible_state') return say('sentIneligible');
+  if (submission && code === 'not_found') return say('sentNotFound');
   switch (code) {
     case 'invalid_input':
       return say('nextInput');
@@ -96,7 +117,7 @@ interface OperationLike {
  */
 export function outcomeOfOperation(
   operation: OperationLike,
-  { record, untracked = false, fieldLabel }: { record?: { label: string }; untracked?: boolean; fieldLabel?: string } = {},
+  { record, untracked = false, fieldLabel }: { record?: { label: string }; untracked?: boolean; fieldLabel?: FieldWord } = {},
 ): Outcome {
   switch (operation.phase) {
     case 'pending':

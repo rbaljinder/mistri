@@ -1,8 +1,8 @@
 import { isPromise, isProxy } from 'node:util/types';
 import type { DeleteRequest, Filter, WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
-import { coerceForColumn, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { coerceForColumn, isBinaryType, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import type { ResourceAccess } from '../app/appAccess.js';
-import { journalImageMatches } from '@mistriwork/engine/server/journal.js';
+import { journalFieldsMatch, journalImageMatches } from '@mistriwork/engine/server/journal.js';
 import { captureTenantData, denyTenant, tenantIdentifier, tenantOptions, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import { parseTenantSelector, type TenantMembershipEvidence } from './tenantMembership.js';
 import { captureTenantOwnership, type TenantOwnershipSnapshot } from './tenantOwnership.js';
@@ -14,10 +14,18 @@ export interface TenantHistoryImage {
   readonly row: Record<string, Scalar>;
 }
 export type TenantDeletedRecordPolicy = (principal: TenantMembershipEvidence, image: TenantHistoryImage) => boolean | Promise<boolean>;
+/** A removed row's image, and whether it is the whole row: a row holding file bytes is
+ * judged and removed on the rest of its fields, and has no Undo (the bytes are not kept). */
+interface TenantRemovedImage {
+  readonly image: TenantHistoryImage;
+  readonly complete: boolean;
+}
 export interface TenantInverseImages {
   capture(input: DeleteRequest): Promise<TenantHistoryImage | undefined>;
+  /** Whether removeCurrent would take this row: Delete's preview. */
+  removable(input: DeleteRequest): Promise<boolean>;
   visible(image: TenantHistoryImage, deleted: boolean): Promise<boolean>;
-  removeCurrent(input: DeleteRequest): Promise<TenantHistoryImage>;
+  removeCurrent(input: DeleteRequest): Promise<TenantRemovedImage>;
   removeCreated(image: TenantHistoryImage): Promise<void>;
   restoreDeleted(image: TenantHistoryImage): Promise<void>;
 }
@@ -162,6 +170,8 @@ export function createTenantInverseImages(
     'actions',
     'me',
   ]);
+  const invalid = (type: string, value: unknown) =>
+    !scalar(value) || (typeof value === 'string' && /^<\d+ bytes>$/.test(value)) || coerceForColumn(type, value) !== value;
   const strings = (input: unknown): Set<string> => {
     try {
       if (!input || typeof input !== 'object' || isProxy(input)) return denyTenant();
@@ -216,18 +226,27 @@ export function createTenantInverseImages(
     if (rule.kind !== 'tenant' || (Object.hasOwn(input, rule.column) && input[rule.column] !== member.tenantId)) return denyTenant();
     return input as Record<string, string | number>;
   };
-  const imageFor = (table: TableMeta, row: Record<string, unknown>, givenKey?: unknown): TenantHistoryImage | undefined => {
+  /* `withoutBytes` is Delete's: a column of file bytes is read as its size, never the bytes, so no
+     image can put it back. Delete leaves those columns out of the image it judges and keeps no Undo;
+     every other caller needs the whole row. */
+  const imageFor = (
+    table: TableMeta,
+    row: Record<string, unknown>,
+    givenKey?: unknown,
+    withoutBytes = false,
+  ): TenantHistoryImage | undefined => {
     const rule = owned.ownership[table.id];
+    const bytes = new Set(
+      withoutBytes
+        ? table.columns.filter((column) => isBinaryType(column.type) && row[column.name] !== null).map((column) => column.name)
+        : [],
+    );
     if (
       rule.kind !== 'tenant' ||
       row[rule.column] !== member.tenantId ||
       Object.keys(row).length !== table.columns.length ||
       table.columns.some(
-        (column) =>
-          !Object.hasOwn(row, column.name) ||
-          !scalar(row[column.name]) ||
-          (typeof row[column.name] === 'string' && /^<\d+ bytes>$/.test(row[column.name] as string)) ||
-          coerceForColumn(column.type, row[column.name] as Scalar) !== row[column.name],
+        (column) => !Object.hasOwn(row, column.name) || (!bytes.has(column.name) && invalid(column.type, row[column.name])),
       )
     )
       return undefined;
@@ -243,7 +262,8 @@ export function createTenantInverseImages(
       const supplied = key(table, givenKey);
       if (Object.entries(actual).some(([column, value]) => supplied[column] !== value)) return undefined;
     }
-    return captureTenantData({ table: table.id, key: actual, row: row as Record<string, Scalar> });
+    const kept = bytes.size ? Object.fromEntries(Object.entries(row).filter(([column]) => !bytes.has(column))) : row;
+    return captureTenantData({ table: table.id, key: actual, row: kept as Record<string, Scalar> });
   };
   const imageInput = (input: TenantHistoryImage): TenantHistoryImage | undefined => {
     tenantRecord(input, ['table', 'key', 'row']);
@@ -259,19 +279,26 @@ export function createTenantInverseImages(
     return value;
   };
   const current = async (table: string, key: Record<string, string | number>) => query({ table, filter: filter(key), limit: 2, offset: 0 });
-  const capture = async (input: DeleteRequest): Promise<TenantHistoryImage | undefined> => {
+  const capture = async (input: DeleteRequest, withoutBytes = false): Promise<TenantRemovedImage | undefined> => {
     tenantRecord(input, ['table', 'key']);
     const table = eligible(input.table);
     if (!table) return undefined;
     const supplied = key(table, input.key),
       result = await current(table.id, supplied);
     if (result.rows.length !== 1) return undefined;
-    const image = imageFor(table, result.rows[0]);
-    if (!image || !(await journalImageMatches(reader, table.id, image.row)) || !(await permitted(image))) return undefined;
-    return image;
+    const image = imageFor(table, result.rows[0], undefined, withoutBytes);
+    if (!image) return undefined;
+    const complete = Object.keys(image.row).length === table.columns.length;
+    // Without its bytes the image is proved on the fields it keeps, at its key.
+    const matches = complete
+      ? await journalImageMatches(reader, table.id, image.row)
+      : await journalFieldsMatch(reader, table.id, image.key, image.row);
+    if (!matches || !(await permitted(image))) return undefined;
+    return { image, complete };
   };
   return Object.freeze<TenantInverseImages>({
-    capture: (input) => invoke(input, capture),
+    capture: (input) => invoke(input, async (input) => (await capture(input))?.image),
+    removable: (input) => invoke(input, async (input) => (await capture(input, true)) !== undefined),
     visible: (image, deleted) =>
       invoke({ image, deleted }, async (input) => {
         if (typeof input.deleted !== 'boolean') return denyTenant();
@@ -289,10 +316,11 @@ export function createTenantInverseImages(
       }),
     removeCurrent: (input) =>
       invoke(input, async (input) => {
-        const image = await capture(input);
-        if (!image) return denyTenant();
+        const removed = await capture(input, true);
+        if (!removed) return denyTenant();
+        const { image } = removed;
         if ((await remove({ table: image.table, key: image.key })).affected !== 1 || !(await permitted(image))) return denyTenant();
-        return image;
+        return removed;
       }),
     removeCreated: (input) =>
       invoke(input, async (input) => {

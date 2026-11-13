@@ -50,3 +50,11 @@ test('a list the server did not serve is read by the page', async () => {
   await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
   expect(await screen.findByText('Read by the page')).toBeTruthy();
 });
+
+test('a choice from a table that says radios is radios, however many rows it has (a field report)', async () => {
+  const rows = ['Kia', 'Ford', 'Fiat', 'Audi', 'Saab', 'Seat', 'Opel', 'Mini'].map((label) => ({ value: `n-${label}`, label }));
+  draw({ ...make(true, rows), as: 'radios' } as AppCommandField);
+  expect(await screen.findAllByRole('radio')).toHaveLength(8);
+  expect(screen.getByRole('radiogroup').id).toBe('make');
+  expect(screen.queryByRole('combobox')).toBeNull();
+});

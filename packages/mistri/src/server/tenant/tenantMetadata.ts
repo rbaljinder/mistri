@@ -190,9 +190,10 @@ function normalizedPage(page: Record<string, unknown>): void {
 }
 
 /** What a normalized timeline stream may carry into a tenant host. `tone` and `compact` name no column, so they
- *  reach a host as a quiet ground and a one-line row; `side` is a condition over the rows, which the projection
- *  would have to judge against the reader's grants first, so it still does not. */
-const STREAM_FIELDS = ['from', 'path', 'at', 'text', 'badge', 'by', 'filter', 'of', 'tone', 'compact'];
+ *  reach a host as a quiet ground and a one-line row. `side` is a condition over the rows, as `filter` is: its read
+ *  is the stream's own narrowed by it, planned on the context's scoped adapter (tenantPageOperations.ts), so the
+ *  other party's rows are only ever the tenant's, and the projection judges its columns as it judges the filter's. */
+const STREAM_FIELDS = ['from', 'path', 'at', 'text', 'badge', 'by', 'filter', 'of', 'tone', 'compact', 'side'];
 /** What a normalized App page may carry into a tenant host. */
 const PAGE_FIELDS = [
   'id',

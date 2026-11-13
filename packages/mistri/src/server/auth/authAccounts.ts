@@ -40,6 +40,8 @@ export interface NativeAccountInput {
 interface NativeAccountRegistration {
   /** Better Auth's createUser, server-side. */
   readonly create: (body: Record<string, unknown>) => Promise<unknown>;
+  /** Sets one account's password, hashed as sign-up hashes it; a development store's only caller is `mistri dev`. */
+  readonly setPassword?: (accountId: string, password: string) => Promise<void>;
   /** The file store's handle, or the PostgreSQL store's pool. */
   readonly file?: DatabaseSync;
   readonly pool?: PgQuery;
@@ -171,6 +173,18 @@ export async function findNativeAccountByEmail(runtime: AppAuthRuntime, input: s
   if (typeof id !== 'string') throw new NativeAccountRefusal('unavailable');
   exact(id);
   return id;
+}
+
+/**
+ * An existing account's password, set to one the caller holds: `mistri dev` adopting the account a development store
+ * already has for a dev address, so the password it prints signs that account in. The platform's own accounts never
+ * reach it: no route and no maintenance entry names it.
+ */
+export async function setNativeAccountPassword(runtime: AppAuthRuntime, accountId: string, password: string): Promise<void> {
+  const store = registered(runtime);
+  exact(accountId);
+  if (!store.setPassword || (await nativeAccountEmailOf(runtime, accountId)) === null) throw new NativeAccountRefusal('unavailable');
+  await store.setPassword(accountId, nativeAccountPassword(password));
 }
 
 /** The account's address, lower-cased, or null when there is no such account:

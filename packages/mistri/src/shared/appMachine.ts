@@ -360,14 +360,62 @@ function machineMoves(machine: AppMachineDef): Map<string, Set<string>> {
   return moves;
 }
 
-/** The record's forward path, the stepper: from the first state, each state's first verb's first state, until a final one or a loop. */
+/** The record's forward path, the stepper: from the first state, a road to a final state that never steps back onto
+ * itself, to the one few states lead to where one stands out (the others are exits); where none reaches one, the longest such road. A side state is one with a verb back onto the road so far
+ * (put on hold and resume, reopen, or stay where it is): the road goes forward past it, and through one only where nothing else leads on. A
+ * side state keeps its own exits (cancel from "On hold") off the road: following it there ended an incident's
+ * stepper at "Cancelled", not "Resolved" (a field report). Among the roads that remain the longest wins, a tie by the
+ * order the verbs are written. The search is bounded; a machine is a few states, not a maze. */
 export function machinePath(machine: AppMachineDef): string[] {
-  const path = [machine.states[0].name];
-  for (;;) {
-    const next = machine.edges.find((edge) => edge.from === path[path.length - 1])?.to[0];
-    if (!next || path.includes(next)) return path;
-    path.push(next);
-  }
+  const moves = new Map<string, string[]>();
+  for (const edge of machine.edges)
+    for (const to of edge.to) {
+      const next = moves.get(edge.from) ?? [];
+      if (!next.includes(to)) next.push(to);
+      moves.set(edge.from, next);
+    }
+  /* An exit is a final state many states lead to (cancel, withdraw: a verb every state says); the road's end is the
+     final that fewest lead to, where one stands out. A state with a way back (in review, which sends back) is a side
+     state to a road whose only other end is such an exit, though "Done" is reachable only through it. */
+  const finals = machine.states.filter((state) => state.final).map((state) => state.name);
+  const final = new Set(finals);
+  const leading = new Map(
+    finals
+      .map((name) => [name, new Set(machine.edges.filter((edge) => edge.to.includes(name)).map((edge) => edge.from))] as const)
+      .filter(([, froms]) => froms.size),
+  );
+  const fewest = Math.min(...[...leading.values()].map((froms) => froms.size));
+  const ends = [...leading].filter(([, froms]) => froms.size === fewest).map(([name]) => name);
+  const isEnd = (name: string) => (ends.length === 1 ? ends[0] === name : final.has(name));
+  let budget = 20_000;
+  const walk = (path: string[]): { path: string[]; done: boolean } => {
+    const at = path[path.length - 1];
+    if (path.length > 1 && isEnd(at)) return { path, done: true };
+    const open = (moves.get(at) ?? []).filter((next) => !path.includes(next));
+    const side = (next: string) => (moves.get(next) ?? []).some((to) => to === next || path.includes(to));
+    const roads = new Map<string, { path: string[]; done: boolean }>();
+    for (const next of open) {
+      if (budget-- <= 0) break;
+      roads.set(next, walk([...path, next]));
+    }
+    const longest = (nexts: string[], done: boolean) => {
+      let best: { path: string[]; done: boolean } | undefined;
+      for (const next of nexts) {
+        const road = roads.get(next);
+        if (road && road.done === done && (!best || road.path.length > best.path.length)) best = road;
+      }
+      return best;
+    };
+    return (
+      longest(
+        open.filter((next) => !side(next)),
+        true,
+      ) ??
+      longest(open.filter(side), true) ??
+      longest(open, false) ?? { path, done: false }
+    );
+  };
+  return walk([machine.states[0].name]).path;
 }
 
 /** Problems `mistri check` names about the graph itself: states no path reaches, and states no path leaves that are not final. */

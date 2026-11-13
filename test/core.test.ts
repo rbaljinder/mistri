@@ -51,6 +51,8 @@ import { fromHash, hashFor } from '../packages/kit/src/client/deeplink.js';
 import { composeFilter } from '../packages/kit/src/client/compose.js';
 import { SORT_SCAN_BELOW, sortableFromHeader } from '../packages/kit/src/client/columns.js';
 import { planColumn } from '../packages/kit/src/client/columns.js';
+import { rollupColumnMeta } from '../packages/engine/src/shared/rollups.js';
+import { computedColumnMeta } from '../packages/engine/src/shared/computed.js';
 import { textToView, viewToTextWithSchema } from '../packages/engine/src/shared/viewtext.js';
 import { compileBreakdown, type BreakdownDef } from '../packages/engine/src/shared/breakdown.js';
 import { breakdownToText, looksLikeBreakdown, sectionFromText, textToBreakdown } from '../packages/engine/src/shared/breakdowntext.js';
@@ -1852,6 +1854,18 @@ describe('the record page and the grid agree about a value', () => {
 
   test('a declared boolean is one whatever it is called', () => {
     assert.equal(plan('anything', 'BOOLEAN', true).kind, 'boolean');
+  });
+
+  test('a worked-out figure is said to its places, not to the six an average of whole numbers carries', () => {
+    /* A field report: an averaged rollup read "3.333". The meta of an average and a computed number says its places
+       (DERIVED_PLACES); a stored float keeps the places it holds. */
+    const average = rollupColumnMeta('mean_score', { fn: 'avg', type: 'integer' });
+    assert.equal((planColumn(average, 'mean_score', [{ mean_score: 3.3333333 }]) as { decimals?: number }).decimals, 2);
+    assert.equal((planColumn(average, 'mean_score', [{ mean_score: 3.5 }]) as { decimals?: number }).decimals, 1);
+    const worked = computedColumnMeta('hours', { type: 'number' });
+    assert.equal((planColumn(worked, 'hours', [{ hours: 1.3333333 }]) as { decimals?: number }).decimals, 2);
+    assert.equal((plan('latitude', 'REAL', 51.507351) as { decimals?: number }).decimals, 6);
+    assert.equal(rollupColumnMeta('total', { fn: 'sum', type: 'integer' }).places, undefined);
   });
 
   test('a key stays an identifier rather than a quantity', () => {

@@ -133,8 +133,8 @@ test.describe('A public door', () => {
     await page.getByRole('button', { name: /Submit|Send/ }).click();
     await expect(page.getByText(/not one of the choices/).first()).toBeVisible();
     expect(posts).toHaveLength(1);
-    // Fixed, and sent again: a fresh token (the first is spent), the same submission key.
-    await page.getByRole('button', { name: /Back|Previous/ }).click();
+    // The refusal names the Make, so the form opens its step: fixed there, and sent again with a fresh token (the first is spent), the same submission key.
+    await expect(makes).toBeVisible();
     await makes.getByText('Harbor Gloss').click();
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByRole('button', { name: /Submit|Send/ }).click();

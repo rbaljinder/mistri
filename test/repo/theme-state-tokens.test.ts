@@ -30,6 +30,13 @@ test('App nav states derive their tints from nav ink and write mode keeps the ch
   assert.match(write, /border-color: var\(--status-critical\)/);
   assert.doesNotMatch(write, /#[0-9a-f]{3,8}\b|\brgba?\(/i);
 });
+test("the bar's workspace tabs wear the menu's inks, so the current one reads on a dark bar", () => {
+  /* A field report: under recipes.bar 'dark' the current workspace kept the page's ink on the bar's dark ground. */
+  const inks = body('.app-mode .topbar :is(.tn-links, .workspace-host)');
+  assert.match(inks, /--ink: var\(--nav-ink\)/);
+  assert.match(inks, /--ink-muted: var\(--nav-muted\)/);
+  assert.match(body('.app-mode .topbar .workspace-tab[aria-current="page"]::after'), /background: var\(--nav-accent\)/);
+});
 test('list filter popovers use the globally defined shadow token without a duplicate color fallback', () => {
   const css = readFileSync(new URL('../../packages/kit/src/client/components/ListFilterBar.css', import.meta.url), 'utf8');
   assert.match(css, /box-shadow: var\(--shadow-pop\);/);

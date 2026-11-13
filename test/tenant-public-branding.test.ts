@@ -130,7 +130,7 @@ test("a tenant's saved name never asks a signed-out visitor for a session: its f
     assert.equal(form.body.app.name, name);
     const sent = await f.call(`/api/forms/apply${via(address)}`, { body: { input: { name: 'Avery' }, submission: randomUUID() } });
     assert.equal(sent.status, 200, sent.text);
-    assert.deepEqual(Object.keys(sent.body).sort(), ['receipt', 'reference']);
+    assert.deepEqual(Object.keys(sent.body).sort(), ['message', 'receipt', 'reference']);
   }
 });
 

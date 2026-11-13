@@ -11,7 +11,7 @@ import { PAGE_EXPORTS, UI_EXPORTS } from '../../../shared/uiSdk.js';
 import { UiPageContext, type UiPageFrame } from './context.js';
 import { fixtureHost, SectionFrame } from './fixture.js';
 import { fixtures, renderPage } from './testing.js';
-import { useRows } from './hooks.js';
+import { useCommand, useGranted, useRows } from './hooks.js';
 import { ActionButton, CommandButton, definePage, List, Scope } from './page.js';
 
 const BOOKINGS = fixtures({
@@ -128,6 +128,36 @@ describe('a command on one row', () => {
     expect(drawn.commands).toEqual([{ command: 'seat', mode: 'run', key: { guest_name: 'Kai Moss', id: 4 } }]);
     // Not granted the command, the reader sees only the action's button.
     expect(screen.queryByRole('button', { name: /^Check in/ })).toBeNull();
+  });
+});
+
+describe('asking whether a command may be run', () => {
+  /* A field report: a New page showed an entry only to a role granted its command, and had to declare every one
+     of them in `commands` to ask, though it ran none. */
+  function Entries() {
+    const mayCheckIn = useGranted('checkIn');
+    const maySeat = useGranted('seat');
+    return <p>{`checkIn ${mayCheckIn} seat ${maySeat}`}</p>;
+  }
+  const entries = definePage({ label: 'New', reads: ['booking'], commands: [], component: Entries });
+
+  test('useGranted answers on a page that declares no command, as granted says', async () => {
+    renderPage(entries, { data: BOOKINGS, viewer: SIGNED_IN, commands: { checkIn: { label: 'Check in' } } });
+    expect(await screen.findByText('checkIn true seat false')).toBeInTheDocument();
+    renderPage(entries, { data: BOOKINGS, commands: { checkIn: { label: 'Check in' } } });
+    expect(await screen.findByText('checkIn false seat false')).toBeInTheDocument();
+  });
+
+  test('running one still needs it declared', () => {
+    const Runs = () => <p>{useCommand('checkIn').label}</p>;
+    const muted = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() =>
+        renderPage(definePage({ label: 'New', reads: ['booking'], commands: [], component: Runs }), { viewer: SIGNED_IN }),
+      ).toThrow(/checkIn/);
+    } finally {
+      muted.mockRestore();
+    }
   });
 });
 

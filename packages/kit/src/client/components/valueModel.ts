@@ -669,7 +669,10 @@ export function sayValue(col: ColumnMeta | undefined, value: unknown): Said {
       ? formatNumber(text)
       : plan.identifier
         ? text
-        : formatNumber(n, { maximumFractionDigits: 6, useGrouping: !YEAR_NAME.test((col?.name ?? '').split('.').pop() ?? '') });
+        : formatNumber(n, {
+            maximumFractionDigits: col?.places ?? 6,
+            useGrouping: !YEAR_NAME.test((col?.name ?? '').split('.').pop() ?? ''),
+          });
     return { kind: 'number', text: shown, title: shown === text ? undefined : text };
   }
   if (plan.kind === 'date' || /date|time/.test(type)) return { kind: 'date', ...daySaid(text) };

@@ -656,6 +656,12 @@ export declare function useOptions<const N extends import('./app.js').CommandNam
  */
 export declare function useOptions(resource: string, options?: { where?: Readonly<Record<string, unknown>> }): Options;
 /**
+ * Whether this reader may run one of the App's commands, without running it: `const mayRaise = useGranted('raiseInvoice')`. The
+ * same answer as `useCommand(…).granted` (signed in, granted the command, and served the action or form that offers it), but a
+ * free-form page need not declare the command in its `commands` to ask: it lists the commands it runs, not the ones it only asks about.
+ */
+export declare function useGranted(command: import('./app.js').CommandName): boolean;
+/**
  * One of the App's fixed actions, a machine's verb or `action(label, { set })`, by its id: `const start = useAction('startVisit')`. Held
  * as a command is (`granted`, `available`, `reason`, `pending`, `run`, `open`, the same outcome), but it is the record page's own
  * button: `run(record)` writes the action's `set` to that record, by its key, through the update route, asking first when the

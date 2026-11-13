@@ -32,7 +32,7 @@
  * (appNotifyRules), which judges every name and compiles each rule to what
  * the writer runs (adapters/inbox/inbox.ts), in logical names.
  */
-import { isTenantApp, type AppDef } from './appModel.js';
+import type { AppDef } from './appModel.js';
 import { isRecord, plainRecord, allowKeys } from '@mistriwork/engine/shared/model.js';
 import { peopleByAccount, personTable } from './appMe.js';
 import { isMessageRef, type AppMessageRef } from '@mistriwork/engine/shared/appMessages.js';
@@ -660,9 +660,10 @@ export function notifyAdvisories(app: AppDef, schema: DatabaseSchema): string[] 
   if (!reaches) return [];
   const at = `resources "${reaches[0]}", notify`;
   const byAccount = peopleByAccount(app);
-  if (byAccount && /mail/i.test(me.column))
+  // A tenant App's email column is refused at load (tenantPersonColumnProblem); under `by: 'account'` it is advice.
+  if (me.by === 'account' && /mail/i.test(me.column))
     return [
-      `${at}: auth.me's "${me.column}" looks like an email column. ${isTenantApp(app) ? 'In a tenant App' : "With by: 'account'"} it holds each person's account id, ` +
+      `${at}: auth.me's "${me.column}" looks like an email column. With by: 'account' it holds each person's account id, ` +
         "which a notice is told at; an email there tells nobody (and is nobody's me).",
     ];
   if (!byAccount && /(?:^|_)id$|account/i.test(me.column))

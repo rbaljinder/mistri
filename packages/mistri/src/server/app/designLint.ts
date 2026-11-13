@@ -489,10 +489,20 @@ function pageFindings(catalog: Catalog, page: PageDef): DesignFinding[] {
         flow.steps.length === 2 &&
         machine?.column === flow.field &&
         machine.states.some((state) => state.final && state.name === flow.steps[1]?.value);
-      if ((flow.steps.length <= 2 && !endsFinal) || (allowed.length && outside.length > allowed.length / 2)) {
+      /* Named by its reason, each that holds: a strip of a machine's road reads as derived, and "thin" alone left an
+         author guessing which of the two to fix (a field report). */
+      const few = flow.steps.length <= 2 && !endsFinal;
+      const most = allowed.length > 0 && outside.length > allowed.length / 2;
+      if (few || most) {
+        const reasons = [
+          ...(few ? [`has only ${flow.steps.length} step${flow.steps.length === 1 ? '' : 's'}`] : []),
+          ...(most
+            ? [`leaves ${outside.length} of its ${allowed.length} values outside its steps (${outside.map(quote).join(', ')})`]
+            : []),
+        ];
         say(
           'thin-workflow',
-          `the workflow over "${flow.field}" has ${flow.steps.length} step${flow.steps.length === 1 ? '' : 's'}${outside.length ? ` and leaves ${outside.length} of its ${allowed.length} values outside` : ''}: ` +
+          `the workflow over "${flow.field}" ${reasons.join(' and ')}: ` +
             'a strip needs an ordered pipeline → keep it for 3–6 steps in order, and let side exits (cancelled, no-show) wear tones: display: { …: { tone: { … } } }.',
         );
       }

@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { CommandOutcome } from './CommandOutcome.js';
-import { outcomeOfOperation, pendingOf, refusalNext } from './outcomeModel.js';
+import { fieldWord, outcomeOfOperation, pendingOf, refusalNext } from './outcomeModel.js';
 import { formFailureOutcome } from './FormSurface.js';
 
 afterEach(cleanup);
@@ -58,7 +58,29 @@ test('refused: the refusal’s own words, then the way on by its code', () => {
   expect(text(container, 'next')).toBe('Nothing was changed. Review and send again.');
   expect(refusalNext('stale_record')).toMatch(/Refresh and review/);
   expect(refusalNext('forbidden')).toMatch(/Ask someone who may/);
-  expect(refusalNext('invalid_input', 'Amount')).toBe('Change Amount and send again.');
+  // A label read from a column's name is lower-cased inside the sentence; an initialism keeps its capitals; what an
+  // author wrote stays as written.
+  expect(refusalNext('invalid_input', fieldWord('Your last name', { name: 'your_last_name', label: 'Your last name' }))).toBe(
+    'Change your last name and send again.',
+  );
+  expect(refusalNext('invalid_input', fieldWord('VIN', { name: 'vin', label: 'VIN' }))).toBe('Change VIN and send again.');
+  expect(refusalNext('invalid_input', { label: 'VIN number', derived: true })).toBe('Change VIN number and send again.');
+  expect(refusalNext('invalid_input', { label: 'McLaren trim', derived: true })).toBe('Change McLaren trim and send again.');
+  expect(refusalNext('invalid_input', fieldWord('Toyota model', { name: 'model', label: 'Toyota model' }))).toBe(
+    'Change Toyota model and send again.',
+  );
+  expect(refusalNext('invalid_input', 'Toyota model')).toBe('Change Toyota model and send again.');
+  // A submission changes no record to refresh: its state and not-found refusals point at the answers.
+  expect(refusalNext('ineligible_state')).toMatch(/Refresh to see where it stands/);
+  expect(refusalNext('ineligible_state', undefined, true)).toMatch(/Review your answers/);
+  expect(refusalNext('not_found', undefined, true)).toMatch(/your answers name/);
+  expect(formFailureOutcome({ message: 'Closed', status: 409, code: 'ineligible_state' }, 'Closed', undefined, true)).toMatchObject({
+    next: refusalNext('ineligible_state', undefined, true),
+  });
+  // A signed-in command form keeps the record's wording.
+  expect(formFailureOutcome({ message: 'Closed', status: 409, code: 'ineligible_state' }, 'Closed')).toMatchObject({
+    next: expect.stringMatching(/Refresh to see where it stands/),
+  });
   // A public form's refusal reads the same way; a wait is a wait.
   expect(formFailureOutcome({ message: 'Slow down', status: 429 }, 'Slow down')).toMatchObject({
     state: 'refused',

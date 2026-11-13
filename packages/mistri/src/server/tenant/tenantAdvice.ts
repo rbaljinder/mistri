@@ -20,14 +20,16 @@ export function tenantDeleteWarnings(
   if (policy.authorizeDeletedRecord !== undefined) return [];
   const tables = new Map<string, string[]>();
   for (const role of Object.keys(app.auth?.roles ?? {})) {
-    let writable: ReadonlySet<string>;
+    let access: ReturnType<typeof resolveAppAccess>;
     try {
-      writable = resolveAppAccess(app, schema, [role]).writable;
+      access = resolveAppAccess(app, schema, [role]);
     } catch {
       // A grant the catalog cannot resolve is validation's to say.
       continue;
     }
-    for (const id of writable) if (policy.ownership[id]?.kind === 'tenant') tables.set(id, [...(tables.get(id) ?? []), role]);
+    // A table the role only appends to offers no Delete at all, so there is nothing for the policy to allow.
+    for (const id of access.writable)
+      if (policy.ownership[id]?.kind === 'tenant' && !access.appendOnly?.has(id)) tables.set(id, [...(tables.get(id) ?? []), role]);
   }
   return [...tables].map(
     ([id, roles]) =>

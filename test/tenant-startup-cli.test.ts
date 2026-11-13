@@ -116,6 +116,17 @@ test('tenant CLI check warns that a written tenant table cannot be deleted witho
   assert.match(result.stdout, /^Tenant CLI: ok\n {2}warning: table "item" \[tenant-delete-unauthorized\]: role "member" writes it/);
 });
 
+test('tenant CLI check does not warn about a table the role only appends to', async (t) => {
+  const f = fixture(t);
+  writing(f, false);
+  const app = JSON.parse(readFileSync(f.appFile, 'utf8'));
+  app.auth.roles.member = { read: true, write: false, create: ['item'] };
+  writeFileSync(f.appFile, JSON.stringify(app));
+  const result = await cli(f, [VALIDATE]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.stdout, 'Tenant CLI: ok\n');
+});
+
 test('tenant CLI check does not warn when the policy authorizes deleted records', async (t) => {
   const f = fixture(t);
   writing(f, true);

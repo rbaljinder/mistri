@@ -298,7 +298,7 @@ describe('mistri check --design', () => {
         { value: 'shipped', label: 'Shipped' },
       ],
     };
-    const thin = (resource: object, section: object) =>
+    const thin = (resource: object, section: object, allowed = ['new', 'shipped']) =>
       designLint(
         { ...composed, ui: {} as AppDef['ui'], resources: { customer: {}, line: {}, sales_order: resource } } as AppDef,
         [
@@ -313,11 +313,17 @@ describe('mistri check --design', () => {
           ...schema,
           tables: schema.tables.map((table) => ({
             ...table,
-            columns: table.columns.map((c) => (c.name === 'status' ? { ...c, allowed: ['new', 'shipped'] } : c)),
+            columns: table.columns.map((c) => (c.name === 'status' ? { ...c, allowed } : c)),
           })),
         },
       ).filter((finding) => finding.code === 'thin-workflow');
     assert.equal(thin({}, {}).length, 1, 'a drawn two-step strip is thin');
+    // Named by its reason, so the author knows which of the two to fix.
+    assert.match(thin({}, {})[0]!.text, /the workflow over "status" has only 2 steps: a strip/);
+    assert.match(
+      thin({}, {}, ['new', 'packed', 'shipped', 'cancelled', 'returned'])[0]!.text,
+      /has only 2 steps and leaves 3 of its 5 values outside its steps \('packed', 'cancelled', 'returned'\): a strip/,
+    );
     assert.equal(thin({}, { presentation: 'headline' }).length, 0, 'a headline draws no strip');
     const machine = (final: boolean) => ({
       column: 'status',

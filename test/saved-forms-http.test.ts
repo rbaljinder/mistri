@@ -464,6 +464,7 @@ test(
       const done = await ada.submit();
       assert.equal(done.status, 200, done.raw);
       assert.match(String(done.body.reference), publicReferencePattern('APP'));
+      assert.equal(done.body.message, 'Application received.', "the visitor is told the handler's words");
       assert.match(done.set!, /^mistri_form_apply=;/);
       assert.match(done.set!, /Max-Age=0/);
       assert.equal(ada.cookie, undefined);

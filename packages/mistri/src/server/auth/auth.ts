@@ -1963,6 +1963,19 @@ export async function createAppAuth(
     if (provisioning) provisioning.register(runtime);
     registerNativeAccounts(runtime, {
       create: (body) => auth.api.createUser({ body }),
+      setPassword: async (accountId, password) => {
+        const context = (await auth.$context) as unknown as {
+          password: { hash(password: string): Promise<string> };
+          internalAdapter: {
+            findCredentialAccount(userId: string): Promise<unknown>;
+            updatePassword(userId: string, hashed: string): Promise<unknown>;
+            createAccount(account: Record<string, unknown>): Promise<unknown>;
+          };
+        };
+        const hashed = await context.password.hash(password);
+        if (await context.internalAdapter.findCredentialAccount(accountId)) await context.internalAdapter.updatePassword(accountId, hashed);
+        else await context.internalAdapter.createAccount({ userId: accountId, providerId: 'credential', accountId, password: hashed });
+      },
       audit,
       closed: () => closed,
       ...(database ? { file: database } : { pool: handle.database as PgQuery }),

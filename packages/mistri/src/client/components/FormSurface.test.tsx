@@ -113,6 +113,32 @@ test("a refusal of a field on screen is said beside it alone, in a person's word
   expect(new Set(keys).size).toBe(1);
 });
 
+test('a refusal of a field on an earlier step opens that step, beside the field; a refusal of no field reads for a submission', async () => {
+  /* A field report: the refusal of an earlier step's field was said under the last step ("Change Your last name and
+     send again.") and the step stayed shut; a state refusal said to refresh a record the form never showed. */
+  const sends = [
+    answer(400, { code: 'invalid_input', message: 'Use your legal name.', field: 'applicant_name' }),
+    answer(409, { code: 'ineligible_state', message: 'Applications are closed this week.' }),
+  ];
+  // A public door (`visitor`) checks each step first; the check has nothing to say.
+  fetchMock.mockImplementation(async (url: unknown) => (String(url).includes('/check/') ? answer(200, {}) : sends.shift()));
+  render(<FormSurface form={form} appName="Ignition" submit={publicSubmit} visitor={{ app: 'ignition' }} />);
+  fireEvent.change(screen.getByLabelText('Full name (required)'), { target: { value: 'M' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await waitFor(() => expect(screen.getByLabelText('Amount (required)')).toBeInTheDocument());
+  fireEvent.change(screen.getByLabelText('Amount (required)'), { target: { value: '500' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send application' }));
+  await waitFor(() => expect(screen.getByLabelText('Full name (required)')).toHaveFocus());
+  expect(screen.getByLabelText('Full name (required)')).toHaveAccessibleDescription(/Use your legal name\./);
+  expect(screen.queryByText(/and send again/)).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await waitFor(() => expect(screen.getByLabelText('Amount (required)')).toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: 'Send application' }));
+  await waitFor(() => expect(screen.getByText('Applications are closed this week.')).toBeVisible());
+  expect(screen.getByText('Nothing was kept. Review your answers and send again, or come back later.')).toBeVisible();
+  expect(screen.queryByText(/Refresh/)).toBeNull();
+});
+
 test('without steps the form is one page; a receipt with no reference still says done, and "Fill in another" starts a new key', async () => {
   const submit = vi.fn().mockResolvedValue({ receipt: { id: 'r1', status: 'applied' } });
   const note: FormPresentation = {

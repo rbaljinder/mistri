@@ -41,6 +41,11 @@ export interface ColumnMeta {
    * string carries its own (`decimals.ts` declaredScale).
    */
   scale?: number;
+  /**
+   * The most places a worked-out figure is said with — an average, a computed number — whose value carries more
+   * than anyone reads (an average of 3, 3 and 4 is 3.333…). Said only: the value read, filtered and sorted is whole.
+   */
+  places?: number;
   /** Public presence hint when a private schema projection omits the SQL default. */
   hasDefault?: boolean;
   /** Catalog-confirmed automatic identity assignment; absent is not a type-based guess. */

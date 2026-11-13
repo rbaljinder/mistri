@@ -204,8 +204,16 @@ type QFault<E> = [E] extends [never] ? unknown : { [Fault in E & string]: true }
 type QSortsErr<T, S> = S extends string ? QSortErr<T, S> : S extends readonly (infer E)[] ? (E extends { sort: infer X extends string } ? QSortErr<T, X> : never) : never;
 /** A segment named where its table is the place's (`{ segment: 'open' }`, a tab), or the fault. */
 export type SegmentErr<T, S extends string> = string extends S ? never : QWordErr<T, S>;
-type QTabErr<T, Tab> = (Tab extends string ? SegmentErr<T, Tab> : never)
-  | (Tab extends { segment: infer N extends string } ? SegmentErr<T, N> : never)
+/* A tab names a segment, or a word no segment declares (implicitTab in appSegments.ts): a state or group of the table's
+   machine, or a yes/no column, stored or computed. A vocabulary's words stand in for a machine's here, as the types
+   do not tell the two apart; the load judges which it is. A table with no segments takes only those last two, never
+   any word at all. */
+type QTabWord<T> = { [C in keyof QOwn<T>]: QOwn<T>[C] extends 'boolean' ? C : QOwn<T>[C] extends readonly (infer V)[] ? V : never }[keyof QOwn<T>];
+type QTabWordErr<T, W extends string> = string extends W ? never
+  : W extends QTabWord<T> | QSegmentsOf<T> ? never
+  : `${W} is not a segment, a state or a yes/no column of ${QName<T>}`;
+type QTabErr<T, Tab> = (Tab extends string ? QTabWordErr<T, Tab> : never)
+  | (Tab extends { segment: infer N extends string } ? QTabWordErr<T, N> : never)
   | (Tab extends { query: infer Q extends string } ? QQueryErr<T, Q> : never) | (Tab extends { sort: infer S extends string } ? QSortErr<T, S> : never);
 type QErrs<T, O> =
   (O extends { query: infer Q extends string } ? QQueryErr<T, Q> : never)
@@ -215,8 +223,8 @@ type QErrs<T, O> =
   | (O extends { tabs: readonly (infer Tab)[] } ? QTabErr<T, Tab> : never);
 type QSortDetail<T, S> = S extends string ? QFault<QSortErr<T, S>>
   : { [I in keyof S]: S[I] extends { sort: infer X extends string } ? { sort: QFault<QSortErr<T, X>> } : unknown };
-type QTabDetail<T, Tab> = (Tab extends string ? QFault<SegmentErr<T, Tab>> : unknown)
-  & (Tab extends { segment: infer N extends string } ? { segment: QFault<SegmentErr<T, N>> } : unknown)
+type QTabDetail<T, Tab> = (Tab extends string ? QFault<QTabWordErr<T, Tab>> : unknown)
+  & (Tab extends { segment: infer N extends string } ? { segment: QFault<QTabWordErr<T, N>> } : unknown)
   & (Tab extends { query: infer Q extends string } ? { query: QFault<QQueryErr<T, Q>> } : unknown)
   & (Tab extends { sort: infer S extends string } ? { sort: QFault<QSortErr<T, S>> } : unknown);
 type QDetail<T, O> =

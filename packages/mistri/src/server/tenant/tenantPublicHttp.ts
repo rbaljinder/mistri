@@ -36,7 +36,8 @@ import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonica
 import { businessCommandHttpError, CommandBodyTooLarge, commandBody, holdCommandBody } from '../commands/businessCommandHttp.js';
 import { BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
 import { CommandInputError } from '../commands/commandPayload.js';
-import { decoyReply, parseSubmission, presentForm, publicFormComponents, publicMessage } from '../commands/formHttp.js';
+import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
+import { declaredMessages, decoyReply, parseSubmission, presentForm, publicFormComponents, publicMessage } from '../commands/formHttp.js';
 import type { HumanCheck } from '../commands/challenges.js';
 import type { CompiledComponents } from '../app/appComponents.js';
 import {
@@ -101,6 +102,8 @@ interface TenantPublicHttpOptions {
   readonly pageAddress?: (carried: string) => Promise<string | undefined>;
   /** The deployment's public intake; absent when the App has no public form or public command page. */
   readonly submit?: TenantIntake['submit'];
+  /** The App's commands: the words a stock form's decoy answers with are the first its command declares (formHttp.ts). */
+  readonly commands?: BusinessCommandRegistry;
   /** A saved form's resume on the same intake. */
   readonly resume?: TenantIntake['resume'];
   /** A file held for a stock form's command, in the place its address resolves to. */
@@ -495,9 +498,10 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       if (req.aborted || res.destroyed) abort();
       const { input, submission, extra } = parseSubmission(await commandBody(req), ['trap']);
       /* The stock form's decoy, filled: answered as an accepted submission is, and written nowhere (formRoutes.ts). */
+      const declared = declaredMessages(options.commands?.[form.command.id]?.output);
       if (typeof extra.trap === 'string' && extra.trap.trim()) {
         countDecoy(form.command.id);
-        send(res, 200, decoyReply());
+        send(res, 200, decoyReply(undefined, declared[0]));
         return;
       }
       const placed = await placing();
@@ -520,7 +524,8 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       // reference has left the applicant nothing to quote, which is its bug.
       if (typeof reference !== 'string' || !reference.trim() || reference.length > 64)
         throw new BusinessCommandExecutionError('invalid_result', 'unknown');
-      send(res, 200, { reference, receipt: { id: result.receiptId, status: result.status } });
+      // The handler's own words for its visitor, only where the decoy could have said them (formHttp.ts publicMessage).
+      send(res, 200, { reference, receipt: { id: result.receiptId, status: result.status }, ...publicMessage(result.result, declared) });
     } catch (error) {
       // Fixed public messages and the field they are about; never the input, never where it landed.
       const failure = businessCommandHttpError(

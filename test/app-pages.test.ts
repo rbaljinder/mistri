@@ -643,7 +643,7 @@ function Board() {
 
   test('page-import: a permission hook the SDK does not export is refused with what to write instead', async () => {
     const source = `import { definePage } from '@mistriwork/mistri/page';
-import { useGranted, useCan as can, useRows } from '@mistriwork/mistri/ui';
+import { useCan as can, useRows } from '@mistriwork/mistri/ui';
 export default definePage({ label: 'Board', reads: ['ticket'], component: Board });
 function Board() {
   return null;
@@ -652,7 +652,6 @@ function Board() {
     assert.deepEqual(
       scan.undeclared.map((problem) => `${problem.line}: ${problem.text}`),
       [
-        "2: useGranted is not exported by @mistriwork/mistri/ui; write useCommand('x').granted. Declaring the command in definePage({ commands: [...] }) grants nothing: .granted says whether this reader may run it.",
         "2: useCan is not exported by @mistriwork/mistri/ui; write useCommand('x').granted. Declaring the command in definePage({ commands: [...] }) grants nothing: .granted says whether this reader may run it.",
       ],
     );

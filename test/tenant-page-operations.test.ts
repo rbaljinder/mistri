@@ -113,6 +113,24 @@ test('alternate-unique root values anchor lists/counts/sums/breakdowns/timelines
   );
 });
 
+test("a timeline stream's far side is its own read narrowed, so it never reaches past the record's rows", async (t) => {
+  /* A tenant App's timeline may say `side` (a field report): the other party's rows are the stream's read with one
+     more condition, planned here beside it, so another record's row that meets the condition is not among them. */
+  const f = await fixture(t);
+  const definition = page({
+    kind: 'timeline',
+    streams: [{ from: 'child', path: 'parent_code', at: 'at', text: 'name', side: 'amount > 5' }],
+  });
+  const result = await tenantPagePlan(f.adapter, f.schema, definition, { id: 'parent-id-a' }, now);
+  const timeline = result.plans[0];
+  assert.ok(timeline.kind === 'timeline' && timeline.streams[0].side?.view);
+  assert.deepEqual(timeline.streams[0].key, ['id']);
+  assert.deepEqual(
+    (await f.adapter.runView(timeline.streams[0].side.view)).rows.map((row) => row.id),
+    ['child-a2'],
+  );
+});
+
 test('about-parent lookup via unique code supplies actual parent PK and every relationship target key', async (t) => {
   const f = await fixture(t),
     definition = page(

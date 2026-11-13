@@ -174,7 +174,10 @@ grant one account the same operation on the same tenant.
 A role's `write` on a tenant table gives it Save and New there; Delete needs
 `authorizeDeletedRecord` as well; `mistri check` warns
 (`tenant-delete-unauthorized`) where a role writes a tenant table and the policy
-has none. A role's `commands` runs a record's command only where an action or
+has none, except a table the role only appends to (`create`), which offers no
+Delete. For a row that holds file bytes, the image `authorizeDeletedRecord`
+judges holds every column but those bytes, and deleting such a row has no Undo.
+A role's `commands` runs a record's command only where an action or
 form offers it (`action('Record payment', { command: 'recordPayment' })` on the
 resource), as in any App; `mistri check` warns (`command-unoffered`) of a
 command that names a record and that nothing offers.
@@ -315,7 +318,9 @@ nav: [navGroup('boarding', 'Boarding', ['kennels', 'stays'], { when: 'tenant.boa
 `auth.me: { from: 'person', column: 'account_id' }` names the people table
 and the column holding each person's **account id**. In a tenant, `me` is the
 row in the current tenant whose column is their account: a person has one row
-per membership, and entering another tenant makes `me` that tenant's row. It
+per membership, and entering another tenant makes `me` that tenant's row. A
+column named for an email (`email`, `work_mail`) is refused when the App loads:
+it would match no account, and every mention and notice would reach nobody. It
 is resolved on every request from the admitted session. A membership without a
 row matches nothing (`assignee = me` is an empty list, not an error), and a
 support visit is no one. Beside a text column, `me` is still the session's

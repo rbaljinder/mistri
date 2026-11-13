@@ -43,7 +43,7 @@ See it in the sample (`examples/apps/lintel/views.ts:143`) (some tabs left out);
 | Key | What it does | Default | Status |
 | --- | --- | --- | --- |
 | `show` | Columns and label paths, 4–7, the name first | the table's columns | Stable |
-| `tabs` | `'segment'`, `{ segment, sort? }` or `{ label: 'All', sort? }`, the first opens; the conditions are the resource's `segments` | none | Stable |
+| `tabs` | `'segment'`, `{ segment, sort? }` or `{ label: 'All', sort? }`, the first opens; the conditions are the resource's `segments`, and a word no segment declares names a state or group of its machine, or a yes/no column, stored or computed | none | Stable |
 | `query` | Standing conditions every tab narrows further | none | Stable |
 | `sort` | `'created_on desc'`, or named orders `[{ label, sort }]` as a Sort menu | the key | Stable |
 | `filters`, `filterBar`, `suggest` | Filter boxes; `filterBar: 'rail'` draws counted facets; a path filters by a parent's column (`'account_id.industry_id'`), `{ has: 'opportunity', filter: 'stage' }` by the rows that point at the record, counted as records; `suggest: { title: ['make', 'model'] }` has a text filter offer up to eight values of those columns as the person types, read through their grants | none; a bar | Stable |

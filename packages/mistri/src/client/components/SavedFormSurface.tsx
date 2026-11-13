@@ -452,7 +452,7 @@ export function SavedFormSurface({
 
   if (receipt) {
     // The receipt and fixed words: nothing typed is shown back, here either.
-    const message = form.done?.description ?? (receipt.reference ? say('keepThisReference') : undefined);
+    const message = receipt.message ?? form.done?.description ?? (receipt.reference ? say('keepThisReference') : undefined);
     return (
       <section className="form-page form-page-done" aria-labelledby={`${id}-done`}>
         <p className="eyebrow">{appName}</p>

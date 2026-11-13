@@ -293,9 +293,32 @@ async function tenantAccounts(opts: Options, loaded: LoadedApp, dev: DevFile, fi
   for (const role of roles) if (!dev.passwords[role]) changed = Boolean((dev.passwords[role] = password()));
   if (changed) save();
   const accounts = (dev.accounts ??= {});
+  const { createAppAccounts, findAppAccount, setDevAccountPassword } = await import('../tenant/tenantMaintenance.js');
+  /* dev.json outlives the sign-in store it was made against: a store deleted, or another tree's, holds none of its
+     accounts, and granting one a membership would refuse every role (field report). An address the store already
+     holds is that account, given the kept password; one it does not hold is made again below with it. */
+  const named = relative(process.cwd(), file) || file;
+  let stale = false;
+  for (const role of roles) {
+    const kept = accounts[role];
+    if (!kept) continue;
+    const found = await findAppAccount(loaded.dir, emailOf(role));
+    if (found === kept) continue;
+    stale = true;
+    if (found) {
+      accounts[role] = found;
+      // The account was made with a password this file never held: set to the one it keeps, so the sign-in printed works.
+      await setDevAccountPassword(loaded.dir, found, dev.passwords[role]);
+    } else delete accounts[role];
+    console.log(
+      found
+        ? `mistri dev: ${emailOf(role)} in the sign-in store is not the ${role} account ${named} named; that account is used.`
+        : `mistri dev: the sign-in store does not hold the ${role} account ${named} named; it is made again.`,
+    );
+  }
+  if (stale) save();
   const missing = roles.filter((role) => !accounts[role]);
   if (missing.length) {
-    const { createAppAccounts } = await import('../tenant/tenantMaintenance.js');
     const made = await createAppAccounts(
       loaded.dir,
       missing.map((role) => ({ email: emailOf(role), name: `Dev ${role}`, password: dev.passwords[role] })),

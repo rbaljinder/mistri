@@ -19,7 +19,7 @@ import { embedHost } from './host.js';
 import { crossOrigin, startSession, type Auth, type EmbedSession } from './session.js';
 import { browserNavigator, type Navigator } from './navigator.js';
 
-export { useAction, useBreakdown, useCommand, useForm, useHref, useRecord, useRows } from '../client/components/sdk/hooks.js';
+export { useAction, useBreakdown, useCommand, useForm, useGranted, useHref, useRecord, useRows } from '../client/components/sdk/hooks.js';
 export { useOptions } from '../client/components/sdk/options.js';
 export type { Auth } from './session.js';
 export type { Navigator } from './navigator.js';

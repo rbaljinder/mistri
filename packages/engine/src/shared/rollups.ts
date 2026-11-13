@@ -118,7 +118,11 @@ export interface ComputedPath extends Rollup {
   on: string;
 }
 
-/** A rollup read as a column: never written, null only where there are no rows to read (a count is 0). */
+/** The most places a worked-out figure is said with: an average's, a computed number's. Two, as money reads. */
+export const DERIVED_PLACES = 2;
+
+/** A rollup read as a column: never written, null only where there are no rows to read (a count is 0). An average
+    is said to DERIVED_PLACES: of whole numbers it read "3.333" (a field report). */
 export function rollupColumnMeta(name: string, rollup: Pick<Rollup, 'fn' | 'type' | 'allowed' | 'references'>): ColumnMeta {
   return {
     name,
@@ -126,6 +130,7 @@ export function rollupColumnMeta(name: string, rollup: Pick<Rollup, 'fn' | 'type
     nullable: rollup.fn !== 'count',
     primaryKey: false,
     writable: false,
+    ...(rollup.fn === 'avg' ? { places: DERIVED_PLACES } : {}),
     ...(rollup.allowed ? { allowed: rollup.allowed } : {}),
     ...(rollup.references ? { references: rollup.references } : {}),
   };

@@ -144,7 +144,15 @@ export function syntheticSchema(tableCount = 150) {
         fk(id, [`${other}_id`], other);
       }
       columns.push(column('version', 'integer'));
-      tables.push({ id, name: id, schema: '', columns });
+      /* The root's segments are the App's (appModule below); the real flow merges them into the schema before it
+         writes the types (appTypes), and a tab is judged against them. */
+      tables.push({
+        id,
+        name: id,
+        schema: '',
+        columns,
+        ...(n === 0 ? { segments: { open_items: { query: 'status = open' }, approved_items: { query: 'status = approved' } } } : {}),
+      });
       names.push(id);
     }
     domains.push({ domain, owner, tables: names });

@@ -414,13 +414,15 @@ The navigation's colors dress the menu, whichever the shell draws and under
 every bar recipe: a side menu, the phone's drawer and a top bar's menu stand on
 `nav.ground`, their entries in `nav.ink`, their group headings, counts and icons
 in `nav.muted`, the current entry in `nav.accent` (or a `nav.current` block).
+The workspaces' tabs in the bar are the menu's too: the current one in
+`nav.ink`, the others in `nav.muted`, under every bar recipe.
 The bar recipe picks the bar's shape — a rule beneath it, an airy search, a
 soft panel — never whose colors the menu wears. Two things on the bar are the
 page's, not the menu's: the search is a field on the surface in the page's ink
 (the dark bar alone draws it on its own ground), and a soft bar beside a side
 menu is a panel on the page in the page's colors. `check` reads each pair and
 names the element it failed for ("the menu's group headings, counts and icons,
-nav.muted/nav.ground …"), with a passing hex beside it; `e2e/menu-contrast.spec.ts`
+and the other workspaces, nav.muted/nav.ground …"), with a passing hex beside it; `e2e/menu-contrast.spec.ts`
 measures the drawn menu at 4.5:1 under every bar recipe, both placements and
 both modes.
 

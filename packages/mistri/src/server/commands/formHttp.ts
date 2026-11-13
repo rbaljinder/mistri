@@ -148,10 +148,27 @@ function answersLink(output: unknown): boolean {
 const PUBLIC_MESSAGE_MOST = 280;
 
 /** A public command's thank-you for its visitor, as a reply member: a literal its output declares (savedFormChecks.ts),
-    so the author's fixed words, never input echoed back. Nothing when it returned none or one past a sentence. */
-export function publicMessage(result: unknown): { message?: string } {
+    so the author's fixed words, never input echoed back. Nothing when it returned none or one past a sentence. A door
+    with an admission check passes `declared`, the literals the command declares: it echoes only one of those, so a
+    templated sentence is never said on a door whose decoy could not have said it. */
+export function publicMessage(result: unknown, declared?: readonly string[]): { message?: string } {
   const message = (result as { message?: unknown } | null)?.message;
-  return typeof message === 'string' && message.trim() && message.length <= PUBLIC_MESSAGE_MOST ? { message: message.trim() } : {};
+  if (typeof message !== 'string' || !message.trim() || message.length > PUBLIC_MESSAGE_MOST) return {};
+  return declared === undefined || declared.includes(message.trim()) ? { message: message.trim() } : {};
+}
+
+/** The thank-yous a command's output declares, as literals: the only words a door with a decoy says for it, so its
+    filled honeypot is answered in words a real submission could have had. Empty when the output declares none. */
+export function declaredMessages(output: unknown): string[] {
+  const described = describeShape(output);
+  if (described.kind !== 'object') return [];
+  const member = described.fields.message;
+  const inner = member?.kind === 'optional' ? member.item : member;
+  if (inner?.kind !== 'literal') return [];
+  return inner.values.flatMap((value) => {
+    const said = typeof value === 'string' ? publicMessage({ message: value }).message : undefined;
+    return said === undefined ? [] : [said];
+  });
 }
 
 /**
@@ -222,6 +239,7 @@ export async function dispatchPublicFormHttp(options: {
         return servesLinks(app) && !result.replayed ? withLinkUrls(app, resources, result) : result;
       },
       ...(options.admit && servesLinks(app) && answersLink(commands[command.id]?.output) ? { decoyLink: () => decoyLinkUrl(app.id) } : {}),
+      ...(options.admit ? { declaredMessages: () => declaredMessages(commands[command.id]?.output) } : {}),
     });
   } finally {
     for (const release of releases.reverse()) release();
@@ -230,10 +248,11 @@ export async function dispatchPublicFormHttp(options: {
 
 /* A decoy's answer: shaped as an accepted submission's, its reference and receipt random, so a script that filled the
    honeypot learns nothing — and nothing was written, journalled or counted as a receipt. */
-export function decoyReply(link?: string): PublicSubmissionReply {
+export function decoyReply(link?: string, message?: string): PublicSubmissionReply {
   return {
     reference: randomBytes(6).toString('hex').toUpperCase(),
     receipt: { id: randomUUID(), status: 'applied' },
+    ...(message ? { message } : {}),
     ...(link ? { link } : {}),
   };
 }
@@ -252,6 +271,9 @@ export async function dispatchPublicFormSubmissionHttp(options: {
   tooLarge?: 'thrown';
   /** A link-shaped URL for a decoy, where the door's command answers with a link: it opens to the one miss. */
   decoyLink?: () => string | undefined;
+  /** The `message` literals the door's command declares, where the door has an admission check: the reply says the
+      handler's message only if it is one of them, and a decoy says the first, so the two keep the same keys. */
+  declaredMessages?: () => readonly string[];
 }): Promise<PublicSubmissionReply> {
   const { req, res, submit } = options;
   const controller = new AbortController();
@@ -262,7 +284,8 @@ export async function dispatchPublicFormSubmissionHttp(options: {
     if (req.aborted || res.destroyed) abort();
     const { input, submission, extra } = parseSubmission(await commandBody(req), options.extra);
     if (controller.signal.aborted) throw new BusinessCommandExecutionError('cancelled');
-    if ((await options.admit?.(extra)) === 'decoy') return decoyReply(options.decoyLink?.());
+    const declared = options.declaredMessages?.();
+    if ((await options.admit?.(extra)) === 'decoy') return decoyReply(options.decoyLink?.(), declared?.[0]);
     const execution = {
       signal: controller.signal,
       ...(typeof res.getHeader('x-request-id') === 'string' ? { requestId: String(res.getHeader('x-request-id')) } : {}),
@@ -273,12 +296,12 @@ export async function dispatchPublicFormSubmissionHttp(options: {
     // reference has left the applicant nothing to quote, which is its bug.
     if (typeof reference !== 'string' || !reference.trim() || reference.length > 64)
       throw new BusinessCommandExecutionError('invalid_result', 'unknown');
-    /* The visitor is told a public command's `message`. A door with an admission (a public form's honeypot) answers a
-       decoy that cannot know it, so it leaves it out and the decoy stays shaped like a real answer. */
+    /* The visitor is told a public command's `message`. Where a honeypot's decoy guards the door, only a declared
+       literal is said, as the decoy says one: a templated sentence would tell a script which answer was real. */
     return {
       reference,
       receipt: { id: result.receiptId, status: result.status },
-      ...(!options.admit ? publicMessage(result.result) : {}),
+      ...publicMessage(result.result, declared),
       ...publicLink(result),
     };
   } catch (error) {

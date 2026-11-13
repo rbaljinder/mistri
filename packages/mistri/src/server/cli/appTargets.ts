@@ -192,7 +192,7 @@ export const MIGRATE_APPS: MigrateHost<MigrateAppRun> = {
 /** A machine as seed walks it: the forward path, the side states, the exits, and what entering each state stamps. */
 const isNow = (value: unknown) => Boolean(value) && typeof value === 'object' && (value as { auto?: unknown }).auto === 'now';
 
-function lifeOfMachine(table: TableMeta, machine: AppMachineDef): SeedLife {
+export function lifeOfMachine(table: TableMeta, machine: AppMachineDef): SeedLife {
   const path = machinePath(machine);
   const finals = new Set(machine.states.filter((state) => state.final).map((state) => state.name));
   const stamps = new Map<string, string[]>();

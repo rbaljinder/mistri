@@ -1101,7 +1101,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=list].tabs` | array | Stable | Tabs over the rows: a segment of the table by name, a segment with its own sort, or every row ({ label }). A tab's label and address are its segment's. A word that is no segment names the resource's machine state or group (its label is the state's) or a yes/no column (its label is the column's); a word two of these claim is refused with the readings to choose between. Used in `examples/apps/tick/app.ts`. |
+| `views.*[kind=list].tabs` | array | Stable | Tabs over the rows: a segment of the table by name, a segment with its own sort, or every row ({ label }). A tab's label and address are its segment's. A word that is no segment names the resource's machine state or group (its label is the state's) or a yes/no column, stored or computed (its label is the column's); a word two of these claim is refused with the readings to choose between. Used in `examples/apps/tick/app.ts`. |
 
 ## `views.*[kind=list].tabs[]`
 

@@ -448,11 +448,15 @@ export function tabNameProblem(table: TableMeta, word: string): string | undefin
         column.states.final.includes(word) ||
         (column.states.groups !== undefined && Object.hasOwn(column.states.groups, word))),
   );
-  const flag = table.columns.find((column) => column.name === word && columnKind(column.type) === 'boolean');
+  /* A computed yes/no column reads like a stored one: `word = true` compiles to the expression it already is (computed.ts). */
+  const flags = [
+    ...table.columns.filter((column) => columnKind(column.type) === 'boolean').map((column) => column.name),
+    ...Object.entries(table.computed ?? {}).flatMap(([name, computed]) => (computed.type === 'boolean' ? [name] : [])),
+  ];
+  const flag = flags.includes(word);
   if (stated.length && flag) return `"${word}" is a state and a yes/no column of ${table.name}; declare a segment and name that.`;
   if (stated.length || flag) return undefined;
   const states = table.columns.flatMap((column) => (column.states ? [...column.states.open, ...column.states.final] : []));
-  const flags = table.columns.filter((column) => columnKind(column.type) === 'boolean').map((column) => column.name);
   const segments = Object.keys(table.segments ?? {});
   return (
     `"${word}" is not a segment, a state or a yes/no column of ${table.name}. ` +

@@ -214,7 +214,7 @@ by a page's rules and codes, and a key only a drawn page has (`component`, `nav`
 counts them, and `authority.lock` carries a line for each read, command and loader.
 
 The front end uses `@mistriwork/mistri/react/headless`: a `Provider` with no shell and no styles, and the page hooks
-(`useRows`, `useRecord`, `useBreakdown`, `useOptions`, `useCommand`, `useAction`, `useForm`, `useHref`). Every request
+(`useRows`, `useRecord`, `useBreakdown`, `useOptions`, `useCommand`, `useGranted`, `useAction`, `useForm`, `useHref`). Every request
 it makes names its surface in `X-Mistri-Surface`, and the server holds it there (`server/http/surfaceGate.ts`):
 
 - A surface's requests take only the routes a headless host calls: view/run, the breakdowns, the page loader, the

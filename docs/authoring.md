@@ -756,8 +756,10 @@ a resource declares `file: { content, name, type?, size? }`, and a related list
 over it draws as attachments (see Pages and forms).
 
 Fields can opt into compact summary presentation. Over a resource with a
-`machine`, the summary also draws the record's road — each state's first
-verb, from the first state — as a stepper, with earlier steps passed and the
+`machine`, the summary also draws the record's road — from the first state,
+the first run of verbs, in the order written, that reaches a final state
+without stepping back (a verb that loops back, such as resume or reopen, is
+passed over) — as a stepper, with earlier steps passed and the
 current one marked; the words are the column's `display.values`. The stepper
 is derived from the graph and never authored, and the machine, not the
 stepper, is what the server enforces.

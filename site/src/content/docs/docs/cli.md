@@ -816,7 +816,9 @@ names the table people are rows of, each role's account takes the email of
 one of its rows, so a view of "= me" shows that person's records. A
 tenant App, started with its --policy, gets an account per role that is a
 member of every tenant of its profile table, up to the first 100 by its
-key, or of the platform realm for a platform role.
+key, or of the platform realm for a platform role. An account dev.json
+names that the auth store does not hold (the store deleted, or another
+tree's) is made again with its kept password, and the start says so.
 
 mistri test init [--app <dir>] [--config <path>] [--force]
 

@@ -125,6 +125,14 @@ export type Columns = {
   vehicle_model: { id: 'text'; make: 'text'; model: 'text'; model_year: 'number' };
 };
 
+/** Each table's segments, by name: what a tab, a `table.segment` source and a bare word in a query may name. */
+export type Segments = {
+  dealer: "active" | "suspended";
+  intake_submission: "in_triage" | "closed";
+  lead: "open" | "converted_leads" | "disqualified_leads";
+  loan_application: "in_flight" | "decided" | "unassigned" | "under_review" | "awaiting_a_decision";
+};
+
 /** The server connections this App may bind, by name: what `connection`
     and `sources.*.connection` accept. */
 export type Connections = "applicants" | "loans";
@@ -149,5 +157,5 @@ export type Flags<Manifest> = AppFlagValues<Manifest>;
 export type FlagName<Manifest> = keyof Flags<Manifest>;
 
 declare module '@mistriwork/mistri/app' {
-  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys } }
+  interface Register { schema(): { columns: Columns; references: References; rows: Rows; keys: Keys; segments: Segments } }
 }

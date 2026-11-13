@@ -43,6 +43,6 @@ export interface HeadlessProviderProps {
 export declare function Provider(props: HeadlessProviderProps): ReactTypes.ReactElement;
 
 export { useHref, useRecord, useRows } from './page.js';
-export { useAction, useBreakdown, useCommand, useOptions } from './ui.js';
+export { useAction, useBreakdown, useCommand, useGranted, useOptions } from './ui.js';
 /** One of the form views the surface declares: its draft as it stands, and the form. Every submit is still granted by the server. */
 export declare function useForm(view: string): PageForm;

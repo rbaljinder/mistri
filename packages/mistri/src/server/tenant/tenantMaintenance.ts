@@ -41,6 +41,7 @@ import { captureAppAuthRuntime, createAppAuth, type AppAuthRuntime } from '../au
 import {
   createNativeAccount,
   findNativeAccountByEmail,
+  setNativeAccountPassword,
   nativeAccountInput,
   NativeAccountRefusal,
   type NativeAccountInput,
@@ -1346,6 +1347,13 @@ export async function revokeTenantMembership(
 export async function findAppAccount(appDir: string, email: string): Promise<string | null> {
   const loaded = await loadedApp(appDir);
   return accountsOf(loaded, (runtime) => findNativeAccountByEmail(runtime, email));
+}
+
+/** A development store's account given a password it will sign in with: `mistri dev` adopting an account the store
+ * already holds for a dev address, whose own password it does not know. */
+export async function setDevAccountPassword(appDir: string, accountId: string, password: string): Promise<void> {
+  const loaded = await loadedApp(appDir);
+  await accountsOf(loaded, (runtime) => setNativeAccountPassword(runtime, accountId, password));
 }
 
 /**

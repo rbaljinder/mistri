@@ -445,6 +445,86 @@ test('a list tab names a segment, with its own order in `sort`', () => {
   assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
 });
 
+test('a tab names a state, a group or a yes/no column, stored or computed, as the load reads it', () => {
+  /* The ticket's status is a machine's column, with a group; `escalated` is stored yes/no and `breaching` computed. */
+  const machined: DatabaseSchema = {
+    ...SEGMENTED,
+    tables: SEGMENTED.tables.map((t) =>
+      t.id === 'ticket'
+        ? {
+            ...t,
+            columns: [
+              ...t.columns.map((c) =>
+                c.name === 'status'
+                  ? {
+                      ...c,
+                      allowed: ['open', 'won', 'lost'],
+                      states: { open: ['open'], final: ['won', 'lost'], groups: { done: ['won', 'lost'] } },
+                    }
+                  : c,
+              ),
+              column('escalated', 'boolean'),
+            ],
+            computed: { breaching: { type: 'boolean', expr: { k: 'bool', value: true }, reads: [] } as never },
+          }
+        : t,
+    ),
+  };
+  const compiled = compile(
+    [
+      'import type { Views } from "./mistri-schema.d.ts";',
+      'import { listView } from "@mistriwork/mistri/app";',
+      'export const views = {',
+      '  t: listView("Tickets", "ticket", { tabs: ["open", "won", { segment: "done", sort: "priority" }, "escalated", "breaching"] }),',
+      '  // @ts-expect-error — "subject" is a column, but not a yes/no one',
+      '  u: listView("Tickets", "ticket", { tabs: ["subject"] }),',
+      '  // @ts-expect-error — "wno" is no segment, state or yes/no column',
+      '  v: listView("Tickets", "ticket", { tabs: [{ segment: "wno" }] }),',
+      '} satisfies Views;',
+    ].join('\n'),
+    {},
+    {},
+    machined,
+  );
+  assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+});
+
+test('a table with no segments takes a tab that is a state or a yes/no column, and no other word', () => {
+  const machined: DatabaseSchema = {
+    ...SCHEMA,
+    tables: SCHEMA.tables.map((t) =>
+      t.id === 'ticket'
+        ? {
+            ...t,
+            columns: [
+              ...t.columns.map((c) =>
+                c.name === 'status' ? { ...c, allowed: ['open', 'won', 'lost'], states: { open: ['open'], final: ['won', 'lost'] } } : c,
+              ),
+              column('escalated', 'boolean'),
+            ],
+          }
+        : t,
+    ),
+  };
+  const compiled = compile(
+    [
+      'import type { Views } from "./mistri-schema.d.ts";',
+      'import { listView } from "@mistriwork/mistri/app";',
+      'export const views = {',
+      '  t: listView("Tickets", "ticket", { tabs: ["open", { segment: "won" }, "escalated"] }),',
+      '  // @ts-expect-error — no segment is declared, so a word that is no state or yes/no column is a slip',
+      '  u: listView("Tickets", "ticket", { tabs: ["urgent"] }),',
+      '  // @ts-expect-error — nor as a segment',
+      '  v: listView("Tickets", "ticket", { tabs: [{ segment: "subject" }] }),',
+      '} satisfies Views;',
+    ].join('\n'),
+    {},
+    {},
+    machined,
+  );
+  assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+});
+
 test('a segment misspelled — as a source, an option, a tab or a word in a query — is a type error where it is written', () => {
   const types = typesForSchema(SEGMENTED);
   assert.match(types, /export type Segments = \{\n {2}ticket: "open" \| "urgent";\n\};/);

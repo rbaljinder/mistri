@@ -10,6 +10,7 @@ import {
   parseMachine,
   withMachineSteppers,
 } from '../packages/mistri/src/shared/appMachine.js';
+import { lifeOfMachine } from '../packages/mistri/src/server/cli/appTargets.js';
 import { validatePage, type PageDef } from '../packages/engine/src/shared/page.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { catalogOf } from './support/commandCatalog.js';
@@ -111,6 +112,76 @@ test("the road is each state's first verb's first state, and a board over the co
   assert.deepEqual(served.path, ['submitted', 'in_review', 'manager_review', 'approved']);
   assert.equal(served.states.find((state) => state.value === 'manager_review')?.label, 'With a manager');
   assert.equal(served.states.find((state) => state.value === 'in_review')?.label, 'In review');
+});
+
+test('the road passes over a verb that loops back, and stays off a side state the first road skips', () => {
+  /* A field report: an incident's first verb from "In progress" puts it on hold, whose one verb resumes it, and the
+     stepper stopped at "On hold", never reaching "Resolved". */
+  const incident = parseMachine(
+    machine('status', {
+      new: { on: { start: 'in_progress' } },
+      in_progress: { on: { hold: 'on_hold', resolve: 'resolved' } },
+      on_hold: { on: { resume: 'in_progress' } },
+      resolved: { on: { reopen: 'in_progress', close: 'closed' } },
+      closed: { final: true },
+    }),
+    'm',
+    () => false,
+  );
+  assert.deepEqual(machinePath(incident), ['new', 'in_progress', 'resolved', 'closed']);
+  // No road reaches a final state: the longest one that never steps back.
+  const open = parseMachine(
+    machine('status', { a: { on: { go: 'b' } }, b: { on: { back: 'a', next: 'c' } }, c: { on: { undo: 'b' } } }),
+    'm',
+    () => false,
+  );
+  assert.deepEqual(machinePath(open), ['a', 'b', 'c']);
+});
+
+test("a side state's own final exit is not the road: hold and cancel leave the stepper at resolved", () => {
+  const incident = parseMachine(
+    machine('status', {
+      new: { on: { start: 'in_progress' } },
+      in_progress: { on: { hold: 'on_hold', resolve: 'resolved' } },
+      on_hold: { on: { resume: 'in_progress', cancel: 'cancelled' } },
+      resolved: { final: true },
+      cancelled: { final: true },
+    }),
+    'm',
+    () => false,
+  );
+  assert.deepEqual(machinePath(incident), ['new', 'in_progress', 'resolved']);
+  // Seed walks the same road, and on hold is a side state with cancelled as its exit.
+  const life = lifeOfMachine(schema.tables[0] as never, incident);
+  assert.deepEqual(life.path, ['new', 'in_progress', 'resolved']);
+  assert.deepEqual(life.exits, ['cancelled']);
+  assert.equal(life.holds.get('on_hold'), 'in_progress');
+  // A side state is still the way on where nothing else leads forward.
+  const only = parseMachine(
+    machine('status', {
+      a: { on: { go: 'b' } },
+      b: { on: { back: 'a', next: 'c' } },
+      c: { final: true },
+    }),
+    'm',
+    () => false,
+  );
+  assert.deepEqual(machinePath(only), ['a', 'b', 'c']);
+});
+
+test('a state that sends back is still the road to the one final only it reaches, past the exit every state shares', () => {
+  const issue = parseMachine(
+    machine('status', {
+      backlog: { on: { start: 'in_progress', cancel: 'canceled' } },
+      in_progress: { on: { review: 'in_review', cancel: 'canceled' } },
+      in_review: { on: { done: 'done', sendBack: 'in_progress', cancel: 'canceled' } },
+      done: { final: true },
+      canceled: { final: true },
+    }),
+    'm',
+    () => false,
+  );
+  assert.deepEqual(machinePath(issue), ['backlog', 'in_progress', 'in_review', 'done']);
 });
 
 test('a page over the resource draws the road as a stepper on its summary, and the page validates it', () => {

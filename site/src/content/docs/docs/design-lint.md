@@ -52,7 +52,7 @@ makes the picture sharper without changing the layout.
 | `shown-twice` | A headline's figure repeated as its subfigure | drop one |
 | `destructive-first` | The first action (the filled button) cancels or deactivates | the forward verb first, `confirm: true`, or `header({ destructive: [...] })` |
 | `no-forward-verb` | A record's only actions end it (cancel, deactivate, end) | add the verb its work moves on by, or a related `create` |
-| `thin-workflow` | A workflow of 2 steps, or most values outside it | 3–6 ordered steps; tones for side exits |
+| `thin-workflow` | A workflow of 2 steps, or most values outside it; the advisory names which, and the values left out | 3–6 ordered steps; tones for side exits |
 | `undressed-vocabulary` | A status without tones reads as body text | `{ tone: { open: 'info', '*': 'neutral' } }` |
 | `raw-label` | A `recordLabel` template names an amount, which it prints raw (a date or a timestamp is said as its day, so it is no smell) | words and references: `'{lease_id} · {kind}'` |
 | `required-unfilled` | A New form or a related `create` leaves a required column empty, or a status unchosen | `show` it, or `defaults: { status: 'new' }` |

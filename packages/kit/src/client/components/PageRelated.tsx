@@ -12,7 +12,7 @@ import type { ResourceClientReply } from '@mistriwork/engine/shared/resourceHttp
 import { columnDisplay, columnLabel, recordLabel, api as coreApi, findTable, openRecord, rowLabel, state, writeAllowed } from '../core.js';
 import { relatedRows } from '../prefs.js';
 import { formatBytes, formatNumber, formatRelativeDay } from '../locale.js';
-import { columnKind, linkTarget, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { columnKind, isAppendOnly, linkTarget, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { recordViewKey, recordViewLabel, withoutParent, withoutParentName } from '@mistriwork/engine/shared/referenceModel.js';
 import { groupsBody, listView, relatedCountsBody } from '@mistriwork/engine/shared/recordReads.js';
 import { GROUP_ROWS_DEFAULT, GROUPS_DEFAULT } from '@mistriwork/engine/shared/pageModel.js';
@@ -525,7 +525,8 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
   const owner = connection ?? state.activeConnection;
   /* Rename and Remove are offered where the server would accept them — the
      catalog's own answer for this reader, as the record's Delete asks it —
-     and never in a preview, which writes nothing. */
+     and never in a preview, which writes nothing. A file the reader only
+     appends is never changed after its upload, so it is never renamed. */
   const nameColumn = file && table ? table.columns.find((column) => column.name === file.name) : undefined;
   const connectionWritable = Boolean(state.connections?.some((c: { id: string; writable?: boolean }) => c.id === owner && c.writable));
   const renamable = Boolean(
@@ -536,6 +537,7 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
     !nameColumn.primaryKey &&
     nameColumn.writable !== false &&
     !table.isView &&
+    !isAppendOnly(table) &&
     writeAllowed(table.id) &&
     connectionWritable,
   );

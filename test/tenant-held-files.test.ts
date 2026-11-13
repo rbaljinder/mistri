@@ -152,6 +152,7 @@ async function publicFixture(t: TestContext, options: { challenge?: boolean } = 
           leads: { kind: 'list', from: 'lead' },
           triage: { kind: 'list', from: 'intake_submission' },
           claim: { kind: 'form', label: 'Send documents', public: true, command: { id: 'claim', version: 1, input: claimInput } },
+          greet: { kind: 'form', label: 'Say hello', public: true, command: { id: 'greet', version: 1, input: savedInput } },
           draft: {
             kind: 'form',
             label: 'Apply in steps',
@@ -230,6 +231,23 @@ async function publicFixture(t: TestContext, options: { challenge?: boolean } = 
         return { reference: String(row.reference), message: 'Application received.' as const };
       },
     }),
+    // Declares no message, and says one anyway, built from the visitor's own typing: a handler that says more than it declared.
+    greet: defineCommand({
+      targets: 'none',
+      source: 'business',
+      target: 'lead',
+      write: ['lead', 'intake_submission'],
+      public: true,
+      input: savedInput,
+      output: shape({ reference: text() }),
+      async handle({ db: records, intake }, value) {
+        const reference = `HI-${value.name}`;
+        const row = { id: randomUUID(), reference, name: value.name, reply: '' };
+        if (intake === 'tenant') await records.lead.insert(row);
+        else await records.intake_submission.insert(row);
+        return { reference, message: `Hello, ${value.name}.` } as never;
+      },
+    }),
     claim: defineCommand({
       targets: 'none',
       source: 'business',
@@ -240,8 +258,8 @@ async function publicFixture(t: TestContext, options: { challenge?: boolean } = 
       output: shape({ reference: text(), message: literal('We will call you.', 'North Motors will call you.') }),
       async handle({ db: records, intake, tenant }, value) {
         const reference = `CLM-${value.name}`;
-        // The reply's words are picked by the placed tenant's shared profile; the platform's triage reads none. A
-        // form's reply is the platform's (its decoy could not know them), so the row keeps them too, for the test.
+        // The reply's words are picked by the placed tenant's shared profile; the platform's triage reads none. The
+        // visitor is told them, and the row keeps them too, for the test.
         const message = tenant?.name === 'North Motors' ? ('North Motors will call you.' as const) : ('We will call you.' as const);
         // Where it lands: a dealer's rows keep the files; the platform's triage keeps the words.
         if (intake === 'tenant') {
@@ -285,7 +303,7 @@ async function publicFixture(t: TestContext, options: { challenge?: boolean } = 
         resolveMembershipRows: () => everything,
         resolveRows: () => everything,
         resolvePlatformRows: () => everything,
-        resultReferences: { claim: () => [], draftName: () => [], draftMore: () => [], draftSubmit: () => [] },
+        resultReferences: { claim: () => [], greet: () => [], draftName: () => [], draftMore: () => [], draftSubmit: () => [] },
         intake: { address: 'intake_address' },
       }),
       source: { ...binding.source, existingPath: business },
@@ -342,6 +360,7 @@ test("a public tenant form holds a file for its visitor, and on submit it lands 
   const sent = await f.send(NORTH, [first.body.id as string], first.cookie);
   assert.equal(sent.response.status, 200, JSON.stringify(sent.body) + JSON.stringify(first.body));
   assert.equal(sent.body.reference, 'CLM-Ada');
+  assert.equal(sent.body.message, 'North Motors will call you.', "the visitor is told the handler's words");
   assert.deepEqual(
     f.rows("SELECT reply FROM lead WHERE tenant_id = 'north'"),
     [{ reply: 'North Motors will call you.' }],
@@ -715,4 +734,17 @@ test("every visitor's share and a sender's count are a place's own: a full tenan
   } finally {
     db.close();
   }
+});
+
+test("a tenant's stock form with a decoy says only a declared message: the templated one is left out, and the decoy has the same keys", async (t) => {
+  const f = await publicFixture(t);
+  const decoy = await f.post(`/api/forms/greet${via(NORTH)}`, { input: { name: 'Bot' }, submission: randomUUID(), trap: 'x' });
+  const real = await f.post(`/api/forms/greet${via(NORTH)}`, { input: { name: 'Ada' }, submission: randomUUID(), trap: '' });
+  assert.equal(real.status, 200, JSON.stringify(await real.clone().json()));
+  const [shown, kept] = [object(await decoy.json()), object(await real.json())];
+  assert.deepEqual(Object.keys(kept).sort(), Object.keys(shown).sort(), 'the real reply and the decoy have the same keys');
+  assert.equal(JSON.stringify(kept).includes('Hello'), false, 'the templated sentence is not returned');
+  // A declared literal is still said.
+  const claimed = await f.send(NORTH, [], undefined, 'Cy');
+  assert.equal(claimed.body.message, 'North Motors will call you.');
 });
