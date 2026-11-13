@@ -51,6 +51,7 @@ import { platformHeldColumns } from './tenantVisibleFields.js';
 import {
   bindTenantIntake,
   type TenantIntake,
+  type TenantIntakeStatus,
   type TenantIntakeHold,
   type TenantIntakeResume,
   type TenantIntakeSubmission,
@@ -567,6 +568,11 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
       resumeIntake: intake
         ? intake.resume
         : async (_request: TenantIntakeResume): Promise<never> => {
+            throw new BusinessCommandExecutionError('temporarily_unavailable');
+          },
+      statusIntake: intake
+        ? intake.status
+        : async (_request: TenantIntakeStatus, _use: unknown): Promise<never> => {
             throw new BusinessCommandExecutionError('temporarily_unavailable');
           },
       /* A record's stored history by its store key, for the host that has read

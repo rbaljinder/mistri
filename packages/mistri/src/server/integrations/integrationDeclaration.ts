@@ -80,12 +80,24 @@ export function captureIntegrations(
   if (!Array.isArray(declared.use) || !declared.use.length)
     fail('Jobs integrations.use lists the integrations the App uses: use: [fakepay()].');
   const use = new Map<string, CapturedIntegration>();
+  const chains = new Map<CapturedIntegration, CapturedIntegration>();
   for (const entry of declared.use as unknown[]) {
     let integration: CapturedIntegration;
     try {
       integration = capturedIntegration(entry);
     } catch (error) {
       return fail(`Jobs integrations.use: ${(error as Error).message}`);
+    }
+    /* An extension carries its base: listing the two, or two extensions of one base, would name one set of secrets and one
+       webhook address twice. The extension stands for the whole chain. */
+    for (let link: CapturedIntegration | undefined = integration; link; link = link.base) {
+      const listed = chains.get(link);
+      if (listed === integration && link === integration) fail(`Jobs integrations.use lists "${integration.name}" twice.`);
+      if (listed)
+        fail(
+          `Jobs integrations.use lists "${integration.name}" more than once: as a base and its extension, or as two extensions of one base. List the extension only.`,
+        );
+      chains.set(link, integration);
     }
     if (use.has(integration.name)) fail(`Jobs integrations.use lists "${integration.name}" twice.`);
     use.set(integration.name, integration);

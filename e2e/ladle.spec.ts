@@ -140,7 +140,8 @@ test('the school’s site, its own schedule route, and the staff App embedded un
   await expect.poll(() => new URL(page.url()).searchParams.get('class')).toBe('2');
   await expect(embed.getByRole('button', { name: /^8 Still expected/ })).toBeVisible();
   await embed.getByRole('button', { name: 'Check in Morgan Lee' }).click();
-  await expect(embed.getByText('Morgan Lee is checked in.')).toBeVisible();
+  // The page's own answer is the platform's toast, which stands outside the embedded App's region.
+  await expect(page.locator('#toast')).toContainText('Morgan Lee is checked in.');
   await expect.poll(() => bookingStatus('Morgan Lee')).toBe('checked_in');
   await expect(embed.getByRole('button', { name: 'Check in Morgan Lee' })).toHaveCount(0);
   // The platform's blocks on the same page read the same rows: the metrics move, and the arrival is listed.

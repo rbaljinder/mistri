@@ -43,10 +43,12 @@ import type { DisplayRule } from '@mistriwork/kit/client/components/valueModel.j
 import { setPageHost, type UiDeployment, type UiHost, type UiLook, type UiOption, type UiResourceChoices, type UiRow } from './context.js';
 import { rowsByPath } from './rows.js';
 import { sayAppMessage } from './appMessage.js';
+import { publicMessages } from './publicMessages.js';
 import { say } from '../../copy/components/components/sdk/host.js';
 import { served, shownUnplaced } from '@mistriwork/kit/client/addressMount.js';
 import { filesOnLease, pictureOnLeaseNow } from '@mistriwork/kit/client/fileSource.js';
 import { hrefFor, viewPath } from '../../publicAddress.js';
+import { publicFormAddress } from '../../../shared/appAddress.js';
 import { createPageAppFlags } from '../../appFlags.js';
 import { pageAnalyticsBeacon } from '../../analyticsBeacon.js';
 import { navFollow, shellRoot } from '@mistriwork/kit/client/shellHost.js';
@@ -245,7 +247,7 @@ const pageHost: UiHost = {
     if (!app?.id || typeof view !== 'string' || !view) return undefined;
     const room = Boolean(app.views && Object.hasOwn(app.views, view));
     const address = room ? app.addresses?.public : app.addresses?.intake;
-    const path = room ? viewPath(view) : `/${encodeURIComponent(app.id)}/form/${encodeURIComponent(view)}`;
+    const path = room ? viewPath(view) : publicFormAddress(app.id, view);
     if (!address || !path) return undefined;
     return `${window.location.origin}${shownUnplaced(path)}?via=${encodeURIComponent(address)}`;
   },
@@ -338,8 +340,13 @@ const pageHost: UiHost = {
     const table = state.schema ? (tableNamed(state.schema, resource) as TableMeta | undefined) : undefined;
     return table ? (rowLabel(table, row) as string) : undefined;
   },
+  /* A public form's page has no App payload: its components say from the catalog served beside them. */
   message: (key, args) =>
-    sayAppMessage((pageBridge.activeApp() as { messages?: Readonly<Record<string, readonly unknown[]>> } | null)?.messages, key, args),
+    sayAppMessage(
+      (pageBridge.activeApp() as { messages?: Readonly<Record<string, readonly unknown[]>> } | null)?.messages ?? publicMessages(),
+      key,
+      args,
+    ),
 };
 
 /* The page's modules, for the host modules a component's bare imports reach.

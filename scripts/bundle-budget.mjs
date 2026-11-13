@@ -103,8 +103,10 @@ export const BUDGET = {
    that draws its own pages: its Provider, the SDK's hooks, TanStack Query and the host they read through. */
 export const EMBED_BUDGET = {
   provider: { raw: 15_000, br: 5_300 },
-  /* The headless embed entry, new in rc.25: measured 127,890 / 33,995, its ceiling about 10% above. */
-  headless: { raw: 134_000, br: 35_500 },
+  /* The headless embed entry, new in rc.25: measured 127,890 / 33,995, its ceiling about 10% above.
+     Raised at rc.50 (measured about 134,550 / 35,430): the SDK's form hooks now carry the visitor's language on
+     each saved step and submit, and the per-answer choice narrowing the server serves. */
+  headless: { raw: 137_500, br: 36_300 },
   adapter: { raw: 3_600, br: 1_400 },
   shell: { raw: 670_000, br: 94_000 },
 };

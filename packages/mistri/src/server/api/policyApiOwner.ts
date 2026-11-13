@@ -45,6 +45,7 @@ import {
   type Identity,
 } from '../auth/auth.js';
 import { AppAccessDenied } from '../app/appAccess.js';
+import { withAppPublicUrls } from '../links/publicLink.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { BusinessCommandExecutionError, isBusinessCommandExecutionError } from '../commands/commandErrors.js';
@@ -429,7 +430,10 @@ export async function createPolicyApiOwner(input: {
                   ? context.commands.prepare(captured, signal ? { signal } : {})
                   : context.commands.execute(captured, { ...(signal ? { signal } : {}), door });
               });
-              outcome = mode === 'prepare' ? apiCommandPreparation(result) : projectApiCommandAnswer('execute', result);
+              outcome =
+                mode === 'prepare'
+                  ? apiCommandPreparation(result)
+                  : projectApiCommandAnswer('execute', await withAppPublicUrls(served, result));
             } catch (error) {
               const code = isBusinessCommandExecutionError(error) ? error.code : undefined;
               if (code && code !== 'temporarily_unavailable' && Object.hasOwn(REFUSAL_STATUS, code)) {

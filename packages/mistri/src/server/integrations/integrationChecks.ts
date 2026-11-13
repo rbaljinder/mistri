@@ -97,22 +97,34 @@ export function integrationFormProblems(declared: CapturedIntegrations | undefin
   );
 }
 
-/** A `notify` rule's `send` names a channel a listed integration provides, or the platform's email: its message is queued
-    in the integrations store. */
+/** A `notify` rule's `send`, and a step-up's one-time code (a status check's or a link's), name a channel a listed
+    integration provides, or the platform's email: a notice is queued in the integrations store, and a code is sent
+    on the channel straight away (forms/oneTimeCode.ts). Checked here rather than where each is parsed, since only the
+    jobs module says what the App's integrations provide. */
 export function integrationNotifyProblems(declared: CapturedIntegrations | undefined, app: AppDef): string[] {
   const channels = new Set(
     [...(declared?.use.values() ?? [])].flatMap((integration) => (integration.channel ? [integration.channel.name] : [])),
   );
-  return Object.entries(app.resources ?? {}).flatMap(([name, resource]) =>
-    (resource.notify ?? []).flatMap((rule, i) =>
-      rule.send && rule.send.channel !== EMAIL_CHANNEL && !channels.has(rule.send.channel)
-        ? [
-            `[integration-channel-unknown] resources "${name}", notify ${i + 1} sends on channel "${rule.send.channel}", which no integration the App lists provides` +
-              (channels.size ? `. They provide: ${[...channels].join(', ')}.` : '.'),
-          ]
+  const unknown = (at: string, verb: string, channel: string | undefined) =>
+    channel !== undefined && channel !== EMAIL_CHANNEL && !channels.has(channel)
+      ? [
+          `[integration-channel-unknown] ${at} ${verb} on channel "${channel}", which no integration the App lists provides` +
+            (channels.size ? `. They provide: ${[...channels].join(', ')}.` : '.'),
+        ]
+      : [];
+  return [
+    ...Object.entries(app.resources ?? {}).flatMap(([name, resource]) => [
+      ...(resource.notify ?? []).flatMap((rule, i) => unknown(`resources "${name}", notify ${i + 1}`, 'sends', rule.send?.channel)),
+      ...Object.entries(resource.links ?? {}).flatMap(([link, spec]) =>
+        unknown(`resources "${name}", links "${link}", "stepUp"`, 'sends its code', spec.stepUp?.channel),
+      ),
+    ]),
+    ...Object.entries(app.views ?? {}).flatMap(([key, view]) =>
+      'statusCheck' in view && view.statusCheck?.stepUp
+        ? unknown(`views "${key}", statusCheck "stepUp"`, 'sends its code', view.statusCheck.stepUp.channel)
         : [],
     ),
-  );
+  ];
 }
 
 /**

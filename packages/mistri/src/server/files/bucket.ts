@@ -162,6 +162,44 @@ export class Bucket {
     return read ? new Uint8Array(await new Response(read.body).arrayBuffer()) : undefined;
   }
 
+  /**
+   * The whole object's bytes when it weighs at most `most`; otherwise how much it weighs (or, where the bucket will
+   * not say, that it weighs more), with no more than `most` + 1 bytes read off the wire. Undefined when there is none.
+   */
+  async bytesAtMost(key: string, most: number): Promise<{ bytes: Uint8Array } | { over: number } | undefined> {
+    const response = await this.send('GET', this.url(key), { range: `bytes=0-${most}` });
+    if (response.status === 404) {
+      await response.body?.cancel();
+      return undefined;
+    }
+    // A range from 0 is unsatisfiable only for an object with no bytes at all.
+    if (response.status === 416) {
+      await response.body?.cancel();
+      return { bytes: new Uint8Array() };
+    }
+    if ((response.status !== 200 && response.status !== 206) || !response.body) await this.refused(response, `read ${key}`);
+    const whole = Number(/\/(\d+)$/.exec(response.headers.get('content-range') ?? '')?.[1] ?? NaN);
+    if (Number.isSafeInteger(whole) && whole > most) {
+      await response.body!.cancel();
+      return { over: whole };
+    }
+    // A bucket that ignored the range sends the whole object: read no further than one byte past the most.
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    const reader = response.body!.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > most) {
+        await reader.cancel();
+        return { over: size };
+      }
+      chunks.push(value);
+    }
+    return { bytes: new Uint8Array(Buffer.concat(chunks)) };
+  }
+
   /** Remove the object; one already gone is not an error. */
   async delete(key: string): Promise<void> {
     const response = await this.send('DELETE', this.url(key), {});

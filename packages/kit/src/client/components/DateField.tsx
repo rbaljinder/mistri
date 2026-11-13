@@ -5,10 +5,11 @@
 import { DateField as Field, type DateFieldProps, type DateFieldWords } from '@mistriwork/ui/DateField.js';
 import { Icon } from './Icon.js';
 import { say } from '../copy/forms/components/DateField.js';
+import { appWord } from '../messages.js';
 
 /* Read when a field draws, so a catalog worn later is the one said. */
 const words = (): DateFieldWords => ({
-  dateTimePattern: say('yyyyMmDdHh'),
+  dateTimePattern: appWord('mistri.form.dateTimeHint', say('yyyyMmDdHh')),
   enterDateAndTime: say('enterADateAndTime'),
   enterDate: (format) => say('enterADateInYyyy', { format }),
   dateAndTimeFormat: say('dateAndTimeFormat'),

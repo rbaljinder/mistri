@@ -8,12 +8,15 @@
  * server), so the browser is told only whether each such part holds, never a value it was not shown.
  *
  * A condition is kept as its text and compiled where it is judged, so `today` is the day it is judged on. Date
- * arithmetic the query language does not say — `today - 18 years` — is worked out to a day first (`dateWords`).
+ * arithmetic — `today - 18 years` — is worked out to a day first (`dateWords`), by the grammar the query language reads.
  */
 import type { ColumnMeta } from '@mistriwork/engine/shared/schema.js';
+import { CHOICES_TYPE } from '@mistriwork/engine/shared/tagLists.js';
 import { compileCondition, conditionResult, type CompiledCondition } from '@mistriwork/engine/shared/formValues.js';
 import { quoteValue } from '@mistriwork/engine/shared/query.js';
+import { DATE_ARITHMETIC, shiftedDay } from '@mistriwork/engine/shared/queryDates.js';
 import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
+import type { CommandChoiceMatch, CommandChoiceOperand } from '@mistriwork/engine/schema/model.js';
 import { RECORD_HOPS, type AppCommandField } from './command.js';
 
 type Field = AppCommandField;
@@ -45,33 +48,9 @@ const unmaskedCondition = (condition: CompiledCondition): CompiledCondition =>
     group.map((c) => ({ ...c, field: unmasked(c.field), ...(c.other === undefined ? {} : { other: unmasked(c.other) }) }) as Comparison),
   );
 
-const UNITS: Record<string, 'day' | 'month' | 'year'> = {
-  day: 'day',
-  days: 'day',
-  week: 'day',
-  weeks: 'day',
-  month: 'month',
-  months: 'month',
-  year: 'year',
-  years: 'year',
-};
-const ARITHMETIC = /\btoday\s*([+-])\s*(\d{1,4})\s*(days?|weeks?|months?|years?)\b/gi;
-
-/** The day `today ± N units` names, from `today` (YYYY-MM-DD); a month or a year past the month's end lands on its last day. */
-function shifted(today: string, sign: string, count: number, unit: string): string {
-  const [y, m, d] = today.split('-').map(Number);
-  const by = (sign === '-' ? -1 : 1) * count * (unit.startsWith('week') ? 7 : 1);
-  const kind = UNITS[unit.toLowerCase()];
-  if (kind === 'day') return new Date(Date.UTC(y, m - 1, d + by)).toISOString().slice(0, 10);
-  const months = kind === 'year' ? by * 12 : by;
-  const first = new Date(Date.UTC(y, m - 1 + months, 1));
-  const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
-  return new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(d, last))).toISOString().slice(0, 10);
-}
-
 /** A condition with each `today - 18 years` (days, weeks, months, years) said as the day it names. */
 function dateWords(text: string, today: string): string {
-  return text.replace(ARITHMETIC, (_, sign: string, count: string, unit: string) => shifted(today, sign, Number(count), unit));
+  return text.replace(DATE_ARITHMETIC, (_, sign: string, count: string, unit: string) => shiftedDay(today, sign, Number(count), unit));
 }
 
 /* The column a field reads as, so a literal compares as its kind does: an amount as a number, a day as a day. */
@@ -94,13 +73,16 @@ function columnType(field: Field): string | undefined {
     case 'time':
     case 'reference':
       return 'TEXT';
+    /* A list of answers: asked with `has` and nothing else (`services has cleaning`). */
+    case 'choices':
+      return CHOICES_TYPE;
     default:
       return undefined;
   }
 }
 
 /** The input's fields a condition may name, as the columns it is judged against: never a group, lines, rich text,
-    several choices, questions in rows, or a sensitive value. */
+    questions in rows, or a sensitive value. Several choices are named only by `has`. */
 function draftColumns(fields: readonly Field[]): ColumnMeta[] {
   return fields.flatMap((field) => {
     const type = columnType(field);
@@ -142,14 +124,24 @@ function draftCondition(text: string, where: string, now = new Date(), fields?: 
 /**
  * The names a condition reads: the input's fields, the record's columns and paths (`record.<column>`,
  * `record.<ref>.<column>`), and the tenant's profile columns (`tenant.<column>`, compared with a literal, or on the
- * right of a record part's comparison).
+ * right of a record part's comparison). `has` lists the fields asked with `has`, which only an answer of several
+ * choices may be, and `plain` those compared any other way, which it may not be.
  */
-export function draftNames(text: string, where: string): { fields: string[]; record: string[]; tenant: string[] } {
+export function draftNames(
+  text: string,
+  where: string,
+): { fields: string[]; record: string[]; tenant: string[]; has: string[]; plain: string[] } {
   const fields = new Set<string>();
   const record = new Set<string>();
   const tenant = new Set<string>();
+  const has = new Set<string>();
+  const plain = new Set<string>();
   const unquoted = text.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""');
   for (const c of draftCondition(text, where).flat()) {
+    if (c.operator === 'has' && (c.field.startsWith(RECORD_PREFIX) || c.field.startsWith(TENANT_PREFIX) || c.field.includes('.')))
+      throw new Error(
+        `${where}: "${unmasked(c.field)} has …" asks a field of the input; has reads the several answers of a choices field.`,
+      );
     for (const name of [c.field, ...(c.other === undefined ? [] : [c.other])]) {
       if (name.startsWith(RECORD_PREFIX)) {
         const path = name.slice(RECORD_PREFIX.length);
@@ -163,7 +155,10 @@ export function draftNames(text: string, where: string): { fields: string[]; rec
         throw new Error(
           `${where}: "${name}" is a path; a condition here names a field of the input, record.<column> for the record's own, or tenant.<column>.`,
         );
-      else fields.add(name);
+      else {
+        fields.add(name);
+        (c.operator === 'has' ? has : plain).add(name);
+      }
     }
     /* `record.<column>` on the right is a bare word to the parser (a path of one hop is not masked), so it is found
        in the text as written, outside quotes. */
@@ -188,14 +183,19 @@ export function draftNames(text: string, where: string): { fields: string[]; rec
       tenant.add(column);
     }
   }
-  return { fields: [...fields], record: [...record], tenant: [...tenant] };
+  return { fields: [...fields], record: [...record], tenant: [...tenant], has: [...has], plain: [...plain] };
 }
 
 /* A comparison whose one value is a bare word naming another field compares the two fields. */
 function withFields(condition: CompiledCondition, names: ReadonlySet<string>): CompiledCondition {
   return condition.map((group) =>
     group.map((c) =>
-      c.other === undefined && c.values.length === 1 && typeof c.values[0] === 'string' && names.has(c.values[0]) && c.values[0] !== c.field
+      c.operator !== 'has' &&
+      c.other === undefined &&
+      c.values.length === 1 &&
+      typeof c.values[0] === 'string' &&
+      names.has(c.values[0]) &&
+      c.values[0] !== c.field
         ? ({ field: c.field, operator: c.operator, values: [], other: c.values[0] } as Comparison)
         : c,
     ),
@@ -212,6 +212,7 @@ const sayValue = (value: unknown): string => {
     dotted), a draft's as written. */
 function recordComparisonText(c: Comparison): string {
   const column = c.field.startsWith(RECORD_PREFIX) ? c.field.slice(RECORD_PREFIX.length) : c.field;
+  if (c.operator === 'has') return `${column} has (${c.values.map(sayValue).join(', ')})`;
   if (c.other !== undefined) return `${column} ${{ eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>=' }[c.operator]} ${c.other}`;
   if (c.values.length === 1 && c.values[0] === null) return `${column} ${c.operator === 'ne' ? 'is not empty' : 'is empty'}`;
   if (c.values.length > 1) return `${column} in (${c.values.map(sayValue).join(', ')})`;
@@ -363,4 +364,60 @@ export function brokenRules(
     if (!draftHolds(rule.must, values, fields, now)) broken.push({ field: ruleField(rule), message: rule.message });
   }
   return broken;
+}
+
+/* A choice's `where` reads a field's answer where a bare word on the right is a field's name; to the parser that is a
+   word, so each is masked into one no column is named before it reads them and said again after. The language's own
+   words stay as written, and so does quoted text. */
+const ANSWER = '__answer__';
+const KEYWORDS = new Set(['and', 'or', 'not', 'in', 'is', 'empty', 'null', 'true', 'false', 'yes', 'no', 'today', 'me']);
+const WORD = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(?<![\w.])([A-Za-z_]\w*)(?![\w.])/g;
+
+/**
+ * A choice's `where` compiled over the rows of its table: the left of each comparison a column of `from`, the right a
+ * literal or, where it is a bare name in `fields`, that field's answer (`region = region`: the rows whose region is
+ * the one answered). Which columns `from` has is the server's to say against its table (commandInputProblem).
+ */
+export function choiceWhere(text: string, where: string, fields: ReadonlySet<string>): CommandChoiceMatch {
+  const said = text.replace(WORD, (whole, quoted: string | undefined, word: string | undefined) =>
+    quoted !== undefined || word === undefined || KEYWORDS.has(word.toLowerCase()) || !fields.has(word) ? whole : `${ANSWER}${word}`,
+  );
+  const answer = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.startsWith(ANSWER) ? value.slice(ANSWER.length) : undefined;
+  let compiled: CompiledCondition;
+  try {
+    compiled = compileCondition(said, where);
+  } catch (error) {
+    throw new Error((error as Error).message.split(ANSWER).join(''));
+  }
+  /* A bare word on the right that is no input is text to the grammar, but read as a column by anyone reading the
+     where ("any other name is a column of from"); a column is compared with an answer or a value, never another
+     column, so it is refused and text is written in quotes. */
+  const bare = new Set<string>(),
+    quoted = new Set<string>();
+  for (const [, literal, word] of text.matchAll(WORD)) {
+    if (literal !== undefined) quoted.add(literal.slice(1, -1));
+    else if (word !== undefined && !KEYWORDS.has(word.toLowerCase()) && !fields.has(word)) bare.add(word);
+  }
+  for (const c of compiled.flat())
+    for (const value of c.values)
+      if (typeof value === 'string' && bare.has(value) && !quoted.has(value))
+        throw new Error(
+          `${where}: compares ${answer(c.field) ?? c.field} with "${value}", which is no input of the form; a column is compared with an answer or a value, and text is written in quotes ("${value}")`,
+        );
+  return compiled.map((group) =>
+    group.map((c) => {
+      const column = answer(c.field) ?? c.field;
+      // `has` asks a list the form answers (a field.choices); a where's left is a column of `from`, never a list.
+      if (c.operator === 'has')
+        throw new Error(
+          `${where}: "has" asks a list of choices the form answers; a where compares a column of the table with =, !=, <, <=, >, >= or in`,
+        );
+      const values: CommandChoiceOperand[] = c.values.map((value) => {
+        const named = answer(value);
+        return named === undefined ? value : { answer: named };
+      });
+      return { column, operator: c.operator, values };
+    }),
+  );
 }

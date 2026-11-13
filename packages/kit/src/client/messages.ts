@@ -22,6 +22,7 @@ import { formatNumber } from './locale.js';
 import { beginWork } from './pendingWork.js';
 import { setHostCookie, shellRoot } from './shellHost.js';
 import { localeCookieName } from '@mistriwork/engine/shared/appLocale.js';
+import type { FrameworkWordKey } from '@mistriwork/engine/shared/frameworkWords.js';
 
 type MessageLanguage = 'en' | 'es';
 
@@ -221,11 +222,15 @@ export interface ServedLanguage {
   locale?: string | undefined;
   /** The App has words in several languages (`ui.languages`): the server's answer is the language, chrome included. */
   offered?: readonly string[] | undefined;
+  /** The platform's form words the App's catalog says in the reader's language (`mistri.*`): what `appWord` says. */
+  words?: Readonly<Record<string, string>> | undefined;
 }
 
 const STORAGE_PREFIX = 'mistri.messages.language.';
 let scope: string | undefined;
 let served: ServedLanguage = {};
+/** The App's words for the platform's own (`holdAppWords`): a public form holds its own, an App's shell its payload's. */
+let appWords: Readonly<Record<string, string>> = {};
 /** The language on screen; `wanted` is the one asked for, which `language` becomes once its words are here. */
 let language: MessageLanguage = 'en';
 let wanted: MessageLanguage = 'en';
@@ -317,11 +322,29 @@ function want(next: MessageLanguage, changed: boolean): Promise<void> {
 export function setMessageScope(appId?: string, language?: ServedLanguage): Promise<void> {
   const nextScope = appId || undefined;
   served = language ?? {};
+  appWords = served.words ?? {};
   const next = served.offered?.length ? chromeLanguage(served.locale) : (savedLanguage(nextScope) ?? chromeLanguage(served.locale));
   const moved = scope !== nextScope;
   scope = nextScope;
   if (!moved && wanted === next) return arriving.get(next) ?? Promise.resolve();
   return want(next, moved);
+}
+
+/**
+ * Hold the App's words for the platform's (`words`, served beside a public form, which has no App shell to scope it).
+ * The next form drawn says them.
+ */
+export function holdAppWords(words: Readonly<Record<string, string>> | undefined): void {
+  appWords = words ?? {};
+}
+
+/**
+ * One of the platform's form words (`mistri.form.back`, engine shared/frameworkWords.ts) as the App's catalog says it
+ * in the reader's language, filled with its values; else `fallback`, the platform's own in the chrome's language.
+ */
+export function appWord(key: FrameworkWordKey, fallback: string, params?: MessageParams): string {
+  const word = Object.hasOwn(appWords, key) ? appWords[key] : undefined;
+  return word === undefined ? fallback : interpolate(word, params);
 }
 
 /** The active framework language, always one the framework catalog supports. */

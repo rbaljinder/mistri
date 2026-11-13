@@ -6,6 +6,7 @@
  * change during startup is a restart rather than a half-read deployment.
  */
 import { setBuildIdSource } from '@mistriwork/engine/server/http/probes.js';
+import { HttpError } from '@mistriwork/engine/server/http/reply.js';
 import { authoringApp } from '@mistriwork/engine/server/http/refusalReport.js';
 import { readFile } from 'node:fs/promises';
 import { dirname, relative } from 'node:path';
@@ -239,7 +240,9 @@ export async function startTenantServing(
     let owner: Awaited<ReturnType<typeof createTenantAuthenticatedHttpServer>>;
     let made:
       | {
-          readonly jobs?: Pick<import('../jobs/jobHost.js').JobHost, 'runNow'>;
+          readonly jobs?: Pick<import('../jobs/jobHost.js').JobHost, 'runNow'> & {
+            readonly service?: NonNullable<Parameters<typeof testControlFrom>[1]['service']>;
+          };
           readonly readAudit: NonNullable<Parameters<typeof testControlFrom>[1]['tenantReadAudit']>;
         }
       | undefined;
@@ -252,6 +255,12 @@ export async function startTenantServing(
         tenantReadAudit: async (tenant, query) => {
           if (!made) throw new Error('The tenant host is not serving yet.');
           return made.readAudit(tenant, query);
+        },
+        /* A tenant App's service actor rides on its jobs: without --jobs there is no principal to act as. */
+        service: async (request) => {
+          const service = made?.jobs?.service;
+          if (!service) throw new HttpError(400, 'This server runs no jobs: start the App with --jobs to act as a service.');
+          return service(request);
         },
         get jobs() {
           return jobs();

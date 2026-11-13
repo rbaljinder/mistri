@@ -1027,6 +1027,32 @@ export function bindTenantJobs(options: TenantJobsOptions) {
     });
   };
 
+  /**
+   * A test host's service actor (tenantServiceActor.ts): one service role in
+   * one tenant, bound as a delivery is — the tenant's anchors read now and
+   * fenced to COMMIT, the role's own grant — under the principal `test`, so
+   * its receipts never pass for a job's. Its commands are a workflow step's:
+   * a tenant command, never public, whose result the policy can read.
+   */
+  const serve = async (role: string, tenantId: string, signal?: AbortSignal): Promise<JobCommandBinding> => {
+    if (retired) return deny();
+    const tenant = parseTenantSelector([tenantId]);
+    const anchors = captureTenantData(await reader.readServiceAnchors(tenant));
+    if (retired || anchors.platformVersion === null || anchors.tenantVersion === null) return deny();
+    const access = resolveAppAccess(app, ownership.schema, [role]);
+    return bindService({
+      runAs: 'test',
+      place: 'tenant',
+      roles: Object.freeze([role]),
+      grants: validation ? { ...access, validation } : access,
+      tenantId: tenant,
+      zone: await zoneOf(tenant),
+      anchors: Object.freeze({ tenantVersion: anchors.tenantVersion, platformVersion: anchors.platformVersion }),
+      aborted: () => signal?.aborted === true,
+      extract: (id) => stepExtract(id),
+    });
+  };
+
   const runtime = Object.freeze({
     app,
     module,
@@ -1036,6 +1062,7 @@ export function bindTenantJobs(options: TenantJobsOptions) {
     admit,
     bind,
     deliver,
+    serve,
     /** Whom a job at times per tenant runs for at a slot: the tenants active now. */
     tenants: async () => (await reader.readActiveTenants()).map((tenant) => tenant.id),
     /** The same, each with its zone: the one its profile row names, else the App's own (`timezone: 'tenant'`). */
@@ -1113,6 +1140,19 @@ export function tenantIntegrationRuntime(enrollment: object) {
     commands: jobs.commands,
     target: jobs.target,
     deliver: jobs.deliver,
+  });
+}
+
+/** What a test host's service actor runs over (tenantServiceActor.ts): the App, its principals and commands, and the
+ * one-role binding. Undefined when the deployment was enrolled without jobs. */
+export function tenantServiceRuntime(enrollment: object) {
+  const jobs = runtimes.get(enrollment)?.jobs;
+  if (!jobs) return undefined;
+  return Object.freeze({
+    app: jobs.app,
+    principals: jobs.module.principals,
+    commands: jobs.commands,
+    serve: jobs.serve,
   });
 }
 

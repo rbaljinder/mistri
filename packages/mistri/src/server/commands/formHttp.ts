@@ -14,6 +14,7 @@ import type { AppDef, AppFormView } from '../../shared/app.js';
 import { servedFormDress } from '../../shared/appForms.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
+import { askedLocale, requestLocale } from '../app/readerLocale.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { bindHttpBusinessCommands } from './businessCommandLoader.js';
 import type { CommandJournalAppScope } from '../../adapters/commands/commandJournalTypes.js';
@@ -26,9 +27,11 @@ import type { CaptureCommandFlags } from './commandFlags.js';
 import { commandFlagsOnce } from './commandFlagCapture.js';
 import { describeShape } from './commandShapes.js';
 import { servesLinks, withLinkUrls } from '../links/linkLookup.js';
-import { LINK_TOKEN_PREFIX, decoyLinkUrl, holdsLinkRef } from '../links/linkToken.js';
+import { withAppPublicUrls } from '../links/publicLink.js';
+import { LINK_REF_PREFIX, LINK_TOKEN_PREFIX, decoyLinkUrl } from '../links/linkToken.js';
 
 import { componentHrefs, type CompiledComponents } from '../app/appComponents.js';
+import { componentMessages, frameworkWords } from '../app/appMessages.js';
 import { publicFormInputIds } from '../../shared/appComponentPlaces.js';
 import { publicActorId } from '../../shared/publicActor.js';
 const SUBMISSION_KEY = /^[A-Za-z0-9_-]{16,128}$/;
@@ -48,7 +51,7 @@ export function presentForm(key: string, form: AppFormView) {
             ? {
                 statusCheck: {
                   confirm: form.statusCheck.confirm.map((item) => ({ name: item.column, label: item.label })),
-                  ...(form.statusCheck.stepUp ? { stepUp: true } : {}),
+                  ...(form.statusCheck.stepUp ? { stepUp: form.statusCheck.stepUp.channel ?? 'email' } : {}),
                 },
               }
             : {}),
@@ -95,6 +98,19 @@ export function publicFormComponents(appId: string, compiled: CompiledComponents
     : undefined;
 }
 
+/** A public form's input components and, beside them, the App's catalog in the visitor's words: no App payload reaches
+    a public form's page, so `useMessage` in a component there says from this. Neither where the form draws no
+    component; no catalog for an App without one. With them, or alone, the App's words for the platform's own
+    (`mistri.*`: Step 1 of 3, Back) in the same language. `app` is the loaded definition, which holds the catalogs. */
+export function publicFormParts(app: AppDef, compiled: CompiledComponents | undefined, form: AppFormView, locale: string | undefined) {
+  const words = frameworkWords(app, locale ?? app.ui.locale);
+  const said = words ? { words } : {};
+  const components = publicFormComponents(app.id, compiled, form);
+  if (!components) return said;
+  const messages = componentMessages(app, locale ?? app.ui.locale);
+  return { components, ...(messages ? { messages } : {}), ...said };
+}
+
 /** The members a door's submission may carry beside its input and key: the stock form's decoy, which a person never
     sees and so never fills. A ticket and a challenge's token travel as headers, read before the body is. */
 type SubmissionExtra = 'trap';
@@ -135,7 +151,9 @@ type PublicSubmissionReply = { reference: string; receipt: { id: string; status:
     answers without it: the URL is said once, and the receipt keeps only its reference. */
 function publicLink(result: BusinessCommandResult): { link?: string } {
   const link = (result.result as { link?: unknown } | null)?.link;
-  return !result.replayed && typeof link === 'string' && !holdsLinkRef(link) && link.includes(`/l/${LINK_TOKEN_PREFIX}`) ? { link } : {};
+  return !result.replayed && typeof link === 'string' && !link.startsWith(LINK_REF_PREFIX) && link.includes(`/l/${LINK_TOKEN_PREFIX}`)
+    ? { link }
+    : {};
 }
 
 /** Whether a command's declared output carries a `link`: its door's decoy then answers with one too. */
@@ -206,6 +224,7 @@ export async function dispatchPublicFormHttp(options: {
     return await dispatchPublicFormSubmissionHttp({
       req,
       res,
+      locale: requestLocale(app, { visitor: true, req, asked: askedLocale(req) }),
       ...(options.extra ? { extra: options.extra } : {}),
       ...(options.admit ? { admit: options.admit } : {}),
       ...(options.tooLarge ? { tooLarge: options.tooLarge } : {}),
@@ -236,7 +255,9 @@ export async function dispatchPublicFormHttp(options: {
           { ...execution, flags, ...(options.visitor ? { visitor: options.visitor } : {}) },
         );
         // A link the handler minted on the row it made is said to its visitor as a URL, in this answer alone.
-        return servesLinks(app) && !result.replayed ? withLinkUrls(app, resources, result) : result;
+        const linked = servesLinks(app) && !result.replayed ? await withLinkUrls(app, resources, result) : result;
+        // A public link (context.publicLink) is no secret: a replay says it too.
+        return await withAppPublicUrls(app, linked);
       },
       ...(options.admit && servesLinks(app) && answersLink(commands[command.id]?.output) ? { decoyLink: () => decoyLinkUrl(app.id) } : {}),
       ...(options.admit ? { declaredMessages: () => declaredMessages(commands[command.id]?.output) } : {}),
@@ -264,8 +285,10 @@ export async function dispatchPublicFormSubmissionHttp(options: {
   res: ServerResponse;
   submit: (
     submission: { input: unknown; submission: string },
-    execution: { signal: AbortSignal; requestId?: string },
+    execution: { signal: AbortSignal; requestId?: string; locale?: string },
   ) => Promise<BusinessCommandResult>;
+  /** The visitor's locale, as their door resolved it (readerLocale.ts `requestLocale`): the command's `ctx.locale`. */
+  locale?: string | undefined;
   extra?: readonly SubmissionExtra[];
   admit?: SubmissionAdmission;
   tooLarge?: 'thrown';
@@ -289,6 +312,7 @@ export async function dispatchPublicFormSubmissionHttp(options: {
     const execution = {
       signal: controller.signal,
       ...(typeof res.getHeader('x-request-id') === 'string' ? { requestId: String(res.getHeader('x-request-id')) } : {}),
+      ...(options.locale ? { locale: options.locale } : {}),
     };
     const result = await submit({ input, submission }, execution);
     const reference = (result.result as { reference?: unknown } | null)?.reference;

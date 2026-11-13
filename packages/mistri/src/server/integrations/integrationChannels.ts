@@ -46,6 +46,8 @@ import type { UnsubscribeClaim } from '../email/unsubscribe.js';
 import { knownTimeZone, type CapturedIntegrations } from './integrationDeclaration.js';
 import type { IntegrationRuntime } from './integrationRuntime.js';
 import { keptReason, NOTICE_WORDS_UNOPENED, openNoticeWords } from '../app/noticeWordsSeal.js';
+import { PUBLIC_LINK_UNSAID, sayPublicLinks, type PublicLinkRender } from '../links/publicLink.js';
+import { holdsLinkRef, LINK_REF_UNSAID } from '../links/linkToken.js';
 
 /**
  * A recipient's address as consent is kept by: a digest, so the opt-out list
@@ -65,6 +67,20 @@ export function channelHolder(address: string, channel: string): string {
    (noticeWordsSeal.ts), and one that does not open here is never sent masked. */
 const saidOf = (appId: string, row: MessageRow): string | undefined =>
   row.words ? openNoticeWords(appId, [row.app, row.tenant, row.key], row.words) : row.text;
+
+/* The said text with its public links as URLs for the row's tenant (a write's words may hold one); the reason it is
+   not sent where it does not open or a link has no address, so a person never reads `mistri-public:<view>.<seal>`. */
+async function sentText(
+  appId: string,
+  row: MessageRow,
+  publicLinks: PublicLinkRender | undefined,
+): Promise<{ text: string } | { reason: string }> {
+  const text = saidOf(appId, row);
+  if (text === undefined) return { reason: NOTICE_WORDS_UNOPENED };
+  if (holdsLinkRef(text, appId)) return { reason: LINK_REF_UNSAID };
+  const said = await sayPublicLinks(text, appId, publicLinks, row.tenant || undefined);
+  return said === undefined ? { reason: PUBLIC_LINK_UNSAID } : { text: said };
+}
 
 const MINUTE = 60_000;
 /* A send that may pass is tried again a minute on, eight times in all, then recorded failed: on every channel. */
@@ -137,11 +153,12 @@ export function channelSender(runtime: IntegrationRuntime, channel: string) {
       });
       return 'rejected';
     }
-    const text = saidOf(runtime.appId, row);
-    if (text === undefined) {
-      await put({ ...row, state: 'failed', reason: NOTICE_WORDS_UNOPENED, dueAt: null, at: runtime.now() });
+    const said = await sentText(runtime.appId, row, runtime.publicLinks);
+    if ('reason' in said) {
+      await put({ ...row, state: 'failed', reason: said.reason, dueAt: null, at: runtime.now() });
       return 'rejected';
     }
+    const { text } = said;
     try {
       const sent = (await integration.channel.send(
         integration.client(secrets),
@@ -303,6 +320,8 @@ export function emailChannelSender(
     transport: EmailTransport;
     /** The address that stops this mail for its holder, absolute. */
     unsubscribe: (claim: UnsubscribeClaim) => string;
+    /** How a public link in a message is said for its tenant; a message one does not say is not sent. */
+    publicLinks?: PublicLinkRender;
     now?: () => number;
   }>,
 ) {
@@ -330,8 +349,9 @@ export function emailChannelSender(
       channel: EMAIL_CHANNEL,
       holder,
     });
-    const text = saidOf(appId, row);
-    if (text === undefined) return put({ ...row, state: 'failed', reason: NOTICE_WORDS_UNOPENED, dueAt: null, at });
+    const said = await sentText(appId, row, options.publicLinks);
+    if ('reason' in said) return put({ ...row, state: 'failed', reason: said.reason, dueAt: null, at });
+    const { text } = said;
     const [subject] = text.split('\n', 1);
     try {
       await transport.send({

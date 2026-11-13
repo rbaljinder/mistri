@@ -20,6 +20,7 @@ import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schem
 import { DURATION_WORDS, parseDuration } from '@mistriwork/engine/shared/duration.js';
 import { isTenantApp, type AppDef } from './appModel.js';
 import { isRegisteredCommand, registeredCommand } from './command.js';
+import { parseLinkStepUp, stepUpAddressProblem, type StepUpTarget } from './appStepUp.js';
 
 /** One declared link: what its holder sees and may run. */
 export interface AppLinkDef {
@@ -35,8 +36,11 @@ export interface AppLinkDef {
   uses?: number;
   /** Columns the holder must type back before anything is shown, each with the label asked. */
   confirm?: { column: string; label: string }[];
-  /** An email column of the record a one-time code goes to before anything is shown. */
-  stepUp?: string;
+  /**
+   * The record's column a one-time code goes to before anything is shown: a
+   * bare column is email; `{ sms: 'mobile' }` a channel an integration declares (appStepUp.ts).
+   */
+  stepUp?: StepUpTarget;
 }
 
 const LINK_EXPIRES_DEFAULT = 7 * 86_400_000;
@@ -156,7 +160,7 @@ export function parseResourceLinks(raw: unknown, at: string, resource: string): 
         if (show.includes(item.column))
           throw new Error(`${where}, "confirm" asks for "${item.column}", which "show" names: a link never shows what it asks.`);
     }
-    if (spec.stepUp !== undefined) link.stepUp = column(spec.stepUp, `${where}, "stepUp"`);
+    if (spec.stepUp !== undefined) link.stepUp = parseLinkStepUp(spec.stepUp, `${where}, "stepUp"`);
     links[name] = link;
   }
   return links;
@@ -212,7 +216,7 @@ export function appLinkProblems(
       const named: [string, string][] = [
         ...link.show.map((col): [string, string] => ['show', col]),
         ...(link.confirm ?? []).map((item): [string, string] => ['confirm', item.column]),
-        ...(link.stepUp ? [['stepUp', link.stepUp] as [string, string]] : []),
+        ...(link.stepUp ? [['stepUp', link.stepUp.column] as [string, string]] : []),
       ];
       for (const [key, col] of named) {
         if (!has(col)) problems.push(`${at}, "${key}" names "${col}", which is not a column of ${table.name}.`);
@@ -220,6 +224,10 @@ export function appLinkProblems(
           problems.push(
             `${at}, "show" names "${col}", which the resource ${hidden.has(col) ? 'hides' : 'does not let anyone read'}; a link adds no read.`,
           );
+      }
+      if (link.stepUp && has(link.stepUp.column)) {
+        const unfit = stepUpAddressProblem(link.stepUp, table, resource.display);
+        if (unfit) problems.push(`${at}, "stepUp" ${unfit}`);
       }
     }
   }

@@ -11,6 +11,7 @@ import { dispatchBusinessCommandHttp, dispatchScopedBusinessCommandHttp } from '
 import { BusinessCommandExecutionError } from '../commands/commandErrors.js';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { emailOf } from '../serviceConnections.js';
+import { requestLocale } from '../app/readerLocale.js';
 import { lookUpLink, servesLinks } from './linkLookup.js';
 import { LINK_PATH, linkDoor, type FoundLink, type LinkBackend, type LinkStep } from './linkDoor.js';
 
@@ -74,12 +75,15 @@ export async function linkRoutes(ctx: RequestContext): Promise<boolean> {
       policy
         ? policy.withLink(actor.link!, (context) => {
             if (!context.commands) throw new BusinessCommandExecutionError('forbidden', 'not_applied');
+            /* The link's holder is known by the link alone: read as a visitor on a public form is. */
+            const locale = requestLocale(app, { visitor: true, req });
             return dispatchScopedBusinessCommandHttp({
               req,
               res,
               path: `/api/commands/${route}`,
               commands: context.commands,
               body: envelope,
+              ...(locale ? { locale } : {}),
             });
           })
         : dispatchBusinessCommandHttp({

@@ -7,7 +7,7 @@
 import { ComputedError, type ComputedFunction, type ComputedNode, type ComputedOp, type ComputedUnit } from './computed.js';
 
 /** The functions an expression may call: each written alike on every engine and worked out alike in JavaScript. */
-const COMPUTED_FUNCTIONS = ['coalesce', 'round', 'min', 'max', 'abs'] as const satisfies readonly ComputedFunction[];
+const COMPUTED_FUNCTIONS = ['coalesce', 'round', 'min', 'max', 'abs', 'concat'] as const satisfies readonly ComputedFunction[];
 const isFunction = (word: string): word is ComputedFunction => (COMPUTED_FUNCTIONS as readonly string[]).includes(word);
 /* The greatest number of places `round` keeps: past it a figure is no longer one an engine says exactly. */
 const ROUND_PLACES = 10;
@@ -256,13 +256,23 @@ export function parseComputed(text: string, isColumn: (path: string) => boolean)
         expect(')');
         const fn = lower;
         const many = fn === 'coalesce' || fn === 'min' || fn === 'max';
-        if (many ? args.length < 2 : fn === 'round' ? args.length < 1 || args.length > 2 : args.length !== 1)
-          throw new ComputedError(
-            many
-              ? `${fn}(…) takes two values or more: ${fn}(a, b).`
+        if (
+          fn === 'concat'
+            ? args.length < 1
+            : many
+              ? args.length < 2
               : fn === 'round'
-                ? 'round(…) takes a number and, if you like, how many places: round(total) or round(total, 2).'
-                : `${fn}(…) takes one number.`,
+                ? args.length < 1 || args.length > 2
+                : args.length !== 1
+        )
+          throw new ComputedError(
+            fn === 'concat'
+              ? "concat(…) takes one text or more: concat(first, ' ', last)."
+              : many
+                ? `${fn}(…) takes two values or more: ${fn}(a, b).`
+                : fn === 'round'
+                  ? 'round(…) takes a number and, if you like, how many places: round(total) or round(total, 2).'
+                  : `${fn}(…) takes one number.`,
             token.at,
           );
         if (fn === 'round' && args[1] && !(args[1].k === 'number' && Number.isInteger(args[1].value) && args[1].value <= ROUND_PLACES))

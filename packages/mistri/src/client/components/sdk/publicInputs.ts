@@ -7,10 +7,13 @@
  * in until then.
  */
 import { installShell, shell } from '@mistriwork/kit/client/shellMode.js';
+import { holdPublicMessages } from './publicMessages.js';
 
 type ServedInputs = Readonly<Record<string, { href: string; css?: string }>>;
 
-export function installPublicInputs(served: ServedInputs): void {
+/** `messages`: the App's catalog in the visitor's words, served beside the components, for their `useMessage`. */
+export function installPublicInputs(served: ServedInputs, messages?: Readonly<Record<string, readonly unknown[]>>): void {
+  holdPublicMessages(messages);
   const prior = shell().components;
   installShell({
     components: {

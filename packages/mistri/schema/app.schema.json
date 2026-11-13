@@ -1956,9 +1956,17 @@
                 ]
               },
               "stepUp": {
-                "type": "string",
-                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-                "description": "An email column of the record: a one-time code is sent to it and typed back before anything is shown."
+                "description": "A one-time code sent to a column of the record and typed back before anything is shown: an email column, or { sms: 'mobile' } for a phone column and a channel an integration declares.",
+                "oneOf": [
+                  { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+                  {
+                    "type": "object",
+                    "minProperties": 1,
+                    "maxProperties": 1,
+                    "propertyNames": { "pattern": "^[a-z][a-z0-9-]{0,31}$" },
+                    "additionalProperties": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$" }
+                  }
+                ]
               }
             }
           }
@@ -2139,7 +2147,7 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 500,
-                "description": "The expression: columns and paths through references, a JSON column's member as text (filters_json.make, Preview: computed.text('filters_json.make')), numbers, quoted text, true, false, today, now, me, comparisons, and, or, not, in (…), is empty, + - * /, date spans (+ 3 months), and coalesce(a, b, …), round(x) or round(x, places), abs(x), min(a, b, …) and max(a, b, …)."
+                "description": "The expression: columns and paths through references, a JSON column's member as text (filters_json.make, Preview: computed.text('filters_json.make')), numbers, quoted text, true, false, today, now, me, comparisons, and, or, not, in (…), is empty, + - * /, date spans (+ 3 months), and coalesce(a, b, …), round(x) or round(x, places), abs(x), min(a, b, …) and max(a, b, …), and concat(a, b, …) of text (a part with no value reads as empty)."
               }
             }
           }
@@ -6169,12 +6177,19 @@
             },
             "stepUp": {
               "type": "object",
-              "additionalProperties": false,
               "required": [
-                "email",
                 "show"
               ],
-              "description": "More after a one-time code to the root's email column, sent by the config's email service: the check's details again with the code, then its show columns for a short session.",
+              "minProperties": 2,
+              "maxProperties": 2,
+              "propertyNames": {
+                "pattern": "^[a-z][a-z0-9-]{0,31}$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$"
+              },
+              "description": "More after a one-time code to a root column: email sent by the config's email service, or another key naming a channel an integration declares ({ sms: 'mobile', show }); one channel key beside show. The check's details again with the code, then its show columns for a short session.",
               "properties": {
                 "email": {
                   "type": "string",

@@ -90,7 +90,7 @@ import {
   type AppAuthority,
 } from './authorityLock.js';
 import { lockedTriggers } from '../commands/triggerLock.js';
-import { saidIconProblem, withCommandCatalog } from '../../shared/command.js';
+import { commandFieldsDeep, saidIconProblem, withCommandCatalog } from '../../shared/command.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
 import type { AppEnvName } from '../../shared/appAuthority.js';
 import { assertAppApiContext, readApiApp } from '../api/appApiValidation.js';
@@ -801,8 +801,29 @@ export async function commandsInWords(
   sayer: MessageSayer | undefined,
   where: string,
 ): Promise<BusinessCommandRegistry> {
+  const problem = choiceLabelLocaleProblem(registry, sayer?.catalogs);
+  if (problem) throw new Error(`${where}: ${problem}`);
   const { withCommandWords } = await import('../commands/businessCommands.js');
   return withCommandWords(registry, (fields, at) => localizeDefinition(fields, sayer, `${where}: ${at}`));
+}
+
+/* A choice's `labelColumns` names locales the App is said in: one with no catalog would never be asked for, its column
+   read for nobody. A tag matches a catalog of its language either way (`es-MX` and `es`), as a reader's does. */
+function choiceLabelLocaleProblem(registry: BusinessCommandRegistry, catalogs: AppCatalogs | undefined): string | undefined {
+  const shipped = Object.keys(catalogs?.locales ?? {});
+  const said = (tag: string) =>
+    shipped.some((locale) => locale.toLowerCase() === tag.toLowerCase() || languageOf(locale) === languageOf(tag));
+  for (const [id, command] of Object.entries(registry))
+    for (const { field, path } of commandFieldsDeep(command.fields)) {
+      if ((field.type !== 'choice' && field.type !== 'choices') || !field.source?.labelColumns) continue;
+      for (const tag of Object.keys(field.source.labelColumns))
+        if (!said(tag))
+          return (
+            `command "${id}" input "${path}" names a label column for "${tag}" (labelColumns), and the App has no catalog for it: ` +
+            `add messages/${tag}.mjs, or take "${tag}" out.`
+          );
+    }
+  return undefined;
 }
 
 /**

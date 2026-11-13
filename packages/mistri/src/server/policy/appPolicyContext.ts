@@ -88,6 +88,8 @@ interface PolicyCommandOptions {
   requestId?: string;
   /** The door an execute came through, which decides what the command keeps (businessCommandExecution.ts). */
   door?: import('../commands/businessCommandExecution.js').CommandDoor;
+  /** The locale the caller resolved for whoever asked (`ctx.locale`), clamped by the executor. */
+  locale?: string;
 }
 
 /** Server-only capability, not a wire token or a bag of client-supplied grants. */
@@ -850,6 +852,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                     signal: options?.signal,
                     requestId: options?.requestId,
                     ...(options?.door ? { door: options.door } : {}),
+                    ...(options?.locale ? { locale: options.locale } : {}),
                   };
                   return executeBusinessCommand(commandBinding, principal, body, {
                     ...execution,
@@ -887,7 +890,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                       binding: commandBinding,
                       actor: principal,
                       body,
-                      execution: { signal: options?.signal, requestId: options?.requestId },
+                      execution: { signal: options?.signal, requestId: options?.requestId, locale: options?.locale },
                       flagsFor: (envelope) => authorizedCommandFlags(commandBinding, principal, envelope, flags),
                       ...(options?.door ? { door: options.door } : {}),
                     });

@@ -37,6 +37,8 @@ type LinkPage = {
       readonly confirm?: readonly { column: string; label: string }[];
       readonly shown?: readonly { label: string; value: string }[];
       readonly commands?: readonly LinkPageCommand[];
+      /** The step-up's channel when it is not email (`sms`): the page says it texts the number on file. */
+      readonly channel?: string;
     }
 );
 
@@ -97,7 +99,7 @@ const button=form.querySelector('button');button.disabled=true;const {ok,body}=a
 if(ok){say(form,'Done.',true);setTimeout(()=>location.reload(),900);}else say(form,failed(body),false);});}
 for(const form of document.querySelectorAll('form[data-gate]')){form.addEventListener('submit',async(e)=>{e.preventDefault();const gate=form.dataset.gate;const fields=Object.fromEntries([...form.elements].filter((el)=>el.name).map((el)=>[el.name,el.value]));
 const body=gate==='confirm'?{confirm:fields}:gate==='send'?{send:true}:{code:fields.code};const {ok,body:answer}=await post(gate==='confirm'?'confirm':'stepup',body);
-if(gate==='send'){say(form,ok?'If the address on file takes mail, a code is on its way. It works for ten minutes.':failed(answer),ok);return;}
+if(gate==='send'){say(form,ok?form.dataset.sent:failed(answer),ok);return;}
 if(ok)location.reload();else say(form,failed(answer),false);});}})();`;
 
 export function linkPage(page: LinkPage): string {
@@ -121,7 +123,9 @@ export function linkPage(page: LinkPage): string {
         `${say}<button type="submit">Continue</button></form>`;
     else if (page.state === 'stepUp')
       body =
-        `<form data-gate="send"><p>To see this, we email a code to the address on file.</p>${say}<button type="submit">Email me a code</button></form>` +
+        (page.channel === undefined
+          ? `<form data-gate="send" data-sent="If the address on file takes mail, a code is on its way. It works for ten minutes."><p>To see this, we email a code to the address on file.</p>${say}<button type="submit">Email me a code</button></form>`
+          : `<form data-gate="send" data-sent="If the number on file takes messages, a code is on its way. It works for ten minutes."><p>To see this, we send a code to the number on file.</p>${say}<button type="submit">Send me a code</button></form>`) +
         `<form data-gate="code"><label for="code">Code</label><input type="text" id="code" name="code" required inputmode="numeric" autocomplete="one-time-code" maxlength="12">${say}<button type="submit">Continue</button></form>`;
     else {
       body = `<dl>${(page.shown ?? []).map((item) => `<dt>${escape(item.label)}</dt><dd>${escape(item.value)}</dd>`).join('')}</dl>`;

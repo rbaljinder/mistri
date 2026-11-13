@@ -579,7 +579,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=form].statusCheck.receipt` | string | Stable |  |
 | `views.*[kind=form].statusCheck.says` | object | Stable |  |
 | `views.*[kind=form].statusCheck.show` | array | Stable |  |
-| `views.*[kind=form].statusCheck.stepUp` | object | Stable | More after a one-time code to the root's email column, sent by the config's email service: the check's details again with the code, then its show columns for a short session. |
+| `views.*[kind=form].statusCheck.stepUp` | object | Stable | More after a one-time code to a root column: email sent by the config's email service, or another key naming a channel an integration declares ({ sms: 'mobile', show }); one channel key beside show. The check's details again with the code, then its show columns for a short session. |
 | `views.*[kind=form].statusCheck.stepUp.email` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
 | `views.*[kind=form].statusCheck.stepUp.show` | array | Stable |  |
 

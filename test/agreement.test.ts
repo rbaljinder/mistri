@@ -28,6 +28,10 @@ import assert from 'node:assert/strict';
 import { labelColumn, type ColumnMeta } from '../packages/engine/src/shared/schema.js';
 import { tryResolvePath } from '../packages/engine/src/shared/view.js';
 import { parseQuery } from '../packages/engine/src/shared/query.js';
+import { CHOICES_TYPE } from '../packages/engine/src/shared/tagLists.js';
+import { bindRecord, boundText, draftHolds } from '../packages/mistri/src/shared/commandDraft.js';
+import { parseCommandInput } from '../packages/mistri/src/shared/commandInputParse.js';
+import { field } from '../packages/mistri/src/server/commands/commandFields.js';
 import { named, SCHEMA, stubDom } from './support/agreementFixture.js';
 
 type Client = {
@@ -275,6 +279,73 @@ describe('the client readings of the query language', () => {
         { column: 'limit', op: '!=', value: 2 },
       ],
     ]);
+  });
+});
+
+/* ---------- a form's `has` on several choices ---------- */
+
+describe('a form condition that asks a list of choices with has', () => {
+  /* The server judges a draft from the condition's text; the browser is served that condition said again after the
+     server bound its record parts (`boundText`) and judges it as someone types. The two readings are one evaluator
+     over two texts, so what is held to agree is the answer, and the filter bar's chip splitter, which reads the same
+     words, must cut them where the parser does. */
+  const fields = parseCommandInput(
+    {
+      services: field.choices(
+        [
+          { value: 'cleaning', label: 'Cleaning' },
+          { value: 'repairs', label: 'Repairs' },
+          { value: 'storage', label: 'Storage' },
+        ],
+        { optional: true },
+      ),
+      name: field.text({ max: 40 }),
+    },
+    'input',
+  );
+  const drafts: Array<Record<string, unknown>> = [
+    {},
+    { services: [] },
+    { services: ['cleaning'] },
+    { services: ['storage', 'repairs'] },
+    { services: ['storage'], name: 'Ana' },
+    { services: ['cleaning', 'storage'], name: 'Ana' },
+  ];
+
+  test('the answer is the same from the condition as written and as the browser is served it', async () => {
+    for (const condition of [
+      'services has cleaning',
+      'services has (cleaning, repairs)',
+      "services has repairs and name = 'Ana'",
+      "services has storage or name = 'Ana'",
+    ]) {
+      const served = boundText(await bindRecord(condition, 'when', async () => true, new Date(), fields));
+      assert.equal(typeof served, 'string', condition);
+      for (const draft of drafts)
+        assert.equal(
+          draftHolds(served as string, draft, fields),
+          draftHolds(condition, draft, fields),
+          `${condition} over ${JSON.stringify(draft)}`,
+        );
+    }
+    // And it is the answer the words give: any of the values, nothing on an empty list.
+    assert.equal(draftHolds('services has (cleaning, repairs)', { services: ['storage', 'repairs'] }, fields), true);
+    assert.equal(draftHolds('services has cleaning', { services: [] }, fields), false);
+  });
+
+  test('the chip splitter cuts a has condition where the parser does', () => {
+    const schema = {
+      ...SCHEMA,
+      tables: SCHEMA.tables.map((table) =>
+        table.name === 'work_order'
+          ? { ...table, columns: [...table.columns, { name: 'services', type: CHOICES_TYPE, nullable: true, primaryKey: false }] }
+          : table,
+      ),
+    };
+    const filter = 'services has (cleaning, repairs) and status = open and services has "and"';
+    const chips = client.clauses.splitConditions(filter);
+    assert.deepEqual(chips, ['services has (cleaning, repairs)', 'status = open', 'services has "and"']);
+    for (const chip of chips) assert.deepEqual(parseQuery(`work_order ${chip}`, { schema }).errors, [], chip);
   });
 });
 

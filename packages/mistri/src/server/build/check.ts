@@ -59,6 +59,7 @@ import { connectionBudgets, deployFindings } from './checkDeploy.js';
 import { schemaChanges } from './schemaChanges.js';
 import { readAuditUnrecordable } from './checkReadAudit.js';
 import { commandElevations, commandUnreadable, publicCommandRemovals } from './checkCommands.js';
+import { publicLinkCallProblems } from '../links/publicLink.js';
 import { asDeployFinding, migrationsToJudge } from './deployMigrations.js';
 import { migrationFindings } from './migrationSafety.js';
 import { lintComponents, pageManifestsOf } from '../app/componentLint.js';
@@ -1631,6 +1632,18 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       if (judged && removing.length) {
         judged.lines = [...judged.lines, ...removing.map((said) => `error: ${said}`)];
         judged.problems = [...(judged.problems ?? []), ...removing.map((said) => problem('validation', 'public-command-remove', said))];
+        judged.status = 'failed';
+      }
+    }
+
+    /* A handler's publicLink('view') whose literal view no signed-out visitor opens throws on every run that reaches it
+       (links/publicLink.ts): said here, by command and view; App load refuses it as well. */
+    if (loaded?.commands?.registry) {
+      const unlinkable = publicLinkCallProblems(loaded.app, loaded.commands.registry);
+      const judged = steps.findLast((step) => step.name === 'validation');
+      if (judged && unlinkable.length) {
+        judged.lines = [...judged.lines, ...unlinkable.map((said) => `error: ${said}`)];
+        judged.problems = [...(judged.problems ?? []), ...unlinkable.map((said) => problem('validation', 'public-link-not-public', said))];
         judged.status = 'failed';
       }
     }

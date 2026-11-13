@@ -26,6 +26,8 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { FRAMEWORK_ARGS, isMessageRef, MESSAGE_KEY, type AppMessageRef } from '@mistriwork/engine/shared/appMessages.js';
+import { FRAMEWORK_WORDS, frameworkWordArgs, isFrameworkWordKey, type FrameworkWordKey } from '@mistriwork/engine/shared/frameworkWords.js';
+import { nearest } from '@mistriwork/engine/shared/suggest.js';
 import type IntlMessageFormatClass from 'intl-messageformat';
 
 type Formatter = InstanceType<typeof IntlMessageFormatClass>;
@@ -99,8 +101,28 @@ export function messageArgs(ast: MessageAst): Set<string> {
 }
 
 /** Whether a message is literal text and `{name}` places only: a template a record fills (no plural, select, number or date). */
-function simple(ast: MessageAst): boolean {
+export function simple(ast: MessageAst): boolean {
   return (ast as Element[]).every((element) => element.type === LITERAL || element.type === ARGUMENT);
+}
+
+/**
+ * A `mistri.*` key is one of the platform's own words (FRAMEWORK_WORDS), which the browser fills from a template, so
+ * its text is literal words and the built-in's `{name}` places only.
+ */
+function frameworkWordProblem(at: string, key: string, ast: MessageAst): void {
+  const known = Object.keys(FRAMEWORK_WORDS);
+  if (!Object.hasOwn(FRAMEWORK_WORDS, key)) {
+    const near = nearest(key, known);
+    throw new Error(
+      `[message-word] ${at}: "${key}" is not one of the platform's words; ${near ? `did you mean "${near}"?` : `the mistri.* keys are ${known.join(', ')}.`}`,
+    );
+  }
+  const allowed = frameworkWordArgs(key as FrameworkWordKey);
+  const extra = [...messageArgs(ast)].filter((name) => !allowed.has(name));
+  if (!simple(ast) || extra.length)
+    throw new Error(
+      `[message-word] ${at}: "${key}" ${extra.length ? `reads {${extra.join('}, {')}}` : 'is more than words and {name} places'}; it says ${JSON.stringify(FRAMEWORK_WORDS[key as FrameworkWordKey])} in its own words${allowed.size ? `, with {${[...allowed].join('}, {')}}` : ''}.`,
+    );
 }
 
 /**
@@ -110,7 +132,8 @@ function simple(ast: MessageAst): boolean {
  * `[message-syntax]` for a file that is not a catalog or a text ICU cannot
  * parse, `[message-missing]` for catalogs without the source,
  * `[message-placeholder]` for a translation or a variant reading an argument
- * its source does not.
+ * its source does not, `[message-word]` for a `mistri.*` key the platform
+ * does not say or a word for one that is more than text and its arguments.
  */
 export async function readCatalogs(
   dir: string,
@@ -158,6 +181,7 @@ export async function readCatalogs(
           `[message-syntax] ${at}: "${key}" is not ICU MessageFormat (${(error as Error).message}): ${JSON.stringify(text)}.`,
         );
       }
+      if (isFrameworkWordKey(key)) frameworkWordProblem(at, key, asts[key]);
       entries[key] = text;
     }
     held[tag] = Object.freeze(entries);
@@ -177,6 +201,8 @@ export async function readCatalogs(
   for (const [tag, entries] of Object.entries(locales)) {
     if (tag === source) continue;
     for (const key of Object.keys(entries)) {
+      /* A platform word is said in the languages that have it, held to the platform's own arguments above. */
+      if (isFrameworkWordKey(key)) continue;
       const original = parsed[source][key];
       if (!original) {
         advisories.push(`[message-unused] ${named[tag]}: "${key}" is not in ${named[source]}, so nothing says it.`);
@@ -198,6 +224,7 @@ export async function readCatalogs(
       if (!Object.hasOwn(locales, tag))
         throw new Error(`[message-missing] ${at} has no messages/${tag}.ts beside it; a variant rewords a language the App has.`);
       for (const key of Object.keys(entries)) {
+        if (isFrameworkWordKey(key)) continue;
         const original = parsed[source][key];
         if (!original) {
           advisories.push(`[message-unused] ${at}: "${key}" is not in ${named[source]}, so nothing says it.`);
@@ -264,6 +291,13 @@ export class MessageSayer {
         if (text !== undefined) return { text, locale: tag };
       }
     return undefined;
+  }
+
+  /** A platform word's text, where a catalog (or the tenant) says it in the reader's language: `frameworkWords`. */
+  word(key: string): string | undefined {
+    const found = this.found(key);
+    /* Said from the parse, so ICU's quoting ('') reads as the apostrophe it means. */
+    return found && languageOf(found.locale) === languageOf(this.locale) ? this.template({ message: key }) : undefined;
   }
 
   /** Whether the source catalog has the key: what `msg` may name. */
@@ -392,6 +426,41 @@ export function componentMessages(
   return said;
 }
 const saidCatalogs = new WeakMap<Localizer, Map<string, Readonly<Record<string, MessageAst>>>>();
+
+/**
+ * The platform's words (FRAMEWORK_WORDS) the App's catalog says in one reader's language, as `{name}` templates the
+ * browser fills (appPayload `words`, kit `appWord`). A word is served only in the language it is written in: where the
+ * reader's language has none, the platform says its own, which the chrome speaks in more than English, rather than
+ * the App's source word in another language. Kept per reader as `componentMessages` is; undefined where the App
+ * says none of them.
+ */
+export function frameworkWords(
+  app: { id: string },
+  locale: string | undefined,
+  overrides?: { stamp: string; words: MessageOverrides },
+  variant?: string,
+): Readonly<Record<string, string>> | undefined {
+  const localizer = localizerOf(app);
+  if (!localizer) return undefined;
+  const { catalogs } = localizer;
+  const tag = locale ?? catalogs.source;
+  const kind = variant !== undefined && Object.hasOwn(catalogs.variants, variant) ? variant : undefined;
+  const key = JSON.stringify([tag, kind ?? null, overrides?.words.size ? overrides.stamp : null]);
+  let byReader = saidWords.get(localizer);
+  if (!byReader) saidWords.set(localizer, (byReader = new Map()));
+  if (byReader.has(key)) return byReader.get(key);
+  const sayer = new MessageSayer(catalogs, tag, overrides?.words, kind);
+  const words: Record<string, string> = {};
+  for (const name of Object.keys(FRAMEWORK_WORDS)) {
+    const word = sayer.word(name);
+    if (word !== undefined) words[name] = word;
+  }
+  const said = Object.keys(words).length ? Object.freeze(words) : undefined;
+  if (byReader.size >= 32) byReader.delete(byReader.keys().next().value!);
+  byReader.set(key, said);
+  return said;
+}
+const saidWords = new WeakMap<Localizer, Map<string, Readonly<Record<string, string>> | undefined>>();
 
 /* ---------- a definition, said in one locale ---------- */
 
@@ -609,7 +678,8 @@ export function messageAdvisories(
   componentKeys: ReadonlySet<string> | undefined = new Set(),
 ): string[] {
   const out = [...catalogs.advisories];
-  const keys = Object.keys(catalogs.locales[catalogs.source]);
+  /* A platform word is said by the platform's forms, not by msg(), and a language without it says the platform's. */
+  const keys = Object.keys(catalogs.locales[catalogs.source]).filter((key) => !isFrameworkWordKey(key));
   for (const [tag, entries] of Object.entries(catalogs.locales)) {
     if (tag === catalogs.source) continue;
     const missing = keys.filter((key) => !Object.hasOwn(entries, key));

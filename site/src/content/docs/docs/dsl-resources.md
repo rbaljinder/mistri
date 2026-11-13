@@ -129,11 +129,13 @@ task: {
 
 An expression in the query language's words: columns and paths, rollups,
 numbers, quoted text, `today`, `now`, `me`, comparisons, `and`, `or`, `not`,
-`is empty`, `+ - * /` (a division by zero has no value), date spans, and five
+`is empty`, `+ - * /` (a division by zero has no value), date spans, and six
 functions: `coalesce(a, b, …)` (the first with a value), `round(x)` or
-`round(x, 2)` (a half away from zero), `abs(x)`, and `min(a, b, …)` and
+`round(x, 2)` (a half away from zero), `abs(x)`, `min(a, b, …)` and
 `max(a, b, …)` of numbers or dates, which have no value where one of theirs has
-none (`computed.number('max(owed - paid, 0)')`). It is
+none (`computed.number('max(owed - paid, 0)')`), and `concat(a, b, …)` of text,
+where a part with no value reads as empty (`computed.text("concat(first, ' ', last)")`;
+there is no `||`). It is
 written into the statement, so it shows, sorts, filters and tones like a
 column (a number is said to at most two places, its value kept whole), and a rollup sums it (`rollup.sum('task', 'overrun')`) or a dashboard
 window reads a computed date (`over: 'renews_on'`) when it reads only its
@@ -379,7 +381,7 @@ another door always is. A second process writes its own row.
 | --- | --- | --- | --- |
 | `resources.*.computed` | object | Stable | Virtual columns, each a typed expression over the record's own columns in the query language's words, with today, now and me: { is_overdue: { type: 'boolean', value: 'due_on &lt; today and not completed' } }; hours and minutes move an instant (now - 30 minutes, due_at - 2 hours). Written into the statement, read like a column everywhere a column is; never written, never in a form, and served to a role only where every column it reads is. Used in `examples/apps/tick/app.ts`. |
 | `resources.*.computed.*.type` | `"boolean"` · `"number"` · `"date"` · `"text"` | Stable |  One of `boolean`, `date`, `number`, `text`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `resources.*.computed.*.value` | string | Stable | The expression: columns and paths through references, a JSON column's member as text (filters_json.make, Preview: computed.text('filters_json.make')), numbers, quoted text, true, false, today, now, me, comparisons, and, or, not, in (…), is empty, + - * /, date spans (+ 3 months), and coalesce(a, b, …), round(x) or round(x, places), abs(x), min(a, b, …) and max(a, b, …). Used in `examples/apps/lintel/views.ts`. |
+| `resources.*.computed.*.value` | string | Stable | The expression: columns and paths through references, a JSON column's member as text (filters_json.make, Preview: computed.text('filters_json.make')), numbers, quoted text, true, false, today, now, me, comparisons, and, or, not, in (…), is empty, + - * /, date spans (+ 3 months), and coalesce(a, b, …), round(x) or round(x, places), abs(x), min(a, b, …) and max(a, b, …), and concat(a, b, …) of text (a part with no value reads as empty). Used in `examples/apps/lintel/views.ts`. |
 
 ## `resources.*.consumes`
 
@@ -600,7 +602,7 @@ another door always is. A second process writes its own row.
 | `resources.*.links.*.expires` | string | Stable | How long a minted link opens: '7 days' unless said, '90 days' at most. |
 | `resources.*.links.*.says` | object | Stable | Words for a shown column's stored values, keyed by column: { status: { review: 'Under review' } }. Sixty characters at most. |
 | `resources.*.links.*.show` | array | Stable | The record's columns the link page shows, in order: one to twelve. |
-| `resources.*.links.*.stepUp` | string | Stable | An email column of the record: a one-time code is sent to it and typed back before anything is shown. |
+| `resources.*.links.*.stepUp` | string \| object | Stable | A one-time code sent to a column of the record and typed back before anything is shown: an email column, or { sms: 'mobile' } for a phone column and a channel an integration declares. |
 | `resources.*.links.*.uses` | integer | Stable | How many opens spend the link; left out, it opens until it expires. Used in `examples/apps/lintel/resources.ts`. |
 
 ## `resources.*.live`

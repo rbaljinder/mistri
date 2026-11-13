@@ -67,7 +67,11 @@ type CommandAnswer = { status: number; replayed: boolean; body: Record<string, u
 
 /** The depot deployment on one engine, with alice in north and bob in south;
  * with `commands`, its `touch` command too, on the journal it needs. */
-async function depot(t: TestContext, dialect: 'sqlite' | 'postgres', options: { commands?: boolean } = {}) {
+async function depot(
+  t: TestContext,
+  dialect: 'sqlite' | 'postgres',
+  options: { commands?: boolean; renderLinks?: (value: unknown, tenantId: string) => Promise<unknown> } = {},
+) {
   const directory = mkdtempSync(join(tmpdir(), `tw-tenant-api-${dialect}-`));
   const cleanup: Array<() => Promise<unknown> | unknown> = [() => rmSync(directory, { recursive: true, force: true })];
   t.after(async () => {
@@ -280,7 +284,12 @@ async function depot(t: TestContext, dialect: 'sqlite' | 'postgres', options: { 
           { appId: 'depot', storeId, excludeConnections, tokenId, expectedVersion: '1', actorId: 'operator' },
           Date.now,
         );
-  const owner = await createTenantApiOwner({ enrollment, auth, integers: 'decimal-string' });
+  const owner = await createTenantApiOwner({
+    enrollment,
+    auth,
+    integers: 'decimal-string',
+    ...(options.renderLinks ? { renderLinks: options.renderLinks } : {}),
+  });
   cleanup.push(() => owner.retire());
   /** One owner call, as a transport would make it: the answer, or the refusal's code. */
   const ask = async (call: (send: (answer: { status: number; body: string }) => void) => Promise<unknown>): Promise<Answer> => {
@@ -608,4 +617,42 @@ for (const { dialect, skip } of [
       assert.deepEqual(await touch(carol.token, 'north-1', 1), { thrown: 'ApiCommandUnauthenticated' });
     },
   );
+
+  test(`tenant API commands on ${dialect}: an applied answer is said for the token's tenant`, { skip, timeout: 240000 }, async (t) => {
+    // The deployment says a public link as its tenant's address (tenantAuthenticatedHttp's renderAnswerLinks); here
+    // the saying is recorded, so the lane is seen to hand every applied answer, and only that, to it.
+    const told: string[] = [];
+    const f = await depot(t, dialect, {
+      commands: true,
+      renderLinks: async (value, tenantId) => {
+        told.push(tenantId);
+        const answer = value as { result: object };
+        return { ...answer, result: { ...answer.result, said: tenantId } };
+      },
+    });
+    const alice = await f.issue('alice', 'north');
+    const run = (version: number, key: string) =>
+      f.command((send) =>
+        f.owner.execute(
+          alice.token,
+          f.owner.map(
+            parseApiCommandRoute('/api/apps/depot/v1/item/north-1/commands/touch/v1'),
+            { expectedVersion: version, idempotencyKey: `tenant-command-said-${key}-000000` },
+            {},
+          ),
+          send,
+        ),
+      );
+    const applied = await run(0, 'first');
+    assert.ok('body' in applied && applied.status === 200 && !applied.replayed, JSON.stringify(applied));
+    assert.deepEqual(applied.body.result, { ok: true, said: 'north' });
+    // Its replay is said again: a receipt holds the reference, never the URL it was once said as.
+    const replayed = await run(0, 'first');
+    assert.ok('body' in replayed && replayed.replayed, JSON.stringify(replayed));
+    assert.deepEqual(replayed.body.result, { ok: true, said: 'north' });
+    // A refusal is not an answer to say.
+    const stale = await run(0, 'second');
+    assert.ok('body' in stale && stale.status === 409, JSON.stringify(stale));
+    assert.deepEqual(told, ['north', 'north']);
+  });
 }

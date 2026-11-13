@@ -61,7 +61,7 @@ const bare = (table: string) => table.slice(table.lastIndexOf('.') + 1);
 const EFFECT_VERB = { update: 'writes', insert: 'inserts into', delete: 'deletes from' } as const;
 
 /** The comment-free text of a function's source, strings kept: a comment that names `db.account.update` is not a write. */
-function withoutComments(text: string): string {
+export function withoutComments(text: string): string {
   let out = '';
   for (let i = 0; i < text.length; i++) {
     const c = text[i];

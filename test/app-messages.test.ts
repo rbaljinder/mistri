@@ -30,11 +30,12 @@ import {
 import { CAPTION_KEYS, isMessageRef, parseCaption } from '../packages/engine/src/shared/appMessages.js';
 import { canonicalLocale, negotiateLocale, resolveLocale } from '../packages/engine/src/shared/appLocale.js';
 import { appAdvisories, appProblems, loadApp, localizedApp, type AppHost, type LoadedApp } from '../packages/mistri/src/server/app/apps.js';
-import { appCatalogs, componentMessages } from '../packages/mistri/src/server/app/appMessages.js';
+import { appCatalogs, componentMessages, frameworkWords } from '../packages/mistri/src/server/app/appMessages.js';
 import {
   localeRow,
   pickedLocale,
   requestLocale,
+  scopedLocale,
   unvaryOnLanguage,
   varyOnLanguage,
 } from '../packages/mistri/src/server/app/readerLocale.js';
@@ -423,10 +424,10 @@ export default definePage({ label: { message: 'ticket.plural' }, description: { 
       /* The reference's own key, which is how a caption is told from a sentence. */
       'model.d.ts AppMessageRef.message',
       /* A command's input rules are parsed when defineCommand runs, before any catalog is read. */
-      'command.d.ts CommandTextField.message',
       'model.d.ts AppCommandField.message',
-      /* The field as it is served: its placeholder is said already (authored, command.d.ts takes msg() for it). */
+      /* The field as it is served: its placeholder and statement are said already (authored, command.d.ts takes msg() for them). */
       'model.d.ts AppCommandField.placeholder',
+      'model.d.ts AppCommandField.statement',
       'command.d.ts CommandRule.message',
       'model.d.ts AppCommandRule.message',
       /* A display's subtitle names a column of the record, not words. */
@@ -435,6 +436,8 @@ export default definePage({ label: { message: 'ticket.plural' }, description: { 
       'app.d.ts HeadlineSection.subtitle',
       /* A link's tab is the tab's address word, not words said to a reader. */
       'model.d.ts ViewTo.tab',
+      /* A choice's `where` operand names the form field whose answer it reads, not words. */
+      'model.d.ts CommandChoiceOperand.answer',
     ]);
     const found = new Set<string>();
     const property = new RegExp(`\\b(${[...CAPTION_KEYS].join('|')})\\??: ([^;,)=]*)`, 'g');
@@ -588,6 +591,62 @@ export default definePage({ label: { message: 'ticket.plural' }, description: { 
   });
 });
 
+describe("the platform's words", () => {
+  const WORDS = {
+    'en.mjs': catalog('en', { ...EN, 'mistri.form.back': 'Go back' }),
+    'es.mjs': catalog('es', {
+      ...ES,
+      'mistri.form.stepNamed': "Paso {step} de {count}: ''{label}''",
+      'mistri.form.back': 'Atrás',
+      'mistri.status.sentText': 'Le enviamos un código por mensaje de texto.',
+    }),
+  };
+
+  test("a catalog says them in the reader's language only, as templates the browser fills", async () => {
+    const loaded = await loadApp(appDir('platform-words', definition(), WORDS), { lock: 'report' });
+    assert.deepEqual(frameworkWords(loaded.app, 'es-MX'), {
+      'mistri.form.stepNamed': "Paso {step} de {count}: '{label}'",
+      'mistri.form.back': 'Atrás',
+      'mistri.status.sentText': 'Le enviamos un código por mensaje de texto.',
+    });
+    assert.equal(frameworkWords(loaded.app, 'es-MX'), frameworkWords(loaded.app, 'es-MX'), 'each reader is said once');
+    assert.deepEqual(frameworkWords(loaded.app, 'en-US'), { 'mistri.form.back': 'Go back' }, "Spanish's step is not English's");
+    assert.equal(frameworkWords(loaded.app, 'fr'), undefined, "a reader with no catalog is not said the source's English");
+    const north = { stamp: 'north-w', words: new Map([['mistri.form.back', new Map([['es', 'Volver']])]]) };
+    assert.equal(frameworkWords(loaded.app, 'es', north)?.['mistri.form.back'], 'Volver', "a tenant's word over the App's");
+    const advice = appAdvisories(loaded, SCHEMA).join('\n');
+    assert.doesNotMatch(advice, /mistri\.form/, 'a platform word is neither untranslated nor unused');
+  });
+
+  test('check refuses a key the platform does not have, naming the nearest, and a word that is more than words', async () => {
+    const refused = (name: string, entries: Record<string, string>, pattern: RegExp) =>
+      assert.rejects(loadApp(appDir(name, definition(), { 'en.mjs': catalog('en', { ...EN, ...entries }) }), { lock: 'report' }), pattern);
+    await refused(
+      'word-unknown',
+      { 'mistri.form.bakc': 'Back' },
+      /\[message-word\] messages\/en\.mjs: "mistri\.form\.bakc" is not one of the platform's words; did you mean "mistri\.form\.back"\?/,
+    );
+    await refused(
+      'word-arg',
+      { 'mistri.form.step': 'Page {page} of {count}' },
+      /\[message-word\][^\n]*"mistri\.form\.step" reads \{page\}/,
+    );
+    await refused(
+      'word-plural',
+      { 'mistri.form.step': '{count, plural, one {Only step} other {Step {step} of #}}' },
+      /\[message-word\][^\n]*"mistri\.form\.step" is more than words/,
+    );
+  });
+
+  test("a tenant's row may say one, as written and with its own places", async () => {
+    const spec = (await words()).app.ui.messages!;
+    assert.equal(await messageRowProblem(spec, 'mistri.form.step', 'es', 'Paso {step} de {count}'), undefined);
+    assert.equal((await messageRowProblem(spec, 'mistri.form.bakc', 'es', 'Atrás'))?.field, 'key');
+    assert.match((await messageRowProblem(spec, 'mistri.form.step', 'es', 'Paso {page}'))!.reason, /\{page\}/);
+    assert.equal((await messageRowProblem(spec, 'mistri.form.no', 'es', '{n, number}'))?.field, 'text');
+  });
+});
+
 describe("a tenant's own words, as they are written", () => {
   test('a row is checked against the source: its key, its tag, its ICU and its arguments', async () => {
     const spec = (await words()).app.ui.messages!;
@@ -719,6 +778,7 @@ async function served(
         },
         auth: { roles: { staff: { read: true } }, public: { read: ['ticket'] } },
       }),
+      { 'en.mjs': catalog('en', EN), 'es.mjs': catalog('es', { ...ES, 'mistri.form.back': 'Atrás' }) },
     ),
     { lock: 'report' },
   );
@@ -780,6 +840,7 @@ const SEED = [
   "INSERT INTO tenant_message VALUES (1, 'north', 'ticket.plural', 'en', 'North cases')",
   "INSERT INTO tenant_message VALUES (2, 'south', 'ticket.plural', 'en', 'South cases')",
   "INSERT INTO tenant_message VALUES (3, 'north', 'ticket.title', 'en', 'Subject {secret}')",
+  "INSERT INTO tenant_message VALUES (4, 'north', 'mistri.form.back', 'en', 'Return')",
 ];
 
 async function exerciseHttp(connection: Parameters<typeof served>[0]) {
@@ -794,14 +855,17 @@ async function exerciseHttp(connection: Parameters<typeof served>[0]) {
     assert.match(String(visitorEs.reply.headers.vary), /Accept-Language/);
     assert.equal(visitorEs.app.views.tickets.label, 'Incidencias');
     assert.equal(visitorEs.app.ui.messages, undefined, 'the binding is never served');
+    assert.deepEqual(visitorEs.app.words, { 'mistri.form.back': 'Atrás' }, "the platform's words the catalog says in Spanish");
     const visitorEn = await payload('/api/app', { 'accept-language': 'de' });
     assert.equal(visitorEn.app.views.tickets.label, 'Tickets');
     assert.equal(visitorEn.app.ui.locale, 'en-US');
+    assert.equal(visitorEn.app.words, undefined, 'the English catalog says none: the platform says its own');
     signIn();
     const staff = await payload('/api/app', { 'accept-language': 'es' });
     assert.equal(staff.app.views.tickets.label, 'Tickets', "a signed-in reader is said the App's language, not their browser's");
     const north = await payload('/api/app?tenant=north');
     assert.equal(north.app.views.tickets.label, 'North cases');
+    assert.deepEqual(north.app.words, { 'mistri.form.back': 'Return' }, "a tenant's own word for the platform's");
     assert.equal(
       north.app.resources.ticket.labels.title,
       'Title',
@@ -810,6 +874,7 @@ async function exerciseHttp(connection: Parameters<typeof served>[0]) {
     const south = await payload('/api/app?tenant=south');
     assert.equal(south.app.views.tickets.label, 'South cases', "south reads its own words, never north's");
     assert.doesNotMatch(south.reply.body, /North cases/);
+    assert.equal(south.app.words, undefined);
     assert.doesNotMatch(north.reply.body, /South cases/);
   });
 }
@@ -1067,6 +1132,38 @@ describe('i18n wave 2', () => {
     assert.equal(asked.length, 1);
   });
 
+  test("a tenant member's command is said in their own row's language, never the first member's", async () => {
+    const app = {
+      id: 'words',
+      auth: { me: { from: 'person', column: 'account' } },
+      ui: { locale: 'en-US', localeColumn: 'person.locale' },
+    } as unknown as AppDef;
+    /* The tenant's scope holds every member's row: Ana's comes first. */
+    const people = [
+      { account: 'acc-ana', locale: 'es-MX' },
+      { account: 'acc-ben', locale: 'fr-CA' },
+    ];
+    const asked: unknown[] = [];
+    const reads = async () => ({
+      query: async (request: { filter?: { groups: Array<Array<{ column: string; value?: unknown }>> }; limit: number }) => {
+        asked.push(request.filter);
+        const test = request.filter?.groups[0]?.[0];
+        const rows = people.filter((row) => !test || row[test.column as keyof typeof row] === test.value);
+        return { columns: ['locale'], rows: rows.slice(0, request.limit).map((row) => ({ locale: row.locale })) } as never;
+      },
+    });
+    assert.equal(await scopedLocale(app, 'acc-ben', reads), 'fr-CA', "Ben's row, not the first one");
+    assert.equal(await scopedLocale(app, 'acc-ana', reads), 'es-MX');
+    assert.deepEqual(asked[0], { groups: [[{ column: 'account', op: '=', value: 'acc-ben' }]] });
+    assert.equal(await scopedLocale(app, 'acc-cy', reads), undefined, 'a member with no row has no tag of their own');
+    assert.equal(await scopedLocale(app, undefined, reads), undefined, 'nor does an unknown account read anyone');
+    assert.equal(asked.length, 3);
+    // A column of another table is the tenant's own setting: its first row.
+    const setting = { ...app, ui: { ...app.ui, localeColumn: 'settings.locale' } } as unknown as AppDef;
+    assert.equal(await scopedLocale(setting, 'acc-ben', reads), 'es-MX');
+    assert.equal(asked.at(-1), undefined, 'read unfiltered');
+  });
+
   test('messages extract: a catalog gains its missing keys as comments once; literal captions are listed with keys', async () => {
     const dir = appDir(
       'extract',
@@ -1099,6 +1196,11 @@ describe('i18n wave 2', () => {
     assert.deepEqual(
       literalCaptions({ views: { a: { label: msg('ticket.plural'), title: 'x1' } } }).map((c) => c.key),
       ['a.x1'],
+    );
+    // A checkbox's statement is a caption: written as literal text, it is one to move to the catalog.
+    assert.deepEqual(
+      literalCaptions({ views: { a: { statement: 'I agree' } } }).map((c) => c.at),
+      ['views.a.statement'],
     );
     await assert.rejects(runMessagesCommand(['extract', '--app', dir, '--locale', 'en']), /source catalog/);
   });

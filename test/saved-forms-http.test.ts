@@ -262,7 +262,7 @@ async function fixture(
   const file = join(directory, 'apply.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE application(id INTEGER PRIMARY KEY, status TEXT NOT NULL, reference TEXT UNIQUE,
-      first_name TEXT, last_name TEXT, ssn_last4 TEXT,
+      first_name TEXT, last_name TEXT, ssn_last4 TEXT, email TEXT, mobile TEXT,
       resume_token_hash TEXT, resume_expires_at TEXT, resume_progress TEXT);
     CREATE TABLE address(id INTEGER PRIMARY KEY, application_id INTEGER NOT NULL REFERENCES application(id), line1 TEXT NOT NULL, city TEXT NOT NULL);
     CREATE TABLE co_applicant(id INTEGER PRIMARY KEY, application_id INTEGER NOT NULL REFERENCES application(id), position INTEGER NOT NULL, name TEXT NOT NULL);`);
@@ -793,19 +793,23 @@ test(
         assert.match(problem({}, noticed('application', {}))!, /notifies on a write a draft makes/);
         assert.match(problem({}, noticed('address', { when: 'status = submitted' }))!, /notifies on a write a draft makes/);
         assert.equal(problem({}, noticed('application', { on: 'update', when: 'status = submitted' })), undefined);
-        // A step-up's code goes to a text column of the root, and what it opens is the root's.
-        assert.equal(
-          problem({}, reparse({ statusCheck: { ...savedForm.statusCheck, stepUp: { email: 'last_name', show: ['first_name'] } } })),
-          undefined,
-        );
-        assert.match(
-          problem({}, reparse({ statusCheck: { ...savedForm.statusCheck, stepUp: { email: 'id', show: ['first_name'] } } }))!,
-          /not a text column/,
-        );
-        assert.match(
-          problem({}, reparse({ statusCheck: { ...savedForm.statusCheck, stepUp: { email: 'last_name', show: ['nope'] } } }))!,
-          /"nope", which is not a column/,
-        );
+        // A step-up's code goes to the root's own address for its channel, and what it opens is the root's.
+        const stepUp = (spec: Record<string, unknown>, display?: Record<string, unknown>) => {
+          const app = reparse({ statusCheck: { ...savedForm.statusCheck, stepUp: spec } });
+          const resources = { ...app.resources, application: { ...app.resources!.application, display: display as never } };
+          return problem({}, display ? ({ ...app, resources } as AppDef) : app);
+        };
+        assert.equal(stepUp({ email: 'email', show: ['first_name'] }), undefined);
+        assert.equal(stepUp({ sms: 'mobile', show: ['first_name'] }), undefined);
+        assert.match(stepUp({ email: 'id', show: ['first_name'] })!, /not a text column/);
+        assert.match(stepUp({ email: 'email', show: ['nope'] })!, /"nope", which is not a column/);
+        // A name holds no address: a code sent there goes nowhere, or to someone else.
+        assert.match(stepUp({ email: 'last_name', show: ['first_name'] })!, /by email to "last_name", which is not an email column/);
+        assert.match(stepUp({ sms: 'email', show: ['first_name'] })!, /"sms" channel to "email", which is not a phone column/);
+        assert.match(stepUp({ sms: 'last_name', show: ['first_name'] })!, /which is not a phone column/);
+        // The resource's display rule says it as surely as the column's name.
+        assert.equal(stepUp({ email: 'last_name', show: ['first_name'] }, { last_name: { format: 'email' } }), undefined);
+        assert.match(stepUp({ email: 'email', show: ['first_name'] }, { email: { format: 'url' } })!, /not an email column/);
         // A public form's link is prefilled only from what the public reads, into inputs the form names prefillable.
         const page = {
           id: 'application',

@@ -15,12 +15,21 @@
  *  - 404 for an address that names no endpoint, a tenant that is not active
  *    and a tenant that has not set the endpoint's secrets — all alike, so an
  *    address says nothing about who is set up; 405 for anything but POST;
- *    413 past 256 KB, the rest unread.
+ *    413 past 256 KB (an endpoint that takes files: past its file cap, in
+ *    base64, more), the rest unread.
+ *  - An endpoint that takes more than 256 KB is not buffered for anyone who
+ *    asks: a Content-Length past its cap is 413, and headers that could not
+ *    be a fresh signature (no signed time inside the window, no digest of the
+ *    algorithm's length) are 401, both before a byte of the body is read; and
+ *    at most INBOUND_LARGE_MOST such bodies are read at once, host-wide, the
+ *    next told 503 and when to retry. Each closes its connection.
  *  - 401 unless the raw bytes verify under the secret (constant time on the
  *    digest) and the time the sender signed is inside the endpoint's window,
  *    on either side of now. A delivery signed for one tenant does not verify
  *    at another's address.
- *  - 400 for a body the endpoint cannot read: not its JSON, no sender's id.
+ *  - 400 for a body the endpoint cannot read: not its JSON, no sender's id,
+ *    a file that is not base64 or not one its file resource takes; 413 for a
+ *    file past that resource's cap.
  *  - The same delivery again (its sender's id and signed time, while the
  *    window is open) is a replay, and answers what the first one did: its
  *    command's receipt replays (204, nothing written twice), and a delivery
@@ -49,12 +58,20 @@ import { AppAccessDenied } from '../app/appAccess.js';
 import { businessCommandHttpError } from '../commands/businessCommandHttp.js';
 import { executeBusinessCommand, isBusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
 import { commandFlagsOnce } from '../commands/commandFlagCapture.js';
+import { FILE_MAX_BYTES_DEFAULT } from '../../shared/appModel.js';
+import type { AppDef, AppFileRule } from '../../shared/app.js';
+import type { CommandFile } from '../commands/businessCommands.js';
+import { receivedFiles } from '../http/fileRows.js';
 import { serviceActor } from './jobAuthorization.js';
 import type { JobCommandBinding } from './jobCommands.js';
 import type { CapturedHmac, CapturedInbound, CapturedJobModule, JobCommandReference } from './jobModule.js';
 
 /** The most a delivery may weigh. A provider's callback is small; anything past this is not one. */
 const INBOUND_MAX_BYTES = 256 * 1024;
+/** The most files one delivery carries: a `field.files`' own most. */
+const INBOUND_FILES_MOST = 20;
+/** The most deliveries past INBOUND_MAX_BYTES read at once, host-wide: what an unverified sender can make it hold. */
+const INBOUND_LARGE_MOST = 4;
 const INBOUND_PREFIX = '/api/inbound/';
 /** An endpoint's name, as its address carries it: a defineInbound name or an integration's. */
 const NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
@@ -75,6 +92,8 @@ export interface InboundPlan {
     runAs: string;
     input: unknown;
     target?: Readonly<Record<string, string | number>>;
+    /** Files the delivery carried, checked: the handler's `ctx.files`, never its input or its receipt. */
+    files?: readonly CommandFile[];
   }>;
   /** Without a command: 202 for a delivery nothing reads, 204 for one that was recorded. */
   readonly status?: 202 | 204;
@@ -93,6 +112,13 @@ export interface InboundEndpoint {
   readonly name: string;
   /** How far the signed time may be from now, either side. */
   readonly windowMs: number;
+  /** The most a delivery may weigh, when it is not 256 KiB: an endpoint that takes files. */
+  readonly maxBytes?: number;
+  /**
+   * Whether the headers alone could be a fresh signed delivery: asked before an endpoint past 256 KiB reads its
+   * body, so a sender with no signature is not buffered. Not the verification, which still reads the body.
+   */
+  signed?(headers: IncomingMessage['headers'], now: number): boolean;
   /** The secrets it verifies with, for one tenant ('' without tenants); undefined while that tenant has not set them. */
   secrets(tenant: string): Promise<Readonly<Record<string, string>> | undefined>;
   /** The time the sender signed (ms), and what was signed, or undefined for a delivery that does not verify. */
@@ -144,6 +170,19 @@ const one = (value: string | string[] | undefined): string | undefined => (typeo
  */
 function signedAt(verify: CapturedHmac, headers: IncomingMessage['headers'], body: Buffer, secret: string): number | undefined {
   if (!secret) return undefined;
+  const claimed = claimedSignature(verify, headers);
+  if (!claimed) return undefined;
+  const expected = createHmac(verify.algorithm, secret)
+    .update(signedBytes(verify, claimed.timestamp, body))
+    .digest();
+  return claimed.given.length === expected.length && timingSafeEqual(claimed.given, expected) ? claimed.at : undefined;
+}
+
+/** What the headers say was signed, and when, as read before any digest is checked; undefined for a malformed one. */
+function claimedSignature(
+  verify: CapturedHmac,
+  headers: IncomingMessage['headers'],
+): Readonly<{ timestamp: string; at: number; given: Buffer }> | undefined {
   // A signed time is required (hmac in jobModule.ts): a delivery without one is refused like a wrong signature.
   const timestamp = one(headers[verify.timestampHeader]) ?? '';
   if (!/^\d{1,16}$/.test(timestamp)) return undefined;
@@ -153,11 +192,7 @@ function signedAt(verify: CapturedHmac, headers: IncomingMessage['headers'], bod
   if (header === undefined || !header.startsWith(verify.prefix)) return undefined;
   const digest = header.slice(verify.prefix.length);
   if (verify.encoding === 'hex' ? !/^(?:[0-9a-fA-F]{2})+$/.test(digest) : !/^[A-Za-z0-9+/]+={0,2}$/.test(digest)) return undefined;
-  const given = Buffer.from(digest, verify.encoding);
-  const expected = createHmac(verify.algorithm, secret)
-    .update(signedBytes(verify, timestamp, body))
-    .digest();
-  return given.length === expected.length && timingSafeEqual(given, expected) ? at : undefined;
+  return { timestamp, at, given: Buffer.from(digest, verify.encoding) };
 }
 
 /** Whether a delivery is what its sender signed, and fresh: the verifier a tenant's mail webhook shares. */
@@ -201,16 +236,46 @@ const unreadable = (): never => {
   throw new Unreadable();
 };
 
+/** A delivery's file its resource does not take: 413 past the resource's cap, 400 for anything else. */
+class FileRefused extends Error {
+  constructor(readonly status: number) {
+    super('A delivery carried a file its endpoint does not take.');
+  }
+}
+
+/** The rule an endpoint's `files` are checked by: the App's file resource, at its own cap. Undefined for none. */
+export function inboundFileRule(app: AppDef, endpoint: CapturedInbound): AppFileRule | undefined {
+  const resource = endpoint.files;
+  const file = resource === undefined ? undefined : app.resources?.[resource]?.file;
+  return file && Object.freeze({ ...file, table: resource!, resource: resource!, maxBytes: file.maxBytes ?? FILE_MAX_BYTES_DEFAULT });
+}
+
 /**
  * A `defineInbound` declaration, compiled: an hmac over the raw bytes with
  * the secret in the environment variable it names, a JSON object body, and
- * its one command run as its principal.
+ * its one command run as its principal. `files` is the rule of the file
+ * resource its `files` names, as the App declares it (the host resolves it):
+ * the body's `files` are checked against it and taken out of what the
+ * declaration's functions read, so no file's bytes reach the input.
  */
-export function inboundEndpoint(endpoint: CapturedInbound, environment: NodeJS.ProcessEnv): InboundEndpoint {
+export function inboundEndpoint(endpoint: CapturedInbound, environment: NodeJS.ProcessEnv, files?: AppFileRule): InboundEndpoint {
   const { verify } = endpoint;
+  if (endpoint.files !== undefined && !files)
+    throw new Error(`inbound endpoint "${endpoint.name}" takes files into "${endpoint.files}", which is not a file resource.`);
   return Object.freeze({
     name: endpoint.name,
     windowMs: verify.windowMs,
+    /* One file at the resource's cap, in base64 (4 bytes for every 3), beside the usual delivery: the cap is the
+       whole body's, so twenty files share it. Raised only here; every other endpoint stays at 256 KiB. */
+    ...(files ? { maxBytes: Math.ceil(files.maxBytes / 3) * 4 + INBOUND_MAX_BYTES } : {}),
+    signed(headers: IncomingMessage['headers'], now: number) {
+      const claimed = claimedSignature(verify, headers);
+      return (
+        claimed !== undefined &&
+        Math.abs(now - claimed.at) <= verify.windowMs &&
+        claimed.given.length === createHash(verify.algorithm).digest().length
+      );
+    },
     // A secret nobody set verifies nothing (401); serve refuses to start on one.
     secrets: async () => Object.freeze({ secret: environment[verify.secretEnv] ?? '' }),
     verify(delivery: Readonly<{ headers: IncomingMessage['headers']; body: Buffer }>, secrets: Readonly<Record<string, string>>) {
@@ -225,16 +290,27 @@ export function inboundEndpoint(endpoint: CapturedInbound, environment: NodeJS.P
         return unreadable();
       }
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return unreadable();
-      const key = deliveryKey(endpoint.key(parsed)) ?? unreadable();
+      let body = parsed as Record<string, unknown>;
+      let parts: unknown = [];
+      if (files && Object.hasOwn(body, 'files')) ({ files: parts, ...body } = body);
+      const key = deliveryKey(endpoint.key(body)) ?? unreadable();
       return Object.freeze({
         key,
         plan(): InboundPlan {
-          const read = endpoint.input(parsed);
-          const target = endpoint.target ? (plainKey(endpoint.target(parsed)) ?? unreadable()) : undefined;
+          const read = endpoint.input(body);
+          const target = endpoint.target ? (plainKey(endpoint.target(body)) ?? unreadable()) : undefined;
           // Plain JSON, as a command takes it: what does not survive the trip is not input.
           const input = read === undefined ? {} : JSON.parse(JSON.stringify(read));
+          const checked = files ? receivedFiles(files, parts, INBOUND_FILES_MOST) : undefined;
+          if (checked && 'status' in checked) throw new FileRefused(checked.status === 413 ? 413 : 400);
           return Object.freeze({
-            run: Object.freeze({ command: endpoint.command, runAs: endpoint.runAs, input, ...(target ? { target } : {}) }),
+            run: Object.freeze({
+              command: endpoint.command,
+              runAs: endpoint.runAs,
+              input,
+              ...(target ? { target } : {}),
+              ...(checked ? { files: checked.files } : {}),
+            }),
           });
         },
       });
@@ -274,6 +350,7 @@ export function createInboundHost(
   const now = options.now ?? Date.now;
   const warn = options.warn ?? ((message: string) => console.error(`mistri: ${message}`));
   const endpoints = new Map<string, InboundEndpoint>();
+  let largeReading = 0;
   for (const endpoint of options.endpoints) {
     if (!NAME.test(endpoint.name) || endpoints.has(endpoint.name))
       throw new Error(`Inbound endpoint "${endpoint.name}" is named twice, or not as an address segment.`);
@@ -287,20 +364,71 @@ export function createInboundHost(
     res: ServerResponse,
     outcome: (value: string) => void,
   ): Promise<void> {
-    const body = await readBounded(req, INBOUND_MAX_BYTES);
-    if (!body) {
+    const cap = endpoint.maxBytes ?? INBOUND_MAX_BYTES;
+    if (cap <= INBOUND_MAX_BYTES) return received(endpoint, tenant, req, res, outcome, cap);
+    // A large body is held only for a sender who could have signed it: refused on its headers, unread, and the
+    // connection closed rather than drained, since what is left of the body is the cost being refused.
+    const close = { connection: 'close' };
+    const length = Number(one(req.headers['content-length']) ?? NaN);
+    if (Number.isFinite(length) && length > cap) {
       outcome('too_large');
-      return status(res, 413);
+      return status(res, 413, close);
     }
+    const secrets = await present(endpoint, tenant, res, outcome, close);
+    if (!secrets) return;
+    if (endpoint.signed && !endpoint.signed(req.headers, now())) {
+      outcome('unverified');
+      return status(res, 401, close);
+    }
+    if (largeReading >= INBOUND_LARGE_MOST) {
+      outcome('busy');
+      return status(res, 503, { ...close, 'retry-after': '5' });
+    }
+    largeReading += 1;
+    try {
+      await received(endpoint, tenant, req, res, outcome, cap, secrets);
+    } finally {
+      largeReading -= 1;
+    }
+  }
+
+  /** Whether the tenant is one to act for and has set the endpoint's secrets; answered 404 when not. */
+  async function present(
+    endpoint: InboundEndpoint,
+    tenant: string,
+    res: ServerResponse,
+    outcome: (value: string) => void,
+    headers: Record<string, string> = {},
+  ): Promise<Readonly<Record<string, string>> | undefined> {
     if (options.active && !(await options.active(tenant).catch(() => false))) {
       outcome('no_tenant');
-      return status(res, 404);
+      status(res, 404, headers);
+      return undefined;
     }
     const secrets = await endpoint.secrets(tenant);
     if (!secrets) {
       outcome('not_set');
-      return status(res, 404);
+      status(res, 404, headers);
     }
+    return secrets;
+  }
+
+  async function received(
+    endpoint: InboundEndpoint,
+    tenant: string,
+    req: IncomingMessage,
+    res: ServerResponse,
+    outcome: (value: string) => void,
+    cap: number,
+    known?: Readonly<Record<string, string>>,
+  ): Promise<void> {
+    const body = await readBounded(req, cap);
+    if (!body) {
+      outcome('too_large');
+      return status(res, 413);
+    }
+    const secrets = known ?? (await present(endpoint, tenant, res, outcome));
+    if (!secrets) return;
     const at = now();
     let verified: Readonly<{ at: number; payload: unknown }> | undefined;
     try {
@@ -329,9 +457,9 @@ export function createInboundHost(
     let plan: InboundPlan;
     try {
       plan = reading.plan();
-    } catch {
-      outcome('invalid');
-      return status(res, 400);
+    } catch (error) {
+      outcome(error instanceof FileRefused && error.status === 413 ? 'too_large' : 'invalid');
+      return status(res, error instanceof FileRefused ? error.status : 400);
     }
     if (fresh && plan.record) {
       // At the time the sender signed, not ours: consent is newest-wins, so an old event resent late changes nothing.
@@ -369,7 +497,13 @@ export function createInboundHost(
             idempotencyKey: inboundCommandKey(endpoint.receipts(tenant), reading.key),
             input: run.input,
           },
-          { door: 'api', flags, requestId: `inbound:${endpoint.name}`, now: () => new Date(now()) },
+          {
+            door: 'api',
+            flags,
+            requestId: `inbound:${endpoint.name}`,
+            now: () => new Date(now()),
+            ...(run.files ? { files: run.files } : {}),
+          },
         );
       });
       outcome(fresh ? 'applied' : 'replayed');

@@ -386,6 +386,15 @@ export function appAddressBook(input: AddressBookInput): AddressBook {
   return book;
 }
 
+/** A view's own address, `/compass/leads`; undefined for a key the book does not route as a room. */
+export function viewAddress(book: AddressBook, appId: string, view: string): string | undefined {
+  const segment = book.views.get(view);
+  return segment ? `/${encodeURIComponent(appId)}/${encodeURIComponent(segment)}` : undefined;
+}
+
+/** A public form's address, `/compass/form/inquiry`: never one of the App's rooms, so it needs no book. */
+export const publicFormAddress = (appId: string, view: string): string => `/${encodeURIComponent(appId)}/form/${encodeURIComponent(view)}`;
+
 /* ---------- ids ---------- */
 
 /* The walk's own form spells a page `@page~id`, a list `view:query` and a

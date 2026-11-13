@@ -81,6 +81,27 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
       });
     });
 
+    test("a public link in the visitor's thank-you is said as the placing tenant's address, and its reference said as nothing where none places", async (t) => {
+      const f = await openTenantPublicForms(t, dialect, database, { publicReads: true, publicPage: true, publicLinkMessage: true });
+      const welcome = (query: string, name: string) =>
+        (resetPublicFormLimits(), f).call(`/api/pages/lobby/commands/welcome${query}`, {
+          body: { input: { name }, submission: key() },
+          headers: { 'x-mistri-ticket': aged() },
+        });
+      const north = await welcome(via(NORTH_PUBLIC), 'Gil');
+      assert.equal(north.status, 200, north.text);
+      assert.match(north.body.message, /^Welcome\. Apply in steps at https?:\/\/\S+\/draft\?via=\S+$/, north.text);
+      // A form is reached under its tenant's intake address, as the tenant's own links to it are.
+      assert.ok(north.body.message.endsWith(`/draft${via(NORTH)}`), north.body.message);
+      // Triage has no tenant to say the link for: the message is kept and the reference is said as nothing, never raw
+      // and never a URL made up at the root origin.
+      const nobody = await welcome(via(UNKNOWN), 'Hal');
+      assert.equal(nobody.status, 200, nobody.text);
+      assert.equal(nobody.body.message, 'Welcome. Apply in steps at');
+      assert.ok(!north.text.includes('mistri-public:') && !nobody.text.includes('mistri-public:'));
+      assert.ok(!nobody.text.includes('/draft'), nobody.text);
+    });
+
     test("the visitor's App names the page's commands, so its page runs them signed out", async (t) => {
       const f = await open(t);
       const app = await f.call(`/api/app?app=${APP_ID}&via=${encodeURIComponent(NORTH_PUBLIC)}`);

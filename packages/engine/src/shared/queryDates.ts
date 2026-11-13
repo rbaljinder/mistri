@@ -30,6 +30,39 @@ function addDays(d: Date, n: number): Date {
   return c;
 }
 
+/* ---------- today plus or minus N units ----------
+
+   One grammar for the day `today - 18 years` names, read by the query language (a window of that one day) and by a
+   command's conditions (`shared/commandDraft.ts`, which works the day out before it compiles), so the two cannot
+   come to mean different days. */
+
+const ARITHMETIC_UNITS: Record<string, 'day' | 'month' | 'year'> = {
+  day: 'day',
+  days: 'day',
+  week: 'day',
+  weeks: 'day',
+  month: 'month',
+  months: 'month',
+  year: 'year',
+  years: 'year',
+};
+const ARITHMETIC_SOURCE = String.raw`today\s*([+-])\s*(\d{1,4})\s*(days?|weeks?|months?|years?)`;
+/** `today + 30 days` inside a longer text, each one found. */
+export const DATE_ARITHMETIC = new RegExp(String.raw`\b${ARITHMETIC_SOURCE}\b`, 'gi');
+const WHOLE_ARITHMETIC = new RegExp(`^${ARITHMETIC_SOURCE}$`, 'i');
+
+/** The day `today ± N units` names, from `today` (YYYY-MM-DD); a month or a year past the month's end lands on its last day. */
+export function shiftedDay(today: string, sign: string, count: number, unit: string): string {
+  const [y, m, d] = today.split('-').map(Number);
+  const by = (sign === '-' ? -1 : 1) * count * (unit.toLowerCase().startsWith('week') ? 7 : 1);
+  const kind = ARITHMETIC_UNITS[unit.toLowerCase()];
+  if (kind === 'day') return new Date(Date.UTC(y, m - 1, d + by)).toISOString().slice(0, 10);
+  const months = kind === 'year' ? by * 12 : by;
+  const first = new Date(Date.UTC(y, m - 1 + months, 1));
+  const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(d, last))).toISOString().slice(0, 10);
+}
+
 /**
  * `now` is a parameter rather than a call to the clock, so the compiler is a
  * pure function of its inputs. That is what makes the tests below able to
@@ -68,6 +101,17 @@ export function dateWindow(phrase: string, now: Date): DateWindow | undefined {
   if (p === 'this year' || p === 'last year') {
     const year = today.getFullYear() + (p === 'last year' ? -1 : 0);
     return { label: p, start: new Date(year, 0, 1), end: new Date(year + 1, 0, 1) };
+  }
+
+  /* One day, not a span: `due = today + 30 days` is that whole day, and `next 30 days` stays the "within" form. */
+  const arithmetic = WHOLE_ARITHMETIC.exec(p);
+  if (arithmetic) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const [, sign, count, unit] = arithmetic;
+    const day = shiftedDay(`${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`, sign, Number(count), unit);
+    const [y, m, d] = day.split('-').map(Number);
+    const start = new Date(y, m - 1, d);
+    return { label: p, start, end: addDays(start, 1) };
   }
 
   const span = p.match(/^(last|next|previous)\s+(\d+)\s+(minute|hour|day|week|month|year)s?$/);

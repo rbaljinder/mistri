@@ -89,7 +89,7 @@ export async function loadAppNav() {
  */
 function messageScope() {
   const app = inAppMode() ? activeApp() : undefined;
-  return app ? [app.id, { locale: app.ui?.locale, offered: app.ui?.languages }] : [undefined, undefined];
+  return app ? [app.id, { locale: app.ui?.locale, offered: app.ui?.languages, words: app.words }] : [undefined, undefined];
 }
 
 /**

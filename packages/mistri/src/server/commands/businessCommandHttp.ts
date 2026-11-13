@@ -2,7 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AppDef } from '../../shared/app.js';
 import type { BusinessCommandActor, BusinessCommandRegistry } from './businessCommands.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
-import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
+import { loadAppRuntimeResources, type RuntimeResources } from '../app/appRuntimeResources.js';
+import { personLocale, requestLocale } from '../app/readerLocale.js';
 import { bindHttpBusinessCommands, bulkCommandWhen, unofferedRefusal } from './businessCommandLoader.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { CommandInputError, parseCommandPrepareTargets, parseCommandAvailability } from './commandPayload.js';
@@ -29,6 +30,7 @@ import { MAX_COMMAND_BYTES, snapshot } from '@mistriwork/engine/adapters/command
 import type { CaptureCommandFlags, CommandFlags } from './commandFlags.js';
 import { authorizedCommandFlags, commandFlagsOnce } from './commandFlagCapture.js';
 import { servesLinks, withLinkUrls } from '../links/linkLookup.js';
+import { withAppPublicUrls } from '../links/publicLink.js';
 
 export const isBusinessCommandPath = (path: string): boolean => path.startsWith('/api/commands/');
 
@@ -211,8 +213,11 @@ export async function dispatchScopedBusinessCommandHttp(options: {
   label?: (body: unknown) => string | undefined;
   /** The body, where it was read already: availability asked inside a record page's composed read (recordCompose.ts). */
   body?: unknown;
+  /** The locale the caller resolved for whoever asked (`ctx.locale`), for what runs: a draft's step and an execute. */
+  locale?: string;
 }): Promise<unknown> {
   const { req, res, path, commands } = options;
+  const said = options.locale ? { locale: options.locale } : {};
   if (req.method !== 'POST' || !COMMAND_ROUTE_PATHS.includes(path)) {
     throw new BusinessCommandExecutionError('invalid_input', 'unknown');
   }
@@ -236,7 +241,7 @@ export async function dispatchScopedBusinessCommandHttp(options: {
     }
     if (path === COMMAND_ROUTES.draft) {
       if (!commands.draft) throw new BusinessCommandExecutionError('forbidden', 'unknown');
-      return await commands.draft(body, { ...execution, door: browserDoor(req) });
+      return await commands.draft(body, { ...execution, door: browserDoor(req), ...said });
     }
     if (path === '/api/commands/availability') {
       if (!commands.availability) throw new BusinessCommandExecutionError('temporarily_unavailable');
@@ -246,7 +251,7 @@ export async function dispatchScopedBusinessCommandHttp(options: {
       ? await commands.prepare(body, execution)
       : path === '/api/commands/status'
         ? await commands.status(body, execution)
-        : await attributeAction(options.label?.(body), () => commands.execute(body, { ...execution, door: browserDoor(req) }));
+        : await attributeAction(options.label?.(body), () => commands.execute(body, { ...execution, door: browserDoor(req), ...said }));
   } catch (error) {
     if (error instanceof CommandInputError) throw new BusinessCommandExecutionError('invalid_input', 'unknown', error.field);
     if (error instanceof AppAccessDenied) throw forbiddenBy(error, 'unknown');
@@ -255,6 +260,23 @@ export async function dispatchScopedBusinessCommandHttp(options: {
     req.off('aborted', abort);
     res.off('close', abort);
   }
+}
+
+/* The locale a command is said in (ctx.locale): a link's holder is a visitor, read like one on a public form;
+   a signed-in person is their row, then their pick. The executor clamps it to the App's catalogs. A row that
+   cannot be read is not a refusal; the pick, then the App's own, answers instead. */
+async function askedLocale(
+  app: AppDef,
+  resources: RuntimeResources,
+  actor: BusinessCommandActor,
+  req: IncomingMessage,
+): Promise<string | undefined> {
+  if (actor.kind === 'link') return requestLocale(app, { visitor: true, req });
+  const person = await personLocale(app, resources.schema, resources.adapter, {
+    ...(actor.email ? { email: actor.email } : {}),
+    account: actor.id,
+  }).catch(() => undefined);
+  return requestLocale(app, { ...(person ? { person } : {}), visitor: false, req });
 }
 
 /** The operation owns every lease until transaction completion, even after socket loss. */
@@ -320,7 +342,7 @@ export async function dispatchBusinessCommandHttp(options: {
         binding,
         actor,
         body,
-        execution,
+        execution: { ...execution, locale: await askedLocale(app, resources, actor, req) },
         flagsFor: (envelope) => authorizedCommandFlags(binding, actor, envelope, admittedFlags),
         door: browserDoor(req),
       });
@@ -364,12 +386,15 @@ export async function dispatchBusinessCommandHttp(options: {
       return await prepareBusinessCommand({ body, app, binding, references, resources, actor, execution, captureFlags: admittedFlags });
     const captured = await authorizedCommandFlags(binding, actor, body, admittedFlags, path === '/api/commands/status');
     if (path === '/api/commands/status') return await lookupBusinessCommandStatus(binding, actor, body, { ...execution, flags: captured });
+    const locale = await askedLocale(app, resources, actor, req);
     const answer = await attributeAction(options.label?.(body), () =>
-      executeBusinessCommand(binding, actor, body, { ...execution, flags: captured, door: browserDoor(req) }),
+      executeBusinessCommand(binding, actor, body, { ...execution, flags: captured, door: browserDoor(req), locale }),
     );
     /* A link the command minted (context.link) is said here, to whoever ran it, as its URL; the receipt keeps the
        reference only, so a status read or a replay elsewhere never holds the secret (links/linkToken.ts). */
-    return servesLinks(app) && actor.kind !== 'link' ? await withLinkUrls(app, resources, answer) : answer;
+    const linked = servesLinks(app) && actor.kind !== 'link' ? await withLinkUrls(app, resources, answer) : answer;
+    // A public link (context.publicLink) names no secret: whoever ran the command reads its URL.
+    return await withAppPublicUrls(app, linked);
   } catch (error) {
     if (error instanceof CommandInputError) throw new BusinessCommandExecutionError('invalid_input', 'not_applied', error.field);
     if (error instanceof AppAccessDenied) throw forbiddenBy(error);

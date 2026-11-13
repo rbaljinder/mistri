@@ -15,7 +15,8 @@ import { logicalResource, type AppDef } from '../../shared/app.js';
 import { formCommands } from '../../shared/appSavedForms.js';
 import type { AppFormView } from '../../shared/app.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
-import { CHOICE_ROWS_MOST, choiceOrder, tenantChoices } from '../forms/choiceCache.js';
+import { choiceLabelColumn, choiceWhereColumns } from '../../shared/command.js';
+import { choiceColumns, choiceNarrowing, choiceOrder, choiceReadLimit, tenantChoices } from '../forms/choiceCache.js';
 import { tenantChoiceTables, tenantLiveHub } from './tenantLive.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
 import type { PublicPlacement, PublicReadContext } from './tenantPublicReadRuntime.js';
@@ -55,7 +56,14 @@ export function tenantPublicChoices(options: TenantPublicChoicesOptions) {
       return null;
     }
   };
-  return async (address: string | undefined, key: string, form: AppFormView, input: AppCommandField[]): Promise<AppCommandField[]> => {
+  return async (
+    address: string | undefined,
+    key: string,
+    form: AppFormView,
+    input: AppCommandField[],
+    /** The visitor's locale: a field naming a column for it (`labelColumns`) is said by that column. */
+    locale?: string,
+  ): Promise<AppCommandField[]> => {
     if (!input.some(sourced)) return input;
     const tenant = await placed(key, address);
     const owners = formCommands(form).map((reference) => reference.id);
@@ -71,20 +79,26 @@ export function tenantPublicChoices(options: TenantPublicChoicesOptions) {
           const resource = resourceOf(owners, field);
           const physical = ownership.resources[resource];
           if (physical === undefined) return none;
-          const columns = [...new Set([field.source.by, field.source.labelColumn])];
+          const local = choiceLabelColumn(field.source, locale);
+          const where = choiceWhereColumns(field.source.match);
+          const narrowing = choiceNarrowing(field.source.match);
+          const read = { by: field.source.by, labelColumn: field.source.labelColumn, sort: field.source.sort, local, where, narrowing };
+          const columns = choiceColumns(read);
           const choices = await tenantChoices({
             hub,
             tables,
             appId: app.id,
             tenant,
-            source: { resource, physical, by: field.source.by, labelColumn: field.source.labelColumn, sort: field.source.sort },
+            source: { resource, physical, ...read },
             read: () =>
               options.withPublicContext({ tenant }, async (context) => {
                 const result = await context.data.query({
                   table: resource,
                   columns,
+                  ...(narrowing.filter ? { filter: narrowing.filter } : {}),
+                  ...(narrowing.lanes ? { lanes: narrowing.lanes } : {}),
                   orderBy: choiceOrder(field.source),
-                  limit: CHOICE_ROWS_MOST + 1,
+                  limit: choiceReadLimit(narrowing),
                   offset: 0,
                 });
                 return result.rows;
@@ -93,7 +107,12 @@ export function tenantPublicChoices(options: TenantPublicChoicesOptions) {
           return {
             ...field,
             source: { ...field.source, served: true },
-            options: choices.options.map((option) => ({ value: option.value, label: option.label })),
+            /* Each row's `where` columns ride along, so the page narrows by other answers itself (formChoices.ts). */
+            options: choices.options.map((option) => ({
+              value: option.value,
+              label: option.label,
+              ...(option.row ? { row: option.row } : {}),
+            })),
           } as AppCommandField;
         } catch {
           return none;

@@ -11,10 +11,11 @@
  * environment, never printed or stored; a deployment with a keyed input and
  * no key refuses to start rather than falling back to a digest.
  */
-import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
+import { createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { AppCommandField } from '../../shared/command.js';
 
 const FORM_KEY_VARIABLE = 'MISTRI_FORM_KEY';
+const AUTH_SECRET_VARIABLE = 'BETTER_AUTH_SECRET';
 
 export class FormKeyMissing extends Error {
   constructor() {
@@ -33,14 +34,18 @@ export class FormKeyMissing extends Error {
    process environment. The derivation is the same either way, so an App
    moved between serve and a suite keeps matching its stored hashes. */
 const configured = new Map<string, string | undefined>();
+const configuredAuth = new Map<string, string | undefined>();
 const derived = new Map<string, Buffer>();
 
 /** Bind an App's form key to the environment its deployment captured; `undefined` means it has none. */
 export function configureFormKey(appId: string, environment: NodeJS.ProcessEnv): () => void {
   const secret = environment[FORM_KEY_VARIABLE];
+  const auth = environment[AUTH_SECRET_VARIABLE];
   configured.set(appId, secret);
+  configuredAuth.set(appId, auth);
   return () => {
     if (configured.get(appId) === secret) configured.delete(appId);
+    if (configuredAuth.get(appId) === auth) configuredAuth.delete(appId);
   };
 }
 
@@ -60,6 +65,32 @@ export function purposeKey(purpose: string, appId?: string): Buffer {
   let key = derived.get(cacheKey);
   if (!key) {
     key = Buffer.from(hkdfSync('sha256', Buffer.from(secret, 'utf8'), 'mistri.form-key', purpose, 32));
+    if (derived.size > 64) derived.clear();
+    derived.set(cacheKey, key);
+  }
+  return key;
+}
+
+const PROCESS_SEAL = randomBytes(32);
+
+/**
+ * A key for sealing what the server writes and later reads back as its own — a link reference a command minted, which
+ * a visitor's typed look-alike must not pass for. The form key's purpose key where the App has one; else one derived
+ * from BETTER_AUTH_SECRET (never the secret itself), which every App with sign-in has; else this process's own, made
+ * at start, so a seal made before a restart is not known after it. Never throws: sealing is not a reason to refuse.
+ */
+export function sealKey(purpose: string, appId?: string): Buffer {
+  try {
+    return purposeKey(purpose, appId);
+  } catch (error) {
+    if (!(error instanceof FormKeyMissing)) throw error;
+  }
+  const secret = appId !== undefined && configuredAuth.has(appId) ? configuredAuth.get(appId) : process.env[AUTH_SECRET_VARIABLE];
+  if (typeof secret !== 'string' || Buffer.byteLength(secret, 'utf8') < 32) return PROCESS_SEAL;
+  const cacheKey = `seal\u0000${purpose}\u0000${secret}`;
+  let key = derived.get(cacheKey);
+  if (!key) {
+    key = Buffer.from(hkdfSync('sha256', Buffer.from(secret, 'utf8'), 'mistri.seal-key', purpose, 32));
     if (derived.size > 64) derived.clear();
     derived.set(cacheKey, key);
   }

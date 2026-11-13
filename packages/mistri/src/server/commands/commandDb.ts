@@ -53,11 +53,14 @@ import {
   type TableMeta,
 } from '@mistriwork/engine/shared/schema.js';
 import { BusinessCommandExecutionError, refuse } from './commandErrors.js';
-import { fileValues } from '../http/fileRows.js';
+import { fileValues, readFileRow } from '../http/fileRows.js';
+import type { FileScope } from '../files/fileStorage.js';
 import type { AppFileRule } from '../../shared/app.js';
+import type { CommandFile } from '../../../schema/command.js';
 import { zonedNow } from '../../shared/appZone.js';
 import type { CommandDerived } from './commandWhen.js';
 import type { ColumnSaying } from './commandSaying.js';
+import { PublicLinkRef } from '../links/publicLink.js';
 
 /** A value a column holds, as the handle writes it. */
 export type Value = string | number | boolean | null;
@@ -235,6 +238,13 @@ export interface ReadTable<Row> {
    * path, `me`) is refused as such at the call.
    */
   segment(name: string): Query<Row>;
+  /**
+   * A file resource's file — its name, type, size and bytes — by its row as read here, or its key: read through the
+   * same grants and row policy as `get`, so a row this command may not see is `not_found`, as is one with no file. A
+   * file kept in a bucket is fetched whole; none is streamed. Held to the resource's `maxBytes` (a tenant's at most
+   * 10 MB), and one command reads at most 50 MB of files in all. Only on a file resource the command reads.
+   */
+  readFile(row: Row | string | number): Promise<CommandFile>;
 }
 /**
  * The constants `now`, `today` and `me` from `@mistriwork/mistri/app`, written as an
@@ -246,12 +256,15 @@ type WriteConstant = { readonly auto: 'now' | 'today' | 'me' };
 /** What a write may give a column: its value, or a constant the server works out as the write runs. */
 export type Written<Row> = { readonly [C in keyof Row]?: Row[C] | WriteConstant };
 
-/** What a write tells besides its row: `words` its notices say (`{words.code}` in a notify title), never stored. */
+/**
+ * What a write tells besides its row: `words` its notices say (`{words.code}` in a notify title), never stored. A
+ * word may be a `publicLink(view)`: the mail says it as the view's URL, and is not sent where it has none.
+ */
 export interface WriteOptions {
-  readonly words?: Readonly<Record<string, string>>;
+  readonly words?: Readonly<Record<string, string | { readonly view: string; toJSON(): string }>>;
 }
 
-export interface WriteTable<Row> extends ReadTable<Row> {
+export interface WriteTable<Row, Moves extends object = Readonly<Record<string, UntypedRow>>> extends ReadTable<Row> {
   /** The row as stored, its key and defaults included. */
   insert(values: Written<Row>, options?: WriteOptions): Promise<Row>;
   /** Writes `changes` guarded by the row's values for those columns, bumping its revision: the new row, or `stale_record`. */
@@ -278,6 +291,14 @@ export interface WriteTable<Row> extends ReadTable<Row> {
    * type and size, never its bytes. Only on a file resource the command writes.
    */
   insertFile(file: { readonly name: string; readonly type?: string; readonly data: Uint8Array }, values?: Written<Row>): Promise<Row>;
+  /**
+   * The file of this row (read as `readFile` reads it, and counted toward the same 50 MB) moved to a new row of `to`,
+   * another file resource the command writes, with `values` its other columns, and this row removed: one
+   * transaction, so a refusal keeps both as they were. The new row is held to `to`'s own rules, as `insertFile` holds
+   * it; a file kept in a bucket is written under the new row's own key, and its old object is deleted once the
+   * command has committed. The history reads as an insert there and a delete here.
+   */
+  moveFile<To extends keyof Moves & string>(row: Row | string | number, to: To, values?: Written<Moves[To]>): Promise<Moves[To]>;
 }
 
 /* ---------- the measures and periods a handler writes ---------- */
@@ -324,7 +345,7 @@ export const period = Object.freeze({
 
 /** A command's tables: read `R`, written `W`. */
 export type CommandTables<Scope, R extends string, W extends string> = {
-  readonly [T in R | W]: T extends W ? WriteTable<RowIn<Scope, T>> : ReadTable<RowIn<Scope, T>>;
+  readonly [T in R | W]: T extends W ? WriteTable<RowIn<Scope, T>, { readonly [To in W]: RowIn<Scope, To> }> : ReadTable<RowIn<Scope, T>>;
 };
 /** One table's row on a source: `RowOf<typeof lending, 'lead'>`. */
 export type RowOf<Src, Table extends string> = RowIn<SourceTables<Src, Table>, LocalName<Table>>;
@@ -630,10 +651,11 @@ function wordsOf(name: string, written: WriteOptions | undefined): Readonly<Reco
   if (typeof words !== 'object' || words === null || Array.isArray(words)) authorMistake(`${name}: words is an object of named texts.`);
   const entries = Object.entries(words);
   if (entries.length > 20) authorMistake(`${name}: a write gives its notices at most 20 words.`);
-  for (const [word, text] of entries)
+  const said = entries.map(([word, text]) => [word, text instanceof PublicLinkRef ? text.toJSON() : text] as const);
+  for (const [word, text] of said)
     if (!WORD_NAME.test(word) || typeof text !== 'string' || text.length > 2000)
       authorMistake(`${name}: words.${word.slice(0, 64)} is a name and a text of at most 2,000 characters.`);
-  return Object.freeze(Object.fromEntries(entries)) as Readonly<Record<string, string>>;
+  return Object.freeze(Object.fromEntries(said)) as Readonly<Record<string, string>>;
 }
 
 /* The places a column holds: PostgreSQL's catalog says them beside the type, SQLite's type string says them itself. */
@@ -828,6 +850,10 @@ interface CommandDbOptions {
   readonly now: () => Date;
   /** The file resources among `write`, by local name: their rows take bytes through `insertFile`. */
   readonly files?: ReadonlyMap<string, AppFileRule>;
+  /** The file resources among `read` and `write`, by local name: what `readFile` reads, and the most one hands over. */
+  readonly fileReads?: ReadonlyMap<string, AppFileRule>;
+  /** Whose bucket objects a row read here may name: the command's App, and its tenant (files/fileStorage.ts). */
+  readonly fileScope?: FileScope;
   /** Puts a new file's bytes in its resource's bucket before the row is written, and gives the row's values naming
       the object (files/fileStorage.ts); the caller deletes the object if the transaction rolls back. */
   /** Work to start once the command has committed (a public picture's pre-made copies); never run on a rollback. */
@@ -863,9 +889,21 @@ async function withConstants(
   return out ?? values;
 }
 
+/** The most file bytes one command reads through `readFile`, all its reads together: a loop over rows that reads each
+    one's file is refused here rather than filling the server's memory. A fixed bound, not a setting. */
+export const COMMAND_FILE_READ_MOST = 50 * 1024 * 1024;
+
+const sizeOf = (bytes: number) => `${Math.ceil((bytes / 1024 / 1024) * 10) / 10} MB`;
+
+/** What one command run has read so far, across all its handles. */
+interface FileReadBudget {
+  read: number;
+}
+
 /** The `db` of one command run: a frozen object of table handles, exactly the footprint's. */
 export function createCommandDb(options: CommandDbOptions): Readonly<Record<string, ReadTable<UntypedRow> | WriteTable<UntypedRow>>> {
   const handles: Record<string, ReadTable<UntypedRow> | WriteTable<UntypedRow>> = {};
+  const budget: FileReadBudget = { read: 0 };
   const names = new Set([...options.read, ...options.write]);
   for (const name of names) {
     const table = options.catalog[name];
@@ -875,12 +913,19 @@ export function createCommandDb(options: CommandDbOptions): Readonly<Record<stri
       tables: table.declared.tables.filter((each) => names.has(each.id)),
       foreignKeys: table.declared.foreignKeys.filter((fk) => names.has(fk.from.table) && names.has(fk.to.table)),
     };
-    handles[name] = tableHandle(declared ? { ...table, declared } : table, options.write.includes(name), options);
+    handles[name] = tableHandle(declared ? { ...table, declared } : table, options.write.includes(name), options, budget, handles);
   }
   return Object.freeze(handles);
 }
 
-function tableHandle(table: CommandTable, writable: boolean, options: CommandDbOptions): ReadTable<UntypedRow> | WriteTable<UntypedRow> {
+function tableHandle(
+  table: CommandTable,
+  writable: boolean,
+  options: CommandDbOptions,
+  budget: FileReadBudget = { read: 0 },
+  // The run's other handles, filled by the time a handler calls: where moveFile writes.
+  peers: Readonly<Record<string, ReadTable<UntypedRow> | WriteTable<UntypedRow>>> = {},
+): ReadTable<UntypedRow> | WriteTable<UntypedRow> {
   const { tx, now } = options;
   const name = table.name;
   const rows = async (compiled: Compiled, limit: number, orderBy = compiled.orderBy): Promise<UntypedRow[]> => {
@@ -1080,6 +1125,58 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
     };
     return query;
   };
+  /* One row's file, through this command's transaction (http/fileRows.ts): its grants, row policy and tenant are the
+     reader's, and a row naming an object outside this App, tenant and resource reads as no file at all. Held to the
+     resource's maxBytes and to what this run may still read; the row's key and object come back for moveFile. */
+  const fileOf = async (given: unknown, verb: 'readFile' | 'moveFile') => {
+    const rule = options.fileReads?.get(name);
+    if (!rule) throw new Error(`${name}: ${verb} reads a file resource this command reads, and ${name} is not one here.`);
+    const key =
+      given !== null && typeof given === 'object'
+        ? keyOf(given)
+        : (typeof given === 'string' || typeof given === 'number') && table.key.length === 1
+          ? (canonicalKey(table, { [table.key[0]]: given }) ?? refuse('not_found'))
+          : authorMistake(`${name}: ${verb} takes a row read through db.${name}, or its key (${table.key.join(', ')}).`);
+    // Whose objects a row may name is the run's to say; without it, no row's object is anyone's to read.
+    const scope = options.fileScope;
+    if (!scope) throw new Error(`${name}: ${verb} was asked outside a command run that says whose files it reads.`);
+    const found = await readFileRow(tx, table.meta, rule, key, undefined, scope);
+    if ('error' in found) return found.status === 404 ? refuse('not_found') : authorMistake(`${name}: ${found.error}`);
+    const held = (size: number) => {
+      if (size > rule.maxBytes)
+        authorMistake(`${name}: this file is ${sizeOf(size)}; ${verb} hands over at most the resource's ${sizeOf(rule.maxBytes)}.`);
+      if (budget.read + size > COMMAND_FILE_READ_MOST)
+        authorMistake(
+          `${name}: one command reads at most ${sizeOf(COMMAND_FILE_READ_MOST)} of files; this one has read ${sizeOf(budget.read)} ` +
+            `and this file is ${sizeOf(size)}. Read fewer in one command, or move the rest to a job.`,
+        );
+    };
+    let data: Uint8Array;
+    if ('bytes' in found) data = found.bytes;
+    else {
+      // Refused before the bytes are fetched where the row says how many there are.
+      if (found.size !== undefined) held(found.size);
+      /* And whatever the row says, no more is fetched than this read may hand over: a row with no size column, or
+         one that understates its object, would otherwise pull the whole object into memory before it is refused. */
+      const read =
+        (await found.bucket.bytesAtMost(found.object, Math.min(rule.maxBytes, COMMAND_FILE_READ_MOST - budget.read))) ??
+        refuse('not_found');
+      if ('over' in read) {
+        held(read.over);
+        throw new Error(`${name}: ${verb} fetched past what it may hand over.`);
+      }
+      data = read.bytes;
+    }
+    held(data.byteLength);
+    budget.read += data.byteLength;
+    const file: CommandFile = Object.freeze({
+      name: found.name,
+      type: found.claimed || 'application/octet-stream',
+      size: data.byteLength,
+      data,
+    });
+    return { file, key, stored: 'object' in found ? { bucket: found.bucket, object: found.object } : undefined };
+  };
   const read: ReadTable<UntypedRow> = {
     async get(key) {
       const given =
@@ -1139,6 +1236,9 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
       const compiled = compileWhere(table, where, now(), [], undefined, HANDLE);
       return compiled.none ? 0 : tx.count(name, compiled.filter);
     },
+    async readFile(given) {
+      return (await fileOf(given, 'readFile')).file;
+    },
   };
   if (!writable) return Object.freeze(read);
   const writer = tx as WriteTransaction;
@@ -1194,6 +1294,24 @@ function tableHandle(table: CommandTable, writable: boolean, options: CommandDbO
       if (!options.placeFile) throw new Error(`${name}: its files are kept in a bucket, which this command cannot write to.`);
       const row = await insert(await options.placeFile(rule, made.values));
       options.stored?.(name, data);
+      return row;
+    },
+    async moveFile(given, to, values = {}) {
+      const into = peers[to] as WriteTable<UntypedRow> | undefined;
+      const ceiling = options.files?.get(to)?.maxBytes;
+      if (to === name || ceiling === undefined || typeof into?.insertFile !== 'function')
+        throw new Error(`${name}: moveFile moves a file to another file resource this command writes, and ${String(to)} is not one here.`);
+      const { file, key, stored } = await fileOf(given, 'moveFile');
+      // Refused in the words readFile uses for its own cap, rather than as an upload too large for the App.
+      if (file.size > ceiling)
+        authorMistake(`${name}: this file is ${sizeOf(file.size)}; moveFile moves it into ${to}, which takes at most ${sizeOf(ceiling)}.`);
+      // The new row first, held to its own resource's rules, and under its own key: a key is never shared by two rows.
+      const row = await into.insertFile({ name: file.name, type: file.type, data: file.data }, values);
+      const result = await writer.remove({ table: name, key });
+      if (result.affected !== 1) stale(key);
+      /* The old object goes once the move has committed; a rollback keeps it, as the row it names. Nothing else names
+         it, and one the delete misses is the sweep's. */
+      if (stored) options.afterCommit?.(() => void stored.bucket.delete(stored.object).catch(() => {}));
       return row;
     },
     async update(row, changes, written) {

@@ -114,6 +114,7 @@ export function evaluateComputed(
       case 'call': {
         const args = n.args.map(value);
         if (n.fn === 'coalesce') return args.find((each) => each !== null) ?? null;
+        if (n.fn === 'concat') return args.map((each) => (each === null ? '' : String(each))).join('');
         if (args.some((each) => each === null)) return null;
         if (n.fn === 'abs') return Math.abs(Number(args[0]));
         if (n.fn === 'round') return roundAway(Number(args[0]), args[1] === undefined ? 0 : Number(args[1]));

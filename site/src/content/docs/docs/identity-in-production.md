@@ -47,7 +47,7 @@ mean more than one factor in the entry's `mfa`: a step-up then counts only a
 sign-in that shows one of them. A password-only App has one factor.
 
 **One-time codes that do exist.** A password reset is an emailed link, good for an hour.
-A public form's `statusCheck.stepUp` emails a six-digit code that opens more
+A public form's `statusCheck.stepUp` emails (or texts, on an integration's channel) a six-digit code that opens more
 for 15 minutes, and `link.email` proves an address by a code
 ([command forms](/docs/command-forms/#forms-saved-on-every-step)). These prove
 control of an address for one form; they do not sign anyone in.

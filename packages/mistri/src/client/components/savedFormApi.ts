@@ -57,14 +57,18 @@ const base = (form: string) => `/api/forms/${encodeURIComponent(form)}`;
 
 /**
  * The intake address the page was published with (a tenant App's `?via=…`),
- * or none. Every step, the resume and the submit carry it on as it was: the
- * server resolves it each time, and a draft is found only where it resolves.
+ * or none. Every step, the resume, the submit and the status check carry it on
+ * as it was: the server resolves it each time, and a draft or an application
+ * is found only where it resolves.
  * Nothing on the page reads it otherwise, and an ordinary App ignores it.
  */
 export const intakeAddress = (): string | undefined => new URLSearchParams(window.location.search).get('via') ?? undefined;
-const carried = (): string => {
+/* The address's own words, `?via=` and, where the visitor has picked a language, `?locale=`: a step and a submission
+   are fetched without that pick's cookie reaching a host that reads it only from the address (publicForm.js). */
+const carried = (locale?: string): string => {
   const via = intakeAddress();
-  return via ? `?via=${encodeURIComponent(via)}` : '';
+  const query = [via && `via=${encodeURIComponent(via)}`, locale && `locale=${encodeURIComponent(locale)}`].filter(Boolean).join('&');
+  return query ? `?${query}` : '';
 };
 
 /** Save one step; the answer is only that it was saved. */
@@ -74,8 +78,10 @@ export async function saveStep(
   submission: string,
   input: CommandInputValue,
   challenge?: string,
+  /** The visitor's pick of language, named as the form's read names it (publicForm.js `pickedLanguage`). */
+  locale?: string,
 ): Promise<void> {
-  await post(`${base(form)}/steps/${encodeURIComponent(step)}${carried()}`, { input, submission }, challenge);
+  await post(`${base(form)}/steps/${encodeURIComponent(step)}${carried(locale)}`, { input, submission }, challenge);
 }
 
 /** Which steps of this browser's application are saved, by id; none for no application at all. */
@@ -97,7 +103,7 @@ interface StatusDetails {
 
 /** The state of the application these details open. Any wrong detail throws the one refusal, whichever it was. */
 export async function checkStatus(form: string, details: StatusDetails): Promise<ApplicationStatus> {
-  const data = await post(`${base(form)}/status`, details);
+  const data = await post(`${base(form)}/status${carried()}`, details);
   return (data.status ?? {}) as ApplicationStatus;
 }
 
@@ -142,7 +148,7 @@ export async function myApplications(form: string): Promise<Array<{ reference: s
 
 /** The check's details, and a code to the address on the application. Wrong details throw the check's one refusal. */
 export async function askStepUpCode(form: string, details: StatusDetails): Promise<void> {
-  await post(`${base(form)}/stepup`, details);
+  await post(`${base(form)}/stepup${carried()}`, details);
 }
 
 /** The details again with the code: the state and the declared details. A wrong, used or expired code throws one refusal. */
@@ -151,7 +157,7 @@ export async function openStepUp(
   details: StatusDetails,
   code: string,
 ): Promise<{ status: ApplicationStatus; details: ApplicationStatus }> {
-  const data = await post(`${base(form)}/stepup`, { ...details, code });
+  const data = await post(`${base(form)}/stepup${carried()}`, { ...details, code });
   return { status: (data.status ?? {}) as ApplicationStatus, details: (data.details ?? {}) as ApplicationStatus };
 }
 

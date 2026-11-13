@@ -1,8 +1,9 @@
 /**
  * What a test host asks of the server it started, outside the App's own doors:
  * rows inserted as a test's setup, a job at times run now, in a tenant App
- * an account with a membership of a tenant or of the platform, and the read
- * audit's rows, which no route of the App reads. `startTestApp`
+ * an account with a membership of a tenant or of the platform, a command run
+ * as one of its service roles in one tenant, and the read audit's rows, which
+ * no route of the App reads. `startTestApp`
  * (testing/host.ts) is the one caller. It starts the server with
  * NODE_ENV=test and a random MISTRI_TEST_CONTROL token, and sends that
  * token with each request; without both, or from beyond loopback, these
@@ -12,7 +13,10 @@
  *
  * Setup is not a person's write: it bypasses grants and the row policy, as a
  * seed script does, and it is named as setup everywhere it surfaces
- * (`host.seed`). What a test asserts still goes through the App's doors.
+ * (`host.seed`). What a test asserts still goes through the App's doors. A
+ * service actor is not setup: its command is bound, granted and fenced as a
+ * job's principal's is (tenant/tenantServiceActor.ts), and its answer is the
+ * command door's own status and body, passed through as they are.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
@@ -24,6 +28,7 @@ import { tableNamed } from '@mistriwork/engine/shared/schema.js';
 import { HttpError, readJson, send } from '@mistriwork/engine/server/http/reply.js';
 import { TEST_CONTROL_HEADER, TEST_CONTROL_PATHS } from '../testing/control.js';
 import type { ReadAuditQuery, StoredReadAudit } from '../../adapters/readAudit/readAudit.js';
+import type { TenantServiceAnswer, TenantServiceRequest } from '../tenant/tenantServiceActor.js';
 
 export interface TestControl {
   /** True when the request was one of these routes, answered here. */
@@ -44,6 +49,8 @@ export function testControlFrom(
     policy?: string;
     /** A tenant App's read audit, read for one tenant at a time (tenantDeployment.ts `readAudit`). */
     tenantReadAudit?: (tenant: string, query: Omit<ReadAuditQuery, 'tenant'>) => Promise<StoredReadAudit[]>;
+    /** A tenant App's service actor, when it was started with its jobs (tenant/tenantServiceActor.ts). */
+    service?: (request: TenantServiceRequest) => Promise<TenantServiceAnswer>;
   },
 ): TestControl | undefined {
   const token = env.MISTRI_TEST_CONTROL;
@@ -147,8 +154,41 @@ export function testControlFrom(
     return readAppReadAudit(serving.registry, apps[0], query);
   }
 
+  /** A command as one service role in one tenant: what the command door would answer, status and body. */
+  async function service(body: Record<string, unknown>): Promise<TenantServiceAnswer> {
+    const { tenant, role, command, input, key, version, idempotencyKey } = body;
+    if (typeof tenant !== 'string' || !tenant) throw new HttpError(400, 'A service actor acts in one tenant: name it.');
+    if (typeof role !== 'string' || !role) throw new HttpError(400, 'A service actor names its role.');
+    if (typeof command !== 'string' || !command) throw new HttpError(400, 'Name the command to run.');
+    if (key !== undefined && (!key || typeof key !== 'object' || Array.isArray(key)))
+      throw new HttpError(400, "A command's key is an object of column to value.");
+    if (version !== undefined && !Number.isSafeInteger(version)) throw new HttpError(400, "A command's version is a whole number.");
+    if (idempotencyKey !== undefined && typeof idempotencyKey !== 'string') throw new HttpError(400, 'An idempotency key is text.');
+    if (!serving.service) throw new HttpError(400, 'This server runs no jobs: start the App with --jobs to act as a service.');
+    return serving.service({
+      tenant,
+      role,
+      command,
+      input: input ?? {},
+      ...(key !== undefined ? { key: key as Record<string, string | number> } : {}),
+      ...(version !== undefined ? { version: version as number } : {}),
+      ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
+    });
+  }
+
   return {
     async handle(req, res, url) {
+      if (url.pathname === TEST_CONTROL_PATHS.service && authorized(req)) {
+        if (req.method !== 'POST') send(res, 405, { error: 'POST' });
+        else
+          try {
+            const answer = await service(await readJson(req));
+            send(res, answer.status, answer.body);
+          } catch (error) {
+            send(res, error instanceof HttpError ? error.status : 400, { error: (error as Error).message });
+          }
+        return true;
+      }
       const route =
         url.pathname === TEST_CONTROL_PATHS.seed
           ? seed

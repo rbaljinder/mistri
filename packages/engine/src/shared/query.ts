@@ -44,7 +44,7 @@ import {
   type QueryPerson,
   type TenantTest,
 } from './queryOperands.js';
-import { TAGS_TYPE } from './tagLists.js';
+import { CHOICES_TYPE, TAGS_TYPE } from './tagLists.js';
 import { DEFINED_PATH_TYPE } from './definedFields.js';
 
 const RANGE_OPS: ReadonlySet<string> = new Set(['<', '<=', '>', '>=']);
@@ -700,6 +700,10 @@ function compileCondition(raw: string, ctx: CompileContext): { conditions?: Cond
     (c) => c.op !== 'has' && ctx.table?.columns.find((col) => col.name === c.column)?.type === TAGS_TYPE,
   );
   if (tagged) return { error: `"${tagged.column}" is a record's tags: ask it with has, as in ${tagged.column} has bug.` };
+  const listed = compiled.conditions?.find(
+    (c) => c.op !== 'has' && ctx.table?.columns.find((col) => col.name === c.column)?.type === CHOICES_TYPE,
+  );
+  if (listed) return { error: `"${listed.column}" holds several choices: ask it with has, as in ${listed.column} has cleaning.` };
   return compiled;
 }
 
@@ -847,8 +851,10 @@ function compileClause(raw: string, ctx: CompileContext): { conditions?: Conditi
     /* `tags has bug`, `tags has (bug, docs)`: a record's tags (TableMeta.tags)
        hold any of the labels. A set, so a list never needs `in`. */
     if (op === 'has') {
-      if (column?.type !== TAGS_TYPE && column?.type !== DEFINED_PATH_TYPE)
-        return { error: `"has" asks a record's tags or a key of a JSON column, and "${name}" is neither.` };
+      /* A parse with no table reads the words alone (a form's condition before its fields are known), so it cannot
+         say what the column is; the form judges that itself, against the fields it has. */
+      if (ctx.table && column?.type !== TAGS_TYPE && column?.type !== DEFINED_PATH_TYPE && column?.type !== CHOICES_TYPE)
+        return { error: `"has" asks a record's tags, a key of a JSON column or a form's several choices, and "${name}" is none of them.` };
       const list = valueRaw
         .trim()
         .replace(/^[([]\s*/, '')

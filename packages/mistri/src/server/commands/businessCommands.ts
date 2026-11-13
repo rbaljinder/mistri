@@ -17,6 +17,7 @@ import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import type { WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import {
   commandFieldsDeep,
+  hasProblem,
   saidIconProblem,
   type AppCommandField,
   type CommandInitialOf,
@@ -180,6 +181,11 @@ export interface BusinessCommandContext extends CommandContextBase {
   /** The IANA zone `today()` counts in: a tenant App's running tenant's own (`ui.timezone: { column }`), else the
       App's `ui.timezone`, else `UTC`. For code that says a moment to a person, as a reminder's text does. */
   readonly timezone: string;
+  /** The BCP 47 tag the person who asked is served in — `es-US` — always one of the App's catalogs (its region kept),
+      else the App's own `ui.locale`: a signed-in person's row (else their pick in this browser), a public form's
+      visitor's pick or browser, a job's or an inbound message's tenant, else the App's. Resolved by the server,
+      never read from the input. `refuse(msg('…'))` is said in it. */
+  readonly locale: string;
   readonly db: Readonly<Record<string, ReadTable<UntypedRow>>>;
   /** The target, read and checked in this transaction: a one-target command that names a record. */
   readonly record?: UntypedRow;
@@ -194,7 +200,7 @@ export interface BusinessCommandContext extends CommandContextBase {
   readonly nextNumber: CommandNextNumber;
   /**
    * Mints a capability link to the record this command runs on, as its resource declares it (`links.<name>`), in this
-   * transaction: kept if the command commits. Answers a reference that reads `mistri-link:<id>` wherever it is
+   * transaction: kept if the command commits. Answers a reference that reads `mistri-link:<id>.<seal>` wherever it is
    * stored — a receipt, an effect's body — and becomes the link's URL only in the command's HTTP answer and when an
    * effect is delivered. A one-target command on an existing record, run by a person or a service, mints one; any
    * other refuses.
@@ -202,6 +208,16 @@ export interface BusinessCommandContext extends CommandContextBase {
   readonly link: CommandLinkMint;
   /** Revokes this record's live links of one declared name, or of every name: the count revoked. */
   readonly revokeLinks: CommandLinkRevoke;
+  /**
+   * A link to one of the App's public views — a public form, a public page, a list the public grant reads — by its
+   * view key, as the client's `publicLink(view)` makes one. Answers a reference that reads `mistri-public:<view>.<seal>`
+   * wherever it is stored and becomes the view's URL where a capability link does: the command's HTTP answer and an
+   * effect's delivery. In a tenant App the URL is the tenant's, carrying its public address (its intake address, for
+   * a form) as that address stands when it is delivered; in an App that is not a tenant App, it is under the address
+   * the server was started on. Where no address is known (no server) an answer keeps the reference and an effect's
+   * delivery fails, as a capability link's does. A view that is not public refuses, naming it.
+   */
+  readonly publicLink: CommandPublicLink;
   /** What `lookup` returned, when the command looks up. */
   readonly lookup?: unknown;
   /**
@@ -237,9 +253,10 @@ export interface BusinessCommandContext extends CommandContextBase {
   readonly draft?: SavedDraftContext;
   /**
    * Files the platform received for this run and hands to it beside the input
-   * — an inbound email's attachments (the jobs module's `mail.receive`) — each
-   * checked against the file resource it names. Store one with
-   * `db.<file resource>.insertFile(file, values)`. Absent on every other command.
+   * — an inbound email's attachments (the jobs module's `mail.receive`), or a
+   * delivery's `files` at a `defineInbound({ files })` endpoint — each checked
+   * against the file resource it names. Store one with
+   * `db.<file resource>.insertFile(file, values)`. Absent on every other run.
    */
   readonly files?: readonly CommandFile[];
 }
@@ -262,13 +279,27 @@ export interface BusinessCommandAvailabilityContext extends CommandContextBase {
   readonly records: readonly UntypedRow[];
 }
 
+/** What a lookup reads of the files its form attached (stagedFiles.ts readHeldFile). */
+interface LookupFiles {
+  /**
+   * The file this held id names, where the command's input names it in a `field.files` or `field.signature`, read
+   * and left held, so the handler is handed it as it would have been: a lookup can send it to a model before the
+   * transaction opens. An id the input does not name, or one not held for this sender — another visitor's, one used
+   * already, one past its day — refuses at its field, as the handler's take would.
+   */
+  read(id: string): Promise<CommandFile>;
+}
+
 /**
  * What `lookup` reads through, before the transaction opens: the declared
  * sources' tables, read only, and the target as it stood then. The handler's
  * `record` is read again inside the transaction, at the form's revision.
  */
 export interface BusinessCommandLookupContext extends CommandContextBase {
+  /** As the handler's (BusinessCommandContext `locale`). */
+  readonly locale: string;
   readonly sources: LookupSources;
+  readonly files: LookupFiles;
   /** The integrations the command declares, each action a function of its input. */
   readonly integrations: IntegrationCalls;
   /**
@@ -295,13 +326,20 @@ type Reads<Target extends string, Read extends readonly string[], Write extends 
   | Write[number];
 type Writes<Target extends string, Write extends readonly string[]> = LocalName<Target> | Write[number];
 
-/** A minted capability link: see BusinessCommandContext.link. Its JSON and text are `mistri-link:<id>`. */
+/** A minted capability link: see BusinessCommandContext.link. Its JSON and text are `mistri-link:<id>.<seal>`. */
 interface CommandLinkRef {
   readonly id: string;
   toJSON(): string;
   toString(): string;
 }
 type CommandLinkMint = (name: string) => Promise<CommandLinkRef>;
+/** A public view's link: see BusinessCommandContext.publicLink. Its JSON and text are `mistri-public:<view>.<seal>`. */
+interface CommandPublicLinkRef {
+  readonly view: string;
+  toJSON(): string;
+  toString(): string;
+}
+type CommandPublicLink = (view: string) => CommandPublicLinkRef;
 type CommandLinkRevoke = (name?: string) => Promise<number>;
 
 /** A handler's sequence: see BusinessCommandContext.nextNumber. */
@@ -323,11 +361,13 @@ type CommandHandlerContext<
   readonly door: CommandHandlerDoor;
   readonly today: BusinessCommandContext['today'];
   readonly timezone: BusinessCommandContext['timezone'];
+  readonly locale: BusinessCommandContext['locale'];
   readonly db: CommandTables<Tables<Src, Target>, Reads<Target, Read, Write>, Writes<Target, Write>>;
   readonly tx: WriteTransaction;
   readonly nextNumber: CommandNextNumber;
   readonly link: CommandLinkMint;
   readonly revokeLinks: CommandLinkRevoke;
+  readonly publicLink: CommandPublicLink;
   readonly intake?: BusinessCommandContext['intake'];
   readonly tenant?: BusinessCommandContext['tenant'];
   readonly placement?: BusinessCommandContext['placement'];
@@ -338,7 +378,10 @@ type CommandHandlerContext<
 
 /** A definition's `lookup` context: the declared sources, and the target as it stood before the transaction. */
 type CommandLookupContext<Src, Target extends string, Many, Pub = undefined, Uses = object> = CommandContextBase & {
+  readonly locale: BusinessCommandContext['locale'];
   readonly sources: LookupSources;
+  /** `files.read(id)`: a file the input names by its held id, read and left held for the handler. */
+  readonly files: LookupFiles;
   /** `integrations.<name>.<action>(input)`: one recorded, idempotent call, typed by the package's action. */
   readonly integrations: IntegrationCallsOf<Uses>;
   /** In a tenant App, the tenant this command runs in, known before the transaction; absent off a tenant App. */
@@ -502,9 +545,14 @@ export interface CommandDefinition<
    literal loosened to its primitive. The output type is the shape's alone
    (NoInfer), and TypeScript types a returned `'Lead converted.'` as string
    before it knows that shape, so the exact literal is the shape's to check,
-   at run time, as it checks every value. */
+   at run time, as it checks every value. A free text output (`text()`, typed
+   string) also takes a link reference: the answer renders it to its URL where
+   it reaches a person, so a handler returns `link(...)` or `publicLink(...)`
+   as it is. A literal output (a choice) does not: no URL is one of its words. */
 type Loose<T> = T extends string
-  ? string
+  ? string extends T
+    ? string | CommandLinkRef | CommandPublicLinkRef
+    : string
   : T extends number
     ? number
     : T extends boolean
@@ -774,7 +822,7 @@ function rulesOption(value: unknown, fields: readonly AppCommandField[]): readon
         if (rule[key] === undefined) continue;
         if (typeof rule[key] !== 'string' || !rule[key].trim() || rule[key].length > 1000)
           fail(`${at} has a ${key} that is not a condition.`);
-        let names: { fields: string[]; record: string[]; tenant: string[] };
+        let names: { fields: string[]; record: string[]; tenant: string[]; has: string[]; plain: string[] };
         try {
           names = draftNames(rule[key] as string, `${at}, ${key}`);
         } catch (error) {
@@ -788,8 +836,10 @@ function rulesOption(value: unknown, fields: readonly AppCommandField[]): readon
           if (!field) fail(`${at} names "${name}", which is not a field of the input.`);
           if (field!.type === 'text' && field!.sensitive)
             fail(`${at} names "${name}", a sensitive field; nothing reads a sensitive value.`);
-          if (['group', 'lines', 'richText', 'choices', 'defined', 'files', 'signature'].includes(field!.type))
+          if (['group', 'lines', 'richText', 'defined', 'files', 'signature'].includes(field!.type))
             fail(`${at} names "${name}", a ${field!.type} field a rule cannot compare.`);
+          const listProblem = hasProblem(name, field!.type, names);
+          if (listProblem) fail(`${at} names "${name}", ${listProblem}.`);
         }
       }
       if (rule.must === undefined) fail(`${at} needs must: the condition the input must meet.`);

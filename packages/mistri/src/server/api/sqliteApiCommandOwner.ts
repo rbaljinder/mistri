@@ -24,6 +24,7 @@ import { ApiTokenStoreUnavailable } from '../auth/apiTokenStoreFailure.js';
 import { commandProblem, projectApiCommandAnswer, refusalHeaders, REFUSAL_STATUS } from './apiCommandResponse.js';
 import { createApiCommandRequestMapper } from './apiCommandRequest.js';
 import { apiPublicActor, apiPublicForm, shapeApiPublicResult, spendApiPublicBudget } from './apiPublicLane.js';
+import { withAppPublicUrls } from '../links/publicLink.js';
 import type { ApiCommandRoute } from './apiCommandRoute.js';
 import { narrowApiOpenApi, renderApiOpenApi } from './apiOpenApiDocument.js';
 import { previewApiMcpReadTools } from './apiMcpReadTools.js';
@@ -352,7 +353,13 @@ export async function createSqliteApiCommandOwner(
                   : mode === 'execute'
                     ? await executeBusinessCommand(binding, actor, captured, { signal, door, flags })
                     : await recoverBusinessCommandReceipt(binding, actor, captured, { signal });
-              const said = publicForm !== undefined && mode !== 'prepare' ? await shapeApiPublicResult(app, resources, result) : result;
+              // A member's answer says its public links as URLs too, as the App's own command route does.
+              const said =
+                mode === 'prepare'
+                  ? result
+                  : publicForm !== undefined
+                    ? await shapeApiPublicResult(app, resources, result)
+                    : await withAppPublicUrls(app, result);
               // Recovered target keys answer in this API's integer representation.
               answer =
                 mode === 'prepare'

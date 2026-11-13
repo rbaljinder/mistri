@@ -501,6 +501,13 @@ export async function prepareJobs(
     // A caller outside the App reaches it only through the verified endpoint, never a public form.
     else if (found.public)
       refuse(`inbound endpoint "${endpoint.name}" runs command "${endpoint.command.id}", which is public: only its public form runs it.`);
+    // Its files reach the handler to be stored: a file resource the command writes, as mail's attachments are.
+    else if (endpoint.files !== undefined && !app.resources?.[endpoint.files]?.file)
+      refuse(`inbound endpoint "${endpoint.name}" takes files into "${endpoint.files}", which is not a file resource of App "${app.id}".`);
+    else if (endpoint.files !== undefined && !found.write?.includes(endpoint.files))
+      refuse(
+        `inbound endpoint "${endpoint.name}" takes files into "${endpoint.files}", and command "${endpoint.command.id}" does not write it.`,
+      );
   }
   assertJobGrants(module, app, options.binding);
   const [decisionProblem] = decisionCommandProblems(module.decisions?.values() ?? [], app, commands);

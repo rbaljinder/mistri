@@ -800,6 +800,31 @@ test('`now` and the date phrases read the same in a segment and in a metric quer
   assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
 });
 
+test('`today + 30 days` is one day in a segment and in a metric query, and a unit the language does not read is refused', () => {
+  const compiled = compile(
+    [
+      'import type { Views } from "./mistri-schema.d.ts";',
+      'import { dashboard, defineFeature, metric } from "@mistriwork/mistri/app";',
+      'export const feature = defineFeature({',
+      '  id: "due",',
+      '  resources: { ticket: { segments: { fortnight: "due_on = today + 14 days", overdue: "due_on <= today - 1 week" } } },',
+      '});',
+      'export const views = {',
+      '  d: dashboard("Home", [',
+      '    metric("Due in a month", "ticket", { query: "due_on = today + 1 month" }),',
+      '    metric("Stale", "ticket", { query: "due_at <= today - 2 years" }),',
+      '    // @ts-expect-error — a fortnight is not a unit',
+      '    metric("Typo", "ticket", { query: "due_on = today + 2 fortnights" }),',
+      '  ]),',
+      '} satisfies Views;',
+    ].join('\n'),
+    {},
+    {},
+    DATED,
+  );
+  assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+});
+
 test("a page's command run is typed by the command's declared output, and a form opens with its command's inputs", () => {
   const types = commandTypes(
     {

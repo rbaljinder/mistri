@@ -229,6 +229,15 @@ test('legacy native intake keeps its via selector, credentials, and exact two-me
   );
 });
 
+test("a submission names the visitor's pick of language beside its intake address, so its command says theirs", async () => {
+  fetchMock.mockResolvedValueOnce(answer(200, { reference: 'R-1', receipt: { id: 'r1', status: 'applied' } }));
+  await submitPublicForm('join', 'k1', { agree: true }, 'native address', {}, 'es-MX');
+  expect(fetchMock).toHaveBeenLastCalledWith('/api/forms/join?via=native%20address&locale=es-MX', expect.anything());
+  fetchMock.mockResolvedValueOnce(answer(200, { reference: 'R-2', receipt: { id: 'r2', status: 'applied' } }));
+  await submitPublicForm('join', 'k2', { agree: true }, undefined, {}, 'es');
+  expect(fetchMock).toHaveBeenLastCalledWith('/api/forms/join?locale=es', expect.anything());
+});
+
 test('a box that must be checked sits beside its label, and unchecked it is caught here, said once, before anything is sent', async () => {
   const consent: FormPresentation = {
     id: 'join',

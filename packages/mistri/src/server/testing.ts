@@ -23,6 +23,8 @@ export type {
   TestAssistantScript,
   TestDecisionScript,
   TestJobRun,
+  TestServiceActor,
+  TestServiceRunOptions,
   TestReadAudit,
   TestReadAuditQuery,
 } from './testing/host.js';

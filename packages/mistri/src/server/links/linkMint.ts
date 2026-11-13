@@ -5,7 +5,7 @@
  * A mint is queued while the handler runs and written once the receipt id is
  * known (businessCommandExecution.ts), so a link names the receipt that made it
  * and is rolled back with a command that does not commit. What the handler
- * holds is a LinkRef, `mistri-link:<id>`: the URL never reaches the receipt.
+ * holds is a LinkRef, `mistri-link:<id>.<seal>`: the URL never reaches the receipt.
  */
 import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
 import type { CommandJournal, CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
@@ -88,7 +88,7 @@ export function handlerLinks(options: {
         lastOpenedAt: null,
       };
       queued.push(row);
-      return new LinkRef(row.id);
+      return new LinkRef(row.id, options.appId);
     },
     async revokeLinks(name) {
       const key = name !== undefined ? declared(name).rowKey : options.links ? rowKey() : undefined;

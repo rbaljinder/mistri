@@ -13,6 +13,7 @@ import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
 import type { AppDef, AppFileRule } from '../../shared/app.js';
 import { primaryKey, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import type { Bucket } from '../files/bucket.js';
+import type { CommandFile } from '../../../schema/command.js';
 import { bytesLabelled } from '@mistriwork/engine/server/http/reply.js';
 import { serverRequest } from '@mistriwork/engine/server/serverRequests.js';
 import { bucketOf, objectBelongs, type FileScope } from '../files/fileStorage.js';
@@ -47,9 +48,44 @@ export function uploadValues(
   if (!file || typeof file !== 'object' || Array.isArray(file))
     return { status: 400, error: 'An upload needs a file: { name, type?, data }.' };
   const { name, type, data } = file as Record<string, unknown>;
-  if (typeof data !== 'string' || data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(data))
-    return { status: 400, error: 'The file content must be base64.' };
-  return fileValues(rule, { name, type, bytes: Buffer.from(data, 'base64') }, body.values ?? {});
+  const bytes = base64Bytes(data);
+  if (!bytes) return { status: 400, error: 'The file content must be base64.' };
+  return fileValues(rule, { name, type, bytes }, body.values ?? {});
+}
+
+/** A file's content as sent: strict base64, decoded once, or undefined for anything else. */
+function base64Bytes(data: unknown): Buffer | undefined {
+  if (typeof data !== 'string' || data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) return undefined;
+  return Buffer.from(data, 'base64');
+}
+
+/**
+ * Files that arrive beside a command's input — an inbound email's attachments, an inbound endpoint's `files` — each
+ * checked as an upload to `rule` would be: base64, its name, its type and the resource's cap. Answers what the
+ * command's handler receives as `ctx.files`, or the one refusal a sender reads: 413 for a file past the cap, 400 for
+ * any other. The handler stores each with insertFile, which checks it again inside the command's transaction.
+ */
+export function receivedFiles(
+  rule: AppFileRule,
+  parts: unknown,
+  most: number,
+): { files: readonly CommandFile[] } | { status: number; error: string } {
+  if (!Array.isArray(parts)) return { status: 400, error: '"files" is not a list.' };
+  if (parts.length > most) return { status: 400, error: `At most ${most} files arrive at once.` };
+  const files: CommandFile[] = [];
+  for (const part of parts) {
+    if (!part || typeof part !== 'object' || Array.isArray(part)) return { status: 400, error: 'A file is { name, type?, content }.' };
+    const { name, type, content } = part as Record<string, unknown>;
+    const named = typeof name === 'string' ? name.slice(0, 255) : '';
+    const typed = typeof type === 'string' && /^[\w.+-]+\/[\w.+-]+$/.test(type) ? type.toLowerCase() : 'application/octet-stream';
+    // Decoded once: an endpoint's files are its whole body's weight, and a second copy of each doubled it.
+    const data = base64Bytes(content);
+    if (!data) return { status: 400, error: 'The file content must be base64.' };
+    const checked = fileValues(rule, { name: named, type: typed, bytes: data }, {});
+    if ('status' in checked) return checked;
+    files.push(Object.freeze({ name: fileName(named) || 'file', type: typed, size: data.length, data }));
+  }
+  return { files: Object.freeze(files) };
 }
 
 /**

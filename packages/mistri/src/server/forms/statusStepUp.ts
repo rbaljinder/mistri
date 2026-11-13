@@ -1,6 +1,7 @@
 /**
  * A status check's step-up (`statusCheck.stepUp`): more than the state, for
- * a person who proves they hold the email on the application.
+ * a person who proves they hold the address on the application: its email,
+ * or the number a channel such as SMS reaches (`{ sms: 'mobile' }`).
  *
  *   POST …/stepup  { receipt, confirm }         the check, then a code to the address on file → { sent: true }
  *   POST …/stepup  { receipt, confirm, code }   the check and the code → { status, details }, and a session
@@ -9,7 +10,8 @@
  * The receipt and its confirmations are asked again with the code, so the
  * code alone opens nothing and every wrong detail still counts toward the
  * check's lockout, with its one refusal and its floor of time. The code goes
- * to the root's own email column, never an address the request names: it is
+ * to the root's own column the step-up names, by email or on the integration
+ * channel its key names, never to an address the request names: it is
  * one-time, ten minutes, three to an application an hour (oneTimeCode.ts).
  * A wrong, reused or expired code is one answer too. Sending is not waited
  * on — a slow relay must not tell a found application from a missing one by
@@ -29,7 +31,7 @@ import type { WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import { statusWords, type AppFormLink, type AppFormSave, type AppStatusCheck } from '../../shared/appSavedForms.js';
 import type { CommandCatalog } from '../commands/commandDb.js';
 import type { EmailTransport } from '../email/email.js';
-import { CODE_MINUTES, issueCode, spendCode } from './oneTimeCode.js';
+import { deliverCode, issueCode, spendCode } from './oneTimeCode.js';
 import { checkApplicationStatus, parseStatusRequest, settle, statusLockKey, statusNotFound, wrongStepUpCodes } from './statusCheck.js';
 import type { SavedFormReply } from './savedFormHttp.js';
 
@@ -54,19 +56,25 @@ interface StepUpRequest {
   mail: EmailTransport | undefined;
   /** The App whose form this is (formKey.ts, statusCheck.ts). */
   appId?: string;
+  /** On a tenant App's host, the place the request landed in: its codes, lockouts and sessions are its own. */
+  tenant?: string;
   reading: <T>(run: (records: WriteTransaction) => Promise<T>) => Promise<T>;
+  /** The client that asked (`clientAddress`): the codes it may have sent are capped (oneTimeCode.ts). */
+  client?: string;
 }
 
 const CODE_REFUSED = 'That code is not right, or it has expired or been used. Ask for a new one.';
 const SESSION_MINUTES = 15;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
-const EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 
 /* A session lives in the deployment's sign-in state (auth/signInState.ts), so
    a step-up proved on one instance opens the details on another. It names
-   its App and form: a suite's Apps share one store and may share a form name. */
+   its App and form: a suite's Apps share one store and may share a form name.
+   On a tenant App's host it names the place too, and opens nowhere else: the
+   cookie replayed under another tenant's host or address reads as ended. */
 interface Session {
   app?: string;
+  tenant?: string;
   form: string;
   receipt: string;
   until: number;
@@ -96,6 +104,7 @@ async function readSession(
   form: string,
   now: number,
   app: string | undefined,
+  tenant: string | undefined,
 ): Promise<Session | undefined> {
   const header = req.headers.cookie;
   if (typeof header !== 'string' || header.length > 8192) return undefined;
@@ -106,7 +115,8 @@ async function readSession(
   const token = values.length === 1 ? values[0].slice(cookieName(form).length + 1) : '';
   if (!TOKEN.test(token)) return undefined;
   const session = await signInState.read<Session>('stepup', hashOf(token));
-  if (!session || session.form !== form || session.app !== app || typeof session.receipt !== 'string') return undefined;
+  if (!session || session.form !== form || session.app !== app || session.tenant !== tenant || typeof session.receipt !== 'string')
+    return undefined;
   if (!(session.until > now)) {
     await signInState.remove('stepup', hashOf(token));
     return undefined;
@@ -114,31 +124,13 @@ async function readSession(
   return session;
 }
 
-// One App's codes are its own: a suite's Apps share this process and may share a form name.
-const receiptSubject = (form: string, receipt: string, app?: string) =>
-  `stepup\u0000${createHash('sha256')
-    .update(app === undefined ? `${form}\u0000${receipt}` : `${app}\u0000${form}\u0000${receipt}`)
-    .digest('hex')}`;
+// One App's codes are its own: a suite's Apps share this process and may share a form name. A tenant's are its own too.
+const receiptSubject = (form: string, receipt: string, app?: string, tenant?: string) =>
+  `stepup\u0000${statusLockKey(form, receipt, app, tenant)}`;
 
 /** The declared details, in the author's words where they gave some. */
 const detailsOf = (check: AppStatusCheck & { stepUp: StepUp }, values: Record<string, unknown>) =>
   Object.fromEntries(check.stepUp.show.map((name) => [name, statusWords(check, name, values[name])]));
-
-function sendCode(mail: EmailTransport | undefined, to: unknown, code: string, appName: string, label: string, form: string): void {
-  if (!mail || typeof to !== 'string' || !EMAIL.test(to.trim())) {
-    process.stderr.write(`${JSON.stringify({ event: 'form.step_up', form, outcome: 'undeliverable' })}\n`);
-    return;
-  }
-  void mail
-    .send({
-      to: to.trim(),
-      subject: `${appName}: your code is ${code}`,
-      text:
-        `Your code is ${code}.\n\nIt opens the details of your ${label} application on ${appName}, once, for ${CODE_MINUTES} minutes.\n\n` +
-        'If you did not ask for it, you can ignore this email: nothing opens without it.',
-    })
-    .catch(() => process.stderr.write(`${JSON.stringify({ event: 'form.step_up', form, outcome: 'send_failed' })}\n`));
-}
 
 /** The step-up: a code to the address on file, or the code spent for a session and the details. */
 export async function stepUpReply({
@@ -153,6 +145,8 @@ export async function stepUpReply({
   mail,
   reading,
   appId,
+  tenant,
+  client,
 }: StepUpRequest): Promise<SavedFormReply> {
   const started = Date.now();
   const check = form.statusCheck;
@@ -176,23 +170,35 @@ export async function stepUpReply({
         form: key,
         catalog,
         ...(appId ? { appId } : {}),
+        ...(tenant === undefined ? {} : { tenant }),
         ...(form.link ? { link: form.link } : {}),
         ...(account ? { account } : {}),
-        more: [check.stepUp.email, ...check.stepUp.show],
+        more: [check.stepUp.column, ...check.stepUp.show],
       }),
     );
     if (!answer.found) return { status: 404, body: statusNotFound(Boolean(form.link)) };
-    const subject = receiptSubject(key, answer.receipt, appId);
+    const subject = receiptSubject(key, answer.receipt, appId, tenant);
     if (code === undefined) {
       const issued = await issueCode(subject);
       if ('limited' in issued) {
         const message = 'Several codes were sent for this application in the last hour. Use the newest one, or try again later.';
         return { status: 429, body: { code: 'rate_limited', message, error: message } };
       }
-      sendCode(mail, answer.more?.[check.stepUp.email], issued.code, appName, form.label, key);
+      deliverCode({
+        channel: check.stepUp.channel,
+        to: answer.more?.[check.stepUp.column],
+        code: issued.code,
+        appName,
+        opens: `the details of your ${form.label} application on ${appName}`,
+        mail,
+        appId,
+        tenant: tenant ?? '',
+        log: { event: 'form.step_up', form: key },
+        ...(client ? { client } : {}),
+      });
       return { status: 200, body: { sent: true } };
     }
-    const lockKey = statusLockKey(key, request.receipt, appId);
+    const lockKey = statusLockKey(key, request.receipt, appId, tenant);
     if (!(await spendCode(subject, code))) {
       await wrongStepUpCodes.count(lockKey);
       return { status: 404, body: { code: 'code_refused', message: CODE_REFUSED, error: CODE_REFUSED } };
@@ -203,7 +209,13 @@ export async function stepUpReply({
     await signInState.put(
       'stepup',
       hashOf(token),
-      { ...(appId === undefined ? {} : { app: appId }), form: key, receipt: answer.receipt, until } satisfies Session,
+      {
+        ...(appId === undefined ? {} : { app: appId }),
+        ...(tenant === undefined ? {} : { tenant }),
+        form: key,
+        receipt: answer.receipt,
+        until,
+      } satisfies Session,
       until,
     );
     process.stderr.write(`${JSON.stringify({ event: 'form.step_up', form: key, outcome: 'opened' })}\n`);
@@ -228,6 +240,7 @@ export async function detailsReply({
   account,
   reading,
   appId,
+  tenant,
 }: StepUpRequest): Promise<SavedFormReply> {
   const gone = {
     status: 404,
@@ -237,7 +250,7 @@ export async function detailsReply({
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length) {
     return { status: 400, body: { code: 'invalid_input', message: 'This takes no details.' } };
   }
-  const session = await readSession(req, key, Date.now(), appId);
+  const session = await readSession(req, key, Date.now(), appId, tenant);
   if (!session) return gone;
   const check = form.statusCheck;
   const row = await reading(async (records) => {

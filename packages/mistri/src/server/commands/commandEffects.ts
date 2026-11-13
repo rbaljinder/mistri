@@ -33,7 +33,8 @@ import {
 } from '../../adapters/events/commandEventTypes.js';
 import { HttpSourceError } from '@mistriwork/engine/adapters/http/egress.js';
 import type { EventPublicationTransport } from '../events/eventPublisher.js';
-import { LINK_REF_PREFIX } from '../links/linkToken.js';
+import { LINK_REF_LENGTH, linkRefCount } from '../links/linkToken.js';
+import { publicRefCount } from '../links/publicLink.js';
 import {
   defineEffectProjection,
   defineOpaqueEvent,
@@ -67,14 +68,16 @@ export { EFFECT_EVENT_PREFIX };
  * event payload counted apart from the command's plain events (commandEventTypes.ts), so the numbers are named there
  * and the stores' envelope bound moves with them. */
 export { EFFECT_LIMITS };
-/** What a link's URL may add over its `mistri-link:<id>` reference: an origin and base path of up to ~250 bytes. */
-const LINK_URL_RESERVE = 320 - (LINK_REF_PREFIX.length + 22);
-/** A body's size as delivered: a capability link rides as its reference and is delivered as its URL, so each is
- * counted at its delivered size. */
+/** What a link's URL may add over its `mistri-link:<id>.<seal>` reference: an origin and base path of up to ~250 bytes. */
+const LINK_URL_RESERVE = 320 - LINK_REF_LENGTH;
+/** What a public link's URL may add over its `mistri-public:<view>.<seal>` reference: a host, base path, view path and a
+ * tenant's `?via=` address. */
+const PUBLIC_URL_RESERVE = 512;
+/** A body's size as delivered: a capability link or a public link rides as its reference and is delivered as its
+ * URL, so each is counted at its delivered size. */
 export function bodyBytes(body: unknown): number {
   const text = JSON.stringify(body) ?? '';
-  const links = text.split(LINK_REF_PREFIX).length - 1;
-  return Buffer.byteLength(text, 'utf8') + links * LINK_URL_RESERVE;
+  return Buffer.byteLength(text, 'utf8') + linkRefCount(text) * LINK_URL_RESERVE + publicRefCount(text) * PUBLIC_URL_RESERVE;
 }
 /** The refusal for a body over `EFFECT_LIMITS.bodyBytes`; it reaches the author through the command's refusal cause. */
 function boundBody(destination: string, body: unknown): void {
@@ -86,7 +89,7 @@ function boundBody(destination: string, body: unknown): void {
   }
 }
 /* What a table handle writes with: a projection that reaches for one is told so by name, not by "not a function". */
-const WRITE_METHODS = new Set(['insert', 'insertFile', 'update', 'remove', 'insertMany', 'updateWhere']);
+const WRITE_METHODS = new Set(['insert', 'insertFile', 'moveFile', 'update', 'remove', 'insertMany', 'updateWhere']);
 /** The db an effect's projection reads through: the command's read handles, each read passed through, a write and a
  * table outside the command's read refused by name. Built over fresh targets, so a frozen handle is never proxied. */
 export function effectProjectionDb(handles: Readonly<Record<string, object>>): object {

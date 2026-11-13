@@ -120,11 +120,13 @@ task: {
 
 An expression in the query language's words: columns and paths, rollups,
 numbers, quoted text, `today`, `now`, `me`, comparisons, `and`, `or`, `not`,
-`is empty`, `+ - * /` (a division by zero has no value), date spans, and five
+`is empty`, `+ - * /` (a division by zero has no value), date spans, and six
 functions: `coalesce(a, b, …)` (the first with a value), `round(x)` or
-`round(x, 2)` (a half away from zero), `abs(x)`, and `min(a, b, …)` and
+`round(x, 2)` (a half away from zero), `abs(x)`, `min(a, b, …)` and
 `max(a, b, …)` of numbers or dates, which have no value where one of theirs has
-none (`computed.number('max(owed - paid, 0)')`). It is
+none (`computed.number('max(owed - paid, 0)')`), and `concat(a, b, …)` of text,
+where a part with no value reads as empty (`computed.text("concat(first, ' ', last)")`;
+there is no `||`). It is
 written into the statement, so it shows, sorts, filters and tones like a
 column (a number is said to at most two places, its value kept whole), and a rollup sums it (`rollup.sum('task', 'overrun')`) or a dashboard
 window reads a computed date (`over: 'renews_on'`) when it reads only its

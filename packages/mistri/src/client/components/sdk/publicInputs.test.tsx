@@ -4,7 +4,7 @@
  * not serve stays the platform's.
  */
 import { afterEach, expect, test, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, renderHook, screen } from '@testing-library/react';
 import { resetShell, shell } from '@mistriwork/kit/client/shellMode.js';
 import { InputSlot } from '@mistriwork/kit/client/components/inputRenderers.js';
 
@@ -65,4 +65,24 @@ test('a form that draws one installs the loader as it arrives; one that draws no
   expect(shell().components).not.toBe(before);
   await shell().components.load('swatch');
   expect(loaded.map(([id]) => id)).toEqual(['swatch']);
+});
+
+test('a component on a public form says the catalog served beside it, in the visitor’s words', async () => {
+  const { formArrives } = await import('../FormSurface.js');
+  const { useHostIfAny } = await import('./context.js');
+  await import('./host.js');
+  const said = () => renderHook(() => useHostIfAny()).result.current?.message('swatch.pick', { count: 2 });
+  // No App payload reaches the page, and nothing was served beside the form: the key is said as itself.
+  expect(said()).toBe('swatch.pick');
+  await formArrives({
+    input: [],
+    components: { swatch: { href: '/paints/_components/swatch-0123456789ab.js' } },
+    messages: {
+      'swatch.pick': [
+        { type: 0, value: 'Elige ' },
+        { type: 1, value: 'count' },
+      ],
+    },
+  });
+  expect(said()).toBe('Elige 2');
 });

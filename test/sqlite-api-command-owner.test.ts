@@ -17,7 +17,8 @@ import { defineCommand, defineCommands } from '../packages/mistri/src/server/com
 import { defineEvent, defineEventProjection } from '../packages/mistri/src/server/commands/businessEvents.js';
 import { issueAppScopeCommandEvents } from '../packages/mistri/src/server/commands/businessCommandAccess.js';
 import { provisionSqliteCommandEventStore, COMMAND_EVENT_TABLES } from '../packages/mistri/src/adapters/events/commandEventSchema.js';
-import { shape, bool } from '../packages/mistri/src/server/commands/commandShapes.js';
+import { shape, bool, text } from '../packages/mistri/src/server/commands/commandShapes.js';
+import { configurePublicLinks } from '../packages/mistri/src/server/links/publicLink.js';
 import { migrateSqliteCommandJournal, COMMAND_JOURNAL_TABLES } from '../packages/mistri/src/adapters/commands/commandJournal.js';
 import { loadAppRuntimeResources } from '../packages/mistri/src/server/app/appRuntimeResources.js';
 import { createSqliteApiCommandOwner } from '../packages/mistri/src/server/api/sqliteApiCommandOwner.js';
@@ -49,6 +50,8 @@ async function fixture(
   many = false,
   versionless = false,
   flags?: { enabled: boolean; captures: number; configured: boolean },
+  /** The visitor reads items, and `change` answers with a public link to their list. */
+  publicLink = false,
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'tw-command-owner-'));
   const authPath = join(directory, 'auth.db'),
@@ -73,7 +76,11 @@ async function fixture(
       resources: { item: { physical: 'physical_item', access: 'write' } },
       views: { items: { kind: 'list', from: 'item' } },
       home: 'items',
-      auth: { store: authPath, roles: { operator: { read: true, commands: many ? ['change', 'batch'] : ['change'] } } },
+      auth: {
+        store: authPath,
+        roles: { operator: { read: true, commands: many ? ['change', 'batch'] : ['change'] } },
+        ...(publicLink ? { public: { read: ['item'] } } : {}),
+      },
     },
     'fixture',
   );
@@ -91,6 +98,9 @@ async function fixture(
   )!;
   const control = { calls: 0, doors: [] as string[], afterWrite: async () => {}, refusal: undefined as (() => never) | undefined };
   const changed = defineEvent('item.changed', shape({ ok: bool() }));
+  /* Named outside the handler: the list is public only where the fixture is asked to make it so, and a literal view
+     would be judged at load against the App that does not. */
+  const listed = 'items';
   const commands = defineCommands({
     change: defineCommand({
       source: 'business',
@@ -98,7 +108,7 @@ async function fixture(
       ...(flags ? { enabledBy: { flag: 'launch', is: true } } : {}),
       ...(withEvents ? { events: { changed: defineEventProjection(changed, (output: { ok: boolean }) => output) } } : {}),
       input: {},
-      output: shape({ ok: bool() }),
+      output: publicLink ? shape({ ok: bool(), listing: text() }) : shape({ ok: bool() }),
       async handle(context) {
         control.calls++;
         control.doors.push(context.door);
@@ -106,7 +116,7 @@ async function fixture(
         if (control.refusal) control.refusal();
         await context.tx.update({ table: 'item', key: { id: 1 }, values: { [column]: Number(context.record[column]) + 1 } });
         await control.afterWrite();
-        return { ok: true };
+        return publicLink ? { ok: true, listing: context.publicLink(listed) } : { ok: true };
       },
     }),
     // Opt-in: one handler over several ordered target records.
@@ -225,6 +235,23 @@ async function fixture(
       ),
   };
 }
+
+test("a member's answer says its public link as the App's URL, and keeps the reference where none is known", async (t) => {
+  const f = await fixture(t, false, undefined, false, false, undefined, true);
+  const run = async (idempotencyKey: string, expectedVersion: number) =>
+    f.owner.consumeResult(await f.owner.execute(f.token.token, { ...request, idempotencyKey, expectedVersion }));
+  // No server address is known (MCP stdio, a test without HTTP): the answer keeps the reference, never a guess.
+  const unsaid = await run('owner-public-link-0001', 0);
+  assert.equal(unsaid.status, 200, unsaid.body);
+  assert.match(JSON.parse(unsaid.body).result.listing, /^mistri-public:items\.[A-Za-z0-9_-]{22}$/);
+  t.after(configurePublicLinks('owner', (path) => `https://owner.example.test${path}`));
+  const said = await run('owner-public-link-0002', 1);
+  assert.equal(said.status, 200, said.body);
+  assert.match(JSON.parse(said.body).result.listing, /^https:\/\/owner\.example\.test\/.*items$/);
+  // A replay reads the receipt, which holds the reference: it is said now, as it stands.
+  const replayed = await run('owner-public-link-0001', 0);
+  assert.match(JSON.parse(replayed.body).result.listing, /^https:\/\/owner\.example\.test\//);
+});
 
 test('mapped native execution and recovery use account identity across rotation, never token identity', async (t) => {
   const f = await fixture(t);

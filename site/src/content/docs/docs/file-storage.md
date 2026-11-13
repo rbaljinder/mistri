@@ -37,23 +37,23 @@ attachment: { access: 'write', file: {
 
 ## Options
 
-| Key | What it does | Default | Status |
-| --- | --- | --- | --- |
-| `storage` | Where new files go: `'database'` or `'bucket'`; a file is read from wherever its row says | `'database'` | Stable |
-| `object`, `hash` | Text columns: the object's key (null for a file in `content`), the file's SHA-256 | none; `object` is needed with a bucket | Stable |
-| `bucket.name`, `region` | The bucket, and its region (`auto` for R2 and Tigris) | region `us-east-1` | Stable |
-| `bucket.endpoint`, `pathStyle` | The service for any but AWS; `pathStyle: true` for MinIO | AWS, host-style | Stable |
-| `bucket.prefix`, `presign` | A folder every key goes under; a download redirects to a URL signed for a minute | none; proxied | Stable |
+| Key                            | What it does                                                                              | Default                                | Status |
+| ------------------------------ | ----------------------------------------------------------------------------------------- | -------------------------------------- | ------ |
+| `storage`                      | Where new files go: `'database'` or `'bucket'`; a file is read from wherever its row says | `'database'`                           | Stable |
+| `object`, `hash`               | Text columns: the object's key (null for a file in `content`), the file's SHA-256         | none; `object` is needed with a bucket | Stable |
+| `bucket.name`, `region`        | The bucket, and its region (`auto` for R2 and Tigris)                                     | region `us-east-1`                     | Stable |
+| `bucket.endpoint`, `pathStyle` | The service for any but AWS; `pathStyle: true` for MinIO                                  | AWS, host-style                        | Stable |
+| `bucket.prefix`, `presign`     | A folder every key goes under; a download redirects to a URL signed for a minute          | none; proxied                          | Stable |
 
 The same `bucket` for each service:
 
-| Service | `endpoint` | `region` | `pathStyle` |
-| --- | --- | --- | --- |
-| AWS S3 | (none) | the bucket's, `eu-west-1` | no |
-| Cloudflare R2 | `https://<account>.r2.cloudflarestorage.com` | `auto` | no |
-| MinIO | `http://localhost:9000` | `us-east-1` | `true` |
-| Backblaze B2 | `https://s3.<region>.backblazeb2.com` | `us-west-004` | no |
-| Tigris | `https://t3.storage.dev` | `auto` | no |
+| Service       | `endpoint`                                   | `region`                  | `pathStyle` |
+| ------------- | -------------------------------------------- | ------------------------- | ----------- |
+| AWS S3        | (none)                                       | the bucket's, `eu-west-1` | no          |
+| Cloudflare R2 | `https://<account>.r2.cloudflarestorage.com` | `auto`                    | no          |
+| MinIO         | `http://localhost:9000`                      | `us-east-1`               | `true`      |
+| Backblaze B2  | `https://s3.<region>.backblazeb2.com`        | `us-west-004`             | no          |
+| Tigris        | `https://t3.storage.dev`                     | `auto`                    | no          |
 
 `MISTRI_S3_SESSION_TOKEN` carries temporary credentials beside the two keys.
 Without static keys, a server takes the platform's: an ECS task role
@@ -110,6 +110,23 @@ belongs to that draft until the form is submitted: only the person whose draft
 it is can read it, and when an expired draft is purged its objects leave the
 bucket first and its rows after, retried while the bucket does not answer. A
 submitted application's files follow the record's own scope.
+
+A command's handler reads a file back with
+[`db.<table>.readFile(row)`](/docs/commands/#the-handler), the bucket's
+object fetched whole, and only from this App's, tenant's and resource's
+place: a row that names any other key reads as no file. A file moved to
+another resource with `moveFile` is written under the new row's own key, and
+the old object is deleted once the command commits; a rolled-back move keeps it.
+
+A command's [lookup](/docs/commands/#starting-values-other-sources-webhooks)
+reads a file its own form attached with `files.read(id)`, before the
+transaction opens: only a file still held for that submission, which stays
+held for the handler to file.
+
+Files reach a command from outside through an inbound endpoint's
+[`files`](/docs/events-and-jobs/#a-signed-callback-inbound) or a tenant's
+[received mail](/docs/tenant-mail/): both check each one as an upload to the
+named resource and hand them to the handler as `ctx.files`.
 
 ## The sweep
 

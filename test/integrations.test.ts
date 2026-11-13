@@ -42,6 +42,8 @@ import {
   saveIntegrationSettings,
 } from '../packages/mistri/src/server/integrations/integrationRuntime.js';
 import { integrationRoutes } from '../packages/mistri/src/server/http/integrationRoutes.js';
+import { integrationsCheck } from '../packages/mistri/src/server/tenant/tenantFeatureIntegrations.js';
+import { TenantCommandStartupError } from '../packages/mistri/src/server/tenant/tenantStartupError.js';
 import { HttpError } from '../packages/engine/src/server/http/reply.js';
 import { BusinessCommandExecutionError } from '../packages/mistri/src/server/commands/commandErrors.js';
 import type { PostContext } from '../packages/engine/src/server/http/context.js';
@@ -551,6 +553,33 @@ test('a notify rule that sends on a channel queues its message with the write, a
     /^\[integration-channel-unknown\] .*"fax".* They provide: sms\./,
   );
   assert.deepEqual(integrationNotifyProblems(capture({ use: [fakepay()] }), { ...app, resources: {} } as never), []);
+  // A step-up's code, a link's or a status check's, is held to the same channels: email, or one an integration provides.
+  const stepped = (channel?: string) => ({
+    id: 'shop',
+    resources: { orders: { links: { status: { show: ['state'], stepUp: { column: 'mobile', ...(channel ? { channel } : {}) } } } } },
+    views: {
+      apply: { kind: 'form', statusCheck: { show: ['state'], stepUp: { column: 'mobile', show: [], ...(channel ? { channel } : {}) } } },
+    },
+  });
+  assert.deepEqual(integrationNotifyProblems(capture({ use: [fakepay()] }), stepped() as never), []);
+  assert.deepEqual(integrationNotifyProblems(capture({ use: [fakepay()] }), stepped('sms') as never), []);
+  assert.deepEqual(integrationNotifyProblems(capture({ use: [fakepay()] }), stepped('fax') as never), [
+    '[integration-channel-unknown] resources "orders", links "status", "stepUp" sends its code on channel "fax", which no integration the App lists provides. They provide: sms.',
+    '[integration-channel-unknown] views "apply", statusCheck "stepUp" sends its code on channel "fax", which no integration the App lists provides. They provide: sms.',
+  ]);
+  // Without a jobs module, nothing provides a channel: only email sends.
+  assert.equal(integrationNotifyProblems(undefined, stepped('sms') as never).length, 2);
+  assert.deepEqual(integrationNotifyProblems(undefined, stepped() as never), []);
+  // `mistri tenant` without a jobs module holds a step-up to the same rule at startup, in the operator's words.
+  const tenantStart = (app: unknown) => integrationsCheck.run({ app, registry: defineCommands({}), jobs: undefined } as never);
+  assert.throws(
+    () => tenantStart(stepped('sms')),
+    (error) =>
+      error instanceof TenantCommandStartupError &&
+      error.message ===
+        'resources "orders", links "status", "stepUp" sends its code on channel "sms", which no integration the App lists provides.',
+  );
+  assert.doesNotThrow(() => tenantStart(stepped()));
 
   const directory = mkdtempSync(join(tmpdir(), 'mistri-notify-via-'));
   const path = join(directory, 'app.db');

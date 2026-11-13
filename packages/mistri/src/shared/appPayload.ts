@@ -143,6 +143,9 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
   /** The App's catalog (`messages/<locale>.ts`) in this reader's words, each message parsed: what a custom
       component's `useMessage` says. Sent only beside `components`, and only by an App with catalogs. */
   messages?: Readonly<Record<string, readonly unknown[]>>;
+  /** The platform's form words (`mistri.*`, engine shared/frameworkWords.ts) the App's catalog says in this reader's
+      language, as `{name}` templates: said by the forms in place of their own (kit `appWord`). */
+  words?: Readonly<Record<string, string>>;
   /** The App keeps each signed-in person an inbox (`notify`, appNotify.ts): the bell, and `/{app}/notifications`. */
   inbox?: true;
   /** The menu holds more than a dozen places: the Directory room, `/{app}/all-pages`, lists every one (Directory.tsx). */
@@ -196,12 +199,10 @@ export interface AppLoadProblem {
 }
 
 /**
- * The App as served, before any runtime answer: its identity, its views,
- * nav and resources resolved against this catalog, and its chrome. The
- * ordinary route and the tenant route both start here and add what they
- * decide per request — who may write what, which commands run — on top.
+ * The views API exposure keeps for server-side checking and the browser is never served as rooms: an `api.views` entry
+ * no menu, home rule, landing or dashboard reaches.
  */
-export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly PageDef[] = []): AppPayloadApp {
+export function apiOnlyViews(app: Pick<AppDef, 'nav' | 'home' | 'landing' | 'views' | 'api'>): Set<string> {
   // API exposure retains a list definition for server-side checking, not a
   // new browser room. Only ordinary UI reachability may publish that view.
   const reachable = new Set([
@@ -218,7 +219,17 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
       for (const step of section.kind === 'firstRun' ? (section.steps ?? []) : []) reachable.add(step.view);
     }
   }
-  const apiOnly = new Set((app.api?.views ?? []).map((entry) => entry.view).filter((key) => !reachable.has(key)));
+  return new Set((app.api?.views ?? []).map((entry) => entry.view).filter((key) => !reachable.has(key)));
+}
+
+/**
+ * The App as served, before any runtime answer: its identity, its views,
+ * nav and resources resolved against this catalog, and its chrome. The
+ * ordinary route and the tenant route both start here and add what they
+ * decide per request — who may write what, which commands run — on top.
+ */
+export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly PageDef[] = []): AppPayloadApp {
+  const apiOnly = apiOnlyViews(app);
   const browserApp = apiOnly.size
     ? { ...app, views: Object.fromEntries(Object.entries(app.views).filter(([key]) => !apiOnly.has(key))) }
     : app;

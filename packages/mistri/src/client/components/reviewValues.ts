@@ -6,6 +6,7 @@
  */
 import type { AppCommandField } from '../../shared/command.js';
 import { formatLocale } from '@mistriwork/kit/client/locale.js';
+import { appWord } from '@mistriwork/kit/client/messages.js';
 import { say } from '../copy/record/components/reviewValues.js';
 import { amountIn, maskShown } from './fieldShown.js';
 import { heldFileInfo } from '../heldFileNames.js';
@@ -52,7 +53,7 @@ export function sayInput(field: AppCommandField, value: unknown, nameOf?: NameOf
     return (typeof value === 'string' || typeof value === 'number' ? nameOf(field, value) : undefined) ?? '…';
   const mask = 'mask' in field && typeof field.mask === 'string' ? field.mask : undefined;
   if (sensitiveText(field)) return maskedLast4(String(value), field.mask);
-  if (field.type === 'boolean') return value ? say('common.yes') : say('common.no');
+  if (field.type === 'boolean') return value ? appWord('mistri.form.yes', say('common.yes')) : appWord('mistri.form.no', say('common.no'));
   // A held file is said by the name it was sent with, where this page sent it; a signature only as given.
   if (field.type === 'files') {
     const ids = Array.isArray(value) ? value : [value];

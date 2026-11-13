@@ -14,18 +14,19 @@ import type { Condition } from './filter.js';
 /** Data only: local columns, no paths, expressions, clock or executable hooks. */
 export type FormScalar = string | number | boolean | null;
 /** The comparisons a compiled condition holds: the query language's own, named for the evaluator. */
-export type FormOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
+export type FormOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte' | 'has';
 /**
  * A condition in the query language — the one a page section's `when` and an
  * action's `when` speak — read against a record's own values rather than run
  * as SQL: "completed = false", "stage = closed_won and probability < 100".
  * One language for every condition an App writes; what a form or a rule can
  * evaluate in memory is its comparisons of local columns (`=`, `!=`, `<`,
- * `<=`, `>`, `>=`, `in`, `is (not) empty`) under `and`, `or` and brackets.
+ * `<=`, `>`, `>=`, `in`, `is (not) empty`) under `and`, `or` and brackets, and for an answer of several choices
+ * `has` (`services has cleaning`, `services has (cleaning, repairs)`: it holds any of them).
  */
 export type FormCondition = string;
 /** One compiled comparison: true when the field compares with any of the values (one, or an `in` list), or with
- *  the record's own `other` column. */
+ *  the record's own `other` column; for `has`, when the field's list of answers holds any of the values. */
 interface Comparison {
   field: string;
   operator: FormOperator;
@@ -129,10 +130,11 @@ function comparison(condition: Condition, where: string, paths: boolean): Compar
   if (condition.op === 'isNull') return { field: condition.column, operator: 'eq', values: [null] };
   if (condition.op === 'isNotNull') return { field: condition.column, operator: 'ne', values: [null] };
   if (condition.op === 'in') return { field: condition.column, operator: 'eq', values: values(condition.value) };
+  if (condition.op === 'has') return { field: condition.column, operator: 'has', values: values(condition.value) };
   const op = QUERY_OPERATORS[condition.op];
   if (!op) {
     throw new Error(
-      `${where}: "${condition.op}" matches text, which a condition here cannot; compare with =, !=, <, <=, >, >=, in or is empty.`,
+      `${where}: "${condition.op}" matches text, which a condition here cannot; compare with =, !=, <, <=, >, >=, in, has (a list of several choices) or is empty.`,
     );
   }
   return { field: condition.column, operator: op, values: values(condition.value) };
@@ -283,7 +285,7 @@ export function normalize(column: ColumnMeta, raw: unknown): Normalized | undefi
   return value === undefined ? undefined : { kind, value };
 }
 
-function compare(left: Normalized | undefined, op: FormOperator, right: Normalized | undefined): boolean | 'unknown' {
+function compare(left: Normalized | undefined, op: Exclude<FormOperator, 'has'>, right: Normalized | undefined): boolean | 'unknown' {
   if (!left || !right) return 'unknown';
   if (left.kind === 'null' || right.kind === 'null') {
     if (op !== 'eq' && op !== 'ne') return 'unknown';
@@ -342,13 +344,20 @@ export function comparisonResult(
 ): boolean | 'unknown' {
   const column = columnNamed(columns, p.field);
   if (!column) return 'unknown';
+  if (p.operator === 'has') {
+    /* An answer of several choices is a list; its values compare as text, so a number option is asked as it is written. */
+    const answers = rowValue(row, p.field);
+    if (!Array.isArray(answers)) return 'unknown';
+    return p.values.some((value) => answers.some((answer) => String(answer) === String(value)));
+  }
   if (p.other !== undefined) {
     const other = columnNamed(columns, p.other);
     return !other || family(column) !== family(other)
       ? 'unknown'
       : compare(normalize(column, rowValue(row, p.field)), p.operator, normalize(other, rowValue(row, p.other)));
   }
-  const results = p.values.map((value) => compare(normalize(column, rowValue(row, p.field)), p.operator, normalize(column, value)));
+  const operator = p.operator;
+  const results = p.values.map((value) => compare(normalize(column, rowValue(row, p.field)), operator, normalize(column, value)));
   return results.includes('unknown') ? 'unknown' : results.some((r) => r === true);
 }
 

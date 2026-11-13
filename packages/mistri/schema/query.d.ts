@@ -74,8 +74,11 @@ type QColumnErr<T, P extends string> = QKindAt<T, P> extends QBad<infer M> ? M :
 /* ---------- values ---------- */
 
 type QUnit = 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year';
+type QDayUnit = 'day' | 'week' | 'month' | 'year';
+/** One day: `today + 30 days`, `today - 1 month`. `=` is that whole day; `next 30 days` is the span ("within"). */
+type QDateArith = `today ${'+' | '-'} ${bigint} ${QDayUnit}${'' | 's'}`;
 /** What `dateWindow` (packages/engine/src/shared/queryDates.ts) reads, lower-cased. */
-type QDatePhrase = 'today' | 'yesterday' | 'tomorrow' | `${'this' | 'last'} ${'week' | 'month' | 'year'}` | `${'this' | 'last' | 'next'} quarter`
+type QDatePhrase = QDateArith | 'today' | 'yesterday' | 'tomorrow' | `${'this' | 'last'} ${'week' | 'month' | 'year'}` | `${'this' | 'last' | 'next'} quarter`
   | `${'last' | 'next' | 'previous'} ${bigint} ${QUnit}${'' | 's'}`;
 /** A date's value: a phrase, a day, or `now`, the instant (query.ts binds it so on every engine). */
 type QDateValue = QDatePhrase | 'now' | `${number}-${number}-${string}`;

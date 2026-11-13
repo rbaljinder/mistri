@@ -58,6 +58,7 @@ import { authoringApp } from '@mistriwork/engine/server/http/refusalReport.js';
 import { appHome, outward, publicRoot, settingsMount, type AddressMount } from '@mistriwork/engine/shared/mount.js';
 import { servesLinks } from '../links/linkLookup.js';
 import { configureLinkBase } from '../links/linkToken.js';
+import { appPublicLinks, configurePublicLinks, type PublicLinkRender } from '../links/publicLink.js';
 import { adviseConnectionLimits } from '@mistriwork/engine/adapters/connectionBudget.js';
 import { startTelemetry } from '@mistriwork/engine/adapters/telemetry/start.js';
 import { runtimeVersion } from '@mistriwork/engine/server/packageVersion.js';
@@ -626,7 +627,7 @@ export async function startServing(
       const { contactMailPlaces, openContactMail } = await import('../email/contactMail.js');
       const { UNSUBSCRIBE_PATH } = await import('../email/unsubscribe.js');
       const service = emailConfigOf(registry);
-      const apps: Array<{ id: string; name: string; target: StoreTarget }> = [];
+      const apps: Array<{ id: string; name: string; target: StoreTarget; publicLinks: PublicLinkRender }> = [];
       try {
         for (const host of contacts) {
           const places = await track(contactMailPlaces(registry, host));
@@ -638,7 +639,7 @@ export async function startServing(
           for (const warning of findings.warnings) console.warn(`mistri: warning: ${warning}`);
           if (findings.problems.length || !places.target)
             throw new Error(findings.problems[0] ?? `${host.app.app.name}: its notify rules' records are not in SQLite or PostgreSQL.`);
-          apps.push({ id: host.app.app.id, name: host.app.app.name, target: places.target });
+          apps.push({ id: host.app.app.id, name: host.app.app.name, target: places.target, publicLinks: appPublicLinks(host.app.app) });
         }
         contactMail = await track(
           openContactMail({
@@ -1113,6 +1114,9 @@ export async function startServing(
           stopWatchers.push(
             configureLinkBase(host.app.app.id, origin + outward(mount, `/${encodeURIComponent(host.app.app.id)}/l`).slice(0, -2)),
           );
+      // A public link (context.publicLink) in an App without tenants: a tenant App's is said by its tenant's address.
+      for (const host of serving.apps)
+        if (!isTenantApp(host.app.app)) stopWatchers.push(configurePublicLinks(host.app.app.id, (path) => origin + outward(mount, path)));
       if (!startBackground()) return;
       /* One question per database, once the pools are open and serving has not waited for it: whether this process's
          pools fit what the server allows. A warning only; a failed question says nothing. */

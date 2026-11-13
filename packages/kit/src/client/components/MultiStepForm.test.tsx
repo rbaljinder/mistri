@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FormStep } from '../../../../mistri/src/shared/formRules.js';
+import { holdAppWords } from '../messages.js';
 import { MultiStepForm } from './MultiStepForm.js';
 
 const steps: FormStep[] = [
@@ -31,6 +32,19 @@ describe('MultiStepForm', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Details' })).toBeTruthy());
     expect(validate).toHaveBeenCalledWith(steps[0], 'next');
     expect(changed).toHaveBeenCalledWith(1, steps[1]);
+  });
+
+  it("says the App's own words for its step count and Back, where the App's catalog has them", async () => {
+    holdAppWords({ 'mistri.form.step': 'Paso {step} de {count}', 'mistri.form.back': 'Atrás' });
+    try {
+      view({ validateStep: () => true });
+      expect(screen.getByText('Paso 1 de 2')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+      await waitFor(() => expect(screen.getByText('Paso 2 de 2')).toBeTruthy());
+      expect(screen.getByRole('button', { name: 'Atrás' })).toBeTruthy();
+    } finally {
+      holdAppWords(undefined);
+    }
   });
 
   it('presses the primary on Enter in a typed answer, and leaves Enter to a checkbox, a box of lines and an open list', async () => {

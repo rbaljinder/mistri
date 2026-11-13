@@ -14,6 +14,7 @@ import { channelTransports } from './integrationChannels.js';
 import type { CapturedIntegrations } from './integrationDeclaration.js';
 import { createIntegrationRuntime, registerIntegrationRuntime, type IntegrationRuntime } from './integrationRuntime.js';
 import { causeText } from '../observe/failureCause.js';
+import type { PublicLinkRender } from '../links/publicLink.js';
 
 /* Held messages are looked at every half minute: quiet hours end on the minute, and nobody waits on a held text. */
 const HELD_MS = 30_000;
@@ -34,12 +35,20 @@ export async function openAppIntegrations(
     declared: CapturedIntegrations;
     target: StoreTarget;
     now?: () => number;
+    /** How a public link in a held message is said. */
+    publicLinks?: PublicLinkRender;
   }>,
 ): Promise<AppIntegrations> {
   const { appId, declared } = options;
   const now = options.now ?? Date.now;
   const store: IntegrationStore = await openIntegrationStore(options.target);
-  const runtime = createIntegrationRuntime({ appId, declared, store, now });
+  const runtime = createIntegrationRuntime({
+    appId,
+    declared,
+    store,
+    now,
+    ...(options.publicLinks ? { publicLinks: options.publicLinks } : {}),
+  });
   const withdraw = registerIntegrationRuntime(runtime);
   const channels = channelTransports(runtime);
   let timer: ReturnType<typeof setTimeout> | undefined;

@@ -18,7 +18,10 @@
  *
  * A form saved on every step is served here as on the ordinary host
  * (forms/savedFormHttp.ts): its steps, its submit and its resume, each
- * carrying the address on to the intake, which resolves it every time.
+ * carrying the address on to the intake, which resolves it every time. Its
+ * status check, step-up and details too: read in the place the address
+ * resolves to, with that place's lockouts, codes and session, so a cookie
+ * proved under one tenant's host opens nothing under another's.
  *
  * A public command page (`definePage({ public: true, commands })`) is a door
  * of the same kind: its ticket and its commands at the ordinary host's paths
@@ -37,7 +40,7 @@ import { businessCommandHttpError, CommandBodyTooLarge, commandBody, holdCommand
 import { BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
 import { CommandInputError } from '../commands/commandPayload.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
-import { declaredMessages, decoyReply, parseSubmission, presentForm, publicFormComponents, publicMessage } from '../commands/formHttp.js';
+import { declaredMessages, decoyReply, parseSubmission, presentForm, publicFormParts, publicMessage } from '../commands/formHttp.js';
 import type { HumanCheck } from '../commands/challenges.js';
 import type { CompiledComponents } from '../app/appComponents.js';
 import {
@@ -50,10 +53,12 @@ import {
   rateLimited,
 } from '../http/formRoutes.js';
 import { isSavedForm } from '../../shared/appSavedForms.js';
+import type { EmailTransport } from '../email/email.js';
 import { dispatchIntakeSavedFormHttp, savedFormAction, type SavedForm, type SavedFormIntake } from '../forms/savedFormHttp.js';
 import { secureRequest } from '../forms/savedForms.js';
 import { attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js';
 import { answerLanding, LANDING_PATH } from '../http/landingRoutes.js';
+import { holdsPublicRef, sealAuthoredRefs, withoutPublicRefs } from '../links/publicLink.js';
 import { clientAddress } from '@mistriwork/engine/server/http/rateLimit.js';
 import { HttpError, readJson, send } from '@mistriwork/engine/server/http/reply.js';
 import { newVisitorToken, PUBLIC_STAGED_FILE_MOST, readVisitorToken, StageRefusal, visitorCookie } from '../commands/stagedFiles.js';
@@ -72,6 +77,9 @@ import { tenantPublicPlacement } from './tenantPublicPlacement.js';
 import { pageCommandPath, TICKET_HEADER } from '../http/pageCommandRoutes.js';
 import { issueTicket, ticketMessage, ticketRefusal } from '../forms/publicTicket.js';
 import { tenantPublicPages } from './tenantIntakePages.js';
+import { askedLocale, catalogLocales, requestLocale, varyOnPick } from '../app/readerLocale.js';
+import { localizedApp } from '../app/apps.js';
+import type { PageDef } from '@mistriwork/engine/shared/page.js';
 
 /** A public file's body: base64 of the largest file a public form holds, and room for the rest (commands/stagedFileHttp.ts). */
 const PUBLIC_FILE_BODY = Math.ceil(PUBLIC_STAGED_FILE_MOST / 3) * 4 + 64 * 1024;
@@ -83,6 +91,8 @@ export function isTenantPublicPath(path: string): boolean {
 
 interface TenantPublicHttpOptions {
   readonly app: AppDef;
+  /** The App's pages as loaded: what a visitor's own words are parsed beside (`localizedApp`). */
+  readonly pages: readonly PageDef[];
   /** The look a save changed in place (tenantLook.ts): what the landing and a form's page wear. */
   readonly look?: () => TenantLook | undefined;
   /** The App's compiled components: where a public form's input components are served, for its page. */
@@ -92,7 +102,14 @@ interface TenantPublicHttpOptions {
       is told. Absent: the App names none. */
   readonly challenge?: HumanCheck;
   /** A form's choices from a table, read for the tenant the request's intake address places (tenantPublicChoices.ts). */
-  readonly choices?: (address: string | undefined, key: string, form: AppFormView, input: AppCommandField[]) => Promise<AppCommandField[]>;
+  readonly choices?: (
+    address: string | undefined,
+    key: string,
+    form: AppFormView,
+    input: AppCommandField[],
+    /** The visitor's locale, which a choice's `labelColumns` says its rows in. */
+    locale?: string,
+  ) => Promise<AppCommandField[]>;
   /** A form's inputs asked by the placing tenant's shared profile (`when: 'tenant.<column> = …'`), judged for the tenant
       the request's intake address places, or for none (tenantPublicAsked.ts). */
   readonly asked?: (address: string | undefined, key: string, input: AppCommandField[]) => Promise<AppCommandField[]>;
@@ -111,6 +128,13 @@ interface TenantPublicHttpOptions {
   readonly resume?: TenantIntake['resume'];
   /** A file held for a stock form's command, in the place its address resolves to. */
   readonly hold?: TenantIntake['hold'];
+  /** A saved form's status check, step-up and details, read in the place its address resolves to. */
+  readonly status?: TenantIntake['status'];
+  /** A handler's message with its public links said as URLs of the tenant `address` places, for the form or page
+      `form`; undefined where it places none or a link has no address. Absent: no such message is said. */
+  readonly publicLinks?: (text: string, address: string | undefined, form: string) => Promise<string | undefined>;
+  /** The host's email service, for a status check's step-up code; absent, a code is not sent (and says nothing). */
+  readonly mail?: () => EmailTransport | undefined;
   readonly bound: Bound;
   readonly basePath: string;
   readonly assertActive: () => void;
@@ -124,6 +148,17 @@ interface TenantPublicHttpOptions {
 }
 
 export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
+  /** The handler's message as its visitor reads it: a public link in it said as the placing tenant's URL. Where one
+      cannot be said (no tenant is placed), the message is kept and each reference is said as nothing, as a person is
+      never shown `mistri-public:<view>.<seal>` and no URL is made up at the root origin. */
+  const sayMessage = async (said: { message?: string }, address: string | undefined, form: string): Promise<{ message?: string }> => {
+    if (said.message === undefined) return said;
+    // The message is a literal the output declares, the author's words: a reference written in it is the App's own.
+    const message = sealAuthoredRefs(said.message, options.app.id);
+    if (!holdsPublicRef(message, options.app.id)) return said;
+    const text = (await options.publicLinks?.(message, address, form)) ?? withoutPublicRefs(message, options.app.id);
+    return text === '' ? {} : { message: text };
+  };
   /** One file, held for the visitor in the place the intake address resolves to: charged to the client's day of bytes,
       the cookie set here where they have none, and the answer the ordinary host's (commands/stagedFileHttp.ts), a
       refusal said as it says it. */
@@ -162,6 +197,15 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
   const forms = publicForms(base);
   const pages = tenantPublicPages(base);
   const invalid = (res: ServerResponse) => send(res, 400, { code: 'invalid_input', error: 'This request is not valid.' });
+  /** The forms as a visitor reads them: in their pick, else their browser's language, among the App's catalogs, as a
+      public page is (tenantPublicReadHttp.ts). Said from the load, never the worn look, which keeps no catalogs; the
+      answer varies on both where the App has words to choose between. */
+  const visitorForms = (req: IncomingMessage, res: ServerResponse) => {
+    const locale = requestLocale(base, { visitor: true, req, res, asked: askedLocale(req) });
+    if (catalogLocales(base).length > 1) varyOnPick(res);
+    const said = localizedApp({ app: base, pages: [...options.pages] }, locale).app;
+    return { locale, forms: said === base ? forms : publicForms(said) };
+  };
   /** A public command page's ticket or submission, in the ordinary host's order (http/pageCommandRoutes.ts), each guard
       before anything later is read; what is added is the intake address, placed as a form's submission is. */
   const answerPage = async (req: IncomingMessage, res: ServerResponse, url: URL, match: { page: string; command?: string }) => {
@@ -229,12 +273,19 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       assertActive();
       // A public submission's writes are the page's, as a form's are: the record history says so.
       const result = await attributeWrites({ via: 'form' }, () =>
-        submit({ form: match.page, command: match.command, address: placed, input, submission }, { signal: controller.signal }),
+        submit(
+          { form: match.page, command: match.command, address: placed, input, submission },
+          { signal: controller.signal, ...visitorLocale(base, req) },
+        ),
       );
       const reference = (result.result as { reference?: unknown } | null)?.reference;
       if (typeof reference !== 'string' || !reference.trim() || reference.length > 64)
         throw new BusinessCommandExecutionError('invalid_result', 'unknown');
-      send(res, 200, { reference, receipt: { id: result.receiptId, status: result.status }, ...publicMessage(result.result) });
+      send(res, 200, {
+        reference,
+        receipt: { id: result.receiptId, status: result.status },
+        ...(await sayMessage(publicMessage(result.result), placed, match.page)),
+      });
     } catch (error) {
       if (error instanceof CommandBodyTooLarge) return tooLarge();
       // Fixed public messages and the field they are about; never the input, never where it landed.
@@ -344,12 +395,14 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       send(res, 405, { error: files ? 'A file is held with POST.' : 'A public form takes GET to read it and POST to submit it.' });
       return;
     }
-    // The list of forms says nothing in its URL; a form's read and a submission say at most its address, once: the
-    // read's places its choices from a table (tenantPublicChoices.ts), the submission's places the submission.
+    // The list of forms says nothing in its URL; a form's read and a submission say at most its address and its
+    // language, each once: the read's address places its choices from a table (tenantPublicChoices.ts), the
+    // submission's places the submission, and the language is the visitor's pick, which the client fetches without.
     const keys = [...url.searchParams.keys()];
     if (
-      (reading && match.id === undefined ? keys.length > 0 : keys.some((key) => key !== 'via')) ||
-      url.searchParams.getAll('via').length > 1
+      (reading && match.id === undefined ? keys.length > 0 : keys.some((key) => key !== 'via' && key !== 'locale')) ||
+      url.searchParams.getAll('via').length > 1 ||
+      url.searchParams.getAll('locale').length > 1
     ) {
       invalid(res);
       return;
@@ -425,7 +478,7 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
     /* A placement that names no tenant sends the submission to triage. */
     const placing = () => placement.address();
     if (reading && match.id === undefined) {
-      send(res, 200, { ...presentation, forms: forms.map(([key, form]) => presentForm(key, form)) });
+      send(res, 200, { ...presentation, forms: visitorForms(req, res).forms.map(([key, form]) => presentForm(key, form)) });
       return;
     }
     const found = forms.find(([key]) => key === match.id);
@@ -445,16 +498,18 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       return;
     }
     if (reading) {
-      const components = publicFormComponents(app.id, options.components, form);
+      const visitor = visitorForms(req, res);
+      const said = visitor.forms.find(([name]) => name === key)?.[1] ?? form;
+      const parts = publicFormParts(base, options.components, said, visitor.locale);
       /* The provider's widget the stock form draws: what the browser may be told, and nothing of the verifier's. */
       const widget = options.challenge?.widget;
-      const served = presentForm(key, form);
-      const chosen = options.choices ? await options.choices(await placing(), key, form, served.input) : served.input;
+      const served = presentForm(key, said);
+      const chosen = options.choices ? await options.choices(await placing(), key, form, served.input, visitor.locale) : served.input;
       const input = options.asked ? await options.asked(await placing(), key, chosen) : chosen;
       assertActive();
       send(res, 200, {
         ...presentation,
-        form: { ...served, input, ...(components ? { components } : {}), ...(widget ? { challenge: widget } : {}) },
+        form: { ...served, input, ...parts, ...(widget ? { challenge: widget } : {}) },
       });
       return;
     }
@@ -472,8 +527,10 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
         if (req.aborted || res.destroyed) abort();
         // A public submission's writes are the form's, as on the ordinary host: the record history says so.
         const intake: SavedFormIntake = {
-          submit: (request, execution) => attributeWrites({ via: 'form' }, () => submit(request, execution)),
+          submit: (request, execution) =>
+            attributeWrites({ via: 'form' }, () => submit(request, { ...execution, ...visitorLocale(base, req) })),
           resume: (request) => resume!(request),
+          ...(options.status ? { status: options.status } : {}),
         };
         const reply = await dispatchIntakeSavedFormHttp({
           req,
@@ -484,8 +541,17 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
           signal: controller.signal,
           address: await placing(),
           secure: secureRequest(req, bound.trustedProxies),
+          client: clientAddress(req, bound.trustedProxies),
+          app: base,
+          ...(options.mail?.() ? { mail: options.mail()! } : {}),
         });
         assertActive();
+        // The submit's thank-you, a public link in it said as the stock form's is.
+        const thanked = reply.body as { message?: unknown } | null;
+        if (reply.status === 200 && typeof thanked?.message === 'string') {
+          const { message: _unsaid, ...rest } = thanked;
+          reply.body = { ...rest, ...(await sayMessage({ message: thanked.message }, await placing(), key)) };
+        }
         if (reply.cookies?.length)
           res.setHeader(
             'set-cookie',
@@ -505,7 +571,12 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       const declared = declaredMessages(options.commands?.[form.command.id]?.output);
       if (typeof extra.trap === 'string' && extra.trap.trim()) {
         countDecoy(form.command.id);
-        send(res, 200, decoyReply(undefined, declared[0]));
+        // Said as a real submission's would be, a public link in it too: a raw reference would mark the decoy.
+        send(
+          res,
+          200,
+          decoyReply(undefined, (await sayMessage({ ...(declared[0] ? { message: declared[0] } : {}) }, await placing(), key)).message),
+        );
         return;
       }
       const placed = await placing();
@@ -520,7 +591,7 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
             // Whose held files the submission may take: this visitor's, by their own cookie.
             ...(readVisitorToken(req, key) ? { visitor: readVisitorToken(req, key) } : {}),
           },
-          { signal: controller.signal },
+          { signal: controller.signal, ...visitorLocale(base, req) },
         ),
       );
       const reference = (result.result as { reference?: unknown } | null)?.reference;
@@ -529,7 +600,11 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       if (typeof reference !== 'string' || !reference.trim() || reference.length > 64)
         throw new BusinessCommandExecutionError('invalid_result', 'unknown');
       // The handler's own words for its visitor, only where the decoy could have said them (formHttp.ts publicMessage).
-      send(res, 200, { reference, receipt: { id: result.receiptId, status: result.status }, ...publicMessage(result.result, declared) });
+      send(res, 200, {
+        reference,
+        receipt: { id: result.receiptId, status: result.status },
+        ...(await sayMessage(publicMessage(result.result, declared), placed, key)),
+      });
     } catch (error) {
       // Fixed public messages and the field they are about; never the input, never where it landed.
       const failure = businessCommandHttpError(
@@ -542,4 +617,11 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       res.off('close', abort);
     }
   };
+}
+
+/* A visitor's `ctx.locale`: the language their request names (`?locale=`), else their pick, else their browser where
+   the App ships more than one catalog (readerLocale.ts). */
+function visitorLocale(app: AppDef, req: IncomingMessage): { locale?: string } {
+  const locale = requestLocale(app, { visitor: true, req, asked: askedLocale(req) });
+  return locale ? { locale } : {};
 }

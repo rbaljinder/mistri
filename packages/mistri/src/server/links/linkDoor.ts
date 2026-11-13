@@ -44,7 +44,7 @@ import { reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
 import { outward, type AddressMount } from '@mistriwork/engine/shared/mount.js';
 import type { EmailTransport } from '../email/email.js';
 import { equalText, settle } from '../forms/statusCheck.js';
-import { oneTimeCodes, CODE_MINUTES } from '../forms/oneTimeCode.js';
+import { codeAddress, deliverCode, oneTimeCodes } from '../forms/oneTimeCode.js';
 import { signInState } from '../auth/signInState.js';
 import { secureRequest } from '../forms/savedForms.js';
 import {
@@ -58,9 +58,9 @@ import {
   readLinkSession,
 } from './linkToken.js';
 import { LINK_MISS, LINK_SESSION_HEADER, linkPage, linkPagePolicy, type LinkPageCommand } from './linkPage.js';
+import { requestLocale } from '../app/readerLocale.js';
 
 export const LINK_PATH = /^\/([^/]+)\/l\/([^/]+)(?:\/(prepare|run|confirm|stepup))?$/;
-const EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 /* Five wrong confirmations in an hour lock the link's confirmation for the rest of it: the columns it asks are
    things a holder knows, often short (a ZIP code, a birth date), and the floor alone would let them be walked. */
 const CONFIRM_TRIES = 5;
@@ -92,7 +92,14 @@ export interface LinkBackend<F extends FoundLink = FoundLink> {
   /** Revokes every link on the found link's row, which is gone. */
   revoke(found: F, now: number): Promise<unknown>;
   /** One command route as the link's principal, through the executor that reads the link again. */
-  run(found: F, actor: BusinessCommandActor, route: 'prepare' | 'execute', envelope: Record<string, unknown>): Promise<unknown>;
+  /** `locale` is the holder's, read as a visitor's (readerLocale.ts): what the command's `ctx.locale` is asked to be. */
+  run(
+    found: F,
+    actor: BusinessCommandActor,
+    route: 'prepare' | 'execute',
+    envelope: Record<string, unknown>,
+    locale?: string,
+  ): Promise<unknown>;
   /** Where a step-up code is mailed from, when anywhere. */
   mail(): EmailTransport | undefined;
   /** Lets go of what the request held. */
@@ -257,7 +264,18 @@ export async function linkDoor<F extends FoundLink>(door: LinkDoorRequest, backe
         return true;
       }
       if (def.stepUp && !passed(GATE_STEPPED_UP)) {
-        page(res, 200, req.method === 'HEAD', (nonce) => linkPage({ app: appName, nonce, state: 'stepUp', base, session: next, title }));
+        const { channel } = def.stepUp;
+        page(res, 200, req.method === 'HEAD', (nonce) =>
+          linkPage({
+            app: appName,
+            nonce,
+            state: 'stepUp',
+            base,
+            session: next,
+            title,
+            ...(channel ? { channel } : {}),
+          }),
+        );
         return true;
       }
       const record = await readRecord(def.show);
@@ -320,18 +338,35 @@ export async function linkDoor<F extends FoundLink>(door: LinkDoorRequest, backe
       } catch {
         return await refusedAfterFloor(started, res, 400, 'invalid_input', 'Ask for a code, or type the one you were sent.');
       }
-      const stored = await readRecord([def.stepUp]);
-      const address = typeof stored?.[def.stepUp] === 'string' ? (stored[def.stepUp] as string).trim() : '';
-      const deliverable = EMAIL.test(address);
+      const { column, channel } = def.stepUp;
+      const stored = await readRecord([column]);
+      const address = codeAddress(channel, stored?.[column]) ?? '';
+      const deliverable = Boolean(address);
       const subject = `link\u0000${appId}\u0000${id}`;
-      const bound = address.toLowerCase();
+      /* The code proves the address on file when it was sent: a changed address is a new code's. A number is bound
+         as its digits and plus, so the same number written another way is the same. */
+      const bound = channel === undefined ? address.toLowerCase() : address.replace(/[\s().-]/g, '');
       const codes = oneTimeCodes();
       if (body.send === true) {
         if (await limited('code')) return true;
         /* The same answer whether or not a code went: what is on file is not this page's to say. */
         if (deliverable) {
           const issued = await codes.issue(subject, now, bound);
-          if ('code' in issued) sendCode(backend.mail(), address, issued.code, app.name ?? app.id, appId);
+          if ('code' in issued) {
+            const appName = app.name ?? app.id;
+            deliverCode({
+              channel,
+              to: address,
+              code: issued.code,
+              appName,
+              opens: `the link you were sent from ${appName}`,
+              mail: backend.mail(),
+              appId,
+              tenant: found.tenant,
+              log: { event: 'link.step_up', app: appId },
+              client,
+            });
+          }
         }
         await settle(started);
         send(res, 200, { sent: true, session: presented });
@@ -386,14 +421,20 @@ export async function linkDoor<F extends FoundLink>(door: LinkDoorRequest, backe
       return true;
     }
     try {
-      await backend.run(found, actor, 'execute', {
-        command,
-        commandVersion: registered.version,
-        key,
-        expectedVersion: asked.expectedVersion,
-        idempotencyKey: asked.idempotencyKey,
-        input: asked.input ?? {},
-      });
+      await backend.run(
+        found,
+        actor,
+        'execute',
+        {
+          command,
+          commandVersion: registered.version,
+          key,
+          expectedVersion: asked.expectedVersion,
+          idempotencyKey: asked.idempotencyKey,
+          input: asked.input ?? {},
+        },
+        requestLocale(app, { visitor: true, req }),
+      );
       send(res, 200, { ok: true, session: presented });
     } catch (error) {
       /* A link revoked (or its row removed) while this run was in flight is refused by the transaction that reads it
@@ -469,21 +510,4 @@ async function refusedAfterFloor(started: number, res: ServerResponse, status: n
   await settle(started);
   send(res, status, { code, error });
   return true;
-}
-
-function sendCode(mail: EmailTransport | undefined, to: string, code: string, appName: string, appId: string): void {
-  if (!mail) {
-    process.stderr.write(`${JSON.stringify({ event: 'link.step_up', app: appId, outcome: 'undeliverable' })}\n`);
-    return;
-  }
-  void mail
-    .send({
-      to,
-      subject: `${appName}: your code is ${code}`,
-      text:
-        `Your code is ${code}.\n\nIt opens the link you were sent from ${appName}, once, for ${CODE_MINUTES} minutes.\n\n` +
-        'If you did not ask for it, you can ignore this email: nothing opens without it.',
-      sensitive: true,
-    })
-    .catch(() => process.stderr.write(`${JSON.stringify({ event: 'link.step_up', app: appId, outcome: 'send_failed' })}\n`));
 }

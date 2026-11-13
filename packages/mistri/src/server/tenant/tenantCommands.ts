@@ -4,6 +4,7 @@ import type { WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { commandZone } from '../app/readerZone.js';
+import { scopedLocale } from '../app/readerLocale.js';
 import { sessionActorWords } from '../app/appStamps.js';
 import {
   registerTenantCommandEventBinding,
@@ -73,6 +74,8 @@ export interface TenantCommandExecutionOptions {
   readonly requestId?: string;
   /** The door the handler is told: the tenant API's `api` or App MCP's `mcp`; absent, the screen. */
   readonly entry?: 'api' | 'mcp';
+  /** The locale its door resolved for whoever asked (readerLocale.ts): the command's `ctx.locale`, clamped by the executor. */
+  readonly locale?: string;
 }
 /** What holding a file answers: the file as held, or the refusal as the ordinary host says it. */
 type StagedFileAnswer =
@@ -114,12 +117,15 @@ export const tenantCommandDomain = domain;
 /** Capture host options without accepting replacement getters or a forged signal.
  * Handlers get an independently owned native signal, not the mutable input. */
 export function captureTenantCommandExecution(input: TenantCommandExecutionOptions) {
-  const raw = tenantOptions(input, ['signal', 'requestId', 'entry']);
+  const raw = tenantOptions(input, ['signal', 'requestId', 'entry', 'locale']);
   const requestId = captureTenantData(raw.requestId);
   if (requestId !== undefined && (typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(requestId)))
     throw new CommandInputError('requestId');
   const entry = captureTenantData(raw.entry);
   if (entry !== undefined && entry !== 'api' && entry !== 'mcp') throw new CommandInputError('entry');
+  // A tag, never a sentence: the executor clamps it to the App's catalogs.
+  const locale = captureTenantData(raw.locale);
+  if (locale !== undefined && (typeof locale !== 'string' || !/^[A-Za-z0-9-]{1,64}$/.test(locale))) throw new CommandInputError('locale');
   const origin = raw.signal as AbortSignal | undefined,
     controller = new AbortController();
   const aborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')!.get!;
@@ -160,6 +166,7 @@ export function captureTenantCommandExecution(input: TenantCommandExecutionOptio
       signal,
       ...(requestId === undefined ? {} : { requestId }),
       ...(entry === undefined ? {} : { entry: entry as 'api' | 'mcp' }),
+      ...(locale === undefined ? {} : { locale }),
     },
     close: () => {
       try {
@@ -291,7 +298,15 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
             ...(rowScope ? { scope: { name: rowScope.name, key: rowScope.key } } : {}),
           });
           /* This tenant's zone for `today()` and `now()` (readerZone.ts), where `ui.timezone` names a column. */
-          const zone = mode === 'execute' || mode === 'draft' ? await commandZone(app.ui, () => scope.reads(), scope.tenant) : undefined;
+          const acting = mode === 'execute' || mode === 'draft';
+          /* And this member's own locale (`ctx.locale`): their row first, then what their door picked (the cookie). */
+          const [zone, person] = acting
+            ? await Promise.all([
+                commandZone(app.ui, () => scope.reads(), scope.tenant),
+                scopedLocale(app, scope.principal.accountId, () => scope.reads()),
+              ])
+            : [undefined, undefined];
+          const said = person ? { ...context!.options, locale: person } : context!.options;
           const flags = commandFlagsOnce(async () => {
             await scope.session();
             const captured = await captureFlags?.(scope.principal, request);
@@ -431,7 +446,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                 binding,
                 actor,
                 body: captured,
-                execution: { signal: context!.options.signal, requestId: context!.options.requestId },
+                execution: { signal: said.signal, requestId: said.requestId, locale: said.locale },
                 flagsFor: (envelope) => authorizedCommandFlags(binding, actor, envelope, flags),
                 // One transaction per tenant request: the host reads the step's draft back with a resume (tenantHttp.ts).
                 stepSummary: false,
@@ -446,7 +461,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                 throw error;
               }
             }
-            const execution = { ...context!.options, flags: await authorizedCommandFlags(binding, actor, captured, flags) };
+            const execution = { ...said, flags: await authorizedCommandFlags(binding, actor, captured, flags) };
             return mode === 'status'
               ? await lookupBusinessCommandStatus(binding, actor, captured, execution)
               : await executeBusinessCommand(binding, actor, captured, execution);

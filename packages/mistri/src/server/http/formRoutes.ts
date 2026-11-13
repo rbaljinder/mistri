@@ -20,7 +20,7 @@ import {
   dispatchPublicFormHttp,
   dispatchPublicFormSubmissionHttp,
   presentForm,
-  publicFormComponents,
+  publicFormParts,
   publicPrincipal,
 } from '../commands/formHttp.js';
 import { holdPolicyFileHttp, stagePublicFileHttp } from '../commands/stagedFileHttp.js';
@@ -38,7 +38,8 @@ import { requestRecordBranding, withRecordBranding } from './recordBranding.js';
 import { reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
 import { challengePasses, type HumanCheck } from '../commands/challenges.js';
 import { inSpan } from '@mistriwork/engine/adapters/telemetry/trace.js';
-import type { AppHost } from '../app/apps.js';
+import { localizedApp, type AppHost } from '../app/apps.js';
+import { askedLocale, catalogLocales, requestLocale, varyOnPick } from '../app/readerLocale.js';
 
 /** The header a public door's human check token travels in, read before the body (commands/challenges.ts). */
 const CHALLENGE_HEADER = 'x-mistri-challenge';
@@ -268,8 +269,16 @@ export async function publicFormRoutes(ctx: RequestContext): Promise<boolean> {
   if (await rateLimited(res, budgets, address, 'all')) return true;
   const branding = reading ? await requestRecordBranding(ctx, undefined, true) : undefined;
   const presentation = { app: withIconGlyphs(appLook(withRecordBranding(app, branding))) };
+  /* A visitor reads a form in their pick, else their browser's language, among the App's catalogs, as a tenant App's
+     visitor does (tenantPublicHttp.ts): the answer varies on both where the App has words to choose between. */
+  const visitor = () => {
+    const locale = requestLocale(app, { visitor: true, req, res, asked: askedLocale(req) });
+    if (catalogLocales(app).length > 1) varyOnPick(res);
+    const said = localizedApp(signedIn.app, locale).app;
+    return { locale, forms: said === app ? forms : publicForms(said) };
+  };
   if (reading && match.id === undefined) {
-    send(res, 200, { ...presentation, forms: forms.map(([key, form]) => presentForm(key, form)) });
+    send(res, 200, { ...presentation, forms: visitor().forms.map(([key, form]) => presentForm(key, form)) });
     return true;
   }
   const found = forms.find(([key]) => key === match.id);
@@ -283,7 +292,9 @@ export async function publicFormRoutes(ctx: RequestContext): Promise<boolean> {
   if (reading) {
     /* The provider's widget the form draws, where the App names a human check that has one (commands/challenges.ts). */
     const widget = challengeOf(signedIn)?.widget;
-    const served = presentForm(key, form);
+    const read = visitor();
+    const said = read.forms.find(([name]) => name === key)?.[1] ?? form;
+    const served = presentForm(key, said);
     /* Its choices from a table, read through the shared cache and served with it (forms/formChoices.ts). */
     const connection = !policy && commands?.appId === app.id ? appEntrypoint(signedIn, registry) : undefined;
     const input = connection
@@ -294,15 +305,16 @@ export async function publicFormRoutes(ctx: RequestContext): Promise<boolean> {
           commands: commands?.registry,
           owners: formCommands(form).map((reference) => reference.id),
           input: served.input,
+          ...(read.locale ? { locale: read.locale } : {}),
         })
       : served.input;
     /* Revalidated, not unstored: the form and its options are one answer under one tag, and a page that has them
        asks again with If-None-Match and is told 304 until either changes. */
-    const components = publicFormComponents(app.id, signedIn.app.components, form);
+    const parts = publicFormParts(app, signedIn.app.components, said, read.locale);
     res.removeHeader('cache-control');
     sendRevalidated(
       res,
-      { ...presentation, form: { ...served, input, ...(components ? { components } : {}), ...(widget ? { challenge: widget } : {}) } },
+      { ...presentation, form: { ...served, input, ...parts, ...(widget ? { challenge: widget } : {}) } },
       `public-form:${app.id}`,
     );
     return true;
@@ -325,6 +337,7 @@ export async function publicFormRoutes(ctx: RequestContext): Promise<boolean> {
       captureFlags: captureHttpCommandFlags,
       action: action!,
       secure: secureRequest(req, bound.trustedProxies),
+      client: clientAddress(req, bound.trustedProxies),
       ...(commands.events ? { events: commands.events } : {}),
       // The verified session's account alone: a link names it, and an owner reads by it.
       ...(ctx.identity.id
@@ -356,6 +369,7 @@ export async function publicFormRoutes(ctx: RequestContext): Promise<boolean> {
       const result = await dispatchPublicFormSubmissionHttp({
         req,
         res,
+        locale: requestLocale(app, { visitor: true, req, asked: askedLocale(req) }),
         // The visitor's own cookie names whose held files the run may take; where they land is the intake's captured scope.
         submit: (body, execution) => {
           const visitor = readVisitorToken(req, key);

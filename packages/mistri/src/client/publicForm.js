@@ -19,6 +19,7 @@ import { firstPaintRead } from '@mistriwork/kit/client/firstPaint.js';
 import { setTabTitle, shellBody, shellQuery } from '@mistriwork/kit/client/shellHost.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
 import { homeHrefFor } from './publicHomeLink.js';
+import { localeCookieName } from '@mistriwork/engine/shared/appLocale.js';
 
 /* Fetched when one is shown: FormDialog brings this module into the App
    shell, whose first paint no saved form is ever on. */
@@ -64,6 +65,28 @@ function offerSignIn(appId) {
 }
 
 /**
+ * The language this browser picked for an App (kit messages.ts `setMessageLanguage`), as its cookie holds it now;
+ * undefined where it picked none. A form is fetched without cookies, so its read and its submission name the pick
+ * themselves (`?locale=`), and a pick made since the page arrived is the one they name.
+ * @param {string | undefined} appId
+ * @returns {string | undefined}
+ */
+export function pickedLanguage(appId) {
+  if (!appId) return undefined;
+  const name = localeCookieName(appId);
+  for (const part of document.cookie.split(';')) {
+    const at = part.indexOf('=');
+    if (at < 0 || part.slice(0, at).trim() !== name) continue;
+    try {
+      return decodeURIComponent(part.slice(at + 1).trim()) || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Fetch one public form's presentation. `undefined` when the server has no
  * public forms at all, so this address is not one and boot carries on; a
  * throw, with the sentence to show, for a form this App does not serve to
@@ -85,9 +108,12 @@ export async function loadPublicForm(id, options = {}) {
     return /** @type {any} */ (carried);
   }
   /* A tenant's link carries its intake address (`?via=…`): the read carries it on, so a choice from a table is
-     offered that tenant's rows (server tenant/tenantPublicChoices.ts). */
+     offered that tenant's rows (server tenant/tenantPublicChoices.ts). The read sends no cookie, so the visitor's
+     pick of language rides in its address. */
   const via = new URLSearchParams(window.location.search).get('via');
-  const res = await fetchServer(`/api/forms/${encodeURIComponent(id)}${via ? `?${new URLSearchParams({ via })}` : ''}`, {
+  const locale = pickedLanguage(options.appId);
+  const query = new URLSearchParams({ ...(via ? { via } : {}), ...(locale ? { locale } : {}) }).toString();
+  const res = await fetchServer(`/api/forms/${encodeURIComponent(id)}${query ? `?${query}` : ''}`, {
     credentials: 'omit',
     cache: 'no-store',
     signal: AbortSignal.timeout(15_000),
@@ -195,6 +221,8 @@ export function showPublicForm(prepared, page, options = {}) {
         form: /** @type {import('./components/SavedFormSurface.js').SavedFormPresentation} */ (form),
         appName: app.name,
         base,
+        // A step and the submit name the visitor's pick as the read does: the pick made since the page arrived.
+        language: () => pickedLanguage(app.id),
       }),
     );
     return true;
@@ -210,7 +238,7 @@ export function showPublicForm(prepared, page, options = {}) {
       visitor: { app: app.id, ...(via ? { via } : {}) },
       // A files input's files are held for this form as they are sent (components/HeldFiles.tsx).
       held: { form: form.id, ...(via ? { via } : {}) },
-      submit: (submission, input, guard) => submitPublicForm(form.id, submission, input, via, guard),
+      submit: (submission, input, guard) => submitPublicForm(form.id, submission, input, via, guard, pickedLanguage(app.id)),
       // Once received, a quiet way back to the App's home where a visitor can go to it (publicHomeLink.ts); none where this form is that home (the way back is itself).
       ...(options.signIn ? {} : { homeHref: homeHrefFor(app.id, shown(`/${encodeURIComponent(app.id)}`)) }),
     }),

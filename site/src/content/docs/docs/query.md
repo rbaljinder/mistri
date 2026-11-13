@@ -48,7 +48,10 @@ invoice invoice_date = last 30 days
 
 Dates are phrases: `today`, `yesterday`, `this week`, `last month`,
 `this quarter`, `last 30 days`, `next 7 days`; `previous 30 days` is the window
-just before `last 30 days`. Hours and minutes count from the instant:
+just before `last 30 days`. `next 30 days` is the "within" form: `due = next 30 days`
+is today through thirty days on. `today + 30 days` and `today - 7 days` (days,
+weeks, months or years) name one day, so `due = today + 30 days` is that whole day
+and `due <= today - 7 days` is a week ago or earlier. Hours and minutes count from the instant:
 `due_at = next 2 hours` is due within two hours. `now` is the instant itself:
 `resolution_due_at < now` is past due. Quarters are calendar quarters (January,
 April, July, October); there is no fiscal year. A value with a space is quoted:

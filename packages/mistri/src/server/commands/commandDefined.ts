@@ -8,7 +8,9 @@
  * scoped reads as the handler's.
  */
 import type { WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
-import type { AppCommandField } from '../../shared/command.js';
+import { boundChoiceMatch, type AppCommandField } from '../../shared/command.js';
+import type { CommandChoiceMatch } from '@mistriwork/engine/schema/model.js';
+import type { Condition } from '@mistriwork/engine/shared/filter.js';
 import { DEFINITIONS_MOST, type DefinedField } from '@mistriwork/engine/shared/definedFields.js';
 import {
   DEFINED_REASONS,
@@ -109,10 +111,15 @@ export async function sourcedChoiceBreak(
     );
     if (!keys.length) continue;
     const unique = [...new Set(keys)];
+    const picked: Condition = { column: field.source.by, op: 'in', value: unique };
+    /* A `where` over the other answers is bound here, in the same read: a pick the form would not have offered beside
+       the answers sent (a forged pair) is refused as any other key outside the choices is. */
+    const bound = field.source.match ? boundChoiceMatch(field.source.match, given) : undefined;
+    if (field.source.match && !bound) return { path: field.name, reason: 'This is not one of the choices.' };
     const rows = await reader.query({
       table: field.source.from,
       columns: [field.source.by],
-      filter: { groups: [[{ column: field.source.by, op: 'in', value: unique }]] },
+      filter: { groups: bound ? choiceConditions(bound).map((group) => [picked, ...group]) : [[picked]] },
       limit: unique.length + 1,
       offset: 0,
     });
@@ -121,3 +128,21 @@ export async function sourcedChoiceBreak(
   }
   return undefined;
 }
+
+const CHOICE_OPERATOR = { eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
+
+/** A bound `where` (or its tests that read no answer, forms/choiceCache.ts `choiceNarrowing`) as the engine's filter:
+    its groups either-or, each group's tests all at once. */
+export const choiceConditions = (bound: CommandChoiceMatch): Condition[][] =>
+  bound.map((group) =>
+    group.map((test): Condition => {
+      if (test.values.length === 1 && test.values[0] === null)
+        return { column: test.column, op: test.operator === 'ne' ? 'isNotNull' : 'isNull' };
+      /* Bound, so every operand is a value (boundChoiceMatch); a list never holds a null (the grammar's `in` takes none). */
+      const values = test.values as readonly (string | number | boolean)[];
+      /* A boolean stays a boolean, as it does in a single `=`: PostgreSQL compares a boolean column with `true`, not with 1.
+         `Condition`'s list type names no boolean, but buildWhere binds each element as it binds a single value. */
+      if (values.length > 1 && test.operator === 'eq') return { column: test.column, op: 'in', value: [...values] as (string | number)[] };
+      return { column: test.column, op: CHOICE_OPERATOR[test.operator], value: values[0] };
+    }),
+  );

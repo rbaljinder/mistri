@@ -24,6 +24,7 @@ import { emailChannelSender } from '../integrations/integrationChannels.js';
 import type { EmailTransport } from './email.js';
 import { createUnsubscribeRoute, issueUnsubscribeToken, UNSUBSCRIBE_PATH } from './unsubscribe.js';
 import { causeText } from '../observe/failureCause.js';
+import type { PublicLinkRender } from '../links/publicLink.js';
 
 /* Queued mail is looked at every ten seconds: a person may be waiting on it, and a write never waits for it. */
 const LOOP_MS = 10_000;
@@ -81,7 +82,8 @@ export interface ContactMail {
 
 export async function openContactMail(
   options: Readonly<{
-    apps: ReadonlyArray<Readonly<{ id: string; name: string; target: StoreTarget }>>;
+    /** Each App's store, and how a public link its mail holds is said (none said: that mail is not sent). */
+    apps: ReadonlyArray<Readonly<{ id: string; name: string; target: StoreTarget; publicLinks?: PublicLinkRender }>>;
     transport: EmailTransport;
     /** The email service's `links.secret`. */
     secret: string;
@@ -110,6 +112,7 @@ export async function openContactMail(
           store,
           transport: options.transport,
           unsubscribe: (claim) => `${options.address}?token=${issueUnsubscribeToken(options.secret, claim)}`,
+          ...(app.publicLinks ? { publicLinks: app.publicLinks } : {}),
           ...(options.now ? { now: options.now } : {}),
         }),
       });

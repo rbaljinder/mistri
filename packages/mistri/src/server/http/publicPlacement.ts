@@ -7,6 +7,7 @@ import { isPublicForm } from '../../shared/app.js';
 import { appLook } from '../../shared/appUi.js';
 import { parseBasePath } from '@mistriwork/engine/shared/mount.js';
 import { withIconGlyphs } from '../app/iconPayload.js';
+import { requestLocale } from '../app/readerLocale.js';
 import { captureTenantData } from '@mistriwork/engine/server/evidence.js';
 import { businessCommandHttpError, commandBody } from '../commands/businessCommandHttp.js';
 import { BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
@@ -301,9 +302,11 @@ export function createHttpPublicPlacement(options: {
           const body = await commandBody(req);
           if (controller.signal.aborted) throw new BusinessCommandExecutionError('cancelled', 'unknown');
           const requestId = res.getHeader('x-request-id');
+          const locale = requestLocale(app, { visitor: true, req });
           const result = await deployed.submitPublicPlacement!(form, selection, body, {
             signal: controller.signal,
             ...(typeof requestId === 'string' ? { requestId } : {}),
+            ...(locale ? { locale } : {}),
           });
           active();
           send(res, 200, result);

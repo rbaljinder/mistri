@@ -46,6 +46,7 @@ import type { HeldTarget } from './HeldFiles.js';
 import { ReviewValue, type ReviewSource } from './ReviewValue.js';
 import { say } from '../copy/forms/components/FormSurface.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
+import { appWord, holdAppWords } from '@mistriwork/kit/client/messages.js';
 import type { ChallengeWidget, FormGuard, GuardHandle } from './PublicGuard.js';
 
 /* The stepper, its parts and the intake style's sheets are a chunk fetched for a form with steps, never by a public
@@ -65,8 +66,10 @@ const MultiStepForm = onDemand(() => Promise.all([stepping(), Columns.ready()]).
  * `when` or a rule, the live lines for a number that has them. A form asking none of these fetches nothing.
  */
 export async function formArrives(
-  form: Pick<FormPresentation, 'input' | 'steps' | 'style' | 'rules' | 'challenge' | 'components'>,
+  form: Pick<FormPresentation, 'input' | 'steps' | 'style' | 'rules' | 'challenge' | 'components' | 'messages' | 'words'>,
 ): Promise<void> {
+  /* A public form has no App shell to hold the App's words for the platform's; an App's form keeps its shell's. */
+  if (form.words) holdAppWords(form.words);
   const fields = form.input ?? [];
   const lives = (list: readonly AppCommandField[]): boolean =>
     list.some(
@@ -84,7 +87,7 @@ export async function formArrives(
     form.challenge ? PublicGuard.ready() : undefined,
     // The App's own input components it draws: where they are served, for the kit's slot; their code comes as drawn.
     (form.components && Object.keys(form.components).length) || ownInputs(fields)
-      ? import('./sdk/publicInputs.js').then(({ installPublicInputs }) => installPublicInputs(form.components ?? {}))
+      ? import('./sdk/publicInputs.js').then(({ installPublicInputs }) => installPublicInputs(form.components ?? {}, form.messages))
       : undefined,
   ]).catch(() => {});
 }
@@ -112,6 +115,10 @@ export interface FormPresentation {
   inputs?: Readonly<Record<string, { id: string }>>;
   /** A public form: where each input component it draws is served (http/formRoutes.ts), loaded as it is drawn. */
   components?: Readonly<Record<string, { href: string; css?: string }>>;
+  /** Beside them, the App's catalog in the visitor's words, for their `useMessage` (commands/formHttp.ts publicFormParts). */
+  messages?: Readonly<Record<string, readonly unknown[]>>;
+  /** The platform's form words the App's catalog says in the visitor's language (`mistri.*`, kit `appWord`). */
+  words?: Readonly<Record<string, string>>;
   /** Saved on every step (SavedFormSurface.tsx): the inputs the submit itself asks, on the review. */
   save?: { submit: string[] };
   /** The command's rules over the draft: each is said at its field on the step that asks the last field it names. */
@@ -134,12 +141,16 @@ export async function submitPublicForm(
   input: CommandInputValue,
   via?: string,
   guard: FormGuard = {},
+  locale?: string,
 ): Promise<FormReceipt> {
   // `via` is the intake address the page was published with (a tenant App's);
   // the server alone decides what it means, and an ordinary App ignores it.
+  // `locale` is the visitor's pick of language, named as the form's read names it (publicForm.js `pickedLanguage`):
+  // the command's `ctx.locale` is the language the form was said in.
+  const query = [via && `via=${encodeURIComponent(via)}`, locale && `locale=${encodeURIComponent(locale)}`].filter(Boolean).join('&');
   let res: Response;
   try {
-    res = await fetchServer(`/api/forms/${encodeURIComponent(id)}${via ? `?via=${encodeURIComponent(via)}` : ''}`, {
+    res = await fetchServer(`/api/forms/${encodeURIComponent(id)}${query ? `?${query}` : ''}`, {
       method: 'POST',
       credentials: 'same-origin',
       signal: AbortSignal.timeout(30_000),
@@ -582,7 +593,7 @@ export function FormSurface({
         </DoneHeading>
         {receipt.reference && (
           <>
-            <p className="form-page-reference-label">{say('yourReference')}</p>
+            <p className="form-page-reference-label">{appWord('mistri.form.reference', say('yourReference'))}</p>
             <p className="form-page-reference">
               <strong>{receipt.reference}</strong>
             </p>

@@ -57,6 +57,8 @@ export class InboundRefusal extends Error {
   }
 }
 
+/** The most attachments one message carries. */
+export const MAIL_ATTACHMENTS_MOST = 100;
 const TENANT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const MAILBOX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
@@ -148,7 +150,8 @@ export function readInbound(body: unknown, routing: InboundRouting, maxBytes: nu
   let bytes = 0;
   const attachments: ReadInbound['attachments'] = [];
   if (given.attachments !== undefined) {
-    if (!Array.isArray(given.attachments) || given.attachments.length > 100) throw new InboundRefusal(400, '"attachments" is not a list.');
+    if (!Array.isArray(given.attachments) || given.attachments.length > MAIL_ATTACHMENTS_MOST)
+      throw new InboundRefusal(400, '"attachments" is not a list.');
     for (const part of given.attachments) {
       const { name, type, content } = (part ?? {}) as Record<string, unknown>;
       if (typeof content !== 'string' || content.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(content))

@@ -28,7 +28,7 @@ import { isPublicReadRequest, PUBLIC_READ_GETS } from '../../shared/tenantPublic
 import { localeWeekStart } from '@mistriwork/engine/shared/weekStart.js';
 import { localizedApp } from '../app/apps.js';
 import { visitorApp } from '../app/appTenantProfile.js';
-import { componentMessages } from '../app/appMessages.js';
+import { componentMessages, frameworkWords } from '../app/appMessages.js';
 import { requestLocale } from '../app/readerLocale.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
 import {
@@ -257,7 +257,10 @@ export function createTenantPublicReadHttp(options: TenantPublicReadHttpOptions)
       const placed = options.components && branded ? placedComponents(branded, metadata.pages, options.components) : undefined;
       /* The catalog beside them, in the visitor's language as the rest of their payload is (`useMessage`). */
       const catalog = placed && Object.keys(placed).length ? componentMessages(app, locale ?? app.ui.locale) : undefined;
-      const served = placed ? { ...branded, components: placed, ...(catalog ? { messages: catalog } : {}) } : branded;
+      const placedServed = placed ? { ...branded, components: placed, ...(catalog ? { messages: catalog } : {}) } : branded;
+      /* The App's words for the platform's own on a public page's forms, in the same language. */
+      const words = placedServed && frameworkWords(app, locale ?? app.ui.locale);
+      const served = placedServed && words ? { ...placedServed, words } : placedServed;
       const commands = options.publicCommands;
       return reply({
         appId: app.id,

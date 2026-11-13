@@ -21,6 +21,8 @@ import { createTenantHttpServer } from '../packages/mistri/src/server/tenant/ten
 import { tenantRouteBody } from '../packages/mistri/src/server/tenant/tenantHttpRoutes.js';
 import { refusalReasons, TenantContextError } from '../packages/engine/src/server/evidence.js';
 import { withTenantApiRequests } from '../packages/mistri/src/server/tenant/tenantApiRequest.js';
+import { LINK_REF_UNSAID, LinkRef } from '../packages/mistri/src/server/links/linkToken.js';
+import { PublicLinkRef } from '../packages/mistri/src/server/links/publicLink.js';
 import { openTenantNoticeMail } from '../packages/mistri/src/server/tenant/tenantNoticeMail.js';
 import { createSqliteTenantAdministration, provisionSqliteTenantStore } from '../packages/mistri/src/server/tenant/tenantStore.js';
 import { provisionSqliteRecordHistory } from '../packages/mistri/src/adapters/history/sqliteRecordHistory.js';
@@ -875,6 +877,51 @@ test("a tenant's emailed notices go to its own members as their own membership, 
   const inbox = await f.call(f.select('/api/inbox', 'north'), { limit: 20 }, { ...f.headers(bobNorth), cookie: 'fixture=bob' });
   assert.equal((inbox.body as { email?: boolean }).email, false);
   assert.ok((inbox.body as { notices: Array<{ title: string }> }).notices.some((notice) => notice.title === 'Renamed to North quietly'));
+});
+
+test("a public link a tenant's notice holds is mailed as that tenant's URL, and a mail that cannot say one is not sent", async (t) => {
+  const f = await fixture(t, { notify: 'email' });
+  const sent: Array<{ to: string; subject: string; text: string }> = [];
+  const said: Array<[string, string | undefined]> = [];
+  const open = (publicLinks?: (view: string, tenant: string | undefined) => Promise<string | undefined>) =>
+    openTenantNoticeMail<IncomingMessage>({
+      loaded: { app: f.app, pages: [] },
+      deployment: f.enrollment.deployment,
+      account: async (email) => (email === 'bob@example.invalid' ? { id: 'bob' } : null),
+      transport: { name: 'test', send: async (message) => void sent.push(message) },
+      baseURL: 'https://desk.example',
+      ...(publicLinks ? { publicLinks } : {}),
+      warn: () => {},
+    });
+  const aliceNorth = await f.open('north');
+  owned(
+    await f.data('/api/update', aliceNorth, { table: 'item', key: { id: 'north-item' }, values: { name: 'North renamed' } }),
+    aliceNorth,
+  );
+  // The notice's title is what a command's words would hold: a reference to a public view, said only at delivery.
+  const plant = (title = `Book a visit: ${new PublicLinkRef('request-visit', f.app.id)}`) =>
+    f.db.exec(`UPDATE __mistri_inbox_notice SET title = '${title}';
+      UPDATE __mistri_inbox_mail SET state = 'queued', due_at = '2000-01-01T00:00:00.000Z', attempts = 0, last_error = NULL;`);
+  // A capability link the App made, left in a mail's words, fails the mail: it is never sent as a raw reference.
+  plant(`Open ${new LinkRef('C'.repeat(22), f.app.id)}`);
+  assert.deepEqual(await open().runOnce(), { sent: 0, skipped: 0, retried: 0, failed: 1 });
+  assert.equal(sent.length, 0);
+  assert.equal(String(f.db.prepare('SELECT last_error FROM __mistri_inbox_mail').get()!.last_error), LINK_REF_UNSAID);
+  plant();
+  const unsaid = open();
+  assert.deepEqual(await unsaid.runOnce(), { sent: 0, skipped: 0, retried: 0, failed: 1 });
+  assert.equal(sent.length, 0, 'a mail whose public link has no address is never sent with the reference');
+  assert.match(String(f.db.prepare('SELECT last_error FROM __mistri_inbox_mail').get()!.last_error), /public link/);
+  // A visitor's look-alikes beside it are the text they are: said literally, never rendered, never a reason not to send.
+  plant(`Book a visit: ${new PublicLinkRef('request-visit', f.app.id)} (typed: mistri-public:apply, mistri-public:nope)`);
+  const sender = open(async (view, tenant) => (said.push([view, tenant]), `https://north.example/${view}?via=${tenant}-public`));
+  assert.deepEqual(await sender.runOnce(), { sent: 1, skipped: 0, retried: 0, failed: 0 });
+  assert.deepEqual(said, [['request-visit', 'north']]);
+  assert.equal(
+    sent[0]!.subject,
+    'Book a visit: https://north.example/request-visit?via=north-public (typed: mistri-public:apply, mistri-public:nope)',
+  );
+  assert.ok(!/mistri-public:[A-Za-z0-9_%-]+\.[A-Za-z0-9_-]{22}/.test(JSON.stringify(sent)), 'no reference the App made is sent raw');
 });
 
 test('a tenant App whose page shows a history does not start on a database without the history store', async (t) => {

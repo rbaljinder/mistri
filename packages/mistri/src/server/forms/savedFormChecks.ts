@@ -26,9 +26,10 @@ import {
   type AppFormView,
 } from '../../shared/app.js';
 import { columnKind, findTable, primaryKey, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { commandFieldsDeep } from '../../shared/command.js';
+import { choiceWhereColumns, commandFieldsDeep } from '../../shared/command.js';
 import { compileNotifyWhen, notifyWhenHolds } from '../../shared/appNotify.js';
 import { formCommands, isSavedForm } from '../../shared/appSavedForms.js';
+import { stepUpAddressProblem } from '../../shared/appStepUp.js';
 import { personTable } from '../../shared/appMe.js';
 import { commandCatalog, type CommandCatalog } from '../commands/commandDb.js';
 import { describeShape, type ShapeDescriptor } from '../commands/commandShapes.js';
@@ -79,7 +80,7 @@ function publicOutputProblem(id: string, command: AnyBusinessCommand, role: 'sub
  * A public form's reference input is a picker a visitor reads its choices
  * through: the same signed-out read a public page makes, so its rows are only
  * those `auth.public` opens (a row policy's public rows, where there is one)
- * and the picker asks its key and its label (and a tree's parent column), nothing else. It is refused,
+ * and the picker asks its key and its label (and a tree's parent column, a `where`'s columns), nothing else. It is refused,
  * by name, where that read could not answer: a resource `auth.public` does not
  * open, or a key or label column its `fields` leave out. Its `query` is read
  * the same way, so a column the visitor cannot read refuses the choices there.
@@ -97,7 +98,16 @@ function publicPickerProblem(
       declared.type === 'reference'
         ? declared
         : (declared.type === 'choice' || declared.type === 'choices') && declared.source
-          ? { from: declared.source.from, by: declared.source.by, labelColumn: declared.source.labelColumn, sort: declared.source.sort }
+          ? {
+              from: declared.source.from,
+              by: declared.source.by,
+              labelColumn: declared.source.labelColumn,
+              sort: declared.source.sort,
+              /* A visitor in a locale it names is shown that column instead: read the same way. */
+              labelColumns: declared.source.labelColumns,
+              /* The columns a `where` compares are served on each row, for the page to narrow by: read the same way. */
+              where: choiceWhereColumns(declared.source.match),
+            }
           : undefined;
     if (!field) continue;
     const resource = logicalResource(app, command.source, field.from);
@@ -114,7 +124,10 @@ function publicPickerProblem(
     const ceilings = [opened.fields?.[resource]?.read, app.resources?.[resource]?.fields?.read].filter((read) => read !== undefined);
     /* A tree picker reads each row's parent too, to draw the hierarchy and say a choice's path. */
     const tree = declared.type === 'reference' && declared.tree ? [declared.tree] : [];
-    for (const column of new Set([field.by, field.labelColumn, ...('sort' in field && field.sort ? [field.sort.column] : []), ...tree])) {
+    const localized = 'labelColumns' in field ? Object.values(field.labelColumns ?? {}) : [];
+    const sort = 'sort' in field && field.sort ? [field.sort.column] : [];
+    const where = 'where' in field ? field.where : [];
+    for (const column of new Set([field.by, field.labelColumn, ...localized, ...sort, ...tree, ...where])) {
       if (keys.includes(column)) continue;
       if (ceilings.some((read) => !read.includes(column)))
         return `${at}, and a visitor may not read its column "${column}". Name it in "auth.public.fields.${resource}", or pick by, label and tree columns the public reads.`;
@@ -310,12 +323,13 @@ export function savedFormProblem(
   if (!signedIn && isRowPolicyApp(app)) {
     return "saves each step, which an ordinary or a tenant App's public form does; a row-policy App's public intake inserts once and changes nothing after. A signed-in form saves each step under a row policy: leave out public and name owner.";
   }
-  /* The status check and the link read and write an application outside any
-     step's command — a lockout stamp, an account's id — and a tenant App's
-     intake runs nothing but its public commands, each in the place its
-     address resolves to. Refused by name rather than served as a 503. */
-  if (isTenantApp(app) && (form.statusCheck || form.link)) {
-    return `declares ${form.statusCheck ? 'statusCheck' : 'link'}, which a tenant App's saved form does not serve yet: its intake runs only the form's own steps and submit, each in the place its address resolves to. Leave it out.`;
+  /* The link writes an account's id onto an application outside any step's
+     command, and a tenant App's intake runs nothing but its public commands,
+     each in the place its address resolves to. Refused by name rather than
+     served as a 503. A status check is served: it reads in that place, and
+     its lockout stamp is the one write it makes (tenant/tenantIntake.ts). */
+  if (isTenantApp(app) && form.link) {
+    return "declares link, which a tenant App's saved form does not serve yet: its intake runs only the form's own steps and submit, each in the place its address resolves to. Leave it out.";
   }
   const steps = form.steps as Array<{ id: string; command: { id: string } }>;
   const commands = formCommands(form).map((reference) => [reference.id, registry[reference.id]] as const);
@@ -453,9 +467,11 @@ export function savedFormProblem(
     if (check.stepUp) {
       // The code goes to the address the application holds, so that column must hold one.
       for (const root of roots) {
-        const email = startCatalog[root]?.meta.columns.find((candidate) => candidate.name === check.stepUp!.email);
-        if (!email || !TEXT.test(email.type))
-          return `the status check's stepUp sends its code to "${root}.${check.stepUp.email}", which is not a text column of the root.`;
+        const address = startCatalog[root]?.meta.columns.find((candidate) => candidate.name === check.stepUp!.column);
+        if (!address || !TEXT.test(address.type))
+          return `the status check's stepUp sends its code to "${root}.${check.stepUp.column}", which is not a text column of the root.`;
+        const unfit = stepUpAddressProblem(check.stepUp, startCatalog[root]!.meta, app.resources?.[root]?.display);
+        if (unfit) return `the status check's stepUp ${unfit}`;
         const missing = check.stepUp.show.find((name) => !startCatalog[root]?.meta.columns.some((candidate) => candidate.name === name));
         if (missing) return `the status check's stepUp shows "${missing}", which is not a column of "${root}".`;
       }
