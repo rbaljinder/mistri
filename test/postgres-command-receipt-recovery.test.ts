@@ -94,6 +94,7 @@ test('native PostgreSQL private ordinary receipt recovery', { skip: liveSkip('po
         assert.deepEqual(Object.keys(journal).sort(), [
           'appendReadAudit',
           'commit',
+          'countLinks',
           'find',
           'insert',
           'kept',

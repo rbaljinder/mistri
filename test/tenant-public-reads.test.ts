@@ -743,7 +743,7 @@ test('a byKey table answers every visitor door with a refusal or one row by its 
     assert.deepEqual(answer.text.match(captions), ['North front']);
   };
   const refused = (answer: { status: number; text: string; body: any }) => {
-    assert.ok(answer.status !== 200 || (answer.body?.errors?.length > 0 && !answer.body?.rows?.length), answer.text);
+    assert.ok([403, 404, 422].includes(answer.status), `a refusal is a 4xx, not ${answer.status}: ${answer.text}`);
     assert.doesNotMatch(answer.text, captions);
   };
   /* What lists no row of a photo: the App, its catalog and pages say tables and columns, never a caption. */

@@ -177,8 +177,11 @@ export function PageHead({
   /* A record that is gone has nothing to be done to it: no verbs, no Delete. */
   /* The verbs, the documents and Delete stand in the App's bar (Actions.tsx), drawn through the shell's slot. */
   const { ActionBar } = shell().slots;
+  /* Revoking the record's links is a write to it, offered where the server says this reader may (appProjection.ts);
+     the item stands from the first paint, so the head row never changes size for it; the count is asked when its dialog opens. */
+  const revokesLinks = Boolean(key && !gone && shell().inApp() && shell().app()?.revokesLinks?.includes(base.id));
   const toolbar =
-    ActionBar && key && !gone && (actions || deleting.available || documents.length) ? (
+    ActionBar && key && !gone && (actions || deleting.available || documents.length || revokesLinks) ? (
       <div className="page-head-actions">
         <ActionBar
           tableId={base.id}
@@ -195,6 +198,7 @@ export function PageHead({
           canUpdate={actions?.canUpdate}
           grantedCommands={actions?.grantedCommands}
           grantedActions={actions?.grantedActions}
+          revokesLinks={revokesLinks}
           menuTail={
             documents.length || deleting.available ? (
               <>

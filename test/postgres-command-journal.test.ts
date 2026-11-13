@@ -745,8 +745,8 @@ describe('business commands on PostgreSQL, against a real server', { skip: liveS
       CommandEventStoreUnavailable,
     );
     assert.equal(await count(tables.receipt), 0);
-    assert.deepEqual(await provisionPostgresCommandEventStore(url, binding), { version: 1, provisioned: true });
-    assert.deepEqual(await provisionPostgresCommandEventStore(url, binding), { version: 1, provisioned: false });
+    assert.deepEqual(await provisionPostgresCommandEventStore(url, binding), { version: 2, provisioned: true });
+    assert.deepEqual(await provisionPostgresCommandEventStore(url, binding), { version: 2, provisioned: false });
     await assert.rejects(provisionPostgresCommandEventStore(url, { ...binding, sourceId: 'other' }), CommandEventStoreUnavailable);
     // An invalid batch fails the whole operation: the receipt written before it is rolled back too.
     await assert.rejects(

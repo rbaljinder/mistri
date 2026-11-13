@@ -72,6 +72,9 @@ export interface ActionBarProps {
   only?: readonly string[];
   /** Items drawn last in More, after the record's own verbs: Delete. Their presence alone gives the bar a More menu. */
   menuTail?: ReactNode;
+  /** A record page's own: this reader may revoke the record's capability links (the server's answer), so More
+      offers it while some still open. */
+  revokesLinks?: boolean;
   /** A row's own menu: every shown verb an item of one ⋯ menu the caller opens, no buttons. */
   menuOnly?: { label: string; open: boolean; onOpenChange: (open: boolean) => void };
   /** Every verb a quiet button, none filled: a related list's head, where the record's forward verb is not. */

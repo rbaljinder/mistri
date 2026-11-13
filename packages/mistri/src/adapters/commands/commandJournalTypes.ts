@@ -154,6 +154,8 @@ export interface CommandJournal {
   mintLink?(row: CommandLinkRow): Promise<void>;
   /** Revokes the live links of one row (of one declared name, or every name), in the owner's transaction. The count revoked. */
   revokeLinks?(appId: string, resource: string, rowKey: string, name: string | undefined, now: number): Promise<number>;
+  /** How many links of one row still open, in the owner's transaction. */
+  countLinks?(appId: string, resource: string, rowKey: string, now: number): Promise<number>;
   /** Opens a live link: one statement that takes a use (where it counts them) and records the open, so two opens of a
    * single-use link take it once. Undefined for a link that is unknown, revoked, expired or used up. */
   openLink?(appId: string, id: string, now: number): Promise<CommandLinkRow | undefined>;

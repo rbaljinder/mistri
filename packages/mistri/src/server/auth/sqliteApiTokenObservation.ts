@@ -8,7 +8,13 @@ import { assertAppApiContext } from '../api/appApiValidation.js';
 import { apiReadTokenCatalog } from '../api/apiEventOperations.js';
 import type { ApiTenantCatalog } from '../api/apiTenantCommandCatalog.js';
 import { apiTokenSecretId, matchesApiTokenSecret } from '../api/apiTokenSecret.js';
-import { narrowApiTokenScope, narrowTenantApiTokenScope, observedRowScope, type TokenRecord } from '../api/apiTokenScope.js';
+import {
+  narrowApiTokenScope,
+  narrowTenantApiTokenScope,
+  observedRowScope,
+  scopeOperation,
+  type TokenRecord,
+} from '../api/apiTokenScope.js';
 import { createSqliteApiTokenStore } from './sqliteApiTokenStore.js';
 import { readSqliteEligibleAccountRoles } from './nativeAccountObservation.js';
 import { captureApiTokenCommandContext } from './apiTokenCommandContext.js';
@@ -110,7 +116,7 @@ function observeAccountToken(
     const parent = parentId === undefined ? undefined : store.lookup(parentId);
     active();
     const rowScope = observedRowScope(stored.record, app, parent?.record, now);
-    const operations = catalog.operations.map((operation) => ({ id: operation.id, eligibleRoles: operation.eligibleRoles }));
+    const operations = catalog.operations.map((operation) => scopeOperation(operation));
     const bound = tenant
       ? narrowTenantApiTokenScope(record, app, { appId: app.id, subject: stored.record.subject, eligible: true }, operations, now)
       : undefined;

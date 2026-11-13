@@ -254,6 +254,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         // The notice-mail outbox (claim, settle, a recipient's switch): a queue, not a writer of tenant rows.
         'inboxMail',
         'intakeCommandTransaction',
+        'linkCommandTransaction',
         'markInboxRead',
         'ownership',
         'platformCommandTransaction',

@@ -2,12 +2,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { isProxy } from 'node:util/types';
 import type { CommandAudit, CommandJournalTenant, StoredCommandReceipt } from '../commands/commandJournalTypes.js';
-import type {
-  CommandEventBatch,
-  CommandEventEnvelope,
-  CommandEventManifest,
-  CommandEventOwner,
-  CommandEventRuntimeContext,
+import {
+  EFFECT_ENVELOPE_MAX,
+  EVENT_BATCH_ENVELOPES_MAX,
+  type CommandEventBatch,
+  type CommandEventEnvelope,
+  type CommandEventManifest,
+  type CommandEventOwner,
+  type CommandEventRuntimeContext,
 } from './commandEventTypes.js';
 import {
   assertSqliteCommandEventStore,
@@ -25,7 +27,8 @@ import { commandEventsAppended } from './commandEventSignal.js';
 const fail = (): never => {
   throw new CommandEventStoreUnavailable();
 };
-const canonical = (input: unknown, maximum = 1_048_576): string => canonicalCommandJson(input, maximum);
+/* The default is a whole batch's envelopes, the digest's input: an effect's post makes one envelope up to EFFECT_ENVELOPE_MAX. */
+const canonical = (input: unknown, maximum = EVENT_BATCH_ENVELOPES_MAX): string => canonicalCommandJson(input, maximum);
 const uuid = (input: unknown): input is string =>
   typeof input === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(input);
 const digest = (manifest: CommandEventManifest, events: readonly CommandEventEnvelope[]): string =>
@@ -165,7 +168,7 @@ export function appendSqliteCommandEvents(
     if (Number(marked.changes) !== 1) return fail();
     const insert = db.prepare(`INSERT INTO main."${tables.event}" (event_id, receipt_id, ordinal, envelope_json) VALUES (?,?,?,?)`);
     for (const [ordinal, event] of events.entries()) {
-      insert.run(event.eventId, receipt.id, ordinal, canonical(event, 131_072));
+      insert.run(event.eventId, receipt.id, ordinal, canonical(event, EFFECT_ENVELOPE_MAX));
     }
     // Verify the persisted association before the shared journal operation can
     // acknowledge completion. This does not claim the transaction committed.
@@ -241,7 +244,7 @@ export function assertSqliteCommandEvents(
         row.ordinal !== ordinal ||
         !uuid(row.event_id) ||
         typeof row.envelope_json !== 'string' ||
-        Buffer.byteLength(row.envelope_json, 'utf8') > 131_072
+        Buffer.byteLength(row.envelope_json, 'utf8') > EFFECT_ENVELOPE_MAX
       )
         return fail();
       const value: unknown = JSON.parse(row.envelope_json);
@@ -254,7 +257,11 @@ export function assertSqliteCommandEvents(
     );
     const events = parsed.map(({ row, value }, ordinal) => {
       const wanted = envelope(runtime, manifest, captured, ordinal, row.event_id as string);
-      if (canonical(value, 131_072) !== canonical(wanted, 131_072) || row.envelope_json !== canonical(wanted, 131_072)) return fail();
+      if (
+        canonical(value, EFFECT_ENVELOPE_MAX) !== canonical(wanted, EFFECT_ENVELOPE_MAX) ||
+        row.envelope_json !== canonical(wanted, EFFECT_ENVELOPE_MAX)
+      )
+        return fail();
       return wanted;
     });
     if (digest(manifest, events) !== batch.digest) return fail();

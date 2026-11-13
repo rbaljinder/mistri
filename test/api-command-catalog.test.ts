@@ -201,7 +201,7 @@ test('physical capabilities must be attested and cannot be assumed', () => {
   assert.throws(f.check, /transaction support/);
 });
 
-test('public registrations are never API callable', () => {
+test('a public registration is API callable only through its public form', () => {
   const f = fixture('none');
   delete f.app.views.create;
   for (const role of Object.values(f.app.auth!.roles!)) delete role.commands;
@@ -214,7 +214,10 @@ test('public registrations are never API callable', () => {
     output: shape({ ok: bool() }),
     handle: () => ({ ok: true }),
   });
-  assert.throws(() => checkApiCommandCatalog(f.api, f.app, f.schema, defineCommands({ change: command }), f.evidence), /public commands/);
+  assert.throws(
+    () => checkApiCommandCatalog(f.api, f.app, f.schema, defineCommands({ change: command }), f.evidence),
+    /through its public form; this one has none/,
+  );
 });
 
 test('unknown registrations are refused', () => {

@@ -14,6 +14,7 @@
  */
 import type { CommandJournalPlatform, CommandJournalTenant } from '../../adapters/commands/commandJournalTypes.js';
 import { isPublicForm, type AppDef, type AppFormView } from '../../shared/app.js';
+import { isTokenActorId, publicActorId } from '../../shared/publicActor.js';
 import { snapshotRowScope, type RowScope, type RowScopeFilter } from '@mistriwork/engine/shared/rowScope.js';
 import { captureTenantData, denyTenant, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import { parseTenantSelector } from './tenantMembership.js';
@@ -49,6 +50,10 @@ export interface TenantIntakeEvidence {
    * that may change rows it did not insert — its own draft's, found by the
    * applicant's token inside this place and fenced to it (forms/savedForms.ts). */
   readonly drafting: boolean;
+  /** The API token that called the form's command (`token:<id>`), when one did:
+   * the receipt's actor, so a replay is the same caller's and a token's
+   * submissions are told apart from the form's anonymous ones. */
+  readonly caller?: string;
 }
 export const INTAKE_EVIDENCE_KEYS: readonly string[] = Object.freeze([
   'realm',
@@ -64,6 +69,7 @@ export const INTAKE_EVIDENCE_KEYS: readonly string[] = Object.freeze([
   'verifiedAt',
   'validUntil',
   'drafting',
+  'caller',
 ]);
 /** Where a submission lands, as its handler is told: the tenant's own rows, or the platform's. */
 type IntakePlace = 'tenant' | 'platform';
@@ -82,6 +88,15 @@ export interface TenantIntakeResolution {
   readonly tenantId: string;
   readonly tenantVersion: string;
   readonly platformVersion: string;
+}
+
+/** The token lane's question: is the calling token's own tenant, and the platform, active now? The tenant is the
+ * token's (`token.tenant`), never an address's or a request's. */
+export interface TenantIntakeTenantLookup {
+  readonly appId: string;
+  readonly source: { readonly id: string; readonly connection: string };
+  readonly deployment: string;
+  readonly tenantId: string;
 }
 
 /* At least 22 base64url characters: 128 bits when the platform generates it at
@@ -151,11 +166,15 @@ export function captureIntakeEvidence(value: unknown, owned: Pick<TenantOwnershi
   if (
     (evidence.validUntil as number) <= (evidence.verifiedAt as number) ||
     typeof evidence.drafting !== 'boolean' ||
-    (evidence.address !== null && intakeAddress(evidence.address) === undefined)
+    (evidence.address !== null && intakeAddress(evidence.address) === undefined) ||
+    (Object.hasOwn(evidence, 'caller') && evidence.caller !== undefined && !isTokenActorId(evidence.caller))
   )
     return denyTenant();
-  // Triage is anchored on the platform alone; a tenant's placement always came from an address.
-  if (evidence.tenantId === PLATFORM_TENANT_ID ? evidence.platformVersion !== evidence.tenantVersion : evidence.address === null)
+  // Triage is anchored on the platform alone; a tenant's placement came from an address, or from the calling token's
+  // own tenant — never both, and a token never lands in triage (resolveIntakeByTenant refuses rather than triages).
+  if (Object.hasOwn(evidence, 'caller') && evidence.caller !== undefined) {
+    if (evidence.tenantId === PLATFORM_TENANT_ID || evidence.address !== null) return denyTenant();
+  } else if (evidence.tenantId === PLATFORM_TENANT_ID ? evidence.platformVersion !== evidence.tenantVersion : evidence.address === null)
     return denyTenant();
   return evidence as unknown as TenantIntakeEvidence;
 }
@@ -171,6 +190,18 @@ export function captureIntakeLookup(value: unknown, owner: Pick<TenantStoreBindi
   tenantIdentifier(lookup.column);
   if (lookup.address !== null && intakeAddress(lookup.address) === undefined) return denyTenant();
   return lookup as unknown as TenantIntakeLookup;
+}
+
+/** The token lane's lookup: bound to the store's App and source, and to a tenant — never the platform. */
+export function captureIntakeTenantLookup(value: unknown, owner: Pick<TenantStoreBinding, 'appId' | 'source'>): TenantIntakeTenantLookup {
+  const lookup = captureTenantData(value);
+  tenantRecord(lookup, ['appId', 'source', 'deployment', 'tenantId']);
+  tenantRecord(lookup.source, ['id', 'connection']);
+  if (lookup.appId !== owner.appId || lookup.source.id !== owner.source.id || lookup.source.connection !== owner.source.connection)
+    return denyTenant();
+  tenantIdentifier(lookup.deployment);
+  if (parseTenantSelector([lookup.tenantId as string]) === PLATFORM_TENANT_ID) return denyTenant();
+  return lookup as unknown as TenantIntakeTenantLookup;
 }
 
 /** The one tenant an address lookup's rows name, or undefined: none, two
@@ -437,6 +468,11 @@ export function tenantOwnAddress(
 export function assertIntakeHeld(evidence: TenantIntakeEvidence, rows: readonly Record<string, unknown>[] | undefined): void {
   if (intakePlace(evidence) === 'tenant' && intakeTenantOf(rows ?? []) !== evidence.tenantId) denyTenant();
 }
+/** Whether a tenant placement has an address to fence: none when a token placed it by its own tenant, whose anchor
+ * fence is the whole of what resolution read. */
+export function intakeFencesAddress(evidence: TenantIntakeEvidence): boolean {
+  return intakePlace(evidence) === 'tenant' && evidence.address !== null;
+}
 
 /** The submission's scope: the command's footprint (`true` entries), within
  * what its place may touch. In a tenant, that tenant's rows by the ownership
@@ -478,7 +514,7 @@ export function intakeJournalOwner(
   owner: TenantStoreBinding,
   evidence: TenantIntakeEvidence,
 ): CommandJournalTenant | CommandJournalPlatform {
-  const actor = `public:${evidence.form}`;
+  const actor = evidence.caller ?? publicActorId(evidence.form);
   const common = {
     appId: owner.appId,
     storeId: owner.storeId,

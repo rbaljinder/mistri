@@ -50,6 +50,16 @@ export function refusedFields(cause: unknown): TenantWriteFailure['fields'] {
   return cause instanceof TenantWriteFailure ? cause.fields : undefined;
 }
 
+/** A link's writer found, before the handler ran, that the anchors its request read or the link itself had moved: the
+ * link was revoked, expired or used up, or its tenant or the platform was suspended. Nothing was applied; the door
+ * answers it as it answers that link's next request (tenantLinks.ts). */
+export class TenantLinkMoved extends TenantWriteFailure {
+  constructor() {
+    super('not_applied');
+    this.name = 'TenantLinkMoved';
+  }
+}
+
 /** Public intake's writer found, before the handler ran, that what resolution
  * read had moved — the address rotated, the tenant or the platform suspended.
  * Nothing was applied; the runtime resolves once more. */
@@ -141,6 +151,10 @@ export interface TenantWriteKind<Evidence extends TenantWriteEvidence, Methods e
   ): RowScope | undefined;
   /** Inside BEGIN IMMEDIATE, on the writer's own handle: no second reader or connection. */
   sqliteFence(db: DatabaseSync, evidence: Evidence, fence: TenantWriteFence): void;
+  /** The pass before COMMIT, once the handler has run, where it differs from `sqliteFence`: for a fence over a row the
+   * handler itself may change (a link its own delete revokes). BEGIN IMMEDIATE has shut every other writer out since
+   * the first pass, so nothing but the handler can have moved it. Absent, `sqliteFence` runs again. */
+  sqliteFenceAfter?(db: DatabaseSync, evidence: Evidence, fence: TenantWriteFence): void;
   /** On the writer's client, after the scope's tables are pinned; its locks hold to COMMIT. */
   postgresFence(client: PgQuery, evidence: Evidence, fence: TenantWriteFence): Promise<void>;
   /** Its fence reads only rows it locks FOR SHARE, held to COMMIT, and judges time only by the evidence's own lifetime:

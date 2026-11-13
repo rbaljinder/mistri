@@ -13,4 +13,14 @@ export const say = defineMessages({
   theReasonIsKept: 'The reason is kept with the record.',
   reason: 'Reason',
   labelReason: '{label}: reason',
+  revokeLinks: 'Revoke links',
+  revokeLinksQuestion: 'Revoke links?',
+  linksStopOpening: {
+    one: 'The {count} link to {label} that still opens stops opening.',
+    other: 'The {count} links to {label} that still open stop opening.',
+  },
+  noOpenLinks: 'No links to {label} are open.',
+  linksAreKept: 'Keep links',
+  linksRevoked: { one: 'Revoked {count} link.', other: 'Revoked {count} links.' },
+  linksWereNotRevoked: 'The links were not revoked.',
 });

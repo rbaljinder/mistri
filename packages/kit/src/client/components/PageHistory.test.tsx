@@ -250,6 +250,19 @@ test('earlier changes are read on request, from where the last page ended', asyn
   expect(screen.queryByRole('button', { name: 'Show earlier changes' })).toBeNull();
 });
 
+test('something done to the record that moved no field — its links revoked — is who, what and when, with no changes', async () => {
+  pages = [
+    {
+      entries: [{ at: '2026-09-20T14:05:00.000Z', kind: 'update', via: 'app', by: 'Maya Chen', action: 'Revoked 2 links', fields: [] }],
+    },
+  ];
+  draw();
+  const [revoked] = await screen.findAllByText('Revoked 2 links');
+  const entry = revoked.closest('.history-entry') as HTMLElement;
+  expect(within(entry).getByText('Maya Chen')).toHaveClass('history-by');
+  expect(entry.querySelector('dl')).toBeNull();
+});
+
 test('who and what are said in words when no person or action is named', () => {
   expect(whoWrote({ via: 'form' })).toBe('A public form');
   // A person the history keeps no name for is someone; an address is never said, even as a name.

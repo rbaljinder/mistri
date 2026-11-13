@@ -702,6 +702,10 @@ export interface WriteTransaction {
    * in this transaction, as a write's rules do, with the step's words. Writes nothing to the record. Only the flows'
    * own command reaches it, about its own target; a facade that cannot carry it omits it. */
   tell?(request: TellRequest): Promise<void>;
+  /** Internal: something done to a record that changed none of its fields, written to its history in this
+   * transaction (a link's revoke, http/recordLinkRoutes.ts). Nothing is written where the record keeps no history; a
+   * facade that cannot carry it omits it. */
+  noted?(request: NoteRequest): Promise<void>;
 }
 
 /** Several inserts of one table: one statement where the transaction carries a batch, else one at a time, in order. */
@@ -882,6 +886,13 @@ export function batchedRows(applied: ReadonlyArray<Record<string, unknown>>, sto
 export function refuseUpdateMatches(request: UpdateRequest, count: number): never {
   if (request.expected !== undefined && count === 0) throw new WriteConflict();
   throw new Refusal(`Refused: that key matches ${count} rows, not 1. An update is only allowed when it is certain which row it changes.`);
+}
+
+/** What a record's history is told that no field shows: which record, and what was done, in the words its history says. */
+export interface NoteRequest {
+  table: string;
+  key: Record<string, string | number>;
+  action: string;
 }
 
 /** What a flow's notify step tells: whom (an audience a `notify` rule names `on: { flow }`), about which record, and its words. */

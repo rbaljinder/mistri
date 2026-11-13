@@ -30,6 +30,7 @@ import { LINK_TOKEN_PREFIX, decoyLinkUrl, holdsLinkRef } from '../links/linkToke
 
 import { componentHrefs, type CompiledComponents } from '../app/appComponents.js';
 import { publicFormInputIds } from '../../shared/appComponentPlaces.js';
+import { publicActorId } from '../../shared/publicActor.js';
 const SUBMISSION_KEY = /^[A-Za-z0-9_-]{16,128}$/;
 
 /**
@@ -123,7 +124,7 @@ export function parseSubmission(
 
 /** The public principal a public door runs under: no session, no roles, one door — a public form or a public page. */
 export function publicPrincipal(appId: string, form: string): BusinessCommandActor {
-  return Object.freeze({ id: `public:${form}`, appId, roles: Object.freeze([]), kind: 'public' as const, form });
+  return Object.freeze({ id: publicActorId(form), appId, roles: Object.freeze([]), kind: 'public' as const, form });
 }
 
 /** What a public door answers a submission with: the reference the applicant quotes, and the receipt; a link to the

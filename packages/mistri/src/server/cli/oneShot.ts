@@ -11,6 +11,7 @@ import { startupReport } from '@mistriwork/engine/shared/refusal.js';
 import { fontWarnings } from '../app/appFonts.js';
 import { themeBandWarnings, themeShadowWarnings, themeShapeWarnings, themeTypeWarnings } from '@mistriwork/engine/shared/theme.js';
 import { brandWarnings } from '../app/appBrand.js';
+import { linkHistoryWarnings } from '../recordHistory.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { type Registry } from '@mistriwork/engine/server/connections.js';
@@ -793,6 +794,8 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
         ...themeTypeWarnings(app.app.ui.customThemes ?? []).map((warning) => `${app.path}: ${warning}`),
         // A logo picture with no dark answer (appBrand.ts): the theme contract's C10.
         ...brandWarnings(app.app).map((warning) => `${app.path}: ${warning}`),
+        // Links a record page may revoke, with no history to note who did (recordHistory.ts).
+        ...linkHistoryWarnings(app.app, app.pages).map((warning) => `${app.path}: ${warning}`),
       ];
       /* A command whose writes fire a trigger the row policy cannot bound: refused when it runs, said here. */
       const commands = commandHosting?.registry ?? app.commands?.registry;

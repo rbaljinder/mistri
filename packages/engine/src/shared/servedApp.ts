@@ -689,6 +689,8 @@ export interface ServedApp<View extends object = ServedDashboardView | ServedFor
   ui: ServedAppUi;
   writableTables?: string[] | false;
   exportableTables?: string[];
+  /** The tables whose records' capability links this reader may revoke from the record page (appPayload.ts). */
+  revokesLinks?: string[];
   viewerRoles?: string[];
   grantedCommands?: string[];
   grantedActions?: Record<string, string[]>;

@@ -6,7 +6,15 @@
  * what they keep by exactly the rules the runtime wrote it by.
  */
 import { isPromise, isProxy } from 'node:util/types';
-import { COMMAND_EVENT_LIMITS, isEffectEvent, type CommandEventBatch, type CommandEventManifest } from './commandEventTypes.js';
+import {
+  COMMAND_EVENT_LIMITS,
+  EFFECT_BATCH_MAX,
+  EFFECT_BATCH_PAYLOAD_MAX,
+  EFFECT_PAYLOAD_MAX,
+  isEffectEvent,
+  type CommandEventBatch,
+  type CommandEventManifest,
+} from './commandEventTypes.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 
 export class BusinessEventDefinitionError extends Error {
@@ -176,8 +184,8 @@ export function payloadJson(input: unknown, allowlist?: readonly string[], effec
   const keys = Object.keys(value);
   if (!keys.length) return projectionError();
   for (const key of keys) fieldName(key);
-  const json = canonicalCommandJson(value, COMMAND_EVENT_LIMITS.payloadBytes);
-  scalarSafety(JSON.parse(json), effect ? COMMAND_EVENT_LIMITS.payloadBytes : COMMAND_EVENT_LIMITS.stringBytes);
+  const json = canonicalCommandJson(value, effect ? EFFECT_PAYLOAD_MAX : COMMAND_EVENT_LIMITS.payloadBytes);
+  scalarSafety(JSON.parse(json), effect ? EFFECT_PAYLOAD_MAX : COMMAND_EVENT_LIMITS.stringBytes);
   return json;
 }
 
@@ -212,19 +220,26 @@ export function captureCommandEventManifest(input: unknown, empty = false): Comm
  * pinned by event/command versions and the complete stored batch association. */
 export function captureCommandEventBatch(input: unknown, expected?: CommandEventManifest): CommandEventBatch {
   try {
-    const value = detached(input, COMMAND_EVENT_LIMITS.batchBytes);
+    const value = detached(input, EFFECT_BATCH_MAX);
     if (!Array.isArray(value) || value.length > COMMAND_EVENT_LIMITS.events) return projectionError();
-    let bytes = 0;
+    // Plain events and effects are counted apart: a post's body does not spend the log's 64 KiB.
+    let bytes = 0,
+      effectBytes = 0;
     const captured = value.map((item) => {
       const draft = exact(item, ['name', 'version', 'payloadJson']);
       const identity = eventIdentity({ name: draft.name, version: draft.version });
-      if (typeof draft.payloadJson !== 'string' || Buffer.byteLength(draft.payloadJson, 'utf8') > COMMAND_EVENT_LIMITS.payloadBytes) {
+      const effect = isEffectEvent(identity.name);
+      if (
+        typeof draft.payloadJson !== 'string' ||
+        Buffer.byteLength(draft.payloadJson, 'utf8') > (effect ? EFFECT_PAYLOAD_MAX : COMMAND_EVENT_LIMITS.payloadBytes)
+      ) {
         return projectionError();
       }
-      const canonical = payloadJson(JSON.parse(draft.payloadJson), undefined, isEffectEvent(identity.name));
+      const canonical = payloadJson(JSON.parse(draft.payloadJson), undefined, effect);
       if (canonical !== draft.payloadJson) return projectionError();
-      bytes += Buffer.byteLength(canonical, 'utf8');
-      if (bytes > COMMAND_EVENT_LIMITS.batchPayloadBytes) return projectionError();
+      if (effect) effectBytes += Buffer.byteLength(canonical, 'utf8');
+      else bytes += Buffer.byteLength(canonical, 'utf8');
+      if (bytes > COMMAND_EVENT_LIMITS.batchPayloadBytes || effectBytes > EFFECT_BATCH_PAYLOAD_MAX) return projectionError();
       return Object.freeze({ ...identity, payloadJson: canonical });
     });
     const manifest = captureCommandEventManifest(

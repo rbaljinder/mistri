@@ -245,7 +245,19 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       });
       assert.deepEqual(observed, {
         records: ['aggregate', 'count', 'insert', 'query', 'remove', 'update'],
-        journal: ['appendReadAudit', 'commit', 'find', 'nextNumber', 'stage', 'takeStaged'],
+        journal: [
+          'appendReadAudit',
+          'commit',
+          'countLinks',
+          'find',
+          'mintLink',
+          'nextNumber',
+          'openLink',
+          'readLink',
+          'revokeLinks',
+          'stage',
+          'takeStaged',
+        ],
         frozen: true,
       });
       assert.deepEqual(plain(result), { found: receipt(), outside: { quantity: 0, counts: [0, 0] } });

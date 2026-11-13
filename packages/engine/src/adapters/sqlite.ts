@@ -45,6 +45,7 @@ import {
   type SqlResult,
   type DeleteRequest,
   type DeleteResult,
+  type NoteRequest,
   type TellRequest,
   type UpdateRequest,
   type UpdateResult,
@@ -1940,6 +1941,7 @@ export class SqliteAdapter implements Adapter {
                   : {}),
                 // Beneath the row scope: the flows' command tells only of its own target, which it read through the scope.
                 ...(history ? { tell: (r: TellRequest) => invoke(r, (r) => history.tell(r)) } : {}),
+                ...(history?.noted ? { noted: (r: NoteRequest) => invoke(r, (r) => history.noted!(r)) } : {}),
               }),
               journal?.open(handle, operations, verify ? verifiedStep : undefined),
               evidence,

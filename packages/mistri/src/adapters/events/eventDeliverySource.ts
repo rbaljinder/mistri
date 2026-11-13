@@ -3,7 +3,7 @@ import { assertSqliteCommandEventStore, COMMAND_EVENT_TABLES as events, type Com
 import { assertSqliteCommandEvents, tenantCommandEventOwner } from './commandEventStore.js';
 import { captureCommandJournalTenant, COMMAND_JOURNAL_TABLES as tables } from '../commands/commandJournal.js';
 import type { CommandAudit, StoredCommandReceipt } from '../commands/commandJournalTypes.js';
-import type { CommandEventEnvelope, CommandEventOwner } from './commandEventTypes.js';
+import { EFFECT_ENVELOPE_MAX, type CommandEventEnvelope, type CommandEventOwner } from './commandEventTypes.js';
 import { deliveryFail, deliveryInteger, deliveryText, type EventDeliveryPolicy, type EventDeliveryRoute } from './eventDeliveryTypes.js';
 
 type Row = Record<string, SQLOutputValue>;
@@ -252,7 +252,7 @@ export function readEventDeliveryReceipt(
     if (
       db
         .prepare(`SELECT 1 FROM main."${events.event}" WHERE receipt_id=? AND
-      (typeof(envelope_json)<>'text' OR instr(envelope_json,char(0))<>0 OR length(CAST(envelope_json AS BLOB))>131072
+      (typeof(envelope_json)<>'text' OR instr(envelope_json,char(0))<>0 OR length(CAST(envelope_json AS BLOB))>${EFFECT_ENVELOPE_MAX}
         OR typeof(event_id)<>'text' OR instr(event_id,char(0))<>0 OR length(CAST(event_id AS BLOB))<>36) LIMIT 1`)
         .get(receiptId)
     )

@@ -191,13 +191,13 @@ export async function applyMigrations(
 function provisionSqliteAppCommandEvents(
   path: string,
   request: Readonly<{ appId: string; sourceId: string }>,
-): { version: 1; provisioned: boolean } {
+): { version: 2; provisioned: boolean } {
   return provisionSqliteCommandEventStore(path, appCommandEventStore(request?.appId, request?.sourceId));
 }
 async function provisionPostgresAppCommandEvents(
   url: string,
   request: Readonly<{ appId: string; sourceId: string }>,
-): Promise<{ version: 1; provisioned: boolean }> {
+): Promise<{ version: 2; provisioned: boolean }> {
   return provisionPostgresCommandEventStore(url, appCommandEventStore(request?.appId, request?.sourceId));
 }
 
@@ -210,13 +210,13 @@ const tenantEventStore = (binding: TenantStoreBinding): CommandEventStoreBinding
   storeId: binding?.storeId,
   sourceId: binding?.source?.id,
 });
-function provisionSqliteTenantCommandEvents(path: string, binding: TenantStoreBinding): { version: 1; provisioned: boolean } {
+function provisionSqliteTenantCommandEvents(path: string, binding: TenantStoreBinding): { version: 2; provisioned: boolean } {
   return provisionSqliteCommandEventStore(path, tenantEventStore(binding));
 }
 async function provisionPostgresTenantCommandEvents(
   url: string,
   binding: TenantStoreBinding,
-): Promise<{ version: 1; provisioned: boolean }> {
+): Promise<{ version: 2; provisioned: boolean }> {
   return provisionPostgresCommandEventStore(url, tenantEventStore(binding));
 }
 

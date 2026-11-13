@@ -6,6 +6,8 @@ export const isEffectEvent = (name: string): boolean => name.startsWith(EFFECT_E
 
 /** An effect's body was over what one post carries. Named, so the projection's catch says it and not "projection". */
 export class EffectBodyTooLarge extends Error {}
+/** An effect's projection wrote through its db, or read a table the command does not read. Named for the same reason. */
+export class EffectProjectionRefused extends Error {}
 
 /** Internal portable DTO proposal. No storage capability, public wire contract,
  * authentication or event delivery is supplied by these types. */
@@ -29,6 +31,22 @@ export const COMMAND_EVENT_LIMITS = Object.freeze({
   batchBytes: 196_608,
   outputBytes: 16_384,
 });
+
+/** What an effect's post carries: one body, and every body one command posts. Counted apart from plain events, whose
+ * 16 KiB payload and 64 KiB batch stay: a post is a webhook's request, built from rows, not a fact in the log. */
+export const EFFECT_LIMITS = Object.freeze({ bodyBytes: 262_144, totalBytes: 1_048_576 });
+/** An effect's payload JSON: its body, and for a bare post the headers (eight of 64 + 512 bytes) and the wrapping. */
+export const EFFECT_PAYLOAD_MAX = EFFECT_LIMITS.bodyBytes + 8192;
+/** Every effect payload of one batch: the bodies' total and each payload's wrapping. */
+export const EFFECT_BATCH_PAYLOAD_MAX = EFFECT_LIMITS.totalBytes + COMMAND_EVENT_LIMITS.events * 8192;
+/** A serialized batch with effects in it: payload JSON is escaped again inside the draft array, at most doubling it. */
+export const EFFECT_BATCH_MAX = COMMAND_EVENT_LIMITS.batchBytes + 2 * EFFECT_BATCH_PAYLOAD_MAX;
+/** One stored envelope, shared by both engines' CHECK: the payload JSON escaped again inside it, and the runtime
+ * context (ids, actor, key) around it. */
+export const EFFECT_ENVELOPE_MAX = 2 * EFFECT_PAYLOAD_MAX + 65_536;
+/** Every envelope of one batch, for its digest. */
+export const EVENT_BATCH_ENVELOPES_MAX =
+  2 * (COMMAND_EVENT_LIMITS.batchPayloadBytes + EFFECT_BATCH_PAYLOAD_MAX) + COMMAND_EVENT_LIMITS.events * 65_536;
 
 interface CommandEventIdentity {
   readonly name: string;

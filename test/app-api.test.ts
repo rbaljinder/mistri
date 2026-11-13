@@ -99,15 +99,14 @@ test('one, many and no-target commands are named, and resolve to their registrat
   assert.equal(result.commands[1].label, 'Assign');
   assert.equal('target' in result.commands[2].command, false);
   assert.throws(() => parse({ ...base(), commands: ['assign', { command: 'assign' }] }), /duplicate command/);
-  for (const command of [
-    'asign',
-    { command: 'assign', execute: () => {} },
-    { id: 'assign', version: 1, target: 'lead', input: {} },
-    'apply',
-    7,
-  ]) {
+  for (const command of ['asign', { command: 'assign', execute: () => {} }, { id: 'assign', version: 1, target: 'lead', input: {} }, 7]) {
     assert.throws(() => parse({ ...base(), commands: [command] }), JSON.stringify(command));
   }
+  /* A public form's command is a legal verb since rc.46 (392): a token that names it calls it as the form's door. */
+  assert.deepEqual(
+    parse({ ...base(), commands: ['apply'] })!.commands.map((entry) => entry.command.id),
+    ['apply'],
+  );
 });
 test('objects and array entries never invoke getters', () => {
   let called = false;

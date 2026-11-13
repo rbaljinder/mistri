@@ -5,6 +5,7 @@ import {
   type AggregateRequest,
   type DeleteRequest,
   type InsertRequest,
+  type NoteRequest,
   type TellRequest,
   type ScopedReads,
   type UpdateRequest,
@@ -312,6 +313,7 @@ export function createAppSourceAdapter(
           : {}),
         remove: (request) => transaction.remove(check(request)),
         ...(transaction.tell ? { tell: (request: TellRequest) => transaction.tell!(check(request, false)) } : {}),
+        ...(transaction.noted ? { noted: (request: NoteRequest) => transaction.noted!(check(request)) } : {}),
       };
     };
     if (group.writable && facade.scopeTransaction)

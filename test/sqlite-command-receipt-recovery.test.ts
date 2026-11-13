@@ -59,6 +59,7 @@ test('ordinary private recovery shares find and returns immutable ordered target
       assert.deepEqual(Object.keys(journal).sort(), [
         'appendReadAudit',
         'commit',
+        'countLinks',
         'find',
         'insert',
         'kept',

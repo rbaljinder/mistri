@@ -9,13 +9,13 @@
  * one that arrives late.
  */
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useId } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, useId, type ReactNode } from 'react';
 import { Modal } from '@mistriwork/ui/Modal.js';
 import { dismissLabel } from './verbDialog.js';
 import { RecordKeys } from '@mistriwork/kit/client/components/recordKeys.js';
 import { takesSingleKeys } from '@mistriwork/kit/client/components/RecordTrailNav.js';
 import { Button } from '@mistriwork/ui/Button.js';
-import { useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, useQueries } from '@tanstack/react-query';
 import { refreshAfterCommand } from '@mistriwork/kit/client/recordWriteRefresh.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
 import { api, columnLabel, findTable, humanName, state, toast } from '@mistriwork/kit/client/core.js';
@@ -116,6 +116,7 @@ export function ActionBar({
   isCurrent: hostIsCurrent,
   compact = false,
   menuTail,
+  revokesLinks = false,
   menuOnly,
   destructive,
   primary,
@@ -167,6 +168,7 @@ export function ActionBar({
     }
   };
   const client = useQueryClient();
+  const revoking = useRevokeLinks(tableId, owner, label, revokesLinks && !menuOnly, () => isCurrent(owner));
   const tell = useContext(ActionOutcomes);
   const told = (action: AppAction, key: Record<string, unknown>, outcome: ActionOutcome) =>
     tell?.({ tableId, key: { ...key }, label, action, outcome });
@@ -483,7 +485,7 @@ export function ActionBar({
           )}
         </DropMenu>
       )}
-      {!menuOnly && (folded.length > 0 || menuTail) && (
+      {!menuOnly && (folded.length > 0 || menuTail || revoking.item) && (
         <DropMenu
           className="page-actions-menu"
           triggerClassName="ghost page-action"
@@ -505,9 +507,11 @@ export function ActionBar({
               {keyOf(action) && <kbd className="key-hint">{keyOf(action)!.toUpperCase()}</kbd>}
             </DropItem>
           ))}
+          {revoking.item}
           {menuTail}
         </DropMenu>
       )}
+      {revoking.dialog}
       {form && (
         <CommandForm
           key={`${form.epoch}:${form.owner.command}:${JSON.stringify(form.owner.key)}`}
@@ -552,6 +556,116 @@ export function ActionBar({
         />
       )}
     </>
+  );
+}
+
+/**
+ * "Revoke links", in a record page's More: every capability link to the record that still opens stops opening
+ * (server/http/recordLinkRoutes.ts). Offered where the server says this reader may, from the first paint: the item
+ * stands in the head row as the payload says, so nothing arrives late and moves it. How many are live is asked
+ * when the dialog opens, and the dialog says so when there are none. Before Delete: it changes no field.
+ */
+function useRevokeLinks(
+  tableId: string,
+  owner: UpdateOwner,
+  label: string,
+  offered: boolean,
+  current: () => boolean,
+): { item: ReactNode; dialog: ReactNode } {
+  const client = useQueryClient();
+  const [asking, setAsking] = useState(false);
+  const revoke = useMutation({
+    retry: false,
+    mutationFn: async (_expected: number) =>
+      (await api('/api/record-links/revoke', { ...ownedBy(owner.connection), table: tableId, key: checkedRecordKey(owner.key) })) as {
+        revoked?: unknown;
+      },
+    onSuccess: (answer, expected) => {
+      if (!current()) return;
+      toast(say('linksRevoked', { count: typeof answer.revoked === 'number' ? answer.revoked : expected }), 'ok');
+      // The record's history notes the revoke where it keeps one.
+      void client.invalidateQueries({ queryKey: ['record-links', tableId] });
+      void client.invalidateQueries({ queryKey: ['page-history', tableId] });
+    },
+    onError: (err: Error) => {
+      if (current()) toast(err.message || say('linksWereNotRevoked'), 'error');
+    },
+  });
+  if (!offered) return { item: null, dialog: null };
+  return {
+    item: (
+      <DropItem className="page-actions-item is-danger" disabled={revoke.isPending} onClick={() => setAsking(true)}>
+        {say('revokeLinks')}
+      </DropItem>
+    ),
+    dialog: asking ? (
+      <RevokeLinksConfirm
+        tableId={tableId}
+        owner={owner}
+        label={label}
+        onAnswer={(yes, live) => {
+          setAsking(false);
+          if (yes && current()) revoke.mutate(live);
+        }}
+      />
+    ) : null,
+  };
+}
+
+/** Ask before revoking, in the page's own dialog, as a verb's confirmation does. The count is read here, as it opens. */
+function RevokeLinksConfirm({
+  tableId,
+  owner,
+  label,
+  onAnswer,
+}: {
+  tableId: string;
+  owner: UpdateOwner;
+  label: string;
+  onAnswer: (yes: boolean, live: number) => void;
+}) {
+  // Keyed as the record's other section reads are, so a command that mints a link recounts (recordWriteRefresh.ts).
+  const links = useQuery({
+    queryKey: ['record-links', tableId, owner.key],
+    queryFn: async () =>
+      (await api('/api/record-links', { ...ownedBy(owner.connection), table: tableId, key: checkedRecordKey(owner.key) })) as {
+        live?: unknown;
+      },
+    retry: false,
+    // A count left from an earlier opening is not shown as this one's.
+    gcTime: 0,
+  });
+  const live = typeof links.data?.live === 'number' ? links.data.live : undefined;
+  const checking = links.isFetching;
+  const answered = useRef(false);
+  const answer = (yes: boolean) => {
+    if (answered.current) return;
+    answered.current = true;
+    onAnswer(yes, live ?? 0);
+  };
+  return (
+    <Modal className="confirm action-confirm" ariaLabel={say('revokeLinksQuestion')} onClose={() => answer(false)}>
+      <h2>{say('revokeLinksQuestion')}</h2>
+      <p>
+        {checking
+          ? say('common.checking')
+          : links.isError
+            ? links.error.message || say('linksWereNotRevoked')
+            : live
+              ? say('linksStopOpening', { count: live, label })
+              : say('noOpenLinks', { label })}
+      </p>
+      <div className="confirm-actions">
+        <Button intent="secondary" onClick={() => answer(false)}>
+          {live && !checking ? say('linksAreKept') : say('common.close')}
+        </Button>
+        {live && !checking ? (
+          <Button intent="primary" onClick={() => answer(true)}>
+            {say('revokeLinks')}
+          </Button>
+        ) : null}
+      </div>
+    </Modal>
   );
 }
 

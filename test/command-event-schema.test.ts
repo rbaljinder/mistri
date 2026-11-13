@@ -39,9 +39,9 @@ test('event schema provisions only an existing journal source and is repeatable 
   const f = fixture(t);
   assert.equal(hasSqliteCommandEventStore(f.db), false);
   assert.throws(() => assertSqliteCommandEventStore(f.db, owner), CommandEventStoreUnavailable);
-  assert.deepEqual(provisionSqliteCommandEventStore(f.path, owner), { version: 1, provisioned: true });
+  assert.deepEqual(provisionSqliteCommandEventStore(f.path, owner), { version: 2, provisioned: true });
   const before = f.schema();
-  assert.deepEqual(provisionSqliteCommandEventStore(f.path, owner), { version: 1, provisioned: false });
+  assert.deepEqual(provisionSqliteCommandEventStore(f.path, owner), { version: 2, provisioned: false });
   assert.deepEqual(f.schema(), before);
   assertSqliteCommandEventStore(f.db, owner);
   f.unchanged();

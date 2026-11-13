@@ -15,6 +15,7 @@ import {
   captureIntakeEvidence,
   composeIntakeScope,
   intakeAddressQuery,
+  intakeFencesAddress,
   intakeJournalOwner,
   intakePlace,
   type TenantIntakeEvidence,
@@ -60,8 +61,7 @@ export const intakeWriteKind = Object.freeze<TenantWriteKind<TenantIntakeEvidenc
   // their versions, and the address still the tenant's.
   sqliteFence: (db, member, { owner, owned, live }) => {
     assertSqliteIntakeAnchorSnapshot(db, owner, member, live);
-    if (intakePlace(member) === 'tenant')
-      assertIntakeHeld(member, db.prepare(intakeAddressQuery(owned, member.column)).all(member.address));
+    if (intakeFencesAddress(member)) assertIntakeHeld(member, db.prepare(intakeAddressQuery(owned, member.column)).all(member.address));
   },
   // The anchor FOR SHARE, held to COMMIT, active at the same version: the
   // membership fence's first lock, in its order, with no membership row.
@@ -70,7 +70,7 @@ export const intakeWriteKind = Object.freeze<TenantWriteKind<TenantIntakeEvidenc
     await assertPostgresIntakeAnchorFence(client, owner, member, live);
     // The tenant's profile row FOR SHARE, to COMMIT: a rotation of its
     // address waits for this submission, or committed first and is seen.
-    if (intakePlace(member) === 'tenant')
+    if (intakeFencesAddress(member))
       assertIntakeHeld(member, (await client.query(`${intakeAddressQuery(owned, member.column)} FOR SHARE`, [member.address])).rows);
   },
   journalOwner: (owner, member) => intakeJournalOwner(owner, member),

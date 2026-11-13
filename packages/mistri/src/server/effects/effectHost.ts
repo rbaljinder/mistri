@@ -155,9 +155,16 @@ function withRenderedLinks(
     const text = publication.envelope.payloadJson;
     if (!holdsLinkRef(text)) return transport(publication);
     const rendered = links ? await renderLinkRefs(text, links) : undefined;
-    if (rendered === undefined || Buffer.byteLength(rendered, 'utf8') > EFFECT_BODY_LIMITS.bodyBytes + 1024) return 'rejected';
+    // The body as delivered is held to the post's limit; the stored body (what the fingerprint covers) is unchanged.
+    if (rendered === undefined || deliveredBodyBytes(rendered) > EFFECT_BODY_LIMITS.bodyBytes) return 'rejected';
     return transport({ ...publication, envelope: { ...publication.envelope, payloadJson: rendered } });
   };
+}
+
+/* The size of the body a rendered payload delivers: what `post` bounded, with every link said as its URL. */
+function deliveredBodyBytes(payloadJson: string): number {
+  const body = (JSON.parse(payloadJson) as { body?: unknown }).body;
+  return Buffer.byteLength(JSON.stringify(body) ?? '', 'utf8');
 }
 
 const DELIVERIES_PER_CYCLE = 16;

@@ -56,6 +56,10 @@ import {
   type TenantIntakeSubmission,
 } from './tenantIntake.js';
 import { tenantPublicForms } from './tenantIntakeModel.js';
+import { bindTenantLinks, type TenantLinks } from './tenantLinks.js';
+import { servesLinks } from '../links/linkLookup.js';
+import { bindTenantLinkRevokes, type RecordLinksRequest } from './tenantLinkRevoke.js';
+import { AppAccessDenied } from '../app/appAccess.js';
 import { tenantPublicPages } from './tenantIntakePages.js';
 import { createAdmissionCache } from './tenantAdmissionCache.js';
 import {
@@ -127,6 +131,10 @@ export function bindTenantDeploymentContext<Request>(input: TenantDeployment<Req
       deployment.draft(request, selectors, value, options, guard),
     stage: (request: Request, selectors: readonly string[], value: unknown, options?: Parameters<typeof deployment.stage>[3]) =>
       deployment.stage(request, selectors, value, options, guard),
+    countLinks: (request: Request, selectors: readonly string[], value: RecordLinksRequest) =>
+      deployment.countLinks(request, selectors, value, guard),
+    revokeLinks: (request: Request, selectors: readonly string[], value: RecordLinksRequest) =>
+      deployment.revokeLinks(request, selectors, value, guard),
   });
 }
 
@@ -472,6 +480,23 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
         ...readAudit,
       });
     } else if (requests.app.auth?.public) throw new Error();
+    /* Capability links over the same genuine sources: exactly when a resource declares one and the App has commands,
+       which are what mint one and what one runs. Without them the door answers every link as one that does not exist. */
+    const links: TenantLinks | undefined =
+      servesLinks(requests.app) && registry && resultReferences
+        ? bindTenantLinks({
+            app: requests.app,
+            reader,
+            writer,
+            deployment: raw.deployment as string,
+            maxLifetimeMs: raw.maxLifetimeMs as number,
+            registry,
+            resultReferences,
+            now,
+          })
+        : undefined;
+    // A record's live links and their revoke, by a member who may write it: only where links are served at all.
+    const revokes = links ? bindTenantLinkRevokes(requests, now) : undefined;
     const retire = tenantRetirement(
       [
         reads.retire,
@@ -482,6 +507,7 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
         ...(platform ? [platform.retire] : []),
         ...(platformRequests ? [platformRequests.retire] : []),
         ...(intake ? [intake.retire] : []),
+        ...(links ? [links.retire] : []),
         async () => admissions.retire(),
       ],
       [reader.close, writer.close, ...outside.map((platformSource) => platformSource.close)],
@@ -580,6 +606,29 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
       readAudit: Object.freeze({
         read: (tenant: string, query: Omit<ReadAuditQuery, 'tenant'>) => writer.readReadAudit({ ...query, tenant }),
       }),
+      /* The link door's backend for one request (links/linkDoor.ts, admitting a TenantFoundLink), placed by the mapped host it came in on, and a
+         link's URL where its tenant's people are told it. An App that serves none has no such member at all. */
+      ...(links ? { links: Object.freeze({ backend: links.backend, render: links.render, rendered: links.rendered }) } : {}),
+      countLinks: revokes
+        ? revokes.countLinks
+        : async (
+            _request: Request,
+            _selectors: readonly string[],
+            _value: RecordLinksRequest,
+            _guard?: TenantInvocationGuard,
+          ): Promise<never> => {
+            throw new AppAccessDenied();
+          },
+      revokeLinks: revokes
+        ? revokes.revokeLinks
+        : async (
+            _request: Request,
+            _selectors: readonly string[],
+            _value: RecordLinksRequest,
+            _guard?: TenantInvocationGuard,
+          ): Promise<never> => {
+            throw new AppAccessDenied();
+          },
       platform: platform !== undefined,
       intake: intake !== undefined,
       publicReads: publicReads !== undefined,

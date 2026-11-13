@@ -12,6 +12,7 @@ import { validateBusinessCommandReferences } from '../commands/businessCommandLo
 import { BusinessCommandDefinitionError, CommandLookupRefusal } from '../commands/businessCommands.js';
 import { MAX_COMMAND_IDS } from '../commands/commandLimits.js';
 import { commandLookupProblem } from '../commands/commandLookupRules.js';
+import { publicVerbPlatformWrite } from '../api/apiTenantCommandCatalog.js';
 import { denyTenant } from '@mistriwork/engine/server/evidence.js';
 import type { TenantEnrollmentHook, TenantStartupCheck, TenantStartupCommands } from './tenantFeatureContract.js';
 import { TenantCommandStartupError } from './tenantStartupError.js';
@@ -113,6 +114,13 @@ export const commandReferencesCheck = Object.freeze<TenantStartupCheck>({
       }
       const problem = platformTenantParentProblem(registry, owned);
       if (problem) throw new TenantCommandStartupError(problem);
+      /* A public form's command exposed as an API verb that writes a platform table: the token's verb runs in its own
+         tenant, so it could never land there. Said at start and in `mistri check`, before a token is minted for it. */
+      for (const { command: exposed } of app.api?.commands ?? []) {
+        const declared = Object.hasOwn(registry, exposed.id) ? registry[exposed.id] : undefined;
+        const platformWrite = declared && publicVerbPlatformWrite(app, exposed.id, declared, owned);
+        if (platformWrite) throw new TenantCommandStartupError(`api.commands.${exposed.id}: ${platformWrite}.`);
+      }
       /* A reference a command's write sets, to a table it does not read, is refused on every run as invalid_result (the
          footprint rule, businessCommandExecution.ts) and passed this check (a field report). The finding is a pattern over
          the handler's source, so it can be wrong: `mistri check` refuses on it, and a start only says it, in the same words. */

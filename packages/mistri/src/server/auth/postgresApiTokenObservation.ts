@@ -12,7 +12,7 @@ import { assertAppApiContext } from '../api/appApiValidation.js';
 import { apiReadTokenCatalog } from '../api/apiEventOperations.js';
 import type { ApiTenantCatalog } from '../api/apiTenantCommandCatalog.js';
 import { apiTokenSecretId, matchesApiTokenSecret } from '../api/apiTokenSecret.js';
-import { narrowApiTokenScope, narrowTenantApiTokenScope, observedRowScope } from '../api/apiTokenScope.js';
+import { narrowApiTokenScope, narrowTenantApiTokenScope, observedRowScope, scopeOperation } from '../api/apiTokenScope.js';
 import { createPostgresApiTokenStore } from './postgresApiTokenStore.js';
 import { readPostgresEligibleAccountRoles } from './nativeAccountObservation.js';
 import { ApiTokenStoreUnavailable, throughApiTokenStoreAsync } from './apiTokenStoreFailure.js';
@@ -63,14 +63,7 @@ export async function observePostgresAccountToken(
     if (!commands && !tenant) assertAppApiContext(app);
     const catalog = tenant ?? commands ?? apiReadTokenCatalog(app.api, app, schema!),
       id = apiTokenSecretId(rawCredential);
-    const scopeOperations = Object.freeze(
-      catalog.operations.map((operation) =>
-        Object.freeze({
-          id: operation.id,
-          eligibleRoles: operation.eligibleRoles,
-        }),
-      ),
-    );
+    const scopeOperations = Object.freeze(catalog.operations.map((operation) => Object.freeze(scopeOperation(operation))));
     // Only the facts narrowApiTokenScope reads are retained across awaits.
     // The complete parsed App remains the trusted catalog construction input.
     const scopedApp = { ...app, api: { ...app.api, roles: [...app.api.roles] }, auth: { ...app.auth!, roles: { ...app.auth!.roles } } };

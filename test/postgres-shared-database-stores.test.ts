@@ -42,9 +42,9 @@ test(
     const owned = await uuidPostgresDatabase('shared_stores');
     t.after(() => owned.drop());
     await migratePostgresCommandJournal(owned.url);
-    assert.deepEqual(await provisionPostgresCommandEventStore(owned.url, source('lender')), { version: 1, provisioned: true });
-    assert.deepEqual(await provisionPostgresCommandEventStore(owned.url, source('leads')), { version: 1, provisioned: true });
-    assert.deepEqual(await provisionPostgresCommandEventStore(owned.url, source('leads')), { version: 1, provisioned: false });
+    assert.deepEqual(await provisionPostgresCommandEventStore(owned.url, source('lender')), { version: 2, provisioned: true });
+    assert.deepEqual(await provisionPostgresCommandEventStore(owned.url, source('leads')), { version: 2, provisioned: true });
+    assert.deepEqual(await provisionPostgresCommandEventStore(owned.url, source('leads')), { version: 2, provisioned: false });
     // An App's row is its own: the same App bound to another store or source is refused, unchanged.
     await assert.rejects(
       provisionPostgresCommandEventStore(owned.url, { ...source('leads'), storeId: 'elsewhere' }),

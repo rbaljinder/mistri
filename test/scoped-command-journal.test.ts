@@ -170,6 +170,7 @@ test('scoped reads and CRUD share one atomic commit with the receipt and paired 
     assert.deepEqual(Object.keys(journal).sort(), [
       'appendReadAudit',
       'commit',
+      'countLinks',
       'find',
       'insert',
       'kept',

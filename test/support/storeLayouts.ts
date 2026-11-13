@@ -578,6 +578,7 @@ export async function applyFixture(engine: Engine, url: string, text: string): P
  * held by its own fixtures and version, so a comparison with this store's fixture leaves its objects out of both sides. */
 const SEQUENCES = { store: 'command-sequences', only: /^(\w+\.)?(__mistri_)?sequence_/ } as const;
 const STAGING = { store: 'command-staging', only: /^(\w+\.)?(__mistri_)?staged_/ } as const;
+const EVENTS = { store: 'command-events', only: /^(\w+\.)?(__mistri_)?event_(meta|event)$/ } as const;
 const JOURNAL = { store: 'command-journal', only: /^(\w+\.)?(__mistri_)?command_(meta|receipt|audit_part|link)$/ } as const;
 const BENEATH: Readonly<Record<string, readonly { readonly store: string; readonly only?: RegExp }[]>> = {
   'api-tokens': [{ store: 'auth' }],
@@ -587,7 +588,9 @@ const BENEATH: Readonly<Record<string, readonly { readonly store: string; readon
   // The stores that stand on the journal hold the version of it they were written at, which a later journal layout
   // moves on: the journal's own fixtures hold it, so a comparison leaves its tables out of both sides.
   'command-events': [JOURNAL, SEQUENCES, STAGING],
-  'event-delivery': [JOURNAL, SEQUENCES, STAGING],
+  // Delivery stands on the event log the same way: the log's own fixtures hold its layout (an envelope's bound moved
+  // with version 2), so delivery's fixture keeps the log as it was written.
+  'event-delivery': [EVENTS, JOURNAL, SEQUENCES, STAGING],
   'command-sequences': [JOURNAL, STAGING],
   'command-staging': [JOURNAL],
 };

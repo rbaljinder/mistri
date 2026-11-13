@@ -26,6 +26,7 @@ import { Registry, loadConfig } from '@mistriwork/engine/server/connections.js';
 import { createSuite } from '../http/suite.js';
 import { openSuiteApp } from '../http/suiteApp.js';
 import { openSuiteTenant } from '../http/suiteTenant.js';
+import type { TenantHostIntent } from '../http/tenantHosts.js';
 import type { FlagRequestRuntime } from '../flags/requestRuntime.js';
 import { readSuiteConfiguration, type SuiteConfiguration } from './suiteConfig.js';
 import { assertBuildEntries } from './apps.js';
@@ -283,7 +284,10 @@ export async function startConfiguredSuite(file: string, environment: NodeJS.Pro
       apps.map(({ deployment, app, connections, services: deploymentServices, publicSurface, analytics: own }) => ({
         id: deployment.id,
         public: publicSurface,
-        open: async (basePath: string, { allowedHosts }: { allowedHosts: readonly string[] }) => {
+        open: async (
+          basePath: string,
+          { allowedHosts, hosts }: { allowedHosts: readonly string[]; hosts: readonly TenantHostIntent[] },
+        ) => {
           const publicPlacement = await placements?.forApp(app.app, deployment.policy, basePath);
           if (publicPlacement) await captureSuitePlacementPolicy(deployment.policy!, publicPlacement.policyRevision);
           if (isTenantApp(app.app)) {
@@ -310,6 +314,7 @@ export async function startConfiguredSuite(file: string, environment: NodeJS.Pro
                 publicURL,
                 port: config.port,
                 allowedHosts,
+                hosts,
                 suiteAuth: identity?.forApp(app, basePath),
                 ...(identity ? { accountEmail: (accountId: string) => nativeAccountEmailOf(identity.native, accountId) } : {}),
               });

@@ -141,6 +141,8 @@ export function renderApiCommandOpenApi(
       'x-mistri-eligible-roles': [...operation.eligibleRoles],
       // The source this command commits on, when the App has more than one.
       ...(several ? { 'x-mistri-source': operation.source } : {}),
+      // A public form's command: it runs as the door would, under the calling token.
+      ...(operation.door === 'public' ? { 'x-mistri-door': 'public' } : {}),
     };
     if (operation.targets === 'none') {
       // A generic create: it names no record, so no revision and no target

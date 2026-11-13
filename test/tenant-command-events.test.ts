@@ -250,7 +250,7 @@ function committed(
   assert.ok(batch);
   const event = after.events.find((row) => row.receipt_id === receipt.id);
   assert.ok(event);
-  assert.deepEqual(after.meta, [{ singleton: 1, version: 1, app_id: f.appId, store_id: 'cross-app-proof', source_id: 'business' }]);
+  assert.deepEqual(after.meta, [{ singleton: 1, version: 2, app_id: f.appId, store_id: 'cross-app-proof', source_id: 'business' }]);
   assert.deepEqual(JSON.parse(String(batch.manifest_json)), manifest);
   assert.equal(batch.event_count, 1);
   assert.equal(event.ordinal, 0);

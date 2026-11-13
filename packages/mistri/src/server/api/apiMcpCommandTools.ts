@@ -108,7 +108,8 @@ export function projectApiMcpCommandTools(
     return name;
   };
   for (const operation of catalog.operations) {
-    if (!permitted.has(operation.id) || !operation.eligibleRoles.some((role) => roles.has(role))) continue;
+    // A public verb names no role: the token's own operation is the whole grant.
+    if (!permitted.has(operation.id) || !(operation.door === 'public' || operation.eligibleRoles.some((role) => roles.has(role)))) continue;
     /* One command's tools are made whole or left out: a command this cannot describe takes its own tools from the
        list, with its cause written to the log, and never the session with it. */
     const marks = { tools: tools.length, bindings: bindings.length, used: new Set(used) };

@@ -68,6 +68,8 @@ import {
 } from '@mistriwork/engine/server/evidence.js';
 import { noteAuthorRequest, reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
 import { databaseUnanswered, refusedWrite, unansweredWrite } from './tenantWriteFault.js';
+import { RECORD_LINKS_PATH, RECORD_LINKS_REVOKE_PATH } from '../http/recordLinkRoutes.js';
+import type { RecordLinksRequest } from './tenantLinkRevoke.js';
 import { captureTenantEnrollment, type TenantEnrollment } from './tenantEnrollment.js';
 import { parseTenantSelector, type TenantMembershipEvidence } from './tenantMembership.js';
 import { withBoundedReads, type TenantReadContext } from './tenantReadRuntime.js';
@@ -225,6 +227,9 @@ interface TenantHttpOptions {
       refusal then tells its cause to a reader on this machine, as the ordinary server's does (refusalReport.ts). Absent
       for a build, which is served as built. */
   readonly authoring?: string;
+  /** A command answer with each capability link it minted rendered as its URL, for the member's own tenant
+      (tenantLinks.ts rendered), when the App declares links. Absent, a reference stays `mistri-link:<id>`. */
+  readonly renderLinks?: (value: unknown, tenantId: string) => Promise<unknown>;
 }
 
 /** Private integration server, deliberately not mounted by the CLI/createApp.
@@ -248,6 +253,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     'loaders',
     'recentSignIn',
     'authoring',
+    'renderLinks',
   ]);
   const integrationSettings = raw.integrations as TenantHttpOptions['integrations'];
   const tokens = raw.tokens as TenantTokenService | undefined;
@@ -258,6 +264,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
   const readerName = raw.readerName as TenantHttpOptions['readerName'];
   if (raw.recentSignIn !== undefined && (typeof raw.recentSignIn !== 'function' || isProxy(raw.recentSignIn))) return denyTenant();
   const recentSignIn = raw.recentSignIn as TenantHttpOptions['recentSignIn'];
+  if (raw.renderLinks !== undefined && (typeof raw.renderLinks !== 'function' || isProxy(raw.renderLinks))) return denyTenant();
+  const renderLinks = raw.renderLinks as TenantHttpOptions['renderLinks'];
   if (raw.look !== undefined && (typeof raw.look !== 'function' || isProxy(raw.look))) return denyTenant();
   const look = raw.look as TenantHttpOptions['look'];
   /* A name that is not one plain line of text is no name (appGreeting.ts). */
@@ -893,6 +901,47 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           more: rows.more,
         };
         return send(req, res, 200, body, ownerHeaders(viewer.context));
+      }
+      if (path === RECORD_LINKS_PATH || path === RECORD_LINKS_REVOKE_PATH) {
+        /* A record's live links and their revoke: a member's, in their own tenant, never the platform realm's or a
+           support operator's. Each runs in the writer's transaction under the member's own grant (tenantLinkRevoke.ts);
+           the revoke is noted in the record's history as the verified session's account, as a Save is. */
+        if (platform || onSupport) return denyTenant();
+        const target = { table: input.table, key: input.key } as RecordLinksRequest;
+        try {
+          if (path === RECORD_LINKS_PATH) {
+            const result = await contexts.countLinks(req, selectors, expected, target);
+            return send(req, res, 200, result.value, ownerHeaders(result.context));
+          }
+          const session = await verified(req);
+          const name = session ? nameOf(req) : undefined;
+          const result = await attributeWrites(
+            { via: 'app', ...(session ? { actor: session.identity.who, ...(name ? { name } : {}) } : {}) },
+            () => contexts.revokeLinks(req, selectors, expected, target),
+          );
+          return send(req, res, 200, result.value, ownerHeaders(result.context));
+        } catch (error) {
+          /* Refused before anything ran — no grant to write it, no links declared, a record out of reach — is the
+             single App's 403, not a denial of the context: the page keeps its lease. Anything else, a lease to renew
+             included, is answered as every request's is, below. */
+          if (
+            error instanceof TenantWriteFailure &&
+            error.outcome === 'not_applied' &&
+            !tenantLeaseFailureCode(error) &&
+            !lostContext(error, path) &&
+            !tenantSupportRefused(error) &&
+            !databaseUnanswered(error)
+          ) {
+            reportRefusal(req, 403, 'forbidden', 'Access to this resource is denied.', error);
+            return send(req, res, 403, { error: 'Access to this resource is denied.', code: 'forbidden' });
+          }
+          if (error instanceof TenantWriteFailure && error.outcome === 'unknown') {
+            const message = 'The change could not be confirmed. Refresh and reconcile before trying again.';
+            reportRefusal(req, 503, 'write_unconfirmed', message, error);
+            return send(req, res, 503, { error: message, code: 'write_unconfirmed', outcome: 'unknown' });
+          }
+          throw error;
+        }
       }
       if (reads.has(path) || path === TENANT_EXPORT_PATH || path === '/api/schema' || metadataGets.has(path) || metadataPosts.has(path)) {
         // One read path for either realm's lease: the platform realm's context
@@ -1768,7 +1817,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           const { status, code, message } = (result.value as { refused: { status: number; code: string; message: string } }).refused;
           return send(req, res, status, { code, error: message }, ownerHeaders(result.context));
         }
-        return send(req, res, 200, result.value, ownerHeaders(result.context));
+        // A link the command minted is shown to the member who minted it, as the URL the record's customer opens.
+        const value = renderLinks ? await renderLinks(result.value, result.context.tenantId) : result.value;
+        return send(req, res, 200, value, ownerHeaders(result.context));
       }
       /* The platform realm's generic edit is Save, New and Delete on its own rows, judged by its
          lease's own catalog and grants. Import, Undo and an upload are not part of it: a bulk load, a replay

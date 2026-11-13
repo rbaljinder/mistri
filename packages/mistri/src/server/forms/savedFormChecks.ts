@@ -105,6 +105,10 @@ function publicPickerProblem(
     const at = `Command "${id}" input "${path}" [public-form-picker] ${declared.type === 'reference' ? 'is a picker' : 'offers the rows'} over "${field.from}" on ${on}`;
     if (!opened?.read.includes(resource))
       return `${at}, and "auth.public" does not open "${resource}": a visitor reads its choices signed out. Open it in "auth.public", or use a choice the handler resolves.`;
+    /* A table the public opens only by a record's key is never listed (app/publicByKey.ts), and a picker is a list:
+       it would be refused on every visit, so the App is refused here, once, by name. */
+    if (opened.byKey?.includes(resource))
+      return `${at}, and "auth.public.byKey" opens "${resource}" only one record at a time by its key, never as a list. Take it out of "byKey", or use a choice the handler resolves.`;
     const table = findTable(schema, resource);
     const keys = table ? primaryKey(table) : [];
     const ceilings = [opened.fields?.[resource]?.read, app.resources?.[resource]?.fields?.read].filter((read) => read !== undefined);

@@ -16,6 +16,7 @@ import {
   type TenantWriteRun,
 } from './tenantWriteKindContract.js';
 import { intakeWriteKind } from './tenantWriteKindIntake.js';
+import { linkWriteKind } from './tenantWriteKindLink.js';
 import { memberWriteKind } from './tenantWriteKindMember.js';
 import { platformWriteKind } from './tenantWriteKindPlatform.js';
 import { platformTenantWriteKind } from './tenantWriteKindPlatformTenant.js';
@@ -29,6 +30,7 @@ const TENANT_WRITE_KINDS = Object.freeze([
   intakeWriteKind,
   serviceWriteKind,
   supportWriteKind,
+  linkWriteKind,
 ] as const);
 
 type MethodsOf<Kind> = Kind extends TenantWriteKind<infer _Evidence, infer Methods> ? Methods : never;

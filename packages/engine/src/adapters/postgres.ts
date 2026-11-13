@@ -40,6 +40,7 @@ import {
   type DeleteResult,
   type InsertRequest,
   type InsertResult,
+  type NoteRequest,
   type TellRequest,
   type UpdateRequest,
   type UpdateResult,
@@ -1063,7 +1064,7 @@ export class PostgresAdapter implements Adapter {
     /* The capture's read of the row it keeps a before image of: an unscoped transaction's reads by key, which a row
        sent ahead may answer (plainReads). */
     query: (request: QueryRequest) => Promise<QueryResult> = (request) => this.queryOn(request, write),
-  ): Pick<WriteTransaction, 'insert' | 'update' | 'remove' | 'tell' | 'insertMany' | 'updateMany'> & {
+  ): Pick<WriteTransaction, 'insert' | 'update' | 'remove' | 'tell' | 'noted' | 'insertMany' | 'updateMany'> & {
     finish(): Promise<void>;
     committed(): void;
     /** A row an accepted trigger changed (writeCapture.ts). */
@@ -1108,6 +1109,7 @@ export class PostgresAdapter implements Adapter {
       remove: (r) => history.remove(r, base.remove),
       ...gatheredBatches(base, history),
       tell: (r) => history.tell(r),
+      ...(history.noted ? { noted: (r: NoteRequest) => history.noted!(r) } : {}),
       finish: () => finishWriteCapture(history),
       committed: () => committedWriteCapture(history),
       triggered: async (change) => history.triggered?.(change),
@@ -1213,6 +1215,7 @@ export class PostgresAdapter implements Adapter {
                   update: (r) => operations.run(() => writes.update(r)),
                   ...batchesThrough(writes, (work) => operations.run(work)),
                   ...(writes.tell ? { tell: (r: TellRequest) => operations.run(() => writes.tell!(r)) } : {}),
+                  ...(writes.noted ? { noted: (r: NoteRequest) => operations.run(() => writes.noted!(r)) } : {}),
                 }),
               ),
             );
@@ -1413,6 +1416,7 @@ export class PostgresAdapter implements Adapter {
               update: (r) => operations.run(() => writes.update(r)),
               ...batchesThrough(writes, (work) => operations.run(work)),
               ...(writes.tell ? { tell: (r: TellRequest) => operations.run(() => writes.tell!(r)) } : {}),
+              ...(writes.noted ? { noted: (r: NoteRequest) => operations.run(() => writes.noted!(r)) } : {}),
             };
             // The transaction's own work runs without the hint: a transaction it opens is not this one.
             const out = await withoutWriteAhead(() =>
@@ -1840,6 +1844,7 @@ export class PostgresAdapter implements Adapter {
                   update: (r: UpdateRequest) => invoke(r, (r) => records.update(r)),
                   // Beneath the row scope: the flows' command tells only of its own target, which it read through the scope.
                   ...(writes.tell ? { tell: (r: TellRequest) => invoke(r, (r) => writes.tell!(r)) } : {}),
+                  ...(writes.noted ? { noted: (r: NoteRequest) => invoke(r, (r) => writes.noted!(r)) } : {}),
                 }),
                 journal?.open(write, operations),
                 evidence,

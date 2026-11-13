@@ -16,6 +16,8 @@ import { columnKind } from '../../../../engine/src/shared/schema.js';
 const calls: Array<{ path: string; body: unknown }> = [];
 const toasts: Array<[string, string]> = [];
 let answer: unknown = {};
+/* What a route answers where it is not `answer`'s: the record's link count and its revoke. */
+const answers: Record<string, unknown> = {};
 let appMode = false;
 
 vi.mock('../../../../kit/src/client/core.js', () => ({
@@ -32,6 +34,10 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
   viewportBox: (element: Element) => element.getBoundingClientRect(),
   api: async (path: string, body: unknown) => {
     calls.push({ path, body });
+    if (Object.hasOwn(answers, path)) {
+      if (answers[path] instanceof Error) throw answers[path];
+      return answers[path];
+    }
     if (answer instanceof Error) throw answer;
     return answer ?? { affected: 1, applied: (body as { values: unknown }).values };
   },
@@ -72,6 +78,7 @@ beforeEach(() => {
   toasts.length = 0;
   answer = null;
   appMode = false;
+  for (const path of Object.keys(answers)) delete answers[path];
 });
 afterEach(() => {
   cleanup();
@@ -443,5 +450,60 @@ describe('a fixed action granted without write', () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(screen.queryByRole('button', { name: 'Start working' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Mark lost' })).toBeNull();
+  });
+});
+
+describe("revoking a record's links", () => {
+  test('a reader the server lets revoke sees it in More at first render with no count fetched, and is asked first', async () => {
+    const user = userEvent.setup();
+    answers['/api/record-links'] = { live: 2 };
+    answers['/api/record-links/revoke'] = { revoked: 2 };
+    draw({ actions: [], revokesLinks: true });
+    // Present at once: the head row does not wait for a count to settle its size.
+    expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy();
+    expect(calls).toEqual([]);
+    await user.click(screen.getByRole('button', { name: 'More actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Revoke links' }));
+    expect(screen.getByRole('heading', { name: 'Revoke links?' })).toBeTruthy();
+    expect(await screen.findByText('The 2 links to Margot Fontaine that still open stop opening.')).toBeTruthy();
+    // Keeping them sends nothing but the count, asked as the dialog opened.
+    await user.click(screen.getByRole('button', { name: 'Keep links' }));
+    expect(calls.map((call) => call.path)).toEqual(['/api/record-links']);
+    await user.click(await screen.findByRole('button', { name: 'More actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Revoke links' }));
+    await screen.findByText('The 2 links to Margot Fontaine that still open stop opening.');
+    await user.click(screen.getByRole('button', { name: 'Revoke links' }));
+    await vi.waitFor(() => expect(toasts).toEqual([['Revoked 2 links.', 'ok']]));
+    expect(calls.find((call) => call.path === '/api/record-links/revoke')?.body).toMatchObject({ table: 'lead', key: { id: 127 } });
+  });
+
+  test('none open: the dialog says so and offers nothing to confirm', async () => {
+    const user = userEvent.setup();
+    answers['/api/record-links'] = { live: 0 };
+    draw({ actions: [], revokesLinks: true });
+    await user.click(screen.getByRole('button', { name: 'More actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Revoke links' }));
+    expect(await screen.findByText('No links to Margot Fontaine are open.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Revoke links' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Close' }));
+    expect(calls.map((call) => call.path)).toEqual(['/api/record-links']);
+  });
+
+  test('a failed count is said in the dialog, with nothing to confirm; no grant, no item and no request', async () => {
+    const user = userEvent.setup();
+    answers['/api/record-links'] = new Error('Access to this resource is denied.');
+    draw({ actions: [], revokesLinks: true });
+    await user.click(screen.getByRole('button', { name: 'More actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Revoke links' }));
+    expect(await screen.findByText('Access to this resource is denied.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Revoke links' })).toBeNull();
+    cleanup();
+
+    calls.length = 0;
+    answers['/api/record-links'] = { live: 3 };
+    draw({ actions: [] });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(calls).toEqual([]);
+    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull();
   });
 });

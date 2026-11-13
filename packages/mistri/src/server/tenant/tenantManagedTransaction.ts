@@ -4,6 +4,7 @@ import {
   TransactionOutcomeUnknown,
   type AggregateRequest,
   type DeleteRequest,
+  type NoteRequest,
   type TellRequest,
   type Filter,
   type InsertRequest,
@@ -12,13 +13,14 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
-import type { CommandJournal } from '../../adapters/commands/commandJournalTypes.js';
+import type { CommandJournal, CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
 import { captureTenantData, denyTenant, TenantContextError, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import type { TenantManagedEvidence, TenantManagedKind } from './tenantManagedKindContract.js';
 import { intakeManagedKind } from './tenantManagedKindIntake.js';
 import { memberManagedKind } from './tenantManagedKindMember.js';
 import { platformManagedKind } from './tenantManagedKindPlatform.js';
 import { platformTenantManagedKind } from './tenantManagedKindPlatformTenant.js';
+import { linkManagedKind } from './tenantManagedKindLink.js';
 import { serviceManagedKind } from './tenantManagedKindService.js';
 import { supportManagedKind } from './tenantManagedKindSupport.js';
 import type { TenantMembershipEvidence } from './tenantMembership.js';
@@ -36,6 +38,7 @@ const TENANT_MANAGED_KINDS: readonly TenantManagedKind[] = Object.freeze([
   intakeManagedKind,
   serviceManagedKind,
   supportManagedKind,
+  linkManagedKind,
 ]);
 
 type Scalar = string | number | boolean | null;
@@ -132,6 +135,12 @@ async function runManaged<T>(
     told && 'value' in told && typeof told.value === 'function'
       ? (((...args: unknown[]) => Reflect.apply(told.value, records, args)) as NonNullable<WriteTransaction['tell']>)
       : undefined;
+  // Optional, as a link's revoke is the one caller: present where the engine keeps a history.
+  const noting = Object.getOwnPropertyDescriptor(records, 'noted');
+  const noted =
+    noting && 'value' in noting && typeof noting.value === 'function'
+      ? (((...args: unknown[]) => Reflect.apply(noting.value, records, args)) as NonNullable<WriteTransaction['noted']>)
+      : undefined;
   // Optional too: a command's sums and groups, where the engine beneath can say them (commandDb.ts).
   const summed = Object.getOwnPropertyDescriptor(records, 'aggregate');
   const aggregate =
@@ -163,6 +172,12 @@ async function runManaged<T>(
   const staging = own('stage') ? journalMethod('stage') : undefined,
     taking = own('takeStaged') ? journalMethod('takeStaged') : undefined,
     auditing = own('appendReadAudit') ? journalMethod('appendReadAudit') : undefined;
+  // Optional too: a store that keeps capability links, in this place's own journal namespace (commandLinks.ts).
+  const minting = own('mintLink') ? journalMethod('mintLink') : undefined,
+    revoking = own('revokeLinks') ? journalMethod('revokeLinks') : undefined,
+    counting = own('countLinks') ? journalMethod('countLinks') : undefined,
+    opening = own('openLink') ? journalMethod('openLink') : undefined,
+    reading = own('readLink') ? journalMethod('readLink') : undefined;
   const operations = new TransactionOperations();
   let accepting = true;
   let callbackFailure: { error: unknown } | undefined;
@@ -353,6 +368,28 @@ async function runManaged<T>(
             }),
         }
       : {}),
+    /* A link's revoke notes its record, which the tenant may update and its own rows hold: the engine's capture reads
+       the owner beneath the scope, so the scope is asked here first, as for a notice. */
+    ...(noted
+      ? {
+          noted: (request: NoteRequest) =>
+            invoke(request, async (value) => {
+              tenantRecord(value, ['table', 'key', 'action']);
+              if (typeof value.action !== 'string') return denyTenant();
+              const { table, column } = writable(value.table, 'update');
+              const completeKey = key(table, column, value.key);
+              const found = await query({
+                table: table.id,
+                columns: Object.keys(completeKey),
+                filter: { groups: [Object.entries(completeKey).map(([name, at]) => ({ column: name, op: '=' as const, value: at }))] },
+                limit: 2,
+                offset: 0,
+              });
+              if (found.rows.length !== 1) return denyTenant();
+              return noted(captureTenantData({ table: table.id, key: completeKey, action: value.action }));
+            }),
+        }
+      : {}),
   });
   let result!: T;
   const ownedJournal = journal
@@ -368,6 +405,35 @@ async function runManaged<T>(
           : {}),
         ...heldFileMethods(invoke, staging, taking),
         ...(auditing ? { appendReadAudit: (rows) => invoke({ rows }, (input) => auditing(input.rows)) } : {}),
+        /* A link is minted, opened, re-read and revoked under the same fence as a commit: kept with the command or
+           rolled back with it. The journal is this place's, so a link of another tenant is not there to read. */
+        ...(minting ? { mintLink: (row: CommandLinkRow) => invoke({ row }, (input) => minting(input.row)) } : {}),
+        ...(revoking
+          ? {
+              revokeLinks: (appId: string, resource: string, rowKey: string, name: string | undefined, now: number) =>
+                invoke({ appId, resource, rowKey, name, now }, (input) =>
+                  revoking(input.appId, input.resource, input.rowKey, input.name, input.now),
+                ),
+            }
+          : {}),
+        ...(counting
+          ? {
+              countLinks: (appId: string, resource: string, rowKey: string, now: number) =>
+                invoke({ appId, resource, rowKey, now }, (input) => counting(input.appId, input.resource, input.rowKey, input.now)),
+            }
+          : {}),
+        ...(opening
+          ? {
+              openLink: (appId: string, id: string, now: number) =>
+                invoke({ appId, id, now }, (input) => opening(input.appId, input.id, input.now)),
+            }
+          : {}),
+        ...(reading
+          ? {
+              readLink: (appId: string, id: string, now: number) =>
+                invoke({ appId, id, now }, (input) => reading(input.appId, input.id, input.now)),
+            }
+          : {}),
       })
     : undefined;
   const completed = (value: T): T => {

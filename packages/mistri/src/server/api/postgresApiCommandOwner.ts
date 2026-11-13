@@ -25,6 +25,7 @@ import { acquirePostgresApiCommandTokenObservation, captureAppAuthRuntime, type 
 import { ApiTokenStoreUnavailable } from '../auth/apiTokenStoreFailure.js';
 import { commandProblem, projectApiCommandAnswer, refusalHeaders, REFUSAL_STATUS } from './apiCommandResponse.js';
 import { createApiCommandRequestMapper } from './apiCommandRequest.js';
+import { apiPublicActor, apiPublicForm, shapeApiPublicResult, spendApiPublicBudget } from './apiPublicLane.js';
 import type { ApiCommandRoute } from './apiCommandRoute.js';
 import { ApiCommandUnauthenticated } from './sqliteApiCommandOwner.js';
 import { narrowApiOpenApi, renderApiOpenApi } from './apiOpenApiDocument.js';
@@ -254,6 +255,9 @@ export async function createPostgresApiCommandOwner(
             throw new ApiCommandUnauthenticated();
           }
           let outcome: { status: number; headers?: Readonly<Record<string, string>>; value: unknown };
+          // A public form's command, named by this token, takes the door's lane (apiPublicLane.ts).
+          const publicForm = listing ? undefined : apiPublicForm(app, apiCommands, command);
+          let limited: Awaited<ReturnType<typeof spendApiPublicBudget>>;
           if (mode === 'spec') {
             // As on SQLite: fresh native operation IDs narrow both halves.
             if (!mapper) return refuse();
@@ -292,6 +296,9 @@ export async function createPostgresApiCommandOwner(
               status: exposed.has(command) ? 403 : 404,
               value: commandProblem(exposed.has(command) ? 'forbidden' : 'not_found', 'not_applied'),
             };
+          } else if (publicForm !== undefined && mode === 'execute' && (limited = await spendApiPublicBudget(observation.tokenId))) {
+            // The door's submit budget, spent by this token: nothing ran.
+            outcome = limited;
           } else {
             current();
             if ((await registry.open(lane)).adapter !== physical) return refuse();
@@ -300,7 +307,12 @@ export async function createPostgresApiCommandOwner(
               { app, registry: apiCommands, resources, writableConnection: evidence.writableConnection, ...(events ? { events } : {}) },
               () => fresh(credential, observation, signal),
             );
-            const actor = { id: observation.subject.id, appId: app.id, roles: [...observation.roles] };
+            // A public verb runs as its form's principal under the token's id;
+            // the token's roles never widen what the door grants.
+            const actor =
+              publicForm === undefined
+                ? { id: observation.subject.id, appId: app.id, roles: [...observation.roles] }
+                : apiPublicActor(app.id, publicForm, observation.tokenId);
             try {
               const authorized = binding.authorize(command, actor);
               const flags = mode === 'recover' ? undefined : await commandFlagsOnce(() => captureFlags?.(authorized.actor))();
@@ -311,12 +323,13 @@ export async function createPostgresApiCommandOwner(
                   : mode === 'execute'
                     ? await executeBusinessCommand(binding, actor, captured, { signal, door, flags })
                     : await recoverBusinessCommandReceipt(binding, actor, captured, { signal });
+              const said = publicForm !== undefined && mode !== 'prepare' ? await shapeApiPublicResult(app, resources, result) : result;
               outcome =
                 mode === 'prepare'
                   ? apiCommandPreparation(result)
                   : wire === 'api-v1'
-                    ? projectApiCommandAnswer(mode, result, (key) => mapper!.targetKey(command, key))
-                    : { status: 200, value: result };
+                    ? projectApiCommandAnswer(mode, said, (key) => mapper!.targetKey(command, key))
+                    : { status: 200, value: said };
             } catch (cause) {
               const error =
                 cause instanceof AppAccessDenied

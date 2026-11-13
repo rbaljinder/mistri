@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { attestOnce } from '@mistriwork/engine/adapters/postgresTransactionHandle.js';
 import { layoutRefusal, postgresLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
-import { runtimeSchema, runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
+import { postgresRuntimeNames, runtimeSchema, runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 import { foldRelations, type LayoutTrust } from '../commands/postgresRelations.js';
 import type { CommandAudit, StoredCommandReceipt } from '../commands/commandJournalTypes.js';
 import { COMMAND_JOURNAL_TABLES } from '../commands/commandJournalSchema.js';
@@ -19,7 +19,13 @@ import {
   withPostgresMaintenanceTransaction,
   type PostgresRelationDescription,
 } from '../commands/postgresCommandJournalSchema.js';
-import type { CommandEventBatch, CommandEventEnvelope, CommandEventManifest, CommandEventOwner } from './commandEventTypes.js';
+import {
+  EFFECT_ENVELOPE_MAX,
+  type CommandEventBatch,
+  type CommandEventEnvelope,
+  type CommandEventManifest,
+  type CommandEventOwner,
+} from './commandEventTypes.js';
 import {
   COMMAND_EVENT_TABLES as tables,
   CommandEventStoreUnavailable,
@@ -36,6 +42,7 @@ const fail = (message?: string): never => {
 };
 const prefix = 'event_';
 const q = (name: string) => runtimeTable('postgres', name);
+const names = postgresRuntimeNames(tables);
 const { context, envelope, digest, uuid, canonical } = shared;
 
 /* PostgreSQL: one event store per App, not per database. The
@@ -45,7 +52,7 @@ const { context, envelope, digest, uuid, canonical } = shared;
    journal row already names it, and every reader filters on it. SQLite keeps
    one App per file: two Apps on one SQLite file is not a
    deployment this project targets. */
-const POSTGRES_COMMAND_EVENT_STORE_VERSION = 1;
+const POSTGRES_COMMAND_EVENT_STORE_VERSION = 2;
 const VERSION = POSTGRES_COMMAND_EVENT_STORE_VERSION;
 /** Why the layout was refused, when the version row says (see layoutRefusal.ts); several Apps keep a row each here, and it is read only where there is exactly one. */
 const layoutMessage = async (client: PgQuery) =>
@@ -67,9 +74,21 @@ const COMMAND_EVENT_POSTGRES_DEFINITIONS: readonly string[] = [
   event_id text COLLATE "C" PRIMARY KEY CHECK (octet_length(event_id) = 36),
   receipt_id text COLLATE "C" NOT NULL REFERENCES ${q(COMMAND_JOURNAL_TABLES.receipt)} (id) ON DELETE RESTRICT CHECK (octet_length(receipt_id) BETWEEN 1 AND 128),
   ordinal integer NOT NULL CHECK (ordinal BETWEEN 0 AND 31),
-  envelope_json text COLLATE "C" NOT NULL CHECK (octet_length(envelope_json) BETWEEN 1 AND 131072 AND json_typeof(envelope_json::json) = 'object'),
+  envelope_json text COLLATE "C" NOT NULL CHECK (octet_length(envelope_json) BETWEEN 1 AND ${EFFECT_ENVELOPE_MAX} AND json_typeof(envelope_json::json) = 'object'),
   UNIQUE (receipt_id, ordinal)
 )`,
+];
+
+/** Layout 1 → 2: the envelope's CHECK moves from 131,072 bytes to EFFECT_ENVELOPE_MAX, so an effect's post can carry a
+ * body of up to 256 KiB. The column's CHECK is the one PostgreSQL named for it; it is dropped and added back under that
+ * name, so the catalog reads as a fresh layout 2 does. */
+export const postgresEventUpgradeFrom1 = (): readonly string[] => [
+  `ALTER TABLE ${q(tables.event)} DROP CONSTRAINT ${names.event}_envelope_json_check`,
+  `ALTER TABLE ${q(tables.event)} ADD CONSTRAINT ${names.event}_envelope_json_check
+  CHECK (octet_length(envelope_json) BETWEEN 1 AND ${EFFECT_ENVELOPE_MAX} AND json_typeof(envelope_json::json) = 'object')`,
+  `ALTER TABLE ${q(tables.meta)} DROP CONSTRAINT ${names.meta}_version_check`,
+  `UPDATE ${q(tables.meta)} SET version = ${VERSION}`,
+  `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT ${names.meta}_version_check CHECK (version = ${VERSION})`,
 ];
 
 const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -110,7 +129,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       column('envelope_json', 'text', true, 'C'),
     ],
     [
-      "CHECK ((((octet_length(envelope_json) >= 1) AND (octet_length(envelope_json) <= 131072)) AND (json_typeof((envelope_json)::json) = 'object'::text)))",
+      `CHECK ((((octet_length(envelope_json) >= 1) AND (octet_length(envelope_json) <= ${EFFECT_ENVELOPE_MAX})) AND (json_typeof((envelope_json)::json) = 'object'::text)))`,
       'CHECK (((octet_length(receipt_id) >= 1) AND (octet_length(receipt_id) <= 128)))',
       'CHECK (((ordinal >= 0) AND (ordinal <= 31)))',
       'CHECK ((octet_length(event_id) = 36))',
@@ -135,7 +154,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       'CHECK (((octet_length(app_id) >= 1) AND (octet_length(app_id) <= 128)))',
       'CHECK (((octet_length(source_id) >= 1) AND (octet_length(source_id) <= 128)))',
       'CHECK (((octet_length(store_id) >= 1) AND (octet_length(store_id) <= 256)))',
-      'CHECK ((version = 1))',
+      `CHECK ((version = ${VERSION}))`,
       'PRIMARY KEY (app_id)',
     ],
     [`CREATE UNIQUE INDEX event_meta_pkey ON ${runtimeSchema('postgres')}.event_meta USING btree (app_id)`],
@@ -197,7 +216,7 @@ async function attestEventStore(client: PgQuery, owner: CommandEventStoreBinding
 export async function provisionPostgresCommandEventStore(
   url: string,
   input: CommandEventStoreBinding,
-): Promise<{ version: 1; provisioned: boolean }> {
+): Promise<{ version: 2; provisioned: boolean }> {
   try {
     const owner = captureCommandEventStoreBinding(input);
     return await withPostgresMaintenanceTransaction(url, async (client) => {
@@ -212,7 +231,7 @@ export async function provisionPostgresCommandEventStore(
           )
         ).rowCount === 1;
       await assertPostgresCommandEventStore(client, owner);
-      return { version: VERSION as 1, provisioned };
+      return { version: VERSION as 2, provisioned };
     });
   } catch (error) {
     if (error instanceof CommandEventStoreUnavailable) throw error;
@@ -258,7 +277,7 @@ export function postgresCommandEventRows(
             receipt.id,
             events.map((event) => event.eventId),
             events.map((_, ordinal) => ordinal),
-            events.map((event) => canonical(event, 131_072)),
+            events.map((event) => canonical(event, EFFECT_ENVELOPE_MAX)),
           ],
         },
         { text: NOTIFY_COMMAND_EVENTS },
@@ -321,7 +340,7 @@ export async function assertPostgresCommandEvents(
         row.ordinal !== ordinal ||
         !uuid(row.event_id) ||
         typeof row.envelope_json !== 'string' ||
-        Buffer.byteLength(row.envelope_json, 'utf8') > 131_072
+        Buffer.byteLength(row.envelope_json, 'utf8') > EFFECT_ENVELOPE_MAX
       )
         return fail();
       const value: unknown = JSON.parse(row.envelope_json);
@@ -334,7 +353,11 @@ export async function assertPostgresCommandEvents(
     );
     const events = parsed.map(({ row, value }, ordinal) => {
       const wanted = envelope(runtime, manifest, captured, ordinal, row.event_id as string);
-      if (canonical(value, 131_072) !== canonical(wanted, 131_072) || row.envelope_json !== canonical(wanted, 131_072)) return fail();
+      if (
+        canonical(value, EFFECT_ENVELOPE_MAX) !== canonical(wanted, EFFECT_ENVELOPE_MAX) ||
+        row.envelope_json !== canonical(wanted, EFFECT_ENVELOPE_MAX)
+      )
+        return fail();
       return wanted;
     });
     if (digest(manifest, events) !== batch.digest) return fail();

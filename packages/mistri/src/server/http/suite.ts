@@ -77,7 +77,10 @@ export async function createSuite(
   apps: ReadonlyArray<{
     id: string;
     public?: boolean;
-    open: (basePath: string, options: { allowedHosts: readonly string[] }) => Promise<Omit<SuiteHost, 'id'>>;
+    open: (
+      basePath: string,
+      options: { allowedHosts: readonly string[]; hosts: readonly TenantHostIntent[] },
+    ) => Promise<Omit<SuiteHost, 'id'>>;
   }>,
   addresses: {
     base?: string;
@@ -360,7 +363,11 @@ export async function createSuite(
   if (SOURCE_CLIENT) attachDevClient(server);
   try {
     for (const app of apps) {
-      const host = await app.open(appHome(mount, app.id).replace(/\/$/, ''), { allowedHosts: hostRouter.allowedHosts(app.id) });
+      const host = await app.open(appHome(mount, app.id).replace(/\/$/, ''), {
+        allowedHosts: hostRouter.allowedHosts(app.id),
+        // Its tenants' own hosts, where their capability links are written (tenantAuthenticatedHttp.ts linkBase).
+        hosts: mappings.filter((intent) => intent.app === app.id),
+      });
       hosts.set(app.id, { ...host, id: app.id });
       if (host.server.listening) throw new Error(`Suite App "${app.id}" must not own a listener.`);
     }

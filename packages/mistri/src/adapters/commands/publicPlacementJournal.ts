@@ -7,6 +7,7 @@ import { commandJournalValidation as rules } from './commandJournal.js';
 import type { CommandAudit, CommandJournal, CommandReceiptScope, StoredCommandReceipt } from './commandJournalTypes.js';
 import type { PublicPlacementAdmission, PublicPlacementOwner } from './publicPlacementTypes.js';
 import { capturePublicPlacementOwner } from './publicPlacementTransaction.js';
+import { publicActorId } from '../../shared/publicActor.js';
 import {
   PUBLIC_PLACEMENT_TABLES as tables,
   placementNamespaceColumns,
@@ -44,7 +45,7 @@ function scopeValues(owner: PublicPlacementOwner, scope: CommandReceiptScope): V
   rules.scopeValues(scope);
   if (
     scope.appId !== owner.appId ||
-    scope.actorId !== `public:${owner.form}` ||
+    scope.actorId !== publicActorId(owner.form) ||
     scope.commandId !== owner.commandId ||
     scope.commandVersion !== owner.commandVersion
   )
@@ -88,7 +89,7 @@ async function lookup(
   const receipt: StoredCommandReceipt = {
     id: row.id as string,
     appId: owner.appId,
-    actorId: `public:${owner.form}`,
+    actorId: publicActorId(owner.form),
     commandId: owner.commandId,
     commandVersion: owner.commandVersion,
     idempotencyKey: submission,

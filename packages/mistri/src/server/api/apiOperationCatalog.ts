@@ -44,6 +44,7 @@ export function checkApiOperationCatalog(
       Object.freeze({
         id: operation.id,
         eligibleRoles: Object.freeze([...operation.eligibleRoles]),
+        ...('door' in operation && operation.door === 'public' ? { door: 'public' as const } : {}),
       }),
     ),
   );

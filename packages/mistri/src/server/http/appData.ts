@@ -42,6 +42,7 @@ import { headlessHeld, isSurfaceRefusal, namedSurface, surfaceRefusal } from './
 import { SURFACE_HEADER } from '../../shared/appSurfaces.js';
 import type { ComposeResources } from '@mistriwork/engine/server/http/recordCompose.js';
 import { recordHistoryRoutes } from './recordHistoryRoutes.js';
+import { recordLinkRoutes } from './recordLinkRoutes.js';
 import { decisionRoutes } from './decisionRoutes.js';
 import { send } from '@mistriwork/engine/server/http/reply.js';
 import { readNotRecorded, withReadKind } from '../readAudit.js';
@@ -187,6 +188,7 @@ export const APP_DATA: DataHooks = {
     (await httpOperationRoutes(post)) ||
     appAuthoringRoutes(post) ||
     (await recordHistoryRoutes(post)) ||
+    (await recordLinkRoutes(post)) ||
     (await decisionRoutes(post)) ||
     (await inboxRoutes(post)) ||
     (await integrationRoutes(post)),

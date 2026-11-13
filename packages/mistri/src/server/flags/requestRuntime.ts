@@ -5,6 +5,7 @@ import { normalizeFlagCatalog, normalizeFlagContext, normalizeFlagScope, type Fl
 import { isPublicCommandPage, isPublicForm, type AppDef } from '../../shared/app.js';
 import { captureAppAuthRuntime, type AppAuthRuntime, type VerifiedSessionInstance } from '../auth/auth.js';
 import { captureTenantData } from '@mistriwork/engine/server/evidence.js';
+import { isPublicActorId } from '../../shared/publicActor.js';
 import { getTenantHostIntent } from '../http/tenantHosts.js';
 import { HttpError } from '@mistriwork/engine/server/http/reply.js';
 import type { Bound } from '@mistriwork/engine/server/http/trust.js';
@@ -269,7 +270,7 @@ export function createFlagRequestRuntime(options: FlagRequestRuntimeOptions) {
             !sameRoles(supplied.roles, held.actorRoles) ||
             (held.publicContext
               ? supplied.kind !== 'public' ||
-                (held.form !== undefined && (supplied.form !== held.form || supplied.id !== `public:${held.form}`))
+                (held.form !== undefined && (supplied.form !== held.form || !isPublicActorId(supplied.id, held.form)))
               : supplied.kind !== undefined || supplied.id !== held.accountId)
           )
             return denied();

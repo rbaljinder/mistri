@@ -184,6 +184,8 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       // rc.1: a public page's public commands, by name, which its door runs signed out (http/pageCommandRoutes.ts).
       'publicCommands',
       'resources',
+      // rc.46: the tables whose record links this reader may revoke (shared/appPayload.ts).
+      'revokesLinks',
       'shortName',
       'supportAudit',
       'supportLog',

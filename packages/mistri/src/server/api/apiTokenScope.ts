@@ -11,6 +11,14 @@ type TokenTenantBinding = Readonly<{ tenantId: string; membershipId: string; mem
  * and — for a child minted by `$scope` — the token it was minted from, whose
  * revocation or expiry ends the child with it. */
 type TokenRowScope = Readonly<{ name: string; key: string; parentId?: string }>;
+/** One operation a token may be scoped to: role-granted, or a public door's (`door: 'public'`, no roles), granted only by name. */
+type ApiScopeOperation = Readonly<{ id: string; eligibleRoles: readonly string[]; door?: 'public' }>;
+/** The facts a catalog operation is scoped by, and no others: its id, its roles, and a public door's mark. */
+export const scopeOperation = (operation: ApiScopeOperation): ApiScopeOperation => ({
+  id: operation.id,
+  eligibleRoles: operation.eligibleRoles,
+  ...(operation.door === 'public' ? { door: 'public' as const } : {}),
+});
 export interface TokenRecord {
   id: string;
   appId: string;
@@ -187,7 +195,7 @@ export function narrowApiTokenScope(
   raw: unknown,
   app: AppDef,
   observation: unknown,
-  currentOperations: readonly { id: string; eligibleRoles: readonly string[] }[],
+  currentOperations: readonly ApiScopeOperation[],
   now: number,
 ) {
   const token = captureApiTokenRecord(raw),
@@ -230,7 +238,7 @@ export function narrowTenantApiTokenScope(
   raw: unknown,
   app: AppDef,
   observation: unknown,
-  currentOperations: readonly { id: string; eligibleRoles: readonly string[] }[],
+  currentOperations: readonly ApiScopeOperation[],
   now: number,
 ) {
   const token = captureApiTokenRecord(raw),
@@ -262,22 +270,24 @@ export function narrowTenantApiTokenScope(
   return Object.freeze({ ...scopeOf(token, app, roles, currentOperations), tenant: token.tenant });
 }
 
-function scopeOf(
-  token: Readonly<TokenRecord>,
-  app: AppDef,
-  roles: readonly string[],
-  currentOperations: readonly { id: string; eligibleRoles: readonly string[] }[],
-) {
+function scopeOf(token: Readonly<TokenRecord>, app: AppDef, roles: readonly string[], currentOperations: readonly ApiScopeOperation[]) {
   const captured = snapshot(currentOperations, 262144).value;
   if (!Array.isArray(captured) || captured.length > 1024) return refuse();
   const ids = new Set<string>(),
     operations: string[] = [];
   for (const rawOperation of captured) {
-    const operation = record(rawOperation, ['id', 'eligibleRoles']),
+    const operation = record(rawOperation, ['id', 'eligibleRoles'], ['door']),
       id = text(operation.id);
     const eligibleRoles = names(operation.eligibleRoles, 128);
     if (ids.has(id) || eligibleRoles.some((role) => !app.api!.roles.includes(role))) return refuse();
     ids.add(id);
+    if (operation.door !== undefined) {
+      // A public door's verb is granted by naming it, never by a role: a token
+      // with no list of operations must not quietly gain one (apiCommandCatalog).
+      if (operation.door !== 'public' || eligibleRoles.length) return refuse();
+      if (token.operations?.includes(id)) operations.push(id);
+      continue;
+    }
     if (eligibleRoles.some((role) => roles.includes(role)) && (token.operations === undefined || token.operations.includes(id)))
       operations.push(id);
   }
