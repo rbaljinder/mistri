@@ -22,7 +22,7 @@ test('a switch says its state and toggles on Space, and a busy switch refuses th
   const control = screen.getByRole('switch', { name: 'Notify me' });
   expect(control).toHaveAttribute('aria-checked', 'false');
   await userEvent.click(control);
-  expect(onCheckedChange).toHaveBeenCalledWith(true, expect.anything());
+  expect(onCheckedChange).toHaveBeenCalledWith(true, expect.objectContaining({ reason: 'toggle', source: 'pointer' }));
   rerender(<Switch label="Notify me" checked onCheckedChange={onCheckedChange} busy />);
   expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
   await userEvent.click(screen.getByRole('switch'));
@@ -104,7 +104,7 @@ test('pagination marks the current page, disables the ends, and shortens a long 
   expect(screen.getByRole('button', { name: '1' })).toHaveAttribute('aria-current', 'page');
   expect(screen.getAllByText('…').length).toBeGreaterThan(0);
   await userEvent.click(screen.getByRole('button', { name: '3' }));
-  expect(onPageChange).toHaveBeenCalledWith(3);
+  expect(onPageChange).toHaveBeenCalledWith(3, expect.objectContaining({ reason: 'page-press', source: 'pointer' }));
   expect(paginationItems(10, 20)).toEqual([1, '…', 8, 9, 10, 11, 12, '…', 20]);
   expect(paginationItems(1, 3)).toEqual([1, 2, 3]);
 });
@@ -140,7 +140,7 @@ test('a carousel shows one slide, steps and dots move it, and the ends disable',
   expect(screen.getByText('Slide 1 of 3: Studio')).toHaveAttribute('aria-live', 'polite');
   expect(screen.getByRole('button', { name: 'Previous slide' })).toBeDisabled();
   await userEvent.click(screen.getByRole('button', { name: 'Next slide' }));
-  expect(onIndexChange).toHaveBeenCalledWith(1);
+  expect(onIndexChange).toHaveBeenCalledWith(1, expect.objectContaining({ reason: 'navigate', source: 'pointer' }));
   expect(screen.getByText('Slide 2 of 3: Work')).toBeVisible();
   await userEvent.click(screen.getByRole('button', { name: 'Go to slide 3: Wall' }));
   expect(screen.getByText('Slide 3 of 3: Wall')).toBeVisible();
@@ -210,11 +210,11 @@ test('resizable panes start at their shares, and the handle walks on arrow keys 
   expect(pane).toHaveAttribute('data-scrolls');
   handle.focus();
   await userEvent.keyboard('{ArrowRight}');
-  expect(onSizesChange).toHaveBeenLastCalledWith([65, 35]);
+  expect(onSizesChange).toHaveBeenLastCalledWith([65, 35], expect.objectContaining({ reason: 'resize', source: 'keyboard' }));
   await userEvent.keyboard('{Home}');
-  expect(onSizesChange).toHaveBeenLastCalledWith([10, 90]);
+  expect(onSizesChange).toHaveBeenLastCalledWith([10, 90], expect.anything());
   await userEvent.keyboard('{End}');
-  expect(onSizesChange).toHaveBeenLastCalledWith([90, 10]);
+  expect(onSizesChange).toHaveBeenLastCalledWith([90, 10], expect.anything());
 });
 
 test('stacked resizable panes are parted by a horizontal line', () => {

@@ -48,8 +48,8 @@ test('single cards are a radiogroup; one choice replaces the last', async () => 
         labelHidden
         options={kinds}
         value={value}
-        onChange={(v) => {
-          change(v);
+        onChange={(v, details) => {
+          change(v, details);
           set(v);
         }}
       />
@@ -60,7 +60,7 @@ test('single cards are a radiogroup; one choice replaces the last', async () => 
   expect(screen.getByTestId('car').parentElement).toHaveAttribute('aria-hidden', 'true');
   await user.click(screen.getByRole('radio', { name: 'Car' }));
   await user.click(screen.getByRole('radio', { name: 'Truck' }));
-  expect(change).toHaveBeenLastCalledWith(['truck']);
+  expect(change).toHaveBeenLastCalledWith(['truck'], expect.objectContaining({ reason: 'select', source: 'pointer' }));
 });
 
 test('several cards are a group of checkboxes; the exclusive card clears the rest and is cleared by them', async () => {
@@ -75,8 +75,8 @@ test('several cards are a group of checkboxes; the exclusive card clears the res
         exclusive="none"
         options={kinds}
         value={value}
-        onChange={(v) => {
-          change(v);
+        onChange={(v, details) => {
+          change(v, details);
           set(v);
         }}
       />
@@ -86,11 +86,11 @@ test('several cards are a group of checkboxes; the exclusive card clears the res
   expect(screen.getByRole('group', { name: 'Vehicles' })).toBeInTheDocument();
   await user.click(screen.getByRole('checkbox', { name: 'Truck' }));
   await user.click(screen.getByRole('checkbox', { name: 'Car' }));
-  expect(change).toHaveBeenLastCalledWith(['car', 'truck']);
+  expect(change).toHaveBeenLastCalledWith(['car', 'truck'], expect.anything());
   await user.click(screen.getByRole('checkbox', { name: 'None of these' }));
-  expect(change).toHaveBeenLastCalledWith(['none']);
+  expect(change).toHaveBeenLastCalledWith(['none'], expect.anything());
   await user.click(screen.getByRole('checkbox', { name: 'Car' }));
-  expect(change).toHaveBeenLastCalledWith(['car']);
+  expect(change).toHaveBeenLastCalledWith(['car'], expect.anything());
 });
 
 test('a checkbox is named by its text, which is a click target, and Space toggles it', async () => {
@@ -102,8 +102,8 @@ test('a checkbox is named by its text, which is a click target, and Space toggle
       <Checkbox
         label="Email me updates"
         checked={on}
-        onChange={(v) => {
-          change(v);
+        onChange={(v, details) => {
+          change(v, details);
           set(v);
         }}
       />
@@ -111,10 +111,10 @@ test('a checkbox is named by its text, which is a click target, and Space toggle
   }
   render(<Agree />);
   await user.click(screen.getByText('Email me updates'));
-  expect(change).toHaveBeenLastCalledWith(true);
+  expect(change).toHaveBeenLastCalledWith(true, expect.objectContaining({ reason: 'toggle', source: 'pointer' }));
   screen.getByRole('checkbox', { name: 'Email me updates' }).focus();
   await user.keyboard(' ');
-  expect(change).toHaveBeenLastCalledWith(false);
+  expect(change).toHaveBeenLastCalledWith(false, expect.objectContaining({ reason: 'toggle', source: 'keyboard' }));
 });
 
 test('a consent is a checkbox whose long paragraph is the label, in its own class, with a problem in its description', () => {

@@ -7,6 +7,7 @@ import type { ReactNode, Ref } from 'react';
 import { Field } from './Field.js';
 import { frameOf, type FieldFrame } from './fieldFrame.js';
 import { masks, type Mask } from './masks.js';
+import { changeDetails, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 /** The mark at a box's inline end: drawn in CSS unless a picture is lent. Decorative: validity is `aria-invalid`'s to say. */
@@ -20,7 +21,7 @@ export function ValidMark({ icon }: { icon?: ReactNode }): ReactNode {
 
 export interface TextFieldProps extends FieldFrame {
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, details: ChangeDetails<'input-change'>) => void;
   onBlur?: () => void;
   /** Present, the box reserves room for the mark; true draws it. Leave it out for a box that never shows one. */
   valid?: boolean;
@@ -56,7 +57,7 @@ function DefaultTextField(props: TextFieldProps): ReactNode {
               placeholder={props.placeholder}
               disabled={props.disabled}
               readOnly={props.readOnly}
-              onChange={(e) => props.onChange(e.target.value)}
+              onChange={(e) => props.onChange(e.target.value, changeDetails('input-change', e))}
               onBlur={props.onBlur}
             />
             {props.valid ? <ValidMark icon={props.validIcon} /> : null}
@@ -72,7 +73,7 @@ export interface MaskedFieldProps extends Omit<TextFieldProps, 'value' | 'onChan
   mask: Mask;
   /** The raw value: the digits, usually. */
   value: string;
-  onChange: (raw: string) => void;
+  onChange: (raw: string, details: ChangeDetails<'input-change'>) => void;
 }
 
 /** A box that shows its value through a mask and keeps the raw one: `masks.phone`, `masks.date` (typed MM/DD/YYYY), `masks.ssn`… */
@@ -81,7 +82,7 @@ function DefaultMaskedField({ mask, value, onChange, ...rest }: MaskedFieldProps
     <TextField
       {...rest}
       value={mask.format(value)}
-      onChange={(typed) => onChange(mask.parse(typed))}
+      onChange={(typed, details) => onChange(mask.parse(typed), details)}
       inputMode={rest.inputMode ?? mask.inputMode}
       placeholder={rest.placeholder ?? mask.placeholder}
     />
@@ -94,6 +95,6 @@ function DefaultMoneyField({ symbol = '$', ...rest }: Omit<MaskedFieldProps, 'ma
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const TextField = slotted('TextField', DefaultTextField);
-export const MaskedField = slotted('MaskedField', DefaultMaskedField);
-export const MoneyField = slotted('MoneyField', DefaultMoneyField);
+export const TextField = slotted('TextField', DefaultTextField, { onChange: [1, 'input-change'] });
+export const MaskedField = slotted('MaskedField', DefaultMaskedField, { onChange: [1, 'input-change'] });
+export const MoneyField = slotted('MoneyField', DefaultMoneyField, { onChange: [1, 'input-change'] });

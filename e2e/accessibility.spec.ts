@@ -20,6 +20,7 @@ import { BUILD_MS } from './support/budgets';
 import AxeBuilder from '@axe-core/playwright';
 import { CRM, expect, FIELDOPS, type Page, test } from './support/ownServers';
 import { COMMONS_ADMIN, DEPOT_ADMIN, PAYDAY_ADMIN, FORECOURT_STAFF, startSample } from './support/sampleServer';
+import { checkPatterns } from '../packages/ui/src/conformancePatterns';
 
 // This worker's own servers (support/ownServers.ts), so the spec runs in the parallel lane.
 test.use({ servers: ['crm', 'fieldops'] });
@@ -164,6 +165,11 @@ test('Compass, writable: dashboard, list, a working lead, calendar and the New f
     await expect(page.locator('.newpanel')).toBeVisible();
     await audit(page, `${as} new lead`, findings);
   }
+  // axe reads the roles; the keys are not its to press. Once, in the default look: the pattern is not dressed.
+  await dress(page, CRM, undefined, 'light');
+  await page.goto(`${CRM}/leads/~11`);
+  await painted(page);
+  expect(await page.evaluate(checkPatterns)).toEqual([]);
   expect(findings, report(findings)).toEqual([]);
 });
 

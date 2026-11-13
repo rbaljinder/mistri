@@ -129,8 +129,8 @@ test('money is drawn with its symbol and the groups, and the value is the digits
         label="Income"
         symbol={symbol}
         value={raw}
-        onChange={(v) => {
-          last(v);
+        onChange={(v, details) => {
+          last(v, details);
           set(v);
         }}
       />
@@ -140,7 +140,7 @@ test('money is drawn with its symbol and the groups, and the value is the digits
   const box = screen.getByRole('textbox', { name: 'Income' });
   await user.type(box, '25000');
   expect(box).toHaveValue('$25,000');
-  expect(last).toHaveBeenLastCalledWith('25000');
+  expect(last).toHaveBeenLastCalledWith('25000', expect.anything());
   cleanup();
   render(<Pay symbol="" />);
   await user.type(screen.getByRole('textbox', { name: 'Income' }), '1200');

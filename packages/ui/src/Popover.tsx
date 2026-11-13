@@ -17,6 +17,7 @@ import { Popover as BasePopover } from '@base-ui/react/popover';
 import { layoutViewport, zoomAnchor } from './internal/anchor.js';
 import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { popupContainer, useDialogContainer } from './internal/popups.js';
+import { fromBaseUi, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface PopoverProps {
@@ -24,7 +25,20 @@ export interface PopoverProps {
   children: ReactNode;
   open?: boolean;
   defaultOpen?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  onOpenChange?: (
+    open: boolean,
+    details: ChangeDetails<
+      | 'trigger-hover'
+      | 'trigger-focus'
+      | 'trigger-press'
+      | 'outside-press'
+      | 'escape-key'
+      | 'close-press'
+      | 'focus-out'
+      | 'imperative-action'
+      | 'implicit'
+    >,
+  ) => void;
   className?: string;
   /** The popup's accessible name, where it needs one. */
   ariaLabel?: string;
@@ -41,7 +55,11 @@ function DefaultPopover({ trigger, children, open, defaultOpen, onOpenChange, cl
   /* The layer is drawn outside the page that opened it; the page's scope goes with it (Modal.tsx). */
   const componentScope = useContext(ComponentStyleScope);
   return (
-    <BasePopover.Root open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
+    <BasePopover.Root
+      open={open}
+      defaultOpen={defaultOpen}
+      onOpenChange={onOpenChange && ((next, details) => onOpenChange(next, fromBaseUi(details, 'implicit')))}
+    >
       <BasePopover.Trigger className="ui-popover-trigger" render={triggerElement} ref={anchor} />
       <BasePopover.Portal container={container ?? popupContainer()}>
         <BasePopover.Positioner
@@ -65,4 +83,4 @@ function DefaultPopover({ trigger, children, open, defaultOpen, onOpenChange, cl
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const Popover = slotted('Popover', DefaultPopover);
+export const Popover = slotted('Popover', DefaultPopover, { onOpenChange: [1, 'implicit'] });

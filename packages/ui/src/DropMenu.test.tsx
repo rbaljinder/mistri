@@ -31,7 +31,7 @@ test('the trigger opens a menu of its items in the classes it was given, with no
   const trigger = screen.getByRole('button', { name: 'Sort' });
   expect(trigger).toHaveClass('sort-btn');
   await user.click(trigger);
-  expect(opened).toHaveBeenLastCalledWith(true);
+  expect(opened).toHaveBeenLastCalledWith(true, expect.objectContaining({ reason: 'trigger-press' }));
   const menu = await screen.findByRole('menu');
   expect(menu).toHaveClass('sort-menu');
   expect(screen.getByRole('group', { name: 'Order' })).toHaveClass('sort-group');

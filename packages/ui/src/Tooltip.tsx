@@ -23,6 +23,7 @@ import { Tooltip as BaseTooltip } from '@base-ui/react/tooltip';
 import { layoutViewport, zoomAnchor } from './internal/anchor.js';
 import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { popupContainer, useDialogContainer } from './internal/popups.js';
+import { fromBaseUi, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface TooltipProps {
@@ -32,7 +33,12 @@ export interface TooltipProps {
   children: ReactNode;
   open?: boolean;
   defaultOpen?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  onOpenChange?: (
+    open: boolean,
+    details: ChangeDetails<
+      'trigger-hover' | 'trigger-focus' | 'trigger-press' | 'outside-press' | 'escape-key' | 'disabled' | 'imperative-action' | 'implicit'
+    >,
+  ) => void;
   className?: string;
 }
 
@@ -58,8 +64,7 @@ function DefaultTooltip({ trigger, children, open, defaultOpen, onOpenChange, cl
       defaultOpen={defaultOpen}
       onOpenChange={(next, details) => {
         if (open === undefined) setUncontrolledOpen(next);
-        onOpenChange?.(next);
-        void details;
+        onOpenChange?.(next, fromBaseUi(details, 'implicit'));
       }}
     >
       <BaseTooltip.Trigger className="ui-tooltip-trigger" render={triggerElement} ref={anchor} />
@@ -86,4 +91,4 @@ function DefaultTooltip({ trigger, children, open, defaultOpen, onOpenChange, cl
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const Tooltip = slotted('Tooltip', DefaultTooltip);
+export const Tooltip = slotted('Tooltip', DefaultTooltip, { onOpenChange: [1, 'implicit'] });

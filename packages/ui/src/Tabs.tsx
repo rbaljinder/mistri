@@ -8,6 +8,7 @@
  */
 import type { ReactNode } from 'react';
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
+import { fromBaseUi, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface TabItem {
@@ -21,9 +22,11 @@ export interface TabsProps {
   tabs: readonly TabItem[];
   value?: string;
   defaultValue?: string;
-  onValueChange?: (value: string) => void;
+  /** `select` when a person chose the tab; Base UI's `disabled`, `missing` or `initial` when the chosen tab went away. */
+  onValueChange?: (value: string, details: ChangeDetails<'select' | 'disabled' | 'missing' | 'initial'>) => void;
   className?: string;
-  /** The tablist's accessible name, where the tabs need one ("Settings sections"). */
+  /** The tablist's accessible name ("Settings sections"). Give one: a tab list without a name is read as "tab list" and
+      nothing more, and the conformance check (`checkPatterns`) reports it. */
   ariaLabel?: string;
 }
 
@@ -33,7 +36,7 @@ function DefaultTabs({ tabs, value, defaultValue, onValueChange, className, aria
       className={['ui-tabs', className].filter(Boolean).join(' ')}
       value={value}
       defaultValue={defaultValue ?? tabs.find((tab) => !tab.disabled)?.value}
-      onValueChange={onValueChange}
+      onValueChange={onValueChange && ((next, details) => onValueChange(next as string, fromBaseUi(details, 'select')))}
     >
       <BaseTabs.List className="ui-tabs-list" aria-label={ariaLabel}>
         {tabs.map((tab) => (
@@ -52,4 +55,4 @@ function DefaultTabs({ tabs, value, defaultValue, onValueChange, className, aria
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const Tabs = slotted('Tabs', DefaultTabs);
+export const Tabs = slotted('Tabs', DefaultTabs, { onValueChange: [1, 'select'] });

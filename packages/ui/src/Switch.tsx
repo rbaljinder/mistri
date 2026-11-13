@@ -10,6 +10,7 @@
  */
 import { useId, type ReactNode, type Ref } from 'react';
 import { Switch as BaseSwitch } from '@base-ui/react/switch';
+import { fromBaseUi, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface SwitchProps {
@@ -19,8 +20,7 @@ export interface SwitchProps {
   description?: ReactNode;
   checked?: boolean;
   defaultChecked?: boolean;
-  /** Base UI reports the reason second; the caller's claim is the state, so the reason is untyped here. */
-  onCheckedChange?: (checked: boolean, event: unknown) => void;
+  onCheckedChange?: (checked: boolean, details: ChangeDetails<'toggle'>) => void;
   disabled?: boolean;
   /** Working: pressed once already. Says so and refuses another press, keeping the focus. */
   busy?: boolean;
@@ -55,9 +55,9 @@ function DefaultSwitch({
         defaultChecked={defaultChecked}
         disabled={disabled}
         aria-disabled={busy || undefined}
-        onCheckedChange={(next, event) => {
+        onCheckedChange={(next, details) => {
           if (busy) return;
-          onCheckedChange?.(next, event);
+          onCheckedChange?.(next, fromBaseUi(details, 'toggle'));
         }}
       >
         <BaseSwitch.Thumb className="ui-switch-thumb" />
@@ -77,4 +77,4 @@ function DefaultSwitch({
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const Switch = slotted('Switch', DefaultSwitch);
+export const Switch = slotted('Switch', DefaultSwitch, { onCheckedChange: [1, 'toggle'] });

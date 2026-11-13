@@ -5,6 +5,13 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.48
+
+- **Every change callback in `@mistriwork/ui` says why the value changed and what changed it.** A callback now hears a `ChangeDetails` second: a `reason` (Base UI's word where it gives one, otherwise one short word per primitive, listed in the callback's type), the `source` that made the change (`pointer`, `keyboard`, or `program` when the page did it) and the DOM `event` behind it. A change that carries an event is never `program`. Switch's untyped event argument becomes these details. A control kit may still call back with the value alone; the slot seam fills the details in.
+- **`checkPatterns(root)` checks widgets against their ARIA patterns.** It reads every listbox, menu, tabs, tree, dialog, combobox, radiogroup and switch under a root for its role and name, the roles it must own, one tab stop per composite and focus that never rests on the body or in inert content, then presses arrows, Home, End and Escape as the ARIA Authoring Practices say. It runs in the primitive conformance suite and on a Compass record page, and found an unnamed listbox in Typeahead and in the Palette; both are named now, and Typeahead draws no empty list.
+- **`mistri docs` with no topic prints an index of the docs**, one line a page and what it answers, so an agent reads only the page a task needs; the skill says so.
+- **`mistri check` warns on a widget's role written by hand.** An App's own component that writes `role="listbox"`, `option`, `menu`, `menuitem`, `tab`, `dialog` or `combobox` is told which shipped primitive keeps that widget's keys, focus and states (`component-role`, an advisory).
+
 ## 1.0.0-rc.47
 
 - **A tenant member deletes a row that holds an uploaded file.** Delete answered 403 for any row with file bytes, since a read never carries the bytes; `authorizeDeletedRecord` now judges the row's other columns, the row goes, and its history entry says it cannot be undone. A table a role only appends to no longer draws `[tenant-delete-unauthorized]`, and its files offer no Rename. (A field report.)

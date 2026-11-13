@@ -272,18 +272,28 @@ export declare function Button(props: (Omit<ReactTypes.ButtonHTMLAttributes<HTML
   onClick?: () => void;
   ref?: ReactTypes.Ref<HTMLAnchorElement>;
 })): ReactTypes.ReactElement;
+/** What a control's change callback hears second: why the value moved (`reason`, a word the callback's type lists), the
+    hand that moved it (`program` when the page did) and the DOM event behind it. As `@mistriwork/ui` says it. */
+export interface ChangeDetails<Reason extends string = string> {
+  reason: Reason;
+  source: 'pointer' | 'keyboard' | 'program';
+  event?: Event;
+}
 /** The platform's themed listbox, with optional actions beneath its choices. */
 export declare function Dropdown(props: {
   items: Array<{ value: string; label: string; detail?: string; badge?: string; disabled?: boolean; tone?: ToneName; swatches?: string[] }>;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, details: ChangeDetails<'item-press' | 'autofill' | 'sync'>) => void;
   ariaLabel?: string;
   ariaInvalid?: boolean;
   ariaDescribedBy?: string;
   id?: string;
   buttonRef?: ReactTypes.Ref<HTMLButtonElement>;
   popupRef?: ReactTypes.Ref<HTMLDivElement>;
-  onOpenChange?: (open: boolean) => void;
+  onOpenChange?: (
+    open: boolean,
+    details: ChangeDetails<'trigger-press' | 'outside-press' | 'escape-key' | 'window-resize' | 'item-press' | 'focus-out' | 'list-navigation' | 'cancel-open' | 'implicit'>,
+  ) => void;
   disabled?: boolean;
   readOnly?: boolean;
   valueClassName?: string;
@@ -318,35 +328,35 @@ type FieldFrame = {
 };
 /** A text box in a field. */
 export declare function TextField(props: FieldFrame & {
-  value: string; onChange: (value: string) => void; onBlur?: () => void; type?: 'text' | 'email' | 'tel' | 'url';
+  value: string; onChange: (value: string, details: ChangeDetails<'input-change'>) => void; onBlur?: () => void; type?: 'text' | 'email' | 'tel' | 'url';
   inputMode?: 'text' | 'email' | 'tel' | 'numeric' | 'url'; autoComplete?: string; placeholder?: string; name?: string;
   disabled?: boolean; readOnly?: boolean; valid?: boolean; after?: ReactTypes.ReactNode; inputRef?: ReactTypes.Ref<HTMLInputElement>;
 }): ReactTypes.ReactElement;
 /** One choice from a list, in a field. */
 export declare function Select(props: FieldFrame & {
   options: Array<{ value: string; label: string; detail?: string; badge?: string; disabled?: boolean }>;
-  value: string; onChange: (value: string) => void; placeholder?: string; disabled?: boolean;
+  value: string; onChange: (value: string, details: ChangeDetails<'item-press' | 'autofill' | 'sync'>) => void; placeholder?: string; disabled?: boolean;
 }): ReactTypes.ReactElement;
 /** A checkbox with its label. */
 export declare function Checkbox(props: Omit<FieldFrame, 'label'> & {
-  label: ReactTypes.ReactNode; checked: boolean; onChange: (on: boolean) => void; disabled?: boolean;
+  label: ReactTypes.ReactNode; checked: boolean; onChange: (on: boolean, details: ChangeDetails<'toggle'>) => void; disabled?: boolean;
 }): ReactTypes.ReactElement;
 /** Two choices, yes or no, as a pair. */
 export declare function YesNo(props: Omit<FieldFrame, 'label'> & {
-  label: ReactTypes.ReactNode; value: 'yes' | 'no' | ''; onChange: (value: 'yes' | 'no') => void; yes: string; no: string;
+  label: ReactTypes.ReactNode; value: 'yes' | 'no' | ''; onChange: (value: 'yes' | 'no', details: ChangeDetails<'select'>) => void; yes: string; no: string;
 }): ReactTypes.ReactElement;
 /** A switch with its label. */
 export declare function Switch(props: {
   label?: ReactTypes.ReactNode; description?: ReactTypes.ReactNode; checked?: boolean; defaultChecked?: boolean;
-  onCheckedChange?: (checked: boolean, event: unknown) => void; disabled?: boolean; busy?: boolean; id?: string; className?: string;
+  onCheckedChange?: (checked: boolean, details: ChangeDetails<'toggle'>) => void; disabled?: boolean; busy?: boolean; id?: string; className?: string;
 }): ReactTypes.ReactElement;
 /** A number on a range, said by `format`. */
 export declare function Slider(props: FieldFrame & {
-  value: number; onChange: (value: number) => void; min: number; max: number; step?: number; format?: (n: number) => string; disabled?: boolean;
+  value: number; onChange: (value: number, details: ChangeDetails<'slide'>) => void; min: number; max: number; step?: number; format?: (n: number) => string; disabled?: boolean;
 }): ReactTypes.ReactElement;
 /** Cards to choose from: one (`value` holds at most one key) or, with `multiple`, several; `exclusive` is the option that clears the rest. */
 export declare function ChoiceCards(props: FieldFrame & {
-  options: Array<{ value: string; label: string; icon?: ReactTypes.ReactNode }>; value: string[]; onChange: (value: string[]) => void;
+  options: Array<{ value: string; label: string; icon?: ReactTypes.ReactNode }>; value: string[]; onChange: (value: string[], details: ChangeDetails<'select'>) => void;
   multiple?: boolean; exclusive?: string;
 }): ReactTypes.ReactElement;
 /** A file chosen in the browser, handed up as a `File` (or null), or with `multiple` a `File[]`; nothing is sent. Drawn with the
@@ -356,8 +366,8 @@ export declare function FileField(props: FieldFrame & {
   /** The button's words and what the names say with no file, in the reader's language where not said. */
   chooseLabel?: string; noneLabel?: string;
 } & (
-  | { multiple?: false; value: File | null; onChange: (file: File | null) => void }
-  | { multiple: true; value: File[]; onChange: (files: File[]) => void }
+  | { multiple?: false; value: File | null; onChange: (file: File | null, details: ChangeDetails<'file-pick'>) => void }
+  | { multiple: true; value: File[]; onChange: (files: File[], details: ChangeDetails<'file-pick'>) => void }
 )): ReactTypes.ReactElement;
 /** A placeholder block at the size what is coming will take (`height`, and `width` where it is not the box's); `lines`
     draws that many, the last shorter, for a paragraph. For `<Loaded loading={…}>`; the wait is announced by what holds it. */

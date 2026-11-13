@@ -84,8 +84,14 @@ describe('the shipped reference', () => {
   test('mistri docs lists, prints and searches', () => {
     const list = capture([]);
     assert.equal(list.code, 0);
-    for (const { topic } of DOC_TOPICS) assert.match(list.out, new RegExp(`^ {2}${topic} `, 'm'));
-    assert.match(list.out, /^ {2}app-dsl /m, 'the longer guides are listed after the topics');
+    /* llms.txt's shape: a title, a line saying what to do with it, then a line a page saying what it answers. */
+    assert.match(list.out, /^# mistri docs\n\n> .*Read only the page your task needs/);
+    for (const { topic } of DOC_TOPICS) assert.match(list.out, new RegExp(`^- ${topic} — \\S`, 'm'));
+    assert.match(list.out, /## Guides\n[^]*^- app-dsl — /m, 'the longer guides are listed after the topics');
+    assert.ok(
+      list.out.split('\n').every((row) => !row.startsWith('-') || / — \S/.test(row)),
+      'every page says what it answers',
+    );
     const one = capture(['relationships']);
     assert.equal(one.code, 0);
     assert.match(one.out, /^# Relationships\n/);

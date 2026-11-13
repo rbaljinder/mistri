@@ -12,7 +12,7 @@
  * could not — but these turn a row's text into script, which no grant stops.
  * A **warning** does not fail it: a literal color or radius where a token
  * belongs, motion past 200ms or not behind `prefers-reduced-motion`, a
- * shadow, a class that is not the component's own, a popup placed by hand.
+ * shadow, a class that is not the component's own, a popup placed by hand, a widget's `role=` written by hand.
  * docs/design.md is the rule each one quotes; a look cannot dress what a
  * component hard-codes.
  *
@@ -125,6 +125,45 @@ const SCRIPT_WARNINGS: Array<[RegExp, string]> = [
     "a literal color no look can dress; use a token — var(--accent), var(--ink-muted) — or useToken('--accent') for an SVG attribute",
   ],
 ];
+
+/* A widget's role written by hand: the role promises keys, focus and states (arrows through a listbox, Escape out of a
+   dialog, aria-selected on a tab) that the shipped primitive keeps and a hand-drawn one almost never does. A warning,
+   since a role can be right, but the primitive named is nearly always what was meant. Only a component an App can import
+   is named (`@mistriwork/mistri/ui`, `/page`): a menu and a combobox have none there yet (DropMenu and Typeahead are
+   @mistriwork/ui's, which an App does not import), so those say so and name nothing. */
+const HAND_ROLES: Readonly<Record<string, string | undefined>> = {
+  listbox: 'Dropdown (or Select) from @mistriwork/mistri/ui',
+  option: "Dropdown's options from @mistriwork/mistri/ui",
+  menu: undefined,
+  menuitem: undefined,
+  tab: 'Tabs from @mistriwork/mistri/page',
+  tablist: 'Tabs from @mistriwork/mistri/page',
+  dialog: 'Modal (or Drawer) from @mistriwork/mistri/page',
+  combobox: undefined,
+};
+/* A JSX attribute: `role=` with nothing between the name and the sign, set off from what comes before it. Not the end of
+   another name (`data-role=`, `aria-role=`, `row.role=`), not a declaration or a destructured default (`const role=`,
+   `{ role='menu' }`), and not text inside a string literal. */
+const HAND_ROLE = /(?<![\w$.-])role=\{?\s*['"`](listbox|option|menu|menuitem|tablist|tab|dialog|combobox)['"`]/g;
+const OPENS_STRING = /(?:^|[=(,[:?+&|{!]|\breturn)\s*$/;
+function handRoles(line: string): string[] {
+  const found: string[] = [];
+  for (const match of line.matchAll(HAND_ROLE)) {
+    const before = line.slice(0, match.index);
+    if (/(?:\b(?:const|let|var)\s+|[{,(]\s*)$/.test(before)) continue;
+    // Inside a string when a quote that opens one (after an operator, not an apostrophe in text) is still open here.
+    let open: string | null = null;
+    for (let i = 0; i < before.length; i++) {
+      const c = before[i]!;
+      if (open) {
+        if (c === '\\') i++;
+        else if (c === open) open = null;
+      } else if ((c === "'" || c === '"' || c === '`') && OPENS_STRING.test(before.slice(0, i))) open = c;
+    }
+    if (!open) found.push(match[1]!);
+  }
+  return found;
+}
 
 /**
  * Where a source names an icon: `<Icon name=…>`, an `icon=…` prop on a kit component and an `icon: …` key in what a prop is
@@ -509,6 +548,14 @@ export async function lintComponents(
         for (const [pattern, message] of SCRIPT_PROBLEMS)
           if (pattern.test(line)) problems.push({ component: id, file, line: i + 1, text: message });
         for (const [pattern, message] of SCRIPT_WARNINGS) if (pattern.test(line)) warn(i + 1, message);
+        for (const role of handRoles(line))
+          warn(
+            i + 1,
+            `[component-role] role="${role}" written by hand: its keys, focus and states are a primitive's work; ` +
+              (HAND_ROLES[role]
+                ? `draw ${HAND_ROLES[role]}`
+                : "an App's modules have no primitive for it yet, so prefer the native element that keeps them (a <button>, a <select>)"),
+          );
         /* Motion said in a style prop is motion all the same. */
         const motion = /\b(transition|animation)(Duration)?\s*:\s*['"`]([^'"`]+)/.exec(line);
         if (motion) {

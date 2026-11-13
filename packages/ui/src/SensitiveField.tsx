@@ -11,12 +11,13 @@ import { Field } from './Field.js';
 import { frameOf, type FieldFrame } from './fieldFrame.js';
 import { digits, type Mask } from './masks.js';
 import { ValidMark } from './TextField.js';
+import { changeDetails, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface SensitiveFieldProps extends FieldFrame {
   /** The raw value. */
   value: string;
-  onChange: (raw: string) => void;
+  onChange: (raw: string, details: ChangeDetails<'input-change'>) => void;
   mask: Mask;
   valid?: boolean;
   validIcon?: ReactNode;
@@ -33,11 +34,11 @@ function DefaultSensitiveField(props: SensitiveFieldProps): ReactNode {
   const [shown, setShown] = useState(false);
   const formatted = props.mask.format(props.value);
   const display = shown ? formatted : '•'.repeat(formatted.length);
-  const change = (typed: string): void => {
-    if (shown) return props.onChange(props.mask.parse(typed));
+  const change = (typed: string, details: ChangeDetails<'input-change'>): void => {
+    if (shown) return props.onChange(props.mask.parse(typed), details);
     // Hidden: what is left of the dots keeps that many characters of the number; a digit typed is added at the end.
     const kept = formatted.slice(0, typed.replace(/[^•]/g, '').length);
-    props.onChange(props.mask.parse(digits(kept) + digits(typed)));
+    props.onChange(props.mask.parse(digits(kept) + digits(typed)), details);
   };
   return (
     <Field {...frameOf(props)}>
@@ -56,7 +57,7 @@ function DefaultSensitiveField(props: SensitiveFieldProps): ReactNode {
                 spellCheck={false}
                 data-1p-ignore
                 data-lpignore="true"
-                onChange={(e) => change(e.target.value)}
+                onChange={(e) => change(e.target.value, changeDetails('input-change', e))}
                 onBlur={props.onBlur}
               />
               {props.valid ? <ValidMark icon={props.validIcon} /> : null}
@@ -78,4 +79,4 @@ function DefaultSensitiveField(props: SensitiveFieldProps): ReactNode {
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const SensitiveField = slotted('SensitiveField', DefaultSensitiveField);
+export const SensitiveField = slotted('SensitiveField', DefaultSensitiveField, { onChange: [1, 'input-change'] });

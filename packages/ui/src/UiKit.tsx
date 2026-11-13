@@ -15,6 +15,7 @@
 import { createElement, type ComponentProps, type ComponentType, type ReactNode } from 'react';
 import type { Avatar } from './Avatar.js';
 import type { Button, ButtonLink } from './Button.js';
+import type { ChangeDetails } from './changeDetails.js';
 import type { CheckCards, Checkbox, ChoiceCards, Consent, YesNo } from './Choices.js';
 import type { DateField } from './DateField.js';
 import type { Drawer } from './Drawer.js';
@@ -34,7 +35,16 @@ import type { TypeaheadProps } from './Typeahead.js';
 import { UiKitContext, defaultSlots, installUiKit } from './internal/uiKitContext.js';
 import { SLOT_NAMES, uiKitProblems, type SlotName } from './uiKitSlots.js';
 
-type Slot<C extends ComponentType<any>> = ComponentType<ComponentProps<C>>;
+/* A kit may call a change callback without its details (the value alone); the seam fills them in for every caller
+   (internal/uiKitContext.ts), so in a kit's props the details are optional and everywhere else they are not. */
+type KitCallback<F> = F extends (...args: [...infer A, infer D extends ChangeDetails<string>]) => infer R
+  ? (...args: A | [...A, D]) => R
+  : F;
+type KitProps<P> = { [K in keyof P]: KitCallback<P[K]> };
+type Slot<C extends ComponentType<any>> = ComponentType<KitProps<ComponentProps<C>>>;
+/* A Typeahead's item callbacks carry no details, and passed through KitCallback while `T` is still open the item itself
+   is taken for details (`onPick(item)` then asks for a `T & ChangeDetails`), so they keep their own types. */
+type TypeaheadItemProps = 'itemKey' | 'itemLabel' | 'itemClassName' | 'renderItem' | 'onPick' | 'onHighlight';
 
 /** Each slot's component, typed by the props the platform draws it with. */
 export interface UiKitSlots {
@@ -50,7 +60,7 @@ export interface UiKitSlots {
   Dropdown: Slot<typeof Dropdown>;
   MultiDropdown: Slot<typeof MultiDropdown>;
   /** Generic in the item it lists, as the default is. */
-  Typeahead: <T>(props: TypeaheadProps<T>) => ReactNode;
+  Typeahead: <T>(props: KitProps<Omit<TypeaheadProps<T>, TypeaheadItemProps>> & Pick<TypeaheadProps<T>, TypeaheadItemProps>) => ReactNode;
   DateField: Slot<typeof DateField>;
   Checkbox: Slot<typeof Checkbox>;
   YesNo: Slot<typeof YesNo>;

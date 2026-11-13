@@ -9,6 +9,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
+import { checkPatterns } from '@mistriwork/ui/conformance.js';
 import { TreePicker, type TreeAsk, type TreeValue } from './TreePicker.js';
 
 /* Three levels: Hardware › Laptops › Batteries, and two roots. */
@@ -196,4 +197,14 @@ test('Escape closes only the picker, and a click on a caret opens a branch witho
   expect(box().getAttribute('aria-expanded')).toBe('false');
   expect(heard).not.toHaveBeenCalled();
   document.removeEventListener('keydown', heard);
+});
+
+test('holds to the combobox pattern over its tree, and over its list of matches', async () => {
+  draw();
+  fireEvent.click(box());
+  await waitFor(() => expect(items()).toEqual(['Hardware', 'Software']));
+  expect(await checkPatterns(document.body, { act: (step) => act(step) })).toEqual([]);
+  fireEvent.change(box(), { target: { value: 'batt' } });
+  await waitFor(() => expect(screen.queryAllByRole('option').length).toBeGreaterThan(1));
+  expect(await checkPatterns(document.body, { act: (step) => act(step) })).toEqual([]);
 });

@@ -17,6 +17,7 @@ import { Menu } from '@base-ui/react/menu';
 import { layoutViewport, zoomAnchor } from './internal/anchor.js';
 import { popupContainer } from './internal/popups.js';
 import { buttonClass } from './Button.js';
+import { fromBaseUi, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 interface DropMenuProps {
@@ -34,7 +35,24 @@ interface DropMenuProps {
   align?: 'start' | 'end';
   sideOffset?: number;
   open?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  onOpenChange?: (
+    open: boolean,
+    details: ChangeDetails<
+      | 'trigger-hover'
+      | 'trigger-focus'
+      | 'trigger-press'
+      | 'outside-press'
+      | 'focus-out'
+      | 'list-navigation'
+      | 'escape-key'
+      | 'item-press'
+      | 'close-press'
+      | 'sibling-open'
+      | 'cancel-open'
+      | 'imperative-action'
+      | 'implicit'
+    >,
+  ) => void;
   /** Where the focus goes when the menu closes; absent, back to the trigger. */
   finalFocus?: Menu.Popup.Props['finalFocus'];
   children: ReactNode;
@@ -69,7 +87,7 @@ function DefaultDropMenu({
     // Return focus before unmount so a containing dialog does not reclaim it — unless the caller says where it goes.
     if (!next && details.reason === 'escape-key' && finalFocus === undefined) trigger.current?.focus({ preventScroll: true });
     setOwn(next);
-    onOpenChange?.(next);
+    onOpenChange?.(next, fromBaseUi(details, 'implicit'));
   };
   return (
     <div className={className || undefined}>
@@ -157,7 +175,7 @@ function DefaultDropItem({
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const DropMenu = slotted('DropMenu', DefaultDropMenu);
+export const DropMenu = slotted('DropMenu', DefaultDropMenu, { onOpenChange: [1, 'implicit'] });
 export const DropGroup = slotted('DropGroup', DefaultDropGroup);
 export const DropSeparator = slotted('DropSeparator', DefaultDropSeparator);
 export const DropItem = slotted('DropItem', DefaultDropItem);
