@@ -761,7 +761,7 @@ OpenAPI compatibility proof, and it does not enable API routes.
 ## Reading the reference offline
 
 ```text
-mistri docs                     list the topics and every shipped page
+mistri docs                     an index: a line a page and what it answers
 mistri docs <topic>             print one (access-model, secrets, relationships, …)
 mistri docs <topic> --brief     its headings and the first sentence under each, one screen
 mistri docs --search <words>    every line of the shipped pages that says them

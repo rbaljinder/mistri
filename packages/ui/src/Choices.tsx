@@ -8,6 +8,7 @@
 import { useId, useRef, useState, type AriaAttributes, type KeyboardEvent, type ReactNode } from 'react';
 import { Field } from './Field.js';
 import { frameOf, type FieldFrame } from './fieldFrame.js';
+import { changeDetails, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface ChoiceOption {
@@ -21,7 +22,7 @@ export interface YesNoProps extends Omit<FieldFrame, 'label'> {
   /** The question. */
   label: ReactNode;
   value: 'yes' | 'no' | '';
-  onChange: (value: 'yes' | 'no') => void;
+  onChange: (value: 'yes' | 'no', details: ChangeDetails<'select'>) => void;
   /** The two words, in the caller's language. */
   yes: string;
   no: string;
@@ -42,7 +43,13 @@ function DefaultYesNo(props: YesNoProps): ReactNode {
         >
           {(['yes', 'no'] as const).map((v) => (
             <label key={v} className={`choice-pick${props.value === v ? ' is-on' : ''}`}>
-              <input type="radio" name={name} className="choice-input" checked={props.value === v} onChange={() => props.onChange(v)} />
+              <input
+                type="radio"
+                name={name}
+                className="choice-input"
+                checked={props.value === v}
+                onChange={(e) => props.onChange(v, changeDetails('select', e))}
+              />
               {props[v]}
             </label>
           ))}
@@ -55,7 +62,7 @@ function DefaultYesNo(props: YesNoProps): ReactNode {
 export interface ChoiceCardsProps extends FieldFrame {
   options: ChoiceOption[];
   value: string[];
-  onChange: (value: string[]) => void;
+  onChange: (value: string[], details: ChangeDetails<'select'>) => void;
   /** Several may be on. */
   multiple?: boolean;
   /** The card that stands alone ("None"): choosing it clears the rest, and choosing another clears it. */
@@ -65,11 +72,12 @@ export interface ChoiceCardsProps extends FieldFrame {
 /** Cards with an icon, a label and a box. One choice is a radio group; `multiple` a group of checkboxes. */
 function DefaultChoiceCards(props: ChoiceCardsProps): ReactNode {
   const name = useId();
-  const toggle = (v: string, on: boolean): void => {
-    if (!props.multiple) return props.onChange(on ? [v] : []);
-    if (v === props.exclusive) return props.onChange(on ? [v] : []);
+  const toggle = (v: string, on: boolean, event: Event | undefined): void => {
+    const details = changeDetails('select', event);
+    if (!props.multiple) return props.onChange(on ? [v] : [], details);
+    if (v === props.exclusive) return props.onChange(on ? [v] : [], details);
     const rest = props.value.filter((x) => x !== v && x !== props.exclusive);
-    props.onChange(on ? props.options.map((o) => o.value).filter((x) => x === v || rest.includes(x)) : rest);
+    props.onChange(on ? props.options.map((o) => o.value).filter((x) => x === v || rest.includes(x)) : rest, details);
   };
   if (props.multiple)
     return (
@@ -80,7 +88,7 @@ function DefaultChoiceCards(props: ChoiceCardsProps): ReactNode {
             aria-describedby={control['aria-describedby']}
             aria-invalid={control['aria-invalid']}
             cards={props.options.map((o) => ({ key: o.value, label: o.label, icon: o.icon, on: props.value.includes(o.value) }))}
-            onToggle={(index, on) => toggle(props.options[index].value, on)}
+            onToggle={(index, on, details) => toggle(props.options[index].value, on, details.event)}
           />
         )}
       </Field>
@@ -105,7 +113,13 @@ function DefaultChoiceCards(props: ChoiceCardsProps): ReactNode {
                   </span>
                 ) : null}
                 <span className="choice-card-label">{o.label}</span>
-                <input type="radio" name={name} className="choice-input" checked={on} onChange={(e) => toggle(o.value, e.target.checked)} />
+                <input
+                  type="radio"
+                  name={name}
+                  className="choice-input"
+                  checked={on}
+                  onChange={(e) => toggle(o.value, e.target.checked, e.nativeEvent)}
+                />
                 <span className="choice-box" aria-hidden="true" />
               </label>
             );
@@ -129,7 +143,7 @@ export interface CheckCard {
 export interface CheckCardsProps {
   cards: readonly CheckCard[];
   /** The card at `index` turned on or off. */
-  onToggle: (index: number, on: boolean) => void;
+  onToggle: (index: number, on: boolean, details: ChangeDetails<'toggle'>) => void;
   id?: string;
   disabled?: boolean;
   'aria-labelledby'?: string;
@@ -174,7 +188,7 @@ function DefaultCheckCards(props: CheckCardsProps): ReactNode {
     } else if (event.key === ' ') {
       // Space is the box's own key; the page does not scroll under it.
       event.preventDefault();
-      if (!props.disabled) props.onToggle(index, !cards[index].on);
+      if (!props.disabled) props.onToggle(index, !cards[index].on, changeDetails('toggle', event));
     }
   };
   return (
@@ -198,9 +212,9 @@ function DefaultCheckCards(props: CheckCardsProps): ReactNode {
           aria-disabled={props.disabled || undefined}
           tabIndex={index === stop ? 0 : -1}
           className={`choice-card${card.on ? ' is-on' : ''}`}
-          onClick={() => {
+          onClick={(event) => {
             setHeld(index);
-            if (!props.disabled) props.onToggle(index, !card.on);
+            if (!props.disabled) props.onToggle(index, !card.on, changeDetails('toggle', event));
           }}
           onFocus={() => setHeld(index)}
           onKeyDown={(event) => keys(event, index)}
@@ -223,7 +237,7 @@ function DefaultCheckCards(props: CheckCardsProps): ReactNode {
 
 export interface CheckboxProps extends Omit<FieldFrame, 'label'> {
   checked: boolean;
-  onChange: (on: boolean) => void;
+  onChange: (on: boolean, details: ChangeDetails<'toggle'>) => void;
   /** The text beside the box; it is the label, so it is a click target too. */
   label: ReactNode;
   disabled?: boolean;
@@ -240,7 +254,7 @@ function DefaultCheckbox(props: CheckboxProps): ReactNode {
           className="field-check"
           checked={props.checked}
           disabled={props.disabled}
-          onChange={(e) => props.onChange(e.target.checked)}
+          onChange={(e) => props.onChange(e.target.checked, changeDetails('toggle', e))}
         />
       )}
     </Field>
@@ -253,8 +267,8 @@ function DefaultConsent(props: CheckboxProps): ReactNode {
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const YesNo = slotted('YesNo', DefaultYesNo);
-export const ChoiceCards = slotted('ChoiceCards', DefaultChoiceCards);
-export const CheckCards = slotted('CheckCards', DefaultCheckCards);
-export const Checkbox = slotted('Checkbox', DefaultCheckbox);
-export const Consent = slotted('Consent', DefaultConsent);
+export const YesNo = slotted('YesNo', DefaultYesNo, { onChange: [1, 'select'] });
+export const ChoiceCards = slotted('ChoiceCards', DefaultChoiceCards, { onChange: [1, 'select'] });
+export const CheckCards = slotted('CheckCards', DefaultCheckCards, { onToggle: [2, 'toggle'] });
+export const Checkbox = slotted('Checkbox', DefaultCheckbox, { onChange: [1, 'toggle'] });
+export const Consent = slotted('Consent', DefaultConsent, { onChange: [1, 'toggle'] });

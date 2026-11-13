@@ -333,7 +333,7 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
             setActive(0);
           }}
         />
-        <div ref={list} className="palette-list" id="palette-list" role="listbox">
+        <div ref={list} className="palette-list" id="palette-list" role="listbox" aria-label={say('navigation.search')}>
           {!shown.length
             ? settled && <p className="palette-empty">{term ? say('nothingMatches', { term }) : say('nothingToGo')}</p>
             : inApp

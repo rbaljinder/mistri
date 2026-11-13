@@ -141,6 +141,7 @@ const DropMenu: UiKitSlots['DropMenu'] = ({
   const wrap = useRef<HTMLSpanElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
+  const triggerId = useId();
   const set = (next: boolean) => {
     if (open === undefined) setOwn(next);
     onOpenChange?.(next);
@@ -167,16 +168,19 @@ const DropMenu: UiKitSlots['DropMenu'] = ({
       close(true);
       return;
     }
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
     const items = [...(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') ?? [])];
     const at = items.indexOf(document.activeElement as HTMLElement);
-    items[(at + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus();
+    if (event.key === 'Home') items[0]?.focus();
+    else if (event.key === 'End') items.at(-1)?.focus();
+    else items[(at + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus();
   };
   return (
     <span ref={wrap} data-kit="drop-menu" className={classes('kit-menu-wrap', className)}>
       <button
         ref={trigger}
+        id={triggerId}
         type="button"
         className={classes('kit-button', 'kit-secondary', triggerClassName)}
         title={triggerTitle}
@@ -195,7 +199,13 @@ const DropMenu: UiKitSlots['DropMenu'] = ({
       </button>
       {shown ? (
         <MenuState.Provider value={{ close }}>
-          <div ref={menu} role="menu" className={classes('kit-menu', `kit-align-${align}`, popupClassName)} onKeyDown={move}>
+          <div
+            ref={menu}
+            role="menu"
+            aria-labelledby={triggerId}
+            className={classes('kit-menu', `kit-align-${align}`, popupClassName)}
+            onKeyDown={move}
+          >
             {children}
           </div>
         </MenuState.Provider>
@@ -319,25 +329,39 @@ const Typeahead: UiKitSlots['Typeahead'] = ({
       />
       {shown ? (
         <div ref={popupRef} className={classes('kit-popup', popupClassName)}>
-          <div role="listbox" id={list} className={classes('kit-list', listClassName)}>
-            {items.length === 0 ? <div className={emptyClassName}>{empty}</div> : null}
-            {items.map((item, at) => (
-              <div
-                key={itemKey(item)}
-                id={`${list}-${at}`}
-                role="option"
-                aria-selected={at === lit}
-                className={classes('kit-option', at === lit && 'kit-lit', itemClassName(item, at === lit))}
-                title={itemLabel(item)}
-                /* The box keeps the focus through a pick, so its blur does not close the list first. */
-                onMouseDown={(event) => event.preventDefault()}
-                onMouseEnter={() => light(at)}
-                onClick={() => onPick(item)}
-              >
-                {renderItem(item)}
+          {/* Nothing matched: the message is a status on the list's surface, and no listbox is left holding no option. */}
+          {items.length === 0 ? (
+            <div id={list} className={classes('kit-list', listClassName)}>
+              <div role="status" className={emptyClassName}>
+                {empty}
               </div>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div
+              role="listbox"
+              id={list}
+              aria-label={rest['aria-label']}
+              aria-labelledby={rest['aria-labelledby']}
+              className={classes('kit-list', listClassName)}
+            >
+              {items.map((item, at) => (
+                <div
+                  key={itemKey(item)}
+                  id={`${list}-${at}`}
+                  role="option"
+                  aria-selected={at === lit}
+                  className={classes('kit-option', at === lit && 'kit-lit', itemClassName(item, at === lit))}
+                  title={itemLabel(item)}
+                  /* The box keeps the focus through a pick, so its blur does not close the list first. */
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => light(at)}
+                  onClick={() => onPick(item)}
+                >
+                  {renderItem(item)}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ) : null}
     </>

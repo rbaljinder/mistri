@@ -609,7 +609,7 @@ describe('the codes and the paths', () => {
       'public-command-remove',
       'bare-word-column',
       'read-audit-query',
-      ...['markup', 'code-from-text', 'environment', 'color', 'radius', 'motion', 'shadow', 'class', 'ruler'].map(
+      ...['markup', 'code-from-text', 'environment', 'color', 'radius', 'motion', 'shadow', 'class', 'ruler', 'role'].map(
         (rule) => `component-${rule}`,
       ),
       /* A free-form page's refusals carry their code in brackets (appPages.ts, appViews.ts, pageLoaderCheck.ts). */

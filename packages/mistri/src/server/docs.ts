@@ -250,7 +250,7 @@ export function runDocs(
   }
   if (argv[0] === '--help' || argv[0] === '-h') {
     write(
-      `${DOCS_USAGE}\n\nWith no topic, lists the reference topics and every other shipped page. With one, prints it;\nwith --brief, its headings and the first sentence under each, one screen.\n`,
+      `${DOCS_USAGE}\n\nWith no topic, an index: a line a page and what it answers. With one, prints it;\nwith --brief, its headings and the first sentence under each, one screen.\n`,
     );
     return 0;
   }
@@ -288,19 +288,22 @@ export function runDocs(
   if (!argv.length) {
     const topics = DOC_TOPICS.filter(({ page }) => pages.some((p) => p.name === page));
     const others = pages.filter((page) => !DOC_TOPICS.some((entry) => entry.page === page.name));
-    const width = Math.max(...[...topics.map((t) => t.topic), ...others.map((p) => p.name)].map((name) => name.length));
-    const line = (name: string, text: string) => `  ${name.padEnd(width)}  ${text}`;
+    /* An llms.txt-style index: a line a page, its name and the question it answers, so an agent reads this one screen
+       and then the one page its task needs, not the shelf. */
+    const line = (name: string, text: string) => `- ${name} — ${text}`;
     write(
       [
-        'The App reference, one screen a topic:',
+        '# mistri docs',
+        '',
+        '> The App reference, offline. Read only the page your task needs: mistri docs <page>. Search them all with mistri docs --search <words>.',
+        '',
+        '## Topics, one screen each',
         '',
         ...topics.map(({ topic, page }) => line(topic, pages.find((p) => p.name === page)!.description)),
         '',
-        'The longer guides:',
+        '## Guides',
         '',
         ...others.map((page) => line(page.name, page.description)),
-        '',
-        `Read one with mistri docs <topic>; search with mistri docs --search <words>.`,
         '',
       ].join('\n'),
     );

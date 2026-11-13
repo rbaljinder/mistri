@@ -7,6 +7,7 @@ import { bridgeShell } from '../../../../../test/shellBridge.js';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import type { TableMeta } from '../../../../engine/src/shared/schema.js';
+import { checkPatterns } from '@mistriwork/ui/conformance.js';
 
 const col = (name: string, type: string, extra = {}) => ({ name, type, nullable: true, primaryKey: false, ...extra });
 const site: TableMeta = {
@@ -118,6 +119,11 @@ test('is a named modal whose one Tab stop is its box', () => {
   const tab = fireEvent.keyDown(document, { key: 'Tab' });
   expect(tab).toBe(false);
   expect(input).toHaveFocus();
+});
+
+test('holds to the dialog and combobox patterns', async () => {
+  render(<Palette onClose={vi.fn()} />);
+  expect(await checkPatterns(document.body, { act: (step) => act(step) })).toEqual([]);
 });
 
 test('ranks the exact name first, moves with the arrows, and Enter goes there', async () => {

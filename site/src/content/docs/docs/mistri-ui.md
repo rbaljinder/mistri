@@ -68,6 +68,15 @@ A primitive reads no data, no address and no message catalog: its words, its ico
 | `ScrollArea` | A region that scrolls inside itself (`label`, `orientation`, `maxHeight`); the viewport is a labeled tab stop with its own thumb |
 | `Tooltip` | A short supplementary note on a `trigger` element, said on hover and on focus alike; the note carries `role="tooltip"` and the trigger names it while open |
 
+Every change callback (`onChange`, `onValueChange`, `onOpenChange`, `onCheckedChange`, `onPageChange`, `onIndexChange`, `onSizesChange`, `onText`, `onToggle`) hears the new value, then its details, `{ reason, source, event? }`. `reason` is Base UI's word where it gives one (`escape-key`, `outside-press`, `item-press`) and one short word otherwise (`toggle`, `select`, `input-change`); each callback's type lists the words it can hear. `source` is `pointer`, `keyboard`, or `program` when the page made the change, and then `event` is absent:
+
+```tsx
+<Drawer open={open} onOpenChange={(next, details) => {
+  setOpen(next);
+  if (!next && details.reason === 'escape-key') discardDraft();
+}} />
+```
+
 `style.css` is the tokens and the primitives' rules in a `mistri-ui` cascade layer, so any rule of your page's own wins. To place them in a layer of your own, import the two files it joins: `@import '@mistriwork/ui/tokens.css' layer(base);` and `@mistriwork/ui/primitives.css` the same way.
 
 ## Common mistakes

@@ -17,6 +17,7 @@
  * hands focus to the other step, never to nowhere.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { changeDetails, type ChangeDetails } from './changeDetails.js';
 
 export interface CarouselSlide {
   /** The slide's short name, said after its number ("1 of 3: Studio"). */
@@ -28,7 +29,7 @@ export interface CarouselProps {
   slides: readonly CarouselSlide[];
   index?: number;
   defaultIndex?: number;
-  onIndexChange?: (index: number) => void;
+  onIndexChange?: (index: number, details: ChangeDetails<'navigate'>) => void;
   /** The region's accessible name, where the carousel needs one ("Project photos"). */
   ariaLabel?: string;
   /** Every word the carousel says, in the caller's language; any left out are English. */
@@ -73,10 +74,10 @@ export function Carousel({ slides, index, defaultIndex = 0, onIndexChange, ariaL
      even where the browser already moved focus to the body on disable. */
   const lastStepRef = useRef<'prev' | 'next' | null>(null);
   const current = slides.length ? Math.min(Math.max(index ?? uncontrolled, 0), slides.length - 1) : 0;
-  const go = (next: number) => {
+  const go = (next: number, event: { nativeEvent: Event }) => {
     const clamped = Math.min(Math.max(next, 0), slides.length - 1);
     if (index === undefined) setUncontrolled(clamped);
-    onIndexChange?.(clamped);
+    onIndexChange?.(clamped, changeDetails('navigate', event));
   };
   /* A step that disables under its own focus hands focus on: the other
      step where it is live, the region itself where both ends are shut
@@ -112,16 +113,16 @@ export function Carousel({ slides, index, defaultIndex = 0, onIndexChange, ariaL
     if (target !== regionRef.current && !(target && controlsRef.current?.contains(target))) return;
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
-      go(current - 1);
+      go(current - 1, event);
     } else if (event.key === 'ArrowRight') {
       event.preventDefault();
-      go(current + 1);
+      go(current + 1, event);
     } else if (event.key === 'Home') {
       event.preventDefault();
-      go(0);
+      go(0, event);
     } else if (event.key === 'End') {
       event.preventDefault();
-      go(slides.length - 1);
+      go(slides.length - 1, event);
     }
   };
   return (
@@ -161,7 +162,7 @@ export function Carousel({ slides, index, defaultIndex = 0, onIndexChange, ariaL
           onFocus={() => {
             lastStepRef.current = 'prev';
           }}
-          onClick={() => go(current - 1)}
+          onClick={(event) => go(current - 1, event)}
         >
           {words.previous}
         </button>
@@ -173,7 +174,7 @@ export function Carousel({ slides, index, defaultIndex = 0, onIndexChange, ariaL
               className="ui-carousel-dot"
               aria-label={words.goToSlide(i + 1, slide.label)}
               aria-current={i === current || undefined}
-              onClick={() => go(i)}
+              onClick={(event) => go(i, event)}
             />
           ))}
         </span>
@@ -185,7 +186,7 @@ export function Carousel({ slides, index, defaultIndex = 0, onIndexChange, ariaL
           onFocus={() => {
             lastStepRef.current = 'next';
           }}
-          onClick={() => go(current + 1)}
+          onClick={(event) => go(current + 1, event)}
         >
           {words.next}
         </button>

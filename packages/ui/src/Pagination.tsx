@@ -10,6 +10,7 @@
  * a pager for a single page is noise.
  */
 import type { ReactNode } from 'react';
+import { changeDetails, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface PaginationProps {
@@ -17,7 +18,7 @@ export interface PaginationProps {
   page: number;
   /** The number of pages. */
   pages: number;
-  onPageChange: (page: number) => void;
+  onPageChange: (page: number, details: ChangeDetails<'page-press'>) => void;
   /** The list's accessible name, where the pager needs one ("Invoices, pages"). */
   ariaLabel?: string;
   /** Every word the pager says, in the caller's language; any left out are English. */
@@ -51,7 +52,12 @@ function DefaultPagination({ page, pages, onPageChange, ariaLabel, words: given 
   const current = Math.min(Math.max(page, 1), pages);
   return (
     <nav className="ui-pagination" aria-label={ariaLabel ?? words.pages}>
-      <button type="button" className="ui-page ui-page-step" disabled={current === 1} onClick={() => onPageChange(current - 1)}>
+      <button
+        type="button"
+        className="ui-page ui-page-step"
+        disabled={current === 1}
+        onClick={(e) => onPageChange(current - 1, changeDetails('page-press', e))}
+      >
         {words.previous}
       </button>
       {paginationItems(current, pages).map((item, i) =>
@@ -65,13 +71,18 @@ function DefaultPagination({ page, pages, onPageChange, ariaLabel, words: given 
             type="button"
             className="ui-page"
             aria-current={item === current ? 'page' : undefined}
-            onClick={() => onPageChange(item)}
+            onClick={(e) => onPageChange(item, changeDetails('page-press', e))}
           >
             {item}
           </button>
         ),
       )}
-      <button type="button" className="ui-page ui-page-step" disabled={current === pages} onClick={() => onPageChange(current + 1)}>
+      <button
+        type="button"
+        className="ui-page ui-page-step"
+        disabled={current === pages}
+        onClick={(e) => onPageChange(current + 1, changeDetails('page-press', e))}
+      >
         {words.next}
       </button>
     </nav>
@@ -79,4 +90,4 @@ function DefaultPagination({ page, pages, onPageChange, ariaLabel, words: given 
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const Pagination = slotted('Pagination', DefaultPagination);
+export const Pagination = slotted('Pagination', DefaultPagination, { onPageChange: [1, 'page-press'] });

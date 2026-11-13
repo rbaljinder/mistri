@@ -9,8 +9,8 @@ compatibility: the mistri that installed it (mistri agent init) on Node 24, run 
 
 An App is `app.ts` (helpers from `@mistriwork/mistri/app`) over a database; the server draws every page and enforces
 who reads and writes what. This file is the loop and the rules; load a reference file when its step comes. Keys
-ship with the package: `npx @mistriwork/mistri docs` lists the topics, `npx @mistriwork/mistri docs <topic>` prints one (`app-dsl`
-indexes every key). The sample Apps the references and guides link, Tick, Lintel and Ladle, ship too: `node_modules/@mistriwork/mistri/examples/apps/`.
+ship with the package: `npx @mistriwork/mistri docs` is an index, a line a page and what it answers; read only the page your
+task needs with `npx @mistriwork/mistri docs <topic>` (`app-dsl` indexes every key). The sample Apps the references and guides link, Tick, Lintel and Ladle, ship too: `node_modules/@mistriwork/mistri/examples/apps/`.
 
 ## The loop: brief → scaffold → seed → check (`--defaults`, `--design --fix`) → dev → test init → grade
 
@@ -36,8 +36,7 @@ indexes every key). The sample Apps the references and guides link, Tick, Lintel
    3. `npx @mistriwork/mistri check --app . --design --brief`, and fix every warning (`--fix` deletes `restated` ones;
       `--defaults` prints what the platform infers, which the App need not say);
    4. `npx @mistriwork/mistri shot --app . <route> --text` to verify what the page shows (headings, columns, row count, actions, empty states, errors);
-   5. only for layout: `npx @mistriwork/mistri shot --app . <route> --both`, open both
-      PNGs, grade them with [rubric.md](references/rubric.md).
+   5. only for layout: `npx @mistriwork/mistri shot --app . <route> --both`, open both PNGs, grade them with [rubric.md](references/rubric.md).
 6. **Walk the journey**: create, change, reload, an invalid value, an empty list, a denied action, a phone. Serve with
    `npx @mistriwork/mistri dev --db-latency 20` (a printed throwaway sign-in per role; each database round trip waits 20 ms, a typical cloud distance, so a page that asks too many questions is slow here too): a refusal names its cause (`because: …`), and
    `npx @mistriwork/mistri observe --mcp` gives `tail`, `recent_errors`, `get_trace`, `explain_access`, `n_plus_one`, `slow_queries`.
@@ -72,6 +71,7 @@ indexes every key). The sample Apps the references and guides link, Tick, Lintel
   resource. Credentials stay in `mistri.json` as `${VARIABLE}` references, never in `app.ts`.
   Never reseed, migrate or write to an existing database without asking.
 - Prefer a built-in block; a custom component only for a drawing no block makes, after the gap is shown. Spell every key as the docs do; never guess one.
+- A `role=` written by hand in a custom component is almost always a bug: use the shipped primitive (`Dropdown`, `Select`, `Tabs`, `Modal`, `Drawer`); `mistri check` names it. A menu or a combobox has none an App imports yet: use the native element.
 - A whole screen no view draws is a free-form page: `pages/<path>.page.tsx`, `definePage` from `@mistriwork/mistri/page`,
   declaring its `reads`, `commands`, `params` and `loader` (or `loaders`, read by name with `page.useLoader`); a condition is a `where` object, a row's verb a `<CommandButton command row />`; it writes only through those commands, never `fetch`.
 - A branded public site, a flow the person's own React owns, or a route that is not a command takes the general

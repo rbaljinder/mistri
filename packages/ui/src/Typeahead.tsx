@@ -23,11 +23,29 @@ import { Autocomplete } from '@base-ui/react/autocomplete';
 import { viewportBox } from './internal/ruler.js';
 import { layoutViewport, zoomAnchor } from './internal/anchor.js';
 import { popupContainer } from './internal/popups.js';
+import { changeDetails, fromBaseUi, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
+
+/** Base UI's reasons for a combobox's text or list moving: typed, cleared, an option pressed, Escape, the focus gone… */
+export type TypeaheadReason =
+  | 'trigger-press'
+  | 'input-press'
+  | 'outside-press'
+  | 'item-press'
+  | 'close-press'
+  | 'escape-key'
+  | 'list-navigation'
+  | 'focus-out'
+  | 'input-change'
+  | 'input-clear'
+  | 'clear-press'
+  | 'chip-remove-press'
+  | 'cancel-open'
+  | 'implicit';
 
 export interface TypeaheadProps<T> {
   text: string;
-  onText: (text: string) => void;
+  onText: (text: string, details: ChangeDetails<TypeaheadReason>) => void;
   /** Already ranked and bounded; drawn in this order. */
   items: T[];
   itemKey: (item: T) => string;
@@ -36,7 +54,7 @@ export interface TypeaheadProps<T> {
   renderItem: (item: T) => ReactNode;
   onPick: (item: T) => void;
   open: boolean;
-  onOpenChange: (open: boolean) => void;
+  onOpenChange: (open: boolean, details: ChangeDetails<TypeaheadReason>) => void;
   /** The `<input>`'s own attributes — class, label, placeholder, title, the caller's keys. */
   inputProps: InputHTMLAttributes<HTMLInputElement>;
   inputRef?: Ref<HTMLInputElement>;
@@ -120,6 +138,23 @@ function DefaultTypeahead<T>({
     if (typeof inputRef === 'function') inputRef(node);
     else if (inputRef) (inputRef as { current: HTMLInputElement | null }).current = node;
   };
+  /* The list is named as its box is. A box named by a `<label for>` has no name attribute to copy, and pointing the list's
+     aria-labelledby at the box itself would read its typed text (an embedded textbox contributes its value), so the
+     label's words are read off the input and given as the list's own aria-label; failing a label, the input's title. */
+  const [labelWords, setLabelWords] = useState<string | undefined>();
+  const named = inputProps['aria-label'] !== undefined || inputProps['aria-labelledby'] !== undefined;
+  useEffect(() => {
+    if (named) return;
+    const words = [...(input.current?.labels ?? [])]
+      .map((label) => (label.textContent ?? '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .join(' ');
+    setLabelWords(words || inputProps.title || undefined);
+  });
+  const listName = {
+    label: named ? inputProps['aria-label'] : labelWords,
+    labelledBy: inputProps['aria-labelledby'],
+  };
   const { onKeyDown, onFocus, ...rest } = inputProps;
   return (
     <Autocomplete.Root
@@ -129,10 +164,10 @@ function DefaultTypeahead<T>({
       value={text}
       onValueChange={(next, details) => {
         // Selection fills the input too; it is not a new search or a cleared key.
-        if (details.reason !== 'item-press') onText(String(next ?? ''));
+        if (details.reason !== 'item-press') onText(String(next ?? ''), fromBaseUi(details, 'input-change'));
       }}
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next, details) => onOpenChange(next, fromBaseUi(details, 'implicit'))}
       openOnInputClick
       autoHighlight={autoHighlight}
       onItemHighlighted={onHighlight && ((item) => onHighlight(item))}
@@ -143,12 +178,14 @@ function DefaultTypeahead<T>({
         onFocus={onFocus}
         onKeyDown={(e) => {
           onKeyDown?.(e);
-          if (e.defaultPrevented) return;
-          /* Only this layer: a drawer under the list listens for Escape too. */
+          /* Only this layer: a drawer under the list listens for Escape too. The key stops here while the popup is up even
+             when something before this handler already took it, as the caller or Base UI may when the popup holds only
+             its empty message — otherwise the drawer under it closes with it. */
           if (e.key === 'Escape' && open) {
-            e.preventDefault();
             e.stopPropagation();
-            onOpenChange(false);
+            if (e.defaultPrevented) return;
+            e.preventDefault();
+            onOpenChange(false, changeDetails('escape-key', e));
           }
         }}
       />
@@ -180,19 +217,32 @@ function DefaultTypeahead<T>({
               ...(fit === 'width' ? { width: '100%' } : { minWidth: 'var(--anchor-width)', maxWidth: 'var(--available-width)' }),
             }}
           >
-            <Autocomplete.List className={listClassName}>
-              {empty !== undefined ? <Autocomplete.Empty className={emptyClassName}>{empty}</Autocomplete.Empty> : null}
-              {items.map((item) => (
-                <Autocomplete.Item
-                  key={itemKey(item)}
-                  value={item}
-                  className={(s) => itemClassName(item, s.highlighted)}
-                  onClick={() => onPick(item)}
-                >
-                  {renderItem(item)}
-                </Autocomplete.Item>
-              ))}
-            </Autocomplete.List>
+            {/* The list is named as its box is: a listbox without a name is read as "listbox" and nothing more. It holds
+                options and nothing else: the empty message is a status, which a listbox may not own, so it sits
+                beside the list, and the list is not drawn at all while it has nothing to hold (a listbox with no option
+                is a pattern violation of its own). */}
+            {items.length > 0 ? (
+              <Autocomplete.List className={listClassName} aria-label={listName.label} aria-labelledby={listName.labelledBy}>
+                {items.map((item) => (
+                  <Autocomplete.Item
+                    key={itemKey(item)}
+                    value={item}
+                    className={(s) => itemClassName(item, s.highlighted)}
+                    onClick={() => onPick(item)}
+                  >
+                    {renderItem(item)}
+                  </Autocomplete.Item>
+                ))}
+              </Autocomplete.List>
+            ) : null}
+            {/* The list's class is the popup's surface (ground, edge, shadow), so while there is no list the empty message's
+                box takes it: a message on a see-through popup over the form is unreadable. The box stays put either way, so
+                the status inside it is one live region, not a new one each time the list empties. */}
+            {empty !== undefined ? (
+              <div className={items.length > 0 ? undefined : listClassName}>
+                <Autocomplete.Empty className={emptyClassName}>{empty}</Autocomplete.Empty>
+              </div>
+            ) : null}
           </Autocomplete.Popup>
         </Autocomplete.Positioner>
       </Autocomplete.Portal>
@@ -201,4 +251,4 @@ function DefaultTypeahead<T>({
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const Typeahead = slotted('Typeahead', DefaultTypeahead);
+export const Typeahead = slotted('Typeahead', DefaultTypeahead, { onText: [1, 'input-change'], onOpenChange: [1, 'implicit'] });

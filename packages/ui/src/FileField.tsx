@@ -8,6 +8,7 @@
  */
 import { useEffect, useRef, type ReactNode, type Ref } from 'react';
 import { buttonClass } from './Button.js';
+import { changeDetails, type ChangeDetails } from './changeDetails.js';
 import { Field } from './Field.js';
 import { frameOf, type FieldFrame } from './fieldFrame.js';
 
@@ -34,13 +35,13 @@ export type FileFieldProps = FileFieldBase &
         multiple?: false;
         /** The chosen file; null while there is none. Set it to null to clear the choice. */
         value: File | null;
-        onChange: (file: File | null) => void;
+        onChange: (file: File | null, details: ChangeDetails<'file-pick'>) => void;
       }
     | {
         multiple: true;
         /** The chosen files; empty while there are none. Set it to `[]` to clear the choice. */
         value: File[];
-        onChange: (files: File[]) => void;
+        onChange: (files: File[], details: ChangeDetails<'file-pick'>) => void;
       }
   );
 
@@ -74,8 +75,9 @@ export function FileField(props: FileFieldProps): ReactNode {
             multiple={props.multiple === true}
             onChange={(e) => {
               const files = Array.from(e.target.files ?? []);
-              if (props.multiple === true) props.onChange(files);
-              else props.onChange(files[0] ?? null);
+              const details = changeDetails('file-pick', e);
+              if (props.multiple === true) props.onChange(files, details);
+              else props.onChange(files[0] ?? null, details);
             }}
           />
           {/* The pointer's way to it: out of the tab order and the tree, the input being the one control for both. */}

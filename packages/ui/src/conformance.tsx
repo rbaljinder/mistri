@@ -36,7 +36,11 @@ import { MaskedField, MoneyField, TextField } from './TextField.js';
 import { Tooltip } from './Tooltip.js';
 import { Typeahead } from './Typeahead.js';
 import { UiKitProvider, type UiKit } from './UiKit.js';
+import type { ChangeDetails } from './changeDetails.js';
+import { checkPatterns } from './conformancePatterns.js';
 import { masks } from './masks.js';
+
+export { checkPatterns, type CheckPatternsOptions } from './conformancePatterns.js';
 
 /** The runner's `test` (Vitest's, Jest's, node:test's): a name and an async body. */
 type ConformanceTest = (name: string, body: () => Promise<void>) => unknown;
@@ -106,6 +110,12 @@ async function type(input: HTMLInputElement | HTMLTextAreaElement, text: string)
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await settle();
+}
+
+/* The page as it stands, held to the ARIA patterns (conformancePatterns.ts), its keys pressed inside `act`. */
+async function patterns(slot: string): Promise<void> {
+  const problems = await checkPatterns(document.body, { act: (step) => act(step) });
+  check(problems.length === 0, `${slot}: ${problems.join('; ')}`);
 }
 
 /* ---- Roles and names, read the way assistive technology reads them ---- */
@@ -209,6 +219,24 @@ function heard<A extends unknown[]>() {
   return Object.assign(fn, { calls });
 }
 
+/* A change callback's details, where the kit gave them: a kit may leave them out (the seam fills them in), but what it
+   gives must be the shape every caller reads, not an event or a word of its own in their place. */
+function heardDetails(callback: { calls: unknown[][] }, at: number, what: string): void {
+  for (const args of callback.calls) {
+    const details = args[at] as Partial<ChangeDetails> | null | undefined;
+    if (details === undefined) continue;
+    check(
+      typeof details === 'object' &&
+        details !== null &&
+        typeof details.reason === 'string' &&
+        details.reason !== '' &&
+        (details.source === 'pointer' || details.source === 'keyboard' || details.source === 'program') &&
+        (details.event === undefined || details.event instanceof Event),
+      `${what}: its second word is not change details, { reason, source, event? }`,
+    );
+  }
+}
+
 const DATE_WORDS: DateFieldWords = {
   dateTimePattern: 'YYYY-MM-DD HH:MM',
   enterDateAndTime: 'Enter a date and time.',
@@ -229,14 +257,22 @@ const ITEMS = [
   { value: 'high', label: 'High' },
 ];
 
-function Typed({ pick, onText }: { pick: (item: string) => void; onText?: (text: string) => void }) {
+function Typed({
+  pick,
+  onText,
+  empty,
+}: {
+  pick: (item: string) => void;
+  onText?: (text: string, details?: ChangeDetails) => void;
+  empty?: string;
+}) {
   const [typed, setTyped] = useState('');
   const [open, setOpen] = useState(false);
   return (
     <Typeahead
       text={typed}
-      onText={(next) => {
-        onText?.(next);
+      onText={(next, details) => {
+        onText?.(next, details);
         setTyped(next);
         setOpen(true);
       }}
@@ -255,6 +291,7 @@ function Typed({ pick, onText }: { pick: (item: string) => void; onText?: (text:
       inputProps={{ 'aria-label': 'Tree' }}
       popupClassName="conformance-popup"
       listClassName="conformance-list"
+      empty={empty}
     />
   );
 }
@@ -306,24 +343,26 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
   });
 
   it('TextField is named by its label, shows its value, reports what is typed, and is disabled when told', async (mount) => {
-    const changed = heard<[string]>();
+    const changed = heard<[string, ChangeDetails?]>();
     const { rerender } = await mount(<TextField label="Company" hint="As it is registered" value="Acme" onChange={changed} />);
     showsText('As it is registered', 'TextField');
     const box = get('textbox', 'Company', 'TextField') as HTMLInputElement;
     check(box.value === 'Acme', `TextField: the box shows "${box.value}", not its value "Acme"`);
     await type(box, 'Acme Ltd');
     check(changed.calls.at(-1)?.[0] === 'Acme Ltd', 'TextField: onChange was not told the typed value');
+    heardDetails(changed, 1, 'TextField: onChange');
     await rerender(<TextField label="Company" value="Acme" onChange={changed} disabled />);
     check((get('textbox', 'Company', 'TextField') as HTMLInputElement).disabled, 'TextField: disabled did not disable the box');
   });
 
   it('MaskedField shows its value through the mask and reports the raw value', async (mount) => {
-    const changed = heard<[string]>();
+    const changed = heard<[string, ChangeDetails?]>();
     await mount(<MaskedField label="Phone" mask={masks.phone} value="5551234567" onChange={changed} />);
     const box = get('textbox', 'Phone', 'MaskedField') as HTMLInputElement;
     check(box.value === '555-123-4567', `MaskedField: the box shows "${box.value}", not the masked "555-123-4567"`);
     await type(box, '555-123-9');
     check(changed.calls.at(-1)?.[0] === '5551239', 'MaskedField: onChange was not told the raw value');
+    heardDetails(changed, 1, 'MaskedField: onChange');
   });
 
   it('MoneyField and SensitiveField are named by their labels and say the words they are given', async (mount) => {
@@ -345,8 +384,8 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
   });
 
   it('Checkbox and Consent are named by their labels, turn on when clicked, and are disabled when told', async (mount) => {
-    const ticked = heard<[boolean]>();
-    const agreed = heard<[boolean]>();
+    const ticked = heard<[boolean, ChangeDetails?]>();
+    const agreed = heard<[boolean, ChangeDetails?]>();
     const { rerender } = await mount(
       <>
         <Checkbox label="Send a copy" checked={false} onChange={ticked} />
@@ -357,15 +396,17 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
     check(ticked.calls.at(-1)?.[0] === true, 'Checkbox: a click on an unchecked box did not report true');
     await click(get('checkbox', 'I agree to the terms', 'Consent'));
     check(agreed.calls.at(-1)?.[0] === true, 'Consent: a click on an unchecked box did not report true');
+    heardDetails(ticked, 1, 'Checkbox: onChange');
+    heardDetails(agreed, 1, 'Consent: onChange');
     await rerender(<Checkbox label="Send a copy" checked onChange={ticked} disabled />);
     const box = get('checkbox', 'Send a copy', 'Checkbox') as HTMLInputElement;
     check(box.disabled || box.getAttribute('aria-disabled') === 'true', 'Checkbox: disabled did not disable the box');
   });
 
   it('YesNo, ChoiceCards and CheckCards say their words and report the pick', async (mount) => {
-    const answered = heard<[string]>();
-    const chosen = heard<[string[]]>();
-    const toggled = heard<[number, boolean]>();
+    const answered = heard<[string, ChangeDetails?]>();
+    const chosen = heard<[string[], ChangeDetails?]>();
+    const toggled = heard<[number, boolean, ChangeDetails?]>();
     await mount(
       <>
         <YesNo label="Is it urgent?" value="" onChange={answered} yes="Indeed" no="Not at all" />
@@ -385,14 +426,18 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
     await click(find('radio', 'High') ?? find('checkbox', 'High') ?? fail('ChoiceCards: no card named "High" is drawn'));
     check(chosen.calls.at(-1)?.[0]?.join() === 'high', 'ChoiceCards: picking a card did not report its value');
     await click(get('checkbox', 'Text me', 'CheckCards'));
-    check(toggled.calls.at(-1)?.join() === '1,true', 'CheckCards: turning the second card on did not report (1, true)');
+    check(toggled.calls.at(-1)?.slice(0, 2).join() === '1,true', 'CheckCards: turning the second card on did not report (1, true)');
+    heardDetails(answered, 1, 'YesNo: onChange');
+    heardDetails(chosen, 1, 'ChoiceCards: onChange');
+    heardDetails(toggled, 2, 'CheckCards: onToggle');
   });
 
   it('Switch is named by its label, turns on when clicked, and is disabled when told', async (mount) => {
-    const switched = heard<[boolean, unknown]>();
+    const switched = heard<[boolean, ChangeDetails?]>();
     const { rerender } = await mount(<Switch label="Notify the owner" checked={false} onCheckedChange={switched} />);
     await click(find('switch', 'Notify the owner') ?? get('checkbox', 'Notify the owner', 'Switch'));
     check(switched.calls.at(-1)?.[0] === true, 'Switch: a click on an off switch did not report true');
+    heardDetails(switched, 1, 'Switch: onCheckedChange');
     await rerender(<Switch label="Notify the owner" checked={false} onCheckedChange={switched} disabled />);
     const control = find('switch', 'Notify the owner') ?? get('checkbox', 'Notify the owner', 'Switch');
     check(
@@ -408,7 +453,7 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
   });
 
   it('Dropdown says its choice, opens from the keyboard, reports a pick, closes on Escape, and is disabled when told', async (mount) => {
-    const changed = heard<[string]>();
+    const changed = heard<[string, ChangeDetails?]>();
     const { rerender } = await mount(<Dropdown ariaLabel="Priority" items={ITEMS} value="low" onChange={changed} />);
     const trigger = get('button', 'Priority', 'Dropdown') as HTMLElement;
     showsText('Low', 'Dropdown', trigger);
@@ -426,6 +471,7 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
     const option = await until(() => find('option', 'High'), 'Dropdown: a click on the button did not list the options');
     await click(option);
     check(changed.calls.at(-1)?.[0] === 'high', 'Dropdown: picking an option did not report its value');
+    heardDetails(changed, 1, 'Dropdown: onChange');
     await rerender(<Dropdown ariaLabel="Priority" items={ITEMS} value="low" onChange={changed} disabled />);
     const off = get('button', 'Priority', 'Dropdown') as HTMLButtonElement;
     check(off.disabled || off.getAttribute('aria-disabled') === 'true', 'Dropdown: disabled did not disable its button');
@@ -447,11 +493,12 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
 
   it('Typeahead reports typing, lists matches, and picks the lit one with the keyboard', async (mount) => {
     const picked = heard<[string]>();
-    const typed = heard<[string]>();
+    const typed = heard<[string, ChangeDetails?]>();
     await mount(<Typed pick={picked} onText={typed} />);
     const box = get('combobox', 'Tree', 'Typeahead') as HTMLInputElement;
     await type(box, 'b');
     check(typed.calls.at(-1)?.[0] === 'b', 'Typeahead: onText was not told the typed text');
+    heardDetails(typed, 1, 'Typeahead: onText');
     const list = await until(() => find('listbox'), 'Typeahead: typing did not open a list of matches');
     check(all('option', list).map(text).join() === 'Birch', 'Typeahead: the list does not show the matching item');
     await press('ArrowDown', box);
@@ -460,7 +507,7 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
   });
 
   it('DateField shows its value, reports what is typed, names its calendar button with its words, and is disabled when told', async (mount) => {
-    const changed = heard<[string]>();
+    const changed = heard<[string, ChangeDetails?]>();
     const { rerender } = await mount(
       <DateField id="due" aria-label="Due" words={DATE_WORDS} calendarIcon={null} value="2026-03-14" onChange={changed} locale="en-US" />,
     );
@@ -468,6 +515,7 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
     check(box.value.length > 0, 'DateField: the box does not show its value');
     await type(box, '2026-04-01');
     check(changed.calls.at(-1)?.[0] === '2026-04-01', 'DateField: onChange was not told the typed text');
+    heardDetails(changed, 1, 'DateField: onChange');
     get('button', 'Pick a day for', 'DateField');
     await rerender(
       <DateField
@@ -607,7 +655,7 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
   });
 
   it('Tabs name their tabs, and choosing one reports it and shows its panel', async (mount) => {
-    const chose = heard<[string]>();
+    const chose = heard<[string, ChangeDetails?]>();
     await mount(
       <Tabs
         ariaLabel="Record sections"
@@ -623,11 +671,12 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
     showsText('The details panel', 'Tabs');
     await click(get('tab', 'History', 'Tabs'));
     check(chose.calls.at(-1)?.[0] === 'history', 'Tabs: choosing a tab did not report its value');
+    heardDetails(chose, 1, 'Tabs: onValueChange');
     await until(() => document.body.textContent?.includes('The history panel'), 'Tabs: the chosen tab does not show its panel');
   });
 
   it('Pagination says its words and reports the page asked for', async (mount) => {
-    const went = heard<[number]>();
+    const went = heard<[number, ChangeDetails?]>();
     await mount(
       <Pagination page={2} pages={5} onPageChange={went} ariaLabel="Invoices, pages" words={{ previous: 'Earlier', next: 'Later' }} />,
     );
@@ -636,6 +685,7 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
     check(went.calls.at(-1)?.[0] === 3, 'Pagination: its next button did not ask for the next page');
     await click(get('button', 'Earlier', 'Pagination'));
     check(went.calls.at(-1)?.[0] === 1, 'Pagination: its previous button did not ask for the page before');
+    heardDetails(went, 1, 'Pagination: onPageChange');
   });
 
   it('Avatar draws a picture or the initials of its name', async (mount) => {
@@ -644,5 +694,73 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
       host.textContent?.includes('AL') || host.querySelector('img, svg, [role="img"]'),
       'Avatar: neither initials nor a picture is drawn',
     );
+  });
+
+  it('an open Dropdown, DropMenu and Typeahead hold to their ARIA patterns', async (mount) => {
+    const { rerender } = await mount(<Dropdown ariaLabel="Priority" items={ITEMS} value="low" onChange={() => {}} />);
+    const trigger = get('button', 'Priority', 'Dropdown') as HTMLElement;
+    trigger.focus();
+    await press('ArrowDown', trigger);
+    await until(() => find('listbox'), 'Dropdown: ArrowDown on the button did not open a listbox');
+    await patterns('Dropdown');
+    await rerender(<Menu run={() => {}} />);
+    const opener = get('button', 'Row actions', 'DropMenu') as HTMLElement;
+    opener.focus();
+    await press('ArrowDown', opener);
+    await until(() => find('menu'), 'DropMenu: ArrowDown on the trigger did not open a menu');
+    await patterns('DropMenu');
+    await rerender(<Typed pick={() => {}} />);
+    await type(get('combobox', 'Tree', 'Typeahead') as HTMLInputElement, 'b');
+    await until(() => find('listbox'), 'Typeahead: typing did not open a list of matches');
+    await patterns('Typeahead');
+    /* Nothing matches: the empty message is a status beside the list, never inside a listbox, and no listbox is left
+       with no option to hold. */
+    await rerender(<Typed pick={() => {}} empty="No tree by that name" />);
+    await type(get('combobox', 'Tree', 'Typeahead') as HTMLInputElement, 'zz');
+    await until(
+      () => document.body.textContent?.includes('No tree by that name'),
+      'Typeahead: a query that matches nothing did not show its empty message',
+    );
+    check(!find('listbox'), 'Typeahead: an empty list is drawn as a listbox with no option');
+    await patterns('Typeahead, nothing matched');
+  });
+
+  it('Tabs, YesNo, ChoiceCards and Switch hold to their ARIA patterns', async (mount) => {
+    await mount(
+      <>
+        <Tabs
+          ariaLabel="Record sections"
+          defaultValue="history"
+          tabs={[
+            { value: 'details', label: 'Details', children: <p>The details panel</p> },
+            { value: 'history', label: 'History', children: <p>The history panel</p> },
+            { value: 'files', label: 'Files', children: <p>The files panel</p> },
+          ]}
+        />
+        <YesNo label="Billable" value="yes" onChange={() => {}} yes="Yes" no="No" />
+        <ChoiceCards label="Size" options={ITEMS} value={['low']} onChange={() => {}} />
+        <Switch label="Notify me" checked onCheckedChange={() => {}} />
+      </>,
+    );
+    await patterns('Tabs, YesNo, ChoiceCards and Switch');
+    check(find('tab', 'History')?.getAttribute('aria-selected') === 'true', 'checkPatterns: reading the tabs left another tab chosen');
+  });
+
+  it('an open Modal and Drawer hold to the dialog pattern', async (mount) => {
+    const { rerender } = await mount(
+      <Modal ariaLabel="Edit the row" onClose={() => {}}>
+        <button type="button">Inside</button>
+      </Modal>,
+    );
+    const dialog = await until(() => find('dialog', 'Edit the row'), 'Modal: no dialog named by its ariaLabel is drawn');
+    await until(() => dialog.contains(document.activeElement), 'Modal: the focus did not move into the dialog when it opened');
+    await patterns('Modal');
+    await rerender(
+      <Drawer open title="Filters" closeLabel="Put it away" onOpenChange={() => {}}>
+        <p>Pick what to show</p>
+      </Drawer>,
+    );
+    await until(() => find('dialog', 'Filters'), 'Drawer: no dialog named by its title is drawn while open');
+    await patterns('Drawer');
   });
 }

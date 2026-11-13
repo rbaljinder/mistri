@@ -20,13 +20,27 @@ import { useContext, type ReactNode } from 'react';
 import { Drawer as BaseDrawer } from '@base-ui/react/drawer';
 import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { popupContainer } from './internal/popups.js';
+import { fromBaseUi, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export type DrawerSide = 'left' | 'right';
 
 interface DrawerBase {
   open: boolean;
-  onOpenChange?: (open: boolean) => void;
+  onOpenChange?: (
+    open: boolean,
+    details: ChangeDetails<
+      | 'trigger-press'
+      | 'outside-press'
+      | 'escape-key'
+      | 'close-watcher'
+      | 'close-press'
+      | 'focus-out'
+      | 'imperative-action'
+      | 'swipe'
+      | 'implicit'
+    >,
+  ) => void;
   side?: DrawerSide;
   children: ReactNode;
   className?: string;
@@ -55,12 +69,12 @@ function DefaultDrawer({
     <BaseDrawer.Root
       open={open}
       disablePointerDismissal={closeDisabled}
-      onOpenChange={(next) => {
+      onOpenChange={(next, details) => {
         /* A non-cancellable operation: a dismissal request (Escape, a
            click outside) is refused here, as Modal's beforeClose refuses
            one, and the controlled drawer stays open. */
         if (!next && closeDisabled) return;
-        onOpenChange?.(next);
+        onOpenChange?.(next, fromBaseUi(details, 'implicit'));
       }}
     >
       <BaseDrawer.Portal container={popupContainer()}>
@@ -87,4 +101,4 @@ function DefaultDrawer({
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const Drawer = slotted('Drawer', DefaultDrawer);
+export const Drawer = slotted('Drawer', DefaultDrawer, { onOpenChange: [1, 'implicit'] });

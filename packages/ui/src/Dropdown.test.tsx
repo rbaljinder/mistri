@@ -62,7 +62,7 @@ test('choosing an option reports it and closes; the arrows walk options and acti
 
   await user.click(screen.getByRole('button', { name: /^Pick\b/ }));
   await user.click((await screen.findAllByRole('option'))[1]);
-  expect(onChange).toHaveBeenCalledWith('b');
+  expect(onChange).toHaveBeenCalledWith('b', expect.objectContaining({ reason: 'item-press' }));
 });
 
 test('optional ownership props expose the real portal and open state without changing selection', async () => {

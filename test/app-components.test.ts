@@ -24,6 +24,7 @@ import { componentsIndex } from '../packages/mistri/src/server/app/appBuild.js';
 import { withHead } from '../packages/engine/src/server/clientHttp.js';
 import { withHostPaths } from '../packages/mistri/src/server/http/componentRoutes.js';
 import { lintComponents } from '../packages/mistri/src/server/app/componentLint.js';
+import { componentCode } from '../packages/mistri/src/server/build/checkProblems.js';
 import { hostModuleSource } from '../packages/mistri/src/server/app/componentSdk.js';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
@@ -276,6 +277,68 @@ describe("mistri check's lints", () => {
       assert.match(said(warnings), expected);
     }
     assert.doesNotMatch(said(warnings), /loud\.css:3/);
+  });
+
+  test("warns on a widget's role written by hand, naming the primitive that keeps its keys", async () => {
+    const at = dir('roles', {
+      'widgets/Picker.jsx': [
+        '// role="menu" in a comment is not a finding',
+        'export default function Picker({ rows }) {',
+        '  return (',
+        '    <ul role="listbox" className="c-picker">',
+        "      {rows.map((row) => <li key={row.id} role={'option'}>{row.name}</li>)}",
+        '      <li role="presentation" />',
+        '    </ul>',
+        '  );',
+        '}',
+      ].join('\n'),
+    });
+    const compiled = (await compileComponents(
+      at,
+      new Map([['picker', { id: 'picker', module: './widgets/Picker.jsx', kind: 'section' }]]),
+    ))!;
+    const { problems, warnings } = await lintComponents(at, compiled);
+    assert.deepEqual(problems, [], 'a warning, never a refusal');
+    const lines = warnings.map((finding) => `${finding.file}:${finding.line} ${finding.text}`);
+    assert.deepEqual(
+      lines.filter((line) => line.includes('[component-role]')),
+      [
+        'widgets/Picker.jsx:4 [component-role] role="listbox" written by hand: its keys, focus and states are a primitive\'s work; draw Dropdown (or Select) from @mistriwork/mistri/ui',
+        'widgets/Picker.jsx:5 [component-role] role="option" written by hand: its keys, focus and states are a primitive\'s work; draw Dropdown\'s options from @mistriwork/mistri/ui',
+      ],
+    );
+    assert.equal(componentCode(warnings.find((finding) => finding.line === 4)!.text), 'component-role');
+  });
+
+  test('a role is a finding only as a JSX attribute, and names only what an App can import', async () => {
+    const at = dir('roles-attribute', {
+      'widgets/Hand.jsx': [
+        "export default function Hand({ role = 'menu', rows }) {",
+        "  { var role='dialog'; }",
+        "  { const role='combobox'; }",
+        "  { const { role='menu' } = rows; }",
+        '  const text = \'<div role="menu">\';',
+        '  return (',
+        '    <div data-role="listbox" aria-role="tab" title="Don\'t" role="tablist">',
+        '      <span role="menu" />',
+        '      <span role="combobox" />',
+        '      <span role="presentation" />',
+        '    </div>',
+        '  );',
+        '}',
+      ].join('\n'),
+    });
+    const compiled = (await compileComponents(at, new Map([['hand', { id: 'hand', module: './widgets/Hand.jsx', kind: 'section' }]])))!;
+    const { warnings } = await lintComponents(at, compiled);
+    const roles = warnings
+      .filter((finding) => finding.text.includes('[component-role]'))
+      .map((finding) => `${finding.line} ${finding.text}`);
+    assert.equal(roles.length, 3, roles.join('\n'));
+    assert.match(roles[0]!, /^7 .*role="tablist" written by hand.*draw Tabs from @mistriwork\/mistri\/page/);
+    assert.match(roles[1]!, /^8 .*role="menu" written by hand.*no primitive for it yet/);
+    assert.doesNotMatch(roles[1]!, /DropMenu|DropItem/);
+    assert.match(roles[2]!, /^9 .*role="combobox" written by hand.*no primitive for it yet/);
+    assert.doesNotMatch(roles[2]!, /Typeahead/);
   });
 });
 

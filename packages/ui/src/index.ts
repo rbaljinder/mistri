@@ -7,17 +7,20 @@
  */
 export { Button, ButtonLink, buttonClass, type ButtonIntent, type ButtonLinkProps, type ButtonProps, type ButtonSize } from './Button.js';
 export { Field, type AnswerKind, type FieldControlProps } from './Field.js';
+/* What every change callback hears second: the reason, the hand, the event. */
+export { type ChangeDetails, type ChangeSource } from './changeDetails.js';
 export { Modal, type ModalHandle } from './Modal.js';
 export { DropMenu, DropGroup, DropItem, DropSeparator } from './DropMenu.js';
 export {
   Dropdown,
   MultiDropdown,
   type DropdownAction,
+  type DropdownChange,
   type DropdownItem,
   type DropdownProps,
   type MultiDropdownProps,
 } from './Dropdown.js';
-export { Typeahead, type TypeaheadProps } from './Typeahead.js';
+export { Typeahead, type TypeaheadProps, type TypeaheadReason } from './Typeahead.js';
 export {
   Icon,
   loadIconsWith,
@@ -28,7 +31,7 @@ export {
   type IconWeight,
   type IconWeighting,
 } from './Icon.js';
-export { DateField, type DateFieldProps, type DateFieldWords } from './DateField.js';
+export { DateField, type DateFieldOpenReason, type DateFieldProps, type DateFieldWords } from './DateField.js';
 /* The form controls. Preview: @mistriwork/ui is Preview at 1.0, and these are the newest of it. */
 export type { FieldFrame } from './fieldFrame.js';
 export { TextField, MaskedField, MoneyField, ValidMark, type MaskedFieldProps, type TextFieldProps } from './TextField.js';

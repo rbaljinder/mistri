@@ -18,6 +18,7 @@
  * a neighbour below its minimum stops at that neighbour's edge.
  */
 import { Fragment, useId, useRef, useState, type ReactNode } from 'react';
+import { changeDetails, type ChangeDetails } from './changeDetails.js';
 
 export interface ResizablePanel {
   /** The pane's accessible name, said by its handle's controls. */
@@ -33,7 +34,7 @@ export interface ResizableProps {
   panels: readonly ResizablePanel[];
   direction?: 'horizontal' | 'vertical';
   sizes?: readonly number[];
-  onSizesChange?: (sizes: number[]) => void;
+  onSizesChange?: (sizes: number[], details: ChangeDetails<'resize'>) => void;
   /** The group's accessible name, where the panes need one ("Record and detail"). */
   ariaLabel?: string;
   /** Every word the handles say, in the caller's language; any left out are English. */
@@ -78,36 +79,36 @@ export function Resizable({ panels, direction = 'horizontal', sizes, onSizesChan
   if (panels.length < 2) return null;
   const current = clampSizes(panels, sizes ?? uncontrolled);
   const mins = panels.map((panel) => panel.minSize ?? 10);
-  const setSizes = (next: number[]) => {
+  const setSizes = (next: number[], event: { nativeEvent: Event }) => {
     const clamped = clampSizes(panels, next);
     if (sizes === undefined) setUncontrolled(clamped);
-    onSizesChange?.(clamped);
+    onSizesChange?.(clamped, changeDetails('resize', event));
   };
   /** Move handle `i` so pane `i` grows by `delta` points and pane `i + 1` shrinks by the same. */
-  const move = (i: number, delta: number) => {
+  const move = (i: number, delta: number, event: { nativeEvent: Event }) => {
     const next = [...current];
     const low = mins[i]! - current[i]!;
     const high = current[i + 1]! - mins[i + 1]!;
     const applied = Math.min(Math.max(delta, low), high);
     next[i] = current[i]! + applied;
     next[i + 1] = current[i + 1]! - applied;
-    setSizes(next);
+    setSizes(next, event);
   };
   const onHandleKeyDown = (i: number) => (event: React.KeyboardEvent) => {
     const horizontal = direction === 'horizontal';
     const step = event.shiftKey ? 10 : 5;
     if (event.key === (horizontal ? 'ArrowRight' : 'ArrowDown')) {
       event.preventDefault();
-      move(i, step);
+      move(i, step, event);
     } else if (event.key === (horizontal ? 'ArrowLeft' : 'ArrowUp')) {
       event.preventDefault();
-      move(i, -step);
+      move(i, -step, event);
     } else if (event.key === 'Home') {
       event.preventDefault();
-      move(i, -(current[i]! - mins[i]!));
+      move(i, -(current[i]! - mins[i]!), event);
     } else if (event.key === 'End') {
       event.preventDefault();
-      move(i, current[i + 1]! - mins[i + 1]!);
+      move(i, current[i + 1]! - mins[i + 1]!, event);
     }
   };
   const onPointerDown = (i: number) => (event: React.PointerEvent) => {
@@ -136,7 +137,7 @@ export function Resizable({ panels, direction = 'horizontal', sizes, onSizesChan
     const applied = Math.min(Math.max(delta, low), high);
     next[drag.handle] = drag.sizes[drag.handle]! + applied;
     next[drag.handle + 1] = drag.sizes[drag.handle + 1]! - applied;
-    setSizes(next);
+    setSizes(next, event);
   };
   const onPointerUp = () => {
     dragRef.current = null;

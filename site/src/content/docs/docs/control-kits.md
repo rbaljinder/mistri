@@ -48,7 +48,8 @@ The slots are the [`@mistriwork/ui`](/docs/mistri-ui/) controls: `Button`, `Butt
 
 - **The menu is one family.** `DropMenu`, `DropGroup`, `DropItem` and `DropSeparator` are drawn together or not at all.
 - **A stylesheet imported by the kit** is served with it and placed in the `components` layer, page-wide. Map it onto the look's tokens (`var(--accent)`, `var(--radius)`, …) so a change of look still reaches your controls.
-- **What the platform relies on** — a `Modal`'s handle and its focus return, `onOpenChange`, the `words` props, `disabled`, and drawing a popup inside the dialog that opened it — is checked by the conformance suite. Run it from your own tests:
+- **A change callback takes its details second** (`onChange(value, details)`): `{ reason, source, event? }`, as the [primitives](/docs/mistri-ui/) give them. A kit may call it with the value alone; the platform fills the details in. If the kit gives them, they must have that shape.
+- **What the platform relies on** — a `Modal`'s handle and its focus return, `onOpenChange`, a change's details, the `words` props, `disabled`, and drawing a popup inside the dialog that opened it — is checked by the conformance suite. Run it from your own tests:
 
 ```ts
 import { test } from 'vitest';

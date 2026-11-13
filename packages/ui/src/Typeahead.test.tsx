@@ -8,6 +8,7 @@ vi.mock('./internal/ruler.js', () => ({
   viewportSize: () => ({ width: 1000, height: 800 }),
 }));
 const { Typeahead } = await import('./Typeahead.js');
+const { checkPatterns } = await import('./conformancePatterns.js');
 afterEach(cleanup);
 
 function Harness({
@@ -138,4 +139,65 @@ test('Escape closes the open typeahead without escaping to its parent', async ()
   await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
   expect(parentEscape).not.toHaveBeenCalled();
   expect(pick).not.toHaveBeenCalled();
+});
+
+function Labelled({ inputProps, empty }: { inputProps: Record<string, string>; empty?: string }) {
+  const [text, setText] = useState('');
+  return (
+    <>
+      <label htmlFor="tree-box">Tree species</label>
+      <Typeahead
+        text={text}
+        onText={setText}
+        items={['Alder', 'Birch'].filter((item) => item.toLowerCase().startsWith(text.toLowerCase()))}
+        itemKey={(item) => item}
+        itemLabel={(item) => item}
+        itemClassName={() => ''}
+        renderItem={(item) => item}
+        onPick={setText}
+        open
+        onOpenChange={() => {}}
+        inputProps={{ id: 'tree-box', ...inputProps }}
+        popupClassName="test-popup"
+        listClassName="test-list"
+        empty={empty}
+      />
+    </>
+  );
+}
+
+test('a list is named by the label of a box that has no aria-label, as the box is, and passes the ARIA patterns', async () => {
+  render(<Labelled inputProps={{}} />);
+  const list = await screen.findByRole('listbox', { name: 'Tree species' });
+  expect(list.getAttribute('aria-label')).toBe('Tree species');
+  expect(await checkPatterns(document.body, { keys: false })).toEqual([]);
+});
+
+test("a box's own aria-label still names the list, ahead of its label", async () => {
+  render(<Labelled inputProps={{ 'aria-label': 'Find a tree' }} />);
+  expect(await screen.findByRole('listbox', { name: 'Find a tree' })).toBeTruthy();
+});
+
+test('an empty message sits beside the list, not inside a listbox, and nothing matched leaves no listbox', async () => {
+  render(<Labelled inputProps={{ 'aria-label': 'Find a tree' }} empty="No tree by that name" />);
+  await userEvent.setup().type(screen.getByRole('combobox'), 'zz');
+  const status = await screen.findByText('No tree by that name');
+  expect(status.closest('[role="listbox"]')).toBeNull();
+  expect(screen.queryByRole('listbox')).toBeNull();
+  expect(await checkPatterns(document.body, { keys: false })).toEqual([]);
+});
+
+test("with nothing matched, the empty message is drawn on the list's surface and Escape stays with the popup", async () => {
+  const drawerEscape = vi.fn();
+  render(
+    <div onKeyDown={(e) => e.key === 'Escape' && drawerEscape()}>
+      <Labelled inputProps={{ 'aria-label': 'Find a tree' }} empty="No tree by that name" />
+    </div>,
+  );
+  const user = userEvent.setup();
+  await user.type(screen.getByRole('combobox'), 'zz');
+  const status = await screen.findByText('No tree by that name');
+  expect(status.closest('.test-list')).not.toBeNull();
+  await user.keyboard('{Escape}');
+  expect(drawerEscape).not.toHaveBeenCalled();
 });

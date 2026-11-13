@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { useState } from 'react';
 import { MultiSelect, Select } from './Select.js';
+import type { ChangeDetails } from './changeDetails.js';
 
 afterEach(cleanup);
 
@@ -13,7 +14,7 @@ const makes = [
   { value: 'audi', label: 'Audi' },
 ];
 
-function One({ start = '', onPick = () => {} }: { start?: string; onPick?: (v: string) => void }) {
+function One({ start = '', onPick = () => {} }: { start?: string; onPick?: (v: string, details: ChangeDetails) => void }) {
   const [value, set] = useState(start);
   return (
     <Select
@@ -22,8 +23,8 @@ function One({ start = '', onPick = () => {} }: { start?: string; onPick?: (v: s
       value={value}
       placeholder="Choose"
       problem={undefined}
-      onChange={(v) => {
-        onPick(v);
+      onChange={(v, details) => {
+        onPick(v, details);
         set(v);
       }}
     />
@@ -75,7 +76,7 @@ test('a problem marks the button invalid and joins its description', () => {
   expect(button).toHaveAccessibleDescription('Pick one. Choose a make.');
 });
 
-function Many({ onPick = () => {} }: { onPick?: (v: string[]) => void }) {
+function Many({ onPick = () => {} }: { onPick?: (v: string[], details: ChangeDetails) => void }) {
   const [value, set] = useState<string[]>([]);
   return (
     <MultiSelect
@@ -83,8 +84,8 @@ function Many({ onPick = () => {} }: { onPick?: (v: string[]) => void }) {
       options={makes}
       value={value}
       placeholder="Choose"
-      onChange={(v) => {
-        onPick(v);
+      onChange={(v, details) => {
+        onPick(v, details);
         set(v);
       }}
     />
@@ -101,11 +102,11 @@ test('several may be chosen; the list stays open and the box says them as one li
   expect(screen.getByRole('listbox')).toHaveAttribute('aria-multiselectable', 'true');
   await user.click(options[2]);
   await user.click(options[0]);
-  expect(pick).toHaveBeenLastCalledWith(['acura', 'audi']);
+  expect(pick).toHaveBeenLastCalledWith(['acura', 'audi'], expect.anything());
   expect(button).toHaveAttribute('aria-expanded', 'true');
   expect(button).toHaveTextContent('Acura, Audi');
   await user.click(screen.getAllByRole('option')[2]);
-  expect(pick).toHaveBeenLastCalledWith(['acura']);
+  expect(pick).toHaveBeenLastCalledWith(['acura'], expect.anything());
 });
 
 test('a multiple list opens from the keyboard and closes on Escape with the focus back', async () => {

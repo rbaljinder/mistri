@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { DateField as Drawn, type DateFieldProps, type DateFieldWords } from './DateField.js';
+import type { ChangeDetails } from './changeDetails.js';
 import { Modal } from './Modal.js';
 
 vi.mock('./internal/anchor.js', () => ({ zoomAnchor: () => null, layoutViewport: () => ({ x: 0, y: 0, width: 1200, height: 900 }) }));
@@ -72,7 +73,7 @@ test('bounds disable outside days and navigation and preserve typed invalid text
   expect(input).toBeInvalid();
 });
 
-function Stamp({ max, onOpen = () => {} }: { max?: string; onOpen?: (open: boolean) => void }) {
+function Stamp({ max, onOpen = () => {} }: { max?: string; onOpen?: (open: boolean, details: ChangeDetails) => void }) {
   const [value, setValue] = useState('2026-09-13T09:30');
   return <DateField id="at" aria-label="At" value={value} onChange={setValue} withTime max={max} locale="en-US" onOpenChange={onOpen} />;
 }
@@ -84,10 +85,11 @@ test('with a time, the calendar picks the date and keeps the time typed; the who
   const input = screen.getByRole('textbox', { name: 'At' });
   expect(input).toHaveAttribute('placeholder', 'YYYY-MM-DD HH:MM');
   await user.click(screen.getByRole('button', { name: 'Choose date for At' }));
-  expect(open).toHaveBeenLastCalledWith(true);
+  expect(open).toHaveBeenLastCalledWith(true, expect.objectContaining({ reason: 'trigger-press', source: 'pointer' }));
   await user.click(await screen.findByRole('button', { name: 'Tuesday, September 15, 2026' }));
   expect(input).toHaveValue('2026-09-15 09:30');
-  expect(open).toHaveBeenLastCalledWith(false);
+  // A day chosen closes the calendar, and says so.
+  expect(open).toHaveBeenLastCalledWith(false, expect.objectContaining({ reason: 'day-press', source: 'pointer' }));
   expect(input).toBeValid();
   await user.clear(input);
   await user.type(input, '2026-09-20 12:01');
@@ -141,7 +143,7 @@ test('locale captions, explicit-zone Today, Clear, and disabled/required inputs'
   await user.click(screen.getByRole('button', { name: 'Choose date for Date' }));
   expect(await screen.findByRole('grid', { name: 'septembre 2026' })).toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'Clear' }));
-  expect(change).toHaveBeenLastCalledWith('');
+  expect(change).toHaveBeenLastCalledWith('', expect.objectContaining({ reason: 'day-press' }));
   await user.click(screen.getByRole('button', { name: 'Choose date for Date' }));
   await user.click(await screen.findByRole('button', { name: 'Today' }));
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -151,7 +153,7 @@ test('locale captions, explicit-zone Today, Clear, and disabled/required inputs'
     day: '2-digit',
   }).formatToParts(new Date());
   const part = (type: string) => parts.find((p) => p.type === type)!.value;
-  expect(change).toHaveBeenLastCalledWith(`${part('year')}-${part('month')}-${part('day')}`);
+  expect(change).toHaveBeenLastCalledWith(`${part('year')}-${part('month')}-${part('day')}`, expect.anything());
   view.rerender(<DateField id="date" value="" onChange={change} disabled />);
   expect(screen.getByRole('textbox')).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Choose date' })).toBeDisabled();

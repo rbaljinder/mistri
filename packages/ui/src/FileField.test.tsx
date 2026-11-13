@@ -4,10 +4,11 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { useState } from 'react';
 import { FileField } from './FileField.js';
+import type { ChangeDetails } from './changeDetails.js';
 
 afterEach(cleanup);
 
-function Picker({ onPick = () => {} }: { onPick?: (file: File | null) => void }) {
+function Picker({ onPick = () => {} }: { onPick?: (file: File | null, details: ChangeDetails) => void }) {
   const [file, set] = useState<File | null>(null);
   return (
     <>
@@ -16,8 +17,8 @@ function Picker({ onPick = () => {} }: { onPick?: (file: File | null) => void })
         hint="A CSV."
         accept=".csv"
         value={file}
-        onChange={(f) => {
-          onPick(f);
+        onChange={(f, details) => {
+          onPick(f, details);
           set(f);
         }}
       />
@@ -44,7 +45,7 @@ test('the chosen File is handed up, and setting the value to null clears the inp
   const input = screen.getByLabelText<HTMLInputElement>('Contacts');
   const file = new File(['a,b\n1,2'], 'people.csv', { type: 'text/csv' });
   await user.upload(input, file);
-  expect(pick).toHaveBeenLastCalledWith(file);
+  expect(pick).toHaveBeenLastCalledWith(file, expect.objectContaining({ reason: 'file-pick' }));
   expect(input.files?.[0]).toBe(file);
   await user.click(screen.getByRole('button', { name: 'Clear' }));
   expect(input.files).toHaveLength(0);
@@ -69,8 +70,8 @@ test('with `multiple` the whole choice is handed up as a list, and an empty list
           label="Exports"
           multiple
           value={files}
-          onChange={(next) => {
-            pick(next);
+          onChange={(next, details) => {
+            pick(next, details);
             set(next);
           }}
         />
@@ -86,7 +87,7 @@ test('with `multiple` the whole choice is handed up as a list, and an empty list
   const a = new File(['1'], 'a.csv', { type: 'text/csv' });
   const b = new File(['2'], 'b.csv', { type: 'text/csv' });
   await user.upload(input, [a, b]);
-  expect(pick).toHaveBeenLastCalledWith([a, b]);
+  expect(pick).toHaveBeenLastCalledWith([a, b], expect.anything());
   expect(input.files).toHaveLength(2);
   await user.click(screen.getByRole('button', { name: 'Clear' }));
   expect(input.files).toHaveLength(0);

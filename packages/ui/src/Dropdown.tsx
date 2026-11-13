@@ -18,6 +18,7 @@ import { useEffect, useId, useRef, useState, type Ref } from 'react';
 import { Select } from '@base-ui/react/select';
 import { layoutViewport, zoomAnchor } from './internal/anchor.js';
 import { popupContainer } from './internal/popups.js';
+import { fromBaseUi, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface DropdownItem {
@@ -30,6 +31,11 @@ export interface DropdownItem {
   tone?: 'good' | 'warn' | 'bad' | 'info' | 'neutral';
   swatches?: string[];
 }
+
+/** Why a dropdown's choice moved: an option pressed (or chosen by key); `autofill`, the browser filling the hidden
+    field; or `sync`, which Base UI reports with no event at all — a letter typed on the closed button, or a chosen option
+    that left the list — and cannot be told apart, so it reads as the page's own change. */
+export type DropdownChange = ChangeDetails<'item-press' | 'autofill' | 'sync'>;
 
 interface DropdownBase {
   items: DropdownItem[];
@@ -44,7 +50,20 @@ interface DropdownBase {
   /** The button, for a form that needs to put focus on this control. */
   buttonRef?: Ref<HTMLButtonElement>;
   popupRef?: Ref<HTMLDivElement>;
-  onOpenChange?: (open: boolean) => void;
+  onOpenChange?: (
+    open: boolean,
+    details: ChangeDetails<
+      | 'trigger-press'
+      | 'outside-press'
+      | 'escape-key'
+      | 'window-resize'
+      | 'item-press'
+      | 'focus-out'
+      | 'list-navigation'
+      | 'cancel-open'
+      | 'implicit'
+    >,
+  ) => void;
   disabled?: boolean;
   readOnly?: boolean;
   /** A class on the shown value — a page title that is also a picker. */
@@ -61,13 +80,13 @@ interface DropdownBase {
   placeholder?: string;
 }
 
-export type DropdownProps = DropdownBase & { value: string; onChange: (value: string) => void };
+export type DropdownProps = DropdownBase & { value: string; onChange: (value: string, details: DropdownChange) => void };
 /** `MultiDropdown`'s: the list of values taken and given, kept in the items' order. */
-export type MultiDropdownProps = DropdownBase & { value: string[]; onChange: (value: string[]) => void };
+export type MultiDropdownProps = DropdownBase & { value: string[]; onChange: (value: string[], details: DropdownChange) => void };
 type DropdownInput = DropdownBase &
   (
-    | { multiple?: false; value: string; onChange: (value: string) => void }
-    | { multiple: true; value: string[]; onChange: (value: string[]) => void }
+    | { multiple?: false; value: string; onChange: (value: string, details: DropdownChange) => void }
+    | { multiple: true; value: string[]; onChange: (value: string[], details: DropdownChange) => void }
   );
 
 export interface DropdownAction {
@@ -146,16 +165,22 @@ function DropdownList(props: DropdownInput) {
         value={(many ? chosen : selected ? selected.value : null) as never}
         disabled={disabled}
         readOnly={readOnly}
-        onOpenChange={onOpenChange}
+        onOpenChange={onOpenChange && ((next, details) => onOpenChange(next, fromBaseUi(details, 'implicit')))}
         /* The labels, handed over: without them Base UI mounts the list
            once, hidden, to read the selected label off an item. */
         items={items.map((i) => ({ value: i.value, label: i.label }))}
-        onValueChange={(next: unknown) => {
+        onValueChange={(next: unknown, details) => {
+          const unnamed = details.event?.type === 'base-ui' ? 'sync' : 'autofill';
+          const change: DropdownChange = fromBaseUi(details as { reason: 'item-press' | 'none'; event: Event }, unnamed);
           if (props.multiple === true) {
             if (!Array.isArray(next)) return;
             const ran = next.find((v): v is string => typeof v === 'string' && v.startsWith(ACTION));
             if (ran) actions[Number(ran.slice(ACTION.length))]?.onSelect();
-            else props.onChange(items.map((i) => i.value).filter((v) => next.includes(v)));
+            else
+              props.onChange(
+                items.map((i) => i.value).filter((v) => next.includes(v)),
+                change,
+              );
             return;
           }
           if (typeof next !== 'string') return;
@@ -163,7 +188,7 @@ function DropdownList(props: DropdownInput) {
             actions[Number(next.slice(ACTION.length))]?.onSelect();
             return;
           }
-          if (next !== props.value) props.onChange(next);
+          if (next !== props.value) props.onChange(next, change);
         }}
       >
         {/* A button that opens a listbox, as it has always been announced —
@@ -275,6 +300,8 @@ function DropdownList(props: DropdownInput) {
   );
 }
 
+const DROPDOWN_FILLS = { onChange: [1, 'item-press'], onOpenChange: [1, 'implicit'] } as const;
+
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const Dropdown = slotted('Dropdown', DefaultDropdown);
-export const MultiDropdown = slotted('MultiDropdown', DefaultMultiDropdown);
+export const Dropdown = slotted('Dropdown', DefaultDropdown, DROPDOWN_FILLS);
+export const MultiDropdown = slotted('MultiDropdown', DefaultMultiDropdown, DROPDOWN_FILLS);

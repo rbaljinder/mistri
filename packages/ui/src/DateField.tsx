@@ -41,6 +41,7 @@ import {
   weekdayLabels,
   withDate,
 } from './internal/datePickerModel.js';
+import { changeDetails, fromBaseUi, type ChangeDetails } from './changeDetails.js';
 import { popupContainer } from './internal/popups.js';
 import { slotted } from './internal/uiKitContext.js';
 
@@ -116,8 +117,9 @@ export interface DateFieldProps {
   /** Drawn in the calendar button. */
   calendarIcon: ReactNode;
   value: string;
-  /** Typed text is preserved, including an incomplete date; callers validate on commit. */
-  onChange: (value: string) => void;
+  /** Typed text is preserved, including an incomplete date; callers validate on commit. `day-press` is a day (or Clear,
+      or Today) chosen in the calendar. */
+  onChange: (value: string, details: ChangeDetails<'input-change' | 'day-press'>) => void;
   /** Composite blur: never fired while focus moves between the input and calendar. */
   onBlur?: () => void;
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
@@ -139,11 +141,27 @@ export interface DateFieldProps {
   withTime?: boolean;
   /** The calendar is drawn in a portal; an owner that watches focus (an autosaving field) is told where. */
   popupRef?: (node: HTMLDivElement | null) => void;
-  onOpenChange?: (open: boolean) => void;
+  /** Base UI's popover words, `day-press` when a choice closed it, `open-key` for Alt+ArrowDown, and `disabled` when the
+      field was disabled or its bounds stopped agreeing while it was open. */
+  onOpenChange?: (open: boolean, details: ChangeDetails<DateFieldOpenReason>) => void;
   'aria-label'?: string;
   'aria-invalid'?: AriaAttributes['aria-invalid'];
   'aria-describedby'?: string;
 }
+
+export type DateFieldOpenReason =
+  | 'trigger-hover'
+  | 'trigger-focus'
+  | 'trigger-press'
+  | 'outside-press'
+  | 'escape-key'
+  | 'close-press'
+  | 'focus-out'
+  | 'imperative-action'
+  | 'implicit'
+  | 'day-press'
+  | 'open-key'
+  | 'disabled';
 
 /** A date field, or a date and a wall-clock time. No input is parsed as an instant or shifted by a timezone. */
 function DefaultDateField({
@@ -193,9 +211,9 @@ function DefaultDateField({
   useLayoutEffect(() => {
     openCallback.current = onOpenChange;
   });
-  const setOpen = (next: boolean) => {
+  const setOpen = (next: boolean, details: ChangeDetails<DateFieldOpenReason>) => {
     setOpenState(next);
-    openCallback.current?.(next);
+    openCallback.current?.(next, details);
   };
   const [container, setContainer] = useState<HTMLElement | null>(null);
   const group = useRef<HTMLSpanElement>(null);
@@ -249,7 +267,7 @@ function DefaultDateField({
   useLayoutEffect(() => {
     if (!open) return;
     if (!configuredBounds || disabled) {
-      setOpen(false);
+      setOpen(false, changeDetails('disabled'));
       return;
     }
     const next = clampDate(isPickerDate(datePart) ? datePart : active, configuredBounds);
@@ -289,12 +307,12 @@ function DefaultDateField({
     // draft now so a surrounding filter's Apply button reads the new value.
     if (!within(event.relatedTarget)) commitBlur();
   };
-  const changeOpen = (next: boolean) => {
+  const changeOpen = (next: boolean, details: ChangeDetails<DateFieldOpenReason>) => {
     if (next) {
       restoreFocus.current = false;
       setActive(seed());
     }
-    setOpen(next);
+    setOpen(next, details);
     if (!next) checkBlur();
   };
   const returnToTrigger = () => {
@@ -303,14 +321,15 @@ function DefaultDateField({
       target.focus({ preventScroll: true });
     }
   };
-  const choose = (date: string) => {
+  const choose = (date: string, event: { nativeEvent: Event }) => {
+    const details = changeDetails('day-press', event);
     restoreFocus.current = true;
     setDraft(null);
     // Move focus before removing the focused day. Otherwise an enclosing
     // modal sees focus fall to body and starts its own recovery to the dialog.
     returnToTrigger();
-    onChange(withTime && date ? withDate(value, date) : date);
-    changeOpen(false);
+    onChange(withTime && date ? withDate(value, date) : date, details);
+    changeOpen(false, details);
   };
   const move = (date: string) => {
     moveFocus.current = true;
@@ -343,7 +362,7 @@ function DefaultDateField({
       onOpenChange={(next, details) => {
         restoreFocus.current = !next && details.reason === 'escape-key';
         if (restoreFocus.current) returnToTrigger();
-        changeOpen(next);
+        changeOpen(next, fromBaseUi(details, 'implicit'));
       }}
     >
       <span
@@ -372,15 +391,16 @@ function DefaultDateField({
           aria-describedby={[describedBy, hint].filter(Boolean).join(' ')}
           onChange={(event) => {
             const text = event.target.value;
-            if (withTime) return onChange(text);
+            const details = changeDetails('input-change', event);
+            if (withTime) return onChange(text, details);
             setDraft(text);
-            onChange(readDate(text, mask) ?? text);
+            onChange(readDate(text, mask) ?? text, details);
           }}
           onKeyDown={(event) => {
             if (event.altKey && event.key === 'ArrowDown') {
               event.preventDefault();
               event.stopPropagation();
-              if (configuredBounds) changeOpen(true);
+              if (configuredBounds) changeOpen(true, changeDetails('open-key', event));
             } else onKeyDown?.(event);
           }}
         />
@@ -474,7 +494,7 @@ function DefaultDateField({
                               tabIndex={day.date === active ? 0 : -1}
                               aria-label={dayName(day.date)}
                               onKeyDown={onDayKey}
-                              onClick={() => choose(day.date!)}
+                              onClick={(event) => choose(day.date!, event)}
                             >
                               {Number(day.date.slice(8))}
                             </button>
@@ -486,10 +506,10 @@ function DefaultDateField({
                 </tbody>
               </table>
               <div className="date-field-foot">
-                <button type="button" onClick={() => choose('')}>
+                <button type="button" onClick={(event) => choose('', event)}>
                   {words.clear}
                 </button>
-                <button type="button" disabled={!dateWithinBounds(today, bounds)} onClick={() => choose(today)}>
+                <button type="button" disabled={!dateWithinBounds(today, bounds)} onClick={(event) => choose(today, event)}>
                   {words.today}
                 </button>
               </div>
@@ -502,4 +522,4 @@ function DefaultDateField({
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const DateField = slotted('DateField', DefaultDateField);
+export const DateField = slotted('DateField', DefaultDateField, { onChange: [1, 'input-change'], onOpenChange: [1, 'implicit'] });

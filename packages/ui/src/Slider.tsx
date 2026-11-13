@@ -6,11 +6,12 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Field } from './Field.js';
 import { frameOf, type FieldFrame } from './fieldFrame.js';
 import { grouped } from './masks.js';
+import { changeDetails, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface SliderProps extends FieldFrame {
   value: number;
-  onChange: (value: number) => void;
+  onChange: (value: number, details: ChangeDetails<'slide'>) => void;
   min: number;
   max: number;
   step?: number;
@@ -41,7 +42,7 @@ function DefaultSlider(props: SliderProps): ReactNode {
             disabled={props.disabled}
             aria-valuetext={say(props.value)}
             style={{ '--range-share': `${share}%` } as CSSProperties}
-            onChange={(e) => props.onChange(Number(e.target.value))}
+            onChange={(e) => props.onChange(Number(e.target.value), changeDetails('slide', e))}
           />
           <div className="field-range-ends" aria-hidden="true">
             <span>{say(props.min)}</span>
@@ -54,4 +55,4 @@ function DefaultSlider(props: SliderProps): ReactNode {
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const Slider = slotted('Slider', DefaultSlider);
+export const Slider = slotted('Slider', DefaultSlider, { onChange: [1, 'slide'] });
