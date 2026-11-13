@@ -107,6 +107,26 @@ test('each step is saved on Continue and the review is drawn from memory; nothin
   expect(document.cookie).toBe('');
 });
 
+test("each step and the submit name the visitor's pick of language, as it stands when they are sent", async () => {
+  server();
+  let picked: string | undefined = 'es';
+  render(<SavedFormSurface form={form} appName="Ignition" language={() => picked} />);
+  await fillAndReview();
+  // A pick made since the page arrived is the one the submit names.
+  picked = 'en';
+  fireEvent.click(screen.getByLabelText('These details are true'));
+  fireEvent.click(screen.getByRole('button', { name: 'Submit application' }));
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Application received' })).toBeInTheDocument());
+  const sent = fetchMock.mock.calls.map(([url]) => String(url));
+  expect(sent.filter((url) => url.includes('/steps/'))).toEqual([
+    '/api/forms/apply/steps/about-you?locale=es',
+    '/api/forms/apply/steps/address?locale=es',
+  ]);
+  // Only what a language changes names it: the resume says nothing, and the submit says the pick it was sent under.
+  expect(sent[0]).toBe('/api/forms/apply/resume');
+  expect(sent.at(-1)).toBe('/api/forms/apply?locale=en');
+});
+
 test("the done screen says the handler's own words when its reply carries them", async () => {
   fetchMock.mockImplementation(async (url: string) => {
     if (url.endsWith('/resume')) return answer(200, { saved: ['about-you', 'address'] });

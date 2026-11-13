@@ -45,6 +45,14 @@ import type { PageDef } from '../packages/engine/src/shared/pageModel.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { redactLinkTokens } from '../packages/engine/src/server/http/refusalReport.js';
 import { Masker } from '../packages/mistri/src/server/observe/mask.js';
+import { openIntegrationStore, provisionSqliteIntegrations } from '../packages/mistri/src/adapters/integrations/integrationStore.js';
+import { captureIntegrations } from '../packages/mistri/src/server/integrations/integrationDeclaration.js';
+import {
+  createIntegrationRuntime,
+  registerIntegrationRuntime,
+  saveIntegrationSettings,
+} from '../packages/mistri/src/server/integrations/integrationRuntime.js';
+import { fakepay, provider, resetProvider } from './fixtures/integrations/fakepay/index.js';
 import { createApp } from './support/createApp.js';
 import { catalogOf } from './support/commandCatalog.js';
 
@@ -52,11 +60,12 @@ import { catalogOf } from './support/commandCatalog.js';
 // name by chance; a CI run once failed on a nonce that read "ioAda9…". Leaks are looked for with them out.
 const untokened = (html: string) => html.replace(/\b(?:nonce|data-base|data-session)="[^"]*"/g, '');
 
-const SCHEMA = `CREATE TABLE application (id INTEGER PRIMARY KEY, applicant TEXT NOT NULL, status TEXT NOT NULL, zip TEXT, email TEXT, note TEXT);
-  INSERT INTO application VALUES (1, 'Ada', 'submitted', '94110', 'ada@example.test', 'private note'),
-                                 (2, 'Bea', 'submitted', '10001', 'bea@example.test', 'another note');`;
+const SCHEMA = `CREATE TABLE application (id INTEGER PRIMARY KEY, applicant TEXT NOT NULL, status TEXT NOT NULL, zip TEXT, email TEXT, mobile TEXT, note TEXT);
+  INSERT INTO application VALUES (1, 'Ada', 'submitted', '94110', 'ada@example.test', '+1 (555) 010-0001', 'private note'),
+                                 (2, 'Bea', 'submitted', '10001', 'bea@example.test', NULL, 'another note');`;
 
 const KEY = 'k'.repeat(40);
+process.env.MISTRI_SECRETS_KEY ??= 'a-secrets-key-for-tests-that-is-long-enough';
 
 const CONTRACTS = {
   invite: { target: 'application', input: { link: { type: 'text' } } },
@@ -85,6 +94,7 @@ const RAW = {
         once: { show: ['applicant'], uses: 1 },
         checked: { show: ['applicant'], confirm: { zip: 'ZIP code' } },
         stepped: { show: ['applicant'], stepUp: 'email' },
+        texted: { show: ['applicant'], stepUp: { sms: 'mobile' } },
         brief: { show: ['applicant'], expires: '1 hour' },
       },
     },
@@ -156,7 +166,7 @@ async function fixture(
       input: CONTRACTS.invite.input as never,
       output: shape({ link: text() }),
       async handle({ link }, input) {
-        return { link: (await link((input as { link: string }).link)) as unknown as string };
+        return { link: await link((input as { link: string }).link) };
       },
     }),
     withdraw: defineCommand({
@@ -209,7 +219,7 @@ async function fixture(
         const { applicant } = input as { applicant: string };
         if (applicant === 'early') await link('status');
         const made = await tx.insert({ table: 'application', values: { applicant, status: 'submitted' } });
-        return { reference: `A-${made.key.id}`, link: (await link(applicant === 'undeclared' ? 'nope' : 'status')) as unknown as string };
+        return { reference: `A-${made.key.id}`, link: await link(applicant === 'undeclared' ? 'nope' : 'status') };
       },
     }),
   });
@@ -386,15 +396,20 @@ test('a log keeps a link’s id and never its MAC: the refusal report and the ob
 });
 
 test('a reference renders as its URL, and a text holding one that does not render renders nothing', async () => {
-  const ref = new LinkRef('C'.repeat(22));
-  assert.equal(JSON.stringify({ link: ref }), `{"link":"mistri-link:${'C'.repeat(22)}"}`);
-  assert.equal(String(ref), `mistri-link:${'C'.repeat(22)}`);
+  const id = 'C'.repeat(22);
+  const ref = new LinkRef(id, 'shop');
+  const said = String(ref);
+  assert.match(said, new RegExp(`^mistri-link:${id}\\.[A-Za-z0-9_-]{22}$`), 'the reference carries its seal');
+  assert.equal(JSON.stringify({ link: ref }), JSON.stringify({ link: said }));
   assert.equal(
-    await renderLinkRefs(`Open ${ref} or ${ref}`, async (id) => `https://x.test/l/${id}`),
-    `Open https://x.test/l/${'C'.repeat(22)} or https://x.test/l/${'C'.repeat(22)}`,
+    await renderLinkRefs(`Open ${ref} or ${ref}`, 'shop', async (link) => `https://x.test/l/${link}`),
+    `Open https://x.test/l/${id} or https://x.test/l/${id}`,
   );
-  assert.equal(await renderLinkRefs(`Open ${ref}`, async () => undefined), undefined);
-  assert.equal(await renderLinkRefs('nothing here', async () => undefined), 'nothing here');
+  assert.equal(await renderLinkRefs(`Open ${ref}`, 'shop', async () => undefined), undefined);
+  assert.equal(await renderLinkRefs('nothing here', 'shop', async () => undefined), 'nothing here');
+  // A look-alike, typed or made for another App, is the text it is: never rendered, never a failure.
+  for (const typed of [`mistri-link:${id}`, `mistri-link:${id}.${'A'.repeat(22)}`, String(new LinkRef(id, 'other'))])
+    assert.equal(await renderLinkRefs(`Open ${typed}`, 'shop', async () => undefined), `Open ${typed}`);
 });
 
 test('a declaration is judged as the App is parsed, and its columns once the catalog is read', () => {
@@ -409,13 +424,19 @@ test('a declaration is judged as the App is parsed, and its columns once the cat
   assert.throws(() => parse(withLink({ show: ['zip'], confirm: ['zip'] })), /never shows what it asks/);
   assert.throws(() => parse(withLink({ show: ['applicant'], commands: ['nope'] })), /does not register/);
   assert.throws(() => parse(withLink({ show: ['applicant'], surprise: true })), /surprise/);
+  // A step-up's code goes to one address: one channel key, named like a channel, naming a column.
+  assert.throws(() => parse(withLink({ show: ['applicant'], stepUp: {} })), /names no channel/);
+  assert.throws(() => parse(withLink({ show: ['applicant'], stepUp: { email: 'email', sms: 'mobile' } })), /more than one channel/);
+  assert.throws(() => parse(withLink({ show: ['applicant'], stepUp: { SMS: 'mobile' } })), /"SMS", which is not a channel/);
+  assert.throws(() => parse(withLink({ show: ['applicant'], stepUp: { sms: ['mobile'] } })), /names the record's column/);
+  assert.throws(() => parse(withLink({ show: ['applicant'], stepUp: 7 })), /email column, or \{ <channel>/);
   const schema = {
     dialect: 'sqlite',
     tables: [
       {
         id: 'application',
         name: 'application',
-        columns: ['id', 'applicant', 'status', 'zip', 'email', 'note'].map((name) => ({
+        columns: ['id', 'applicant', 'status', 'zip', 'email', 'mobile', 'note'].map((name) => ({
           name,
           type: 'TEXT',
           nullable: true,
@@ -433,6 +454,32 @@ test('a declaration is judged as the App is parsed, and its columns once the cat
   assert.match(appLinkProblems(hidden, schema)[0], /the resource hides; a link adds no read/);
   const keyedL = parse({ ...RAW, views: { ...RAW.views, l: { kind: 'list', from: 'application' } } });
   assert.match(appLinkProblems(keyedL, schema)[0], /no view can be keyed "l"/);
+  // The code's column holds an address for its channel: an email for email, a phone number for any other.
+  assert.deepEqual(appLinkProblems(parse(withLink({ show: ['applicant'], stepUp: { email: 'email' } })), schema), []);
+  assert.match(
+    appLinkProblems(parse(withLink({ show: ['applicant'], stepUp: 'applicant' })), schema)[0],
+    /links "x", "stepUp" sends its code by email to "applicant", which is not an email column/,
+  );
+  assert.match(
+    appLinkProblems(parse(withLink({ show: ['applicant'], stepUp: { sms: 'email' } })), schema)[0],
+    /"stepUp" sends its code by the "sms" channel to "email", which is not a phone column/,
+  );
+  // A missing column is said once, as missing.
+  assert.deepEqual(appLinkProblems(parse(withLink({ show: ['applicant'], stepUp: { sms: 'cell_phone' } })), schema), [
+    'resources "application", links "x", "stepUp" names "cell_phone", which is not a column of application.',
+  ]);
+  // The resource's display rule says it as surely as the name.
+  const dressed = parse({
+    ...RAW,
+    resources: {
+      application: {
+        ...RAW.resources.application,
+        display: { note: { format: 'phone' } },
+        links: { x: { show: ['applicant'], stepUp: { sms: 'note' } } },
+      },
+    },
+  });
+  assert.deepEqual(appLinkProblems(dressed, schema), []);
 });
 
 test('a link is minted by its command, said once as a URL, and opens its one record behind a Lax cookie', () =>
@@ -440,7 +487,7 @@ test('a link is minted by its command, said once as a URL, and opens its one rec
     const { url } = await mint('status');
     // The receipt keeps the reference; the secret is nowhere in the journal.
     const receipts = JSON.stringify(sql.prepare(`SELECT * FROM ${COMMAND_JOURNAL_TABLES.receipt}`).all());
-    assert.match(receipts, /mistri-link:[A-Za-z0-9_-]{22}/);
+    assert.match(receipts, /mistri-link:[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{22}/);
     assert.doesNotMatch(receipts, /mstl1\./);
     const opened = await get(url.slice(origin.length));
     assert.equal(opened.status, 303);
@@ -639,7 +686,7 @@ test('a row removed outside any command closes its links the first time one is r
   }));
 
 test('check advises where a link outlives its row: a cascade, and a SQLite key the database hands out again', () => {
-  const columns = ['id', 'applicant', 'status', 'zip', 'email', 'note'].map((name) => ({
+  const columns = ['id', 'applicant', 'status', 'zip', 'email', 'mobile', 'note'].map((name) => ({
     name,
     type: 'TEXT',
     nullable: true,
@@ -913,4 +960,63 @@ test('a step-up mails a code to the record’s address, and the code opens the r
     assert.match(opened.text, /<dd>Ada<\/dd>/);
     // Spent: the same code a second time is refused.
     assert.equal((await post(`/l/${id}/stepup`, { code }, headers)).status, 403);
+  }));
+
+test('a step-up on a channel texts the code to the record’s number under the App’s own key, and never says it', () =>
+  fixture(async ({ mint, land, get, post, mail }) => {
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-links-sms-'));
+    const path = join(directory, 'integrations.db');
+    new DatabaseSync(path).close();
+    provisionSqliteIntegrations(path);
+    const store = await openIntegrationStore({ sqlite: path });
+    const runtime = createIntegrationRuntime({
+      appId: 'intake',
+      declared: captureIntegrations({ use: [fakepay()] }, new Map(), (message) => {
+        throw new Error(message);
+      }),
+      store,
+    });
+    const withdraw = registerIntegrationRuntime(runtime);
+    resetProvider();
+    try {
+      await saveIntegrationSettings(runtime, '', 'clerk', {
+        integration: 'fakepay',
+        secrets: { apiKey: 'sk_intake', webhookSecret: 'whsec_intake_0123456789abcdef' },
+      });
+      const { url } = await mint('texted');
+      const { id, page, session } = await land(url);
+      assert.match(page.text, /data-gate="send"/);
+      assert.doesNotMatch(untokened(page.text), /Ada|555/);
+      const headers = { 'x-mistri-link': session };
+      const sent = await post(`/l/${id}/stepup`, { send: true }, headers);
+      assert.equal(sent.status, 200, sent.text);
+      assert.deepEqual(sent.body.sent, true);
+      const until = Date.now() + 2000;
+      while (provider.texts.length < 1 && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.equal(provider.texts.length, 1);
+      assert.equal(provider.texts[0].to, '+1 (555) 010-0001');
+      assert.equal(provider.texts[0].apiKey, 'sk_intake');
+      const code = /code is (\d+)\./.exec(provider.texts[0].text)?.[1];
+      assert.ok(code, provider.texts[0].text);
+      assert.ok(!sent.text.includes(code), 'the answer never says the code');
+      assert.equal(mail.length, 0, 'a channel step-up sends no email');
+      const ok = await post(`/l/${id}/stepup`, { code }, headers);
+      assert.equal(ok.status, 200, ok.text);
+      const opened = await get(`/l/${id}`, { cookie: ok.headers.get('set-cookie')!.split(';')[0] });
+      assert.match(opened.text, /<dd>Ada<\/dd>/);
+      assert.doesNotMatch(untokened(opened.text), /555/);
+      assert.equal((await post(`/l/${id}/stepup`, { code }, headers)).status, 403);
+      // A record with no number on file answers the same, and nothing is sent.
+      const bea = await land((await mint('texted', 2)).url);
+      const quiet = await post(`/l/${bea.id}/stepup`, { send: true }, { 'x-mistri-link': bea.session });
+      assert.equal(quiet.status, 200, quiet.text);
+      assert.deepEqual(quiet.body.sent, true);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      assert.equal(provider.texts.length, 1);
+    } finally {
+      withdraw();
+      resetProvider();
+      await store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
   }));

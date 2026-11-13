@@ -46,6 +46,8 @@ import { nativeMailAccount } from '../auth/authAccounts.js';
 import { appInboxConnection, ensureAppInbox, noticeForReader } from '../inbox.js';
 import { nextIdleWait } from '../jobs/jobHost.js';
 import { keptReason, NOTICE_WORDS_UNOPENED, openNoticeWords } from '../app/noticeWordsSeal.js';
+import { appPublicLinks, PUBLIC_LINK_UNSAID, sayPublicLinks } from '../links/publicLink.js';
+import { holdsLinkRef, LINK_REF_UNSAID } from '../links/linkToken.js';
 import { EmailFailure, type EmailTransport } from './email.js';
 
 /** An address's account: its id and roles. */
@@ -95,12 +97,13 @@ export function appSendsEmail(app: AppDef): boolean {
   return appKeepsInbox(app) && Object.values(app.resources ?? {}).some((resource) => resource.notify?.some((rule) => rule.email));
 }
 
-/** What of an App mails someone: its notify rules, a status check's step-up, a form's address proof. */
+/** What of an App mails someone: its notify rules, a status check's step-up by email, a form's address proof. */
 function mailingParts(app: AppDef): string[] {
   const parts = appSendsEmail(app) ? ['a notify rule says email: true'] : [];
   for (const [key, view] of Object.entries(app.views)) {
     const form = view as AppFormView;
-    if (form.statusCheck?.stepUp) parts.push(`form "${key}" declares a status check stepUp`);
+    // A step-up on an integration's channel (`{ sms: 'mobile', show }`) sends no mail.
+    if (form.statusCheck?.stepUp && !form.statusCheck.stepUp.channel) parts.push(`form "${key}" declares a status check stepUp`);
     if (form.link?.email?.verified) parts.push(`form "${key}" proves the applicant's email with a code`);
   }
   return parts;
@@ -177,9 +180,14 @@ export function createEmailOutbox(options: OutboxOptions) {
       const person = await account(host, mail.recipient);
       /* A title that says the write's words is kept masked; the said one waited sealed to this row, and is what the
          reader is told where they may read the whole title. One that does not open here is never sent masked. */
-      const title = mail.words === undefined ? mail.title : openNoticeWords(app.id, [mail.app, String(mail.notice)], mail.words);
+      const opened = mail.words === undefined ? mail.title : openNoticeWords(app.id, [mail.app, String(mail.notice)], mail.words);
+      /* A public link the words hold is said as the App's URL; one with none fails the mail, never sent as a reference,
+         and so does a capability link a command minted. A visitor's look-alike of either is text, and sent as text. */
+      const title = opened === undefined ? undefined : await sayPublicLinks(opened, app.id, appPublicLinks(app), undefined);
       if (!person || (await store.emailOff(app.id, mail.recipient))) outcome = { kind: 'skipped' };
-      else if (title === undefined) outcome = { kind: 'failed', error: NOTICE_WORDS_UNOPENED };
+      else if (opened === undefined) outcome = { kind: 'failed', error: NOTICE_WORDS_UNOPENED };
+      else if (holdsLinkRef(opened, app.id)) outcome = { kind: 'failed', error: LINK_REF_UNSAID };
+      else if (title === undefined) outcome = { kind: 'failed', error: PUBLIC_LINK_UNSAID };
       else {
         const tell = async (reader: { adapter: Adapter; schema: DatabaseSchema }) => {
           const told = await noticeForReader(app, reader.adapter, reader.schema, {

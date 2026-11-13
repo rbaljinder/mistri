@@ -27,6 +27,7 @@ import type { FlagRequestRuntime } from '../flags/requestRuntime.js';
 import type { HttpAppPolicy } from '../policy/appPolicyHttp.js';
 import { commandsOf } from '../stores/commandStores.js';
 import { renderedLink, servesLinks } from '../links/linkLookup.js';
+import { appPublicUrl } from '../links/publicLink.js';
 import { resolveConnection } from '@mistriwork/engine/server/auth/credentials.js';
 
 /* What hosting needs, loaded only when there is something to host: every
@@ -156,6 +157,24 @@ export async function hostCommands(opts: Options, registry: Registry, loadedApps
     console.error(`mistri: ${refusal}`);
     await registry.closeAll();
     process.exit(1);
+  } else {
+    /* With neither commands nor --jobs no integration is open, so only email sends: a notify or a step-up on any
+       other channel would load and then never reach anyone. Refused as hostAppCommands refuses it with commands. */
+    const asking = loadedApps.filter(({ app }) => namesChannel(app));
+    if (asking.length) {
+      const { integrationNotifyProblems } = await import('../integrations/integrationChecks.js');
+      const several = loadedApps.length > 1;
+      const [problem] = asking.flatMap(({ app }) =>
+        integrationNotifyProblems(undefined, app).map((found) => (several ? `App "${app.name}": ${found}` : found)),
+      );
+      if (problem) {
+        const { JobDeclarationError } = await import('../jobs/jobModule.js');
+        if (opts.embedded) throw new JobDeclarationError(problem);
+        console.error(`Jobs startup error: ${problem}`);
+        await registry.closeAll();
+        process.exit(1);
+      }
+    }
   }
   return {
     commandHosting,
@@ -175,6 +194,17 @@ export async function hostCommands(opts: Options, registry: Registry, loadedApps
     workflowProblems: hosted?.workflowProblems ?? [],
     ...(hosted?.decisions ? { decisions: hosted.decisions } : {}),
   };
+}
+
+/** Whether an App sends anything on a named channel: only then is the integration check worth loading. */
+function namesChannel(app: AppDef): boolean {
+  return (
+    Object.values(app.resources ?? {}).some(
+      (resource) =>
+        (resource.notify ?? []).some((rule) => rule.send?.channel !== undefined) ||
+        Object.values(resource.links ?? {}).some((spec) => spec.stepUp?.channel !== undefined),
+    ) || Object.values(app.views ?? {}).some((view) => 'statusCheck' in view && view.statusCheck?.stepUp?.channel !== undefined)
+  );
 }
 
 /** One App's commands, as `mistri serve` hosts them and a suite hosts each of its Apps. */
@@ -230,7 +260,7 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
     { prepareJobs },
     { JobDeclarationError },
     ,
-    { createInboundHost, inboundEndpoint, inboundSecretProblems },
+    { createInboundHost, inboundEndpoint, inboundFileRule, inboundSecretProblems },
     { checkWorkflows },
   ] = await hostingModules();
   /* The App framework's config sections, read only where an App hosts commands: `--mcp` and the browser never
@@ -397,6 +427,8 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
           appId: app.id,
           declared: prepared.module.integrations,
           target: prepared.integrationTarget,
+          // A held message's public link, said as an effect's is (below).
+          publicLinks: async (view: string) => appPublicUrl(options.current(), view),
         });
       }
     }
@@ -413,7 +445,9 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
           for (const release of releases.reverse()) release();
         }
       };
-      effectHost = await openEffectHost({ ...effects, links, ...(integrations ? { channels: integrations.channel } : {}) });
+      // A public link (context.publicLink) under the address the server was started on (serve.ts).
+      const publicLinks = async (view: string) => appPublicUrl(options.current(), view);
+      effectHost = await openEffectHost({ ...effects, links, publicLinks, ...(integrations ? { channels: integrations.channel } : {}) });
     }
     if (integrations) effectHost = withIntegrations(effectHost, integrations);
     if (prepared) {
@@ -521,7 +555,9 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
         const { integrationEndpoints } = await import('../integrations/integrationInbound.js');
         inbound = createInboundHost({
           endpoints: [
-            ...[...prepared.module.inbound.values()].map((endpoint) => inboundEndpoint(endpoint, environment)),
+            ...[...prepared.module.inbound.values()].map((endpoint) =>
+              inboundEndpoint(endpoint, environment, inboundFileRule(app, endpoint)),
+            ),
             ...(integrations ? integrationEndpoints(integrations.runtime, commands) : []),
           ],
           appId: app.id,

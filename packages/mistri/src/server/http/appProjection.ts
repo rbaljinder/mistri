@@ -41,7 +41,7 @@ import { appEntrypoint } from '../app/appEntrypoint.js';
 import { withDraftsHidden } from '../forms/savedFormLists.js';
 import { send, sendRevalidated } from '@mistriwork/engine/server/http/reply.js';
 import { catalogLocales, localeRow } from '../app/readerLocale.js';
-import { componentMessages } from '../app/appMessages.js';
+import { componentMessages, frameworkWords } from '../app/appMessages.js';
 import { principalOf, type RequestContext, type ResolvedSource } from '@mistriwork/engine/server/http/context.js';
 import { requestRecordBranding, withRecordBranding } from './recordBranding.js';
 import { pageReadRoutes, type PageReadHooks } from '@mistriwork/engine/server/http/pageReads.js';
@@ -127,6 +127,11 @@ export function browserApp(ctx: RequestContext, source: ResolvedSource) {
   if (app?.components && Object.keys(app.components).length && host) {
     const messages = componentMessages(host.app.app, source.locale, source.messages);
     if (messages) app = { ...app, messages };
+  }
+  /* And the App's words for the platform's own on its forms (`mistri.*`), to every reader: any App has forms. */
+  if (app && host) {
+    const words = frameworkWords(host.app.app, source.locale, source.messages);
+    if (words) app = { ...app, words };
   }
   /* Where this principal starts, from its verified session's roles alone:
      the gate admits a signed-out visitor to an App that signs people in
@@ -232,6 +237,7 @@ export async function appProjectionRoutes(ctx: RequestContext, source: ResolvedS
             app: host.app.app,
             connection: policy ? undefined : appEntrypoint(host, registry),
             commands: commands.registry,
+            ...(source.locale ? { locale: source.locale } : {}),
           })
         : {};
     const withPublic = (served: AppPayloadApp): AppPayloadApp =>

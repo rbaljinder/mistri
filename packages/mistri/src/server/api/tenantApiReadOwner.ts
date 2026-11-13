@@ -114,6 +114,8 @@ export async function createTenantApiOwner(input: {
   enrollment: TenantEnrollment<IncomingMessage>;
   auth: AppAuthRuntime;
   integers: 'decimal-string' | 'number';
+  /** An answer's link refs said as the tenant's addresses; without it (MCP stdio has no origin) they stay refs. */
+  renderLinks?: (value: unknown, tenantId: string) => Promise<unknown>;
 }) {
   let capability: { retire(): unknown } | undefined;
   try {
@@ -450,7 +452,8 @@ export async function createTenantApiOwner(input: {
                 },
                 { ...(signal ? { signal } : {}), entry: door },
               );
-              return projectApiCommandAnswer('execute', await shapeApiPublicResult(enrolled, undefined, result));
+              const shaped = await shapeApiPublicResult(enrolled, undefined, result);
+              return projectApiCommandAnswer('execute', input.renderLinks ? await input.renderLinks(shaped, binding.tenantId) : shaped);
             } catch (error) {
               const code = isBusinessCommandExecutionError(error) ? error.code : undefined;
               if (!code || !Object.hasOwn(REFUSAL_STATUS, code))
@@ -510,7 +513,10 @@ export async function createTenantApiOwner(input: {
                   mode === 'prepare'
                     ? await context.prepare(apiRequest, [binding.tenantId], captured, signal ? { signal } : {})
                     : await context.execute(apiRequest, [binding.tenantId], captured, { ...(signal ? { signal } : {}), entry: door });
-                outcome = mode === 'prepare' ? apiCommandPreparation(result) : projectApiCommandAnswer('execute', result);
+                outcome =
+                  mode === 'prepare'
+                    ? apiCommandPreparation(result)
+                    : projectApiCommandAnswer('execute', input.renderLinks ? await input.renderLinks(result, binding.tenantId) : result);
               } catch (error) {
                 const code = isBusinessCommandExecutionError(error) ? error.code : undefined;
                 if (code && code !== 'temporarily_unavailable' && Object.hasOwn(REFUSAL_STATUS, code)) {

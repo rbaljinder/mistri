@@ -1,6 +1,6 @@
 ---
 title: Status & roadmap
-description: The 1.0.0-rc.49 scope, stable and preview features, current limitations and planned work.
+description: The 1.0.0-rc.50 scope, stable and preview features, current limitations and planned work.
 ---
 
 The scope of this release, stable and preview features, current limitations and planned work.
@@ -10,7 +10,7 @@ npx @mistriwork/mistri check --app .
 #   preview: This App uses Preview features (…). They work as documented and may change in any 1.x release.
 ```
 
-This site describes **mistri 1.0.0-rc.49**, a release candidate. Since rc.2, the first release under the mistri name,
+This site describes **mistri 1.0.0-rc.50**, a release candidate. Since rc.2, the first release under the mistri name,
 the App framework is split out of tablewalk, which stays the standalone database browser. A save is a fixed number of
 database round trips, the runtime forgets what it wrote about an App after the App's own retention windows, and on
 PostgreSQL the runtime lives in one schema named `mistri`. There is no upgrade from a tablewalk 0.9 App database.
@@ -64,7 +64,7 @@ stable.
 | Forms with groups and `when`; multi-step forms (`form.steps`) | Stable |
 | Money in minor units (`minor`, `currency: { column }`), a form's `lines` and `live` values | Stable |
 | Command forms (`form` views) and public forms: saved on every step, `statusCheck` and its page, `keyed` inputs, `link` to an account | Stable |
-| A status check's emailed code (`statusCheck.stepUp`) and a link by verified email (`link.email`) | Stable |
+| A status check's one-time code by email or an integration's channel (`statusCheck.stepUp`) and a link by verified email (`link.email`) | Stable |
 | Landing pages, signed-out reads (`auth.public`), `ui.footer` | Stable |
 | The header's New menu (`ui.shell.new`) | Stable |
 | [Custom components](/docs/custom-components/): `component()`, sections, value renderers, inputs, `customList()`, `useCommand`, `ui.csp`, public surfaces | Stable |
@@ -143,7 +143,7 @@ and `package.json` are files, not entry points.
 | `@mistriwork/mistri/policy` | `defineAppRowPolicy`, `defineAppTenantPolicy` and `via()` (a row scope through a relationship) | Stable |
 | `@mistriwork/mistri/jobs` | `defineJobs`, `defineJob`, `defineInbound` | Stable |
 | `@mistriwork/mistri/workflows` | `defineWorkflow`, `defineWorkflows`, `flowRunner` | Stable |
-| `@mistriwork/mistri/integration` | `defineIntegration`, for a vendor package | Stable |
+| `@mistriwork/mistri/integration` | `defineIntegration` and `extendIntegration`, for a vendor package | Stable |
 | `@mistriwork/mistri/handler` | [Mount an App in your server](/docs/mount-in-your-server/), `mintEmbedAssertion` | Stable |
 | `@mistriwork/mistri/testing` | Test helpers for Apps (`roundTrips` is Preview) | Stable |
 | `@mistriwork/mistri/maintenance` | Operator steps: `provisionStores`, `applyMigrations`, inspect, redrive and prune | Stable |
@@ -171,7 +171,7 @@ entry points above:
   "version": "1.0.0",
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "peerDependencies": { "@mistriwork/mistri": "^1.0.0-rc.49" }
+  "peerDependencies": { "@mistriwork/mistri": "^1.0.0-rc.50" }
 }
 ```
 

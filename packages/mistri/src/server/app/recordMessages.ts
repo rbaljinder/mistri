@@ -15,8 +15,9 @@ import type { AppDef } from '../../shared/appModel.js';
 import type { RecordMessagesSpec } from '../../shared/branding.js';
 import { canonicalLocale } from '@mistriwork/engine/shared/appLocale.js';
 import { MESSAGE_KEY } from '@mistriwork/engine/shared/appMessages.js';
+import { FRAMEWORK_WORDS, frameworkWordArgs, type FrameworkWordKey } from '@mistriwork/engine/shared/frameworkWords.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { messageArgs, type MessageOverrides } from './appMessages.js';
+import { messageArgs, simple, type MessageOverrides } from './appMessages.js';
 
 /** A tenant's words are a few hundred rows; past this many, the rest are not read. */
 const MOST_ROWS = 5000;
@@ -30,8 +31,10 @@ interface MessageRowProblem {
 
 /**
  * What is wrong with one row, or undefined: the key must be one of the source
- * catalog's, the locale a language tag, the text ICU that reads only arguments
- * the source's text reads. Imports the formatter on first use.
+ * catalog's or one of the platform's words (FRAMEWORK_WORDS), the locale a
+ * language tag, the text ICU that reads only arguments the source's text reads
+ * — a platform word, words and its built-in's places only. Imports the
+ * formatter on first use.
  */
 export async function messageRowProblem(
   spec: RecordMessagesSpec,
@@ -41,19 +44,24 @@ export async function messageRowProblem(
 ): Promise<MessageRowProblem | undefined> {
   const source = spec.source;
   if (!source) return { field: 'key', reason: 'The App has no messages to override.' };
-  if (typeof key !== 'string' || !MESSAGE_KEY.test(key) || !Object.hasOwn(source.entries, key))
+  const platform = typeof key === 'string' && Object.hasOwn(FRAMEWORK_WORDS, key);
+  if (typeof key !== 'string' || !MESSAGE_KEY.test(key) || (!platform && !Object.hasOwn(source.entries, key)))
     return { field: 'key', reason: "This is not one of the App's messages." };
   if (!canonicalLocale(locale)) return { field: 'locale', reason: 'This is not a language tag like "es" or "es-MX".' };
   if (typeof text !== 'string' || !text.trim() || text.length > MOST_TEXT)
     return { field: 'text', reason: `The words must be text of at most ${MOST_TEXT} characters.` };
   const { default: Format } = await import('intl-messageformat');
-  let names: Set<string>;
+  let ast: ReturnType<InstanceType<typeof Format>['getAst']>;
   try {
-    names = messageArgs(new Format(text, canonicalLocale(locale)).getAst());
+    ast = new Format(text, canonicalLocale(locale)).getAst();
   } catch {
     return { field: 'text', reason: 'These words are not ICU MessageFormat: check every { has its }.' };
   }
-  const allowed = messageArgs(new Format(source.entries[key]!, source.locale).getAst());
+  const names = messageArgs(ast);
+  if (platform && !simple(ast)) return { field: 'text', reason: 'These words are said as written: no plural, select, number or date.' };
+  const allowed = platform
+    ? frameworkWordArgs(key as FrameworkWordKey)
+    : messageArgs(new Format(source.entries[key]!, source.locale).getAst());
   const extra = [...names].filter((name) => !allowed.has(name));
   if (extra.length)
     return { field: 'text', reason: `The App's words say no {${extra.join('}, {')}}; use only {${[...allowed].join('}, {') || '…'}}.` };

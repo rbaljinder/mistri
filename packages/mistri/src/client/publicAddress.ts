@@ -83,6 +83,7 @@ import {
   appAddressBook,
   readAppSegments,
   recordSegments,
+  viewAddress,
   type AddressBook,
   type RouteTarget,
 } from '../shared/appAddress.js';
@@ -593,8 +594,7 @@ export function appAddress(connection: string, stack: readonly Entry[]): string 
 export function viewPath(view: string): string | undefined {
   const book = addressBook(),
     app = activeApp();
-  const segment = book?.views.get(view);
-  return app && segment ? `/${encodeURIComponent(app.id)}/${encodeURIComponent(segment)}` : undefined;
+  return app && book ? viewAddress(book, app.id, view) : undefined;
 }
 
 /**

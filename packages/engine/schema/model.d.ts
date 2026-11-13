@@ -79,6 +79,9 @@ export interface AppCommandChoice {
   icon?: string;
   /** A line under the label, on a card. */
   help?: string;
+  /** Set by the server on a table's row it served (`source.served`): the columns its `where` compares, so the page
+      offers the rows the answers given match without a read of its own. Never written in an App. */
+  row?: Readonly<Record<string, string | number | boolean | null>>;
 }
 
 /** A shape a text value must have; each refuses anything else. */
@@ -130,12 +133,32 @@ export interface CommandSensitive { keep: 'last4' | 'hash' | 'none' | 'handler' 
 export type CommandLiveLines = Readonly<Record<string, string>>;
 /** Choices read from a table rather than written out: its rows' key (`by`, its primary key) and the column each is
     shown by, read under the reader's grants and validated against the table where the command runs. */
+/** One side of a choice's `where` comparison: a literal, or the answer to a field of the form (`{ answer: 'region' }`). */
+export type CommandChoiceOperand = string | number | boolean | null | { readonly answer: string };
+/** One comparison of a choice's `where`: a column of `from` against operands; several for `in`, `[null]` for `is empty`. */
+export interface CommandChoiceTest {
+  readonly column: string;
+  readonly operator: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
+  readonly values: readonly CommandChoiceOperand[];
+}
+/** A choice's `where`, compiled: OR of ANDs of comparisons. */
+export type CommandChoiceMatch = readonly (readonly CommandChoiceTest[])[];
 export interface CommandChoiceSource {
   from: string;
   by: string;
   labelColumn: string;
-  /** The order the rows are offered in: a column of `from` and a direction. Absent, the rows are in the order of `labelColumn`. */
+  /** The column each row is shown by in a locale, keyed by the locale's tag as the App's catalogs name it
+      (`{ es: 'name_es' }`); a row with nothing there is shown by `labelColumn`. */
+  labelColumns?: Readonly<Record<string, string>>;
+  /** The order the rows are offered in: a column of `from` and a direction. Absent, the rows are in the order of `labelColumn`
+      (in a locale `labelColumns` names, of the words shown, in that locale's order). */
   sort?: { column: string; direction: 'asc' | 'desc' };
+  /** The rows offered, narrowed by other answers of the form, as the App wrote it (`'region = region and active = true'`):
+      a name on the right of a comparison that is a field of the form is that field's answer, any other name a column
+      of `from`. Until every answer it reads is given, nothing is offered. */
+  where?: string;
+  /** `where`, compiled by the server: OR of ANDs of its comparisons. */
+  match?: CommandChoiceMatch;
   /** Set by the server on a public form it served this field's rows with: `options` is the whole answer, an empty list
       meaning none to offer, and the page reads nothing of its own. Never written in an App. */
   served?: true;

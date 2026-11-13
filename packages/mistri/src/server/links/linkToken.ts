@@ -8,9 +8,10 @@
  * and rotating MISTRI_FORM_KEY voids every link, as it voids form tickets.
  *
  * A command that mints a link holds a LinkRef, which serializes to
- * `mistri-link:<id>`; that is what reaches the receipt, the effect outbox and a
- * replayed result. The URL is rendered only at the edges: the minting
- * command's HTTP answer and an effect's delivery (renderLinkRefs).
+ * `mistri-link:<id>.<seal>`; that is what reaches the receipt, the effect outbox
+ * and a replayed result. The URL is rendered only at the edges: the minting
+ * command's HTTP answer and an effect's delivery (renderLinkRefs). The seal
+ * (refSeal.ts) tells it from the same words in a visitor's text, which stay text.
  *
  * After the first open the visitor holds a session token instead
  * (`mstls1.<id>.<exp>.<gates>.<opened>.<mac>`, five minutes, purpose `mistri
@@ -22,6 +23,7 @@ import { SURFACE_TOKEN_MAX_TTL_SECONDS } from '../auth/surfaceToken.js';
 import { purposeKey } from '../forms/formKey.js';
 import type { CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
 import { LINK_ID } from '../../adapters/commands/commandLinks.js';
+import { refSeal, refSealed, SEAL } from './refSeal.js';
 
 export const LINK_TOKEN_PREFIX = 'mstl1.';
 const TOKEN = /^mstl1\.([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})$/;
@@ -115,44 +117,68 @@ export function readLinkSession(
 
 const LINK_REF_BRAND: unique symbol = Symbol.for('mistri.link-ref');
 
-/** What `context.link()` answers: a reference to a minted link. It serializes as `mistri-link:<id>`, never the secret. */
+/** What `context.link()` answers: a reference to a minted link. It serializes as `mistri-link:<id>.<seal>`, never the secret. */
 export class LinkRef {
   readonly id: string;
+  readonly #said: string;
   /** The brand an output's text() reads it by (commandShapes.ts). */
   readonly [LINK_REF_BRAND] = true;
-  constructor(id: string) {
+  constructor(id: string, appId: string) {
     if (!LINK_ID.test(id)) throw new TypeError('A link reference names a link id.');
     this.id = id;
+    this.#said = `${LINK_REF_PREFIX}${id}.${refSeal(appId, 'link', id)}`;
     Object.freeze(this);
   }
   toJSON(): string {
-    return `${LINK_REF_PREFIX}${this.id}`;
+    return this.#said;
   }
   toString(): string {
-    return `${LINK_REF_PREFIX}${this.id}`;
+    return this.#said;
   }
 }
 export const LINK_REF_PREFIX = 'mistri-link:';
-const REF = /mistri-link:([A-Za-z0-9_-]{22})/g;
+/** A reference's length as written: the prefix, the id, a dot and the seal. */
+export const LINK_REF_LENGTH = LINK_REF_PREFIX.length + 22 + 1 + 22;
+const REF = new RegExp(`mistri-link:([A-Za-z0-9_-]{22})\\.(${SEAL})(?![A-Za-z0-9_-])`, 'g');
 
-/** Whether `text` holds a link reference. */
-export const holdsLinkRef = (text: string): boolean => text.includes(LINK_REF_PREFIX) && new RegExp(REF.source).test(text);
+/* The references in `text` the App made, by spelling, with their ids; a look-alike is not one and stays the text it is. */
+function sealedIds(text: string, appId: string): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!text.includes(LINK_REF_PREFIX)) return out;
+  for (const [whole, id, seal] of text.matchAll(REF)) if (!out.has(whole) && refSealed(appId, 'link', id!, seal!)) out.set(whole, id!);
+  return out;
+}
+
+/** Whether `text` holds a link reference the App made. */
+export const holdsLinkRef = (text: string, appId: string): boolean => sealedIds(text, appId).size > 0;
+
+/** How many link references `text` may hold, by spelling: each is counted at its URL's size where a body is bounded. */
+export const linkRefCount = (text: string): number => (text.includes(LINK_REF_PREFIX) ? [...text.matchAll(REF)].length : 0);
+
+/** Why a message holding a capability link a command minted was not sent: a message to a person (a notice's mail, a
+    channel's text) says no capability link, and is never sent its reference instead. */
+export const LINK_REF_UNSAID = 'a capability link in it cannot be said in a message';
 
 /**
- * `text` with each `mistri-link:<id>` replaced by what `render` answers for
- * the id (its URL), or undefined when a reference does not render: a link
- * revoked or expired before delivery sends nothing.
+ * `text` with each `mistri-link:<id>.<seal>` the App made replaced by what
+ * `render` answers for the id (its URL), or undefined when a reference does
+ * not render: a link revoked or expired before delivery sends nothing. Text
+ * that only looks like a reference is left as it is and never fails the text.
  */
-export async function renderLinkRefs(text: string, render: (id: string) => Promise<string | undefined>): Promise<string | undefined> {
-  if (!holdsLinkRef(text)) return text;
-  const ids = [...new Set([...text.matchAll(REF)].map((match) => match[1]!))];
+export async function renderLinkRefs(
+  text: string,
+  appId: string,
+  render: (id: string) => Promise<string | undefined>,
+): Promise<string | undefined> {
+  const ids = sealedIds(text, appId);
+  if (ids.size === 0) return text;
   const urls = new Map<string, string>();
-  for (const id of ids) {
+  for (const [whole, id] of ids) {
     const url = await render(id);
     if (url === undefined) return undefined;
-    urls.set(id, url);
+    urls.set(whole, url);
   }
-  return text.replace(REF, (_, id: string) => urls.get(id)!);
+  return text.replace(REF, (whole: string) => urls.get(whole) ?? whole);
 }
 
 /* Where an App's links are served, `<origin><base>`, as the server is started (serve.ts); a link renders only where one is known. */

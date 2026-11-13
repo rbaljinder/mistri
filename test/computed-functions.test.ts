@@ -1,5 +1,5 @@
 /**
- * The functions a computed column may call (computed.ts, DM2): `coalesce`, `round`, `min`, `max` and `abs`. Each is
+ * The functions a computed column may call (computed.ts, DM2): `coalesce`, `round`, `min`, `max`, `abs` and `concat`. Each is
  * parsed and typed in the author's words, written into the statement on SQLite and PostgreSQL, and worked out in
  * JavaScript (computedValue.ts) — and the three must say the same thing of the same rows, nulls, negatives and halves
  * included, which is what the live blocks below hold them to. The PostgreSQL block works in a temporary table, so it
@@ -35,14 +35,18 @@ describe('the words', () => {
     assert.equal(kind("coalesce(nick, name) = 'Ada'"), 'boolean');
     assert.equal(kind('abs(b) + round(a)'), 'number');
     assert.equal(kind('min(d1, d2)'), 'date');
+    assert.equal(kind("concat(name, ' ', nick)"), 'text');
+    assert.equal(kind('concat(name)'), 'text');
+    assert.equal(kind("concat(name, nick) = 'Ada'"), 'boolean');
   });
 
   test('a mistake says which function and what it takes', () => {
     const refused: Array<[string, RegExp]> = [
-      ['floor(a)', /"floor" is not a function; an expression calls coalesce, round, min, max, abs/],
+      ['floor(a)', /"floor" is not a function; an expression calls coalesce, round, min, max, abs, concat/],
       ['coalesce(a)', /coalesce\(…\) takes two values or more/],
       ['max(a)', /max\(…\) takes two values or more/],
       ['abs(a, b)', /abs\(…\) takes one number/],
+      ['concat()', /concat\(…\) takes one text or more: concat\(first, ' ', last\)/],
       ['round(a, b)', /round\(…\)'s places are a whole number from 0 to 10/],
       ['round(a, 2.5)', /round\(…\)'s places are a whole number/],
       ['round(a, 2', /expected "\)"/],
@@ -54,6 +58,8 @@ describe('the words', () => {
       ['coalesce(a, d1)', /coalesce\(…\) takes values of one kind, and has a number and a date/],
       ['max(name, nick)', /max\(…\) takes numbers or dates/],
       ['coalesce(done, done)', /not yes-or-no conditions/],
+      ['concat(name, a)', /concat\(…\) joins text, and has a number/],
+      ['concat(d1)', /concat\(…\) joins text, and has a date/],
     ];
     for (const [text, message] of mistyped) assert.throws(() => kind(text), message, text);
   });
@@ -66,7 +72,7 @@ const ROWS = [
   { id: 3, a: 1.005, b: 2.675, d1: '2026-03-01', d2: null, name: 'Cy', nick: null },
   { id: 4, a: -0.4, b: -1.25, d1: '2026-01-31', d2: '2026-01-30', name: 'Di', nick: 'D' },
 ];
-const EXPRESSIONS: Array<[string, 'number' | 'date' | 'boolean']> = [
+const EXPRESSIONS: Array<[string, 'number' | 'date' | 'boolean' | 'text']> = [
   ['coalesce(b, a, 0)', 'number'],
   ['round(a)', 'number'],
   ['round(b, 2)', 'number'],
@@ -76,19 +82,22 @@ const EXPRESSIONS: Array<[string, 'number' | 'date' | 'boolean']> = [
   ['min(a, b)', 'number'],
   ['max(a - b, 0)', 'number'],
   ['coalesce(d1, d2)', 'date'],
+  ["concat(name, ' ', nick)", 'text'],
+  ["concat(nick, '!') = '!'", 'boolean'],
   ['max(d1, d2)', 'date'],
   ['min(d1, d2 + 3 days)', 'date'],
   ["coalesce(nick, name) = 'Ada'", 'boolean'],
 ];
 const kindOf = (path: string) => (Object.hasOwn(KINDS, path) ? { kind: KINDS[path] } : undefined);
-const said = (value: unknown, type: 'number' | 'date' | 'boolean'): unknown => {
+const said = (value: unknown, type: 'number' | 'date' | 'boolean' | 'text'): unknown => {
   if (value === null || value === undefined) return null;
+  if (type === 'text') return String(value);
   if (type === 'number') return Number(value);
   if (type === 'boolean') return value === true || value === 1 || value === '1' || value === 't';
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   return String(value).slice(0, 10);
 };
-const worked = (text: string, type: 'number' | 'date' | 'boolean') =>
+const worked = (text: string, type: 'number' | 'date' | 'boolean' | 'text') =>
   ROWS.map((row) => {
     const value = evaluateComputed(parse(text) as ComputedNode, { today: '2026-10-13', now: new Date(), me: null }, (path) => {
       const raw = row[path as keyof typeof row];
@@ -97,6 +106,18 @@ const worked = (text: string, type: 'number' | 'date' | 'boolean') =>
     });
     return said(value !== null && typeof value === 'object' && 'day' in value ? value.day : value, type);
   });
+
+test('a part with no value reads as empty, so the rest of the text stays', () => {
+  const rows = worked("concat(name, ' ', nick)", 'text');
+  // Ana has no last name: "Ana ", not nothing.
+  assert.deepEqual(rows, ['Ada ', 'Bo B', 'Cy ', 'Di D']);
+  assert.equal(
+    evaluateComputed(parse("concat(name, ' ', nick)") as ComputedNode, { today: '2026-10-13', now: new Date(), me: null }, (path) =>
+      path === 'name' ? 'Ana' : null,
+    ),
+    'Ana ',
+  );
+});
 
 describe('every engine says what JavaScript says', () => {
   test('SQLite', () => {

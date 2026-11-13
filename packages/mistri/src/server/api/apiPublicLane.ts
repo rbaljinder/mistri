@@ -13,6 +13,7 @@ import { tokenActorId } from '../../shared/publicActor.js';
 import type { RuntimeResources } from '../app/appRuntimeResources.js';
 import type { BusinessCommandActor } from '../commands/businessCommands.js';
 import { servesLinks, withLinkUrls } from '../links/linkLookup.js';
+import { withAppPublicUrls } from '../links/publicLink.js';
 import { holdsLinkRef } from '../links/linkToken.js';
 import { publicFormOf } from './apiCommandCatalog.js';
 import { apiTransportProblem } from './apiCommandResponse.js';
@@ -45,13 +46,15 @@ export async function spendApiPublicBudget(tokenId: string) {
     if any, is dropped on a replay all the same. */
 export async function shapeApiPublicResult<T>(app: AppDef, resources: RuntimeResources | undefined, result: T): Promise<T> {
   const replayed = (result as { replayed?: unknown }).replayed !== false;
-  const shaped = !replayed && resources && servesLinks(app) ? await withLinkUrls(app, resources, result) : result;
+  const linked = !replayed && resources && servesLinks(app) ? await withLinkUrls(app, resources, result) : result;
+  // A public link (context.publicLink) names no secret, so a replay says it as well.
+  const shaped = await withAppPublicUrls(app, linked);
   const answer = (shaped as { result?: unknown }).result;
   if (!answer || typeof answer !== 'object' || Array.isArray(answer) || !Object.hasOwn(answer, 'link')) return shaped;
   /* A tenant App's public command mints no link (refused at start and in `mistri check`: tenantIntakePages.ts), so on
      a tenant deployment this strip is defense in depth against an answer that names one anyway. */
   const link = (answer as { link?: unknown }).link;
-  if (!replayed && typeof link === 'string' && !holdsLinkRef(link)) return shaped;
+  if (!replayed && typeof link === 'string' && !holdsLinkRef(link, app.id)) return shaped;
   const { link: _said, ...rest } = answer as Record<string, unknown>;
   return { ...shaped, result: rest };
 }

@@ -104,7 +104,7 @@ async function serve(t: TestContext) {
       input: { link: { type: 'text' } } as never,
       output: shape({ link: text() }),
       async handle({ link }, input) {
-        return { link: (await link((input as { link: string }).link)) as unknown as string };
+        return { link: await link((input as { link: string }).link) };
       },
     }),
     inviteSlot: defineCommand({
@@ -114,7 +114,7 @@ async function serve(t: TestContext) {
       input: { link: { type: 'text' } } as never,
       output: shape({ link: text() }),
       async handle({ link }, input) {
-        return { link: (await link((input as { link: string }).link)) as unknown as string };
+        return { link: await link((input as { link: string }).link) };
       },
     }),
     withdraw: defineCommand({

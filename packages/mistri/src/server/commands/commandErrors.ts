@@ -3,6 +3,7 @@ import { isProxy } from 'node:util/types';
 import { COMMAND_FIELD_PATH } from '@mistriwork/engine/shared/commandFieldPath.js';
 import { COMMAND_REFUSAL_MESSAGES } from '../../shared/commandRefusals.js';
 import { refusalSaid } from '@mistriwork/engine/shared/refusal.js';
+import { isMessageRef, type AppMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import type { CommandKey } from './commandPayload.js';
 import type { UntypedRow, WriteTable } from './commandDb.js';
 
@@ -103,7 +104,7 @@ export function isBusinessCommandExecutionError(error: unknown): error is Busine
 export type RefusalCode = keyof typeof messages;
 
 /** A table as a refusal's `keep` writes it: read, insert and update; never remove, never a file. */
-export type RefusalKeepTable = Omit<WriteTable<UntypedRow>, 'remove' | 'insertFile'>;
+export type RefusalKeepTable = Omit<WriteTable<UntypedRow>, 'remove' | 'insertFile' | 'moveFile'>;
 /** What `keep` is handed: the tables of the command's `refused: { writes }`, and only those. */
 export type RefusalKeepDb = Readonly<Record<string, RefusalKeepTable>>;
 
@@ -136,6 +137,28 @@ export const refusalKeep = (error: unknown): ((db: RefusalKeepDb) => Promise<unk
 export const carryRefusalKeep = (from: unknown, to: BusinessCommandExecutionError): BusinessCommandExecutionError =>
   keeping(to, refusalKeep(from));
 
+/* The App's message a refusal names (`refuse(msg('booking.full'))`), registered and hidden as `keep` is: the handler
+   cannot say it, since it is said in the locale the server resolved, which the executor knows and the error does not. */
+const messageKey = Symbol.for('mistri.refusalMessage');
+
+/** The message a handler's refusal names, if it names one. */
+const refusalMessage = (error: unknown): AppMessageRef | undefined => {
+  const ref = error && typeof error === 'object' ? (error as Record<symbol, unknown>)[messageKey] : undefined;
+  return isMessageRef(ref) ? ref : undefined;
+};
+
+/** A refusal's reason: its own sentence, else the message it names said by `say` (none where it cannot be: the code's words stand). */
+export function refusalReason(error: unknown, say: (ref: AppMessageRef) => string | undefined): string | undefined {
+  if (isBusinessCommandExecutionError(error) && error.reason !== undefined) return error.reason;
+  const ref = refusalMessage(error);
+  if (!ref) return undefined;
+  try {
+    return readerReason(say(ref));
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Refuse the command: nothing it wrote is kept, and the caller hears `code`'s
  * fixed message. `detail` is the input field the refusal is about (by path:
@@ -154,15 +177,34 @@ export const carryRefusalKeep = (from: unknown, to: BusinessCommandExecutionErro
  * record, is what stops it — said under that field of the form, which stays
  * open to be corrected. The field is an input's path, as `detail` names one.
  *
+ * Or say it from the App's messages: `refuse(msg('booking.full'))` is said in
+ * the locale the person is served in (`ctx.locale`), as a sentence is, and
+ * takes the same `{ field, key, keep }`. The message is said without
+ * arguments; a key the catalogs lack leaves the code's fixed message.
+ *
  * `{ keep: async (db) => … }` writes what a refusal must still leave behind — a
  * failed attempt counted, a lockout set — in a fresh transaction once the
  * handler's writes are rolled back, through the tables the command names in
  * `refused: { writes }`. The refusal is answered after it commits.
  */
 export function refuse(reason: string, detail?: RefusalDetail): never;
+export function refuse(message: AppMessageRef, detail?: RefusalDetail): never;
 export function refuse(code: RefusalCode, detail?: string | RefusalDetail): never;
-export function refuse(codeOrReason: string, detail?: string | RefusalDetail): never {
+export function refuse(codeOrReason: string | AppMessageRef, detail?: string | RefusalDetail): never {
   const { field, key, keep } = typeof detail === 'string' ? { field: detail, key: undefined, keep: undefined } : (detail ?? {});
+  if (typeof codeOrReason === 'object' && codeOrReason !== null) {
+    if (!isMessageRef(codeOrReason)) throw new TypeError("refuse() takes a refusal code, a one-line reason, or msg('a.key').");
+    checkRefusalField(field);
+    const error = keeping(
+      new BusinessCommandExecutionError(field !== undefined ? 'invalid_input' : 'ineligible_state', 'not_applied', field, key),
+      keep,
+    );
+    Object.defineProperty(error, messageKey, {
+      value: Object.freeze({ message: codeOrReason.message, ...(codeOrReason.args ? { args: { ...codeOrReason.args } } : {}) }),
+      enumerable: false,
+    });
+    throw error;
+  }
   if (Object.hasOwn(messages, codeOrReason))
     throw keeping(new BusinessCommandExecutionError(codeOrReason as RefusalCode, 'not_applied', field, key), keep);
   /* A word shaped like a code that is not one is a typo, not a sentence for
@@ -173,12 +215,16 @@ export function refuse(codeOrReason: string, detail?: string | RefusalDetail): n
       `refuse() takes a refusal code or a one-line reason of at most ${REASON_MAX} characters; got ${JSON.stringify(String(codeOrReason).slice(0, 60))}.`,
     );
   }
+  checkRefusalField(field);
+  if (field !== undefined) throw keeping(new BusinessCommandExecutionError('invalid_input', 'not_applied', field, key, reason), keep);
+  throw keeping(new BusinessCommandExecutionError('ineligible_state', 'not_applied', undefined, key, reason), keep);
+}
+
+function checkRefusalField(field: unknown): void {
   if (field !== undefined && (typeof field !== 'string' || field.length > 400 || !COMMAND_FIELD_PATH.test(field)))
     throw new TypeError(
       `refuse() names a field by its input's path, such as "amount" or "lines[1].quantity"; got ${JSON.stringify(String(field).slice(0, 60))}.`,
     );
-  if (field !== undefined) throw keeping(new BusinessCommandExecutionError('invalid_input', 'not_applied', field, key, reason), keep);
-  throw keeping(new BusinessCommandExecutionError('ineligible_state', 'not_applied', undefined, key, reason), keep);
 }
 
 /** `forbidden`, in the words of the rule that refused where it said them (sayRefusal), else the code's fixed message. */

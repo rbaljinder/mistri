@@ -495,6 +495,14 @@ A tenant reads its own addresses from `/api/app` (`addresses: { intake, public
 }`), and a custom component turns them into a link with
 `useNavigate().publicLink(view)`.
 
+A command does the same with `ctx.publicLink(view)` ([commands](/docs/commands/#a-link-to-a-public-view)).
+Its receipt keeps the view's name, and the URL is made when the answer is sent
+or the effect delivered: the tenant's mapped host, else the shared one, and
+`?via=` with the address the tenant holds at that moment (its intake address
+for a public form, its public address for a page or list), so an address rotated
+after the command ran is never sent. A tenant that holds no such address gets the
+reference back in an answer, and its effect is not delivered.
+
 ### What a tenant keeps
 
 Where a feature is served, refused, or kept per tenant, in one table. The

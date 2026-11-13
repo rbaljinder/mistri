@@ -33,9 +33,9 @@ import { sniffImage } from '../http/imageSniff.js';
 import { StagedFileRefused, StagedFilesFull, type StagedLimits } from '../../adapters/commands/commandStaging.js';
 import type { CommandJournal } from '../../adapters/commands/commandJournalTypes.js';
 import type { AppCommandField } from '../../shared/command.js';
-import type { BusinessCommandBinding } from './businessCommandAccess.js';
+import type { AuthorizedBusinessCommand, BusinessCommandBinding } from './businessCommandAccess.js';
 import { BusinessCommandExecutionError } from './commandErrors.js';
-import type { BusinessCommandActor, CommandFile } from './businessCommands.js';
+import type { BusinessCommandActor, BusinessCommandRegistry, CommandFile } from './businessCommands.js';
 
 /** How long a held file waits for its command. */
 const STAGED_FILE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -297,4 +297,86 @@ export async function takeHeldFiles(
   };
   const values = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
   return { files: await within(fields, values, ''), taken, from };
+}
+
+/* ---------- a lookup's read ---------- */
+
+/* Where the input names held id `id`: the value's own path (`attachments[1].file`), or undefined where no file field
+   of the command holds it. */
+function heldAt(fields: readonly AppCommandField[], input: unknown, id: string): string | undefined {
+  const values = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+  for (const field of fields) {
+    const value = values[field.name];
+    if (field.type === 'files' || field.type === 'signature') {
+      if (value === id || (Array.isArray(value) && value.includes(id))) return field.name;
+    } else if (field.type === 'group' && value && typeof value === 'object') {
+      const rows = Array.isArray(value) ? value : [value];
+      for (const [index, row] of rows.entries()) {
+        const inner = heldAt(field.fields, row, id);
+        if (inner) return `${field.name}${Array.isArray(value) ? `[${index}]` : ''}.${inner}`;
+      }
+    }
+  }
+  return undefined;
+}
+
+/** Thrown inside the read's transaction so the take rolls back and the file stays held for the command. */
+class HeldReadDone extends Error {}
+
+/**
+ * A lookup's `files.read(id)`: one file the command's input names by id, read from what is held for its sender and
+ * left held, so the handler takes it as it would have. The read is a take that rolls back: who may take a held file —
+ * this sender, this command, this field path, within its day — is the take's rule in every store and every tenant
+ * fence, and a second copy of that rule would be one to drift. An id the input does not name, or one not held for this
+ * sender (another visitor's, one used already, one past its day), refuses at its field as the take would.
+ */
+export async function readHeldFile(
+  fields: readonly AppCommandField[],
+  input: unknown,
+  id: unknown,
+  transaction: AuthorizedBusinessCommand['commandTransaction'],
+  scope: { appId: string; command: string; owner: string | undefined; now: number },
+): Promise<CommandFile> {
+  const at = typeof id === 'string' && STAGED_FILE_ID.test(id) ? heldAt(fields, input, id) : undefined;
+  if (!at || !scope.owner || !transaction) throw new BusinessCommandExecutionError('invalid_input', 'not_applied', at);
+  let read: CommandFile | undefined;
+  try {
+    await transaction(async (_records, journal) => {
+      if (typeof journal.takeStaged !== 'function') return;
+      const [file] = await journal.takeStaged(scope.appId, {
+        owner: scope.owner!,
+        command: scope.command,
+        field: heldFilePath(at),
+        hashes: [stagedIdHash(id as string)],
+        now: scope.now,
+      });
+      if (file) read = Object.freeze({ name: file.name, type: file.type, size: file.size, data: file.data });
+      throw new HeldReadDone();
+    });
+  } catch (error) {
+    if (read) return read;
+    // Said from inside the transaction, so it may arrive as the failed transaction's cause.
+    const cause = error instanceof Error && !(error instanceof StagedFileRefused) ? error.cause : error;
+    if (!(error instanceof StagedFileRefused) && !(cause instanceof StagedFileRefused) && !(error instanceof HeldReadDone)) throw error;
+  }
+  throw new BusinessCommandExecutionError('invalid_input', 'not_applied', at);
+}
+
+/**
+ * `[lookup-files-unattached]`: a lookup that reads `files.read(…)` in a command with no `field.files` or
+ * `field.signature`. A lookup reads only what its own form attached, so every such read is refused; said by
+ * `check` as advice, since it is read off the lookup's text and a helper's call is not seen.
+ */
+export function lookupFileWarnings(commands: BusinessCommandRegistry | undefined): string[] {
+  if (!commands) return [];
+  const warnings: string[] = [];
+  for (const [id, command] of Object.entries(commands)) {
+    if (!command.lookup || heldFileFields(command.fields).length) continue;
+    if (!/\bfiles\s*\.\s*read\s*\(/.test(String(command.lookup))) continue;
+    warnings.push(
+      `command "${id}" reads files.read in its lookup and takes no file [lookup-files-unattached]: ` +
+        'a lookup reads only a file its own form attached, by the id a field.files or field.signature holds, so this read is always refused → add the file field, or read a kept file in the handler with db.<resource>.readFile.',
+    );
+  }
+  return warnings;
 }

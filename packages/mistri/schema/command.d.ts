@@ -61,8 +61,8 @@ export interface CommandTextField extends FieldBase {
   format?: CommandTextFormat;
   /** A regular expression the whole value must match, as its source text: `field.text({ pattern: /[A-Z]+/ })` stores it so. */
   pattern?: string;
-  /** What the form says when the format, pattern or mask is not met. */
-  message?: string;
+  /** What the form says when the format, pattern or mask is not met; `msg()` says it in the reader's language. */
+  message?: string | AppMessageRef;
   /** Upper or lower case, applied before any rule is checked. */
   case?: 'upper' | 'lower';
   /** A mask the value is typed through: `0` a digit, `a` a letter, `*` either, anything else drawn as written
@@ -141,8 +141,8 @@ export interface CommandBooleanField extends FieldBase {
   accept?: true;
   /** The words a checkbox stands beside when they are longer than a label: a consent's whole paragraph, at most 2,000
       characters, on a box that must be checked (`accept`) or one that may be left. The label stays the short name (the
-      review's). Not with `as: 'buttons'`, which has no box. */
-  statement?: string;
+      review's), and `msg()` says it in the reader's language. Not with `as: 'buttons'`, which has no box. */
+  statement?: string | AppMessageRef;
 }
 /** An ISO calendar date, `YYYY-MM-DD`; `min` and `max` are dates too. */
 export interface CommandDateField extends FieldBase {
@@ -206,15 +206,23 @@ export interface CommandRichTextField extends FieldBase {
 /** One of the options, drawn as radios when there are a few and a select otherwise. At most 100. Or, with `from`,
     one of a table's rows by its key (`by`, the primary key; `id` unless said), shown by `labelColumn`: read under
     the reader's grants (a public form's, what `auth.public` opens) and checked against the table where it runs. The rows
-    are in the order of `labelColumn` unless `sort` names a column of `from` and a direction. `label` is the field's own title. */
+    are in the order of `labelColumn` unless `sort` names a column of `from` and a direction. `label` is the field's own title.
+    `labelColumns` names, per locale the App has a catalog for, the column a reader in that locale sees each row by
+    (`{ es: 'name_es' }`; a reader in `es-MX` sees `es`'s): the names are the tenant's data, and a row with none there is
+    shown by `labelColumn`. `where` narrows the rows by other answers of the form (`'region = region and active = true'`):
+    a name on the right of a comparison that is a field of the form is that field's answer, any other name a column of
+    `from`. Nothing is offered until every answer it reads is given, and a pick the answers no longer match is cleared. */
 export interface CommandChoiceField extends FieldBase {
   type: 'choice';
   options?: readonly CommandChoiceOption[];
   from?: string;
   by?: string;
   labelColumn?: string;
+  labelColumns?: Readonly<Record<string, string>>;
   sort?: CommandChoiceSort;
+  where?: string;
 }
+
 /** An option as `defineCommand` writes it: AppCommandChoice, whose words and icon may each be a `msg()`. */
 export interface CommandChoiceOption extends Omit<AppCommandChoice, 'label' | 'icon' | 'help'> {
   label: string | AppMessageRef;
@@ -234,7 +242,9 @@ export interface CommandChoicesField extends FieldBase {
   from?: string;
   by?: string;
   labelColumn?: string;
+  labelColumns?: Readonly<Record<string, string>>;
   sort?: CommandChoiceSort;
+  where?: string;
   min?: number;
   max?: number;
   exclusive?: readonly (string | number)[];
@@ -323,8 +333,9 @@ export interface CommandLinesField {
 }
 
 /** A file a command's handler receives: its name, its type (a picture's read from its bytes, never the sender's word
-    for it), its size in bytes and the bytes. A `field.files` or `field.signature` value, and an inbound email's
-    attachment. Store one with `db.<file resource>.insertFile(file, values)`. */
+    for it), its size in bytes and the bytes. A `field.files` or `field.signature` value, an inbound email's
+    attachment or an inbound endpoint's file, and what `db.<file resource>.readFile(row)` reads back. Store one with
+    `db.<file resource>.insertFile(file, values)`. */
 export interface CommandFile {
   readonly name: string;
   readonly type: string;

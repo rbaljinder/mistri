@@ -116,9 +116,10 @@ export function machineCommandWarnings(app: AppDef, commands: BusinessCommandReg
   return warnings;
 }
 
-/* What a table's handle says it reads and writes; the rest of a call is the table's own. */
-const TABLE_CALL = /\b([A-Za-z_$][\w$]*)\s*\.\s*(get|find|where|count|insert|insertFile|update|remove)\s*\(/g;
-const READS = new Set(['get', 'find', 'where', 'count']);
+/* What a table's handle says it reads and writes; the rest of a call is the table's own. A moveFile's values are
+   the row it writes in another table, so on the target's own handle too they are not the target's. */
+const TABLE_CALL = /\b([A-Za-z_$][\w$]*)\s*\.\s*(get|find|where|count|readFile|insert|insertFile|moveFile|update|remove)\s*\(/g;
+const NOT_OWN = new Set(['get', 'find', 'where', 'count', 'readFile', 'moveFile']);
 
 /**
  * A handler's source with what it says to another of the App's tables, and
@@ -141,7 +142,7 @@ function writtenTo(app: AppDef, target: string, source: string): string {
     if (open < from) continue;
     const [, table, method] = match;
     const elsewhere = tables.has(table) && !own.has(table);
-    if (!elsewhere && !(own.has(table) && READS.has(method))) continue;
+    if (!elsewhere && !(own.has(table) && NOT_OWN.has(method))) continue;
     out += source.slice(from, open + 1);
     from = closing(source, open);
   }

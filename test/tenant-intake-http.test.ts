@@ -524,7 +524,7 @@ test('a saved form over the tenant host: every step carries its address, and a c
   assert.deepEqual(f.count("SELECT tenant_id, status, resume_token_hash FROM lead WHERE status = 'submitted'"), [
     { tenant_id: 'north', status: 'submitted', resume_token_hash: null },
   ]);
-  // A saved form's paths are the ordinary host's: no status check or link on a tenant App.
+  // A form that declares no status check answers none (tenant-status-check.test.ts has one that does).
   assert.equal((await post('/status', via(NORTH), {})).status, 404);
 });
 

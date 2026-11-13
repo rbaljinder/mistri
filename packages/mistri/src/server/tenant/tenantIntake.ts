@@ -63,6 +63,7 @@ import { commandFlagsOnce } from '../commands/commandFlagCapture.js';
 import { formCommands, isSavedForm, platformColumns, type AppFormSave } from '../../shared/appSavedForms.js';
 import type { AppFormView } from '../../shared/app.js';
 import { savedFormRoots } from '../forms/savedFormChecks.js';
+import type { SavedFormPlace } from '../forms/savedFormHttp.js';
 import { readDraftProgress, type SavedDraftRun } from '../forms/savedForms.js';
 import { tenantVisibleFields } from './tenantVisibleFields.js';
 import { intakeCommandProblem, tenantPageProblems, tenantPublicPages } from './tenantIntakePages.js';
@@ -168,6 +169,11 @@ export interface TenantIntakeResume {
   readonly form: string;
   readonly address: unknown;
   readonly token: string;
+}
+/** A saved form's status check (its step-up and details too), in the place this address resolves to. */
+export interface TenantIntakeStatus {
+  readonly form: string;
+  readonly address: unknown;
 }
 type SavedIntakeForm = AppFormView & { save: AppFormSave; steps: Array<{ id: string; command: { id: string; version: number } }> };
 const HASH = /^[0-9a-f]{64}$/;
@@ -298,10 +304,7 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
     const startCommand: AnyBusinessCommand | undefined = start ? registry[start] : undefined;
     if (!start || !startCommand) return denyTenant();
     // Said for the operator who starts the deployment (tenantStartup.ts prints the reason under its refusal).
-    if (saved.statusCheck || saved.link)
-      throw new Error(
-        `Form "${key}" declares ${saved.statusCheck ? 'statusCheck' : 'link'}, which a tenant App's saved form does not serve.`,
-      );
+    if (saved.link) throw new Error(`Form "${key}" declares link, which a tenant App's saved form does not serve.`);
     const roots = savedFormRoots(saved, startCommand, authorizer.authorize(start, publicPrincipal(app.id, key)).catalog);
     const placed = (kind: 'tenant' | 'platform') => Object.freeze(roots.filter((table) => ownership.ownership[table]?.kind === kind));
     const byPlace = Object.freeze({ tenant: placed('tenant'), platform: placed('platform') });
@@ -681,6 +684,58 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
     }
   };
 
+  /**
+   * A saved form's status check, step-up or details (forms/statusCheck.ts, statusStepUp.ts), in the place the address
+   * resolves to now: a receipt is found only among that place's roots, through the first step's authorization, as on
+   * the ordinary host. Admitted as drafting, so the attempt that locks may stamp the root's `alert` column in triage as
+   * in a tenant; nothing removes. `use` is told the place's id, which keys its codes, lockouts and sessions. A read the
+   * writer found moved is read again once in the place resolved afresh, and refused if that place is another.
+   */
+  const status = async <T>(input: TenantIntakeStatus, use: (place: SavedFormPlace) => Promise<T>): Promise<T> => {
+    let finish!: () => void;
+    const held = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    pending.add(held);
+    try {
+      if (retired) throw new BusinessCommandExecutionError('temporarily_unavailable');
+      let request: TenantIntakeStatus;
+      try {
+        request = captureTenantData(tenantOptions(input, ['form', 'address'])) as unknown as TenantIntakeStatus;
+      } catch {
+        throw new BusinessCommandExecutionError('invalid_input');
+      }
+      const where = typeof request.form === 'string' ? drafts.get(request.form) : undefined;
+      if (!where || !(forms.get(request.form) as SavedIntakeForm).statusCheck) throw new BusinessCommandExecutionError('forbidden');
+      const principal = publicPrincipal(app.id, request.form);
+      const authorization = authorizer.authorize(where.start, principal),
+        extractor = extractors.get(where.start)!;
+      let admitted = await admit(request.form, request.address, true);
+      const tenant = String(admitted.evidence.tenantId),
+        place = admitted.place;
+      const reading = async <R>(run: (records: WriteTransaction) => Promise<R>): Promise<R> => {
+        try {
+          const first = { moved: false };
+          try {
+            return await inPlace(admitted, authorization, extractor, first, (records) => run(records));
+          } catch (error) {
+            if (!first.moved || retired) throw error;
+          }
+          admitted = await admit(request.form, request.address, true);
+          if (String(admitted.evidence.tenantId) !== tenant) throw new BusinessCommandExecutionError('temporarily_unavailable');
+          return await inPlace(admitted, authorization, extractor, { moved: false }, (records) => run(records));
+        } catch (error) {
+          if (error instanceof BusinessCommandExecutionError) throw error;
+          throw recordRefusalCause(new BusinessCommandExecutionError('temporarily_unavailable'), refusalCause(error) ?? error);
+        }
+      };
+      return await use(Object.freeze({ tenant, roots: where.roots[place], catalog: authorization.catalog, reading }));
+    } finally {
+      pending.delete(held);
+      finish();
+    }
+  };
+
   const submit = async (input: TenantIntakeSubmission, execution: TenantCommandExecutionOptions = {}): Promise<BusinessCommandResult> => {
     let context: ReturnType<typeof captureTenantCommandExecution> | undefined, finish!: () => void;
     const held = new Promise<void>((resolve) => {
@@ -814,6 +869,7 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
     submit,
     resume,
     hold,
+    status,
     /** Read-only experiment admission uses exactly the intake resolver. No
      * selector becomes a tenant membership and no placement is disclosed. */
     async withPublicFlags<T>(
@@ -827,7 +883,8 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
         profile(): Promise<Readonly<Record<string, TenantValue>> | undefined>;
       }) => Promise<T>,
     ): Promise<T> {
-      if (!forms.has(form) || retired) return denyTenant();
+      // A public command page's run is placed by the same resolver, so it reads its place (and its flags) as a form does.
+      if ((!forms.has(form) && !pages.has(form)) || retired) return denyTenant();
       let finish!: () => void;
       const held = new Promise<void>((resolve) => {
         finish = resolve;

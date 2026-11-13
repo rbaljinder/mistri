@@ -1,14 +1,21 @@
 /**
- * One-time codes the platform emails: a status check's step-up, an
- * applicant proving the address they typed into a form, and a capability
- * link's step-up. Six digits, from the system's random source, good for ten
- * minutes and one use.
+ * One-time codes: a status check's step-up, an applicant proving the address
+ * they typed into a form, and a capability link's step-up. Six digits, from
+ * the system's random source, good for ten minutes and one use. The platform
+ * emails them; a step-up may name a channel an integration declares instead
+ * (`stepUp: { sms: 'mobile' }`), sent under the tenant's
+ * own secrets (`deliverCode`, below).
  *
  * A code is kept only as a digest beside its subject (one application, one
  * draft's address, one link), never in a log or a reply. Five wrong tries
  * burn it; a subject is sent at most three codes in an hour, whoever asks,
  * so a mailbox cannot be flooded through a form and a code cannot be ground
  * out by asking for more. Asking again replaces the code before it.
+ *
+ * A sent code costs whoever pays for the channel — a text to a premium number
+ * is the tenant's money — so past each subject's three, a send is capped by
+ * where it goes, by who asked, and on a channel by the tenant paying
+ * (`deliverCode`, below).
  *
  * Kept in the shared sign-in state (auth/signInState.ts), as the status
  * check's lockouts are: a code sent by one instance is spent on the next, its
@@ -18,11 +25,25 @@
  */
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { resetSignInState, signInState, type SignInState } from '../auth/signInState.js';
+import type { EmailTransport } from '../email/email.js';
+import { integrationRuntimeOf, sendOnChannel } from '../integrations/integrationRuntime.js';
 
 export const CODE_MINUTES = 10;
 const CODE_TRIES = 5;
 const CODES_PER_HOUR = 3;
 const HOUR_SECONDS = 3_600;
+
+/* The send caps, each an hour: codes to one destination however many records name it, codes one client asks for
+   however many subjects it names, and texts one tenant pays for. Not settings: a person asks for a few codes an hour,
+   and a tenant's real traffic is far under the hundred. */
+const DEFAULT_CODE_CAPS = Object.freeze({ destination: 5, client: 20, tenant: 100 });
+type CodeCaps = { readonly destination: number; readonly client: number; readonly tenant: number };
+let codeCaps: CodeCaps = DEFAULT_CODE_CAPS;
+
+/** Lower the send caps for a test that cannot send a hundred texts; called bare, the defaults again. */
+export function codeCapsForTests(caps?: Partial<CodeCaps>): void {
+  codeCaps = { ...DEFAULT_CODE_CAPS, ...caps };
+}
 
 interface Held {
   /** The digest, hex. */
@@ -103,3 +124,105 @@ export function oneTimeCodes(state: SignInState = signInState): OneTimeCodes {
 const platform = oneTimeCodes();
 export const issueCode = platform.issue;
 export const spendCode = platform.spend;
+
+const EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+/* The shape a `phone` field accepts (shared/commandInput.ts): a channel's address is a number. */
+const PHONE = /^\+?[0-9 ().-]{7,32}$/;
+
+/**
+ * The address a code goes to on `channel` (email when absent), read from the record's stored value, or undefined
+ * when the value is not one: an email for email, a number for any other channel.
+ */
+export function codeAddress(channel: string | undefined, stored: unknown): string | undefined {
+  if (typeof stored !== 'string') return undefined;
+  const address = stored.trim();
+  if (channel === undefined) return EMAIL.test(address) ? address : undefined;
+  return PHONE.test(address) && address.replace(/\D/g, '').length >= 7 ? address : undefined;
+}
+
+interface CodeDelivery {
+  /** The step-up's channel; absent is email. */
+  channel: string | undefined;
+  /** The record's stored value; a code is never sent to an address a request names. */
+  to: unknown;
+  code: string;
+  appName: string;
+  /** What the code opens, in the words of the message ("the link you were sent from …"). */
+  opens: string;
+  mail: EmailTransport | undefined;
+  /** The App and tenant whose integration sends a channel's code (`''` in an App without tenants). */
+  appId: string | undefined;
+  tenant: string;
+  /** What the outcome is logged under; never the code or the address. */
+  log: Readonly<Record<string, string>>;
+  /** The client that asked (`clientAddress`), counted against its own cap; never logged. */
+  client?: string;
+}
+
+/**
+ * Whether a code may go to `address`: each cap counted in the shared sign-in state, so instances behind one balancer
+ * count together. The destination is the number's digits or the email lowercased, so one number written two ways is
+ * one destination; a tenant's cap counts only what its channel sends, the platform's email being nobody's bill.
+ */
+async function withinCodeCaps(
+  channel: string | undefined,
+  address: string,
+  appId: string | undefined,
+  tenant: string,
+  client: string | undefined,
+) {
+  const destination = channel === undefined ? address.toLowerCase() : address.replace(/\D/g, '');
+  const caps: Array<[string, number]> = [
+    ...(client ? [[`otp-client:${keyOf(client)}`, codeCaps.client] as [string, number]] : []),
+    [`otp-to:${keyOf(destination)}`, codeCaps.destination],
+    ...(channel === undefined ? [] : [[`otp-tenant:${keyOf(`${appId ?? ''}\u0000${tenant}`)}`, codeCaps.tenant] as [string, number]]),
+  ];
+  for (const [key, max] of caps) if (!(await signInState.consume(key, { window: HOUR_SECONDS, max })).allowed) return false;
+  return true;
+}
+
+/**
+ * Sends a code and does not wait: a slow relay or provider must not tell a found record from a missing one by the
+ * clock, and a send that fails, an address that is not one, a channel not set up and a send over a cap answer as a
+ * sent code does: a capped asker learns nothing it could tune against. What became of it is logged, without the code,
+ * the address or the client.
+ */
+export function deliverCode(delivery: CodeDelivery): void {
+  const report = (outcome: string): void => {
+    process.stderr.write(`${JSON.stringify({ ...delivery.log, outcome })}\n`);
+  };
+  const address = codeAddress(delivery.channel, delivery.to);
+  if (!address) return report('undeliverable');
+  void withinCodeCaps(delivery.channel, address, delivery.appId, delivery.tenant, delivery.client)
+    .then((within) => (within ? send(delivery, address, report) : report('rate_limited')))
+    .catch(() => report('send_failed'));
+}
+
+function send(
+  { channel, code, appName, opens, mail, appId, tenant }: CodeDelivery,
+  address: string,
+  report: (outcome: string) => void,
+): void {
+  if (channel === undefined) {
+    if (!mail) return report('undeliverable');
+    void mail
+      .send({
+        to: address,
+        subject: `${appName}: your code is ${code}`,
+        text:
+          `Your code is ${code}.\n\nIt opens ${opens}, once, for ${CODE_MINUTES} minutes.\n\n` +
+          'If you did not ask for it, you can ignore this email: nothing opens without it.',
+        sensitive: true,
+      })
+      .catch(() => report('send_failed'));
+    return;
+  }
+  const runtime = appId === undefined ? undefined : integrationRuntimeOf(appId);
+  if (!runtime) return report('no_runtime');
+  const text = `${appName}: your code is ${code}. It opens ${opens}, once, for ${CODE_MINUTES} minutes. If you did not ask for it, ignore this message.`;
+  void sendOnChannel(runtime, tenant, channel, { to: address, text })
+    .then((outcome) => {
+      if (outcome !== 'sent') report(outcome);
+    })
+    .catch(() => report('send_failed'));
+}

@@ -143,6 +143,7 @@ export function bindPolicyPublicIntake(options: PolicyPublicIntakeOptions) {
         catalog: authorized.catalog,
         ...(authorized.machine ? { machine: authorized.machine } : {}),
         ...(authorized.files ? { files: authorized.files } : {}),
+        ...(authorized.fileReads ? { fileReads: authorized.fileReads } : {}),
         transaction: deny,
         assertTarget: (records, key) => checks.get(records)?.target(key) ?? deny(),
         assertResult: (records, key, result) => checks.get(records)?.result(key, result) ?? deny(),
@@ -253,7 +254,7 @@ export function bindPolicyPublicIntake(options: PolicyPublicIntakeOptions) {
     },
   });
   return Object.freeze({
-    submit(body: unknown, execution: { signal?: AbortSignal; requestId?: string; visitor?: string } = {}) {
+    submit(body: unknown, execution: { signal?: AbortSignal; requestId?: string; visitor?: string; locale?: string } = {}) {
       if (retired) return Promise.reject(new BusinessCommandExecutionError('temporarily_unavailable'));
       let submission: ReturnType<typeof parseSubmission>;
       try {
@@ -264,7 +265,7 @@ export function bindPolicyPublicIntake(options: PolicyPublicIntakeOptions) {
         );
       }
       // The visitor token only names whose held files the run may take; where they land is the captured scope's.
-      const context = { signal: execution.signal, requestId: execution.requestId, visitor: execution.visitor };
+      const context = { signal: execution.signal, requestId: execution.requestId, visitor: execution.visitor, locale: execution.locale };
       // Register before running trusted code so retirement cannot release the
       // source while an accepted submission still owns a transaction.
       const operation = Promise.resolve().then(async () => {

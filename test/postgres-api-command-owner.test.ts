@@ -18,7 +18,8 @@ import { provisionPostgresApiTokenStore } from '../packages/mistri/src/server/au
 import { issuePostgresApiCommandToken, revokePostgresApiToken } from '../packages/mistri/src/server/auth/postgresApiTokenMaintenance.js';
 import { loadAppRuntimeResources } from '../packages/mistri/src/server/app/appRuntimeResources.js';
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
-import { shape, bool } from '../packages/mistri/src/server/commands/commandShapes.js';
+import { shape, bool, optional, text } from '../packages/mistri/src/server/commands/commandShapes.js';
+import { configurePublicLinks } from '../packages/mistri/src/server/links/publicLink.js';
 import { refuse } from '../packages/mistri/src/server/commands/commandErrors.js';
 import { createPostgresApiCommandOwner } from '../packages/mistri/src/server/api/postgresApiCommandOwner.js';
 import { ApiCommandUnauthenticated } from '../packages/mistri/src/server/api/sqliteApiCommandOwner.js';
@@ -128,7 +129,7 @@ test(
       db = new pg.default.Client({ connectionString: urls[1], statement_timeout: 10000 });
       await db.connect();
       await db.query(`CREATE TABLE physical_item(id INTEGER PRIMARY KEY,version INTEGER NOT NULL);
-        INSERT INTO physical_item SELECT n, 0 FROM generate_series(1, 13) AS n`);
+        INSERT INTO physical_item SELECT n, 0 FROM generate_series(1, 14) AS n`);
       await migratePostgresCommandJournal(urls[1]);
       await migratePostgresAuthStore(urls[0]);
       accounts = new pg.default.Client({ connectionString: urls[0], statement_timeout: 10000 });
@@ -144,7 +145,8 @@ test(
           resources: { item: { physical: 'public.physical_item', access: 'write' } },
           views: { items: { kind: 'list', from: 'item' } },
           home: 'items',
-          auth: { store: urls[0], roles: { operator: { read: true, commands: ['change'] } } },
+          // The visitor reads items, so `change` may answer with a public link to their list.
+          auth: { store: urls[0], roles: { operator: { read: true, commands: ['change'] } }, public: { read: ['item'] } },
         },
         'fixture',
       );
@@ -158,13 +160,13 @@ test(
         },
         ['operator'],
       )!;
-      const hooks = { calls: 0, afterWrite: async () => {}, refusal: undefined as (() => never) | undefined };
+      const hooks = { calls: 0, afterWrite: async () => {}, refusal: undefined as (() => never) | undefined, listing: false };
       const commands = defineCommands({
         change: defineCommand({
           source: 'business',
           target: 'item',
           input: {},
-          output: shape({ ok: bool() }),
+          output: shape({ ok: bool(), listing: optional(text()) }),
           async handle(context) {
             hooks.calls++;
             if (hooks.refusal) hooks.refusal();
@@ -174,7 +176,7 @@ test(
               values: { version: Number(context.record.version) + 1 },
             });
             await hooks.afterWrite();
-            return { ok: true };
+            return hooks.listing ? { ok: true, listing: context.publicLink('items') } : { ok: true };
           },
         }),
       });
@@ -708,6 +710,26 @@ test(
           assert.equal(unclaimed.status, 0);
         },
       );
+
+      await t.test("a member's answer says its public link as the App's URL, and keeps the reference where none is known", async (sub) => {
+        hooks.listing = true;
+        sub.after(() => {
+          hooks.listing = false;
+        });
+        // No server address is known (MCP stdio, a test without HTTP): the answer keeps the reference, never a guess.
+        const first = request(14);
+        const unsaid = await call(internal, 'execute', token.token, first);
+        assert.equal(unsaid.body.status, 'applied', JSON.stringify(unsaid.body));
+        assert.match(unsaid.body.result.listing, /^mistri-public:items\.[A-Za-z0-9_-]{22}$/);
+        sub.after(configurePublicLinks('owner', (path) => `https://owner.example.test${path}`));
+        const said = await call(internal, 'execute', token.token, request(14, { expectedVersion: 1 }));
+        assert.equal(said.body.status, 'applied', JSON.stringify(said.body));
+        assert.match(said.body.result.listing, /^https:\/\/owner\.example\.test\/.*items$/);
+        // A replay reads the receipt, which holds the reference: it is said now, as it stands.
+        const replayed = await call(internal, 'execute', token.token, first);
+        assert.match(replayed.body.result.listing, /^https:\/\/owner\.example\.test\//);
+        assert.equal(await revision(14), 2);
+      });
 
       await t.test('a PG read owner serves the read half of the command-exposing App to command-issued tokens', async (sub) => {
         const reader = await createPostgresApiReadOwner(registry, host, 'decimal-string');

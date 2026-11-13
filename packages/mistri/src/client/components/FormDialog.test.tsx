@@ -12,6 +12,7 @@ vi.mock('../publicForm.js', () => ({
     if (loaded.failure) throw loaded.failure;
     return loaded.value ?? undefined;
   }),
+  pickedLanguage: vi.fn(() => undefined),
 }));
 
 const { FormDialog } = await import('./FormDialog.js');

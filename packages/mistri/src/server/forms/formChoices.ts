@@ -8,12 +8,12 @@
  * read (`/api/run`), and its form is served without them.
  */
 import type { AppCommandField } from '../../../schema/command.js';
-import type { AppFormCommandReference } from '../../shared/command.js';
+import { choiceAnswers, choiceLabelColumn, choiceWhereColumns, type AppFormCommandReference } from '../../shared/command.js';
 import { isRowPolicyApp, isTenantApp, logicalResource, type AppDef } from '../../shared/app.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
-import { CHOICE_ROWS_MOST, choiceOrder, sharedChoices } from './choiceCache.js';
+import { choiceColumns, choiceNarrowing, choiceOrder, choiceReadLimit, sharedChoices } from './choiceCache.js';
 
 type Sourced = Extract<AppCommandField, { type: 'choice' | 'choices' }> & {
   source: NonNullable<Extract<AppCommandField, { type: 'choice' }>['source']>;
@@ -37,6 +37,8 @@ export async function withTableChoices(options: {
   /** The commands whose inputs the form serves, in its order: a saved form's steps' and its submit's. */
   owners: readonly string[];
   input: readonly AppCommandField[];
+  /** The reader's locale: a field naming a column for it (`labelColumns`) is said by that column. */
+  locale?: string;
 }): Promise<AppCommandField[]> {
   const { registry, app, connection } = options;
   const input = [...options.input];
@@ -63,26 +65,41 @@ export async function withTableChoices(options: {
           if (app.auth?.public?.byKey?.includes(resource)) return field;
           const physical = resources.toPhysical(resource);
           const owner = resources.connectionFor(resource);
+          const local = choiceLabelColumn(field.source, options.locale);
+          const where = choiceWhereColumns(field.source.match);
+          const narrowing = choiceNarrowing(field.source.match);
+          const read = { by: field.source.by, labelColumn: field.source.labelColumn, sort: field.source.sort, local, where, narrowing };
           const choices = await sharedChoices({
             registry,
             appId: app.id,
             connection: owner,
-            source: { resource, physical, by: field.source.by, labelColumn: field.source.labelColumn, sort: field.source.sort },
+            source: { resource, physical, ...read },
             read: async () =>
               (
                 await resources.forConnection(owner).query({
                   table: resource,
-                  columns: [...new Set([field.source.by, field.source.labelColumn])],
+                  columns: choiceColumns(read),
+                  ...(narrowing.filter ? { filter: narrowing.filter } : {}),
+                  ...(narrowing.lanes ? { lanes: narrowing.lanes } : {}),
                   orderBy: choiceOrder(field.source),
-                  limit: CHOICE_ROWS_MOST + 1,
+                  limit: choiceReadLimit(narrowing),
                   offset: 0,
                 })
               ).rows,
           });
+          /* Cut, and narrowed by an answer the served rows could not all be read for: the field is left as it was, so the
+             page reads it itself with the answer bound (IntakeControls.tsx useSourced), each answer its own rows. */
+          if (choices.cut && field.source.match && choiceAnswers(field.source.match).length) return field;
           return {
             ...field,
             source: { ...field.source, served: true },
-            options: choices.options.map((option) => ({ value: option.value, label: option.label })),
+            /* A field that narrows by other answers keeps each row's `where` columns: the page filters as they change,
+               with no read of its own. */
+            options: choices.options.map((option) => ({
+              value: option.value,
+              label: option.label,
+              ...(option.row ? { row: option.row } : {}),
+            })),
           } as AppCommandField;
         } catch {
           return field;
@@ -105,7 +122,13 @@ export async function withTableChoices(options: {
  */
 export async function withPublicCommandChoices(
   served: Readonly<Record<string, AppFormCommandReference>>,
-  options: { registry: Registry; app: AppDef; connection: string | undefined; commands: BusinessCommandRegistry | undefined },
+  options: {
+    registry: Registry;
+    app: AppDef;
+    connection: string | undefined;
+    commands: BusinessCommandRegistry | undefined;
+    locale?: string;
+  },
 ): Promise<Record<string, AppFormCommandReference>> {
   const { connection, ...rest } = options;
   const entries = Object.entries(served);

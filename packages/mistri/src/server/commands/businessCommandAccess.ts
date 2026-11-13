@@ -54,12 +54,16 @@ export interface AuthorizedBusinessCommand {
   readonly readsInCommand?: true;
   /** The App's `ui.timezone`, the wall clock its writes into zone-less timestamp columns are made in (UTC when absent). */
   readonly timezone?: string;
+  /** The App's catalogs and `ui.locale` (commandLocale.ts), which `ctx.locale` is clamped to. */
+  readonly words?: import('./commandLocale.js').CommandWords;
   /** The App's `ui.currency` (see businessCommandAuthorization.ts). */
   readonly currency?: string;
   /** The table people are rows of (`auth.me`), where the command reads it: what `me` writes to a reference to it. */
   readonly people?: Readonly<{ table: string; column: string; key: string; id: string }>;
   /** The file resources it writes, by local name: the only tables a command may put bytes in, within their cap. */
   readonly files?: ReadonlyMap<string, CommandFileRule>;
+  /** The file resources it reads or writes, by local name: what `db.<file>.readFile` reads, and the most it hands over. */
+  readonly fileReads?: ReadonlyMap<string, CommandFileRule>;
   /** The tables it writes beside its target that this actor cannot read: it may add rows there and nothing more (see businessCommandAuthorization.ts). */
   readonly insertOnly?: ReadonlyMap<string, string>;
   /** Present when the command looks up: its sources' tables, read outside any transaction. */
@@ -72,6 +76,8 @@ export interface AuthorizedBusinessCommand {
   readonly links?: Readonly<Record<string, import('../../shared/appLinks.js').AppLinkDef>>;
   /** The tables it writes whose resource declares links, by local name → resource: a row removed from one ends its links. */
   readonly linkedTables?: ReadonlyMap<string, string>;
+  /** What `context.publicLink(view)` answers: a reference to one of the App's public views (links/publicLink.ts). */
+  readonly publicLink?: (view: string) => import('../links/publicLink.js').PublicLinkRef;
   /** Private stable namespace; never request-supplied membership/session evidence. */
   readonly receiptOwner?: Readonly<{ storeId: string; sourceId: string; tenantId: string }>;
   /** A tenant App's public intake only: where this submission lands, the
@@ -281,12 +287,15 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
         catalog: binding.catalog,
         ...(binding.machine ? { machine: binding.machine } : {}),
         ...(binding.timezone ? { timezone: binding.timezone } : {}),
+        ...(binding.words ? { words: binding.words } : {}),
         ...(binding.currency ? { currency: binding.currency } : {}),
         ...(binding.people ? { people: binding.people } : {}),
         ...(binding.files ? { files: binding.files } : {}),
+        ...(binding.fileReads ? { fileReads: binding.fileReads } : {}),
         ...(binding.insertOnly ? { insertOnly: binding.insertOnly } : {}),
         ...(binding.links ? { links: binding.links } : {}),
         ...(binding.linkedTables ? { linkedTables: binding.linkedTables } : {}),
+        ...(binding.publicLink ? { publicLink: binding.publicLink } : {}),
         /* A read of an audited resource is written to the database its rows came from, as a page's is (http/source.ts). */
         ...(binding.audited
           ? {

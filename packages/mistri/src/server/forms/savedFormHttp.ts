@@ -54,6 +54,8 @@ import { burnClaim, claimCookie, newClaim, readClaim } from './formLink.js';
 import { claimReply, foundReply, linkReply, mineReply, verifyEmailReply, type LinkAccount, type LinkedForm } from './formLinkHttp.js';
 import { detailsReply, stepUpReply, type StepUpForm } from './statusStepUp.js';
 import { emailOf } from '../serviceConnections.js';
+import type { EmailTransport } from '../email/email.js';
+import { askedLocale, requestLocale } from '../app/readerLocale.js';
 
 export type SavedFormAction =
   | { kind: 'step'; step: string }
@@ -226,6 +228,7 @@ async function statusReply(
   account: string | undefined,
   read: (run: (records: WriteTransaction) => Promise<StatusAnswer>) => Promise<StatusAnswer>,
   appId: string,
+  tenant?: string,
 ): Promise<SavedFormReply> {
   const started = Date.now();
   const check = form.statusCheck!;
@@ -250,6 +253,7 @@ async function statusReply(
         form: key,
         catalog,
         appId,
+        ...(tenant === undefined ? {} : { tenant }),
         ...(form.link ? { link: form.link } : {}),
         ...(account ? { account } : {}),
       }),
@@ -292,6 +296,8 @@ export async function dispatchSavedFormHttp(options: {
   captureFlags?: CaptureCommandFlags;
   /** The verified session's account, when there is one: the one a link names, never a request's. */
   account?: LinkAccount;
+  /** The client that asked (`clientAddress`), for a step-up's send cap. */
+  client?: string;
 }): Promise<SavedFormReply> {
   const { req, res, registry, app, commands, connection, key, form, action, secure, events, account } = options;
   const captureFlags = options.captureFlags;
@@ -356,6 +362,7 @@ export async function dispatchSavedFormHttp(options: {
         appId: app.id,
         mail: emailOf(registry),
         ...(account ? { account: account.id } : {}),
+        ...(options.client ? { client: options.client } : {}),
       };
       return action.kind === 'stepup' ? await stepUpReply(stepping) : await detailsReply(stepping);
     }
@@ -401,6 +408,8 @@ export async function dispatchSavedFormHttp(options: {
           signal: controller.signal,
           flags,
           draft: draftRun(form, plan, roots),
+          // A public form's visitor: the language their request names, else their pick, else their browser's (readerLocale.ts).
+          locale: requestLocale(app, { visitor: !account, req, asked: account ? null : askedLocale(req) }),
           ...(typeof res.getHeader('x-request-id') === 'string' ? { requestId: String(res.getHeader('x-request-id')) } : {}),
         },
       );
@@ -441,13 +450,28 @@ export interface SavedFormIntake {
     execution: { signal: AbortSignal },
   ): Promise<BusinessCommandResult>;
   resume(request: { form: string; address: unknown; token: string }): Promise<string[]>;
+  /** A status check, its step-up and its details, in the place the address resolves to now: `use` reads there, once,
+      through the first step's authorization (tenant/tenantIntake.ts `status`). Absent, they are not served. */
+  status?<T>(request: { form: string; address: unknown }, use: (place: SavedFormPlace) => Promise<T>): Promise<T>;
+}
+
+/** Where a status check landed on a tenant App's host: the place's id, its roots, and one read there. */
+export interface SavedFormPlace {
+  /** The tenant the address placed, or the platform's triage: codes, lockouts and sessions are the place's own. */
+  readonly tenant: string;
+  readonly roots: readonly string[];
+  readonly catalog: CommandCatalog;
+  reading<T>(run: (records: WriteTransaction) => Promise<T>): Promise<T>;
 }
 
 /**
  * One request to a saved form on a tenant App's host: the same plan and the
  * same answers as the ordinary host's, with the intake address carried to the
  * intake, which decides where the draft is and binds the token to it. The
- * status check and the link are not served there (savedFormChecks.ts).
+ * status check, its step-up and its details read in the place the address
+ * resolves to, and answer as the ordinary host's do; a receipt is found only
+ * in its own place, and a code, a lockout and a session are that place's.
+ * The link is not served there (savedFormChecks.ts).
  */
 export async function dispatchIntakeSavedFormHttp(options: {
   req: IncomingMessage;
@@ -459,10 +483,38 @@ export async function dispatchIntakeSavedFormHttp(options: {
   address: unknown;
   intake: SavedFormIntake;
   signal: AbortSignal;
+  /** The App, for a step-up's code: its name in the message, its id in every key. */
+  app: Pick<AppDef, 'id' | 'name'>;
+  /** The deployment's mail, for a step-up's code. */
+  mail?: EmailTransport;
+  /** The client that asked (`clientAddress`), for a step-up's send cap. */
+  client?: string;
 }): Promise<SavedFormReply> {
-  const { req, key, form, action, secure, address, intake, signal } = options;
+  const { req, key, form, action, secure, address, intake, signal, app, mail } = options;
   try {
     if (action.kind === 'resume') return await resumeReply(req, key, (token) => intake.resume({ form: key, address, token }));
+    if ((action.kind === 'status' || action.kind === 'stepup' || action.kind === 'details') && intake.status) {
+      const body = await commandBody(req);
+      return await intake.status({ form: key, address }, async ({ tenant, roots, catalog, reading }: SavedFormPlace) => {
+        if (action.kind === 'status') return statusReply(key, form, body, roots, catalog, undefined, reading, app.id, tenant);
+        const stepping = {
+          req,
+          key,
+          form: form as unknown as StepUpForm,
+          body,
+          roots,
+          catalog,
+          secure,
+          reading,
+          appName: app.name,
+          appId: app.id,
+          tenant,
+          mail,
+          ...(options.client ? { client: options.client } : {}),
+        };
+        return action.kind === 'stepup' ? stepUpReply(stepping) : detailsReply(stepping);
+      });
+    }
     if (action.kind !== 'step' && action.kind !== 'submit') return { status: 404, body: { code: 'no_such_form', error: 'No such form.' } };
     const body = await commandBody(req);
     let plan: SavedFormPlan;

@@ -291,6 +291,12 @@ export interface InboundDeclaration {
   readonly input: (body: any) => unknown;
   /** From the parsed body to the key of the record the command names. Only for a command that targets a record. Pure. */
   readonly target?: (body: any) => Readonly<Record<string, string | number>>;
+  /**
+   * A file resource of the App: the body's `files` (`[{ name, type, content: base64 }]`, at most 20) are checked
+   * against it as uploads are, and reach the command's handler as `ctx.files`, never its input. The body may then
+   * weigh up to the resource's file cap (plus base64) more than 256 KiB.
+   */
+  readonly files?: string;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -311,6 +317,8 @@ export interface CapturedInbound {
   readonly key: (body: unknown) => unknown;
   readonly input: (body: unknown) => unknown;
   readonly target?: (body: unknown) => unknown;
+  /** The file resource a delivery's `files` are checked against, and handed to the command as `ctx.files`. */
+  readonly files?: string;
 }
 
 declare const moduleType: unique symbol;
@@ -615,7 +623,7 @@ export function hmac(options: HmacOptions): InboundVerifier {
  */
 export function defineInbound(declaration: InboundDeclaration): Inbound {
   const value = plainRecord(declaration, 'Inbound');
-  exactly(value, ['verify', 'runAs', 'command', 'key', 'input'], 'Inbound', ['target']);
+  exactly(value, ['verify', 'runAs', 'command', 'key', 'input'], 'Inbound', ['target', 'files']);
   const verify = typeof value.verify === 'object' && value.verify ? verifiers.get(value.verify) : undefined;
   if (!verify) fail('Inbound verify must be created with hmac(...).');
   if (typeof value.runAs !== 'string' || !PRINCIPAL.test(value.runAs))
@@ -627,13 +635,18 @@ export function defineInbound(declaration: InboundDeclaration): Inbound {
     if (typeof fn !== 'function' || isProxy(fn)) return fail(`Inbound ${name} must be a function of the parsed body.`);
     return [[name, (body: unknown) => Reflect.apply(fn, undefined, [body])] as const];
   });
+  if (value.files !== undefined && (typeof value.files !== 'string' || !RESOURCE.test(value.files)))
+    fail('Inbound files names a file resource of the App.');
   const endpoint = Object.freeze({ runAs: value.runAs as string, command: command.id }) as unknown as Inbound;
   inbounds.set(
     endpoint,
-    Object.freeze({ verify: verify!, runAs: value.runAs as string, command, ...Object.fromEntries(functions) }) as Omit<
-      CapturedInbound,
-      'name'
-    >,
+    Object.freeze({
+      verify: verify!,
+      runAs: value.runAs as string,
+      command,
+      ...Object.fromEntries(functions),
+      ...(value.files === undefined ? {} : { files: value.files as string }),
+    }) as Omit<CapturedInbound, 'name'>,
   );
   return endpoint;
 }

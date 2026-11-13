@@ -15,6 +15,8 @@ import { captureHttpCommandFlags } from '../flags/httpRuntime.js';
 import { stageFileHttp } from '../commands/stagedFileHttp.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import { servesLinks, withLinkUrls } from '../links/linkLookup.js';
+import { withAppPublicUrls } from '../links/publicLink.js';
+import { personLocale, requestLocale } from '../app/readerLocale.js';
 
 /**
  * `body`: the command's body where it was read already — availability asked
@@ -58,6 +60,15 @@ export async function commandRoutes(ctx: RequestContext, body?: unknown): Promis
         return true;
       }
       res.setHeader('x-mistri-app', signedIn.app.app.id);
+      /* Their own row, read under their own rows as their pages read it (http/source.ts); else their pick. */
+      const person =
+        path === COMMAND_ROUTES.execute || path === COMMAND_ROUTES.draft
+          ? await personLocale(signedIn.app.app, policyContext.schema, policyContext.data, {
+              email: sessionActorWords(identity).email,
+              account: identity.id,
+            }).catch(() => undefined)
+          : undefined;
+      const locale = requestLocale(signedIn.app.app, { ...(person ? { person } : {}), visitor: false, req });
       const result = await dispatchScopedBusinessCommandHttp({
         req,
         res,
@@ -65,6 +76,7 @@ export async function commandRoutes(ctx: RequestContext, body?: unknown): Promis
         commands: policyContext.commands,
         label: (body) => commandActionLabel(signedIn.app.app, body),
         ...given,
+        ...(locale ? { locale } : {}),
       });
       send(res, 200, path === COMMAND_ROUTES.execute ? await policyLinkUrls(ctx, result) : result);
       return true;
@@ -113,9 +125,11 @@ export async function commandRoutes(ctx: RequestContext, body?: unknown): Promis
 
 /* A link a row-policy command minted is said as its URL to whoever ran it, as on the unscoped path
    (businessCommandHttp.ts): the receipt keeps the reference only. The link's row is the platform's, read by id. */
-async function policyLinkUrls(ctx: RequestContext, result: unknown): Promise<unknown> {
+async function policyLinkUrls(ctx: RequestContext, answer: unknown): Promise<unknown> {
   const app = ctx.signedIn?.app.app;
-  if (!app || !servesLinks(app)) return result;
+  if (!app) return answer;
+  const result = await withAppPublicUrls(app, answer);
+  if (!servesLinks(app)) return result;
   const connection = appEntrypoint(ctx.signedIn as never, ctx.registry);
   if (!connection) return result;
   const releases: Array<() => void> = [];

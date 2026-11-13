@@ -36,6 +36,7 @@ import { onDemand, useArrived } from '@mistriwork/kit/client/components/onDemand
 import { Button } from '@mistriwork/ui/Button.js';
 import { Field, type AnswerKind } from '@mistriwork/ui/Field.js';
 import { InputSlot, builtInInputId } from '@mistriwork/kit/client/components/inputRenderers.js';
+import { appWord } from '@mistriwork/kit/client/messages.js';
 import { say } from '../copy/forms/components/CommandFields.js';
 import { ChoiceRadios } from './ChoiceRadios.js';
 import type { DefinedField } from '@mistriwork/engine/shared/definedFields.js';
@@ -553,8 +554,11 @@ export function CommandFieldControl({
   record,
   valid,
   onLeave,
+  answers,
 }: {
   field: Exclude<ValueField, { type: 'reference' | 'defined' }>;
+  /** The form's answers so far: a choice narrowed by the others (`where`) reads them. */
+  answers?: CommandValues;
   /** The intake style's valid check on a text or number box: present, the box keeps room for the mark; true draws it. */
   valid?: boolean;
   /** Focus has left the control: where the valid check is kept, it is judged from then on. */
@@ -604,6 +608,7 @@ export function CommandFieldControl({
         disabled={disabled}
         onChange={onChange}
         {...(connection !== undefined ? { source: connection } : visitor ? { source: { visitor } } : {})}
+        {...(answers && (field.type === 'choice' || field.type === 'choices') && field.source?.match ? { answers } : {})}
       />,
       true,
     );
@@ -863,6 +868,7 @@ export function CommandFields({
               field={field}
               path={field.name}
               value={values[field.name]}
+              answers={whole?.values ?? values}
               shared={shared}
               onChange={(next, path) => onChange({ ...values, [field.name]: next }, path)}
             />
@@ -891,10 +897,13 @@ function FieldEntry({
   value,
   onChange,
   shared,
+  answers,
 }: {
   field: AppCommandField;
   path: string;
   value: Entry;
+  /** The whole form's answers, where this is one of its own fields (a choice inside a group reads no `where`). */
+  answers?: CommandValues;
   shared: CommandFieldsShared;
   onChange: (value: Entry, path: string) => void;
 }) {
@@ -978,7 +987,7 @@ function FieldEntry({
   const label = needed ? (
     <>
       {field.label}
-      <span className="visually-hidden"> {say('requiredWord')}</span>
+      <span className="visually-hidden"> {appWord('mistri.form.required', say('requiredWord'))}</span>
     </>
   ) : (
     field.label
@@ -1019,7 +1028,7 @@ function FieldEntry({
     <Field
       label={label}
       required={needed === true}
-      optional={isCheck(field) ? undefined : say('optionalWord')}
+      optional={isCheck(field) ? undefined : appWord('mistri.form.optional', say('optionalWord'))}
       id={id}
       hint={field.help}
       problem={problem}
@@ -1076,6 +1085,7 @@ function FieldEntry({
                 {...(shared.connection === undefined ? {} : { connection: shared.connection })}
                 {...(shared.visitor ? { visitor: shared.visitor } : {})}
                 {...(shared.record ? { record: shared.record } : {})}
+                {...(answers ? { answers } : {})}
               />
             );
             /* The App's own input, where it names one for this input: the form still keeps, checks and sends the value. */

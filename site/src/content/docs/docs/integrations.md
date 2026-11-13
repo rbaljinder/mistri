@@ -78,6 +78,42 @@ The signature must cover the event time, and `at` must be read from what it
 covers, never from a header of its own: core refuses a delivery more than five
 minutes from now and takes the same event id and time once.
 
+## Add to a package's integration
+
+A second package, or the App itself, may add actions and webhook events to an
+integration without a second name. `extendIntegration` keeps the base's name,
+secrets, client, signature check and channel, so a tenant enters one set of
+secrets and the provider calls one address. An App lists the extension and not
+its base.
+
+```ts
+import { extendIntegration, int, shape, text } from '@mistriwork/mistri/integration';
+import { fakepay } from '@acme/fakepay-integration';
+
+export const fakepayPlus = () =>
+  extendIntegration(fakepay(), {
+    actions: {
+      void: {
+        input: shape({ charge: text() }),
+        output: shape({ id: text() }),
+        run: (client, input: { charge: string }, { idempotencyKey }) => client.voidCharge(input.charge, idempotencyKey),
+      },
+    },
+    webhooks: { events: { disputed: { type: 'charge.disputed', payload: shape({ charge: text() }) } } },
+  });
+
+// jobs.ts: integrations: { use: [fakepayPlus()] }, not [fakepay(), fakepayPlus()]
+```
+
+An extension adds and never overrides: an action or event the base has, or an
+event type it already takes, is refused when the definition loads. It may not
+declare `secrets`, `client`, `channel`, or webhooks' `verify` or `signing`:
+those are the base's, and an extension that needs a secret of its own is a new
+integration. It needs a base that declares webhooks to add events, since the
+base's `verify` checks every delivery. An extension may be extended again.
+Listing a base with its extension, or two extensions of one base, is refused
+(by `mistri check` too): list the extension only.
+
 ## The App side
 
 The jobs module lists the integrations, maps each webhook event to a command

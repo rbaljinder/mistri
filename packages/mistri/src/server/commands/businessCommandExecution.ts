@@ -39,7 +39,15 @@ import {
   registeredAvailability,
   type BusinessCommandActor,
 } from './businessCommands.js';
-import { canonicalKey, createCommandDb, keyFilter, normalizeRow, type UntypedRow, type WriteTable } from './commandDb.js';
+import {
+  canonicalKey,
+  COMMAND_FILE_READ_MOST,
+  createCommandDb,
+  keyFilter,
+  normalizeRow,
+  type UntypedRow,
+  type WriteTable,
+} from './commandDb.js';
 import { auditCommandRead, type CommandReadAudit, type ReadAuditSink } from '../readAudit.js';
 import { FLOW_TELL, flowCommandOf } from './flowCommandBrand.js';
 import { compileWhen, failingCondition, plainlyFails, recordPartHolds, type DerivedFailure, whenHolds, whenPerson } from './commandWhen.js';
@@ -74,13 +82,15 @@ import {
   carryRefusalKeep,
   isBusinessCommandExecutionError,
   refusalKeep,
+  refusalReason,
   type RefusalKeepDb,
 } from './commandErrors.js';
+import { commandLocale } from './commandLocale.js';
 import { attributeAction, currentWriteAttribution } from '@mistriwork/engine/adapters/writeAttribution.js';
 import { evaluateCommandAvailability } from './commandAvailability.js';
 import { constraintColumns, writeFailureKind } from '@mistriwork/engine/server/constraints.js';
-import { placeFile, type PlacedFile } from '../files/fileStorage.js';
-import { stagedOwner, takeHeldFiles } from './stagedFiles.js';
+import { placeFile, type FileScope, type PlacedFile } from '../files/fileStorage.js';
+import { readHeldFile, stagedOwner, takeHeldFiles } from './stagedFiles.js';
 import type { CommandFileRule } from './businessCommandAuthorization.js';
 import { openSavedDraft, type SavedDraftRun } from '../forms/savedForms.js';
 import { currentSpan, errorCode, inSpan, tracing } from '@mistriwork/engine/adapters/telemetry/trace.js';
@@ -145,10 +155,16 @@ interface ExecutionOptions {
    * Absent, the App's registered recorder (`registerCommandAnalytics`) is used.
    */
   analytics?: (event: CommandAnalyticsEvent) => void;
-  /** Files the host received for this run, beside the input (an inbound email's attachments): the handler's `files`. */
+  /** Files the host received for this run, beside the input (an inbound email's attachments, an inbound endpoint's
+      `files`): the handler's `files`. */
   files?: readonly import('./businessCommands.js').CommandFile[];
   /** A public form's visitor token, from their own cookie: whose held files (stagedFiles.ts) a submission may take. */
   visitor?: string;
+  /**
+   * The locale the caller resolved for whoever asked (readerLocale.ts `requestLocale`, a tenant's default for a job):
+   * the handler's `ctx.locale` once clamped to the App's catalogs. Absent, it is the App's own. Never input.
+   */
+  locale?: string;
 }
 
 interface CommandAnalyticsEvent {
@@ -289,6 +305,9 @@ async function executeUntraced(
   /* The handler's own mistake found under a scoped refusal (footprintReference): the transaction rethrows the
      refusal it saw first, so the mistake is kept here and said in its place. */
   let footprintFault: unknown;
+  /* The locale the handler is served in, once authorized: what a refusal naming a message (`refuse(msg(…))`) is
+     said in, wherever its error is rebuilt below. Before that nothing has run that could name one. */
+  let sayRefusal: (ref: import('@mistriwork/engine/shared/appMessages.js').AppMessageRef) => string | undefined = () => undefined;
   const refusedKey = (key: unknown): CommandKey | undefined => {
     if (requestKeys.length < 2 || !key) return undefined;
     const text = commandKeyText(key);
@@ -327,6 +346,8 @@ async function executeUntraced(
     requestKeys = list.keys;
     const authorized = binding.authorize(request.command, actor);
     if (!authorized || typeof authorized !== 'object' || isProxy(authorized)) throw new AppAccessDenied();
+    const locale = commandLocale(authorized.words, options.locale);
+    sayRefusal = (ref) => authorized.words?.say(locale, ref);
     // The authorizer already refuses this; the executor says it again because
     // it is the one boundary a handler's public flag is trusted at. A
     // signed-in form's command is never public and names no key.
@@ -411,6 +432,8 @@ async function executeUntraced(
         receiptOwner = owner as typeof receiptOwner;
       }
     }
+    /* Whose files this run's bucket objects are: a new one is filed under it, and one a row names is read only from it. */
+    const fileScope: FileScope = { app: authorized.actor.appId, ...(receiptOwner ? { tenant: receiptOwner.tenantId } : {}) };
     // A tenant command emits through the tenant runtime's binding, an
     // App-scope command only through a binding given the issued App source.
     if (events && !(receiptOwner ? hasTenantCommandEventOwner(binding) : hasAppScopeCommandEventOwner(binding)))
@@ -597,6 +620,27 @@ async function executeUntraced(
           }
         }
         const stood = command.targets === 'none' || creating ? {} : many ? { records: Object.freeze(before) } : { record: before[0] };
+        /* The files the form attached, read and left held for the handler; only this sender's, a public form's
+           visitor by their cookie. Within the one budget a handler's readFile keeps, so a lookup reading the same
+           id over and over is refused rather than filling memory. */
+        let lookupRead = 0;
+        const lookupFiles = Object.freeze({
+          read: async (id: string) => {
+            const file = await readHeldFile(command.fields, input, id, authorized.commandTransaction, {
+              appId: authorized.actor.appId,
+              command: request.command,
+              owner: stagedOwner(publicActor ? actor : authorized.actor, options.visitor),
+              now: now().getTime(),
+            });
+            if (lookupRead + file.size > COMMAND_FILE_READ_MOST)
+              throw authorFault(
+                new BusinessCommandExecutionError('invalid_result'),
+                `lookup: one command reads at most ${COMMAND_FILE_READ_MOST / 1024 / 1024} MB of files; read fewer, or move the rest to a job.`,
+              );
+            lookupRead += file.size;
+            return file;
+          },
+        });
         lookupHeld = !options.statusOnly && before.some((row) => refusedAsItStands(table, row));
         const value = lookupHeld
           ? undefined
@@ -610,7 +654,9 @@ async function executeUntraced(
                 signal,
                 now,
                 flags,
+                locale,
                 sources: createLookupSources({ catalogs: reader.catalogs, query: lookupQuery, now }),
+                files: lookupFiles,
                 // Each call keyed by this request, so a replay re-running lookup is answered from the call's record.
                 integrations: integrationCalls({
                   appId: scope.appId,
@@ -635,7 +681,10 @@ async function executeUntraced(
         /* The reason is kept for the operator (a read the audit could not record is said as itself), never the caller;
            and a lookup's refuse(code, { keep }) its keep, run once the transaction this refusal rolls back has. */
         lookupFailure = isBusinessCommandExecutionError(error)
-          ? carryRefusalKeep(error, new BusinessCommandExecutionError(error.code, 'not_applied', error.field, error.key, error.reason))
+          ? carryRefusalKeep(
+              error,
+              new BusinessCommandExecutionError(error.code, 'not_applied', error.field, error.key, refusalReason(error, sayRefusal)),
+            )
           : recordRefusalCause(new BusinessCommandExecutionError('temporarily_unavailable'), error);
       }
     }
@@ -743,7 +792,7 @@ async function executeUntraced(
             const kept: RefusalKeepDb = Object.freeze(
               Object.fromEntries(
                 Object.entries(db).map(([name, table]) => {
-                  const { remove: _remove, insertFile: _insertFile, ...rest } = table as WriteTable<UntypedRow>;
+                  const { remove: _remove, insertFile: _insertFile, moveFile: _moveFile, ...rest } = table as WriteTable<UntypedRow>;
                   return [name, Object.freeze(rest)];
                 }),
               ),
@@ -1453,16 +1502,14 @@ async function executeUntraced(
               ...(authorized.versionField === undefined ? {} : { versionField: authorized.versionField }),
               target: command.target,
               constant: (table, column, word) => commandConstant(authorized, tx, table.meta, column, word, now()),
+              ...(authorized.fileReads ? { fileReads: authorized.fileReads, fileScope } : {}),
               ...(authorized.files
                 ? {
                     files: authorized.files,
                     afterCommit: (run: () => void) => void afterCommit.push(run),
                     stored: (table: string, data: Uint8Array) => void storedFiles.push([table, data]),
                     placeFile: async (rule: CommandFileRule, values: Record<string, unknown>) => {
-                      const placed = await placeFile(rule, values, {
-                        app: authorized.actor.appId,
-                        ...(receiptOwner ? { tenant: receiptOwner.tenantId } : {}),
-                      });
+                      const placed = await placeFile(rule, values, fileScope);
                       placedFiles.push(placed);
                       return placed.values;
                     },
@@ -1585,12 +1632,14 @@ async function executeUntraced(
                     now,
                     today: () => zoneDay(now(), authorized.timezone),
                     timezone: authorized.timezone ?? 'UTC',
+                    locale,
                     flags: executionFlags,
                     db,
                     tx: audit(tx),
                     nextNumber: handlerNextNumber(journal, authorized.actor.appId),
                     link: links.link,
                     revokeLinks: links.revokeLinks,
+                    publicLink: authorized.publicLink ?? noPublicLinks,
                     ...named,
                     ...(lookupRun ? { lookup } : {}),
                     ...(intake ? { intake } : {}),
@@ -1858,7 +1907,7 @@ async function executeUntraced(
           cause.outcome === 'unknown' || options.statusOnly ? 'unknown' : outcome,
           cause.field,
           refusedKey(cause.key ?? (cause.code === 'stale_record' ? conflictKey : undefined)),
-          cause.reason,
+          refusalReason(cause, sayRefusal),
         ),
         cause,
       );
@@ -1989,6 +2038,11 @@ const carriedKey = (key: readonly string[], row: Record<string, unknown>) => JSO
 type Authorized = import('./businessCommandAccess.js').AuthorizedBusinessCommand;
 const developerError = (cause: string) => authorFault(new BusinessCommandExecutionError('invalid_result'), cause);
 /* How many more times a refusal's keep runs when the record moved under it. */
+/* An authorization made without an App to read (a test's) names no public view. */
+const noPublicLinks = (view: string): never => {
+  throw new TypeError(`publicLink("${String(view)}"): this command's App has no public view to link to.`);
+};
+
 const KEEP_RETRIES = 3;
 
 /**

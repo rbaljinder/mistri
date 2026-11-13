@@ -45,10 +45,12 @@ const LOCK_MS = 3_600_000;
    a cache configured, a receipt locked on one instance is locked on all, and
    the window runs from the first failure whichever instance counted it. */
 
-/** The key a receipt's lockout counts under. One App's lockouts are its own: a suite's Apps may share a form name. */
-export function statusLockKey(form: string, receipt: string, appId?: string): string {
+/** The key a receipt's lockout counts under. One App's lockouts are its own: a suite's Apps may share a form name. On a
+    tenant App's host they are one tenant's (`tenant`, its place's id): one tenant's tries never lock another's receipt. */
+export function statusLockKey(form: string, receipt: string, appId?: string, tenant?: string): string {
+  const scope = tenant === undefined ? (appId === undefined ? [] : [appId]) : [appId ?? '', tenant];
   return createHash('sha256')
-    .update(appId === undefined ? `${form}\u0000${receipt}` : `${appId}\u0000${form}\u0000${receipt}`)
+    .update([...scope, form, receipt].join('\u0000'))
     .digest('hex');
 }
 
@@ -115,12 +117,14 @@ export async function checkApplicationStatus(options: {
   now?: () => number;
   /** The App whose form this is: its own form key hashes, and its own lockouts count. */
   appId?: string;
+  /** On a tenant App's host, the place the request landed in: its lockouts are its own (statusLockKey). */
+  tenant?: string;
   /** Further root columns read with the check (a step-up's email and details), handed back on success only. */
   more?: readonly string[];
 }): Promise<StatusAnswer> {
   const { check, save, roots, records, request, form, link, catalog, account } = options;
   const now = (options.now ?? Date.now)();
-  const receiptKey = statusLockKey(form, request.receipt, options.appId);
+  const receiptKey = statusLockKey(form, request.receipt, options.appId, options.tenant);
   /* Each attempt is counted before it is judged: read first and counted after,
      guesses sent together all read the count as it was and all were judged,
      however many there were. A success takes the count away again. */

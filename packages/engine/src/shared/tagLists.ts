@@ -22,6 +22,10 @@ export const TAGS_COLUMN = 'tags';
 /** The type a record's tags carry where a column's would be: no column has it. */
 export const TAGS_TYPE = 'tags';
 
+/** The type a form's several-choices answer (`field.choices`) carries where a column's would be: a list the draft
+ *  holds, asked with `has` (`services has cleaning`) and never compared whole. Only a form's draft has one. */
+export const CHOICES_TYPE = 'choices';
+
 /** A record's tags as the catalog serves them and a view carries them: no request ever supplies one. */
 export interface TagSet {
   /** The link table's id. */

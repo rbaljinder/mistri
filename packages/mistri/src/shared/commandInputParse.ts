@@ -8,8 +8,8 @@
  * part loaded on demand (the draft's logic, CommandFields.tsx) asks for it.
  */
 import { parseCommandFields, type AppCommandField } from './command.js';
-import { draftNames } from './commandDraft.js';
+import { choiceWhere, draftNames } from './commandDraft.js';
 
 export function parseCommandInput(raw: unknown, where: string, options: { publicForm?: boolean } = {}): AppCommandField[] {
-  return parseCommandFields(raw, where, { ...options, names: draftNames });
+  return parseCommandFields(raw, where, { ...options, names: draftNames, choiceWhere });
 }

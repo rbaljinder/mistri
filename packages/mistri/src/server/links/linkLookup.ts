@@ -1,6 +1,6 @@
 /**
  * A link found by id, in the command journal beside the records it names: what the link door reads
- * (linkRoutes.ts), and what turns a handler's `mistri-link:<id>` into a URL where one may be said — the minting
+ * (linkRoutes.ts), and what turns a handler's `mistri-link:<id>.<seal>` into a URL where one may be said — the minting
  * command's HTTP answer and an effect's delivery (renderLinkRefs).
  */
 import type { CommandJournal, CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
@@ -51,6 +51,6 @@ export async function renderedLink(app: AppDef, resources: RuntimeResources, id:
 export async function withLinkUrls<T>(app: AppDef, resources: RuntimeResources, value: T): Promise<T> {
   const text = JSON.stringify(value);
   if (typeof text !== 'string') return value;
-  const rendered = await renderLinkRefs(text, (id) => renderedLink(app, resources, id));
+  const rendered = await renderLinkRefs(text, app.id, (id) => renderedLink(app, resources, id));
   return rendered === undefined || rendered === text ? value : (JSON.parse(rendered) as T);
 }

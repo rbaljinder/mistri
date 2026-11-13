@@ -456,6 +456,30 @@ test("a step's lines split into errors and warnings, each in the order said, and
     assert.equal(passed.code, 0, passed.out + passed.err);
   });
 
+  /* With no commands module and no --jobs, no integration is open, so a step-up's code could only go by email:
+     one on "sms" loaded and served before, and its code never reached anyone. */
+  test('an App with neither commands nor jobs is refused a step-up on a channel no integration provides', async () => {
+    const dir = app('stepup-no-jobs', {
+      'app.ts': [
+        "import type { App } from './mistri-schema.d.ts';",
+        "import { listView } from '@mistriwork/mistri/app';",
+        "export default { id: 'stepped', name: 'Stepped', connection: 'tick', resources: { task: { display: { name: { format: 'phone' } },",
+        "  links: { status: { show: ['name'], stepUp: { sms: 'name' } } } } },",
+        "  views: { tasks: listView('Tasks', 'task') }, home: 'tasks' } satisfies App;",
+        '',
+      ].join('\n'),
+    });
+    const said =
+      /Jobs startup error: \[integration-channel-unknown\] resources "task", links "status", "stepUp" sends its code on channel "sms", which no integration the App lists provides\./;
+    const checked = await run(['check', '--app', dir, '--config', config]);
+    assert.equal(checked.code, 4, checked.out + checked.err);
+    assert.match(checked.out, /validation {4}failed {2}the App did not load/);
+    assert.match(checked.out, said);
+    const served = await run(['--app', dir, '--config', config, '--port', '0']);
+    assert.equal(served.code, 1, served.out + served.err);
+    assert.match(served.err, said);
+  });
+
   /* The commands module is its own file: a definition refused for an unrelated reason must not leave its generated
      types stale (a field report: one nav refusal became a screen of "no such command" typecheck errors). */
   test('the command types are regenerated though the App definition is refused', async () => {

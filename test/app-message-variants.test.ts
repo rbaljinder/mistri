@@ -29,8 +29,16 @@ const EN = {
   'ticket.reasonHelp': 'Why it is flagged',
   'ticket.urgent': 'Urgent',
   'ticket.urgentIcon': 'flame',
+  'ticket.code': 'Capital letters only.',
+  'ticket.consent': 'I agree to be told when it is resolved.',
 };
-const ES = { 'ticket.plural': 'Incidencias', 'ticket.reason': 'Motivo', 'ticket.urgentIcon': 'alert-triangle' };
+const ES = {
+  'ticket.plural': 'Incidencias',
+  'ticket.reason': 'Motivo',
+  'ticket.urgentIcon': 'alert-triangle',
+  'ticket.code': 'Solo mayúsculas.',
+  'ticket.consent': 'Acepto que me avisen cuando se resuelva.',
+};
 
 const COMMANDS = `import { defineCommand, defineCommands } from ${sourceUrl('packages/mistri/src/server/commands/businessCommands.ts')};
 import { field } from ${sourceUrl('packages/mistri/src/server/commands/commandFields.ts')};
@@ -42,6 +50,8 @@ export default defineCommands({
     input: {
       reason: field.text({ label: msg('ticket.reason'), help: msg('ticket.reasonHelp') }),
       level: field.choice({ options: [{ value: 'urgent', label: msg('ticket.urgent'), icon: msg('ticket.urgentIcon') }] }),
+      code: field.text({ optional: true, pattern: /[A-Z]+/, message: msg('ticket.code') }),
+      consent: field.bool({ optional: true, statement: msg('ticket.consent') }),
     },
     async handle() {},
   }),
@@ -154,10 +164,12 @@ test("a command's input is said in the reader's words on the form and in the App
   const loaded = await loadApp(appDir('command-words', {}, { 'en.mjs': catalog('en', EN), 'es.mjs': catalog('es', ES) }, true), {
     lock: 'report',
   });
-  const [reason, level] = loaded.commands!.registry.flag.fields as unknown as Array<{
+  const [reason, level, code, consent] = loaded.commands!.registry.flag.fields as unknown as Array<{
     label: string;
     help?: string;
     options?: Array<{ label: string; icon?: string }>;
+    message?: string;
+    statement?: string;
   }>;
   assert.deepEqual(
     [reason.label, reason.help, level.options![0]],
@@ -170,6 +182,15 @@ test("a command's input is said in the reader's words on the form and in the App
   assert.equal(input(loaded)[0].label, 'Reason');
   const es = input(localizedApp(loaded, 'es'));
   assert.deepEqual([es[0].label, es[0].help, es[1].options![0].icon], ['Motivo', 'Why it is flagged', 'alert-triangle']);
+  // A pattern's message and a checkbox's statement are captions too: the reader's words on the form, the App's to the server.
+  assert.deepEqual([code.message, consent.statement], ['Capital letters only.', 'I agree to be told when it is resolved.']);
+  assert.deepEqual([es[2].message, es[3].statement], ['Solo mayúsculas.', 'Acepto que me avisen cuando se resuelva.']);
+  assert.equal(input(localizedApp(loaded, 'en'))[3].statement, 'I agree to be told when it is resolved.');
+  const withoutConsent = Object.fromEntries(Object.entries(EN).filter(([key]) => key !== 'ticket.consent'));
+  await assert.rejects(
+    loadApp(appDir('no-statement', {}, { 'en.mjs': catalog('en', withoutConsent) }, true), { lock: 'report' }),
+    /\[message-missing\].*statement.*ticket\.consent/,
+  );
 
   await assert.rejects(
     loadApp(appDir('bad-icon', {}, { 'en.mjs': catalog('en', { ...EN, 'ticket.urgentIcon': 'Not An Icon' }) }, true), { lock: 'report' }),

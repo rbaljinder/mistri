@@ -38,6 +38,7 @@ import { openWebhook, type WebhookServiceConfig } from '../webhooks.js';
 import { tenantEffectDeployment } from './tenantFeatureEffects.js';
 import { captureTenantEnrollment, type TenantEnrollment } from './tenantEnrollment.js';
 import { tenantIntegrationRuntime } from './tenantJobs.js';
+import type { PublicLinkRender } from '../links/publicLink.js';
 
 /* Held messages are looked at every half minute: quiet hours end on the minute, and nobody waits on a held text. */
 const HELD_MS = 30_000;
@@ -70,6 +71,8 @@ export async function openTenantIntegrations<Request = IncomingMessage>(
     warn?: (message: string) => void;
     /** A capability link's URL, for an effect that carries one (tenantLinks.ts render): absent, it is held as it was. */
     links?: (id: string) => Promise<string | undefined>;
+    /** A public view's URL for a tenant (context.publicLink), by its addresses as they stand at delivery. */
+    publicLinks?: PublicLinkRender;
   }>,
 ): Promise<TenantIntegrations | undefined> {
   const captured = captureTenantEnrollment(options.enrollment);
@@ -86,7 +89,13 @@ export async function openTenantIntegrations<Request = IncomingMessage>(
   try {
     if (owned) {
       store = await openIntegrationStore(target);
-      runtime = createIntegrationRuntime({ appId: app.id, declared: owned.integrations, store, now });
+      runtime = createIntegrationRuntime({
+        appId: app.id,
+        declared: owned.integrations,
+        store,
+        now,
+        ...(options.publicLinks ? { publicLinks: options.publicLinks } : {}),
+      });
       withdraw = registerIntegrationRuntime(runtime);
     }
     const channels = runtime ? channelTransports(runtime) : undefined;
@@ -111,6 +120,7 @@ export async function openTenantIntegrations<Request = IncomingMessage>(
         ...(channels ? { channels: channels.transport } : {}),
         ...(options.now ? { now: options.now } : {}),
         ...(options.links ? { links: options.links } : {}),
+        ...(options.publicLinks ? { publicLinks: options.publicLinks } : {}),
       });
     }
     let webhookRoutes: InboundHost | undefined;

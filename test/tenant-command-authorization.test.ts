@@ -113,9 +113,12 @@ test('pure metadata has frozen arrays, exact local mapping and no transaction or
     // rc.12: the App's ui.currency (USD when it names none), what a field.money({ minor: true }) amount is typed in.
     'currency',
     'keyColumns',
+    'publicLink',
     'read',
     'resource',
     'table',
+    // rc.50: the App's words, what ctx.locale is resolved against and refuse(msg) is said in.
+    'words',
     'write',
   ]);
   // The footprint's catalog is what `db` and the target preload read: columns and keys, no connection.
@@ -135,6 +138,7 @@ test('pure metadata has frozen arrays, exact local mapping and no transaction or
     authorized.actor.roles,
     authorized.catalog,
     authorized.catalog?.item,
+    authorized.words,
   ]) {
     assert.equal(Object.isFrozen(value), true);
   }

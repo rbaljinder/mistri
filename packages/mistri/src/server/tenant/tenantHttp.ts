@@ -10,7 +10,7 @@ import { pickedLocale } from '../app/readerLocale.js';
 import { readTenantMessages } from '../app/recordMessages.js';
 import { tenantImporter } from './tenantImport.js';
 import { tenantProjection } from './tenantProjection.js';
-import { componentMessages } from '../app/appMessages.js';
+import { componentMessages, frameworkWords } from '../app/appMessages.js';
 import type { TenantIntegrations } from './tenantIntegrations.js';
 import { IntegrationSettingsRefusal } from '../integrations/integrationRuntime.js';
 import { LogoRefused } from '../app/brandImage.js';
@@ -228,7 +228,7 @@ interface TenantHttpOptions {
       for a build, which is served as built. */
   readonly authoring?: string;
   /** A command answer with each capability link it minted rendered as its URL, for the member's own tenant
-      (tenantLinks.ts rendered), when the App declares links. Absent, a reference stays `mistri-link:<id>`. */
+      (tenantLinks.ts rendered), when the App declares links. Absent, a reference stays `mistri-link:<id>.<seal>`. */
   readonly renderLinks?: (value: unknown, tenantId: string) => Promise<unknown>;
 }
 
@@ -1126,7 +1126,11 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               /* The App's catalog in this reader's words beside the components that say it (`useMessage`). */
               const catalog =
                 components && Object.keys(components).length ? componentMessages(app, locale, tenantWords, variantOf(context)) : undefined;
-              const shown = branded && components ? { ...branded, components, ...(catalog ? { messages: catalog } : {}) } : branded;
+              const withComponents =
+                branded && components ? { ...branded, components, ...(catalog ? { messages: catalog } : {}) } : branded;
+              /* The App's words for the platform's own on its forms (`mistri.*`), the tenant's words over them. */
+              const words = withComponents && frameworkWords(app, locale, tenantWords, variantOf(context));
+              const shown = withComponents && words ? { ...withComponents, words } : withComponents;
               /* The assistant is drawn only where its routes answer (tenantAssistant.ts): a tenant's own lease, a
                  role it is offered to, a model to talk to, and the tenant's switch on, read on every page load. Never
                  on the platform realm or a support session. */
@@ -1806,7 +1810,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           ).value;
           if (refused) return send(req, res, refused.status, refused.body);
         }
-        const execution = { signal: controller.signal };
+        /* What this member picked (the cookie), for `ctx.locale` where their row names none (tenantCommands.ts scopedLocale). */
+        const picked = pickedLocale(app, req);
+        const execution = { signal: controller.signal, ...(picked ? { locale: picked } : {}) };
         const result = await attributed(
           () => tenantCommandRoute(contexts, { path, platform, req, selectors, expected, input, execution }),
           commandActionLabel(app, input),

@@ -1,4 +1,9 @@
-import type { CommandChoiceSource, CommandFieldPresentation } from '@mistriwork/engine/schema/model.js';
+import type {
+  CommandChoiceMatch,
+  CommandChoiceSource,
+  CommandChoiceTest,
+  CommandFieldPresentation,
+} from '@mistriwork/engine/schema/model.js';
 import type {
   AppCommandChoice,
   AppCommandField,
@@ -19,6 +24,7 @@ import { RICH_TEXT_MOST } from '@mistriwork/engine/shared/richText.js';
 import { mentionLabelColumns } from '@mistriwork/engine/shared/mentionLabel.js';
 import { commandFieldsDeep, isIsoDate } from '@mistriwork/engine/shared/commandWire.js';
 import { isMessageRef } from '@mistriwork/engine/shared/appMessages.js';
+import { canonicalLocale } from '@mistriwork/engine/shared/appLocale.js';
 import type { DraftRule } from './commandDraft.js';
 export { BULK_LIMIT, commandFieldsDeep, commandKeyText, isIsoDate } from '@mistriwork/engine/shared/commandWire.js';
 
@@ -176,7 +182,13 @@ function items(raw: unknown, where: string, what: string, max: number, noun: str
 
 /** The names a field's `when` reads — the input's fields, the record's columns or paths, the tenant's shared
  * profile columns — or a throw where it does not parse. */
-type ConditionNames = (text: string, where: string) => { fields: string[]; record: string[]; tenant: string[] };
+type ConditionNames = (
+  text: string,
+  where: string,
+) => { fields: string[]; record: string[]; tenant: string[]; has: string[]; plain: string[] };
+/** A choice's `where` compiled (commandDraft.ts choiceWhere): a bare name on the right that is one of `fields` is
+ * that field's answer; or a throw where it does not parse. */
+type ChoiceWhere = (text: string, where: string, fields: ReadonlySet<string>) => CommandChoiceMatch;
 
 /** The most references a `record.<path>` follows from the target (`record.customer_id.region_id.code` is two):
  * each hop is a read, and a longer chain is the handler's to walk. */
@@ -190,6 +202,8 @@ interface FieldRules {
      (commandInputParse.ts): this module is in every page's module graph, the browser never parses a declaration,
      and a static import here put the compiler on every public page's first paint. */
   names: ConditionNames;
+  /* The same compiler's reading of a choice's `where`, handed in beside it. */
+  choiceWhere: ChoiceWhere;
 }
 
 /** An App icon's name, as a choice's icon is: what a `msg()` icon must say too. */
@@ -290,7 +304,7 @@ function fieldWhen(f: Record<string, unknown>, where: string, rules: FieldRules)
     return fail(at, "is a condition over the draft, as text: another field's name (trade_in = true) or record.<column>");
   if (f.type === 'group') return fail(at, "is a single field's: a group is asked whole");
   if (rules.depth) return fail(at, 'asks a field of the input itself, not one inside a group');
-  let names: { fields: string[]; record: string[]; tenant: string[] };
+  let names: { fields: string[]; record: string[]; tenant: string[]; has: string[]; plain: string[] };
   try {
     names = rules.names(f.when.trim(), at);
   } catch (error) {
@@ -349,12 +363,78 @@ function choiceSource(f: Record<string, unknown>, where: string): CommandChoiceS
       return fail(where, "sort.direction is 'asc' or 'desc'");
     sort = { column: name(said.column, `${where}, sort.column`), direction: (said.direction as 'asc' | 'desc' | undefined) ?? 'asc' };
   }
+  const labelColumns = f.labelColumns === undefined ? undefined : choiceLabelColumns(f.labelColumns, `${where}, labelColumns`);
+  if (f.where !== undefined && (typeof f.where !== 'string' || !f.where.trim() || f.where.length > 1000))
+    return fail(
+      `${where}: where`,
+      "is a condition over the rows of from, as text: a column compared with another field's answer (region = region)",
+    );
   return {
     from: name(f.from, `${where}, from`, true),
     by: f.by === undefined ? 'id' : name(f.by, `${where}, by`),
     labelColumn: name(f.labelColumn, `${where}, labelColumn`),
+    ...(labelColumns ? { labelColumns } : {}),
     ...(sort ? { sort } : {}),
+    ...(typeof f.where === 'string' ? { where: f.where.trim() } : {}),
   };
+}
+
+/* `labelColumns`: a column per locale tag, the tags kept as said once they are tags (`es`, `pt-BR`). Whether the App has a
+   catalog for each is the load's to say (apps.ts commandsInWords), as it holds the catalogs. */
+function choiceLabelColumns(raw: unknown, where: string): Readonly<Record<string, string>> {
+  const said = record(raw, raw && typeof raw === 'object' ? Object.keys(raw) : [], where);
+  const columns: Record<string, string> = {};
+  const seen = new Set<string>();
+  for (const [locale, column] of Object.entries(said)) {
+    const tag = canonicalLocale(locale);
+    if (!tag || tag !== locale.trim()) return fail(where, `"${locale}" is not a locale tag, such as es or pt-BR`);
+    if (seen.has(tag.toLowerCase())) return fail(where, `names "${locale}" twice`);
+    seen.add(tag.toLowerCase());
+    columns[tag] = name(column, `${where}.${locale}`);
+  }
+  if (!seen.size) return fail(where, "names a column per locale, such as { es: 'name_es' }");
+  return Object.freeze(columns);
+}
+
+/** The locale whose column a reader sees a table's choices by, and that column. */
+export interface ChoiceLabel {
+  readonly locale: string;
+  readonly column: string;
+}
+
+/** The `labelColumns` entry for a reader in `locale`: theirs, else its language's (`es-MX` → `es`); none where neither is named. */
+export function choiceLabelColumn(
+  source: { readonly labelColumns?: Readonly<Record<string, string>> },
+  locale: string | undefined,
+): ChoiceLabel | undefined {
+  if (!source.labelColumns || !locale) return undefined;
+  const named = Object.entries(source.labelColumns);
+  for (let tag = locale.toLowerCase(); tag; tag = tag.includes('-') ? tag.slice(0, tag.lastIndexOf('-')) : '') {
+    const hit = named.find(([key]) => key.toLowerCase() === tag);
+    if (hit) return { locale: hit[0], column: hit[1] };
+  }
+  return undefined;
+}
+
+/** A table's rows as choices: each by its reader's column where it says one, else by `labelColumn`. Read in `labelColumn`'s
+    order, they are put in the reader's when a localized column shows them and no `sort` is said: collated here, not by the
+    database, so both engines agree and a row shown by its fallback sits among the rest. */
+export function choiceOptions(
+  rows: readonly Record<string, unknown>[],
+  source: { readonly by: string; readonly labelColumn: string; readonly sort?: unknown },
+  local?: ChoiceLabel,
+): { value: string | number; label: string }[] {
+  const options = rows.map((row) => {
+    const value = row[source.by] as string | number;
+    const localized = local ? row[local.column] : undefined;
+    const label = localized != null && String(localized).trim() ? String(localized) : String(row[source.labelColumn] ?? value);
+    return { value, label };
+  });
+  if (local && !source.sort) {
+    const collator = new Intl.Collator(local.locale);
+    options.sort((a, b) => collator.compare(a.label, b.label));
+  }
+  return options;
 }
 
 /* `as`: how the field is drawn, one its kind can be drawn as. */
@@ -434,7 +514,9 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
       'above',
       'by',
       'labelColumn',
+      'labelColumns',
       'sort',
+      'where',
       'query',
       'options',
       'fields',
@@ -558,7 +640,7 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
       ...(f.max === undefined ? {} : { maxLength: f.max as number }),
       ...(f.format === undefined ? {} : { format: f.format as 'email' | 'url' | 'phone' }),
       ...(f.pattern === undefined ? {} : { pattern: f.pattern as string }),
-      ...(f.message === undefined ? {} : { message: text(f.message, where, 200) }),
+      ...(f.message === undefined ? {} : { message: caption(f.message, where, 200) }),
       ...(f.case === undefined ? {} : { case: f.case as 'upper' | 'lower' }),
       ...(f.mask === undefined ? {} : { mask: f.mask as string }),
       ...(sensitive ? { sensitive } : {}),
@@ -687,7 +769,7 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
       ...base,
       type: 'boolean',
       ...(f.accept === true ? { accept: true as const } : {}),
-      ...(f.statement === undefined ? {} : { statement: text(f.statement, `${where}, statement`, 2000) }),
+      ...(f.statement === undefined ? {} : { statement: caption(f.statement, `${where}, statement`, 2000) }),
     };
   }
   if (f.type === 'month') {
@@ -750,12 +832,15 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
   if (f.type === 'choice' || f.type === 'choices') {
     only(
       f.type === 'choices'
-        ? ['options', 'from', 'by', 'labelColumn', 'sort', 'min', 'max', 'exclusive']
-        : ['options', 'from', 'by', 'labelColumn', 'sort'],
+        ? ['options', 'from', 'by', 'labelColumn', 'labelColumns', 'sort', 'where', 'min', 'max', 'exclusive']
+        : ['options', 'from', 'by', 'labelColumn', 'labelColumns', 'sort', 'where'],
     );
     const source = f.from === undefined ? undefined : choiceSource(f, where);
-    if (!source && (f.by !== undefined || f.labelColumn !== undefined || f.sort !== undefined))
-      return fail(where, 'by, labelColumn and sort read choices from a table: give from');
+    if (
+      !source &&
+      (f.by !== undefined || f.labelColumn !== undefined || f.labelColumns !== undefined || f.sort !== undefined || f.where !== undefined)
+    )
+      return fail(where, 'by, labelColumn, labelColumns, sort and where read choices from a table: give from');
     const options = source
       ? []
       : items(f.options, where, 'options', COMMAND_INPUT_LIMITS.choiceOptions, 'options').map((option, index) =>
@@ -965,6 +1050,19 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
   return fail(where, 'unknown command input type');
 }
 
+/**
+ * What is wrong with how a condition reads a field, where it is only the word `has` (`services has cleaning`): an
+ * answer of several choices is a list, asked with `has` and compared no other way, and `has` asks nothing else. The
+ * browser and the server judge the same draft, so the refusal is the declaration's, once, where it is parsed.
+ */
+export function hasProblem(named: string, type: string, asked: { has: readonly string[]; plain: readonly string[] }): string | undefined {
+  if (type === 'choices')
+    return asked.has.includes(named) && !asked.plain.includes(named)
+      ? undefined
+      : `a choices field is a list, which a condition asks with has (${named} has <value>), not by comparing it`;
+  return asked.has.includes(named) ? `a ${type} field, and has asks the several answers of a choices field (${named} has …)` : undefined;
+}
+
 /* Fields keyed by name, in the order written: the object's own keys, each a
    plain data property. A field below or above another names a sibling of
    its own kind, beside it in this list. */
@@ -987,7 +1085,8 @@ function fieldList(raw: unknown, where: string, rules: FieldRules): AppCommandFi
   };
   for (const item of list) {
     if (item.type !== 'group' && item.type !== 'lines' && item.when !== undefined) {
-      for (const named of rules.names(item.when, where).fields) {
+      const asked = rules.names(item.when, where);
+      for (const named of asked.fields) {
         const other = byName.get(named);
         if (other === item) return fail(where, `input "${item.name}" is asked when "${named}"…, which is itself`);
         if (!other) {
@@ -1009,12 +1108,13 @@ function fieldList(raw: unknown, where: string, rules: FieldRules): AppCommandFi
           other.type === 'group' ||
           other.type === 'lines' ||
           other.type === 'richText' ||
-          other.type === 'choices' ||
           other.type === 'defined' ||
           other.type === 'files' ||
           other.type === 'signature'
         )
           return fail(where, `input "${item.name}" is asked when "${named}"…, a ${other.type} field a condition cannot compare`);
+        const listProblem = hasProblem(named, other.type, asked);
+        if (listProblem) return fail(where, `input "${item.name}" is asked when "${named}"…, ${listProblem}`);
       }
     }
     if ((item.type === 'number' || item.type === 'money') && item.live) {
@@ -1039,16 +1139,169 @@ function fieldList(raw: unknown, where: string, rules: FieldRules): AppCommandFi
       }
     }
   }
-  return list;
+  return choicesNarrowed(list, where, rules, sensitiveField);
 }
+
+/* The fields a condition cannot compare: a value of several parts, or none it can read. */
+const UNCOMPARED = new Set(['group', 'lines', 'richText', 'choices', 'defined', 'files', 'signature']);
+
+/* Each choice's `where` compiled against its siblings: the answers it reads are fields beside it a condition can
+   compare, and no chain of choices reads its own answer back. */
+function choicesNarrowed(
+  list: AppCommandField[],
+  where: string,
+  rules: FieldRules,
+  sensitive: (name: string) => boolean,
+): AppCommandField[] {
+  const names = new Set(list.map((item) => item.name));
+  const reads = new Map<string, string[]>();
+  const narrowed = list.map((item) => {
+    if ((item.type !== 'choice' && item.type !== 'choices') || item.source?.where === undefined) return item;
+    const at = `${where}, input "${item.name}" where`;
+    if (rules.depth) return fail(at, 'narrows a field of the input itself, not one inside a group');
+    let match: CommandChoiceMatch;
+    try {
+      match = rules.choiceWhere(item.source.where, at, names);
+    } catch (error) {
+      return fail(at, (error as Error).message.replace(/^.*?: /, '').replace(/\.$/, ''));
+    }
+    const answers = choiceAnswers(match);
+    for (const named of answers) {
+      const other = list.find((candidate) => candidate.name === named)!;
+      if (sensitive(named)) return fail(at, `reads "${named}", a sensitive field; nothing reads a sensitive value`);
+      if (UNCOMPARED.has(other.type)) return fail(at, `reads "${named}", a ${other.type} field a condition cannot compare`);
+    }
+    reads.set(item.name, answers);
+    return { ...item, source: { ...item.source, match } } as AppCommandField;
+  });
+  /* A choice that reads itself, or one that reads one that reads it back: no answer could be given first. */
+  const seen = new Set<string>();
+  const walk = (name: string, path: readonly string[]): void => {
+    if (path.length === 1 && name === path[0]) return fail(where, `input "${name}" where reads "${name}", its own answer`);
+    if (path.includes(name))
+      return fail(
+        where,
+        `input "${path[0]}" where reads its own answer back (${[...path, name].join(' → ')}); one of them must not read the other`,
+      );
+    if (seen.has(name)) return;
+    for (const next of reads.get(name) ?? []) walk(next, [...path, name]);
+    if (!path.length) seen.add(name);
+  };
+  for (const name of reads.keys()) walk(name, []);
+  return narrowed;
+}
+
+/** The fields of the input a choice's `where` reads the answers of. */
+export const choiceAnswers = (match: CommandChoiceMatch): string[] => [
+  ...new Set(
+    match.flat().flatMap((test) => test.values.flatMap((value) => (value !== null && typeof value === 'object' ? [value.answer] : []))),
+  ),
+];
+
+/** The columns of `from` a choice's `where` compares, in name order: what a served row carries. */
+export const choiceWhereColumns = (match: CommandChoiceMatch | undefined): string[] =>
+  match ? [...new Set(match.flat().map((test) => test.column))].sort() : [];
+
+/* An answer not given: absent, null, an empty box, or no picks. */
+const unanswered = (value: unknown): boolean =>
+  value === undefined || value === null || value === '' || (Array.isArray(value) && !value.length);
+
+/** A choice's `where` with each answer it reads said as its value, or undefined while one is not given (nothing is
+    offered until it is). An answer of several values is not one a `where` reads. */
+export function boundChoiceMatch(match: CommandChoiceMatch, answers: Readonly<Record<string, unknown>>): CommandChoiceMatch | undefined {
+  const bound: CommandChoiceTest[][] = [];
+  for (const group of match) {
+    const tests: CommandChoiceTest[] = [];
+    for (const test of group) {
+      const values: Array<string | number | boolean | null> = [];
+      for (const value of test.values) {
+        if (value === null || typeof value !== 'object') {
+          values.push(value as string | number | boolean | null);
+          continue;
+        }
+        const given = Object.hasOwn(answers, value.answer) ? answers[value.answer] : undefined;
+        if (unanswered(given) || (typeof given !== 'string' && typeof given !== 'number' && typeof given !== 'boolean')) return undefined;
+        values.push(given);
+      }
+      tests.push({ column: test.column, operator: test.operator, values });
+    }
+    bound.push(tests);
+  }
+  return bound;
+}
+
+/* A value as a comparison reads it: a flag as 1 or 0 (SQLite keeps it so), a number written as text as that number. */
+const comparable = (value: unknown): string | number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  if (typeof value === 'number') return value;
+  const text = String(value);
+  return /^-?\d+(?:\.\d+)?$/.test(text) ? Number(text) : text;
+};
+
+/** Whether a served row's `where` columns (`option.row`) meet a bound `where`: as the database would answer it, a
+    null meeting nothing but `is empty`. */
+export function choiceRowHolds(bound: CommandChoiceMatch, row: Readonly<Record<string, unknown>> | undefined): boolean {
+  const test = (t: CommandChoiceTest): boolean => {
+    const value = comparable(row && Object.hasOwn(row, t.column) ? row[t.column] : null);
+    if (t.values.length === 1 && t.values[0] === null) return (value === null) === (t.operator === 'eq');
+    if (value === null) return false;
+    return t.values.some((operand) => {
+      const other = comparable(operand);
+      if (other === null || typeof other !== typeof value) return t.operator === 'ne' && other !== null;
+      switch (t.operator) {
+        case 'eq':
+          return value === other;
+        case 'ne':
+          return value !== other;
+        case 'lt':
+          return value < other;
+        case 'lte':
+          return value <= other;
+        case 'gt':
+          return value > other;
+        case 'gte':
+          return value >= other;
+      }
+    });
+  };
+  return bound.some((group) => group.every(test));
+}
+
+const SAID_OPERATOR = { eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>=' } as const;
+/* A literal as the query language reads it whatever it holds: text quoted, so a word is never a column. */
+const saidLiteral = (value: unknown): string =>
+  typeof value === 'string' ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : String(value);
+
+/** A bound `where` said in the query language, for a read of its own (`/api/run`). */
+export const choiceMatchText = (bound: CommandChoiceMatch): string =>
+  bound
+    .map((group) =>
+      group
+        .map((t) =>
+          t.values.length === 1 && t.values[0] === null
+            ? `${t.column} ${t.operator === 'ne' ? 'is not empty' : 'is empty'}`
+            : t.values.length > 1
+              ? `${t.column} in (${t.values.map(saidLiteral).join(', ')})`
+              : `${t.column} ${SAID_OPERATOR[t.operator]} ${saidLiteral(t.values[0])}`,
+        )
+        .join(' and '),
+    )
+    .join(' or ');
 
 /** The field parser behind parseCommandInput (commandInputParse.ts), which hands it the condition compiler's reading. */
 export function parseCommandFields(
   raw: unknown,
   where: string,
-  options: { publicForm?: boolean; names: ConditionNames },
+  options: { publicForm?: boolean; names: ConditionNames; choiceWhere: ChoiceWhere },
 ): AppCommandField[] {
-  return fieldList(raw, where, { depth: 0, publicForm: options.publicForm === true, count: { fields: 0 }, names: options.names });
+  return fieldList(raw, where, {
+    depth: 0,
+    publicForm: options.publicForm === true,
+    count: { fields: 0 },
+    names: options.names,
+    choiceWhere: options.choiceWhere,
+  });
 }
 
 /**
@@ -1315,8 +1568,27 @@ export function commandInputProblem(
       const from = tableNamed(schema, f.source.from);
       if (!from)
         return `Command input "${f.name}" offers the rows of "${f.source.from}", which is not a resource the command reads: add it to \`read\`.`;
-      for (const column of [f.source.by, f.source.labelColumn, ...(f.source.sort ? [f.source.sort.column] : [])])
+      for (const column of [
+        f.source.by,
+        f.source.labelColumn,
+        ...Object.values(f.source.labelColumns ?? {}),
+        ...(f.source.sort ? [f.source.sort.column] : []),
+      ])
         if (!from.columns.some((c) => c.name === column)) return `Command input "${f.name}": "${f.source.from}" has no column "${column}".`;
+      for (const test of f.source.match?.flat() ?? []) {
+        if (!from.columns.some((c) => c.name === test.column))
+          return `Command input "${f.name}" where compares "${test.column}", which is not a column of "${f.source.from}".`;
+        /* `location = location` has one reading; `location = region`, where `from` has a column "region" too, reads
+           as either the answer or that column, so the input is renamed rather than one of them guessed. */
+        for (const value of test.values)
+          if (
+            value !== null &&
+            typeof value === 'object' &&
+            value.answer !== test.column &&
+            from.columns.some((c) => c.name === value.answer)
+          )
+            return `Command input "${f.name}" where compares ${test.column} with "${value.answer}", which is both an input of the form and a column of "${f.source.from}": rename the input so the where says one of them.`;
+      }
       continue;
     }
     if (f.type !== 'reference') continue;

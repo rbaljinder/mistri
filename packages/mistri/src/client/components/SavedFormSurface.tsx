@@ -51,6 +51,7 @@ import { armLeaveGuard } from './formLeaveGuard.js';
 import type { DraftTransport } from './draftFormApi.js';
 import { Field } from '@mistriwork/ui/Field.js';
 import { IntakeNote } from './IntakeNote.js';
+import { appWord } from '@mistriwork/kit/client/messages.js';
 import { say } from '../copy/forms/components/SavedFormSurface.js';
 
 export { sayInput } from './reviewValues.js';
@@ -180,6 +181,7 @@ export function SavedFormSurface({
   draft,
   onDismiss,
   at,
+  language,
 }: {
   form: SavedFormPresentation;
   /** The step a page asked to open at (`useForm(...).goTo`): honored only up to the first step not yet saved, so no step is skipped. */
@@ -191,6 +193,9 @@ export function SavedFormSurface({
   appName: string;
   /** The form's own address (`/{app}/form/{key}`): its status check and account pages are under it. */
   base?: string;
+  /** The visitor's pick of language as it stands when a step or the submit is sent (publicForm.js `pickedLanguage`),
+      which the form's requests name in their address, as its read does. Absent: none is named. */
+  language?: () => string | undefined;
 }) {
   const id = useId();
   /* A saved draft's note is one line on a phone, with Start over beside it: the page's room goes to the fields. */
@@ -394,7 +399,7 @@ export function SavedFormSurface({
     }
     try {
       if (draft) await draft.step(step.id, keyFor(step.id), input);
-      else await saveStep(form.id, step.id, keyFor(step.id), input, await token());
+      else await saveStep(form.id, step.id, keyFor(step.id), input, await token(), language?.());
     } catch (error) {
       refused(error, fields);
       return false;
@@ -435,7 +440,7 @@ export function SavedFormSurface({
         draft.clearKeys();
       } else {
         const challenge = await token();
-        answer = await submitPublicForm(form.id, keyFor(REVIEW), input, intakeAddress(), challenge ? { challenge } : {});
+        answer = await submitPublicForm(form.id, keyFor(REVIEW), input, intakeAddress(), challenge ? { challenge } : {}, language?.());
       }
       // Received: the page lets go of every answer it held.
       keys.current.clear();
@@ -461,7 +466,7 @@ export function SavedFormSurface({
         </h1>
         {receipt.reference && (
           <>
-            <p className="form-page-reference-label">{say('yourReference')}</p>
+            <p className="form-page-reference-label">{appWord('mistri.form.reference', say('yourReference'))}</p>
             <p className="form-page-reference">
               <strong>{receipt.reference}</strong>
             </p>

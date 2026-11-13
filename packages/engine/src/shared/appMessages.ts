@@ -45,6 +45,7 @@ export const CAPTION_KEYS: ReadonlySet<string> = new Set([
   'alt',
   'message',
   'note',
+  'statement',
   'before',
   'after',
 ]);

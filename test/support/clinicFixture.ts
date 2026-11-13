@@ -81,16 +81,21 @@ async function database(workspace: TestWorkspace, engine: Engine): Promise<strin
 
 /**
  * The clinic served on `engine`. `operator` is the native account the policy lets create and suspend clinics in
- * Manage tenants: made before the start, as a deployment makes its own.
+ * Manage tenants: made before the start, as a deployment makes its own. `override.app` serves a copy of the clinic
+ * (its policy and commands its own), and `override.jobs` its `jobs.ts` beside them, its stores made with the rest.
  */
-export async function startClinic(t: TestContext, engine: Engine) {
+export async function startClinic(t: TestContext, engine: Engine, override: { app?: string; jobs?: boolean } = {}) {
+  const app = override.app ?? CLINIC,
+    policy = override.app ? resolve(app, 'server/tenant-policy.ts') : POLICY,
+    commands = override.app ? resolve(app, 'commands.ts') : COMMANDS,
+    jobs = override.jobs ? ['--jobs', resolve(app, 'jobs.ts')] : [];
   const workspace = await createTestWorkspace();
   t.after(() => workspace.close());
   const url = await database(workspace, engine);
   const config = await workspace.write('mistri.json', { connections: [{ name: 'clinic-db', url, writable: true }] });
   const environment = { MISTRI_AUDIT_KEY: randomBytes(32).toString('base64'), MISTRI_TEST_AUTH_LIMITS: 'off', NODE_ENV: 'test' };
   // The stores, as the docs say to make them: one command, with the server stopped.
-  const up = cli(workspace, ['migrate', 'stores', 'up', '--app', CLINIC, '--policy', POLICY, '--config', config], environment);
+  const up = cli(workspace, ['migrate', 'stores', 'up', '--app', app, '--policy', policy, ...jobs, '--config', config], environment);
   if (up.status !== 0) throw new Error(`migrate stores up failed (${up.status}): ${up.stdout}${up.stderr}`);
   // The operator's account, in the auth store the served App will open (its XDG_CONFIG_HOME is the workspace's).
   const operator = { email: 'operator@clinic.example.test', name: 'Olive Operator', password: randomBytes(18).toString('base64url') };
@@ -98,16 +103,16 @@ export async function startClinic(t: TestContext, engine: Engine) {
   process.env.XDG_CONFIG_HOME = workspace.path('config');
   let operatorId: string;
   try {
-    [operatorId] = await createAppAccounts(CLINIC, [operator]);
+    [operatorId] = await createAppAccounts(app, [operator]);
   } finally {
     if (saved === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = saved;
   }
   const host = await startTestApp({
     workspace,
-    directory: CLINIC,
+    directory: app,
     config,
-    args: ['--policy', POLICY, '--commands', COMMANDS],
+    args: ['--policy', policy, '--commands', commands, ...jobs],
     environment: { ...environment, CLINIC_OPERATOR_ID: operatorId },
     timeoutMs: 60_000,
   });

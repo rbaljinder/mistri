@@ -15,7 +15,7 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { useId, useMemo } from 'react';
-import { loadPublicForm } from '../publicForm.js';
+import { loadPublicForm, pickedLanguage } from '../publicForm.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { served } from '@mistriwork/kit/client/addressMount.js';
 import { FormSurface, submitPublicForm } from './FormSurface.js';
@@ -78,7 +78,7 @@ export function FormDialog({
             // A reference input's choices: what the App opens to a signed-out visitor, read as one (publicForm.js).
             visitor={{ app: asked.data!.app.id, ...(via ? { via } : {}) }}
             held={{ form: form.id, ...(via ? { via } : {}) }}
-            submit={(submission, input, guard) => submitPublicForm(form.id, submission, input, via, guard)}
+            submit={(submission, input, guard) => submitPublicForm(form.id, submission, input, via, guard, pickedLanguage(appId))}
           />
         ))}
     </Modal>

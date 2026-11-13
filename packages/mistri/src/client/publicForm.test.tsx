@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { act, fireEvent, screen } from '@testing-library/react';
 import { unmountAll } from '../../../kit/src/client/components/mount.js';
-import { loadPublicForm, showPublicForm } from './publicForm.js';
+import { loadPublicForm, pickedLanguage, showPublicForm } from './publicForm.js';
 import { rereadFirstPaint } from '../../../kit/src/client/firstPaint.js';
 import { FIRST_PAINT_ELEMENT, readKey } from '../../../engine/src/shared/firstPaint.js';
 
@@ -87,6 +87,38 @@ test("a tenant's link carries its intake address on to the form's read, so its c
     await loadPublicForm('join', { appId: app.id });
     expect(fetcher).toHaveBeenLastCalledWith('/api/forms/join', expect.anything());
   } finally {
+    window.history.replaceState(null, '', '/');
+  }
+});
+
+test("the form's read names the visitor's current pick of language, since it sends no cookie to say it", async () => {
+  const fetcher = vi.fn(async () => new Response(JSON.stringify({ app, form }), { status: 200 }));
+  vi.stubGlobal('fetch', fetcher);
+  window.history.replaceState(null, '', '/workshop/form/join?via=north');
+  try {
+    // No pick: the read names none, and the server says the form in the browser's language.
+    await loadPublicForm('join', { appId: app.id });
+    expect(fetcher).toHaveBeenLastCalledWith('/api/forms/join?via=north', expect.objectContaining({ credentials: 'omit' }));
+    document.cookie = 'mistri-locale-workshop=es; path=/';
+    // Another App's pick is not this one's.
+    document.cookie = 'mistri-locale-other=fr; path=/';
+    await loadPublicForm('join', { appId: app.id });
+    expect(fetcher).toHaveBeenLastCalledWith('/api/forms/join?via=north&locale=es', expect.objectContaining({ credentials: 'omit' }));
+    // A pick made since the page arrived is the one a fresh read names.
+    document.cookie = 'mistri-locale-workshop=en; path=/';
+    await loadPublicForm('join', { appId: app.id, fresh: true });
+    expect(fetcher).toHaveBeenLastCalledWith(
+      '/api/forms/join?via=north&locale=en',
+      expect.objectContaining({ credentials: 'omit', cache: 'no-store' }),
+    );
+    window.history.replaceState(null, '', '/workshop/form/join');
+    await loadPublicForm('join', { appId: app.id });
+    expect(fetcher).toHaveBeenLastCalledWith('/api/forms/join?locale=en', expect.anything());
+    expect(pickedLanguage(app.id)).toBe('en');
+    expect(pickedLanguage(undefined)).toBeUndefined();
+  } finally {
+    document.cookie = 'mistri-locale-workshop=; path=/; max-age=0';
+    document.cookie = 'mistri-locale-other=; path=/; max-age=0';
     window.history.replaceState(null, '', '/');
   }
 });

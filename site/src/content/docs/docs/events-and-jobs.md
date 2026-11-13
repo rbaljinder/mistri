@@ -157,6 +157,16 @@ tenant App refuses a hand-written one; an [integration's
 webhooks](/docs/integrations/#what-core-does) are this same endpoint and are
 served per tenant ([what a tenant keeps](/docs/tenant-apps/#what-a-tenant-keeps)).
 
+An endpoint that names a file resource with `files: 'scan'` takes up to 20
+files beside its input: the body's `files` is a list of `{ name, type, content }`,
+`content` in base64. Each is checked as an upload to that resource is, and the
+command's handler receives them as `ctx.files` to store with
+`db.scan.insertFile(file, values)`; `key`, `input` and `target` never see them.
+Only such an endpoint's body may weigh more than 256 KB: up to the resource's
+`maxBytes` in base64, plus 256 KB. A file past that cap is `413`; a part that
+is not base64 is `400`. Startup and `mistri check` refuse `files` naming a
+resource with no `file`, or one its command does not write.
+
 ### A workflow
 
 ```ts title="examples/apps/lintel/late-fees.ts"

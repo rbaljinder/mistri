@@ -319,10 +319,16 @@ export interface SavedFormResume {
  * the receipt (high entropy, random) confirmed by one to three values only the applicant knows.
  * It answers `show` — a state, never an input — in the words `says` gives; a wrong receipt and a
  * wrong factor are answered alike, in the same time, and a receipt locks after repeated failures.
- * `stepUp` opens more after a one-time code sent to the root's email column (the config's email service sends it):
- * the check's details again with the code, ten minutes, once, three codes an hour; then `show` there for a
+ * `stepUp` opens more after a one-time code sent to a root column: `{ email: 'email', show }` by email (the config's
+ * email service sends it), or `{ sms: 'mobile', show }` on a channel an integration declares, under the tenant's own
+ * secrets: the check's details again with the code, ten minutes, once, three codes an hour; then `show` there for a
  * fifteen-minute session in that browser.
  */
+/** A status check's step-up: one channel key naming the root column its code goes to, and `show`. */
+export type SavedFormStepUp =
+  | { email: string; show: readonly string[] }
+  | ({ show: readonly string[] } & { readonly [channel: string]: string | readonly string[] });
+
 export interface SavedFormStatusCheck {
   /** The root column holding the reference the submit returned. */
   receipt: string;
@@ -332,8 +338,9 @@ export interface SavedFormStatusCheck {
   show?: readonly string[];
   /** The words for a shown column's values: `{ status: { in_review: 'In review' } }`. A value it does not name reads "Received". */
   says?: Readonly<Record<string, Readonly<Record<string, string>>>>;
-  /** `email`: the root's text column the code goes to; `show`: the root columns opened after the code. */
-  stepUp?: { email: string; show: readonly string[] };
+  /** `email`: the root's email column the code goes to; or, instead of `email`, one key naming a channel an integration
+      declares and the root's phone column (`sms: 'mobile'`); `show`: the root columns opened after the code. */
+  stepUp?: SavedFormStepUp;
   /** A nullable timestamp column the server stamps when a submitted application's receipt locks after repeated wrong
       answers; a `notify` rule on the root watching it (`on: { changes: 'check_alert_at' }`) tells staff. */
   alert?: string;
@@ -750,8 +757,9 @@ export interface AppResourceLink<Column extends string = string> {
   /** One to three columns only the holder knows, typed back before anything is shown: `['zip']`, or
       `{ zip: 'ZIP code' }` to say the label asked. Never a column `show` names. */
   confirm?: readonly Column[] | Partial<Record<Column, string>>;
-  /** An email column of the record: a one-time code is sent to it and typed back before anything is shown. */
-  stepUp?: Column;
+  /** A one-time code sent to a column of the record and typed back before anything is shown: an email column, or
+      `{ sms: 'mobile' }` for a phone column and a channel an integration declares. */
+  stepUp?: Column | Readonly<Record<string, Column>>;
 }
 
 /**

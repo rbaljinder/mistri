@@ -17,6 +17,7 @@ import { consumesValidation } from '../app/appValidation.js';
 import { effectiveTrack } from './commandTrack.js';
 import { publicFormProblems, publicFormsNeedKey, signedInDraftProblems } from '../forms/savedFormChecks.js';
 import { assertFormKey, FormKeyMissing } from '../forms/formKey.js';
+import { publicLinkCallProblems } from '../links/publicLink.js';
 import { BusinessCommandDefinitionError, callerMustRead, defineCommands, type BusinessCommandRegistry } from './businessCommands.js';
 import { moduleFailure } from '../moduleFailure.js';
 import { recordRefusalCause } from '@mistriwork/engine/shared/refusal.js';
@@ -217,6 +218,9 @@ export function validateBusinessCommandReferences(
      tables that can hold a draft (forms/savedFormChecks.ts). */
   const problem = publicFormProblems(app, registry, resources.schema) ?? signedInDraftProblems(app, registry, resources.schema);
   if (problem) invalid(problem);
+  /* A handler's publicLink('view') naming a view no signed-out visitor opens would throw on every run that reaches it. */
+  const [linkProblem] = publicLinkCallProblems(app, registry);
+  if (linkProblem) invalid(linkProblem);
   // A keyed input is hashed under the deployment's form key: without one, refuse to start rather than keep a bare digest.
   // A link's secret is derived from the same key (server/links/linkToken.ts), so a link could not be opened without one.
   if (links || publicFormsNeedKey(app, registry)) {

@@ -40,6 +40,8 @@ import type { PlatformReadContext } from './tenantPlatformReadRuntime.js';
 import type { TenantReadContext } from './tenantReadRuntime.js';
 import { tenantServedSchema, withRequestInstant } from './tenantServedSchema.js';
 import { NOTICE_WORDS_UNOPENED, openNoticeWords } from '../app/noticeWordsSeal.js';
+import { PUBLIC_LINK_UNSAID, sayPublicLinks, type PublicLinkRender } from '../links/publicLink.js';
+import { holdsLinkRef, LINK_REF_UNSAID } from '../links/linkToken.js';
 
 /** What of the enrolled deployment the sender uses: its reads as a request, and the outbox beside its inbox. */
 interface NoticeMailDeployment<Request> {
@@ -60,6 +62,8 @@ interface TenantNoticeMailOptions<Request> {
   mount?: AddressMount;
   /** What a person calls a tenant, for the line that says where it happened. */
   names?: TenantNames;
+  /** How a public link the words hold is said for the mail's tenant; a mail one does not say fails, never sent raw. */
+  publicLinks?: PublicLinkRender;
   now?: () => number;
   idleMs?: number;
   maxIdleMs?: number;
@@ -83,9 +87,12 @@ export function openTenantNoticeMail<Request>(options: TenantNoticeMailOptions<R
     try {
       const person = await options.account(mail.recipient);
       /* A title that says the write's words is kept masked; the said one waited sealed to this row (outbox.ts). */
-      const title = mail.words === undefined ? mail.title : openNoticeWords(app.id, [mail.app, String(mail.notice)], mail.words);
+      const opened = mail.words === undefined ? mail.title : openNoticeWords(app.id, [mail.app, String(mail.notice)], mail.words);
+      const title = opened === undefined ? undefined : await sayPublicLinks(opened, app.id, options.publicLinks, tenantId);
       if (!person || (await store.emailOff(mail.app, mail.recipient))) outcome = skipped;
-      else if (title === undefined) outcome = { kind: 'failed', error: NOTICE_WORDS_UNOPENED };
+      else if (opened === undefined) outcome = { kind: 'failed', error: NOTICE_WORDS_UNOPENED };
+      else if (holdsLinkRef(opened, app.id)) outcome = { kind: 'failed', error: LINK_REF_UNSAID };
+      else if (title === undefined) outcome = { kind: 'failed', error: PUBLIC_LINK_UNSAID };
       else {
         const request = createTenantApiRequest(async () => {
           const again = await options.account(mail.recipient);

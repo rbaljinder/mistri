@@ -29,6 +29,7 @@ import { resolveAppAccess } from '../../shared/app.js';
 import { appKeepsInbox, ensureAppInbox } from '../inbox.js';
 import { appSendsEmail, createEmailOutbox, type MailAccount } from '../email/outbox.js';
 import { appEmailsContacts, contactMailPlaces, openContactMail } from '../email/contactMail.js';
+import { appPublicLinks } from '../links/publicLink.js';
 import { UNSUBSCRIBE_PATH } from '../email/unsubscribe.js';
 import { expandEnv, expandEnvReferences } from '@mistriwork/engine/server/auth/credentials.js';
 import { sqliteAuthExclusions } from '../auth/sqliteStoreIdentity.js';
@@ -244,7 +245,7 @@ export async function openSuiteApp(
       if (findings.problems.length || !places.target)
         throw new Error(`${app.app.name}: ${findings.problems[0] ?? "its notify rules' records are not in SQLite or PostgreSQL."}`);
       const mail = await openContactMail({
-        apps: [{ id: app.app.id, name: app.app.name, target: places.target }],
+        apps: [{ id: app.app.id, name: app.app.name, target: places.target, publicLinks: appPublicLinks(app.app) }],
         transport: emailOf(registry)!,
         // The secret is a reference, read in this App's own environment as its connections are.
         secret: expandEnvReferences(service!.links!.secret, environment),

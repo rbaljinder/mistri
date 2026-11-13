@@ -238,7 +238,7 @@ interface DraftRouteOptions {
   readonly binding: BusinessCommandBinding;
   readonly actor: BusinessCommandActor;
   readonly body: unknown;
-  readonly execution: { signal?: AbortSignal | undefined; requestId?: string | undefined };
+  readonly execution: { signal?: AbortSignal | undefined; requestId?: string | undefined; locale?: string | undefined };
   /** The flags for this command's run, captured under the actor's grant of it. */
   readonly flagsFor: (envelope: unknown) => Promise<CommandFlags>;
   readonly door?: CommandDoor;
@@ -383,6 +383,7 @@ export async function runDraftRoute(options: DraftRouteOptions): Promise<unknown
   const result = await executeBusinessCommand(binding, actor, envelope, {
     ...(options.execution.signal ? { signal: options.execution.signal } : {}),
     ...(options.execution.requestId ? { requestId: options.execution.requestId } : {}),
+    ...(options.execution.locale ? { locale: options.execution.locale } : {}),
     flags: await options.flagsFor(envelope),
     ...(options.door ? { door: options.door } : {}),
     draft: run,

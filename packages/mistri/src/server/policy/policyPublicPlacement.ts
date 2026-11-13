@@ -413,6 +413,7 @@ function bind(options: PolicyPublicPlacementOptions) {
           catalog: authorized.catalog,
           ...(authorized.machine ? { machine: authorized.machine } : {}),
           ...(authorized.files ? { files: authorized.files } : {}),
+          ...(authorized.fileReads ? { fileReads: authorized.fileReads } : {}),
           transaction: deny,
           assertTarget: (records, key) => checks.get(records)?.target(key) ?? deny(),
           assertResult: (records, key, result) => checks.get(records)?.result(key, result) ?? deny(),
@@ -526,7 +527,7 @@ function bind(options: PolicyPublicPlacementOptions) {
     submit(
       trustedHostSelection: TrustedPublicPlacementSelection,
       body: unknown,
-      execution: { signal?: AbortSignal; requestId?: string } = {},
+      execution: { signal?: AbortSignal; requestId?: string; locale?: string } = {},
     ) {
       let scope: ReturnType<typeof selection>, submission: ReturnType<typeof parseSubmission>, binding: string;
       try {
@@ -547,7 +548,7 @@ function bind(options: PolicyPublicPlacementOptions) {
           new BusinessCommandExecutionError('invalid_input', 'unknown', error instanceof CommandInputError ? error.field : undefined),
         );
       }
-      const context = { signal: execution.signal, requestId: execution.requestId };
+      const context = { signal: execution.signal, requestId: execution.requestId, locale: execution.locale };
       return lease.run(async () => {
         const claims = verify(binding, submission.submission, scope);
         let resolved: PublicFormAdmission;

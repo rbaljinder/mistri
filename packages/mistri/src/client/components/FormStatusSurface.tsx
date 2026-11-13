@@ -34,12 +34,17 @@ import {
   type SavedFormFailure,
 } from './savedFormApi.js';
 import './FormSurface.css';
+import { appWord } from '@mistriwork/kit/client/messages.js';
 import { say } from '../copy/public/components/FormStatusSurface.js';
 
 /** A form with a status check: the details it asks, and whether a signed-in check may add the application to the account. */
 export type StatusFormPresentation = FormPresentation & {
   save: {
-    statusCheck: { confirm: Array<{ name: string; label: string }>; stepUp?: true };
+    statusCheck: {
+      confirm: Array<{ name: string; label: string }>;
+      /** The channel the step-up's code goes on: `email`, or an integration's (`sms`) to a phone number. */
+      stepUp?: string;
+    };
     link?: { sameDevice?: true; statusCheck?: true; email?: { prove?: string } };
   };
 };
@@ -61,8 +66,18 @@ function Status({ status }: { status: ApplicationStatus }) {
   );
 }
 
-/** More than the state: a code to the email on the application, then the details the form declares. */
-function StepUp({ form, details }: { form: string; details: () => { receipt: string; confirm: Record<string, string> } }) {
+/** More than the state: a code to the address or number on the application, then the details the form declares. Its words
+    name the channel the code goes on, and are the App's own where its catalog says them (`mistri.status.*`). */
+function StepUp({
+  form,
+  channel,
+  details,
+}: {
+  form: string;
+  channel: string;
+  details: () => { receipt: string; confirm: Record<string, string> };
+}) {
+  const byEmail = channel === 'email';
   const id = useId();
   const [sent, setSent] = useState(false);
   const [code, setCode] = useState('');
@@ -100,16 +115,32 @@ function StepUp({ form, details }: { form: string; details: () => { receipt: str
         <Status status={shown} />
       ) : !sent ? (
         <>
-          <p className="form-page-done-message">{say('weCanEmailACode')}</p>
+          <p className="form-page-done-message">
+            {byEmail
+              ? appWord('mistri.status.offerEmail', say('weCanEmailACode'))
+              : appWord('mistri.status.offerText', say('weCanSendACode'))}
+          </p>
           <div>
             <Button intent="secondary" onClick={() => void ask()} busy={pending}>
-              {say('emailMeACode')}
+              {byEmail ? appWord('mistri.status.askEmail', say('emailMeACode')) : appWord('mistri.status.askText', say('sendMeACode'))}
             </Button>
           </div>
         </>
       ) : (
         <form noValidate onSubmit={open} className="command-fields">
-          <Field label={say('codeFromTheEmail')} required>
+          <p className="form-page-done-message" role="status">
+            {byEmail
+              ? appWord('mistri.status.sentEmail', say('weSentACodeToYourEmail'))
+              : appWord('mistri.status.sentText', say('weSentACodeByText'))}
+          </p>
+          <Field
+            label={
+              byEmail
+                ? appWord('mistri.status.codeEmail', say('codeFromTheEmail'))
+                : appWord('mistri.status.codeText', say('codeFromTheMessage'))
+            }
+            required
+          >
             <input
               className="field-control"
               name="code"
@@ -386,7 +417,7 @@ export function FormStatusSurface({
           )}
         </section>
       )}
-      {answer && form.save.statusCheck.stepUp && <StepUp form={form.id} details={details} />}
+      {answer && form.save.statusCheck.stepUp && <StepUp form={form.id} channel={form.save.statusCheck.stepUp} details={details} />}
     </section>
   );
 }

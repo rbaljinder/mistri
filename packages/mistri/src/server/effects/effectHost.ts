@@ -31,6 +31,7 @@ import {
   type Webhook,
 } from '../commands/commandEffects.js';
 import { holdsLinkRef, renderLinkRefs } from '../links/linkToken.js';
+import { holdsPublicRef, renderPublicRefs, type PublicLinkRender } from '../links/publicLink.js';
 import type { CommandEventStoreBinding } from '../../adapters/events/commandEventSchema.js';
 import type { EventPublicationTransport } from '../events/eventPublisher.js';
 import {
@@ -144,17 +145,29 @@ export interface EffectHost {
   stop(): Promise<void>;
 }
 
-/* A link a command minted rides its effect as `mistri-link:<id>` (the delivery store keeps no secret) and is said as
+/* A link a command minted rides its effect as `mistri-link:<id>.<seal>` (the delivery store keeps no secret) and is said as
    its URL only as it is delivered. One that no longer opens, or a body its URLs carry past the limit, is rejected: an
-   operator sees the failure and redrives, rather than a recipient being sent a reference they cannot open. */
+   operator sees the failure and redrives, rather than a recipient being sent a reference they cannot open. A public
+   link (`mistri-public:<view>.<seal>`) is said the same way, for the effect's own tenant, by its address as it stands now. */
 function withRenderedLinks(
+  appId: string,
   transport: EventPublicationTransport,
   links: ((id: string) => Promise<string | undefined>) | undefined,
+  publicLinks: PublicLinkRender | undefined,
 ): EventPublicationTransport {
   return async (publication) => {
     const text = publication.envelope.payloadJson;
-    if (!holdsLinkRef(text)) return transport(publication);
-    const rendered = links ? await renderLinkRefs(text, links) : undefined;
+    const minted = holdsLinkRef(text, appId),
+      shared = holdsPublicRef(text, appId);
+    if (!minted && !shared) return transport(publication);
+    const tenantId = publication.envelope.tenantId;
+    const linked = !minted ? text : links ? await renderLinkRefs(text, appId, links) : undefined;
+    const rendered =
+      linked === undefined || !shared
+        ? linked
+        : publicLinks
+          ? await renderPublicRefs(linked, appId, (view) => publicLinks(view, tenantId))
+          : undefined;
     // The body as delivered is held to the post's limit; the stored body (what the fingerprint covers) is unchanged.
     if (rendered === undefined || deliveredBodyBytes(rendered) > EFFECT_BODY_LIMITS.bodyBytes) return 'rejected';
     return transport({ ...publication, envelope: { ...publication.envelope, payloadJson: rendered } });
@@ -185,6 +198,8 @@ export async function openEffectHost(
     maxIdleMs?: number;
     /** A capability link's URL by id, while it still opens (links/linkLookup.ts renderedLink). */
     links?: (id: string) => Promise<string | undefined>;
+    /** A public view's URL, for the delivering effect's tenant where it has one (links/publicLink.ts). */
+    publicLinks?: PublicLinkRender;
   }>,
 ): Promise<EffectHost> {
   const { deployment, target, webhooks } = options;
@@ -202,7 +217,7 @@ export async function openEffectHost(
         ? options.channels?.(webhook, routed)
         : hook && webhookTransport({ webhook: hook, routed });
       if (!transport) throw new Error();
-      const delivered = withRenderedLinks(transport, options.links);
+      const delivered = withRenderedLinks(deployment.appId, transport, options.links, options.publicLinks);
       const store = pg
         ? await openPostgresEventDeliveryStore(pg, policy, { clock })
         : openSqliteEventDeliveryStore((target as { sqlite: string }).sqlite, policy);

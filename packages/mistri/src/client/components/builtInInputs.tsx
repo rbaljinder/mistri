@@ -20,6 +20,7 @@ import { Button } from '@mistriwork/ui/Button.js';
 import { api } from '@mistriwork/kit/client/core.js';
 import { pageBridge } from '@mistriwork/kit/client/uiBridge.js';
 import { richTextImageAddress } from '@mistriwork/engine/shared/richText.js';
+import { appWord } from '@mistriwork/kit/client/messages.js';
 import { say } from '../copy/record/components/builtInInputs.js';
 import './builtInInputs.css';
 
@@ -495,7 +496,7 @@ export function SignaturePad({
         )}
         <span className="signature-input-tools">
           <Button ref={again} intent="quiet" disabled={disabled} onClick={() => setSigning(true)}>
-            {say('signAgain')}
+            {appWord('mistri.form.signAgain', say('signAgain'))}
           </Button>
           <Button intent="quiet" disabled={disabled} onClick={() => onChange(null)}>
             {say('removeSignature')}

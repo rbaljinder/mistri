@@ -6,11 +6,12 @@
  * `intake_submission`.
  *
  * Options turn on what a suite is about: the App's human check (`auth.challenge`, a Turnstile verifier pointed at the
- * local stand-in) and public reads of `make` (`auth.public`), which the quote form's choices are read under.
+ * local stand-in) and public reads of `make` (`auth.public`), which the quote form's choices are read under, and a
+ * status check on the `draft` form, its step-up code sent through the host's email service.
  */
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
@@ -31,7 +32,16 @@ import { provisionSqliteLiveChange } from '../../packages/mistri/src/adapters/li
 import { provisionSqliteBranding, writeSqliteBranding } from '../../packages/mistri/src/adapters/branding/sqliteBranding.js';
 import { settingsMount } from '../../packages/engine/src/shared/mount.js';
 import { readAppFonts } from '../../packages/mistri/src/server/app/appFonts.js';
+import { Registry } from '../../packages/engine/src/server/connections.js';
+import { emailConnectionOf } from '../../packages/mistri/src/server/email/email.js';
+import {
+  provisionPostgresIntegrations,
+  provisionSqliteIntegrations,
+} from '../../packages/mistri/src/adapters/integrations/integrationStore.js';
+import { defineJobs } from '../../packages/mistri/src/server/jobs/jobModule.js';
+import { fakepay } from '../fixtures/integrations/fakepay/index.js';
 import { parseTestApp } from './commandCatalog.js';
+import { parseWordedApp } from './wordedApp.js';
 import { openTenantEngine, type TenantDialect, type TenantEngine } from './tenantDialects.js';
 
 export const APP_ID = 'yard';
@@ -45,9 +55,12 @@ export const NORTH = 'north-intake-AAAAAAAAAAAAAAAA',
 export const NORTH_HOST = 'north.example.test';
 /** What north saved as its name, where a suite turns `tenantBranding` on. */
 export const NORTH_BRAND = 'North Motors Co';
+/** `welcome`'s thank-you: fixed words holding a public link to the stepped form, as `String(publicLink('draft'))` says it. */
+export const WELCOME = 'Welcome. Apply in steps at mistri-public:draft' as const;
 export const via = (address: string) => `?via=${encodeURIComponent(address)}`;
 
-const draftColumns = 'more TEXT, status TEXT, resume_token_hash TEXT, resume_expires_at TEXT, resume_progress TEXT';
+const draftColumns =
+  'more TEXT, status TEXT, email TEXT, mobile TEXT, resume_token_hash TEXT, resume_expires_at TEXT, resume_progress TEXT';
 const SQLITE = `PRAGMA foreign_keys = ON;
   CREATE TABLE dealer (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, intake_address TEXT, public_address TEXT, country TEXT);
   CREATE TABLE make (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES dealer(id), name TEXT NOT NULL);
@@ -73,6 +86,10 @@ const quoteInput = {
   name: { label: 'Name', type: 'text', max: 80 },
   make: { label: 'Make', type: 'choice', from: 'make', labelColumn: 'name' },
 } as const;
+/* With `localMakes`: a Spanish reader is offered each make by its Spanish name, where the dealer gave one. */
+const localQuoteInput = { ...quoteInput, make: { ...quoteInput.make, labelColumns: { es: 'name_es' } } } as const;
+/* With `models`: the quote also asks a model, offered only among the make picked (`where`). */
+const modelChoice = { label: 'Model', type: 'choice', from: 'model', labelColumn: 'name', where: 'make_id = make' } as const;
 /* A state is asked only where the dealer placing the form is in the US: north is, south (in Canada) is not. */
 const askInput = {
   name: { label: 'Name', type: 'text', max: 80 },
@@ -101,11 +118,31 @@ export interface TenantPublicFormOptions {
   readonly atRoot?: true;
   /** A public command page, `lobby`, that runs `apply` (with `publicReads`, it reads `make` too). */
   readonly publicPage?: true;
+  /** With `publicPage`: the lobby also runs `welcome`, whose thank-you (a declared literal, as every public reply's is)
+      holds a public link's reference to `draft`, which the visitor must read as the placing tenant's address. */
+  readonly publicLinkMessage?: true;
   /** `--trust-proxy`: the ranges whose X-Forwarded-For names a visitor on the public doors. */
   readonly trustedProxies?: readonly string[];
+  /** The apply form's label is a message (`yard.apply`) of the App's catalogs: English alone, or English and Spanish. */
+  readonly words?: 'english' | 'both';
+  /** `apply`'s reference ends in the command's `ctx.locale` (`YRD-<name>-<locale>`, `none` where it has none). */
+  readonly localeReference?: true;
   /** Each dealer shares its country (`auth.tenancy.shared`), and a form, `ask`, asks a state only of a US dealer's
       visitor (`when: "tenant.country = 'US'"`): north is in the US, south is not. */
   readonly askByCountry?: true;
+  /** With `publicReads` and `words: 'both'`: `make` has a Spanish name column, `name_es` (north's Ford is "Vado", its Kia
+      has none), and the quote form's choice says its rows by it to a Spanish reader (`labelColumns`). */
+  readonly localMakes?: true;
+  /** With `publicReads`: each dealer's makes have models (`model`, open to the public too), and the quote form asks one
+      among the make picked (`where: 'make_id = make'`): north's Ford has the Focus and the Ranger, its Kia the Niro. */
+  readonly models?: true;
+  /** The `draft` form answers a status check: its reference, confirmed by the name, shows the status, and a code to the
+      application's email (the host's email service, a log `mail()` reads) opens `more`. `'sms'` sends that code to the
+      application's `mobile` on the `sms` channel instead: FakePay's (test/fixtures/integrations/fakepay), listed by a jobs
+      module of only integrations, its secrets each tenant's own (`integrationRuntimeOf(APP_ID)` saves them). `{ channel }`
+      sends it on a channel FakePay does not provide, with that jobs module: an App the server refuses to start. (Without
+      one, `mistri tenant`'s startup check refuses it, which this fixture's enrollment does not run: integrations.test.ts.) */
+  readonly statusCheck?: true | 'sms' | { readonly channel: string };
 }
 
 export interface Answer {
@@ -127,6 +164,8 @@ export interface TenantPublicForms {
   ): Promise<Answer>;
   /** Rows on the control connection, never the host's. */
   rows(sql: string): Promise<Record<string, unknown>[]>;
+  /** With `statusCheck`: the messages the host's email service sent, oldest first. */
+  mail(): Array<{ to: string; subject: string; text: string }>;
 }
 
 /** The suite's own PostgreSQL database: a suffix ending in a UUID, dropped by the suite when it ends. */
@@ -149,11 +188,30 @@ export async function openTenantPublicForms(
   options: TenantPublicFormOptions = {},
 ): Promise<TenantPublicForms> {
   resetPublicFormLimits();
-  const engine = await openTenantEngine(dialect, { sqlite: SQLITE, postgres: POSTGRES, tables: ['make'], database });
+  const engine = await openTenantEngine(dialect, { sqlite: SQLITE, postgres: POSTGRES, tables: ['make', 'model'], database });
+  if (options.localMakes) {
+    await engine.exec(`ALTER TABLE ${engine.dialect === 'sqlite' ? '' : 'public.'}make ADD COLUMN name_es TEXT`);
+    await engine.exec(`UPDATE ${engine.dialect === 'sqlite' ? '' : 'public.'}make SET name_es = 'Vado' WHERE id = 'n-ford'`);
+  }
+  if (options.models) {
+    const table = `${engine.dialect === 'sqlite' ? '' : 'public.'}model`;
+    await engine.exec(
+      `CREATE TABLE ${table} (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL, make_id TEXT NOT NULL, name TEXT NOT NULL)`,
+    );
+    await engine.exec(
+      `INSERT INTO ${table} VALUES ('n-focus', 'north', 'n-ford', 'Focus'), ('n-ranger', 'north', 'n-ford', 'Ranger'),
+        ('n-niro', 'north', 'n-kia', 'Niro'), ('s-panda', 'south', 's-fiat', 'Panda')`,
+    );
+  }
+  const quote = {
+    ...(options.localMakes ? localQuoteInput : quoteInput),
+    ...(options.models ? { model: modelChoice } : {}),
+  };
   const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-public-forms-'));
   let auth: AppAuthRuntime | undefined;
   let owner: Awaited<ReturnType<typeof createTenantAuthenticatedHttpServer>> | undefined;
   const front = createServer();
+  const services = new Registry();
   t.after(async () => {
     try {
       front.closeAllConnections();
@@ -162,12 +220,21 @@ export async function openTenantPublicForms(
       await owner?.retire();
     } finally {
       auth?.close();
+      await services.closeAll();
       await engine.close();
       rmSync(directory, { recursive: true, force: true });
     }
   });
   await engine.provisionStore(binding);
   await engine.migrateCommandJournal();
+  const channel = options.statusCheck === 'sms' ? 'sms' : typeof options.statusCheck === 'object' ? options.statusCheck.channel : undefined;
+  const listsIntegrations = options.statusCheck === 'sms' || typeof options.statusCheck === 'object';
+  if (listsIntegrations) {
+    // What an operator provisions once for a jobs module that lists integrations: their store, beside the tenant's.
+    if (engine.dialect === 'sqlite') provisionSqliteIntegrations(engine.path);
+    else await provisionPostgresIntegrations(engine.url);
+    process.env.MISTRI_SECRETS_KEY ??= 'a-secrets-key-for-tests-that-is-long-enough';
+  }
   if (options.publicReads) {
     if (engine.dialect === 'sqlite') provisionSqliteLiveChange(engine.path);
     else await provisionPostgresLiveChange(engine.url);
@@ -195,11 +262,22 @@ export async function openTenantPublicForms(
   }
   const port = await listenFirst(front),
     origin = `http://127.0.0.1:${port}`;
+  /* With `words`, the App is read with its catalogs, as a load reads them, and said in its source language. */
+  const parse = (raw: Record<string, unknown>, where: string) =>
+    options.words
+      ? parseWordedApp(raw, where, directory, {
+          en: { 'yard.apply': 'Apply for financing' },
+          ...(options.words === 'both'
+            ? { es: { 'yard.apply': 'Solicitar financiación', 'mistri.form.step': 'Paso {step} de {count}', 'mistri.form.back': 'Atrás' } }
+            : {}),
+        })
+      : // A command only a page runs is in the catalog as the commands module registers it.
+        parseTestApp(raw, where, options.publicLinkMessage ? { welcome: { public: true, input } } : {});
   const loaded: LoadedApp = {
     path: join(directory, 'app.ts'),
     pages: [],
     sources: {},
-    app: parseTestApp(
+    app: await parse(
       {
         id: APP_ID,
         name: 'Yard',
@@ -207,6 +285,7 @@ export async function openTenantPublicForms(
         resources: {
           dealer: { owner: 'platform' },
           make: { owner: 'tenant', access: 'write' },
+          ...(options.models ? { model: { owner: 'tenant' } } : {}),
           lead: { access: 'write', owner: 'tenant' },
           intake_submission: { access: 'write', owner: 'platform' },
         },
@@ -277,16 +356,21 @@ export async function openTenantPublicForms(
           },
           roles: { staff: { realm: 'tenant', read: true }, manager: { realm: 'platform', read: true } },
           ...(options.challenge ? { challenge: 'verifyHuman' } : {}),
-          ...(options.publicReads ? { public: { read: ['make'] } } : {}),
+          ...(options.publicReads ? { public: { read: options.models ? ['make', 'model'] : ['make'] } } : {}),
         },
         views: {
           leads: { kind: 'list', from: 'lead' },
           triage: { kind: 'list', from: 'intake_submission' },
-          apply: { kind: 'form', label: 'Apply for financing', public: true, command: { id: 'apply', version: 1, input } },
+          apply: {
+            kind: 'form',
+            label: options.words ? { message: 'yard.apply' } : 'Apply for financing',
+            public: true,
+            command: { id: 'apply', version: 1, input },
+          },
           // Its choices are read signed out, so it needs `make` open to the public.
           ...(options.publicReads
             ? {
-                quote: { kind: 'form', label: 'Ask for a quote', public: true, command: { id: 'quote', version: 1, input: quoteInput } },
+                quote: { kind: 'form', label: 'Ask for a quote', public: true, command: { id: 'quote', version: 1, input: quote } },
                 // A visitor names a make the dealer lacks: a write to a choice table through the deployment's writer.
                 suggest: { kind: 'form', label: 'Suggest a make', public: true, command: { id: 'suggest', version: 1, input } },
               }
@@ -301,7 +385,7 @@ export async function openTenantPublicForms(
                   label: 'Lobby',
                   component: { id: 'page-lobby', module: './pages/lobby.page.tsx', kind: 'page' },
                   reads: options.publicReads ? ['make'] : [],
-                  commands: ['apply'],
+                  commands: options.publicLinkMessage ? ['apply', 'welcome'] : ['apply'],
                   public: true,
                 },
               }
@@ -310,6 +394,16 @@ export async function openTenantPublicForms(
             kind: 'form',
             label: 'Apply in steps',
             public: true,
+            ...(options.statusCheck
+              ? {
+                  statusCheck: {
+                    receipt: 'reference',
+                    confirm: { name: 'Name' },
+                    show: ['status'],
+                    stepUp: channel ? { [channel]: 'mobile', show: ['more'] } : { email: 'email', show: ['more'] },
+                  },
+                }
+              : {}),
             resume: { token: 'resume_token_hash', expires: 'resume_expires_at', progress: 'resume_progress', after: '14 days' },
             draft: { status: 'draft' },
             steps: [{ id: 'name', label: 'Name', command: { id: 'draftName', version: 1, input } }],
@@ -347,21 +441,40 @@ export async function openTenantPublicForms(
       public: true,
       input,
       output: received,
-      async handle({ db, intake }, value) {
-        const reference = `YRD-${value.name}`;
+      async handle({ db, intake, locale }, value) {
+        const reference = `YRD-${value.name}${options.localeReference ? `-${locale ?? 'none'}` : ''}`;
         if (intake === 'tenant') await db.lead.insert({ id: randomUUID(), reference, name: value.name });
         else await db.intake_submission.insert({ id: randomUUID(), reference, name: value.name });
         return { reference, message: 'Application received.' as const };
       },
     }),
+    ...(options.publicLinkMessage
+      ? {
+          welcome: defineCommand({
+            targets: 'none',
+            source: 'business',
+            target: 'lead',
+            write: places,
+            public: true,
+            input,
+            output: shape({ reference: text(), message: literal(WELCOME) }),
+            async handle({ db, intake }, value) {
+              const reference = `YRD-W-${value.name}`;
+              if (intake === 'tenant') await db.lead.insert({ id: randomUUID(), reference, name: value.name });
+              else await db.intake_submission.insert({ id: randomUUID(), reference, name: value.name });
+              return { reference, message: WELCOME };
+            },
+          }),
+        }
+      : {}),
     quote: defineCommand({
       targets: 'none',
       source: 'business',
       target: 'lead',
       write: places,
-      read: ['make'],
+      read: options.models ? ['make', 'model'] : ['make'],
       public: true,
-      input: quoteInput,
+      input: quote,
       output: received,
       async handle({ db, intake }, value) {
         const reference = `YRD-Q-${value.name}`;
@@ -412,12 +525,14 @@ export async function openTenantPublicForms(
       public: true,
       input,
       output: shape({ message: literal('Saved.') }),
-      async handle({ tx, draft, intake }, value) {
+      async handle({ tx, draft, intake, locale }, value) {
+        // A step saved in a visitor's language leaves it in the draft's reference, where a test reads it back.
+        const reference = `YRD-D-${options.localeReference ? `${locale ?? 'none'}-` : ''}${randomUUID().slice(0, 8)}`;
         if (draft!.root) await tx.update({ table: root(intake), key: { ...draft!.root }, values: { name: value.name } });
         else
           await tx.insert({
             table: root(intake),
-            values: { id: randomUUID(), reference: `YRD-D-${randomUUID().slice(0, 8)}`, name: value.name, ...draft!.start },
+            values: { id: randomUUID(), reference, name: value.name, ...draft!.start },
           });
         return { message: 'Saved.' as const };
       },
@@ -431,10 +546,14 @@ export async function openTenantPublicForms(
       public: true,
       input: { note: { label: 'Note', type: 'text', max: 80, optional: true } },
       output: received,
-      async handle({ tx, draft, intake }) {
+      async handle({ tx, draft, intake, locale }) {
         const [row] = (await tx.query({ table: root(intake), columns: ['reference'], limit: 1, offset: 0 })).rows;
         await tx.update({ table: root(intake), key: { ...draft!.root! }, values: { status: 'submitted' } });
-        return { reference: String(row.reference), message: 'Application received.' as const };
+        // The submit's own language, said after the draft's, where a test reads both.
+        return {
+          reference: `${String(row.reference)}${options.localeReference ? `/${locale ?? 'none'}` : ''}`,
+          message: 'Application received.' as const,
+        };
       },
     }),
   });
@@ -451,10 +570,16 @@ export async function openTenantPublicForms(
       else process.env[name] = saved[i];
     });
   }
-  const everything = { dealer: true, make: true, lead: true, intake_submission: true };
+  const everything = { dealer: true, make: true, lead: true, intake_submission: true, ...(options.models ? { model: true } : {}) };
+  const log = join(directory, 'mail.log');
+  if (options.statusCheck)
+    services.addService(
+      emailConnectionOf({ name: 'mail', kind: 'email', url: 'log:mail.log', from: 'Yard <no-reply@example.test>' }, 'test', directory),
+    );
   owner = await createTenantAuthenticatedHttpServer({
     loaded,
     auth,
+    ...(options.statusCheck ? { registry: services } : {}),
     browser: true,
     bound: { host: '127.0.0.1', port, allowedHosts: [NORTH_HOST] },
     ...(options.atRoot ? { mount: settingsMount([APP_ID], {}) } : {}),
@@ -467,6 +592,7 @@ export async function openTenantPublicForms(
         ownership: {
           dealer: { kind: 'platform' },
           make: { kind: 'tenant', column: 'tenant_id' },
+          ...(options.models ? { model: { kind: 'tenant' as const, column: 'tenant_id' } } : {}),
           lead: { kind: 'tenant', column: 'tenant_id' },
           intake_submission: { kind: 'platform' },
         },
@@ -480,15 +606,19 @@ export async function openTenantPublicForms(
           draftName: () => [],
           draftSubmit: () => [],
           ...(options.askByCountry ? { ask: () => [] } : {}),
+          ...(options.publicLinkMessage ? { welcome: () => [] } : {}),
         },
         intake: { address: 'intake_address' },
-        ...(options.publicReads ? { public: { address: 'public_address' }, resolvePublicRows: () => ({ make: true }) } : {}),
+        ...(options.publicReads
+          ? { public: { address: 'public_address' }, resolvePublicRows: () => ({ make: true, ...(options.models ? { model: true } : {}) }) }
+          : {}),
       }),
       source: engine.dialect === 'sqlite' ? { ...binding.source, existingPath: engine.path } : { ...binding.source, url: engine.url },
       deployment: 'public-forms-generation',
       roles: ['staff', 'manager'],
       maxLifetimeMs: 60000,
       commands: { registry },
+      ...(listsIntegrations ? { jobs: { module: defineJobs({}, { principals: {}, integrations: { use: [fakepay()] } }) } } : {}),
     },
   });
   // The operator's mapped host, routed as the suite listener routes it (tenantHosts.ts).
@@ -562,5 +692,12 @@ export async function openTenantPublicForms(
         }, 20);
       } else req.end(payload);
     });
-  return { engine, origin, port, call, rows: (sql) => engine.all(sql) };
+  const mail = () =>
+    existsSync(log)
+      ? readFileSync(log, 'utf8')
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => JSON.parse(line))
+      : [];
+  return { engine, origin, port, call, rows: (sql) => engine.all(sql), mail };
 }

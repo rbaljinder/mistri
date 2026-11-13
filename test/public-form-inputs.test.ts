@@ -25,6 +25,7 @@ import { shape, text } from '../packages/mistri/src/server/commands/commandShape
 import { resetPublicFormLimits } from '../packages/engine/src/server/http/rateLimit.js';
 import { parseTrustedProxies } from '../packages/engine/src/server/http/trust.js';
 import { parseTestApp } from './support/commandCatalog.js';
+import { parseWordedApp } from './support/wordedApp.js';
 
 const work = mkdtempSync(join(tmpdir(), 'mistri-public-inputs-'));
 after(() => rmSync(work, { recursive: true, force: true }));
@@ -61,9 +62,27 @@ test('a public form names input components by the form and by a field, and they 
   assert.deepEqual([...appComponents(app, [], 'fixture').keys()].sort(), ['dial', 'secret', 'swatch']);
 });
 
-async function serve(run: (base: string, db: DatabaseSync, files: Readonly<Record<string, string>>) => Promise<void>) {
-  const app = parseTestApp(RAW, 'public inputs fixture', CONTRACTS);
-  const dir = join(work, 'app');
+/* The ask form's title and a word its component says, in English and Spanish. */
+const WORDS = {
+  en: { 'paints.ask': 'Ask', 'paints.pick': 'Pick {count}' },
+  es: { 'paints.ask': 'Pregunta', 'paints.pick': 'Elige {count}' },
+};
+
+async function serve(
+  run: (base: string, db: DatabaseSync, files: Readonly<Record<string, string>>) => Promise<void>,
+  /** The App is loaded with WORDS, its form's title a message. */
+  worded?: true,
+) {
+  const dir = join(work, worded ? 'worded' : 'app');
+  const app = worded
+    ? await parseWordedApp(
+        { ...RAW, views: { ...RAW.views, ask: { ...RAW.views.ask, label: { message: 'paints.ask' } } } },
+        'public inputs fixture',
+        dir,
+        WORDS,
+        CONTRACTS,
+      )
+    : parseTestApp(RAW, 'public inputs fixture', CONTRACTS);
   mkdirSync(join(dir, 'widgets'), { recursive: true });
   writeFileSync(join(dir, 'package.json'), '{ "type": "module" }\n');
   for (const [name, color] of [
@@ -181,3 +200,44 @@ test(
     });
   },
 );
+
+/* Last in the file: the worded App's catalogs are its id's latest, as a load's are (support/wordedApp.ts). */
+test('a public form is said in its visitor’s language, and its components are handed the words', { timeout: 60_000 }, async () => {
+  await serve(async (base) => {
+    const read = async (headers: Record<string, string> = {}, query = '') => {
+      const response = await fetch(`${base}/api/forms/ask${query}`, { headers: { origin: base, ...headers } });
+      assert.equal(response.status, 200);
+      const { form } = (await response.json()) as {
+        form: { label: string; components?: Record<string, unknown>; messages?: Record<string, unknown[]> };
+      };
+      return { form, vary: (response.headers.get('vary') ?? '').toLowerCase() };
+    };
+    const english = await read();
+    assert.equal(english.form.label, 'Ask');
+    assert.match(english.vary, /accept-language/);
+    assert.match(english.vary, /cookie/);
+    // The browser's language, else the visitor's pick, which wins over it.
+    const spanish = await read({ 'accept-language': 'es-MX,es;q=0.9' });
+    assert.equal(spanish.form.label, 'Pregunta');
+    assert.equal((await read({ cookie: 'mistri-locale-paints=es' })).form.label, 'Pregunta');
+    assert.equal((await read({ 'accept-language': 'es', cookie: 'mistri-locale-paints=en' })).form.label, 'Ask');
+    // A language the App has no catalog for is said in its own.
+    assert.equal((await read({ 'accept-language': 'fr' })).form.label, 'Ask');
+    // A read sent without cookies names the pick in its address: the answer among the catalogs, over the browser and
+    // the cookie alike, else the App's own.
+    assert.equal((await read({ 'accept-language': 'en' }, '?locale=es-MX')).form.label, 'Pregunta');
+    assert.equal((await read({ cookie: 'mistri-locale-paints=es' }, '?locale=en')).form.label, 'Ask');
+    assert.equal((await read({ 'accept-language': 'es' }, '?locale=fr')).form.label, 'Ask');
+    // Its components say what the catalog served beside them says, in the same language.
+    assert.ok(spanish.form.components?.swatch);
+    assert.deepEqual(spanish.form.messages?.['paints.pick'], [
+      { type: 0, value: 'Elige ' },
+      { type: 1, value: 'count' },
+    ]);
+    assert.deepEqual(english.form.messages?.['paints.pick']?.[0], { type: 0, value: 'Pick ' });
+    // The list says the forms in the visitor's words too.
+    const list = await fetch(`${base}/api/forms`, { headers: { origin: base, 'accept-language': 'es' } });
+    const { forms } = (await list.json()) as { forms: Array<{ id: string; label: string }> };
+    assert.equal(forms.find((form) => form.id === 'ask')?.label, 'Pregunta');
+  }, true);
+});

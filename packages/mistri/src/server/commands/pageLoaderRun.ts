@@ -29,7 +29,7 @@ function readOnly(handle: ReadTable<UntypedRow>): ReadTable<UntypedRow> {
   const refused = () => {
     throw new PageLoaderRefused(403, 'loader_refused', READS_ONLY);
   };
-  return Object.freeze({ ...handle, insert: refused, insertFile: refused, update: refused, remove: refused });
+  return Object.freeze({ ...handle, insert: refused, insertFile: refused, moveFile: refused, update: refused, remove: refused });
 }
 
 /**

@@ -59,6 +59,7 @@ import { Button } from '@mistriwork/ui/Button.js';
 import { useAvatarPhotos } from '@mistriwork/kit/client/components/avatarPhotos.js';
 import { usePointerDrag, type DropPoint } from '@mistriwork/kit/client/components/usePointerDrag.js';
 import { dressFor, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
+import { appWord } from '@mistriwork/kit/client/messages.js';
 import { say } from '../copy/forms/components/FormLines.js';
 import './FormLines.css';
 
@@ -216,7 +217,11 @@ function sayFigure(rule: DisplayRule | null, value: ComputedValue, draft: DraftV
     return said.replace(/^-/, '−');
   }
   if (typeof value === 'number') return formatNumber(value);
-  return typeof value === 'boolean' ? (value ? say('common.yes') : say('common.no')) : value;
+  return typeof value === 'boolean'
+    ? value
+      ? appWord('mistri.form.yes', say('common.yes'))
+      : appWord('mistri.form.no', say('common.no'))
+    : value;
 }
 
 /** Figures worked out of one row, by the evaluator the server agrees with; nothing where the catalog has changed under it. */

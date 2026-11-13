@@ -192,6 +192,8 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'ui',
       'viewerRoles',
       'views',
+      // rc.50: the platform's form words (`mistri.*`) in the reader's language, for the client's own chrome.
+      'words',
       'writableTables',
     ],
   },

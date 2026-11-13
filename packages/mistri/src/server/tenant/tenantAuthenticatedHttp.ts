@@ -90,6 +90,7 @@ import { challengesOf, namedChallenge } from '../commands/challenges.js';
 import { tenantPublicChoices } from './tenantPublicChoices.js';
 import { tenantPublicAsked } from './tenantPublicAsked.js';
 import { openTenantJobHost, tenantDecisionProviders, tenantMailRuntime } from './tenantJobs.js';
+import { tenantServiceActor } from './tenantServiceActor.js';
 import { openTenantMail, type TenantMail } from './tenantMail.js';
 import { openTenantNoticeMail } from './tenantNoticeMail.js';
 import { appSendsEmail } from '../email/outbox.js';
@@ -111,6 +112,7 @@ import { createTenantTokenService } from './tenantTokenService.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { LINK_PATH, linkDoor, type LinkStep } from '../links/linkDoor.js';
 import { servesLinks } from '../links/linkLookup.js';
+import { sayPublicLinks, tenantPublicLinks, withPublicUrls } from '../links/publicLink.js';
 import { openTenantSearch, type TenantSearch } from './tenantSearch.js';
 import { createAppMcpHttp } from '../api/appMcpHttp.js';
 import { answerOAuthWellKnown, bearerChallenge, bindOAuthTenancy } from '../auth/oauthResource.js';
@@ -178,7 +180,7 @@ interface TenantAuthenticatedHttpOptions {
   /** Where the App is mounted and the base path it is served under (shared/mount.ts); the root when absent. */
   readonly mount?: AddressMount;
   /** The host's registry, for the App's search connection alone (tenantSearch.ts) and its email service (tenantMail.ts,
-      tenantNoticeMail.ts): never the data's. */
+      tenantNoticeMail.ts, a status check's step-up): never the data's. */
   readonly registry?: Registry;
   /** The public origin people reach this host by: where a signed mail link starts. */
   readonly publicURL?: string;
@@ -485,24 +487,6 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     }
     auth.assertCurrent();
     binding();
-    /* Notices that are emailed too (`notify` with `email: true`): sent after each write commits, from the outbox
-       beside each tenant's inbox, each read as its recipient's own membership (tenantNoticeMail.ts). Started
-       with the job host's loops; the transport is the config's email service, never the App's. */
-    if (appSendsEmail(loaded.app)) {
-      const noticeRegistry = raw.registry as Registry | undefined;
-      const transport = noticeRegistry && emailOf(noticeRegistry);
-      if (!transport)
-        throw new Error(`${loaded.app.name}: a notify rule says email: true, and the config names no email service ("kind": "email").`);
-      noticeMail = openTenantNoticeMail<IncomingMessage>({
-        loaded,
-        deployment: enrollment.deployment,
-        account: (email) => nativeMailAccount(raw.auth as AppAuthRuntime, email),
-        transport,
-        baseURL: String(raw.publicURL ?? `http://localhost`),
-        ...(raw.mount === undefined ? {} : { mount: captureTenantData(raw.mount) as AddressMount }),
-        names: enrollment.names,
-      });
-    }
     /* Where a tenant's capability links are written: its own mapped host when the suite maps one to it, else the
        shared address, so a tenant's customer is sent to the address that tenant gave them. Either host opens it
        (the door finds the tenant by the link); only another tenant's host misses. */
@@ -520,17 +504,48 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       raw.mount === undefined ? NO_MOUNT : (raw.mount as AddressMount),
       `/${encodeURIComponent(loaded.app.id)}/l`,
     ).slice(0, -2);
-    const linkBase = (tenant: string): string | undefined => {
+    const tenantOrigin = (tenant: string): string | undefined => {
       const host = linkHosts.get(tenant);
-      if (host === undefined) return `${linkOrigin}${linkPath}`;
+      if (host === undefined) return linkOrigin;
       try {
         const url = new URL(linkOrigin);
         url.hostname = host;
-        return `${url.origin}${linkPath}`;
+        return url.origin;
       } catch {
         return undefined;
       }
     };
+    const linkBase = (tenant: string): string | undefined => {
+      const origin = tenantOrigin(tenant);
+      return origin === undefined ? undefined : `${origin}${linkPath}`;
+    };
+    /* A public link (context.publicLink) is the tenant's: its own host, the view's address and the address it hands
+       out, read as it stands when the link is said (publicLink.ts). */
+    const publicMount = raw.mount === undefined ? NO_MOUNT : (raw.mount as AddressMount);
+    const publicUrl = tenantPublicLinks(loaded.app, {
+      origin: tenantOrigin,
+      outward: (path) => outward(publicMount, path),
+      addresses: enrollment.addresses,
+    });
+    /* Notices that are emailed too (`notify` with `email: true`): sent after each write commits, from the outbox
+       beside each tenant's inbox, each read as its recipient's own membership (tenantNoticeMail.ts). Started
+       with the job host's loops; the transport is the config's email service, never the App's. */
+    if (appSendsEmail(loaded.app)) {
+      const noticeRegistry = raw.registry as Registry | undefined;
+      const transport = noticeRegistry && emailOf(noticeRegistry);
+      if (!transport)
+        throw new Error(`${loaded.app.name}: a notify rule says email: true, and the config names no email service ("kind": "email").`);
+      noticeMail = openTenantNoticeMail<IncomingMessage>({
+        loaded,
+        deployment: enrollment.deployment,
+        account: (email) => nativeMailAccount(raw.auth as AppAuthRuntime, email),
+        transport,
+        baseURL: String(raw.publicURL ?? `http://localhost`),
+        ...(raw.mount === undefined ? {} : { mount: captureTenantData(raw.mount) as AddressMount }),
+        names: enrollment.names,
+        publicLinks: publicUrl,
+      });
+    }
     /* Effects and integrations: deliveries after commit, the signed webhooks, the channels and the settings
        screen's secrets (tenantIntegrations.ts). Opened now, their loops started with the job host. An effect's
        link renders for the link's own tenant: the delivery names none, and the link's row is what says it. */
@@ -543,6 +558,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         webhookConfig: (name) => registry && webhookConfigOf(registry, name),
         webhookBase: `${String(raw.publicURL ?? `http://localhost`).replace(/\/+$/, '')}${base}`,
         ...(links ? { links: (id: string) => links.render(id, undefined, linkBase) } : {}),
+        publicLinks: publicUrl,
       });
     }
     auth.assertCurrent();
@@ -567,6 +583,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
             id: loaded.app.id,
             name: loaded.app.name,
             target: 'path' in captured.source ? { sqlite: captured.source.path } : { postgres: captured.source.url },
+            publicLinks: publicUrl,
           },
         ],
         transport: emailOf(registry!)!,
@@ -655,6 +672,11 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       }
     };
     const mintedLinks = enrollment.deployment.links;
+    /* An answer's link refs as the tenant's addresses: the member's answer and a test's service actor say the same. */
+    const renderAnswerLinks = async (value: unknown, tenantId: string): Promise<unknown> =>
+      withPublicUrls(mintedLinks ? await mintedLinks.rendered(value, tenantId, linkBase) : value, loaded.app.id, (view) =>
+        publicUrl(view, tenantId),
+      );
     data = createTenantHttpServer({
       app: loaded.app,
       look: () => look,
@@ -671,7 +693,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       ...(search ? { search } : {}),
       ...(branding ? { branding } : {}),
       ...(integrations?.settings ? { integrations: integrations.settings } : {}),
-      ...(mintedLinks ? { renderLinks: (value: unknown, tenantId: string) => mintedLinks.rendered(value, tenantId, linkBase) } : {}),
+      renderLinks: renderAnswerLinks,
       // Asked once the assistant below exists; it is made on this server's own listener.
       ...(loaded.app.assistant
         ? {
@@ -724,6 +746,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         enrollment,
         auth: raw.auth as AppAuthRuntime,
         integers: chosen.integers,
+        renderLinks: renderAnswerLinks,
       }));
       const apiHost = Object.freeze({
         app: loaded,
@@ -936,6 +959,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         : undefined;
     const dispatchPublic = createTenantPublicHttp({
       app: loaded.app,
+      pages: loaded.pages,
       ...(loaded.components ? { components: loaded.components } : {}),
       ...(challenge ? { challenge } : {}),
       /* A form's choices from a table, read for the tenant its address or mapped host places it with, as that tenant's
@@ -970,6 +994,21 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
          land where the host says, through the intake's one resolution and fence. */
       ...(hostAddress ? { hostAddress } : {}),
       ...(pageAddress ? { pageAddress } : {}),
+      /* A handler's public link said to its visitor as the URL of the tenant the submission was placed with, read by the
+         intake's own resolution; triage places no tenant, and the message is kept with its references said as nothing. */
+      ...(deployment.intake && deployment.withPublicFlagIntake
+        ? {
+            publicLinks: async (text: string, address: string | undefined, form: string) => {
+              if (!address) return undefined;
+              try {
+                const tenant = await deployment.withPublicFlagIntake!(form, address, async (owner) => owner.tenantId);
+                return tenant ? await sayPublicLinks(text, loaded.app.id, publicUrl, tenant) : undefined;
+              } catch {
+                return undefined;
+              }
+            },
+          }
+        : {}),
       look: () => look,
       ...(branding ? { branding: (req: IncomingMessage) => hostBranding(req) } : {}),
       /* A form reached through a tenant's own intake address wears that tenant's published look. */
@@ -977,7 +1016,11 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       bound: publicBound,
       assertActive: active,
       basePath: mount.base,
-      ...(deployment.intake ? { submit: deployment.submitIntake, resume: deployment.resumeIntake, hold: deployment.holdIntake } : {}),
+      ...(deployment.intake
+        ? { submit: deployment.submitIntake, resume: deployment.resumeIntake, hold: deployment.holdIntake, status: deployment.statusIntake }
+        : {}),
+      /* A status check's step-up code goes out through the host's email service, as a link's does. */
+      mail: () => (raw.registry ? emailOf(raw.registry as Registry) : undefined),
       ...(captured.registry ? { commands: captured.registry } : {}),
     });
     /* A visitor's reads (`auth.public`): placed with one tenant by its public
@@ -1783,6 +1826,9 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
                 jobs
                   ? jobs.runNow(name, timeoutMs, tenantId)
                   : Promise.reject(new Error(`This server runs no jobs: start the App with --jobs to run "${name}".`)),
+              /* A test host's service actor (http/testControl.ts): one service role's command in one tenant, bound as
+                 a job's principal is; undefined without jobs. Nothing else calls it. */
+              service: jobs ? tenantServiceActor(enrollment, renderAnswerLinks) : undefined,
             }),
           }
         : {}),

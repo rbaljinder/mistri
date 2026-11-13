@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { holdAppWords } from '@mistriwork/kit/client/messages.js';
 import { FormStatusSurface, type StatusFormPresentation } from './FormStatusSurface.js';
 
 const form = (link?: StatusFormPresentation['save']['link']): StatusFormPresentation => ({
@@ -128,11 +129,12 @@ test('a step-up emails a code and opens the declared details with it; a wrong co
     throw new Error(`unexpected ${url}`);
   });
   const stepped = form();
-  stepped.save.statusCheck.stepUp = true;
+  stepped.save.statusCheck.stepUp = 'email';
   render(<FormStatusSurface form={stepped} appName="Ignition" />);
   fill(RIGHT);
   fireEvent.click(await screen.findByRole('button', { name: 'Email me a code' }));
   const code = await screen.findByLabelText(/Code from the email/);
+  expect(screen.getByRole('status')).toHaveTextContent('We sent a code to your email.');
   fireEvent.change(code, { target: { value: '111111' } });
   fireEvent.click(screen.getByRole('button', { name: 'Show details' }));
   expect(await screen.findByText('That code is not right.')).toBeInTheDocument();
@@ -143,6 +145,49 @@ test('a step-up emails a code and opens the declared details with it; a wrong co
   // The details were asked again with the code: the code alone opens nothing.
   const last = JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body));
   expect(last).toEqual({ ...RIGHT, code: '246810' });
+});
+
+test("a step-up on an integration's channel says a message to the phone number, never an email", async () => {
+  fetchMock.mockImplementation(async (url: string) => {
+    if (url.endsWith('/status')) return answer(200, { status: { status: 'In review' } });
+    if (url.endsWith('/stepup')) return answer(200, { sent: true });
+    throw new Error(`unexpected ${url}`);
+  });
+  const texted = form();
+  texted.save.statusCheck.stepUp = 'sms';
+  render(<FormStatusSurface form={texted} appName="Ignition" />);
+  fill(RIGHT);
+  expect(await screen.findByText(/phone number on this application/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Send me a code' }));
+  expect(await screen.findByLabelText(/Code from the message/)).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('We sent a code by text message.');
+  expect(screen.queryByText(/email/i)).toBeNull();
+});
+
+test("a step-up says the App's own words for its channel where its catalog has them", async () => {
+  fetchMock.mockImplementation(async (url: string) => {
+    if (url.endsWith('/status')) return answer(200, { status: { status: 'En revisión' } });
+    if (url.endsWith('/stepup')) return answer(200, { sent: true });
+    throw new Error(`unexpected ${url}`);
+  });
+  holdAppWords({
+    'mistri.status.offerText': 'Podemos enviar un código al teléfono de esta solicitud.',
+    'mistri.status.askText': 'Envíenme un código',
+    'mistri.status.sentText': 'Le enviamos un código por mensaje de texto.',
+    'mistri.status.codeText': 'Código del mensaje',
+  });
+  try {
+    const texted = form();
+    texted.save.statusCheck.stepUp = 'sms';
+    render(<FormStatusSurface form={texted} appName="Ignition" />);
+    fill(RIGHT);
+    expect(await screen.findByText('Podemos enviar un código al teléfono de esta solicitud.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Envíenme un código' }));
+    expect(await screen.findByLabelText(/Código del mensaje/)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Le enviamos un código por mensaje de texto.');
+  } finally {
+    holdAppWords(undefined);
+  }
 });
 
 test('signed in with a verified email, an application found by it is offered and added only by its Yes', async () => {

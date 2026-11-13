@@ -229,8 +229,9 @@ the change: `--export types > test/fixtures/apps/ignition/mistri-schema.d.ts`, a
 ## Known limitations
 
 - The financing form saves every step but serves no status check and no
-  "add to my account": a tenant App's saved form does not serve `statusCheck`
-  or `link` yet, so an applicant's receipt is theirs to quote to the dealership.
+  "add to my account": a tenant App's saved form serves `statusCheck` but not
+  `link` yet, and the sample declares neither, so an applicant's receipt is
+  theirs to quote to the dealership.
 
 - Support sessions and delegated dealer administration are declared in the tenant
   policy but have no flow in the sample yet, and no browser proof.

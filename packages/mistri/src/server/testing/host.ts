@@ -12,7 +12,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { TestWorkspace } from './workspace.js';
 import { createTestClient, type TestClient } from './client.js';
 import { runTestMaintenance } from './worker.js';
-import type { TestRow } from './appRequests.js';
+import { readResult, type TestCommandResult, type TestRow } from './appRequests.js';
 import type { AssistantScript } from '../assistant/assistantScripted.js';
 import type { DecisionScript } from '../decide/providers/scriptedDecisions.js';
 import type { StoredReadAudit } from '../../adapters/readAudit/readAudit.js';
@@ -71,6 +71,19 @@ export type TestReadAudit = StoredReadAudit;
 export interface TestJobRun {
   state: string;
   code: string | null;
+}
+/** What `host.service(tenant, role).run` names beside the command and its input. */
+export interface TestServiceRunOptions {
+  /** The record a record command runs on. */
+  key?: Readonly<Record<string, string | number>>;
+  /** The command's contract version; the one the App declares now when not said. */
+  version?: number;
+  /** Two runs with one key are one command, as a job's retried attempt is; each run is new when not said. */
+  idempotencyKey?: string;
+}
+/** A tenant App's service role in one tenant (`host.service`): it runs a command as a job's principal does. */
+export interface TestServiceActor {
+  run(command: string, input: unknown, options?: TestServiceRunOptions): Promise<TestCommandResult>;
 }
 type TestValue = string | number | boolean | null;
 export interface TestSuiteOptions extends HostOptions {
@@ -397,6 +410,25 @@ function setup(url: string, control: string) {
      * for the one tenant named, so a test sees what that tenant's log holds and nothing of another's.
      */
     readAudit: (query: TestReadAuditQuery = {}): Promise<TestReadAudit[]> => ask<TestReadAudit[]>(TEST_CONTROL_PATHS.readAudit, query),
+    /**
+     * A tenant App's service role acting in one tenant, as a job's principal acts: the role's grant, that tenant's
+     * rows read and fenced, the job door. Not setup: what it runs is granted and refused as the App's background work
+     * would be, and the answer is the command door's — a result, never a throw. Only a service role acts (`service:
+     * true`, or held by a principal of the jobs module); any other is refused, `not_a_service_role`. The App is
+     * started with `--jobs`.
+     */
+    service: (tenantId: string, role: string): TestServiceActor =>
+      Object.freeze({
+        run: async (command: string, input: unknown, options: TestServiceRunOptions = {}): Promise<TestCommandResult> =>
+          readResult(
+            await fetch(new URL(TEST_CONTROL_PATHS.service, url), {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', [TEST_CONTROL_HEADER]: control },
+              body: JSON.stringify({ tenant: tenantId, role, command, input, ...options }),
+              signal: AbortSignal.timeout(60_000),
+            }),
+          ),
+      }),
   };
 }
 /** Starts the actual suite CLI, including shared login and App grants. */

@@ -607,6 +607,7 @@ describe('the codes and the paths', () => {
       'route-clash',
       'command-reads-unreadable',
       'public-command-remove',
+      'public-link-not-public',
       'bare-word-column',
       'read-audit-query',
       ...['markup', 'code-from-text', 'environment', 'color', 'radius', 'motion', 'shadow', 'class', 'ruler', 'role'].map(
@@ -619,7 +620,7 @@ describe('the codes and the paths', () => {
       /* A page's archetype carries its code in brackets (shared/pageLayouts.ts). */
       ...['conversation', 'showcase', 'article'].map((layout) => `layout-${layout}`),
       /* An App's words carry their code in brackets (server/app/appMessages.ts). */
-      ...['missing', 'syntax', 'placeholder', 'arg', 'untranslated', 'unused'].map((rule) => `message-${rule}`),
+      ...['missing', 'syntax', 'placeholder', 'arg', 'word', 'untranslated', 'unused'].map((rule) => `message-${rule}`),
       /* An App's use of integrations carries its code in brackets (integrationChecks.ts, integrationDeclaration.ts). */
       ...['unknown', 'action-unknown', 'event-unknown', 'channel-unknown', 'event-input', 'service-role'].map(
         (rule) => `integration-${rule}`,

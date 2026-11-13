@@ -31,6 +31,7 @@ import {
 import { appAdvisories, appProblems, type LoadedApp } from '../app/apps.js';
 import { appDestinationWarnings, appRoleFormDefaultProblems, appRoleReach, appRoleWarnings } from '../app/appRoleChecks.js';
 import { commandRestatedWarnings } from '../commands/commandRestated.js';
+import { lookupFileWarnings } from '../commands/stagedFiles.js';
 import { snapshotCommandChecks } from '../app/appSnapshotChecks.js';
 import { consumesCommandWarnings, machineCommandWarnings, referenceReadWarnings } from '../app/appMachineChecks.js';
 import { appIndexWarnings } from '../../shared/appIndexWarnings.js';
@@ -780,6 +781,8 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
           new Set([...hosted.serviceRuns.values()].flatMap((commands) => [...commands])),
         ),
         ...commandRestatedWarnings(commandHosting?.registry ?? app.commands?.registry),
+        // A lookup reading a file its form cannot attach: every such read is refused.
+        ...lookupFileWarnings(commandHosting?.registry ?? app.commands?.registry),
         ...snapshots.warnings,
         ...appIndexWarnings(app.app, app.pages, schema),
         // Its themes' font files: one past its size, all past the budget, one never drawn (appFonts.ts).

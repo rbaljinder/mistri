@@ -29,6 +29,7 @@ import { describeShape, type Shape, type ShapeOf } from '../commands/commandShap
 
 declare const integrationType: unique symbol;
 declare const actionTypes: unique symbol;
+declare const clientType: unique symbol;
 
 /** What a webhook request handed `verify`: its headers, lowercased, and its raw body, before any parsing. */
 export interface IntegrationDelivery {
@@ -62,7 +63,11 @@ export interface IntegrationEventDefinition<Payload> {
   readonly optIn?: string;
 }
 
-/** One message on a channel, as core hands it to the package once consent, opt-out and quiet hours allowed it. */
+/**
+ * One message on a channel, as core hands it to the package once consent, opt-out and quiet hours allowed it. A
+ * step-up's one-time code (`stepUp: { sms: 'mobile' }`) comes the same way, asked for that minute, so only an
+ * opt-out holds it: its text is a secret, so a package must not log or echo it.
+ */
 export interface ChannelMessage {
   readonly to: string;
   readonly text: string;
@@ -127,11 +132,26 @@ type ActionTypes<Actions> = {
 type ActionShape<Action, Key extends 'input' | 'output'> = Action extends Readonly<Record<Key, infer S>> ? ShapeOf<S> : unknown;
 
 /** What defineIntegration returns: the package's integration, as an App's jobs module lists it. */
-export interface Integration<Name extends string = string, Actions = unknown> {
+export interface Integration<Name extends string = string, Actions = unknown, Client = unknown> {
   readonly name: Name;
   readonly [integrationType]: true;
   /* Types only: never set. A command's call reads its input and output from here. */
   readonly [actionTypes]?: Actions;
+  /* Types only: never set. An extension's actions are handed the client its base makes. */
+  readonly [clientType]?: Client;
+}
+
+/** What an extension adds to an integration (`extendIntegration`): actions and webhook events, and nothing that is the base's. */
+export interface IntegrationExtension<
+  Client,
+  Actions extends Readonly<Record<string, AnyAction<Client>>>,
+  Events extends Readonly<Record<string, IntegrationEventDefinition<unknown>>>,
+> {
+  /* The intersection is what types `run(client, …)`: extendIntegration defaults Actions to no actions, and a
+     default, not the constraint, is the contextual type while Actions is still being inferred. */
+  readonly actions?: Actions & Readonly<Record<string, AnyAction<Client>>>;
+  /** Only `events`: the base's `verify` and `signing` check every delivery, so an extension's events are verified as the base's are. */
+  readonly webhooks?: Readonly<{ readonly events: Events }>;
 }
 
 /**
@@ -182,6 +202,8 @@ interface CapturedAction {
 
 /** The integration as core holds it once captured. */
 export interface CapturedIntegration {
+  /** The integration an extension extends (`extendIntegration`); the extension holds the base's definition and what it adds. */
+  readonly base?: CapturedIntegration;
   readonly name: string;
   readonly secrets: readonly string[];
   client(secrets: Readonly<Record<string, string>>): unknown;
@@ -189,7 +211,7 @@ export interface CapturedIntegration {
   readonly webhooks?: Readonly<{
     readonly signing?: string;
     verify(delivery: IntegrationDelivery, context: Readonly<{ secrets: Readonly<Record<string, string>>; now: number }>): unknown;
-    readonly events: ReadonlyMap<string, Readonly<{ type: string; payload: Shape<unknown>; optOut?: string; optIn?: string }>>;
+    readonly events: ReadonlyMap<string, CapturedEvent>;
   }>;
   readonly channel?: Readonly<{
     name: string;
@@ -247,6 +269,61 @@ function objectShape(value: unknown, where: string): Shape<unknown> {
   return taken;
 }
 
+type CapturedEvent = Readonly<{ type: string; payload: Shape<unknown>; optOut?: string; optIn?: string }>;
+
+/* The actions a definition or an extension declares, each checked to be an action. */
+function captureActions(given: unknown, where: string): Map<string, CapturedAction> {
+  const actions = new Map<string, CapturedAction>();
+  if (given === undefined) return actions;
+  for (const [action, declared] of Object.entries(record(given, `${where} actions`))) {
+    if (!MEMBER.test(action)) fail(`${where} action "${action}" needs a name of letters, digits and underscores, starting with a letter.`);
+    const at = `${where} action "${action}"`;
+    const entry = record(declared, at);
+    only(entry, at, ['input', 'output', 'run']);
+    actions.set(
+      action,
+      Object.freeze({
+        input: shapeOf(entry.input, `${at} input`),
+        output: objectShape(entry.output, `${at} output`),
+        run: fn<CapturedAction['run']>(entry.run, `${at} run`),
+      }),
+    );
+  }
+  return actions;
+}
+
+/* The events a definition or an extension declares; `types` holds the wire types already taken, and takes this one's. */
+function captureEvents(given: unknown, where: string, types: Set<string>): Map<string, CapturedEvent> {
+  const events = new Map<string, CapturedEvent>();
+  for (const [event, declared] of Object.entries(record(given, `${where} webhooks.events`))) {
+    if (!MEMBER.test(event)) fail(`${where} event "${event}" needs a name of letters, digits and underscores, starting with a letter.`);
+    const at = `${where} event "${event}"`;
+    const entry = record(declared, at);
+    only(entry, at, ['type', 'payload'], ['optOut', 'optIn']);
+    if (typeof entry.type !== 'string' || !EVENT_TYPE.test(entry.type))
+      fail(`${at} type is the provider's event type: type: 'charge.succeeded'.`);
+    if (types.has(entry.type as string)) fail(`${at} type "${entry.type as string}" is another event's: one name per type.`);
+    types.add(entry.type as string);
+    const payload = objectShape(entry.payload, `${at} payload`);
+    const fields = (describeShape(payload) as { fields: Readonly<Record<string, unknown>> }).fields;
+    for (const key of ['optOut', 'optIn'] as const) {
+      if (entry[key] === undefined) continue;
+      if (typeof entry[key] !== 'string' || !Object.hasOwn(fields, entry[key] as string))
+        fail(`${at} ${key} names the payload field holding the recipient, one of: ${Object.keys(fields).join(', ')}.`);
+    }
+    events.set(
+      event,
+      Object.freeze({
+        type: entry.type as string,
+        payload,
+        ...(entry.optOut === undefined ? {} : { optOut: entry.optOut as string }),
+        ...(entry.optIn === undefined ? {} : { optIn: entry.optIn as string }),
+      }),
+    );
+  }
+  return events;
+}
+
 /**
  * Capture a package's integration. Throws an IntegrationDeclarationError
  * naming what is wrong; the result is what an App's jobs module lists.
@@ -257,7 +334,7 @@ export function defineIntegration<
   Client,
   const Actions extends Readonly<Record<string, AnyAction<Client>>>,
   const Events extends Readonly<Record<string, IntegrationEventDefinition<unknown>>>,
->(definition: IntegrationDefinition<Name, Secret, Client, Actions, Events>): Integration<Name, ActionTypes<Actions>> {
+>(definition: IntegrationDefinition<Name, Secret, Client, Actions, Events>): Integration<Name, ActionTypes<Actions>, Client> {
   const value = record(definition, 'An integration');
   only(value, 'An integration', ['name', 'secrets', 'client'], ['actions', 'webhooks', 'channel']);
   const name = value.name;
@@ -273,58 +350,14 @@ export function defineIntegration<
   )
     fail(`${where} secrets is a list of at most 16 distinct names of letters, digits and underscores: secrets: ['apiKey'].`);
   const client = fn<(context: { secrets: Readonly<Record<string, string>> }) => unknown>(value.client, `${where} client`);
-  const actions = new Map<string, CapturedAction>();
-  if (value.actions !== undefined) {
-    for (const [action, declared] of Object.entries(record(value.actions, `${where} actions`))) {
-      if (!MEMBER.test(action))
-        fail(`${where} action "${action}" needs a name of letters, digits and underscores, starting with a letter.`);
-      const at = `${where} action "${action}"`;
-      const entry = record(declared, at);
-      only(entry, at, ['input', 'output', 'run']);
-      actions.set(
-        action,
-        Object.freeze({
-          input: shapeOf(entry.input, `${at} input`),
-          output: objectShape(entry.output, `${at} output`),
-          run: fn<CapturedAction['run']>(entry.run, `${at} run`),
-        }),
-      );
-    }
-  }
+  const actions = captureActions(value.actions, where);
   let webhooks: CapturedIntegration['webhooks'];
   if (value.webhooks !== undefined) {
     const declared = record(value.webhooks, `${where} webhooks`);
     only(declared, `${where} webhooks`, ['verify', 'events'], ['signing']);
     if (declared.signing !== undefined && (typeof declared.signing !== 'string' || !(secrets as string[]).includes(declared.signing)))
       fail(`${where} webhooks.signing names the secret the provider signs with, one of: ${(secrets as string[]).join(', ') || 'none'}.`);
-    const events = new Map<string, Readonly<{ type: string; payload: Shape<unknown>; optOut?: string; optIn?: string }>>();
-    const types = new Set<string>();
-    for (const [event, given] of Object.entries(record(declared.events, `${where} webhooks.events`))) {
-      if (!MEMBER.test(event)) fail(`${where} event "${event}" needs a name of letters, digits and underscores, starting with a letter.`);
-      const at = `${where} event "${event}"`;
-      const entry = record(given, at);
-      only(entry, at, ['type', 'payload'], ['optOut', 'optIn']);
-      if (typeof entry.type !== 'string' || !EVENT_TYPE.test(entry.type))
-        fail(`${at} type is the provider's event type: type: 'charge.succeeded'.`);
-      if (types.has(entry.type as string)) fail(`${at} type "${entry.type as string}" is another event's: one name per type.`);
-      types.add(entry.type as string);
-      const payload = objectShape(entry.payload, `${at} payload`);
-      const fields = (describeShape(payload) as { fields: Readonly<Record<string, unknown>> }).fields;
-      for (const key of ['optOut', 'optIn'] as const) {
-        if (entry[key] === undefined) continue;
-        if (typeof entry[key] !== 'string' || !Object.hasOwn(fields, entry[key] as string))
-          fail(`${at} ${key} names the payload field holding the recipient, one of: ${Object.keys(fields).join(', ')}.`);
-      }
-      events.set(
-        event,
-        Object.freeze({
-          type: entry.type as string,
-          payload,
-          ...(entry.optOut === undefined ? {} : { optOut: entry.optOut as string }),
-          ...(entry.optIn === undefined ? {} : { optIn: entry.optIn as string }),
-        }),
-      );
-    }
+    const events = captureEvents(declared.events, where, new Set());
     if (!events.size) fail(`${where} webhooks.events names at least one event.`);
     webhooks = Object.freeze({
       ...(declared.signing === undefined ? {} : { signing: declared.signing as string }),
@@ -344,7 +377,7 @@ export function defineIntegration<
     });
   }
   if (!actions.size && !webhooks && !channel) fail(`${where} declares no actions, webhooks or channel: nothing an App could use.`);
-  const integration = Object.freeze({ name }) as unknown as Integration<Name, ActionTypes<Actions>>;
+  const integration = Object.freeze({ name }) as unknown as Integration<Name, ActionTypes<Actions>, Client>;
   captured.set(
     integration,
     Object.freeze({
@@ -359,7 +392,73 @@ export function defineIntegration<
   return integration;
 }
 
-/** The captured integration behind a defineIntegration result; anything else, however alike, refuses. */
+/**
+ * Add actions and webhook events to an integration a package made, without a
+ * second name: the result keeps the base's name, secrets, client, signature
+ * check and channel, so a tenant enters one set of secrets and the provider
+ * calls one address. It adds and never overrides: an action or event the base
+ * has, or an event type it takes, is refused, and so is anything that is the
+ * base's to say (secrets, client, verify, signing, channel) — an extension
+ * that needs a secret of its own is a new integration. An App lists the
+ * extension and not its base; an extension may be extended again.
+ *
+ *   export const paymentsPlus = extendIntegration(payments, {
+ *     actions: { refund: { input, output, run: (client, input, { idempotencyKey }) => client.refund(input, idempotencyKey) } },
+ *     webhooks: { events: { refunded: { type: 'refund.updated', payload } } },
+ *   })
+ */
+export function extendIntegration<
+  const Name extends string,
+  BaseActions,
+  Client,
+  const Actions extends Readonly<Record<string, AnyAction<Client>>> = Record<never, never>,
+  const Events extends Readonly<Record<string, IntegrationEventDefinition<unknown>>> = Record<never, never>,
+>(
+  base: Integration<Name, BaseActions, Client>,
+  extension: IntegrationExtension<Client, Actions, Events>,
+): Integration<Name, BaseActions & ActionTypes<Actions>, Client> {
+  const parent = captured.get(base as object);
+  if (!parent)
+    return fail(
+      'extendIntegration extends an integration made by defineIntegration or extendIntegration (@mistriwork/mistri/integration).',
+    );
+  const where = `Integration "${parent.name}" extension`;
+  const value = record(extension, `An extension of "${parent.name}"`);
+  for (const key of Object.keys(value))
+    if (key !== 'actions' && key !== 'webhooks')
+      fail(
+        `${where} has no "${key}". It takes: actions, webhooks.events. The name, secrets, client and channel are the base's; an extension that needs its own is a new integration.`,
+      );
+  let events: ReadonlyMap<string, CapturedEvent> | undefined;
+  if (value.webhooks !== undefined) {
+    const declared = record(value.webhooks, `${where} webhooks`);
+    for (const key of Object.keys(declared))
+      if (key !== 'events')
+        fail(`${where} webhooks has no "${key}". It takes: events. The base's verify and signing check every delivery.`);
+    if (!parent.webhooks) fail(`${where} declares webhooks, but the base declares none: there is no signature check for its events.`);
+    events = captureEvents(declared.events, where, new Set([...parent.webhooks!.events.values()].map((event) => event.type)));
+    for (const key of events.keys())
+      if (parent.webhooks!.events.has(key)) fail(`${where} event "${key}" is the base's: an extension adds and never overrides.`);
+    if (!events.size) fail(`${where} webhooks.events names at least one event.`);
+  }
+  const actions = captureActions(value.actions, where);
+  for (const key of actions.keys())
+    if (parent.actions.has(key)) fail(`${where} action "${key}" is the base's: an extension adds and never overrides.`);
+  if (!actions.size && !events) fail(`${where} declares no actions or webhook events: nothing it adds.`);
+  const integration = Object.freeze({ name: parent.name }) as unknown as Integration<Name, BaseActions & ActionTypes<Actions>, Client>;
+  captured.set(
+    integration,
+    Object.freeze({
+      ...parent,
+      base: parent,
+      actions: new Map([...parent.actions, ...actions]),
+      ...(events ? { webhooks: Object.freeze({ ...parent.webhooks!, events: new Map([...parent.webhooks!.events, ...events]) }) } : {}),
+    }),
+  );
+  return integration;
+}
+
+/** The captured integration behind a defineIntegration or extendIntegration result; anything else, however alike, refuses. */
 export function capturedIntegration(value: unknown): CapturedIntegration {
   const found = value && typeof value === 'object' ? captured.get(value) : undefined;
   return found ?? fail('An App lists integrations made by defineIntegration (@mistriwork/mistri/integration).');

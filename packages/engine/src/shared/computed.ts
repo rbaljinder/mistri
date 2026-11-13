@@ -18,10 +18,12 @@
  * account's email, as a fixed action's `set` writes it), comparisons,
  * `and`/`or`/`not`, `in (…)`, `is empty`, arithmetic, and dates: a date minus a date is
  * days, a date plus a number is that many days later, and a unit says others
- * (`ends_on + term months`, `now - 30 minutes`). Five functions: `coalesce(a, b, …)`
+ * (`ends_on + term months`, `now - 30 minutes`). Six functions: `coalesce(a, b, …)`
  * the first that has a value, `round(x)` and `round(x, 2)`, `abs(x)`, and
  * `min(a, b, …)` and `max(a, b, …)` of numbers or dates, which have no value
- * where one of theirs has none, as arithmetic has (`max(owed - paid, 0)`).
+ * where one of theirs has none, as arithmetic has (`max(owed - paid, 0)`), and
+ * `concat(a, b, …)`, text joined, where a part with no value reads as empty
+ * (`concat(first, ' ', last)`). There is no `||`: SQLite and PostgreSQL differ on what it does with a null.
  * That covers a due flag, an age, a renewal day, a balance.
  * Anything heavier is a database view or a generated column, which the
  * catalog reads as a column already.
@@ -80,7 +82,7 @@ export interface ComputedJson {
 }
 
 /** The functions an expression may call (computedParse.ts COMPUTED_FUNCTIONS): each written alike on every engine and worked out alike in JavaScript. */
-export type ComputedFunction = 'coalesce' | 'round' | 'min' | 'max' | 'abs';
+export type ComputedFunction = 'coalesce' | 'round' | 'min' | 'max' | 'abs' | 'concat';
 
 interface ComputedSpan {
   k: 'span';
@@ -222,6 +224,13 @@ export function computedKind(node: ComputedNode, kindOf: (path: string) => Value
       }
       case 'call': {
         const kinds = n.args.map(kind);
+        /* Text only: a number or a day said as text is written differently by each engine (3.0, 3), so joining one
+           would answer differently on SQLite and PostgreSQL. */
+        if (n.fn === 'concat') {
+          const other = kinds.find((each) => each !== 'text');
+          if (other) throw new Error(`concat(…) joins text, and has a ${other}.`);
+          return 'text';
+        }
         if (n.fn === 'round' || n.fn === 'abs') {
           if (kinds.some((each) => each !== 'number')) throw new Error(`${n.fn}(…) reads numbers.`);
           return 'number';
@@ -411,6 +420,8 @@ export function compileComputed(
         const args = n.args.map(sql);
         if (n.fn === 'abs') return `ABS(${args[0]})`;
         if (n.fn === 'coalesce') return `COALESCE(${args.join(', ')})`;
+        /* A part with no value reads as empty, which the dialect's own `||` would not (a null swallows the whole). */
+        if (n.fn === 'concat') return style.concat(args.map((arg) => `COALESCE(${arg}, '')`));
         if (n.fn === 'round') {
           const places = args[1] ?? '0';
           /* A half rounds away from zero, of the figure as written: 1.005 is 1.01. PostgreSQL rounds a numeric so (a

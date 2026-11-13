@@ -22,12 +22,14 @@
  * key. A package's refuse(reason) is recorded and answered as the command's
  * refusal, with its reason, every time.
  */
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { IntegrationStore } from '../../adapters/integrations/integrationStore.js';
+import { channelHolder } from './integrationChannels.js';
 import { BusinessCommandExecutionError, isBusinessCommandExecutionError } from '../commands/commandErrors.js';
 import type { CapturedIntegrations } from './integrationDeclaration.js';
 import { SIGNING_SECRET_LEAST, type IntegrationCalls } from './integrationModule.js';
 import { openSecret, sealSecret } from './integrationSecrets.js';
+import type { PublicLinkRender } from '../links/publicLink.js';
 
 /* Three tries, 250 ms then 500 ms apart, each given 12 s: the effects' per-request bound, inside a request someone waits on. */
 const CALL_LIMITS = Object.freeze({ attempts: 3, backoffMs: 250, timeoutMs: 12_000 });
@@ -39,11 +41,19 @@ export interface IntegrationRuntime {
   readonly now: () => number;
   /** One tenant's opened secrets for an integration, or undefined while any it declares is missing. */
   secrets(tenant: string, integration: string): Promise<Readonly<Record<string, string>> | undefined>;
+  /** How a public link in a held message is said for its tenant; a message one does not say is not sent. */
+  readonly publicLinks?: PublicLinkRender;
 }
 
 /** The runtime over an opened store. The store is the caller's to close. */
 export function createIntegrationRuntime(
-  options: Readonly<{ appId: string; declared: CapturedIntegrations; store: IntegrationStore; now?: () => number }>,
+  options: Readonly<{
+    appId: string;
+    declared: CapturedIntegrations;
+    store: IntegrationStore;
+    now?: () => number;
+    publicLinks?: PublicLinkRender;
+  }>,
 ): IntegrationRuntime {
   const { appId, declared, store } = options;
   const now = options.now ?? Date.now;
@@ -52,6 +62,7 @@ export function createIntegrationRuntime(
     declared,
     store,
     now,
+    ...(options.publicLinks ? { publicLinks: options.publicLinks } : {}),
     async secrets(tenant: string, integration: string) {
       const wanted = declared.use.get(integration)?.secrets;
       if (!wanted) return undefined;
@@ -80,6 +91,37 @@ export function registerIntegrationRuntime(runtime: IntegrationRuntime): () => v
 /** The runtime registered for an App, as its settings routes reach it. */
 export function integrationRuntimeOf(appId: string): IntegrationRuntime | undefined {
   return runtimes.get(appId);
+}
+
+/** What became of a one-time code sent on a channel; only `sent` reached the provider. */
+type ChannelSendOutcome = 'sent' | 'opted_out' | 'no_channel' | 'not_set_up';
+
+/**
+ * A one-time code on an integration's channel (a step-up's, shared/appStepUp.ts), to an address the record holds,
+ * under one tenant's secrets. Not a notice: the person asked for it this minute, so no consent is asked of the App
+ * and no quiet hours hold it, but a recipient who opted out on the channel (a STOP) is not sent to. Nothing is
+ * written to the message table — the text is the secret — and the send is tried once under the call deadline,
+ * with a fresh idempotency key: asking again is the retry, and makes a new code. A failed send throws; the caller
+ * logs it and answers as if it went.
+ */
+export async function sendOnChannel(
+  runtime: IntegrationRuntime,
+  tenant: string,
+  channel: string,
+  message: Readonly<{ to: string; text: string }>,
+): Promise<ChannelSendOutcome> {
+  const integration = [...runtime.declared.use.values()].find((candidate) => candidate.channel?.name === channel);
+  if (!integration?.channel) return 'no_channel';
+  const consent = await runtime.store.consent(runtime.appId, tenant, channel, channelHolder(message.to, channel));
+  if (consent?.state === 'out') return 'opted_out';
+  const secrets = await runtime.secrets(tenant, integration.name);
+  if (!secrets) return 'not_set_up';
+  await integration.channel.send(
+    integration.client(secrets),
+    Object.freeze({ to: message.to, text: message.text, idempotencyKey: randomUUID() }),
+    Object.freeze({ signal: AbortSignal.timeout(CALL_LIMITS.timeoutMs) }),
+  );
+  return 'sent';
 }
 
 /** The key a call is recorded and sent under: the same for every try of the same request's same call. */

@@ -48,6 +48,8 @@ export interface PolicyServerOptions {
   url?: string;
   /** More flags for the server. */
   args?: readonly string[];
+  /** More files in the App's directory, by their path under it (`messages/es.mjs`). */
+  files?: Readonly<Record<string, string>>;
 }
 
 export interface Reply {
@@ -88,6 +90,10 @@ export async function policyServer(t: TestContext, options: PolicyServerOptions)
   const manifest = { sources: { main: { connection: 'ops' } }, ...options.app };
   if (options.module) writeFileSync(join(appDir, 'app.mjs'), `export default ${JSON.stringify(manifest, null, 2)};\n`);
   else writeFileSync(join(appDir, 'app.json'), JSON.stringify(manifest));
+  for (const [path, source] of Object.entries(options.files ?? {})) {
+    mkdirSync(dirname(join(appDir, path)), { recursive: true });
+    writeFileSync(join(appDir, path), source);
+  }
   const policy = join(directory, 'policy.mjs');
   if (options.policy !== undefined) writeFileSync(policy, options.policy);
   const commands = join(directory, 'commands.mjs');

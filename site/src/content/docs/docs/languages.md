@@ -77,6 +77,42 @@ export default defineMessages<typeof en>('en', { 'visit.visits': 'Appointments' 
 
 A caption is said from the tenant's own rows, then the variant in the reader's language, then the App's catalog in it, then the variant's and the App's source. A value naming no folder reads the App's catalog. A variant says only keys the source has, in a language the App has a catalog for.
 
+## The platform's words
+
+A command's form, a public form and its status check say a few words of their own around the App's: "Step 2 of 3", "Back", "(optional)", "We sent a code by text message." An App's catalog says them in its own words under a `mistri.*` key, in the language it is written in:
+
+```ts
+export default defineMessages<typeof en>('es', {
+  'mistri.form.step': 'Paso {step} de {count}',
+  'mistri.form.back': 'Atrás',
+  'mistri.form.optional': '(opcional)',
+});
+```
+
+| Key | Said as | Reads |
+| --- | --- | --- |
+| `mistri.form.step` | Step {step} of {count} | `{step}`, `{count}` |
+| `mistri.form.stepNamed` | Step {step} of {count}: {label} | `{step}`, `{count}`, `{label}` |
+| `mistri.form.back` | Back | |
+| `mistri.form.optional` | (optional) | |
+| `mistri.form.required` | (required) | |
+| `mistri.form.reference` | Your reference | |
+| `mistri.form.signAgain` | Sign again | |
+| `mistri.form.yes` | Yes | |
+| `mistri.form.no` | No | |
+| `mistri.form.monthHint` | MM/YYYY | |
+| `mistri.form.dateTimeHint` | YYYY-MM-DD HH:MM | |
+| `mistri.status.offerEmail` | We can email a code to the address on this application. It opens its details once, for 10 minutes. | |
+| `mistri.status.offerText` | We can send a code to the phone number on this application. It opens its details once, for 10 minutes. | |
+| `mistri.status.askEmail` | Email me a code | |
+| `mistri.status.askText` | Send me a code | |
+| `mistri.status.sentEmail` | We sent a code to your email. | |
+| `mistri.status.sentText` | We sent a code by text message. | |
+| `mistri.status.codeEmail` | Code from the email | |
+| `mistri.status.codeText` | Code from the message | |
+
+A key is chosen by the same reader's language as every caption, and said only where the catalog that has it is in that language; elsewhere the platform says its own word, in English or in the language its menus are fetched in. A key is optional and needs no entry in the source catalog, so an App that writes none changes nothing. Each is said as written: no plural, select, number or date, and only the arguments in its row. A tenant's own words may say them too.
+
 ## Translating
 
 ```sh
@@ -88,7 +124,7 @@ With a locale, each key the catalog lacks is appended to `messages/<tag>.ts` as 
 
 ## Checks
 
-`mistri check` refuses a catalog that does not parse (`message-syntax`), a key no catalog has or catalogs without the App's own language (`message-missing`), a translation reading an argument its source does not (`message-placeholder`) and an argument bound to no column (`message-arg`), and a `ui.catalog` that is no shared text column of the profile, or variant folders with no `ui.catalog` (`ui-catalog`). It advises on a catalog that translates only some keys (`message-untranslated`) and a key no `msg()` and no component's `useMessage` names, or that only a translation has (`message-unused`). See [Check codes](/docs/check-codes/).
+`mistri check` refuses a catalog that does not parse (`message-syntax`), a key no catalog has or catalogs without the App's own language (`message-missing`), a translation reading an argument its source does not (`message-placeholder`), an argument bound to no column (`message-arg`), a `mistri.*` key that is not one of the platform's words or reads more than its row (`message-word`, naming the nearest key), and a `ui.catalog` that is no shared text column of the profile, or variant folders with no `ui.catalog` (`ui-catalog`). It advises on a catalog that translates only some keys (`message-untranslated`) and a key no `msg()` and no component's `useMessage` names, or that only a translation has (`message-unused`). See [Check codes](/docs/check-codes/).
 
 ## Related
 

@@ -63,13 +63,13 @@ import {
   type EmailServiceConfig,
   type OutboundMail,
 } from '../email/email.js';
-import { InboundRefusal, noiseOf, readInbound, type ReadInbound } from '../email/inboundMail.js';
+import { InboundRefusal, MAIL_ATTACHMENTS_MOST, noiseOf, readInbound, type ReadInbound } from '../email/inboundMail.js';
 import { issueMailLink, mailLinkKey, readMailLink } from '../email/mailLinks.js';
 import { inboundWords } from '../email/mailText.js';
 import { fillMailBrand, mailLinkPage, mailLinkPolicy, type MailLinkPage } from '../email/mailLinkPage.js';
 import type { TenantBrandingService } from './tenantBranding.js';
 import { fieldLabel } from '../../shared/command.js';
-import { uploadValues } from '../http/fileRows.js';
+import { receivedFiles } from '../http/fileRows.js';
 import { readBounded, TENANT_FILE_MOST } from '@mistriwork/engine/server/http/reply.js';
 import { FILE_MAX_BYTES_DEFAULT } from '../../shared/appModel.js';
 import { inboundCommandKey, verifyDelivery } from '../jobs/inboundHost.js';
@@ -345,15 +345,15 @@ export async function openTenantMail(options: TenantMailOptions): Promise<Tenant
       resource: files!,
       maxBytes: Math.min(file.maxBytes ?? FILE_MAX_BYTES_DEFAULT, TENANT_FILE_MOST),
     };
+    let received: readonly CommandFile[] | undefined;
     if (rule) {
-      for (const part of mail.attachments) {
-        const checked = uploadValues(rule, { file: { name: part.name, type: part.type, data: part.content } });
-        if ('status' in checked) {
-          await log({ ...entry, outcome: 'refused', reason: checked.error });
-          outcome(checked.status === 413 ? 'too_large' : 'invalid');
-          return status(res, checked.status === 413 ? 413 : 400);
-        }
+      const checked = receivedFiles(rule, mail.attachments, MAIL_ATTACHMENTS_MOST);
+      if ('status' in checked) {
+        await log({ ...entry, outcome: 'refused', reason: checked.error });
+        outcome(checked.status === 413 ? 'too_large' : 'invalid');
+        return status(res, checked.status === 413 ? 413 : 400);
       }
+      received = checked.files;
     }
     const words = inboundWords(mail);
     const message: InboundMail = Object.freeze({
@@ -391,11 +391,7 @@ export async function openTenantMail(options: TenantMailOptions): Promise<Tenant
         /* The attachments' bytes reach the handler beside its input, never in it: the receipt keeps the input, and
            a handler stores each with db.<file resource>.insertFile(file, { … }) — checked again there, audited by
            name, type and size. */
-        rule
-          ? mail.attachments.map((part) =>
-              Object.freeze({ name: part.name, type: part.type, size: part.size, data: Buffer.from(part.content, 'base64') }),
-            )
-          : undefined,
+        received,
       );
       await log({ ...entry, outcome: done.replayed ? 'replayed' : 'applied', reason: null });
       outcome(done.replayed ? 'replayed' : 'applied');

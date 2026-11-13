@@ -281,7 +281,7 @@ export function bindTenantLinks(options: TenantLinksOptions) {
   };
 
   /** One run, through the executor, which reads the link again in the transaction it runs in. */
-  const execute = async (found: TenantFoundLink, actor: BusinessCommandActor, envelope: Record<string, unknown>) => {
+  const execute = async (found: TenantFoundLink, actor: BusinessCommandActor, envelope: Record<string, unknown>, locale?: string) => {
     const tenant = await readSharedProfile(reader, app, found.evidence.tenantId);
     found.active();
     const binding = Object.freeze<BusinessCommandBinding>({
@@ -327,7 +327,7 @@ export function bindTenantLinks(options: TenantLinksOptions) {
         });
       },
     });
-    return executeBusinessCommand(binding, actor, envelope, {});
+    return executeBusinessCommand(binding, actor, envelope, locale ? { locale } : {});
   };
 
   /**
@@ -354,10 +354,10 @@ export function bindTenantLinks(options: TenantLinksOptions) {
             journal.revokeLinks!(app.id, found.row.resource, found.row.rowKey, undefined, at),
           ),
         ),
-      run: (found, actor, route, envelope) =>
+      run: (found, actor, route, envelope, locale) =>
         held(async () => {
           try {
-            return await (route === 'prepare' ? prepare(found, actor, envelope) : execute(found, actor, envelope));
+            return await (route === 'prepare' ? prepare(found, actor, envelope) : execute(found, actor, envelope, locale));
           } catch (error) {
             return answered(error);
           }
@@ -388,8 +388,8 @@ export function bindTenantLinks(options: TenantLinksOptions) {
   /** `value` with each link reference it holds rendered for `tenant` (a member's command answer); as it was where one does not render. */
   const rendered = async <T>(value: T, tenant: string, base: (tenant: string) => string | undefined): Promise<T> => {
     const text = JSON.stringify(value);
-    if (typeof text !== 'string' || !holdsLinkRef(text)) return value;
-    const out = await renderLinkRefs(text, (id) => render(id, tenant, base));
+    if (typeof text !== 'string' || !holdsLinkRef(text, app.id)) return value;
+    const out = await renderLinkRefs(text, app.id, (id) => render(id, tenant, base));
     return out === undefined || out === text ? value : (JSON.parse(out) as T);
   };
 

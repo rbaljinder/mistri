@@ -9,7 +9,7 @@
  * typed text or a number, a month as `YYYY-MM`, a masked text as the characters its places hold, choices as a list of
  * option values. A sensitive value lives in the form's state alone: nothing here keeps, logs or prefills it.
  */
-import { useState, type AriaAttributes, type CSSProperties } from 'react';
+import { useEffect, useState, type AriaAttributes, type CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Dropdown, readsAsName } from '@mistriwork/kit/client/components/Dropdown.js';
 import { Button } from '@mistriwork/ui/Button.js';
@@ -17,12 +17,21 @@ import { CheckCards } from '@mistriwork/ui/Choices.js';
 import { run, type ChoiceSource } from './CommandReference.js';
 import '@mistriwork/kit/client/formControls.css';
 import './IntakeControls.css';
-import type { AppCommandField } from '../../shared/command.js';
+import {
+  boundChoiceMatch,
+  choiceAnswers,
+  choiceLabelColumn,
+  choiceMatchText,
+  choiceOptions,
+  choiceRowHolds,
+  type AppCommandField,
+} from '../../shared/command.js';
 import type { CommandValue } from '../commandState.js';
 import { defaultCurrency, formatLocale } from '@mistriwork/kit/client/locale.js';
 import { currencyDigits } from '@mistriwork/engine/shared/money.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { isAppIcon } from '@mistriwork/engine/shared/appIcons.js';
+import { appWord } from '@mistriwork/kit/client/messages.js';
 import { say } from '../copy/forms/components/IntakeControls.js';
 import { amountIn, maskShown, moneySymbol, PLACE } from './fieldShown.js';
 import { ChoiceRadios } from './ChoiceRadios.js';
@@ -42,6 +51,8 @@ interface IntakeControlProps {
   currency?: string;
   /** Where a choice from a table reads its rows: the reader's connection, or a public form's App as its visitor. */
   source?: ChoiceSource;
+  /** The form's answers so far: what a choice narrowed by the others (`where`) reads. */
+  answers?: Readonly<Record<string, unknown>>;
 }
 
 /** At most this many rows are offered by a choice from a table; past it the form is a reference's to ask. */
@@ -50,14 +61,26 @@ const SOURCED_MOST = 200;
 const CARDS_MOST = 6;
 
 /* A choice from a table's rows: read once per form through the reader's own read (a visitor's, on a public form,
-   answers only what `auth.public` opens), each row's key its value and its label column its words. */
-function useSourced(field: Field, source: ChoiceSource | undefined): readonly Choice[] | undefined {
+   answers only what `auth.public` opens), each row's key its value and its label column its words — the reader's
+   locale's column where the field names one (`labelColumns`), else `labelColumn`. A choice narrowed by the form's other
+   answers (`where`) offers nothing until those are given; then a served list is narrowed here, each row carrying the
+   columns its `where` compares, with no read of its own, and a read list is read again with the `where` bound, once per
+   change of the answers it reads. */
+function useSourced(
+  field: Field,
+  source: ChoiceSource | undefined,
+  answers: Readonly<Record<string, unknown>> | undefined,
+): readonly Choice[] | undefined {
   const from = (field.type === 'choice' || field.type === 'choices') && field.source ? field.source : undefined;
+  const match = from?.match;
+  const bound = match ? boundChoiceMatch(match, answers ?? {}) : undefined;
+  const narrowedBy = match && bound ? choiceMatchText(bound) : undefined;
   /* A public form is served its rows with it (server forms/formChoices.ts, tenantPublicChoices.ts), under the form's own
      ETag: nothing to read. `served` says the list is the whole answer, so an empty one offers nothing rather than
      reading — a tenant's visitor on the shared host has no read of its own to ask. */
   const served =
     from && (field.type === 'choice' || field.type === 'choices') && (from.served || field.options.length) ? field.options : undefined;
+  const local = from ? choiceLabelColumn(from, formatLocale()) : undefined;
   const read = useQuery({
     queryKey: [
       'command-choices',
@@ -67,25 +90,46 @@ function useSourced(field: Field, source: ChoiceSource | undefined): readonly Ch
       from?.labelColumn,
       from?.sort?.column,
       from?.sort?.direction,
+      local?.column,
+      ...(match ? choiceAnswers(match).map((name) => answers?.[name] ?? null) : []),
     ],
-    enabled: from !== undefined && source !== undefined && served === undefined,
+    enabled: from !== undefined && source !== undefined && served === undefined && (!match || bound !== undefined),
     staleTime: 60_000,
     queryFn: async () => {
-      const columns = [...new Set([from!.by, from!.labelColumn])].join(', ');
+      const columns = [...new Set([from!.by, from!.labelColumn, ...(local ? [local.column] : [])])].join(', ');
       const data = await run(source!, {
-        q: `${from!.from} show ${columns} sort ${from!.sort ? `${from!.sort.column} ${from!.sort.direction}` : from!.labelColumn}`,
+        q: `${from!.from}${narrowedBy ? ` ${narrowedBy}` : ''} show ${columns} sort ${from!.sort ? `${from!.sort.column} ${from!.sort.direction}` : from!.labelColumn}`,
         limit: SOURCED_MOST,
         offset: 0,
         count: 'none',
       });
       const rows = Array.isArray(data.rows) ? (data.rows as Record<string, unknown>[]) : [];
-      return rows.flatMap((row) => {
-        const value = row[from!.by];
-        return typeof value === 'string' || typeof value === 'number' ? [{ value, label: String(row[from!.labelColumn] ?? value) }] : [];
-      });
+      const keyed = rows.filter((row) => typeof row[from!.by] === 'string' || typeof row[from!.by] === 'number');
+      return choiceOptions(keyed, from!, local);
     },
   });
-  return from ? (served ?? read.data) : undefined;
+  if (!from) return undefined;
+  if (match && !bound) return [];
+  if (served && match) return served.filter((option) => choiceRowHolds(bound!, option.row));
+  return served ?? read.data;
+}
+
+/* A pick the narrowed list no longer offers — its parent answer changed — is cleared, so the form never sends a pairing
+   it did not offer (the server refuses one all the same). Only a narrowed choice: a plain one keeps a prefilled key
+   past its first rows. */
+function useStalePickCleared(props: IntakeControlProps, offered: readonly Choice[] | undefined): void {
+  const { field, value, onChange } = props;
+  const narrowed = (field.type === 'choice' || field.type === 'choices') && field.source?.match !== undefined;
+  const keys = offered?.map((option) => String(option.value)).join('\u0000');
+  useEffect(() => {
+    if (!narrowed || !offered) return;
+    const held = new Set(offered.map((option) => String(option.value)));
+    if (Array.isArray(value)) {
+      const kept = value.filter((pick) => held.has(String(pick)));
+      if (kept.length !== value.length) onChange(kept);
+    } else if (value !== undefined && value !== '' && !held.has(String(value))) onChange('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- judged again when what is offered or picked changes
+  }, [narrowed, keys, value]);
 }
 
 /** Whether the field is one this module draws (the rest are CommandFields' own). */
@@ -151,7 +195,8 @@ function cardFit(options: readonly Choice[]): 'short' | 'brief' | undefined {
 
 /* A choice from a table: its rows read (the one control here that reads anything), then drawn as written choices. */
 function SourcedControl(props: IntakeControlProps) {
-  const sourced = useSourced(props.field, props.source);
+  const sourced = useSourced(props.field, props.source, props.answers);
+  useStalePickCleared(props, sourced);
   const { field, id, value, disabled, onChange } = props;
   if (field.type !== 'choice' && field.type !== 'choices') return null;
   if (!sourced) return null;
@@ -282,7 +327,7 @@ export function IntakeControl(props: IntakeControlProps) {
         inputMode="numeric"
         enterKeyHint="next"
         autoComplete="off"
-        placeholder={say('monthPlaceholder')}
+        placeholder={appWord('mistri.form.monthHint', say('monthPlaceholder'))}
         disabled={disabled}
         required={field.required}
         value={monthShown(typeof value === 'string' ? value : '')}
@@ -388,7 +433,7 @@ export function IntakeControl(props: IntakeControlProps) {
                 disabled={disabled}
                 onChange={() => onChange(answer)}
               />
-              {answer ? say('yesWord') : say('noWord')}
+              {answer ? appWord('mistri.form.yes', say('yesWord')) : appWord('mistri.form.no', say('noWord'))}
             </label>
           ))}
         </div>

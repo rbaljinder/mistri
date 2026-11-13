@@ -36,12 +36,14 @@ import { compileWhen, recordPartEnd, recordPathEnd, withDerived, type CommandPeo
 import { sayRefusal } from '@mistriwork/engine/shared/refusal.js';
 import { withSaying } from './commandSaying.js';
 import { versionColumn } from './commandRevision.js';
+import { publicLinkTo, type PublicLinkRef } from '../links/publicLink.js';
 import { isPublicActorId } from '../../shared/publicActor.js';
 import { commandLookupProblem } from './commandLookupRules.js';
 import { captureTenantData, isCapturedTenantData, tenantOptions, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import { issueReadColumns, issueTargetColumns, issueTargetUnreadable } from './commandActorColumns.js';
 import { genericWriteEntitled, genericWriteOf } from './genericWriteBrand.js';
 import { flowCommandOf } from './flowCommandBrand.js';
+import { commandWords, type CommandWords } from './commandLocale.js';
 
 export interface BusinessCommandAuthorizationOptions {
   app: AppDef;
@@ -85,6 +87,8 @@ export interface BusinessCommandAuthorization {
   readonly machine?: CommandMachine;
   /** The App's `ui.timezone`: the wall clock a write into a zone-less timestamp column is made in (UTC when absent). */
   readonly timezone?: string;
+  /** The App's catalogs and `ui.locale` (commandLocale.ts): the locale a command is served in is clamped to them. */
+  readonly words?: CommandWords;
   /** The App's `ui.currency`: what a minor-unit amount in a command's input is typed in where it names none (USD when absent). */
   readonly currency?: string;
   /** The table people are rows of (`auth.me`), where the command reads it: what `me` writes to a reference to it. */
@@ -92,6 +96,8 @@ export interface BusinessCommandAuthorization {
   /** The file resources it writes, by local name: where a new row's bytes go and the most it may hold (the
       resource's `maxBytes`, and a tenant host's 10 MB), as an upload is held. */
   readonly files?: ReadonlyMap<string, CommandFileRule>;
+  /** The file resources it reads or writes, by local name: what `db.<file>.readFile` reads, and the most it hands over. */
+  readonly fileReads?: ReadonlyMap<string, CommandFileRule>;
   /** The tables it writes beside its target that this actor cannot read, by local name, each with the sentence a read
       of it is refused in: the command may add rows there and nothing more (a photo filed or a line logged where its
       sender cannot browse). */
@@ -103,6 +109,8 @@ export interface BusinessCommandAuthorization {
   readonly links?: Readonly<Record<string, AppLinkDef>>;
   /** The tables it writes whose resource declares links, by local name → resource: a row removed from one ends its links. */
   readonly linkedTables?: ReadonlyMap<string, string>;
+  /** What `context.publicLink(view)` answers: a reference to one of the App's public views, refused for any other. */
+  readonly publicLink?: (view: string) => PublicLinkRef;
   table(local: string, writing?: boolean): string;
 }
 
@@ -952,19 +960,21 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         auditedTables.size || auditedLookups.size ? Object.freeze({ tables: auditedTables, lookups: auditedLookups }) : undefined;
       /* A file resource it writes takes bytes only as an upload would: in its content column, within its cap. */
       const files = new Map<string, CommandFileRule>();
-      for (const local of command.write) {
+      /* Every file resource it reads or writes, the same rule: what `readFile` hands over is held to the cap a new
+         row's bytes meet, so no file is read whole into a handler that an upload could not have put there. */
+      const fileReads = new Map<string, CommandFileRule>();
+      for (const local of new Set([...command.read, ...command.write])) {
         const file = app.resources?.[logical(local)]?.file;
         if (!file) continue;
         const most = file.maxBytes ?? FILE_MAX_BYTES_DEFAULT;
-        files.set(
-          local,
-          Object.freeze({
-            ...file,
-            table: local,
-            resource: logical(local),
-            maxBytes: isTenantApp(app) ? Math.min(most, TENANT_FILE_MOST) : most,
-          }),
-        );
+        const rule = Object.freeze({
+          ...file,
+          table: local,
+          resource: logical(local),
+          maxBytes: isTenantApp(app) ? Math.min(most, TENANT_FILE_MOST) : most,
+        });
+        fileReads.set(local, rule);
+        if (command.write.includes(local)) files.set(local, rule);
       }
       /* Held files land in their resource through insertFile, which takes bytes only into a file resource's content. */
       for (const { field, path } of heldFileFields(command.fields))
@@ -990,9 +1000,11 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
           audited,
           versionField,
           ...(appZone(app.ui) ? { timezone: appZone(app.ui) } : {}),
+          words: commandWords(app),
           currency: app.ui?.currency ?? 'USD',
           ...peopleIn(app, schema, catalog, options.peopleByAccount === true || app.auth?.me?.by === 'account'),
           ...(files.size ? { files } : {}),
+          ...(fileReads.size ? { fileReads } : {}),
         },
       ] as const;
     }),
@@ -1251,13 +1263,16 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         ...(lookupTables ? { lookupTables } : {}),
         ...(binding.machine ? { machine: machineFor(binding.machine, identity) } : {}),
         ...(binding.timezone ? { timezone: binding.timezone } : {}),
+        ...(binding.words ? { words: binding.words } : {}),
         ...(binding.currency ? { currency: binding.currency } : {}),
         ...(binding.people ? { people: binding.people } : {}),
         ...(binding.files ? { files: binding.files } : {}),
+        ...(binding.fileReads ? { fileReads: binding.fileReads } : {}),
         ...(insertOnly.size ? { insertOnly } : {}),
         ...(binding.audited ? { audited: binding.audited } : {}),
         ...(mints ? { links: mints } : {}),
         ...(linkedTables.size ? { linkedTables } : {}),
+        publicLink: publicLinkTo.bind(undefined, app),
         table(local: string, writing = false): string {
           if (!(writing ? binding.command.write : binding.command.read).includes(local)) throw new AppAccessDenied();
           return binding.logical(local);

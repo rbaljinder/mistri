@@ -52,8 +52,9 @@ const IMMUTABLE = 'public, max-age=31536000, immutable';
    Forecourt's list, 570.5 KB Tick's list. rc.23's pages, steps, page presentations and form drafts (the App script's
    ceiling moved with them in bundle-budget.mjs) took Forecourt's list to 473.9 KB. rc.47's public-form refusal and
    reply words, radios from a table and the dark bar's workspace tab took the staff sign-in to 260.3 KB and Tick's list to
-   590.4 KB; both moved about 0.5% above. */
-const FIRST_PAINT_WIRE_KB = { public: 262, app: 488, workshop: 594 };
+   590.4 KB; both moved about 0.5% above. rc.50's forms in the visitor's language, the mistri.* form words and dependent
+   choices took the staff sign-in to 262.5 KB; it moved about 0.5% above. */
+const FIRST_PAINT_WIRE_KB = { public: 264, app: 488, workshop: 594 };
 const NEVER = {
   public: ['/assets/shell', '/assets/chrome', '/assets/tenant'],
   app: ['/assets/tenant', '/assets/public'],

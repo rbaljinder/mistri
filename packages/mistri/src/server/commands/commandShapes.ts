@@ -118,7 +118,8 @@ export const NO_OUTPUT: Shape<void> = make<void>(
 );
 
 /* A capability link's reference (server/links/linkToken.ts LinkRef) is text where an output keeps it: a handler
-   returns `{ link: await context.link('status') }` and the receipt keeps `mistri-link:<id>`. Branded by a registered
+   returns `{ link: await context.link('status') }` and the receipt keeps `mistri-link:<id>.<seal>`; a public link
+   (`context.publicLink`, server/links/publicLink.ts) carries the same brand and keeps `mistri-public:<view>.<seal>`. Branded by a registered
    symbol rather than imported, so the shapes stay free of the link machinery. */
 const LINK_REF = Symbol.for('mistri.link-ref');
 const asText = (value: unknown): unknown =>

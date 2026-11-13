@@ -12,6 +12,7 @@ import { Button } from '@mistriwork/ui/Button.js';
 import { ActionBar, ProgressBar, StepHeader } from '@mistriwork/ui/FormParts.js';
 /* The progress bar, the step header and the action bar wear @mistriwork/ui's form rules, which arrive with this chunk. */
 import { say } from '../copy/forms/components/MultiStepForm.js';
+import { appWord } from '../messages.js';
 
 const MAX_RENDERED_STEPS = 16;
 /* The intake style's sheets (intakeStyle.ts), fetched the first time a form wears it. Until they are here the form
@@ -94,7 +95,7 @@ export function MultiStepForm<Field extends string = string>({
   validateStep,
   onComplete,
   nextLabel,
-  previousLabel = say('common.back'),
+  previousLabel = appWord('mistri.form.back', say('common.back')),
   completeLabel = say('common.save'),
   className = '',
   leading,
@@ -246,10 +247,17 @@ export function MultiStepForm<Field extends string = string>({
         min={1}
         value={current + 1}
         max={boundedSteps.length}
-        label={say('progress', { step: current + 1, count: boundedSteps.length, label: active.label })}
+        label={appWord('mistri.form.stepNamed', say('progress', { step: current + 1, count: boundedSteps.length, label: active.label }), {
+          step: current + 1,
+          count: boundedSteps.length,
+          label: active.label,
+        })}
       />
       <span className="multi-step-count" aria-hidden="true">
-        {say('stepOf', { step: current + 1, count: boundedSteps.length })}
+        {appWord('mistri.form.step', say('stepOf', { step: current + 1, count: boundedSteps.length }), {
+          step: current + 1,
+          count: boundedSteps.length,
+        })}
       </span>
     </div>
   );

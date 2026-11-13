@@ -6,7 +6,7 @@
  * jobs module (`integrations: { use: [fakepay()] }`) and its commands call it
  * from their lookups (docs: Integrations).
  */
-export { defineIntegration, IntegrationDeclarationError } from './integrations/integrationModule.js';
+export { defineIntegration, extendIntegration, IntegrationDeclarationError } from './integrations/integrationModule.js';
 export type {
   ChannelMessage,
   Integration,
@@ -16,6 +16,7 @@ export type {
   IntegrationDelivery,
   IntegrationEvent,
   IntegrationEventDefinition,
+  IntegrationExtension,
   IntegrationRegistry,
 } from './integrations/integrationModule.js';
 /* A provider's answer that is final (a declined card, an unknown number): the command is refused with it, and a retry

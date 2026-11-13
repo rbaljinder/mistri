@@ -18,6 +18,7 @@
  */
 import { parseFormCommandReference, type AppFormCommandReference } from './command.js';
 import type { AppFormView } from './appModel.js';
+import { parseStepUpTarget, type StepUpTarget } from './appStepUp.js';
 import { parseStepWords, stepIdOf } from './formRules.js';
 import { parseDuration } from '@mistriwork/engine/shared/duration.js';
 
@@ -70,8 +71,12 @@ export interface AppStatusCheck {
   show: string[];
   /** Words for a shown column's values (`{ status: { new: 'Received' } }`); a value it does not name is answered as "Received". */
   says?: Record<string, Record<string, string>>;
-  /** More after a one-time code sent to the root's email column: these columns too. */
-  stepUp?: { email: string; show: string[] };
+  /**
+   * More after a one-time code sent to the root's own column: these columns
+   * too. The code goes by email (`{ email: 'email', show }`), or on a channel an
+   * integration declares (`{ sms: 'mobile', show }`, appStepUp.ts).
+   */
+  stepUp?: StepUpTarget & { show: string[] };
   /**
    * A timestamp column of the root the server stamps when a submitted
    * application's receipt locks after repeated wrong answers: the App's own
@@ -286,15 +291,16 @@ export function parseStatusCheck(raw: unknown, at: string, save: AppFormSave): A
   let stepUp: AppStatusCheck['stepUp'];
   if (raw.stepUp !== undefined) {
     if (!isRecord(raw.stepUp))
-      throw new Error(`${at}, "stepUp" is { email, show }: the root's email column a one-time code goes to, and what it opens.`);
-    keysOnly(raw.stepUp, ['email', 'show'], `${at}, "stepUp"`);
-    const email = column(raw.stepUp.email, `${at}, "stepUp"`, 'an "email"');
+      throw new Error(
+        `${at}, "stepUp" is { email, show }: the root's email column a one-time code goes to (or { sms: 'mobile' }, a channel an integration declares), and what it opens.`,
+      );
+    const target = parseStepUpTarget(raw.stepUp, `${at}, "stepUp"`, ['show']);
     const more = list(raw.stepUp.show, `${at}, "stepUp.show"`);
     for (const name of more)
       if (owned.has(name) || confirm.some((item) => item.keyed && item.column === name)) {
         throw new Error(`${at}, "stepUp.show" names "${name}", which is never shown: the server's own column, or a keyed hash.`);
       }
-    stepUp = { email, show: more };
+    stepUp = { ...target, show: more };
   }
   const alert = raw.alert === undefined ? undefined : column(raw.alert, at, 'an "alert"');
   if (alert && (secret.has(alert) || show.includes(alert) || alert === save.draft.column))
