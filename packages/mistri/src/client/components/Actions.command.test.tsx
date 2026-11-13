@@ -3,7 +3,7 @@
  * confirms asks first, and one with inputs asks them in its form.
  */
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
@@ -146,6 +146,13 @@ test('one with inputs asks them in its form', async () => {
   await userEvent.click(await screen.findByRole('button', { name: 'Watch' }));
   expect(await screen.findByRole('dialog', { name: 'Watch', hidden: true })).toBeTruthy();
   expect(mocks.calls.filter((call) => call.path === '/api/commands/execute')).toEqual([]);
+});
+
+test("a form's submit says the action's submitLabel, though the button on the record says its label", async () => {
+  draw([{ ...watch, submitLabel: 'Start watching', command: command('watch', [{ name: 'note', type: 'text', label: 'Note' }]) }]);
+  await userEvent.click(await screen.findByRole('button', { name: 'Watch' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Watch', hidden: true });
+  expect(within(dialog).getByRole('button', { name: 'Start watching', hidden: true })).toBeTruthy();
 });
 
 test('its revision is asked as the pointer comes to its button, so the click sends only the execute', async () => {

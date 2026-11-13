@@ -59,7 +59,7 @@ On SQLite, `resources: { work_order: { types: { due_on: 'date', closed_at: 'date
 
 **Said from today, or as the day:** an App says a near date from today ("yesterday", "in 3 days") and the rest as the date. `display: { paid_on: { format: 'date' } }` always says the day, the same on any day and for any reader; `format: 'datetime'` says a moment with its time and zone, in the rule's `timezone` or else `ui.timezone`. A `DATE` is a day and never shifts with a zone. A [document](/docs/documents/) says every date as the day, whatever its rule.
 
-**`now` and `today`, or `ctx.now()`:** in a declaration (an action's `set`, a field's or a machine's `default`, a New form's `auto`) write the words `now` and `today`. They are stamps, not values: the server works them out inside the write, in `ui.timezone`, so a request cannot choose them. In a command handler write `ctx.now()` and `ctx.today()` (`handle({ db, now, today })` takes them off the context): the same clock as a `Date` and a `YYYY-MM-DD` day, for code that computes with them, such as a due date `n` days on.
+**`now` and `today`, or `ctx.now()`:** in a declaration (an action's `set`, a field's or a machine's `default`, a New form's `auto`) write the words `now` and `today`. They are stamps, not values: the server works them out inside the write, in `ui.timezone`, so a request cannot choose them. In a command handler write `ctx.now()` and `ctx.today()` (`handle({ db, now, today })` takes them off the context): the same clock as a `Date` and a `YYYY-MM-DD` day, for code that computes with them, such as a due date `n` days on. `ctx.timezone` is the zone `today()` counts in, for code that says a moment to a person, as a reminder's text does.
 
 ## Common mistakes
 

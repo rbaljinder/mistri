@@ -332,6 +332,12 @@ export declare function TextField(props: FieldFrame & {
   inputMode?: 'text' | 'email' | 'tel' | 'numeric' | 'url'; autoComplete?: string; placeholder?: string; name?: string;
   disabled?: boolean; readOnly?: boolean; valid?: boolean; after?: ReactTypes.ReactNode; inputRef?: ReactTypes.Ref<HTMLInputElement>;
 }): ReactTypes.ReactElement;
+/** A box of several lines, in the same frame as TextField: a label, a hint and a problem wired to it. */
+export declare function TextArea(props: FieldFrame & {
+  value: string; onChange: (value: string, details: ChangeDetails<'input-change'>) => void; onBlur?: () => void; rows?: number; maxLength?: number;
+  autoComplete?: string; placeholder?: string; name?: string; disabled?: boolean; readOnly?: boolean; after?: ReactTypes.ReactNode;
+  inputRef?: ReactTypes.Ref<HTMLTextAreaElement>;
+}): ReactTypes.ReactElement;
 /** One choice from a list, in a field. */
 export declare function Select(props: FieldFrame & {
   options: Array<{ value: string; label: string; detail?: string; badge?: string; disabled?: boolean }>;
@@ -386,10 +392,11 @@ export declare function Loaded<T>(props: {
 }): ReactTypes.ReactElement;
 /** One of the App's curated marks: the names a view's `icon` takes. Decoration unless it has a label. */
 export declare function Icon(props: { name: AppIcon; label?: string; size?: number | string }): ReactTypes.ReactElement;
-/** A few exclusive choices as one row of words, the chosen one filled; arrows move the choice. A choice may carry a count. */
+/** A few exclusive choices as one row of words, the chosen one filled; arrows move the choice. A choice may carry a count.
+    Past four choices, at a phone's width a native picker stands in the row's place; `className` is the App's own class. */
 export declare function Segmented<T extends string>(props: {
   label: string; value: T; options: ReadonlyArray<{ value: T; label: ReactTypes.ReactNode; count?: number; name?: string }>;
-  onChange(value: T): void; size?: 'default' | 'compact';
+  onChange(value: T): void; size?: 'default' | 'compact'; className?: string;
 }): ReactTypes.ReactElement;
 /** A figure and what it counts: its label, its change against the period before (toned where the news is known) and, from four points, its trend. */
 export declare function Stat(props: {

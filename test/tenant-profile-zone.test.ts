@@ -56,7 +56,44 @@ const app = parseTestApp(
   'desk zone fixture',
 );
 
-/* A command that stamps a ticket with the day its handler counts. */
+/* The same App with a menu entry shown to a tenant on the pro plan: a shared text column a CHECK … IN list pins. The
+   agent may escalate a ticket, on the pro plan only: a machine's `when` reads the profile as the menu's does. */
+const planned = parseTestApp(
+  {
+    id: appId,
+    name: 'Desk',
+    auth: {
+      rows: 'tenant',
+      tenancy: { label: 'Customer', profile: 'customer', shared: ['timezone', 'plan'], platform: { label: 'Operator' } },
+      roles: {
+        agent: { realm: 'tenant', read: ['ticket'], commands: ['stampToday'], actions: { ticket: ['escalate'] } },
+        operator: { realm: 'platform', read: true },
+      },
+    },
+    sources: { business: { connection: binding.source.connection } },
+    ui: { timezone: { column: 'tenant.timezone', default: OWN } },
+    resources: {
+      customer: { owner: 'platform' },
+      ticket: {
+        owner: 'tenant',
+        access: 'write',
+        machine: {
+          column: 'state',
+          states: { open: { on: { escalate: { to: 'escalated', when: "tenant.plan = 'pro'" } } }, escalated: { final: true } },
+        },
+      },
+    },
+    views: { tickets: { kind: 'list', from: 'ticket', realm: 'tenant' }, pro: { kind: 'list', from: 'ticket', realm: 'tenant' } },
+    home: 'tickets',
+    nav: [
+      { id: 'desk', label: 'Desk', realm: 'tenant', children: ['tickets', { label: 'Pro desk', to: 'pro', when: "tenant.plan = 'pro'" }] },
+    ],
+  },
+  'desk plan fixture',
+);
+
+/* A command that stamps a ticket with the day its handler counts, and notes the zone it was handed. */
+const zonesSeen: string[] = [];
 const registry = defineCommands({
   stampToday: defineCommand({
     source: 'business',
@@ -66,7 +103,8 @@ const registry = defineCommands({
     write: ['ticket'],
     input: { id: { type: 'text' } },
     output: { parse: (value: unknown) => value as { id: string } },
-    async handle({ db, today }, input) {
+    async handle({ db, today, timezone }, input) {
+      zonesSeen.push(timezone);
       await db.ticket.insert({ id: String(input.id), opened_on: today() });
       return { id: String(input.id) };
     },
@@ -91,16 +129,18 @@ const policy = defineAppTenantPolicy({
 
 /* Each tenant has a ticket opened on Chicago's today and one on Kiritimati's
    (a day apart for most of every day); `today` picks the tenant's own. */
-async function fixture(t: TestContext, dialect: TenantDialect) {
+async function fixture(t: TestContext, dialect: TenantDialect, defined: typeof app = app) {
   const suffix = `pzone_${randomUUID().replaceAll('-', '')}`;
   const chicago = dayIn(ZONES.north),
     kiritimati = dayIn(ZONES.south);
   const tables = `
-    CREATE TABLE customer (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, timezone TEXT);
-    CREATE TABLE ticket (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, opened_on DATE NOT NULL);
-    INSERT INTO customer VALUES ('north', 'North', '${ZONES.north}'), ('south', 'South', '${ZONES.south}'),
-      ('west', 'West', 'Not/AZone'), ('empty', 'Empty', ''), ('none', 'None', NULL);
-    INSERT INTO ticket VALUES
+    CREATE TABLE customer (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, timezone TEXT, plan TEXT CHECK (plan IN ('free', 'pro')));
+    CREATE TABLE ticket (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, opened_on DATE NOT NULL,
+      state TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open', 'escalated')));
+    INSERT INTO customer (id, name, timezone, plan) VALUES ('north', 'North', '${ZONES.north}', 'pro'),
+      ('south', 'South', '${ZONES.south}', 'free'), ('west', 'West', 'Not/AZone', NULL), ('empty', 'Empty', '', NULL),
+      ('none', 'None', NULL, NULL);
+    INSERT INTO ticket (id, tenant_id, opened_on) VALUES
       ('north-chi', 'north', '${chicago}'), ('north-kir', 'north', '${kiritimati}'),
       ('south-chi', 'south', '${chicago}'), ('south-kir', 'south', '${kiritimati}');`;
   const engine = await openTenantEngine(dialect, {
@@ -130,7 +170,7 @@ async function fixture(t: TestContext, dialect: TenantDialect) {
     }
   });
   const enrollment = await createTenantEnrollment<IncomingMessage>({
-    app,
+    app: defined,
     pages: [],
     policy,
     source: { ...binding.source, ...(dialect === 'postgres' ? { url: engine.url } : { existingPath: engine.path }) },
@@ -146,7 +186,7 @@ async function fixture(t: TestContext, dialect: TenantDialect) {
     expiresAt: Date.now() + 3_600_000,
   };
   const bound = { host: '127.0.0.1', port: 0 };
-  const owner = createTenantHttpServer({ app, enrollment, bound, verifySessionInstance: () => session });
+  const owner = createTenantHttpServer({ app: defined, enrollment, bound, verifySessionInstance: () => session });
   t.after(async () => {
     const stopped = new Promise<void>((resolve) => owner.server.close(() => resolve()));
     owner.server.closeAllConnections();
@@ -212,7 +252,8 @@ async function fixture(t: TestContext, dialect: TenantDialect) {
     return String((await engine.get('SELECT CAST(opened_on AS TEXT) AS opened_on FROM ticket WHERE id = ?', [id]))?.opened_on);
   };
   const ask = async (lease: Context, q: string) => data('/api/run', lease, { q, limit: 50, offset: 0, count: 'none' });
-  return { open, served, today, stamp, read, ask, chicago, kiritimati };
+  const state = async (id: string) => String((await engine.get('SELECT state FROM ticket WHERE id = ?', [id]))?.state);
+  return { open, served, today, stamp, read, ask, data, state, chicago, kiritimati };
 }
 
 test('check refuses a zone column shared does not list, one that is not text, and the profile named as a resource', () => {
@@ -239,7 +280,7 @@ test('check refuses a zone column shared does not list, one that is not text, an
   assert.match(zoneColumnProblem(direct, catalog(['id', 'timezone'])) ?? '', /name it "tenant\.timezone".*\[tenant-shared-column\]/);
 });
 
-test('check refuses a shared column that is missing, the key, a reference or a document, and tenant. where no tenant is meant', () => {
+test('check refuses a shared column that is missing, the key or a document, and tenant. where no tenant is meant', () => {
   const column = (name: string, type = 'TEXT', extra: object = {}) => ({ name, type, nullable: true, primaryKey: false, ...extra });
   const catalog: DatabaseSchema = {
     label: 'Desk',
@@ -277,13 +318,13 @@ test('check refuses a shared column that is missing, the key, a reference or a d
       auth: { ...app.auth!, tenancy: { ...app.auth!.tenancy!, shared } },
       views: { ...app.views, ...views },
     }) as typeof app;
-  assert.deepEqual(sharedProfileProblems(sharing(['timezone', 'country']), catalog), []);
-  const problems = sharedProfileProblems(sharing(['nowhere', 'id', 'region_id', 'settings']), catalog);
-  assert.equal(problems.length, 4, problems.join('\n'));
+  /* A reference shares its stored value (tenant-shared-reference.test.ts). */
+  assert.deepEqual(sharedProfileProblems(sharing(['timezone', 'country', 'region_id']), catalog), []);
+  const problems = sharedProfileProblems(sharing(['nowhere', 'id', 'settings']), catalog);
+  assert.equal(problems.length, 3, problems.join('\n'));
   assert.match(problems[0], /"nowhere", and the profile "customer" has no such column \[tenant-shared-column\]/);
-  assert.match(problems[1], /"id", the profile's key or a reference/);
-  assert.match(problems[2], /"region_id", the profile's key or a reference/);
-  assert.match(problems[3], /"settings", which is JSON/);
+  assert.match(problems[1], /"id", the profile's key;/);
+  assert.match(problems[2], /"settings", which is JSON/);
   const views = {
     rates: { kind: 'list', table: 'tax_rate', query: 'country = tenant.country' },
     quoted: { kind: 'list', table: 'tax_rate', query: 'country = "tenant.region"' },
@@ -418,6 +459,43 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       assert.doesNotMatch(unshared.text, /North/, 'an unshared column is not read out');
     });
 
+    test("a menu's when over a shared vocabulary column is judged on each request as check judged it", async (t) => {
+      const f = await fixture(t, dialect, planned);
+      const labels = async (tenant: string) => {
+        const reply = await f.data('/api/app', await f.open(tenant), undefined);
+        assert.equal(reply.status, 200, reply.text);
+        const nav = (reply.body.app as { nav: Array<{ children: Array<{ label?: string; view?: string }> }> }).nav;
+        assert.doesNotMatch(JSON.stringify(nav), /"when"/);
+        return nav.flatMap((group) => group.children.map((child) => child.label ?? child.view));
+      };
+      assert.ok((await labels('north')).includes('Pro desk'));
+      assert.ok(!(await labels('south')).includes('Pro desk'));
+      assert.ok(!(await labels('none')).includes('Pro desk'));
+    });
+
+    test("a list and a machine's when read tenant.<column> on the left, judged for the asking tenant", async (t) => {
+      const f = await fixture(t, dialect, planned);
+      const north = await f.open('north'),
+        south = await f.open('south');
+      const ids = async (lease: Context, q: string) => {
+        const reply = await f.ask(lease, q);
+        assert.equal(reply.status, 200, reply.text);
+        assert.deepEqual(reply.body.errors ?? [], [], reply.text);
+        return (reply.body.rows as Array<Record<string, unknown>>).map((row) => row.id).sort();
+      };
+      assert.deepEqual(await ids(north, "ticket tenant.plan = 'pro'"), ['north-chi', 'north-kir']);
+      assert.deepEqual(await ids(south, "ticket tenant.plan = 'pro'"), []);
+      assert.deepEqual(await ids(south, "ticket tenant.plan = 'pro' or id = 'south-chi'"), ['south-chi']);
+      const escalate = (lease: Context, id: string) =>
+        f.data('/api/update', lease, { table: 'ticket', key: { id }, values: { state: 'escalated' } });
+      const allowed = await escalate(north, 'north-chi');
+      assert.equal(allowed.status, 200, allowed.text);
+      assert.equal(await f.state('north-chi'), 'escalated');
+      const refused = await escalate(south, 'south-chi');
+      assert.ok([403, 409, 422].includes(refused.status), refused.text);
+      assert.equal(await f.state('south-chi'), 'open');
+    });
+
     test('a null, empty or unknown zone on the profile is the App’s own, silently', async (t) => {
       const f = await fixture(t, dialect);
       for (const tenant of ['west', 'empty', 'none']) assert.equal((await f.served(await f.open(tenant))).timezone, OWN, tenant);
@@ -439,5 +517,12 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       }
       // The same lease's list for today finds what it stamped.
       assert.ok((await f.today(await f.open('south'))).includes('south-stamped'));
+    });
+
+    test("a tenant command's handler reads the zone its today() counts in, the App's where the profile names none", async (t) => {
+      const f = await fixture(t, dialect);
+      zonesSeen.length = 0;
+      for (const tenant of ['north', 'south', 'west'] as const) await f.stamp(await f.open(tenant), `${tenant}-zoned`);
+      assert.deepEqual(zonesSeen, [ZONES.north, ZONES.south, OWN]);
     });
   });

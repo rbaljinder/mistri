@@ -34,7 +34,7 @@ import { ANYONE, parseQuery } from '@mistriwork/engine/shared/query.js';
 import { unformedColumns } from '@mistriwork/engine/shared/form.js';
 import { findTable, tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { tryResolvePath } from '@mistriwork/engine/shared/viewPaths.js';
-import { callerRead, type BusinessCommandRegistry } from '../commands/businessCommands.js';
+import { callerMustRead, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { opensTo } from '../../shared/appViewRoles.js';
 import { accessibleSchema } from './appAccess.js';
 import { fieldAccessibleApp, fieldAccessiblePage, readablePage, readableSection } from './appFieldProjection.js';
@@ -474,7 +474,7 @@ export function appRoleWarnings(loaded: LoadedApp, schema: DatabaseSchema, comma
     for (const id of appCommandGrants(app, [role])) {
       const command = commands?.[id];
       if (!command) continue;
-      const blind = callerRead(command)
+      const blind = callerMustRead(command)
         .map((local) => logicalResource(app, command.source, local))
         .filter((table) => !access.readable.has(table));
       if (!blind.length) continue;

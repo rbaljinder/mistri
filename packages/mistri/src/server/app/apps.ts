@@ -137,6 +137,7 @@ import { checkPageLoaders } from './pageLoaderCheck.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
 import { namedChallenge, type HumanCheck } from '../commands/challenges.js';
 import { apiScopeAdvisories } from '../api/apiRowScope.js';
+import { moduleLoadTimedOut, moduleLoadTimeout } from './moduleLoadTimeout.js';
 
 /**
  * Import a module graph in a throwaway worker and hand back its default
@@ -153,6 +154,7 @@ function importFresh(
 ): Promise<unknown> {
   const names = env.map(({ name }) => name);
   return new Promise((resolveValue, reject) => {
+    const limit = moduleLoadTimeout();
     const worker = new Worker(
       `const { parentPort, workerData } = require('node:worker_threads');
        /* A name mistri.json does not pass is a mistake to say, not an
@@ -242,7 +244,7 @@ function importFresh(
     worker.once('error', (err) => done(() => reject(err)));
     /* An app file that never answers (a top-level await on nothing) must
        not hang the server's own startup. */
-    const timer = setTimeout(() => done(() => reject(new Error('the app module did not finish loading within 10s'))), 10_000);
+    const timer = setTimeout(() => done(() => reject(new Error(moduleLoadTimedOut('app module', limit.seconds)))), limit.ms);
     timer.unref();
   });
 }

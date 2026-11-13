@@ -123,6 +123,11 @@ test('an insert starts in the first state or one the machine names in entry, and
     await exec('raise', { title: 'Drafted', status: 'draft' });
     await exec('raise', { title: 'Phoned in', status: 'open' });
     await assert.rejects(exec('raise', { title: 'Born closed', status: 'closed' }), code('ineligible_state'));
+    // The refusal says where a new row may start and which word lets it start elsewhere, not the fixed "not eligible".
+    await assert.rejects(
+      exec('raise', { title: 'Born closed', status: 'closed' }),
+      /A new ticket starts in "draft", "open", not "closed": that state needs the machine's "entry"\./,
+    );
     assert.deepEqual(
       db
         .prepare('SELECT title, status FROM ticket ORDER BY id')

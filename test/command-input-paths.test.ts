@@ -31,13 +31,15 @@ import { parseCommandInput } from '../packages/mistri/src/shared/commandInputPar
 const source = defineSource<{ ticket: { id: number; version: number; state: string; note: string | null } }>('desk');
 const base = { source, target: 'ticket' as const, output: bool(), handle: () => true };
 
-test('a path follows at most two references, and a public form reads no tenant', () => {
+test('a path follows at most two references, and a public form reads a tenant but no record', () => {
   const refused = (input: Record<string, unknown>, options = {}, pattern: RegExp = /./) =>
     assert.throws(() => parseCommandInput(input, 'input', options), pattern);
   assert.doesNotThrow(() => parseCommandInput({ rate: field.number({ default: { record: 'customer_id.region_id.rate' } }) }, 'input'));
   refused({ rate: { type: 'number', default: { record: 'a_id.b_id.c_id.rate' } } }, {}, /more than 2 references/);
   refused({ reason: { type: 'text', when: 'record.a_id.b_id.c_id.vip = true' } }, {}, /more than 2 references/);
-  refused({ region: { type: 'text', when: "tenant.country = 'US'" } }, { publicForm: true }, /a public form has no member/);
+  // A tenant App's public form is placed with a tenant (`?via=`, a mapped host) and judged by its shared profile.
+  assert.doesNotThrow(() => parseCommandInput({ region: { type: 'text', when: "tenant.country = 'US'" } }, 'input', { publicForm: true }));
+  refused({ region: { type: 'text', when: 'record.state = "NY"' } }, { publicForm: true }, /record/);
   refused({ region: { type: 'text', default: { tenant: 'country' } } }, { publicForm: true }, /no member to start a field from/);
   refused({ region: { type: 'text', when: 'tenant.country = record.state' } }, {}, /compare a tenant's value with a literal/);
 

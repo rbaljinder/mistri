@@ -139,6 +139,17 @@ test('dev refuses NODE_ENV=production and a directory with no App', () => {
   assert.match(none.stderr, /has no app\.ts/);
 });
 
+test('a MISTRI_MODULE_LOAD_TIMEOUT that is not seconds stops the start, naming it, before any module loads', () => {
+  const run = spawnSync(process.execPath, ['--import', 'tsx', ENTRY, 'dev', '--app', app], {
+    env: { ...env, MISTRI_MODULE_LOAD_TIMEOUT: 'soon' },
+    encoding: 'utf8',
+    timeout: 60_000,
+  });
+  assert.equal(run.status, 2, run.stderr);
+  assert.match(run.stderr, /MISTRI_MODULE_LOAD_TIMEOUT takes seconds from 1 to 600; "soon" is not one\./);
+  assert.doesNotMatch(run.stderr, /^\s+at /m);
+});
+
 test('there is no serve command: `tablewalk serve`, with --app or bare, says how a start serves', () => {
   for (const args of [['serve', '--app', app], ['serve']]) {
     // In the scratch folder, where no file is called serve: a bare `serve` opened one, and said it could not.

@@ -1,8 +1,9 @@
 /**
  * Startup's check of `auth.tenancy.shared`: the columns of the tenant's profile row its members' queries, row
  * scopes and handlers may read as `tenant.<column>` (tenantReadSource.ts readTenantProfile). Each must be a plain
- * value on the profile table — text, a number, a flag or a date — and not the row's key or a reference, since
- * those are the platform's wiring, not a setting a member compares a row with. The platform realm reads across
+ * value on the profile table — text, a number, a flag or a date — and not the row's key, which is the platform's
+ * wiring, not a setting a member compares a row with. A reference shares its stored value (a plan kept as a pointer to
+ * a vocabulary table reads as the plan's id), unless it points at the profile itself: that is another tenant's key. The platform realm reads across
  * tenants, so no tenant is meant there and `tenant.` is refused in its views (it would be an error per request).
  */
 import type { AppDef, AppNavNode } from '../../shared/appModel.js';
@@ -32,12 +33,12 @@ export function sharedProfileProblems(app: AppDef, schema: DatabaseSchema): stri
       const column = table?.columns.find((candidate) => candidate.name === name);
       if (!table) continue;
       if (!column) problems.push(`${where}, and the profile "${profile}" has no such column [tenant-shared-column].`);
-      else if (
-        column.primaryKey ||
-        column.references ||
-        schema.foreignKeys.some((fk) => fk.to.table === table.id && fk.to.columns.includes(name))
-      )
-        problems.push(`${where}, the profile's key or a reference; share a setting a member compares rows with [tenant-shared-column].`);
+      else if (column.primaryKey || schema.foreignKeys.some((fk) => fk.to.table === table.id && fk.to.columns.includes(name)))
+        problems.push(`${where}, the profile's key; share a setting a member compares rows with [tenant-shared-column].`);
+      else if (column.references?.table === table.id)
+        problems.push(
+          `${where}, which points at another tenant's profile; share a setting of this tenant's own (a reference to a vocabulary table shares its stored value) [tenant-shared-column].`,
+        );
       else if (!profileScalar(column.type))
         problems.push(`${where}, which is ${column.type}; share text, a number, a flag or a date [tenant-shared-column].`);
     }

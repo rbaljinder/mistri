@@ -32,7 +32,18 @@ import { distance, nearest } from './suggest.js';
 import { columnKind, findTable, type ColumnMeta, type DatabaseSchema, type MachineStates, type TableMeta } from './schema.js';
 import { dateWindow } from './queryDates.js';
 import { maskQuoted } from './maskQuoted.js';
-import { ME_SET, columnOperand, meOperand, meSetOperand, tenantOperand, type CompileContext, type QueryPerson } from './queryOperands.js';
+import {
+  ME_SET,
+  TENANT_FIELD,
+  columnOperand,
+  meOperand,
+  meSetOperand,
+  tenantHolds,
+  tenantOperand,
+  type CompileContext,
+  type QueryPerson,
+  type TenantTest,
+} from './queryOperands.js';
 import { TAGS_TYPE } from './tagLists.js';
 import { DEFINED_PATH_TYPE } from './definedFields.js';
 
@@ -677,17 +688,55 @@ function resolveColumn(table: TableMeta | undefined, name: string): { column?: C
 }
 
 export type { QueryPerson } from './queryOperands.js';
-export { ANYONE } from './queryOperands.js';
+export { ANYONE, ANYONE_ONCE } from './queryOperands.js';
 
 /* A record's tags are asked only whether they hold a label: `tags = bug` would
    compare the list itself, which is no question anyone means. */
-function compileCondition(raw: string, ctx: CompileContext): { conditions?: Condition[]; error?: string } {
+function compileCondition(raw: string, ctx: CompileContext): { conditions?: Condition[]; error?: string; holds?: true } {
+  const constant = tenantClause(raw.trim(), ctx);
+  if (constant) return constant;
   const compiled = compileClause(raw, ctx);
   const tagged = compiled.conditions?.find(
     (c) => c.op !== 'has' && ctx.table?.columns.find((col) => col.name === c.column)?.type === TAGS_TYPE,
   );
   if (tagged) return { error: `"${tagged.column}" is a record's tags: ask it with has, as in ${tagged.column} has bug.` };
   return compiled;
+}
+
+/**
+ * A condition on the reader's tenant (`tenant.plan = 'pro'`, `tenant.plan in (pro, team)`, `tenant.plan is empty`),
+ * judged for this request (queryOperands.ts tenantHolds): one that holds says `holds`, and its group asks nothing
+ * more of the row; one that does not is a condition no row meets. Undefined where the left is not that word: a
+ * table with a `tenant` column of its own, or a path the view parser found (`tenant.plan` through a reference).
+ */
+function tenantClause(text: string, ctx: CompileContext): { conditions?: Condition[]; error?: string; holds?: true } | undefined {
+  const table = ctx.table;
+  const field = /^([\w.$+]+)/.exec(text)?.[1];
+  if (!table || !field || !TENANT_FIELD.test(field) || table.columns.some((c) => c.name === 'tenant') || !resolveColumn(table, field).error)
+    return undefined;
+  const rest = text.slice(field.length);
+  let judged: { holds?: boolean; error?: string };
+  const empty = /^\s+is\s+(not\s+)?empty$/i.exec(rest);
+  const listed = /^\s+(not\s+in|in)\s+(.+)$/i.exec(rest);
+  const symbol = /^\s*(!=|<=|>=|=|<|>)\s*(.+)$/.exec(rest);
+  if (empty) judged = tenantHolds(ctx, field, empty[1] ? 'isNotNull' : 'isNull', []);
+  else if (listed) {
+    const items = listed[2]
+      .trim()
+      .replace(/^[([]\s*/, '')
+      .replace(/\s*[)\]]$/, '')
+      .split(',')
+      .map((s) => unquoteValue(s))
+      .filter((s) => s.value !== '');
+    if (!items.length) return { error: `"${listed[1]}" needs at least one value` };
+    judged = tenantHolds(ctx, field, /^not/i.test(listed[1]) ? 'not in' : 'in', items);
+  } else if (symbol) judged = tenantHolds(ctx, field, symbol[1] as TenantTest, [unquoteValue(symbol[2])]);
+  else return { error: `${field} is the reader's tenant: ask it with =, !=, <, >, in or is empty, as in ${field} = 'pro'.` };
+  if (judged.error) return { error: judged.error };
+  if (judged.holds) return { conditions: [], holds: true };
+  /* No row: an empty list, which every engine says as a falsehood (filter.ts `never`), over a column every read has. */
+  const key = table.columns.find((c) => c.primaryKey) ?? table.columns[0];
+  return { conditions: [{ column: key.name, op: 'in', value: [] }] };
 }
 
 function compileClause(raw: string, ctx: CompileContext): { conditions?: Condition[]; error?: string } {
@@ -1295,22 +1344,36 @@ function parseUncached(input: string, options: ParseOptions): ParseResult {
     if (groups.length > MAX_GROUPS) {
       errors.push({ message: `That expands to more than ${MAX_GROUPS} OR branches. Simplify it or filter in two steps.` });
     } else {
+      /* A group whose every condition is the reader's tenant, and holds (`tenant.plan = 'pro'`), asks nothing of the
+         row: every row is in it, so the filter is every row, whatever the other branches ask. */
+      let everything = false;
       for (const group of groups) {
         const conditions: Condition[] = [];
+        let held = 0;
+        let failed = false;
         for (const node of group) {
           if (node.kind !== 'cond') continue;
-          const { conditions: got, error } = compileCondition(node.text, {
+          const {
+            conditions: got,
+            error,
+            holds,
+          } = compileCondition(node.text, {
             table,
             now,
             columnValues: options.columnValues === true,
             ...(options.me !== undefined ? { me: options.me } : {}),
             ...(options.states ? { states: options.states } : {}),
           });
-          if (error) errors.push({ message: error, at: said(node.at) });
-          else if (got) conditions.push(...got);
+          if (error) {
+            errors.push({ message: error, at: said(node.at) });
+            failed = true;
+          } else if (got) conditions.push(...got);
+          if (holds) held++;
         }
         if (conditions.length) filter.groups.push(conditions);
+        else if (held && !failed) everything = true;
       }
+      if (everything) filter.groups = [];
     }
   }
 

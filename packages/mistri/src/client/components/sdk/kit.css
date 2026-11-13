@@ -255,6 +255,20 @@
     padding: var(--space-1);
     gap: var(--space-1);
   }
+  /* Folded: past four choices the row is wider than a phone, so there a native picker stands in its place (the radio group
+     leaves the box and the accessibility tree with display: none, so one control is read, not two). */
+  .kit-segmented-pick {
+    display: none;
+    max-width: 100%;
+  }
+  @media (max-width: 560px) {
+    .kit-segmented-folds {
+      display: none;
+    }
+    .kit-segmented-pick {
+      display: block;
+    }
+  }
   .kit-segment {
     display: inline-flex;
     align-items: center;

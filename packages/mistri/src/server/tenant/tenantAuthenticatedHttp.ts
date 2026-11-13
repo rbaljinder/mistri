@@ -88,6 +88,7 @@ import { readRouteOf, withReadRoute } from '../readAudit.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
 import { challengesOf, namedChallenge } from '../commands/challenges.js';
 import { tenantPublicChoices } from './tenantPublicChoices.js';
+import { tenantPublicAsked } from './tenantPublicAsked.js';
 import { openTenantJobHost, tenantDecisionProviders, tenantMailRuntime } from './tenantJobs.js';
 import { openTenantMail, type TenantMail } from './tenantMail.js';
 import { openTenantNoticeMail } from './tenantNoticeMail.js';
@@ -948,6 +949,21 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
               withPublicContext: deployment.withPublicContext,
               intakeTenant: (form, address) => deployment.withPublicFlagIntake!(form, address, async (owner) => owner.tenantId),
             }),
+          }
+        : {}),
+      /* A form's inputs asked by its tenant's shared profile, judged for the tenant its address or mapped host places it
+         with, as its submission is; an address that places nobody places no profile, and those inputs are not asked. */
+      ...(deployment.intake && deployment.withPublicFlagIntake
+        ? {
+            asked: (address, form, input) =>
+              tenantPublicAsked(input, async () => {
+                if (!address) return undefined;
+                try {
+                  return await deployment.withPublicFlagIntake!(form, address, (owner) => owner.profile());
+                } catch {
+                  return undefined;
+                }
+              }),
           }
         : {}),
       /* A mapped host places a form by its tenant's own intake address, so the read, the submission and every step

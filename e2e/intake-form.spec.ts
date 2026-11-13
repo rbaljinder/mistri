@@ -187,6 +187,23 @@ test.describe('The intake style of a public command form', () => {
     expect(stored(app)).toMatchObject([{ joint: 1 }]);
   });
 
+  test('the picked answer of a yes or no reads as picked beside the other, by more than its ring', async ({ page }) => {
+    await page.goto(`${app.origin}/form/apply`);
+    await toNameStep(page);
+    await toAccountStep(page);
+    await page.getByRole('radio', { name: 'Savings', exact: true }).check();
+    await press(page, 'Almost there', { step: 4, label: 'Joint' });
+    await page.getByRole('radio', { name: 'Yes', exact: true }).check({ force: true });
+    const face = (name: string) =>
+      page
+        .locator('label.choice-pick', { has: page.getByRole('radio', { name, exact: true }) })
+        .evaluate((el) => ({ well: getComputedStyle(el).backgroundColor, weight: getComputedStyle(el).fontWeight }));
+    const [yes, no] = [await face('Yes'), await face('No')];
+    /* The edge alone was a hairline on a field that is its own fill: the face carries a tint and heavier words too. */
+    expect(yes.well).not.toBe(no.well);
+    expect(Number(yes.weight)).toBeGreaterThan(Number(no.weight));
+  });
+
   test('a step with a missing answer holds there, and a mismatched confirmation is refused', async ({ page }) => {
     await page.goto(`${app.origin}/form/apply`);
     await page.getByRole('button', { name: 'Continue', exact: true }).click();

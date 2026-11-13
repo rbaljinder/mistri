@@ -58,7 +58,7 @@ import { parseTenantSelector } from './tenantMembership.js';
 import { createPlatformMembershipIssuer, type PlatformMembershipEvidence } from './tenantPlatform.js';
 import type { PlatformTenantEvidence } from './tenantPlatformTenant.js';
 import type { PlatformInvocationGuard } from './tenantPlatformReadRuntime.js';
-import { composePlatformReadScope } from './tenantReadScope.js';
+import { composePlatformReadScope, footprintRows } from './tenantReadScope.js';
 import { advisoryRecords, captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { assertTenantSourcePair } from './tenantSourceIdentity.js';
@@ -339,9 +339,7 @@ export function bindPlatformRequestRuntime<Request>(options: PlatformRequestRunt
             )
               return operations.run(async () => denyTenant());
             // The command footprint intersects, never widens, the platform scope.
-            sourceRows = Object.freeze(
-              Object.fromEntries(Object.entries(rows).map(([table, row]) => [table, read.includes(table) ? row : false])),
-            );
+            sourceRows = footprintRows(rows, (table) => read.includes(table));
           } catch {
             invalid = true;
           }
@@ -426,9 +424,7 @@ export function bindPlatformRequestRuntime<Request>(options: PlatformRequestRunt
               new Set(read).size === read.length &&
               read.every((table) => typeof table === 'string' && Object.hasOwn(ownership.resources, table))
             ) {
-              footprint = Object.freeze(
-                Object.fromEntries(Object.entries(rows).map(([table, row]) => [table, read.includes(table) ? row : false])),
-              );
+              footprint = footprintRows(rows, (table) => read.includes(table));
             }
           } catch {
             footprint = undefined;
@@ -664,6 +660,7 @@ export function bindPlatformCommands<Request>(runtime: PlatformRequestRuntime<Re
                           key: prepared.key,
                           catalog: authorization.catalog,
                           ...(authorization.people ? { people: authorization.people } : {}),
+                          ...(authorization.insertOnly ? { insertOnly: authorization.insertOnly } : {}),
                           signal: context!.options.signal,
                           flags: capturedFlags,
                         });

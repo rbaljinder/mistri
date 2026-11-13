@@ -56,7 +56,10 @@ April, July, October); there is no fiscal year. A value with a space is quoted:
 
 In a [tenant App](/docs/tenant-apps/#what-members-read), `tenant.<column>` is the
 tenant's own value of a profile column `auth.tenancy.shared` lists:
-`tax_rate country = tenant.country`.
+`tax_rate country = tenant.country`. On the left it tests the tenant, not the
+row: `tenant.plan = 'pro'` (also `!=`, `<`, `>`, `in`, `not in`, `is empty`)
+matches every row for a tenant on that plan and none for any other, so a record
+page's section or list, or an action, can be one tenant's and not another's.
 
 ## Follow a reference in a query
 

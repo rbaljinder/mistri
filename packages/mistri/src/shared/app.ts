@@ -1810,6 +1810,10 @@ export function resolveResources(app: AppDef, schema: DatabaseSchema): { resourc
   const display = resolveDisplay(app, schema).display;
   const seen = new Set<string>();
   const person = checkedPerson(app, schema);
+  /* An action's `when` may read the reader's tenant (`tenant.plan = 'pro'`), judged as a write judges it
+     (appTransitions.ts): each shared column, with no value yet. */
+  const shared = app.auth?.tenancy?.profile !== undefined ? (app.auth.tenancy.shared ?? []) : undefined;
+  const actor = person && shared ? { ...person, tenant: Object.fromEntries(shared.map((column) => [column, null])) } : person;
   const people = personTable(app, schema);
   // A column that is not there is said as itself; only one that is can be judged by its name.
   const personProblem = people.problem ?? tenantPersonColumnProblem(app);
@@ -1848,7 +1852,7 @@ export function resolveResources(app: AppDef, schema: DatabaseSchema): { resourc
       /* A command action's own part first, so a problem is pointed at in the words its author wrote. */
       for (const when of ['offered' in action ? action.offered : undefined, action.when]) {
         if (!when || problem) continue;
-        const parsed = parseViewQuery(schema, table.id, when, undefined, person ? { me: person } : {});
+        const parsed = parseViewQuery(schema, table.id, when, undefined, actor ? { me: actor } : {});
         if (parsed.errors.length) problem = `action "${action.id}", when: ${saidAt(parsed.errors[0], when)}`;
       }
       if (problem) break;

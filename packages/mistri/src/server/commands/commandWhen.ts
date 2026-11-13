@@ -685,6 +685,32 @@ function meets(condition: Condition, value: ComputedValue): boolean {
 }
 
 /**
+ * Whether a `when` plainly fails of a row read before the command's transaction opens — what a lookup is held back
+ * by, so a command its record refuses makes no outside call. Each group must hold a condition on one of the target's
+ * own stored columns that the row does not meet, judged by emptiness, or by equality or membership of a number held
+ * as a number, a flag or a word. False where the `when` holds, or where only the database can say: an order, two
+ * columns compared, a rollup, a number past what JavaScript holds exactly, an empty word, and a word's equality on
+ * MySQL, whose collation may fold case. The transaction judges the `when` again either way.
+ */
+export function plainlyFails(table: Table, when: CompiledWhen, row: Readonly<Record<string, unknown>>): boolean {
+  if (when.none) return true;
+  if (!when.filter.groups.length || when.derived.size) return false;
+  const fails = (condition: Condition) => {
+    const kind = Object.hasOwn(table.kinds, condition.column) ? table.kinds[condition.column] : undefined;
+    if (condition.other !== undefined || !kind) return false;
+    const raw = row[condition.column];
+    const empty = raw === null || raw === undefined;
+    if (condition.op === 'isNull') return !empty;
+    if (condition.op === 'isNotNull') return empty;
+    if (!FOLD_OPS.has(condition.op) || raw === '') return false;
+    const plain =
+      kind === 'boolean' || (kind === 'number' && (empty || typeof raw === 'number')) || (kind === 'text' && table.dialect !== 'mysql');
+    return plain && !meets(condition, typedValue(table.meta, condition.column, raw));
+  };
+  return when.filter.groups.every((group) => group.some(fails));
+}
+
+/**
  * The first condition of a `when` the row does not meet, where it is one of the target's own stored columns judged
  * by a plain comparison: what a refusal names so a person can see why (`Balance owed is $108.99; needs to be at most $0.00`).
  * For a compound `when` it is the first part that fails, in the order it was written; undefined where the failing

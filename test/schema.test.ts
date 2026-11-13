@@ -466,6 +466,7 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
       'label',
       'reason',
       'set',
+      'submitLabel',
       'when',
     ]);
     /* `children` (repeatable child collections) stays off the public form. */
@@ -758,7 +759,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // was a display rule's already): 1760/521.
     // 1.0.0-rc.45: a public read's `byKey`, the tables a visitor opens one row of by its key (one entry, one new
     // name): 1761/522.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1761, names: 522 });
+    // 1.0.0-rc.49: a resource action's `submitLabel`, the words on its dialog's submit (one entry; the name was a
+    // landing search's already): 1762/522.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1762, names: 522 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

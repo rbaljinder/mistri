@@ -105,7 +105,10 @@ and on a command that targets one record `record.<column>` is that record's
 value (`reason: field.text({ when: 'record.open_parts > 0' })`), through up to
 two references as for a default (`when: 'record.customer_id.tax_exempt = false'`);
 in a tenant App `tenant.<column>` is a shared profile column
-(`vat_number: field.text({ when: "tenant.country = 'DE'" })`). The browser is told
+(`vat_number: field.text({ when: "tenant.country = 'DE'" })`), on a public form
+too: there it is the profile of the tenant its link's `?via=` or mapped host
+places, and a form that places none (the platform's triage) does not ask the
+field. The browser is told
 only whether those parts hold, never the values behind them. The form
 draws it while the condition holds and then requires it; the server refuses
 it sent while the condition does not hold, and requires it while it does.
@@ -227,7 +230,7 @@ declaration off.
 | `files`                                                       | The parts a mail intake received, `[{ name, type, size, data }]` (tenant mail)                                                                                                                                                                            |
 | `actor`                                                       | The verified principal: `id`, `roles`, and for an account `email` and `name`; `kind` is `'public'` or `'service'` for a public form or a job                                                                                                              |
 | `door`                                                        | Where the request came in: `'ui'` (a screen or a form), `'api'` (the App API), `'mcp'` (App MCP), `'job'` or `'workflow'`. The host says it, never the request                                                                                            |
-| `now()`, `today()`, `nextNumber(name, { per, start, after })` | The server clock; the day it falls on in `ui.timezone` (`YYYY-MM-DD`, UTC without one); the next number of a sequence, taken in this transaction. `after` is the highest number rows already hold (a seed's): the number taken is past it                 |
+| `now()`, `today()`, `timezone`, `nextNumber(name, { per, start, after })` | The server clock; the day it falls on in `timezone` (`YYYY-MM-DD`); that zone, `ui.timezone` or in a tenant App the running tenant's own (`UTC` without one); the next number of a sequence, taken in this transaction. `after` is the highest number rows already hold (a seed's): the number taken is past it                 |
 
 A `where` is an object (`{ status: 'available' }`), the query language, or a
 tagged template whose values are always quoted:
@@ -305,8 +308,12 @@ defineCommand({ /* … */ write: ['attempt'], refused: { writes: ['attempt'] },
 
 The handler reads its footprint whole, as the App's own server code: a
 column a role's `fields` or the resource's `hidden` withholds is still in
-`record` and `db`. What reaches the person stays narrowed, so keep a withheld
-value out of `output` yourself.
+`record` and `db`, and a resource's `hidden` columns are in what its `lookup`
+reads too when a signed-in member runs it: `hidden` keeps a column from
+people, not from the App's own server code, so a handler should not echo a
+hidden value into its `output`. A visitor's lookup (a public form's) still reads
+none. What reaches the person stays narrowed, so keep a withheld value out of
+`output` yourself.
 
 ### Sums, groups and pages
 
@@ -403,7 +410,7 @@ answer is `temporarily_unavailable`.
 - A command a free-form page lists in `commands` is offered by that declaration, with no action beside it and nothing added to a menu; the grant still decides who may run it. A section's component (not a page) still reaches a record's command through an action.
 - `label: 'Book an appointment'` on `defineCommand` is the title of the command's dialog and its buttons; without it they say the command's key as words (`book` is "Book"). It is text of 1 to 120 characters.
 - A public command's `output` may carry `message` only as `literal('…')`; that sentence is what the public page's outcome and a public form's done screen say in place of the platform's thank-you (at most 280 characters), beside the receipt's reference. On a public door only declared literal messages reach the visitor: a `message` the handler returns that its `output` does not declare is left out. On a tenant App, a submission placed with a tenant hands the handler that tenant's shared profile as `tenant`, so it may pick among the sentences its output declares: `message: literal('We will call you.', 'We will text you.')` and `return { reference, message: tenant?.contact === 'sms' ? 'We will text you.' : 'We will call you.' }`. The platform's triage has no `tenant`.
-- `lookup({ sources, record }, input)` runs before the transaction opens and hands its JSON to the handler as `lookup`; a failure is `temporarily_unavailable`. It reads the other sources (a database or an HTTP connection) its `sources` names, `{ valuations: ['estimate'] }`. A lookup that reads none, one that works from its input or the record alone, declares no `sources`; `sources` without a `lookup` is refused. Its tables offer `get`, `find` and `where` only: there is no `insert`, `update` or `remove`, in the type or at run time, so a write belongs in the handler. What it reads of a resource that audits reads is recorded under the command, as the handler's reads are. In a [tenant App](/docs/tenant-apps/#a-commands-lookup) it reads global tables and its own tenant's, as the person running it could read them, and `tenant` is the id of the tenant it runs in.
+- `lookup({ sources, record }, input)` runs before the transaction opens and hands its JSON to the handler as `lookup`; a failure is `temporarily_unavailable`. It reads the other sources (a database or an HTTP connection) its `sources` names, `{ valuations: ['estimate'] }`. A lookup that reads none, one that works from its input or the record alone, declares no `sources`; `sources` without a `lookup` is refused. Its tables offer `get`, `find` and `where` only: there is no `insert`, `update` or `remove`, in the type or at run time, so a write belongs in the handler. What it reads of a resource that audits reads is recorded under the command, as the handler's reads are. In a [tenant App](/docs/tenant-apps/#a-commands-lookup) it reads global tables and its own tenant's, as the person running it could read them, and `tenant` is the id of the tenant it runs in. A lookup is not run for a record the command already refuses as it stands: one in a state its machine verb does not leave, or one a plain `when` on its own columns fails. The command is refused in its usual words and nothing goes out (a `when` that names `me`, a rollup or another column is judged in the transaction as before).
 - `effects: { notify: post('dealer-hooks', output => ({ id: output.applicationId })) }` posts to a `"kind": "webhook"` connection after commit, with retries; nothing is sent on rollback. A body is at most 262,144 bytes of JSON, and a string in it may be as long as that; the posts of one command carry at most 1,048,576 between them. Over either, the command is refused and rolls back, and the refusal names it: `Command "syncCrm": post "crm" body is 312,450 bytes; one post carries at most 262,144.` or `Command "syncCrm": its 6 posts carry 1,204,330 bytes; one command carries at most 1,048,576.` A domain event keeps its 16 KiB payload and 1,024-byte strings, and `output` its 16 KiB. `{ envelope: false, headers }` sends your own body shape; a delivery whose headers name one the request owns, the connection's `auth.header` among them, is rejected for an operator, not sent. On a tenant App each delivery carries its tenant.
 - A post's body may be built from rows: its projection may be `async` and gets the command's `db` as its second argument, `post<Output, CommandDb<typeof source, 'order' | 'line'>>('crm', async (output, { db }) => ({ lines: await db.line.where({ order_id: output.id }) }))`. It runs inside the command's transaction, before commit, and reads only what the command's `read` names, through `get`, `find`, `where`, `count` and `segment`: a write through it, or a read of a table outside `read`, refuses the command by name. Name both types on `post`, as above: a call written inside `defineCommand` is typed before the command around it, so without them `output` and `db` are `unknown`. The body is stored with the receipt and sent as stored; a delivery that resumes after a restart never runs the projection again.
 - `effects: { text: send('sms', output => ({ to: output.phone, text: 'Shipped.', consent: true })) }` sends on an [integration's](/docs/integrations/) channel after commit.
@@ -436,6 +443,12 @@ command reads one under its own authority:
 whole; the caller sees only the declared `output`, never the rows. An
 elevation never makes a command an [App API](/docs/app-api/) operation for a
 role that cannot read the table, and `mistri check --design` lists every one.
+
+A table in `write` beside the target is not a read grant, and needs none: a
+role that cannot read it may still run the command, which may only add rows
+there (a log line, a hand-off for another team). A handler that reads, counts,
+changes or removes those rows for that role is refused, naming them, and
+nothing it wrote lands.
 
 ## A link to one record
 

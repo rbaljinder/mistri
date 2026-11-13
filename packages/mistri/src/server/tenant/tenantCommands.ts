@@ -38,6 +38,7 @@ import {
 import { collectTenantAvailability } from './tenantCommandAvailability.js';
 import { readPreparedRecord, withPreparedAhead, type PreparedCommand } from '../commands/commandPrepare.js';
 import { captureTenantData, tenantOptions, refusalCause, recordRefusalCause } from '@mistriwork/engine/server/evidence.js';
+import { refusalSaid } from '@mistriwork/engine/shared/refusal.js';
 import { runTenantCommandTransaction, type TenantCommandRecords } from './tenantCommandTransaction.js';
 import {
   captureTenantRequestRuntime,
@@ -97,8 +98,14 @@ function domain(error: unknown): BusinessCommandExecutionError | undefined {
         )
       : undefined;
   }
-  // The refusal's recorded reason travels: the operator's log names the write it refused.
-  if (error instanceof AppAccessDenied) return recordRefusalCause(new BusinessCommandExecutionError('forbidden'), error);
+  /* The refusal's recorded reason travels: the operator's log names the write it refused. And the sentence its rule said for
+     the caller ("Your role has no grant for …", sayRefusal) is said in place of the fixed one, as a single-tenant member's
+     refusal says it (commandErrors.ts): a tenant member's test read "not available to this account" and nothing more. */
+  if (error instanceof AppAccessDenied)
+    return recordRefusalCause(
+      new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, undefined, refusalSaid(error)),
+      error,
+    );
   if (error instanceof CommandInputError) return new BusinessCommandExecutionError('invalid_input', 'not_applied', error.field);
   return undefined;
 }
@@ -338,6 +345,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                           key: prepared.key,
                           catalog: authorization.catalog,
                           ...(authorization.people ? { people: authorization.people } : {}),
+                          ...(authorization.insertOnly ? { insertOnly: authorization.insertOnly } : {}),
                           // The tenant's shared profile, which an input's `when` and default may read (`tenant.<column>`).
                           ...(scope.principal.tenantId === PLATFORM_TENANT_ID ? {} : { tenant: scope.tenant }),
                           signal: context!.options.signal,

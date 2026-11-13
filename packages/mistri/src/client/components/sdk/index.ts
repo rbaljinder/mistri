@@ -54,6 +54,7 @@ export const FileField = onDemand(controls, 'FileField', { quiet: true });
 export const Select = onDemand(controls, 'Select', { quiet: true });
 export const Slider = onDemand(controls, 'Slider', { quiet: true });
 export const Switch = onDemand(controls, 'Switch', { quiet: true });
+export const TextArea = onDemand(controls, 'TextArea', { quiet: true });
 export const TextField = onDemand(controls, 'TextField', { quiet: true });
 export const YesNo = onDemand(controls, 'YesNo', { quiet: true });
 export {

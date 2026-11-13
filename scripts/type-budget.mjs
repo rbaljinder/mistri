@@ -224,11 +224,15 @@ const require = createRequire(join(ROOT, 'package.json'));
    `Segments` block the real generator writes for its four tables with them (it was written before the block existed, and
    a tab then had no segments to be judged against). Ignition measures 66,238 types, 338 past, and 242,299
    instantiations; the block is one name list per table, nothing a table's columns multiply. Types rise to about 1.5%
-   above; the rest hold. */
+   above; the rest hold.
+   rc.49: a tenant row rule's `when` reads the tenant's own columns, a resource action takes `submitLabel`, and the
+   command context gains the tenant's time zone; names read once in the declarations, nothing per table (not
+   isolated by a before/after run here). Synthetic measures 481,193 symbols (993 past), Ignition 242,640
+   instantiations (340 past) and 196,901 symbols (101 past). Those three rise to about 1.5% above; the rest hold. */
 export const BUDGET = {
-  synthetic: { types: 184_400, instantiations: 991_600, symbols: 480_200 },
+  synthetic: { types: 184_400, instantiations: 991_600, symbols: 488_400 },
   compass: { types: 32_500, instantiations: 149_000, symbols: 104_600 },
-  ignition: { types: 67_200, instantiations: 242_300, symbols: 196_800 },
+  ignition: { types: 67_200, instantiations: 246_300, symbols: 199_900 },
 };
 
 /* Seconds of an unloaded core, scaled from the process's wall time (`calibrate`): a

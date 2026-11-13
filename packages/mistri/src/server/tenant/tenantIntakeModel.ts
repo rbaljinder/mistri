@@ -343,7 +343,8 @@ export interface TenantProfileLookup {
   readonly tenantId: string;
   readonly columns: readonly string[];
 }
-/** A shared column: a scalar of the profile, neither its key nor any key, nor a reference — the row's own facts. */
+/** A shared column: a scalar of the profile, neither its key nor any key — the row's own facts. A reference is its
+ * stored value, unless it points at the profile itself (another tenant's key). */
 function assertProfileColumn(owned: TenantOwnershipSnapshot, name: string): void {
   tenantIdentifier(name);
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return denyTenant();
@@ -352,7 +353,7 @@ function assertProfileColumn(owned: TenantOwnershipSnapshot, name: string): void
   const column = table.columns.find((candidate) => candidate.name === name) ?? denyTenant();
   if (
     column.primaryKey ||
-    column.references ||
+    column.references?.table === profile ||
     !profileScalar(column.type) ||
     name === intakeProfileKey(owned) ||
     owned.schema.foreignKeys.some((fk) => fk.to.table === profile && fk.to.columns.includes(name))

@@ -309,8 +309,11 @@ const MAX_ORIGINS = 16;
    optional port. No path, no wildcard, no quote or space that could close
    the policy's source list and open another directive. Plain http only to
    the machine itself, for a local service in development. */
-const ORIGIN =
-  /^(?:https:\/\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*|http:\/\/(?:localhost|127\.0\.0\.1))(?::\d{1,5})?$/;
+const HOST = String.raw`[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*`;
+const ORIGIN = new RegExp(String.raw`^(?:https://${HOST}|http://(?:localhost|127\.0\.0\.1))(?::\d{1,5})?$`);
+/* A connection may also be a WebSocket, which `connect-src` governs: wss to a host, the same rule as https, and plain
+   ws only to the machine itself, as http is. A picture cannot be one. */
+const CONNECT_ORIGIN = new RegExp(String.raw`^(?:https://${HOST}|wss://${HOST}|(?:http|ws)://(?:localhost|127\.0\.0\.1))(?::\d{1,5})?$`);
 
 /**
  * `ui.csp`: the origins beside its own an App's custom components may send
@@ -332,11 +335,14 @@ function egress(raw: Record<string, unknown>, key: 'connect' | 'images', where: 
     !Array.isArray(value) ||
     !value.length ||
     value.length > MAX_ORIGINS ||
-    value.some((origin) => typeof origin !== 'string' || !ORIGIN.test(origin.trim().replace(/\/$/, '').toLowerCase()))
+    value.some(
+      (origin) =>
+        typeof origin !== 'string' || !(key === 'connect' ? CONNECT_ORIGIN : ORIGIN).test(origin.trim().replace(/\/$/, '').toLowerCase()),
+    )
   ) {
     throw new Error(
-      `${where}: "ui.csp.${key}" is not a list of up to ${MAX_ORIGINS} origins like "https://api.example.com" — https, a host and a port at most; ` +
-        'no path and no wildcard.',
+      `${where}: "ui.csp.${key}" is not a list of up to ${MAX_ORIGINS} origins like "https://api.example.com" — ` +
+        `${key === 'connect' ? 'https or wss' : 'https'}, a host and a port at most; no path and no wildcard.`,
     );
   }
   return { [key]: [...new Set(value.map((origin) => (origin as string).trim().replace(/\/$/, '').toLowerCase()))].sort() };

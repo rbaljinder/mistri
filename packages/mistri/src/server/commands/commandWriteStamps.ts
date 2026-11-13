@@ -93,7 +93,8 @@ export async function commandConstant(
   ).catch(refused);
 }
 
-const refusedMove = (cause: string) => recordRefusalCause(new BusinessCommandExecutionError('ineligible_state'), cause);
+const refusedMove = (cause: string, reason?: string) =>
+  recordRefusalCause(new BusinessCommandExecutionError('ineligible_state', 'not_applied', undefined, undefined, reason), cause);
 
 /** A new row of a machine's table starts in its first state, or one its `entry` names, and stamps `since`. */
 export function machineInsert<T extends { table: string; values: Record<string, unknown> }>(
@@ -111,6 +112,8 @@ export function machineInsert<T extends { table: string; values: Record<string, 
     throw refusedMove(
       `A new "${request.table}" starts in ${starts}, as its machine on "${graph.column}" allows; the command inserted it in ` +
         `"${String(state)}". A command starts a record past the first state only where the machine's "entry" names that state.`,
+      // The reader's sentence: the fixed "not eligible" said nothing about which state the new row was born in.
+      `A new ${request.table} starts in ${starts}, not "${String(state)}": that state needs the machine's "entry".`,
     );
   }
   const entered = enteredValue(catalog, request, state === undefined ? graph.start : String(state), graph, now, timezone);

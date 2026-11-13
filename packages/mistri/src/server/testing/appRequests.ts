@@ -82,7 +82,7 @@ interface ServedSchema {
   tables: Array<{
     id: string;
     name: string;
-    columns: Array<{ name: string; primaryKey: boolean; references?: { table: string; column: string } }>;
+    columns: Array<{ name: string; type?: string; primaryKey: boolean; references?: { table: string; column: string } }>;
   }>;
 }
 
@@ -338,7 +338,24 @@ export function appRequests(send: Send, options: { app?: string; base?: string }
         json: { app: id, q, limit: options.limit ?? 20, offset: 0, count: 'none' } satisfies ResourceHttpRequest<'/api/run', 'app'>,
       }),
     );
-    return result.ok ? { ok: true, status: result.status, value: result.value.rows } : result;
+    if (!result.ok) return result;
+    /* SQLite has no boolean: a BOOLEAN column is stored and read as 1 or 0, and a test that compared it with `true`
+       failed on a right value (a field report). A column the schema declares boolean is read as one, as the generated
+       types say it is. */
+    const { schema } = await describe();
+    const found = schema.tables.find((candidate) => candidate.id === table || candidate.name === table);
+    const flags = found?.columns.filter((column) => /^bool/i.test(column.type ?? '')).map((column) => column.name) ?? [];
+    return {
+      ok: true,
+      status: result.status,
+      value: flags.length
+        ? result.value.rows.map((row) => {
+            const read = { ...row };
+            for (const name of flags) if (read[name] === 0 || read[name] === 1) read[name] = read[name] === 1;
+            return read;
+          })
+        : result.value.rows,
+    };
   }
 
   async function update(table: string, key: TestRecordKey, values: HttpValues, expected?: HttpValues): Promise<TestUpdateResult> {

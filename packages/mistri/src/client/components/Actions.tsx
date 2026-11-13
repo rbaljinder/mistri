@@ -762,7 +762,7 @@ function Confirm({
           {dismissLabel(action.label)}
         </Button>
         <Button intent="primary" onClick={() => answer(true)}>
-          {action.label}
+          {action.submitLabel ?? action.label}
         </Button>
       </div>
     </Modal>
@@ -825,7 +825,7 @@ export function ReasonForm({
             {dismissLabel(action.label)}
           </Button>
           <Button intent="primary" type="submit" disabled={!text.trim()}>
-            {action.label}
+            {action.submitLabel ?? action.label}
           </Button>
         </div>
       </form>

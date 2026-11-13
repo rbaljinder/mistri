@@ -416,8 +416,9 @@ export function Icon({ name, label, size }: { name: AppIconName; label?: string;
  * A segmented control: a few exclusive choices said as one row of words, the
  * chosen one filled in the look's tab dress — a filter's All / Needs attention,
  * a range's 7 d / 30 d. A choice may carry a count, a pill beside its word.
- * One target: arrows move the choice, as a radio group's do. Past four or five
- * choices it is a Dropdown's job. A value no option carries leaves every one unchosen (the first stays the tab stop).
+ * One target: arrows move the choice, as a radio group's do. A value no option carries leaves every one unchosen (the
+ * first stays the tab stop). Past four choices the row is too wide for a phone, so at a phone's width a native picker
+ * stands in its place; `className` is the App's own class, on whichever of the two is drawn.
  */
 export function Segmented<T extends string>({
   label,
@@ -425,12 +426,14 @@ export function Segmented<T extends string>({
   options,
   onChange,
   size = 'default',
+  className,
 }: {
   label: string;
   value: T;
   options: ReadonlyArray<{ value: T; label: ReactNode; count?: number; name?: string }>;
   onChange(value: T): void;
   size?: 'default' | 'compact';
+  className?: string;
 }) {
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
   const at = Math.max(
@@ -452,28 +455,53 @@ export function Segmented<T extends string>({
     onChange(options[next].value);
     buttons.current[next]?.focus();
   };
+  /* A picker's words are text: a count is said after the word, and a label that is not text falls back to the option's name. */
+  const said = (option: (typeof options)[number]) =>
+    `${typeof option.label === 'string' ? option.label : (option.name ?? option.value)}${option.count === undefined ? '' : ` (${option.count})`}`;
+  const folds = options.length > 4;
   return (
-    <div className={`kit-segmented${size === 'compact' ? ' kit-segmented-compact' : ''}`} role="radiogroup" aria-label={label}>
-      {options.map((option, index) => (
-        <button
-          key={option.value}
-          type="button"
-          role="radio"
-          aria-checked={option.value === value}
-          tabIndex={index === at ? 0 : -1}
-          aria-label={option.name}
-          ref={(node) => {
-            buttons.current[index] = node;
-          }}
-          className="kit-segment"
-          onClick={() => onChange(option.value)}
-          onKeyDown={(event) => key(event, index)}
+    <>
+      <div
+        className={`kit-segmented${size === 'compact' ? ' kit-segmented-compact' : ''}${folds ? ' kit-segmented-folds' : ''}${className ? ` ${className}` : ''}`}
+        role="radiogroup"
+        aria-label={label}
+      >
+        {options.map((option, index) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={option.value === value}
+            tabIndex={index === at ? 0 : -1}
+            aria-label={option.name}
+            ref={(node) => {
+              buttons.current[index] = node;
+            }}
+            className="kit-segment"
+            onClick={() => onChange(option.value)}
+            onKeyDown={(event) => key(event, index)}
+          >
+            <span>{option.label}</span>
+            {option.count !== undefined && <span className="kit-segment-count">{option.count}</span>}
+          </button>
+        ))}
+      </div>
+      {folds && (
+        <select
+          className={`kit-segmented-pick field-control${className ? ` ${className}` : ''}`}
+          aria-label={label}
+          value={options.some((option) => option.value === value) ? value : ''}
+          onChange={(event) => onChange(event.target.value as T)}
         >
-          <span>{option.label}</span>
-          {option.count !== undefined && <span className="kit-segment-count">{option.count}</span>}
-        </button>
-      ))}
-    </div>
+          {!options.some((option) => option.value === value) && <option value="" disabled hidden />}
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {said(option)}
+            </option>
+          ))}
+        </select>
+      )}
+    </>
   );
 }
 

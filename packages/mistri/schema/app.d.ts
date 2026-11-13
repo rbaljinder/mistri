@@ -3309,9 +3309,10 @@ export interface AppUi {
   /** ISO 4217 default for money rules that name none. Defaults to USD. */
   currency?: string;
   /** The origins the page opens beside the App's own for its custom components, recorded in authority.lock. Each is
-      https, a host and a port; no path, no wildcard. */
+      https, a host and a port; no path, no wildcard. A `connect` origin may also be `wss`, for a WebSocket. */
   csp?: {
-    /** Origins they may send requests to — `['https://api.example.com']` — opened in the page's policy (`connect-src`). */
+    /** Origins they may send requests to or open a WebSocket to — `['https://api.example.com', 'wss://live.example.com']` —
+        opened in the page's policy (`connect-src`). */
     connect?: readonly string[];
     /** Origins they may load pictures from, beside the App's own: the page's `img-src`. Once an App serves components,
         pictures come only from its own origin and these. */
@@ -3976,7 +3977,7 @@ export declare function action<const L extends string | AppMessageRef, const Nam
     /** Offered for a queue selection only when the command declares `targets: 'many'`. */
     bulk?: TakesMany<Name> extends true ? boolean : false },
 ): CommandAction<Name, L> & MadeBy<'action'>;
-export declare function action<const L extends string | AppMessageRef, const O extends Omit<AppUpdateAction, 'id' | 'label' | 'set'> & { set: Readonly<Record<string, ActionSetValue>> }>(
+export declare function action<const L extends string | AppMessageRef, const O extends Omit<AppUpdateAction<string | AppMessageRef>, 'id' | 'label' | 'set'> & { set: Readonly<Record<string, ActionSetValue>> }>(
   label: L, options: O & Record<Exclude<keyof O, Exclude<keyof AppUpdateAction, 'id'>>, never>,
 ): NoInfer<Omit<AppUpdateAction<L>, 'id' | 'set' | 'reason' | 'when'> & Authored<Omit<O, 'set'>> & { set: ActionSet<O['set']> } & MadeBy<'action'>>;
 export type { Theme, ThemeBase, ThemeColors, ThemeColorsOver, ThemePalette, ThemePaletteVariant, ThemeRecipes, ThemeSpec } from '@mistriwork/engine/schema/theme.js';

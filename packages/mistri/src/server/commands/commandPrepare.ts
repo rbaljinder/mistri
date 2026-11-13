@@ -150,6 +150,12 @@ export function withPreparedAhead<T>(command: AnyBusinessCommand, catalog: Comma
   return withWriteAhead({ targets: [{ table, key }], writes: false, readOnly: true }, work);
 }
 
+/* `initial` reads as its caller does, and only reads: a table the command may only add to for this actor is not in
+   its db at all, as a handler's read of it is refused. */
+function preparedRead(command: AnyBusinessCommand, insertOnly: ReadonlyMap<string, string> | undefined): readonly string[] {
+  return insertOnly?.size ? callerRead(command).filter((table) => !insertOnly.has(table)) : callerRead(command);
+}
+
 export async function readPreparedRecord(
   records: WriteTransaction,
   options: {
@@ -170,6 +176,8 @@ export async function readPreparedRecord(
     /** The tenant's shared profile columns (`auth.tenancy.shared`), where a tenant member prepares: what
      *  `tenant.<column>` reads in an input's `when` and `default: { tenant }`. */
     tenant?: Readonly<Record<string, TenantValue>>;
+    /** The tables it writes that the actor may only add to (businessCommandAuthorization.ts insertOnly). */
+    insertOnly?: ReadonlyMap<string, string>;
   },
 ): Promise<PreparedCommand> {
   const { command, key, catalog } = options;
@@ -302,7 +310,7 @@ export async function readPreparedRecord(
       flags,
       tx,
       record: visible,
-      db: createCommandDb({ tx, catalog, read: callerRead(command), write: [], now }),
+      db: createCommandDb({ tx, catalog, read: preparedRead(command, options.insertOnly), write: [], now }),
     }),
   );
   checkCancelled();
@@ -390,6 +398,7 @@ async function readPreparedStart(
     flags: ReturnType<typeof commandFlagsReader>;
     requestId?: string;
     tenant?: Readonly<Record<string, TenantValue>>;
+    insertOnly?: ReadonlyMap<string, string>;
   },
 ): Promise<PreparedCommand> {
   const { command, catalog, signal, now, flags } = options;
@@ -434,7 +443,7 @@ async function readPreparedStart(
       now,
       flags,
       tx,
-      db: createCommandDb({ tx, catalog, read: callerRead(command), write: [], now }),
+      db: createCommandDb({ tx, catalog, read: preparedRead(command, options.insertOnly), write: [], now }),
     }),
   );
   if (signal.aborted) throw new BusinessCommandExecutionError('cancelled');

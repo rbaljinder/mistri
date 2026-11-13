@@ -22,6 +22,7 @@ import type { ComponentDecl } from '@mistriwork/engine/shared/appComponents.js';
 import { astParser, dataUrl, withStandIns } from './appPages.js';
 import { compilePageModule } from './appComponents.js';
 import type { LoadedApp } from './apps.js';
+import { moduleLoadTimedOut, moduleLoadTimeout } from './moduleLoadTimeout.js';
 
 /** The longest word a label may be: it is drawn in a legend, a chip and a select. */
 const MAX_LABEL = 80;
@@ -69,6 +70,7 @@ interface Outcome {
 /** The module's `label`, called for each value in a worker with no environment. */
 function evaluate(code: string, values: readonly string[]): Promise<Outcome> {
   return new Promise((resolveOutcome, reject) => {
+    const limit = moduleLoadTimeout();
     const worker = new Worker(
       `const { parentPort, workerData } = require('node:worker_threads');
        import(workerData.href).then(
@@ -97,7 +99,7 @@ function evaluate(code: string, values: readonly string[]): Promise<Outcome> {
       done(() => (m.ok ? resolveOutcome({ has: m.has!, said: m.said! }) : reject(new Error(m.message)))),
     );
     worker.once('error', (err) => done(() => reject(err)));
-    const timer = setTimeout(() => done(() => reject(new Error('the value component did not finish loading within 10s'))), 10_000);
+    const timer = setTimeout(() => done(() => reject(new Error(moduleLoadTimedOut('value component', limit.seconds)))), limit.ms);
     timer.unref();
   });
 }

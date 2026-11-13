@@ -12,7 +12,7 @@
  * the reader may not see.
  */
 import { grantsByRole, type AppDef, type AppRollup } from './appModel.js';
-import { ANYONE, saidAt } from '@mistriwork/engine/shared/query.js';
+import { ANYONE_ONCE, saidAt } from '@mistriwork/engine/shared/query.js';
 import { parseViewQuery } from '@mistriwork/engine/shared/view.js';
 import type { Condition, Filter } from '@mistriwork/engine/shared/filter.js';
 import {
@@ -98,8 +98,9 @@ export function appRollupRules(
     readable ??= withComputed(app, schema, now ?? new Date(), null, zone, true);
     /* `now` is the request's instant; a date phrase reads the App's wall clock (zonedNow), as a list's does. Read
        as given, `today` was the server's day, and a rollup counted Tokyo's tasks for a team in Chicago. */
-    // `me` is read as anyone's here, so the rule below says why a rollup cannot ask it.
-    const parsed = parseViewQuery(readable, child.id, rollup.query, now && zonedNow(appZone(app.ui, zone), now), { me: ANYONE });
+    // `me` is read as anyone's here, so the rule below says why a rollup cannot ask it; `tenant.` is refused, for a
+    // figure kept for every request would otherwise hold it for everyone and count every row.
+    const parsed = parseViewQuery(readable, child.id, rollup.query, now && zonedNow(appZone(app.ui, zone), now), { me: ANYONE_ONCE });
     if (parsed.errors.length) {
       problems.push(`${here} query: ${saidAt(parsed.errors[0], rollup.query)}`);
       return false;

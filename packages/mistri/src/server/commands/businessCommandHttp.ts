@@ -458,6 +458,7 @@ async function prepareBusinessCommand(options: {
         key,
         catalog: authorized.catalog!,
         ...(authorized.people ? { people: authorized.people } : {}),
+        ...(authorized.insertOnly ? { insertOnly: authorized.insertOnly } : {}),
         ...execution,
       }),
     ),

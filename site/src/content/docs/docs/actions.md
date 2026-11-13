@@ -38,6 +38,7 @@ See it in the sample (`examples/apps/tick/app.ts:42`).
 | `set` | The columns written, with constants or stamps | required | Stable |
 | `when` | A query-language condition on the record; the button shows where it holds | always | Stable |
 | `confirm` | Ask before writing | `false` | Stable |
+| `submitLabel` | The words on the dialog's submit (a form, a confirmation, a reason), when the label reads right on the record but not as an instruction: a noun there, a verb phrase here | the label | Stable |
 | `reason` | A column for a required note, written with the change; not with `bulk` | none | Stable |
 | `bulk` | Offer it on a queue's selection, written record by record | `false` | Stable |
 | `header` | `false` keeps it out of the record's action bar and menu; still granted, and run from a queue, a board or `useCommand` | `true` | Stable |

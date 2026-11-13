@@ -72,6 +72,10 @@ interface ResolvedAccess {
       never edited or removed. Absent where none is. Carried wherever `creatable` is, so no copy can leave a table editable. */
   appendOnly?: ReadonlySet<string>;
   fields?: ReadonlyMap<string, { read: ReadonlySet<string>; write: ReadonlySet<string> }>;
+  /** Of each table's grant, the columns `hidden` cut from `fields`, by table id: kept from every person, read by the
+      server code an author wrote (a command's lookup, server/commands/businessCommandAuthorization.ts). Absent where
+      nothing is hidden. */
+  hidden?: ReadonlyMap<string, ReadonlySet<string>>;
   /** Columns the server reads and writes for its own work, by table id: never in a served catalog, named by no request but its own. */
   internal?: ReadonlyMap<string, ReadonlySet<string>>;
   /** Of `readable`, the tables whose reads are written to the read audit (server/readAudit.ts). */
@@ -95,6 +99,7 @@ interface ResolvedAccess {
 function withoutHidden(app: AppDef, schema: DatabaseSchema, access: ResolvedAccess): ResolvedAccess {
   const cuts = hiddenColumns(app, schema);
   if (!cuts.size) return access;
+  const hidden = new Map<string, ReadonlySet<string>>();
   const fields = new Map(
     [...access.readable].map((id) => {
       const held =
@@ -104,6 +109,7 @@ function withoutHidden(app: AppDef, schema: DatabaseSchema, access: ResolvedAcce
           return { read: new Set(all), write: new Set(access.writable.has(id) ? all : []) };
         })();
       const cut = cuts.get(id);
+      if (cut) hidden.set(id, new Set([...held.read].filter((column) => cut.has(column))));
       return [
         id,
         cut
@@ -115,7 +121,7 @@ function withoutHidden(app: AppDef, schema: DatabaseSchema, access: ResolvedAcce
       ];
     }),
   );
-  return { ...access, fields };
+  return { ...access, fields, hidden };
 }
 
 /**

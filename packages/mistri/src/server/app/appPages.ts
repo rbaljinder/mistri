@@ -40,6 +40,7 @@ import { strayRead } from '../http/tablesReached.js';
 import { PAGE_NAV_RENAMED, PAGE_RENAMED, renamedMessages } from '../../shared/renamedWords.js';
 import { compilePageModule } from './appComponents.js';
 import { exportNames } from './componentSdk.js';
+import { moduleLoadTimedOut, moduleLoadTimeout } from './moduleLoadTimeout.js';
 
 /** A page's file name: its path, then the suffix. */
 const PAGE_FILE = /^(.+)\.page\.(tsx|jsx)$/;
@@ -398,6 +399,7 @@ export function evaluate(code: string, kind: 'page' | 'surface' | 'UI kit' = 'pa
   const symbol = kind === 'page' ? FIELDS : kind === 'surface' ? SURFACE_FIELDS : UI_KIT_SLOTS;
   const maker = kind === 'page' ? 'definePage' : kind === 'surface' ? 'defineSurface' : 'defineUiKit';
   return new Promise((resolveValue, reject) => {
+    const limit = moduleLoadTimeout();
     const worker = new Worker(
       `const { parentPort, workerData } = require('node:worker_threads');
        import(workerData.href).then(
@@ -421,7 +423,7 @@ export function evaluate(code: string, kind: 'page' | 'surface' | 'UI kit' = 'pa
       done(() => (m.ok ? resolveValue(m.value) : reject(new Error(hostImportMessage(m.message ?? ''))))),
     );
     worker.once('error', (err) => done(() => reject(err)));
-    const timer = setTimeout(() => done(() => reject(new Error(`the ${kind} module did not finish loading within 10s`))), 10_000);
+    const timer = setTimeout(() => done(() => reject(new Error(moduleLoadTimedOut(`${kind} module`, limit.seconds)))), limit.ms);
     timer.unref();
   });
 }

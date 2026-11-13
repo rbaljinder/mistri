@@ -92,8 +92,9 @@ export interface BusinessCommandAuthorization {
   /** The file resources it writes, by local name: where a new row's bytes go and the most it may hold (the
       resource's `maxBytes`, and a tenant host's 10 MB), as an upload is held. */
   readonly files?: ReadonlyMap<string, CommandFileRule>;
-  /** The file resources it writes that this actor cannot read, by local name, each with the sentence a read of it is
-      refused in: the command may add rows there and nothing more (a photo filed where its sender cannot browse). */
+  /** The tables it writes beside its target that this actor cannot read, by local name, each with the sentence a read
+      of it is refused in: the command may add rows there and nothing more (a photo filed or a line logged where its
+      sender cannot browse). */
   readonly insertOnly?: ReadonlyMap<string, string>;
   /** The resources it reads whose reads are audited (`audit: { reads: true }`); absent where it reads none. */
   readonly audited?: CommandAudited;
@@ -367,11 +368,17 @@ const narrowed = new WeakMap<LookupReader, WeakMap<object, LookupReader>>();
  * A lookup's reader as the actor reads a tenant's own tables: each one a role's column rule narrows keeps the columns
  * the rule reads and its key (a `get` names the row by it), so a where, an order or a row never reaches another. The
  * same rule a generic read of that table is held to; reference data is not narrowed (the binding's own comment).
+ *
+ * `lifted` is what a resource's `hidden` cut from that rule (appAccess.ts). Hidden keeps a column from people, not from
+ * the server code an author wrote — the handler's `db` reads it, and so does the record a lookup acts on — so a
+ * member's lookup reads it back through `sources` too: a vendor's reference kept from every reader is the one thing
+ * the outside call needs. A visitor's lookup shows the visitor what it finds, so it is given none.
  */
 function narrowedLookup(
   reader: LookupReader,
   tenantOwned: readonly Readonly<{ source: string; local: string; logical: string }>[],
   fields: ReturnType<typeof resolveAppAccess>['fields'],
+  lifted?: ReturnType<typeof resolveAppAccess>['hidden'],
 ): LookupReader {
   if (!fields || !tenantOwned.some((table) => fields.get(table.logical))) return reader;
   let byAccess = narrowed.get(reader);
@@ -384,7 +391,8 @@ function narrowedLookup(
     const seen = fields.get(logical)?.read;
     if (!seen) continue;
     const table = catalogs[source][local];
-    const keep = (column: string) => seen.has(column) || table.key.includes(column);
+    const back = lifted?.get(logical);
+    const keep = (column: string) => seen.has(column) || back?.has(column) === true || table.key.includes(column);
     const meta = Object.freeze({ ...table.meta, columns: table.meta.columns.filter((column) => keep(column.name)) });
     catalogs[source] = Object.freeze({
       ...catalogs[source],
@@ -1170,16 +1178,19 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         const access = accessOf(identity.roles);
         /* A signed-in caller is told which table: the refusal is theirs to act on, and the fixed sentence sent them to
            the command's author. (A public caller never reaches here, and keeps the generic message.) */
-        /* A file resource it writes beside its target, which the role cannot read, is no reason to refuse the run: a
-           command that files a photo or a signature only adds a row there, and a role that may send one need not
-           browse every other. It is held to adding (insertOnly, enforced by the executor's db), so read stays where the
-           role puts it: a handler that reads, counts, changes or removes those rows is refused as before. */
-        for (const rule of binding.files?.values() ?? [])
-          if (rule.table !== binding.command.target && !access.readable.has(rule.resource))
+        /* A table it writes beside its target, which the role cannot read, is no reason to refuse the run: a command
+           that files a photo, logs a line or leaves a to-do for another team only adds a row there, and a role that
+           may send one need not browse every other (a write grant never implies a read grant). It is held to adding
+           (insertOnly, enforced by the executor's db), so read stays where the role puts it: a handler that reads,
+           counts, changes or removes those rows is refused as before. */
+        for (const local of binding.command.write) {
+          const resource = binding.logical(local);
+          if (local !== binding.command.target && !access.readable.has(resource))
             insertOnly.set(
-              rule.table,
-              `Your role cannot read ${recordNoun(app.resources?.[rule.resource]?.noun, rule.resource)} records, which "${commandLabel(app, id)}" reads: it may only add them.`,
+              local,
+              `Your role cannot read ${recordNoun(app.resources?.[resource]?.noun, resource)} records, which "${commandLabel(app, id)}" reads: it may only add them.`,
             );
+        }
         const unread = binding.callerReads.find(
           (table) => !access.readable.has(table) && ![...insertOnly.keys()].some((local) => binding.logical(local) === table),
         );
@@ -1199,7 +1210,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
             `Your role cannot read ${recordNoun(app.resources?.[unlooked]?.noun, unlooked)} records, which "${commandLabel(app, id)}" looks up.`,
           );
         if (binding.lookup?.tenantOwned.length)
-          lookupTables = narrowedLookup(binding.lookup.reader, binding.lookup.tenantOwned, access.fields);
+          lookupTables = narrowedLookup(binding.lookup.reader, binding.lookup.tenantOwned, access.fields, access.hidden);
         // A job's service principal prepares no form and presses no button.
         const seen = access.fields?.get(binding.resource)?.read;
         if (seen && identity.kind !== 'service') issueTargetColumns(identity, seen);

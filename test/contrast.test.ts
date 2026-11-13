@@ -90,6 +90,26 @@ test('every built-in look, palette and mode meets AA on the pairs the design sys
   assert.deepEqual(failures, []);
 });
 
+test("a chosen segment's count chip reads in every look: the fill and its ink, turned over", () => {
+  // kit.css fills the chosen segment with the accent, or the ink where the look inverts its tabs, and draws the chip as
+  // the segment's own pair the other way about, so the pair measured is the fill against on-accent.
+  const failures: string[] = [];
+  let inverted = 0;
+  for (const look of THEME_PRESETS) {
+    const fill = (look as { recipes?: { tabs?: string } }).recipes?.tabs === 'inverted' ? 'ink' : 'accent';
+    if (fill === 'ink') inverted++;
+    for (const id of ['default', ...(look.palettes ?? []).map((p) => p.id)]) {
+      const definition = effectiveThemeDefinition(look, id);
+      for (const mode of ['light', 'dark'] as const) {
+        const palette = effectiveThemePalette(definition[mode] as ThemePalette, mode === 'dark') as unknown as Record<string, string>;
+        failures.push(...measure(palette, `${look.id}/${id}/${mode}`, [[fill, 'onAccent', 4.5]]));
+      }
+    }
+  }
+  assert.ok(inverted > 0, 'a look that inverts its tabs was measured');
+  assert.deepEqual(failures, []);
+});
+
 /** color-mix(in srgb, a weight%, b), as kit.css writes it. */
 function mix(a: string, weight: number, b: string): string {
   const [x, y] = [parse(a), parse(b)];

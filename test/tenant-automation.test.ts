@@ -163,6 +163,8 @@ type Closed = { ref: string };
 const advanced = defineEvent('task.advanced', shape({ taskId: text(), ref: text() }));
 const closed = defineEvent('task.closed', shape({ ref: text() }));
 const output = { parse: (value: unknown) => value as Record<string, unknown> };
+/* The zone each sweep's handler was handed (`timezone`), by the tenant whose rows it saw. */
+const sweepZones = new Map<string, string>();
 const advanceOutput = { parse: (value: unknown) => value as Advanced };
 const closeOutput = { parse: (value: unknown) => value as Closed };
 const commands = defineCommands({
@@ -226,8 +228,9 @@ const commands = defineCommands({
     targets: 'none',
     input: {},
     output,
-    async handle({ db }) {
+    async handle({ db, timezone }) {
       const rows = await db.task.where();
+      for (const tenant of new Set(rows.map((row) => String(row.tenant_id)))) sweepZones.set(tenant, timezone);
       for (const row of rows) await db.task.update(row, { flagged: Number(row.flagged) + 1, version: Number(row.version) + 1 });
       return { seen: rows.map((row) => String(row.id)).sort() };
     },
@@ -543,6 +546,8 @@ for (const { dialect, skip } of ENGINES)
       }
       // Each tenant's run is at its own zone's slot.
       assert.deepEqual((await runs()).map((run) => [run.tenant, run.runAt]).sort(), due.map((slot) => [slot.tenant, slot.at]).sort());
+      // And its command counts the day there too: the handler's `timezone` is the tenant's zone, the App's where it names none (west).
+      assert.deepEqual(Object.fromEntries(sweepZones), { ...ZONES });
     });
 
     test("a job per tenant run now (a test's host.runJob) runs for the tenant named alone; without one, or on the platform's, it is refused", async (t) => {

@@ -65,8 +65,8 @@ test('a handler writes now, today and me in each column’s own format', { timeo
             closed_on: today,
             closed_by: me,
             owner_id: me,
-            // The handler's own day, in the App's zone as the stamp's is.
-            day_said: context.today(),
+            // The handler's own day and the zone it counts in: the App's, as the stamp's is.
+            day_said: `${context.today()} ${context.timezone}`,
           });
           return { ok: true as const };
         },
@@ -138,7 +138,7 @@ test('a handler writes now, today and me in each column’s own format', { timeo
         // A TIMESTAMP holds no zone, so it holds the App's wall clock too, not the UTC instant.
         stamped: '2026-09-07 19:30:00',
         closed_on: '2026-09-07',
-        day_said: '2026-09-07',
+        day_said: '2026-09-07 America/Los_Angeles',
         closed_by: 'ada@example.test',
         owner_id: 7,
       },

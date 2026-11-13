@@ -48,6 +48,31 @@ function viaTargetsOwned(policy: RowScopeFilter, ownership: TenantOwnershipSnaps
   );
 }
 
+/**
+ * A command's rows narrowed to its footprint (`kept`), keeping as well the rule of every table a kept rule reads through
+ * a `via`, however many hops away. The `via` is the row policy's test of a kept row, run over the rows the policy
+ * admits of its target: with the target narrowed to nothing, a table scoped through one the command did not declare
+ * read empty (a field report: a global catalog a tenant sees only where it stocks the item). Keeping the target's
+ * rule intersects, never widens, and hands the target to no handler: what the handler reads is its own read grant.
+ */
+export function footprintRows(rows: RowScope, kept: (table: string) => boolean): RowScope {
+  const reached = new Set<string>();
+  const walk = (table: string): void => {
+    const rule = Object.hasOwn(rows, table) ? rows[table] : undefined;
+    if (!rule || rule === true) return;
+    for (const group of rule.groups)
+      for (const condition of group)
+        if (relates(condition) && !reached.has(condition.via.resource)) {
+          reached.add(condition.via.resource);
+          walk(condition.via.resource);
+        }
+  };
+  for (const table of Object.keys(rows)) if (kept(table)) walk(table);
+  return Object.freeze(
+    Object.fromEntries(Object.entries(rows).map(([table, row]) => [table, kept(table) || reached.has(table) ? row : false])),
+  );
+}
+
 /** A composed (logical) scope in the source's physical names: the keys and every `via` target translate by the same mapping. */
 export function physicalRowScope(scope: RowScope, toPhysical: (id: string) => string): RowScope {
   return Object.fromEntries(Object.entries(scope).map(([id, rule]) => [toPhysical(id), renameViaTargets(rule, toPhysical)]));

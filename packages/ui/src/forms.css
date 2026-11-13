@@ -69,6 +69,9 @@
 }
 /* On is a thicker edge drawn outside the box, not a wider border, so choosing moves nothing. */
 .choice-pick.is-on, .choice-card.is-on { border-color: var(--choice-on, var(--accent)); box-shadow: 0 0 0 1px var(--choice-on, var(--accent)); background: var(--choice-on-well, var(--accent-soft)); }
+/* A button that is picked has no square to say so, so its face carries it: the host's picked well where it names one
+   (--choice-pick-on-well: a quiet form, whose --choice-on-well is its field's own fill), and heavier words. */
+.choice-pick.is-on { background: var(--choice-pick-on-well, var(--choice-on-well, var(--accent-soft))); font-weight: 600; }
 .choice-pick:has(.choice-input:focus-visible), .choice-card:has(.choice-input:focus-visible), .choice-card:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
 .choice-card[aria-disabled="true"] { cursor: not-allowed; opacity: 0.6; }
 .choice-cards { display: flex; flex-direction: column; gap: var(--space-3); }

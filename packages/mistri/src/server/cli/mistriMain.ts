@@ -350,6 +350,9 @@ export const main: Main = async () => {
   const latency = await import('@mistriwork/engine/adapters/dbLatency.js');
   try {
     latency.configureDbLatency(opts.dbLatency);
+    /* Every App, page and component load reads this setting: refused here, once, rather than each load throwing
+       at a request (moduleLoadTimeout.ts). */
+    (await import('../app/moduleLoadTimeout.js')).moduleLoadTimeout();
   } catch (error) {
     console.error(`mistri: ${(error as Error).message}`);
     process.exitCode = 2;

@@ -272,6 +272,7 @@ export function bindTenantLinks(options: TenantLinksOptions) {
             key: prepared.key,
             catalog: authorization.catalog,
             ...(authorization.people ? { people: authorization.people } : {}),
+            ...(authorization.insertOnly ? { insertOnly: authorization.insertOnly } : {}),
             tenant,
           });
         }),
