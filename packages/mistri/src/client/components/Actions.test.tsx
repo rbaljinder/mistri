@@ -423,6 +423,15 @@ describe('an action that asks a reason', () => {
     expect(calls.at(-1)).toMatchObject({ path: '/api/update', body: { values: { status: 'canceled', cancel_note: 'Duplicate of #4' } } });
   });
 
+  test("its submit says the action's submitLabel where it has one, and the label where it has none", async () => {
+    const user = userEvent.setup();
+    draw({ actions: [{ ...cancel, submitLabel: 'Cancel the issue' }] });
+    await user.click(await screen.findByRole('button', { name: 'Cancel issue' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cancel issue: reason' });
+    expect(dialog.querySelector('button[type="submit"]')).toHaveTextContent('Cancel the issue');
+    expect(dialog.querySelector('h2')).toHaveTextContent('Cancel issue');
+  });
+
   test('its own Cancel writes nothing', async () => {
     const user = userEvent.setup();
     draw({ actions: [cancel] });

@@ -26,6 +26,12 @@ export interface QueryPerson {
    */
   anyone?: true;
   /**
+   * With `anyone`: the query is compiled once and kept for every request (a rollup's rows), so a fact of one
+   * request, `tenant.<column>`, cannot be read into it. Held for `anyone` alone, as a check before any request
+   * does; here refused, since a figure that held it for everyone would count every row.
+   */
+  once?: true;
+  /**
    * The table people are rows of (an App's `auth.me`), and the signed-in
    * account's row key there — null when no row carries their email, which
    * then matches nothing rather than failing the list.
@@ -57,6 +63,12 @@ const TENANT_VALUE = /^tenant\.([A-Za-z_]\w*)$/;
 /** Nobody in particular (`anyone` above): what a check that runs before any request reads `me` as. */
 export const ANYONE: QueryPerson = Object.freeze({ email: null, anyone: true });
 
+/** ANYONE for a query kept as it is compiled and served to every request: `tenant.<column>` is refused, not held. */
+export const ANYONE_ONCE: QueryPerson = Object.freeze({ email: null, anyone: true, once: true });
+
+const ONCE_TENANT = (word: string): string =>
+  `${word} is a fact of one request's tenant, and this query is read once for every request, so it cannot ask it. Test the tenant in a \`when\` instead.`;
+
 /** One `me.<table>.<column>`: its values and their kind, or the sentence that refuses it. */
 export type MeSet = { values: readonly (string | number)[]; kind: ColumnKind } | { error: string };
 
@@ -71,6 +83,64 @@ export interface CompileContext {
   me?: QueryPerson | null;
   /** A machine's states by column, where the catalog does not carry them (a parse with no schema). */
   states?: Readonly<Record<string, MachineStates>>;
+}
+
+/** `tenant.<column>` where a condition's left-hand column would be. */
+export const TENANT_FIELD = TENANT_VALUE;
+
+/** How a condition with `tenant.<column>` on its left compares (`tenant.plan = 'pro'`, `tenant.plan in (pro, team)`). */
+export type TenantTest = '=' | '!=' | '<' | '<=' | '>' | '>=' | 'in' | 'not in' | 'isNull' | 'isNotNull';
+
+/**
+ * `tenant.<column>` on the left of a condition (`tenant.plan = 'pro'`): no column of the row but a fact of this
+ * request, as a menu's or a command input's `when` reads it (commandWhen.ts foldWhen), so the condition holds of
+ * every row or of none. Judged against the profile as that fold judges it: a null value meets only `is empty`, and
+ * a value written is read as the profile's kind (a number, a flag, text). Refused with the words the right-hand
+ * form uses where no tenant is meant or the column is not shared. A check before any request (ANYONE) holds it,
+ * and the request judges it.
+ */
+export function tenantHolds(
+  ctx: CompileContext,
+  word: string,
+  test: TenantTest,
+  values: readonly { value: string; quoted: boolean }[],
+): { holds?: boolean; error?: string } {
+  const column = TENANT_VALUE.exec(word)![1];
+  const me = ctx.me;
+  if (me?.anyone && me.tenant === undefined) return me.once ? { error: ONCE_TENANT(word) } : { holds: true };
+  if (!me?.tenant)
+    return { error: `${word} is the reader's tenant profile, and no tenant is meant here. Quote it ("${word}") to mean the text.` };
+  if (!Object.hasOwn(me.tenant, column))
+    return { error: `${word} is not a column the App shares with its members: list "${column}" in auth.tenancy.shared.` };
+  for (const { value, quoted } of values) {
+    if (!quoted && (value === 'me' || ME_SET.test(value) || TENANT_VALUE.test(value) || ctx.table?.columns.some((c) => c.name === value)))
+      return { error: `${word} is compared with a value, and ${value} is not one. Quote it ("${value}") to mean the text.` };
+  }
+  const held = me.tenant[column];
+  if (test === 'isNull') return { holds: held === null };
+  if (test === 'isNotNull') return { holds: held !== null };
+  if (held === null) return { holds: false };
+  const as = (given: string): string | number | boolean =>
+    typeof held === 'number' ? Number(given) : typeof held === 'boolean' ? /^(1|true|t|yes|y)$/i.test(given) : given;
+  const read = values.map((item) => as(item.value));
+  switch (test) {
+    case 'in':
+      return { holds: read.includes(held) };
+    case 'not in':
+      return { holds: !read.includes(held) };
+    case '=':
+      return { holds: held === read[0] };
+    case '!=':
+      return { holds: held !== read[0] };
+    case '<':
+      return { holds: held < read[0] };
+    case '<=':
+      return { holds: held <= read[0] };
+    case '>':
+      return { holds: held > read[0] };
+    case '>=':
+      return { holds: held >= read[0] };
+  }
 }
 
 /**
@@ -89,7 +159,7 @@ export function tenantOperand(
   const match = quoted ? null : TENANT_VALUE.exec(word);
   if (!match || ctx.table?.columns.some((c) => c.name === 'tenant')) return undefined;
   const me = ctx.me;
-  if (me?.anyone && me.tenant === undefined) return { value: word };
+  if (me?.anyone && me.tenant === undefined) return me.once ? { error: ONCE_TENANT(word) } : { value: word };
   if (!me?.tenant)
     return { error: `${word} is the reader's tenant profile, and no tenant is meant here. Quote it ("${word}") to mean the text.` };
   if (!Object.hasOwn(me.tenant, match[1]))

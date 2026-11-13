@@ -174,9 +174,12 @@ export interface BusinessCommandContext extends CommandContextBase {
    * `workflow`. Never read from the request.
    */
   readonly door: CommandHandlerDoor;
-  /** The day `now()` falls on in the App's `ui.timezone` (UTC without one), as `YYYY-MM-DD`: the day a DATE column's
-      `today` stamp writes, so a handler's day and a stamp's agree wherever the server runs. */
+  /** The day `now()` falls on in `timezone`, as `YYYY-MM-DD`: the day a DATE column's `today` stamp writes, so a
+      handler's day and a stamp's agree wherever the server runs. */
   readonly today: () => string;
+  /** The IANA zone `today()` counts in: a tenant App's running tenant's own (`ui.timezone: { column }`), else the
+      App's `ui.timezone`, else `UTC`. For code that says a moment to a person, as a reminder's text does. */
+  readonly timezone: string;
   readonly db: Readonly<Record<string, ReadTable<UntypedRow>>>;
   /** The target, read and checked in this transaction: a one-target command that names a record. */
   readonly record?: UntypedRow;
@@ -319,6 +322,7 @@ type CommandHandlerContext<
 > = CommandContextBase & {
   readonly door: CommandHandlerDoor;
   readonly today: BusinessCommandContext['today'];
+  readonly timezone: BusinessCommandContext['timezone'];
   readonly db: CommandTables<Tables<Src, Target>, Reads<Target, Read, Write>, Writes<Target, Write>>;
   readonly tx: WriteTransaction;
   readonly nextNumber: CommandNextNumber;
@@ -677,6 +681,9 @@ const commandEvents = new WeakMap<object, unknown>();
 /* Every event slot a command's batch carries, its effects' included: what its fingerprint names. */
 const commandSlots = new WeakMap<object, readonly string[]>();
 const commandEffects = new WeakMap<object, CapturedEffects['targets']>();
+/* The tables its author named in `read` and in `write` both. `read` is the whole footprint, written tables
+   included, so without this a table said twice reads as one only written (callerMustRead). */
+const declaredReads = new WeakMap<object, readonly string[]>();
 /* The callbacks as registration captured them: replacing one on the
    caller's object afterwards changes nothing that runs. */
 const commandRules = new WeakMap<
@@ -833,6 +840,20 @@ function elevateOption(
 export function callerRead(command: Pick<BusinessCommand<unknown, unknown>, 'read' | 'elevate'>): readonly string[] {
   const elevated = command.elevate?.read;
   return elevated?.length ? command.read.filter((table) => !elevated.includes(table)) : command.read;
+}
+
+/**
+ * The tables a role must read to run a command: what its caller reads, less what it writes beside its target. A
+ * written table the role cannot read does not refuse the run: the command may only add rows there (a log line, a
+ * to-do for another team, a photo), and a read, change or removal of them is refused then
+ * (businessCommandAuthorization.ts insertOnly). A write grant never implies a read grant; a table the author also
+ * named in `read` is a read the caller must hold.
+ */
+export function callerMustRead(
+  command: Pick<BusinessCommand<unknown, unknown>, 'read' | 'elevate' | 'write' | 'target'>,
+): readonly string[] {
+  const declared = declaredReads.get(command) ?? [];
+  return callerRead(command).filter((table) => table === command.target || !command.write.includes(table) || declared.includes(table));
 }
 
 function plainRecord(value: unknown, where: string): Record<string, unknown> {
@@ -1051,7 +1072,9 @@ export function defineCommand<
   // naming either again is redundant, never a second footprint, so a
   // registered command's own footprint spreads back in unchanged.
   const writes = resources(value.write, 'Command write footprint').filter((table) => table !== target);
-  const reads = resources(value.read, 'Command read footprint').filter((table) => table !== target && !writes.includes(table));
+  const named = resources(value.read, 'Command read footprint');
+  const reads = named.filter((table) => table !== target && !writes.includes(table));
+  const alsoWritten = named.filter((table) => table !== target && writes.includes(table));
   const read = Object.freeze([target, ...reads, ...writes]),
     write = Object.freeze([target, ...writes]);
   const elevate = Object.hasOwn(value, 'elevate') ? elevateOption(value.elevate, target, reads, writes) : undefined;
@@ -1314,6 +1337,7 @@ export function defineCommand<
   if (capturedEvents) commandEvents.set(result, capturedEvents);
   if (slots) commandSlots.set(result, slots);
   if (effects) commandEffects.set(result, effects.targets);
+  if (alsoWritten.length) declaredReads.set(result, Object.freeze(alsoWritten));
   const stated: string[] = [];
   if (value.public === true && value.targets === 'none') stated.push("targets: 'none' is implied by public: true. Delete it.");
   // The executor parses the handler's return against `output` already; parsing it again in the handler repeats that.
@@ -1545,7 +1569,10 @@ function recommand(
   Object.defineProperty(copy, 'fields', { value: changes.fields ?? command.fields, enumerable: false });
   Object.freeze(copy);
   registered.add(copy);
-  for (const map of [commandEvents, commandSlots, commandEffects, commandRules, restatements] as WeakMap<object, unknown>[]) {
+  for (const map of [commandEvents, commandSlots, commandEffects, commandRules, restatements, declaredReads] as WeakMap<
+    object,
+    unknown
+  >[]) {
     if (map.has(command)) map.set(copy, map.get(command));
   }
   return copy as AnyBusinessCommand;

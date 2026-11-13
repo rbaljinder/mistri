@@ -3,7 +3,7 @@
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { genericWriteOf } from '../commands/genericWriteBrand.js';
 import { flowCommandOf } from '../commands/flowCommandBrand.js';
-import { callerRead, type BusinessCommandRegistry } from '../commands/businessCommands.js';
+import { callerMustRead, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { appCommandGrants, logicalResource, resolveAppAccess, type AppDef } from '../../shared/app.js';
 
 /**
@@ -43,14 +43,9 @@ export function commandUnreadable(app: AppDef, commands: BusinessCommandRegistry
   const out: string[] = [];
   for (const [id, command] of Object.entries(commands)) {
     if (command.public === true || genericWriteOf(command) !== undefined || flowCommandOf(command) !== undefined) continue;
-    /* A file resource it writes beside its target, it may only add to for a role that cannot read it: the run goes
-       ahead and a read of those rows is refused then (businessCommandAuthorization.ts insertOnly). */
-    const tables = callerRead(command)
-      .filter(
-        (local) =>
-          local === command.target || !command.write.includes(local) || !app.resources?.[logicalResource(app, command.source, local)]?.file,
-      )
-      .map((local) => logicalResource(app, command.source, local));
+    /* A table it writes beside its target, it may only add to for a role that cannot read it: the run goes ahead and
+       a read of those rows is refused then (businessCommandAuthorization.ts insertOnly). */
+    const tables = callerMustRead(command).map((local) => logicalResource(app, command.source, local));
     for (const role of Object.keys(app.auth?.roles ?? {})) {
       if (!appCommandGrants(app, [role]).has(id)) continue;
       let readable: ReadonlySet<string>;

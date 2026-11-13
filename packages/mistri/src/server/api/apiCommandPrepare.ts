@@ -30,6 +30,7 @@ export async function prepareApiCommand(
         key,
         catalog: authorized.catalog,
         ...(authorized.people ? { people: authorized.people } : {}),
+        ...(authorized.insertOnly ? { insertOnly: authorized.insertOnly } : {}),
         signal,
         flags,
         beforeInitial: () => authorized.assertTarget?.(records, key) ?? Promise.resolve(),

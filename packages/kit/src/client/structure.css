@@ -839,6 +839,14 @@
     }
   }
 
+  /* A Segmented of five or more folds to a native picker at a phone's width (sdk/kit.css); a finger lands on the whole of it,
+     and a look's field height (visualThemes.css) is 36px, so the picker says its 44px here, after the looks. */
+  @media (max-width: 560px), (pointer: coarse) {
+    .kit-segmented-pick {
+      min-height: 44px;
+    }
+  }
+
   /* A row's own small controls draw at 22–24px, which a pointer hits and a
    finger does not: on a coarse pointer each takes a 44px hit area (WCAG
    2.5.5) without growing what it draws, so the row keeps its measure. The

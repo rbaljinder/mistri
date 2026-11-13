@@ -22,6 +22,7 @@ export default page;
 function Vocabulary() {
   const things = useRows('thing');
   const [range, setRange] = useState('week');
+  const [stage, setStage] = useState('all');
   const [file, setFile] = useState<File | null>(null);
   return (
     <Beside
@@ -45,6 +46,15 @@ function Vocabulary() {
                     lead={at === 0 ? '09:30' : undefined}
                     tone={at === 1 ? 'bad' : undefined}
                     href="/vocabulary?seen=1"
+                    action={
+                      at === 2 ? (
+                        <>
+                          <Button href="/vocabulary?accept=1">Accept the delivery</Button>
+                          <Button href="/vocabulary?hold=1">Hold it at the gate</Button>
+                          <Button href="/vocabulary?return=1">Send it back</Button>
+                        </>
+                      ) : undefined
+                    }
                   />
                 ))}
               </Items>
@@ -59,6 +69,19 @@ function Vocabulary() {
             options={[
               { value: 'week', label: 'Week', count: 3 },
               { value: 'month', label: 'Month', count: 12 },
+            ]}
+          />
+          <Segmented
+            label="Stage"
+            className="vocabulary-stage"
+            value={stage}
+            onChange={setStage}
+            options={[
+              { value: 'all', label: 'All stages' },
+              { value: 'new', label: 'New enquiries', count: 4 },
+              { value: 'working', label: 'Working' },
+              { value: 'quoted', label: 'Quoted' },
+              { value: 'won', label: 'Won and closed' },
             ]}
           />
           <Button href="/vocabulary?opened=1">Open</Button>

@@ -229,6 +229,41 @@ describe('as the App declares them', () => {
     assert.deepEqual(parseTestApp({ ...APP, ui: { csp: { connect: ['http://localhost:8080'] } } }, 'lot').ui.csp?.connect, [
       'http://localhost:8080',
     ]);
+    // A WebSocket is a connection: wss to a host, as https is, and ws to this machine, as http is; not a picture.
+    assert.deepEqual(
+      parseTestApp({ ...APP, ui: { csp: { connect: ['ws://localhost', 'ws://127.0.0.1:5173/', 'ws://localhost:8080'] } } }, 'lot').ui.csp
+        ?.connect,
+      ['ws://127.0.0.1:5173', 'ws://localhost', 'ws://localhost:8080'],
+    );
+    assert.deepEqual(
+      parseTestApp({ ...APP, ui: { csp: { connect: ['wss://live.example.com/', 'wss://Relay.test:8443'] } } }, 'lot').ui.csp?.connect,
+      ['wss://live.example.com', 'wss://relay.test:8443'],
+    );
+    assert.match(
+      authorityReport(parseTestApp({ ...APP, ui: { csp: { connect: ['wss://live.example.com'] } } }, 'lot')),
+      /^egress connect wss:\/\/live\.example\.com — the App$/m,
+    );
+    for (const [key, origin] of [
+      ['connect', 'ws://live.example.com'],
+      ['connect', 'ws://localhost/socket'],
+      ['connect', 'ws://localhost.example.com'],
+      ['images', 'ws://localhost'],
+      ['connect', 'wss://live.example.com/socket'],
+      ['connect', 'wss://*.example.com'],
+      ['images', 'wss://live.example.com'],
+    ])
+      assert.throws(
+        () => parseTestApp({ ...APP, ui: { csp: { [key]: [origin] } } }, 'lot'),
+        /origins like "https:\/\/api\.example\.com"/,
+        origin,
+      );
+    assert.match(
+      withEgress(
+        shellPolicy('<script>boot()</script>'),
+        shellEgress([{ ui: { csp: { connect: ['wss://live.example.com'] } }, components: true }]),
+      ),
+      /connect-src 'self' wss:\/\/live\.example\.com;/,
+    );
   });
 
   test("the page's policy opens the served Apps' origins and nothing else, and narrows pictures once a component is served", () => {

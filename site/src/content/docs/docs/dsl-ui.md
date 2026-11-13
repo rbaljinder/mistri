@@ -45,7 +45,8 @@ App the tenant's own zone is a shared profile column: `timezone: { column:
 `auth.tenancy.shared` ([what members read](/docs/tenant-apps/#what-members-read)).
 An empty, null or unknown value is `default`, and `mistri check` refuses a column
 `shared` does not list (`tenant-shared-column`). A tenant command's `today()`
-counts the same day.
+counts the same day, and its handler reads the zone as `ctx.timezone`; a page's
+`useFormat().timezone` is the tenant's too.
 
 `locale` is also the App's own language, the one its `messages/` catalogs are
 written from, and may be read per reader the same way: `locale: { column:
@@ -520,7 +521,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `ui.csp` | object | Stable | The origins the page opens beside the App's own for its custom components, recorded in authority.lock. |
-| `ui.csp.connect` | array | Stable | Origins its custom components may send requests to (https://api.example.com): the page's connect-src. |
+| `ui.csp.connect` | array | Stable | Origins its custom components may send requests to or open a WebSocket to (https://api.example.com, wss://live.example.com): the page's connect-src. |
 | `ui.csp.images` | array | Stable | Origins its custom components may load pictures from, beside its own: the page's img-src. Once an App serves components, pictures come only from its own origin and these. |
 
 ## `ui.currency`

@@ -815,7 +815,7 @@ function sayMoney(value: number | string, options: string | UiMoneyFormat = {}):
 /** Figures in the App's locale, currency and timezone (`ui.locale`, `ui.currency`, `ui.timezone`), as every built-in section says them. */
 export function useFormat() {
   return {
-    /** The App's day (`ui.timezone`): the zone a page reckons "today" in, as the built-in calendar does. Undefined where the App names none, so `Intl` uses the reader's own. */
+    /** The App's day (`ui.timezone`, in a tenant App the reader's tenant's own): the zone a page reckons "today" in, as the built-in calendar does. Undefined where the App names none, so `Intl` uses the reader's own. */
     timezone: formatTimezone(),
     number: (value: number | string, options?: Intl.NumberFormatOptions) => formatNumber(value, options),
     money: (value: number | string, options?: string | UiMoneyFormat) => sayMoney(value, options),

@@ -166,20 +166,19 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
             ...(grants.internal ? { internal: grants.internal } : {}),
             ...(validation ? { validation } : {}),
             ...(transitions ? { transitions } : {}),
-            ...(actions
-              ? {
-                  actions,
-                  me: (reader) =>
-                    lookupTenantPerson(
-                      runtime.app,
-                      ownership.schema,
-                      scope.who(),
-                      peopleOwned ? principal.accountId : undefined,
-                      reader,
-                      scope.tenant,
-                    ),
-                }
-              : {}),
+            ...(actions ? { actions } : {}),
+            /* The writer as a `when` reads them, `tenant.<column>` included: a machine's step is judged for a member
+               who holds write as much as an action is for one granted only the verb. Looked up only when a `when`
+               names them. */
+            me: (reader) =>
+              lookupTenantPerson(
+                runtime.app,
+                ownership.schema,
+                scope.who(),
+                peopleOwned ? principal.accountId : undefined,
+                reader,
+                scope.tenant,
+              ),
             ...(stamps?.rules.size ? { stamp: (request, reader) => stampUpdate(stamps, request, moment(reader)) } : {}),
             ...(stamps?.defaults ? { fill: (request, reader) => stampInsert(stamps, request, moment(reader)) } : {}),
           };

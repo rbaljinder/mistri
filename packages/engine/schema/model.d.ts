@@ -234,6 +234,9 @@ export interface AppFormCommandReference {
   label?: string;
 }
 
+/** As served, where every `msg()` is said, a caption is text; as authored it may be a message. */
+type SubmitLabel<Label> = [Label] extends [string] ? string : string | AppMessageRef;
+
 export interface AppUpdateAction<Label extends string | AppMessageRef = string> {
   /** Its key in `resources.<table>.actions`: what a header, a queue and a role name it by. Served, never authored in the object. */
   id: string;
@@ -257,11 +260,19 @@ export interface AppUpdateAction<Label extends string | AppMessageRef = string> 
   bulk?: boolean;
   /** See `CommandActionBase.header`. */
   header?: boolean;
+  /** The words on the button of the dialog this action opens (the confirmation, the reason), at most 60 characters; left
+      out, the action's own label. A label that reads right as a button on the record (a noun) may read wrong as the
+      dialog's submit, which is an instruction. */
+  submitLabel?: SubmitLabel<Label>;
   command?: never;
 }
 
 export interface CommandActionBase<Label extends string | AppMessageRef> {
   label: Label;
+  /** The words on the submit of the form (or the confirmation) this action opens, at most 60 characters; left out, the
+      action's own label. A label that reads right as a button on the record (a noun) may read wrong as the dialog's
+      submit, which is an instruction. */
+  submitLabel?: SubmitLabel<Label>;
   /** A command collects what it needs through its own input. */
   reason?: never;
   set?: never;

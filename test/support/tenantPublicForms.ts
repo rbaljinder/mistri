@@ -49,27 +49,34 @@ export const via = (address: string) => `?via=${encodeURIComponent(address)}`;
 
 const draftColumns = 'more TEXT, status TEXT, resume_token_hash TEXT, resume_expires_at TEXT, resume_progress TEXT';
 const SQLITE = `PRAGMA foreign_keys = ON;
-  CREATE TABLE dealer (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, intake_address TEXT, public_address TEXT);
+  CREATE TABLE dealer (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, intake_address TEXT, public_address TEXT, country TEXT);
   CREATE TABLE make (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES dealer(id), name TEXT NOT NULL);
   CREATE TABLE lead (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES dealer(id), reference TEXT NOT NULL,
     name TEXT NOT NULL, make_id TEXT, ${draftColumns});
   CREATE TABLE intake_submission (id TEXT PRIMARY KEY NOT NULL, reference TEXT NOT NULL, name TEXT NOT NULL, make_id TEXT, ${draftColumns});
-  INSERT INTO dealer VALUES ('north', 'North Motors', '${NORTH}', '${NORTH_PUBLIC}'), ('south', 'South Wheels', '${SOUTH}', '${SOUTH_PUBLIC}');
+  INSERT INTO dealer (id, name, intake_address, public_address, country)
+    VALUES ('north', 'North Motors', '${NORTH}', '${NORTH_PUBLIC}', 'US'), ('south', 'South Wheels', '${SOUTH}', '${SOUTH_PUBLIC}', 'CA');
   INSERT INTO make VALUES ('n-ford', 'north', 'Ford'), ('n-kia', 'north', 'Kia'), ('s-fiat', 'south', 'Fiat');`;
 const POSTGRES = `
-  CREATE TABLE public.dealer (id text PRIMARY KEY, name text NOT NULL, intake_address text, public_address text);
+  CREATE TABLE public.dealer (id text PRIMARY KEY, name text NOT NULL, intake_address text, public_address text, country text);
   CREATE TABLE public.make (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES public.dealer(id), name text NOT NULL);
   CREATE TABLE public.lead (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES public.dealer(id), reference text NOT NULL,
     name text NOT NULL, make_id text, ${draftColumns.replaceAll('TEXT', 'text')});
   CREATE TABLE public.intake_submission (id text PRIMARY KEY, reference text NOT NULL, name text NOT NULL, make_id text,
     ${draftColumns.replaceAll('TEXT', 'text')});
-  INSERT INTO public.dealer VALUES ('north', 'North Motors', '${NORTH}', '${NORTH_PUBLIC}'), ('south', 'South Wheels', '${SOUTH}', '${SOUTH_PUBLIC}');
+  INSERT INTO public.dealer (id, name, intake_address, public_address, country)
+    VALUES ('north', 'North Motors', '${NORTH}', '${NORTH_PUBLIC}', 'US'), ('south', 'South Wheels', '${SOUTH}', '${SOUTH_PUBLIC}', 'CA');
   INSERT INTO public.make VALUES ('n-ford', 'north', 'Ford'), ('n-kia', 'north', 'Kia'), ('s-fiat', 'south', 'Fiat');`;
 
 const input = { name: { label: 'Name', type: 'text', max: 80 } } as const;
 const quoteInput = {
   name: { label: 'Name', type: 'text', max: 80 },
   make: { label: 'Make', type: 'choice', from: 'make', labelColumn: 'name' },
+} as const;
+/* A state is asked only where the dealer placing the form is in the US: north is, south (in Canada) is not. */
+const askInput = {
+  name: { label: 'Name', type: 'text', max: 80 },
+  state: { label: 'State', type: 'text', max: 2, when: "tenant.country = 'US'" },
 } as const;
 
 export interface TenantPublicFormOptions {
@@ -96,6 +103,9 @@ export interface TenantPublicFormOptions {
   readonly publicPage?: true;
   /** `--trust-proxy`: the ranges whose X-Forwarded-For names a visitor on the public doors. */
   readonly trustedProxies?: readonly string[];
+  /** Each dealer shares its country (`auth.tenancy.shared`), and a form, `ask`, asks a state only of a US dealer's
+      visitor (`when: "tenant.country = 'US'"`): north is in the US, south is not. */
+  readonly askByCountry?: true;
 }
 
 export interface Answer {
@@ -259,7 +269,12 @@ export async function openTenantPublicForms(
           store: join(directory, 'auth.db'),
           signUp: 'open',
           rows: 'tenant',
-          tenancy: { label: 'Dealer', profile: 'dealer', platform: { label: 'Lender' } },
+          tenancy: {
+            label: 'Dealer',
+            profile: 'dealer',
+            platform: { label: 'Lender' },
+            ...(options.askByCountry ? { shared: ['country'] } : {}),
+          },
           roles: { staff: { realm: 'tenant', read: true }, manager: { realm: 'platform', read: true } },
           ...(options.challenge ? { challenge: 'verifyHuman' } : {}),
           ...(options.publicReads ? { public: { read: ['make'] } } : {}),
@@ -275,6 +290,9 @@ export async function openTenantPublicForms(
                 // A visitor names a make the dealer lacks: a write to a choice table through the deployment's writer.
                 suggest: { kind: 'form', label: 'Suggest a make', public: true, command: { id: 'suggest', version: 1, input } },
               }
+            : {}),
+          ...(options.askByCountry
+            ? { ask: { kind: 'form', label: 'Ask about a car', public: true, command: { id: 'ask', version: 1, input: askInput } } }
             : {}),
           ...(options.publicPage
             ? {
@@ -366,6 +384,25 @@ export async function openTenantPublicForms(
         return { reference: `YRD-S-${value.name}`, message: 'Application received.' as const };
       },
     }),
+    ...(options.askByCountry
+      ? {
+          ask: defineCommand({
+            targets: 'none',
+            source: 'business',
+            target: 'lead',
+            write: places,
+            public: true,
+            input: askInput,
+            output: received,
+            async handle({ db, intake }, value) {
+              const reference = `YRD-A-${value.name}-${value.state ?? 'none'}`;
+              if (intake === 'tenant') await db.lead.insert({ id: randomUUID(), reference, name: value.name });
+              else await db.intake_submission.insert({ id: randomUUID(), reference, name: value.name });
+              return { reference, message: 'Application received.' as const };
+            },
+          }),
+        }
+      : {}),
     draftName: defineCommand({
       targets: 'none',
       source: 'business',
@@ -436,7 +473,14 @@ export async function openTenantPublicForms(
         resolveMembershipRows: () => everything,
         resolveRows: () => everything,
         resolvePlatformRows: () => everything,
-        resultReferences: { apply: () => [], quote: () => [], suggest: () => [], draftName: () => [], draftSubmit: () => [] },
+        resultReferences: {
+          apply: () => [],
+          quote: () => [],
+          suggest: () => [],
+          draftName: () => [],
+          draftSubmit: () => [],
+          ...(options.askByCountry ? { ask: () => [] } : {}),
+        },
         intake: { address: 'intake_address' },
         ...(options.publicReads ? { public: { address: 'public_address' }, resolvePublicRows: () => ({ make: true }) } : {}),
       }),

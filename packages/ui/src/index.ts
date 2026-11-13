@@ -35,6 +35,7 @@ export { DateField, type DateFieldOpenReason, type DateFieldProps, type DateFiel
 /* The form controls. Preview: @mistriwork/ui is Preview at 1.0, and these are the newest of it. */
 export type { FieldFrame } from './fieldFrame.js';
 export { TextField, MaskedField, MoneyField, ValidMark, type MaskedFieldProps, type TextFieldProps } from './TextField.js';
+export { TextArea, type TextAreaProps } from './TextArea.js';
 export { SensitiveField, type SensitiveFieldProps } from './SensitiveField.js';
 export { FileField, type FileFieldProps } from './FileField.js';
 export { Select, MultiSelect } from './Select.js';

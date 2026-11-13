@@ -1259,6 +1259,11 @@ describe('reading pages out of a config file', () => {
     // The aside is on the same screen: two more there tip the fullest screen past the ceiling.
     const crowded = [...ticket, fields({ region: 'aside' })];
     assert.throws(() => read([{ label: 'x', base: 'y', sections: crowded }]), /more than 24 sections on one screen \(25\)/);
+    // The refusal says how the screen is counted, so a page near the ceiling knows a tab is the room.
+    assert.throws(
+      () => read([{ label: 'x', base: 'y', sections: crowded }]),
+      /\(here main 16 in no tab \+ 6 in its fullest tab, aside 3 in no tab\)/,
+    );
     // However they are tabbed, a page holds at most 96.
     const tabs = Array.from({ length: 97 }, (_, i) => fields({ tab: `Tab ${i % 8}` }));
     assert.throws(() => read([{ label: 'x', base: 'y', sections: tabs }]), /more than 96 sections, its tabs' included/);

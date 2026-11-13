@@ -342,6 +342,7 @@ another door always is. A second process writes its own row.
 | `resources.*.actions.*.set.*.auto` | `"today"` · `"now"` · `"me"` | Stable |  One of `me`, `now`, `today`. |
 | `resources.*.actions.*.set.*.type` | `"boolean"` · `"number"` · `"date"` | Stable |  One of `boolean`, `date`, `number`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `resources.*.actions.*.set.*.value` | string | Stable | A constant expression: numbers, true, false, today, now, me, comparisons, and, or, not, + - * /, and date spans (today + 14 days, now + 1 week). No column. Used in `examples/apps/lintel/views.ts`. |
+| `resources.*.actions.*.submitLabel` | string | Stable | The words on the submit of the dialog this action opens (its form, confirmation or reason), when they should differ from the action's label: a noun that reads right on the record may read wrong as an instruction. Left out, the label. Used in `examples/apps/lintel/views.ts`. |
 | `resources.*.actions.*.when` | string | Stable | Shown only when the record matches, in the query language. On a command action, on top of the command's own `when`, which still decides where it may run. Used in `examples/apps/tick/app.ts`. |
 
 ## `resources.*.address`

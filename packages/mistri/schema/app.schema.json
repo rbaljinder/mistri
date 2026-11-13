@@ -1246,6 +1246,12 @@
             },
             "minProperties": 1
           },
+          "submitLabel": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "description": "The words on the submit of the dialog this action opens (its form, confirmation or reason), when they should differ from the action's label: a noun that reads right on the record may read wrong as an instruction. Left out, the label."
+          },
           "when": {
             "type": "string",
             "description": "Shown only when the record matches, in the query language. On a command action, on top of the command's own `when`, which still decides where it may run."
@@ -7150,10 +7156,10 @@
               "minItems": 1,
               "maxItems": 16,
               "uniqueItems": true,
-              "description": "Origins its custom components may send requests to (https://api.example.com): the page's connect-src.",
+              "description": "Origins its custom components may send requests to or open a WebSocket to (https://api.example.com, wss://live.example.com): the page's connect-src.",
               "items": {
                 "type": "string",
-                "pattern": "^(https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*|http://(localhost|127\\.0\\.0\\.1))(:[0-9]{1,5})?/?$"
+                "pattern": "^(https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*|wss://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*|http://(localhost|127\\.0\\.0\\.1))(:[0-9]{1,5})?/?$"
               }
             },
             "images": {

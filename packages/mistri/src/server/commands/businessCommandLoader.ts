@@ -17,7 +17,7 @@ import { consumesValidation } from '../app/appValidation.js';
 import { effectiveTrack } from './commandTrack.js';
 import { publicFormProblems, publicFormsNeedKey, signedInDraftProblems } from '../forms/savedFormChecks.js';
 import { assertFormKey, FormKeyMissing } from '../forms/formKey.js';
-import { BusinessCommandDefinitionError, callerRead, defineCommands, type BusinessCommandRegistry } from './businessCommands.js';
+import { BusinessCommandDefinitionError, callerMustRead, defineCommands, type BusinessCommandRegistry } from './businessCommands.js';
 import { moduleFailure } from '../moduleFailure.js';
 import { recordRefusalCause } from '@mistriwork/engine/shared/refusal.js';
 import { commandsOf } from '../stores/commandStores.js';
@@ -333,7 +333,7 @@ export function visibleBusinessCommandActions(
       command &&
       grants.has(reference.id) &&
       command.version === reference.version &&
-      callerRead(command).every((local) => readable.has(logicalResource(app, command.source, local))),
+      callerMustRead(command).every((local) => readable.has(logicalResource(app, command.source, local))),
     );
   };
   const runnable = (action: AppAction): boolean => !action.command || runs(action.command);
@@ -397,7 +397,7 @@ export function grantedFormCommands(
   return unformedCommands(
     app,
     commands,
-    (id, command) => grants.has(id) && callerRead(command).every((local) => readable.has(logicalResource(app, command.source, local))),
+    (id, command) => grants.has(id) && callerMustRead(command).every((local) => readable.has(logicalResource(app, command.source, local))),
     realm,
   );
 }

@@ -60,7 +60,7 @@ export interface AuthorizedBusinessCommand {
   readonly people?: Readonly<{ table: string; column: string; key: string; id: string }>;
   /** The file resources it writes, by local name: the only tables a command may put bytes in, within their cap. */
   readonly files?: ReadonlyMap<string, CommandFileRule>;
-  /** The file resources it writes that this actor cannot read: it may add rows there and nothing more (see businessCommandAuthorization.ts). */
+  /** The tables it writes beside its target that this actor cannot read: it may add rows there and nothing more (see businessCommandAuthorization.ts). */
   readonly insertOnly?: ReadonlyMap<string, string>;
   /** Present when the command looks up: its sources' tables, read outside any transaction. */
   readonly lookup?: CommandLookupReader;

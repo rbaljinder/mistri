@@ -148,7 +148,10 @@ parsed. `secret` is the name of an environment variable, never the value.
 retry replays one write and answers its receipt. The answer is a status alone:
 `204` applied or replayed, `400` a body it cannot read, `401` a bad signature
 or time, `409` a reused key with a different body or a refusal, `413` past
-256 KB. `runAs` holds `service: true` roles alone. Deliveries are remembered in
+256 KB. A text input the command declares with no `max` takes the delivery's
+whole text, up to that limit; a declared `max` stops at 65,536 characters (a
+larger one is refused when the App loads), so bound a field that must stay
+small. `runAs` holds `service: true` roles alone. Deliveries are remembered in
 the integrations store (`provisionStores` with the App and its `jobs`). A
 tenant App refuses a hand-written one; an [integration's
 webhooks](/docs/integrations/#what-core-does) are this same endpoint and are

@@ -879,9 +879,24 @@ describe('actions and the curated form', () => {
     assert.throws(() => nav({ actions: { a: { label: 'A', set: { status: { deep: 1 } } } } }), /sets "status" to something that is not/);
     assert.throws(
       () => nav({ actions: { a: { label: 'A', set: { status: 'x' }, wehn: 'a = 1' } } }),
-      /action "a" has no "wehn"\. Did you mean "when"\? It takes: label, command, set, when, confirm, bulk, header, reason, inputs/,
+      /action "a" has no "wehn"\. Did you mean "when"\? It takes: label, submitLabel, command, set, when, confirm, bulk, header, reason, inputs/,
     );
     assert.throws(() => nav({ actions: { label: 'A' } }), /action "label" is not an object/);
+  });
+
+  test("an action's submitLabel is the words on its dialog's submit: kept trimmed, and refused when empty or long", () => {
+    const app = nav({
+      actions: { close: { label: 'Cancellation', set: { status: 'closed' }, reason: 'status', submitLabel: ' Cancel the order ' } },
+    });
+    assert.equal(app.resources?.work_order.actions?.[0]?.submitLabel, 'Cancel the order');
+    assert.throws(
+      () => nav({ actions: { a: { label: 'A', set: { status: 'x' }, submitLabel: '' } } }),
+      /"submitLabel" that is not text of at most 60/,
+    );
+    assert.throws(
+      () => nav({ actions: { a: { label: 'A', set: { status: 'x' }, submitLabel: 'x'.repeat(61) } } }),
+      /"submitLabel" that is not text of at most 60/,
+    );
   });
 
   test('resolution judges the set columns and the when against the table, on the resource', () => {

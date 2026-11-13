@@ -70,6 +70,7 @@ export const UI_EXPORTS = [
   'Select',
   'Slider',
   'Switch',
+  'TextArea',
   'TextField',
   'YesNo',
   'useRows',

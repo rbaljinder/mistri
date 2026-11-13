@@ -5,6 +5,9 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { AppAccessDenied } from '../packages/mistri/src/server/app/appAccess.ts';
+import { tenantCommandDomain } from '../packages/mistri/src/server/tenant/tenantCommands.ts';
+import { refusalSaid, sayRefusal } from '../packages/engine/src/shared/refusal.ts';
 import { startClinic } from './support/clinicFixture.ts';
 
 test('a tenant command refusal carries its cause for the author at a source host', async (t) => {
@@ -22,4 +25,15 @@ test('a tenant command refusal carries its cause for the author at a source host
   assert.ok(!plain.ok);
   assert.equal(plain.cause, undefined);
   assert.equal('cause' in (plain.body as object), false);
+});
+
+test("a tenant member's refused grant says the sentence its rule said, as a single-tenant member's does", () => {
+  const said = 'Your role has no grant for "Record payment".';
+  const refusal = tenantCommandDomain(sayRefusal(new AppAccessDenied(), said));
+  assert.equal(refusal?.code, 'forbidden');
+  assert.equal(refusal?.message, said);
+  assert.equal(refusal?.reason, said);
+  // A denial that said nothing keeps the fixed sentence.
+  assert.equal(tenantCommandDomain(new AppAccessDenied())?.message, 'This command is not available to this account.');
+  assert.equal(refusalSaid(new AppAccessDenied()), undefined);
 });

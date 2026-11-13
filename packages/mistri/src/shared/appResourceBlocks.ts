@@ -1663,7 +1663,20 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
     const a = entry as Record<string, unknown>;
     allowKeys(
       a,
-      ['label', 'command', 'set', 'when', 'confirm', 'bulk', 'header', 'reason', 'inputs', 'given', ...(derived ? ['labels', 'move'] : [])],
+      [
+        'label',
+        'submitLabel',
+        'command',
+        'set',
+        'when',
+        'confirm',
+        'bulk',
+        'header',
+        'reason',
+        'inputs',
+        'given',
+        ...(derived ? ['labels', 'move'] : []),
+      ],
       here,
       { enter: LATER.T8 },
     );
@@ -1671,6 +1684,9 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
     if (a.header !== undefined && typeof a.header !== 'boolean') throw new Error(`${here} has a "header" that is not true or false.`);
     /* Only the drawing reads it, so only `false` is carried: `true` is what every action already is. */
     const header = a.header === false ? { header: false } : {};
+    if (a.submitLabel !== undefined && (typeof a.submitLabel !== 'string' || !a.submitLabel.trim() || a.submitLabel.trim().length > 60))
+      throw new Error(`${here} has a "submitLabel" that is not text of at most 60 characters.`);
+    const submitLabel = a.submitLabel === undefined ? {} : { submitLabel: (a.submitLabel as string).trim() };
     if (a.command !== undefined) {
       if (Object.hasOwn(a, 'set')) throw new Error(`${here} cannot combine a command with set.`);
       if (Object.hasOwn(a, 'reason')) throw new Error(`${here} asks a reason, which a command collects through its own input.`);
@@ -1711,6 +1727,7 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
       return {
         id,
         label: a.label.trim(),
+        ...submitLabel,
         command,
         ...(when === undefined ? {} : { when }),
         ...(offered === undefined ? {} : { offered }),
@@ -1766,6 +1783,7 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
     return {
       id,
       label: a.label.trim(),
+      ...submitLabel,
       set: set as NonNullable<AppAction['set']>,
       ...(a.when === undefined ? {} : { when: (a.when as string).trim() }),
       ...(a.confirm === undefined ? {} : { confirm: a.confirm as boolean }),

@@ -56,6 +56,7 @@ import {
   type TableMeta,
 } from './schema.js';
 import { ANY_CONDITION, anyConditions, expandSegments, parseQuery, splitClauseTail, type QueryError, type QueryPerson } from './query.js';
+import { TENANT_FIELD } from './queryOperands.js';
 import { stitchedListProblem } from './stitchedPaths.js';
 import { qualifiedTable } from './sqlRelation.js';
 import { ScopedRelations, type RowScope } from './rowScope.js';
@@ -674,6 +675,9 @@ export function parseViewQuery(
     added.add(path);
     const { resolved, error } = tryResolvePath(schema, baseId, path);
     if (error) {
+      /* `tenant.plan = 'pro'` is no path but the reader's tenant, which the parser judges for this request
+         (query.ts tenantClause); a table with a `tenant` column of its own reads it as the path it is. */
+      if (TENANT_FIELD.test(path) && !base.columns.some((c) => c.name === 'tenant')) continue;
       /* Located at the token so the composer can underline the right word.
          The offset is into the filter text, and the caller shifts it. */
       if (isField) {

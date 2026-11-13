@@ -39,6 +39,7 @@ import {
   MAX_SECTIONS,
   MAX_PAGE_SECTIONS,
   screenSections,
+  screenSectionsSaid,
   type PageHeadlineAction,
   type PageSimilar,
   type PageGroup,
@@ -255,7 +256,8 @@ function parseSections(raw: unknown, at: string, name: string, config: boolean):
   if (drawn > MAX_SECTIONS) {
     throw new Error(
       `${at} ("${name}") has more than ${MAX_SECTIONS} sections on one screen (${drawn}). A page is a screen, not a report: ` +
-        'give some of them a "tab", and each tab is counted as a screen of its own.',
+        `a screen counts the sections in no tab plus its fullest tab's, in each region (here ${screenSectionsSaid(sections)}), ` +
+        'so give some of them a "tab", and each tab is counted as a screen of its own.',
     );
   }
   /* A record has one head. */

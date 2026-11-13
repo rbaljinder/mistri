@@ -891,8 +891,8 @@ export const MAX_SECTIONS = 24;
 /** Sections a page may hold in all, every tab's included. */
 export const MAX_PAGE_SECTIONS = 96;
 
-/** How many sections a page draws on its fullest screen: per region, those in no tab and its largest tab's. */
-export function screenSections(sections: readonly { region?: SectionRegion; tab?: string }[]): number {
+/** Per region, the sections in no tab and the fullest tab's: what one screen of the page draws. */
+function screenCounts(sections: readonly { region?: SectionRegion; tab?: string }[]): Map<string, { untabbed: number; fullest: number }> {
   const regions = new Map<string, { untabbed: number; tabs: Map<string, number> }>();
   for (const section of sections) {
     const region = section.region ?? 'main';
@@ -901,9 +901,21 @@ export function screenSections(sections: readonly { region?: SectionRegion; tab?
     if (section.tab === undefined) counted.untabbed += 1;
     else counted.tabs.set(section.tab, (counted.tabs.get(section.tab) ?? 0) + 1);
   }
+  return new Map([...regions].map(([region, { untabbed, tabs }]) => [region, { untabbed, fullest: Math.max(0, ...tabs.values()) }]));
+}
+
+/** How many sections a page draws on its fullest screen: per region, those in no tab and its largest tab's. */
+export function screenSections(sections: readonly { region?: SectionRegion; tab?: string }[]): number {
   let most = 0;
-  for (const { untabbed, tabs } of regions.values()) most += untabbed + Math.max(0, ...tabs.values());
+  for (const { untabbed, fullest } of screenCounts(sections).values()) most += untabbed + fullest;
   return most;
+}
+
+/** How that count is made, for the sentence that refuses a page over the ceiling: "main 18 in no tab + 6 in its fullest tab". */
+export function screenSectionsSaid(sections: readonly { region?: SectionRegion; tab?: string }[]): string {
+  return [...screenCounts(sections)]
+    .map(([region, { untabbed, fullest }]) => `${region} ${untabbed} in no tab${fullest ? ` + ${fullest} in its fullest tab` : ''}`)
+    .join(', ');
 }
 
 /** A workflow step's label when it names none: `in_review` reads "In review". */

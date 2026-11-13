@@ -110,6 +110,22 @@ test('results are values: an applied step, and a refusal with its status and cod
   assert.ok(!missing.ok && missing.code === 'no_action');
 });
 
+test('rows() reads a column the schema declares boolean as a boolean, though SQLite stores 1 and 0', async (t) => {
+  const directory = await exampleApp('tick');
+  const workspace = await createTestWorkspace();
+  t.after(() => workspace.close());
+  const config = await workspace.copyConfig(join(directory, 'mistri.json'));
+  const host = await startTestApp({ workspace, directory, config });
+  const tasks = await host.client().rows('task');
+  assert.ok(tasks.ok, JSON.stringify(tasks));
+  const done = tasks.value.find((row) => row.name === 'Clear the desk');
+  const open = tasks.value.find((row) => row.name === 'Plan the week');
+  assert.equal(done?.completed, true, JSON.stringify(done));
+  assert.equal(open?.completed, false, JSON.stringify(open));
+  // Only a boolean column is read so: a number or a real column is left as stored.
+  assert.equal(open?.position, 1024);
+});
+
 test('rows({ show }) reads a rollup through the projection the list reads', async (t) => {
   const directory = await exampleApp('payday');
   const workspace = await createTestWorkspace();

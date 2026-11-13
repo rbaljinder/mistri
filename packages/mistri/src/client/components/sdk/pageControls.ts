@@ -32,5 +32,6 @@ export { Popover } from '@mistriwork/ui/Popover.js';
 export { Select } from '@mistriwork/ui/Select.js';
 export { Slider } from '@mistriwork/ui/Slider.js';
 export { Switch } from '@mistriwork/ui/Switch.js';
+export { TextArea } from '@mistriwork/ui/TextArea.js';
 export { TextField } from '@mistriwork/ui/TextField.js';
 export { Tooltip } from '@mistriwork/ui/Tooltip.js';

@@ -42,7 +42,8 @@ import {
 import { canonicalKey, createCommandDb, keyFilter, normalizeRow, type UntypedRow, type WriteTable } from './commandDb.js';
 import { auditCommandRead, type CommandReadAudit, type ReadAuditSink } from '../readAudit.js';
 import { FLOW_TELL, flowCommandOf } from './flowCommandBrand.js';
-import { compileWhen, failingCondition, recordPartHolds, type DerivedFailure, whenHolds, whenPerson } from './commandWhen.js';
+import { compileWhen, failingCondition, plainlyFails, recordPartHolds, type DerivedFailure, whenHolds, whenPerson } from './commandWhen.js';
+import { mentionsMe } from '../../shared/appMe.js';
 import { whenRefusalSentence } from './commandSaying.js';
 import { bindRecord, readsRecord, readsTarget, type BoundCondition } from '../../shared/commandDraft.js';
 import { mayReadTargetColumn } from './commandActorColumns.js';
@@ -536,6 +537,22 @@ async function executeUntraced(
     /* Targets the lookup's read already wrote to the read audit: the transaction's read of the same row is not a
        second line. */
     const lookupAudited = new Set<string>();
+    /* A record its command's machine or `when` plainly refuses as it stands holds the lookup back, so no outside call
+       goes out for a command the transaction then refuses (commandWhen.ts plainlyFails). The transaction judges again
+       and says why; one that admits the record after all (it moved between the two reads) is refused as stale, since
+       the handler would run without its lookup. A `when` naming `me` waits for the transaction, which reads the person. */
+    let lookupHeld = false;
+    const refusedAsItStands = (table: NonNullable<typeof authorized.catalog>[string], row: UntypedRow): boolean => {
+      const graph = authorized.machine?.verb && authorized.machine.tables.get(command.target);
+      if (graph && !authorized.machine!.verb!.from.has(String(row[graph.column]))) return true;
+      if (command.when === undefined || mentionsMe(command.when)) return false;
+      const me = authorized.tenant ? { email: authorized.actor.email ?? null, tenant: authorized.tenant } : undefined;
+      try {
+        return plainlyFails(table, compileWhen(table, command.when, now(), me), row);
+      } catch {
+        return false;
+      }
+    };
     if (lookupRun) {
       const reader = authorized.lookup;
       const table = authorized.catalog?.[command.target];
@@ -580,35 +597,38 @@ async function executeUntraced(
           }
         }
         const stood = command.targets === 'none' || creating ? {} : many ? { records: Object.freeze(before) } : { record: before[0] };
-        const value = await lookupRun(
-          Object.freeze({
-            actor: authorized.actor,
-            requestId,
-            commandId: request.command,
-            version: command.version,
-            source: command.source,
-            signal,
-            now,
-            flags,
-            sources: createLookupSources({ catalogs: reader.catalogs, query: lookupQuery, now }),
-            // Each call keyed by this request, so a replay re-running lookup is answered from the call's record.
-            integrations: integrationCalls({
-              appId: scope.appId,
-              tenant: receiptOwner?.tenantId ?? '',
-              commandId: request.command,
-              actorId: scope.actorId,
-              idempotencyKey: request.idempotencyKey,
-              signal,
-              declared: command.integrations,
-            }),
-            // The tenant it runs in, read before the transaction: a command naming no record has no row to say it.
-            ...(receiptOwner ? { tenant: receiptOwner.tenantId } : {}),
-            ...stood,
-          }),
-          input,
-        );
+        lookupHeld = !options.statusOnly && before.some((row) => refusedAsItStands(table, row));
+        const value = lookupHeld
+          ? undefined
+          : await lookupRun(
+              Object.freeze({
+                actor: authorized.actor,
+                requestId,
+                commandId: request.command,
+                version: command.version,
+                source: command.source,
+                signal,
+                now,
+                flags,
+                sources: createLookupSources({ catalogs: reader.catalogs, query: lookupQuery, now }),
+                // Each call keyed by this request, so a replay re-running lookup is answered from the call's record.
+                integrations: integrationCalls({
+                  appId: scope.appId,
+                  tenant: receiptOwner?.tenantId ?? '',
+                  commandId: request.command,
+                  actorId: scope.actorId,
+                  idempotencyKey: request.idempotencyKey,
+                  signal,
+                  declared: command.integrations,
+                }),
+                // The tenant it runs in, read before the transaction: a command naming no record has no row to say it.
+                ...(receiptOwner ? { tenant: receiptOwner.tenantId } : {}),
+                ...stood,
+              }),
+              input,
+            );
         checkCancelled();
-        lookup = lookupResult(value);
+        if (!lookupHeld) lookup = lookupResult(value);
       } catch (error) {
         if (signal.aborted) throw new BusinessCommandExecutionError('cancelled');
         if (error instanceof AppAccessDenied) throw error;
@@ -1047,7 +1067,7 @@ async function executeUntraced(
               ),
             });
           };
-          /* A file resource the actor cannot read takes this command's new rows and gives nothing back
+          /* A table it writes that the actor cannot read takes this command's new rows and gives nothing back
              (businessCommandAuthorization.ts insertOnly): every read, change and removal of it is refused. */
           const addingOnly = (table: string) => {
             const said = authorized.insertOnly?.get(table);
@@ -1337,6 +1357,7 @@ async function executeUntraced(
                 }
                 targets.push(row);
               }
+              if (lookupHeld) throw new BusinessCommandExecutionError('stale_record', 'not_applied', undefined, list.keys[0]);
             }
             /* An input asked only where its `when` holds, where that `when` reads the record or the tenant: each
                `record.<path>` part judged of the record in this transaction (following its references as the actor
@@ -1563,6 +1584,7 @@ async function executeUntraced(
                     signal,
                     now,
                     today: () => zoneDay(now(), authorized.timezone),
+                    timezone: authorized.timezone ?? 'UTC',
                     flags: executionFlags,
                     db,
                     tx: audit(tx),

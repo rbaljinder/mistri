@@ -133,3 +133,29 @@ test('a handler that reads the rows it may only add is refused, naming them, and
 test('check does not call the grant dead for a file table the command only adds to', () => {
   assert.deepEqual(commandUnreadable(app, commands, resources.schema), []);
 });
+
+test('a table the author names in read and in write is a read the caller must hold; written alone it is not', () => {
+  const said = (read: string[]) =>
+    commandUnreadable(
+      app,
+      defineCommands({
+        fileReport: defineCommand({
+          source: 'main',
+          target: 'repair',
+          targets: 'none',
+          read,
+          write: ['repair', 'repair_photo'],
+          input: { title: field.text() },
+          async handle() {},
+        }),
+      }),
+      resources.schema,
+    );
+  assert.equal(said([]).length, 0, 'write alone stays insert-only');
+  const advisory = said(['repair_photo']);
+  assert.equal(advisory.length, 1);
+  assert.match(
+    advisory[0],
+    /command "fileReport" is granted to role "clerk", which cannot read "repair_photo" its read names, .*\[command-reads-unreadable\]/,
+  );
+});

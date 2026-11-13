@@ -498,7 +498,7 @@ export function CommandForm({
           ) : (
             !success && (
               <Button intent="primary" type="submit" disabled={pending || !ready || prepared.isFetching}>
-                {pending ? say('common.submitting') : verb}
+                {pending ? say('common.submitting') : (action.submitLabel ?? verb)}
               </Button>
             )
           )}

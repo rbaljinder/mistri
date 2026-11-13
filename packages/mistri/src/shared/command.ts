@@ -297,7 +297,9 @@ function fieldWhen(f: Record<string, unknown>, where: string, rules: FieldRules)
     return fail(at, (error as Error).message.replace(/^.*?: /, '').replace(/\.$/, ''));
   }
   if (names.record.length && rules.publicForm) return fail(at, `reads record.${names.record[0]}, and a public form has no record`);
-  if (names.tenant.length && rules.publicForm) return fail(at, `reads tenant.${names.tenant[0]}, and a public form has no member`);
+  /* `tenant.<column>` is not refused: a tenant App's public form is placed with a tenant by its link's `?via=` or its
+     mapped host, and the form is served with that tenant's truths bound (tenant/tenantPublicAsked.ts), as the
+     submission is judged by them. A form placed with no tenant holds none of them. */
   return f.when.trim();
 }
 

@@ -16,7 +16,7 @@ import {
   refusalCause,
 } from '@mistriwork/engine/server/evidence.js';
 import { createTenantMembershipIssuer, type TenantMembershipEvidence } from './tenantMembership.js';
-import { composeTenantReadScope } from './tenantReadScope.js';
+import { composeTenantReadScope, footprintRows } from './tenantReadScope.js';
 import { tenantAppAccess } from './tenantAccess.js';
 import { advisoryRecords, captureTenantReadSource, readSharedProfile, type TenantReadSource } from './tenantReadSource.js';
 import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
@@ -358,11 +358,8 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
                 // widens, the mandatory membership/authored tenant scope.
                 // A scoped insert under a path is proven against its parent's rows (apiRowScope.ts), still inside this scope.
                 const parents = apiScope ? apiScopeParents(apiScope.scope, ownership.schema, captureTenantData(written ?? [])) : undefined;
-                sourceRows = Object.freeze(
-                  Object.fromEntries(
-                    Object.entries(rows).map(([table, row]) => [table, read.includes(table) || parents?.has(table) ? row : false]),
-                  ),
-                );
+                // A table the footprint's row policies read through (`via`) keeps its rule (tenantReadScope.ts footprintRows).
+                sourceRows = footprintRows(rows, (table) => read.includes(table) || !!parents?.has(table));
               } catch {
                 invalid = true;
               }
@@ -420,9 +417,7 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
                 read.every((table) => typeof table === 'string' && Object.hasOwn(ownership.resources, table))
               ) {
                 // The footprint intersects, never widens, the mandatory scope — as a command transaction's does.
-                footprint = Object.freeze(
-                  Object.fromEntries(Object.entries(rows).map(([table, row]) => [table, read.includes(table) ? row : false])),
-                );
+                footprint = footprintRows(rows, (table) => read.includes(table));
               }
             } catch {
               footprint = undefined;

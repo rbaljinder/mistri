@@ -141,7 +141,7 @@ export default defineAppRowPolicy({
 - **Writes.** A row is written only if its parent is one the person may see: a message on a case out of scope, or a node moved under a parent out of scope, is refused.
 - **Indexes.** Each row asks the other table, so index the target's key and the column that points at it. The server says once when a `via` has neither, at the first request that uses it; it is advice, not a refusal.
 - **Live sync.** A row that enters a `via` scope is announced by key. One that leaves it is not, because the earlier row cannot say what another table held; the next refresh drops it.
-- **Commands.** A command that writes to a `via`-scoped table must declare the target as read, or the write is refused: `"case_note" is scoped through "support_case", which is not in this write's footprint: declare it read by the command.`
+- **Commands.** A command that writes to a `via`-scoped table must declare the target as read, or the write is refused: `"case_note" is scoped through "support_case", which is not in this write's footprint: declare it read by the command.` Reading one needs no such declaration: a command that reads `case_note` sees the notes of the cases the person may see, though it declares only `case_note`, and its handler still reads `support_case` only if the command declares it.
 - **Tenant Apps.** A `via` reads the target's rows in the same tenant. A target the tenant does not own (a platform table) is refused.
 
 A grant held in rows is gone at the next statement; a grant held in a list is

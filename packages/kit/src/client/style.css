@@ -2314,9 +2314,11 @@ body.app-mode .page-head.has-record + .page-body { padding-bottom: calc(132px + 
 .command-row-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
 .command-row-number { font: 500 var(--text-xs) var(--mono); color: var(--ink-muted); }
 .command-repeat-actions { display: flex; gap: var(--space-3); }
-.command-choices { display: flex; flex-wrap: wrap; gap: var(--space-2h) var(--space-5); }
-.command-choice { display: inline-flex; align-items: center; gap: var(--space-2h); font: var(--text-base) var(--sans); color: var(--ink); }
-.command-choice input { margin: 0; accent-color: var(--accent); }
+/* A choice is the reader's own word, so it wraps and is never cut (Truncation): a row of radios whose label is longer than
+   the phone is wide wraps inside the label, beside its own radio, rather than running on or ending in an ellipsis. */
+.command-choices { display: flex; flex-wrap: wrap; gap: var(--space-2h) var(--space-5); min-width: 0; }
+.command-choice { display: inline-flex; align-items: center; gap: var(--space-2h); min-width: 0; max-width: 100%; overflow-wrap: anywhere; font: var(--text-base) var(--sans); color: var(--ink); }
+.command-choice input { flex: none; margin: 0; accent-color: var(--accent); }
 .command-form .command-feedback { min-height: 3em; margin: 20px 0 0; color: var(--ink-muted); font-size: var(--text-base); overflow-wrap: anywhere; }
 /* "Ready to submit" is said to a screen reader and not drawn: the primary button says it, and the line stood as filler. */
 .command-feedback[data-phase="ready"] { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

@@ -106,6 +106,31 @@ test('printed, the payslip is the sheet alone: no skip link, no navigation', asy
   expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
 });
 
+test('printed, a table of six columns stays inside the sheet', async ({ page }) => {
+  await signIn(page);
+  await openPayslip(page);
+  /* The payslip draws no table; give its sheet one of six columns of nowrap figures and long codes, drawn as
+     Document.tsx draws a related list, which was reported running past the sheet's edge when printed. */
+  await page.evaluate(() => {
+    const cells = (tag: string, text: (i: number) => string) =>
+      [0, 1, 2, 3, 4, 5].map((i) => `<${tag} class="${['is-words', 'is-figure', 'is-fit'][i % 3]}">${text(i)}</${tag}>`).join('');
+    const section = document.createElement('section');
+    section.className = 'doc-lines';
+    section.innerHTML = `<table class="doc-table" data-wide><thead><tr>${cells('th', (i) => `Column ${i}`)}</tr></thead>
+      <tbody><tr>${cells('td', () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789')}</tr></tbody></table>`;
+    document.querySelector('.doc-sheet')!.append(section);
+  });
+  /* A sheet's width, less its margins: the room a printed page gives the table, not a desk's. */
+  await page.setViewportSize({ width: 680, height: 900 });
+  await page.emulateMedia({ media: 'print' });
+  const fit = await page.evaluate(() => {
+    const sheet = document.querySelector('.doc-sheet')!.getBoundingClientRect();
+    const table = document.querySelector('.doc-sheet .doc-table')!.getBoundingClientRect();
+    return { sheetRight: Math.min(Math.round(sheet.right), window.innerWidth), tableRight: Math.round(table.right) };
+  });
+  expect(fit.tableRight).toBeLessThanOrEqual(fit.sheetRight);
+});
+
 /* Every word on the sheet: a caption, a column's head, a value however it is drawn. */
 const PAPER = [['.doc-sheet :is(h1, h2, p, span, dt, dd, th, td, time, li):not(.doc-logo, .doc-logo *)', 4.5]] as const;
 

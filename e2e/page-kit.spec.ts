@@ -54,6 +54,20 @@ test.describe('The page kit vocabulary', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 
+  test("a free-form page's first part starts one space under its head, not three margins' worth", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`${app.origin}/vocabulary`);
+    await settled(page);
+    const gap = await page.evaluate(() => {
+      const head = document.querySelector('.dash-head')!.getBoundingClientRect();
+      const first = document.querySelector('.free-page-body .custom-room')!.getBoundingClientRect();
+      return first.top - head.bottom;
+    });
+    /* A field report measured 62px (the head's margin, the body's and the section's); a list's tabs sit about 27px under. */
+    expect(gap).toBeGreaterThanOrEqual(0);
+    expect(gap).toBeLessThanOrEqual(24);
+  });
+
   test("a Card says what it holds, in its tone; an Item's lead and tone mark share one column", async ({ page }) => {
     await page.goto(`${app.origin}/vocabulary`);
     await settled(page);
@@ -93,6 +107,49 @@ test.describe('The page kit vocabulary', () => {
       .click({ position: { x: 300, y: 8 } });
     await expect(page).toHaveURL(/seen=1/);
     expect(await page.evaluate(() => (window as unknown as { marker: number }).marker)).toBe(1);
+  });
+
+  test("at a phone's width a row's actions stand under its words, and the row is a finger tall", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.goto(`${app.origin}/vocabulary`);
+    await settled(page);
+    const row = page.locator('.kit-item', { has: page.locator('.kit-item-action') });
+    const [body, action, whole] = await Promise.all(
+      ['.kit-item-body', '.kit-item-action', ''].map(async (selector) => (await (selector ? row.locator(selector) : row).boundingBox())!),
+    );
+    // Three buttons would squeeze the words into a sliver beside them: the action wraps under the note instead.
+    expect(action.y).toBeGreaterThanOrEqual(body.y + body.height - 1);
+    expect(body.width).toBeGreaterThan(150);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    // A clickable row answers a finger anywhere on it, and is at least 44px tall to be hit.
+    expect(whole.height).toBeGreaterThanOrEqual(44);
+    for (const item of await page.locator('.kit-item-clickable').all())
+      expect((await item.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  });
+
+  test('a row of five choices is a picker at a phone, and the row at a desk; className reaches whichever is drawn', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`${app.origin}/vocabulary`);
+    await settled(page);
+    const row = page.getByRole('radiogroup', { name: 'Stage' });
+    const pick = page.getByRole('combobox', { name: 'Stage' });
+    await expect(row).toBeVisible();
+    await expect(pick).toBeHidden();
+    await expect(row).toHaveClass(/vocabulary-stage/);
+    await page.setViewportSize({ width: 390, height: 800 });
+    await settled(page);
+    await expect(row).toBeHidden();
+    await expect(pick).toBeVisible();
+    await expect(pick).toHaveClass(/vocabulary-stage/);
+    // Nothing runs past the window, and the picker is a finger tall.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect((await pick.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await pick.selectOption('quoted');
+    await expect(pick).toHaveValue('quoted');
+    // The two-choice row beside it is never folded.
+    await expect(page.getByRole('radiogroup', { name: 'Range' })).toBeVisible();
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(page.getByRole('radio', { name: /Quoted/ })).toHaveAttribute('aria-checked', 'true');
   });
 
   test('a Skeleton holds the size it was given', async ({ page }) => {

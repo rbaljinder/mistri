@@ -7,7 +7,7 @@ drawn with: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and
 DateField over [Base UI](https://base-ui.com), the tokens and stylesheet they
 are drawn with, and the zoom-aware ruler their popups are placed by.
 
-The form controls are built on them (**Preview**: @mistriwork/ui is Preview at 1.0): `TextField`, `MaskedField`,
+The form controls are built on them (**Preview**: @mistriwork/ui is Preview at 1.0): `TextField`, `TextArea`, `MaskedField`,
 `MoneyField`, `SensitiveField`, `FileField`, `Select`, `MultiSelect`, `YesNo`, `ChoiceCards`, `Checkbox`, `Consent`, `Slider`,
 `HelpTip`, `ProgressBar`, `StepHeader`, `ActionBar`, `Columns` and `ReviewList`, with the `masks` they take
 (`phone`, `date`, `month`, `ssn`, `zip`, `money`). Each takes a value and an `onChange` and draws what it is told. A

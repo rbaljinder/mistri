@@ -93,6 +93,9 @@ interface TenantPublicHttpOptions {
   readonly challenge?: HumanCheck;
   /** A form's choices from a table, read for the tenant the request's intake address places (tenantPublicChoices.ts). */
   readonly choices?: (address: string | undefined, key: string, form: AppFormView, input: AppCommandField[]) => Promise<AppCommandField[]>;
+  /** A form's inputs asked by the placing tenant's shared profile (`when: 'tenant.<column> = …'`), judged for the tenant
+      the request's intake address places, or for none (tenantPublicAsked.ts). */
+  readonly asked?: (address: string | undefined, key: string, input: AppCommandField[]) => Promise<AppCommandField[]>;
   /** A tenant's own intake address, as its profile row holds it now (tenantEnrollment.ts `addresses`): how this App's
       mapped host places a request, through the same resolution and fence as a link's `?via=`. */
   readonly hostAddress?: (tenant: string) => Promise<string | undefined>;
@@ -446,7 +449,8 @@ export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
       /* The provider's widget the stock form draws: what the browser may be told, and nothing of the verifier's. */
       const widget = options.challenge?.widget;
       const served = presentForm(key, form);
-      const input = options.choices ? await options.choices(await placing(), key, form, served.input) : served.input;
+      const chosen = options.choices ? await options.choices(await placing(), key, form, served.input) : served.input;
+      const input = options.asked ? await options.asked(await placing(), key, chosen) : chosen;
       assertActive();
       send(res, 200, {
         ...presentation,

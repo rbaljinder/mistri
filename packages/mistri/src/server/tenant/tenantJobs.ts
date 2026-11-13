@@ -83,7 +83,8 @@ import { runTenantCommandTransaction, type TenantCommandRecords } from './tenant
 import { captureTenantData, denyTenant, tenantIdentifier, tenantOptions } from '@mistriwork/engine/server/evidence.js';
 import { parseTenantSelector } from './tenantMembership.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
-import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
+import { captureTenantReadSource, readSharedProfile, type TenantReadSource } from './tenantReadSource.js';
+import { commandZone } from '../app/readerZone.js';
 import { DUE_TIMER_PAGE, type DueTimer } from './tenantDueTimers.js';
 import { sandboxSkew } from './tenantSandboxClock.js';
 import { captureServiceEvidence, type TenantServiceEvidence } from './tenantServiceModel.js';
@@ -746,6 +747,14 @@ export function bindTenantJobs(options: TenantJobsOptions) {
     return true;
   };
 
+  /** The zone a tenant's command counts its day in, where `ui.timezone` names a column its profile shares
+   * (`tenant.<column>`): the tenant's own, as a member's command is given (tenantCommands.ts), so a job's
+   * `today()` and `timezone` agree with the zone its slot was kept in (`timezone: 'tenant'`). Undefined, the App's. */
+  const zoneOf = async (tenantId: string | null): Promise<string | undefined> => {
+    if (tenantId === null || zoneColumn(app.ui)?.resource !== 'tenant') return undefined;
+    return commandZone(app.ui, () => deny(), await readSharedProfile(reader, app, tenantId));
+  };
+
   /** One attempt's binding: the evidence of what its admission read, and the
    * one command the job runs, as its principal, in the writer's fenced
    * transaction. The runner's handler brings the actor; only this job's is taken. */
@@ -760,12 +769,14 @@ export function bindTenantJobs(options: TenantJobsOptions) {
     // A lost admission is not a refusal of the job: the next attempt asks again.
     if (retired || !anchors || !at || (!flow && module.jobs.get(job.id) !== job) || (flow && context.job !== job.id))
       throw new Error('The job attempt was not admitted.');
+    const tenantId = tenantOf(flow ? undefined : job, context.provenance);
     return bindService({
       runAs: job.runAs,
       place: at.place,
       roles: at.roles,
       grants: at.grants,
-      tenantId: tenantOf(flow ? undefined : job, context.provenance),
+      tenantId,
+      zone: await zoneOf(tenantId),
       anchors,
       aborted: () => context.signal.aborted,
       // A job runs its one command; a workflow's step, any of its principal's tenant commands this binding can run.
@@ -781,6 +792,8 @@ export function bindTenantJobs(options: TenantJobsOptions) {
     roles: readonly string[];
     grants: ResourceAccess;
     tenantId: string | null;
+    /** The tenant's own zone for its command's day (zoneOf), where the App keeps one. */
+    zone?: string | undefined;
     anchors: Anchors;
     aborted: () => boolean;
     extract: (id: string) => (result: unknown) => readonly CommandResultReference[];
@@ -850,6 +863,7 @@ export function bindTenantJobs(options: TenantJobsOptions) {
         const contexts = new WeakMap<WriteTransaction, TenantCommandRecords>();
         return Object.freeze<AuthorizedBusinessCommand>({
           ...authorization,
+          ...(options.zone === undefined ? {} : { timezone: options.zone }),
           transaction: deny,
           /* No plain transaction: a decision's reads (its record, its choices) run in this command's own fenced
              transaction, scoped to the tenant's rows, and write nothing (decideReads.ts). Without it every tenant
@@ -1002,6 +1016,7 @@ export function bindTenantJobs(options: TenantJobsOptions) {
       roles: at.roles,
       grants: at.grants,
       tenantId: tenant,
+      zone: await zoneOf(tenant),
       anchors: Object.freeze({ tenantVersion: anchors.tenantVersion, platformVersion: anchors.platformVersion }),
       aborted: () => signal?.aborted === true,
       extract: (id) => {

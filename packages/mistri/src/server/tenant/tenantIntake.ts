@@ -92,6 +92,7 @@ import {
 } from './tenantIntakeModel.js';
 import { observerMounted } from '../observe/mount.js';
 import { captureTenantReadSource, readSharedProfile, type TenantReadSource } from './tenantReadSource.js';
+import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import { scopedLookupReader, type CommandLookupReader } from '../commands/commandLookup.js';
 import { intakeVisitor } from './tenantPublicRead.js';
 import type { PublicReadRuntimeOptions } from './tenantPublicReadRuntime.js';
@@ -818,7 +819,13 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
     async withPublicFlags<T>(
       form: string,
       address: unknown,
-      use: (owner: { readonly tenantId: string | null; current(): Promise<void>; assertCurrent(): void }) => Promise<T>,
+      use: (owner: {
+        readonly tenantId: string | null;
+        current(): Promise<void>;
+        assertCurrent(): void;
+        /** The placed tenant's shared profile (`auth.tenancy.shared`), as a submission is judged by it; none in triage. */
+        profile(): Promise<Readonly<Record<string, TenantValue>> | undefined>;
+      }) => Promise<T>,
     ): Promise<T> {
       if (!forms.has(form) || retired) return denyTenant();
       let finish!: () => void;
@@ -842,7 +849,9 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
           }
         };
         await current();
-        const value = await use({ tenantId: admitted.place === 'tenant' ? admitted.evidence.tenantId : null, current, assertCurrent });
+        const tenantId = admitted.place === 'tenant' ? admitted.evidence.tenantId : null;
+        const profile = async () => (tenantId === null ? undefined : await readSharedProfile(reader, app, tenantId));
+        const value = await use({ tenantId, current, assertCurrent, profile });
         await current();
         return value;
       } finally {

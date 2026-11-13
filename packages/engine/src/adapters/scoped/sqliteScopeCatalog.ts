@@ -3,6 +3,7 @@ import { ANSI_STYLE, Refusal } from '../adapter.js';
 import { cachedStatement as prepared } from '../sqliteHandles.js';
 import {
   chooseColumnReference,
+  columnKind,
   deleteRuleOf,
   type ColumnReferenceCandidate,
   type ColumnReferenceChoice,
@@ -10,6 +11,7 @@ import {
   type TableMeta,
 } from '../../shared/schema.js';
 import { mapScopeCatalog } from '../../shared/scopeCatalog.js';
+import { flagsFromDDL, vocabularyFromDDL } from '../../shared/vocabulary.js';
 import { referenceKey, type ReferenceComparison, type ScopeCatalog } from './scopedTransaction.js';
 import { keyTypeRefusal, sqliteAffinity, sqliteKeyType, sqliteTypeSaid } from './keyTypes.js';
 import { readSqliteTrigger, sqliteColumnCollations, sqliteConflictClauses } from './sqliteTriggers.js';
@@ -274,8 +276,8 @@ function scanSqliteScopeCatalog(
     if (prepared(db, 'PRAGMA foreign_keys').get()?.foreign_keys !== 1) return refuse();
     const entries = prepared(
       db,
-      "SELECT name, type FROM main.sqlite_schema WHERE type IN ('table', 'view') ORDER BY name",
-    ).all() as unknown as Array<{ name: string; type: string }>;
+      "SELECT name, type, sql FROM main.sqlite_schema WHERE type IN ('table', 'view') ORDER BY name",
+    ).all() as unknown as Array<{ name: string; type: string; sql: unknown }>;
     const listed = prepared(db, 'PRAGMA main.table_list').all() as unknown as ListedTable[];
     // Unknown PRAGMAs can return nothing without throwing. Never interpret
     // unavailable table-kind metadata as proof that a table is ordinary.
@@ -345,6 +347,12 @@ function scanSqliteScopeCatalog(
         !indexes.some((index) => index.origin === 'pk')
           ? primary[0].name
           : undefined;
+      /* A CHECK's vocabulary and a 0-or-1 flag, read off the statement as the browser's catalog reads them (sqlite.ts):
+         evidence of how a value reads, never a grant (scopeCatalog.ts leaves both out of the fingerprint). A tenant
+         App judges a menu's `when` over its profile by them (appTenantProfile.ts menuFor), as check did. */
+      const names = columns.map((column) => column.name);
+      const vocabulary = typeof entry.sql === 'string' ? vocabularyFromDDL(entry.sql, names) : new Map<string, string[]>();
+      const flags = typeof entry.sql === 'string' ? flagsFromDDL(entry.sql, names) : new Set<string>();
       tables.push({
         id: entry.name,
         name: entry.name,
@@ -357,6 +365,8 @@ function scanSqliteScopeCatalog(
           nullable: column.notnull === 0 && column.name !== identity && !(column.pk > 0 && (kind.wr === 1 || kind.strict === 1)),
           ...(column.dflt_value !== null ? { default: column.dflt_value } : {}),
           ...(column.name === identity ? { identity: 'by-default' as const } : {}),
+          ...(vocabulary.has(column.name) ? { allowed: vocabulary.get(column.name) } : {}),
+          ...(flags.has(column.name) && columnKind(column.type) === 'number' ? { flag: true as const } : {}),
           // The database computes a generated column from its row: read like any other, never written.
           ...(generated(column) ? { writable: false } : {}),
         })),

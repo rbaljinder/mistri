@@ -114,6 +114,32 @@ test('the catalog judges each rollup and names the fix', () => {
     problems({ mine: { fn: 'count', from: 'receipt', query: 'id = me' } })[0],
     /mine" query: a rollup is the same figure for every reader, so its query cannot say "me"/,
   );
+  // One figure kept for every request cannot test the request's tenant: `tenant.plan = 'pro'` held for anyone at
+  // check and so counted every row, where it was once refused as an unknown path.
+  for (const query of ["tenant.plan = 'pro'", 'id > 0 and tenant.plan is empty', 'id = tenant.plan']) {
+    assert.match(
+      problems({ pro: { fn: 'count', from: 'receipt', query } })[0],
+      /pro" query: .*tenant\.plan is a fact of one request's tenant, and this query is read once for every request/,
+      query,
+    );
+  }
+  // A segment that tests the tenant is no way round it: the rollup that names it reads the same clause.
+  assert.match(
+    appRollupRules(
+      app(
+        { pro: { fn: 'count', from: 'receipt', query: 'paying' } },
+        {
+          resources: {
+            po: { rollups: { pro: { fn: 'count', from: 'receipt', query: 'paying' } } },
+            receipt: { segments: { paying: "tenant.plan = 'pro'" } },
+          },
+        },
+      ),
+      schema,
+    ).problems.join('\n'),
+    /tenant\.plan is a fact of one request's tenant/,
+  );
+  assert.deepEqual(problems({ named: { fn: 'count', from: 'receipt', query: 'id = "tenant.plan"' } }), [], 'quoted, it is the text');
   assert.deepEqual(
     problems({ named: { fn: 'count', from: 'receipt', query: 'id = "me"' } }).filter((p) => /cannot say "me"/.test(p)),
     [],

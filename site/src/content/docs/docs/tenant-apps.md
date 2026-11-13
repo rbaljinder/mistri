@@ -298,9 +298,14 @@ The request reads the tenant's row once, and the same values reach a view's
 query, `resolveRows(member, { tenant })` and a command handler's `tenant`
 (`handle({ db, tenant })`); `ui.timezone: { column: 'tenant.timezone' }` counts
 the tenant's days in its own zone. A tenant without a row reads nulls, and
-`country = tenant.country` then matches nothing. At most 16 plain columns —
-text, a number, a flag or a date, never the key or a reference — and no other
-profile column becomes readable. The platform realm reads across tenants, so
+`country = tenant.country` then matches nothing. A `when` may test the tenant
+alone — `when: "tenant.plan = 'pro'"` on a record page's section or list, an
+action or a machine's step — and the server judges an action's for the tenant
+pressing it. At most 16 plain columns —
+text, a number, a flag or a date, never the key — and no other profile column
+becomes readable. A reference shares its stored value: a plan kept as a pointer
+to a vocabulary table reads as the plan's id (`plan_id = tenant.plan_id`). One
+that points at the profile itself is another tenant's key and is refused. The platform realm reads across tenants, so
 `tenant.` is refused there (`tenant-shared-platform`), and a public intake
 handler has no `tenant`. A table with its own `tenant` column keeps reading it.
 
@@ -384,7 +389,10 @@ member's or a support visit's writes get no fixed actions: it is a member's verb
 A tenant command's `lookup` may read `owner: 'global'` tables and its own
 tenant's `owner: 'tenant'` tables, read only, as the person running it could
 read them: their role's row filter and column rule apply, and another tenant's
-rows are never there. A consent check reads the tenant's consent table before
+rows are never there. A resource's `hidden` columns are there, as they are in
+`record` and the handler's `db`: hidden keeps a column from people, not from
+the App's own server code, so a vendor's reference kept from every reader can
+still go out in the call. A public form's lookup reads none. A consent check reads the tenant's consent table before
 the model is called:
 
 ```ts

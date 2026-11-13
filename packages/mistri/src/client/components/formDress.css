@@ -28,6 +28,8 @@
        pointer, and once chosen an edge and a square in the primary-action color. */
     --choice-well: var(--form-well); --choice-well-hover: var(--form-well-hover); --choice-edge: var(--form-edge); --choice-edge-hover: var(--form-edge-hover);
     --choice-on: var(--form-primary); --choice-on-well: var(--form-well-in); --choice-check: var(--form-primary); --choice-on-check: var(--form-on-primary);
+    /* A picked button has no square: a tint of the primary over the form's field, so it differs from its neighbor by more than a hairline. */
+    --choice-pick-on-well: color-mix(in srgb, var(--form-primary) 12%, var(--form-well-in));
   }
   :root[data-field-fill] :is(.form-page, .command-form, .insert-form-app) {
     --form-well: var(--field-fill); --form-well-hover: var(--field-fill); --form-well-in: var(--field-fill); --form-edge: var(--line-control);

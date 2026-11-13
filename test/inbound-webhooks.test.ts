@@ -253,6 +253,17 @@ const settle = defineCommand({
     return { id: updated.id as number };
   },
 });
+// A free-text field with no `max`: the delivery's own size is its only bound (the inbound limit, 256 KiB).
+const note = defineCommand({
+  source: 'shop',
+  target: 'vehicle',
+  input: { note: field.text() },
+  output: shape({ id: id() }),
+  async handle({ db, record }, input) {
+    const updated = await db.vehicle.update(record!, { stock: input.note });
+    return { id: updated.id as number };
+  },
+});
 // The provider's "paid", run by FakePay's webhook: it names no record, and finds the item by its stock number.
 const markPaid = defineCommand({
   source: 'shop',
@@ -314,7 +325,7 @@ async function fixture(
     if (dialect === 'sqlite') provisionSqliteIntegrations(engine.path);
     else await provisionPostgresIntegrations(engine.url);
     store = await openIntegrationStore(dialect === 'sqlite' ? { sqlite: engine.path } : { postgres: engine.url });
-    const commands = defineCommands({ settle, markPaid });
+    const commands = defineCommands({ settle, markPaid, note });
     registry.add({ id: 'private-db', name: 'Shop', url: engine.path || engine.url, writable: true, source: 'config' });
     const config = {
       id: 'shop',
@@ -324,7 +335,7 @@ async function fixture(
       auth: {
         roles: {
           staff: { read: true },
-          integration: { read: true, service: true, commands: ['settle', 'markPaid'] },
+          integration: { read: true, service: true, commands: ['settle', 'markPaid', 'note'] },
           clerk: { read: true, commands: ['settle'] },
           observer: { read: true },
         },
@@ -622,6 +633,29 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         const large = JSON.stringify({ id: 'big', pad: 'x'.repeat(300 * 1024) });
         assert.equal((await f.send(large, signed(large))).status, 413);
       });
+    });
+
+    test('a text field with no max takes the whole delivery: 200,000 characters is applied, past 256 KiB is 413', async () => {
+      const noted = defineInbound({
+        verify: verifier(),
+        runAs: 'sender',
+        command: 'note',
+        key: (body: { id: string }) => body.id,
+        input: (body: { note: string }) => ({ note: body.note }),
+        target: (body: { item: number }) => ({ id: body.item }),
+      });
+      await fixture(
+        dialect,
+        async (f) => {
+          const big = f.delivery({ id: 'note-1', item: 1, note: 'n'.repeat(200_000) });
+          assert.equal((await f.send(big.body, big.headers, { path: '/api/inbound/noted' })).status, 204);
+          const [row] = await f.engine.all('SELECT LENGTH(stock) AS size FROM db_item WHERE id = 1');
+          assert.equal(Number(row.size), 200_000, 'the whole text was written');
+          const past = f.delivery({ id: 'note-2', item: 1, note: 'n'.repeat(300 * 1024) });
+          assert.equal((await f.send(past.body, past.headers, { path: '/api/inbound/noted' })).status, 413);
+        },
+        { settled: settled(), noted },
+      );
     });
 
     test('a principal the App does not grant is refused at the call, not applied', async () => {

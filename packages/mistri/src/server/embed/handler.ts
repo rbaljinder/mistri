@@ -190,6 +190,8 @@ async function prepare(
   if (typeof pools === 'string') throw new Error(pools);
   const timings = shutdownTimings(opts);
   if (typeof timings === 'string') throw new Error(timings);
+  // Read by every module load: refused here with the other settings, not at the first load (moduleLoadTimeout.ts).
+  (await import('../app/moduleLoadTimeout.js')).moduleLoadTimeout();
   return {
     opts,
     settings: {
