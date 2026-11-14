@@ -96,7 +96,8 @@ export function roleClaimsOf(roles: Readonly<Record<string, { claims?: AppClaimR
 
 /** The roles a sign-in's claims give, through `provider` (`oidc:<name>` or `saml:<name>`, as `auth.providers`
     says it): a rule that names another provider is not read, so a claim of the same name from another identity
-    provider never gives the role (0.8.5 I1). */
+    provider never gives the role (0.8.5 I1). Loading binds every rule to its provider; one that reached here
+    unbound is read from none. */
 export function mappedRoles(
   mapping: Readonly<Record<string, AppClaimRule>>,
   claims: Readonly<Record<string, unknown>>,
@@ -105,7 +106,8 @@ export function mappedRoles(
   return Object.entries(mapping)
     .filter(
       ([, rule]) =>
-        (rule.provider === undefined || rule.provider === provider) &&
+        rule.provider !== undefined &&
+        [rule.provider].flat().includes(provider as AppProvider) &&
         Object.entries(rule.match).some(([claim, values]) => claimValues(claims, claim).some((value) => values.includes(value))),
     )
     .map(([role]) => role);

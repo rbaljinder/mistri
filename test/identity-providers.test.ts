@@ -44,9 +44,6 @@ import {
 } from '../packages/mistri/src/server/auth/identityConfig.js';
 import { claimValues, showsMfa, stepUpInstant } from '../packages/mistri/src/server/auth/identityProviders.js';
 import { mappedRoles, maySignUp } from '../packages/mistri/src/server/auth/identityRoles.js';
-import { appRoleWarnings } from '../packages/mistri/src/server/app/appRoleChecks.js';
-import type { LoadedApp } from '../packages/mistri/src/server/app/apps.js';
-import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { makeDemoDatabase, seedDemoDatabase } from './make-demo-db.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { authorityReport } from '../packages/mistri/src/shared/appAuthority.js';
@@ -97,7 +94,7 @@ describe('the DSL', () => {
     assert.throws(() => app({ providers: [saml.tenants()] }), /tenant App/);
     assert.deepEqual(
       app({ providers: [saml('okta')], roles: { viewer: { read: true, claims: { groups: ['g1'] } } } }).auth?.roles?.viewer.claims,
-      { match: { groups: ['g1'] } },
+      { provider: 'saml:okta', match: { groups: ['g1'] } },
       "a SAML provider's attributes are the claims a role reads",
     );
   });
@@ -120,7 +117,11 @@ describe('the DSL', () => {
       providers: ['oidc:workforce'],
       roles: { viewer: { read: true, claims: { groups: ['g1'], 'realm_access.roles': ['viewer'] } } },
     });
-    assert.deepEqual(mapped.auth?.roles?.viewer.claims, { match: { groups: ['g1'], 'realm_access.roles': ['viewer'] } });
+    assert.deepEqual(
+      mapped.auth?.roles?.viewer.claims,
+      { provider: 'oidc:workforce', match: { groups: ['g1'], 'realm_access.roles': ['viewer'] } },
+      'with one provider, a rule that names none is bound to it at loading',
+    );
     assert.throws(
       () => app({ providers: ['email', 'github'], roles: { viewer: { read: true, claims: { groups: ['g1'] } } } }),
       /\[claim-without-provider\]/,
@@ -165,7 +166,7 @@ describe('the DSL', () => {
       () => app({ providers: both, roles: { viewer: { read: true, claims: { provider: 'oidc:other', groups: ['g1'] } } } }),
       /\[claim-provider-unknown\].*Name one of: oidc:workforce, saml:contractors/,
     );
-    for (const provider of ['github', 'oidc:*', 'workforce', ['oidc:workforce'], 1])
+    for (const provider of ['github', 'oidc:*', 'workforce', [], ['oidc:workforce', 'github'], 1])
       assert.throws(
         () => app({ providers: both, roles: { viewer: { read: true, claims: { provider, groups: ['g1'] } } } }),
         /not a named identity provider/,
@@ -180,39 +181,41 @@ describe('the DSL', () => {
     assert.ok(lock.includes('role viewer claims from provider oidc:workforce — the App'), lock);
   });
 
-  test('check warns of a claim rule without a provider only where the App has more than one to read it from', () => {
-    const schema = {
-      label: 'crew',
-      dialect: 'sqlite',
-      readAt: '2026-10-01T00:00:00Z',
-      foreignKeys: [],
-      tables: [
-        {
-          id: 'work_order',
-          name: 'work_order',
-          schema: 'main',
-          columns: [{ name: 'id', type: 'INTEGER', nullable: false, primaryKey: true }],
-        },
-      ],
-    } as unknown as DatabaseSchema;
-    const warned = (auth: Record<string, unknown>) =>
-      appRoleWarnings({ app: app(auth), path: '/apps/crew/app.ts', pages: [], sources: {} } as unknown as LoadedApp, schema).filter(
-        (line) => line.includes('[claim-any-provider]'),
-      );
+  test('a claim rule may name a list of providers: kept sorted, a list of one is the one, and each must be known', () => {
+    const three = ['oidc:workforce', 'saml:contractors', 'saml:north'];
+    const claims = (provider: unknown) =>
+      app({ providers: three, roles: { viewer: { read: true, claims: { provider, groups: ['g1'] } } } }).auth?.roles?.viewer.claims;
+    const listed = app({
+      providers: three,
+      roles: { viewer: { read: true, claims: { provider: ['saml:north', 'oidc:workforce'], groups: ['g1'] } } },
+    });
+    assert.deepEqual(listed.auth?.roles?.viewer.claims, { provider: ['oidc:workforce', 'saml:north'], match: { groups: ['g1'] } });
+    assert.deepEqual(claims(['saml:north']), { provider: 'saml:north', match: { groups: ['g1'] } });
+    assert.throws(() => claims(['saml:north', 'saml:north']), /names a provider twice/);
+    assert.throws(() => claims(['saml:north', 'oidc:other']), /"oidc:other" \[claim-provider-unknown\]/);
+    const lock = authorityReport(listed);
+    assert.ok(lock.includes('role viewer claims from provider oidc:workforce — the App'), lock);
+    assert.ok(lock.includes('role viewer claims from provider saml:north — the App'), lock);
+    const rule = listed.auth!.roles!.viewer.claims!;
+    assert.deepEqual(mappedRoles({ viewer: rule }, { groups: ['g1'] }, 'saml:north'), ['viewer']);
+    assert.deepEqual(mappedRoles({ viewer: rule }, { groups: ['g1'] }, 'saml:contractors'), []);
+  });
+
+  test('a claim rule without a provider is bound to the only one, and refused where the App has more than one', () => {
     const roles = (claims: Record<string, unknown>) => ({ viewer: { read: true, claims }, admin: { read: true, write: true } });
+    assert.deepEqual(app({ providers: ['email', 'oidc:workforce'], roles: roles({ groups: ['g1'] }) }).auth?.roles?.viewer.claims, {
+      provider: 'oidc:workforce',
+      match: { groups: ['g1'] },
+    });
     assert.deepEqual(
-      warned({ providers: ['email', 'oidc:workforce'], roles: roles({ groups: ['g1'] }) }),
-      [],
-      'one provider: any is that one',
+      app({ providers: ['oidc:workforce', 'saml:contractors'], roles: roles({ provider: 'oidc:workforce', groups: ['g1'] }) }).auth?.roles
+        ?.viewer.claims,
+      { provider: 'oidc:workforce', match: { groups: ['g1'] } },
     );
-    assert.deepEqual(
-      warned({ providers: ['oidc:workforce', 'saml:contractors'], roles: roles({ provider: 'oidc:workforce', groups: ['g1'] }) }),
-      [],
+    assert.throws(
+      () => app({ providers: ['oidc:workforce', 'saml:contractors'], roles: roles({ groups: ['g1'] }) }),
+      /role "viewer" has "claims" and no "provider" \[claim-any-provider\].*oidc:workforce, saml:contractors.*provider: oidc\('workforce'\)/,
     );
-    assert.deepEqual(warned({ providers: ['oidc:workforce', 'saml:contractors'], roles: roles({ groups: ['g1'] }) }), [
-      'app.ts: role "viewer" [claim-any-provider]: its claims are read from a sign-in through any of oidc:workforce, saml:contractors, ' +
-        "so a claim of the same name from another of them gives it too. Say whose claims these are: roles.viewer.claims.provider, for example oidc('workforce').",
-    ]);
   });
 
   test('authority.lock records the providers, who may sign up and which claims give each role', () => {
@@ -376,23 +379,26 @@ describe('claims', () => {
     assert.deepEqual(claimValues(claims, 'realm_access.roles'), ['underwriter']);
     assert.deepEqual(claimValues(claims, 'missing.path'), []);
     assert.deepEqual(
-      mappedRoles({ viewer: { match: { groups: ['b'] } }, lead: { match: { 'realm_access.roles': ['lead'] } } }, claims, 'oidc:workforce'),
+      mappedRoles(
+        {
+          viewer: { provider: 'oidc:workforce', match: { groups: ['b'] } },
+          lead: { provider: 'oidc:workforce', match: { 'realm_access.roles': ['lead'] } },
+        },
+        claims,
+        'oidc:workforce',
+      ),
       ['viewer'],
     );
   });
 
-  test("a rule naming a provider is read only from that provider's sign-in; one naming none, from any", () => {
+  test("a rule is read only from its provider's sign-in; one that reached the runtime unbound, from none", () => {
     const claims = { groups: ['admins'] };
     const mapping = {
       admin: { provider: 'oidc:workforce' as const, match: { groups: ['admins'] } },
       helper: { match: { groups: ['admins'] } },
     };
-    assert.deepEqual(mappedRoles(mapping, claims, 'oidc:workforce'), ['admin', 'helper']);
-    assert.deepEqual(
-      mappedRoles(mapping, claims, 'saml:contractors'),
-      ['helper'],
-      "the contractors' IdP says groups too, and gives no admin",
-    );
+    assert.deepEqual(mappedRoles(mapping, claims, 'oidc:workforce'), ['admin']);
+    assert.deepEqual(mappedRoles(mapping, claims, 'saml:contractors'), [], "the contractors' IdP says groups too, and gives no admin");
   });
 
   test('more than one factor is said by amr (mfa, or two kinds) or by an acr the provider lists', () => {

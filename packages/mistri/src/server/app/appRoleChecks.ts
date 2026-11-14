@@ -23,7 +23,7 @@ import { dirname, relative } from 'node:path';
 import { appRollupRules, withRollups } from '../../shared/appRollups.js';
 import { appCommandGrants, grantsByRole, logicalResource, resolveAppAccess, resolveViews, type AppDef } from '../../shared/app.js';
 import { labelTemplateProblem } from '../../shared/appRecordLabels.js';
-import { isFormView, isTenantApp, NAMED_PROVIDER } from '../../shared/appModel.js';
+import { isFormView, isTenantApp } from '../../shared/appModel.js';
 import { isRoom, servedView, servedViewKind } from '../../shared/appDestinations.js';
 import { assertNever, humanName } from '@mistriwork/engine/shared/model.js';
 import { ADMIN_ROLE } from '../../shared/accountAdministration.js';
@@ -448,22 +448,6 @@ export function appRoleWarnings(loaded: LoadedApp, schema: DatabaseSchema, comma
           `Grant it what an administrator reads and writes: roles.${ADMIN_ROLE}, for example { read: true, write: true }.`,
       ),
     );
-  /* A claim rule without `provider` is read from every named provider's sign-in. With one provider that is the
-     same thing; with several, a claim of the same name from another identity provider (a contractors' IdP that
-     also says `groups`) would give the role (0.8.5 I1). Allowed, since an App may trust them all alike, and said. */
-  const named = (app.auth?.providers ?? []).filter((provider) => NAMED_PROVIDER.test(provider));
-  if (named.length > 1)
-    for (const role of roles) {
-      const claims = app.auth?.roles?.[role]?.claims;
-      if (!claims || claims.provider !== undefined) continue;
-      warnings.push(
-        say(
-          `role "${role}" [claim-any-provider]: its claims are read from a sign-in through any of ${named.join(', ')}, ` +
-            `so a claim of the same name from another of them gives it too. Say whose claims these are: ` +
-            `roles.${role}.claims.provider, for example ${named[0].replace(/^(oidc|saml):(.*)$/, "$1('$2')")}.`,
-        ),
-      );
-    }
   for (const role of roles) {
     let access: ReturnType<typeof resolveAppAccess>;
     try {

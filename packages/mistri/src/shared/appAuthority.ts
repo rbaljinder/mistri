@@ -122,7 +122,8 @@ export function authorityReport(app: AppDef, origins?: AppOrigins, env: readonly
       if (grant.extends !== undefined) fact(`role ${role} extends ${grant.extends}`, `${at}.extends`);
       /* Who holds the role is authority too when a provider's claims say it:
          a value added to a mapping is one added line in review. */
-      if (grant.claims?.provider !== undefined) fact(`role ${role} claims from provider ${grant.claims.provider}`, `${at}.claims.provider`);
+      for (const provider of sorted([grant.claims?.provider ?? []].flat()))
+        fact(`role ${role} claims from provider ${provider}`, `${at}.claims.provider`);
       for (const claim of sorted(Object.keys(grant.claims?.match ?? {}))) {
         for (const value of sorted(grant.claims!.match[claim]))
           fact(`role ${role} from claim ${claim} ${JSON.stringify(value)}`, `${at}.claims`);

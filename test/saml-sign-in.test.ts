@@ -73,8 +73,8 @@ describe('signing in through a SAML provider', () => {
           store,
           defaultRole: 'viewer',
           roles: {
-            viewer: { read: true, claims: { groups: ['crew'] } },
-            dispatcher: { read: true, write: true, claims: { groups: ['dispatch'] } },
+            viewer: { read: true, claims: { provider: ['saml:north', 'saml:south', 'saml:west'], groups: ['crew'] } },
+            dispatcher: { read: true, write: true, claims: { provider: 'saml:north', groups: ['dispatch'] } },
           },
         },
         views: { 'work-orders': { kind: 'list', from: 'work_order' } },
