@@ -46,7 +46,7 @@ import { MemoryCacheStore, scopedCache, type CacheStore } from '../adapters/cach
 import type { HttpDescription } from '../adapters/http/httpDescription.js';
 import type { Adapter } from '../adapters/adapter.js';
 import type { PoolRoleStats } from '../adapters/poolMetrics.js';
-import { listenOf, poolOf, replicaEngine, replicasOf, type PoolSize } from './poolConfig.js';
+import { backstopOf, listenOf, poolOf, replicaEngine, replicasOf, type PoolSize } from './poolConfig.js';
 import type { DatabaseSchema } from '../shared/schema.js';
 import { slug } from '../shared/slug.js';
 import type { PublicConnection, SecretSource } from '../shared/connection.js';
@@ -131,6 +131,14 @@ export interface ConnectionConfig {
    * listening session (packages/mistri/src/adapters/events/postgresCommandEventWake.ts).
    */
   listen?: string;
+  /**
+   * `"rls"`: the database's row-level security stands behind the tenant scope (docs/postgresql.md). `url` and
+   * `replicas` then name the runtime role, which owns no table and reads under the pinned policy; `owner` names
+   * the role that owns the tables. A tenant App only; checked by backstopOf.
+   */
+  backstop?: 'rls';
+  /** The owner role's URL under `backstop`, resolved as `url` is: what crosses tenants by design runs on it. */
+  owner?: string;
   /**
    * Present for an API read through its description (`"kind": "http"` in the
    * config file); `url` is then the API's base URL. It holds no secret:
@@ -899,6 +907,10 @@ interface ConfigFile {
     replicas?: unknown;
     /** A direct URL for LISTEN behind a pooler, checked by listenOf. */
     listen?: unknown;
+    /** `"rls"` with `owner`, checked by backstopOf. */
+    backstop?: unknown;
+    /** The owner role's URL under `backstop`, checked by backstopOf. */
+    owner?: unknown;
     /** `"http"` for an API, `"cache"`, `"webhook"`, … for a service (serviceConnections.ts); absent for a database. */
     kind?: 'http' | ServiceKind;
     /** A description file relative to this one, or the description itself. */
@@ -916,12 +928,14 @@ export interface LoadedConfig {
   path: string;
   /** As written — a SQLite path located against the file (`writtenUrl` keeps the spelling) — plus an HTTP connection's fields checked and its description resolved against the file, and a checked pool. */
   connections: Array<
-    Omit<ConfigFile['connections'][number], 'pool' | 'replicas' | 'listen'> & {
+    Omit<ConfigFile['connections'][number], 'pool' | 'replicas' | 'listen' | 'backstop' | 'owner'> & {
       writtenUrl?: string;
       http?: HttpConnectionConfig;
       pool?: PoolSize;
       replicas?: string[];
       listen?: string;
+      backstop?: 'rls';
+      owner?: string;
     }
   >;
   /** The services the file names beside its databases, checked; never databases, never listed as connections. */
@@ -1032,7 +1046,8 @@ export async function loadConfig(explicit: string | undefined, sections: ConfigS
       const pool = poolOf(c as unknown as Record<string, unknown>, http !== undefined, path);
       const replicas = replicasOf(c as unknown as Record<string, unknown>, http !== undefined, path);
       const listen = listenOf(c as unknown as Record<string, unknown>, http !== undefined, path);
-      const { pool: _written, replicas: _listed, listen: _direct, ...entry } = c;
+      const backstop = backstopOf(c as unknown as Record<string, unknown>, http !== undefined, path);
+      const { pool: _written, replicas: _listed, listen: _direct, backstop: _wall, owner: _owner, ...entry } = c;
       const located = http ? c.url : sqliteTargetFrom(c.url, dirname(resolve(path)));
       return [
         {
@@ -1042,6 +1057,7 @@ export async function loadConfig(explicit: string | undefined, sections: ConfigS
           ...(pool ? { pool } : {}),
           ...(replicas ? { replicas } : {}),
           ...(listen ? { listen } : {}),
+          ...(backstop ?? {}),
         },
       ];
     });

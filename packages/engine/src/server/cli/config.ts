@@ -147,6 +147,8 @@ export async function readStartupConfig(
           ...(c.replicas ? { replicas: c.replicas } : {}),
           // A direct URL for LISTEN behind a pooler, checked by loadConfig.
           ...(c.listen ? { listen: c.listen } : {}),
+          // The row-level security backstop and its owner's URL, checked by loadConfig.
+          ...(c.backstop ? { backstop: c.backstop, ...(c.owner ? { owner: c.owner } : {}) } : {}),
           // An API's base URL, description and auth, checked by loadConfig.
           http: c.http,
           // Where its migrations are (tablewalk migrate), checked by loadConfig.

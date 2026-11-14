@@ -38,6 +38,8 @@ interface TenantLive {
   readonly state: LiveState;
   /** The tenant-owned choice tables captured, bare: what a tenant's cached choices may be kept for. */
   readonly choices?: ReadonlySet<string>;
+  /** What the writer's transactions record, while live sync is on: what a second writer of the source records too. */
+  readonly changes?: Parameters<typeof bindLiveChanges>[1];
 }
 
 /* By App, source and connection: the writer an ownership snapshot names. */
@@ -101,7 +103,8 @@ export async function bindTenantLive(adapter: Adapter, ownership: TenantOwnershi
         : [ownership.resources[resource]],
     ),
   );
-  bindLiveChanges(adapter, { owners, scoped: true, ...(skip.size ? { skip } : {}), ...(wish.live ? {} : { only: choices }) });
+  const changes = { owners, scoped: true as const, ...(skip.size ? { skip } : {}), ...(wish.live ? {} : { only: choices }) };
+  bindLiveChanges(adapter, changes);
   const listen = url === undefined ? undefined : wakeListenUrl(url, postgresPoolDefaults().pooler);
   const hub = await liveHubOf(adapter, listen === undefined ? {} : { listen });
   bound.set(key, {
@@ -109,7 +112,25 @@ export async function bindTenantLive(adapter: Adapter, ownership: TenantOwnershi
     ...(hub ? { hub } : {}),
     state: hub ? { state: 'on' } : { state: 'off', reason: 'no store' },
     ...(hub && choices.size ? { choices } : {}),
+    ...(hub ? { changes } : {}),
   });
+}
+
+/**
+ * A second writer of the source bound in `bindTenantLive` — the owner's, for the platform realm's commands under the
+ * row-security backstop (tenantWriteSource.ts) — records what the first records, into the same store, so the one hub
+ * hears its writes too. It opens no hub of its own; `unbindTenantLive` lets it go.
+ */
+export async function shareTenantLive(adapter: Adapter, ownership: TenantOwnershipSnapshot): Promise<void> {
+  const changes = bound.get(keyOf(ownership))?.changes;
+  if (!changes) return;
+  if (
+    !(await liveStoreOf(adapter)
+      ?.ready()
+      .catch(() => false))
+  )
+    return;
+  bindLiveChanges(adapter, changes);
 }
 
 /** The writer closed: its hub stops, and its streams end at their next read. */

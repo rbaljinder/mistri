@@ -186,6 +186,9 @@ interface PostgresCommands extends NativeCommands {
     run: ScopedCommandRun<T>,
     /** The outer bound the scope sits inside (scopedTransaction.ts ScopeBound), over the same tables. */
     boundInput?: RowScope,
+    /** What the row policy reads under the backstop (PostgresAdapter.scopeTransaction's `tenant`): the source's to say,
+     * not the journal's, whose platform realm names no tenant even where a command runs in one. */
+    options?: { readonly tenant?: string | null },
   ): Promise<T>;
 }
 
@@ -267,7 +270,7 @@ function postgresCommands(host: PostgresStoreHost): PostgresCommands {
       const owner = capturePublicPlacementOwner(input);
       return host.readSnapshot((snapshot) => recoverPostgresPublicPlacementReceipt(snapshot.client, owner, submission));
     },
-    scopeVerifiedCommandTransaction: async (input, verify, tenant, run, boundInput) => {
+    scopeVerifiedCommandTransaction: async (input, verify, tenant, run, boundInput, options = {}) => {
       const scope = captureRowScope(input),
         owner = captureCommandJournalMember(tenant),
         bound = boundInput === undefined ? undefined : captureRowScope(boundInput);
@@ -283,6 +286,7 @@ function postgresCommands(host: PostgresStoreHost): PostgresCommands {
         scope,
         verify,
         bound,
+        ...(options.tenant !== undefined ? { tenant: options.tenant } : {}),
       });
     },
   };

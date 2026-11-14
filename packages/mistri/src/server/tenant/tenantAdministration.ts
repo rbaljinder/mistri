@@ -663,7 +663,8 @@ async function openPostgresAdministrationStore(
   auth: AppAuthRuntimeBinding,
 ): Promise<AdministrationStore> {
   auth.assertCurrent();
-  const writer = tenantAdapter(url, 'Private tenant administration');
+  // Administration manages every tenant by design: under the backstop, as the owner (tenantConnections.ts).
+  const writer = tenantAdapter(url, 'Private tenant administration', false, 'owner');
   try {
     let invitationStorage: boolean | undefined;
     const attestInvitations = async (client: PgQuery) => {

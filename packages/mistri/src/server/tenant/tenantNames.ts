@@ -24,7 +24,7 @@ import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
 export const TENANT_NAMES_MAX = 256;
 
 type Part = { readonly text: string } | { readonly column: string; readonly words?: Readonly<Record<string, string>> };
-interface TenantNamePlan {
+export interface TenantNamePlan {
   readonly key: string;
   readonly parts: readonly Part[];
   readonly columns: readonly string[];

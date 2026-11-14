@@ -16,6 +16,7 @@ import { assertAppSearch } from '../app/appSearchRuntime.js';
 import { configurePublicFormLimits } from '@mistriwork/engine/server/http/rateLimit.js';
 import { configureSignInState } from '../auth/signInState.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
+import { assertNoBackstop } from '../tenant/tenantBackstopOwner.js';
 import type { Options } from '@mistriwork/engine/server/cli/args.js';
 import type { StartupConfig } from '@mistriwork/engine/server/cli/config.js';
 
@@ -110,6 +111,16 @@ export function assertPresentationNamesApps(presentation: LoadedApp['presentatio
     );
 }
 
+/** Refuses a non-tenant App bound to a connection under the row-security backstop (tenantBackstopOwner.ts). */
+export function assertAppsOffBackstop(loadedApps: readonly LoadedApp[], registry: Pick<Registry, 'configs' | 'list' | 'active'>): void {
+  for (const loaded of loadedApps) {
+    if (isTenantApp(loaded.app)) continue;
+    const scope = loaded.app.connection;
+    const bound = (scope ? registry.list().find((c) => c.id === scope || c.name === scope)?.id : undefined) ?? registry.active;
+    if (bound) assertNoBackstop(registry, 'a non-tenant App', [bound]);
+  }
+}
+
 export async function loadStartupApps(opts: Options, registry: Registry, config: StartupConfig): Promise<StartupApps> {
   /* The app layer. Loaded whether or not a config file was — `--app` is
      an explicit ask, and the config's "apps" list is the same ask written
@@ -178,6 +189,8 @@ export async function loadStartupApps(opts: Options, registry: Registry, config:
       assertBuildEntries(opts, loadedApps);
       assertPresentationNamesApps(presentation, loadedApps);
       assertAppScopes(loadedApps, (scope) => registry.list().find((c) => c.id === scope || c.name === scope)?.id ?? scope);
+      /* Only a tenant App reads through the row-security backstop; any other would see none of its tenant rows. */
+      assertAppsOffBackstop(loadedApps, registry);
       // A search names a search connection the config has; said here, not at the first keystroke.
       assertAppSearch(
         loadedApps.map((loaded) => loaded.app),

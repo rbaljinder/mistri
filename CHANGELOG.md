@@ -5,6 +5,14 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.53
+
+- **A tenant App's Postgres connection can run under the row-security backstop.** A connection that says `"backstop": "rls"` and names its `owner` serves every tenant transaction through the runtime role it connects as, with `mistri.tenant` set in the flight that begins it, and keeps a small pool (five connections) as the owner for what is cross-tenant by design: migrations, enrollment, the tenant directory, the platform realm, support reads and due timers. A runtime transaction that does not say its tenant is refused rather than sent. Without `backstop` nothing changes.
+- **The roles are attested when the server starts.** The runtime role must not be a superuser, hold `BYPASSRLS`, be a member of the owner role or be the owner itself; a replica's role is held to the same. Any of these refuses to start.
+- **Search and `--reindex` read as the owner under the backstop**, so indexing a write reads the rows it indexes rather than seeing none and removing the documents it should keep. Each document still carries its tenant, and a search still answers only from the person's own.
+- **A non-tenant App, or the Workbench, refuses a backstop connection** with a message saying the backstop is for tenant Apps: either would run as the runtime role with no tenant and read nothing.
+- **The store check allows the backstop's runtime role** to read and write the store's tables, and the PostgreSQL guide has a section on setting the backstop up: the roles, the grants, the pinned policy, and what runs as which role.
+
 ## 1.0.0-rc.52
 
 - **A Postgres transaction can carry its tenant into the database.** An adapter opened with `rowSecurity` sets `mistri.tenant` for the life of each tenant transaction, in the same flight as `BEGIN`, so a row policy can read it and nothing costs a round trip. Reads, writes, the journal and a pinned read snapshot all carry it; an autocommit read, which could not, refuses on such an adapter rather than returning nothing. A tenant value that is empty or holds a NUL or a backslash is refused before it is sent. Nothing turns this on yet: the next candidates route a tenant App's runtime role through it and add the command that writes the policies.

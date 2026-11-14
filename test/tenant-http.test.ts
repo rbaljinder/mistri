@@ -4346,7 +4346,7 @@ test("every method of the tenant read and write sources is answered by a cross-t
         'a logo is served as its sniffed type, never sniffed again, cached for good, and runs nothing opened on its own',
       ],
     },
-    members('../packages/mistri/src/server/tenant/tenantReadSource.ts', 'TenantReadSource'),
+    members('../packages/mistri/src/server/tenant/tenantReadSourceShared.ts', 'TenantReadSource'),
     'TenantReadSource',
   );
   answered(

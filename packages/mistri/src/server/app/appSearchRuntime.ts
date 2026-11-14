@@ -472,6 +472,8 @@ class SearchIndexer {
   private draining?: Promise<void>;
   private waiting = 0;
   private readonly ensured = new Set<string>();
+  /* A connection's reader where the registry's own cannot read its rows (readThrough). */
+  private readonly readers = new Map<string, () => Adapter>();
 
   constructor(
     private readonly registry: Registry,
@@ -529,7 +531,7 @@ class SearchIndexer {
       const name = target.resource;
       if (only !== undefined && name !== only) continue;
       if ('problem' in target) throw new Error(`resources "${name}" cannot be indexed on this connection: ${target.problem}`);
-      const { adapter, schema } = await this.registry.open(target.connection);
+      const { adapter, schema } = await this.source(target.connection);
       const found = searchedAt(app, schema, target);
       const table = schema.tables.find((candidate) => candidate.id === target.physical)!;
       if (!found)
@@ -618,9 +620,25 @@ class SearchIndexer {
     }
   }
 
+  /**
+   * Read `connection`'s rows through `open` instead of the registry's adapter (undefined takes it back). Under the
+   * row-security backstop the registry's adapter is the runtime role, which reads no tenant row with no tenant set:
+   * `apply` would find none and remove the record's document on every write, and a reindex would index nothing. The
+   * indexer reads as the owner, across tenants by design, and each document keeps its row's tenant.
+   */
+  readThrough(connection: string, open: (() => Adapter) | undefined): void {
+    if (open) this.readers.set(connection, open);
+    else this.readers.delete(connection);
+  }
+
+  private async source(connection: string): Promise<{ adapter: Adapter; schema: DatabaseSchema }> {
+    const opened = await this.registry.open(connection);
+    return { adapter: this.readers.get(connection)?.() ?? opened.adapter, schema: opened.schema };
+  }
+
   private async apply(job: IndexJob): Promise<void> {
     if (job.dependents) return this.applyDependents(job);
-    const { adapter, schema } = await this.registry.open(job.connection);
+    const { adapter, schema } = await this.source(job.connection);
     const found = searchedAt(job.app, schema, job);
     if (!found) return;
     const index = this.index(found);
@@ -652,7 +670,7 @@ class SearchIndexer {
    * by the reference column, in key order, at most MAX_DEPENDENTS of them.
    */
   private async applyDependents(job: IndexJob): Promise<void> {
-    const { adapter, schema } = await this.registry.open(job.connection);
+    const { adapter, schema } = await this.source(job.connection);
     for (const target of await searchTargets(this.registry, job.app, job.connection)) {
       if ('problem' in target || target.connection !== job.connection) continue;
       const found = searchedAt(job.app, schema, target);

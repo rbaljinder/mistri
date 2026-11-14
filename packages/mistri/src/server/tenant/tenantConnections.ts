@@ -14,6 +14,7 @@
  * Every other holder asks one statement at a time, which a pipelining client sends exactly as before.
  */
 import { sharedPostgresAdapter, type PostgresAdapter } from '@mistriwork/engine/adapters/postgres.js';
+import { declareBackstopRoles, forgetBackstopRoles } from '@mistriwork/engine/adapters/postgresMaintenance.js';
 import { poolSizes } from '@mistriwork/engine/adapters/postgresPool.js';
 
 const TENANT_REQUEST_POOL = Object.freeze({ pipelineReads: true });
@@ -27,9 +28,40 @@ export function declareTenantPool(url: string, pool: { read?: number; write?: nu
   declared.set(url, Object.freeze({ ...pool }));
 }
 
-/** Forget every declared pool: a test's, between hosts. */
+/** Forget every declared pool and backstop: a test's, between hosts. */
 export function forgetTenantPools(): void {
   declared.clear();
+  backstops.clear();
+  forgetBackstopRoles();
+}
+
+/* The owner's pool under the row-security backstop: what crosses tenants by design (a public address resolved, the
+   jobs' sweep of every tenant, administration, enrollment's catalog) is a small share of the traffic, and it must
+   not take a connection the role's request pool is counting on. */
+const OWNER_POOL = Object.freeze({ read: 2, write: 2 });
+
+/* Each tenant database's backstop, by its runtime URL and each replica's (declareTenantBackstop). */
+const backstops = new Map<string, Readonly<{ owner: string; role: string }>>();
+
+/**
+ * Say that the tenant database on `url` runs under the row-security backstop (docs/postgresql.md): `url` and
+ * `replicas` connect as the runtime `role`, `owner` as `ownerRole`, which owns the tables. Declared once enrollment
+ * has attested the pair (tenantEnrollment.ts); from then on `tenantAdapter` hands the runtime's adapters the role,
+ * and an `'owner'` adapter the owner's own small pool.
+ */
+export function declareTenantBackstop(
+  url: string,
+  backstop: { owner: string; role: string; ownerRole: string; replicas?: readonly string[] },
+): void {
+  declareBackstopRoles(backstop.role, backstop.ownerRole);
+  const entry = Object.freeze({ owner: backstop.owner, role: backstop.role });
+  for (const each of [url, ...(backstop.replicas ?? [])]) backstops.set(each, entry);
+  if (!declared.has(backstop.owner)) declareTenantPool(backstop.owner, OWNER_POOL);
+}
+
+/** The backstop declared on `url` — the owner's URL and the runtime role the pinned policy binds — or undefined. */
+export function tenantBackstop(url: string): Readonly<{ owner: string; role: string }> | undefined {
+  return backstops.get(url);
 }
 
 /** The readers and writers the request pool on `url` takes: the connection's `"pool"`, else the process's settings. */
@@ -50,8 +82,27 @@ export function tenantRequestReaders(): number {
 /**
  * An adapter of the tenant host's on `url`: its own catalog, lanes and stores, the database's one request pool. A
  * replica's holds its readers only (`replica`): its writers and background writer are never opened.
+ *
+ * `role`, under a declared backstop (declareTenantBackstop): `'runtime'` runs as the role the pinned policy binds,
+ * so a scoped read or write must say its tenant (PostgresAdapterOptions.rowSecurity); `'owner'` runs on the owner's
+ * URL and pool, which the policy does not bind, on the primary only. Without a backstop both are today's adapter.
  */
-export function tenantAdapter(url: string, label: string, replica = false): PostgresAdapter {
+export function tenantAdapter(url: string, label: string, replica = false, role: 'runtime' | 'owner' = 'runtime'): PostgresAdapter {
+  const backstop = backstops.get(url);
+  if (backstop && role === 'owner') {
+    const owner = tenantPoolSizes(backstop.owner);
+    return sharedPostgresAdapter(
+      backstop.owner,
+      label,
+      { ...TENANT_REQUEST_POOL, ...owner },
+      { rowSecurity: { role: backstop.role, bypass: true } },
+    );
+  }
   const { readers, writers } = tenantPoolSizes(url);
-  return sharedPostgresAdapter(url, label, { ...TENANT_REQUEST_POOL, readers, writers, ...(replica ? { readersOnly: true } : {}) });
+  return sharedPostgresAdapter(
+    url,
+    label,
+    { ...TENANT_REQUEST_POOL, readers, writers, ...(replica ? { readersOnly: true } : {}) },
+    backstop ? { rowSecurity: { role: backstop.role } } : {},
+  );
 }

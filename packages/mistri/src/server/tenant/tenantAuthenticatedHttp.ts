@@ -626,11 +626,13 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     }
     // Search, where the App declares it and a search provider is plugged in: the index follows this deployment's writer.
     const registry = raw.registry as Registry | undefined;
+    const searched = captureTenantEnrollment(enrollment);
     search = registry
       ? openTenantSearch({
           registry,
           app: loaded.app,
-          ownership: captureTenantEnrollment(enrollment).ownership,
+          ownership: searched.ownership,
+          ...('url' in searched.source ? { url: searched.source.url } : {}),
         })
       : undefined;
     /* The reader's own name, for a dashboard's "Hello, {me.name}": the sign-in

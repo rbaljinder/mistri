@@ -29,14 +29,19 @@ export async function reindexApps(registry: Registry, loadedApps: LoadedApp[], o
         const { tenantSearchColumns } = await import('../tenant/tenantSearch.js');
         tenantColumns = tenantSearchColumns((await loadAppTenantPolicy(policyFile)).ownership);
       }
-      for (const { resource, indexed } of await indexerFor(registry).reindex(
-        loaded.app,
-        owner,
-        only || undefined,
-        undefined,
-        tenantColumns,
-      )) {
-        console.error(`mistri: indexed ${indexed} record(s) of "${resource}" for app "${loaded.app.name}"`);
+      /* Under the row-security backstop the registry's adapter is the runtime role and reads no tenant row: the
+         indexer reads as the owner, across tenants by design (each document keeps its row's tenant). */
+      const { openBackstopOwnerReader } = await import('../tenant/tenantBackstopOwner.js');
+      const reader = await openBackstopOwnerReader(registry, owner);
+      const indexer = indexerFor(registry);
+      if (reader) indexer.readThrough(owner, () => reader);
+      try {
+        for (const { resource, indexed } of await indexer.reindex(loaded.app, owner, only || undefined, undefined, tenantColumns)) {
+          console.error(`mistri: indexed ${indexed} record(s) of "${resource}" for app "${loaded.app.name}"`);
+        }
+      } finally {
+        indexer.readThrough(owner, undefined);
+        await reader?.close();
       }
     }
   } catch (err) {
