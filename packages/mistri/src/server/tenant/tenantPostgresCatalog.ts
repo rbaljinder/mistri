@@ -250,6 +250,63 @@ export async function attestPostgresTenantRelations(
   );
 }
 
+/**
+ * The backstop's two roles, each asked as it connects (tenantEnrollment.ts): the owner's, and the runtime role the
+ * pinned policy binds. The runtime role must be neither the owner nor a member of it, nor a superuser, nor BYPASSRLS,
+ * and must see the same database: each of those reads every tenant's rows whatever the policy says, and the
+ * PostgreSQL error that would say so is never raised. Refuses with the reason, which the trusted startup reports.
+ */
+export async function attestPostgresBackstopRoles(runtime: PgQuery, owner: PgQuery): Promise<{ role: string; ownerRole: string }> {
+  const theirs = (await owner.query('SELECT current_user::text AS role, current_database()::text AS db')).rows[0] as
+    | { role?: unknown; db?: unknown }
+    | undefined;
+  if (typeof theirs?.role !== 'string' || typeof theirs.db !== 'string') return denyTenant();
+  const mine = (
+    await runtime.query(
+      `SELECT r.rolname::text AS role, r.rolsuper AS super, r.rolbypassrls AS bypass, current_database()::text AS db,
+            o.oid IS NOT NULL AS known, COALESCE(pg_catalog.pg_has_role(r.oid, o.oid, 'MEMBER'), false) AS member
+       FROM pg_catalog.pg_roles r LEFT JOIN pg_catalog.pg_roles o ON o.rolname = $1
+      WHERE r.rolname = current_user`,
+      [theirs.role],
+    )
+  ).rows[0] as { role?: unknown; super?: unknown; bypass?: unknown; db?: unknown; known?: unknown; member?: unknown } | undefined;
+  if (typeof mine?.role !== 'string') return denyTenant();
+  const refuse = (why: string) => denyTenant(new Error(`The row-security backstop refuses this pair of roles: ${why}`));
+  if (mine.db !== theirs.db || mine.known !== true)
+    return refuse('"url" and "owner" must name the same database, and the runtime role must see the owner role there.');
+  if (mine.role === theirs.role) return refuse('"url" connects as the owner. The runtime role must be another role, which owns nothing.');
+  if (mine.super !== false) return refuse('the runtime role is a superuser, which row-level security never binds.');
+  if (mine.bypass !== false) return refuse('the runtime role has BYPASSRLS. Run ALTER ROLE … NOBYPASSRLS.');
+  if (mine.member !== false) return refuse('the runtime role is a member of the owner role, and so reads as the owner.');
+  return { role: mine.role, ownerRole: theirs.role };
+}
+
+/** Under the backstop: the runtime role, asked on its own connection, owns no tenant table, directly or through a
+ * role it is a member of. A table's owner is exempt from its policies unless FORCE is on, which the backstop does
+ * not use. */
+export async function assertPostgresRuntimeOwnsNone(client: PgQuery, ownership: TenantOwnershipSnapshot): Promise<void> {
+  const tenantIds = Object.entries(ownership.ownership)
+    .filter(([, rule]) => rule.kind === 'tenant')
+    .map(([logical]) => ownership.resources[logical])
+    .sort(byCodeUnit);
+  const owned = (
+    await client.query(
+      `SELECT w.id FROM unnest($1::text[], $2::text[], $3::text[]) AS w(id, schema, name)
+       JOIN pg_catalog.pg_namespace n ON n.nspname = w.schema
+       JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = w.name
+      WHERE pg_catalog.pg_has_role(current_user, c.relowner, 'MEMBER')
+      ORDER BY w.id`,
+      targets(tenantIds),
+    )
+  ).rows as Array<{ id: string }>;
+  if (owned.length)
+    denyTenant(
+      new Error(
+        `The row-security backstop refuses this pair of roles: the runtime role owns ${owned.map((row) => row.id).join(', ')}, and a table's owner is exempt from its policy. ALTER TABLE … OWNER TO the owner role.`,
+      ),
+    );
+}
+
 interface IndexRow {
   id: string;
   name: string;

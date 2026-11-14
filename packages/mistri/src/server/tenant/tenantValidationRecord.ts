@@ -97,6 +97,8 @@ function connectionShape(connections: readonly ConnectionConfig[]): unknown {
     schemas: each.schemas?.length ?? 0,
     replicas: each.replicas?.length ?? 0,
     listen: each.listen !== undefined,
+    // Only under the backstop: a configuration without one keeps the shape it had.
+    ...(each.backstop ? { backstop: each.backstop } : {}),
   }));
 }
 

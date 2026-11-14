@@ -21,6 +21,7 @@ import {
   TenantMaintenanceRefusal,
   type TenantMaintenanceTarget,
 } from './tenantMaintenance.js';
+import { openBackstopOwnerReader } from './tenantBackstopOwner.js';
 import type { TenantStoreBinding } from './tenantStore.js';
 
 interface TenantLocalAccess {
@@ -66,8 +67,20 @@ export async function profileTenants(loaded: LoadedApp, registry: Registry, limi
   const table = tableNamed(schema, app.resources?.[profile]?.physical ?? profile);
   const [key] = table ? primaryKey(table) : [];
   if (!table || !key) return [];
-  const rows = await adapter.query({ table: table.id, columns: [key], limit, offset: 0, orderBy: [{ column: key, direction: 'asc' }] });
-  return rows.rows.map((row) => String(row[key]));
+  /* Under the row-security backstop the registry's adapter is the runtime role, which reads no tenant row. */
+  const owner = await openBackstopOwnerReader(registry, connection.id);
+  try {
+    const rows = await (owner ?? adapter).query({
+      table: table.id,
+      columns: [key],
+      limit,
+      offset: 0,
+      orderBy: [{ column: key, direction: 'asc' }],
+    });
+    return rows.rows.map((row) => String(row[key]));
+  } finally {
+    await owner?.close();
+  }
 }
 
 /* A step that found what it would make already there: the steps refuse it, and here it is what was wanted. */

@@ -552,10 +552,20 @@ describe('row-scoped transactions on PostgreSQL, against a real server', { skip:
         rowsA(),
         async (client) => void after.push(await setting(client)),
         async () => {},
+        { tenant: null },
       );
       assert.ok(
         after.every((each) => !each),
         'no tenant is left behind',
+      );
+      // A transaction that does not say its tenant at all is a caller that forgot it.
+      await assert.rejects(
+        adapter.scopeVerifiedTransaction(
+          rowsA(),
+          async () => {},
+          async () => {},
+        ),
+        /without a tenant under the row-security backstop/,
       );
       for (const bad of ['', 'a\0b', 'a\\b'])
         await assert.rejects(adapter.scopeTransaction(rowsA(), rename, undefined, { tenant: bad }), Refusal, JSON.stringify(bad));

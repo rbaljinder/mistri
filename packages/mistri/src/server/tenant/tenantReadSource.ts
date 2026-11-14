@@ -1,24 +1,8 @@
-import {
-  postgresSandboxSession,
-  sandboxRows,
-  sandboxStorePresent,
-  sqliteSandboxSession,
-  type SandboxRecord,
-} from './tenantSandboxStore.js';
+import { postgresSandboxSession, sandboxRows, sandboxStorePresent } from './tenantSandboxStore.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { realpathSync, statSync } from 'node:fs';
-import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
-import {
-  ANSI_STYLE,
-  Refusal,
-  Serial,
-  TransactionOutcomeUnknown,
-  type AggregateRequest,
-  type ScopedReads,
-  type WriteTransaction,
-} from '@mistriwork/engine/adapters/adapter.js';
+import { TransactionOutcomeUnknown, type ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
 import type { PostgresAdapter, PostgresReadSnapshot } from '@mistriwork/engine/adapters/postgres.js';
-import { tenantAdapter } from './tenantConnections.js';
+import { tenantAdapter, tenantBackstop } from './tenantConnections.js';
 import {
   MAX_REPLICAS,
   primaryReads,
@@ -29,27 +13,13 @@ import {
 } from '@mistriwork/engine/adapters/replicas.js';
 import { StatementStopped } from '@mistriwork/engine/adapters/statementControl.js';
 import { createScopedReads } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
-import { schemaFingerprint, sqliteParams, toJsonSafe, withBytes } from '@mistriwork/engine/adapters/sqlite.js';
-import { readSqliteReadCatalog } from '@mistriwork/engine/adapters/scoped/sqliteScopeCatalog.js';
 import { assertScopeCatalog, captureScopeCatalog, isFixedScopeCatalog, mapScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import { isRowScopeSnapshot, snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { mapAppScopedReads } from '../app/appResources.js';
-import {
-  captureTenantData,
-  denyTenant,
-  denyTenantFor,
-  recordRefusalCause,
-  TenantContextError,
-  tenantRecord,
-} from '@mistriwork/engine/server/evidence.js';
-import {
-  parseTenantSelector,
-  type TenantMembershipEvidence,
-  type TenantMembershipLookup,
-  type TenantMembershipRecord,
-} from './tenantMembership.js';
-import { assertTenantOwnership, captureTenantOwnership, type TenantOwnershipSnapshot } from './tenantOwnership.js';
-import type { PlatformMembershipEvidence, PlatformMembershipLookup, PlatformMembershipRecord } from './tenantPlatform.js';
+import { captureTenantData, denyTenant, denyTenantFor, TenantContextError } from '@mistriwork/engine/server/evidence.js';
+import { parseTenantSelector, type TenantMembershipEvidence, type TenantMembershipLookup } from './tenantMembership.js';
+import { captureTenantOwnership, type TenantOwnershipSnapshot } from './tenantOwnership.js';
+import type { PlatformMembershipEvidence, PlatformMembershipLookup } from './tenantPlatform.js';
 import { assertServiceReadCurrent, captureServiceEvidence, composeServiceScope, type TenantServiceEvidence } from './tenantServiceModel.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { composePlatformReadScope, composePublicReadScope, composeTenantReadScope, physicalRowScope } from './tenantReadScope.js';
@@ -67,19 +37,9 @@ import {
 } from './tenantPublicRead.js';
 import { assertSupportEvidenceObserved, supportAsMember } from './tenantSupportMembership.js';
 import type { SupportMembershipEvidence } from './tenantSupportLease.js';
-import { observeSqliteSupportMembership } from './tenantSupportMembershipSqlite.js';
 import { observePostgresSupportMembership } from './tenantSupportMembershipPostgres.js';
-import { postgresTenantLocator, provideTenantSourceProbe, registerTenantSourceIdentity } from './tenantSourceIdentity.js';
-import {
-  assertSqlitePlatformMembershipSnapshot,
-  assertSqliteTenantMembershipSnapshot,
-  assertSqliteTenantStore,
-  readSqlitePlatformMembershipSnapshot,
-  readSqliteTenantMembershipSnapshot,
-  readSqliteTenantMembershipsSnapshot,
-  type TenantMembershipListLookup,
-  type TenantStoreBinding,
-} from './tenantStore.js';
+import { postgresTenantLocator, registerTenantSourceIdentity } from './tenantSourceIdentity.js';
+import { type TenantMembershipListLookup, type TenantStoreBinding } from './tenantStore.js';
 import {
   assertPostgresPlatformMembershipSnapshot,
   assertPostgresTenantMembershipRows,
@@ -114,7 +74,6 @@ import {
   intakeAddressQuery,
   intakePlace,
   intakeTenantOf,
-  tenantAddressQuery,
   tenantOwnAddress,
   tenantOwnAddressQuery,
   ownAddressResolution,
@@ -132,12 +91,11 @@ import {
   type TenantIntakeEvidence,
   type TenantIntakeLookup,
   type TenantIntakeTenantLookup,
-  type TenantIntakeResolution,
 } from './tenantIntakeModel.js';
 import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import type { AppDef } from '../../shared/app.js';
 import { PLATFORM_TENANT_ID } from './tenantPlatform.js';
-import { findPostgresLink, findSqliteLink, readPostgresLink, readSqliteLink } from '../../adapters/commands/commandLinks.js';
+import { findPostgresLink, readPostgresLink } from '../../adapters/commands/commandLinks.js';
 import {
   assertLinkReadCurrent,
   assertLinkRowCurrent,
@@ -147,244 +105,49 @@ import {
   linkResolution,
   type TenantLinkEvidence,
   type TenantLinkLookup,
-  type TenantLinkResolution,
 } from './tenantLinkModel.js';
-import { readSqliteActiveTenants, readSqliteIntakeAnchor } from './tenantStore.js';
-import { dueTimersPlan, type DueTimer, type DueTimersQuery } from './tenantDueTimers.js';
-import { TENANT_NAMES_MAX, tenantNamePlan, tenantNamesOf, tenantNamesQuery } from './tenantNames.js';
+import { dueTimersPlan, type DueTimersQuery } from './tenantDueTimers.js';
+import { tenantNamesOf, tenantNamesQuery } from './tenantNames.js';
 import { readPostgresActiveTenants, readPostgresIntakeAnchor } from './tenantStorePostgres.js';
 import {
   assertActivityQuery,
   assertHistoryQuery,
   type RecordActivityQuery,
   type RecordHistoryQuery,
-  type StoredRecordChange,
 } from '../../adapters/history/recordHistory.js';
-import { readSqliteRecordActivity, readSqliteRecordHistory } from '../../adapters/history/sqliteRecordHistory.js';
 import { readPostgresRecordActivity, readPostgresRecordHistory } from '../../adapters/history/postgresRecordHistory.js';
-import { assertInboxQuery, type InboxQuery, type StoredNotice } from '../../adapters/inbox/inbox.js';
+import { assertInboxQuery, type InboxQuery } from '../../adapters/inbox/inbox.js';
 
 import {
   assertBrandingLogoQuery,
   assertBrandingQuery,
   type BrandingLogoQuery,
   type BrandingQuery,
-  type StoredBranding,
-  type StoredBrandingLogo,
 } from '../../adapters/branding/branding.js';
-import { readSqliteBranding, readSqliteBrandingLogo } from '../../adapters/branding/sqliteBranding.js';
 import { readPostgresBranding, readPostgresBrandingLogo } from '../../adapters/branding/postgresBranding.js';
-import { readSqliteInbox, sqliteInboxMail } from '../../adapters/inbox/sqliteInbox.js';
 import { postgresInboxMail, readPostgresInbox } from '../../adapters/inbox/postgresInbox.js';
-
-/** One person's email switch in one inbox: the same names an inbox read takes. */
-interface EmailSwitchQuery {
-  readonly app: string;
-  readonly recipient: string;
-}
-function assertEmailSwitchQuery(query: EmailSwitchQuery): void {
-  tenantRecord(query, ['app', 'recipient']);
-  if (typeof query.app !== 'string' || !query.app || typeof query.recipient !== 'string' || !query.recipient)
-    throw new Refusal('Invalid notification read.');
-}
-
-/** Private pinned source, not a public credential or session/deployment issuer. */
-/** A discovery's tenants, as a sandbox lookup takes them: tenant ids, at most a discovery's worth. */
-function sandboxLookup(tenants: unknown): readonly string[] {
-  if (!Array.isArray(tenants) || tenants.length > 256) return denyTenant();
-  return Object.freeze(tenants.map((id) => parseTenantSelector([id])));
-}
-
-export interface TenantReadSource {
-  readonly ownership: TenantOwnershipSnapshot;
-  readMembership(lookup: TenantMembershipLookup): Promise<TenantMembershipRecord | null>;
-  readMemberships(lookup: TenantMembershipListLookup): Promise<readonly TenantMembershipRecord[]>;
-  assertCurrent(evidence: TenantMembershipEvidence): Promise<void>;
-  scopeReads(evidence: TenantMembershipEvidence, rows: RowScope): Promise<ScopedReads>;
-  /** The reader `scopeReads` binds, composed by the same rule, without the
-   * snapshot `scopeReads` checks the membership in first. Nothing is read
-   * until an operation runs, and every operation revalidates the evidence in
-   * its own snapshot before its SQL, so no row is read on evidence that
-   * snapshot did not find current. For an owner that also revalidates before
-   * it releases anything (tenantReadRuntime.ts). */
-  bindReads(evidence: TenantMembershipEvidence, rows: RowScope): Promise<ScopedReads>;
-  /** Several reads in one snapshot: the evidence revalidated once at its start,
-   * then every operation `work` asks for on that same snapshot, one after
-   * another, and none once it has returned. The snapshot is the fence each of
-   * `bindReads`' operations has, shared: what they read is one state, and it is
-   * the state the membership was found current in. For an answer that is only
-   * advice — which commands a record offers — and that its command asks again
-   * when it runs (tenantCommandAvailability.ts). */
-  withReads<T>(evidence: TenantMembershipEvidence, rows: RowScope, work: (reads: ScopedReads) => T | Promise<T>): Promise<T>;
-  /** `work`, with every operation of `bindReads`' readers for this evidence that it asks, while it runs, on one
-   * snapshot: opened at the first of them, the evidence revalidated in it once, held until `work` has returned and
-   * every read begun on it has settled, then ended. A composed record page, a page's boot, a post-write refresh asked
-   * many reads of one context at once, and each took a snapshot of its own — its BEGIN, its LOCK and its membership,
-   * its COMMIT, and a reader of the pool beside the others (tenantReadRuntime.ts `together`). What they read is then
-   * one state, the one the membership was found current in, as `withReads`' is. A read that wants a replica, and any
-   * asked once `work` has returned, takes its own snapshot as before. Where reads are not pooled (SQLite), `work`. */
-  together<T>(evidence: TenantMembershipEvidence, work: () => Promise<T>): Promise<T>;
-  /** `together`, and where its snapshot was opened and the catalog's attestation stands, the release fence in the
-   * message that ends it (PostgresReadSnapshot.finish): once `work` has returned and every read on the snapshot has
-   * settled, its COMMIT and this evidence's membership in a fresh snapshot of its own, one round trip where the
-   * COMMIT and assertCurrent's own snapshot were three. A membership that no longer holds refuses. `fenced` says
-   * whether it rode; where it did not — nothing was read, the attestation was due, `work` failed, SQLite — the
-   * caller fences as before. */
-  togetherFenced<T>(evidence: TenantMembershipEvidence, work: () => Promise<T>): Promise<{ value: T; fenced: boolean }>;
-  /** The platform realm's twins: its membership, its revalidation, and reads
-   * under the platform scope (across tenants, unnamed tables denied). */
-  readPlatformMembership(lookup: PlatformMembershipLookup): Promise<PlatformMembershipRecord | null>;
-  assertPlatformCurrent(evidence: PlatformMembershipEvidence): Promise<void>;
-  scopePlatformReads(evidence: PlatformMembershipEvidence, rows: RowScope): Promise<ScopedReads>;
-  /** `scopePlatformReads` without its snapshot, as `bindReads` is `scopeReads`
-   * without one: every operation revalidates the platform membership in its
-   * own snapshot before its SQL, for an owner that fences again before it
-   * releases anything (tenantPlatformReadRuntime.ts). */
-  bindPlatformReads(evidence: PlatformMembershipEvidence, rows: RowScope): Promise<ScopedReads>;
-  /** `withReads` for the platform realm, under the platform scope. */
-  withPlatformReads<T>(evidence: PlatformMembershipEvidence, rows: RowScope, work: (reads: ScopedReads) => T | Promise<T>): Promise<T>;
-  /** A support session's twins ("enter as dealer"): its revalidation, and reads
-   * under the dealer's own scope. The fence is the support row itself, with its
-   * parent platform membership, `@platform` and the dealer — never a member
-   * membership, which an operator inside a dealer does not have. The scope is
-   * the dealer's, composed by the same rule a member's is, so a session can
-   * never read more than that one rule allows. */
-  assertSupportCurrent(evidence: SupportMembershipEvidence): Promise<void>;
-  scopeSupportReads(evidence: SupportMembershipEvidence, rows: RowScope): Promise<ScopedReads>;
-  /** Public intake's resolution, in one snapshot: the active tenant whose
-   * profile row alone holds the address, else the platform when it is active.
-   * Reads the profile by the policy's column only; admits nobody. */
-  resolveIntake(lookup: TenantIntakeLookup): Promise<TenantIntakeResolution>;
-  /** A token's public verb's placement, in one snapshot: the token's own
-   * tenant when it and the platform are both active, else refused — never
-   * triage, and never another tenant, whatever the request says. */
-  resolveIntakeByTenant(lookup: TenantIntakeTenantLookup): Promise<TenantIntakeResolution>;
-  /** A visitor's placement, in one snapshot: the active tenant whose profile
-   * row alone holds the address (or the mapped host's tenant, when active),
-   * with `@platform` active too; else null, whatever the reason, so no
-   * address is answered differently from another. Admits nobody. */
-  resolvePublic(lookup: TenantPublicLookup): Promise<TenantPublicResolution | null>;
-  /** A visitor's placement re-resolved in a snapshot of its own: the release fence. */
-  assertPublicCurrent(evidence: TenantPublicEvidence): Promise<void>;
-  /** Reads under a visitor's scope (tenantPublicRead.ts composePublicReadScope),
-   * as `bindReads` is a member's: every operation re-resolves the address in
-   * its own snapshot and requires the same tenant at the same versions before
-   * its SQL, so a rotated address or a suspended tenant reads nothing more. */
-  bindPublicReads(evidence: TenantPublicEvidence, rows: RowScope): Promise<ScopedReads>;
-  /** Reads for a public command's lookup in a tenant's intake (tenantIntake.ts): the submission read as the
-   * visitor it is (tenantPublicRead.ts intakeVisitor), under the same scope and the same fence as
-   * `bindPublicReads`. Triage is refused: it lands in no tenant, so no tenant's rows are its to look up. */
-  bindIntakeReads(evidence: TenantIntakeEvidence, rows: RowScope): Promise<ScopedReads>;
-  /** Reads under a tenant service's scope (tenantServiceModel.ts composeServiceScope), as `bindReads` is a
-   * member's: the source recomposes the scope from the evidence (never a caller's predicate), and every
-   * operation re-reads the service anchors in its own snapshot and requires the same tenant and platform at
-   * the same versions, inside the attempt's window. A platform place is refused: it runs outside any tenant. */
-  bindServiceReads(evidence: TenantServiceEvidence, rows: RowScope): Promise<ScopedReads>;
-  /** A capability link's placement, in one snapshot: the live link by this App and its id alone — the one read a
-   * tenant App's shared door makes before it knows the tenant — with its tenant and `@platform` each active; else
-   * null, whatever the reason. Admits nobody: the door checks the token or session against the tenant it names. */
-  resolveLink(lookup: TenantLinkLookup): Promise<TenantLinkResolution | null>;
-  /** Reads under a link's scope (tenantLinkModel.ts composeLinkScope): its one record within its tenant. Every
-   * operation re-reads the anchors and the link row in its own snapshot and requires the same tenant at the same
-   * versions, inside the request's window, with the link still live: a revoke or a suspension reads nothing more. */
-  bindLinkReads(evidence: TenantLinkEvidence, rows: RowScope): Promise<ScopedReads>;
-  /** What these tenants are called: each one's profile row said by the App's
-   * template for that resource (tenantNames.ts), for the ids a caller already
-   * holds. Reads the profile's key and the name's columns only; admits nobody. */
-  readTenantNames(lookup: TenantNamesLookup): Promise<Readonly<Record<string, string>>>;
-  /** A tenant's own intake and public addresses, by the policy's columns, in
-   * one snapshot: each only when its profile row holds one of an
-   * address's shape that resolves back to this tenant alone. For the tenant's
-   * own lease to show; admits nobody. */
-  readTenantAddresses(lookup: TenantAddressesLookup): Promise<TenantAddresses>;
-  /** The columns of a tenant's profile row its members read (`auth.tenancy.shared`), by column, once per request:
-   * the platform's own read of the row (as the names and addresses are), no App resource read and no grant. Those
-   * columns and nothing else of the row; a missing row reads as every column null. Admits nobody. */
-  readTenantProfile(lookup: TenantProfileLookup): Promise<Readonly<Record<string, TenantValue>>>;
-  /** A job attempt's anchors, in one snapshot: the named tenant's row and
-   * `@platform`, each its version while active, else null. With no tenant
-   * (the platform's own time job), `@platform` alone. Admits nobody. */
-  readServiceAnchors(tenantId: string | null): Promise<Readonly<{ tenantVersion: string | null; platformVersion: string | null }>>;
-  /** The tenants active now, by id: whom a job at times per tenant runs for.
-   * Given `zone`, a shared profile column, each also carries that column off
-   * its row (null where it has none): the zone its slots keep. Each attempt is
-   * admitted again on its own tenant's row. Admits nobody. */
-  readActiveTenants(options?: ActiveTenantsQuery): Promise<readonly ActiveTenant[]>;
-  /** A machine timer's due records across the active tenants, a page at a
-   * time, each with the tenant its owner column names, read off the row here
-   * (tenantDueTimers.ts). A plan, as readActiveTenants is: each run is
-   * admitted again on its own tenant's row. Admits nobody. */
-  readDueTimers(query: DueTimersQuery): Promise<readonly DueTimer[]>;
-  /** The sandboxes whose dev clock reads ahead (tenantSandboxClock.ts), none where the store was never
-   * provisioned: which tenants' timers the sweep also reads on their own clock. A live tenant has no row
-   * there, so none is ever among them. Admits nobody. */
-  readSandboxClocks(): Promise<readonly SandboxRecord[]>;
-  /** Which of these tenants are sandboxes, for discovery to mark them to their members: none where the
-   * store was never provisioned. Admits nobody. */
-  readSandboxes(tenants: readonly string[]): Promise<ReadonlySet<string>>;
-  /** One record's stored history, by its store key — a tenant-owned record's
-   * carries its owner (adapters/history/recordHistory.ts). Admits nobody: the
-   * caller has read the record in the reader's own context first. */
-  readRecordHistory(query: RecordHistoryQuery): Promise<StoredRecordChange[]>;
-  /** A dashboard feed's stored rows (recordActivity.ts). Admits nobody: the
-   * caller names the context's own tenant in `owners`, or none for the
-   * platform realm, and reads each record the rows name in that context. */
-  readRecordActivity(query: RecordActivityQuery): Promise<StoredRecordChange[]>;
-  /** One person's notices in one inbox (tenantInbox.ts). Admits nobody: the caller names the lease's own inbox. */
-  readInbox(query: InboxQuery): Promise<StoredNotice[]>;
-  /** Whether one person asked an inbox for no email: the outbox's switch, read on the reader (inboxMail.ts). */
-  readEmailOff(query: EmailSwitchQuery): Promise<boolean>;
-  /** One tenant's saved branding in one App, or null (adapters/branding). */
-  readBranding(query: BrandingQuery): Promise<StoredBranding | null>;
-  /** One logo of an App by the hash of its bytes. */
-  readBrandingLogo(query: BrandingLogoQuery): Promise<StoredBrandingLogo | null>;
-  close(): Promise<void>;
-}
-
-/** The tenant an address names, when that tenant is active, else the platform.
- * The platform's own row first: while it is not active nothing is taken,
- * whatever the address, so no address is answered differently from another. */
-function intakeResolution(tenantId: string | undefined, anchor: (id: string) => string | null): TenantIntakeResolution {
-  const platform = anchor(PLATFORM_TENANT_ID);
-  if (platform === null) return denyTenant();
-  const version = tenantId === undefined ? null : anchor(tenantId);
-  return tenantId !== undefined && version !== null
-    ? { tenantId, tenantVersion: version, platformVersion: platform }
-    : { tenantId: PLATFORM_TENANT_ID, tenantVersion: platform, platformVersion: platform };
-}
-
-/** The token's tenant when it and the platform are both active; refused otherwise, as no token is triaged. */
-function intakeResolutionByTenant(tenantId: string, anchor: (id: string) => string | null): TenantIntakeResolution {
-  const platform = anchor(PLATFORM_TENANT_ID);
-  const version = platform === null ? null : anchor(tenantId);
-  if (platform === null || version === null) return denyTenant();
-  return { tenantId, tenantVersion: version, platformVersion: platform };
-}
-
-/** The profile's record-name template, as the App's catalog serves it, and the tenants to name. */
-interface TenantNamesLookup {
-  readonly template: string | undefined;
-  readonly tenants: readonly string[];
-}
-/** The lookup's plan and its ids, or undefined when there is nothing to read. */
-function namesLookup(owned: TenantOwnershipSnapshot, lookup: TenantNamesLookup) {
-  const value = captureTenantData(lookup);
-  if (
-    !Array.isArray(value.tenants) ||
-    value.tenants.length > TENANT_NAMES_MAX ||
-    (value.template !== undefined && typeof value.template !== 'string')
-  )
-    return denyTenant();
-  const tenants = [...new Set(value.tenants.filter((id) => id !== PLATFORM_TENANT_ID))];
-  for (const id of tenants) parseTenantSelector([id]);
-  const plan = tenantNamePlan(owned, value.template);
-  return plan && tenants.length ? { plan, tenants } : undefined;
-}
-
-const sources = new WeakSet<TenantReadSource>();
+import {
+  type EmailSwitchQuery,
+  assertEmailSwitchQuery,
+  sandboxLookup,
+  intakeResolution,
+  intakeResolutionByTenant,
+  type TenantNamesLookup,
+  namesLookup,
+  sources,
+  refusedBefore,
+  readBatch,
+  type TenantReadSource,
+} from './tenantReadSourceShared.js';
+export { advisoryRecords, captureTenantReadSource, type TenantReadSource } from './tenantReadSourceShared.js';
+export { openSqliteTenantReadSource } from './tenantReadSourceSqlite.js';
 
 /* A whole snapshot begun under an attestation another has replaced since: asked again with the catalog attested. */
 const MOVED: unique symbol = Symbol('moved');
+/* A snapshot's route for what crosses tenants by design (openPostgresTenantReadSource's `snapshot`). */
+const OWNER: unique symbol = Symbol('owner');
+/* Where a PostgreSQL snapshot reads: for a tenant, for none (`null`), or as the owner. */
+type Route = string | null | typeof OWNER;
 /** A read snapshot as the PostgreSQL source hands it to its work: begun, where `fenced` says so, with
  * this evidence's membership read in the message that began it, its rows still on their way. */
 type Snapshot = PostgresReadSnapshot & {
@@ -402,637 +165,6 @@ interface StoreLedger {
   has(store: string): boolean;
   keep(store: string): void;
   forget(): void;
-}
-
-/** Only frozen factory objects can supply source authority. WeakSet lookup does
- * not inspect properties, so lookalikes, getters and proxies never execute. */
-export function captureTenantReadSource(input: TenantReadSource): TenantReadSource {
-  if (!sources.has(input)) return denyTenant();
-  return input;
-}
-provideTenantSourceProbe('read', captureTenantReadSource);
-
-/** A batch's reads in the shape a command's records take, for the one caller
- * that asks a command's questions without its transaction (availability): it
- * reads, and every way of writing refuses. */
-export function advisoryRecords(reads: ScopedReads): WriteTransaction {
-  const refuse = async (): Promise<never> => {
-    throw new Refusal('Availability reads; it never writes.');
-  };
-  return Object.freeze<WriteTransaction>({
-    query: (request) => reads.query(request),
-    count: (table, filter) => reads.count(table, filter),
-    ...(reads.aggregate ? { aggregate: (request: AggregateRequest) => reads.aggregate!(request) } : {}),
-    insert: refuse,
-    update: refuse,
-    remove: refuse,
-  });
-}
-
-/* A read refused before it ran — its arguments not plain data, the source
-   closed — is one fixed sentence to its caller, and keeps why for the
-   operator (refusalReport.ts), where a fresh denial in its place said
-   nothing on stderr at all. */
-const refusedBefore = (error: unknown): Promise<never> => Promise.reject(recordRefusalCause(new TenantContextError(), error));
-
-/** The reader a batch is handed (`withReads`): each operation's arguments
- * captured, run on the batch's snapshot as it is asked, and refused once the
- * batch has returned. Asked together, they leave together: the PostgreSQL
- * reader pipelines, so the `when` of every command a record offers is one
- * round trip, where one after another each was its own (SQLite runs them in
- * turn on its one handle either way). The first failure is every later
- * operation's, as one transaction's is. A database failure is mapped where
- * it happens, so what `work` itself throws stays its own; `own` hears which
- * that was. */
-async function readBatch<T>(
-  bound: ScopedReads,
-  active: () => void,
-  work: (reads: ScopedReads) => T | Promise<T>,
-  own: (error: unknown) => void,
-): Promise<T> {
-  const running = new Set<Promise<unknown>>();
-  let failure: { error: unknown } | undefined;
-  const operations = {
-    finish: async () => {
-      await Promise.allSettled([...running]);
-      if (failure) throw failure.error;
-    },
-  };
-  let open = true;
-  const run = <A extends unknown[], R>(args: A, call: (...captured: A) => Promise<R>): Promise<R> => {
-    let captured: A;
-    try {
-      if (!open) throw recordRefusalCause(new TenantContextError(), "A batch's read was asked after the batch had returned.");
-      active();
-      captured = captureTenantData(args);
-    } catch (error) {
-      return refusedBefore(error);
-    }
-    if (failure) return Promise.reject(failure.error);
-    const operation = (async () => {
-      try {
-        const result = await call(...captured);
-        active();
-        return result;
-      } catch (error) {
-        try {
-          return denyTenantFor(error);
-        } catch (mapped) {
-          failure ??= { error: mapped };
-          throw mapped;
-        }
-      }
-    })();
-    running.add(operation);
-    void operation.then(
-      () => running.delete(operation),
-      () => running.delete(operation),
-    );
-    return operation;
-  };
-  const reads = Object.freeze<ScopedReads>({
-    query: (request) => run([request] as [typeof request], (value) => bound.query(value)),
-    count: (table, filter, limit) =>
-      run([table, filter, limit] as [typeof table, typeof filter, typeof limit], (id, value, boundLimit) =>
-        bound.count(id, value, boundLimit),
-      ),
-    runView: (view, offset) =>
-      run([view, offset] as [typeof view, typeof offset], (value, boundOffset) => bound.runView(value, boundOffset)),
-    countView: (view, limit) =>
-      run([view, limit] as [typeof view, typeof limit], (value, boundLimit) => bound.countView(value, boundLimit)),
-    runBreakdown: (breakdown, offset) =>
-      run([breakdown, offset] as [typeof breakdown, typeof offset], (value, boundOffset) => bound.runBreakdown(value, boundOffset)),
-    countBreakdown: (breakdown, limit) =>
-      run([breakdown, limit] as [typeof breakdown, typeof limit], (value, boundLimit) => bound.countBreakdown(value, boundLimit)),
-    /* A sum or a group, captured and run on the batch's snapshot as `count` is. */
-    ...(bound.aggregate
-      ? { aggregate: (request: AggregateRequest) => run([request] as [typeof request], (value) => bound.aggregate!(value)) }
-      : {}),
-  });
-  let result: T;
-  try {
-    result = await work(reads);
-  } catch (error) {
-    open = false;
-    own(error);
-    await operations.finish().catch(() => {});
-    throw error;
-  }
-  open = false;
-  await operations.finish();
-  return result;
-}
-
-/** Opens once, read-only. Every operation owns a serialized read snapshot on
- * that exact handle; no registry lookup, request-time migration or writer exists. */
-export function openSqliteTenantReadSource(
-  existingPath: string,
-  ownership: TenantOwnershipSnapshot,
-  store: TenantStoreBinding,
-  now: () => number = Date.now,
-): TenantReadSource {
-  let opened: DatabaseSync | undefined;
-  try {
-    const captured = captureTenantOwnership(ownership);
-    // Ordinary SQLite catalogs omit engine internals. Apply exactly that
-    // normalization to both sides, never private/business dependency filtering.
-    const owned = captureTenantOwnership({
-      ...captured,
-      physicalSchema: mapScopeCatalog(
-        captured.physicalSchema,
-        new Map(captured.physicalSchema.tables.filter((table) => !/^sqlite_/i.test(table.id)).map((table) => [table.id, table.id])),
-      ),
-    });
-    const owner = captureTenantData(store);
-    if (
-      owner.appId !== owned.appId ||
-      owner.source.id !== owned.source.id ||
-      owner.source.connection !== owned.source.connection ||
-      typeof now !== 'function' ||
-      typeof existingPath !== 'string' ||
-      !statSync(existingPath).isFile()
-    )
-      return denyTenant();
-    const canonicalPath = realpathSync(existingPath);
-    const db = (opened = new DatabaseSync(canonicalPath, { readOnly: true, enableForeignKeyConstraints: true }));
-    db.exec('PRAGMA query_only = ON; PRAGMA busy_timeout = 1000');
-    const physicalIds = new Map(Object.entries(owned.resources).map(([logical, physical]) => [physical, logical]));
-    const logicalIds = new Map(Object.entries(owned.resources));
-    const toPhysical = (id: string): string => logicalIds.get(id) ?? denyTenant();
-    const toLogical = (id: string): string => physicalIds.get(id) ?? denyTenant();
-    const physicalSchema = mapScopeCatalog(owned.physicalSchema, new Map([...physicalIds.keys()].map((id) => [id, id])));
-    // A snapshot, so every read's composition with it is kept (tenantReadScope.ts).
-    const allTrue: RowScope = snapshotRowScope(owned.schema, Object.fromEntries([...logicalIds.keys()].map((id) => [id, true])));
-    let definitions: Map<string, string> | undefined;
-    const attestCatalog = () => {
-      const actual = readSqliteReadCatalog(db);
-      if ([...physicalIds.keys()].some((id) => !actual.readable.has(id))) return denyTenant();
-      assertTenantOwnership(owned, { ...owned, physicalSchema: actual.schema });
-      // Catalog authority intentionally omits collations. Pin actual mapped DDL
-      // too: changing a policy column to NOCASE/RTRIM must not widen its filter.
-      const ddl = new Map<string, string>();
-      for (const row of db.prepare("SELECT name, sql FROM main.sqlite_schema WHERE type = 'table'").all()) {
-        if (typeof row.name === 'string' && physicalIds.has(row.name)) {
-          if (typeof row.sql !== 'string') return denyTenant();
-          ddl.set(row.name, row.sql);
-        }
-      }
-      if (ddl.size !== physicalIds.size || (definitions && [...definitions].some(([id, sql]) => ddl.get(id) !== sql))) return denyTenant();
-      definitions ??= ddl;
-    };
-    /* A field report measured a whole catalog scan inside every read. Any DDL
-       on either schema moves its schema_version, so while the pair is the one
-       the last full pass judged, nothing it judged can have changed: the scan
-       is skipped. Read first, inside the read transaction, it names the
-       snapshot the read sees. A refused pass records nothing, so it refuses
-       again on every read until the schema moves back to a passing shape. */
-    const fingerprint = schemaFingerprint(db);
-    let attested: string | undefined;
-    const assertCatalog = () => {
-      const seen = fingerprint();
-      if (seen === attested) return;
-      attested = undefined;
-      attestCatalog();
-      attested = seen;
-    };
-
-    // Construction must fail before publishing a capability, and close its
-    // owned handle even when either catalog or durable store evidence refuses.
-    db.exec('BEGIN');
-    assertCatalog();
-    assertSqliteTenantStore(db, owner);
-    db.exec('COMMIT');
-
-    const queue = new Serial();
-    let closing = false;
-    let closed: Promise<void> | undefined;
-    const active = () => {
-      if (closing) denyTenant('This tenant read source has closed.');
-    };
-    const close = (): Promise<void> => {
-      if (!closed) {
-        closing = true;
-        closed = queue.run(async () => {
-          try {
-            db.close();
-          } catch {
-            return denyTenant();
-          }
-        });
-      }
-      return closed;
-    };
-    const snapshot = async <T>(work: () => T | Promise<T>): Promise<T> => {
-      active();
-      if (db.isTransaction) return denyTenant();
-      db.exec('BEGIN');
-      try {
-        assertCatalog();
-        const result = await work();
-        active();
-        db.exec('COMMIT');
-        return result;
-      } finally {
-        if (db.isTransaction) {
-          try {
-            db.exec('ROLLBACK');
-          } catch {
-            void close().catch(() => {});
-          }
-        }
-      }
-    };
-    // Snapshot all arguments before the first queue wait. Failures are local to
-    // this read; the serialized source still drains subsequent accepted work.
-    const invoke = <A, R>(input: A, work: (captured: A) => R | Promise<R>): Promise<R> => {
-      let value: A;
-      try {
-        active();
-        value = captureTenantData(input);
-      } catch (error) {
-        return refusedBefore(error);
-      }
-      return queue.run(async () => {
-        try {
-          const result = await snapshot(() => work(value));
-          active();
-          return result;
-        }
-        // A refusal inside stays one; a database that failed to answer —
-        // busy, gone, a statement that could not run — is a fault.
-        catch (error) {
-          return denyTenantFor(error);
-        }
-      });
-    };
-    const current = (evidence: TenantMembershipEvidence) => {
-      assertSqliteTenantMembershipSnapshot(db, owner, evidence, () => {
-        const instant = now();
-        active();
-        return instant;
-      });
-      // A trusted clock can retire the source synchronously. Never run SQL or
-      // return a newly bound reader after that retirement.
-      active();
-    };
-    const currentPlatform = (evidence: PlatformMembershipEvidence) => {
-      assertSqlitePlatformMembershipSnapshot(db, owner, evidence, () => {
-        const instant = now();
-        active();
-        return instant;
-      });
-      active();
-    };
-    /* A support session's fence: the support row itself, observed with its
-       parent platform membership, `@platform` and the dealer. An operator inside
-       a dealer holds no member membership there, so the member check above would
-       refuse it; this runs inside the same snapshot, which `snapshot()` has
-       already opened as a transaction. */
-    const currentSupport = (evidence: SupportMembershipEvidence) => {
-      const instant = now();
-      active();
-      assertSupportEvidenceObserved(
-        observeSqliteSupportMembership(db, owner, {
-          supportId: evidence.supportId,
-          accountId: evidence.accountId,
-          tenantId: evidence.tenantId,
-          at: instant,
-        }),
-        evidence,
-        instant,
-      );
-      active();
-    };
-    /* A visitor's placement in this snapshot: the address read by the policy's
-       column, byte for byte, then both anchors. Never a refusal of its own: null. */
-    const resolvePublicIn = (lookup: TenantPublicLookup): TenantPublicResolution | null => {
-      const value = capturePublicLookup(lookup, owner),
-        sql = intakeAddressQuery(owned, value.column);
-      const tenantId = value.address === null ? (value.tenant as string) : publicTenantOf(db.prepare(sql).all(value.address));
-      return publicResolution(tenantId, (id) => readSqliteIntakeAnchor(db, owner, id));
-    };
-    // A service's anchors as this snapshot finds them, against the versions its attempt read.
-    const currentService = (evidence: TenantServiceEvidence) => {
-      const found = {
-        tenantVersion: readSqliteIntakeAnchor(db, owner, evidence.tenantId!),
-        platformVersion: readSqliteIntakeAnchor(db, owner, PLATFORM_TENANT_ID),
-      };
-      const instant = now();
-      active();
-      assertServiceReadCurrent(evidence, found, instant);
-      active();
-    };
-    // A link's anchors and its row as this snapshot finds them, against the versions its request read.
-    const currentLink = (evidence: TenantLinkEvidence) => {
-      const found = {
-        tenantVersion: readSqliteIntakeAnchor(db, owner, evidence.tenantId),
-        platformVersion: readSqliteIntakeAnchor(db, owner, PLATFORM_TENANT_ID),
-      };
-      const instant = now();
-      active();
-      assertLinkReadCurrent(evidence, found, instant);
-      assertLinkRowCurrent(readSqliteLink(db, owner.appId, evidence.tenantId, evidence.linkId, instant), evidence);
-      active();
-    };
-    const currentPublic = (evidence: TenantPublicEvidence) => {
-      const value = capturePublicEvidence(evidence, owned);
-      const resolved = resolvePublicIn(publicLookupOf(value));
-      const instant = now();
-      active();
-      assertPublicResolved(value, resolved, instant);
-      active();
-    };
-    // One compiled reader per admitted scope. Every call first revalidates the
-    // principal it was bound for, tenant or platform, in its own snapshot.
-    const scoped = (scope: RowScope): ScopedReads => {
-      const physicalScope = physicalRowScope(scope, toPhysical);
-      return mapAppScopedReads(
-        createScopedReads(physicalSchema, physicalScope, ANSI_STYLE, async (sql, hint) => {
-          const started = performance.now();
-          const statement = db.prepare(sql.text);
-          statement.setReadBigInts(true);
-          const rows = statement.all(...sqliteParams(sql.params)) as Record<string, unknown>[];
-          return {
-            columns: statement.columns().map((column) => column.name),
-            rows: rows.map(hint?.binary ? withBytes : toJsonSafe),
-            ms: Math.round(performance.now() - started),
-            sql,
-          };
-        }),
-        { schema: owned.schema, toPhysical, toLogical },
-      );
-    };
-    const bind = (scope: RowScope, revalidate: () => void): ScopedReads => {
-      const reads = scoped(scope);
-      const run = <A extends unknown[], R>(args: A, work: (...args: A) => Promise<R>) =>
-        invoke(args, (capturedArgs) => {
-          revalidate();
-          return work(...capturedArgs);
-        });
-      return Object.freeze({
-        query: (request) => run([request], reads.query),
-        count: (table, filter, limit) => run([table, filter, limit], reads.count),
-        runView: (view, offset) => run([view, offset], reads.runView),
-        // The bound reaches the statement: never counted past it.
-        countView: (view, limit) => run([view, limit], reads.countView),
-        runBreakdown: (breakdown, offset) => run([breakdown, offset], reads.runBreakdown),
-        countBreakdown: (breakdown, limit) => run([breakdown, limit], reads.countBreakdown),
-        // Revalidated and bounded by the tenant's rows as `count` is.
-        ...(reads.aggregate ? { aggregate: (request: AggregateRequest) => run([request], reads.aggregate!) } : {}),
-      } satisfies ScopedReads);
-    };
-    /* A batch is one queued snapshot: its reads run inside it, on the handle
-       directly, never through the queue it already holds. */
-    const batch = <C, T>(input: C, open: (captured: C) => RowScope, work: (reads: ScopedReads) => T | Promise<T>): Promise<T> => {
-      if (typeof work !== 'function') return Promise.reject(new TenantContextError());
-      let own: { error: unknown } | undefined;
-      return invoke(input, (captured) =>
-        readBatch(scoped(open(captured)), active, work, (error) => {
-          own = { error };
-        }),
-      ).catch((error: unknown) => {
-        throw own ? own.error : error;
-      });
-    };
-    // Arguments captured now, as `invoke` captures them; no snapshot is opened.
-    const bindLater = <A>(input: A, make: (captured: A) => ScopedReads): Promise<ScopedReads> => {
-      try {
-        active();
-        return Promise.resolve(make(captureTenantData(input)));
-      } catch (error) {
-        return refusedBefore(error);
-      }
-    };
-    const source: TenantReadSource = Object.freeze({
-      ownership: owned,
-      readMembership: (lookup: TenantMembershipLookup) => invoke(lookup, (query) => readSqliteTenantMembershipSnapshot(db, owner, query)),
-      readMemberships: (lookup: TenantMembershipListLookup) =>
-        invoke(lookup, (query) =>
-          readSqliteTenantMembershipsSnapshot(db, owner, query, () => {
-            const instant = now();
-            active();
-            return instant;
-          }),
-        ),
-      assertCurrent: (evidence: TenantMembershipEvidence) => invoke(evidence, current),
-      scopeReads: (evidence: TenantMembershipEvidence, rows: RowScope) =>
-        invoke({ evidence, rows }, (captured) => {
-          current(captured.evidence);
-          return bind(composeTenantReadScope(owned, captured.evidence, captured.rows, allTrue), () => current(captured.evidence));
-        }),
-      bindReads: (evidence: TenantMembershipEvidence, rows: RowScope) =>
-        bindLater({ evidence, rows }, (captured) =>
-          bind(composeTenantReadScope(owned, captured.evidence, captured.rows, allTrue), () => current(captured.evidence)),
-        ),
-      withReads: <T>(evidence: TenantMembershipEvidence, rows: RowScope, work: (reads: ScopedReads) => T | Promise<T>) =>
-        batch(
-          { evidence, rows },
-          (captured) => {
-            current(captured.evidence);
-            return composeTenantReadScope(owned, captured.evidence, captured.rows, allTrue);
-          },
-          work,
-        ),
-      /* One handle, read in turn: every snapshot is already this one connection's, so there is nothing to share. */
-      together: async <T>(_evidence: TenantMembershipEvidence, work: () => Promise<T>): Promise<T> => {
-        if (typeof work !== 'function') return Promise.reject(new TenantContextError());
-        active();
-        return work();
-      },
-      togetherFenced: async <T>(_evidence: TenantMembershipEvidence, work: () => Promise<T>): Promise<{ value: T; fenced: boolean }> => {
-        if (typeof work !== 'function') return Promise.reject(new TenantContextError());
-        active();
-        return { value: await work(), fenced: false };
-      },
-      readPlatformMembership: (lookup: PlatformMembershipLookup) =>
-        invoke(lookup, (query) => readSqlitePlatformMembershipSnapshot(db, owner, query)),
-      assertPlatformCurrent: (evidence: PlatformMembershipEvidence) => invoke(evidence, currentPlatform),
-      // The source recomposes the platform scope itself: whatever a runtime
-      // passes, a table the platform policy does not name stays denied.
-      scopePlatformReads: (evidence: PlatformMembershipEvidence, rows: RowScope) =>
-        invoke({ evidence, rows }, (captured) => {
-          currentPlatform(captured.evidence);
-          return bind(composePlatformReadScope(owned, captured.evidence, captured.rows), () => currentPlatform(captured.evidence));
-        }),
-      bindPlatformReads: (evidence: PlatformMembershipEvidence, rows: RowScope) =>
-        bindLater({ evidence, rows }, (captured) =>
-          bind(composePlatformReadScope(owned, captured.evidence, captured.rows), () => currentPlatform(captured.evidence)),
-        ),
-      withPlatformReads: <T>(evidence: PlatformMembershipEvidence, rows: RowScope, work: (reads: ScopedReads) => T | Promise<T>) =>
-        batch(
-          { evidence, rows },
-          (captured) => {
-            currentPlatform(captured.evidence);
-            return composePlatformReadScope(owned, captured.evidence, captured.rows);
-          },
-          work,
-        ),
-      assertSupportCurrent: (evidence: SupportMembershipEvidence) => invoke(evidence, currentSupport),
-      /* The source recomposes the dealer's scope itself, as above — and through
-         composeTenantReadScope on a member view of the support evidence, not a
-         rule of its own. One policy rule then governs a dealer's rows for its
-         own members and for an operator inside it; a second rule could disagree
-         with the first, and that disagreement would show up as a session
-         reading rows the policy meant to withhold rather than as a failing
-         test. The fence is still the support row (currentSupport). */
-      scopeSupportReads: (evidence: SupportMembershipEvidence, rows: RowScope) =>
-        invoke({ evidence, rows }, (captured) => {
-          currentSupport(captured.evidence);
-          return bind(composeTenantReadScope(owned, supportAsMember(captured.evidence), captured.rows, allTrue), () =>
-            currentSupport(captured.evidence),
-          );
-        }),
-      resolvePublic: (lookup: TenantPublicLookup) => invoke(lookup, resolvePublicIn),
-      assertPublicCurrent: (evidence: TenantPublicEvidence) => invoke(evidence, currentPublic),
-      // The source recomposes the visitor's scope itself: the tenant predicate is never the caller's.
-      bindPublicReads: (evidence: TenantPublicEvidence, rows: RowScope) =>
-        bindLater({ evidence, rows }, (captured) =>
-          bind(composePublicReadScope(owned, captured.evidence, captured.rows), () => currentPublic(captured.evidence)),
-        ),
-      bindIntakeReads: (evidence: TenantIntakeEvidence, rows: RowScope) =>
-        bindLater({ evidence, rows }, (captured) => {
-          const value = captureIntakeEvidence(captured.evidence, owned);
-          if (intakePlace(value) !== 'tenant') throw new AppAccessDenied();
-          const visitor = intakeVisitor(value);
-          return bind(composePublicReadScope(owned, visitor, captured.rows), () => currentPublic(visitor));
-        }),
-      // The source recomposes the service's scope itself, as it does a visitor's.
-      bindServiceReads: (evidence: TenantServiceEvidence, rows: RowScope) =>
-        bindLater({ evidence, rows }, (captured) => {
-          const value = captureServiceEvidence(captured.evidence, owned);
-          if (value.place !== 'tenant') throw new AppAccessDenied();
-          return bind(composeServiceScope(owned, value, captured.rows), () => currentService(value));
-        }),
-      // The source recomposes the link's scope itself: its one record, never a caller's predicate.
-      bindLinkReads: (evidence: TenantLinkEvidence, rows: RowScope) =>
-        bindLater({ evidence, rows }, (captured) => {
-          const value = captureLinkEvidence(captured.evidence, owned);
-          return bind(composeLinkScope(owned, value, captured.rows), () => currentLink(value));
-        }),
-      resolveLink: (lookup: TenantLinkLookup) =>
-        invoke(lookup, (query) => {
-          const { id } = captureLinkLookup(query);
-          let row;
-          try {
-            row = findSqliteLink(db, owner.appId, id, now());
-          } catch {
-            // A store no command has written to yet has no link table: no link, as any other miss.
-            return null;
-          }
-          return linkResolution(row, (tenant) => readSqliteIntakeAnchor(db, owner, tenant));
-        }),
-      resolveIntake: (lookup: TenantIntakeLookup) =>
-        invoke(lookup, (query) => {
-          const value = captureIntakeLookup(query, owner),
-            sql = intakeAddressQuery(owned, value.column);
-          const tenantId = value.address === null ? undefined : intakeTenantOf(db.prepare(sql).all(value.address));
-          return intakeResolution(tenantId, (id) => readSqliteIntakeAnchor(db, owner, id));
-        }),
-      resolveIntakeByTenant: (lookup: TenantIntakeTenantLookup) =>
-        invoke(lookup, (query) => {
-          const value = captureIntakeTenantLookup(query, owner);
-          return intakeResolutionByTenant(value.tenantId, (id) => readSqliteIntakeAnchor(db, owner, id));
-        }),
-      readTenantNames: (lookup: TenantNamesLookup) =>
-        invoke(lookup, (query) => {
-          const asked = namesLookup(owned, query);
-          if (!asked) return Object.freeze({});
-          const rows = db.prepare(tenantNamesQuery(owned, asked.plan, asked.tenants.length)).all(...asked.tenants);
-          return tenantNamesOf(asked.plan, rows as Record<string, unknown>[], asked.tenants);
-        }),
-      readTenantAddresses: (lookup: TenantAddressesLookup) =>
-        invoke(lookup, (query) => {
-          const { tenantId, columns } = captureAddressesLookup(owned, query);
-          const found: Record<string, string> = {};
-          for (const [kind, column] of Object.entries(columns)) {
-            if (column === undefined) continue;
-            const address = heldAddress(db.prepare(tenantAddressQuery(owned, column)).all(tenantId) as Record<string, unknown>[]);
-            const own = address && tenantOwnAddress(tenantId, address, db.prepare(intakeAddressQuery(owned, column)).all(address));
-            if (own) found[kind] = own;
-          }
-          return Object.freeze(found) as TenantAddresses;
-        }),
-      // Always a tenant's: `@platform` fails the selector.
-      readTenantProfile: (lookup: TenantProfileLookup) =>
-        invoke(lookup, (query) => {
-          const { tenantId, columns } = captureProfileLookup(owned, query);
-          return heldProfile(owned, columns, db.prepare(tenantProfileQuery(owned, columns)).all(tenantId) as Record<string, unknown>[]);
-        }),
-      readServiceAnchors: (tenantId: string | null) =>
-        invoke(tenantId, (id) =>
-          Object.freeze({
-            tenantVersion: id === null ? null : readSqliteIntakeAnchor(db, owner, parseTenantSelector([id])),
-            platformVersion: readSqliteIntakeAnchor(db, owner, PLATFORM_TENANT_ID),
-          }),
-        ),
-      readActiveTenants: (options?: ActiveTenantsQuery) =>
-        invoke(options ?? {}, (query): readonly ActiveTenant[] => {
-          const zone = activeTenantsZone(owned, query);
-          const active = readSqliteActiveTenants(db, owner);
-          if (zone === undefined) return Object.freeze(active.map((id) => Object.freeze({ id })));
-          const rows = db.prepare(tenantProfileColumnQuery(owned, zone)).all() as Record<string, unknown>[];
-          return activeWithColumn(owned, zone, active, rows);
-        }),
-      readSandboxClocks: () =>
-        invoke(null, async () => {
-          const rows = sqliteSandboxSession(db);
-          return (await sandboxStorePresent(rows)) ? sandboxRows(rows, owner.appId).clocks() : Object.freeze([]);
-        }),
-      readSandboxes: (tenants: readonly string[]) =>
-        invoke(sandboxLookup(tenants), async (asked) => {
-          const rows = sqliteSandboxSession(db);
-          return (await sandboxStorePresent(rows)) ? sandboxRows(rows, owner.appId).among(asked) : new Set<string>();
-        }),
-      readDueTimers: (query: DueTimersQuery) =>
-        invoke(query, (value) => {
-          const plan = dueTimersPlan(owned, value);
-          const active = plan.tenants ? readSqliteActiveTenants(db, owner) : [];
-          if (plan.tenants && !active.length) return Object.freeze([]);
-          return plan.decode(db.prepare(plan.sql).all(...(plan.params(active) as SQLInputValue[])) as Record<string, unknown>[]);
-        }),
-      readRecordHistory: (query: RecordHistoryQuery) =>
-        invoke(query, (value) => {
-          assertHistoryQuery(value);
-          return readSqliteRecordHistory(db, value);
-        }),
-      readRecordActivity: (query: RecordActivityQuery) =>
-        invoke(query, (value) => {
-          assertActivityQuery(value);
-          return readSqliteRecordActivity(db, value);
-        }),
-      readInbox: (query: InboxQuery) =>
-        invoke(query, (value) => {
-          assertInboxQuery(value);
-          return readSqliteInbox(db, value);
-        }),
-      readEmailOff: (query: EmailSwitchQuery) =>
-        invoke(query, (value) => {
-          assertEmailSwitchQuery(value);
-          return sqliteInboxMail(async (work) => work(db)).emailOff(value.app, value.recipient);
-        }),
-      readBranding: (query: BrandingQuery) =>
-        invoke(query, (value) => {
-          assertBrandingQuery(value);
-          return readSqliteBranding(db, value);
-        }),
-      readBrandingLogo: (query: BrandingLogoQuery) =>
-        invoke(query, (value) => {
-          assertBrandingLogoQuery(value);
-          return readSqliteBrandingLogo(db, value);
-        }),
-      close,
-    });
-    sources.add(source);
-    registerTenantSourceIdentity(source, { ...owner, canonicalPath });
-    return source;
-  } catch {
-    try {
-      opened?.close();
-    } catch {
-      /* Construction never publishes its handle. */
-    }
-    return denyTenant();
-  }
 }
 
 /**
@@ -1117,7 +249,7 @@ export async function openPostgresTenantReadSource(
        the digest of its catalog as the last full attestation that passed
        there saw it, read in that attestation's own snapshot
        (adapters/postgresCatalogDigest.ts). Nothing a request says reaches it. */
-    type Target = { readonly url: string; reader: PostgresAdapter; attested?: string; checked?: number };
+    type Target = { readonly url: string; reader: PostgresAdapter; attested?: string; checked?: number; readonly owner?: true };
     /* The digest walks every catalog row of the database, and read in every
        snapshot it was most of the database's time under a tenant App (a field report,
        on a remote PostgreSQL: three quarters of all statement time, 27,458
@@ -1136,6 +268,10 @@ export async function openPostgresTenantReadSource(
       return target.attested !== undefined && at !== undefined && now >= at && now - at < trustFor ? target.attested : undefined;
     };
     const primary: Target = { url, reader };
+    /* Under the backstop the description attests the pinned policy too, on every pool, the owner's included: what
+       the runtime role is held to is the database's to say wherever it is read from. */
+    const backstop = tenantBackstop(url);
+    const security = backstop ? { rowSecurity: { role: backstop.role } } : {};
     const standbys = new ReplicaSet<Target>(
       replicas.map((replica) => ({
         url: replica,
@@ -1173,7 +309,7 @@ export async function openPostgresTenantReadSource(
         assertScopeCatalog(owned.physicalSchema, actual);
         // Catalog authority omits collations, indexes and triggers; pin the
         // description too, as the SQLite reader pins its CREATE text.
-        const described = await attestPostgresTenantRelations(snapshot.client, owned);
+        const described = await attestPostgresTenantRelations(snapshot.client, owned, security);
         if (definitions !== undefined && described !== definitions) return denyTenant();
         await assertPostgresTenantStore(snapshot.client, owner);
         definitions ??= described;
@@ -1194,9 +330,18 @@ export async function openPostgresTenantReadSource(
       },
       false,
       prologue,
+      false,
+      false,
+      null,
     );
     // Asked once, at construction: row scopes inline on Postgres 12 and later (rowScope.ts).
     const style = await reader.scopeStyle();
+    /* What crosses tenants by design — a public address resolved, the jobs' sweep, every tenant's names — reads on
+       the owner's pool under the backstop, which the policy does not bind; on the primary alone, as a write's fence
+       does. Attested in full on its first snapshot, as a renewed pool is. Opened once construction has stood. */
+    const ownerTarget: Target | undefined = backstop
+      ? { url, reader: tenantAdapter(url, 'Private tenant owner reader', false, 'owner'), owner: true }
+      : undefined;
 
     let closing = false;
     let closed: Promise<void> | undefined;
@@ -1213,6 +358,7 @@ export async function openPostgresTenantReadSource(
             await Promise.all(
               [...standbys.pools.map((standby) => standby.reader), ...retired].map((standby) => standby.close().catch(() => {})),
             );
+            await ownerTarget?.reader.close();
             await primary.reader.close();
           } catch {
             return denyTenant();
@@ -1239,11 +385,9 @@ export async function openPostgresTenantReadSource(
     const retired = new Set<PostgresAdapter>();
     const renew = (target: Target, failed: PostgresAdapter) => {
       if (closing || target.reader !== failed) return;
-      target.reader = tenantAdapter(
-        target.url,
-        target === primary ? 'Private tenant reader' : 'Private tenant replica reader',
-        target !== primary,
-      );
+      target.reader = target.owner
+        ? tenantAdapter(target.url, 'Private tenant owner reader', false, 'owner')
+        : tenantAdapter(target.url, target === primary ? 'Private tenant reader' : 'Private tenant replica reader', target !== primary);
       target.attested = target.checked = undefined;
       if (lent.has(failed)) retired.add(failed);
       else void failed.close().catch(() => {});
@@ -1290,6 +434,9 @@ export async function openPostgresTenantReadSource(
       lead?: string,
       /* The fence's membership is the snapshot's whole question (assertCurrent): nothing else is read on it. */
       alone = false,
+      /* What the row policy reads under the backstop (tenantConnections.ts): the tenant this snapshot is for, `null`
+         where it reads no tenant's rows. Without a backstop nothing is sent for it. */
+      tenant?: string | null,
     ): Promise<T> => {
       const pool = target.reader;
       const standing = trusted(target);
@@ -1335,6 +482,7 @@ export async function openPostgresTenantReadSource(
             `${pin}; ${question}`,
             false,
             true,
+            tenant,
           );
           if (answered !== MOVED) return answered;
         }
@@ -1391,6 +539,8 @@ export async function openPostgresTenantReadSource(
             false,
             `${standing === undefined ? prologue : pin}; ${membership}`,
             true,
+            false,
+            tenant,
           );
         /* A membership read that is the snapshot's whole reason (discovery's, an admission's) rides in the message
            that begins it, as a member's fence does above: one round trip where BEGIN and the read were two. Its rows
@@ -1422,6 +572,9 @@ export async function openPostgresTenantReadSource(
             },
             false,
             `${standing === undefined ? prologue : pin}; ${lead}`,
+            false,
+            false,
+            tenant,
           );
         }
         /* Any other snapshot on an attestation that stands is handed over with its BEGIN in flight (`ahead`), as a
@@ -1465,6 +618,8 @@ export async function openPostgresTenantReadSource(
             false,
             pin,
             true,
+            false,
+            tenant,
           );
         return await pool.readSnapshot(
           async (lease) => {
@@ -1475,6 +630,9 @@ export async function openPostgresTenantReadSource(
           },
           false,
           prologue,
+          false,
+          false,
+          tenant,
         );
       } catch (error) {
         if (schemaMoved(error)) target.attested = target.checked = undefined;
@@ -1497,9 +655,10 @@ export async function openPostgresTenantReadSource(
       fence?: TenantMembershipEvidence,
       lead?: string,
       alone = false,
+      tenant?: string | null,
     ): Promise<T> => {
       try {
-        return await on(target, work, fence, lead, alone);
+        return await on(target, work, fence, lead, alone, tenant);
       } catch (error) {
         if (error instanceof StatementStopped) throw error;
         // Uncertain, as the primary's can be: `on` replaced that pool, not the source.
@@ -1508,16 +667,22 @@ export async function openPostgresTenantReadSource(
         throw new ReplicaUnavailable(replicaFailure(error) ?? 'retry', 'The replica could not answer this read.', { cause: error });
       }
     };
+    /* `route`: the tenant the snapshot reads for, `null` for none, or OWNER for what crosses tenants by design, which
+       under the backstop reads on the owner's pool, on the primary alone (tenantConnections.ts). Without a backstop
+       OWNER is today's read with no tenant, and no tenant is ever sent. */
     const snapshot = async <T>(
       work: (snapshot: Snapshot) => Promise<T>,
       fence?: TenantMembershipEvidence,
       lead?: string,
       alone = false,
+      route?: Route,
     ): Promise<T> => {
       active();
+      if (route === OWNER && ownerTarget) return on(ownerTarget, work, fence, lead, alone, null);
+      const tenant = route === OWNER ? null : route;
       return standbys.read(
-        (target) => onReplica(target, work, fence, lead, alone),
-        () => on(primary, work, fence, lead, alone),
+        (target) => onReplica(target, work, fence, lead, alone, tenant),
+        () => on(primary, work, fence, lead, alone, tenant),
       );
     };
     /* `fence`: the member evidence the work revalidates first (`current`), so the snapshot may read it as it begins. */
@@ -1529,6 +694,8 @@ export async function openPostgresTenantReadSource(
       lead?: (captured: A) => string,
       /* The fence's membership is all the work reads (`on`'s `alone`). */
       alone = false,
+      /* Where the snapshot reads (`snapshot`'s `route`). Left out, a backstop's adapter refuses before anything is sent. */
+      route?: (captured: A) => Route,
     ): Promise<R> => {
       let value: A;
       try {
@@ -1544,7 +711,7 @@ export async function openPostgresTenantReadSource(
       pending.add(held);
       return (async () => {
         try {
-          const result = await snapshot(async (lease) => work(value, lease), fence?.(value), lead?.(value), alone);
+          const result = await snapshot(async (lease) => work(value, lease), fence?.(value), lead?.(value), alone, route?.(value));
           active();
           return result;
         }
@@ -1729,6 +896,9 @@ export async function openPostgresTenantReadSource(
               return shared.fence && (await releaseFence(lease, evidence));
             },
             (evidence) => evidence,
+            undefined,
+            false,
+            (evidence) => evidence.tenantId,
           ),
         );
         shared.closed = held;
@@ -1769,9 +939,16 @@ export async function openPostgresTenantReadSource(
     const inRequest = <A, R>(input: A, work: (captured: A, lease: Snapshot) => Promise<R>): Promise<R> => {
       const shared = sharing.getStore();
       if (shared?.open && !(standbys.pools.length && replicaReadWanted())) return onShared(shared, input, work);
-      return invoke(input, work);
+      // A store's rows, which no policy binds: no tenant is needed to read them.
+      return invoke(input, work, undefined, undefined, false, () => null);
     };
-    const bind = (scope: RowScope, revalidate: (lease: Snapshot) => Promise<void>, fence?: TenantMembershipEvidence): ScopedReads => {
+    const bind = (
+      scope: RowScope,
+      revalidate: (lease: Snapshot) => Promise<void>,
+      fence: TenantMembershipEvidence | undefined,
+      /* Where each of its snapshots reads (`snapshot`): the tenant its scope is for, or OWNER for the platform's. */
+      route: Route,
+    ): ScopedReads => {
       const reads = scoped(scope);
       const fenceKey = fence === undefined ? undefined : JSON.stringify(fence);
       const run = <A extends unknown[], R>(args: A, work: (bound: ScopedReads, ...args: A) => Promise<R>) => {
@@ -1799,6 +976,9 @@ export async function openPostgresTenantReadSource(
             return answer;
           },
           fence === undefined ? undefined : () => fence,
+          undefined,
+          false,
+          () => route,
         );
       };
       return Object.freeze({
@@ -1832,10 +1012,11 @@ export async function openPostgresTenantReadSource(
       input: C,
       open: (captured: C, lease: Snapshot) => Promise<RowScope>,
       work: (reads: ScopedReads) => T | Promise<T>,
-      fence?: (captured: C) => TenantMembershipEvidence,
+      fence: ((captured: C) => TenantMembershipEvidence) | undefined,
       /* For a fenced batch whose membership rides with its BEGIN (`fenced.ahead`): the scope, composed from the
          evidence alone, and the revalidation, asked of the same flight rather than waited on before the reads. */
-      ahead?: Readonly<{ scope: (captured: C) => RowScope; proof: (captured: C, lease: Snapshot) => Promise<void> }>,
+      ahead: Readonly<{ scope: (captured: C) => RowScope; proof: (captured: C, lease: Snapshot) => Promise<void> }> | undefined,
+      route: (captured: C) => Route,
     ): Promise<T> => {
       if (typeof work !== 'function') return Promise.reject(new TenantContextError());
       let own: { error: unknown } | undefined;
@@ -1876,6 +1057,9 @@ export async function openPostgresTenantReadSource(
           return answer.value;
         },
         fence,
+        undefined,
+        false,
+        route,
       ).catch((error: unknown) => {
         throw own ? own.error : error;
       });
@@ -1899,6 +1083,9 @@ export async function openPostgresTenantReadSource(
           (query, lease) => postgresTenantMembershipLookupRows(owner, query, lease.lead ?? denyTenant()),
           undefined,
           (query) => postgresTenantMembershipLookupStatement(owner, query),
+          false,
+          // The membership store's rows, which no policy binds.
+          () => null,
         ),
       readMemberships: (lookup: TenantMembershipListLookup) => {
         let asked: { readonly sql: string; readonly instant: number } | undefined;
@@ -1907,6 +1094,8 @@ export async function openPostgresTenantReadSource(
           (query, lease) => postgresTenantMembershipsRows(owner, query, lease.lead ?? denyTenant(), asked!.instant, clock),
           undefined,
           (query) => (asked = postgresTenantMembershipsStatement(owner, query, clock)).sql,
+          false,
+          () => null,
         );
       },
       assertCurrent: (evidence: TenantMembershipEvidence) =>
@@ -1916,6 +1105,7 @@ export async function openPostgresTenantReadSource(
           (value) => value,
           undefined,
           true,
+          (value) => value.tenantId,
         ),
       scopeReads: (evidence: TenantMembershipEvidence, rows: RowScope) =>
         invoke(
@@ -1926,9 +1116,13 @@ export async function openPostgresTenantReadSource(
               composeTenantReadScope(owned, captured.evidence, captured.rows, allTrue),
               (next) => current(next, captured.evidence),
               captured.evidence,
+              captured.evidence.tenantId,
             );
           },
           (captured) => captured.evidence,
+          undefined,
+          false,
+          (captured) => captured.evidence.tenantId,
         ),
       bindReads: (evidence: TenantMembershipEvidence, rows: RowScope) =>
         bindLater({ evidence, rows }, (captured) =>
@@ -1936,6 +1130,7 @@ export async function openPostgresTenantReadSource(
             composeTenantReadScope(owned, captured.evidence, captured.rows, allTrue),
             (next) => current(next, captured.evidence),
             captured.evidence,
+            captured.evidence.tenantId,
           ),
         ),
       together: async <T>(evidence: TenantMembershipEvidence, work: () => Promise<T>): Promise<T> => {
@@ -2019,6 +1214,7 @@ export async function openPostgresTenantReadSource(
             scope: (captured) => composeTenantReadScope(owned, captured.evidence, captured.rows, allTrue),
             proof: (captured, lease) => current(lease, captured.evidence),
           },
+          (captured) => captured.evidence.tenantId,
         ),
       /* Its statement rides in the message that begins the snapshot (`lead`), as a membership list's does. */
       readPlatformMembership: (lookup: PlatformMembershipLookup) =>
@@ -2027,19 +1223,45 @@ export async function openPostgresTenantReadSource(
           (query, lease) => postgresPlatformMembershipRows(owner, query, lease.lead ?? denyTenant()),
           undefined,
           (query) => postgresPlatformMembershipStatement(owner, query),
+          false,
+          () => null,
         ),
-      assertPlatformCurrent: (evidence: PlatformMembershipEvidence) => invoke(evidence, (value, lease) => currentPlatform(lease, value)),
+      /* The platform's realm reads every tenant's rows its scope reaches, so it reads as the owner. */
+      assertPlatformCurrent: (evidence: PlatformMembershipEvidence) =>
+        invoke(
+          evidence,
+          (value, lease) => currentPlatform(lease, value),
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
+        ),
       // The source recomposes the platform scope itself, as on SQLite.
       scopePlatformReads: (evidence: PlatformMembershipEvidence, rows: RowScope) =>
-        invoke({ evidence, rows }, async (captured, lease) => {
-          await currentPlatform(lease, captured.evidence);
-          return bind(composePlatformReadScope(owned, captured.evidence, captured.rows), (next) =>
-            currentPlatform(next, captured.evidence),
-          );
-        }),
+        invoke(
+          { evidence, rows },
+          async (captured, lease) => {
+            await currentPlatform(lease, captured.evidence);
+            return bind(
+              composePlatformReadScope(owned, captured.evidence, captured.rows),
+              (next) => currentPlatform(next, captured.evidence),
+              undefined,
+              OWNER,
+            );
+          },
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
+        ),
       bindPlatformReads: (evidence: PlatformMembershipEvidence, rows: RowScope) =>
         bindLater({ evidence, rows }, (captured) =>
-          bind(composePlatformReadScope(owned, captured.evidence, captured.rows), (next) => currentPlatform(next, captured.evidence)),
+          bind(
+            composePlatformReadScope(owned, captured.evidence, captured.rows),
+            (next) => currentPlatform(next, captured.evidence),
+            undefined,
+            OWNER,
+          ),
         ),
       withPlatformReads: <T>(evidence: PlatformMembershipEvidence, rows: RowScope, work: (reads: ScopedReads) => T | Promise<T>) =>
         batch(
@@ -2049,142 +1271,285 @@ export async function openPostgresTenantReadSource(
             return composePlatformReadScope(owned, captured.evidence, captured.rows);
           },
           work,
+          undefined,
+          undefined,
+          () => OWNER,
         ),
-      assertSupportCurrent: (evidence: SupportMembershipEvidence) => invoke(evidence, (value, lease) => currentSupport(lease, value)),
+      assertSupportCurrent: (evidence: SupportMembershipEvidence) =>
+        invoke(
+          evidence,
+          (value, lease) => currentSupport(lease, value),
+          undefined,
+          undefined,
+          false,
+          (value) => value.tenantId,
+        ),
       /* The dealer's scope, composed by the same rule its own members get, on a
          member view of the support evidence — one rule, so a second cannot
          disagree and quietly widen what a session reads. Fenced on the support
          row, as on SQLite. */
       scopeSupportReads: (evidence: SupportMembershipEvidence, rows: RowScope) =>
-        invoke({ evidence, rows }, async (captured, lease) => {
-          await currentSupport(lease, captured.evidence);
-          return bind(composeTenantReadScope(owned, supportAsMember(captured.evidence), captured.rows, allTrue), (next) =>
-            currentSupport(next, captured.evidence),
-          );
-        }),
-      resolvePublic: (lookup: TenantPublicLookup) => invoke(lookup, (value, lease) => resolvePublicIn(lease, value)),
-      assertPublicCurrent: (evidence: TenantPublicEvidence) => invoke(evidence, (value, lease) => currentPublic(lease, value)),
+        invoke(
+          { evidence, rows },
+          async (captured, lease) => {
+            await currentSupport(lease, captured.evidence);
+            return bind(
+              composeTenantReadScope(owned, supportAsMember(captured.evidence), captured.rows, allTrue),
+              (next) => currentSupport(next, captured.evidence),
+              undefined,
+              captured.evidence.tenantId,
+            );
+          },
+          undefined,
+          undefined,
+          false,
+          (captured) => captured.evidence.tenantId,
+        ),
+      /* An address is resolved among every tenant's, so as the owner; what the visitor then reads is that tenant's
+         alone, its placement proved again under the tenant it resolved to (assertPublicCurrent, the bound reads). */
+      resolvePublic: (lookup: TenantPublicLookup) =>
+        invoke(
+          lookup,
+          (value, lease) => resolvePublicIn(lease, value),
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
+        ),
+      assertPublicCurrent: (evidence: TenantPublicEvidence) =>
+        invoke(
+          evidence,
+          (value, lease) => currentPublic(lease, value),
+          undefined,
+          undefined,
+          false,
+          (value) => value.tenantId,
+        ),
       // The source recomposes the visitor's scope itself, as on SQLite.
       bindPublicReads: (evidence: TenantPublicEvidence, rows: RowScope) =>
         bindLater({ evidence, rows }, (captured) =>
-          bind(composePublicReadScope(owned, captured.evidence, captured.rows), (next) => currentPublic(next, captured.evidence)),
+          bind(
+            composePublicReadScope(owned, captured.evidence, captured.rows),
+            (next) => currentPublic(next, captured.evidence),
+            undefined,
+            captured.evidence.tenantId,
+          ),
         ),
       bindIntakeReads: (evidence: TenantIntakeEvidence, rows: RowScope) =>
         bindLater({ evidence, rows }, (captured) => {
           const value = captureIntakeEvidence(captured.evidence, owned);
           if (intakePlace(value) !== 'tenant') throw new AppAccessDenied();
           const visitor = intakeVisitor(value);
-          return bind(composePublicReadScope(owned, visitor, captured.rows), (next) => currentPublic(next, visitor));
+          return bind(
+            composePublicReadScope(owned, visitor, captured.rows),
+            (next) => currentPublic(next, visitor),
+            undefined,
+            visitor.tenantId,
+          );
         }),
       // The source recomposes the service's scope itself, as on SQLite.
       bindServiceReads: (evidence: TenantServiceEvidence, rows: RowScope) =>
         bindLater({ evidence, rows }, (captured) => {
           const value = captureServiceEvidence(captured.evidence, owned);
           if (value.place !== 'tenant') throw new AppAccessDenied();
-          return bind(composeServiceScope(owned, value, captured.rows), (next) => currentService(next, value));
+          // `place` is 'tenant', so the service has its tenant.
+          return bind(composeServiceScope(owned, value, captured.rows), (next) => currentService(next, value), undefined, value.tenantId);
         }),
       // The source recomposes the link's scope itself, as on SQLite.
       bindLinkReads: (evidence: TenantLinkEvidence, rows: RowScope) =>
         bindLater({ evidence, rows }, (captured) => {
           const value = captureLinkEvidence(captured.evidence, owned);
-          return bind(composeLinkScope(owned, value, captured.rows), (next) => currentLink(next, value));
+          return bind(composeLinkScope(owned, value, captured.rows), (next) => currentLink(next, value), undefined, value.tenantId);
         }),
+      /* A link, an intake address and the anchors are found among every tenant's rows: as the owner. */
       resolveLink: (lookup: TenantLinkLookup) =>
-        invoke(lookup, async (query, lease) => {
-          const { id } = captureLinkLookup(query);
-          const row = await findPostgresLink(lease.client, owner.appId, id, clock());
-          if (!row) return null;
-          const anchors = new Map<string, string | null>();
-          for (const tenant of [PLATFORM_TENANT_ID, row.tenant])
-            anchors.set(tenant, await readPostgresIntakeAnchor(lease.client, owner, tenant));
-          return linkResolution(row, (tenant) => anchors.get(tenant) ?? null);
-        }),
+        invoke(
+          lookup,
+          async (query, lease) => {
+            const { id } = captureLinkLookup(query);
+            const row = await findPostgresLink(lease.client, owner.appId, id, clock());
+            if (!row) return null;
+            const anchors = new Map<string, string | null>();
+            for (const tenant of [PLATFORM_TENANT_ID, row.tenant])
+              anchors.set(tenant, await readPostgresIntakeAnchor(lease.client, owner, tenant));
+            return linkResolution(row, (tenant) => anchors.get(tenant) ?? null);
+          },
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
+        ),
       resolveIntake: (lookup: TenantIntakeLookup) =>
-        invoke(lookup, async (query, lease) => {
-          const value = captureIntakeLookup(query, owner),
-            sql = intakeAddressQuery(owned, value.column);
-          const tenantId = value.address === null ? undefined : intakeTenantOf((await lease.client.query(sql, [value.address])).rows);
-          const anchors = new Map<string, string | null>();
-          for (const id of [...(tenantId === undefined ? [] : [tenantId]), PLATFORM_TENANT_ID]) {
-            anchors.set(id, await readPostgresIntakeAnchor(lease.client, owner, id));
-          }
-          return intakeResolution(tenantId, (id) => anchors.get(id) ?? null);
-        }),
+        invoke(
+          lookup,
+          async (query, lease) => {
+            const value = captureIntakeLookup(query, owner),
+              sql = intakeAddressQuery(owned, value.column);
+            const tenantId = value.address === null ? undefined : intakeTenantOf((await lease.client.query(sql, [value.address])).rows);
+            const anchors = new Map<string, string | null>();
+            for (const id of [...(tenantId === undefined ? [] : [tenantId]), PLATFORM_TENANT_ID]) {
+              anchors.set(id, await readPostgresIntakeAnchor(lease.client, owner, id));
+            }
+            return intakeResolution(tenantId, (id) => anchors.get(id) ?? null);
+          },
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
+        ),
       resolveIntakeByTenant: (lookup: TenantIntakeTenantLookup) =>
-        invoke(lookup, async (query, lease) => {
-          const value = captureIntakeTenantLookup(query, owner);
-          const anchors = new Map<string, string | null>();
-          for (const id of [value.tenantId, PLATFORM_TENANT_ID]) anchors.set(id, await readPostgresIntakeAnchor(lease.client, owner, id));
-          return intakeResolutionByTenant(value.tenantId, (id) => anchors.get(id) ?? null);
-        }),
+        invoke(
+          lookup,
+          async (query, lease) => {
+            const value = captureIntakeTenantLookup(query, owner);
+            const anchors = new Map<string, string | null>();
+            for (const id of [value.tenantId, PLATFORM_TENANT_ID]) anchors.set(id, await readPostgresIntakeAnchor(lease.client, owner, id));
+            return intakeResolutionByTenant(value.tenantId, (id) => anchors.get(id) ?? null);
+          },
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
+        ),
+      /* What the platform and the jobs read across tenants by design (docs/postgresql.md): as the owner. */
       readTenantNames: (lookup: TenantNamesLookup) =>
-        invoke(lookup, async (query, lease) => {
-          const asked = namesLookup(owned, query);
-          if (!asked) return Object.freeze({});
-          const { rows } = await lease.client.query(tenantNamesQuery(owned, asked.plan, asked.tenants.length), [asked.tenants]);
-          return tenantNamesOf(asked.plan, rows, asked.tenants);
-        }),
+        invoke(
+          lookup,
+          async (query, lease) => {
+            const asked = namesLookup(owned, query);
+            if (!asked) return Object.freeze({});
+            const { rows } = await lease.client.query(tenantNamesQuery(owned, asked.plan, asked.tenants.length), [asked.tenants]);
+            return tenantNamesOf(asked.plan, rows, asked.tenants);
+          },
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
+        ),
       readTenantAddresses: (lookup: TenantAddressesLookup) =>
-        invoke(lookup, async (query, lease) => {
-          const { tenantId, columns } = captureAddressesLookup(owned, query);
-          const found: Record<string, string> = {};
-          for (const [kind, column] of Object.entries(columns)) {
-            if (column === undefined) continue;
-            // The address and its resolution in one round trip (`tenantOwnAddressQuery`): an entry waits on it.
-            const { rows } = await lease.client.query(tenantOwnAddressQuery(owned, column), [tenantId]);
-            const address = heldAddress(rows);
-            const own = address && tenantOwnAddress(tenantId, address, ownAddressResolution(rows));
-            if (own) found[kind] = own;
-          }
-          return Object.freeze(found) as TenantAddresses;
-        }),
+        invoke(
+          lookup,
+          async (query, lease) => {
+            const { tenantId, columns } = captureAddressesLookup(owned, query);
+            const found: Record<string, string> = {};
+            for (const [kind, column] of Object.entries(columns)) {
+              if (column === undefined) continue;
+              // The address and its resolution in one round trip (`tenantOwnAddressQuery`): an entry waits on it.
+              const { rows } = await lease.client.query(tenantOwnAddressQuery(owned, column), [tenantId]);
+              const address = heldAddress(rows);
+              const own = address && tenantOwnAddress(tenantId, address, ownAddressResolution(rows));
+              if (own) found[kind] = own;
+            }
+            return Object.freeze(found) as TenantAddresses;
+          },
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
+        ),
       readTenantProfile: (lookup: TenantProfileLookup) =>
-        invoke(lookup, async (query, lease) => {
-          const { tenantId, columns } = captureProfileLookup(owned, query);
-          return heldProfile(owned, columns, (await lease.client.query(tenantProfileQuery(owned, columns), [tenantId])).rows);
-        }),
+        invoke(
+          lookup,
+          async (query, lease) => {
+            const { tenantId, columns } = captureProfileLookup(owned, query);
+            return heldProfile(owned, columns, (await lease.client.query(tenantProfileQuery(owned, columns), [tenantId])).rows);
+          },
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
+        ),
       readServiceAnchors: (tenantId: string | null) =>
-        invoke(tenantId, async (id, lease) =>
-          Object.freeze({
-            tenantVersion: id === null ? null : await readPostgresIntakeAnchor(lease.client, owner, parseTenantSelector([id])),
-            platformVersion: await readPostgresIntakeAnchor(lease.client, owner, PLATFORM_TENANT_ID),
-          }),
+        invoke(
+          tenantId,
+          async (id, lease) =>
+            Object.freeze({
+              tenantVersion: id === null ? null : await readPostgresIntakeAnchor(lease.client, owner, parseTenantSelector([id])),
+              platformVersion: await readPostgresIntakeAnchor(lease.client, owner, PLATFORM_TENANT_ID),
+            }),
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
         ),
       readActiveTenants: (options?: ActiveTenantsQuery) =>
-        invoke(options ?? {}, async (query, lease): Promise<readonly ActiveTenant[]> => {
-          const zone = activeTenantsZone(owned, query);
-          const active = await readPostgresActiveTenants(lease.client, owner);
-          if (zone === undefined) return Object.freeze(active.map((id) => Object.freeze({ id })));
-          const rows = (await lease.client.query(tenantProfileColumnQuery(owned, zone))).rows as Record<string, unknown>[];
-          return activeWithColumn(owned, zone, active, rows);
-        }),
+        invoke(
+          options ?? {},
+          async (query, lease): Promise<readonly ActiveTenant[]> => {
+            const zone = activeTenantsZone(owned, query);
+            const active = await readPostgresActiveTenants(lease.client, owner);
+            if (zone === undefined) return Object.freeze(active.map((id) => Object.freeze({ id })));
+            const rows = (await lease.client.query(tenantProfileColumnQuery(owned, zone))).rows as Record<string, unknown>[];
+            return activeWithColumn(owned, zone, active, rows);
+          },
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
+        ),
       readSandboxClocks: () =>
-        invoke(null, async (_none, lease) => {
-          const rows = postgresSandboxSession(lease.client);
-          return (await sandboxStorePresent(rows)) ? sandboxRows(rows, owner.appId).clocks() : Object.freeze([]);
-        }),
+        invoke(
+          null,
+          async (_none, lease) => {
+            const rows = postgresSandboxSession(lease.client);
+            return (await sandboxStorePresent(rows)) ? sandboxRows(rows, owner.appId).clocks() : Object.freeze([]);
+          },
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
+        ),
       readSandboxes: (tenants: readonly string[]) =>
-        invoke(sandboxLookup(tenants), async (asked, lease) => {
-          const rows = postgresSandboxSession(lease.client);
-          return (await sandboxStorePresent(rows)) ? sandboxRows(rows, owner.appId).among(asked) : new Set<string>();
-        }),
+        invoke(
+          sandboxLookup(tenants),
+          async (asked, lease) => {
+            const rows = postgresSandboxSession(lease.client);
+            return (await sandboxStorePresent(rows)) ? sandboxRows(rows, owner.appId).among(asked) : new Set<string>();
+          },
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
+        ),
       readDueTimers: (query: DueTimersQuery) =>
-        invoke(query, async (value, lease) => {
-          const plan = dueTimersPlan(owned, value);
-          const active = plan.tenants ? await readPostgresActiveTenants(lease.client, owner) : [];
-          if (plan.tenants && !active.length) return Object.freeze([]);
-          return plan.decode((await lease.client.query(plan.sql, plan.params(active))).rows);
-        }),
+        invoke(
+          query,
+          async (value, lease) => {
+            const plan = dueTimersPlan(owned, value);
+            const active = plan.tenants ? await readPostgresActiveTenants(lease.client, owner) : [];
+            if (plan.tenants && !active.length) return Object.freeze([]);
+            return plan.decode((await lease.client.query(plan.sql, plan.params(active))).rows);
+          },
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
+        ),
+      // The stores' own rows, which no policy binds: read as the runtime, with no tenant said.
       readRecordHistory: (query: RecordHistoryQuery) =>
-        invoke(query, (value, lease) => {
-          assertHistoryQuery(value);
-          return attestedStore(lease, 'history', (attested) => readPostgresRecordHistory(lease.client, value, attested));
-        }),
+        invoke(
+          query,
+          (value, lease) => {
+            assertHistoryQuery(value);
+            return attestedStore(lease, 'history', (attested) => readPostgresRecordHistory(lease.client, value, attested));
+          },
+          undefined,
+          undefined,
+          false,
+          () => null,
+        ),
       readRecordActivity: (query: RecordActivityQuery) =>
-        invoke(query, (value, lease) => {
-          assertActivityQuery(value);
-          return attestedStore(lease, 'history', (attested) => readPostgresRecordActivity(lease.client, value, attested));
-        }),
+        invoke(
+          query,
+          (value, lease) => {
+            assertActivityQuery(value);
+            return attestedStore(lease, 'history', (attested) => readPostgresRecordActivity(lease.client, value, attested));
+          },
+          undefined,
+          undefined,
+          false,
+          () => null,
+        ),
       readInbox: (query: InboxQuery) =>
         inRequest(query, (value, lease) => {
           assertInboxQuery(value);
@@ -2196,15 +1561,29 @@ export async function openPostgresTenantReadSource(
           return postgresInboxMail((work) => work(lease.client)).emailOff(value.app, value.recipient);
         }),
       readBranding: (query: BrandingQuery) =>
-        invoke(query, (value, lease) => {
-          assertBrandingQuery(value);
-          return attestedStore(lease, 'branding', (attested) => readPostgresBranding(lease.client, value, attested));
-        }),
+        invoke(
+          query,
+          (value, lease) => {
+            assertBrandingQuery(value);
+            return attestedStore(lease, 'branding', (attested) => readPostgresBranding(lease.client, value, attested));
+          },
+          undefined,
+          undefined,
+          false,
+          () => null,
+        ),
       readBrandingLogo: (query: BrandingLogoQuery) =>
-        invoke(query, (value, lease) => {
-          assertBrandingLogoQuery(value);
-          return attestedStore(lease, 'branding', (attested) => readPostgresBrandingLogo(lease.client, value, attested));
-        }),
+        invoke(
+          query,
+          (value, lease) => {
+            assertBrandingLogoQuery(value);
+            return attestedStore(lease, 'branding', (attested) => readPostgresBrandingLogo(lease.client, value, attested));
+          },
+          undefined,
+          undefined,
+          false,
+          () => null,
+        ),
       close,
     });
     sources.add(source);

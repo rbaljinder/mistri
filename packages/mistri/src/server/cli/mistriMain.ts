@@ -339,8 +339,19 @@ export const main: Main = async () => {
   /* A server with no App to serve, from the command line or the config, is the database browser's, whose dispatcher
      (http/browserHandler.ts) is the one that manages connections: this one's is an App's. Said before an App or a
      connection is opened. */
-  if (!config.apps.length && !opts.apps?.length && opts.appEntry === undefined && !dev && startFor(opts) !== 'mistri')
+  if (!config.apps.length && !opts.apps?.length && opts.appEntry === undefined && !dev && startFor(opts) !== 'mistri') {
+    /* A connection under the row-security backstop is a tenant App's: the Workbench would browse it as the runtime
+       role and see none of its tenant rows, so that is said first (tenantBackstopOwner.ts). */
+    try {
+      (await import('../tenant/tenantBackstopOwner.js')).assertNoBackstop(registry, 'the Workbench');
+    } catch (error) {
+      await registry.closeAll();
+      console.error(`mistri: ${(error as Error).message}`);
+      process.exitCode = 2;
+      return;
+    }
     return refuseBrowser('a server with no App', process.argv.slice(2), registry);
+  }
   /* Before any App opens a writer: a tenant App's is bound to live sync as it is made (tenantLive.ts). */
   if (opts.noLive) (await import('../live/liveBinding.js')).setLiveSync(false);
   /* The wait each database round trip is given, to feel a remote database in development (dbLatency.ts): before any

@@ -2,7 +2,7 @@ import { createTenantExperimentConversionAuthority } from './experimentConversio
 import { realpathSync, statSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { isProxy } from 'node:util/types';
-import { PostgresAdapter } from '@mistriwork/engine/adapters/postgres.js';
+import { PostgresAdapter, type PostgresReadSnapshot } from '@mistriwork/engine/adapters/postgres.js';
 import { MAX_REPLICAS } from '@mistriwork/engine/adapters/replicas.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { readSqliteReadCatalog } from '@mistriwork/engine/adapters/scoped/sqliteScopeCatalog.js';
@@ -52,6 +52,8 @@ import { tenantNoticeBinding, tenantNoticeMembers } from './tenantInbox.js';
 import type { NoticeMembers } from '../../adapters/inbox/inbox.js';
 import { assertSqliteTenantStore } from './tenantStore.js';
 import { assertPostgresTenantStore } from './tenantStorePostgres.js';
+import { assertPostgresRuntimeOwnsNone, attestPostgresBackstopRoles } from './tenantPostgresCatalog.js';
+import { declareTenantBackstop } from './tenantConnections.js';
 import { keyId, supportAuditKey, type SupportAuditKey } from './tenantSupportAuditContract.js';
 import type { TenantWriteAudit } from './tenantWriteKindContract.js';
 import { membershipRole } from './tenantFeatureMembershipRoles.js';
@@ -72,6 +74,9 @@ type TenantSourceWhere = {
   readonly replicas?: readonly string[];
   /** The PostgreSQL source's direct URL for the jobs host's `LISTEN`, when `url` is a transaction-mode pooler's. */
   readonly listen?: string;
+  /** Under the row-security backstop: the URL of the role that owns the tables, while `url` and `replicas` are the
+   * runtime role's (docs/postgresql.md). It serves what crosses tenants by design. */
+  readonly owner?: string;
 };
 export interface TenantEnrollmentOptions<Request> {
   readonly app: AppDef;
@@ -193,7 +198,7 @@ function capture<Request>(input: TenantEnrollmentOptions<Request>) {
   const source = captureTenantData(raw.source);
   // One engine per source: an existing SQLite file or a PostgreSQL URL.
   const postgres = !!source && typeof source === 'object' && Object.hasOwn(source, 'url');
-  tenantRecord(source, ['id', 'connection', ...(postgres ? ['url', 'replicas', 'listen'] : ['existingPath'])]);
+  tenantRecord(source, ['id', 'connection', ...(postgres ? ['url', 'replicas', 'listen', 'owner'] : ['existingPath'])]);
   tenantIdentifier(source.id);
   tenantIdentifier(source.connection, 1024);
   if (postgres) {
@@ -202,6 +207,10 @@ function capture<Request>(input: TenantEnrollmentOptions<Request>) {
     if (source.listen !== undefined) {
       tenantIdentifier(source.listen, 32768);
       if (!/^postgres(ql)?:\/\//i.test(source.listen)) return denyTenant();
+    }
+    if (source.owner !== undefined) {
+      tenantIdentifier(source.owner, 32768);
+      if (!/^postgres(ql)?:\/\//i.test(source.owner)) return denyTenant();
     }
     const replicas = source.replicas;
     if (replicas !== undefined) {
@@ -347,7 +356,17 @@ async function acquire<Request>(config: ReturnType<typeof capture<Request>>, pol
       ? tenantNoticeMembers({ appId: app.id, source: binding.source, deployment, now, reader: () => discovery, accountEmail })
       : undefined;
     if (source.url !== undefined) {
-      ({ reader, writer, discovery } = await acquirePostgres(source.url, attested, pages, now, closes, auditing, members, source.replicas));
+      ({ reader, writer, discovery } = await acquirePostgres(
+        source.url,
+        attested,
+        pages,
+        now,
+        closes,
+        auditing,
+        members,
+        source.replicas,
+        source.owner,
+      ));
     } else {
       const existingPath = source.existingPath ?? denyTenant();
       if (!statSync(existingPath).isFile()) return denyTenant();
@@ -586,9 +605,13 @@ async function acquirePostgres(
   audit?: TenantWriteAudit,
   members?: NoticeMembers,
   replicas: readonly string[] = [],
+  owner?: string,
 ) {
   const { app, policy, binding } = attested;
-  const inspector = new PostgresAdapter(url, 'Private tenant enrollment');
+  /* Under the row-security backstop (docs/postgresql.md) the roles are attested before anything opens on them, and
+     the catalog is read as the owner, which every tenant table belongs to. */
+  if (owner !== undefined) declareTenantBackstop(url, { owner, ...(await attestBackstopRoles(url, owner, replicas)), replicas });
+  const inspector = new PostgresAdapter(owner ?? url, 'Private tenant enrollment');
   let physicalSchema: DatabaseSchema;
   try {
     physicalSchema = await inspector.readSnapshot(async (snapshot) => {
@@ -612,6 +635,7 @@ async function acquirePostgres(
     ownership: policy.ownership,
     ...(profile === undefined ? {} : { profile }),
   });
+  if (owner !== undefined) await onEach([url], (snapshot) => assertPostgresRuntimeOwnsNone(snapshot.client, ownership));
   /* Only the request reader takes replicas. Discovery answers who is a
      member, for sign-in and notices: that stays where it was granted. */
   const reader = await openPostgresTenantReadSource(url, ownership, binding, now, replicas);
@@ -632,6 +656,32 @@ async function acquirePostgres(
   const discovery = await openPostgresTenantReadSource(url, ownership, binding, now);
   closes.push(discovery.close);
   return { reader, writer, discovery };
+}
+
+/* Run `work` in a read snapshot on each URL in turn, each on its own short-lived adapter: one that names no role, so the
+   connection is asked as whatever role its URL connects as. */
+async function onEach<T>(urls: readonly string[], work: (snapshot: PostgresReadSnapshot) => Promise<T>): Promise<T[]> {
+  const out: T[] = [];
+  for (const each of urls) {
+    const adapter = new PostgresAdapter(each, 'Private tenant backstop');
+    try {
+      out.push(await adapter.readSnapshot(work));
+    } finally {
+      await adapter.close();
+    }
+  }
+  return out;
+}
+
+/** The backstop's two roles, asked of the primary and of each replica: every one must connect as the same runtime role. */
+export async function attestBackstopRoles(url: string, owner: string, replicas: readonly string[]) {
+  const [roles] = await onEach([owner], (theirs) =>
+    onEach([url, ...replicas], (mine) => attestPostgresBackstopRoles(mine.client, theirs.client)),
+  );
+  const first = roles![0]!;
+  if (roles!.some((each) => each.role !== first.role || each.ownerRole !== first.ownerRole))
+    return denyTenant(new Error('The row-security backstop refuses these roles: every replica must connect as the role "url" does.'));
+  return first;
 }
 
 export async function createTenantEnrollment<Request>(input: TenantEnrollmentOptions<Request>) {

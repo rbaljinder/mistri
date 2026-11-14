@@ -78,8 +78,9 @@ export interface JournalTransactionOptions<V> {
   readonly ordinaryVerify?: () => unknown;
   /** A scoped transaction's triggers the App accepts, by physical table (scoped/triggerProof.ts). */
   readonly triggers?: TriggerAcceptance;
-  /** A scoped transaction's tenant, for the row policy under PostgreSQL's backstop (PostgresAdapterOptions.rowSecurity); SQLite has none. */
-  readonly tenant?: string;
+  /** A scoped transaction's tenant, for the row policy under PostgreSQL's backstop (PostgresAdapterOptions.rowSecurity),
+   * where it must be given (`null`: deliberately none); SQLite has none. */
+  readonly tenant?: string | null;
 }
 
 /** The callback: the records, the journal, and a scoped transaction's catalog evidence (absent in an ordinary one). */

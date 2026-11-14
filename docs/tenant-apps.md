@@ -1058,6 +1058,11 @@ What differs from SQLite:
   provisioned with the stores (`provisionStores` with the App's `commands`
   and its tenant binding) and only attested at
   startup; one that is not provisioned refuses, on either engine.
+- **A row-security backstop**, opt-in: with `"backstop": "rls"` and an `"owner"`
+  URL on the connection, the App runs as a role the database's own row policy
+  binds to one tenant per transaction, and only what crosses tenants by design
+  runs as the tables' owner
+  ([PostgreSQL guide](postgresql.md#row-security-backstop)).
 
 ### Authentication on PostgreSQL
 

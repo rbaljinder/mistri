@@ -338,6 +338,10 @@ const TENANT_IMPORTERS = [
   'packages/mistri/src/server/api/tenantApiReadOwner.ts',
   'packages/mistri/src/server/cli/apiTokenTenant.ts',
   'packages/mistri/src/server/cli/appMcpMode.ts',
+  // Startup refuses a connection under the row-security backstop for a non-tenant App (apps.ts) or the Workbench
+  // (mistriMain.ts): either would read as the runtime role with no tenant set and see nothing (tenantBackstopOwner.ts).
+  'packages/mistri/src/server/cli/apps.ts',
+  'packages/mistri/src/server/cli/mistriMain.ts',
   // `mistri dev` and `mistri test init` are a developer's entry points on their own machine: dev signs each
   // role in as a member, test init reads the tenants it writes tests for (tenant/tenantLocalAccess.ts).
   'packages/mistri/src/server/cli/devMode.ts',

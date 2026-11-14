@@ -28,6 +28,7 @@
  * the request, as an ordinary App's are. `--reindex --policy` fills it from
  * scratch.
  */
+import type { PostgresAdapter } from '@mistriwork/engine/adapters/postgres.js';
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
 import type { AppDef } from '../../shared/appModel.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
@@ -37,6 +38,7 @@ import { indexerFor, tenantSearchAdapter } from '../app/appSearchRuntime.js';
 import { searchProviderOf } from '../app/searchProvider.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
 import { observeTenantCommits } from './tenantWriteSource.js';
+import { tenantAdapter, tenantBackstop } from './tenantConnections.js';
 
 /** What the tenant host is handed: a reader made searchable, and nothing of the registry behind it. */
 export interface TenantSearch {
@@ -59,15 +61,29 @@ export function tenantSearchColumns(
 
 /** The tenant App's search, or undefined when it declares none or no search provider is plugged in. */
 export function openTenantSearch(
-  input: Readonly<{ registry: Registry; app: AppDef; ownership: TenantOwnershipSnapshot }>,
+  input: Readonly<{
+    registry: Registry;
+    app: AppDef;
+    ownership: TenantOwnershipSnapshot;
+    /** The deployment's resolved PostgreSQL runtime URL: under the row-security backstop, the indexer reads as the owner. */
+    url?: string;
+  }>,
 ): TenantSearch | undefined {
-  const { registry, app, ownership } = input;
+  const { registry, app, ownership, url } = input;
   const searched = Object.entries(app.resources ?? {}).filter(([, resource]) => resource.search);
   if (!searched.length || !searchProviderOf(registry)) return undefined;
   const tenantColumns = tenantSearchColumns(ownership.ownership);
   const named = ownership.source.connection;
   const connection = registry.list().find((each) => each.id === named || each.name === named)?.id ?? named;
   const indexer = indexerFor(registry);
+  /* The registry's adapter is the runtime role, which reads no tenant row under the backstop, so the indexer would
+     remove every document it re-reads. It reads as the owner, across tenants by design (each document keeps its row's
+     tenant). One holder of the owner's shared pool, taken at the first read and let go once at close. */
+  let owner: PostgresAdapter | undefined,
+    closed = false;
+  if (url !== undefined && tenantBackstop(url)) {
+    indexer.readThrough(connection, () => (owner ??= tenantAdapter(url, 'Private tenant search', false, 'owner')));
+  }
   const stop = observeTenantCommits(ownership, (writes) => {
     for (const write of writes) {
       const physical = ownership.resources[write.table];
@@ -86,6 +102,12 @@ export function openTenantSearch(
   return Object.freeze({
     reader: (adapter: Adapter, schema: DatabaseSchema, tenantId: string) =>
       tenantSearchAdapter(adapter, { registry, app, schema, tenantId, tenantColumns }),
-    close: stop,
+    close: () => {
+      stop();
+      if (closed) return;
+      closed = true;
+      indexer.readThrough(connection, undefined);
+      void owner?.close().catch(() => {});
+    },
   });
 }

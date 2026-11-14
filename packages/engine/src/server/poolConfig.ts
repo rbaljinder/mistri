@@ -114,6 +114,42 @@ export function listenOf(entry: Record<string, unknown>, http: boolean, path: st
   return listen;
 }
 
+/**
+ * A connection's `"backstop": "rls"` and its `"owner"`: the database's row-level security as a second wall behind
+ * the tenant scope (docs/postgresql.md). `url` and `replicas` then name the runtime role, which owns nothing and
+ * reads under the pinned policy; `owner` names the role that owns the tables and serves what crosses tenants by
+ * design. Both or neither: a backstop with no owner has nobody to resolve a public address or run the jobs that
+ * read every tenant, and an owner with no backstop is a second pool doing what `url` does. Refused for HTTP and
+ * SQLite, which have no roles to separate.
+ */
+export function backstopOf(entry: Record<string, unknown>, http: boolean, path: string): { owner: string; backstop: 'rls' } | undefined {
+  const { owner, backstop } = entry;
+  if (owner === undefined && backstop === undefined) return undefined;
+  const where = `${path}: connection "${String(entry.name)}"`;
+  if (http) throw new Error(`${where} is an HTTP connection; "backstop" and "owner" separate database roles. Remove them.`);
+  if (backstop === undefined) {
+    throw new Error(
+      `${where} has "owner" without "backstop". The owner's URL is only used under "backstop": "rls"; add it, or remove "owner".`,
+    );
+  }
+  if (backstop !== 'rls') throw new Error(`${where} has "backstop": ${JSON.stringify(backstop)}. The one backstop is "rls".`);
+  if (owner === undefined) {
+    throw new Error(
+      `${where} has "backstop": "rls" without "owner". Add "owner": the URL of the role that owns the tables, such as "\${OWNER_URL}".`,
+    );
+  }
+  if (typeof owner !== 'string' || !owner.trim()) {
+    throw new Error(`${where} has "owner": ${JSON.stringify(owner)}. It must be a PostgreSQL URL, such as "postgres://owner@db:5432/app".`);
+  }
+  const written = owner.trim();
+  if (!written.includes('$') && replicaEngine(written) !== 'PostgreSQL')
+    throw new Error(`${where} has an "owner" that is not a PostgreSQL URL; the backstop is PostgreSQL's row-level security.`);
+  const url = String(entry.url);
+  if (!url.includes('$') && replicaEngine(url) !== 'PostgreSQL')
+    throw new Error(`${where} is not a PostgreSQL connection; SQLite has no roles or row-level security. Remove "backstop" and "owner".`);
+  return { owner: written, backstop: 'rls' };
+}
+
 /** Which engine a URL names, for a replica's agreement with its primary; undefined for anything else. */
 export function replicaEngine(url: string): 'PostgreSQL' | undefined {
   if (/^postgres(ql)?:\/\//i.test(url)) return 'PostgreSQL';

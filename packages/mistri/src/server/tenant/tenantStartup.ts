@@ -214,9 +214,18 @@ export async function prepareTenantStartup(
         : undefined;
       if (listen && !/^postgres(ql)?:\/\//i.test(listen))
         throw new TenantStartupError('A PostgreSQL source\'s "listen" must be a postgres:// URL.');
-      if (isPostgresAuthStore(store)) assertPostgresAuthStoreSeparation(store, [{ url }, ...replicas.map((each) => ({ url: each }))]);
+      /* The connection's "owner", under "backstop": "rls": `url` and the replicas are then the runtime role's, which reads
+         under the pinned policy and owns nothing; the owner's is where what crosses tenants runs, the catalog among it
+         (enrollment attests the pair, tenantEnrollment.ts). */
+      const owner = connection.backstop
+        ? (await resolveConnection(connection.name, connection.owner!, { environment: capturedEnvironment })).url
+        : undefined;
+      if (connection.backstop && !/^postgres(ql)?:\/\//i.test(owner!))
+        throw new TenantStartupError('A PostgreSQL source\'s "owner" must be a postgres:// URL.');
+      if (isPostgresAuthStore(store))
+        assertPostgresAuthStoreSeparation(store, [{ url }, ...replicas.map((each) => ({ url: each })), ...(owner ? [{ url: owner }] : [])]);
       describe = async () => {
-        const adapter = new PostgresAdapter(url, 'Tenant startup');
+        const adapter = new PostgresAdapter(owner ?? url, 'Tenant startup');
         try {
           return await adapter.readSnapshot((snapshot) => snapshot.describe());
         } finally {
@@ -229,10 +238,12 @@ export async function prepareTenantStartup(
         url,
         ...(replicas.length ? { replicas: Object.freeze(replicas) } : {}),
         ...(listen ? { listen } : {}),
+        ...(owner ? { owner } : {}),
       });
     } else {
       if (connection.replicas?.length)
         throw new TenantStartupError('SQLite has no replicas: a file is read where it is. Remove "replicas".');
+      if (connection.backstop) throw new TenantStartupError('SQLite has no roles or row-level security. Remove "backstop" and "owner".');
       const path = resolved.url.replace(/^sqlite:(\/\/)?/i, '');
       if (!path || path.includes('://') || /^file:/i.test(path) || path === ':memory:') throw new TenantStartupError();
       const file = realpathSync(path),

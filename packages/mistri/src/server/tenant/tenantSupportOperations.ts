@@ -250,7 +250,8 @@ async function openSqliteStore(
  * precedes the final native observation, which may await the auth store. */
 async function openPostgresStore(url: string, owner: TenantStoreBinding, key: SupportAuditKey, assertAuth: () => void): Promise<Store> {
   assertAuth();
-  const writer = tenantAdapter(url, 'Private tenant support');
+  // Support crosses tenants by design (its log and audit name each one): under the backstop, as the owner.
+  const writer = tenantAdapter(url, 'Private tenant support', false, 'owner');
   const attest = async (client: PgQuery) => {
     assertAuth();
     await assertPostgresTenantAdministrationJournal(client, owner);

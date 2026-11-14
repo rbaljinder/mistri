@@ -17,7 +17,7 @@ import { renamedWriteAhead, withWriteAhead, writeAhead } from '@mistriwork/engin
 import { commandsOf } from '../stores/commandStores.js';
 import { cachedStatement, SqliteAdapter } from '@mistriwork/engine/adapters/sqlite.js';
 import type { PostgresAdapter, PostgresTransactionVerifier } from '@mistriwork/engine/adapters/postgres.js';
-import { tenantAdapter } from './tenantConnections.js';
+import { tenantAdapter, tenantBackstop } from './tenantConnections.js';
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import type { PostgresScopeCatalog } from '@mistriwork/engine/adapters/scoped/postgresScopeCatalog.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
@@ -67,7 +67,8 @@ import { tenantWriteMethods, type TenantWriteMethods } from './tenantWriteKinds.
 import { WriterRetargeted, writerLifecycle } from './tenantWriterLifecycle.js';
 import type { RecordHistoryBinding } from '../../adapters/history/recordHistory.js';
 import { bindTenantRecordHistoryStore } from './tenantRecordHistoryStore.js';
-import { bindTenantLive, unbindTenantLive } from './tenantLive.js';
+import { bindTenantLive, shareTenantLive, unbindTenantLive } from './tenantLive.js';
+import type { PlatformTenantEvidence } from './tenantPlatformTenant.js';
 import { appStoresOf } from '../stores/appStores.js';
 import { assertInboxMark, type InboxMark, type NoticeBinding } from '../../adapters/inbox/inbox.js';
 import type { InboxMailStore } from '../../adapters/inbox/inboxMail.js';
@@ -264,6 +265,23 @@ function recording(records: WriteTransaction, wrote: TenantCommittedWrite[], own
 }
 
 const sources = new WeakSet<TenantWriteSource>();
+/**
+ * The tenant the pinned policy reads for a write under the row-security backstop: the journal's (a member, a link,
+ * an intake, support, service all name one), the platform-tenant kind's named tenant (its scope narrows every
+ * tenant table to it), and undefined for the platform realm's own command, which runs on the owner's writer.
+ * Without a backstop the engine ignores it.
+ */
+export function backstopTenantOf<Evidence extends TenantWriteEvidence>(
+  kind: TenantWriteKind<Evidence, object>,
+  owner: TenantStoreBinding,
+  evidence: Evidence,
+): string | undefined {
+  const journal = kind.journalOwner(owner, evidence);
+  if (!('realm' in journal)) return journal.tenantId;
+  if (kind.realm === 'platform-tenant') return (evidence as unknown as PlatformTenantEvidence).tenantId;
+  return undefined;
+}
+
 export function captureTenantWriteSource(input: TenantWriteSource): TenantWriteSource {
   if (!sources.has(input)) throw new TenantWriteFailure('not_applied');
   return input;
@@ -724,7 +742,7 @@ export async function openPostgresTenantWriteSource(
   branding = false,
   readAudit = false,
 ): Promise<TenantWriteSource> {
-  let adapter: PostgresAdapter | undefined;
+  let adapter: PostgresAdapter | undefined, platformAdapter: PostgresAdapter | undefined;
   try {
     const owned = captureTenantOwnership(ownership);
     const owner = captureTenantData(store);
@@ -739,6 +757,10 @@ export async function openPostgresTenantWriteSource(
     )
       return denyTenant();
     const locator = postgresTenantLocator(url);
+    /* Under the row-security backstop (tenantConnections.ts) this writer runs as the runtime role, which the pinned
+       policy binds, so every write says its tenant (backstopTenantOf); the platform realm's own commands, whose scope
+       crosses tenants by design (composePlatformReadScope), run on a second writer as the owner. */
+    const backstop = tenantBackstop(url);
     const first = (adapter = tenantAdapter(url, 'Private tenant writer'));
     const physical = new Map(Object.entries(owned.resources));
     const ids = new Set(physical.values());
@@ -773,7 +795,7 @@ export async function openPostgresTenantWriteSource(
       await assertPostgresTenantStore(client, owner);
       await assertPostgresTenantUniqueKeys(client, owned);
       const state = JSON.stringify({
-        definitions: await attestPostgresTenantRelations(client, owned),
+        definitions: await attestPostgresTenantRelations(client, owned, backstop ? { rowSecurity: { role: backstop.role } } : {}),
         writable: [...ids].filter((id) => catalog.writable.has(id)).sort(),
       });
       if (baseline !== undefined && state !== baseline) return denyTenant();
@@ -786,7 +808,8 @@ export async function openPostgresTenantWriteSource(
     ): PostgresTransactionVerifier => Object.assign(verify, ahead ? { pin, ahead } : { pin });
     const empty = Object.fromEntries([...ids].map((id) => [id, false]));
     // As on SQLite: at opening, and again at each reopen after an uncertain write.
-    const prepare = async (dbAdapter: PostgresAdapter, receipt?: string): Promise<boolean | undefined> => {
+    /* `shared`: the owner's writer, which records live changes for the runtime writer's one hub (shareTenantLive). */
+    const prepare = async (dbAdapter: PostgresAdapter, receipt?: string, shared = false): Promise<boolean | undefined> => {
       let committed: boolean | undefined;
       await dbAdapter.scopeVerifiedTransaction(
         empty,
@@ -798,12 +821,15 @@ export async function openPostgresTenantWriteSource(
                 .length > 0;
         }),
         async () => {},
+        // Every tenant table is false here, and the journal and store carry no policy: no tenant to name.
+        { tenant: null },
       );
       if (history) await bindTenantRecordHistoryStore(dbAdapter, history, 'postgres');
       if (notices) await bindTenantInboxStore(dbAdapter, notices, 'postgres');
       if (branding) await bindTenantBrandingStore(dbAdapter, 'postgres');
       if (readAudit) await bindTenantReadAuditStore(dbAdapter);
-      await bindTenantLive(dbAdapter, owned, url);
+      if (shared) await shareTenantLive(dbAdapter, owned);
+      else await bindTenantLive(dbAdapter, owned, url);
       return committed;
     };
     await prepare(first);
@@ -835,8 +861,36 @@ export async function openPostgresTenantWriteSource(
         }
       },
     });
+    /* The owner's writer, under the backstop only: its own lifecycle, so an uncertain platform write pauses it and
+       not the tenants' writer, and the same queue, so shutdown drains both behind every admitted write. */
+    let ownerLife: typeof life | undefined;
+    if (backstop) {
+      const ownerFirst = (platformAdapter = tenantAdapter(url, 'Private tenant platform writer', false, 'owner'));
+      await prepare(ownerFirst, undefined, true);
+      ownerLife = writerLifecycle({
+        owner,
+        name: `${owner.appId}'s tenant platform writer (source "${owner.source.id}")`,
+        paused: `${owner.appId}/${owner.source.id}/owner`,
+        initial: ownerFirst,
+        drain: (work) => queue.run('all', work),
+        release: (handle) => unbindTenantLive(handle, owned),
+        reopen: async (receipt) => {
+          const next = tenantAdapter(url, 'Private tenant platform writer', false, 'owner');
+          standing = undefined;
+          try {
+            return { handle: next, committed: await prepare(next, receipt, true) };
+          } catch (error) {
+            await next.close().catch(() => {});
+            throw error;
+          }
+        },
+      });
+    }
     const closing = life.closing;
-    const close = life.close;
+    /* One promise for every caller, as the lifecycle's own close is: a second close waits on the first. */
+    const both = ownerLife;
+    let closingBoth: Promise<void> | undefined;
+    const close = both ? (): Promise<void> => (closingBoth ??= Promise.all([life.close(), both.close()]).then(() => {})) : life.close;
     const transaction = <Evidence extends TenantWriteEvidence, T>(
       kind: TenantWriteKind<Evidence, object>,
       command: boolean,
@@ -849,16 +903,23 @@ export async function openPostgresTenantWriteSource(
     ): Promise<T> => {
       let input: { readonly evidence: Evidence; readonly rows: RowScope };
       let tables: readonly string[] | undefined;
+      let tenant: string | undefined;
+      let lane: typeof life;
       try {
         if (closing()) return paused();
         if (typeof run !== 'function' || (assertActive !== undefined && typeof assertActive !== 'function')) return denyTenant();
         input = kind.capture(evidence, rows, owned);
         tables = footprintOf(owned, command, footprint);
+        tenant = backstopTenantOf(kind, owner, input.evidence);
+        lane = tenant === undefined && ownerLife ? ownerLife : life;
+        if (lane.closing()) return paused();
       } catch (error) {
         return Promise.reject(tenantWriteFailed('not_applied', error));
       }
+      // Left out where undefined: the owner's writer bypasses the policy, and without a backstop nothing reads it.
+      const scoped = tenant !== undefined ? { tenant } : {};
       return queue.run([], async () => {
-        const dbAdapter = life.handle();
+        const dbAdapter = lane.handle();
         let receipt: string | undefined;
         let fenced: { transaction: object; rollbacks: number } | undefined;
         let entered = false,
@@ -870,13 +931,13 @@ export async function openPostgresTenantWriteSource(
         // Shape validation happens inside the classified failure boundary.
         let lastTime = input.evidence?.verifiedAt;
         const live = (): number => {
-          if (closing()) return paused();
+          if (lane.closing()) return paused();
           if (assertActive) synchronous(assertActive());
           const instant = now();
           if (isPromise(instant)) void Promise.prototype.then.call(instant, undefined, () => {});
           // The source's clock can synchronously retire the request owner.
           if (assertActive) synchronous(assertActive());
-          if (closing()) return paused();
+          if (lane.closing()) return paused();
           if (
             typeof instant !== 'number' ||
             !Number.isSafeInteger(instant) ||
@@ -1102,8 +1163,9 @@ export async function openPostgresTenantWriteSource(
                   kind.journalOwner(owner, input.evidence),
                   work,
                   physicalBound,
+                  scoped,
                 )
-              : dbAdapter.scopeVerifiedTransaction(physicalScope, verify, (records) => work(records)),
+              : dbAdapter.scopeVerifiedTransaction(physicalScope, verify, (records) => work(records), scoped),
           );
           completed = true;
           committed(owner, wrote);
@@ -1123,7 +1185,7 @@ export async function openPostgresTenantWriteSource(
             (error instanceof CommandTransactionFailure && error.outcome === 'unknown') ||
             (attempted && !entered && !refusedCheckout(error))
           )
-            life.pause(receipt);
+            lane.pause(receipt);
           if (moved && !completed && kind.moved) throw kind.moved();
           throw tenantWriteFailed(unknown ? 'unknown' : 'not_applied', error);
         }
@@ -1187,6 +1249,9 @@ export async function openPostgresTenantWriteSource(
     return source;
   } catch (error) {
     try {
+      // The owner's writer opens after the runtime's has bound live sync: let that go with it.
+      if (platformAdapter && adapter) await unbindTenantLive(adapter, ownership);
+      await platformAdapter?.close();
       await adapter?.close();
     } catch {
       /* No writer capability is published. */

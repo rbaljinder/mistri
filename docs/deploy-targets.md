@@ -108,7 +108,8 @@ workers or child processes. Inside it, beside the HTTP server:
 - **The analytics sink**, when configured.
 - **Write lanes**: per database, `read + write + 1` PostgreSQL connections at
   most for the App's (or a tenant App's) one request pool, nine by default, and
-  five more for the server's stores when it declares any, and the sign-in
+  five more for the server's stores when it declares any, five more on the
+  owner's URL under a tenant App's row-security backstop, and the sign-in
   store's own pool (`MISTRI_AUTH_POOL`, default 4) when it is on the same
   database (`docs/postgresql.md`, "Sizing" and "Per database, per process").
 

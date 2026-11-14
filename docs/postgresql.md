@@ -220,6 +220,7 @@ the cores, 4 to 16, and `R` is as many as `W`):
 | --- | --- | --- |
 | The App's adapter (its record history, inbox, branding and live stores share it) | always, one per connection | `R + W + 1` |
 | A tenant App's request pool, in place of the adapter (its reader, discovery, writer, administration and support share it) | `auth.rows: "tenant"` | `R + W + 1` |
+| A tenant App's owner pool ([row-security backstop](#row-security-backstop)), on the owner's URL | `"backstop": "rls"` | 5 |
 | Live sync's LISTEN | always | 1 |
 | The server's stores: jobs, workflows and event deliveries, decisions, effects, the email outbox, integrations and inbound deliveries, the API event feed, the assistant | any of them is declared (the assistant's opens on its first request) | 5 |
 | The jobs host's LISTEN | the jobs module declares a job or workflow | 1 |
@@ -641,6 +642,93 @@ and, live-gated, on PostgreSQL; and `test/postgres-tenant-http.test.ts`, a
 hostile two-tenant HTTP proof through startup, native auth and administration.
 The tenant suites work in databases of their own beside `TABLEWALK_TEST_PG`,
 created once, so the role needs CREATEDB.
+
+### Row-security backstop
+
+Everything above is the tenant scope mistri writes into each statement. A
+tenant App on PostgreSQL may put the database's row-level security behind it,
+so a statement the scope failed to bound still reads and writes one tenant's
+rows. It is opt-in, per connection, and off by default; off, nothing below is
+sent or opened.
+
+```json
+{ "name": "business-db", "url": "${RUNTIME_URL}", "owner": "${OWNER_URL}", "backstop": "rls" }
+```
+
+`url` (and every `replicas` URL) connects as the **runtime role**, which owns
+nothing and is bound by the policy; `owner` connects as the **owner role**,
+which owns the tables, migrated them, and is not bound. Both keys or neither;
+either is refused on SQLite or an HTTP source (`backstopOf`,
+`packages/engine/src/server/poolConfig.ts`). The database setup, with the
+owner running the migrations of [Tenant Apps on PostgreSQL](tenant-apps.md#tenant-apps-on-postgresql):
+
+```sql
+CREATE ROLE app_runtime LOGIN NOBYPASSRLS;           -- not a member of the owner
+GRANT CONNECT ON DATABASE business TO app_runtime;
+GRANT USAGE ON SCHEMA public, mistri TO app_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public, mistri TO app_runtime;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public, mistri TO app_runtime;
+-- every tenant-owned table, by its ownership column:
+ALTER TABLE public.lead ENABLE ROW LEVEL SECURITY;  -- not FORCE
+CREATE POLICY mistri_tenant ON public.lead TO app_runtime
+  USING (tenant = NULLIF(current_setting('mistri.tenant', true), ''))
+  WITH CHECK (tenant = NULLIF(current_setting('mistri.tenant', true), ''));
+```
+
+- **The pinned policy.** Each tenant-owned table has row security enabled,
+  not forced, and exactly one policy: `mistri_tenant`, permissive, for every
+  command, to the runtime role alone, with that expression over its ownership
+  column in both `USING` and `WITH CHECK`. A table no tenant owns has no row
+  security and no policy. Any other shape — a second policy, `USING (true)`,
+  another role, `FORCE` — refuses the source, as row security always did
+  without the backstop (`attestBackstop`,
+  `packages/mistri/src/server/tenant/tenantPostgresCatalog.ts`). PostgreSQL 15
+  or later, no `SECURITY DEFINER` function in a visible schema, and every view
+  over a tenant table `security_invoker`: each of those would read past the
+  policy.
+- **The tenant is set per transaction.** A runtime-role transaction that reads
+  or writes for a tenant carries `SET LOCAL mistri.tenant = '<id>'` in its
+  `BEGIN` message, so it costs no round trip and ends with the transaction; one
+  that reads no tenant's rows (the store's own tables) sets nothing, and the
+  policy then matches no tenant row. A runtime-role transaction that says
+  neither is refused before anything is sent (`tenantSet`,
+  `packages/engine/src/adapters/postgres.ts`): a path that forgot to say its
+  tenant fails loudly instead of quietly reading nothing.
+- **What runs as the owner.** What crosses tenants by design: a public address
+  resolved, the platform realm's reads and its commands (`platform`, and
+  `intake` and `service` at the platform place), every tenant's names for the
+  operator, tenant administration and support. Everything a member, a link or
+  a support session does for one tenant runs as the runtime role with that
+  tenant set; a `platform-tenant` command runs there too, with the tenant its
+  evidence names. Owner reads stay on the primary.
+- **Startup attests the roles** before any source opens (`tenantEnrollment.ts`,
+  `attestPostgresBackstopRoles`): `url` and `owner` reach the same database as
+  two roles; the runtime role is not a superuser, not `BYPASSRLS`, not a member
+  of the owner and owns no tenant table (a table's owner is exempt from its
+  policy without `FORCE`); every replica connects as the role `url` does. Each
+  refusal names its reason. The stores' sole-ownership attestation then takes
+  the owner's view and allows the runtime role its `SELECT`, `INSERT`,
+  `UPDATE`, `DELETE` and sequence `USAGE`, and nothing more
+  (`postgresRuntimeSchemaProblems`).
+- **Connections.** The owner's pool is two readers, two writers and the
+  background writer on the owner's URL, shared by everything that runs as the
+  owner: five more than the [sizing table](#writers-one-for-the-database-browser-a-pool-for-an-app)
+  counts. The request pool on `url` is unchanged.
+
+Search indexing and `--reindex` read as the owner. The connection registry
+connects as the runtime role and sets no tenant, so through it they would see no
+tenant rows, and the index would drop a record's document on every write. The
+index is cross-tenant by design, and each document keeps its row's tenant, which
+every search still filters on. A non-tenant App, or the Workbench, on a
+connection under the backstop refuses to start: it would browse the runtime
+role's empty view of every tenant table. Point it at the owner's URL, or remove
+`"backstop"`.
+
+Verification: `test/tenant-backstop.test.ts` (configuration, the refusal of an
+unsaid tenant, routing) and, live-gated, `test/postgres-tenant-backstop.test.ts`
+(the role attestation, a tenant reading only its own rows, `42501` on a write
+carrying another tenant's value, and search indexing and the owner reader
+crossing tenants); `test/tenant-backstop-search.test.ts` holds the two refusals.
 
 ## Authentication store
 

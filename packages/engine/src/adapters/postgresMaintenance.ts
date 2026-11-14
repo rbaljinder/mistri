@@ -101,6 +101,36 @@ export async function ensurePostgresRuntimeSchema(client: PgQuery): Promise<bool
   return true;
 }
 
+/* The tenant backstop's role pairs, runtime to owner (declareBackstopRoles), once a tenant App's startup has
+   attested them: none without the backstop, and then every statement below is the one it was. */
+const backstopRoles = new Map<string, string>();
+
+/**
+ * Under the tenant row-security backstop, the App connects as `runtime` and its stores belong to `owner`, which
+ * migrated them. Declared once the startup attestation has proved the pair (two roles, the runtime neither
+ * superuser, BYPASSRLS nor a member of the owner): from then on a store attestation on either role's connection
+ * takes the owner's view of ownership and allows the runtime its DML (postgresRuntimeSchemaProblems). A runtime paired with a second, different owner is refused: a store has one owner.
+ */
+export function declareBackstopRoles(runtime: string, owner: string): void {
+  if (typeof runtime !== 'string' || !runtime || typeof owner !== 'string' || !owner || runtime === owner)
+    throw new TypeError('A backstop pairs two role names.');
+  const held = backstopRoles.get(runtime);
+  if (held !== undefined && held !== owner) throw new Refusal(`The role "${runtime}" already runs as the runtime of another owner.`);
+  backstopRoles.set(runtime, owner);
+}
+
+/** Forget every declared pair: a process's tenant pools closing (tenantConnections.forgetTenantPools). */
+export function forgetBackstopRoles(): void {
+  backstopRoles.clear();
+}
+
+/* The pair the connecting role belongs to, as SQL over two text-array parameters at `at`: a CTE `bk(rt, owner)`
+   holding it, or nothing. */
+const backstopPair = (at: number) =>
+  `bk AS (SELECT p.rt, p.owner FROM pg_catalog.unnest($${at}::text[], $${at + 1}::text[]) AS p(rt, owner)
+           WHERE CURRENT_USER IN (p.rt, p.owner) LIMIT 1)`;
+const backstopValues = () => [[...backstopRoles.keys()], [...backstopRoles.values()]];
+
 /* A role the store may belong to: the connecting role itself, or a role
    whose privileges it inherits, so a deployment can migrate as one member
    of an owning group and run as another. A superuser is an implicit member
@@ -141,10 +171,18 @@ export async function postgresRuntimeSchemaProblems(
   /* `rt.oid` is null without a runtime role, so nothing, PUBLIC included, is the runtime's and every grant counts as before. */
   const runtime = (grantee: string, privilege: string, kinds: string) =>
     `COALESCE(${grantee} = rt.oid AND ${privilege} IN (${kinds}), false)`;
+  /* Under a declared backstop pair (declareBackstopRoles) the checks take the owner's view, on either role's
+     connection, and the runtime is the pair's unless the caller named one. */
+  const paired = backstopRoles.size > 0;
+  const roles = paired
+    ? `${backstopPair(7)},
+          me AS (SELECT r.oid, r.rolsuper FROM pg_catalog.pg_roles r WHERE r.rolname = COALESCE((SELECT owner FROM bk), CURRENT_USER)),
+          rt AS (SELECT (SELECT r.oid FROM pg_catalog.pg_roles r WHERE r.rolname = COALESCE($6::text, (SELECT bk.rt FROM bk))) AS oid),`
+    : `me AS (SELECT r.oid, r.rolsuper FROM pg_catalog.pg_roles r WHERE r.rolname = CURRENT_USER),
+          rt AS (SELECT (SELECT r.oid FROM pg_catalog.pg_roles r WHERE r.rolname = $6::text) AS oid),`;
   const row = (
     await client.query(
-      `WITH me AS (SELECT r.oid, r.rolsuper FROM pg_catalog.pg_roles r WHERE r.rolname = CURRENT_USER),
-          rt AS (SELECT (SELECT r.oid FROM pg_catalog.pg_roles r WHERE r.rolname = $6::text) AS oid),
+      `WITH ${roles}
           ns AS (SELECT n.oid, n.nspowner, n.nspacl FROM pg_catalog.pg_namespace n WHERE n.nspname = $1),
           acl AS (SELECT a.grantee, a.privilege_type FROM ns, pg_catalog.aclexplode(COALESCE(ns.nspacl, pg_catalog.acldefault('n', ns.nspowner))) a),
           control AS (SELECT DISTINCT c.relowner AS role FROM ns, pg_catalog.pg_class c
@@ -190,6 +228,7 @@ export async function postgresRuntimeSchemaProblems(
         RUNTIME_CONTROL_PREFIXES.map((each) => `${each.replaceAll('_', '\\_')}%`),
         RUNTIME_SCHEMA_FUNCTIONS,
         options.runtime ?? null,
+        ...(paired ? backstopValues() : []),
       ],
     )
   ).rows[0] as
