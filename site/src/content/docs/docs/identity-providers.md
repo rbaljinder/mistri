@@ -48,7 +48,7 @@ The App names the provider and `mistri.json` says where it is. Register `<public
 Every sign-in is a code flow with PKCE, state and nonce. The server checks the ID token's signature, issuer, audience, `azp`, age (a minute of skew) and nonce. A person is the issuer's subject, never an email, and only the ID token is kept.
 
 - **Roles.** `claims: { <claim or dotted.path>: [values] }` gives a role at each sign-in, and counts only in a session that provider opened: a password session of the same account keeps only the roles set by hand. A sign-in that leaves no declared role is refused.
-- **Whose claims.** With more than one provider, say which one a rule reads: `claims: { provider: oidc('workforce'), groups: ['admins'] }`. A rule without `provider` is read from any of them, and `check` warns where there is more than one.
+- **Whose claims.** A rule is read only from its provider's sign-ins. With one identity provider, a rule without `provider` is that one's. With more than one, say which: `claims: { provider: oidc('workforce'), groups: ['admins'] }`, or a list where the same role comes from several, `provider: [oidc('workforce'), saml('corp')]`. A rule that does not say is refused.
 - **Sign-up.** `'invite'` makes no account at a first sign-in, `'open'` does, and `{ providers, domains }` does through those providers or for a verified email in those domains.
 - **Linking.** An address links to an existing account only if verified (`email_verified`, or `verifiedEmails`).
 - **Step-up.** Opening a support session or making a tenant API token needs a sign-in from the last five minutes (a host's [embed sign-in](/docs/embed-sign-in/) never counts); a provider sign-in counts only from its `auth_time`, and, where the entry lists `mfa`, only if it shows more than one factor.
@@ -64,7 +64,7 @@ Recipes: **Entra ID** issuer `https://login.microsoftonline.com/<tenant id>/v2.0
 
 - `[identity-provider-unknown]` or `[identity-provider-kind]` → add an entry with that name to `mistri.json`: `"kind": "oidc"` for `oidc('…')`, `"kind": "saml"` for `saml('…')`.
 - `[claim-without-provider]`: a role has `claims` and no `oidc('…')` or `saml('…')` provider → add the provider, or drop `claims`; `[claim-grants-nothing]` → give the role a grant, or drop it.
-- `[claim-provider-unknown]` → `claims.provider` names one of the App's `providers`; `[claim-any-provider]` (warning) → add `provider` to the role's `claims`.
+- `[claim-provider-unknown]` → `claims.provider` names one of the App's `providers`; `[claim-any-provider]` → with more than one identity provider, add `provider` to the role's `claims`.
 - `[claim-in-tenant-app]` → in a tenant App, grant the membership in the tenant store instead.
 
 ## Related

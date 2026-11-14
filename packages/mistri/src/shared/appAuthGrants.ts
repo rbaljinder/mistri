@@ -480,17 +480,20 @@ function parseSignUp(raw: unknown, at: string, providers: AppProvider[]): AppSig
 }
 
 /** `claims`: `{ <claim>: [values] }`, the claim a name or a dotted path into one (`realm_access.roles`), and
-    `provider`, the one named identity provider whose claims these are (0.8.5 I1). */
+    `provider`, the named identity provider whose claims these are, or a list of them (0.8.5 I1). */
 function claimRule(raw: unknown, here: string): AppClaimRule {
   if (!isRecord(raw) || !Object.keys(raw).some((key) => key !== 'provider')) {
     throw new Error(`${here} must be an object of claim → values, like { groups: ['underwriters'] } or { roles: ['Underwriter'] }.`);
   }
   const { provider, ...claims } = raw;
-  if (provider !== undefined && (typeof provider !== 'string' || !NAMED_PROVIDER.test(provider))) {
+  const named = (value: unknown) => typeof value === 'string' && NAMED_PROVIDER.test(value);
+  if (provider !== undefined && !named(provider) && !(Array.isArray(provider) && provider.length > 0 && provider.every(named))) {
     throw new Error(
-      `${here} has a "provider" that is not a named identity provider: say the one whose claims these are, like oidc('workforce') or saml('corp').`,
+      `${here} has a "provider" that is not a named identity provider: say the one whose claims these are, like oidc('workforce') or saml('corp'), ` +
+        `or a list of them, like [oidc('workforce'), saml('corp')].`,
     );
   }
+  if (Array.isArray(provider) && new Set(provider).size !== provider.length) throw new Error(`${here}, "provider" names a provider twice.`);
   const match = Object.fromEntries(
     Object.entries(claims).map(([claim, values]) => {
       if (!claim.trim() || claim.trim() !== claim || claim.length > 200 || /\p{Cc}/u.test(claim) || RESERVED_NAMES.has(claim)) {
@@ -507,14 +510,18 @@ function claimRule(raw: unknown, here: string): AppClaimRule {
       return [claim, [...values] as string[]];
     }),
   );
-  return provider === undefined ? { match } : { provider: provider as AppProvider, match };
+  if (provider === undefined) return { match };
+  /* A list of one is that one; a longer list is kept sorted, so the authority file says it one way. */
+  const list = [provider as AppProvider | AppProvider[]].flat();
+  return { provider: list.length === 1 ? list[0]! : list.sort(), match };
 }
 
 /**
  * A mapping from claims is identity authority, judged where the whole policy
  * is known: only an App that signs in through a named identity provider has
  * claims to read, a tenant App's roles are its members' memberships and
- * never a claim, and a role the claims give must grant something.
+ * never a claim, a rule reads one provider's claims (bound here when the
+ * App has only one), and a role the claims give must grant something.
  */
 function claimMappingProblems(roles: Record<string, AppRoleGrant>, providers: readonly AppProvider[], rows: AppRows, at: string): void {
   const mapped = Object.entries(roles).filter(([, grant]) => grant.claims !== undefined);
@@ -531,13 +538,29 @@ function claimMappingProblems(roles: Record<string, AppRoleGrant>, providers: re
       `${at}, role "${first}" has "claims" [claim-without-provider]: roles from claims need an identity provider in "providers", like oidc('workforce') or saml('corp').`,
     );
   }
+  const named = providers.filter((provider) => NAMED_PROVIDER.test(provider));
   for (const [name, grant] of mapped) {
     const from = grant.claims!.provider;
-    if (from !== undefined && !providers.includes(from)) {
-      throw new Error(
-        `${at}, role "${name}" reads its claims from "${from}" [claim-provider-unknown], which "providers" does not name. ` +
-          `Name one of: ${providers.filter((provider) => NAMED_PROVIDER.test(provider)).join(', ')}.`,
-      );
+    /* A rule is read from one provider's sign-in, never from any: a claim of the same name from another identity
+       provider (a contractors' IdP that also says `groups`) must not give the role (0.8.5 I1). With one provider
+       the rule is that one's, bound here so the runtime never meets an unbound rule; with several, it must say. */
+    if (from === undefined) {
+      if (named.length > 1) {
+        throw new Error(
+          `${at}, role "${name}" has "claims" and no "provider" [claim-any-provider], and the App signs in through ${named.join(', ')}: ` +
+            `a claim of the same name from any of them would give the role. Say whose claims these are, like ` +
+            `claims: { provider: ${named[0].replace(/^(oidc|saml):(.*)$/, "$1('$2')")}, … }.`,
+        );
+      }
+      roles[name] = { ...grant, claims: { provider: named[0], match: grant.claims!.match } };
+    } else {
+      const unknown = [from].flat().find((provider) => !providers.includes(provider));
+      if (unknown !== undefined) {
+        throw new Error(
+          `${at}, role "${name}" reads its claims from "${unknown}" [claim-provider-unknown], which "providers" does not name. ` +
+            `Name one of: ${named.join(', ')}.`,
+        );
+      }
     }
     const some = (scope: boolean | string[]) => scope === true || (Array.isArray(scope) && scope.length > 0);
     const grants =

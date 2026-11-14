@@ -253,11 +253,12 @@ interface AppJustInTime {
 }
 export type AppSignUp = (typeof SIGN_UP_MODES)[number] | AppJustInTime;
 /** A role an identity provider's claims give: a claim (a name, or a dotted path into one) and the values that
-    mean the role, in `match`. Any listed value of any listed claim gives it. With `provider` (authored
-    `claims: { provider: oidc('workforce'), … }`), only a sign-in through that provider reads it; without, any
-    of the App's named providers does. */
+    mean the role, in `match`. Any listed value of any listed claim gives it, and only in a sign-in through
+    `provider` (authored `claims: { provider: oidc('workforce'), … }`), or one of a list of them where the same
+    role comes from several (`provider: [oidc('workforce'), saml('corp')]`). An App with one identity provider may
+    leave it out and loading binds the rule to that one; an App with several must say (`claim-any-provider`). */
 export interface AppClaimRule {
-  provider?: AppProvider;
+  provider?: AppProvider | AppProvider[];
   match: Record<string, string[]>;
 }
 /** Row scoping within the role grants: every row, a server-defined row policy, or tenant membership. */

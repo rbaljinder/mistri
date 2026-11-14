@@ -1214,9 +1214,10 @@ export interface AppRoleGrant<Resource extends string = string, Role extends str
   /** The identity provider's claims that give this role, re-read at every sign-in through an `oidc(...)` provider:
       `{ groups: ['8f2c…'] }`, `{ roles: ['Underwriter'] }`, `{ 'realm_access.roles': ['underwriter'] }`. Any listed
       value of any listed claim gives it; a sign-in whose claims give no role is refused. Not in a tenant App.
-      `provider` names the one provider whose claims these are, `{ provider: oidc('workforce'), groups: ['admins'] }`:
-      a sign-in through another never reads the rule. Without it any of the App's providers does, and `check` warns
-      where the App has more than one. */
+      `provider` names the provider whose claims these are, `{ provider: oidc('workforce'), groups: ['admins'] }`, or
+      a list where the same role comes from several, `{ provider: [oidc('workforce'), saml('corp')], … }`: a sign-in
+      through any other never reads the rule. An App with one identity provider may leave it out; with several,
+      loading refuses a rule that does not say (`claim-any-provider`). */
   claims?: AppRoleClaims;
   /** A role only a service principal holds (a jobs module's `principals`, an App API token), never a person:
       `{ integration: { service: true, read: true, commands: ['recordCreditResult'] } }`. A free-form page is offered
@@ -1225,9 +1226,9 @@ export interface AppRoleGrant<Resource extends string = string, Role extends str
 }
 
 /** A role's claims: each claim (a name, or a dotted path into one) with the values that give the role, and
-    optionally the one named provider they are read from. `provider` is not a claim; any other key is. */
+    the named provider (or providers) they are read from. `provider` is not a claim; any other key is. */
 export type AppRoleClaims = {
-  readonly provider?: `oidc:${string}` | `saml:${string}`;
+  readonly provider?: `oidc:${string}` | `saml:${string}` | readonly (`oidc:${string}` | `saml:${string}`)[];
   readonly [claim: string]: readonly string[] | `oidc:${string}` | `saml:${string}` | undefined;
 };
 

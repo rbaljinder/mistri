@@ -2658,9 +2658,22 @@
           "minProperties": 1,
           "properties": {
             "provider": {
-              "type": "string",
-              "pattern": "^(oidc|saml):[a-z][a-z0-9-]{0,39}$",
-              "description": "The one named identity provider whose claims these are, oidc('workforce') or saml('corp'): a sign-in through another never reads the rule. Without it any of the App's providers does, and check warns where there are several."
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(oidc|saml):[a-z][a-z0-9-]{0,39}$"
+                },
+                {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(oidc|saml):[a-z][a-z0-9-]{0,39}$"
+                  }
+                }
+              ],
+              "description": "The named identity provider whose claims these are, oidc('workforce') or saml('corp'), or a list of them where the same role comes from several: a sign-in through any other never reads the rule. An App with one identity provider may leave it out and the rule is that one's; with several, loading refuses a rule that does not say [claim-any-provider]."
             }
           },
           "additionalProperties": {
@@ -2672,7 +2685,7 @@
               "minLength": 1
             }
           },
-          "description": "The identity provider's claims that give this role: { <claim, or a dotted path into one>: [values] }, and optionally provider, the one provider they are read from. Re-read at every sign-in; not in a tenant App."
+          "description": "The identity provider's claims that give this role: { <claim, or a dotted path into one>: [values] }, and provider, the provider (or list of them) they are read from. Re-read at every sign-in; not in a tenant App."
         },
         "service": {
           "const": true,

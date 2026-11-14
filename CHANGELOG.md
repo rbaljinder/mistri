@@ -5,6 +5,10 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.57
+
+- **A role's claims are read only from the provider they name.** A `claims` rule without `provider` used to be read from any of an App's identity providers, so a group named `admins` at one IdP gave the role to anyone another IdP put in a group of that name (`check` only warned). Now an App with one identity provider binds such a rule to it, an App with several refuses to load it (`claim-any-provider`, now a problem), and a sign-in through any provider the rule does not name never reads it. Where the same role comes from several, `provider` takes a list: `claims: { provider: [oidc('workforce'), saml('corp')], groups: ['admins'] }`. Every provider in it must be one `auth.providers` names (`claim-provider-unknown`).
+
 ## 1.0.0-rc.56
 
 - **One-time codes charge each try before comparing it.** A burst of guesses typed together used to read the count before any wrote it, so more than five could be judged against one code. Every try, right or wrong, now takes its own number from one atomic count first, and a try past five is refused unjudged. A right code within the five still opens, once.
