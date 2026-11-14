@@ -1,8 +1,8 @@
 import { type ChildProcess } from 'node:child_process';
+import { withFreePort } from './support/freePort';
 import { spawn } from './support/spawned';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -97,41 +97,39 @@ const children: ChildProcess[] = [];
 
 /** One tablewalk serving `app` on a free port; its origin. */
 async function serve(config: string, app: string): Promise<string> {
-  const reservation = createServer();
-  await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((done) => reservation.close(() => done()));
-  const started = spawn(
-    process.execPath,
-    ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port)],
-    {
-      cwd: resolve('.'),
-      env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-  children.push(started);
-  let log = '';
-  started.stdout!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  started.stderr!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  await new Promise<void>((done, fail) => {
-    const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 30_000);
-    started.stdout!.on('data', () => {
-      if (log.includes('Listening on ')) {
+  return withFreePort(async (port) => {
+    const started = spawn(
+      process.execPath,
+      ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port)],
+      {
+        cwd: resolve('.'),
+        env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    children.push(started);
+    let log = '';
+    started.stdout!.on('data', (chunk) => {
+      log += String(chunk);
+    });
+    started.stderr!.on('data', (chunk) => {
+      log += String(chunk);
+    });
+    await new Promise<void>((done, fail) => {
+      const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 30_000);
+      started.stdout!.on('data', () => {
+        if (log.includes('Listening on ')) {
+          clearTimeout(timer);
+          done();
+        }
+      });
+      started.once('exit', () => {
         clearTimeout(timer);
-        done();
-      }
+        fail(new Error(`The fixture exited: ${log}`));
+      });
     });
-    started.once('exit', () => {
-      clearTimeout(timer);
-      fail(new Error(`The fixture exited: ${log}`));
-    });
+    return `http://127.0.0.1:${port}`;
   });
-  return `http://127.0.0.1:${port}`;
 }
 
 /** Each step's label as drawn: its words, the lines it takes, and whether its box cuts it or the window does. */

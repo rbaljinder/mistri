@@ -1,22 +1,18 @@
 /** Isolated real-App navigation targets. Intentionally separate from shared preview listeners. */
-import { createServer } from 'node:http';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, test } from './support/harness.js';
 import { startConfiguredSuite } from '../packages/mistri/src/server/cli/suiteCommand.js';
+import { withFreePort } from './support/freePort';
 import { changeSuiteGrant } from '../packages/mistri/src/server/cli/suiteGrant.js';
 
 test('grouped nav targets navigate fresh documents at target mounts and disappear after revoke', async ({ page, context }) => {
   const directory = mkdtempSync(join(tmpdir(), 'tw-nav-targets-'));
   let suite: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
   try {
-    const reservation = createServer();
-    await new Promise<void>((resolve) => reservation.listen(0, '127.0.0.1', resolve));
-    const port = (reservation.address() as { port: number }).port;
-    await new Promise<void>((resolve) => reservation.close(() => resolve()));
-    const apps = [];
+    const apps: Array<{ id: string; directory: string; config: string; mount: string }> = [];
     for (const id of ['alpha', 'beta']) {
       const home = join(directory, id);
       mkdirSync(home);
@@ -54,23 +50,25 @@ test('grouped nav targets navigate fresh documents at target mounts and disappea
       apps.push({ id, directory: `./${id}`, config: `./${id}/connections.json`, mount: id === 'alpha' ? '/desk' : '/' });
     }
     const file = join(directory, 'suite.json');
-    writeFileSync(
-      file,
-      JSON.stringify({
-        port,
-        basePath: '/tools',
-        apps,
-        identity: {
-          id: 'shared',
-          name: 'Shared',
-          store: './identity.db',
-          grants: './grants.db',
-          environment: { BETTER_AUTH_SECRET: 'SECRET' },
-        },
-      }),
-    );
     const environment = { SECRET: 'nav-target-browser-test-secret-longer-than-thirty-two-characters' };
-    suite = await startConfiguredSuite(file, environment);
+    suite = await withFreePort(async (port) => {
+      writeFileSync(
+        file,
+        JSON.stringify({
+          port,
+          basePath: '/tools',
+          apps,
+          identity: {
+            id: 'shared',
+            name: 'Shared',
+            store: './identity.db',
+            grants: './grants.db',
+            environment: { BETTER_AUTH_SECRET: 'SECRET' },
+          },
+        }),
+      );
+      return startConfiguredSuite(file, environment);
+    });
     const origin = suite.publicURL;
     const signup = await page.request.post(`${origin}/tools/api/auth/sign-up/email`, {
       headers: { origin },

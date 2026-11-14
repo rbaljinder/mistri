@@ -1,12 +1,12 @@
 import { SLOW_MS } from './support/budgets';
 /** Checked authored CTAs across real independent App hosts and their external mounts. */
-import { createServer } from 'node:http';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, test } from './support/harness';
 import { startConfiguredSuite } from '../packages/mistri/src/server/cli/suiteCommand';
+import { withFreePort } from './support/freePort';
 import { changeSuiteGrant } from '../packages/mistri/src/server/cli/suiteGrant';
 
 test('notes and headlines use checked mounted links, fresh grants and document navigation', async ({ page, context }) => {
@@ -16,11 +16,7 @@ test('notes and headlines use checked mounted links, fresh grants and document n
   const directory = mkdtempSync(join(tmpdir(), 'tw-suite-links-'));
   let suite: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
   try {
-    const reservation = createServer();
-    await new Promise<void>((resolve) => reservation.listen(0, '127.0.0.1', resolve));
-    const port = (reservation.address() as { port: number }).port;
-    await new Promise<void>((resolve) => reservation.close(() => resolve()));
-    const apps = [];
+    const apps: Array<{ id: string; directory: string; config: string; mount: string }> = [];
     for (const id of ['alpha', 'beta']) {
       const home = join(directory, id);
       mkdirSync(home);
@@ -81,23 +77,25 @@ test('notes and headlines use checked mounted links, fresh grants and document n
       apps.push({ id, directory: `./${id}`, config: `./${id}/connections.json`, mount: id === 'alpha' ? '/desk' : '/' });
     }
     const file = join(directory, 'suite.json');
-    writeFileSync(
-      file,
-      JSON.stringify({
-        port,
-        basePath: '/tools',
-        apps,
-        identity: {
-          id: 'shared',
-          name: 'Shared',
-          store: './identity.db',
-          grants: './grants.db',
-          environment: { BETTER_AUTH_SECRET: 'SECRET' },
-        },
-      }),
-    );
     const environment = { SECRET: 'suite-links-browser-test-secret-longer-than-thirty-two-characters' };
-    suite = await startConfiguredSuite(file, environment);
+    suite = await withFreePort(async (port) => {
+      writeFileSync(
+        file,
+        JSON.stringify({
+          port,
+          basePath: '/tools',
+          apps,
+          identity: {
+            id: 'shared',
+            name: 'Shared',
+            store: './identity.db',
+            grants: './grants.db',
+            environment: { BETTER_AUTH_SECRET: 'SECRET' },
+          },
+        }),
+      );
+      return startConfiguredSuite(file, environment);
+    });
     const origin = suite.publicURL;
     const signup = await page.request.post(`${origin}/tools/api/auth/sign-up/email`, {
       headers: { origin },

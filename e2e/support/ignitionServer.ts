@@ -28,11 +28,11 @@
  * unset, and a thrown error instead when `TABLEWALK_REQUIRE_LIVE=1` says this
  * run must not pass by skipping.
  */
+import { withFreePort } from './freePort.js';
 import { spawn } from './spawned.js';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { cpSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { liveSkip } from '../../test/live.js';
 
@@ -111,16 +111,6 @@ async function ownedDatabases(): Promise<{ lending: string; applicants: string; 
       for (const name of Object.values(names)) await run(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`).catch(() => {});
     },
   };
-}
-
-/** A port nothing is listening on, released before it is handed back. */
-async function freePort(): Promise<number> {
-  const reservation = createServer();
-  reservation.listen(0, '127.0.0.1');
-  await once(reservation, 'listening');
-  const { port } = reservation.address() as { port: number };
-  await new Promise<void>((done, fail) => reservation.close((error) => (error ? fail(error) : done())));
-  return port;
 }
 
 /** Run a child to completion, and fail with everything it said. */
@@ -243,63 +233,68 @@ export async function startIgnition(
     }
     const route = options.route ?? ((url: string) => url);
 
-    const port = options.port ?? (await freePort());
-    const origin = `http://127.0.0.1:${port}`;
-    child = spawn(
-      process.execPath,
-      [
-        ...(options.entry ?? ['--import', 'tsx', 'packages/mistri/src/server/index.ts']),
-        '--config',
-        join(fixture, 'server.json'),
-        '--app',
-        authored,
-        '--policy',
-        join(authored, 'tenant-policy.ts'),
-        '--commands',
-        join(authored, 'commands.ts'),
-        '--jobs',
-        join(authored, 'jobs.ts'),
-        '--port',
-        String(port),
-      ],
-      {
-        cwd,
-        env: {
-          ...shared,
-          IGNITION_LENDING_DATABASE_URL: route(databases.lending),
-          IGNITION_APPLICANTS_DATABASE_URL: route(databases.applicants),
-          ...options.env,
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
-    const serving = child;
     let log = '';
-    serving.stdout!.on('data', (chunk) => {
-      log += String(chunk);
-    });
-    serving.stderr!.on('data', (chunk) => {
-      log += String(chunk);
-    });
-    await new Promise<void>((done, fail) => {
-      const finish = (error?: Error) => {
-        clearTimeout(timer);
-        serving.stdout!.off('data', ready);
-        serving.off('exit', exited);
-        serving.off('error', finish);
-        if (error) fail(error);
-        else done();
-      };
-      const ready = () => {
-        if (log.includes('Listening on ')) finish();
-      };
-      const exited = () => finish(new Error(`The Ignition server exited: ${log}`));
-      const timer = setTimeout(() => finish(new Error(`The Ignition server did not start: ${log}`)), 60_000);
-      serving.stdout!.on('data', ready);
-      serving.once('exit', exited);
-      serving.once('error', finish);
-      ready();
-    });
+    const launch = async (port: number) => {
+      child = spawn(
+        process.execPath,
+        [
+          ...(options.entry ?? ['--import', 'tsx', 'packages/mistri/src/server/index.ts']),
+          '--config',
+          join(fixture, 'server.json'),
+          '--app',
+          authored,
+          '--policy',
+          join(authored, 'tenant-policy.ts'),
+          '--commands',
+          join(authored, 'commands.ts'),
+          '--jobs',
+          join(authored, 'jobs.ts'),
+          '--port',
+          String(port),
+        ],
+        {
+          cwd,
+          env: {
+            ...shared,
+            IGNITION_LENDING_DATABASE_URL: route(databases.lending),
+            IGNITION_APPLICANTS_DATABASE_URL: route(databases.applicants),
+            ...options.env,
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      const serving = child;
+      log = '';
+      serving.stdout!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      serving.stderr!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      await new Promise<void>((done, fail) => {
+        const finish = (error?: Error) => {
+          clearTimeout(timer);
+          serving.stdout!.off('data', ready);
+          serving.off('exit', exited);
+          serving.off('error', finish);
+          if (error) fail(error);
+          else done();
+        };
+        const ready = () => {
+          if (log.includes('Listening on ')) finish();
+        };
+        const exited = () => finish(new Error(`The Ignition server exited: ${log}`));
+        const timer = setTimeout(() => finish(new Error(`The Ignition server did not start: ${log}`)), 60_000);
+        serving.stdout!.on('data', ready);
+        serving.once('exit', exited);
+        serving.once('error', finish);
+        ready();
+      });
+      return port;
+    };
+    // A port the caller chose is theirs to hold; one reserved here can be lost to another worker, so it is retried.
+    const port = options.port === undefined ? await withFreePort(launch) : await launch(options.port);
+    const origin = `http://127.0.0.1:${port}`;
 
     const accounts = new Map(credentials.accounts.map((account) => [account.email, account]));
     const intakes = new Map(credentials.intakeLinks.map((link) => [link.dealer, link.path]));

@@ -54,12 +54,14 @@ export async function readSnapshotOn<T>(
   prologue: string | undefined,
   ahead: boolean,
   whole: boolean,
+  session = '',
 ): Promise<T> {
   if (
     typeof run !== 'function' ||
     (prologue !== undefined && (typeof prologue !== 'string' || !prologue.trim())) ||
     (ahead && (observeCheckout || prologue === undefined)) ||
-    (whole && (observeCheckout || ahead || prologue === undefined))
+    (whole && (observeCheckout || ahead || prologue === undefined)) ||
+    typeof session !== 'string'
   ) {
     throw new Refusal('This read snapshot is unavailable.');
   }
@@ -71,6 +73,9 @@ export async function readSnapshotOn<T>(
        observed checkout: its owner hands its response off inside the
        snapshot (postgresReadCatalog.ts), so a COMMIT it never heard
        acknowledged is an uncertain outcome it must be told of. */
+  /* The tenant a row policy reads (postgresTransactionOpening.ts tenantSession), set in every BEGIN this snapshot
+     sends: its one answer is the engine's to drop, so an owner counts its own results as it did without one. */
+  const set = session ? 1 : 0;
   let deliver!: (value: T) => void;
   const answered = new Promise<T>((resolve) => {
     deliver = resolve;
@@ -94,12 +99,14 @@ export async function readSnapshotOn<T>(
          answer before it trusts anything; a BEGIN that failed fails what was
          sent behind it, and the owner hears the BEGIN's failure first. */
     const begun = (
-      client.query(prologue === undefined ? BEGIN_SNAPSHOT : `${BEGIN_SNAPSHOT}; ${prologue}${whole ? '; COMMIT' : ''}`) as Promise<unknown>
+      client.query(
+        prologue === undefined ? `${BEGIN_SNAPSHOT}${session}` : `${BEGIN_SNAPSHOT}${session}; ${prologue}${whole ? '; COMMIT' : ''}`,
+      ) as Promise<unknown>
     ).then((opened) =>
       Object.freeze(
         prologue === undefined
           ? []
-          : ((Array.isArray(opened) ? opened : [opened]).slice(1, whole ? -1 : undefined) as PgResult<Record<string, unknown>>[]),
+          : ((Array.isArray(opened) ? opened : [opened]).slice(1 + set, whole ? -1 : undefined) as PgResult<Record<string, unknown>>[]),
       ),
     );
     let results: readonly PgResult<Record<string, unknown>>[] | undefined;
@@ -120,8 +127,8 @@ export async function readSnapshotOn<T>(
       if (ended || typeof next !== 'string' || !next.trim()) throw new Refusal('The read snapshot is unavailable.');
       ended = true;
       if (ahead) await begun;
-      const closed = (await client.query(`COMMIT; ${BEGIN_SNAPSHOT}; ${next}; COMMIT`)) as unknown;
-      return Object.freeze((Array.isArray(closed) ? closed : [closed]).slice(2, -1) as PgResult<Record<string, unknown>>[]);
+      const closed = (await client.query(`COMMIT; ${BEGIN_SNAPSHOT}${session}; ${next}; COMMIT`)) as unknown;
+      return Object.freeze((Array.isArray(closed) ? closed : [closed]).slice(2 + set, -1) as PgResult<Record<string, unknown>>[]);
     };
     try {
       out = await run(

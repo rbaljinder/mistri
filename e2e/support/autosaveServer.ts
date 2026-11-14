@@ -1,7 +1,7 @@
 import { spawn } from './spawned';
+import { withFreePort } from './freePort';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -96,54 +96,49 @@ export async function startAutosaveApp(save: 'blur' | 'explicit' = 'blur') {
       ui: { shell: { placement: 'top' }, editing: { save } },
     };
     writeFileSync(join(appDirectory, 'app.json'), JSON.stringify(app));
-    const reservation = createServer();
-    await new Promise<void>((resolve, reject) => {
-      reservation.once('error', reject);
-      reservation.listen(0, '127.0.0.1', resolve);
-    });
-    const port = (reservation.address() as { port: number }).port;
-    await new Promise<void>((resolve, reject) => reservation.close((error) => (error ? reject(error) : resolve())));
-    const origin = `http://127.0.0.1:${port}`;
-    child = spawn(
-      process.execPath,
-      ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', appDirectory, '--port', String(port)],
-      {
-        cwd: resolve('.'),
-        env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
-    const server = child;
-    let log = '';
-    const recordLog = (chunk: Buffer) => {
-      log = (log + String(chunk)).slice(-16_000);
-    };
-    server.stdout!.on('data', recordLog);
-    server.stderr!.on('data', recordLog);
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => done(new Error(`Autosave fixture startup timed out: ${log}`)), 15_000);
-      const ready = () => {
-        if (log.includes('Listening on ')) done();
+    const origin = await withFreePort(async (port) => {
+      child = spawn(
+        process.execPath,
+        ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', appDirectory, '--port', String(port)],
+        {
+          cwd: resolve('.'),
+          env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      const server = child;
+      let log = '';
+      const recordLog = (chunk: Buffer) => {
+        log = (log + String(chunk)).slice(-16_000);
       };
-      const failed = () => done(new Error(`Autosave fixture exited during startup: ${log}`));
-      const done = (error?: Error) => {
-        clearTimeout(timer);
-        server.stdout!.off('data', ready);
-        server.off('exit', failed);
-        server.off('error', done);
-        if (error) reject(error);
-        else resolve();
-      };
-      server.stdout!.on('data', ready);
-      server.once('exit', failed);
-      server.once('error', done);
-      ready();
+      server.stdout!.on('data', recordLog);
+      server.stderr!.on('data', recordLog);
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => done(new Error(`Autosave fixture startup timed out: ${log}`)), 15_000);
+        const ready = () => {
+          if (log.includes('Listening on ')) done();
+        };
+        const failed = () => done(new Error(`Autosave fixture exited during startup: ${log}`));
+        const done = (error?: Error) => {
+          clearTimeout(timer);
+          server.stdout!.off('data', ready);
+          server.off('exit', failed);
+          server.off('error', done);
+          if (error) reject(error);
+          else resolve();
+        };
+        server.stdout!.on('data', ready);
+        server.once('exit', failed);
+        server.once('error', done);
+        ready();
+      });
+      return `http://127.0.0.1:${port}`;
     });
     return {
       origin,
       db,
       directory,
-      pid: server.pid,
+      pid: child?.pid,
       stop,
       task: () => rows<AutosaveRow>(db, 'SELECT * FROM task WHERE id=1')[0],
       snapshot: () => ({

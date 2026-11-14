@@ -9,11 +9,11 @@
 import { execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { pathToFileURL } from 'node:url';
+import { withFreePort } from './freePort';
 import { spawn } from './spawned';
 
 const source = (path: string) => JSON.stringify(pathToFileURL(resolve(path)).href);
@@ -145,34 +145,30 @@ writeFileSync(${JSON.stringify(join(app, 'decisions.lock'))}, decisionLockText(l
     const cli = (args: string[]) => execFileSync(process.execPath, ['--import', 'tsx', ENTRY, ...args], { stdio: 'pipe', env });
     cli(['migrate', 'stores', 'up', '--app', app, '--jobs', jobs, '--config', config]);
 
-    const reservation = createServer();
-    await new Promise<void>((done, reject) => {
-      reservation.once('error', reject);
-      reservation.listen(0, '127.0.0.1', done);
-    });
-    const port = (reservation.address() as { port: number }).port;
-    await new Promise<void>((done, reject) => reservation.close((error) => (error ? reject(error) : done())));
-    const origin = `http://127.0.0.1:${port}`;
-    child = spawn(
-      process.execPath,
-      ['--import', 'tsx', ENTRY, '--config', config, '--app', app, '--commands', commands, '--jobs', jobs, '--port', String(port)],
-      { env, stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    const running = child;
     let log = '';
-    running.stdout!.on('data', (chunk) => (log += String(chunk)));
-    running.stderr!.on('data', (chunk) => (log += String(chunk)));
-    await new Promise<void>((done, reject) => {
-      const timer = setTimeout(() => reject(new Error(`The decide fixture did not start: ${log}`)), 30_000);
-      const ready = () => {
-        if (!log.includes('Listening on ')) return;
-        clearTimeout(timer);
-        running.stdout!.off('data', ready);
-        done();
-      };
-      running.stdout!.on('data', ready);
-      running.once('exit', () => reject(new Error(`The decide fixture exited: ${log}`)));
-      ready();
+    const origin = await withFreePort(async (port) => {
+      child = spawn(
+        process.execPath,
+        ['--import', 'tsx', ENTRY, '--config', config, '--app', app, '--commands', commands, '--jobs', jobs, '--port', String(port)],
+        { env, stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      const running = child;
+      log = '';
+      running.stdout!.on('data', (chunk) => (log += String(chunk)));
+      running.stderr!.on('data', (chunk) => (log += String(chunk)));
+      await new Promise<void>((done, reject) => {
+        const timer = setTimeout(() => reject(new Error(`The decide fixture did not start: ${log}`)), 30_000);
+        const ready = () => {
+          if (!log.includes('Listening on ')) return;
+          clearTimeout(timer);
+          running.stdout!.off('data', ready);
+          done();
+        };
+        running.stdout!.on('data', ready);
+        running.once('exit', () => reject(new Error(`The decide fixture exited: ${log}`)));
+        ready();
+      });
+      return `http://127.0.0.1:${port}`;
     });
 
     // The sweep, once, by hand: each new incident asked about, a run of its own.

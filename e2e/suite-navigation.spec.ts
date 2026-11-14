@@ -2,7 +2,6 @@ import { SLOW_MS } from './support/budgets';
 /** Owned suite entry/navigation acceptance. Requires a current built client.
  * Every test owns its databases and reserved ephemeral port; no preview server.
  * Bare-root defaults must never override an explicit switch to the root App. */
-import { createServer } from 'node:http';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import type { APIRequestContext, BrowserContext, Page } from '@playwright/test';
 import { expect, test as base } from './support/harness';
 import { startConfiguredSuite } from '../packages/mistri/src/server/cli/suiteCommand';
+import { withFreePort } from './support/freePort';
 import { changeSuiteGrant } from '../packages/mistri/src/server/cli/suiteGrant';
 import type { AppSwitcherConfig } from '../packages/mistri/src/client/components/SuiteAppSwitcher';
 
@@ -33,11 +33,7 @@ async function startNavigationSuite(switcher: AppSwitcherConfig) {
   const dir = mkdtempSync(join(temporaryRoot, 'tw-suite-navigation-'));
   let running: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
   try {
-    const reservation = createServer();
-    await new Promise<void>((resolve) => reservation.listen(0, '127.0.0.1', resolve));
-    const port = (reservation.address() as { port: number }).port;
-    await new Promise<void>((resolve, reject) => reservation.close((error) => (error ? reject(error) : resolve())));
-    const apps = [];
+    const apps: Array<{ id: string; directory: string; config: string; mount: string }> = [];
     for (const id of ['lender', 'benefits'] as const) {
       const home = join(dir, id);
       mkdirSync(home);
@@ -68,22 +64,24 @@ async function startNavigationSuite(switcher: AppSwitcherConfig) {
     }
     const file = join(dir, 'suite.json');
     const environment = { SECRET: 'owned-navigation-suite-secret-longer-than-thirty-two-characters', LIMITS: 'off', MODE: 'test' };
-    writeFileSync(
-      file,
-      JSON.stringify({
-        port,
-        basePath: BASE,
-        apps,
-        identity: {
-          id: 'shared',
-          name: 'Navigation Suite',
-          store: './identity.db',
-          grants: './grants.db',
-          environment: { BETTER_AUTH_SECRET: 'SECRET', MISTRI_TEST_AUTH_LIMITS: 'LIMITS', NODE_ENV: 'MODE' },
-        },
-      }),
-    );
-    running = await startConfiguredSuite(file, environment);
+    running = await withFreePort(async (port) => {
+      writeFileSync(
+        file,
+        JSON.stringify({
+          port,
+          basePath: BASE,
+          apps,
+          identity: {
+            id: 'shared',
+            name: 'Navigation Suite',
+            store: './identity.db',
+            grants: './grants.db',
+            environment: { BETTER_AUTH_SECRET: 'SECRET', MISTRI_TEST_AUTH_LIMITS: 'LIMITS', NODE_ENV: 'MODE' },
+          },
+        }),
+      );
+      return startConfiguredSuite(file, environment);
+    });
     const origin = running.publicURL;
     return {
       origin,

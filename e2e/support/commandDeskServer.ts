@@ -6,10 +6,10 @@
  * module came to exist.
  */
 import { execFileSync } from 'node:child_process';
+import { withFreePort } from './freePort';
 import { spawn } from './spawned';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -82,15 +82,7 @@ export async function startCommandApp(options: { rowPolicy?: boolean } = {}) {
       }, resultReferences: {assignReviewer: result => [{table:'reviewer',key:{id:result.reviewerId}}]} };
     `,
       );
-    const reservation = createServer();
-    await new Promise<void>((done, reject) => {
-      reservation.once('error', reject);
-      reservation.listen(0, '127.0.0.1', done);
-    });
-    const port = (reservation.address() as { port: number }).port;
-    await new Promise<void>((done, reject) => reservation.close((error) => (error ? reject(error) : done())));
-    const origin = `http://127.0.0.1:${port}`;
-    const start = async () => {
+    const start = async (port: number) => {
       child = spawn(
         process.execPath,
         [
@@ -149,7 +141,11 @@ export async function startCommandApp(options: { rowPolicy?: boolean } = {}) {
         ready();
       });
     };
-    await start();
+    const port = await withFreePort(async (port) => {
+      await start(port);
+      return port;
+    });
+    const origin = `http://127.0.0.1:${port}`;
     const accounts = [];
     for (const name of ['north-manager', 'central-manager']) {
       const credentials = { name, email: `${name}@example.test`, password: `command-fixture-${name}-password` };
@@ -167,7 +163,8 @@ export async function startCommandApp(options: { rowPolicy?: boolean } = {}) {
        be bound to their desks by restarting the server with the map written. */
     await stopProcess();
     writeFileSync(mapping, JSON.stringify({ [accounts[0].id]: 1, [accounts[1].id]: 2 }));
-    await start();
+    // The restart keeps the port its first start held: the origin is already part of the accounts' sign-ups.
+    await start(port);
     return { origin, database, accounts, stop };
   } catch (error) {
     await stop();

@@ -5,6 +5,14 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.52
+
+- **A Postgres transaction can carry its tenant into the database.** An adapter opened with `rowSecurity` sets `mistri.tenant` for the life of each tenant transaction, in the same flight as `BEGIN`, so a row policy can read it and nothing costs a round trip. Reads, writes, the journal and a pinned read snapshot all carry it; an autocommit read, which could not, refuses on such an adapter rather than returning nothing. A tenant value that is empty or holds a NUL or a backslash is refused before it is sent. Nothing turns this on yet: the next candidates route a tenant App's runtime role through it and add the command that writes the policies.
+- **Under that backstop, a table carrying exactly mistri's tenant policy is one the engine still writes to.** The policy is one, pinned: permissive, for every command, for the runtime role alone, comparing the owner column with the setting in both `USING` and `WITH CHECK`. A second policy, a restrictive one, one for another role or command, a changed expression or `FORCE ROW LEVEL SECURITY` where it was not allowed refuses as "a row policy that is not mistri's tenant policy". Without the backstop any row-level security refuses, as before.
+- **A tenant App's catalog check, under the backstop, says what the database must look like around the policy**: each tenant table carries it on its own ownership column, a global or platform table carries none, a view that reaches a tenant table reads as the person reading it (`security_invoker`), there is no materialized view over one and no `SECURITY DEFINER` function in a schema the App maps, and the server is PostgreSQL 15 or later.
+- **The store check can allow a named runtime role** to read and write the store's tables and use its schema: never with grant option, never `CREATE`, never ownership. Without a runtime role the check is what it was.
+- **Test servers take a free port when they start**, so two suites can no longer meet on a fixed one (the race that failed main CI once on rc.51).
+
 ## 1.0.0-rc.51
 
 - **A delete refused because the record is still referenced names only the references its principal reads.** Each referencing table is counted under the person's own reads, row policy and tenant fence, and the refusal says how many rows in which table still point at the record (2 records in "invoice" still point at this one) only for rows they can see; where none are theirs it says "This record is in use and can't be deleted." The full count across every tenant goes to the operator's log alone. A tenant App names the App's own table, never the physical one. The answer stays a 409. That a hidden reference exists is still told, as a refusal must; how many, and where, is not.

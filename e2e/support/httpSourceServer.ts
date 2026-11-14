@@ -6,27 +6,16 @@
  * test/fixtures/apps/parcel/source/api.mjs behind a bearer token, and the
  * sample App over it through the committed description.
  */
+import { withFreePort } from './freePort';
 import { spawn } from './spawned';
 import { once } from 'node:events';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const PARCEL_TOKEN = 'e2e-parcel-token-71d';
 
 type Child = ReturnType<typeof spawn>;
-
-async function reservePort(): Promise<number> {
-  const reservation = createServer();
-  await new Promise<void>((resolve, reject) => {
-    reservation.once('error', reject);
-    reservation.listen(0, '127.0.0.1', resolve);
-  });
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((resolve, reject) => reservation.close((error) => (error ? reject(error) : resolve())));
-  return port;
-}
 
 async function stopChild(child: Child | undefined): Promise<void> {
   if (!child || child.exitCode !== null || child.signalCode !== null) return;
@@ -100,16 +89,20 @@ export async function startParcel() {
   };
   try {
     const env = { ...process.env, PARCEL_API_TOKEN: PARCEL_TOKEN, XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' };
-    const apiPort = await reservePort();
-    api = await started('Parcel API', ['test/fixtures/apps/parcel/source/api.mjs', '--port', String(apiPort)], env, 'listening on');
+    const apiPort = await withFreePort(async (reserved) => {
+      api = await started('Parcel API', ['test/fixtures/apps/parcel/source/api.mjs', '--port', String(reserved)], env, 'listening on');
+      return reserved;
+    });
     // The sample's connection, pointed at this run's port; the description is the committed one.
     const sample = JSON.parse(readFileSync('test/fixtures/apps/parcel/source/server.example.json', 'utf8'));
     sample.connections[0].url = `http://127.0.0.1:${apiPort}/v1/`;
     sample.connections[0].description = resolve('test/fixtures/apps/parcel/source/parcel.http.json');
     const config = join(directory, 'parcel.json');
     writeFileSync(config, JSON.stringify(sample));
-    const port = await reservePort();
-    server = await started('Parcel server', mistri(config, port, ['--app', 'test/fixtures/apps/parcel']), env, 'Listening on ');
+    const port = await withFreePort(async (reserved) => {
+      server = await started('Parcel server', mistri(config, reserved, ['--app', 'test/fixtures/apps/parcel']), env, 'Listening on ');
+      return reserved;
+    });
     return { origin: `http://127.0.0.1:${port}`, stop };
   } catch (error) {
     await stop();
