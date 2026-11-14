@@ -93,11 +93,11 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
       assert.match(north.body.message, /^Welcome\. Apply in steps at https?:\/\/\S+\/draft\?via=\S+$/, north.text);
       // A form is reached under its tenant's intake address, as the tenant's own links to it are.
       assert.ok(north.body.message.endsWith(`/draft${via(NORTH)}`), north.body.message);
-      // Triage has no tenant to say the link for: the message is kept and the reference is said as nothing, never raw
-      // and never a URL made up at the root origin.
+      // Triage has no tenant to say the link for: the sentence that held it goes and the rest of the message stays,
+      // never the raw reference and never a URL made up at the root origin.
       const nobody = await welcome(via(UNKNOWN), 'Hal');
       assert.equal(nobody.status, 200, nobody.text);
-      assert.equal(nobody.body.message, 'Welcome. Apply in steps at');
+      assert.equal(nobody.body.message, 'Welcome.');
       assert.ok(!north.text.includes('mistri-public:') && !nobody.text.includes('mistri-public:'));
       assert.ok(!nobody.text.includes('/draft'), nobody.text);
     });

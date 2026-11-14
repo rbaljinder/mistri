@@ -159,3 +159,31 @@ test('a table the author names in read and in write is a read the caller must ho
     /command "fileReport" is granted to role "clerk", which cannot read "repair_photo" its read names, .*\[command-reads-unreadable\]/,
   );
 });
+
+test('a command spread back into defineCommand keeps which written tables its author also read', () => {
+  /* A registered command's `read` holds every table it writes, so a spread (a second module copy adopting it, or an
+     author's `{ ...command, handle }`) once read every written table as declared: an add-only table became a read
+     the caller must hold, and the grant was called dead. */
+  const original = defineCommand({
+    source: 'main',
+    target: 'repair',
+    targets: 'none',
+    write: ['repair', 'repair_photo'],
+    input: { title: field.text() },
+    async handle() {},
+  });
+  const { version: _version, ...definition } = original as unknown as Record<string, unknown>;
+  const respread = defineCommand(definition as unknown as Parameters<typeof defineCommand>[0]);
+  assert.deepEqual(commandUnreadable(app, defineCommands({ fileReport: respread }), resources.schema), [], 'still insert-only');
+  const declared = defineCommand({ ...definition, read: ['repair_photo'] } as unknown as Parameters<typeof defineCommand>[0]);
+  const { version: _again, ...again } = declared as unknown as Record<string, unknown>;
+  assert.equal(
+    commandUnreadable(
+      app,
+      defineCommands({ fileReport: defineCommand(again as unknown as Parameters<typeof defineCommand>[0]) }),
+      resources.schema,
+    ).length,
+    1,
+    'a declared read survives the spread too',
+  );
+});

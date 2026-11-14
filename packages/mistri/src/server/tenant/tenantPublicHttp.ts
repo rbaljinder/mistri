@@ -149,7 +149,7 @@ interface TenantPublicHttpOptions {
 
 export function createTenantPublicHttp(options: TenantPublicHttpOptions) {
   /** The handler's message as its visitor reads it: a public link in it said as the placing tenant's URL. Where one
-      cannot be said (no tenant is placed), the message is kept and each reference is said as nothing, as a person is
+      cannot be said (no tenant is placed), the sentence that held each reference goes and the rest is kept, as a person is
       never shown `mistri-public:<view>.<seal>` and no URL is made up at the root origin. */
   const sayMessage = async (said: { message?: string }, address: string | undefined, form: string): Promise<{ message?: string }> => {
     if (said.message === undefined) return said;

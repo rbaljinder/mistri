@@ -730,8 +730,20 @@ const commandEvents = new WeakMap<object, unknown>();
 const commandSlots = new WeakMap<object, readonly string[]>();
 const commandEffects = new WeakMap<object, CapturedEffects['targets']>();
 /* The tables its author named in `read` and in `write` both. `read` is the whole footprint, written tables
-   included, so without this a table said twice reads as one only written (callerMustRead). */
-const declaredReads = new WeakMap<object, readonly string[]>();
+   included, so without this a table said twice reads as one only written (callerMustRead). It rides on the command
+   itself, enumerable, so a registered command spread back into defineCommand (adoptCommand, or an author's
+   `{ ...command, handle }`) keeps what its author said: from the spread `read` alone every written table would
+   read as declared. It names the `read` it was said beside, so a spread that replaces `read` is read afresh.
+   Symbol.for, so a second copy of this module reads the first's. */
+const DECLARED_READS = Symbol.for('mistri.command.declaredReads');
+interface DeclaredReads {
+  readonly beside: readonly string[];
+  readonly tables: readonly string[];
+}
+const carriedReads = (command: object): DeclaredReads | undefined => {
+  const carried = (command as Record<symbol, unknown>)[DECLARED_READS] as DeclaredReads | undefined;
+  return carried && Array.isArray(carried.tables) ? carried : undefined;
+};
 /* The callbacks as registration captured them: replacing one on the
    caller's object afterwards changes nothing that runs. */
 const commandRules = new WeakMap<
@@ -902,15 +914,16 @@ export function callerRead(command: Pick<BusinessCommand<unknown, unknown>, 'rea
 export function callerMustRead(
   command: Pick<BusinessCommand<unknown, unknown>, 'read' | 'elevate' | 'write' | 'target'>,
 ): readonly string[] {
-  const declared = declaredReads.get(command) ?? [];
+  const declared = carriedReads(command)?.tables ?? [];
   return callerRead(command).filter((table) => table === command.target || !command.write.includes(table) || declared.includes(table));
 }
 
-function plainRecord(value: unknown, where: string): Record<string, unknown> {
+function plainRecord(value: unknown, where: string, carried?: symbol): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail(`${where} must be a plain object.`);
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== null && prototype !== Object.prototype) return fail(`${where} must not inherit configuration.`);
   for (const key of Reflect.ownKeys(value)) {
+    if (key === carried && carried !== undefined) continue;
     if (typeof key !== 'string' || reserved.has(key)) return fail(`${where} has an unsafe property.`);
     const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
     if (!descriptor.enumerable || !('value' in descriptor)) return fail(`${where} must contain only enumerable data properties.`);
@@ -1107,7 +1120,7 @@ export function defineCommand<
     /* `when` is read against the target's columns where the App's generated schema registers them (packages/mistri/schema/query.d.ts). */
     { readonly when?: When } & NoInfer<WhenGuard<Target, When>>,
 ): BusinessCommand<Input, Output, I> {
-  const value = plainRecord(definition, 'Command');
+  const value = plainRecord(definition, 'Command', DECLARED_READS);
   for (const key of Object.keys(value)) {
     if (!definitionKeys.has(key)) fail(`Command has an unknown option: ${key}.`);
   }
@@ -1124,7 +1137,10 @@ export function defineCommand<
   const writes = resources(value.write, 'Command write footprint').filter((table) => table !== target);
   const named = resources(value.read, 'Command read footprint');
   const reads = named.filter((table) => table !== target && !writes.includes(table));
-  const alsoWritten = named.filter((table) => table !== target && writes.includes(table));
+  /* A registered command spread back with its own `read` says what its author declared; that `read` holds every written table. */
+  const carried = carriedReads(value);
+  const declared = carried && carried.beside === value.read ? carried.tables : named;
+  const alsoWritten = declared.filter((table) => table !== target && writes.includes(table));
   const read = Object.freeze([target, ...reads, ...writes]),
     write = Object.freeze([target, ...writes]);
   const elevate = Object.hasOwn(value, 'elevate') ? elevateOption(value.elevate, target, reads, writes) : undefined;
@@ -1382,12 +1398,15 @@ export function defineCommand<
   } as BusinessCommand<Input, Output, I>;
   // Derived, so not spread: a registered command spreads back into defineCommand as its definition.
   Object.defineProperty(result, 'fields', { value: fields, enumerable: false });
+  Object.defineProperty(result, DECLARED_READS, {
+    value: Object.freeze({ beside: read, tables: Object.freeze(alsoWritten) }),
+    enumerable: true,
+  });
   Object.freeze(result);
   registered.add(result);
   if (capturedEvents) commandEvents.set(result, capturedEvents);
   if (slots) commandSlots.set(result, slots);
   if (effects) commandEffects.set(result, effects.targets);
-  if (alsoWritten.length) declaredReads.set(result, Object.freeze(alsoWritten));
   const stated: string[] = [];
   if (value.public === true && value.targets === 'none') stated.push("targets: 'none' is implied by public: true. Delete it.");
   // The executor parses the handler's return against `output` already; parsing it again in the handler repeats that.
@@ -1619,10 +1638,7 @@ function recommand(
   Object.defineProperty(copy, 'fields', { value: changes.fields ?? command.fields, enumerable: false });
   Object.freeze(copy);
   registered.add(copy);
-  for (const map of [commandEvents, commandSlots, commandEffects, commandRules, restatements, declaredReads] as WeakMap<
-    object,
-    unknown
-  >[]) {
+  for (const map of [commandEvents, commandSlots, commandEffects, commandRules, restatements] as WeakMap<object, unknown>[]) {
     if (map.has(command)) map.set(copy, map.get(command));
   }
   return copy as AnyBusinessCommand;

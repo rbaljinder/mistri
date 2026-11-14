@@ -110,18 +110,34 @@ export async function renderPublicRefs(
   return text.replace(REF, (whole: string) => urls.get(whole) ?? whole);
 }
 
+/* Where a reference the App made stood while its sentences are read: one character, so a seal's dot never ends one. */
+const GONE = '\u0000';
+
 /**
- * `text` with each reference the App made removed, and the space or punctuation it leaves behind tidied: for a message
- * whose links cannot be said (no address places them), where the reference is dropped and the words around it kept.
+ * `text` without each sentence that held a reference the App made: for a message whose links cannot be said (no
+ * address places them). A sentence whose point was the link means nothing without it ("Apply in steps at"), so it
+ * goes whole and the sentences around it stay; a line left empty goes with it. A sentence ends at `.`, `!` or `?`
+ * before a space, or at a line's end. A message that is only such sentences is said as nothing at all.
  */
 export function withoutPublicRefs(text: string, appId: string): string {
   const refs = sealedRefs(text, appId);
   if (refs.size === 0) return text;
-  return text
-    .replace(REF, (whole: string) => (refs.has(whole) ? '' : whole))
-    .replace(/\(\s*\)|\[\s*\]/g, '')
-    .replace(/[ \t]+([.,;:!?)\]])/g, '$1')
-    .replace(/[ \t]{2,}/g, ' ')
+  const marked = text.replace(REF, (whole: string) => (refs.has(whole) ? GONE : whole));
+  const lines: string[] = [];
+  for (const line of marked.split('\n')) {
+    if (!line.includes(GONE)) {
+      lines.push(line);
+      continue;
+    }
+    const kept = line
+      .split(/(?<=[.!?])[ \t]+/)
+      .filter((sentence) => !sentence.includes(GONE))
+      .join(' ');
+    if (kept.trim()) lines.push(kept);
+  }
+  return lines
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 

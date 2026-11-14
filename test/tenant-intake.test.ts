@@ -58,19 +58,19 @@ const ROTATED = 'rotated-intake-GGGGGGGGGGGGGG';
 const SCHEMA = {
   tables: ['intake_submission', 'lead', 'dealer'],
   sqlite: `PRAGMA journal_mode=WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 0;
-    CREATE TABLE dealer (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, intake_address TEXT);
+    CREATE TABLE dealer (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, intake_address TEXT, timezone TEXT);
     CREATE TABLE lead (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES dealer(id), reference TEXT NOT NULL,
       name TEXT NOT NULL, UNIQUE (tenant_id, reference));
     CREATE TABLE intake_submission (id TEXT PRIMARY KEY NOT NULL, reference TEXT NOT NULL, name TEXT NOT NULL, dealer_hint TEXT);`,
   postgres: `
-    CREATE TABLE public.dealer (id text PRIMARY KEY, name text NOT NULL, intake_address text);
+    CREATE TABLE public.dealer (id text PRIMARY KEY, name text NOT NULL, intake_address text, timezone text);
     CREATE TABLE public.lead (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES public.dealer(id), reference text NOT NULL,
       name text NOT NULL, UNIQUE (tenant_id, reference));
     CREATE TABLE public.intake_submission (id text PRIMARY KEY, reference text NOT NULL, name text NOT NULL, dealer_hint text);`,
 };
 // `east` and `far` share one address, so it names nobody; `ghost` has a profile row and no tenant.
 const ROWS = `
-    INSERT INTO dealer VALUES ('north', 'North Motors', '${NORTH}'), ('south', 'South Auto', '${SOUTH}'), ('west', 'West Wheels', '${WEST}'),
+    INSERT INTO dealer (id, name, intake_address) VALUES ('north', 'North Motors', '${NORTH}'), ('south', 'South Auto', '${SOUTH}'), ('west', 'West Wheels', '${WEST}'),
       ('east', 'East Cars', '${SHARED}'), ('far', 'Far Cars', '${SHARED}'), ('ghost', 'Ghost Motors', '${GHOST}');
     INSERT INTO lead VALUES ('seeded', 'north', 'IGN-seeded', 'Seeded lead');`;
 const OWNERSHIP = {
@@ -116,6 +116,7 @@ const manifest = () => ({
    lead or another dealer's, or a removal. */
 let mode: 'place' | 'misplace' | 'owner' | 'update' | 'cross' | 'remove' = 'place';
 const told: string[] = [];
+const zones: (string | undefined)[] = [];
 const registry = defineCommands({
   apply: defineCommand({
     targets: 'none',
@@ -125,8 +126,9 @@ const registry = defineCommands({
     public: true,
     input,
     output: shape({ reference: text(), message: literal('Application received.') }),
-    async handle({ db, tx, intake }, value) {
+    async handle({ db, tx, intake, timezone }, value) {
       told.push(String(intake));
+      zones.push(timezone);
       // The same reference in every dealer, and with the lender: equal business ids, and equal answers.
       const reference = `IGN-${value.name}`;
       if (mode === 'owner')
@@ -185,7 +187,7 @@ async function engineFor(dialect: TenantDialect) {
   return engine;
 }
 
-async function enrolled(t: TestContext, dialect: TenantDialect, patch: Record<string, unknown> = {}) {
+async function enrolled(t: TestContext, dialect: TenantDialect, patch: Record<string, unknown> = {}, app: object = manifest()) {
   const engine = await engineFor(dialect);
   let service: TenantEnrollment<Request> | undefined;
   t.after(async () => {
@@ -196,7 +198,7 @@ async function enrolled(t: TestContext, dialect: TenantDialect, patch: Record<st
     }
   });
   service = await createTenantEnrollment<Request>({
-    app: parseTestApp(manifest(), 'lending.ts'),
+    app: parseTestApp(app, 'lending.ts'),
     policy: policy(patch),
     source: { ...binding.source, ...(dialect === 'postgres' ? { url: engine.url } : { existingPath: engine.path }) },
     deployment: 'generation',
@@ -911,4 +913,23 @@ test('under mistri dev, a submission placed in triage says why: the address shap
   );
   assert.equal(intakeColumnProblem('dealer', { name: 'intake_address', type: 'TEXT' }), undefined);
   assert.equal(intakeColumnProblem('dealer', { name: 'intake_address', type: 'varchar(128)' }), undefined);
+});
+
+test("a submission placed with a dealer counts the day in that dealer's zone, as its members' commands do; triage keeps the App's", async (t) => {
+  const OWN = 'America/New_York',
+    NORTH_ZONE = 'Pacific/Kiritimati';
+  const app = manifest();
+  const zoned = {
+    ...app,
+    auth: { ...app.auth, tenancy: { ...app.auth.tenancy, shared: ['timezone'] } },
+    ui: { timezone: { column: 'tenant.timezone', default: OWN } },
+  };
+  const f = await enrolled(t, 'sqlite', {}, zoned);
+  await f.engine.exec(`UPDATE dealer SET timezone = '${NORTH_ZONE}' WHERE id = 'north'`);
+  zones.length = 0;
+  await f.submit(NORTH, 'Ada');
+  await f.submit(UNKNOWN, 'Ada');
+  await f.submit(SOUTH, 'Bea');
+  // North's own zone; the lender's triage and South (no zone on its row) take the App's default.
+  assert.deepEqual(zones, [NORTH_ZONE, OWN, OWN]);
 });

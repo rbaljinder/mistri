@@ -590,11 +590,14 @@ for (const { dialect, skip } of TENANT_DIALECTS)
     });
   });
 
-describe('a message whose links cannot be said keeps its words', () => {
+describe('a message whose links cannot be said keeps its other sentences', () => {
   const ref = (view: string) => String(new PublicLinkRef(view, 'shop'));
-  test('each reference the App made is said as nothing, with the space and punctuation around it tidied', () => {
-    assert.equal(withoutPublicRefs(`Thanks! Apply at ${ref('apply')}.`, 'shop'), 'Thanks! Apply at.');
-    assert.equal(withoutPublicRefs(`Book (${ref('visit')}) or call ${ref('call')} today`, 'shop'), 'Book or call today');
+  test('each sentence that held a reference the App made goes whole, and the sentences around it stay', () => {
+    assert.equal(withoutPublicRefs(`Thanks! Apply at ${ref('apply')}.`, 'shop'), 'Thanks!');
+    assert.equal(withoutPublicRefs(`Welcome. Apply in steps at ${ref('draft')}`, 'shop'), 'Welcome.');
+    assert.equal(withoutPublicRefs(`Got it. See ${ref('apply')}. We will call? Soon.`, 'shop'), 'Got it. We will call? Soon.');
+    assert.equal(withoutPublicRefs(`Thanks.\nApply at ${ref('apply')}\n\nWe will call.`, 'shop'), 'Thanks.\n\nWe will call.');
+    assert.equal(withoutPublicRefs(`Book (${ref('visit')}) or call ${ref('call')} today`, 'shop'), '');
     assert.equal(withoutPublicRefs(ref('apply'), 'shop'), '');
     assert.ok(!withoutPublicRefs(`${ref('apply')} and ${ref('apply')}`, 'shop').includes('mistri-public:'));
   });
