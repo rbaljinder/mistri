@@ -57,6 +57,8 @@ export async function projectSuiteGrant(
     who: subject.who,
     ...(subject.name !== undefined ? { name: subject.name } : {}),
     ...(subject.emailVerified === true ? { emailVerified: true as const } : {}),
+    // Open sign-up marks an unverified email unproven; dropping it would present that identity as ordinary.
+    ...(subject.emailUnproven === true ? { emailUnproven: true as const } : {}),
     role: roles.join(','),
   };
 }

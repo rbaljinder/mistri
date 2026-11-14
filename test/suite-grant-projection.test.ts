@@ -73,3 +73,11 @@ test('invalid subject, App and declared roles refuse before consulting grants', 
   sparse[0] = 'reader';
   assert.equal(await projectSuiteGrant(subject, 'lender', sparse, consulted), null);
 });
+
+test('an unproven email stays marked through the projection, and is absent when the subject lacks it', async () => {
+  const lookup: SuiteGrantLookup = async () => ['reader'];
+  const unproven = await projectSuiteGrant({ id: 'u1', who: 'a@example.test', emailUnproven: true as const }, 'lender', ['reader'], lookup);
+  assert.equal(unproven?.emailUnproven, true);
+  const plain = await projectSuiteGrant({ id: 'u2', who: 'b@example.test' }, 'lender', ['reader'], lookup);
+  assert.ok(plain && !('emailUnproven' in plain));
+});

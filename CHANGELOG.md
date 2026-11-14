@@ -5,6 +5,11 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.58
+
+- **A write's reply shows only the columns the caller may read.** Values the server adds to a row (a fill from a chosen record, a derived value, a state machine's start, a stamp) were echoed in an insert's `applied` even where the caller's role cannot read that column. An insert's and an update's reply, `row` and `applied` alike, are now narrowed to the columns the role reads; a role with no column grant on the table sees the reply as before.
+- **A suite's projected grant keeps an unproven email unproven.** An identity from open sign-up whose email was never verified carries `emailUnproven`; projecting it into a suite App's grant dropped the mark, so that identity read as an ordinary one there. The projection now keeps it.
+
 ## 1.0.0-rc.57
 
 - **A role's claims are read only from the provider they name.** A `claims` rule without `provider` used to be read from any of an App's identity providers, so a group named `admins` at one IdP gave the role to anyone another IdP put in a group of that name (`check` only warned). Now an App with one identity provider binds such a rule to it, an App with several refuses to load it (`claim-any-provider`, now a problem), and a sign-in through any provider the rule does not name never reads it. Where the same role comes from several, `provider` takes a list: `claims: { provider: [oidc('workforce'), saml('corp')], groups: ['admins'] }`. Every provider in it must be one `auth.providers` names (`claim-provider-unknown`).
