@@ -1,0 +1,663 @@
+/* The gallery page: its shell, sections and specimens. None of this is the design system. */
+@layer m-page {
+  /* UI SDK's stylesheet boxes a code span; this page sets its own in the mono face and nothing more. */
+  code {
+    background: none;
+    padding: 0;
+  }
+
+  body {
+    margin: 0;
+    background: var(--m-ground);
+    color: var(--m-ink);
+    font-family: var(--m-sans);
+    font-size: var(--m-text);
+    /* The library's own leading: a whole number of pixels at its text size. */
+    line-height: var(--m-leading);
+    font-feature-settings: 'cv11', 'ss03';
+    -webkit-font-smoothing: antialiased;
+  }
+
+  [data-part='rail-note'] {
+    margin: auto 0 0;
+    padding: 0.625rem;
+    border: 1px solid var(--m-line);
+    border-radius: var(--m-radius);
+    color: var(--m-ink-muted);
+    font-size: 0.75rem;
+
+    & strong {
+      display: block;
+      color: var(--m-ink);
+      font-weight: 600;
+    }
+  }
+
+  [data-part='appearance'] {
+    width: 17rem;
+  }
+
+  [data-part='knob'] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+
+    & > span {
+      color: var(--m-ink-muted);
+      font-size: 0.75rem;
+    }
+
+    & [data-slot='segmented-control'] {
+      display: flex;
+    }
+
+    & [data-slot='segmented-control-item'] {
+      flex: 1;
+      padding-inline: 0;
+      font-size: 0.6875rem;
+      text-transform: capitalize;
+    }
+  }
+
+  [data-part='components'] {
+    display: flex;
+    flex-direction: column;
+    gap: 3.5rem;
+  }
+
+  [data-part='section'] {
+    scroll-margin-block-start: 1.5rem;
+
+    & > header {
+      margin-block-end: 1.25rem;
+      padding-block-end: 0.75rem;
+      border-block-end: 1px solid var(--m-line);
+    }
+
+    & h2 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 650;
+      letter-spacing: -0.012em;
+    }
+
+    & > header p {
+      margin: 0.125rem 0 0;
+      color: var(--m-ink-muted);
+    }
+  }
+
+  [data-part='specimens'] {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+    gap: 1.75rem 2rem;
+  }
+
+  [data-part='specimen'] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    min-width: 0;
+    margin: 0;
+
+    &[data-wide] {
+      grid-column: 1 / -1;
+    }
+
+    /* The specimen's own caption, not a caption of something shown in it. */
+    & > figcaption {
+      color: var(--m-ink-muted);
+      font-size: 0.75rem;
+    }
+  }
+
+  [data-part='stage'] {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+
+    & > :is([data-slot='field'], [data-slot='tabs'], [data-slot='accordion'], [data-part='stack'], [data-slot='slider']) {
+      width: 100%;
+      max-width: 22rem;
+    }
+  }
+
+  [data-part='row'] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  [data-part='stack'] {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  [data-part='swatches'] {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: 1rem;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    & li {
+      display: grid;
+      grid-template-columns: 2.25rem 1fr;
+      column-gap: 0.625rem;
+      align-items: center;
+    }
+
+    & code {
+      font-family: var(--m-mono);
+      font-size: 0.75rem;
+    }
+
+    & li > span:last-child {
+      grid-column: 2;
+      color: var(--m-ink-muted);
+      font-size: 0.75rem;
+    }
+  }
+
+  [data-part='swatch'] {
+    grid-row: span 2;
+    width: 2.25rem;
+    height: 2.25rem;
+    border: 1px solid var(--m-line);
+    border-radius: var(--m-radius);
+  }
+
+  [data-part='type-scale'] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 100%;
+    margin: 0;
+
+    & > div {
+      display: grid;
+      grid-template-columns: 6rem 1fr;
+      align-items: baseline;
+    }
+
+    & dt {
+      color: var(--m-ink-muted);
+      font-size: 0.75rem;
+    }
+
+    & dd {
+      margin: 0;
+    }
+
+    & [data-step='display'] {
+      font-size: 2rem;
+      font-weight: 650;
+      letter-spacing: -0.022em;
+      line-height: 1.15;
+    }
+
+    & [data-step='title'] {
+      font-size: 1.25rem;
+      font-weight: 650;
+      letter-spacing: -0.012em;
+    }
+
+    & [data-step='caption'] {
+      color: var(--m-ink-muted);
+      font-size: 0.75rem;
+    }
+
+    & [data-step='figure'] {
+      font-family: var(--m-mono);
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  /* Today and a board card's facts, as Lintel's own pages lay them out (in-app/lintel/lintel.css). */
+  [data-part='door'] {
+    display: grid;
+    place-items: center;
+    min-height: 60dvh;
+  }
+
+  [data-part='railed'] {
+    display: grid;
+    grid-template-columns: 13rem minmax(0, 1fr);
+    gap: 2rem;
+    align-items: start;
+
+    @media (max-width: 56rem) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  [data-part='railed-main'] {
+    display: grid;
+    gap: 1.5rem;
+    min-width: 0;
+  }
+
+  [data-part='lease-notes'] {
+    max-width: 42rem;
+  }
+
+  [data-part='resident-row'] {
+    display: grid;
+    gap: 0.0625rem;
+
+    & b {
+      font-weight: 550;
+    }
+
+    & span {
+      color: var(--m-ink-muted);
+      font-size: 0.75rem;
+    }
+  }
+
+  [data-part='resident'] {
+    display: grid;
+    gap: 0.875rem;
+    justify-items: start;
+
+    & h2 {
+      margin: 0;
+      font-size: 1.25rem;
+      letter-spacing: var(--m-track-title);
+    }
+
+    & p {
+      margin: 0;
+    }
+  }
+
+  [data-part='resident-note'] {
+    color: var(--m-ink-muted);
+    font-size: 0.75rem;
+  }
+
+  [data-part='dash-filters'] {
+    display: flex;
+    gap: 0.5rem;
+    margin-block: -0.5rem;
+
+    & > * {
+      width: 12rem;
+    }
+  }
+
+  [data-part='today'] {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  [data-part='today-columns'] {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 1.5rem 3rem;
+    align-items: start;
+  }
+
+  [data-part='today-more'] {
+    margin-block-start: 0.75rem;
+  }
+
+  /* A card's facts under its name: how urgent, what stage, when the visit is. */
+  [data-part='card-facts'] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.75rem;
+    margin: 0;
+    font-size: 0.75rem;
+  }
+
+  [data-part='visit'] {
+    color: var(--m-ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-slot='board-card-foot'] [data-slot='absent'] {
+    font-size: 0.75rem;
+  }
+
+  @media (max-width: 60rem) {
+    [data-part='today-columns'] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* The panel beside the rent roll, as Lintel's own page lays it out (in-app/lintel/lintel.css). */
+  [data-part='peek'] {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.125rem;
+
+    & [data-slot='facts'] {
+      gap: 0.75rem 2rem;
+    }
+
+    & [data-slot='properties'] {
+      align-self: stretch;
+      padding-block: 1.125rem 0;
+      border-block-start: 1px solid var(--m-line);
+    }
+  }
+
+  [data-part='stepper'] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-inline-end: auto;
+
+    & [data-slot='button'] {
+      width: calc(var(--ui-spacing) * 8);
+      padding: 0;
+    }
+
+    & small {
+      margin-inline-start: 0.375rem;
+      color: var(--m-ink-muted);
+      font-size: 0.75rem;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  /* How far the page's content already stands from the window's edge, so a list steps aside for a panel beside it
+     by the panel's width and no more (src/theme/overlays.css). */
+  :root {
+    --m-gutter: 2.5rem;
+  }
+
+  [data-part='waiting'] {
+    display: grid;
+    gap: 1.25rem;
+    width: 100%;
+  }
+
+  /* The behaviors shown bare wear just enough to be read: a row, a tile, a lane. */
+  [data-slot='sortable'][data-kind='demo-list'] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    width: min(20rem, 100%);
+
+    & [data-slot='sortable-item'] {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      min-height: 2.25rem;
+      padding-inline: 0.75rem;
+      border: 1px solid var(--m-line);
+      border-radius: var(--m-radius);
+      background: var(--m-surface);
+      cursor: grab;
+
+      &:focus-visible {
+        outline: 2px solid var(--ui-ring);
+        outline-offset: 2px;
+      }
+
+      & span {
+        flex: 1;
+      }
+    }
+
+    & [data-slot='more-link'] {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--m-accent-ink);
+      font: inherit;
+      font-weight: 550;
+      cursor: pointer;
+    }
+  }
+
+  [data-slot='sortable'][data-kind='demo-grid'] {
+    display: grid;
+    grid-template-columns: repeat(3, 4rem);
+    gap: 0.5rem;
+
+    & [data-slot='sortable-item'] {
+      height: 4rem;
+      border-radius: var(--m-radius);
+      cursor: grab;
+
+      &:focus-visible {
+        outline: 2px solid var(--ui-ring);
+        outline-offset: 2px;
+      }
+    }
+  }
+
+  [data-slot='transfer'][data-kind='demo-lanes'] {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    width: 100%;
+
+    & [data-slot='transfer-list'] {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      min-height: 9rem;
+      padding: 0.625rem;
+      border-radius: calc(var(--m-radius) + 4px);
+      background: color-mix(in oklab, var(--m-raised) 70%, var(--m-surface));
+      transition:
+        opacity var(--m-fast),
+        box-shadow var(--m-fast),
+        background-color var(--m-fast);
+
+      &[data-takes] {
+        box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--m-accent) 45%, transparent);
+      }
+
+      &[data-over] {
+        background: var(--m-accent-soft);
+        box-shadow: inset 0 0 0 2px var(--m-accent);
+      }
+
+      &[data-refuses] {
+        background: transparent;
+        box-shadow: inset 0 0 0 1px var(--m-line);
+
+        & [data-slot='transfer-item'] {
+          background: transparent;
+        }
+      }
+    }
+
+    & h3 {
+      display: flex;
+      justify-content: space-between;
+      margin: 0;
+      font-size: inherit;
+      font-weight: 550;
+
+      & small {
+        color: var(--m-ink-subtle);
+        font-size: var(--m-size-2xs);
+        font-weight: 400;
+      }
+    }
+
+    & ul {
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    & [data-slot='transfer-item'] {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      min-height: 2.25rem;
+      padding-inline: 0.375rem 0.75rem;
+      border: 1px solid var(--m-line);
+      border-radius: var(--m-radius);
+      background: var(--m-surface);
+      cursor: grab;
+
+      &[data-dragging] {
+        border-style: dashed;
+        background: transparent;
+        color: var(--m-ink-subtle);
+      }
+
+      &[data-carried]:not([data-dragging]) {
+        border-color: var(--m-accent);
+        box-shadow: 0 0 0 1px var(--m-accent);
+      }
+    }
+  }
+
+  @media (max-width: 40rem) {
+    [data-slot='transfer'][data-kind='demo-lanes'] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  [data-part='row'] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.625rem;
+  }
+
+  [data-part='pop-note'] {
+    margin: 0;
+    color: var(--m-ink-muted);
+  }
+
+  [data-part='slide'] {
+    display: block;
+    width: 100%;
+    height: 11rem;
+    object-fit: cover;
+  }
+
+  [data-part='panes'] {
+    width: 100%;
+    height: 12rem;
+
+    & [data-slot='resizable'] {
+      height: 100%;
+    }
+  }
+
+  [data-part='pane-note'] {
+    margin: 0;
+    padding: 0.875rem;
+    color: var(--m-ink-muted);
+  }
+
+  [data-part='notes'] {
+    margin: 0;
+    padding: 0.625rem 0.875rem;
+    list-style: none;
+
+    & li {
+      padding-block: 0.375rem;
+      border-block-end: 1px solid var(--m-line);
+    }
+  }
+
+  [data-part='apply'] {
+    width: min(32rem, 100%);
+  }
+}
+
+/* The Themes room. */
+@layer m-page {
+  [data-part='theme-lead'] {
+    max-width: 44rem;
+    margin: 0 0 1.5rem;
+    color: var(--m-ink-muted);
+  }
+
+  [data-part='theme-recipes'] {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: 0.75rem 1rem;
+  }
+
+  [data-part='theme-actions'] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  [data-part='theme-specimen'] {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+  }
+
+  [data-part='theme-panes'] {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 30rem), 1fr));
+    gap: 1rem;
+  }
+
+  /* A pane is a page of its own: its theme's ground and ink, in the mode it pins. */
+  [data-part='theme-pane'] {
+    min-width: 0;
+    padding: 1rem;
+    border: 1px solid var(--m-line);
+    border-radius: var(--m-radius);
+    background: var(--m-ground);
+    color: var(--m-ink);
+
+    & > h3 {
+      margin: 0 0 0.75rem;
+      font-size: var(--m-size-sm);
+      line-height: var(--m-lead-sm);
+      text-transform: capitalize;
+
+      & span {
+        color: var(--m-ink-muted);
+        font-weight: 400;
+      }
+    }
+  }
+
+  [data-part='knob'] select {
+    height: 2rem;
+    padding-inline: 0.5rem;
+    border: 1px solid var(--m-line-control);
+    border-radius: var(--m-radius);
+    background: var(--m-surface);
+    color: var(--m-ink);
+    font: inherit;
+  }
+
+  [data-part='knob'] a {
+    color: var(--m-accent-ink);
+    font-size: var(--m-size-xs);
+  }
+}
+
+@layer m-page {
+  [data-part='visit-day'] {
+    display: grid;
+    gap: var(--m-space-4);
+    min-width: 0;
+
+    & > p {
+      margin: 0;
+      color: var(--m-ink-muted);
+    }
+  }
+}

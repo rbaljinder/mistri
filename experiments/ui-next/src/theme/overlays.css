@@ -1,0 +1,151 @@
+/* A modal and a side panel are one sheet: a head, a body that scrolls, a foot that does not. */
+@layer m-components {
+  :is([data-slot='dialog-content'], [data-slot='drawer-content'])[data-kind='sheet'] {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  [data-slot='dialog-content'][data-kind='sheet'] {
+    width: min(30rem, calc(100% - 2rem));
+    max-height: min(44rem, calc(100dvh - 4rem));
+    border-radius: calc(var(--m-radius) + 4px);
+
+    &[data-size='lg'] {
+      width: min(42rem, calc(100% - 2rem));
+    }
+  }
+
+  /* The panel floats a little off the window's edge, on the same corner as the content pane behind it. */
+  [data-slot='drawer-content'][data-kind='sheet']:is([data-side='right'], [data-side='left']) {
+    width: min(30rem, calc(100vw - 1rem));
+    height: calc(100dvh - 1rem);
+    max-height: none;
+    margin-block: var(--m-space-3);
+    margin-inline-end: var(--m-space-3);
+    border-radius: calc(var(--m-radius) + 4px);
+  }
+
+  [data-slot='sheet-head'] {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--m-space-5);
+    padding: var(--m-space-5) var(--m-space-5h) var(--m-space-5);
+
+    & :is([data-slot='dialog-title'], [data-slot='drawer-title']) {
+      margin: 0;
+    }
+
+    & :is([data-slot='dialog-description'], [data-slot='drawer-description']) {
+      margin: var(--m-space-1h) 0 0;
+      color: var(--m-ink-muted);
+    }
+
+    & :is([data-slot='dialog-close'], [data-slot='drawer-close']) {
+      flex: none;
+      width: calc(var(--ui-spacing) * 7);
+      height: calc(var(--ui-spacing) * 7);
+      margin: calc(var(--m-space-1) * -1) calc(var(--m-space-2h) * -1) 0 0;
+      padding: 0;
+    }
+  }
+
+  [data-slot='sheet-body'] {
+    flex: 1;
+    min-height: 0;
+    padding: var(--m-space-2) var(--m-space-5h) var(--m-space-6);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  [data-slot='sheet-foot'] {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--m-space-3);
+    padding: var(--m-space-4) var(--m-space-5h);
+    border-block-start: 1px solid var(--m-line);
+    background: color-mix(in oklab, var(--m-raised) 45%, var(--m-surface));
+  }
+
+  [data-slot='alert-dialog-content'][data-kind='confirm'] {
+    gap: var(--m-space-3);
+    width: min(26rem, calc(100% - 2rem));
+    border-radius: calc(var(--m-radius) + 4px);
+
+    & [data-slot='alert-dialog-description'] {
+      margin: 0;
+      color: var(--m-ink-muted);
+    }
+
+    & [data-slot='action-bar'] {
+      margin-block-start: var(--m-space-5);
+    }
+  }
+
+  /* The one filled critical button: the answer that destroys, and only inside its confirmation. */
+  [data-slot][data-variant='danger-solid'] {
+    border-color: var(--m-critical);
+    background: var(--m-critical);
+    color: var(--m-surface);
+
+    &:hover:not([data-disabled]) {
+      background: color-mix(in oklab, var(--m-critical) 88%, var(--m-ink));
+    }
+  }
+
+  [data-slot='menu-item'][data-tone='critical'] {
+    color: var(--m-critical);
+  }
+
+  /* A panel beside the page it describes: it dims nothing, so its own edge and shadow are what set it off. */
+  [data-slot='drawer-content'][data-kind='sheet'][data-beside] {
+    border: 1px solid var(--m-line);
+    box-shadow: var(--m-shadow-pop);
+  }
+
+  /* What stands under a panel beside the page steps aside by the panel's width, less the page's own gutter (a page
+     says how far its content already stands from the window's edge in --m-gutter). */
+  :root {
+    --m-beside: 31.25rem;
+  }
+
+  [data-slot='list-view'] {
+    transition: margin-inline-end var(--m-enter) var(--m-ease-out);
+  }
+
+  :root[data-m-beside] [data-slot='list-view'] {
+    margin-inline-end: max(0px, calc(var(--m-beside) - var(--m-gutter, 0px)));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot='list-view'] {
+      transition: none;
+    }
+  }
+
+  /* The question a sheet asks before it loses what was entered, in its own foot: the words at the start, the two
+     answers at the end, on the warning's wash so it does not read as the form's own buttons. */
+  [data-slot='sheet-foot'][data-kind='guard'] {
+    align-items: center;
+    background: color-mix(in oklab, var(--m-warning) 10%, var(--m-surface));
+
+    & > span {
+      margin-inline-end: auto;
+      font-weight: var(--m-weight-strong);
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot='sheet-foot'][data-kind='guard'] {
+      animation: m-rise var(--m-enter) var(--m-ease-out);
+    }
+  }
+
+  [data-slot='button'][data-kind='sheet-close'] {
+    width: calc(var(--ui-spacing) * 8);
+    padding: 0;
+  }
+}

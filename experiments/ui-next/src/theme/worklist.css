@@ -1,0 +1,127 @@
+/* The worklist: things to do, a row and a press each, ruled apart. */
+@layer m-components {
+  [data-slot='worklist'] {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    & > li + li {
+      border-block-start: 1px solid var(--m-line);
+    }
+  }
+
+  [data-slot='worklist-item'] {
+    display: flex;
+    align-items: center;
+    gap: var(--m-space-4);
+    min-height: calc(var(--m-unit) * 13);
+    margin-inline: calc(var(--m-space-3) * -1);
+    padding: var(--m-space-2h) var(--m-space-3);
+    border-radius: calc(var(--m-radius) * 0.75);
+    color: var(--m-ink);
+    text-decoration: none;
+    transition: background-color var(--m-fast);
+
+    &:hover {
+      background: color-mix(in oklab, var(--m-raised) 70%, var(--m-surface));
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: -2px;
+    }
+  }
+
+  [data-slot='worklist-icon'] {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: calc(var(--m-radius) * 0.75);
+    background: var(--m-raised);
+    color: var(--m-ink-muted);
+
+    & svg {
+      width: 0.9375rem;
+      height: 0.9375rem;
+    }
+
+    /* The mark carries the row's tone; the words stay in the ink. */
+    [data-tone='critical'] > & {
+      background: color-mix(in oklab, var(--m-critical) 12%, var(--m-surface));
+      color: var(--m-critical);
+    }
+
+    [data-tone='warning'] > & {
+      background: color-mix(in oklab, var(--m-warning) 12%, var(--m-surface));
+      color: var(--m-warning);
+    }
+
+    [data-tone='info'] > & {
+      background: color-mix(in oklab, var(--m-info) 12%, var(--m-surface));
+      color: var(--m-info);
+    }
+  }
+
+  [data-slot='worklist-words'] {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  [data-slot='worklist-title'] {
+    overflow: hidden;
+    font-weight: var(--m-weight-strong);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-slot='worklist-detail'] {
+    overflow: hidden;
+    color: var(--m-ink-muted);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-slot='worklist-value'] {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+
+    [data-tone='warning'] > & {
+      color: var(--m-warning);
+    }
+
+    [data-tone='critical'] > & {
+      color: var(--m-critical);
+    }
+  }
+
+  [data-slot='worklist-go'] {
+    flex: none;
+    width: 0.75rem;
+    height: 0.75rem;
+    color: var(--m-ink-subtle);
+  }
+
+  [data-slot='worklist-empty'] {
+    margin: 0;
+    padding-block: var(--m-space-4);
+    color: var(--m-ink-muted);
+  }
+
+  /* A row that waits: two bars where its words will be, a line apart. */
+  [data-slot='worklist-item'][data-waiting] {
+    pointer-events: none;
+
+    & [data-slot='worklist-words'] {
+      gap: var(--m-space-3);
+    }
+  }
+}

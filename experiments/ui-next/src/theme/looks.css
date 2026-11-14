@@ -1,0 +1,1318 @@
+/* The recipes. A theme in mistri picks one treatment a part from a closed menu (`recipes: { tabs: 'pill', status:
+   'dot' }`), and wears each as an attribute (`data-look-tabs="pill"`). These are ui-next's answers, on its own
+   parts, to that same menu: the names and values are mistri's (packages/engine/src/shared/themeRecipes.ts), so a
+   built-in look, a palette and an App's own `defineTheme` dress these components as they dress mistri's, and an
+   App writes no CSS.
+
+   A value answered here is one of mistri's; where ui-next's own drawing already is that treatment (its tabs are
+   underlined, its status is a dot and a word) the value needs no rule and has none. An attribute is read from
+   whatever wears it, the root or any part of the page, and a part answers the nearest: every rule is a scope
+   that starts at the attribute and ends at the next theme inside it (`@scope … to`), so a theme worn by a part
+   of a page is not also dressed by the page's. kit/theme.test.tsx holds this sheet to the menu: every value it
+   answers is on it. */
+@layer m-looks {
+  /* ---------- tabs: pill, inverted, underline (ui-next's own), rule, chosen ---------- */
+  @scope (:is([data-look-tabs='pill'], [data-look-tabs='inverted'], [data-look-tabs='chosen'])) to ([data-custom-theme], [data-look-tabs]) {
+    :scope {
+      & [data-slot='tabs-list'] {
+        gap: var(--m-space-2);
+        padding-block-end: var(--m-space-3);
+      }
+
+      & [data-slot='tabs-tab'] {
+        height: calc(var(--m-unit) * 8);
+        padding-inline: var(--m-space-4);
+      }
+
+      & [data-slot='tabs-indicator'] {
+        display: none;
+      }
+    }
+  }
+
+  @scope ([data-look-tabs='pill']) to ([data-custom-theme], [data-look-tabs]) {
+    [data-slot='tabs-tab'] {
+      border-radius: var(--m-radius-pill, 999px);
+
+      &:hover {
+        background: var(--m-raised);
+      }
+
+      &[data-selected] {
+        background: var(--m-raised);
+        box-shadow: inset 0 0 0 1px var(--m-line-strong);
+      }
+    }
+  }
+
+  @scope ([data-look-tabs='inverted']) to ([data-custom-theme], [data-look-tabs]) {
+    [data-slot='tabs-tab'] {
+      border-radius: var(--m-radius);
+
+      &[data-selected] {
+        background: var(--m-ink);
+        color: var(--m-surface);
+
+        & [data-slot='tab-count'] {
+          color: inherit;
+          opacity: 0.75;
+        }
+      }
+    }
+  }
+
+  @scope ([data-look-tabs='chosen']) to ([data-custom-theme], [data-look-tabs]) {
+    [data-slot='tabs-tab'] {
+      border-radius: var(--m-radius);
+
+      &[data-selected] {
+        background: var(--m-accent-soft);
+        color: var(--m-accent-ink);
+        font-weight: var(--m-weight-bold);
+      }
+    }
+  }
+
+  @scope ([data-look-tabs='rule']) to ([data-custom-theme], [data-look-tabs]) {
+    :scope {
+      & [data-slot='tabs-list'] {
+        border-block-end: var(--m-rule-weight, 2px) solid var(--m-rule-section, var(--m-ink));
+      }
+
+      & [data-slot='tabs-indicator'] {
+        inset-block-end: calc(var(--m-rule-weight, 2px) * -1);
+        height: 4px;
+        background: var(--m-accent);
+      }
+    }
+  }
+
+  /* ---------- status: dot (ui-next's own), pill, pill-dot, quiet ---------- */
+  @scope (:is([data-look-status='pill'], [data-look-status='pill-dot'])) to ([data-custom-theme], [data-look-status]) {
+    [data-slot='status'] {
+      --tone: var(--m-ink-muted);
+      height: 1.375rem;
+      padding-inline: var(--m-space-3);
+      border-radius: var(--m-radius-pill, 999px);
+      background: color-mix(in oklab, var(--tone) 13%, var(--m-surface));
+      color: color-mix(in oklab, var(--tone) 82%, var(--m-ink));
+      font-size: var(--m-size-xs);
+      font-weight: var(--m-weight-strong);
+      line-height: var(--m-lead-xs);
+
+      &[data-tone='good'] {
+        --tone: var(--m-good);
+      }
+
+      &[data-tone='info'] {
+        --tone: var(--m-info);
+      }
+
+      &[data-tone='warning'] {
+        --tone: var(--m-warning);
+      }
+
+      &[data-tone='critical'] {
+        --tone: var(--m-critical);
+      }
+    }
+  }
+
+  @scope ([data-look-status='pill']) to ([data-custom-theme], [data-look-status]) {
+    [data-slot='status']::before {
+      display: none;
+    }
+  }
+
+  @scope ([data-look-status='pill-dot']) to ([data-custom-theme], [data-look-status]) {
+    [data-slot='status']::before {
+      background: var(--tone);
+    }
+  }
+
+  /* The word in the quiet ink and the dot in the tone: the state is there for a reader who looks for it. */
+  @scope ([data-look-status='quiet']) to ([data-custom-theme], [data-look-status]) {
+    [data-slot='status']:not([data-slot='status'] [data-slot='status']) {
+      color: var(--m-ink-muted);
+    }
+  }
+
+  /* ---------- table: open (ui-next's own), tinted, hairline, card, quiet, banded ---------- */
+  @scope ([data-look-table='tinted']) to ([data-custom-theme], [data-look-table]) {
+    [data-slot='data-table'] {
+      & thead th {
+        background: var(--m-raised);
+      }
+
+      & tbody tr:hover td {
+        background: var(--m-accent-soft);
+      }
+    }
+  }
+
+  @scope ([data-look-table='hairline']) to ([data-custom-theme], [data-look-table]) {
+    [data-slot='data-table'] {
+      & th {
+        border-block-end-color: var(--m-line);
+      }
+
+      & td {
+        border-block-end-color: color-mix(in oklab, var(--m-line) 60%, var(--m-surface));
+      }
+    }
+  }
+
+  @scope ([data-look-table='card']) to ([data-custom-theme], [data-look-table]) {
+    [data-slot='data-table-scroll'] {
+      border: 1px solid var(--m-line);
+      border-radius: var(--m-radius-panel, calc(var(--m-radius) + 2px));
+      background: var(--m-surface);
+
+      & thead th {
+        background: color-mix(in oklab, var(--m-raised) 60%, var(--m-surface));
+      }
+
+      & tbody tr:last-child td {
+        border-block-end: 0;
+      }
+    }
+  }
+
+  @scope ([data-look-table='quiet']) to ([data-custom-theme], [data-look-table]) {
+    [data-slot='data-table'] {
+      & th {
+        border-block-end-color: var(--m-line);
+        color: var(--m-ink-subtle);
+      }
+
+      & td {
+        border-block-end-color: transparent;
+      }
+
+      & tbody tr:hover td {
+        background: var(--m-raised);
+      }
+    }
+  }
+
+  @scope ([data-look-table='banded']) to ([data-custom-theme], [data-look-table]) {
+    [data-slot='data-table'] {
+      & td {
+        border-block-end-color: transparent;
+      }
+
+      & tbody tr:nth-child(even) td {
+        background: color-mix(in oklab, var(--m-raised) 55%, var(--m-surface));
+      }
+    }
+  }
+
+  /* ---------- rules: ink, hairline (ui-next's own), double ---------- */
+  @scope ([data-look-rules='ink']) to ([data-custom-theme], [data-look-rules]) {
+    :scope {
+      & [data-slot='data-table'] thead th {
+        border-block-end: var(--m-rule-weight, 2px) solid var(--m-rule-head, var(--m-ink));
+      }
+
+      & :is([data-slot='record-section'], [data-slot='form-section']) > :is(header, h2):first-child {
+        padding-block-end: var(--m-space-2h);
+        border-block-end: var(--m-rule-weight, 2px) solid var(--m-rule-section, var(--m-ink));
+      }
+    }
+  }
+
+  @scope ([data-look-rules='double']) to ([data-custom-theme], [data-look-rules]) {
+    [data-slot='data-table'] thead th {
+      border-block-end: 3px double var(--m-rule-head, var(--m-line-control));
+    }
+  }
+
+  /* ---------- section: open, card, panel ---------- */
+  @scope ([data-look-section='open']) to ([data-custom-theme], [data-look-section]) {
+    [data-slot='dash-block'] {
+      padding: 0;
+      border: 0;
+      background: none;
+    }
+  }
+
+  @scope ([data-look-section='card']) to ([data-custom-theme], [data-look-section]) {
+    :is([data-slot='record-section'], [data-slot='form-section']) {
+      padding: var(--m-pad-box);
+      border: 1px solid var(--m-line);
+      border-radius: var(--m-radius-panel, calc(var(--m-radius) + 2px));
+      background: var(--m-surface);
+    }
+  }
+
+  @scope ([data-look-section='panel']) to ([data-custom-theme], [data-look-section]) {
+    :is([data-slot='record-section'], [data-slot='form-section'], [data-slot='dash-block']) {
+      padding: var(--m-pad-box);
+      border: 0;
+      border-radius: var(--m-radius-panel, calc(var(--m-radius) + 4px));
+      background: var(--m-surface);
+      box-shadow: var(--m-lift-card, var(--m-shadow-control));
+    }
+  }
+
+  /* A section drawn as a box stands off the next: in ui-next's own drawing a rule and its padding divide two
+     sections, and a box has neither. The rule goes and the gap between boxes takes its place. */
+  @scope (:is([data-look-section='card'], [data-look-section='panel'])) to ([data-custom-theme], [data-look-section]) {
+    [data-slot='form-section'] {
+      border-block-start: 0;
+    }
+
+    :is([data-slot='form-section'], [data-slot='record-section']) + :is([data-slot='form-section'], [data-slot='record-section']) {
+      margin-block-start: var(--m-gap-box);
+    }
+
+    /* Sections in a column that sets its own gap are already apart by more than a box's. */
+    [data-slot='record-main'] > [data-slot='record-section'] + [data-slot='record-section'] {
+      margin-block-start: 0;
+    }
+  }
+
+  /* ---------- stat: plain, framed, topline, ruled, panel, divided (ui-next's own) ---------- */
+  @scope (:is([data-look-stat='plain'], [data-look-stat='framed'], [data-look-stat='topline'], [data-look-stat='ruled'], [data-look-stat='panel'])) to ([data-custom-theme], [data-look-stat]) {
+    [data-slot='stats'] {
+      gap: var(--m-space-4);
+      border: 0;
+      border-radius: 0;
+      overflow: visible;
+
+      & > div {
+        box-shadow: none;
+      }
+    }
+  }
+
+  @scope ([data-look-stat='plain']) to ([data-custom-theme], [data-look-stat]) {
+    :is([data-slot='stats'] > div, [data-slot='metric']) {
+      padding-inline: 0;
+      border: 0;
+      background: none;
+    }
+  }
+
+  @scope ([data-look-stat='framed']) to ([data-custom-theme], [data-look-stat]) {
+    :is([data-slot='stats'] > div, [data-slot='metric']) {
+      border: var(--m-rule-weight, 2px) solid var(--m-ink);
+      border-radius: var(--m-radius);
+    }
+  }
+
+  @scope ([data-look-stat='topline']) to ([data-custom-theme], [data-look-stat]) {
+    :is([data-slot='stats'] > div, [data-slot='metric']) {
+      border: 0;
+      border-block-start: 3px solid var(--m-accent);
+      border-radius: 0;
+      background: color-mix(in oklab, var(--m-raised) 50%, var(--m-surface));
+    }
+  }
+
+  @scope ([data-look-stat='ruled']) to ([data-custom-theme], [data-look-stat]) {
+    :is([data-slot='stats'] > div, [data-slot='metric']) {
+      padding-inline: 0;
+      border: 0;
+      border-block-end: var(--m-rule-weight, 2px) solid var(--m-rule-section, var(--m-ink));
+      border-radius: 0;
+      background: none;
+    }
+  }
+
+  @scope ([data-look-stat='panel']) to ([data-custom-theme], [data-look-stat]) {
+    :is([data-slot='stats'] > div, [data-slot='metric']) {
+      border: 0;
+      border-radius: var(--m-radius-panel, calc(var(--m-radius) + 4px));
+      background: var(--m-surface);
+      box-shadow: var(--m-lift-card, var(--m-shadow-control));
+    }
+  }
+
+  /* ---------- fields: open (ui-next's own), panel, card, rail ---------- */
+  @scope ([data-look-fields='card']) to ([data-custom-theme], [data-look-fields]) {
+    [data-slot='properties'] {
+      padding: var(--m-pad-box);
+      border: 1px solid var(--m-line);
+      border-radius: var(--m-radius-panel, calc(var(--m-radius) + 2px));
+    }
+  }
+
+  @scope ([data-look-fields='panel']) to ([data-custom-theme], [data-look-fields]) {
+    [data-slot='properties'] {
+      padding: var(--m-pad-box);
+      border: 0;
+      border-radius: var(--m-radius-panel, calc(var(--m-radius) + 4px));
+      background: var(--m-surface);
+      box-shadow: var(--m-lift-card, var(--m-shadow-control));
+    }
+  }
+
+  /* Fields drawn as boxes stand off each other and off what is beside them, and the rule that divided the
+     record from what is beside it goes: the boxes' own edges are that division now. */
+  @scope (:is([data-look-fields='card'], [data-look-fields='panel'])) to ([data-custom-theme], [data-look-fields]) {
+    [data-slot='properties']:not(:first-child),
+    [data-slot='properties'] + * {
+      margin-block-start: var(--m-gap-box);
+    }
+
+    [data-slot='record-aside'] {
+      padding-inline-start: 0;
+      border-inline-start: 0;
+    }
+  }
+
+  @scope ([data-look-fields='rail']) to ([data-custom-theme], [data-look-fields]) {
+    [data-slot='properties'] dl {
+      padding-inline-start: var(--m-space-4h);
+      border-inline-start: 2px solid var(--m-line);
+    }
+  }
+
+  /* ---------- board and its lanes: ruled, soft (ui-next's own), strip; tint, tag, plain ---------- */
+  @scope ([data-look-board='ruled']) to ([data-custom-theme], [data-look-board]) {
+    [data-kind='board-lane'] {
+      padding-inline: 0;
+      border-radius: 0;
+      background: none;
+
+      & > header {
+        padding: 0 0 var(--m-space-3);
+        border-block-end: var(--m-rule-weight, 2px) solid var(--m-rule-section, var(--m-ink));
+      }
+    }
+  }
+
+  @scope ([data-look-board='strip']) to ([data-custom-theme], [data-look-board]) {
+    [data-kind='board-lane'] {
+      background: none;
+
+      & > header {
+        padding: var(--m-space-2h) var(--m-space-3h);
+        border-radius: calc(var(--m-radius) - 2px);
+        background: var(--m-raised);
+      }
+    }
+  }
+
+  @scope ([data-look-lanes='tag']) to ([data-custom-theme], [data-look-lanes]) {
+    [data-kind='board-lane'] > header [data-slot='status'] {
+      padding: 0.0625rem var(--m-space-3);
+      border-radius: calc(var(--m-radius) - 3px);
+      background: var(--m-ink);
+      color: var(--m-surface);
+      font-size: var(--m-size-xs);
+      line-height: var(--m-lead-xs);
+
+      &::before {
+        display: none;
+      }
+    }
+  }
+
+  @scope ([data-look-lanes='plain']) to ([data-custom-theme], [data-look-lanes]) {
+    [data-kind='board-lane'] > header [data-slot='status']::before {
+      display: none;
+    }
+  }
+
+  /* ---------- buttons: accent, raised, keyed ---------- */
+  @scope ([data-look-buttons='accent']) to ([data-custom-theme], [data-look-buttons]) {
+    [data-slot='button'][data-variant='solid'] {
+      border-color: var(--m-accent);
+      background: var(--m-accent);
+      color: var(--m-on-accent);
+    }
+  }
+
+  @scope ([data-look-buttons='raised']) to ([data-custom-theme], [data-look-buttons]) {
+    [data-slot='button']:not([data-variant='quiet'], [data-variant='bare']) {
+      box-shadow:
+        0 1px 0 light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.06)) inset,
+        0 1px 2px light-dark(rgb(23 23 26 / 0.12), rgb(0 0 0 / 0.5));
+    }
+  }
+
+  /* A key: a hard edge under it, which goes when it is pressed. */
+  @scope ([data-look-buttons='keyed']) to ([data-custom-theme], [data-look-buttons]) {
+    [data-slot='button']:not([data-variant='quiet'], [data-variant='bare']) {
+      border-radius: calc(var(--m-radius) - 2px);
+      box-shadow: 0 2px 0 var(--m-ink);
+      translate: 0 -1px;
+
+      &:active {
+        box-shadow: 0 0 0 var(--m-ink);
+        translate: 0 1px;
+      }
+    }
+  }
+
+  /* ---------- links: plain (ui-next's own), underline ---------- */
+  @scope ([data-look-links='underline']) to ([data-custom-theme], [data-look-links]) {
+    :is([data-slot='more-link'], [data-slot='prose'] a, td[data-primary] a) {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      text-decoration-thickness: 1px;
+    }
+  }
+
+  /* ---------- filters: dashed (ui-next's own), solid, quiet ---------- */
+  @scope ([data-look-filters='solid']) to ([data-custom-theme], [data-look-filters]) {
+    [data-kind='filter-chip'] {
+      border-style: solid;
+      border-color: var(--m-ink);
+      color: var(--m-ink);
+    }
+  }
+
+  @scope ([data-look-filters='quiet']) to ([data-custom-theme], [data-look-filters]) {
+    [data-kind='filter-chip'] {
+      border-color: transparent;
+      background: var(--m-raised);
+    }
+  }
+
+  /* ---------- avatar: plain, large, round (ui-next's own) ---------- */
+  @scope ([data-look-avatar='plain']) to ([data-custom-theme], [data-look-avatar]) {
+    [data-slot='avatar'] {
+      border-radius: calc(var(--m-radius) - 2px);
+    }
+  }
+
+  @scope ([data-look-avatar='large']) to ([data-custom-theme], [data-look-avatar]) {
+    [data-slot='avatar']:not([data-size='sm']) {
+      width: 2.5rem;
+      height: 2.5rem;
+    }
+  }
+
+  /* ---------- workflow: markers (ui-next's own), pills ---------- */
+  @scope ([data-look-workflow='pills']) to ([data-custom-theme], [data-look-workflow]) {
+    [data-slot='timeline'][data-kind='stages'] {
+      & [data-slot='timeline-marker'] {
+        display: none;
+      }
+
+      & [data-slot='timeline-connector'] {
+        display: none;
+      }
+
+      & [data-slot='timeline-title'] {
+        padding: var(--m-space-1h) var(--m-space-4);
+        border-radius: var(--m-radius-pill, 999px);
+        background: var(--m-raised);
+      }
+
+      & [data-current] [data-slot='timeline-title'] {
+        background: var(--m-accent-soft);
+        color: var(--m-accent-ink);
+      }
+    }
+  }
+
+  /* ---------- chart: plain (ui-next's own), wash, gradient, line ----------
+     How a line chart is drawn. Columns keep their series' colours in every one: a recipe never takes away what
+     tells two series apart. */
+  @scope ([data-look-chart='wash']) to ([data-custom-theme], [data-look-chart]) {
+    [data-slot='chart-wash'] {
+      fill-opacity: 0.14;
+    }
+  }
+
+  /* The wash fades to nothing at the axis, under a heavier line, over a dashed grid. */
+  @scope ([data-look-chart='gradient']) to ([data-custom-theme], [data-look-chart]) {
+    :scope {
+      & [data-slot='chart-wash'] {
+        fill-opacity: 0.24;
+        mask-image: linear-gradient(to bottom, #000, transparent);
+      }
+
+      & [data-slot='chart-line'] {
+        stroke-width: 2.25px;
+      }
+
+      & [data-slot='chart-grid'] {
+        stroke-dasharray: 3 4;
+      }
+    }
+  }
+
+  /* A line and nothing under it, on a grid a shade lighter than a hairline. */
+  @scope ([data-look-chart='line']) to ([data-custom-theme], [data-look-chart]) {
+    :scope {
+      & [data-slot='chart-wash'] {
+        display: none;
+      }
+
+      & [data-slot='chart-line'] {
+        stroke-width: 1.5px;
+      }
+
+      & [data-slot='chart-grid'] {
+        stroke: color-mix(in oklab, var(--m-line) 70%, var(--m-surface));
+      }
+    }
+  }
+
+  /* ---------- header: plain (ui-next's own), band ---------- */
+  @scope ([data-look-header='band']) to ([data-custom-theme], [data-look-header]) {
+    /* The band runs the width of the room whatever the page's own measure is: it is painted past the heading's
+       sides and cut at its top and bottom, so the heading's words stay on the page's margins. The room cuts it at
+       its own sides (`clip`, which makes no scroller and so leaves what sticks sticking). */
+    :is([data-slot='list-head'], [data-slot='record-head']) {
+      margin-block: calc(var(--m-space-6) * -1) var(--m-space-5);
+      padding-block: var(--m-space-5h);
+      background: var(--band, color-mix(in oklab, var(--m-raised) 70%, var(--m-surface)));
+      box-shadow: 0 0 0 100vmax var(--band, color-mix(in oklab, var(--m-raised) 70%, var(--m-surface)));
+      clip-path: inset(0 -100vmax);
+    }
+
+    [data-slot='shell-pane'] {
+      overflow-x: clip;
+    }
+  }
+
+  /* ---------- a form's actions: plain (ui-next's own), raised ---------- */
+  @scope ([data-look-action-bar='raised']) to ([data-custom-theme], [data-look-action-bar]) {
+    [data-slot='form-page'] > [data-slot='action-bar'] {
+      border-block-start-color: transparent;
+      box-shadow: 0 -8px 20px -12px light-dark(rgb(23 23 26 / 0.28), rgb(0 0 0 / 0.8));
+    }
+  }
+
+  /* ---------- the menu: tint, inverted, wash, underline, pill, quiet (ui-next's own), slot ---------- */
+  /* The menu is a surface of its own in a theme (`nav.ground`, `nav.ink`): inside it the tokens are the menu's,
+     so everything drawn there, a count, a group's name, the fold, reads on it without a rule of its own. */
+  @scope ([data-custom-theme]) to ([data-custom-theme]) {
+    [data-slot='shell-rail'] {
+      --m-ground: var(--m-nav-ground);
+      --m-surface: var(--m-nav-ground);
+      --m-raised: color-mix(in oklab, var(--m-nav-ink) 9%, var(--m-nav-ground));
+      --m-ink: var(--m-nav-ink);
+      --m-ink-muted: var(--m-nav-muted);
+      --m-ink-subtle: var(--m-nav-muted);
+      --m-line: var(--m-nav-line);
+      --m-accent-ink: var(--m-nav-accent);
+      border-color: var(--m-nav-line);
+      background: var(--m-nav-ground);
+      color: var(--m-nav-ink);
+    }
+  }
+
+  /* The current room is each recipe's to draw: the menu's own mark goes first. `:where`, so that a recipe's rule
+     below answers it whatever its weight. */
+  @scope ([data-look-nav]:not([data-look-nav='quiet'])) to ([data-custom-theme], [data-look-nav]) {
+    :where([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a[aria-current] {
+      background: none;
+    }
+  }
+
+  @scope ([data-look-nav='tint']) to ([data-custom-theme], [data-look-nav]) {
+    :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a[aria-current] {
+      background: var(--m-accent-soft);
+      color: var(--m-accent-ink);
+    }
+  }
+
+  @scope ([data-look-nav='inverted']) to ([data-custom-theme], [data-look-nav]) {
+    :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a[aria-current] {
+      border-radius: 0;
+      background: var(--m-nav-current, var(--m-ink));
+      color: var(--m-nav-on-current, var(--m-surface));
+
+      & [data-slot='shell-nav-count'] {
+        color: inherit;
+        opacity: 0.8;
+      }
+    }
+  }
+
+  @scope ([data-look-nav='wash']) to ([data-custom-theme], [data-look-nav]) {
+    :scope {
+      & [data-slot='shell-rail'] {
+        background: color-mix(in oklab, var(--m-nav-accent, var(--m-accent)) 8%, var(--m-ground));
+      }
+
+      & :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a[aria-current] {
+        background: color-mix(in oklab, var(--m-nav-accent, var(--m-accent)) 16%, var(--m-ground));
+      }
+    }
+  }
+
+  @scope ([data-look-nav='underline']) to ([data-custom-theme], [data-look-nav]) {
+    :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a[aria-current] {
+      border-radius: 0;
+      box-shadow: inset 0 -2px 0 var(--m-nav-accent, var(--m-accent));
+    }
+  }
+
+  @scope ([data-look-nav='pill']) to ([data-custom-theme], [data-look-nav]) {
+    :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a {
+      border-radius: var(--m-radius-pill, 999px);
+      padding-inline: var(--m-space-4);
+
+      &[aria-current] {
+        background: var(--m-accent-soft);
+        color: var(--m-accent-ink);
+      }
+    }
+  }
+
+  /* A slot cut for the current room: a marker at its leading edge, in the menu's accent. */
+  @scope ([data-look-nav='slot']) to ([data-custom-theme], [data-look-nav]) {
+    :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a[aria-current] {
+      border-radius: 0;
+      background: color-mix(in oklab, var(--m-ink) 6%, transparent);
+      box-shadow: inset 3px 0 0 var(--m-nav-accent, var(--m-accent));
+    }
+  }
+
+  /* ---------- the bar: plain (ui-next's own), ruled, dark, airy, soft ---------- */
+  @scope ([data-look-bar='ruled']) to ([data-custom-theme], [data-look-bar]) {
+    [data-slot='shell-bar'] {
+      box-shadow: inset 0 calc(var(--m-rule-weight, 2px) * -1) 0 var(--m-rule-section, var(--m-ink));
+    }
+  }
+
+  @scope ([data-look-bar='dark']) to ([data-custom-theme], [data-look-bar]) {
+    [data-slot='shell-bar'] {
+      --m-ink: var(--m-nav-ink, #f2f2f0);
+      --m-ink-muted: var(--m-nav-muted, #c5c5c0);
+      --m-ink-subtle: var(--m-nav-muted, #c5c5c0);
+      --m-raised: color-mix(in oklab, var(--m-ink) 12%, transparent);
+      --m-line: color-mix(in oklab, var(--m-ink) 18%, transparent);
+      background: var(--m-nav-ground, #1b1b1d);
+      color: var(--m-ink);
+      box-shadow: none;
+      backdrop-filter: none;
+    }
+  }
+
+  @scope ([data-look-bar='airy']) to ([data-custom-theme], [data-look-bar]) {
+    [data-slot='shell'] {
+      --shell-bar: 3.5rem;
+
+      & [data-slot='shell-bar'] {
+        box-shadow: none;
+      }
+    }
+  }
+
+  @scope ([data-look-bar='soft']) to ([data-custom-theme], [data-look-bar]) {
+    [data-slot='shell-bar'] {
+      background: color-mix(in oklab, var(--m-ground) 85%, transparent);
+    }
+  }
+
+  /* ---------- rhythm: house (ui-next's own), tight, airy ----------
+     How far apart things stand. As in mistri, it moves the page's air (the steps from 16px up, and the seam
+     between sections) a quarter closer or wider, and never a control's own padding or a row's height. A box's
+     padding is made from a step, so it is made again here: a token that names another is settled where it is
+     written. */
+  @scope ([data-look-rhythm='tight']) to ([data-custom-theme], [data-look-rhythm]) {
+    :scope {
+      --m-space-5: 0.75rem;
+      --m-space-5h: 0.9375rem;
+      --m-space-6: 1.125rem;
+      --m-space-7: 1.5rem;
+      --m-space-8: 2.25rem;
+      --m-seam: 1.875rem;
+      --m-pad-box: var(--m-space-5);
+    }
+  }
+
+  @scope ([data-look-rhythm='airy']) to ([data-custom-theme], [data-look-rhythm]) {
+    :scope {
+      --m-space-5: 1.25rem;
+      --m-space-5h: 1.5625rem;
+      --m-space-6: 1.875rem;
+      --m-space-7: 2.5rem;
+      --m-space-8: 3.75rem;
+      --m-seam: 3.125rem;
+      --m-pad-box: var(--m-space-5);
+    }
+  }
+
+  /* A rhythm goes down into a theme worn inside this one, as any token does: the house's says its own. */
+  @scope ([data-look-rhythm='house']) to ([data-custom-theme], [data-look-rhythm]) {
+    :scope:not(:root, body) {
+      --m-space-5: 1rem;
+      --m-space-5h: 1.25rem;
+      --m-space-6: 1.5rem;
+      --m-space-7: 2rem;
+      --m-space-8: 3rem;
+      --m-seam: 2.5rem;
+      --m-pad-box: var(--m-space-5);
+    }
+  }
+
+  /* ---------- how far things are lifted: hairline (ui-next's own), flat, soft, raised ---------- */
+  /* The lift is a token, and a token goes down into a theme worn inside this one: the hairline says its own. */
+  @scope ([data-look-elevation='hairline']) to ([data-custom-theme], [data-look-elevation]) {
+    :scope {
+      --m-lift-card: initial;
+    }
+  }
+
+  @scope ([data-look-elevation='flat']) to ([data-custom-theme], [data-look-elevation]) {
+    :scope {
+      --m-shadow-control: none;
+      --m-shadow-pop: 0 0 0 1px var(--m-ink);
+      --ui-shadow: var(--m-shadow-pop);
+      --m-lift-card: 0 0 0 1px var(--m-line-strong);
+    }
+  }
+
+  @scope ([data-look-elevation='soft']) to ([data-custom-theme], [data-look-elevation]) {
+    :scope {
+      --m-lift-card:
+        0 1px 2px light-dark(rgb(23 23 26 / 0.05), rgb(0 0 0 / 0.4)), 0 6px 20px -8px light-dark(rgb(23 23 26 / 0.12), rgb(0 0 0 / 0.6));
+    }
+  }
+
+  @scope ([data-look-elevation='raised']) to ([data-custom-theme], [data-look-elevation]) {
+    :scope {
+      --m-lift-card:
+        0 1px 2px light-dark(rgb(23 23 26 / 0.06), rgb(0 0 0 / 0.4)), 0 10px 28px -10px light-dark(rgb(23 23 26 / 0.18), rgb(0 0 0 / 0.7));
+    }
+  }
+
+  /* ---------- a theme's faces ---------- */
+  @scope ([data-custom-theme]) to ([data-custom-theme]) {
+    :is(h1, h2, [data-slot='chart-title'], [data-slot='shell-brand']) {
+      font-family: var(--m-font-heading, inherit);
+      font-weight: var(--m-heading-weight, revert-layer);
+    }
+  }
+
+  @scope ([data-custom-theme]) to ([data-custom-theme]) {
+    :is([data-slot='metric-value'], [data-slot='stats'] dd:first-of-type, [data-slot='card-figure']) {
+      font-family: var(--m-font-figures, inherit);
+    }
+  }
+
+  /* ---------- type roles ----------
+     A theme sets a role's face, size, leading, tracking, weight, case and figures (`type.roles`), and wears each
+     property it says as a word in `data-type-<role>` beside a `--type-<role>-<property>` token, so a role that
+     says nothing turns no rule on. These are the parts each role is in ui-next. A title's weight is every
+     heading's (`--heading-weight`), as it is in mistri. */
+
+  @scope ([data-type-title~='face']) to ([data-custom-theme]) {
+    [data-slot='record-title'] {
+      font-family: var(--type-title-font);
+    }
+  }
+
+  @scope ([data-type-title~='size']) to ([data-custom-theme]) {
+    [data-slot='record-title'] {
+      font-size: var(--type-record-title);
+      line-height: round(up, calc(var(--type-record-title) * 1.3), 1px);
+    }
+  }
+
+  @scope ([data-type-title~='leading']) to ([data-custom-theme]) {
+    [data-slot='record-title'] {
+      line-height: var(--type-title-leading);
+    }
+  }
+
+  @scope ([data-type-title~='tracking']) to ([data-custom-theme]) {
+    [data-slot='record-title'] {
+      letter-spacing: var(--type-title-tracking);
+    }
+  }
+
+  @scope ([data-type-title~='weight']) to ([data-custom-theme]) {
+    [data-slot='record-title'] {
+      font-weight: var(--type-title-weight);
+    }
+  }
+
+  @scope ([data-type-title~='upper']) to ([data-custom-theme]) {
+    [data-slot='record-title'] {
+      text-transform: uppercase;
+      letter-spacing: var(--type-title-tracking, 0.05em);
+    }
+  }
+
+  @scope ([data-type-title~='small-caps']) to ([data-custom-theme]) {
+    [data-slot='record-title'] {
+      font-variant-caps: all-small-caps;
+      letter-spacing: var(--type-title-tracking, 0.05em);
+    }
+  }
+
+  @scope ([data-type-title~='numeric']) to ([data-custom-theme]) {
+    [data-slot='record-title'] {
+      font-variant-numeric: var(--type-title-numeric);
+    }
+  }
+
+  @scope ([data-type-title~='features']) to ([data-custom-theme]) {
+    [data-slot='record-title'] {
+      font-feature-settings: var(--type-title-features);
+    }
+  }
+
+  @scope ([data-type-heading~='face']) to ([data-custom-theme]) {
+    [data-slot='list-head'] > :is(h1, h2) {
+      font-family: var(--type-heading-font);
+    }
+  }
+
+  @scope ([data-type-heading~='size']) to ([data-custom-theme]) {
+    [data-slot='list-head'] > :is(h1, h2) {
+      font-size: var(--type-heading-size);
+      line-height: round(up, calc(var(--type-heading-size) * 1.3), 1px);
+    }
+  }
+
+  @scope ([data-type-heading~='leading']) to ([data-custom-theme]) {
+    [data-slot='list-head'] > :is(h1, h2) {
+      line-height: var(--type-heading-leading);
+    }
+  }
+
+  @scope ([data-type-heading~='tracking']) to ([data-custom-theme]) {
+    [data-slot='list-head'] > :is(h1, h2) {
+      letter-spacing: var(--type-heading-tracking);
+    }
+  }
+
+  @scope ([data-type-heading~='weight']) to ([data-custom-theme]) {
+    [data-slot='list-head'] > :is(h1, h2) {
+      font-weight: var(--type-heading-weight);
+    }
+  }
+
+  @scope ([data-type-heading~='upper']) to ([data-custom-theme]) {
+    [data-slot='list-head'] > :is(h1, h2) {
+      text-transform: uppercase;
+      letter-spacing: var(--type-heading-tracking, 0.05em);
+    }
+  }
+
+  @scope ([data-type-heading~='small-caps']) to ([data-custom-theme]) {
+    [data-slot='list-head'] > :is(h1, h2) {
+      font-variant-caps: all-small-caps;
+      letter-spacing: var(--type-heading-tracking, 0.05em);
+    }
+  }
+
+  @scope ([data-type-heading~='numeric']) to ([data-custom-theme]) {
+    [data-slot='list-head'] > :is(h1, h2) {
+      font-variant-numeric: var(--type-heading-numeric);
+    }
+  }
+
+  @scope ([data-type-heading~='features']) to ([data-custom-theme]) {
+    [data-slot='list-head'] > :is(h1, h2) {
+      font-feature-settings: var(--type-heading-features);
+    }
+  }
+
+  @scope ([data-type-section~='face']) to ([data-custom-theme]) {
+    :is(
+      :is([data-slot='record-section'], [data-slot='dash-block'], [data-slot='form-section']) > header > :is(h2, h3, h4),
+      [data-slot='chart-title']
+    ) {
+      font-family: var(--type-section-font);
+    }
+  }
+
+  @scope ([data-type-section~='size']) to ([data-custom-theme]) {
+    :is(
+      :is([data-slot='record-section'], [data-slot='dash-block'], [data-slot='form-section']) > header > :is(h2, h3, h4),
+      [data-slot='chart-title']
+    ) {
+      font-size: var(--type-section-size);
+      line-height: round(up, calc(var(--type-section-size) * 1.3), 1px);
+    }
+  }
+
+  @scope ([data-type-section~='leading']) to ([data-custom-theme]) {
+    :is(
+      :is([data-slot='record-section'], [data-slot='dash-block'], [data-slot='form-section']) > header > :is(h2, h3, h4),
+      [data-slot='chart-title']
+    ) {
+      line-height: var(--type-section-leading);
+    }
+  }
+
+  @scope ([data-type-section~='tracking']) to ([data-custom-theme]) {
+    :is(
+      :is([data-slot='record-section'], [data-slot='dash-block'], [data-slot='form-section']) > header > :is(h2, h3, h4),
+      [data-slot='chart-title']
+    ) {
+      letter-spacing: var(--type-section-tracking);
+    }
+  }
+
+  @scope ([data-type-section~='weight']) to ([data-custom-theme]) {
+    :is(
+      :is([data-slot='record-section'], [data-slot='dash-block'], [data-slot='form-section']) > header > :is(h2, h3, h4),
+      [data-slot='chart-title']
+    ) {
+      font-weight: var(--type-section-weight);
+    }
+  }
+
+  @scope ([data-type-section~='upper']) to ([data-custom-theme]) {
+    :is(
+      :is([data-slot='record-section'], [data-slot='dash-block'], [data-slot='form-section']) > header > :is(h2, h3, h4),
+      [data-slot='chart-title']
+    ) {
+      text-transform: uppercase;
+      letter-spacing: var(--type-section-tracking, 0.05em);
+    }
+  }
+
+  @scope ([data-type-section~='small-caps']) to ([data-custom-theme]) {
+    :is(
+      :is([data-slot='record-section'], [data-slot='dash-block'], [data-slot='form-section']) > header > :is(h2, h3, h4),
+      [data-slot='chart-title']
+    ) {
+      font-variant-caps: all-small-caps;
+      letter-spacing: var(--type-section-tracking, 0.05em);
+    }
+  }
+
+  @scope ([data-type-section~='numeric']) to ([data-custom-theme]) {
+    :is(
+      :is([data-slot='record-section'], [data-slot='dash-block'], [data-slot='form-section']) > header > :is(h2, h3, h4),
+      [data-slot='chart-title']
+    ) {
+      font-variant-numeric: var(--type-section-numeric);
+    }
+  }
+
+  @scope ([data-type-section~='features']) to ([data-custom-theme]) {
+    :is(
+      :is([data-slot='record-section'], [data-slot='dash-block'], [data-slot='form-section']) > header > :is(h2, h3, h4),
+      [data-slot='chart-title']
+    ) {
+      font-feature-settings: var(--type-section-features);
+    }
+  }
+
+  @scope ([data-type-label~='face']) to ([data-custom-theme]) {
+    :is(
+      [data-slot='data-table'] thead :is(th, th button),
+      [data-slot='stats'] dt,
+      [data-slot='metric-label'],
+      [data-slot='properties'] dt
+    ) {
+      font-family: var(--type-label-font);
+    }
+  }
+
+  @scope ([data-type-label~='size']) to ([data-custom-theme]) {
+    :is(
+      [data-slot='data-table'] thead :is(th, th button),
+      [data-slot='stats'] dt,
+      [data-slot='metric-label'],
+      [data-slot='properties'] dt
+    ) {
+      font-size: var(--type-label-size);
+      line-height: round(up, calc(var(--type-label-size) * 1.3), 1px);
+    }
+  }
+
+  @scope ([data-type-label~='leading']) to ([data-custom-theme]) {
+    :is(
+      [data-slot='data-table'] thead :is(th, th button),
+      [data-slot='stats'] dt,
+      [data-slot='metric-label'],
+      [data-slot='properties'] dt
+    ) {
+      line-height: var(--type-label-leading);
+    }
+  }
+
+  @scope ([data-type-label~='tracking']) to ([data-custom-theme]) {
+    :is(
+      [data-slot='data-table'] thead :is(th, th button),
+      [data-slot='stats'] dt,
+      [data-slot='metric-label'],
+      [data-slot='properties'] dt
+    ) {
+      letter-spacing: var(--type-label-tracking);
+    }
+  }
+
+  @scope ([data-type-label~='weight']) to ([data-custom-theme]) {
+    :is(
+      [data-slot='data-table'] thead :is(th, th button),
+      [data-slot='stats'] dt,
+      [data-slot='metric-label'],
+      [data-slot='properties'] dt
+    ) {
+      font-weight: var(--type-label-weight);
+    }
+  }
+
+  @scope ([data-type-label~='upper']) to ([data-custom-theme]) {
+    :is(
+      [data-slot='data-table'] thead :is(th, th button),
+      [data-slot='stats'] dt,
+      [data-slot='metric-label'],
+      [data-slot='properties'] dt
+    ) {
+      text-transform: uppercase;
+      letter-spacing: var(--type-label-tracking, 0.05em);
+    }
+  }
+
+  @scope ([data-type-label~='small-caps']) to ([data-custom-theme]) {
+    :is(
+      [data-slot='data-table'] thead :is(th, th button),
+      [data-slot='stats'] dt,
+      [data-slot='metric-label'],
+      [data-slot='properties'] dt
+    ) {
+      font-variant-caps: all-small-caps;
+      letter-spacing: var(--type-label-tracking, 0.05em);
+    }
+  }
+
+  @scope ([data-type-label~='numeric']) to ([data-custom-theme]) {
+    :is(
+      [data-slot='data-table'] thead :is(th, th button),
+      [data-slot='stats'] dt,
+      [data-slot='metric-label'],
+      [data-slot='properties'] dt
+    ) {
+      font-variant-numeric: var(--type-label-numeric);
+    }
+  }
+
+  @scope ([data-type-label~='features']) to ([data-custom-theme]) {
+    :is(
+      [data-slot='data-table'] thead :is(th, th button),
+      [data-slot='stats'] dt,
+      [data-slot='metric-label'],
+      [data-slot='properties'] dt
+    ) {
+      font-feature-settings: var(--type-label-features);
+    }
+  }
+
+  @scope ([data-type-data~='face']) to ([data-custom-theme]) {
+    [data-slot='data-table'] tbody td {
+      font-family: var(--type-data-font);
+    }
+  }
+
+  @scope ([data-type-data~='size']) to ([data-custom-theme]) {
+    [data-slot='data-table'] tbody td {
+      font-size: var(--type-data-size);
+      line-height: round(up, calc(var(--type-data-size) * 1.3), 1px);
+    }
+  }
+
+  @scope ([data-type-data~='leading']) to ([data-custom-theme]) {
+    [data-slot='data-table'] tbody td {
+      line-height: var(--type-data-leading);
+    }
+  }
+
+  @scope ([data-type-data~='tracking']) to ([data-custom-theme]) {
+    [data-slot='data-table'] tbody td {
+      letter-spacing: var(--type-data-tracking);
+    }
+  }
+
+  @scope ([data-type-data~='weight']) to ([data-custom-theme]) {
+    [data-slot='data-table'] tbody td {
+      font-weight: var(--type-data-weight);
+    }
+  }
+
+  @scope ([data-type-data~='upper']) to ([data-custom-theme]) {
+    [data-slot='data-table'] tbody td {
+      text-transform: uppercase;
+      letter-spacing: var(--type-data-tracking, 0.05em);
+    }
+  }
+
+  @scope ([data-type-data~='small-caps']) to ([data-custom-theme]) {
+    [data-slot='data-table'] tbody td {
+      font-variant-caps: all-small-caps;
+      letter-spacing: var(--type-data-tracking, 0.05em);
+    }
+  }
+
+  @scope ([data-type-data~='numeric']) to ([data-custom-theme]) {
+    [data-slot='data-table'] tbody td {
+      font-variant-numeric: var(--type-data-numeric);
+    }
+  }
+
+  @scope ([data-type-data~='features']) to ([data-custom-theme]) {
+    [data-slot='data-table'] tbody td {
+      font-feature-settings: var(--type-data-features);
+    }
+  }
+
+  @scope ([data-type-figure~='face']) to ([data-custom-theme]) {
+    :is([data-slot='stats'] dd:not([data-slot]), [data-slot='metric-value']) {
+      font-family: var(--type-figure-font);
+    }
+  }
+
+  @scope ([data-type-figure~='size']) to ([data-custom-theme]) {
+    :is([data-slot='stats'] dd:not([data-slot]), [data-slot='metric-value']) {
+      font-size: var(--type-figure-size);
+      line-height: round(up, calc(var(--type-figure-size) * 1.3), 1px);
+    }
+  }
+
+  @scope ([data-type-figure~='leading']) to ([data-custom-theme]) {
+    :is([data-slot='stats'] dd:not([data-slot]), [data-slot='metric-value']) {
+      line-height: var(--type-figure-leading);
+    }
+  }
+
+  @scope ([data-type-figure~='tracking']) to ([data-custom-theme]) {
+    :is([data-slot='stats'] dd:not([data-slot]), [data-slot='metric-value']) {
+      letter-spacing: var(--type-figure-tracking);
+    }
+  }
+
+  @scope ([data-type-figure~='weight']) to ([data-custom-theme]) {
+    :is([data-slot='stats'] dd:not([data-slot]), [data-slot='metric-value']) {
+      font-weight: var(--type-figure-weight);
+    }
+  }
+
+  @scope ([data-type-figure~='upper']) to ([data-custom-theme]) {
+    :is([data-slot='stats'] dd:not([data-slot]), [data-slot='metric-value']) {
+      text-transform: uppercase;
+      letter-spacing: var(--type-figure-tracking, 0.05em);
+    }
+  }
+
+  @scope ([data-type-figure~='small-caps']) to ([data-custom-theme]) {
+    :is([data-slot='stats'] dd:not([data-slot]), [data-slot='metric-value']) {
+      font-variant-caps: all-small-caps;
+      letter-spacing: var(--type-figure-tracking, 0.05em);
+    }
+  }
+
+  @scope ([data-type-figure~='numeric']) to ([data-custom-theme]) {
+    :is([data-slot='stats'] dd:not([data-slot]), [data-slot='metric-value']) {
+      font-variant-numeric: var(--type-figure-numeric);
+    }
+  }
+
+  @scope ([data-type-figure~='features']) to ([data-custom-theme]) {
+    :is([data-slot='stats'] dd:not([data-slot]), [data-slot='metric-value']) {
+      font-feature-settings: var(--type-figure-features);
+    }
+  }
+
+  @scope ([data-type-nav~='face']) to ([data-custom-theme]) {
+    :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a {
+      font-family: var(--type-nav-font);
+    }
+  }
+
+  @scope ([data-type-nav~='size']) to ([data-custom-theme]) {
+    :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a {
+      font-size: var(--type-nav-size);
+      line-height: round(up, calc(var(--type-nav-size) * 1.3), 1px);
+    }
+  }
+
+  @scope ([data-type-nav~='leading']) to ([data-custom-theme]) {
+    :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a {
+      line-height: var(--type-nav-leading);
+    }
+  }
+
+  @scope ([data-type-nav~='tracking']) to ([data-custom-theme]) {
+    :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a {
+      letter-spacing: var(--type-nav-tracking);
+    }
+  }
+
+  @scope ([data-type-nav~='weight']) to ([data-custom-theme]) {
+    :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a {
+      font-weight: var(--type-nav-weight);
+    }
+  }
+
+  @scope ([data-type-nav~='upper']) to ([data-custom-theme]) {
+    :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a {
+      text-transform: uppercase;
+      letter-spacing: var(--type-nav-tracking, 0.05em);
+    }
+  }
+
+  @scope ([data-type-nav~='small-caps']) to ([data-custom-theme]) {
+    :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a {
+      font-variant-caps: all-small-caps;
+      letter-spacing: var(--type-nav-tracking, 0.05em);
+    }
+  }
+
+  @scope ([data-type-nav~='numeric']) to ([data-custom-theme]) {
+    :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a {
+      font-variant-numeric: var(--type-nav-numeric);
+    }
+  }
+
+  @scope ([data-type-nav~='features']) to ([data-custom-theme]) {
+    :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a {
+      font-feature-settings: var(--type-nav-features);
+    }
+  }
+
+  /* ---------- a theme's corners ----------
+     mistri says four: a control's, a field's, a pill's and a panel's. A field's and a control's are their own
+     here where a theme says them (Ledger squares its fields and softens its buttons); a pill's is read wherever
+     a word stands in a rounded box (`--m-radius-pill`). */
+  @scope ([data-custom-theme]) to ([data-custom-theme]) {
+    :is(
+      [data-slot='input'],
+      [data-slot='textarea'],
+      [data-slot='select-trigger'],
+      [data-slot='combobox-input'],
+      [data-slot='date-picker-input'],
+      [data-slot='adorned'],
+      [data-slot='number-input-group'],
+      [data-slot='password-input'],
+      [data-slot='time-input'],
+      [data-slot='file-input-dropzone'],
+      [data-slot='choice']
+    ) {
+      border-radius: var(--m-radius-field, var(--m-radius));
+    }
+
+    :is(
+      [data-slot='button'],
+      [data-slot$='-trigger']:not([data-slot='select-trigger'], [data-kind='filter-chip'], [data-kind='help-tip'])
+    ) {
+      border-radius: var(--m-radius-control, var(--m-radius));
+    }
+  }
+
+  /* The face values are set in, where a theme names one (Ledger sets them in a monospace). */
+  @scope ([data-custom-theme]) to ([data-custom-theme]) {
+    :is([data-slot='data-table'] tbody td, [data-slot='properties'] dd, [data-slot='facts'] dd) {
+      font-family: var(--m-font-data, inherit);
+    }
+  }
+
+  /* A data face that reaches figures only (`type.roles.data.reach`): a name, a status and a sentence are read in
+     the interface's face, and a table's figures, the cells set to the end of their column, keep the data face. */
+  @scope ([data-type-data~='figures']) to ([data-custom-theme]) {
+    :is([data-slot='data-table'] tbody td, [data-slot='properties'] dd, [data-slot='facts'] dd) {
+      font-family: inherit;
+    }
+
+    [data-slot='data-table'] tbody td[data-align='end'] {
+      font-family: var(--m-font-data, inherit);
+    }
+  }
+}

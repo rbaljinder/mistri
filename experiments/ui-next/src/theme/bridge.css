@@ -1,0 +1,211 @@
+/* Wearing a theme. mistri says a theme as tokens named by what they are for (`--ground`, `--accent`,
+   `--status-good`) and as one attribute a recipe (`data-look-tabs`), set by `defineTheme`, a built-in look, a
+   palette or a reader's choice. Wherever a theme is worn (`data-custom-theme`, which mistri puts on the root and
+   `wearTheme` puts on any element), ui-next's own tokens are those: so the library follows an App's look, a
+   tenant's branding and a reader's palette without knowing any of them, and a part of a page can wear another
+   theme than the page.
+
+   A token a theme does not say is ui-next's own. A token cannot name itself as its fallback, so the root keeps
+   each of its own under a second name (`--m-own-*`) and a worn theme falls back to that. That is also why a
+   theme worn by the root is read on the body: the root's tokens stay ui-next's, with what a reader set there
+   (density, corners), and the theme lies over them from the body down. A token only a theme has (the menu's
+   colours, the rules, a heading's face) has no fallback here: it is nothing where no theme says it, and the
+   rule that reads it says what stands in. */
+@layer m-tokens {
+  :root {
+    --m-own-ground: var(--m-ground);
+    --m-own-surface: var(--m-surface);
+    --m-own-raised: var(--m-raised);
+    --m-own-line: var(--m-line);
+    --m-own-line-strong: var(--m-line-strong);
+    --m-own-line-control: var(--m-line-control);
+    --m-own-ink: var(--m-ink);
+    --m-own-ink-muted: var(--m-ink-muted);
+    --m-own-ink-subtle: var(--m-ink-subtle);
+    --m-own-accent: var(--m-accent);
+    --m-own-on-accent: var(--m-on-accent);
+    --m-own-accent-ink: var(--m-accent-ink);
+    --m-own-good: var(--m-good);
+    --m-own-warning: var(--m-warning);
+    --m-own-critical: var(--m-critical);
+    --m-own-info: var(--m-info);
+    --m-own-series-1: var(--m-series-1);
+    --m-own-series-2: var(--m-series-2);
+    --m-own-series-3: var(--m-series-3);
+    --m-own-series-4: var(--m-series-4);
+    --m-own-series-5: var(--m-series-5);
+    --m-own-series-6: var(--m-series-6);
+    --m-own-series-7: var(--m-series-7);
+    --m-own-series-8: var(--m-series-8);
+    --m-own-sans: var(--m-sans);
+    --m-own-mono: var(--m-mono);
+    --m-own-radius: var(--m-radius);
+    --m-own-text: var(--m-text);
+    /* Two of mistri's tokens a theme's type is written against, for a page mistri is not on to say them: the
+       step its sizes are multiplied by, and its monospace. On an App's page mistri's own stand over these. */
+    --type-k: 1;
+    --code: var(--m-mono);
+  }
+
+  /* A theme worn inside another starts from nothing: mistri's tokens go down the page like any other, and what
+     the outer theme said and this one does not (a primary, the menu's ground) would be worn here as this one's.
+     Every name a theme can say is listed (kit/theme.test.tsx holds the list to the engine's); what the theme
+     does say is written on the element itself and stands over this. */
+  [data-custom-theme]:not(:root) {
+    --ground: initial;
+    --surface: initial;
+    --field-fill: initial;
+    --raised: initial;
+    --line: initial;
+    --line-strong: initial;
+    --line-control: initial;
+    --ink: initial;
+    --ink-muted: initial;
+    --ink-subtle: initial;
+    --accent: initial;
+    --on-accent: initial;
+    --accent-ink: initial;
+    --primary: initial;
+    --on-primary: initial;
+    --focus: initial;
+    --accent-soft: initial;
+    --link: initial;
+    --status-good: initial;
+    --status-warning: initial;
+    --status-critical: initial;
+    --status-info: initial;
+    --nav-ground: initial;
+    --nav-ink: initial;
+    --nav-muted: initial;
+    --nav-line: initial;
+    --nav-accent: initial;
+    --nav-current: initial;
+    --nav-on-current: initial;
+    --rules-section: initial;
+    --rules-head: initial;
+    --shadow-ink: initial;
+    --band: initial;
+    --rules-weight: initial;
+    --control-border-w: initial;
+    --chart-1: initial;
+    --chart-2: initial;
+    --chart-3: initial;
+    --chart-4: initial;
+    --chart-5: initial;
+    --chart-6: initial;
+    --chart-7: initial;
+    --chart-8: initial;
+    --sans: initial;
+    --mono: initial;
+    --heading-font: initial;
+    --figures-face: initial;
+    --radius: initial;
+    --field-radius: initial;
+    --pill-radius: initial;
+    --panel-radius: initial;
+    --control-radius: initial;
+    --control-h: initial;
+    --heading-weight: initial;
+    --type-k: 1;
+    --code: var(--m-own-mono);
+  }
+
+  :root[data-custom-theme] > body,
+  [data-custom-theme]:not(:root) {
+    --m-ground: var(--ground, var(--m-own-ground));
+    --m-surface: var(--surface, var(--m-own-surface));
+    --m-raised: var(--raised, var(--m-own-raised));
+    --m-line: var(--line, var(--m-own-line));
+    --m-line-strong: var(--line-strong, var(--m-own-line-strong));
+    --m-line-control: var(--line-control, var(--m-own-line-control));
+    --m-ink: var(--ink, var(--m-own-ink));
+    --m-ink-muted: var(--ink-muted, var(--m-own-ink-muted));
+    --m-ink-subtle: var(--ink-subtle, var(--m-own-ink-subtle));
+    --m-accent: var(--accent, var(--m-own-accent));
+    /* The inks an accent needs, where a theme says the accent and not them: mistri's own rule (the page on the
+       accent, the accent as its own ink). */
+    --m-on-accent: var(--on-accent, var(--ground, var(--m-own-on-accent)));
+    --m-accent-ink: var(--accent-ink, var(--accent, var(--m-own-accent-ink)));
+    --m-good: var(--status-good, var(--m-own-good));
+    --m-warning: var(--status-warning, var(--m-own-warning));
+    --m-critical: var(--status-critical, var(--m-own-critical));
+    --m-info: var(--status-info, var(--m-own-info));
+    --m-series-1: var(--chart-1, var(--m-own-series-1));
+    --m-series-2: var(--chart-2, var(--m-own-series-2));
+    --m-series-3: var(--chart-3, var(--m-own-series-3));
+    --m-series-4: var(--chart-4, var(--m-own-series-4));
+    --m-series-5: var(--chart-5, var(--m-own-series-5));
+    --m-series-6: var(--chart-6, var(--m-own-series-6));
+    --m-series-7: var(--chart-7, var(--m-own-series-7));
+    --m-series-8: var(--chart-8, var(--m-own-series-8));
+    --m-sans: var(--sans, var(--m-own-sans));
+    /* mistri's `--mono` is the face values are set in, which most looks leave as the interface's own; its
+       monospace is `--code`. */
+    --m-mono: var(--code, var(--m-own-mono));
+    --m-radius: var(--radius, var(--m-own-radius));
+    /* A theme's base size, as mistri says it: a step over thirteen pixels, on the reader's density. */
+    --m-text: calc(var(--m-own-text) * var(--type-k, 1));
+    /* What only a theme says: the menu's own colours (the page's where it says none), the rules, a heading's
+       face, what a shadow is mixed from. */
+    --m-nav-ground: var(--nav-ground, var(--m-ground));
+    --m-nav-ink: var(--nav-ink, var(--m-ink));
+    --m-nav-muted: var(--nav-muted, var(--m-ink-muted));
+    --m-nav-line: var(--nav-line, var(--m-line));
+    --m-nav-accent: var(--nav-accent, var(--m-accent-ink));
+    --m-nav-current: var(--nav-current);
+    --m-nav-on-current: var(--nav-on-current);
+    --m-rule-section: var(--rules-section);
+    --m-rule-head: var(--rules-head);
+    --m-rule-weight: var(--rules-weight);
+    --m-font-heading: var(--heading-font);
+    --m-heading-weight: var(--heading-weight);
+    --m-font-figures: var(--figures-face);
+    --m-font-data: var(--mono);
+    --m-radius-field: var(--field-radius);
+    --m-radius-control: var(--control-radius);
+    --m-radius-pill: var(--pill-radius);
+    --m-radius-panel: var(--panel-radius);
+    --m-focus: var(--focus);
+    --m-link: var(--link);
+    --m-shadow-ink: var(--shadow-ink);
+    color: var(--m-ink);
+    font-family: var(--m-sans);
+  }
+
+  /* What is made from other tokens is made again where a theme changes them: a token that names another is
+     worked out where it is written, not where it is used, so the root's would still be the root's. These are the
+     same lines as tokens.css's (kit/theme.test.tsx holds the two together). */
+  :root[data-custom-theme] > body,
+  [data-custom-theme]:not(:root) {
+    --m-accent-soft: color-mix(in oklab, var(--m-accent) 9%, var(--m-surface));
+    --m-primary: var(--m-ink);
+    --m-on-primary: var(--m-surface);
+    --m-row: calc(var(--m-unit) * 10);
+    --m-size-sm: var(--m-text);
+    --m-leading: var(--m-lead-sm);
+    --ui-background: var(--m-surface);
+    --ui-foreground: var(--m-ink);
+    --ui-muted: var(--m-raised);
+    --ui-muted-foreground: var(--m-ink-muted);
+    --ui-border: var(--m-line);
+    --ui-input: var(--m-line-control);
+    --ui-primary: var(--m-accent);
+    --ui-primary-foreground: var(--m-on-accent);
+    --ui-destructive: var(--m-critical);
+    --ui-ring: color-mix(in oklab, var(--m-accent) 72%, var(--m-surface));
+    --ui-ring-border: var(--m-accent);
+    --ui-shadow: var(--m-shadow-pop);
+    --ui-radius: var(--m-radius);
+    --ui-spacing: var(--m-unit);
+    --ui-font-size: var(--m-text);
+    --ui-line-height: var(--m-leading);
+    --ui-font-sans: var(--m-sans);
+    --ui-font-mono: var(--m-mono);
+    /* The primary and the tint are a theme's own where it says them. */
+    --m-primary: var(--primary, var(--m-ink));
+    --m-on-primary: var(--on-primary, var(--m-surface));
+    --m-accent-soft: var(--accent-soft, color-mix(in oklab, var(--m-accent) 9%, var(--m-surface)));
+    --ui-ring: color-mix(in oklab, var(--focus, var(--m-accent)) 72%, var(--m-surface));
+    --ui-ring-border: var(--focus, var(--m-accent));
+  }
+}

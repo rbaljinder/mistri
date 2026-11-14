@@ -1,0 +1,448 @@
+/* The record: where it is, what it is, what it is worth, and what stands beside it. */
+@layer m-components {
+  [data-slot='record'] {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  [data-slot='breadcrumbs'] {
+    color: var(--m-ink-muted);
+    font-size: 0.78125rem;
+
+    & ol {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--m-space-2h);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    & li {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--m-space-2h);
+    }
+
+    & svg {
+      width: 0.625rem;
+      height: 0.625rem;
+      color: var(--m-ink-subtle);
+    }
+
+    & a {
+      color: inherit;
+      text-decoration: none;
+
+      &:hover {
+        color: var(--m-ink);
+      }
+    }
+
+    & [aria-current] {
+      color: var(--m-ink);
+    }
+  }
+
+  [data-slot='record-head'] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--m-space-5);
+    margin-block: var(--m-space-4h) var(--m-space-5h);
+  }
+
+  [data-slot='record-title-row'] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--m-space-5);
+  }
+
+  [data-slot='record-kind'] {
+    margin: 0 0 var(--m-space-1);
+    color: var(--m-ink-muted);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    font-weight: var(--m-weight-strong);
+  }
+
+  [data-slot='record-title'] :is(h1, h2) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--m-space-4);
+    margin: 0;
+    font-size: var(--m-size-6xl);
+    font-weight: var(--m-weight-heavy);
+    letter-spacing: var(--m-track-display);
+    line-height: var(--m-lead-6xl);
+
+    /* Beside a title the status is a small ruled pill, so it reads as a label on the name and not as part of it. */
+    & [data-slot='status'] {
+      padding: var(--m-space-1h) var(--m-space-3h) var(--m-space-1h) var(--m-space-3);
+      border: 1px solid var(--m-line-strong);
+      border-radius: var(--m-radius-pill, 999px);
+      font-size: var(--m-size-xs);
+      font-weight: var(--m-weight-strong);
+      letter-spacing: 0;
+      line-height: var(--m-lead-xs);
+    }
+  }
+
+  [data-slot='record-actions'] {
+    display: flex;
+    gap: var(--m-space-3);
+
+    & > [data-slot='menu-trigger'] {
+      width: calc(var(--ui-spacing) * 8);
+      padding: 0;
+    }
+  }
+
+  [data-slot='facts'] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--m-space-4) var(--m-space-8);
+    margin: 0;
+
+    & dt {
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-xs);
+      line-height: var(--m-lead-xs);
+    }
+
+    & dd {
+      margin: var(--m-space-1) 0 0;
+      font-size: var(--m-size-md);
+      line-height: var(--m-lead-md);
+      font-weight: var(--m-weight-medium);
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  [data-slot='record-layout'] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 19rem;
+    gap: var(--m-seam);
+    padding-block-start: var(--m-space-6);
+  }
+
+  [data-slot='record-main'] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--m-space-7);
+    min-width: 0;
+  }
+
+  [data-slot='record-aside'] {
+    padding-inline-start: var(--m-space-7);
+    border-inline-start: 1px solid var(--m-line);
+  }
+
+  [data-slot='record'] > [data-slot='tabs'] > [data-slot='tabs-panel']:not(:has([data-slot='record-layout'])) {
+    padding-block-start: var(--m-space-6);
+  }
+
+  /* A workflow's stages: a numbered mark, the rule to the next, the stage's word under it. */
+  [data-slot='timeline'][data-kind='stages'] {
+    display: flex;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    & [data-slot='timeline-item'] {
+      flex: 1;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: var(--m-space-3) var(--m-space-3h);
+      border-radius: calc(var(--m-radius) * 0.75);
+      outline-offset: 4px;
+
+      &[data-last] {
+        flex: none;
+      }
+    }
+
+    & [data-slot='timeline-marker'] {
+      display: grid;
+      place-items: center;
+      width: 1.375rem;
+      height: 1.375rem;
+      border: 1.5px solid var(--m-line-control);
+      border-radius: 999px;
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-2xs);
+      line-height: var(--m-lead-2xs);
+      font-weight: var(--m-weight-bold);
+      font-variant-numeric: tabular-nums;
+
+      &[data-complete] {
+        border-color: var(--m-ink);
+        background: var(--m-ink);
+        color: var(--m-surface);
+      }
+
+      &[data-current] {
+        border-color: var(--m-accent);
+        background: var(--m-accent-soft);
+        color: var(--m-accent-ink);
+      }
+
+      & svg {
+        width: 0.6875rem;
+        height: 0.6875rem;
+      }
+    }
+
+    & [data-slot='timeline-connector'] {
+      /* Whole pixels: a line of one and a half is drawn as one sharp row and one grey one. */
+      height: 2px;
+      margin-inline-end: var(--m-space-3h);
+      background: var(--m-line-strong);
+
+      &[data-complete] {
+        background: var(--m-ink);
+      }
+
+      &[data-last] {
+        display: none;
+      }
+    }
+
+    & [data-slot='timeline-title'] {
+      grid-column: 1 / -1;
+      color: var(--m-ink-muted);
+      font-weight: var(--m-weight-medium);
+
+      &[data-current] {
+        color: var(--m-ink);
+        font-weight: var(--m-weight-bold);
+      }
+
+      &[data-complete] {
+        color: var(--m-ink);
+      }
+    }
+  }
+
+  [data-slot='stats'] {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    margin: 0;
+    border: 1px solid var(--m-line);
+    border-radius: var(--m-radius-panel, calc(var(--m-radius) + 2px));
+    /* Each figure rules its own leading and top edge, and the strip clips the ones on its outside, so the rules
+       stand between figures however many columns the width leaves them in. */
+    overflow: hidden;
+
+    & > div {
+      padding: var(--m-space-4h) var(--m-space-5) var(--m-space-5);
+      box-shadow: -1px -1px 0 0 var(--m-line);
+    }
+
+    & dt {
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-xs);
+      line-height: var(--m-lead-xs);
+    }
+
+    & dd {
+      margin: var(--m-space-2) 0 0;
+      font-size: var(--m-size-5xl);
+      font-weight: var(--m-weight-heavy);
+      letter-spacing: var(--m-track-display);
+      line-height: var(--m-lead-5xl);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* A toned figure is set in its tone's ink alone: no tint, no dot (docs/design.md, rule 6). */
+    & [data-tone='warning'] dd:not([data-slot]) {
+      color: var(--m-warning);
+    }
+
+    & [data-tone='critical'] dd:not([data-slot]) {
+      color: var(--m-critical);
+    }
+
+    & dd[data-slot='stat-share'] {
+      margin-block: var(--m-space-3) var(--m-space-1);
+      font-size: 0;
+
+      & [data-slot='meter'] {
+        min-width: 0;
+        width: 100%;
+      }
+
+      & [data-slot='meter-track'] {
+        height: 0.25rem;
+      }
+    }
+
+    & dd[data-slot='stat-note'] {
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-xs);
+      line-height: var(--m-lead-xs);
+      font-weight: var(--m-weight-regular);
+      letter-spacing: 0;
+    }
+  }
+
+  [data-slot='record-section'] {
+    & > header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: calc(var(--ui-spacing) * 7);
+      margin-block-end: var(--m-space-2);
+    }
+
+    & h2 {
+      display: flex;
+      align-items: baseline;
+      gap: var(--m-space-3);
+      margin: 0;
+      font-size: var(--m-size-lg);
+      line-height: var(--m-lead-lg);
+      font-weight: var(--m-weight-heavy);
+      letter-spacing: var(--m-track-title);
+    }
+  }
+
+  [data-slot='properties'] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--m-space-4);
+    padding-block: var(--m-space-5h);
+    border-block-start: 1px solid var(--m-line);
+
+    &:first-child {
+      padding-block-start: 0;
+      border-block-start: 0;
+    }
+
+    & h2 {
+      margin: 0;
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-xs);
+      line-height: var(--m-lead-xs);
+      font-weight: var(--m-weight-strong);
+    }
+
+    & dl {
+      display: flex;
+      flex-direction: column;
+      gap: var(--m-space-3);
+      margin: 0;
+    }
+
+    & dl > div {
+      display: grid;
+      grid-template-columns: 5.5rem minmax(0, 1fr);
+      gap: var(--m-space-4);
+    }
+
+    & dt {
+      color: var(--m-ink-muted);
+    }
+
+    & dd {
+      margin: 0;
+      overflow-wrap: anywhere;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  [data-slot='properties-name'] {
+    display: flex;
+    align-items: center;
+    gap: var(--m-space-3);
+    margin: 0;
+    font-size: var(--m-size-lg);
+    line-height: var(--m-lead-lg);
+    font-weight: var(--m-weight-bold);
+    letter-spacing: var(--m-track-title);
+  }
+
+  /* What happened, newest first: a mark on a thread, the event, when, and a line of detail. */
+  [data-slot='timeline'][data-kind='activity'] {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    & [data-slot='timeline-item'] {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1rem minmax(0, 1fr) auto;
+      column-gap: var(--m-space-3);
+      padding-block-end: var(--m-space-5);
+      border-radius: calc(var(--m-radius) * 0.75);
+      outline-offset: 2px;
+
+      &[data-last] {
+        padding-block-end: 0;
+      }
+    }
+
+    & [data-slot='timeline-marker'] {
+      grid-column: 1;
+      justify-self: center;
+      width: 0.4375rem;
+      height: 0.4375rem;
+      margin-block-start: var(--m-space-2h);
+      border-radius: 999px;
+      background: var(--m-ink-subtle);
+      box-shadow: 0 0 0 3px var(--m-surface);
+      z-index: 1;
+    }
+
+    & [data-slot='timeline-connector'] {
+      position: absolute;
+      inset-block: 0.75rem -0.25rem;
+      /* Two pixels, so it can stand on the centre of a marker an even number of pixels wide. */
+      inset-inline-start: calc(0.5rem - 1px);
+      width: 2px;
+      background: var(--m-line-strong);
+
+      &[data-last] {
+        display: none;
+      }
+    }
+
+    & [data-slot='timeline-title'] {
+      grid-column: 2;
+      font-weight: var(--m-weight-strong);
+    }
+
+    & [data-slot='timeline-time'] {
+      grid-column: 3;
+      color: var(--m-ink-subtle);
+      font-size: var(--m-size-xs);
+      line-height: var(--m-lead-xs);
+      font-variant-numeric: tabular-nums;
+    }
+
+    & [data-slot='timeline-description'] {
+      grid-column: 2 / -1;
+      color: var(--m-ink-muted);
+    }
+  }
+
+  @media (max-width: 60rem) {
+    [data-slot='record-layout'] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    [data-slot='record-aside'] {
+      padding-inline-start: 0;
+      padding-block-start: var(--m-space-6);
+      border-inline-start: 0;
+      border-block-start: 1px solid var(--m-line);
+    }
+  }
+}

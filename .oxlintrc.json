@@ -19,7 +19,11 @@
         "packages/*/src/client/**",
         "packages/*/src/embed/**",
         "packages/ui/src/**",
-        "test/fixtures/apps/*/ui/**"
+        "test/fixtures/apps/*/ui/**",
+        "experiments/*/src/**",
+        "experiments/*/gallery/**",
+        "experiments/*/kit/**",
+        "experiments/*/in-app/**"
       ],
       "env": {
         "browser": true,

@@ -1,0 +1,356 @@
+/* Cards, a tree, a list with its detail, a queue. */
+@layer m-components {
+  [data-slot='cards'] {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
+    gap: var(--m-space-4h);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  [data-slot='card'] {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--m-line);
+    border-radius: var(--m-radius-panel, calc(var(--m-radius) + 2px));
+    background: var(--m-surface);
+    overflow: hidden;
+
+    &:not([data-waiting]):hover {
+      border-color: var(--m-line-strong);
+      box-shadow: var(--m-shadow-control);
+    }
+
+    /* The ring is the card's, since the link that has the keyboard is stretched over all of it. */
+    &:has([data-slot='card-title']:focus-visible) {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: 1px;
+    }
+  }
+
+  [data-slot='card-picture'] {
+    display: grid;
+    place-items: center;
+    background: var(--m-raised);
+    color: var(--m-ink-subtle);
+
+    & img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    & svg {
+      width: 1.5rem;
+      height: 1.5rem;
+    }
+  }
+
+  [data-slot='card-body'] {
+    display: grid;
+    gap: var(--m-space-2h);
+    padding: var(--m-space-4) var(--m-space-4h) var(--m-space-4h);
+  }
+
+  [data-slot='card-head'] {
+    display: flex;
+    /* Centred, not on a shared baseline: the name and the badge are different sizes, and a baseline between
+       them made the row a fraction of a pixel taller than either. */
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--m-space-3);
+
+    /* The badge is above the stretched link only to be seen; a press on it is still the card's. */
+    & [data-slot='status'] {
+      flex: none;
+      pointer-events: none;
+    }
+  }
+
+  [data-slot='card-title'] {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--m-ink);
+    font-weight: var(--m-weight-bold);
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    outline: none;
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+    }
+  }
+
+  [data-slot='card-figure'] {
+    font-size: var(--m-size-2xl);
+    line-height: var(--m-lead-2xl);
+    font-weight: var(--m-weight-bold);
+    letter-spacing: var(--m-track-title);
+  }
+
+  [data-slot='card-facts'] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--m-space-2) var(--m-space-5);
+    margin: var(--m-space-1) 0 0;
+
+    & dt {
+      color: var(--m-ink-subtle);
+      font-size: var(--m-size-2xs);
+      line-height: var(--m-lead-2xs);
+    }
+
+    & dd {
+      margin: 0;
+      font-size: var(--m-size-sm);
+      line-height: var(--m-lead-sm);
+    }
+  }
+
+  [data-slot='cards-empty'],
+  [data-slot='list-detail-empty'] {
+    padding: var(--m-space-7) var(--m-space-5);
+    color: var(--m-ink-muted);
+    text-align: center;
+  }
+
+  /* UI SDK's tree, at the width it is given and with a far end for a count. */
+  [data-kind='tree'] {
+    max-width: none;
+
+    & [data-slot='tree-item']:focus-visible > [data-slot='tree-label'] {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: -2px;
+    }
+
+    & [data-slot='tree-label'] {
+      height: calc(var(--m-unit) * 8);
+      border-radius: calc(var(--m-radius) - 2px);
+
+      &[data-current] {
+        background: var(--m-accent-soft);
+        color: var(--m-accent-ink);
+      }
+    }
+
+    & [data-slot='tree-indicator'] svg {
+      width: 0.6875rem;
+      height: 0.6875rem;
+    }
+  }
+
+  [data-slot='tree-icon'] {
+    display: inline-flex;
+    flex: none;
+    color: var(--m-ink-muted);
+
+    & svg {
+      width: 1rem;
+      height: 1rem;
+    }
+  }
+
+  [data-slot='tree-words'] {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  [data-slot='tree-meta'] {
+    flex: none;
+    color: var(--m-ink-subtle);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-slot='list-detail'] {
+    display: grid;
+    grid-template-columns: minmax(15rem, 22rem) minmax(0, 1fr);
+    min-width: 0;
+    min-height: 24rem;
+    border: 1px solid var(--m-line);
+    border-radius: var(--m-radius-panel, calc(var(--m-radius) + 2px));
+    background: var(--m-surface);
+    overflow: hidden;
+
+    &[data-narrow] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  [data-slot='list-detail-list'] {
+    margin: 0;
+    padding: var(--m-space-2h);
+    list-style: none;
+    overflow: auto;
+    border-inline-end: 1px solid var(--m-line);
+
+    [data-narrow] > & {
+      border-inline-end: 0;
+    }
+
+    & > [role='option'] {
+      padding: var(--m-space-3) var(--m-space-4);
+      border-radius: calc(var(--m-radius) - 2px);
+      cursor: pointer;
+
+      &:hover {
+        background: var(--m-raised);
+      }
+
+      &[aria-selected='true'] {
+        background: var(--m-accent-soft);
+        box-shadow: inset 2px 0 0 0 var(--m-accent);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--ui-ring);
+        outline-offset: -2px;
+      }
+    }
+  }
+
+  [data-slot='list-detail-pane'] {
+    min-width: 0;
+    padding: var(--m-space-5h) var(--m-space-6) var(--m-space-6);
+    overflow: auto;
+    outline: none;
+
+    /* The pane takes the keyboard to be read from the top; its ring is drawn inside so the frame does not clip it. */
+    &:focus-visible {
+      box-shadow: inset 0 0 0 2px var(--ui-ring);
+    }
+
+    [data-narrow] > & {
+      padding: var(--m-space-4) var(--m-space-5) var(--m-space-5h);
+    }
+  }
+
+  [data-slot='list-detail-back'] {
+    margin: 0 0 var(--m-space-4) calc(var(--m-space-2h) * -1);
+  }
+
+  [data-slot='list-detail-hint'] {
+    display: grid;
+    place-items: center;
+    height: 100%;
+    min-height: 12rem;
+    margin: 0;
+    color: var(--m-ink-muted);
+  }
+
+  [data-slot='queue'] {
+    display: grid;
+    gap: var(--m-space-5);
+    max-width: 44rem;
+    padding: var(--m-space-5h) var(--m-space-6) var(--m-space-6);
+    border: 1px solid var(--m-line);
+    border-radius: var(--m-radius-panel, calc(var(--m-radius) + 2px));
+    background: var(--m-surface);
+
+    & h2 {
+      margin: 0;
+      font-size: var(--m-size-2xl);
+      line-height: var(--m-lead-2xl);
+      font-weight: var(--m-weight-bold);
+      letter-spacing: var(--m-track-title);
+      outline: none;
+    }
+
+    &[data-done] {
+      justify-items: center;
+      padding-block: var(--m-space-8);
+      text-align: center;
+
+      & p {
+        margin: 0;
+        color: var(--m-ink-muted);
+      }
+    }
+  }
+
+  [data-slot='queue-done-mark'] {
+    display: grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--m-good) 14%, var(--m-surface));
+    color: var(--m-good);
+
+    & svg {
+      width: 1.125rem;
+      height: 1.125rem;
+    }
+  }
+
+  [data-slot='queue-head'] {
+    display: flex;
+    align-items: center;
+    gap: var(--m-space-4);
+    min-height: 1.75rem;
+  }
+
+  [data-slot='queue-count'] {
+    flex: none;
+    color: var(--m-ink-muted);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-slot='queue-bar'] {
+    flex: 1;
+    height: 0.25rem;
+    border-radius: 999px;
+    background: var(--m-raised);
+    overflow: hidden;
+
+    & span {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+      background: var(--m-accent);
+    }
+  }
+
+  [data-slot='queue-body'] {
+    display: grid;
+    gap: var(--m-space-4);
+
+    &[aria-busy='true'] {
+      opacity: 0.6;
+    }
+  }
+
+  [data-slot='queue-problem'] {
+    margin: 0;
+    color: var(--m-critical);
+  }
+
+  [data-slot='queue-verbs'] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--m-space-3);
+    padding-top: var(--m-space-5);
+    border-top: 1px solid var(--m-line);
+  }
+
+  :is([data-slot='queue-verbs'], [data-slot='queue-head']) [data-slot='kbd'] {
+    margin-inline-start: var(--m-space-2h);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot='queue-bar'] span {
+      transition: width var(--m-enter) var(--m-ease-out);
+    }
+  }
+}

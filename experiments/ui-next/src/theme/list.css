@@ -1,0 +1,573 @@
+/* The list: its head, its tabs and bar, the table, its foot and the bar a selection raises. */
+@layer m-components {
+  [data-slot='list-view'] {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--m-unit) * 3.5);
+    min-width: 0;
+  }
+
+  [data-slot='list-head'] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--m-space-4);
+
+    & > :is(h1, h2) {
+      display: flex;
+      align-items: baseline;
+      gap: var(--m-space-3);
+      margin: 0;
+      font-size: var(--m-size-4xl);
+      font-weight: var(--m-weight-heavy);
+      letter-spacing: var(--m-track-title);
+      line-height: var(--m-lead-4xl);
+    }
+
+    & [data-slot='list-count'] {
+      font-size: var(--m-size-md);
+      line-height: var(--m-lead-md);
+      letter-spacing: 0;
+    }
+  }
+
+  [data-slot='list-actions'] {
+    display: flex;
+    gap: var(--m-space-3);
+  }
+
+  [data-slot='list-bar'] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--m-space-3);
+
+    & [data-kind='search'] {
+      width: min(15rem, 100%);
+      margin-inline-end: var(--m-space-2);
+    }
+  }
+
+  /* A filter not yet used is an offer, on a dashed edge; one in use is a fact, in the accent. */
+  [data-slot='menu-trigger'][data-kind='filter-chip'] {
+    gap: var(--m-space-2);
+    height: calc(var(--ui-spacing) * 7);
+    padding-inline: calc(var(--ui-spacing) * 2.5);
+    border: 1px dashed var(--m-line-control);
+    border-radius: var(--m-radius-pill, 999px);
+    background: transparent;
+    box-shadow: none;
+    color: var(--m-ink-muted);
+    font-weight: var(--m-weight-medium);
+
+    &:hover:not([data-disabled]),
+    &[data-open] {
+      border-style: solid;
+      background: var(--m-raised);
+      color: var(--m-ink);
+    }
+
+    &[data-active] {
+      border: 1px solid color-mix(in oklab, var(--m-accent) 40%, var(--m-surface));
+      background: var(--m-accent-soft);
+      color: var(--m-accent-ink);
+    }
+
+    & svg {
+      width: 0.75rem;
+      height: 0.75rem;
+    }
+  }
+
+  [data-slot='filter-chip-value'] {
+    padding-inline-start: var(--m-space-2h);
+    border-inline-start: 1px solid color-mix(in oklab, var(--m-accent) 40%, var(--m-surface));
+    font-weight: var(--m-weight-bold);
+  }
+
+  /* Only the table scrolls sideways, never the page. Positioned, so a header's hidden words are clipped with it. */
+  [data-slot='data-table-scroll'] {
+    position: relative;
+    overflow-x: auto;
+  }
+
+  [data-slot='data-table'] {
+    width: 100%;
+    /* Borders that are each cell's own: collapsed ones are shared half and half, and put every row on a
+       half pixel. */
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: var(--m-text);
+    font-variant-numeric: tabular-nums;
+
+    & th {
+      height: calc(var(--m-unit) * 9);
+      padding: 0 var(--m-space-4);
+      border-block-end: 1px solid var(--m-line-strong);
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-xs);
+      line-height: var(--m-lead-xs);
+      font-weight: var(--m-weight-medium);
+      text-align: start;
+      white-space: nowrap;
+    }
+
+    & td {
+      height: var(--m-row);
+      padding: 0 var(--m-space-4);
+      border-block-end: 1px solid var(--m-line);
+      white-space: nowrap;
+    }
+
+    & [data-align='end'] {
+      text-align: end;
+    }
+
+    & [data-cell='select'] {
+      width: 1%;
+      padding-inline: var(--m-space-3) var(--m-space-2);
+      line-height: 0;
+    }
+
+    & [data-cell='actions'] {
+      width: 1%;
+      padding-inline: var(--m-space-2);
+    }
+
+    & td[data-primary] {
+      font-weight: var(--m-weight-strong);
+
+      & a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      & a:hover {
+        text-decoration: underline;
+        text-underline-offset: 0.1875rem;
+      }
+    }
+
+    & tbody tr:not([data-empty]):hover td {
+      background: color-mix(in oklab, var(--m-raised) 55%, var(--m-surface));
+    }
+
+    & tbody tr[data-opens] {
+      cursor: pointer;
+    }
+
+    & tbody tr[data-selected] td {
+      background: var(--m-accent-soft);
+    }
+
+    /* The row a panel beside the list is showing: a fill and its name in the accent, so the reader keeps their place. */
+    & tbody tr[data-current] td {
+      background: color-mix(in oklab, var(--m-raised) 80%, var(--m-surface));
+    }
+
+    & tbody tr[data-current] td[data-primary] {
+      color: var(--m-accent-ink);
+    }
+
+    /* A row's menu waits until the row is pointed at, focused or its menu is open: forty dots down an edge are
+       a column of noise. A touch screen has no hover, so there it always shows. */
+    & [data-cell='actions'] [data-slot='menu-trigger'] {
+      width: calc(var(--ui-spacing) * 7);
+      height: calc(var(--ui-spacing) * 7);
+      padding: 0;
+      opacity: 0;
+
+      &:focus-visible,
+      &[data-open] {
+        opacity: 1;
+      }
+    }
+
+    & tr:hover [data-cell='actions'] [data-slot='menu-trigger'] {
+      opacity: 1;
+    }
+
+    @media (hover: none) {
+      & [data-cell='actions'] [data-slot='menu-trigger'] {
+        opacity: 1;
+      }
+    }
+
+    & tr[data-empty] td {
+      height: auto;
+      padding: var(--m-space-8) var(--m-space-5);
+      border-block-end: 0;
+      text-align: center;
+      white-space: normal;
+    }
+  }
+
+  /* A sortable header is a button that looks like its header until it is pointed at. */
+  [data-slot='button'][data-variant='bare'] {
+    gap: var(--m-space-2);
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+
+    &:hover:not([data-disabled]) {
+      background: none;
+      color: var(--m-ink);
+    }
+
+    & svg {
+      width: 0.75rem;
+      height: 0.75rem;
+      opacity: 0;
+    }
+
+    &:is(:hover, :focus-visible) svg {
+      opacity: 0.5;
+    }
+
+    &[data-sorted] {
+      color: var(--m-ink);
+
+      & svg {
+        opacity: 1;
+      }
+    }
+  }
+
+  [data-slot='list-empty'] {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--m-space-2);
+    color: var(--m-ink-muted);
+
+    & strong {
+      color: var(--m-ink);
+      font-size: var(--m-size-lg);
+      line-height: var(--m-lead-lg);
+      font-weight: var(--m-weight-bold);
+    }
+
+    & [data-slot='button'] {
+      margin-block-start: var(--m-space-4);
+    }
+  }
+
+  [data-slot='list-foot'] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--m-space-4);
+    min-height: calc(var(--ui-spacing) * 8);
+    color: var(--m-ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-slot='bulk-bar'] {
+    position: sticky;
+    inset-block-end: 1rem;
+    z-index: 5;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    gap: var(--m-space-2h);
+    margin-block-start: calc(var(--ui-spacing) * -11.5);
+    padding: var(--m-space-2h) var(--m-space-2h) var(--m-space-2h) var(--m-space-4h);
+    border-radius: var(--m-radius-panel, calc(var(--m-radius) + 4px));
+    background: var(--m-ink);
+    box-shadow: var(--m-shadow-pop);
+    color: var(--m-surface);
+  }
+
+  [data-slot='bulk-count'] {
+    margin-inline-end: var(--m-space-3);
+    font-weight: var(--m-weight-strong);
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-slot='button'][data-variant='on-ink'] {
+    border-color: color-mix(in oklab, var(--m-surface) 24%, transparent);
+    background: transparent;
+    box-shadow: none;
+    color: var(--m-surface);
+
+    &:hover:not([data-disabled]) {
+      background: color-mix(in oklab, var(--m-surface) 14%, transparent);
+    }
+
+    &:focus-visible {
+      outline-color: var(--m-surface);
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot='bulk-bar'] {
+      animation: m-rise var(--m-enter) var(--m-ease-out);
+    }
+  }
+
+  @keyframes m-rise {
+    from {
+      opacity: 0;
+      translate: 0 0.5rem;
+    }
+  }
+
+  /* Where the keyboard is. A row holding it is drawn as a row pointed at, with the accent down its leading edge,
+     so J and K are followed by eye without a ring around a whole row. */
+  [data-slot='data-table'] {
+    & tbody tr[data-key]:focus-within td {
+      background: color-mix(in oklab, var(--m-raised) 55%, var(--m-surface));
+    }
+
+    & tbody tr[data-key]:is(:focus-visible, :has(td[data-primary] a:focus-visible)) td:first-child {
+      box-shadow: inset 2px 0 0 var(--m-accent);
+    }
+
+    & tbody tr[data-key]:focus-visible {
+      outline: 0;
+    }
+
+    & tbody tr[data-key] td[data-primary] a:focus-visible {
+      outline: 0;
+      text-decoration: underline;
+      text-underline-offset: 0.1875rem;
+    }
+
+    & tbody tr[data-waiting] td {
+      pointer-events: none;
+    }
+
+    /* What the search matched, in the row: the accent's own tint, never the browser's yellow. */
+    & mark {
+      margin-inline: -0.0625rem;
+      padding-inline: 0.0625rem;
+      border-radius: 2px;
+      background: color-mix(in oklab, var(--m-accent) 22%, transparent);
+      color: inherit;
+    }
+  }
+
+  [data-slot='list-bar'] [data-kind='search'] {
+    position: relative;
+
+    & [data-slot='kbd'] {
+      position: absolute;
+      inset-block: 0;
+      inset-inline-end: 0.5rem;
+      margin-block: auto;
+      pointer-events: none;
+    }
+  }
+
+  /* The search box's own key steps aside the moment the box is in use. */
+  [data-slot='list-bar'] [data-kind='search']:focus-within [data-slot='kbd'] {
+    display: none;
+  }
+
+  [data-slot='list-keys'] {
+    display: none;
+    align-items: center;
+    gap: var(--m-space-2);
+    margin-inline: auto var(--m-space-3);
+    color: var(--m-ink-subtle);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+
+    & [data-slot='kbd']:not(:first-child) {
+      margin-inline-start: var(--m-space-3);
+    }
+
+    & [data-slot='kbd'] + [data-slot='kbd'] {
+      margin-inline-start: 0;
+    }
+  }
+
+  /* Keys are said to a reader who has them: a pointer that hovers and a window with room. */
+  @media (hover: hover) and (min-width: 60rem) {
+    [data-slot='list-keys'] {
+      display: inline-flex;
+    }
+  }
+
+  @media (hover: none), (max-width: 60rem) {
+    [data-slot='list-bar'] [data-kind='search'] [data-slot='kbd'] {
+      display: none;
+    }
+  }
+
+  /* The list's own controls stand at the bar's far end, apart from what refines the rows. */
+  [data-slot='list-bar-end'] {
+    margin-inline-start: auto;
+  }
+
+  /* Which columns, and in what order: a short list of rows, each a grip, a tick and a name. */
+  [data-slot='popover-content'][data-kind='column-chooser'] {
+    width: 15rem;
+    padding: var(--m-space-2h);
+
+    & > header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 2rem;
+      padding: 0 var(--m-space-2) var(--m-space-2) var(--m-space-3);
+    }
+
+    & [data-slot='popover-title'] {
+      margin: 0;
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-xs);
+      line-height: var(--m-lead-xs);
+      font-weight: var(--m-weight-strong);
+    }
+
+    & [data-slot='sortable'] {
+      display: flex;
+      flex-direction: column;
+    }
+
+    & [data-slot='sortable-item'] {
+      display: flex;
+      align-items: center;
+      gap: var(--m-space-2);
+      min-height: 2rem;
+      padding-inline: var(--m-space-2) var(--m-space-3);
+      border-radius: calc(var(--m-radius) - 2px);
+      background: var(--m-surface);
+      cursor: grab;
+
+      &:hover {
+        background: var(--m-raised);
+      }
+    }
+
+    & label {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: var(--m-space-3);
+      min-width: 0;
+      cursor: inherit;
+    }
+  }
+
+  /* A column the reader has made narrower than its words cuts them with an ellipsis, in the head and in the rows. */
+  [data-slot='data-table'] :is(th[data-sized], td[data-sized]) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  [data-slot='data-table'] th[data-sized] {
+    /* The bar stands half outside the column, so the head keeps it in view where the cells are clipped. */
+    overflow: visible;
+
+    & > [data-slot='button'] {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  /* A cell that can be changed fills its cell, so the whole cell is where a press starts on it. */
+  [data-slot='data-table'] td > [data-slot='editable-value'] {
+    display: flex;
+    margin: calc(var(--m-space-2) * -1) calc(var(--m-space-3) * -1);
+    padding: var(--m-space-2) var(--m-space-3);
+
+    td[data-align='end'] > & {
+      justify-content: flex-end;
+      text-align: end;
+    }
+  }
+
+  /* A table with a height of its own: it scrolls in its box under a head that stays, and a foot that stays. A
+     stuck cell cannot keep a collapsed border, so the rules under the head and over the foot are drawn as shadows. */
+  [data-slot='data-table-scroll'][data-virtual] {
+    overflow: auto;
+    border: 1px solid var(--m-line);
+    border-radius: var(--m-radius);
+
+    & thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      border-block-end: 0;
+      background: var(--m-surface);
+      box-shadow: inset 0 -1px 0 var(--m-line-strong);
+    }
+
+    /* The rows above and below what is drawn are room kept for them, and nothing to be seen: hidden, so that
+       their growing and shrinking as the window turns is not counted, by a browser or a reader, as the page
+       moving. */
+    & tr[data-spacer] {
+      visibility: hidden;
+    }
+
+    & tr[data-spacer] td {
+      padding: 0;
+      border: 0;
+    }
+
+    & tbody tr:last-child td {
+      border-block-end: 0;
+    }
+  }
+
+  [data-slot='data-table'] tfoot td {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    border-block-end: 0;
+    background: var(--m-surface);
+    box-shadow: inset 0 1px 0 var(--m-line-strong);
+    font-weight: var(--m-weight-bold);
+  }
+
+  /* The row's name stays where it is while the rest goes sideways, with a hairline at its far edge once it has. */
+  [data-slot='data-table-scroll'][data-pin] {
+    & :is(th, td)[data-cell='select'] {
+      position: sticky;
+      inset-inline-start: 0;
+      z-index: 1;
+      width: 2.25rem;
+      min-width: 2.25rem;
+      box-sizing: border-box;
+      background: var(--m-surface);
+    }
+
+    & :is(th, td)[data-primary] {
+      position: sticky;
+      inset-inline-start: 0;
+      z-index: 1;
+      background: var(--m-surface);
+      box-shadow: inset -1px 0 0 var(--m-line);
+    }
+
+    & :is(th, td)[data-cell='select'] ~ :is(th, td)[data-primary] {
+      inset-inline-start: 2.25rem;
+    }
+
+    & thead :is(th[data-primary], th[data-cell='select']),
+    & tfoot :is(td[data-primary], td[data-cell='select']) {
+      z-index: 3;
+    }
+
+    & thead th[data-primary] {
+      box-shadow:
+        inset -1px 0 0 var(--m-line),
+        inset 0 -1px 0 var(--m-line-strong);
+    }
+
+    & tbody tr:is(:hover, [data-selected], [data-current]) :is(td[data-primary], td[data-cell='select']) {
+      background: color-mix(in oklab, var(--m-raised) 60%, var(--m-surface));
+    }
+  }
+}

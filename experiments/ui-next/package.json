@@ -1,0 +1,35 @@
+{
+  "name": "@mistriwork/ui-next",
+  "private": true,
+  "description": "An experiment, plugged into nothing: the next @mistriwork/ui, drawn over Vercel's UI SDK behaviors. Not a workspace and never published, so no released package, lockfile or gate depends on a beta.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./style.css": "./src/style.css"
+  },
+  "scripts": {
+    "dev": "vite --port 6020",
+    "build": "vite build",
+    "preview": "vite preview --port 6020",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --config kit/vitest.config.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@phosphor-icons/react": "^2.1.10",
+    "@ui-sdk/core": "0.1.0-beta.2",
+    "@ui-sdk/react": "0.1.0-beta.2",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@base-ui/react": "1.8.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.3.0",
+    "happy-dom": "^21.0.4",
+    "typescript": "~7.0.2",
+    "vite": "^8.2.4",
+    "vitest": "^5.1.0"
+  }
+}

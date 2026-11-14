@@ -1,0 +1,638 @@
+/* A month by its days. The grid is ruled by hairlines and nothing is boxed twice: a day is its number and what
+   it holds, today wears the accent on its number, and a day of another month is there to keep the weeks whole and
+   says so by standing back. */
+@layer m-components {
+  [data-slot='month'] {
+    display: grid;
+    gap: var(--m-space-4);
+    min-width: 0;
+
+    &[data-loading] :is([data-kind='month-grid'], [data-slot='month-agenda']) {
+      opacity: 0.5;
+    }
+  }
+
+  [data-slot='month-head'] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--m-space-4);
+
+    & h2 {
+      margin: 0;
+      font-size: var(--m-size-xl);
+      line-height: var(--m-lead-xl);
+      font-weight: var(--m-weight-bold);
+      letter-spacing: var(--m-track-title);
+    }
+
+    & > div {
+      display: flex;
+      align-items: center;
+      gap: var(--m-space-2);
+    }
+  }
+
+  [data-kind='month-grid'] {
+    display: grid;
+    border: 1px solid var(--m-line);
+    border-radius: var(--m-radius-panel, calc(var(--m-radius) + 2px));
+    background: var(--m-surface);
+    overflow: hidden;
+  }
+
+  :is([data-slot='month-weekdays'], [data-slot='month-week']) {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  [data-slot='month-weekdays'] > span {
+    padding: var(--m-space-2h) var(--m-space-3h);
+    border-bottom: 1px solid var(--m-line);
+    color: var(--m-ink-subtle);
+    font-size: var(--m-size-2xs);
+    line-height: var(--m-lead-2xs);
+    font-weight: var(--m-weight-strong);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  [data-slot='month-week'] > [role='gridcell'] {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--m-space-1h);
+    min-height: 6.75rem;
+    padding: var(--m-space-2h) var(--m-space-2h) var(--m-space-2h);
+    /* Each day rules its own leading and top edge and the grid clips the outside ones. */
+    box-shadow: -1px -1px 0 0 var(--m-line);
+
+    &[data-outside] {
+      background: color-mix(in oklab, var(--m-ground) 60%, var(--m-surface));
+
+      & [data-slot='month-date'] {
+        color: var(--m-ink-subtle);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: -2px;
+      z-index: 1;
+    }
+
+    /* While something is carried: the day it is over, the days that would take it, and the ones that will not. */
+    &[data-over] {
+      background: var(--m-accent-soft);
+      box-shadow:
+        -1px -1px 0 0 var(--m-line),
+        inset 0 0 0 1.5px var(--m-accent);
+    }
+
+    &[data-refuses] {
+      background: var(--m-raised);
+
+      & [data-slot='month-date'] {
+        color: var(--m-ink-subtle);
+      }
+    }
+
+    & ul {
+      display: grid;
+      gap: var(--m-space-1);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      min-width: 0;
+
+      /* A long name is cut at the day's edge, never drawn over the next day. */
+      & > li {
+        min-width: 0;
+      }
+    }
+  }
+
+  [data-slot='month-date'] {
+    align-self: flex-start;
+    display: grid;
+    place-items: center;
+    min-width: 1.375rem;
+    height: 1.375rem;
+    padding-inline: var(--m-space-2);
+    border-radius: 999px;
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    font-weight: var(--m-weight-medium);
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-today] > [data-slot='month-date'] {
+    background: var(--m-accent);
+    color: var(--m-on-accent);
+    font-weight: var(--m-weight-bold);
+  }
+
+  /* The way to add to a day is in its corner, and seen when the day is pointed at or the keyboard is in it. */
+  [data-slot='month-add'] {
+    position: absolute;
+    inset-block-start: 0.3125rem;
+    inset-inline-end: 0.3125rem;
+    display: grid;
+    place-items: center;
+    width: 1.375rem;
+    height: 1.375rem;
+    padding: 0;
+    border: 0;
+    border-radius: calc(var(--m-radius) - 3px);
+    background: none;
+    color: var(--m-ink-muted);
+    cursor: pointer;
+    opacity: 0;
+
+    & svg {
+      width: 0.8125rem;
+      height: 0.8125rem;
+    }
+
+    &:hover {
+      background: var(--m-raised);
+      color: var(--m-ink);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: 1px;
+    }
+  }
+
+  [role='gridcell']:is(:hover, :focus-within) > [data-slot='month-add'] {
+    opacity: 1;
+  }
+
+  [data-kind='month-grid'][data-carrying] [data-slot='month-add'] {
+    opacity: 0;
+  }
+
+  [data-slot='month-event'] {
+    display: flex;
+    align-items: baseline;
+    gap: var(--m-space-2);
+    min-width: 0;
+    padding: var(--m-space-1) var(--m-space-2h) var(--m-space-1) var(--m-space-3);
+    border-radius: calc(var(--m-radius) - 4px);
+    background: color-mix(in oklab, var(--tone, var(--m-accent)) 10%, var(--m-surface));
+    box-shadow: inset 2px 0 0 0 var(--tone, var(--m-accent));
+    color: var(--m-ink);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    text-decoration: none;
+
+    &[data-tone='good'] {
+      --tone: var(--m-good);
+    }
+
+    &[data-tone='warning'] {
+      --tone: var(--m-warning);
+    }
+
+    &[data-tone='critical'] {
+      --tone: var(--m-critical);
+    }
+
+    &[data-tone='neutral'] {
+      --tone: var(--m-line-control);
+    }
+
+    & time {
+      flex: none;
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-2xs);
+      line-height: var(--m-lead-2xs);
+      font-variant-numeric: tabular-nums;
+    }
+
+    & span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    &:hover {
+      background: color-mix(in oklab, var(--tone, var(--m-accent)) 17%, var(--m-surface));
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: 1px;
+    }
+  }
+
+  [data-kind='month-grid'] [data-slot='transfer-item'] {
+    min-width: 0;
+    cursor: grab;
+
+    /* One past what a day shows is not drawn, except the one being carried into it. */
+    &[hidden]:is([data-carried], [data-dragging]) {
+      display: block;
+    }
+
+    /* Where it came from keeps its place, faint, while its copy is under the pointer. */
+    &[data-dragging] {
+      opacity: 0.35;
+    }
+  }
+
+  [data-kind='month-grid'][data-carrying] {
+    cursor: grabbing;
+  }
+
+  [data-slot='month-more'] {
+    align-self: flex-start;
+    padding: 0.0625rem var(--m-space-2h);
+    border: 0;
+    border-radius: calc(var(--m-radius) - 4px);
+    background: none;
+    color: var(--m-ink-muted);
+    font: inherit;
+    font-size: var(--m-size-2xs);
+    line-height: var(--m-lead-2xs);
+    font-weight: var(--m-weight-strong);
+    cursor: pointer;
+
+    &:hover {
+      background: var(--m-raised);
+      color: var(--m-ink);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: 1px;
+    }
+  }
+
+  [data-slot='month-all'] {
+    display: grid;
+    gap: var(--m-space-2);
+    min-width: 13rem;
+    margin: var(--m-space-3) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  [data-slot='month-agenda'] {
+    display: grid;
+    gap: var(--m-space-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    & h3 {
+      display: flex;
+      align-items: baseline;
+      gap: var(--m-space-2h);
+      margin: 0 0 var(--m-space-2h);
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-sm);
+      line-height: var(--m-lead-sm);
+      font-weight: var(--m-weight-medium);
+
+      & b {
+        color: var(--m-ink);
+        font-size: var(--m-size-xl);
+        line-height: var(--m-lead-xl);
+        font-weight: var(--m-weight-bold);
+      }
+    }
+
+    & ul {
+      display: grid;
+      gap: var(--m-space-2);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    & [data-slot='month-event'] {
+      padding-block: var(--m-space-2h);
+      font-size: var(--m-size-sm);
+      line-height: var(--m-lead-sm);
+    }
+  }
+
+  [data-slot='month-today'] {
+    margin-inline-start: var(--m-space-2);
+    padding: 0.0625rem var(--m-space-2h);
+    border-radius: 999px;
+    background: var(--m-accent-soft);
+    color: var(--m-accent-ink);
+    font-size: var(--m-size-2xs);
+    line-height: var(--m-lead-2xs);
+    font-weight: var(--m-weight-bold);
+  }
+
+  [data-slot='month-empty'] {
+    padding: var(--m-space-7) var(--m-space-5);
+    border: 1px dashed var(--m-line-strong);
+    border-radius: var(--m-radius);
+    color: var(--m-ink-muted);
+    text-align: center;
+  }
+
+  /* A week by the hour: a column a day, ruled by the hour, a block a thing. */
+  [data-slot='week'] {
+    display: grid;
+    gap: var(--m-space-4);
+    min-width: 0;
+  }
+
+  [data-kind='week-grid'] {
+    --week-hour: 3rem;
+    --week-gutter: 3.25rem;
+    border: 1px solid var(--m-line);
+    border-radius: var(--m-radius-panel, calc(var(--m-radius) + 2px));
+    background: var(--m-surface);
+    overflow-x: auto;
+  }
+
+  :is([data-slot='week-head'], [data-slot='week-body']) {
+    display: grid;
+    grid-template-columns: var(--week-gutter) repeat(7, minmax(6.5rem, 1fr));
+    min-width: max-content;
+  }
+
+  [data-slot='week-head'] {
+    border-block-end: 1px solid var(--m-line-strong);
+
+    & span {
+      padding: var(--m-space-2h) var(--m-space-3h);
+      color: var(--m-ink-subtle);
+      font-size: var(--m-size-2xs);
+      line-height: var(--m-lead-2xs);
+      font-weight: var(--m-weight-strong);
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+
+      & b {
+        color: var(--m-ink);
+        font-size: var(--m-size-sm);
+        line-height: var(--m-lead-sm);
+        font-weight: var(--m-weight-bold);
+        letter-spacing: 0;
+      }
+
+      &[data-today] b {
+        padding: 0.0625rem var(--m-space-2h);
+        border-radius: 999px;
+        background: var(--m-accent);
+        color: var(--m-on-accent);
+      }
+    }
+  }
+
+  [data-slot='week-hours'] {
+    display: grid;
+    grid-auto-rows: var(--week-hour);
+
+    & span {
+      padding-inline: var(--m-space-3);
+      color: var(--m-ink-subtle);
+      font-size: var(--m-size-2xs);
+      line-height: var(--m-lead-2xs);
+      font-variant-numeric: tabular-nums;
+      text-align: end;
+      translate: 0 -0.4375rem;
+
+      &:first-child {
+        visibility: hidden;
+      }
+    }
+  }
+
+  /* The hours are ruled by a repeating hairline, so the grid costs no elements. */
+  [data-kind='week-day'] {
+    position: relative;
+    height: calc(var(--week-hours) * var(--week-hour));
+    background-image: linear-gradient(to bottom, var(--m-line) 1px, transparent 1px);
+    background-size: 100% var(--week-hour);
+    box-shadow: inset 1px 0 0 var(--m-line);
+
+    &[data-today] {
+      background-color: color-mix(in oklab, var(--m-accent) 3%, var(--m-surface));
+    }
+  }
+
+  [data-slot='week-now'] {
+    position: absolute;
+    inset-inline: 0;
+    z-index: 2;
+    height: 0;
+    border-block-start: 1.5px solid var(--m-critical);
+    pointer-events: none;
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset-block-start: -0.25rem;
+      inset-inline-start: -0.1875rem;
+      width: 0.4375rem;
+      height: 0.4375rem;
+      border-radius: 999px;
+      background: var(--m-critical);
+    }
+  }
+
+  [data-kind='week-event'] {
+    --tone: var(--m-accent);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: var(--m-space-1h) var(--m-space-2h) var(--m-space-2) var(--m-space-3);
+    border: 1px solid var(--m-surface);
+    border-radius: calc(var(--m-radius) - 3px);
+    background: color-mix(in oklab, var(--tone) 13%, var(--m-surface));
+    box-shadow: inset 2px 0 0 0 var(--tone);
+    color: var(--m-ink);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    cursor: grab;
+    overflow: hidden;
+    user-select: none;
+    touch-action: pan-x;
+
+    &[data-tone='good'] {
+      --tone: var(--m-good);
+    }
+
+    &[data-tone='warning'] {
+      --tone: var(--m-warning);
+    }
+
+    &[data-tone='critical'] {
+      --tone: var(--m-critical);
+    }
+
+    &[data-tone='neutral'] {
+      --tone: var(--m-line-control);
+    }
+
+    &[data-locked] {
+      cursor: default;
+    }
+
+    & time {
+      flex: none;
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-2xs);
+      line-height: var(--m-lead-2xs);
+      font-variant-numeric: tabular-nums;
+    }
+
+    & span {
+      overflow: hidden;
+      font-weight: var(--m-weight-medium);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    &:focus-visible {
+      z-index: 3;
+      outline: 2px solid var(--ui-ring);
+      outline-offset: 1px;
+    }
+
+    &:is([data-dragging], [data-resizing]) {
+      z-index: 3;
+      box-shadow:
+        inset 2px 0 0 0 var(--tone),
+        var(--m-shadow-pop);
+      cursor: grabbing;
+    }
+
+    /* Its end is pulled from a strip along its foot. */
+    & > [data-span-edge] {
+      position: absolute;
+      inset-inline: 0;
+      inset-block-end: 0;
+      height: 0.375rem;
+      cursor: ns-resize;
+    }
+  }
+}
+
+/* A day chosen from a month laid open (DayPicker): the Days behavior with a look. */
+@layer m-components {
+  /* Seven days of 44px and the gaps between them at the least, so a day is a target a finger can hit and a note
+     under its number (`3 free`) has room at its sides; where there is less than that the picker scrolls in its
+     own box before its days run together. */
+  [data-slot='day-picker'] {
+    display: grid;
+    gap: var(--m-space-3);
+    max-width: 24rem;
+    overflow-x: auto;
+
+    & > * {
+      min-width: 19.75rem;
+    }
+  }
+
+  [data-slot='day-picker-head'] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--m-space-4);
+
+    & h3 {
+      margin: 0;
+      font-size: var(--m-size-md);
+      line-height: var(--m-lead-md);
+      font-weight: var(--m-weight-bold);
+    }
+
+    & > div {
+      display: flex;
+      gap: var(--m-space-2);
+    }
+  }
+
+  [data-slot='day-picker'] [data-slot='days'] {
+    display: grid;
+    gap: var(--m-space-1);
+  }
+
+  :is([data-slot='day-picker-weekdays'], [data-slot='day-picker-week']) {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: var(--m-space-1);
+  }
+
+  [data-slot='day-picker-weekdays'] > span {
+    padding-block: var(--m-space-2);
+    color: var(--m-ink-subtle);
+    font-size: var(--m-size-2xs);
+    line-height: var(--m-lead-2xs);
+    font-weight: var(--m-weight-strong);
+    text-align: center;
+  }
+
+  /* A day is a target a finger can hit: never under 40px, whatever the picker's width. */
+  [data-slot='day-picker'] [data-slot='days-day'] {
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    min-height: 2.75rem;
+    padding-block: var(--m-space-2);
+    border-radius: var(--m-radius);
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+    outline: none;
+
+    & b {
+      font-weight: var(--m-weight-medium);
+      line-height: var(--m-lead-sm);
+    }
+
+    & small {
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-2xs);
+      line-height: var(--m-lead-2xs);
+    }
+
+    &[data-outside] {
+      color: var(--m-ink-subtle);
+    }
+
+    &[data-today] b {
+      color: var(--m-accent-ink);
+      font-weight: var(--m-weight-heavy);
+    }
+
+    &:hover:not([data-taken], [data-picked]) {
+      background: var(--m-raised);
+    }
+
+    &:focus-visible {
+      box-shadow: 0 0 0 2px var(--ui-ring-border);
+    }
+
+    &[data-picked] {
+      background: var(--m-primary);
+      color: var(--m-on-primary);
+
+      & :is(b, small) {
+        color: inherit;
+      }
+    }
+
+    /* A day that cannot be had is struck through as well as faded, so it does not rest on colour alone. */
+    &[data-taken] {
+      color: var(--m-ink-subtle);
+      cursor: not-allowed;
+
+      & b {
+        font-weight: var(--m-weight-regular);
+        text-decoration: line-through;
+      }
+    }
+  }
+}

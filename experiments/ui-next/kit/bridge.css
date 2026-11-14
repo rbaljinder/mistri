@@ -1,0 +1,51 @@
+/* The bridge: ui-next's tokens said in the App's own, so the look an App wears (its palette, its radius, its
+   faces, light and dark) still reaches every control the kit draws. An App that installs the kit takes this sheet
+   with it; the gallery wears it only where a page asks (`data-m-look="app"`).
+
+   UI SDK's --ui-* names are said again here, not left to inherit: a custom property is settled where it is
+   declared, so one that reads --m-surface on the root keeps the root's value however a descendant redefines it. */
+@layer m-tokens {
+  :root[data-m-look='app'],
+  [data-m-look='app'] {
+    --m-ground: var(--ground);
+    --m-surface: var(--surface);
+    --m-raised: var(--raised);
+    --m-line: var(--line);
+    --m-line-strong: var(--line-strong);
+    --m-line-control: var(--line-control);
+    --m-ink: var(--ink);
+    --m-ink-muted: var(--ink-muted);
+    --m-ink-subtle: var(--ink-subtle);
+    --m-accent: var(--accent);
+    --m-on-accent: var(--on-accent);
+    --m-accent-ink: var(--accent-ink);
+    --m-accent-soft: var(--accent-soft);
+    /* A look says which colour its primary fills in; where it says none, the accent. */
+    --m-primary: var(--primary, var(--accent));
+    --m-on-primary: var(--on-primary, var(--on-accent));
+    --m-good: var(--status-good);
+    --m-warning: var(--status-warning);
+    --m-critical: var(--status-critical);
+    --m-info: var(--status-info);
+    --m-radius: var(--field-radius, var(--radius));
+    --m-text: var(--text-base);
+    --m-sans: var(--sans);
+    --m-mono: var(--mono);
+
+    --ui-background: var(--m-surface);
+    --ui-foreground: var(--m-ink);
+    --ui-muted: var(--m-raised);
+    --ui-muted-foreground: var(--m-ink-muted);
+    --ui-border: var(--m-line);
+    --ui-input: var(--m-line-control);
+    --ui-primary: var(--m-accent);
+    --ui-primary-foreground: var(--m-on-accent);
+    --ui-destructive: var(--m-critical);
+    --ui-ring: var(--focus, var(--m-accent));
+    --ui-ring-border: var(--m-accent);
+    --ui-radius: var(--m-radius);
+    --ui-font-size: var(--m-text);
+    --ui-font-sans: var(--m-sans);
+    --ui-font-mono: var(--m-mono);
+  }
+}

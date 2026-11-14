@@ -1,0 +1,22 @@
+/* @mistriwork/ui-next's stylesheet. The order is the whole contract: UI SDK's own rules first (import
+   @ui-sdk/core/web.css beside this), then the tokens, the dress for UI SDK's parts, and ui-next's own components.
+   A later layer wins by order, never by specificity (docs/design.md, The cascade). m-page is the host's. */
+@layer ui-sdk, m-tokens, m-parts, m-components, m-looks, m-page;
+@import './theme/tokens.css';
+@import './theme/bridge.css';
+@import './theme/parts.css';
+@import './theme/list.css';
+@import './theme/record.css';
+@import './theme/forms.css';
+@import './theme/overlays.css';
+@import './theme/board.css';
+@import './theme/worklist.css';
+@import './theme/extras.css';
+@import './theme/charts.css';
+@import './theme/calendar.css';
+@import './theme/presentations.css';
+@import './theme/notes.css';
+@import './theme/workbench.css';
+@import './theme/shell.css';
+@import './theme/gantt.css';
+@import './theme/looks.css';

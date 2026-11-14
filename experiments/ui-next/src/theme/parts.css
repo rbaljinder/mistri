@@ -1,0 +1,806 @@
+/* This theme's dress over UI SDK's stylesheet: what its tokens cannot say. Every rule keys on a part's
+   data-slot and its state attributes, never on a class or a generated id. */
+@layer m-parts {
+  [data-slot='visually-hidden'],
+  [data-kind='visually-hidden'] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* Hover is 120ms of colour and nothing else (docs/design.md, Motion). */
+  :is(
+    [data-slot='button'],
+    [data-slot='toggle'],
+    [data-slot$='-trigger'],
+    [data-slot$='-close'],
+    [data-slot$='-item'],
+    [data-slot='pagination-link'],
+    [data-slot='tabs-tab'],
+    [data-slot='input'],
+    [data-slot='textarea']
+  ) {
+    transition:
+      background-color var(--m-fast),
+      border-color var(--m-fast),
+      color var(--m-fast);
+  }
+
+  /* A filled primary is the ink, not the accent: UI SDK fills `solid` with its primary, which here is the accent
+     that checked and selected states wear. */
+  [data-slot][data-variant='solid'] {
+    border-color: var(--m-primary);
+    background: var(--m-primary);
+    color: var(--m-on-primary);
+
+    &:hover:not([data-disabled]) {
+      background: color-mix(in oklab, var(--m-primary) 86%, var(--m-surface));
+    }
+  }
+
+  /* A control at rest stands a hair off the surface, on a softer edge than a field's: a button is found by its
+     words and its fill, a field by its edge. */
+  :is([data-slot='button'], [data-slot$='-trigger'], [data-slot='toggle']):not([data-variant]) {
+    border-color: var(--m-line-strong);
+    box-shadow: var(--m-shadow-control);
+  }
+
+  /* The quiet intent: words until hovered. UI SDK draws `solid` and `destructive` itself. */
+  [data-slot][data-variant='quiet'] {
+    border-color: transparent;
+    background: transparent;
+    color: var(--m-ink-muted);
+
+    &:hover:not([data-disabled]) {
+      background: var(--m-raised);
+      color: var(--m-ink);
+    }
+  }
+
+  [data-slot][data-size='sm']:is([data-slot='button'], [data-slot$='-trigger']) {
+    height: calc(var(--ui-spacing) * 6.5);
+    padding-inline: calc(var(--ui-spacing) * 2.25);
+    font-size: calc(var(--ui-font-size) - 0.0625rem);
+  }
+
+  [data-slot='button'][data-size='lg'] {
+    height: calc(var(--ui-spacing) * 10);
+    padding-inline: calc(var(--ui-spacing) * 4.5);
+    font-size: calc(var(--ui-font-size) + 0.0625rem);
+  }
+
+  /* The label keeps its width while the button waits, so nothing beside it moves. */
+  [data-slot='button'][data-pending] {
+    cursor: progress;
+    opacity: 0.72;
+  }
+
+  :is([data-slot='button'], [data-slot$='-trigger'], [data-slot$='-close'], [data-slot='toggle']) > svg {
+    flex: none;
+    width: 1.1em;
+    height: 1.1em;
+  }
+
+  /* A checkbox or a switch stands beside its label, not over it. */
+  [data-slot='field']:has(> :is([data-slot='checkbox'], [data-slot='switch'])) {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: calc(var(--ui-spacing) * 2.5);
+  }
+
+  [data-slot='field-label'] {
+    font-weight: var(--m-weight-strong);
+  }
+
+  [data-slot='avatar'] {
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--m-accent) 14%, var(--m-surface));
+    color: var(--m-accent-ink);
+    font-weight: var(--m-weight-bold);
+
+    &[data-size='sm'] {
+      width: 1.5rem;
+      height: 1.5rem;
+      font-size: var(--m-size-2xs);
+    }
+  }
+
+  /* Meaning is a dot and its word: the word stays in the ink, the dot carries the tone. */
+  [data-slot='status'] {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--m-space-2h);
+    white-space: nowrap;
+
+    &::before {
+      flex: none;
+      width: 0.4375rem;
+      height: 0.4375rem;
+      border-radius: 999px;
+      background: var(--m-ink-muted);
+      content: '';
+    }
+
+    &[data-tone='good']::before {
+      background: var(--m-good);
+    }
+    &[data-tone='info']::before {
+      background: var(--m-info);
+    }
+    &[data-tone='warning'] {
+      color: var(--m-warning);
+      &::before {
+        background: var(--m-warning);
+      }
+    }
+    &[data-tone='critical'] {
+      color: var(--m-critical);
+      &::before {
+        background: var(--m-critical);
+      }
+    }
+  }
+
+  /* Popups enter with ease-out and leave at once. */
+  @media (prefers-reduced-motion: no-preference) {
+    :is(
+      [data-slot='menu-content'],
+      [data-slot='select-content'],
+      [data-slot='combobox-content'],
+      [data-slot='popover-content'],
+      [data-slot='tooltip-content'],
+      [data-slot='date-picker-content'],
+      [data-slot='dialog-content'],
+      [data-slot='alert-dialog-content']
+    ) {
+      transform-origin: var(--transform-origin, center);
+      transition:
+        opacity var(--m-enter) var(--m-ease-out),
+        scale var(--m-enter) var(--m-ease-out);
+
+      &[data-starting-style] {
+        opacity: 0;
+        scale: 0.97;
+      }
+
+      &[data-ending-style] {
+        opacity: 0;
+        transition: none;
+      }
+    }
+  }
+
+  :is([data-slot='dialog-title'], [data-slot='alert-dialog-title'], [data-slot='drawer-title']) {
+    font-size: 1.0625rem;
+    font-weight: var(--m-weight-heavy);
+    letter-spacing: -0.012em;
+  }
+
+  [data-part='dialog-actions'] {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--m-space-3);
+    margin-block-start: var(--m-space-3);
+  }
+
+  [data-part='form'] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--m-space-5);
+  }
+
+  [data-slot='drawer-content']:is([data-side='left'], [data-side='right']) {
+    width: min(24rem, 100vw);
+  }
+
+  /* A toast says its type with the tone's dot, as a status does. */
+  [data-slot='toast'][data-type] [data-slot='toast-title']::before {
+    display: inline-block;
+    width: 0.4375rem;
+    height: 0.4375rem;
+    margin-inline-end: var(--m-space-3);
+    border-radius: 999px;
+    vertical-align: 0.0625rem;
+    content: '';
+  }
+  [data-slot='toast'][data-type='success'] [data-slot='toast-title']::before {
+    background: var(--m-good);
+  }
+  [data-slot='toast'][data-type='info'] [data-slot='toast-title']::before {
+    background: var(--m-info);
+  }
+  [data-slot='toast'][data-type='warning'] [data-slot='toast-title']::before {
+    background: var(--m-warning);
+  }
+  [data-slot='toast'][data-type='error'] [data-slot='toast-title']::before {
+    background: var(--m-critical);
+  }
+
+  /* A button that is one of a few ways to see the same thing says which is on by its ground, and by its state. */
+  [data-slot='button'][aria-pressed='true']:not([data-variant]) {
+    border-color: color-mix(in oklab, var(--m-accent) 45%, var(--m-surface));
+    background: var(--m-accent-soft);
+    color: var(--m-accent-ink);
+  }
+
+  /* Values edited where they stand. The root lays nothing out. */
+  [data-slot='editable'] {
+    display: contents;
+  }
+
+  [data-slot='editable-value'] {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--m-space-2h);
+    max-width: 100%;
+    min-height: 1.5rem;
+    margin: calc(var(--m-space-1) * -1) calc(var(--m-space-2h) * -1);
+    padding: var(--m-space-1) var(--m-space-2h);
+    border-radius: calc(var(--m-radius) - 3px);
+    cursor: text;
+
+    &[data-locked] {
+      cursor: default;
+    }
+
+    /* That it can be changed is said by its edge, on the way to it: nothing is drawn on a value at rest. */
+    &:not([data-editing], [data-locked]):hover {
+      box-shadow: inset 0 0 0 1px var(--m-line-control);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: 1px;
+    }
+
+    &[data-pending] {
+      opacity: 0.6;
+    }
+
+    &[data-failed] {
+      box-shadow: inset 0 0 0 1px var(--m-critical);
+    }
+  }
+
+  [data-slot='editable-shown'][data-empty] {
+    color: var(--m-ink-subtle);
+  }
+
+  [data-slot='editable-pencil'] {
+    flex: none;
+    width: 0.75rem;
+    height: 0.75rem;
+    color: var(--m-ink-subtle);
+    opacity: 0;
+
+    [data-slot='editable-value']:is(:hover, :focus-visible) > & {
+      opacity: 1;
+    }
+  }
+
+  /* While a value is edited, what it showed is still there to hold its place, and is not seen or read. */
+  [data-slot='editable-value'] [data-under] {
+    visibility: hidden;
+  }
+
+  /* The box is laid over the value, not in its place: nothing around it is laid out again. It is at least wide
+     enough to type in, and where the value is short it reaches past it, toward the side its words start from. */
+  [data-slot='editable-input'] {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    z-index: 1;
+    width: 100%;
+    min-width: 6rem;
+    height: 100%;
+    max-height: 1.75rem;
+    margin: 0;
+    padding: 0 var(--m-space-2h);
+    box-sizing: border-box;
+    border: 0;
+    border-radius: calc(var(--m-radius) - 3px);
+    background: var(--m-surface);
+    box-shadow: inset 0 0 0 1px var(--ui-ring-border);
+    color: var(--m-ink);
+    font: inherit;
+    text-align: inherit;
+    outline: 2px solid var(--ui-ring);
+    outline-offset: 1px;
+
+    &[aria-invalid='true'] {
+      box-shadow: inset 0 0 0 1px var(--m-critical);
+      outline-color: color-mix(in oklab, var(--m-critical) 60%, var(--m-surface));
+    }
+  }
+
+  /* What is wrong is said on a note under the value, over the page and not in it: a problem does not push the
+     rows under it down, or make its own row taller. */
+  [data-slot='editable-problem'] {
+    position: absolute;
+    inset-block-start: calc(100% + 0.25rem);
+    inset-inline-start: 0;
+    z-index: 2;
+    width: max-content;
+    max-width: 16rem;
+    padding: var(--m-space-2) var(--m-space-3);
+    border-radius: calc(var(--m-radius) - 3px);
+    background: var(--m-surface);
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--m-critical) 45%, var(--m-surface)),
+      var(--m-shadow-pop);
+    color: var(--m-critical);
+    font-size: var(--m-size-xs);
+    font-weight: var(--m-weight-regular);
+    line-height: var(--m-lead-xs);
+    text-align: start;
+    white-space: normal;
+  }
+
+  /* Toward the far side where the value is set there, so the note stays over its own cell. */
+  [data-align='end'] > [data-slot='editable-value'] > :is([data-slot='editable-problem'], [data-slot='editable-input']) {
+    inset-inline: auto 0;
+  }
+
+  /* A popover's title names a small surface, not a page: it is the size of a label. */
+  [data-slot='popover-title'] {
+    margin: 0;
+    font-size: var(--m-size-sm);
+    line-height: var(--m-lead-sm);
+    font-weight: var(--m-weight-bold);
+    letter-spacing: 0;
+  }
+
+  /* The command palette: a dialog that is nothing but its command. */
+  [data-slot='dialog-content'][data-part='palette'] {
+    inset-block: 18dvh auto;
+    width: min(36rem, calc(100% - 2rem));
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+
+    & [data-slot='command'] {
+      width: 100%;
+      border: 0;
+      border-radius: 0;
+    }
+
+    & [data-slot='command-item'] {
+      min-height: calc(var(--ui-spacing) * 9);
+    }
+  }
+
+  [data-part='palette-search'] {
+    display: flex;
+    align-items: center;
+    padding-inline-start: calc(var(--ui-spacing) * 4);
+    border-block-end: 1px solid var(--m-line);
+    color: var(--m-ink-muted);
+
+    & svg {
+      flex: none;
+      width: 1rem;
+      height: 1rem;
+    }
+
+    & [data-slot='command-input'] {
+      height: calc(var(--ui-spacing) * 12);
+      border: 0;
+      /* The palette is its input: the caret says where focus is, and a ring would only frame the whole dialog. */
+      outline: none;
+      font-size: calc(var(--ui-font-size) + 0.0625rem);
+    }
+  }
+
+  /* A search box: the glass inside its start, the clear button inside its end. */
+  [data-kind='search'] {
+    position: relative;
+    display: flex;
+    align-items: center;
+
+    & > svg {
+      position: absolute;
+      inset-inline-start: 0.625rem;
+      width: 0.9375rem;
+      height: 0.9375rem;
+      color: var(--m-ink-muted);
+      pointer-events: none;
+    }
+
+    & [data-slot='input'] {
+      width: 100%;
+      padding-inline: var(--m-space-7);
+    }
+
+    & [data-slot='input']::-webkit-search-cancel-button {
+      display: none;
+    }
+
+    & [data-slot='input-clear'] {
+      position: absolute;
+      inset-inline-end: 0.25rem;
+      display: grid;
+      place-items: center;
+      width: 1.5rem;
+      height: 1.5rem;
+      padding: 0;
+      border: 0;
+      border-radius: calc(var(--m-radius) * 0.6);
+      background: transparent;
+      color: var(--m-ink-muted);
+      cursor: pointer;
+
+      &:hover {
+        background: var(--m-raised);
+        color: var(--m-ink);
+      }
+    }
+  }
+
+  /* Tabs are words on a rule; the marker under the current one slides to the next. */
+  [data-slot='tabs-list'] {
+    position: relative;
+    display: flex;
+    gap: calc(var(--m-unit) * 5);
+    padding: 0;
+    border: 0;
+    border-block-end: 1px solid var(--m-line);
+    border-radius: 0;
+    background: none;
+    /* More tabs than the width holds scroll in their own box, never the page. */
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  [data-slot='tabs-tab'] {
+    flex: none;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--m-space-2h);
+    height: calc(var(--m-unit) * 9.5);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--m-ink-muted);
+    font: inherit;
+    font-size: var(--m-text);
+    font-weight: var(--m-weight-medium);
+    cursor: pointer;
+
+    &:hover {
+      color: var(--m-ink);
+    }
+
+    &[data-selected] {
+      background: none;
+      box-shadow: none;
+      color: var(--m-ink);
+    }
+  }
+
+  [data-slot='tabs-indicator'] {
+    position: absolute;
+    inset-block-end: -1px;
+    left: var(--active-tab-left);
+    width: var(--active-tab-width);
+    height: 2px;
+    background: var(--m-ink);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot='tabs-indicator'] {
+      transition:
+        left var(--m-enter) var(--m-ease-out),
+        width var(--m-enter) var(--m-ease-out);
+    }
+  }
+
+  [data-slot='tab-count'],
+  [data-slot='list-count'] {
+    color: var(--m-ink-subtle);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    font-weight: var(--m-weight-regular);
+    font-variant-numeric: tabular-nums;
+  }
+
+  [data-slot='tabs-panel'] {
+    padding: 0;
+  }
+
+  /* A value that is not there is a quiet dash to the eye and its words to a screen reader. */
+  [data-slot='absent'] {
+    color: var(--m-ink-subtle);
+  }
+
+  [data-slot='yes'] {
+    color: var(--m-accent-ink);
+  }
+
+  [data-tone='warning']:not([data-slot]) {
+    color: var(--m-warning);
+  }
+
+  [data-slot='more-link'] {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--m-space-2);
+    color: var(--m-accent-ink);
+    font-weight: var(--m-weight-strong);
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+      text-underline-offset: 0.1875rem;
+    }
+  }
+
+  /* Something not read yet, at the size it will have. The light crosses it slowly, and not at all for a reader
+     who asked for less motion: there it only stands, a shade lighter than its ground. */
+  [data-slot='skeleton'] {
+    display: inline-block;
+    width: var(--w, 100%);
+    height: var(--h, 0.75em);
+    border-radius: calc(var(--m-radius) - 2px);
+    background: var(--m-raised);
+    vertical-align: middle;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot='skeleton'] {
+      background: linear-gradient(100deg, transparent 35%, color-mix(in oklab, var(--m-surface) 70%, transparent) 50%, transparent 65%)
+        var(--m-raised);
+      background-size:
+        300% 100%,
+        auto;
+      animation: m-wait 1.6s linear infinite;
+    }
+  }
+
+  @keyframes m-wait {
+    from {
+      background-position: 120% 0;
+    }
+
+    to {
+      background-position: -80% 0;
+    }
+  }
+
+  /* A key, said beside what it does. */
+  [data-slot='kbd'] {
+    display: inline-grid;
+    place-items: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding-inline: var(--m-space-2);
+    border: 1px solid var(--m-line);
+    border-radius: calc(var(--m-radius) - 3px);
+    background: var(--m-surface);
+    box-shadow: 0 1px 0 var(--m-line);
+    color: var(--m-ink-muted);
+    font: 500 0.6875rem/1 var(--ui-font-sans, inherit);
+  }
+
+  /* A button whose press is still running keeps its width and says so with a turning ring in place of a dimming:
+     the reader pressed it, and it is working. */
+  [data-slot='button'][data-pending] {
+    position: relative;
+    filter: none;
+    color: transparent;
+
+    & > * {
+      visibility: hidden;
+    }
+
+    &::after {
+      position: absolute;
+      inset: 0;
+      width: 0.875rem;
+      height: 0.875rem;
+      margin: auto;
+      border: 2px solid var(--m-ink-subtle);
+      border-block-start-color: transparent;
+      border-radius: 50%;
+      content: '';
+    }
+
+    &:is([data-variant='solid'], [data-variant='destructive'])::after {
+      border-color: color-mix(in oklab, var(--m-surface) 80%, transparent);
+      border-block-start-color: transparent;
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot='button'][data-pending]::after {
+      animation: m-turn 0.7s linear infinite;
+    }
+  }
+
+  @keyframes m-turn {
+    to {
+      rotate: 1turn;
+    }
+  }
+
+  /* What a toast offers (Undo) reads as a word to press, in the accent, not as a second box inside the box. */
+  [data-slot='toast-action'] {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--m-accent-ink);
+    font-weight: var(--m-weight-strong);
+
+    &:hover {
+      background: var(--m-accent-soft);
+    }
+  }
+
+  /* Something carried: the copy under the pointer lifts off the page and tilts, and squares up with an edge in the
+     accent over a place that would take it. It is drawn on the page's top layer, outside whatever it was lifted
+     from, so its look is said here with the parts and not with the board. */
+  [data-drag-preview] {
+    /* A copy of a list's item is outside its list, and would grow the marker its list had taken off. */
+    list-style: none;
+    box-shadow: var(--m-shadow-pop);
+    rotate: 1.5deg;
+    cursor: grabbing;
+    transition:
+      rotate var(--m-fast),
+      outline-color var(--m-fast);
+    outline: 2px solid transparent;
+
+    &[data-over] {
+      rotate: 0deg;
+      outline-color: var(--m-accent);
+    }
+  }
+
+  /* The behaviors' own dress (src/behaviors). A grip is the button an item is picked up by with a keyboard or a
+     finger: bare, six dots, and it alone takes a finger's drag so the rest of the item scrolls. */
+  :is([data-slot='sortable-handle'], [data-slot='transfer-handle']) {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: 1rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 0;
+    border-radius: calc(var(--m-radius) - 3px);
+    background: transparent;
+    box-shadow: none;
+    color: var(--m-ink-subtle);
+    cursor: grab;
+    touch-action: none;
+
+    & svg {
+      width: 0.875rem;
+      height: 0.875rem;
+    }
+
+    &:hover {
+      color: var(--m-ink);
+    }
+
+    &:focus-visible,
+    &:is([data-grabbed], [data-carried]) {
+      color: var(--m-accent-ink);
+      outline: 2px solid var(--m-accent);
+      outline-offset: 1px;
+    }
+  }
+
+  /* An item of a sortable list follows the pointer that drags it, over its neighbours; picked up by keys it is
+     itself where it would land, marked. */
+  [data-slot='sortable-item'] {
+    user-select: none;
+
+    &[data-dragging] {
+      position: relative;
+      z-index: 1;
+      /* Where core says, with the pointer's part put right for a zoomed page (behaviors/sortable.ts). */
+      translate: calc(var(--drag-x, 0px) + var(--drag-dx, 0px) * var(--drag-ease, 0))
+        calc(var(--drag-y, 0px) + var(--drag-dy, 0px) * var(--drag-ease, 0));
+      box-shadow: var(--m-shadow-pop);
+      cursor: grabbing;
+    }
+
+    &[data-grabbed]:not([data-dragging]) {
+      box-shadow: 0 0 0 2px var(--m-accent);
+    }
+  }
+
+  /* A thing that is carried is not also selected as text by the press that carries it. */
+  [data-slot='transfer-item'],
+  [data-slot='transfer'][data-carrying] {
+    user-select: none;
+  }
+
+  /* Column widths (src/behaviors/widths.ts). The root lays nothing out. A column's bar is a strip over its far
+     edge, wider than the line it draws, and the line shows when the column is pointed at and turns to the accent
+     under the pointer and while it is dragged. */
+  [data-slot='widths'] {
+    display: contents;
+
+    &[data-sizing] {
+      cursor: col-resize;
+      user-select: none;
+    }
+  }
+
+  [data-slot='widths-column'] {
+    position: relative;
+  }
+
+  [data-slot='widths-handle'] {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: -0.3125rem;
+    z-index: 1;
+    width: 0.625rem;
+    cursor: col-resize;
+    touch-action: none;
+
+    &::after {
+      position: absolute;
+      inset-block: 28%;
+      inset-inline-start: calc(50% - 0.5px);
+      width: 1px;
+      background: var(--m-line-strong);
+      content: '';
+      opacity: 0;
+      transition:
+        opacity var(--m-fast),
+        background-color var(--m-fast);
+    }
+
+    [data-slot='widths-column']:hover > &::after {
+      opacity: 1;
+    }
+
+    &:hover::after,
+    &[data-sizing]::after {
+      inset-block: 0;
+      width: 2px;
+      background: var(--m-accent);
+      opacity: 1;
+    }
+  }
+
+  [data-slot='button'][data-block] {
+    display: flex;
+    width: 100%;
+  }
+
+  /* A word at a menu item's end: its shortcut, a count. */
+  [data-slot='menu-item-hint'] {
+    margin-inline-start: auto;
+    padding-inline-start: var(--m-space-6);
+    color: var(--m-ink-subtle);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Under a finger a grip is as large a target as any button, without being drawn any larger: the area around it
+     answers for it. */
+  @media (pointer: coarse) {
+    :is([data-slot='sortable-handle'], [data-slot='transfer-handle']) {
+      position: relative;
+
+      &::before {
+        position: absolute;
+        inset: 50% auto auto 50%;
+        width: 2.75rem;
+        height: 2.75rem;
+        translate: -50% -50%;
+        content: '';
+      }
+    }
+  }
+}

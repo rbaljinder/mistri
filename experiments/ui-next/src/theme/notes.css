@@ -1,0 +1,309 @@
+/* Notes: the box one is written in, what it reads as, and a record's timeline. */
+@layer m-components {
+  [data-slot='prose'] {
+    display: grid;
+    gap: var(--m-space-3);
+    min-width: 0;
+    overflow-wrap: anywhere;
+
+    & p {
+      margin: 0;
+    }
+
+    & :is(ul, ol) {
+      display: grid;
+      gap: var(--m-space-1h);
+      margin: 0;
+      padding-inline-start: var(--m-space-5h);
+    }
+
+    & ul {
+      list-style: disc;
+    }
+
+    & a {
+      color: var(--m-accent-ink);
+      text-underline-offset: 2px;
+    }
+
+    & code {
+      padding: 0.0625rem var(--m-space-2);
+      border-radius: 4px;
+      background: var(--m-raised);
+      font: 0.92em var(--m-mono);
+    }
+  }
+
+  /* The box and its marks are one control: one edge, and the ring around both when the keyboard is in either. */
+  [data-slot='note-area'] {
+    display: grid;
+    border: 1px solid var(--m-line-control);
+    border-radius: var(--m-radius);
+    background: var(--m-surface);
+    box-shadow: var(--m-shadow-control);
+
+    &:focus-within {
+      border-color: var(--ui-ring-border);
+      outline: 2px solid var(--ui-ring);
+      outline-offset: 1px;
+    }
+
+    &[data-disabled] {
+      opacity: 0.6;
+    }
+
+    & [data-slot='textarea'] {
+      width: 100%;
+      min-height: 0;
+      padding: var(--m-space-3) var(--m-space-4) var(--m-space-2);
+      border: 0;
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
+      outline: none;
+      resize: none;
+    }
+  }
+
+  [data-slot='note-preview'] {
+    min-height: 3.5rem;
+    padding: var(--m-space-3) var(--m-space-4) var(--m-space-2);
+  }
+
+  [data-slot='note-nothing'] {
+    margin: 0;
+    color: var(--m-ink-subtle);
+  }
+
+  [data-slot='note-bar'] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--m-space-3);
+    padding: var(--m-space-2) var(--m-space-2) var(--m-space-2);
+
+    & [data-slot='toolbar'] {
+      display: flex;
+      gap: 0.0625rem;
+      padding: 0;
+      border: 0;
+      background: none;
+    }
+  }
+
+  [data-slot='note-mark'] {
+    display: grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 0;
+    border-radius: calc(var(--m-radius) - 3px);
+    background: none;
+    color: var(--m-ink-muted);
+    cursor: pointer;
+
+    & svg {
+      width: 0.9375rem;
+      height: 0.9375rem;
+    }
+
+    &:hover:not(:disabled) {
+      background: var(--m-raised);
+      color: var(--m-ink);
+    }
+
+    &[aria-pressed='true'] {
+      background: var(--m-accent-soft);
+      color: var(--m-accent-ink);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: -1px;
+    }
+  }
+
+  [data-slot='composer'] {
+    display: grid;
+    gap: var(--m-space-2h);
+  }
+
+  [data-slot='composer-end'] {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--m-space-3);
+  }
+
+  [data-slot='composer-hint'] {
+    display: inline-flex;
+    gap: var(--m-space-1h);
+  }
+
+  [data-slot='composer-problem'] {
+    margin: 0;
+    color: var(--m-critical);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+  }
+
+  [data-slot='record-timeline'] {
+    display: grid;
+    gap: var(--m-space-5);
+    min-width: 0;
+
+    & ol {
+      display: grid;
+      gap: var(--m-space-4h);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+  }
+
+  [data-slot='timeline-day'] {
+    display: grid;
+    gap: var(--m-space-4);
+
+    /* The day is a word on a rule, so the eye finds where one day ends without a box around each. */
+    & > :is(h2, h3, h4) {
+      display: flex;
+      align-items: center;
+      gap: var(--m-space-4);
+      margin: 0;
+      color: var(--m-ink-subtle);
+      font-size: var(--m-size-2xs);
+      line-height: var(--m-lead-2xs);
+      font-weight: var(--m-weight-strong);
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+
+      &::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--m-line);
+      }
+    }
+  }
+
+  [data-slot='timeline-note'] {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--m-space-3h);
+
+    & article {
+      display: grid;
+      gap: var(--m-space-2);
+      min-width: 0;
+    }
+
+    & header {
+      display: flex;
+      align-items: baseline;
+      gap: var(--m-space-3);
+
+      & b {
+        font-weight: var(--m-weight-bold);
+      }
+    }
+
+    & time,
+    & [data-slot='timeline-state'] {
+      color: var(--m-ink-subtle);
+      font-size: var(--m-size-xs);
+      line-height: var(--m-lead-xs);
+    }
+
+    &[data-pending] article {
+      opacity: 0.6;
+    }
+
+    &[data-failed] [data-slot='timeline-state'] {
+      color: var(--m-critical);
+    }
+  }
+
+  [data-slot='timeline-event'] {
+    display: flex;
+    align-items: baseline;
+    gap: var(--m-space-3h);
+    padding-inline-start: var(--m-space-3);
+    color: var(--m-ink-muted);
+    font-size: var(--m-size-sm);
+    line-height: var(--m-lead-sm);
+
+    & time {
+      color: var(--m-ink-subtle);
+      font-size: var(--m-size-xs);
+      line-height: var(--m-lead-xs);
+    }
+  }
+
+  [data-slot='timeline-dot'] {
+    flex: none;
+    width: 0.4375rem;
+    height: 0.4375rem;
+    margin-inline-end: var(--m-space-2h);
+    border-radius: 999px;
+    background: var(--m-line-control);
+    translate: 0 -1px;
+  }
+
+  :is([data-slot='timeline-reactions'], [data-slot='timeline-retry']) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--m-space-2);
+    margin-top: var(--m-space-1);
+  }
+
+  [data-slot='timeline-reactions'] > button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--m-space-2);
+    height: 1.5rem;
+    padding-inline: var(--m-space-2h);
+    border: 1px solid var(--m-line);
+    border-radius: var(--m-radius-pill, 999px);
+    background: var(--m-surface);
+    color: var(--m-ink-muted);
+    font: inherit;
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+
+    &:hover {
+      border-color: var(--m-line-strong);
+    }
+
+    &[aria-pressed='true'] {
+      border-color: color-mix(in oklab, var(--m-accent) 45%, var(--m-surface));
+      background: var(--m-accent-soft);
+      color: var(--m-accent-ink);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: 1px;
+    }
+  }
+
+  [data-slot='timeline-reactions'] [data-slot$='-trigger'] {
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border-radius: var(--m-radius-pill, 999px);
+  }
+
+  [data-slot='timeline-empty'] {
+    margin: 0;
+    color: var(--m-ink-muted);
+  }
+}

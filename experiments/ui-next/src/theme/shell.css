@@ -1,0 +1,682 @@
+/* The shell: the menu on the ground, and the page as a sheet of the surface laid on it, so the page has one edge
+   and the menu reads as the desk it sits on.
+
+   Everything in the menu's head and in the bar stands on one line across the window. The bar is `--shell-bar`
+   tall inside its rule, and every control in it is `--shell-control`, so each sits a whole number of pixels from
+   the bar's edges and none is drawn on a half pixel. */
+@layer m-components {
+  [data-slot='shell'] {
+    --shell-rail: 15rem;
+    --shell-bar: 3rem;
+    --shell-control: 2rem;
+    --shell-inset: 0.5rem;
+    /* How far the page's content stands from the pane's edge; the bar's first control lines up with it. */
+    --shell-gutter: 2rem;
+    display: grid;
+    grid-template-columns: var(--shell-rail) minmax(0, 1fr);
+    min-height: 100dvh;
+    background: var(--m-ground);
+
+    &[data-folded] {
+      --shell-rail: 3.5rem;
+    }
+
+    &:is([data-layout='top'], [data-layout='phone']) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    &[data-layout='phone'] {
+      --shell-inset: 0rem;
+      --shell-gutter: 1rem;
+    }
+  }
+
+  /* The first stop on the page, seen only when the keyboard is on it. */
+  [data-slot='shell-skip'] {
+    position: fixed;
+    inset-block-start: 0.5rem;
+    inset-inline-start: 0.5rem;
+    z-index: 100;
+    padding: var(--m-space-3) var(--m-space-4);
+    border-radius: var(--m-radius);
+    background: var(--m-ink);
+    color: var(--m-surface);
+    font-weight: var(--m-weight-strong);
+    text-decoration: none;
+    translate: 0 -200%;
+
+    &:focus-visible {
+      translate: 0 0;
+      outline: 2px solid var(--ui-ring);
+      outline-offset: 2px;
+    }
+  }
+
+  /* The menu: its head stays, its rooms scroll under it, its foot stays. */
+  [data-slot='shell-rail'] {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100dvh;
+    box-sizing: border-box;
+    padding-inline: var(--m-space-3h);
+  }
+
+  /* As tall as the bar and as far down, so the brand and the bar's controls share a centre. */
+  [data-slot='shell-rail-head'] {
+    display: flex;
+    align-items: center;
+    height: var(--shell-bar);
+    margin-block-start: calc(var(--shell-inset) + 1px);
+  }
+
+  [data-slot='shell-rail-body'] {
+    min-height: 0;
+    padding-block: var(--m-space-3) var(--m-space-5);
+    overflow: hidden auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--m-line-strong) transparent;
+  }
+
+  [data-slot='shell-brand'] {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--m-space-3);
+    min-width: 0;
+    height: var(--shell-control);
+    padding-inline: var(--m-space-2h);
+    border-radius: calc(var(--m-radius) - 2px);
+    color: var(--m-ink);
+    font-size: var(--m-size-md);
+    line-height: var(--m-lead-md);
+    font-weight: var(--m-weight-heavy);
+    letter-spacing: var(--m-track-title);
+    text-decoration: none;
+
+    &:hover {
+      background: var(--m-raised);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: -2px;
+    }
+  }
+
+  [data-slot='shell-brand-mark'] {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: calc(var(--m-radius) * 0.75);
+    background: var(--m-ink);
+    color: var(--m-surface);
+
+    & svg {
+      width: 0.9375rem;
+      height: 0.9375rem;
+    }
+  }
+
+  [data-slot='shell-nav'] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--m-space-5h);
+  }
+
+  [data-slot='shell-nav-group'] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    & p {
+      margin: 0 0 var(--m-space-2);
+      padding-inline: var(--m-space-3);
+      color: var(--m-ink-subtle);
+      font-size: var(--m-size-2xs);
+      font-weight: var(--m-weight-strong);
+      line-height: 1rem;
+      white-space: nowrap;
+    }
+  }
+
+  /* A room in the menu, down the side or along the bar. Folded, a link is also what a tip is about, and the parts'
+     sheet dresses whatever opens something as a button: a room stays a line of the menu. */
+  :is([data-slot='shell-nav-group'], [data-slot='shell-topnav']) > a {
+    display: flex;
+    align-items: center;
+    gap: var(--m-space-3);
+    height: var(--shell-control);
+    padding-inline: var(--m-space-3);
+    border: 0;
+    border-radius: calc(var(--m-radius) - 2px);
+    background: none;
+    box-shadow: none;
+    color: var(--m-ink-muted);
+    font-size: inherit;
+    font-weight: var(--m-weight-medium);
+    line-height: 1.25rem;
+    text-decoration: none;
+    white-space: nowrap;
+
+    &:hover {
+      background: var(--m-raised);
+      color: var(--m-ink);
+    }
+
+    &[aria-current] {
+      background: color-mix(in oklab, var(--m-ink) 7%, transparent);
+      color: var(--m-ink);
+      font-weight: var(--m-weight-bold);
+    }
+
+    &[data-idle] {
+      color: var(--m-ink-subtle);
+      cursor: default;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: -2px;
+    }
+  }
+
+  [data-slot='shell-nav-icon'] {
+    position: relative;
+    flex: none;
+    display: inline-flex;
+
+    & svg {
+      width: 1rem;
+      height: 1rem;
+    }
+  }
+
+  /* Folded, a room with something waiting says so with a dot on its icon; the number is in its name. */
+  [data-slot='shell-nav-dot'] {
+    position: absolute;
+    inset-block-start: -0.1875rem;
+    inset-inline-end: -0.25rem;
+    width: 0.4375rem;
+    height: 0.4375rem;
+    border-radius: 999px;
+    background: var(--m-accent);
+    box-shadow: 0 0 0 1.5px var(--m-ground);
+  }
+
+  [data-slot='shell-nav-label'] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  [data-slot='shell-nav-count'] {
+    margin-inline-start: auto;
+    color: var(--m-ink-subtle);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* On the room being read the count stands on a darker ground, and takes the darker of the quiet inks to
+     stay readable there. */
+  [data-slot='shell-nav-group'] a[aria-current] [data-slot='shell-nav-count'] {
+    color: var(--m-ink-muted);
+  }
+
+  /* Folded, the menu is its icons: the names are in each link's label and in the tip that says it. */
+  [data-slot='shell'][data-folded] [data-slot='shell-rail'] {
+    padding-inline: var(--m-space-3);
+
+    & [data-slot='shell-nav-label'],
+    & [data-slot='shell-nav-count'],
+    & [data-slot='shell-nav-group'] p {
+      display: none;
+    }
+
+    & [data-slot='shell-nav-group'] a,
+    & [data-slot='shell-brand'] {
+      justify-content: center;
+      padding-inline: 0;
+    }
+
+    & [data-slot='shell-nav'] {
+      gap: var(--m-space-4);
+    }
+
+    /* A group is still a group: a hairline stands where its name was. */
+    & [data-slot='shell-nav-group'] + [data-slot='shell-nav-group'] {
+      padding-top: var(--m-space-4);
+      border-top: 1px solid var(--m-line);
+    }
+  }
+
+  [data-slot='shell-foot'] {
+    padding-block: var(--m-space-3) var(--m-space-4);
+  }
+
+  [data-slot='shell-pane'] {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin: var(--shell-inset);
+    margin-inline-start: 0;
+    border: 1px solid var(--m-line);
+    border-radius: calc(var(--m-radius) + 4px);
+    background: var(--m-surface);
+    box-shadow: var(--m-shadow-control);
+
+    [data-layout='top'] > & {
+      margin-inline-start: var(--shell-inset);
+    }
+
+    [data-layout='phone'] > & {
+      border: 0;
+      border-radius: 0;
+    }
+  }
+
+  /* The bar's rule is a shadow inside it, so the bar is exactly as tall as it says and what is in it centres on
+     whole pixels. Its first control's icon stands on the page's own gutter. */
+  [data-slot='shell-bar'] {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: var(--m-space-3);
+    height: var(--shell-bar);
+    /* Both ends stand on the page's gutters, at any width: where the page stops growing and is centred, so is
+       what is in the bar. The first control's icon and the last one's disc are inset in their boxes by that much. */
+    --shell-page: 82rem;
+    padding-inline: max(calc(var(--shell-gutter) - 0.5rem), calc((100% - var(--shell-page)) / 2 + var(--shell-gutter) - 0.5rem))
+      max(calc(var(--shell-gutter) - 0.25rem), calc((100% - var(--shell-page)) / 2 + var(--shell-gutter) - 0.25rem));
+    border-start-start-radius: inherit;
+    border-start-end-radius: inherit;
+    background: color-mix(in oklab, var(--m-surface) 88%, transparent);
+    box-shadow: inset 0 -1px 0 var(--m-line);
+    backdrop-filter: blur(10px);
+  }
+
+  /* Once the page has gone under it the bar says it is over something. */
+  [data-slot='shell'][data-scrolled] [data-slot='shell-bar'] {
+    box-shadow:
+      inset 0 -1px 0 var(--m-line-strong),
+      0 6px 16px -12px light-dark(rgb(23 23 26 / 0.35), rgb(0 0 0 / 0.9));
+  }
+
+  /* Every control in the bar is one height. */
+  [data-slot='shell-bar'] :is([data-slot='button'], [data-slot$='-trigger']) {
+    height: var(--shell-control);
+  }
+
+  /* The fold and what stands at the bar's far end are squares of that height: an icon, a disc. */
+  :is([data-part='shell-fold'], [data-slot='shell-bar-end'] :is([data-slot='popover-trigger'], [data-slot='menu-trigger'])) {
+    flex: none;
+    width: var(--shell-control);
+    padding: 0;
+  }
+
+  [data-part='shell-fold'] {
+    color: var(--m-ink-muted);
+
+    /* Its icon's edge is the page's gutter, so it is the size its box was laid out for. */
+    & svg {
+      width: 1rem;
+      height: 1rem;
+    }
+  }
+
+  /* Where the reader is: the group quietly, a stroke, the room. */
+  [data-slot='shell-trail'] {
+    display: flex;
+    align-items: center;
+    gap: var(--m-space-3);
+    min-width: 0;
+    padding-inline-start: var(--m-space-2);
+    font-size: var(--m-size-sm);
+    line-height: 1.25rem;
+    white-space: nowrap;
+
+    & span {
+      color: var(--m-ink-subtle);
+
+      &::after {
+        content: '/';
+        margin-inline-start: var(--m-space-3);
+        color: var(--m-line-control);
+      }
+    }
+
+    & b {
+      overflow: hidden;
+      font-weight: var(--m-weight-strong);
+      text-overflow: ellipsis;
+    }
+  }
+
+  /* The bar's own middle stands at its far end, before what the reader's own is. */
+  [data-slot='shell-bar-middle'] {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    justify-content: flex-end;
+
+    & [data-part='palette-trigger'] {
+      width: min(16rem, 100%);
+    }
+  }
+
+  [data-layout='phone'] [data-slot='shell-bar-middle'] {
+    justify-content: flex-start;
+
+    & [data-part='palette-trigger'] {
+      width: 100%;
+    }
+  }
+
+  [data-layout='phone'] [data-slot='shell-trail'] {
+    display: none;
+  }
+
+  [data-slot='shell-bar-end'] {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--m-space-2);
+  }
+
+  /* The menu along the bar: a room a link, a group a menu under its name. */
+  [data-slot='shell-topnav'] {
+    display: flex;
+    align-items: center;
+    gap: var(--m-space-1);
+    min-width: 0;
+    margin-inline-start: var(--m-space-3);
+
+    & [data-slot='menu-trigger'] {
+      width: auto;
+      padding-inline: var(--m-space-3);
+      color: var(--m-ink-muted);
+      font-weight: var(--m-weight-medium);
+    }
+  }
+
+  [data-layout='top'] [data-slot='shell-bar'] > [data-slot='shell-brand'] {
+    flex: none;
+    padding-inline: var(--m-space-2h) var(--m-space-3);
+  }
+
+  [data-slot='shell-topnav-group'] {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--m-space-2);
+
+    & svg {
+      width: 0.6875rem;
+      height: 0.6875rem;
+    }
+
+    &[data-current] {
+      color: var(--m-ink);
+      font-weight: var(--m-weight-bold);
+    }
+  }
+
+  [data-slot='shell-main'] {
+    position: relative;
+    width: 100%;
+    max-width: 82rem;
+    box-sizing: border-box;
+    margin-inline: auto;
+    padding: var(--m-space-6) var(--shell-gutter) var(--m-space-8);
+    outline: none;
+
+    [data-layout='phone'] & {
+      padding-block: var(--m-space-5) var(--m-space-8);
+    }
+  }
+
+  /* A point at the page's head: when it has left the window, the page is under the bar. */
+  [data-slot='shell-mark'] {
+    position: absolute;
+    inset-block-start: 0;
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+  }
+
+  [data-slot='drawer-content'][data-kind='shell-drawer'] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--m-space-5);
+    width: min(18rem, 86vw);
+    padding: var(--m-space-4h) var(--m-space-3h);
+    background: var(--m-ground);
+
+    & > header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--m-space-3);
+
+      & [data-slot='shell-brand'] {
+        flex: 1;
+      }
+    }
+
+    /* A finger wants more than a pointer does. */
+    & [data-slot='shell-nav-group'] a {
+      height: 2.5rem;
+    }
+  }
+
+  [data-part='bell'] {
+    position: relative;
+
+    & svg {
+      width: 1.0625rem;
+      height: 1.0625rem;
+    }
+  }
+
+  [data-slot='bell-count'] {
+    position: absolute;
+    inset-block-start: 0.1875rem;
+    inset-inline-end: 0.125rem;
+    display: grid;
+    place-items: center;
+    min-width: 0.875rem;
+    height: 0.875rem;
+    padding-inline: var(--m-space-1h);
+    box-sizing: border-box;
+    border-radius: 999px;
+    background: var(--m-critical);
+    color: var(--m-surface);
+    font-size: 0.5625rem;
+    font-weight: var(--m-weight-heavy);
+    line-height: 1;
+    box-shadow: 0 0 0 1.5px var(--m-surface);
+  }
+
+  [data-slot='popover-content'][data-part='inbox'] {
+    display: grid;
+    gap: var(--m-space-2h);
+    width: 22rem;
+    max-width: calc(100vw - 1.5rem);
+    padding: var(--m-space-3h) var(--m-space-3) var(--m-space-3);
+
+    & > header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 1.75rem;
+      padding-inline: var(--m-space-2h) 0;
+    }
+
+    & ul {
+      display: grid;
+      gap: 1px;
+      max-height: 22rem;
+      margin: 0;
+      padding: 0;
+      overflow: auto;
+      list-style: none;
+    }
+
+    & li a {
+      display: grid;
+      grid-template-columns: 0.5rem minmax(0, 1fr) auto;
+      align-items: baseline;
+      gap: var(--m-space-3);
+      padding: var(--m-space-3) var(--m-space-3) var(--m-space-3) var(--m-space-2h);
+      border-radius: calc(var(--m-radius) - 2px);
+      color: var(--m-ink);
+      text-decoration: none;
+
+      &:hover {
+        background: var(--m-raised);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--ui-ring);
+        outline-offset: -2px;
+      }
+    }
+
+    & time {
+      color: var(--m-ink-subtle);
+      font-size: var(--m-size-xs);
+      line-height: var(--m-lead-xs);
+      white-space: nowrap;
+    }
+  }
+
+  [data-slot='inbox-dot'] {
+    width: 0.4375rem;
+    height: 0.4375rem;
+    border-radius: 999px;
+    translate: 0 -1px;
+
+    [data-unread] & {
+      background: var(--m-accent);
+    }
+  }
+
+  [data-slot='inbox-words'] {
+    display: grid;
+    gap: 0.0625rem;
+    min-width: 0;
+
+    & b {
+      font-weight: var(--m-weight-medium);
+
+      [data-unread] & {
+        font-weight: var(--m-weight-heavy);
+      }
+    }
+
+    & > span {
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-xs);
+      line-height: var(--m-lead-xs);
+    }
+  }
+
+  [data-slot='inbox-empty'] {
+    margin: 0;
+    padding: var(--m-space-5h) var(--m-space-3);
+    color: var(--m-ink-muted);
+    text-align: center;
+  }
+
+  [data-slot='sign-in'] {
+    display: grid;
+    gap: var(--m-space-5h);
+    width: min(22rem, 100%);
+    margin-inline: auto;
+
+    & > header {
+      display: grid;
+      gap: var(--m-space-4h);
+      justify-items: start;
+
+      & h1 {
+        margin: 0;
+        font-size: var(--m-size-4xl);
+        line-height: var(--m-lead-4xl);
+        font-weight: var(--m-weight-heavy);
+        letter-spacing: var(--m-track-display);
+      }
+
+      & [data-slot='shell-brand-mark'] {
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--m-radius);
+
+        & svg {
+          width: 1.25rem;
+          height: 1.25rem;
+        }
+      }
+    }
+
+    & form {
+      display: grid;
+      gap: var(--m-space-4h);
+    }
+
+    & > footer {
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-sm);
+      line-height: var(--m-lead-sm);
+
+      & a {
+        color: var(--m-accent-ink);
+      }
+    }
+  }
+
+  [data-slot='sign-in-providers'] {
+    display: grid;
+    gap: var(--m-space-3);
+  }
+
+  /* "or", on a rule. */
+  [data-slot='sign-in-or'] {
+    display: flex;
+    align-items: center;
+    gap: var(--m-space-4);
+    margin: 0;
+    color: var(--m-ink-subtle);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+
+    &::before,
+    &::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--m-line);
+    }
+  }
+
+  [data-slot='sign-in-problem'] {
+    margin: 0;
+    padding: var(--m-space-3) var(--m-space-4);
+    border-radius: var(--m-radius);
+    background: color-mix(in oklab, var(--m-critical) 9%, var(--m-surface));
+    color: color-mix(in oklab, var(--m-critical) 85%, var(--m-ink));
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot='shell'] {
+      transition: grid-template-columns var(--m-enter) var(--m-ease-out);
+    }
+  }
+}

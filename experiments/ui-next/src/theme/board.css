@@ -1,0 +1,231 @@
+/* A list as lanes: each lane a quiet tray on the surface, each card a sheet in it. */
+@layer m-components {
+  [data-kind='board'] {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(15.5rem, 1fr);
+    align-items: start;
+    gap: var(--m-space-4);
+    padding-block-end: var(--m-space-3);
+    overflow-x: auto;
+  }
+
+  [data-kind='board-lane'] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--m-space-3);
+    padding: var(--m-space-3);
+    border-radius: var(--m-radius-panel, calc(var(--m-radius) + 4px));
+    background: color-mix(in oklab, var(--m-raised) 70%, var(--m-surface));
+
+    & > header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--m-space-2) var(--m-space-2h) 0;
+      font-weight: var(--m-weight-strong);
+    }
+
+    /* A lane's name is a heading: the dot carries its tone and the word stays in the ink. */
+    & > header [data-slot='status'] {
+      color: var(--m-ink);
+    }
+
+    & > ul {
+      display: flex;
+      flex-direction: column;
+      gap: var(--m-space-3);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+  }
+
+  [data-kind='board-card'] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--m-space-2h) var(--m-space-3);
+    padding: var(--m-space-3h) var(--m-space-3) var(--m-space-3h) var(--m-space-4);
+    border: 1px solid var(--m-line);
+    border-radius: var(--m-radius);
+    background: var(--m-surface);
+    box-shadow: var(--m-shadow-control);
+    transition: border-color var(--m-fast);
+
+    &:hover {
+      border-color: var(--m-line-strong);
+    }
+
+    & [data-slot='menu-trigger'] {
+      width: calc(var(--ui-spacing) * 6);
+      height: calc(var(--ui-spacing) * 6);
+      margin-block-start: calc(var(--m-space-1) * -1);
+      padding: 0;
+    }
+  }
+
+  /* The grip a card is carried by with a keyboard or a finger. It sits in the card's leading edge and waits, as a
+     row's menu does, until the card is pointed at or the keyboard is on it; a touch screen has no hover, so there
+     it always shows, and it alone takes the finger's drag while the rest of the card scrolls the board. */
+  [data-kind='board-card'] {
+    position: relative;
+  }
+
+  [data-kind='board-card'][data-carries] {
+    padding-inline-start: var(--m-space-5h);
+  }
+
+  [data-kind='board-card'] [data-slot='transfer-handle'] {
+    position: absolute;
+    inset-block-start: 0.5rem;
+    inset-inline-start: 0.125rem;
+    width: 0.875rem;
+    opacity: 0;
+    transition: opacity var(--m-fast);
+
+    &:focus-visible,
+    &[data-carried] {
+      opacity: 1;
+    }
+  }
+
+  [data-kind='board-card']:hover [data-slot='transfer-handle'] {
+    opacity: 1;
+  }
+
+  @media (hover: none) {
+    [data-kind='board-card'] [data-slot='transfer-handle'] {
+      opacity: 0.7;
+    }
+  }
+
+  [data-slot='board-card-name'] {
+    color: var(--m-ink);
+    font-weight: var(--m-weight-strong);
+    line-height: var(--m-lead-xs);
+    text-decoration: none;
+
+    &:is(a):hover {
+      text-decoration: underline;
+      text-underline-offset: 0.1875rem;
+    }
+  }
+
+  [data-slot='board-card-body'] {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--m-space-3);
+    padding-inline-end: var(--m-space-2);
+  }
+
+  [data-slot='board-card-meta'] {
+    display: flex;
+    /* Each fact keeps to one line and the facts wrap between them, never inside one. */
+    flex-wrap: wrap;
+    gap: 0 var(--m-space-2h);
+    white-space: nowrap;
+    margin: 0;
+    color: var(--m-ink-subtle);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    font-variant-numeric: tabular-nums;
+
+    & span + span::before {
+      margin-inline-end: var(--m-space-2h);
+      content: '·';
+    }
+  }
+
+  [data-slot='board-card-foot'] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+  }
+
+  [data-slot='board-empty'] {
+    padding: var(--m-space-5);
+    border: 1px dashed var(--m-line-control);
+    border-radius: var(--m-radius);
+    color: var(--m-ink-subtle);
+    text-align: center;
+  }
+
+  /* Carrying a card. The card left behind fades to a place-holder, the copy under the pointer lifts, and the board
+     answers the question a reader carrying one has: where may this go, and what happens if I let go there. */
+  [data-kind='board-card'][data-carries] {
+    cursor: grab;
+    touch-action: pan-x pan-y;
+  }
+
+  [data-kind='board'][data-carrying] {
+    cursor: grabbing;
+    user-select: none;
+
+    & [data-kind='board-card'] {
+      cursor: grabbing;
+    }
+  }
+
+  /* A card carried by a pointer leaves a place-holder where it would land, since the copy under the pointer is
+     the card. A card carried by keys has no copy: it is itself where it would land, lifted. */
+  [data-kind='board-card'][data-dragging] {
+    border-style: dashed;
+    background: transparent;
+    box-shadow: none;
+
+    & > * {
+      opacity: 0.35;
+    }
+  }
+
+  [data-kind='board-card'][data-carried]:not([data-dragging]) {
+    border-color: var(--m-accent);
+    box-shadow:
+      0 0 0 1px var(--m-accent),
+      var(--m-shadow-pop);
+  }
+
+  [data-kind='board-lane'] {
+    transition:
+      opacity var(--m-fast),
+      background-color var(--m-fast),
+      box-shadow var(--m-fast);
+
+    &[data-takes] {
+      box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--m-accent) 45%, transparent);
+    }
+
+    &[data-over] {
+      background: var(--m-accent-soft);
+      box-shadow: inset 0 0 0 2px var(--m-accent);
+    }
+
+    /* A lane that would not take the card stands back by going flat, its tray and its cards' lift gone, and not
+       by fading: what is in it can still be read. */
+    &[data-refuses] {
+      background: transparent;
+      box-shadow: inset 0 0 0 1px var(--m-line);
+
+      & [data-kind='board-card'] {
+        background: transparent;
+        box-shadow: none;
+      }
+    }
+  }
+
+  /* What letting go here does, said where the lane's count stood. */
+  [data-slot='board-offer'] {
+    color: var(--m-accent-ink);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    font-weight: var(--m-weight-strong);
+  }
+
+  [data-kind='board-card'][data-waiting] {
+    box-shadow: none;
+    pointer-events: none;
+  }
+}

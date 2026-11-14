@@ -44,8 +44,8 @@
     "test:tokens": "node scripts/visual-matrix.mjs --tokens",
     "affected": "node scripts/affected.mjs",
     "test:components": "vitest run",
-    "format": "oxfmt \"{packages,test,e2e,scripts,storybook,site,examples,packs}/**/*.{ts,tsx,js,mjs,cjs,mts}\" \"{*,config/*}.{ts,mjs,js,cjs,mts}\"",
-    "format:check": "oxfmt --check \"{packages,test,e2e,scripts,storybook,site,examples,packs}/**/*.{ts,tsx,js,mjs,cjs,mts}\" \"{*,config/*}.{ts,mjs,js,cjs,mts}\""
+    "format": "oxfmt \"{packages,test,e2e,scripts,storybook,site,examples,packs,experiments}/**/*.{ts,tsx,js,mjs,cjs,mts}\" \"{*,config/*}.{ts,mjs,js,cjs,mts}\"",
+    "format:check": "oxfmt --check \"{packages,test,e2e,scripts,storybook,site,examples,packs,experiments}/**/*.{ts,tsx,js,mjs,cjs,mts}\" \"{*,config/*}.{ts,mjs,js,cjs,mts}\""
   },
   "devDependencies": {
     "@astrojs/starlight": "0.42.0",

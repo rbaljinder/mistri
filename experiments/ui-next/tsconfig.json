@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "noUncheckedSideEffectImports": false,
+    "types": [],
+    "paths": {
+      "@mistriwork/mistri/ui": ["../../packages/mistri/schema/ui.d.ts"],
+      "@mistriwork/mistri/page": ["../../packages/mistri/schema/page.d.ts"],
+      "@mistriwork/ui/*.js": ["../../packages/ui/src/*"],
+      "react": ["./node_modules/@types/react"],
+      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime"],
+      "react-dom/client": ["./node_modules/@types/react-dom/client"],
+      "@base-ui/react/*": ["./node_modules/@base-ui/react/*"]
+    }
+  },
+  "include": ["src", "gallery", "kit", "in-app", "vite.config.ts"]
+}
