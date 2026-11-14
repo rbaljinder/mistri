@@ -1087,6 +1087,7 @@
       "tests": [{ "file": "test/api-token-command.test.ts" }, { "file": "test/api-token-args.test.ts" }]
     },
     { "id": "cli-flag-history-table", "surface": ["cli: flag --history-table"], "tests": [{ "file": "test/migrate-flags.test.ts" }] },
+    { "id": "cli-flag-runtime", "surface": ["cli: flag --runtime"], "tests": [{ "file": "test/postgres-tenant-backstop.test.ts" }] },
     {
       "id": "cli-flag-host",
       "surface": ["cli: flag --host"],

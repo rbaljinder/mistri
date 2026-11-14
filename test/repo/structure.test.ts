@@ -338,6 +338,9 @@ const TENANT_IMPORTERS = [
   'packages/mistri/src/server/api/tenantApiReadOwner.ts',
   'packages/mistri/src/server/cli/apiTokenTenant.ts',
   'packages/mistri/src/server/cli/appMcpMode.ts',
+  // `mistri migrate backstop` and the check's backstop step read a tenant App's policy to say what its database must hold
+  // for the row-security backstop (docs/postgresql.md): an operator's entry point, as tenant.ts is.
+  'packages/mistri/src/server/cli/backstopCli.ts',
   // Startup refuses a connection under the row-security backstop for a non-tenant App (apps.ts) or the Workbench
   // (mistriMain.ts): either would read as the runtime role with no tenant set and see nothing (tenantBackstopOwner.ts).
   'packages/mistri/src/server/cli/apps.ts',

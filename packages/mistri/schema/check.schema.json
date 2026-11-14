@@ -101,7 +101,7 @@
         }
       ]
     },
-    "step": { "enum": ["check", "pending", "schema file", "schema types", "typecheck", "themes", "fonts", "files", "validation", "indexes", "queries", "components", "routes", "design", "elevations", "segments", "defaults", "fix", "deploy", "stores"] },
+    "step": { "enum": ["check", "pending", "schema file", "schema types", "typecheck", "themes", "fonts", "files", "validation", "indexes", "queries", "components", "routes", "design", "elevations", "segments", "defaults", "fix", "deploy", "stores", "backstop"] },
     "problem": {
       "type": "object",
       "additionalProperties": false,

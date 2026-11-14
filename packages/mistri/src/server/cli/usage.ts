@@ -373,6 +373,8 @@ Checking an App while authoring it — the one command of the loop:
   on any engine: a branch or restore of the real one, or an empty one the whole
   history can build; for a hosted role without CREATEDB. It is never dropped
   and never the App's own database; a \${NAME} in the URL is expanded.
+  The backstop step is not judged on a copy: once the migrations are applied,
+  check without --pending (or mistri migrate backstop status) judges it.
   --schema-file [<schema.sql>] checks an App with no database to reach: the file
   (the App's schema.sql by default) is run on a scratch database, as a migration
   is — SQLite, or PostgreSQL on the server --dev-url names, which needs CREATEDB —
@@ -700,6 +702,21 @@ Changing the schema — versioned SQL files in Flyway's format, forward only:
   server itself (a tenant App tenant by tenant); otherwise run sweep daily
   from cron.
   Exit codes: 1 could not run, 3 some files did not move.
+
+  mistri migrate backstop status | new --app <dir> --policy <file> [--runtime <role>]
+                  [--connection <name>] [--config <path>]
+  A tenant App's row-security backstop on PostgreSQL 15 or later
+  (docs/postgresql.md), read from the App instead of written by hand: the
+  runtime role, what it may touch, and the one policy, mistri_tenant, on each
+  tenant table's ownership column. status says what the database lacks of it
+  or holds beside it: a policy missing, changed or extra, row security off or
+  forced, a grant gone or one the plan does not make (exit 2); new writes the
+  next V file, tenant_backstop, idempotent SQL that migrate up applies as the
+  owner. The role is made NOLOGIN: its login and password are the operator's
+  step, never in the file. --runtime names the role; a connection that
+  declares the backstop gives it by its url's user. mistri check judges the
+  same, as its backstop step, for a connection that declares it.
+  Exit codes: 1 could not run, 2 the database differs from the plan.
 
 Starting flows on records already there — a backfill, run once beside the server:
   mistri flows start <resource> [--app <dir>] --jobs <file>

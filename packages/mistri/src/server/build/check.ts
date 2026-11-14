@@ -505,6 +505,38 @@ interface ScratchCopy {
 
 /* The lines mistri check sends to stderr that are only its startup narration. */
 /**
+ * The backstop step: a tenant App whose connection declares the row-security backstop (docs/postgresql.md) judged
+ * against the plan `mistri migrate backstop` writes — a policy missing, changed or extra, row security off or forced, a
+ * grant gone or one the plan does not make. Undefined where the connection declares none, and under --pending: the copy's
+ * roles and grants are the database's, not what the pending migrations would make them. Failed, never pending: a database that drifted from the
+ * fence is a fault to fix, and the fix is the migration the finding names.
+ */
+async function backstopStep(registry: Registry, loaded: LoadedApp, opts: Options, appDir: string): Promise<Step | undefined> {
+  if (loaded.build) return undefined;
+  const { backstopFinding } = await import('../cli/backstopCli.js');
+  const found = await backstopFinding(registry, loaded, opts, appDir);
+  if (!found) return undefined;
+  if ('skipped' in found) return { name: 'backstop', status: 'skipped', detail: found.skipped, lines: [] };
+  if ('unread' in found)
+    return {
+      name: 'backstop',
+      status: 'failed',
+      detail: `could not be read: ${found.unread}`,
+      lines: [],
+      problems: [problem('backstop', 'backstop-drift', `The row-security backstop could not be judged: ${found.unread}`)],
+    };
+  if (!found.drift.length)
+    return { name: 'backstop', status: 'passed', detail: `the database matches the plan for "${found.runtime}"`, lines: [] };
+  return {
+    name: 'backstop',
+    status: 'failed',
+    detail: `${found.drift.length} difference${found.drift.length === 1 ? '' : 's'} from the plan for "${found.runtime}"`,
+    lines: [...found.drift.map((line) => `  ${line}`), `made by: ${found.fix}`],
+    problems: found.drift.map((line) => problem('backstop', 'backstop-drift', `${line}.`, { fix: found.fix })),
+  };
+}
+
+/**
  * The stores step: the stores the App uses that its database lacks (stores/storesCli.ts appStoresPlan, the plan
  * `mistri migrate status --app` prints), or undefined when every one is there. Pending, never failed: the fix is
  * the migrate step, with this run's own entries, and nothing in the App.
@@ -823,7 +855,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
           '--no-index-check skips the indexes step: on PostgreSQL, the foreign keys, default sorts, fixed filters, ownership columns and searches the App reads by that no index leads with (index-missing, with the CREATE INDEX that adds it; tables under 10,000 rows are counted in one line, and --warnings lists those too).\n' +
           "--no-query-check skips the queries step: the database EXPLAINs each read the App's pages would make (lists, related and grouped lists, timelines, breakdowns, figures, rollups) and says the ones it refuses (query-invalid, with the page:section); nothing is run, and PostgreSQL plans them in a READ ONLY transaction.\n" +
           '--bump <command> moves a command whose contract changed to its next version in authority.lock (its API route, receipts and jobs follow).\n' +
-          "--pending judges the App against the schema as it will be after the pending migrations (mistri migrate), applied to a scratch copy, or with --pending-on <url> to the scratch database that URL names (a branch of the database, never the App's own). Exit 6: one failed there.\n" +
+          "--pending judges the App against the schema as it will be after the pending migrations (mistri migrate), applied to a scratch copy, or with --pending-on <url> to the scratch database that URL names (a branch of the database, never the App's own). Exit 6: one failed there. The backstop step is not judged on a copy: check without --pending once they are applied.\n" +
           "--deploy judges whether the App survives a container being replaced (mistri docs build-and-deploy): it refuses a source or auth.store on a SQLite file, the default auth.store, and a missing BETTER_AUTH_SECRET or ${NAME} the environment lacks, and with --replicas <n> above one it warns about per-process rate limits. It also reads the migrations not yet applied and warns about a statement that breaks the code still running (a dropped or renamed column or table, a type change, SET NOT NULL, a NOT NULL column without a default), as expand/contract steps; mark a deliberate one with a '-- mistri: contract' comment on the line before it, and add --strict-migrations to fail on the rest. Run it with the deployment's environment. Exit 7.\n" +
           '--json prints one JSON document instead (schema/check.schema.json): every finding with its code, file, line, column, path and fix.\n' +
           '--brief prints one line per problem, `code file:line message — fix: …`, and nothing else (ok when there is none): errors each in full, warnings a group by code and resource with its count and one example (--warnings lists every one). Exit codes are the same. mistri explain <code> says more.',
@@ -1677,6 +1709,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     }
 
     if (storesStep) steps.push(storesStep);
+    const fenceStep = loaded && !copy ? await backstopStep(registry, loaded, opts, appDir) : undefined;
+    if (fenceStep) steps.push(fenceStep);
     if (indexed) steps.push(indexed);
     if (queried?.step) steps.push(queried.step);
 
