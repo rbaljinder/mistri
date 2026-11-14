@@ -200,6 +200,23 @@ them: the parent column on the left, for SQLite's affinity and collation, and
 on PostgreSQL the constraint's own operator (`conpfeqop`), read with the scope
 catalog as the parent check reads it; a `char(3)` key counted by `=` missed
 its `text` reference 'ab ', which the cascade reached.
+The refusal is `reference_conflict` (409 on a write route, `ineligible_state`
+for a command), and it names only what the reader reads: the table and the
+number of referencing rows it can see. Where every remaining reference is one
+it cannot read — another tenant's row, or a row its policy hides — it says
+only "This record is in use and can't be deleted.", with no table and no
+count; the total is recorded for the operator alone. What remains is that
+the delete is refused at all: a reader learns that something it cannot see
+points at the row, never what or how many. Global tables cannot carry that
+signal from a member: every write to one is refused in a tenant context,
+whatever the grant.
+A key already taken is said the same way. A unique index that includes the
+tenant column (startup requires it of every one but an opaque text primary
+key) met a row of the writer's own tenant, so the answer is `duplicate_value`
+naming the field. A key
+unique across every tenant — an opaque id — may have met another tenant's row,
+so it is refused as the scope refuses a write, with no column and no value,
+word for word the same for a row of the writer's tenant and another's.
 An ordinary (non-command) write, the platform realm and support sessions keep
 the stricter rule: a row is written only where it is read.
 
@@ -219,7 +236,9 @@ tenant whose rows they are, on the deployment's own writer:
   says whose each entry is; it is read only after the reader reads the record in
   their own context, under the owner that context is (a member's tenant; the row
   the platform realm read). The same key in another tenant is another record's
-  history. Provision it with `provisionStores(<the database>, { app: { definition, pages } })`
+  history. A global or platform table's entries say no tenant, so its history is
+  closed in a tenant's context (a missing record's not-found, and nothing of it
+  in a member's activity feed) and read only in the platform realm. Provision it with `provisionStores(<the database>, { app: { definition, pages } })`
   on the App's database (it makes every store the App declares; `only: ['record-history']`
   names this one and is refused for an App with no history); startup refuses without it.
 - **Activity feeds** (`activity()`). A dashboard's feed is read on the reader's

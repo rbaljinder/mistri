@@ -22,7 +22,7 @@ import { AUDIT_PART_ENTRIES, AUDIT_TARGET_ENTRIES, COMMAND_TARGET_BOUNDS } from 
 import { scopedAudit, splitAudit } from '../../adapters/commands/commandAuditParts.js';
 import { EffectBodyTooLarge, EffectProjectionRefused, type CommandEventBatch } from '../../adapters/events/commandEventTypes.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
-import { ScopeRefusal } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
+import { referencedBeneath, ScopeRefusal } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
 import { lockTimedOut } from '@mistriwork/engine/adapters/writeLanes.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { NarrowedRefusal } from '../app/appNarrowedWrites.js';
@@ -1915,6 +1915,14 @@ async function executeUntraced(
     /* The row scope's own refusal is permanent for this request: said as forbidden, which names no row and no value,
        where it fell through to temporarily_unavailable and sent a caller, a job or a workflow round a retry that
        could never succeed. */
+    /* A delete refused while rows still point at it is the record's state, not the caller's grants: said in its own
+       sentence, which names only the rows the caller reads, or none (scopedTransaction.ts ReferencedRefusal). */
+    const referenced = referencedBeneath(cause);
+    if (referenced)
+      throw recordRefusalCause(
+        new BusinessCommandExecutionError('ineligible_state', outcome, undefined, undefined, referenced.message),
+        cause,
+      );
     if (cause instanceof ScopeRefusal) throw recordRefusalCause(new BusinessCommandExecutionError('forbidden', outcome), cause);
     if (cause instanceof CommandInputError) throw new BusinessCommandExecutionError('invalid_input', outcome, cause.field);
     /* A write a narrowed resource's query does not allow (appNarrowedWrites.ts): the record's state, said in its own

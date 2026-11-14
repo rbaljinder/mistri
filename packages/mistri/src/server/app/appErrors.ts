@@ -1,5 +1,6 @@
 import { Refusal, WriteConflict } from '@mistriwork/engine/adapters/adapter.js';
 import { PathError } from '@mistriwork/engine/shared/view.js';
+import { referencedBeneath } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
 import { AppAccessDenied } from './appAccess.js';
 import { ReadAuditFailed } from '../readAudit.js';
 import { AppValidationDenied, ConsumesRefused } from './appValidationDenied.js';
@@ -42,6 +43,10 @@ export function appError(
   if (error instanceof ReadAuditFailed) throw error;
   if (error instanceof AppAccessDenied) return { code: 'forbidden', message: error.message };
   if (error instanceof WriteConflict) return { code: 'record_conflict', message: error.message };
+  /* A delete a row policy refused while rows still point at it: named by what the principal reads of them, or
+     by nothing when it reads none (scopedTransaction.ts ReferencedRefusal), so the sentence is said as it stands. */
+  const referenced = referencedBeneath(error);
+  if (referenced) return { code: 'reference_conflict', message: referenced.message };
   if (error instanceof Refusal || error instanceof PathError) {
     if (error instanceof AppValidationDenied && operation === 'write' && error.fields.length) {
       return {

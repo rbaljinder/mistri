@@ -102,6 +102,20 @@ const MUTATIONS = [
     find: '      const compiled = compileAggregate(schema, snapshotScopedData(request), style, 0, scope, schema);',
     replace: '      const compiled = compileAggregate(schema, snapshotScopedData(request), style, 0, undefined, schema);',
   },
+  {
+    id: 'a-rollup-testing-the-tenant-held-for-anyone',
+    defect:
+      "A rollup's query read `tenant.plan` as a check before any request reads it, held for anyone: the App checked, and a figure compiled once for every request counted every row whatever the tenant's plan, directly or through a segment.",
+    file: 'packages/mistri/src/shared/appRollups.ts',
+    // The rollup is parsed as any check before a request is, which holds `tenant.` rather than refusing it.
+    find: '{ me: ANYONE_ONCE });',
+    replace: '{ me: ANYONE });',
+    also: {
+      file: 'packages/mistri/src/shared/appRollups.ts',
+      find: "import { ANYONE_ONCE, saidAt } from '@mistriwork/engine/shared/query.js';",
+      replace: "import { ANYONE, saidAt } from '@mistriwork/engine/shared/query.js';",
+    },
+  },
 ];
 
 const git = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' });

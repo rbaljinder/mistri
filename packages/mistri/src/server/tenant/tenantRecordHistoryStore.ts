@@ -29,6 +29,7 @@ import type { PageDef } from '@mistriwork/engine/shared/page.js';
 import { historyRules, withBookkeeping } from '../recordHistory.js';
 import { findTable } from '@mistriwork/engine/shared/schema.js';
 import { denyTenant } from '@mistriwork/engine/server/evidence.js';
+import { AppAccessDenied } from '../app/appAccess.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
 
 /** The App's history tables, by the physical id the writer is asked them by, each tenant-owned one with its owner column. */
@@ -79,9 +80,17 @@ export async function bindTenantRecordHistoryStore(
  * context (a member's, or a support operator's inside it), or the platform
  * realm's when `tenantId` is undefined. `read` is what the visibility read
  * must also return: the owner column, where only the row can say whose it is.
+ *
+ * Only a tenant-owned table's entries say whose they are. A global or
+ * platform table's are kept under the record's key alone, and the store keeps
+ * no tenant beside them, so nothing could tell a member which entries were
+ * made inside their tenant: such a table's history is closed in a tenant's
+ * context (`holds`), as a record with none is, and open to the platform realm.
  */
 export function tenantHistoryStoreKey(ownership: TenantOwnershipSnapshot, tenantId: string | undefined) {
+  const holds = (table: string): boolean => tenantId === undefined || ownership.ownership[table]?.kind === 'tenant';
   return Object.freeze({
+    holds,
     read: (table: string): string[] => {
       const rule = ownership.ownership[table];
       return rule?.kind === 'tenant' && tenantId === undefined ? [rule.column] : [];
@@ -92,6 +101,7 @@ export function tenantHistoryStoreKey(ownership: TenantOwnershipSnapshot, tenant
       row: Readonly<Record<string, unknown>>,
     ): Record<string, unknown> => {
       const rule = ownership.ownership[table];
+      if (!holds(table)) throw new AppAccessDenied();
       if (rule?.kind !== 'tenant') return { ...key };
       const owner = tenantId ?? row[rule.column];
       if (typeof owner !== 'string' || !owner) return denyTenant();

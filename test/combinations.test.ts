@@ -34,6 +34,7 @@ import {
   apiTouchCommand,
   auth,
   base,
+  childRollup,
   COMBO_STORE,
   inFeature,
   layoutDashboard,
@@ -43,6 +44,7 @@ import {
   RATE_TABLE,
   seedCombination,
   settleJob,
+  sharedProfile,
   tallyCommand,
   tenancyWithRowPolicy,
   tenancy,
@@ -447,6 +449,42 @@ test('combination: an ordered workflow strip × tenancy loads, and keeps its ord
     section.workflow.steps.map((step) => step.value),
     ['new', 'working', 'done'],
   );
+});
+
+/** A rollup in a tenant App whose members share a profile. Rollups are
+ * covered, and so is `tenant.plan` in a `when`; together, a rollup's query
+ * read `tenant.plan` as a check before any request reads it — held for
+ * anyone — and a figure compiled once for every request then counted every
+ * row, whatever the tenant's plan. Proved where the pair lives: the same App
+ * checks with a rollup that tests its rows, and is refused, by name, with
+ * one that tests the tenant, where the catalog is read (`mistri check`). */
+test('combination: a rollup × a shared tenant profile checks a row test, and refuses a test of the tenant by name', async (t) => {
+  const check = async (query: string, segments?: Record<string, string>) => {
+    const directory = mkdtempSync(join(tmpdir(), 'tw-combination-rollup-'));
+    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    const business = join(directory, 'business.db'),
+      authPath = join(directory, 'auth.db');
+    const part = merge(base(), auth('AUTH-STORE'), sharedProfile(), childRollup(query, segments));
+    const whole: Part = { ...part, root: JSON.parse(JSON.stringify(part.root).replaceAll('"AUTH-STORE"', JSON.stringify(authPath))) };
+    seedCombination(business, whole);
+    provisionSqliteTenantStore(business, { appId: 'combo', source: { id: 'business', connection: 'data' }, storeId: COMBO_STORE });
+    const { appDir, config, flags } = writeCombination(directory, whole, { business });
+    const checked = await runCli(['--config', config, '--app', appDir, ...flags, VALIDATE]);
+    return { code: checked.code, said: `${checked.out}${checked.err}` };
+  };
+
+  // The segment alone is the tenant's to test: a list reads it per request. Only a rollup naming it is refused.
+  const rows = await check("status = 'new'", { paying: "tenant.plan = 'pro'" });
+  assert.equal(rows.code, 0, rows.said);
+
+  const refusal = /children" query: .*tenant\.plan is a fact of one request's tenant, and this query is read once for every request/;
+  const tenant = await check("tenant.plan = 'pro'");
+  assert.notEqual(tenant.code, 0, 'a rollup that tests the tenant checked');
+  assert.match(tenant.said, refusal);
+  // A segment that tests the tenant is no way round it: the rollup that names it reads the same clause.
+  const named = await check('paying', { paying: "tenant.plan = 'pro'" });
+  assert.notEqual(named.code, 0, 'a rollup through a segment that tests the tenant checked');
+  assert.match(named.said, /tenant\.plan is a fact of one request's tenant/);
 });
 
 /** A tenant App served from its build. `mistri build` is covered, and so
