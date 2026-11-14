@@ -665,9 +665,10 @@ test.describe('Ignition tenant inventory browser proof', () => {
     const executed = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/commands/execute');
     await form.getByRole('button', { name: app.inventory.reserveAction, exact: true }).click();
     const response = await executed;
-    expect(response.status()).toBe(503);
+    // The scope's own refusal: the unique rule met a row the member's policy hides, so neither it nor the rule is said.
+    expect(response.status()).toBe(403);
     const failure = await response.json();
-    expect(failure).toMatchObject({ code: 'temporarily_unavailable', outcome: 'not_applied' });
+    expect(failure).toMatchObject({ code: 'forbidden', outcome: 'not_applied' });
     expect(JSON.stringify(failure)).not.toMatch(/northstar-private|Northstar private|northstar-hidden-reservation|UNIQUE|physical_/);
     await expect(form.getByRole('button', { name: 'Refresh and review', exact: true })).toBeVisible();
     await expect(form.getByRole('button', { name: 'Retry same submission', exact: true })).toHaveCount(0);

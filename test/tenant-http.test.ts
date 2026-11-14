@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
+import { tenantHistoryStoreKey } from '../packages/mistri/src/server/tenant/tenantRecordHistoryStore.js';
+import { AppAccessDenied } from '../packages/mistri/src/server/app/appAccess.js';
+import type { TenantOwnershipSnapshot } from '../packages/mistri/src/server/tenant/tenantOwnership.js';
 import { createTenantBrandingService } from '../packages/mistri/src/server/tenant/tenantBranding.js';
 import { MemoryCacheStore } from '../packages/engine/src/adapters/cache/cacheStore.js';
 import type { AppDef } from '../packages/mistri/src/shared/app.js';
 import { once } from 'node:events';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,7 +22,25 @@ import type { VerifiedSessionInstance } from '../packages/mistri/src/server/auth
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { createTenantEnrollment } from '../packages/mistri/src/server/tenant/tenantEnrollment.js';
 import { createTenantHttpServer } from '../packages/mistri/src/server/tenant/tenantHttp.js';
-import { tenantRouteBody } from '../packages/mistri/src/server/tenant/tenantHttpRoutes.js';
+import { tenantWriteMethods } from '../packages/mistri/src/server/tenant/tenantWriteKinds.js';
+import {
+  TENANT_COMMAND_ROUTES,
+  TENANT_CONTROL_ROUTES,
+  TENANT_EXPORT_PATH,
+  TENANT_METADATA_GETS,
+  TENANT_METADATA_POSTS,
+  TENANT_READ_ROUTES,
+  TENANT_WRITE_ROUTES,
+  tenantRouteBody,
+} from '../packages/mistri/src/server/tenant/tenantHttpRoutes.js';
+import { SUPPORT_HTTP_OPERATIONS, SUPPORT_HTTP_ROOT } from '../packages/mistri/src/shared/tenantSupport.js';
+import { SUPPORT_LOG_PATH, SUPPORT_SESSIONS_PATH } from '../packages/mistri/src/shared/tenantSupportLog.js';
+import { APP_FLAG_VALUES_PATH, EXPERIMENT_EXPOSURES_PATH } from '../packages/mistri/src/shared/appFlagValues.js';
+import { LIVE_PATH } from '../packages/mistri/src/server/live/liveRoute.js';
+import { DECISION_PATHS } from '../packages/mistri/src/server/http/decisionRoutes.js';
+import { PAGE_LOAD_PATH } from '../packages/engine/src/shared/pageRoutes.js';
+import { TENANT_BOOT_PATH, TENANT_ENTER_PATH } from '../packages/mistri/src/shared/tenantBoot.js';
+import { FILE_READ_PATH, FILE_UPLOAD_PATH } from '../packages/engine/src/server/http/reply.js';
 import { refusalReasons, TenantContextError } from '../packages/engine/src/server/evidence.js';
 import { withTenantApiRequests } from '../packages/mistri/src/server/tenant/tenantApiRequest.js';
 import { LINK_REF_UNSAID, LinkRef } from '../packages/mistri/src/server/links/linkToken.js';
@@ -32,6 +54,8 @@ import { parsePagesConfig, type PageDef } from '../packages/engine/src/shared/pa
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
 import { fromRecord } from '../packages/mistri/src/shared/branding.js';
 import { parseTestApp } from './support/commandCatalog.js';
+import { whenBody } from '../packages/engine/src/shared/recordReads.js';
+import { laneCountsText, laneWindow } from '../packages/engine/src/shared/boardLanes.js';
 
 type HttpOwner = ReturnType<typeof createTenantHttpServer>;
 type Answer = { status: number; headers: Headers; text: string; body: Record<string, unknown> };
@@ -342,6 +366,53 @@ test("batched tab counts and a count-free run pass the tenant allowlist and stay
   denied(await f.data('/api/export', a, { q: 'item show tenant_id', format: 'json' }));
 });
 
+/* A section's `when` is asked as one bounded run of the record's key and the condition (recordReads.ts whenBody):
+   another tenant's record, whatever the condition, is answered as a key nothing holds, so a section's showing or
+   hiding never says that a key is held elsewhere. */
+test("a section's `when` holds on the tenant's own record alone; another tenant's key answers as a missing one", async (t) => {
+  const f = await fixture(t),
+    a = await f.open();
+  const base = { id: 'item', columns: [{ name: 'id', primaryKey: true }] } as unknown as Parameters<typeof whenBody>[0];
+  const ask = (id: string, when: string) => f.data('/api/run', a, whenBody(base, { id }, when));
+  for (const when of ['business_id = same', 'name = "South item"', 'name = "North item"']) {
+    const foreign = await ask('south-item', when),
+      missing = await ask('missing-item', when);
+    for (const reply of [foreign, missing]) {
+      owned(reply, a);
+      assert.deepEqual(rows(reply), [], when);
+    }
+    assert.deepEqual(timeless(foreign.body), timeless(missing.body), when);
+  }
+  assert.deepEqual(
+    rows(await ask('north-item', 'business_id = same')).map((row) => row.id),
+    ['north-item'],
+  );
+  assert.deepEqual(rows(await ask('north-item', 'name = "South item"')), []);
+});
+
+/* A board reads its lanes as one statement windowed by the lane column (adapter.ts lanesStatement) beside the
+   list's own read: a lane is the tenant's own values, and a value both tenants hold is a lane of the tenant's
+   cards alone. */
+test("a board's lanes are read in the tenant's own rows: a value another tenant shares adds no card and no lane", async (t) => {
+  const f = await fixture(t),
+    a = await f.open();
+  f.db.prepare(`INSERT INTO db_item VALUES ('south-only','south','south-lane','South only')`).run();
+  const lanes = await f.data('/api/run', a, { q: 'item show id, business_id', offset: 0, ...laneWindow('business_id') });
+  owned(lanes, a);
+  assert.deepEqual(
+    rows(lanes).map((row) => [row.id, row.business_id]),
+    [['north-item', 'same']],
+  );
+  assert.doesNotMatch(lanes.text, /south/i);
+  const counts = await f.data('/api/breakdown', a, { text: laneCountsText('item show id, business_id', 'business_id'), limit: 500 });
+  owned(counts, a);
+  assert.doesNotMatch(counts.text, /south/i);
+  assert.deepEqual(
+    rows(counts).map((row) => Object.values(row)),
+    [['same', 1]],
+  );
+});
+
 test('configured and suggested page plans and references stay on the selected tenant', async (t) => {
   const f = await fixture(t, { foreignKey: true, pages: metadataPages() }),
     a = await f.open();
@@ -630,6 +701,68 @@ test("a dashboard's activity is its tenant's: the store reads that tenant's chan
   denied(await f.data('/api/record-activity', north, { view: 'item', section: 0, period: 'week' }));
 });
 
+test("a global table's history is closed to members: its stored changes say no tenant, so none is said to be theirs", async (t) => {
+  const pages = parsePagesConfig(
+    {
+      pages: [
+        { id: 'items', label: 'Item', base: 'item', sections: [{ kind: 'fields', show: ['name'] }, { kind: 'history' }] },
+        { id: 'countries', label: 'Country', base: 'country', sections: [{ kind: 'fields', show: ['name'] }, { kind: 'history' }] },
+      ],
+    },
+    'global history fixture',
+  );
+  const f = await fixture(t, { history: true, activity: true, globals: true, pages });
+  const north = await f.open('north');
+  owned(await f.data('/api/update', north, { table: 'item', key: { id: 'north-item' }, values: { name: 'North renamed' } }), north);
+  /* A change to the global row, as a writer outside any tenant would keep it:
+     under the record's key alone, with nothing beside it naming a tenant. */
+  f.db
+    .prepare(`INSERT INTO __mistri_history_change (write_id, at, resource, key_json, kind, changes_json, actor, actor_name, via, action)
+    SELECT 'global', at, 'db_country', '{"code":"us"}', 'update', '{"name":{"before":"USA","after":"United States"}}', actor, actor_name, via, action
+    FROM __mistri_history_change WHERE key_json = '{"id":"north-item","tenant_id":"north"}'`)
+    .run();
+  // The member reads the country itself, and its history answers as a missing record's does.
+  owned(
+    await f.data('/api/view/run', north, { view: { id: 'countries', name: 'country', base: 'country', columns: [{ path: 'name' }] } }),
+    north,
+  );
+  for (const code of ['us', 'missing']) {
+    const reply = await f.data('/api/record-history', north, { table: 'country', key: { code } });
+    denied(reply);
+    assert.equal(reply.status, 404, reply.text);
+    assert.equal(reply.body.code, 'not_found');
+  }
+  // The feed over both says the member's own item and nothing of the country; the context answers on.
+  const feed = await f.data('/api/record-activity', north, { view: 'feed', section: 0, period: 'week' });
+  owned(feed, north);
+  assert.deepEqual(
+    (feed.body.entries as Array<Record<string, unknown>>).map((entry) => [entry.table, entry.key]),
+    [['item', { id: 'north-item' }]],
+  );
+  owned(await f.data('/api/record-history', north, { table: 'item', key: { id: 'north-item' } }), north);
+});
+
+test("the platform realm reads every table's history; a tenant's context only its tenant-owned tables'", () => {
+  const ownership = {
+    ownership: {
+      item: { kind: 'tenant', column: 'tenant_id' },
+      country: { kind: 'global', access: 'read-only' },
+      dealer: { kind: 'platform' },
+    },
+  } as unknown as TenantOwnershipSnapshot;
+  const platform = tenantHistoryStoreKey(ownership, undefined),
+    member = tenantHistoryStoreKey(ownership, 'north');
+  for (const table of ['item', 'country', 'dealer']) assert.equal(platform.holds(table), true, table);
+  assert.deepEqual(platform.key('country', { code: 'us' }, {}), { code: 'us' });
+  assert.deepEqual(platform.key('item', { id: 'a' }, { tenant_id: 'south' }), { id: 'a', tenant_id: 'south' });
+  assert.equal(member.holds('item'), true);
+  assert.deepEqual(member.key('item', { id: 'a' }, { tenant_id: 'south' }), { id: 'a', tenant_id: 'north' });
+  for (const table of ['country', 'dealer', 'unknown']) {
+    assert.equal(member.holds(table), false, table);
+    assert.throws(() => member.key(table, { id: 'a' }, {}), AppAccessDenied);
+  }
+});
+
 test("notices are kept in the inbox of the tenant whose record was written, and read and marked only on that tenant's lease", async (t) => {
   const f = await fixture(t, { notify: true });
   const aliceNorth = await f.open('north'),
@@ -790,6 +923,48 @@ test("a CSV import lands every row in the member's own tenant, and cannot name a
     rows(await f.data('/api/query', south, { table: 'item' })).map((row) => row.id),
     ['south-item'],
   );
+});
+
+/* What a file's rows meet is said in the member's own terms: a key another tenant holds is refused in the same words as
+   one the member's tenant holds, a value unique within a tenant is free where only another tenant holds it, and a
+   table every tenant shares cannot be imported into at all, so its keys are never tried. */
+test("an import's refusals say nothing of another tenant's rows, and a table every tenant shares takes no import", async (t) => {
+  const f = await fixture(t, { imports: true }),
+    north = await f.open('north');
+  f.db.prepare(`INSERT INTO db_item VALUES ('south-only','south','south-business','South only')`).run();
+  const post = (id: string, business: string, mode: 'check' | 'commit') =>
+    f.data('/api/import', north, {
+      table: 'item',
+      csv: `id,business_id,name\r\n${id},${business},Imported`,
+      mapping: ['id', 'business_id', 'name'],
+      mode,
+    });
+  for (const mode of ['check', 'commit'] as const) {
+    const foreign = await post('south-item', 'fresh-business', mode),
+      own = await post('north-item', 'fresh-business', mode);
+    for (const reply of [foreign, own]) {
+      owned(reply, north);
+      assert.equal(reply.body.ready, 0, reply.text);
+      assert.doesNotMatch(reply.text, /south|duplicate|unique|business_id/i);
+    }
+    assert.equal(foreign.text, own.text, mode);
+  }
+  const free = await post('imported-1', 'south-business', 'commit');
+  owned(free, north);
+  assert.equal(free.body.outcome, 'applied', free.text);
+  assert.deepEqual(
+    f.db
+      .prepare("SELECT id, tenant_id FROM db_item WHERE business_id = 'south-business' ORDER BY id")
+      .all()
+      .map((row) => ({ ...row })),
+    [
+      { id: 'imported-1', tenant_id: 'north' },
+      { id: 'south-only', tenant_id: 'south' },
+    ],
+  );
+  assert.deepEqual({ ...f.row('south') }, { id: 'south-item', tenant_id: 'south', business_id: 'same', name: 'South item' });
+  await assert.rejects(() => fixture(t, { imports: true, globals: true, globalImport: 'declared' }), /"import" and no access 'write'/);
+  await assert.rejects(() => fixture(t, { imports: true, globals: true, globalImport: 'write' }), /"owner": "global".*takes no "access"/);
 });
 
 test("a tenant's emailed notices go to its own members as their own membership, link into that tenant, and never carry another tenant's record", async (t) => {
@@ -1069,8 +1244,14 @@ async function fixture(
     /** Each tenant brands the App (`branding`), its viewers the editors; the store a Map. */
     tenantBranding?: boolean;
     activity?: boolean;
+    /** A read-only global table, `country`, every tenant's to read and none's to write. */
+    globals?: boolean;
+    /** An import declared on `country`, as it stands or with a write access beside it: neither may load. */
+    globalImport?: 'declared' | 'write';
     files?: boolean;
     richText?: boolean;
+    /** Host options laid over the fixture's own (tokens, integration settings, a recent sign-in). */
+    host?: Record<string, unknown>;
   } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-http-')),
@@ -1105,6 +1286,9 @@ async function fixture(
     INSERT INTO db_task VALUES ('north-task','north','same','North task',0),('south-task','south','same','South task',0);
     INSERT INTO db_note VALUES ('north-note','north','North note','PRIVATE_HTTP_TENANT_SENTINEL'${setup.foreignKey ? (setup.alternateKey ? ",'North item'" : ",'north-item'") : ''}),
       ('south-note','south','South note','PRIVATE_HTTP_TENANT_SENTINEL'${setup.foreignKey ? (setup.alternateKey ? ",'South item'" : ",'south-item'") : ''});`);
+  if (setup.globals)
+    db.exec(`CREATE TABLE db_country(code TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL);
+    INSERT INTO db_country VALUES ('us','United States');`);
   // An item's attachments: the bytes in a BLOB, each row its tenant's.
   if (setup.files)
     db.exec(`CREATE TABLE db_attachment(id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, item_id TEXT NOT NULL REFERENCES db_item(id),
@@ -1263,6 +1447,20 @@ async function fixture(
           fields: { read: ['id', 'name', ...(setup.foreignKey ? ['item_id'] : [])] },
           ...(setup.metadata ? { display: { secret: { tone: { [privateValue]: 'bad' } } } } : {}),
         },
+        ...(setup.globals
+          ? {
+              country: {
+                physical: 'db_country',
+                owner: 'global',
+                fields: { read: ['code', 'name'] },
+                ...(setup.globalImport === 'write'
+                  ? { access: 'write', fields: { read: ['code', 'name'], write: ['code', 'name'] }, import: {} }
+                  : setup.globalImport
+                    ? { import: {} }
+                    : {}),
+              },
+            }
+          : {}),
         ...(setup.mentions
           ? {
               member: { physical: 'db_member', owner: 'tenant', fields: { read: ['id', 'name', 'account_id'] } },
@@ -1309,7 +1507,13 @@ async function fixture(
         item: { kind: 'list', from: 'item', ...(setup.tags ? { filters: ['tags'] } : {}) },
         task: { kind: 'list', from: 'task' },
         ...(setup.activity
-          ? { feed: { kind: 'dashboard', label: 'Feed', sections: [{ kind: 'activity', title: 'Latest', resources: { item: {} } }] } }
+          ? {
+              feed: {
+                kind: 'dashboard',
+                label: 'Feed',
+                sections: [{ kind: 'activity', title: 'Latest', resources: { item: {}, ...(setup.globals ? { country: {} } : {}) } }],
+              },
+            }
           : {}),
         ...(setup.metadata
           ? {
@@ -1360,6 +1564,7 @@ async function fixture(
     item: true,
     task: true,
     note: { groups: [[{ column: 'secret', op: '=', value: privateValue }]] },
+    ...(setup.globals ? { country: true } : {}),
     ...(setup.files ? { attachment: true } : {}),
     ...(setup.mentions ? { member: true, team: true, team_member: true } : {}),
     ...(setup.tags ? { tag: true, item_tag: true } : {}),
@@ -1424,6 +1629,7 @@ async function fixture(
       item: { kind: 'tenant', column: 'tenant_id' },
       task: { kind: 'tenant', column: 'tenant_id' },
       note: { kind: 'tenant', column: 'tenant_id' },
+      ...(setup.globals ? { country: { kind: 'global' as const, access: 'read-only' as const } } : {}),
       ...(setup.files ? { attachment: { kind: 'tenant' as const, column: 'tenant_id' } } : {}),
       ...(setup.collision
         ? { other: { kind: 'tenant' as const, column: 'tenant_id' }, child: { kind: 'tenant' as const, column: 'tenant_id' } }
@@ -1481,6 +1687,7 @@ async function fixture(
     bound,
     ...(setup.components ? { components: setup.components } : {}),
     ...(setup.tenantBranding ? { branding: memoryBranding(app) } : {}),
+    ...(setup.host ?? {}),
     verifySessionInstance: (req: IncomingMessage) => {
       control.proofs++;
       return control.proof ? control.proof(req) : (sessions[cookie(req)] ?? null);
@@ -1554,8 +1761,8 @@ async function fixture(
   const row = (tenant = 'north') => object(db.prepare('SELECT * FROM db_item WHERE id=?').get(`${tenant}-item`));
   const version = (tenant = 'north') => db.prepare('SELECT version FROM db_task WHERE id=?').get(`${tenant}-task`)!.version;
   const counts = () =>
-    [COMMAND_JOURNAL_TABLES.receipt, sqliteAuditRows].map(
-      (table) => db.prepare(`SELECT count(*) AS n FROM ${table.startsWith('(') ? `${table} a` : `"${table}"`}`).get()!.n,
+    [COMMAND_JOURNAL_TABLES.receipt, sqliteAuditRows].map((table) =>
+      Number(db.prepare(`SELECT count(*) AS n FROM ${table.startsWith('(') ? `${table} a` : `"${table}"`}`).get()!.n),
     );
   const command = (tenant = 'north') => ({
     command: 'advance',
@@ -2519,6 +2726,65 @@ test('generic HTTP insert/update project ordinary values, inject ownership priva
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM db_item WHERE id='forged'").get()!.n, 0);
 });
 
+/* A unique rule names its column of a row that may be another tenant's: an id unique across every tenant meets this
+   tenant's row and another's alike, so that answer is the scope's own refusal, the same word for word, naming neither
+   the column nor the value. A key the tenant's own rows hold (the owner column is in the unique rule, compared by its
+   bytes) is the record's to fix: 409 `duplicate_value`. */
+test('a key unique across tenants is refused as the scope refuses; a key unique within the tenant is a duplicate value', async (t) => {
+  const f = await fixture(t),
+    a = await f.open();
+  const own = await f.data('/api/insert', a, { table: 'item', values: { id: 'north-item', business_id: 'own', name: 'Own' } });
+  const foreign = await f.data('/api/insert', a, { table: 'item', values: { id: 'south-item', business_id: 'own', name: 'Own' } });
+  for (const reply of [own, foreign]) {
+    denied(reply);
+    assert.equal(reply.status, 403, reply.text);
+    assert.equal(object((reply.body.errors as unknown[])[0]).code, 'forbidden');
+    assert.doesNotMatch(reply.text, /duplicate|unique|business_id|south/i);
+  }
+  assert.equal(foreign.text, own.text);
+  const business = await f.data('/api/insert', a, { table: 'item', values: { id: 'fresh', business_id: 'same', name: 'Same' } });
+  denied(business);
+  assert.equal(business.status, 409, business.text);
+  assert.equal(object((business.body.errors as unknown[])[0]).code, 'duplicate_value');
+  assert.equal(f.version(), 0);
+  assert.equal(f.db.prepare("SELECT count(*) AS n FROM db_item WHERE business_id='own' OR id='fresh'").get()!.n, 0);
+});
+
+/* A reference is checked in the writer's own rows before the statement runs (scopedTransaction.ts): one to another
+   tenant's row is the same refusal, word for word, as one to a row nothing holds, so the database's own
+   reference_conflict never answers for a row the writer cannot read. */
+test("a reference to another tenant's row is refused as one to a row nothing holds, on insert and on update", async (t) => {
+  const f = await fixture(t, { tags: true }),
+    a = await f.open();
+  const insert = (item: string) =>
+    f.data('/api/insert', a, { table: 'item_tag', values: { id: `link-${item}`, item_id: item, tag_id: 'n-vpn' } });
+  const update = (tag: string) => f.data('/api/update', a, { table: 'item_tag', key: { id: 'n-1' }, values: { tag_id: tag } });
+  for (const [foreign, missing] of [
+    [await insert('south-item'), await insert('nowhere')],
+    [await update('s-vpn'), await update('nowhere')],
+  ]) {
+    for (const reply of [foreign, missing]) {
+      denied(reply);
+      assert.equal(reply.status, 403, reply.text);
+      assert.equal(object((reply.body.errors as unknown[])[0]).code, 'forbidden');
+      assert.doesNotMatch(reply.text, /reference|south|s-vpn|nowhere|item_id|tag_id/i);
+    }
+    assert.equal(foreign.text, missing.text);
+  }
+  owned(await insert('north-item'), a);
+  assert.deepEqual(
+    f.db
+      .prepare('SELECT id, tenant_id, item_id, tag_id FROM db_item_tag ORDER BY id')
+      .all()
+      .map((row) => ({ ...row })),
+    [
+      { id: 'link-north-item', tenant_id: 'north', item_id: 'north-item', tag_id: 'n-vpn' },
+      { id: 'n-1', tenant_id: 'north', item_id: 'north-item', tag_id: 'n-vpn' },
+      { id: 's-1', tenant_id: 'south', item_id: 'south-item', tag_id: 's-vpn' },
+    ],
+  );
+});
+
 /* A record offering two command actions asks about both in one request, which is
    what the browser's action bar does. The request owns one transaction, so a
    collector that opened one per check refused every check after the first and
@@ -3289,4 +3555,864 @@ test("a tenant list's pager steps by key, the plain query's and the view's, and 
     () => tenantRouteBody('/api/run', { q: 'item', stray: true }),
     (error: unknown) => error instanceof TenantContextError && refusalReasons(error).some((reason) => reason.includes('"stray"')),
   );
+});
+
+/* ---------------------------------------------------------------------------------------------------------------
+   Every door, generated. The routes are read off the host's own gate and route tables, the reader's and writer's
+   methods off their interfaces, the tables off the App, and the public doors off their field table: each must have
+   a case below, so a door added without one fails here instead of shipping untried across tenants. A case is a
+   live probe on this fixture, a control route probed apart, or a pointer to the test that owns the door's other
+   tenant; a pointer is checked to still name that test. */
+
+const source = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
+const flat = (text: string) => text.replace(/\s+/g, ' ');
+type Pointer = readonly [file: string, title: string];
+const pointer = ([file, title]: Pointer) => assert.ok(source(`./${file}`).includes(title), `${file} no longer holds “${title}”`);
+type Lease = {
+  body?: unknown;
+  ok?: number;
+  search?: string;
+  /** Rows of the other tenant (and a case-folded alias of this one) that must answer as a key nothing holds. */
+  probe?: { ids: string[]; body: (id: string) => unknown };
+  also?: Pointer;
+};
+type Door = { lease?: Lease; control?: true; elsewhere?: Pointer };
+
+const fenceItems = ['south-item', 'alias-item'],
+  fenceTasks = ['south-task'],
+  fenceFiles = ['south-att'];
+const fenceWhere = (key: 'column' | 'path', id: string) => ({ groups: [[{ [key]: 'id', op: '=', value: id }]] });
+const fenceCommand = (id: string, idempotencyKey: string) => ({
+  command: 'advance',
+  commandVersion: 1,
+  key: { id },
+  expectedVersion: 0,
+  idempotencyKey,
+  input: {},
+});
+const fenceBase64 = (text: string) => Buffer.from(text).toString('base64');
+
+function fenceDoors(): Record<string, Door> {
+  const here = (title: string): Pointer => ['tenant-http.test.ts', title];
+  const doors: Record<string, Door> = {
+    '/api/schema': { lease: {} },
+    '/api/runtime': { lease: {} },
+    '/api/app': { lease: {} },
+    '/api/pages': { lease: {} },
+    '/api/pages/suggested': { lease: { search: '&table=item' } },
+    '/api/query': {
+      lease: { probe: { ids: fenceItems, body: (id) => ({ table: 'item', filter: fenceWhere('column', id), limit: 5, offset: 0 }) } },
+    },
+    '/api/count': { lease: { probe: { ids: fenceItems, body: (id) => ({ table: 'item', filter: fenceWhere('column', id) }) } } },
+    '/api/counts': { lease: { probe: { ids: fenceItems, body: (id) => ({ items: [`item id = "${id}"`] }) } } },
+    '/api/run': { lease: { probe: { ids: fenceItems, body: (id) => ({ q: `item id = "${id}"`, limit: 5, count: 'none' }) } } },
+    '/api/view/run': {
+      lease: {
+        probe: {
+          ids: fenceItems,
+          body: (id) => ({ view: { base: 'item', columns: ['name'], filter: fenceWhere('path', id) }, limit: 5 }),
+        },
+      },
+    },
+    '/api/breakdown': { lease: { probe: { ids: fenceItems, body: (id) => ({ text: `item id = "${id}" count` }) } } },
+    '/api/breakdowns': { lease: { probe: { ids: fenceItems, body: (id) => ({ items: [{ text: `item id = "${id}" count` }] }) } } },
+    [FILE_READ_PATH]: { lease: { probe: { ids: fenceFiles, body: (id) => ({ table: 'attachment', key: { id } }) } } },
+    [TENANT_EXPORT_PATH]: {
+      lease: {
+        body: { q: 'item show name', format: 'json' },
+        probe: { ids: fenceItems, body: (id) => ({ q: `item id = "${id}" show name`, format: 'json' }) },
+      },
+    },
+    '/api/update': {
+      lease: {
+        body: { table: 'item', key: { id: 'north-item' }, values: { name: 'North item' } },
+        probe: { ids: fenceItems, body: (id) => ({ table: 'item', key: { id }, values: { name: 'Fenced' } }) },
+      },
+    },
+    '/api/insert': {
+      lease: {
+        body: { table: 'item_tag', values: { id: 'n-2', item_id: 'north-item', tag_id: 'n-vpn' } },
+        probe: { ids: fenceItems, body: (id) => ({ table: 'item_tag', values: { id: 'fence-tag', item_id: id, tag_id: 'n-vpn' } }) },
+      },
+    },
+    '/api/delete': {
+      lease: {
+        body: { table: 'item_tag', key: { id: 'n-1' }, confirm: true },
+        probe: { ids: fenceItems, body: (id) => ({ table: 'item', key: { id }, confirm: true }) },
+      },
+    },
+    [FILE_UPLOAD_PATH]: {
+      lease: {
+        body: { table: 'attachment', values: { id: 'north-file', item_id: 'north-item' }, file: { name: 'n.txt', data: fenceBase64('n') } },
+        probe: {
+          ids: fenceItems,
+          body: (id) => ({
+            table: 'attachment',
+            values: { id: 'fence-file', item_id: id },
+            file: { name: 'x.txt', data: fenceBase64('x') },
+          }),
+        },
+      },
+    },
+    '/api/revert': {
+      lease: { body: {}, also: here('HTTP mixed insert/update/delete uses one history stack without allowing foreign-tenant tokens') },
+    },
+    '/api/import': {
+      lease: {
+        body: {
+          table: 'item',
+          csv: 'id,business_id,name\r\nfence-import,fence,Fenced\r\n',
+          mapping: ['id', 'business_id', 'name'],
+          mode: 'check',
+        },
+        also: here("a CSV import lands every row in the member's own tenant, and cannot name another's"),
+      },
+    },
+    '/api/commands/availability': {
+      lease: {
+        body: { checks: [{ command: 'advance', commandVersion: 1, keys: [{ id: 'north-task' }] }] },
+        probe: { ids: fenceTasks, body: (id) => ({ checks: [{ command: 'advance', commandVersion: 1, keys: [{ id }] }] }) },
+      },
+    },
+    '/api/commands/prepare': {
+      lease: {
+        body: { command: 'advance', commandVersion: 1, key: { id: 'north-task' } },
+        probe: { ids: fenceTasks, body: (id) => ({ command: 'advance', commandVersion: 1, key: { id } }) },
+      },
+    },
+    '/api/commands/execute': {
+      lease: {
+        body: fenceCommand('north-task', 'fence-attempt-north-task'),
+        probe: { ids: fenceTasks, body: (id) => fenceCommand(id, `fence-attempt-${id}`) },
+      },
+    },
+    '/api/commands/status': {
+      lease: {
+        body: fenceCommand('north-task', 'fence-attempt-north-task'),
+        probe: { ids: fenceTasks, body: (id) => fenceCommand(id, `fence-attempt-${id}`) },
+      },
+    },
+    '/api/commands/draft': {
+      elsewhere: [
+        'tenant-signed-in-drafts.test.ts',
+        'neither another member of the tenant nor an account of another tenant can open, step, submit or discard it',
+      ],
+    },
+    '/api/commands/files': {
+      elsewhere: [
+        'tenant-held-files.test.ts',
+        "a file held in one tenant is no use to a command run in another, and the other account's lease does not hold it",
+      ],
+    },
+    '/api/pages/plan': {
+      lease: {
+        body: { page: 'items', key: { id: 'north-item' } },
+        probe: { ids: fenceItems, body: (id) => ({ page: 'items', key: { id } }) },
+      },
+    },
+    '/api/pages/compose': {
+      lease: {
+        body: { page: 'items', key: { id: 'north-item' }, rows: 10 },
+        probe: { ids: fenceItems, body: (id) => ({ page: 'items', key: { id }, rows: 10 }) },
+      },
+    },
+    '/api/references': {
+      lease: {
+        body: { table: 'item', key: { id: 'north-item' } },
+        probe: { ids: fenceItems, body: (id) => ({ table: 'item', key: { id } }) },
+      },
+    },
+    '/api/record-history': {
+      lease: {
+        body: { table: 'item', key: { id: 'north-item' } },
+        probe: { ids: fenceItems, body: (id) => ({ table: 'item', key: { id } }) },
+      },
+    },
+    '/api/record-activity': { lease: { body: { view: 'feed', section: 0, period: 'week' } } },
+    '/api/record-flows': {
+      elsewhere: [
+        'tenant-flows.test.ts',
+        "the flows section's route reads in the member's own tenant, and a manual start runs in the starter's tenant alone",
+      ],
+    },
+    '/api/record-flows/start': {
+      elsewhere: [
+        'tenant-flows.test.ts',
+        "a flow's run is one tenant's: it starts on its own tenant's records alone, and another tenant's fact never resumes it",
+      ],
+    },
+    '/api/record-links': {
+      elsewhere: [
+        'tenant-links.test.ts',
+        'a link is written on its tenant’s own host, runs its commands there as link:<id>, and nowhere else',
+      ],
+    },
+    '/api/record-links/revoke': { elsewhere: ['tenant-links.test.ts', 'a member of another dealer revokes none of a lead’s links'] },
+    '/api/inbox': {
+      lease: {
+        body: { limit: 20 },
+        also: here("notices are kept in the inbox of the tenant whose record was written, and read and marked only on that tenant's lease"),
+      },
+    },
+    '/api/inbox/read': {
+      lease: {
+        body: { all: true },
+        also: here("notices are kept in the inbox of the tenant whose record was written, and read and marked only on that tenant's lease"),
+      },
+    },
+    '/api/inbox/email': {
+      lease: {
+        body: { email: true },
+        also: here(
+          "a tenant's emailed notices go to its own members as their own membership, link into that tenant, and never carry another tenant's record",
+        ),
+      },
+    },
+    '/api/tokens': { lease: { body: {} } },
+    '/api/tokens/issue': { lease: { body: { label: 'Fence', roles: ['operator'], operations: [], days: 1 } } },
+    '/api/tokens/revoke': { lease: { body: { id: 'fence-token' } } },
+    '/api/branding': {
+      lease: {
+        body: {},
+        also: here("a tenant's branding is read by its members, saved only by its editors, and refused in a fixed sentence"),
+      },
+    },
+    '/api/branding/save': {
+      lease: {
+        body: { branding: { name: 'Fence Co' } },
+        ok: 403,
+        also: here("a tenant's branding is read by its members, saved only by its editors, and refused in a fixed sentence"),
+      },
+    },
+    '/api/integrations': { lease: { body: {} } },
+    '/api/integrations/save': { lease: { body: { integration: 'fence', secrets: {} } } },
+    [PAGE_LOAD_PATH]: {
+      lease: {
+        body: { page: 'items' },
+        ok: 404,
+        also: [
+          'tenant-auth-http.test.ts',
+          "a page's loader on the tenant host reads the member's own tenant through its lease, never writes, and runs only for a page it serves",
+        ],
+      },
+    },
+    [TENANT_BOOT_PATH]: {
+      lease: {
+        body: { path: `/${appId}`, search: '' },
+        probe: { ids: fenceItems, body: (id) => ({ path: `/${appId}/item/${id}`, search: '' }) },
+      },
+    },
+    [SUPPORT_LOG_PATH]: {
+      elsewhere: ['tenant-support-log.test.ts', ": one dealer never sees another's visits, however it addresses the request"],
+    },
+    [SUPPORT_SESSIONS_PATH]: {
+      elsewhere: ['tenant-support-log.test.ts', ": the store read itself returns one dealer's sessions and no other's"],
+    },
+    [APP_FLAG_VALUES_PATH]: {
+      elsewhere: [
+        'flag-values-http.test.ts',
+        'ordinary read denial is preserved and verified active tenant must agree with the exact request and fixed App/environment',
+      ],
+    },
+    [EXPERIMENT_EXPOSURES_PATH]: {
+      elsewhere: ['experiment-exposure-http.test.ts', 'closed canonical app/tenant/realm selectors never grant another scope'],
+    },
+    [LIVE_PATH]: {
+      elsewhere: ['tenant-live.test.ts', 'a tenant member is told of changes in their own tenant and scope, and of none in another'],
+    },
+    [`${SUPPORT_HTTP_ROOT}/open`]: {
+      elsewhere: [
+        'tenant-support-elevation.test.ts',
+        ': impersonation, over-ceiling roles, other dealers, suspended dealers and outsiders are refused',
+      ],
+    },
+    [`${SUPPORT_HTTP_ROOT}/status`]: {
+      elsewhere: ['tenant-support-read-http.test.ts', ': a support read is confined to the dealer entered'],
+    },
+    [`${SUPPORT_HTTP_ROOT}/exit`]: {
+      elsewhere: ['tenant-support-read-http.test.ts', ': a support read is confined to the dealer entered'],
+    },
+  };
+  for (const path of TENANT_CONTROL_ROUTES) doors[path] = { control: true };
+  for (const path of DECISION_PATHS)
+    doors[path] = {
+      elsewhere: [
+        'tenant-decision-routes.test.ts',
+        "each tenant's members see its own suggestions alone, and only those who could accept one",
+      ],
+    };
+  return doors;
+}
+
+/* The routes the host serves, as its gate admits them: the gate's own terms are tied to its source below, so a term
+   added there and not here fails. */
+const fenceServed = () =>
+  new Set([
+    ...TENANT_CONTROL_ROUTES,
+    ...TENANT_READ_ROUTES,
+    TENANT_EXPORT_PATH,
+    ...TENANT_WRITE_ROUTES,
+    ...TENANT_COMMAND_ROUTES,
+    ...TENANT_METADATA_GETS,
+    ...TENANT_METADATA_POSTS,
+    '/api/schema',
+    SUPPORT_LOG_PATH,
+    SUPPORT_SESSIONS_PATH,
+    APP_FLAG_VALUES_PATH,
+    EXPERIMENT_EXPOSURES_PATH,
+    LIVE_PATH,
+    ...SUPPORT_HTTP_OPERATIONS.map((operation) => `${SUPPORT_HTTP_ROOT}/${operation}`),
+  ]);
+const fenceGets = () =>
+  new Set([
+    '/api/schema',
+    '/api/tenant/bootstrap',
+    ...TENANT_METADATA_GETS,
+    SUPPORT_LOG_PATH,
+    SUPPORT_SESSIONS_PATH,
+    APP_FLAG_VALUES_PATH,
+    LIVE_PATH,
+  ]);
+
+test('the tenant host serves exactly the routes its gate names, and each has a cross-tenant case', async (t) => {
+  const text = source('../packages/mistri/src/server/tenant/tenantHttp.ts'),
+    plain = flat(text);
+  const gateText = /const get =([\s\S]*?);\s*if \(\s*!\(([\s\S]*?)\)\s*\)\s*return invalid\(403\);/.exec(text);
+  assert.ok(gateText, 'the gate is no longer where this test reads it');
+  const terms = (value: string) => value.split('||').map((term) => term.trim());
+  assert.deepEqual(terms(gateText[1]!), [
+    'flagValues',
+    'live',
+    "path === '/api/schema'",
+    "path === '/api/tenant/bootstrap'",
+    'metadataGets.has(path)',
+    'supportLog',
+    'supportSessions',
+  ]);
+  assert.deepEqual(terms(gateText[2]!), [
+    'control',
+    'reads.has(path)',
+    'path === TENANT_EXPORT_PATH',
+    'writes.has(path)',
+    'commands.has(path)',
+    "path === '/api/schema'",
+    'metadataGets.has(path)',
+    'metadataPosts.has(path)',
+    'supportLog',
+    'supportSessions',
+    'flagValues',
+    'flagExposures',
+    'live',
+  ]);
+  for (const said of [
+    'let control = controls.has(path);',
+    'const supportLog = path === SUPPORT_LOG_PATH, supportSessions = path === SUPPORT_SESSIONS_PATH;',
+    'const flagValues = path === APP_FLAG_VALUES_PATH &&',
+    'const flagExposures = path === EXPERIMENT_EXPOSURES_PATH &&',
+    'const live = path === LIVE_PATH;',
+    'TENANT_COMMAND_ROUTES as commands',
+    'TENANT_CONTROL_ROUTES as controls',
+    'TENANT_METADATA_GETS as metadataGets',
+    'TENANT_METADATA_POSTS as metadataPosts',
+    'TENANT_READ_ROUTES as reads',
+    'TENANT_WRITE_ROUTES as writes',
+    'if (path.startsWith(`${SUPPORT_HTTP_ROOT}/`) && path !== SUPPORT_LOG_PATH && path !== SUPPORT_SESSIONS_PATH) {',
+    'if (!support || !SUPPORT_HTTP_OPERATIONS.includes(operation)) return invalid(403);',
+  ])
+    assert.ok(plain.includes(said), `tenantHttp.ts no longer says: ${said}`);
+
+  const served = fenceServed(),
+    doors = fenceDoors();
+  assert.deepEqual(Object.keys(doors).sort(), [...served].sort(), 'every served route has a case, and every case a served route');
+  for (const [path, door] of Object.entries(doors)) {
+    assert.equal([door.lease, door.control, door.elsewhere].filter(Boolean).length, 1, path);
+    if (door.elsewhere) pointer(door.elsewhere);
+    if (door.lease?.also) pointer(door.lease.also);
+  }
+
+  // A route the gate does not name is refused before anything reads it.
+  const f = await fixture(t),
+    a = await f.open();
+  for (const path of ['/api/nowhere', '/api/query/', '/api/tenant/support/nowhere', '/api/Query'])
+    denied(await f.call(f.select(path), {}, f.headers(a)));
+});
+
+/* Each served route, through the lease of the north tenant, answers another tenant's row as it answers a key nothing
+   holds, changes nothing of it, and refuses a selector naming another tenant as it refuses one naming none. */
+test("every lease route answers another tenant's key and selector exactly as a missing one, and changes nothing of it", async (t) => {
+  const seen: string[] = [];
+  const pages = parsePagesConfig(
+    {
+      pages: [
+        {
+          id: 'items',
+          label: 'Item',
+          base: 'item',
+          sections: [
+            { kind: 'fields', show: ['name'] },
+            { kind: 'list', from: 'note', whose: 'item_id', show: ['name'] },
+            { kind: 'history' },
+          ],
+        },
+      ],
+    },
+    'fence fixture',
+  );
+  const f = await fixture(t, {
+    foreignKey: true,
+    history: true,
+    activity: true,
+    globals: true,
+    files: true,
+    tags: true,
+    twoCommands: true,
+    imports: true,
+    notify: 'email',
+    tenantBranding: true,
+    pages,
+    host: {
+      recentSignIn: async () => true,
+      tokens: {
+        list: async (principal: { tenantId?: string }) => (seen.push(`tokens:${principal.tenantId}`), []),
+        choices: (principal: { tenantId?: string }) => (seen.push(`choices:${principal.tenantId}`), {}),
+        issue: async (principal: { tenantId?: string }) => (seen.push(`issue:${principal.tenantId}`), { id: 'fence-token' }),
+        revoke: async (principal: { tenantId?: string }) => {
+          seen.push(`revoke:${principal.tenantId}`);
+        },
+      },
+      integrations: {
+        editors: ['operator'],
+        read: async (tenantId: string) => (seen.push(`integrations:${tenantId}`), { integrations: [] }),
+        save: async (tenantId: string) => {
+          seen.push(`save:${tenantId}`);
+        },
+      },
+    },
+  });
+  f.db.exec(`INSERT INTO db_attachment(id, tenant_id, item_id, file_name, content_type, data, sha256) VALUES
+    ('north-att', 'north', 'north-item', 'n.txt', 'text/plain', x'6e', '${createHash('sha256').update('n').digest('hex')}'),
+    ('south-att', 'south', 'south-item', 's.txt', 'text/plain', x'73', '${createHash('sha256').update('s').digest('hex')}')`);
+  /* The other tenant has a history, a notice and a moved command version of its own, written through its own
+     lease, so a history, inbox or command probe has something real of it to leak. */
+  const south = await f.open('south');
+  assert.equal(
+    (await f.data('/api/update', south, { table: 'item', key: { id: 'south-item' }, values: { name: 'South item renamed' } })).status,
+    200,
+  );
+  assert.equal((await f.data('/api/commands/execute', south, f.command('south'))).status, 200);
+  assert.equal(f.version('south'), 1);
+  const tables = (f.db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as { name: string }[]).map(
+    (row) => row.name,
+  );
+  /* The App's rows and the stores a route could write for a record: a refused key changes none of them. The
+     command journal is counted instead, since a refusal may itself be journaled, alike for either key. */
+  const kept = tables.filter(
+    (name) =>
+      name.startsWith('db_') || /^__mistri_(history_change|inbox_(notice|mail)|staged_file|branding_value|tenant_membership)$/.test(name),
+  );
+  assert.equal(kept.length, 13, kept.join(','));
+  const snapshot = () =>
+    JSON.stringify(
+      kept.map((name) => [
+        name,
+        (f.db.prepare(`SELECT * FROM "${name}" ORDER BY rowid`).all() as Record<string, unknown>[]).map((row) =>
+          Object.fromEntries(
+            Object.entries(row).map(([key, value]) => [key, value instanceof Uint8Array ? Buffer.from(value).toString('hex') : value]),
+          ),
+        ),
+      ]),
+    );
+  const gets = fenceGets();
+  const send = async (path: string, body: unknown, headers: Record<string, string>, get: boolean) => {
+    const response = await fetch(f.base + path, {
+      method: get ? 'GET' : 'POST',
+      headers: { cookie: 'fixture=alice', ...(get ? {} : { 'content-type': 'application/json' }), ...headers },
+      ...(get ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const text = await response.text();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = undefined;
+    }
+    const reply: Answer = {
+      status: response.status,
+      headers: response.headers,
+      text,
+      body: parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {},
+    };
+    noPrivate(reply);
+    assert.doesNotMatch(text, /South (item|task|note)|s-vpn|s\.txt/, `${path} said another tenant's row`);
+    return { reply, parsed };
+  };
+  const said = ({ reply, parsed }: { reply: Answer; parsed: unknown }, words: string[]) => {
+    let text = parsed === undefined ? reply.text : JSON.stringify(timeless(parsed));
+    for (const word of words) text = text.split(word).join('<probe>');
+    return `${reply.status} ${text}`;
+  };
+  let a = await f.open();
+  const doors = fenceDoors();
+  for (const [path, door] of Object.entries(doors)) {
+    const lease = door.lease;
+    if (!lease) continue;
+    const get = gets.has(path),
+      at = (tenant: string) => f.select(path, tenant) + (lease.search ?? '');
+    // Absent a body of its own, a route is first called with its probe on this tenant's own row.
+    const body = lease.body ?? lease.probe?.body(lease.probe.ids[0]!.replace('south', 'north')) ?? {};
+    const ok = await send(at('north'), body, f.headers(a), get);
+    assert.equal(ok.reply.status, lease.ok ?? 200, `${path}: ${ok.reply.text}`);
+    // A served answer is attested to the lease it was read on, and is never kept by a cache (a file is also private).
+    if ((lease.ok ?? 200) === 200) {
+      const values = [a.appId, a.accountId, a.tenantId, a.tabId, a.context, String(a.revision)];
+      ownerHeaders.forEach((header, index) => assert.equal(ok.reply.headers.get(header), values[index], `${path} ${header}`));
+      assert.match(ok.reply.headers.get('cache-control') ?? '', /^(private, )?no-store$/, path);
+    }
+
+    const before = snapshot(),
+      counted = f.counts();
+    // A selector naming another tenant is refused as one naming no tenant at all.
+    const [other, none] = [await send(at('south'), body, f.headers(a), get), await send(at('missing'), body, f.headers(a), get)];
+    assert.ok(other.reply.status >= 400, `${path}: ${other.reply.text}`);
+    assert.equal(said(other, ['south']), said(none, ['missing']), path);
+    for (const reply of [other.reply, none.reply]) denied(reply);
+    assert.equal(snapshot(), before, path);
+    assert.deepEqual(f.counts(), counted, path);
+
+    for (const id of lease.probe?.ids ?? []) {
+      const start = f.counts();
+      const hidden = await send(at('north'), lease.probe!.body(id), f.headers(a), get);
+      const middle = f.counts();
+      assert.equal(snapshot(), before, `${path} ${id} changed a row`);
+      const missing = await send(at('north'), lease.probe!.body('nowhere'), f.headers(a), get);
+      const end = f.counts();
+      assert.equal(snapshot(), before, `${path} nowhere changed a row`);
+      assert.equal(said(hidden, [id]), said(missing, ['nowhere']), `${path} ${id}`);
+      assert.deepEqual(
+        middle.map((n, index) => n - start[index]!),
+        end.map((n, index) => n - middle[index]!),
+        `${path} ${id} journaled unlike a missing key`,
+      );
+    }
+    // A refused route may retire nothing; if it did, the next route opens afresh rather than inheriting a failure.
+    if ((await f.data('/api/app', a)).status !== 200) a = await f.open();
+  }
+  assert.deepEqual([...new Set(seen.map((entry) => entry.split(':')[1]))], ['north'], seen.join(' '));
+});
+
+/* The control routes take a tenant or a tab rather than a key: for a person who is a member of one tenant, another
+   tenant answers as a tenant nobody has, and another account's tab, in another tenant, as a tab never opened. */
+test("every control route answers another tenant and another account's tab exactly as missing ones", async (t) => {
+  const f = await fixture(t);
+  await f.maintenance((admin) => admin.putMembership({ ...f.grant, accountId: 'carol', membershipId: 'north-carol' }));
+  f.sessions.carol = { identity: { id: 'carol', who: 'Carol' }, sessionId: 'session-secret-carol-1', expiresAt: 20000 };
+  const carol = { cookie: 'fixture=carol' };
+  const theirs = await f.open('south'),
+    stranger = '00000000-0000-4000-8000-000000000000';
+  const bootstrap = await f.call(`/api/tenant/bootstrap?app=${appId}`, undefined, carol);
+  assert.equal(bootstrap.status, 200, bootstrap.text);
+  assert.deepEqual(bootstrap.body.memberships, [{ tenantId: 'north' }]);
+  assert.doesNotMatch(bootstrap.text, /south/);
+  const own = async () => context(await f.call(f.select('/api/tenant/context/open'), {}, carol));
+  const as = (value: Context) => ({ ...f.headers(value), ...carol });
+  type Pair = [hidden: () => Promise<Answer>, missing: () => Promise<Answer>, words: [string, string]];
+  const tenants = (ask: (tenant: string) => Promise<Answer>): Pair => [() => ask('south'), () => ask('missing'), ['south', 'missing']];
+  const tabs = (ask: (tab: Context) => Promise<Answer>): Pair => [
+    () => ask(theirs),
+    () => ask({ ...theirs, tabId: stranger }),
+    [theirs.tabId, stranger],
+  ];
+  const probes: Record<string, (c: Context) => Pair> = {
+    '/api/tenant/bootstrap': () => tenants((tenant) => f.call(`/api/tenant/bootstrap?app=${appId}&tenant=${tenant}`, undefined, carol)),
+    [TENANT_ENTER_PATH]: () =>
+      tenants((tenant) => f.call(`${TENANT_ENTER_PATH}?app=${appId}`, { path: `/${appId}`, search: '', tenant }, carol)),
+    '/api/tenant/context/open': () => tenants((tenant) => f.call(f.select('/api/tenant/context/open', tenant), {}, carol)),
+    '/api/tenant/context/switch': (c) => tenants((tenant) => f.call(f.select('/api/tenant/context/switch', tenant), assertion(c), as(c))),
+    '/api/tenant/context/renew': (c) => tenants((tenant) => f.call(f.select('/api/tenant/context/renew', tenant), assertion(c), as(c))),
+    '/api/tenant/context/recover': () => tabs((tab) => f.call(`/api/tenant/context/recover?app=${appId}`, { tabId: tab.tabId }, carol)),
+    '/api/tenant/context/release': () => tabs((tab) => f.call(`/api/tenant/context/release?app=${appId}`, assertion(tab), carol)),
+    '/api/tenant/context/resume': () =>
+      tabs((tab) => f.call(f.select('/api/tenant/context/resume', tab.tenantId), { tabId: tab.tabId }, carol)),
+  };
+  assert.deepEqual(Object.keys(probes).sort(), [...TENANT_CONTROL_ROUTES].sort(), 'every control route has a probe');
+  const said = (reply: Answer, [word, as]: [string, string]) =>
+    `${reply.status} ${JSON.stringify(timeless(reply.body)).split(word).join(as)}`;
+  for (const [path, probe] of Object.entries(probes)) {
+    const c = await own(),
+      before = f.counts();
+    const [hidden, missing, words] = probe(c);
+    const [one, two] = [await hidden(), await missing()];
+    for (const reply of [one, two]) {
+      noPrivate(reply);
+      assert.doesNotMatch(reply.text, /South|s-vpn/, path);
+      for (const header of ownerHeaders.slice(2)) assert.equal(reply.headers.get(header), null, `${path} ${header}`);
+    }
+    assert.equal(said(one, words), said(two, [words[1], words[1]]), path);
+    assert.deepEqual(f.counts(), before, path);
+  }
+  // Nothing carol asked moved alice's context in the other tenant.
+  owned(await f.data('/api/query', theirs, { table: 'item' }), theirs);
+});
+
+/* Every table the App declares, read off the App itself: each read door answers exactly this tenant's rows of a
+   tenant-owned table (byte for byte: a case-folded alias of the tenant is another tenant) and every row of a shared
+   one, and another tenant's row by key answers as a key nothing holds. */
+test("every table the App declares reads as this tenant's rows alone on every read door, and another's key as a missing one", async (t) => {
+  const f = await fixture(t, { foreignKey: true, globals: true, files: true, tags: true, mentions: true });
+  f.db.exec(`INSERT INTO db_attachment(id, tenant_id, item_id, file_name, content_type, data, sha256) VALUES
+    ('north-att', 'north', 'north-item', 'n.txt', 'text/plain', x'6e', NULL), ('south-att', 'south', 'south-item', 's.txt', 'text/plain', x'73', NULL)`);
+  const a = await f.open();
+  const resources = Object.entries(object(f.app.resources)).map(([name, value]) => [name, object(value)] as const);
+  assert.ok(resources.length >= 9, resources.map(([name]) => name).join(','));
+  const sorted = (values: unknown[]) => values.map(String).sort();
+  for (const [name, resource] of resources) {
+    const physical = String(resource.physical),
+      owner = String(resource.owner);
+    assert.ok(['tenant', 'global'].includes(owner), `${name} is owned by ${owner}`);
+    const keys = (f.db.prepare(`SELECT name FROM pragma_table_info(?) WHERE pk > 0`).all(physical) as { name: string }[]).map(
+      (row) => row.name,
+    );
+    assert.equal(keys.length, 1, `${name} has one key column`);
+    const pk = keys[0]!;
+    const all = f.db.prepare(`SELECT "${pk}" AS id, ${owner === 'tenant' ? 'tenant_id' : 'NULL'} AS tenant FROM "${physical}"`).all() as {
+      id: string;
+      tenant: string | null;
+    }[];
+    const mine = sorted(all.filter((row) => owner === 'global' || row.tenant === 'north').map((row) => row.id)),
+      foreign = all.filter((row) => owner === 'tenant' && row.tenant !== 'north').map((row) => row.id);
+    assert.ok(mine.length > 0, `${name} has a row of this tenant's`);
+    if (owner === 'tenant') assert.ok(foreign.length > 0, `${name} has a row of another tenant's`);
+    const read = async (path: string, body: unknown) => {
+      const reply = await f.data(path, a, body);
+      owned(reply, a);
+      noPrivate(reply);
+      return reply;
+    };
+    const label = (path: string) => `${name} ${path}`;
+    assert.deepEqual(sorted(rows(await read('/api/query', { table: name, limit: 500 })).map((row) => row[pk])), mine, label('query'));
+    assert.equal((await read('/api/count', { table: name })).body.count, mine.length, label('count'));
+    assert.deepEqual(
+      ((await read('/api/counts', { items: [name] })).body.results as Array<Record<string, unknown>>).map((result) => result.total),
+      [mine.length],
+      label('counts'),
+    );
+    assert.deepEqual(
+      sorted(rows(await read('/api/run', { q: name, limit: 500, count: 'none' })).map((row) => row[pk])),
+      mine,
+      label('run'),
+    );
+    assert.deepEqual(
+      sorted(rows(await read('/api/view/run', { view: { base: name, columns: [{ path: pk }] }, limit: 500 })).map((row) => row[pk])),
+      mine,
+      label('view/run'),
+    );
+    const lanes = rows(await read('/api/breakdown', { text: `${name} count by ${pk}`, limit: 500 })).map((row) => Object.values(row));
+    assert.deepEqual(sorted(lanes.map(([id]) => id)), mine, label('breakdown'));
+    assert.ok(
+      lanes.every(([, count]) => count === 1),
+      label('breakdown'),
+    );
+    for (const id of foreign) {
+      for (const [path, body] of [
+        ['/api/run', (key: string) => ({ q: `${name} ${pk} = "${key}"`, limit: 5, count: 'none' })],
+        ['/api/references', (key: string) => ({ table: name, key: { [pk]: key } })],
+      ] as const) {
+        const [hidden, missing] = [await f.data(path, a, body(id)), await f.data(path, a, body('nowhere'))];
+        assert.equal(
+          `${hidden.status} ${JSON.stringify(timeless(hidden.body)).split(id).join('<key>')}`,
+          `${missing.status} ${JSON.stringify(timeless(missing.body)).split('nowhere').join('<key>')}`,
+          `${name} ${path} ${id}`,
+        );
+      }
+    }
+  }
+});
+
+/* Every way a tenant source reads or writes is named by a case above, a case elsewhere that crosses tenants, or a
+   reason it holds no tenant's rows. The members are read off the interfaces and the writer's own kinds, so a method
+   added to either with no case here fails. */
+test("every method of the tenant read and write sources is answered by a cross-tenant case or a reason it holds no tenant's rows", () => {
+  const doors = fenceDoors();
+  const members = (file: string, name: string) => {
+    const text = source(file),
+      start = text.indexOf(`export interface ${name} `);
+    assert.ok(start >= 0, `${file} declares ${name}`);
+    const body = text.slice(text.indexOf('{', start) + 1, text.indexOf('\n}', start));
+    return [...body.matchAll(/^  (?:readonly )?([A-Za-z]\w*)\??[(:<]/gm)].map((match) => match[1]!);
+  };
+  type Answer = string | Pointer;
+  const answered = (map: Record<string, Answer>, names: readonly string[], what: string) => {
+    assert.deepEqual(Object.keys(map).sort(), [...new Set(names)].sort(), `${what}: a member and its case are named together`);
+    for (const [name, answer] of Object.entries(map)) {
+      if (typeof answer !== 'string') pointer(answer);
+      else if (!answer.startsWith('reason: ')) assert.ok(doors[answer], `${what}.${name} names ${answer}, a route with no case`);
+    }
+  };
+  const readSource = [
+    'tenant-read-source.test.ts',
+    'membership revision, revocation, regrant identity and case changes invalidate retained readers',
+  ] as const;
+  const realm = (title: string): Pointer => ['tenant-platform-realm.test.ts', title];
+  const dialects = (title: string): Pointer => ['tenant-platform-dialects.test.ts', title];
+  const intake = (title: string): Pointer => ['tenant-intake.test.ts', title];
+  const support: Pointer = ['tenant-support-read-http.test.ts', ': a support read is confined to the dealer entered'];
+  const supportWrite = (title: string): Pointer => ['tenant-support-write-audit.test.ts', title];
+  const publicReads: Pointer = [
+    'tenant-public-reads.test.ts',
+    'with one tenant’s address, another tenant’s row by key answers on every door exactly as a missing row',
+  ];
+  const timers: Pointer = [
+    'tenant-timers.test.ts',
+    'the same key in two tenants fires once in each, as that tenant’s service, and a later sweep fires neither again',
+  ];
+  const sandboxes: Pointer = [
+    'tenant-timers.test.ts',
+    'a sandbox’s dev clock brings only its own records due; a live tenant keeps real time',
+  ];
+  const links: Pointer = ['tenant-links.test.ts', 'a link’s cookie and session are refused on another tenant’s host'];
+  const jobs: Pointer = [
+    'tenant-jobs.test.ts',
+    "the event's tenant bounds both realms: a key naming another tenant's row finds nothing, and nothing of it changes",
+  ];
+  const readAudit: Pointer = [
+    'read-audit.test.ts',
+    'a tenant row carries its tenant, a support visit its operator, and one tenant never reads another',
+  ];
+  const platformRead = realm(
+    "the platform context reads every dealer's rows under its own policy, sees whose they are, and a tenant member cannot open it",
+  );
+  const platformFence = realm("a dealer's tenant context never reads a platform table: not its rows, counts, catalog or a path into it");
+  answered(
+    {
+      ownership: 'reason: the declared snapshot of which tables are owned, read from no tenant',
+      close: 'reason: releases the pool; reads nothing',
+      readMembership: readSource,
+      readMemberships: '/api/tenant/bootstrap',
+      assertCurrent: '/api/tenant/context/renew',
+      scopeReads: '/api/query',
+      bindReads: [
+        'tenant-read-source.test.ts',
+        'bindReads opens no snapshot, reads what scopeReads reads, and every read revalidates the membership',
+      ],
+      withReads: [
+        'tenant-read-source.test.ts',
+        'withReads reads in one snapshot under the tenant scope, revalidated once, and nothing after it',
+      ],
+      together: '/api/pages/compose',
+      togetherFenced: [
+        'postgres-bounded-reads.test.ts',
+        'withBoundedReads reads a context on one snapshot and rides its fence on the message that ends it',
+      ],
+      readPlatformMembership: platformRead,
+      assertPlatformCurrent: platformFence,
+      scopePlatformReads: platformRead,
+      bindPlatformReads: dialects(
+        'bindPlatformReads opens no snapshot, reads what scopePlatformReads reads, and every read revalidates the membership',
+      ),
+      withPlatformReads: realm('one tab moves between the platform realm and a dealer, and each lease reads only in its own realm'),
+      assertSupportCurrent: support,
+      scopeSupportReads: support,
+      resolveIntake: intake('the reader resolves an address to the one active dealer whose row holds it, and anything else to the lender'),
+      resolveIntakeByTenant: intake("a tenant token writes only into token.tenant: never an address's tenant, never triage"),
+      bindIntakeReads: intake('a public submission lands where its address says, and every placement answers alike'),
+      resolvePublic: publicReads,
+      assertPublicCurrent: publicReads,
+      bindPublicReads: publicReads,
+      bindServiceReads: timers,
+      readActiveTenants: timers,
+      readDueTimers: timers,
+      resolveLink: links,
+      bindLinkReads: links,
+      readTenantNames: [
+        'tenant-names.test.ts',
+        'names are read for the asked tenants only, said as the template says them, and a blank one is none',
+      ],
+      readTenantAddresses: ['tenant-boot.test.ts', "one role's answers are never another's, nor one clinic's another's"],
+      readTenantProfile: [
+        'tenant-profile-zone.test.ts',
+        "tenant.<column> in a query and resolveRows read the asking tenant's own profile, and an unshared column is refused",
+      ],
+      readServiceAnchors: jobs,
+      readSandboxClocks: sandboxes,
+      readSandboxes: sandboxes,
+      readRecordHistory: '/api/record-history',
+      readRecordActivity: '/api/record-activity',
+      readInbox: '/api/inbox',
+      readEmailOff: '/api/inbox/email',
+      readBranding: '/api/branding',
+      readBrandingLogo: [
+        'tenant-branding.test.ts',
+        'a logo is served as its sniffed type, never sniffed again, cached for good, and runs nothing opened on its own',
+      ],
+    },
+    members('../packages/mistri/src/server/tenant/tenantReadSource.ts', 'TenantReadSource'),
+    'TenantReadSource',
+  );
+  answered(
+    {
+      ownership: 'reason: the declared snapshot of which tables are owned, read from no tenant',
+      close: 'reason: releases the pool; writes nothing',
+      markInboxRead: '/api/inbox/read',
+      inboxMail: [
+        'tenant-http.test.ts',
+        "a tenant's emailed notices go to its own members as their own membership, link into that tenant, and never carry another tenant's record",
+      ],
+      writeBranding: '/api/branding/save',
+      appendReadAudit: readAudit,
+      readReadAudit: readAudit,
+      transaction: '/api/update',
+      commandTransaction: '/api/commands/execute',
+      platformCommandTransaction: dialects(
+        "a platform command transaction updates a dealer's row and files its own, journaled in the platform realm",
+      ),
+      platformTransaction: dialects(
+        "a platform edit's transaction writes the platform's own rows alone, never a tenant's, the profile's birth or end, or a key",
+      ),
+      platformTenantCommandTransaction: [
+        'tenant-platform-tenant-write.test.ts',
+        "no other tenant's row is in its scope: ${mode} is refused and nothing stays",
+      ],
+      intakeCommandTransaction: intake(
+        "the writer lets intake insert, and update its own tenant's rows, only in its place: never an owner, another place, another tenant's row, triage's update or a removal",
+      ),
+      serviceCommandTransaction: jobs,
+      supportTransaction: supportWrite(': every row a support session changes is recorded beside it, redacted where the resource says'),
+      supportCommandTransaction: supportWrite(": a revoked support row stops the writer, and a member's evidence never reaches it"),
+      linkCommandTransaction: links,
+    },
+    [
+      ...members('../packages/mistri/src/server/tenant/tenantWriteSource.ts', 'TenantWriteSource'),
+      ...Object.keys(tenantWriteMethods((() => Promise.resolve()) as never)),
+    ],
+    'TenantWriteSource',
+  );
+});
+
+/* The public lane answers its own list of read doors; each must be a route the member lane fences above and one the
+   public suite asks another tenant's key of. */
+test("every read door a visitor may knock on is asked another tenant's key, as a member's door is", () => {
+  const doors = fenceDoors();
+  const text = source('../packages/mistri/src/server/tenant/tenantPublicReadHttp.ts');
+  const table = text.slice(
+    text.indexOf('const fields: Record<string, readonly string[]> = {'),
+    text.indexOf('\n};', text.indexOf('const fields')),
+  );
+  const paths = [...table.matchAll(/^  (?:'([^']+)'|\[([A-Z_]+)\]):/gm)].map(([, literal, name]) => {
+    if (literal) return literal;
+    const named = ({ PAGE_LOAD_PATH, FILE_READ_PATH } as Record<string, string>)[name!];
+    assert.ok(named, `the public lane names ${name}, a path this test cannot resolve`);
+    return named;
+  });
+  assert.equal(paths.length, 12, paths.join(','));
+  const publicSuite = source('./tenant-public-reads.test.ts');
+  const asked = publicSuite.slice(
+    publicSuite.indexOf('const doors = (id: string)'),
+    publicSuite.indexOf('\n];', publicSuite.indexOf('const doors = (id: string)')),
+  );
+  for (const path of paths) {
+    const lease = doors[path]?.lease;
+    assert.ok(lease?.probe ?? lease?.also, `${path} is a member door with no cross-tenant case`);
+    assert.ok(asked.includes(`['${path}',`), `${path} is a public door the public suite never asks another tenant's key of`);
+  }
 });

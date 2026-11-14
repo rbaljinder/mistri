@@ -1,6 +1,6 @@
 import { Refusal, type Filter, type ScopedReads, type WriteTransaction } from '../adapter.js';
 import { buildWhere, type Condition, type ConditionEquality, type SqlFragment, type SqlStyle } from '../../shared/filter.js';
-import { authorFault, recordRefusalCause } from '../../shared/refusal.js';
+import { authorFault, recordRefusalCause, refusalCause, sayRefusal } from '../../shared/refusal.js';
 import type { RowScope, RowScopeFilter, ViaCondition } from '../../shared/rowScope.js';
 import { coerceForColumn, columnKind, type DatabaseSchema, type ForeignKey, type TableMeta } from '../../shared/schema.js';
 import { blockingTriggers, firedBy, sayRuns, sayTriggers, sayWrite, type ScopeTrigger, type TriggeringWrite } from './scopeTriggers.js';
@@ -80,6 +80,90 @@ export const foreignKeyRefusal = (error: unknown): ScopeRefusal => {
     `The database's foreign key${typeof constraint === 'string' ? ` ${JSON.stringify(constraint)}` : ''} refused the write: a row it points at is not in the principal's rows, or does not exist.`,
   );
 };
+
+/** Whether a failure is a unique rule refusing a write: SQLite's PRIMARY KEY and UNIQUE, PostgreSQL's 23505 and 23P01. */
+const isUniqueViolation = (error: unknown): boolean => {
+  const { code, errcode } = (error ?? {}) as { code?: unknown; errcode?: unknown };
+  return errcode === 1555 || errcode === 2067 || code === '23505' || code === '23P01';
+};
+
+/* A column as each engine names it in a unique refusal, and nothing else: the names only, never the values
+   (engine/src/server/constraints.ts reads the same, for a form's field, where the adapters cannot import it). */
+const COLUMN_NAME = /^[A-Za-z_][\w$]{0,127}$/;
+
+/** The columns of `table` whose unique rule refused a write, or undefined where the error names another table, an
+ * expression, an exclusion, or nothing it can read. */
+export function uniqueColumns(error: unknown, table: Pick<TableMeta, 'name' | 'schema'>): string[] | undefined {
+  const e = (error ?? {}) as { code?: unknown; message?: unknown; detail?: unknown; table?: unknown; schema?: unknown };
+  let names: string[] | undefined;
+  if (e.code === '23505') {
+    // A trigger or a cascade can break another table's rule: only the table written is judged.
+    if (e.table !== table.name || (typeof e.schema === 'string' && table.schema && e.schema !== table.schema)) return undefined;
+    const head = typeof e.detail === 'string' ? /^Key \(([^()]*)\)=\(/.exec(e.detail) : null;
+    names = head?.[1].split(',').map((name) => name.trim());
+  } else if (typeof e.message === 'string') {
+    const said = /^UNIQUE constraint failed: (.+)$/.exec(e.message);
+    names = said?.[1].split(',').map((part) => {
+      const at = part.trim();
+      return at.startsWith(`${table.name}.`) ? at.slice(table.name.length + 1) : '';
+    });
+  }
+  return names?.length && names.every((name) => COLUMN_NAME.test(name)) ? [...new Set(names)] : undefined;
+}
+
+/**
+ * Whether a unique refusal on `columns` names a row the principal reads: some group of its rule fixes every one of
+ * those columns' values (`=` and nothing else), and the row written holds exactly those values. Any row the unique rule
+ * compared equal to it then holds them too, and is inside the same group, so long as the index compares those columns
+ * no more loosely than the scope does. That is what the engine cannot read off the error, so only a comparison that is
+ * attested counts:
+ * - on SQLite (`sqlite`), a column the scope compares by its bytes (`binary`): a tenant's owner column, which every
+ *   unique index of a tenant table must compare BINARY (the tenant write source's assertUniqueKeys). Any other
+ *   condition is compared under the column's collation, where `UNIQUE (email COLLATE NOCASE)` finds 'X' equal to an
+ *   'x' the scope tells apart, so the refusal stays generic;
+ * - on PostgreSQL, a condition under the column's own collation: an index compares by it unless it names another, and
+ *   a tenant's owner column must be deterministic in every unique index (tenantPostgresCatalog.ts).
+ * A tenant's own table answers so, by the owner column its unique indexes include: the conflicting row is the tenant's
+ * own. A rule that reads the whole table answers so whatever the index compares.
+ */
+export function uniqueConflictSeen(
+  rule: RowScope[string],
+  columns: readonly string[],
+  row: Readonly<Record<string, unknown>>,
+  sqlite: boolean,
+): boolean {
+  if (rule === true) return true;
+  if (rule === false) return false;
+  return rule.groups.some(
+    (group) =>
+      group.length > 0 &&
+      group.every(
+        (condition) =>
+          !isViaCondition(condition) &&
+          condition.op === '=' &&
+          condition.other === undefined &&
+          condition.collation === undefined &&
+          condition.equality === undefined &&
+          (!sqlite || rule.binary?.includes(condition.column) === true) &&
+          columns.includes(condition.column) &&
+          condition.value !== undefined &&
+          !Array.isArray(condition.value) &&
+          Object.hasOwn(row, condition.column) &&
+          row[condition.column] === condition.value,
+      ),
+  );
+}
+
+/**
+ * A unique rule's refusal of a scoped write, where the row it conflicts with may be one the principal cannot read:
+ * said as the scope's own refusal, so neither the column nor the fact that the value is taken outside its rows is
+ * named. The operator reads the table and the columns, never the value.
+ */
+export const uniqueRefusal = (table: Pick<TableMeta, 'id'>, columns: readonly string[] | undefined): ScopeRefusal =>
+  recordRefusalCause(
+    new ScopeRefusal('This operation is not available in the current row scope.'),
+    `A unique rule on "${table.id}"${columns ? ` (${columns.map((column) => JSON.stringify(column)).join(', ')})` : ''} refused the write, and the row it conflicts with may be outside the principal's rows.`,
+  );
 
 /** A table's triggers as a refusal names them: `the trigger "audit_order"`, `the triggers "a", "b"`. */
 export const triggerNames = (names: readonly string[]): string =>
@@ -256,6 +340,42 @@ export class ScopeRefusal extends Refusal {}
 const refuse = (reason?: string): never => {
   throw recordRefusalCause(new ScopeRefusal('This operation is not available in the current row scope.'), reason);
 };
+
+/** The sentence a delete hears when every row still referencing it is one its principal cannot read. */
+export const IN_USE = "This record is in use and can't be deleted.";
+
+/**
+ * A delete refused because rows still reference the row, said as the record's state rather than as the scope: the
+ * person can act on it. Its words name only what the principal reads — the referencing table and how many of its
+ * rows point here, counted under the principal's own rows — and, where every remaining reference is one the scope
+ * hides (another tenant's row on a shared parent, a row the policy keeps from them), name nothing: {@link IN_USE}.
+ * That the delete is refused at all is the one thing such a row still says, and it cannot be otherwise: deleting it
+ * would reach that row. The total across every row is recorded for the operator only.
+ */
+export class ReferencedRefusal extends ScopeRefusal {
+  constructor(
+    /** What the principal reads of the references: the table and its count, or nothing when it reads none. */
+    readonly seen?: { readonly table: string; readonly count: number },
+  ) {
+    super(
+      seen
+        ? `${seen.count === 1 ? 'A record' : `${seen.count} records`} in "${seen.table}" still ${seen.count === 1 ? 'points' : 'point'} at this one. Change or remove ${seen.count === 1 ? 'it' : 'them'} first, then try again.`
+        : IN_USE,
+    );
+    this.name = 'ReferencedRefusal';
+    sayRefusal(this, this.message);
+  }
+}
+
+/** The ReferencedRefusal a failure was rebuilt over, however many value-free wrappers lie between. */
+export function referencedBeneath(error: unknown): ReferencedRefusal | undefined {
+  let at: unknown = error;
+  for (let depth = 0; at !== null && typeof at === 'object' && depth < 16; depth++) {
+    if (at instanceof ReferencedRefusal) return at;
+    at = refusalCause(at) ?? (at instanceof Error ? at.cause : undefined);
+  }
+  return undefined;
+}
 const isViaCondition = (condition: Condition | ViaCondition): condition is ViaCondition =>
   typeof (condition.via as { resource?: unknown } | undefined)?.resource === 'string';
 const keyText = (key: Record<string, unknown>) =>
@@ -384,6 +504,30 @@ export function createScopedTransaction(
     const scope = withOwnRows(catalog.schema, own.scope, made);
     reads = own.reads(scope, false);
     guards = own.reads(scope, true);
+  };
+  /* A row still referenced, said in what the principal reads of it. The total above counts every row on the writer, as
+     the cascade would reach them; how many of those the principal reads is counted again under its own rows, by each
+     referencing column as the child compares — where the foreign key matches more than that (a parent collation the
+     child lacks), fewer are named, never more, and none named is the sentence that names nothing. */
+  const referencedRefusal = async (
+    table: TableMeta,
+    key: Record<string, unknown>,
+    referenced: readonly { fk: ForeignKey; values: (string | number)[]; total: number }[],
+  ): Promise<ReferencedRefusal> => {
+    const cause = `A scoped command may not delete the "${table.id}" row ${keyText(key)}: ${referenced
+      .map(({ fk, total }) => `"${fk.from.table}" still references it (${total} ${total === 1 ? 'row' : 'rows'} in all)`)
+      .join(', ')}.`;
+    for (const { fk, values } of referenced) {
+      const seen = await reads
+        .count(fk.from.table, { groups: [fk.from.columns.map((column, index) => ({ column, op: '=' as const, value: values[index] }))] })
+        .catch((error: unknown) => {
+          // A table the principal does not read at all reads none of the references: refused as the one that names nothing.
+          if (error instanceof Refusal) return 0;
+          throw error;
+        });
+      if (seen > 0) return recordRefusalCause(new ReferencedRefusal({ table: fk.from.table, count: seen }), cause);
+    }
+    return recordRefusalCause(new ReferencedRefusal(), cause);
   };
   const target = (id: string, write: TriggeringWrite): TableMeta => {
     const table = catalog.schema.tables.find((table) => table.id === id);
@@ -729,12 +873,25 @@ export function createScopedTransaction(
   /* The statements themselves. A foreign key that refuses one answers as a hidden parent does (foreignKeyRefusal):
      the checks before a write compare what it names, and this is everything they cannot see — a default's part of a
      reference, a value a trigger writes, a deferred check. */
-  const statement = <T>(sent: Promise<T>): Promise<T> =>
+  /* A unique rule that refuses one names its column, and on PostgreSQL the value, of a row that may be outside the
+     principal's rows: that the value is taken there is what the scope keeps. It is let through only where the
+     conflicting row is one the principal reads (uniqueConflictSeen); otherwise it is the scope's own refusal. */
+  const statement = <T>(sent: Promise<T>, table?: TableMeta, row?: Readonly<Record<string, unknown>>): Promise<T> =>
     sent.catch((error: unknown) => {
-      throw isForeignKeyViolation(error) ? foreignKeyRefusal(error) : error;
+      if (isForeignKeyViolation(error)) throw foreignKeyRefusal(error);
+      if (isUniqueViolation(error) && table) {
+        const columns = uniqueColumns(error, table);
+        // With a scope present, a table it does not name has no rows the principal reads (shared/rowScope.ts).
+        const rule = scope === undefined ? true : Object.hasOwn(scope, table.id) ? scope[table.id] : false;
+        if (!columns || !uniqueConflictSeen(rule, columns, row ?? {}, typeof (error as { errcode?: unknown }).errcode === 'number'))
+          throw uniqueRefusal(table, columns);
+      }
+      throw error;
     });
-  const insertRow = (request: Parameters<WriteTransaction['insert']>[0]) => statement(records.insert(request));
-  const updateRow = (request: Parameters<WriteTransaction['update']>[0]) => statement(records.update(request));
+  const insertRow = (table: TableMeta, request: Parameters<WriteTransaction['insert']>[0]) =>
+    statement(records.insert(request), table, request.values ?? {});
+  const updateRow = (table: TableMeta, request: Parameters<WriteTransaction['update']>[0], row: Readonly<Record<string, unknown>>) =>
+    statement(records.update(request), table, row);
   const afterward = async (afterwards: readonly Afterward[] | undefined, images: Parameters<Afterward>[0]) => {
     for (const next of afterwards ?? []) await next(images);
   };
@@ -753,7 +910,7 @@ export function createScopedTransaction(
       const afterwards = proof && (await proof.before(table, { kind: 'insert' }, proof.images.insert(table, request.values)));
       const given = unproven(parentChecks(table, request.values ?? {}, undefined, true));
       if (!locks?.together) await verify(given);
-      const result = locks?.together ? await parentsFirst(given, () => insertRow(request)) : await insertRow(request);
+      const result = locks?.together ? await parentsFirst(given, () => insertRow(table, request)) : await insertRow(table, request);
       const filter = keyFilter(table, result.key);
       /* The new row locked and read back, and where the writer sends together
          its references checked in the same flight, from the row the INSERT
@@ -791,7 +948,8 @@ export function createScopedTransaction(
       const afterwards =
         proof && (await proof.before(table, { kind: 'update', set: [...set] }, proof.images.update(table, before, request.values)));
       // What the update sets is given; every other column of a reference it sets in part is as stored, bound as its text.
-      const given = unproven(parentChecks(table, overlaid(before, request.values), set, true));
+      const written = overlaid(before, request.values);
+      const given = unproven(parentChecks(table, written, set, true));
       if (!locks?.together) await verify(given);
       /* The row read again after the write, sent the moment the write is: it
          reads what the write wrote, and leaves in the write's round trip, with
@@ -807,7 +965,9 @@ export function createScopedTransaction(
       let result: Awaited<ReturnType<WriteTransaction['update']>>;
       try {
         // The references it sets leave ahead of it, in its flight (parentsFirst).
-        result = locks?.together ? await parentsFirst(given, () => updateRow(request)) : await updateRow(request);
+        result = locks?.together
+          ? await parentsFirst(given, () => updateRow(table, request, written))
+          : await updateRow(table, request, written);
       } finally {
         withdraw?.();
       }
@@ -841,17 +1001,19 @@ export function createScopedTransaction(
          are counted: across every row of each table, on the writer itself,
          since the principal sees every row the bound holds there and a row
          outside the bound pointing in is the one a cascade must never reach. */
+      const referenced: { fk: ForeignKey; values: (string | number)[]; total: number }[] = [];
       for (const fk of children) {
         const values = fk.to.columns.map((column) => row[column]);
         if (values.some((value) => value === null)) continue;
         if (!values.every(comparable))
           return refuse(`"${table.id}".${fk.to.columns.join('+')} holds a value that is not a text or a number.`);
         const key: Filter = { groups: [Object.entries(request.key).map(([column, value]) => ({ column, op: '=', value }))] };
-        if ((await counted?.(fk, key)) !== 0)
-          return refuse(
-            `A scoped command may not delete the "${table.id}" row ${keyText(request.key)}: "${fk.from.table}" still references it.`,
-          );
+        const total = await counted?.(fk, key);
+        if (total === undefined)
+          return refuse(`A scoped command may not delete the "${table.id}" row ${keyText(request.key)}: its references were not counted.`);
+        if (total !== 0) referenced.push({ fk, values, total });
       }
+      if (referenced.length) throw await referencedRefusal(table, request.key, referenced);
       const afterwards = proof && (await proof.before(table, { kind: 'delete' }, proof.images.delete(row)));
       const result = await statement(records.remove(request));
       if (result.affected !== 1) return refuse(`The delete from "${table.id}" removed ${result.affected} rows, not one.`);

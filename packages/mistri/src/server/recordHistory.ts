@@ -371,8 +371,12 @@ export function exactKey(schema: DatabaseSchema, table: string, raw: unknown): R
 
 /** The key a record's changes are kept under, where it is more than the
  * record's key: a tenant App's (tenant/tenantRecordHistoryStore.ts). `read`
- * names the columns the record's read must also return for `key` to say it. */
+ * names the columns the record's read must also return for `key` to say it.
+ * `holds` is false for a table whose stored changes cannot be told apart by
+ * whose they are, in a context that may read only its own: its history is
+ * closed there, as a record with none is. */
 export interface RecordHistoryStoreKey {
+  holds(table: string): boolean;
   read(table: string): string[];
   key(table: string, key: Record<string, string | number>, row: Record<string, unknown>): Record<string, unknown>;
 }
@@ -402,6 +406,8 @@ export async function readRecordHistoryFor(options: {
   const table = options.table;
   // Only a resource whose page shows a history keeps one; the rest have none to read.
   if (!historyRules(app, options.pages).has(table) || !findTable(schema, table)) throw new AppAccessDenied();
+  // Asked before the record is read, so a record that exists and one that does not answer alike.
+  if (options.storeKey && !options.storeKey.holds(table)) throw new AppAccessDenied();
   const key = exactKey(schema, table, options.key);
   const limit = options.limit === undefined ? 20 : options.limit;
   if (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 1 || limit > RECORD_HISTORY_PAGE)

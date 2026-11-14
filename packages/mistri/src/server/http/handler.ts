@@ -54,6 +54,7 @@ import { catalogLocales, requestLocale, unvaryOnLanguage } from '../app/readerLo
 import type { ConfigLayout } from '@mistriwork/engine/shared/recordview.js';
 import { accountOf } from '../app/appStamps.js';
 import { attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js';
+import { referencedBeneath } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
 import { AppAccessDenied } from '@mistriwork/engine/server/columnGrants.js';
 import { httpRowPolicyAllows, type HttpAppPolicy } from '../policy/appPolicyHttp.js';
 import type { AppPolicyContext } from '../policy/appPolicyContext.js';
@@ -577,11 +578,14 @@ async function underPolicy(ctx: Admitted, routes: (policyContext?: AppPolicyCont
       const broke = error instanceof Refusal ? refusalCause(error) : error;
       const refusedBy = rejected && !conflict && !denied ? writeRefusalStatus(broke) : undefined;
       const { code, errcode, severity } = (refusedBy ? broke : {}) as { code?: unknown; errcode?: unknown; severity?: unknown };
-      const said = refusedBy && appError({ code, errcode, severity }, 'write');
+      /* A delete refused while rows still point at it (scopedTransaction.ts ReferencedRefusal) says only the rows
+         the principal reads, or nothing, so its own sentence is the answer, by the code the database's would be. */
+      const referenced = rejected && !conflict && !denied && !refusedBy ? referencedBeneath(error) : undefined;
+      const said = refusedBy ? appError({ code, errcode, severity }, 'write') : referenced && appError(referenced, 'write');
       const failure = said ? { code: said.code, message: said.message } : refused;
       // A body past its ceiling is too large, not a refusal of the change: the client can shrink it.
       const tooLarge = error instanceof HttpError && error.status === 413;
-      const status = tooLarge ? 413 : denied ? 403 : conflict ? 409 : (refusedBy ?? (rejected ? 400 : 200));
+      const status = tooLarge ? 413 : denied ? 403 : conflict ? 409 : (refusedBy ?? (referenced ? 409 : rejected ? 400 : 200));
       const cause = reportRefusal(req, rejected ? status : 503, failure.code, failure.message, error);
       /* One refusal body for every route: the code and message at the top, as a command's say them, and errors[]
          for the readers of a write's per-field list. */

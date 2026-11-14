@@ -966,8 +966,15 @@ update/insert/delete refusals report `outcome: 'rejected'` and are never a 2xx:
 a key already taken or a reference to nothing answers HTTP 409
 (`duplicate_value`, `reference_conflict`); the App's validation, a line's
 `consumes` (`consumes_refused`), a required value, a check or a value its column
-cannot hold answer 422. A tenant App answers the same codes in their fixed
-sentences, the same whether the key it met is its own tenant's or another's. A
+cannot hold answer 422. Under a tenant or a row policy, a key already taken is
+`duplicate_value` only where the scope itself fixes every column of the unique
+rule to the value written, as `UNIQUE (tenant_id, number)` does, so the row it
+met is one the writer reads. Any other unique rule (an id unique across every
+tenant, a column the policy does not pin) may have met a row the writer cannot
+read, so it answers as the scope refuses a write (403 on a tenant route,
+`validation_failed` under a row policy), naming no column and no value, the
+same whether the row it met is the writer's or hidden; the operator's log names
+the table and the columns. A
 write that waited out another transaction's lock reports `row_locked` with 503
 and `Retry-After`; unconfirmed failures report `unknown`. Inspect the response
 body: uncertainty can arrive with HTTP 200. There are no durable generic-write receipts or safe

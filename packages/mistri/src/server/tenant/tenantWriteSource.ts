@@ -72,12 +72,25 @@ import { appStoresOf } from '../stores/appStores.js';
 import { assertInboxMark, type InboxMark, type NoticeBinding } from '../../adapters/inbox/inbox.js';
 import type { InboxMailStore } from '../../adapters/inbox/inboxMail.js';
 import { physicalRowScope } from './tenantReadScope.js';
+import { ReferencedRefusal } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
+import { recordRefusalCause, refusalCause } from '@mistriwork/engine/shared/refusal.js';
 import { bindTenantInboxStore } from './tenantInbox.js';
 import { bindTenantBrandingStore } from './tenantBrandingStore.js';
 import { bindTenantReadAuditStore } from './tenantReadAudit.js';
 import { assertReadAuditRow, type ReadAuditQuery, type ReadAuditRow, type StoredReadAudit } from '../../adapters/readAudit/readAudit.js';
 import { groupCommit } from '../../adapters/readAudit/groupCommit.js';
 import { assertBrandingWrite, type BrandingWrite } from '../../adapters/branding/branding.js';
+
+/* A delete still referenced is refused by the engine under the physical table it counted (scopedTransaction.ts
+   ReferencedRefusal). A member hears the App's name for that table, or no table at all where the App has none. */
+function logicalReferences(physical: ReadonlyMap<string, string>): (error: unknown) => never {
+  const logical = new Map([...physical].map(([name, table]) => [table, name]));
+  return (error) => {
+    if (!(error instanceof ReferencedRefusal) || !error.seen) throw error;
+    const table = logical.get(error.seen.table);
+    throw recordRefusalCause(new ReferencedRefusal(table ? { table, count: error.seen.count } : undefined), refusalCause(error) ?? error);
+  };
+}
 
 /* A writer an uncertain outcome closed is reopening itself (tenantWriterLifecycle.ts). What it turns away meanwhile
    decided nothing about the person, so it is said as the database not answering, a 503 to try again, as /readyz says
@@ -361,6 +374,7 @@ export async function openSqliteTenantWriteSource(
     const physical = new Map(Object.entries(owned.resources));
     const ids = new Set(physical.values());
     const toPhysical = (logical: string) => physical.get(logical) ?? denyTenant();
+    const said = logicalReferences(physical);
     // A snapshot, so every write's composition with it is kept (tenantReadScope.ts).
     const allTrue: RowScope = snapshotRowScope(owned.schema, Object.fromEntries([...physical.keys()].map((id) => [id, true])));
     let baseline: string | undefined;
@@ -555,7 +569,7 @@ export async function openSqliteTenantWriteSource(
                 : {}),
               insert: (request) => records.insert({ ...request, table: toPhysical(request.table) }),
               update: (request) => records.update({ ...request, table: toPhysical(request.table) }),
-              remove: (request) => records.remove({ ...request, table: toPhysical(request.table) }),
+              remove: (request) => records.remove({ ...request, table: toPhysical(request.table) }).catch(said),
               ...(records.tell ? { tell: (request: TellRequest) => records.tell!({ ...request, table: toPhysical(request.table) }) } : {}),
               ...(records.noted
                 ? { noted: (request: NoteRequest) => records.noted!({ ...request, table: toPhysical(request.table) }) }
@@ -729,6 +743,7 @@ export async function openPostgresTenantWriteSource(
     const physical = new Map(Object.entries(owned.resources));
     const ids = new Set(physical.values());
     const toPhysical = (logical: string) => physical.get(logical) ?? denyTenant();
+    const said = logicalReferences(physical);
     // A snapshot, so every write's composition with it is kept (tenantReadScope.ts).
     const allTrue: RowScope = snapshotRowScope(owned.schema, Object.fromEntries([...physical.keys()].map((id) => [id, true])));
     let baseline: string | undefined;
@@ -955,7 +970,7 @@ export async function openPostgresTenantWriteSource(
               },
               remove: (request) => {
                 live();
-                return records.remove({ ...request, table: toPhysical(request.table) });
+                return records.remove({ ...request, table: toPhysical(request.table) }).catch(said);
               },
               ...(records.tell
                 ? {

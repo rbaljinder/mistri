@@ -524,3 +524,44 @@ export default defineAppTenantPolicy({ kind: 'tenant', appId: 'combo', storeId: 
   flags: ['--policy', '{policy.mjs}'],
   ddl: [ARCHIVED_ROW],
 });
+
+/** A tenant's shared profile: the platform's one row per tenant, and the
+    column of it (`plan`) every member's query may test as `tenant.plan`.
+    Carries its own tenancy and policy, because a profile is a fact of the
+    tenancy rather than something added beside it. */
+export const PLAN_PROFILE_TABLE = 'CREATE TABLE tenant_profile(id TEXT PRIMARY KEY NOT NULL, plan TEXT NOT NULL)';
+export const PLAN_PROFILE_ROWS = "INSERT INTO tenant_profile VALUES ('north','pro'),('south','free')";
+export const sharedProfile = (): Part => ({
+  root: {
+    auth: {
+      rows: 'tenant',
+      tenancy: { label: 'Depot', profile: 'tenant_profile', shared: ['plan'], platform: { label: 'Head office' } },
+      roles: { operator: { realm: 'tenant' } },
+    },
+    resources: { item: { owner: 'tenant' }, tenant_profile: { owner: 'platform' } },
+    views: { items: { realm: 'tenant' } },
+  },
+  ddl: [PLAN_PROFILE_TABLE, PLAN_PROFILE_ROWS],
+  files: {
+    'policy.mjs': `import { defineAppTenantPolicy } from '${source('packages/mistri/src/server/policy/appTenantPolicy.ts')}';
+export default defineAppTenantPolicy({ kind: 'tenant', appId: 'combo', storeId: '${COMBO_STORE}',
+  ownership: { item: { kind: 'tenant', column: 'tenant_id' }, tenant_profile: { kind: 'platform' } },
+  resolveMembershipRows: () => ({ item: true }), resolveRows: () => ({ item: true }),
+  resolvePlatformRows: () => ({ tenant_profile: true }) });
+`,
+  },
+  flags: ['--policy', '{policy.mjs}'],
+});
+
+/** A rollup: an item counts the items under it, those its `query` admits.
+    The one table again — an item's parent is an item — so the figure needs
+    no second tenant-owned table for a policy to name. `segments` are the
+    item's named queries, which the rollup's `query` may name. */
+export const childRollup = (query: string, segments?: Record<string, string>): Part => ({
+  root: {
+    resources: {
+      item: { rollups: { children: { fn: 'count', from: 'item', whose: 'parent_id', query } }, ...(segments ? { segments } : {}) },
+    },
+  },
+  ddl: ['ALTER TABLE item ADD COLUMN parent_id TEXT REFERENCES item(id)', "UPDATE item SET parent_id = 'north-1' WHERE id = 'north-2'"],
+});

@@ -539,8 +539,9 @@ test('inventory: invisible active reservation forces uniqueness rollback after t
   for (let delivery = 0; delivery < 2; delivery++) {
     const reply = await client.data('/api/commands/execute', c, input);
     denied(reply);
-    assert.equal(reply.status, 503);
-    assert.deepEqual({ code: reply.body.code, outcome: reply.body.outcome }, { code: 'temporarily_unavailable', outcome: 'not_applied' });
+    // The scope's own refusal: the unique rule met a row the member's policy hides, so neither it nor the rule is said.
+    assert.equal(reply.status, 403);
+    assert.deepEqual({ code: reply.body.code, outcome: reply.body.outcome }, { code: 'forbidden', outcome: 'not_applied' });
     for (const value of [n.hiddenReservation, n.hiddenLead, n.hiddenStaff, n.hiddenUnit, 'UNIQUE', 'constraint', 'Northstar private']) {
       assert.ok(!JSON.stringify(reply.body).includes(value), 'hidden conflict disclosed private information');
     }

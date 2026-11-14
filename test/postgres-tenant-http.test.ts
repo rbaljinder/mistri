@@ -51,6 +51,8 @@ import { tenantInbox } from '../packages/mistri/src/adapters/inbox/inbox.js';
 import { dedicatedPostgresUrl } from './support/tenantDialects.js';
 import { runtimeTable } from '../packages/engine/src/shared/runtimeTables.js';
 import { holdPort } from './support/heldPort.js';
+import { whenBody } from '../packages/engine/src/shared/recordReads.js';
+import { laneWindow } from '../packages/engine/src/shared/boardLanes.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
 const appId = 'pg-tenant-http';
@@ -695,6 +697,160 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
     // Context tokens are bound to the native login and the tenant that opened them.
     refused(await f.data('/api/query', { ...south, ...f.signedIn(ada) }, { table: 'item' }));
     refused(await f.data('/api/query', { ...north, tenant: 'south' }, { table: 'item' }));
+    /* A section's `when` (one bounded run of the key and the condition) answers another tenant's key as one nothing
+       holds, and a board's lanes, windowed by their column, are the tenant's own cards under a value both hold. */
+    const base = { id: 'item', columns: [{ name: 'id', primaryKey: true }] } as unknown as Parameters<typeof whenBody>[0];
+    const when = (id: string) => f.data('/api/run', north, whenBody(base, { id }, 'business_id = same'));
+    const [foreign, missing] = [await when('south-item'), await when('missing-item')];
+    assert.deepEqual(rows(foreign), []);
+    const { ms: _foreign, ...foreignBody } = foreign.body;
+    const { ms: _missing, ...missingBody } = missing.body;
+    assert.deepEqual(foreignBody, missingBody);
+    assert.deepEqual(
+      rows(await when('north-item')).map((row) => row.id),
+      ['north-item'],
+    );
+    assert.deepEqual(rows(await f.data('/api/run', north, { q: 'item show id, business_id', offset: 0, ...laneWindow('business_id') })), [
+      { id: 'north-item', business_id: 'same' },
+    ]);
+  });
+
+  /* Generated from the App's declaration: each table it names is read through every read door as the member's
+     tenant's rows alone, another tenant's key answers as a key nothing holds, and every statement the host sends
+     over a tenant-owned table carries the tenant as an operand, so no compiled scope reaches the database open. */
+  test("every table the App declares reads as one tenant's rows on every read door, and every statement over it binds that tenant", async (t) => {
+    const f = await fixture(t),
+      ada = await f.signup('Ada'),
+      bob = await f.signup('Bob');
+    await f.grant(ada, 'north');
+    await f.grant(bob, 'south');
+    const north = await f.open(ada, 'north');
+    const resources = Object.entries(manifest('./auth.db').resources).map(([name, value]) => [name, object(value)] as const);
+    assert.ok(resources.length >= 2);
+    const tables = new Map<string, { name: string; pk: string; mine: string[]; foreign: string[] }>();
+    for (const [name, resource] of resources) {
+      assert.equal(resource.owner, 'tenant', `${name} is owned by its tenant`);
+      const [schema, table] = String(resource.physical).split('.') as [string, string];
+      const keys = (
+        await control.query(
+          `SELECT a.attname AS name FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+            WHERE i.indisprimary AND i.indrelid = format('%I.%I', $1::text, $2::text)::regclass`,
+          [schema, table],
+        )
+      ).rows as { name: string }[];
+      assert.equal(keys.length, 1, `${name} has one key column`);
+      const pk = keys[0]!.name;
+      const all = (await control.query(`SELECT "${pk}"::text AS id, tenant_id FROM ${schema}.${table}`)).rows as {
+        id: string;
+        tenant_id: string;
+      }[];
+      const mine = all
+          .filter((row) => row.tenant_id === 'north')
+          .map((row) => row.id)
+          .sort(),
+        foreign = all.filter((row) => row.tenant_id !== 'north').map((row) => row.id);
+      assert.ok(mine.length > 0 && foreign.length > 0, `${name} holds a row of each tenant`);
+      tables.set(table, { name, pk, mine, foreign });
+    }
+    const specifier = 'pg';
+    const pg = (await import(specifier)) as {
+      Client?: { prototype: Record<string, unknown> };
+      default?: { Client: { prototype: Record<string, unknown> } };
+    };
+    const Client = pg.Client ?? pg.default?.Client;
+    assert.ok(Client, 'the pg package exports a Client');
+    const prototype = Client.prototype;
+    const query = prototype.query as (...args: unknown[]) => unknown;
+    const sent: { text: string; values: unknown[] }[] = [];
+    prototype.query = function (this: unknown, ...args: unknown[]) {
+      const [config, values] = args as [string | { text?: string; values?: unknown[] } | undefined, unknown];
+      if (this !== control) {
+        const text = typeof config === 'string' ? config : String(config?.text ?? '');
+        sent.push({ text, values: Array.isArray(values) ? values : (typeof config === 'object' && config?.values) || [] });
+      }
+      return query.apply(this, args);
+    };
+    t.after(() => {
+      prototype.query = query;
+    });
+    const sorted = (values: unknown[]) => values.map(String).sort();
+    const same = (hidden: Answer, missing: Answer, id: string, label: string) => {
+      const said = (reply: Answer, key: string) => {
+        // How long a read took is the clock's, at any depth, not the row's.
+        return `${reply.status} ${JSON.stringify(reply.body, (name, value: unknown) => (name === 'ms' ? undefined : value))
+          .split(key)
+          .join('<key>')}`;
+      };
+      sealed(hidden);
+      assert.equal(said(hidden, id), said(missing, 'nowhere'), label);
+    };
+    for (const { name, pk, mine, foreign } of tables.values()) {
+      const where = (key: 'column' | 'path', id: string) => ({ groups: [[{ [key]: pk, op: '=', value: id }]] });
+      assert.deepEqual(
+        sorted(rows(await f.data('/api/query', north, { table: name, limit: 500 })).map((row) => row[pk])),
+        mine,
+        `${name} query`,
+      );
+      const count = await f.data('/api/count', north, { table: name });
+      assert.equal(count.status, 200, count.text);
+      assert.equal(count.body.count, mine.length, `${name} count`);
+      const counts = await f.data('/api/counts', north, { items: [name] });
+      assert.equal(counts.status, 200, counts.text);
+      assert.deepEqual(
+        (counts.body.results as Record<string, unknown>[]).map((result) => result.total),
+        [mine.length],
+        `${name} counts`,
+      );
+      assert.deepEqual(
+        sorted(rows(await f.data('/api/run', north, { q: name, limit: 500, count: 'none' })).map((row) => row[pk])),
+        mine,
+        `${name} run`,
+      );
+      assert.deepEqual(
+        sorted(
+          rows(await f.data('/api/view/run', north, { view: { base: name, columns: [{ path: pk }] }, limit: 500 })).map((row) => row[pk]),
+        ),
+        mine,
+        `${name} view/run`,
+      );
+      const lanes = rows(await f.data('/api/breakdown', north, { text: `${name} count by ${pk}`, limit: 500 })).map((row) =>
+        Object.values(row),
+      );
+      assert.deepEqual(sorted(lanes.map(([id]) => id)), mine, `${name} breakdown`);
+      const doors: Array<[string, (id: string) => unknown]> = [
+        ['/api/query', (id) => ({ table: name, filter: where('column', id), limit: 5, offset: 0 })],
+        ['/api/count', (id) => ({ table: name, filter: where('column', id) })],
+        ['/api/counts', (id) => ({ items: [`${name} ${pk} = "${id}"`] })],
+        ['/api/run', (id) => ({ q: `${name} ${pk} = "${id}"`, limit: 5, count: 'none' })],
+        ['/api/view/run', (id) => ({ view: { base: name, columns: [{ path: pk }], filter: where('path', id) }, limit: 5 })],
+        ['/api/breakdown', (id) => ({ text: `${name} ${pk} = "${id}" count by ${pk}` })],
+        ['/api/breakdowns', (id) => ({ items: [{ text: `${name} ${pk} = "${id}" count by ${pk}` }] })],
+        ['/api/references', (id) => ({ table: name, key: { [pk]: id } })],
+      ];
+      for (const id of foreign)
+        for (const [path, body] of doors)
+          same(await f.data(path, north, body(id)), await f.data(path, north, body('nowhere')), id, `${name} ${path} ${id}`);
+    }
+    prototype.query = query;
+    /* Every place a statement names a tenant table, bar the snapshot's lock, is a read of it under the tenant's own
+       operand, bound to the member's tenant. */
+    let reads = 0;
+    for (const { text, values } of sent)
+      for (const part of text.split(/;\s*/)) {
+        if (/^\s*LOCK TABLE /.test(part)) continue;
+        for (const table of tables.keys()) {
+          const named = part.match(new RegExp(`\\b${table}\\b`, 'g'))?.length ?? 0;
+          const scoped = [
+            ...part.matchAll(
+              new RegExp(`(?:FROM|JOIN) "public"\\."${table}" WHERE "tenant_id" OPERATOR\\(pg_catalog\\.=\\) \\$(\\d+)\\)`, 'g'),
+            ),
+          ];
+          assert.equal(scoped.length, named, `a statement names ${table} outside a tenant scope: ${part}`);
+          for (const [, operand] of scoped) assert.equal(values[Number(operand) - 1], 'north', part);
+          reads += scoped.length;
+        }
+      }
+    assert.ok(reads >= tables.size * 13, `${reads} scoped reads`);
   });
 
   test("a page's loader reads its member's own tenant on PostgreSQL through the lease's reader, and cannot write", async (t) => {
@@ -760,11 +916,12 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
   });
 
   /* A write the database refused for good — a key already taken, a value its column cannot hold — was answered as the
-     database not answering: 503 with Retry-After, inviting the retry that can never work (a live load test). It is the
-     record's to fix, said as a single-database App says it. And a key is global while rows are a tenant's: the answer
-     for an id another tenant holds is the answer for one this tenant holds, word for word, so it says nothing of
+     database not answering: 503 with Retry-After, inviting the retry that can never work (a live load test). A key the
+     tenant's own rows hold is the record's to fix, said as a single-database App says it: 409 `duplicate_value`. An
+     opaque id is unique across every tenant, so the row it meets may be another tenant's: that answer is the scope's own
+     refusal, for an id this tenant holds and one another tenant holds alike, word for word, so it says nothing of
      another tenant's rows. */
-  test('a duplicate key is a 409 and a value its column cannot hold a 422, the same for an id another tenant holds', async (t) => {
+  test('a duplicate key is a 409 and a value its column cannot hold a 422, and an id unique across tenants is refused alike', async (t) => {
     const f = await fixture(t),
       ada = await f.signup('Ada');
     await f.grant(ada, 'north');
@@ -776,15 +933,20 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
       values: { id: 'south-item', business_id: 'own', name: 'Own' },
     });
     for (const reply of [own, foreign]) {
-      assert.equal(reply.status, 409, reply.text);
+      assert.equal(reply.status, 403, reply.text);
       assert.equal(reply.headers.get('retry-after'), null);
       sealed(reply);
       assert.equal(reply.body.outcome, 'rejected');
-      assert.equal(object((reply.body.errors as unknown[])[0]).code, 'duplicate_value');
+      assert.equal(object((reply.body.errors as unknown[])[0]).code, 'forbidden');
+      assert.doesNotMatch(reply.text, /duplicate|unique|business_id|south/i);
     }
     assert.equal(foreign.text, own.text);
     const business = await f.data('/api/insert', north, { table: 'item', values: { id: 'fresh', business_id: 'same', name: 'Same' } });
     assert.equal(business.status, 409, business.text);
+    assert.equal(business.headers.get('retry-after'), null);
+    sealed(business);
+    assert.equal(business.body.outcome, 'rejected');
+    assert.equal(object((business.body.errors as unknown[])[0]).code, 'duplicate_value');
     // A NUL, which no PostgreSQL text value can hold: class 22, the value's own fault.
     const typed = await f.data('/api/insert', north, {
       table: 'item',

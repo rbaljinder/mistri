@@ -19,6 +19,7 @@ import { captureTenantOwnership } from '../packages/mistri/src/server/tenant/ten
 import type { TenantReadSource } from '../packages/mistri/src/server/tenant/tenantReadSource.js';
 import { TenantWriteFailure, type TenantWriteSource } from '../packages/mistri/src/server/tenant/tenantWriteSource.js';
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
+import { IN_USE, referencedBeneath } from '../packages/engine/src/adapters/scoped/scopedTransaction.js';
 import {
   CASE_INSENSITIVE,
   dropDedicatedPostgresDatabase,
@@ -79,6 +80,15 @@ const NARROW: RowScope = { ...ALICE, note: { groups: [[{ column: 'author', op: '
 const FOOTPRINT = ['lead', 'note', 'tag', 'folder', 'pin'];
 const refused = (error: unknown) => error instanceof TenantWriteFailure && error.outcome === 'not_applied';
 const because = (pattern: RegExp) => (error: unknown) => refused(error) && pattern.test(refusalReasons(error).join(' | '));
+/* What the caller hears of a delete still referenced: the table and count of the references it reads, or, where it
+   reads none of them, the sentence that names nothing. */
+const inUse = (seen: { table: string; count: number } | undefined, sentence: string) => (error: unknown) => {
+  const referenced = referencedBeneath(error);
+  assert.ok(referenced, 'refused as a record still referenced');
+  assert.deepEqual(referenced.seen && { ...referenced.seen }, seen);
+  assert.equal(referenced.message, sentence);
+  return refused(error);
+};
 
 async function fixture(t: TestContext, dialect: TenantDialect) {
   const engine = await openTenantEngine(dialect, {
@@ -185,6 +195,11 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         f.command((tx) => tx.remove({ table: 'lead', key: { id: 'n2' } })),
         because(/still references it/),
       );
+      // Said by the one note Alice reads: its table and count, and nothing of a row she does not.
+      await assert.rejects(
+        f.command((tx) => tx.remove({ table: 'lead', key: { id: 'n2' } })),
+        inUse({ table: 'note', count: 1 }, 'A record in "note" still points at this one. Change or remove it first, then try again.'),
+      );
       await f.command(async (tx) => {
         await tx.remove({ table: 'note', key: { id: 'nn1' } });
         await tx.remove({ table: 'lead', key: { id: 'n2' } });
@@ -203,6 +218,11 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       await assert.rejects(
         f.command((tx) => tx.remove({ table: 'folder', key: { id: 'f1' } })),
         because(/still references it/),
+      );
+      // The pin read as its own column compares is none: the sentence that names nothing, never a count too low.
+      await assert.rejects(
+        f.command((tx) => tx.remove({ table: 'folder', key: { id: 'f1' } })),
+        inUse(undefined, IN_USE),
       );
       assert.deepEqual(await f.ids('pin'), ['np1']);
       assert.deepEqual(await f.ids('folder'), ['f1']);
@@ -224,6 +244,11 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       await assert.rejects(
         f.command((tx) => tx.remove({ table: 'lead', key: { id: 'n3' } })),
         because(/still references it/),
+      );
+      // Every reference is one Alice cannot read: no table, no count, only that the record is in use.
+      await assert.rejects(
+        f.command((tx) => tx.remove({ table: 'lead', key: { id: 'n3' } })),
+        inUse(undefined, IN_USE),
       );
       // Another dealer's row, and a row the policy hides, are never removed at all.
       await assert.rejects(

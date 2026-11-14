@@ -1318,9 +1318,10 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
             }
             if (path === '/api/record-activity') {
               /* A dashboard's feed. In a tenant's context the store reads that
-                 tenant's rows of its tenant-owned resources alone (and the
-                 platform's rows), so no other tenant's writes crowd it or reach
-                 it; each record a row names is then read in this context, under
+                 tenant's rows of its tenant-owned resources alone, so no other
+                 tenant's writes crowd it or reach it (a global or platform
+                 resource's changes say no tenant, and are no member's feed);
+                 each record a row names is then read in this context, under
                  the owner this context is, before anything about it is said.
                  The platform realm's feed spans tenants, each record read as
                  the platform realm reads it (tenantRecordHistoryStore.ts). */

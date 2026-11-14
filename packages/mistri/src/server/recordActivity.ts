@@ -227,7 +227,8 @@ export async function readRecordActivityFor(options: {
   const kept = historyRules(app, options.pages);
   /* The section's resources the reader's catalog holds: one their grant leaves out has no feed for them. */
   const resources = Object.keys(section.resources ?? {}).flatMap((resource) => {
-    const table = kept.has(resource) ? findTable(schema, resource) : undefined;
+    // A resource whose changes the reader's context may not read (record history's `storeKey.holds`) has no feed for them.
+    const table = kept.has(resource) && (options.storeKey?.holds(resource) ?? true) ? findTable(schema, resource) : undefined;
     return table
       ? [{ resource, table, physical: options.mapping.toPhysical(resource), connection: options.mapping.connectionFor(resource) }]
       : [];

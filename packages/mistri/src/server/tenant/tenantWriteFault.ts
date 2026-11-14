@@ -10,6 +10,7 @@
  * the way down stays a denial.
  */
 import { POOL_BUSY_MESSAGE, PoolBusy } from '@mistriwork/engine/adapters/poolMetrics.js';
+import { ReferencedRefusal } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
 import { refusalCause } from '@mistriwork/engine/shared/refusal.js';
 import { writeRefusalStatus } from '@mistriwork/engine/server/constraints.js';
 import { TenantContextError, TenantUnavailableError } from '@mistriwork/engine/server/evidence.js';
@@ -59,16 +60,20 @@ export function unansweredWrite(
  * fixed sentence that names no column: the engine's own names are physical, the tenant's column among them, and its
  * detail carries values. A key is global while rows are a tenant's, so an id another tenant holds is refused exactly
  * as one this tenant holds, word for word: the reply is chosen by the SQLSTATE alone, and says nothing more of whose
- * row it met. Undefined for anything else, and for a denial on the way down, which stays a denial.
+ * row it met. A delete refused for the rows still pointing at it is answered the same way, by reference_conflict.
+ * Undefined for anything else, and for a denial on the way down, which stays a denial.
  */
 export function refusedWrite(path: string, error: unknown): { status: 409 | 422; code: string; body: Record<string, unknown> } | undefined {
   let at: unknown = error;
   for (let depth = 0; at !== null && typeof at === 'object' && depth < 16; depth++) {
-    const status = writeRefusalStatus(at);
+    /* A delete refused while rows still point at it (scopedTransaction.ts ReferencedRefusal): its sentence names
+       only the rows this tenant reads, or nothing, so it is said as it stands. */
+    const referenced = at instanceof ReferencedRefusal;
+    const status = referenced ? 409 : writeRefusalStatus(at);
     if (status) {
       // Its codes and nothing else: no column, constraint or detail reaches appError, so it says the fixed sentence.
       const { code, errcode, severity } = at as { code?: unknown; errcode?: unknown; severity?: unknown };
-      const failure = appError({ code, errcode, severity }, 'write');
+      const failure = referenced ? appError(at, 'write') : appError({ code, errcode, severity }, 'write');
       return {
         status,
         code: failure.code,
