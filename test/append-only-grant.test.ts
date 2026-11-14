@@ -126,3 +126,31 @@ test('a captured grant keeps appendOnly, in a copy the caller cannot change', ()
   assert.deepEqual(kept.appendOnly, new Set(['note']));
   assert.notEqual(kept.appendOnly, grant.appendOnly);
 });
+
+test('a write reply carries no column the role cannot read, even one the server filled in', async () => {
+  const filled = { sql, key: { id: 1 } };
+  const writer = {
+    insert: async (request: InsertRequest) => ({
+      ...filled,
+      row: { id: 1, body: request.values.body, secret: 'server fill' },
+      applied: { ...request.values, secret: 'server fill' },
+    }),
+    update: async (request: { values: Record<string, unknown> }) => ({
+      affected: 1,
+      applied: { ...request.values, secret: 'server stamp' },
+      sql,
+    }),
+    lockRecord: async () => {},
+  } as unknown as WriteTransaction;
+  const grant: ColumnGrant = {
+    readable: new Set(['note']),
+    writable: new Set(['note']),
+    fields: new Map([['note', { read: new Set(['id', 'body']), write: new Set(['body']) }]]),
+  };
+  const tx = authorizeColumnWrites(schema, grant, writer);
+  const made = await tx.insert({ table: 'note', values: { body: 'hello' } });
+  assert.deepEqual(made.applied, { body: 'hello' });
+  assert.deepEqual(made.row, { id: 1, body: 'hello' });
+  const changed = await tx.update({ table: 'note', key, values: { body: 'edited' } });
+  assert.deepEqual(changed.applied, { body: 'edited' });
+});

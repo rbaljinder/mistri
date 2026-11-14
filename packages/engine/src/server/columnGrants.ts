@@ -736,6 +736,20 @@ export interface WriteRules<G extends ColumnGrant> {
   remove?(request: DeleteRequest, grant: G): ReturnType<WriteTransaction['remove']>;
 }
 
+/* The server adds values the caller never sent (fills, derived values, a machine's start, stamps), so a write's
+   reply is narrowed to the columns this principal reads, `applied` as much as `row`. No read set: unchanged. */
+function readableResult<R extends { row?: Record<string, unknown>; applied: Record<string, unknown> }>(
+  operation: ColumnGrant,
+  table: string,
+  result: R,
+): R {
+  const readable = operation.fields?.get(table)?.read;
+  if (!readable) return result;
+  const narrow = <T extends Record<string, unknown>>(values: T): T =>
+    Object.fromEntries(Object.entries(values).filter(([column]) => readable.has(column))) as T;
+  return { ...result, ...(result.row ? { row: narrow(result.row) } : {}), applied: narrow(result.applied) };
+}
+
 /** Apply the same graph-aware checks to an already-owned transaction handle. */
 export function authorizeColumnWrites<G extends ColumnGrant>(
   full: DatabaseSchema,
@@ -760,11 +774,7 @@ export function authorizeColumnWrites<G extends ColumnGrant>(
     if (operation.creatable && !operation.creatable.has(request.table)) throw new AppAccessDenied();
     recordFields(request.table, request.values, 'write', server);
     const written = product?.insert ? product.insert(request, operation, server, write) : (async () => write(request))();
-    return written.then((result) => {
-      const readable = operation.fields?.get(request.table)?.read;
-      if (!readable || !result.row) return result;
-      return { ...result, row: Object.fromEntries(Object.entries(result.row).filter(([column]) => readable.has(column))) };
-    });
+    return written.then((result) => readableResult(operation, request.table, result));
   };
   const updateVia = (input: UpdateRequest, write: WriteTransaction['update']): Promise<UpdateResult> => {
     const request = jsonWritten(full, requestData(input));
@@ -773,12 +783,12 @@ export function authorizeColumnWrites<G extends ColumnGrant>(
        update to a table the principal does not write (a granted fixed action) answers it, else it is refused. */
     if (operation.appendOnly?.has(request.table)) {
       const answered = product?.unwritable?.(request, operation, write);
-      if (answered) return answered;
+      if (answered) return answered.then((result) => readableResult(operation, request.table, result));
       throw new AppAccessDenied();
     }
     if (!operation.writable.has(request.table)) {
       const answered = product?.unwritable?.(request, operation, write);
-      if (answered) return answered;
+      if (answered) return answered.then((result) => readableResult(operation, request.table, result));
     }
     assertWrite(request.table);
     recordFields(request.table, request.values, 'write', isServerRequest(input));
@@ -788,7 +798,9 @@ export function authorizeColumnWrites<G extends ColumnGrant>(
       if (!expectedCovers(full, request)) throw new AppAccessDenied();
     }
     assertRelatedWrites(request.table, Object.keys(request.values));
-    return product?.update ? product.update(request, operation, write) : (async () => write(request))();
+    return (product?.update ? product.update(request, operation, write) : (async () => write(request))()).then((result) =>
+      readableResult(operation, request.table, result),
+    );
   };
   return {
     ...(writer.lockRecord
