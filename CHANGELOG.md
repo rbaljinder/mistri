@@ -5,6 +5,11 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.56
+
+- **One-time codes charge each try before comparing it.** A burst of guesses typed together used to read the count before any wrote it, so more than five could be judged against one code. Every try, right or wrong, now takes its own number from one atomic count first, and a try past five is refused unjudged. A right code within the five still opens, once.
+- **`mistri check` warns when a signed-out `byKey` read is keyed by a number** (`bykey-guessable`). The read is fenced to one row by its whole key, but a visitor can walk a counter's ids, so the key is the only secret: read by a UUID or a sealed reference.
+
 ## 1.0.0-rc.55
 
 - **A public form's submission counts the day in its tenant's zone.** Where `ui.timezone` names a column of the tenant profile (`tenant.<column>`), a submission placed with a tenant hands its handler that tenant's zone, so `today()` and `now()` agree with the tenant's members' commands and its jobs. A submission sent to the platform's triage, a tenant with no zone on its row, and a zone held on another table keep the App's zone: a visitor has no member scope to read another table under.

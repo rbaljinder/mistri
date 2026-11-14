@@ -21,6 +21,8 @@ import { defineCommand, defineCommands, type BusinessCommandRegistry } from '../
 import { shape, text } from '../packages/mistri/src/server/commands/commandShapes.js';
 import { PUBLIC_GETS, PUBLIC_POSTS } from '../packages/mistri/src/server/http/gate.js';
 import { parseAppConfig, type AppDef } from '../packages/mistri/src/shared/app.js';
+import { publicKeyWarnings } from '../packages/mistri/src/shared/appWarnings.js';
+import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { authorityReport } from '../packages/mistri/src/shared/appAuthority.js';
 import { resetPublicFormLimits } from '../packages/engine/src/server/http/rateLimit.js';
 import { createApp } from './support/createApp.js';
@@ -463,4 +465,31 @@ test('check refuses a public form whose picker or choice lists a byKey table, by
     /\[public-form-picker\] offers the rows over "vehicle" on a public form, and "auth.public.byKey" opens "vehicle" only one record at a time/,
   );
   assert.equal(form({ dealer: { label: 'Dealer', type: 'reference', from: 'dealer', by: 'id', labelColumn: 'name' } }), undefined);
+});
+
+/* `mistri check` warns where a visitor's key is a counter: the fence holds, but the key is the only secret. */
+test('a public byKey read keyed by a number is warned; a uuid or text key, and a signed-in-only read, are not', () => {
+  const column = (name: string, type: string, primaryKey = false) => ({ name, type, nullable: false, primaryKey });
+  const table = (id: string, ...columns: ReturnType<typeof column>[]) => ({ id, name: id, schema: '', isView: false, columns });
+  const schema: DatabaseSchema = {
+    label: 'Lot',
+    dialect: 'postgres',
+    readAt: '',
+    tables: [
+      table('vehicle', column('id', 'integer', true), column('make', 'text')),
+      table('quote', column('id', 'uuid', true), column('total', 'integer')),
+      table('badge', column('code', 'text', true)),
+      table('ticket', column('id', 'bigserial', true)),
+    ],
+    foreignKeys: [],
+  };
+  const app = (read: string[], byKey: string[]) =>
+    ({ auth: { roles: { staff: { read: true } }, public: { read, ...(byKey.length ? { byKey } : {}) } } }) as unknown as AppDef;
+  const found = publicKeyWarnings(app(['vehicle', 'ticket'], ['vehicle', 'ticket']), schema);
+  assert.equal(found.length, 2);
+  assert.match(found[0]!, /\[bykey-guessable\].*vehicle.*key id is a number/);
+  assert.match(found[1]!, /key id is a number/);
+  assert.deepEqual(publicKeyWarnings(app(['quote', 'badge'], ['quote', 'badge']), schema), []);
+  assert.deepEqual(publicKeyWarnings(app(['vehicle'], []), schema), [], 'read without byKey is not this warning');
+  assert.deepEqual(publicKeyWarnings({ auth: { roles: { staff: { read: true } } } } as unknown as AppDef, schema), [], 'signed-in only');
 });

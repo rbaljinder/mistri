@@ -588,7 +588,8 @@ const ROLE_RENAMED = {
  * `auth.public`: the resources a signed-out visitor reads, each one named —
  * never `true`, so nothing is public by accident — and none written. One
  * that `byKey` names is read a record at a time by its key and never listed,
- * counted or searched (server/app/publicByKey.ts): a link's page, not a directory.
+ * counted or searched (server/app/publicByKey.ts): a link's page, not a directory. The key is the only secret, so it
+ * must be unguessable (a UUID, a sealed reference); `check` warns on a numeric one (`bykey-guessable`).
  *
  * With `rows: 'policy'` the two answer different readers and do not meet: a
  * visitor is scoped by this grant, which names its resources and narrows

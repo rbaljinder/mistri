@@ -79,7 +79,7 @@ import { appComputedRules } from '../../shared/appComputed.js';
 import { formLinesProblems } from '../../shared/formLines.js';
 import { composeFeatures, type AppOrigins } from '../../shared/appFeatures.js';
 import { locateProblem, withProvenance } from '../../shared/appProvenance.js';
-import { appLiteralWarnings, appMenuWarnings, appReachWarnings, appRestatedWarnings } from '../../shared/appWarnings.js';
+import { appLiteralWarnings, appMenuWarnings, appReachWarnings, appRestatedWarnings, publicKeyWarnings } from '../../shared/appWarnings.js';
 import { deprecatedOf } from '../../shared/deprecations.js';
 import {
   AUTHORITY_CHANGED,
@@ -1431,6 +1431,7 @@ export function appAdvisories(loaded: LoadedApp, schema: DatabaseSchema): string
     ...appLiteralWarnings(loaded.app, loaded.pages, schema),
     ...appReachWarnings(loaded.app, schema),
     ...appMenuWarnings(loaded.app),
+    ...publicKeyWarnings(loaded.app, schema),
     ...appRestatedWarnings(loaded.app, schema).filter((warning) => !saidByMessage(loaded, warning)),
     ...messageAdvice(loaded),
     ...deprecatedOf(loaded.app),

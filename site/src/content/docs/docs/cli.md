@@ -144,6 +144,7 @@ step runs; the errors print first, and warnings are advisory (unless
 lists them in full. On PostgreSQL an indexes step names each foreign key, default
 sort, fixed filter, ownership column and search the App reads by that no index
 leads (index-missing), with the CREATE INDEX that adds it; --no-index-check skips it.
+A signed-out byKey read keyed by a number is a bykey-guessable warning: a visitor can walk ids.
 A queries step has the database EXPLAIN each read the App's pages would make
 (lists, related and grouped lists, timelines, breakdowns, figures, rollups, and its own list tabs, dashboard figures and segments): one a
 statement, never run, in a READ ONLY transaction on PostgreSQL. A read it refuses

@@ -181,6 +181,10 @@ read of another table that reaches it is refused, whichever route asked. `check`
 refuses a list or dashboard over it that names no `roles` (it would be served
 to visitors) and a public page that reads it.
 
+The key is the only secret, so it must be unguessable: a UUID or a sealed
+reference, never a counter a visitor can walk. `check` warns
+(`bykey-guessable`) when a `byKey` resource's key is a number.
+
 Anything else a visitor asks for (a list, a record, a dashboard section over a
 table `auth.public` does not name) is answered `401` with the sign-in card, the
 same answer for a private table and for a name that is no table.
