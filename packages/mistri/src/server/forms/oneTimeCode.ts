@@ -70,7 +70,7 @@ interface OneTimeCodes {
    * must name the same.
    */
   issue(subject: string, now?: number, bound?: string): Promise<{ code: string } | { limited: true }>;
-  /** Whether `typed` is the live code for `subject`. Right, it is spent; wrong five times, it is burned. */
+  /** Whether `typed` is the live code for `subject`. Each try, right or wrong, counts against five; right within them, it is spent; the fifth try burns it. */
   spend(subject: string, typed: unknown, now?: number, bound?: string): Promise<boolean>;
 }
 
@@ -107,13 +107,16 @@ export function oneTimeCodes(state: SignInState = signInState): OneTimeCodes {
       }
       const tries = `otp:${key}:${held.gen}`;
       const window = Math.max(1, held.until - now);
+      // Every attempt is charged before it is judged, by the store's one atomic increment: guesses typed together each
+      // get their own number, so no more than CODE_TRIES are ever judged against a code, on this instance or another.
+      // Counting only the wrong ones afterwards let a burst all read the count before any write landed.
+      const charged = await state.fail(tries, window);
+      if (charged > CODE_TRIES) return false;
       if (!matches || !shaped) {
-        if ((await state.fail(tries, window)) >= CODE_TRIES) await state.remove('otp', key);
+        if (charged >= CODE_TRIES) await state.remove('otp', key);
         return false;
       }
-      // Wrong tries counted on another instance burn the code here too; and of two instances given the right code at
-      // once, the one whose claim counts first opens.
-      if ((await state.failures(tries)) >= CODE_TRIES) return false;
+      // Of two instances given the right code at once, the one whose claim counts first opens.
       if (!(await state.consume(`otp-spent:${key}:${held.gen}`, { window: Math.ceil(window / 1000), max: 1 })).allowed) return false;
       await state.remove('otp', key);
       return true;

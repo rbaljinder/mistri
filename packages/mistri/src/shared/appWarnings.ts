@@ -10,7 +10,14 @@
  * say a column's values (`allowed` absent) is never guessed at.
  */
 import { expandSegments, type QueryPerson } from '@mistriwork/engine/shared/query.js';
-import { columnKind, tableNamed, type ColumnMeta, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import {
+  columnKind,
+  primaryKey,
+  tableNamed,
+  type ColumnMeta,
+  type DatabaseSchema,
+  type TableMeta,
+} from '@mistriwork/engine/shared/schema.js';
 import { parseViewQuery, tryResolvePath } from '@mistriwork/engine/shared/view.js';
 import { checkedPerson } from './appMe.js';
 import { grantsByRole, isFormView, restatedOf, type AppDef } from './appModel.js';
@@ -263,6 +270,31 @@ export function appReachWarnings(app: AppDef, schema: DatabaseSchema): string[] 
           'so no one can open it. Add it to a role\'s "commands", or make the form public.',
       );
     }
+  }
+  return warnings;
+}
+
+/**
+ * A table a signed-out visitor reads by its key (`auth.public.byKey`) whose key is a number. The fence is sound — one
+ * row, by its whole key, never a list — but a visitor who may try any key can walk a serial's ids, so the key is
+ * the only secret and a counter is not one.
+ */
+export function publicKeyWarnings(app: AppDef, schema: DatabaseSchema): string[] {
+  const warnings: string[] = [];
+  for (const name of app.auth?.public?.byKey ?? []) {
+    const table = tableOf(schema, name);
+    if (!table) continue;
+    const key = primaryKey(table);
+    // A composite key with one unguessable part is not walked by counting.
+    const numeric = (column: string) => {
+      const type = table.columns.find((candidate) => candidate.name === column)?.type ?? '';
+      return columnKind(type) === 'number' && /int|serial/i.test(type) && !/interval|point/i.test(type);
+    };
+    if (!key.length || !key.every(numeric)) continue;
+    warnings.push(
+      `auth "public", byKey "${name}" [bykey-guessable]: a signed-out visitor reads ${name} by its key, and its key ${key.join(', ')} ` +
+        `is a number, so ids can be walked. Read by an unguessable key (a UUID, or a sealed reference) instead.`,
+    );
   }
   return warnings;
 }

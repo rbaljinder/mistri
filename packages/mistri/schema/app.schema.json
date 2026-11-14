@@ -2870,7 +2870,7 @@
                 "type": "string",
                 "minLength": 1
               },
-              "description": "Of read, the resources a visitor opens one record at a time by its key and never lists, counts or searches: a link's page, not a directory."
+              "description": "Of read, the resources a visitor opens one record at a time by its key and never lists, counts or searches: a link's page, not a directory. Its key must be unguessable (a UUID or a sealed reference); `check` warns on a numeric key."
             },
             "fields": {
               "type": "object",
