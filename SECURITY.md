@@ -39,6 +39,15 @@ The database browser, in its own repository
   bound parameter; table names are checked against the catalog before being
   quoted; raw SQL runs one statement at a time inside a read-only session
   and is bounded by a LIMIT wrap.
+- **The tenant fence is the App's; the database's is a backstop.** A tenant
+  App bounds every statement it sends to one tenant, and that is the primary
+  defense. On PostgreSQL a connection may opt in (`"backstop": "rls"`) to row
+  security behind it, so a statement the scope missed still reads and writes one
+  tenant's rows; `mistri migrate backstop` writes it and `mistri check` names
+  drift. It is defense in depth, off by default, and does not cover what runs
+  as the owner role by design (public address resolution, the jobs sweep,
+  administration, the enrollment catalog, search indexing) or tenant-keyed
+  rows in mistri's own store tables, which stay fenced by the App alone.
 - **An app directory is code.** `app.mjs` / `app.ts` manifests are
   evaluated in a worker with the server's privileges and hot-reloaded on
   save. Keep the directory writable only by the account running mistri.

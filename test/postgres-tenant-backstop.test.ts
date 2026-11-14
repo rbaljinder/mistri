@@ -1,7 +1,8 @@
 /**
  * The row-security backstop against a real server (docs/postgresql.md): the pair of roles a tenant App starts
  * with is attested before anything is served, and a runtime role the pinned policy binds sees one tenant's rows
- * and cannot write another's, even where the engine's own scope was talked into allowing it.
+ * and cannot write another's, even where the engine's own scope was talked into allowing it; and what
+ * `mistri migrate backstop` writes builds that same database, judged by the catalog check and by its own status.
  * tenant-backstop.test.ts proves the wiring without a server.
  *
  * Live and opt-in like postgres-tenant-store.test.ts: `TABLEWALK_TEST_PG` names a server whose role may create
@@ -12,19 +13,28 @@ import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { after, before, describe, test } from 'node:test';
 import { PostgresAdapter } from '../packages/engine/src/adapters/postgres.js';
+import { createScopedReads } from '../packages/engine/src/adapters/scoped/scopedReads.js';
+import { POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
+import { runMigrate } from '../packages/engine/src/server/migrate/cli.js';
+import { MIGRATE_APPS } from '../packages/mistri/src/server/cli/appTargets.js';
+import { backstopDrift, backstopPlan, backstopSql } from '../packages/mistri/src/server/tenant/tenantBackstop.js';
 import type { PgQuery } from '../packages/engine/src/adapters/postgresPool.js';
 import { TenantContextError } from '../packages/engine/src/server/evidence.js';
 import { refusalCause } from '../packages/engine/src/shared/refusal.js';
 import type { RowScope } from '../packages/engine/src/shared/rowScope.js';
 import type { TenantOwnershipSnapshot } from '../packages/mistri/src/server/tenant/tenantOwnership.js';
-import { assertPostgresRuntimeOwnsNone, attestPostgresBackstopRoles } from '../packages/mistri/src/server/tenant/tenantPostgresCatalog.js';
+import {
+  assertPostgresRuntimeOwnsNone,
+  attestPostgresBackstopRoles,
+  attestPostgresTenantRelations,
+} from '../packages/mistri/src/server/tenant/tenantPostgresCatalog.js';
 import { indexerFor } from '../packages/mistri/src/server/app/appSearchRuntime.js';
 import { openBackstopOwnerReader } from '../packages/mistri/src/server/tenant/tenantBackstopOwner.js';
 import { plugSearch } from '../packages/mistri/src/server/app/searchProvider.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { sqliteSearch } from '../packs/search-sqlite/src/index.js';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { liveSkip } from './live.js';
@@ -38,6 +48,8 @@ const ROLE = {
   runtime: `mistri_bs_runtime_${FIXTURE_ID}`,
   member: `mistri_bs_member_${FIXTURE_ID}`,
   bypass: `mistri_bs_bypass_${FIXTURE_ID}`,
+  /* Made by the backstop's own SQL, not by the setup. */
+  planned: `mistri_bs_planned_${FIXTURE_ID}`,
 };
 const PASSWORD = randomBytes(18).toString('hex');
 const ITEM = 'public.item';
@@ -104,7 +116,7 @@ describe('the row-security backstop on PostgreSQL, against a real server', { ski
       await server.query(`CREATE ROLE ${ROLE.runtime} LOGIN NOBYPASSRLS PASSWORD '${PASSWORD}'`);
       await server.query(`CREATE ROLE ${ROLE.member} LOGIN NOBYPASSRLS PASSWORD '${PASSWORD}' IN ROLE ${ROLE.owner}`);
       await server.query(`CREATE ROLE ${ROLE.bypass} LOGIN BYPASSRLS PASSWORD '${PASSWORD}'`);
-      await server.query(`GRANT CONNECT ON DATABASE "${DATABASE}" TO ${Object.values(ROLE).join(', ')}`);
+      await server.query(`GRANT CONNECT ON DATABASE "${DATABASE}" TO ${[ROLE.owner, ROLE.runtime, ROLE.member, ROLE.bypass].join(', ')}`);
     } finally {
       await server.end();
     }
@@ -137,7 +149,8 @@ describe('the row-security backstop on PostgreSQL, against a real server', { ski
     const server = await client(LIVE!);
     try {
       await server.query(`DROP DATABASE IF EXISTS "${DATABASE}" WITH (FORCE)`);
-      for (const role of [ROLE.member, ROLE.bypass, ROLE.runtime, ROLE.owner]) await server.query(`DROP ROLE IF EXISTS ${role}`);
+      for (const role of [ROLE.planned, ROLE.member, ROLE.bypass, ROLE.runtime, ROLE.owner])
+        await server.query(`DROP ROLE IF EXISTS ${role}`);
     } finally {
       await server.end();
     }
@@ -295,5 +308,457 @@ describe('the row-security backstop on PostgreSQL, against a real server', { ski
       await Promise.all([registry.closeAll(), owner.close()]);
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  /* ---- The command's output, applied to a real server ---- */
+
+  const version = async () =>
+    Number(((await (await as()).query(`SELECT current_setting('server_version_num') AS v`)).rows[0] as { v: string }).v);
+  const FENCED = {
+    resources: { note: 'bsx.note', memo: 'bsx.memo', lookup: 'bsx.lookup', ledger: 'bsx.ledger', audit: 'bsp.audit' },
+    ownership: {
+      note: { kind: 'tenant', column: 'owner_key' },
+      memo: { kind: 'tenant', column: 'tenant_id' },
+      lookup: { kind: 'global', access: 'read-only' },
+      ledger: { kind: 'platform' },
+      audit: { kind: 'platform' },
+    },
+  } as unknown as TenantOwnershipSnapshot;
+
+  test('the SQL `backstop new` writes satisfies the catalog check on a text and a varchar owner column, and status agrees', async (t) => {
+    if ((await version()) < 150000) return t.skip('the backstop needs PostgreSQL 15 or later');
+    const admin = await as();
+    for (const statement of [
+      'DROP SCHEMA IF EXISTS bsx CASCADE',
+      'DROP SCHEMA IF EXISTS bsp CASCADE',
+      'DROP ROLE IF EXISTS bsx_group',
+      'CREATE SCHEMA bsx',
+      /* A platform table in a schema of its own: the plan grants nothing there, so status must still read it. */
+      'CREATE SCHEMA bsp',
+      'CREATE TABLE bsp.audit (id text PRIMARY KEY, body text)',
+      'CREATE TABLE bsx.note (id text PRIMARY KEY, owner_key text NOT NULL, body text)',
+      'CREATE TABLE bsx.memo (id serial PRIMARY KEY, tenant_id varchar(40) NOT NULL, body text)',
+      'CREATE TABLE bsx.lookup (id text PRIMARY KEY, label text)',
+      'CREATE TABLE bsx.ledger (id text PRIMARY KEY, tenant_id text)',
+    ])
+      await admin.query(statement);
+    const plan = backstopPlan(FENCED, ROLE.planned, { storeTables: [], sequences: [{ id: 'bsx.memo_id_seq', of: 'bsx.memo' }] });
+    const sql = backstopSql(plan);
+    const judged = () => attestPostgresTenantRelations(admin, FENCED, { rowSecurity: { role: ROLE.planned } });
+    assert.ok(
+      (await backstopDrift(plan, admin)).some((line) => /does not exist/.test(line)),
+      'before it is applied, the role is missing',
+    );
+    await admin.query(sql);
+    await judged();
+    assert.deepEqual(await backstopDrift(plan, admin), []);
+    await admin.query(sql);
+    await judged();
+    assert.deepEqual(await backstopDrift(plan, admin), [], 'run again, it says the same');
+
+    /* Each tamper is named by status; the catalog check refuses the ones that change the policy's shape (it reads no
+       privilege); and the SQL puts back what it made. */
+    const tamper: Array<{ name: string; make: string; unmake?: string; says: RegExp; refused: boolean }> = [
+      {
+        name: 'a second policy',
+        make: 'CREATE POLICY sneaky ON bsx.note USING (true)',
+        unmake: 'DROP POLICY sneaky ON bsx.note',
+        says: /extra policy "sneaky"/,
+        refused: true,
+      },
+      {
+        name: 'USING (true)',
+        make: 'ALTER POLICY mistri_tenant ON bsx.note USING (true)',
+        says: /policy mistri_tenant on bsx\.note changed: USING true/,
+        refused: true,
+      },
+      {
+        name: 'a widened WITH CHECK',
+        make: 'ALTER POLICY mistri_tenant ON bsx.memo WITH CHECK (true)',
+        says: /on bsx\.memo changed: WITH CHECK true/,
+        refused: true,
+      },
+      {
+        name: 'the policy for PUBLIC',
+        make: 'ALTER POLICY mistri_tenant ON bsx.memo TO PUBLIC',
+        says: /on bsx\.memo changed: to PUBLIC/,
+        refused: true,
+      },
+      {
+        name: 'FORCE',
+        make: 'ALTER TABLE bsx.note FORCE ROW LEVEL SECURITY',
+        unmake: 'ALTER TABLE bsx.note NO FORCE ROW LEVEL SECURITY',
+        says: /bsx\.note has FORCE ROW LEVEL SECURITY on/,
+        refused: true,
+      },
+      {
+        name: 'row security off',
+        make: 'ALTER TABLE bsx.memo DISABLE ROW LEVEL SECURITY',
+        says: /bsx\.memo has row security off/,
+        refused: true,
+      },
+      {
+        name: 'a dropped policy',
+        make: 'DROP POLICY mistri_tenant ON bsx.note',
+        says: /bsx\.note lacks the policy mistri_tenant/,
+        refused: true,
+      },
+      {
+        name: 'row security on a global table',
+        make: 'ALTER TABLE bsx.lookup ENABLE ROW LEVEL SECURITY',
+        unmake: 'ALTER TABLE bsx.lookup DISABLE ROW LEVEL SECURITY',
+        says: /bsx\.lookup has row security on/,
+        refused: true,
+      },
+      {
+        name: 'a dropped grant',
+        make: `REVOKE DELETE ON bsx.memo FROM ${ROLE.planned}`,
+        says: /lacks DELETE on bsx\.memo/,
+        refused: false,
+      },
+      {
+        name: 'a dropped schema grant',
+        make: `REVOKE USAGE ON SCHEMA bsx FROM ${ROLE.planned}`,
+        says: /lacks USAGE on schema bsx/,
+        refused: false,
+      },
+      {
+        name: 'a dropped sequence grant',
+        make: `REVOKE USAGE ON SEQUENCE bsx.memo_id_seq FROM ${ROLE.planned}`,
+        says: /lacks USAGE, SELECT on sequence bsx\.memo_id_seq/,
+        refused: false,
+      },
+      {
+        name: 'a write grant on a read-only table',
+        make: `REVOKE SELECT ON bsx.lookup FROM ${ROLE.planned}`,
+        says: /lacks SELECT on bsx\.lookup/,
+        refused: false,
+      },
+      {
+        name: 'a grant on a platform table',
+        make: `GRANT SELECT ON bsx.ledger TO ${ROLE.planned}`,
+        unmake: `REVOKE SELECT ON bsx.ledger FROM ${ROLE.planned}`,
+        says: /bsx\.ledger grants \S+ SELECT, which the plan does not/,
+        refused: false,
+      },
+      {
+        name: 'a platform table readable by PUBLIC',
+        make: 'GRANT SELECT ON bsx.ledger TO PUBLIC',
+        unmake: 'REVOKE SELECT ON bsx.ledger FROM PUBLIC',
+        says: /bsx\.ledger grants PUBLIC SELECT, which the plan does not/,
+        refused: false,
+      },
+      {
+        name: 'a write grant on the read-only table',
+        make: `GRANT INSERT ON bsx.lookup TO ${ROLE.planned}`,
+        unmake: `REVOKE INSERT ON bsx.lookup FROM ${ROLE.planned}`,
+        says: /bsx\.lookup grants \S+ INSERT, which the plan does not/,
+        refused: false,
+      },
+      {
+        name: 'a grant option on a writable table',
+        make: `GRANT SELECT ON bsx.note TO ${ROLE.planned} WITH GRANT OPTION`,
+        unmake: `REVOKE GRANT OPTION FOR SELECT ON bsx.note FROM ${ROLE.planned}`,
+        says: /bsx\.note grants \S+ SELECT WITH GRANT OPTION, which the plan does not/,
+        refused: false,
+      },
+      {
+        name: 'TRUNCATE on a tenant table',
+        make: `GRANT TRUNCATE ON bsx.memo TO ${ROLE.planned}`,
+        unmake: `REVOKE TRUNCATE ON bsx.memo FROM ${ROLE.planned}`,
+        says: /bsx\.memo grants \S+ TRUNCATE, which the plan does not/,
+        refused: false,
+      },
+      {
+        name: 'CREATE on the schema',
+        make: `GRANT CREATE ON SCHEMA bsx TO ${ROLE.planned}`,
+        unmake: `REVOKE CREATE ON SCHEMA bsx FROM ${ROLE.planned}`,
+        says: /schema bsx grants \S+ CREATE, which the plan does not/,
+        refused: false,
+      },
+      {
+        name: 'a column grant on the read-only table',
+        make: `GRANT UPDATE (label) ON bsx.lookup TO ${ROLE.planned}`,
+        unmake: `REVOKE UPDATE (label) ON bsx.lookup FROM ${ROLE.planned}`,
+        says: /bsx\.lookup column label grants \S+ UPDATE, which the plan does not/,
+        refused: false,
+      },
+      {
+        name: 'a write held through a group role',
+        make: `CREATE ROLE bsx_group NOLOGIN; GRANT INSERT ON bsx.lookup TO bsx_group; GRANT bsx_group TO ${ROLE.planned}`,
+        unmake: `REVOKE bsx_group FROM ${ROLE.planned}; DROP OWNED BY bsx_group; DROP ROLE bsx_group`,
+        says: /bsx\.lookup grants \S+ through "bsx_group" INSERT, which the plan does not/,
+        refused: false,
+      },
+      {
+        name: 'a platform table in a schema the plan grants nothing on',
+        make: `GRANT USAGE ON SCHEMA bsp TO ${ROLE.planned}; GRANT SELECT ON bsp.audit TO ${ROLE.planned}`,
+        unmake: `REVOKE SELECT ON bsp.audit FROM ${ROLE.planned}; REVOKE USAGE ON SCHEMA bsp FROM ${ROLE.planned}`,
+        says: /bsp\.audit grants \S+ SELECT, which the plan does not/,
+        refused: false,
+      },
+      {
+        name: 'UPDATE on a planned sequence',
+        make: `GRANT UPDATE ON SEQUENCE bsx.memo_id_seq TO ${ROLE.planned}`,
+        unmake: `REVOKE UPDATE ON SEQUENCE bsx.memo_id_seq FROM ${ROLE.planned}`,
+        says: /bsx\.memo_id_seq grants \S+ UPDATE, which the plan does not/,
+        refused: false,
+      },
+      {
+        name: 'a planned sequence usable by PUBLIC',
+        make: 'GRANT USAGE ON SEQUENCE bsx.memo_id_seq TO PUBLIC',
+        unmake: 'REVOKE USAGE ON SEQUENCE bsx.memo_id_seq FROM PUBLIC',
+        says: /bsx\.memo_id_seq grants PUBLIC USAGE, which the plan does not/,
+        refused: false,
+      },
+    ];
+    for (const each of tamper) {
+      await admin.query(each.make);
+      const found = await backstopDrift(plan, admin);
+      assert.ok(
+        found.some((line) => each.says.test(line)),
+        `${each.name}: ${JSON.stringify(found)}`,
+      );
+      if (each.refused) await assert.rejects(judged(), () => true, `${each.name}: the catalog check refuses what status names`);
+      else await judged();
+      if (each.unmake) await admin.query(each.unmake);
+      await admin.query(sql);
+      assert.deepEqual(await backstopDrift(plan, admin), [], `${each.name}: the SQL puts back what it made`);
+      await judged();
+    }
+    // Its tables would make a later App's resource names ambiguous.
+    await admin.query('DROP SCHEMA bsx CASCADE');
+    await admin.query('DROP SCHEMA bsp CASCADE');
+  });
+
+  test('with the application fence removed, the database holds: no foreign row, no foreign write, nothing deleted', async () => {
+    const runtime = new PostgresAdapter(urlOf(ROLE.runtime), 'backstop fence-off', ['public'], undefined, undefined, {
+      rowSecurity: { role: ROLE.runtime },
+    });
+    const owner = new PostgresAdapter(urlOf(ROLE.owner), 'backstop fence-off owner', ['public'], undefined, undefined, {
+      rowSecurity: { role: ROLE.runtime, bypass: true },
+    });
+    /* The app fence is the engine's row scope, which here says `true` for every table: no tenant condition at all. */
+    const unfenced: RowScope = { [ITEM]: true };
+    const wholeOf = async (on: PostgresAdapter) =>
+      on.readSnapshot(async (snapshot) => (await snapshot.client.query(`SELECT id, tenant_id, title FROM ${ITEM} ORDER BY id`)).rows);
+    const reads = (tenant: string | null) =>
+      runtime.readSnapshot(
+        async (snapshot) => {
+          const schema = await snapshot.describe();
+          const scoped = createScopedReads(schema, unfenced, POSTGRES_STYLE, async (statement) => {
+            const result = await snapshot.client.query(statement.text, statement.params);
+            return { columns: result.fields.map((field) => field.name), rows: result.rows, ms: 0, sql: statement };
+          });
+          const south = { groups: [[{ column: 'tenant_id', op: '=' as const, value: 'south' }]] };
+          return {
+            ids: (
+              await scoped.query({
+                table: ITEM,
+                columns: ['id', 'tenant_id'],
+                limit: 100,
+                offset: 0,
+                orderBy: [{ column: 'id', direction: 'asc' }],
+              })
+            ).rows,
+            all: await scoped.count(ITEM),
+            foreign: await scoped.count(ITEM, south),
+            raw: Number((await snapshot.client.query(`SELECT count(*) AS n FROM ${ITEM}`)).rows[0]!.n),
+          };
+        },
+        false,
+        undefined,
+        false,
+        false,
+        tenant,
+      );
+    try {
+      const before = await wholeOf(owner);
+      const north = before.filter((row) => row.tenant_id === 'north');
+      const south = before.filter((row) => row.tenant_id === 'south');
+      assert.ok(north.length && south.length, 'both tenants hold rows');
+
+      const asNorth = await reads('north');
+      assert.deepEqual(
+        asNorth.ids.map((row) => (row as { id: string }).id),
+        north.map((row) => row.id),
+        "with no tenant condition in the statement, the policy alone leaves north's rows",
+      );
+      assert.equal(asNorth.all, north.length);
+      assert.equal(asNorth.foreign, 0, "a statement that asks for south's rows by name gets none");
+      assert.equal(asNorth.raw, north.length);
+
+      /* The engine's scope says nothing of tenants; the transaction is north's. */
+      const asNorthWrite = (run: Parameters<typeof runtime.scopeTransaction>[1]) =>
+        runtime.scopeTransaction(unfenced, run, undefined, { tenant: 'north' });
+      for (const forged of [
+        (tx: Parameters<Parameters<typeof runtime.scopeTransaction>[1]>[0]) =>
+          tx.insert({ table: ITEM, values: { id: 'b-forged', tenant_id: 'south', title: 'Forged' } }),
+        (tx: Parameters<Parameters<typeof runtime.scopeTransaction>[1]>[0]) =>
+          tx.update({ table: ITEM, key: { id: north[0]!.id as string }, values: { tenant_id: 'south' } }),
+      ])
+        await assert.rejects(asNorthWrite(forged), (error: unknown) => {
+          assert.equal(sqlState(error), '42501', String(error));
+          return true;
+        });
+      /* Another tenant's row is not there to change or delete: the write finds nothing, or is refused, and changes nothing. */
+      for (const reach of [
+        (tx: Parameters<Parameters<typeof runtime.scopeTransaction>[1]>[0]) =>
+          tx.update({ table: ITEM, key: { id: south[0]!.id as string }, values: { title: 'Taken over' } }),
+        (tx: Parameters<Parameters<typeof runtime.scopeTransaction>[1]>[0]) =>
+          tx.remove({ table: ITEM, key: { id: south[0]!.id as string } }),
+      ])
+        await asNorthWrite(reach).catch(() => {});
+      assert.deepEqual(await wholeOf(owner), before, "nothing of south's was changed, added or deleted");
+    } finally {
+      await Promise.all([runtime.close(), owner.close()]);
+    }
+  });
+
+  test('with no tenant set, the runtime role sees nothing and the engine says so', async () => {
+    const runtime = new PostgresAdapter(urlOf(ROLE.runtime), 'backstop unset', ['public'], undefined, undefined, {
+      rowSecurity: { role: ROLE.runtime },
+    });
+    try {
+      const counted = (tenant: string | null | undefined) =>
+        runtime.readSnapshot(
+          async (snapshot) => Number((await snapshot.client.query(`SELECT count(*) AS n FROM ${ITEM}`)).rows[0]!.n),
+          false,
+          undefined,
+          false,
+          false,
+          tenant,
+        );
+      assert.equal(await counted(null), 0, 'deliberately none: the policy matches no row');
+      assert.ok((await counted('north')) > 0);
+      await assert.rejects(
+        counted(undefined),
+        /without a tenant under the row-security backstop/,
+        'a path that forgot its tenant fails loudly',
+      );
+      /* The role itself, outside the engine: an unset setting is no tenant. */
+      const raw = await as(ROLE.runtime);
+      assert.equal(Number((await raw.query(`SELECT count(*) AS n FROM ${ITEM}`)).rows[0]!.n), 0);
+    } finally {
+      await runtime.close();
+    }
+  });
+
+  test('`migrate backstop new` plans from the App and its policy, and `status` finds no drift once it is applied', async (t) => {
+    if ((await version()) < 150000) return t.skip('the backstop needs PostgreSQL 15 or later');
+    const admin = await as();
+    for (const statement of [
+      /* A tenant App's database holds only its own tables, and the start names any other as unowned: the earlier
+         tests' tables go, as this is the last test of the file. */
+      'DROP TABLE IF EXISTS public.item, public.mine, public.bsc_note, public.bsc_tag CASCADE',
+      'DROP SCHEMA IF EXISTS mistri CASCADE',
+      'CREATE TABLE public.bsc_note (id text PRIMARY KEY, tenant_id text NOT NULL, title text)',
+      'CREATE TABLE public.bsc_tag (id text PRIMARY KEY, owner_key varchar(40) NOT NULL, label text)',
+      `CREATE SCHEMA mistri AUTHORIZATION ${ROLE.owner}`,
+      'CREATE TABLE mistri.bsc_store (id serial PRIMARY KEY, tenant_id text, body text)',
+      /* The owner role owns every table, as it does where it migrated them: it alone reads their columns, and it
+         applies the migration. */
+      `ALTER TABLE public.bsc_note OWNER TO ${ROLE.owner}`,
+      `ALTER TABLE public.bsc_tag OWNER TO ${ROLE.owner}`,
+      `ALTER TABLE mistri.bsc_store OWNER TO ${ROLE.owner}`,
+      `ALTER SEQUENCE mistri.bsc_store_id_seq OWNER TO ${ROLE.owner}`,
+    ])
+      await admin.query(statement);
+    const directory = mkdtempSync(join(tmpdir(), 'mistri-backstop-cli-'));
+    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    const app = join(directory, 'app');
+    mkdirSync(app);
+    writeFileSync(join(app, 'package.json'), '{ "type": "module" }\n');
+    writeFileSync(
+      join(app, 'app.json'),
+      JSON.stringify({
+        id: 'bsc',
+        name: 'Backstop fixture',
+        auth: {
+          providers: ['email'],
+          signUp: 'open',
+          store: './auth.db',
+          rows: 'tenant',
+          roles: { member: { read: true, write: ['note'] } },
+        },
+        sources: { business: { connection: 'bsc-db' } },
+        resources: {
+          note: {
+            physical: 'public.bsc_note',
+            owner: 'tenant',
+            access: 'write',
+            fields: { read: ['id', 'title'], write: ['id', 'title'] },
+          },
+          tag: { physical: 'public.bsc_tag', owner: 'tenant', fields: { read: ['id', 'label'] } },
+        },
+        views: { notes: { kind: 'list', from: 'note' }, tags: { kind: 'list', from: 'tag' } },
+        home: 'notes',
+        nav: ['notes', 'tags'],
+      }),
+    );
+    const policy = join(app, 'policy.mjs');
+    writeFileSync(
+      policy,
+      `export default { kind: 'tenant', appId: 'bsc', storeId: 'bsc-store',
+  ownership: { note: { kind: 'tenant', column: 'tenant_id' }, tag: { kind: 'tenant', column: 'owner_key' } },
+  resolveMembershipRows: () => ({ note: true, tag: true }), resolveRows: () => ({ note: true, tag: true }) };`,
+    );
+    const config = join(directory, 'mistri.json');
+    writeFileSync(
+      config,
+      JSON.stringify({
+        connections: [{ name: 'bsc-db', url: urlOf(ROLE.runtime), owner: urlOf(ROLE.owner), backstop: 'rls', writable: true }],
+      }),
+    );
+    const run = async (...argv: string[]) => {
+      const out: string[] = [];
+      const error = console.error;
+      console.error = (line: string) => void out.push(String(line));
+      try {
+        const code = await runMigrate(
+          ['backstop', ...argv, '--app', app, '--config', config, '--policy', policy],
+          (line) => out.push(line),
+          undefined,
+          MIGRATE_APPS,
+        );
+        return { code, text: out.join('\n') };
+      } finally {
+        console.error = error;
+      }
+    };
+    const before = await run('status');
+    assert.equal(before.code, 2, before.text);
+    assert.match(before.text, /bsc_note lacks the policy mistri_tenant|bsc_note has row security off/);
+
+    await admin.query('ALTER TABLE public.bsc_tag ALTER COLUMN owner_key TYPE integer USING 0');
+    const mistyped = await run('new');
+    assert.notEqual(mistyped.code, 0, mistyped.text);
+    assert.match(mistyped.text, /must be text or varchar.*public\.bsc_tag\.owner_key is integer/);
+    await admin.query('ALTER TABLE public.bsc_tag ALTER COLUMN owner_key TYPE text USING owner_key::text');
+
+    /* --runtime names the role outright; it agrees here with the one the URL signs in as. */
+    const made = await run('new', '--runtime', ROLE.runtime);
+    assert.equal(made.code, 0, made.text);
+    assert.match(made.text, new RegExp(`fenced for "${ROLE.runtime}"`));
+    const file = readdirSync(join(app, 'migrations')).find((name) => name.endsWith('tenant_backstop.sql'))!;
+    assert.ok(file, made.text);
+    const sql = readFileSync(join(app, 'migrations', file), 'utf8');
+    assert.match(sql, new RegExp(`CREATE POLICY mistri_tenant ON "public"\\."bsc_tag"[^;]*"owner_key" = NULLIF`));
+    assert.match(sql, /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE [^;]*"mistri"\."bsc_store"/);
+    assert.match(sql, /GRANT USAGE, SELECT ON SEQUENCE "mistri"\."bsc_store_id_seq"/);
+    assert.doesNotMatch(sql, /PASSWORD '(?!<secret>)/);
+
+    await (await as(ROLE.owner)).query(sql);
+    const after = await run('status');
+    assert.equal(after.code, 0, after.text);
+    assert.match(after.text, /matches the plan/);
+
+    await admin.query('CREATE POLICY sneaky ON public.bsc_note USING (true)');
+    const drifted = await run('status');
+    assert.equal(drifted.code, 2);
+    assert.match(drifted.text, /extra policy "sneaky"/);
+    await admin.query('DROP POLICY sneaky ON public.bsc_note');
+    await admin.query('DROP TABLE public.bsc_note, public.bsc_tag CASCADE');
+    await admin.query('DROP SCHEMA mistri CASCADE');
   });
 });

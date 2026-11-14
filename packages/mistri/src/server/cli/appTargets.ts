@@ -6,7 +6,7 @@
  * database the way a start reads one and know nothing of Apps. With `--app`,
  * this says which connection the App binds and which schemas its sources
  * keep (the target), regenerates its types and checks it after `up`, adds the
- * commands only an App has — `migrate stores` and `migrate files` — and gives
+ * commands only an App has — `migrate stores`, `migrate files` and `migrate backstop` — and gives
  * seed the App's machines and its people. The mistri main hands these to the
  * engine commands (mistriCommands.ts); the database browser's main hands
  * none, and its migrate and seed take no `--app`.
@@ -27,6 +27,10 @@ import type { SeedLife, SeedResource } from '@mistriwork/engine/server/seed/seed
 import type { SeedHost } from '@mistriwork/engine/server/seed/cli.js';
 import { STORES_USAGE } from '../stores/storesCli.js';
 import { FILES_USAGE } from '../files/filesCli.js';
+
+/* Kept here, not in backstopCli.ts, which reads tenancy: loading this module for its usage lines must not. */
+const BACKSTOP_USAGE =
+  'mistri migrate backstop <status | new> --app <dir> --policy <file> [--runtime <role>] [--connection <name>] [--config <path>]';
 
 const shown = (path: string) => {
   const near = relative(process.cwd(), path);
@@ -181,6 +185,30 @@ export const MIGRATE_APPS: MigrateHost<MigrateAppRun> = {
             schemas: input.schemas,
             ...(input.opts.policy !== undefined ? { policy: input.opts.policy } : {}),
             dryRun: input.dryRun,
+          },
+          write,
+        );
+      },
+    },
+    backstop: {
+      says: "a tenant App's row-security backstop: what its database lacks of it, or the migration that makes it",
+      usage: BACKSTOP_USAGE,
+      needs: 'backstop needs status or new.',
+      takes: { '--runtime': true },
+      async run(input, write) {
+        const { runBackstop } = await import('./backstopCli.js');
+        return runBackstop(
+          input.sub,
+          {
+            registry: input.registry,
+            config: input.config,
+            appDir: input.appDir,
+            loaded: input.app?.loaded,
+            connection: input.connection,
+            argument: input.argument,
+            schemas: input.schemas,
+            ...(input.opts.policy !== undefined ? { policy: input.opts.policy } : {}),
+            ...(typeof input.flags['--runtime'] === 'string' ? { runtime: input.flags['--runtime'] } : {}),
           },
           write,
         );

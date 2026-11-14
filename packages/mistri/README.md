@@ -30,7 +30,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.53; the
+These App features ship in mistri 1.0.0-rc.54; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -599,6 +599,21 @@ bucket does not start without them. Served with --jobs, an App is swept daily by
 server itself (a tenant App tenant by tenant); otherwise run sweep daily
 from cron.
 Exit codes: 1 could not run, 3 some files did not move.
+
+mistri migrate backstop status | new --app <dir> --policy <file> [--runtime <role>]
+                [--connection <name>] [--config <path>]
+A tenant App's row-security backstop on PostgreSQL 15 or later
+(docs/postgresql.md), read from the App instead of written by hand: the
+runtime role, what it may touch, and the one policy, mistri_tenant, on each
+tenant table's ownership column. status says what the database lacks of it
+or holds beside it: a policy missing, changed or extra, row security off or
+forced, a grant gone or one the plan does not make (exit 2); new writes the next V file, tenant_backstop,
+idempotent SQL that migrate up applies as the owner. The role is made
+NOLOGIN: its login and password are the operator's step, never in the file.
+--runtime names the role; a connection that declares the backstop gives it
+by its url's user. mistri check judges the same, as its backstop step, for
+a connection that declares it.
+Exit codes: 1 could not run, 2 the database differs from the plan.
 
 mistri flows start <resource> [--app <dir>] --jobs <file>
                 [--where <query>] [--flow <id>] [--tenant <id> --policy <file>]

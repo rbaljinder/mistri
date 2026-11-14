@@ -44,6 +44,7 @@ export type CheckStep =
   | 'fix'
   | 'deploy'
   | 'stores'
+  | 'backstop'
   | 'check';
 export type CheckSeverity = 'error' | 'warning' | 'info';
 

@@ -660,20 +660,40 @@ nothing and is bound by the policy; `owner` connects as the **owner role**,
 which owns the tables, migrated them, and is not bound. Both keys or neither;
 either is refused on SQLite or an HTTP source (`backstopOf`,
 `packages/engine/src/server/poolConfig.ts`). The database setup, with the
-owner running the migrations of [Tenant Apps on PostgreSQL](tenant-apps.md#tenant-apps-on-postgresql):
+owner running the migrations of [Tenant Apps on PostgreSQL](tenant-apps.md#tenant-apps-on-postgresql),
+does not have to be written by hand: the App's policy says which tables are
+tenant-owned and by which column, so mistri writes it.
 
-```sql
-CREATE ROLE app_runtime LOGIN NOBYPASSRLS;           -- not a member of the owner
-GRANT CONNECT ON DATABASE business TO app_runtime;
-GRANT USAGE ON SCHEMA public, mistri TO app_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public, mistri TO app_runtime;
-GRANT USAGE ON ALL SEQUENCES IN SCHEMA public, mistri TO app_runtime;
--- every tenant-owned table, by its ownership column:
-ALTER TABLE public.lead ENABLE ROW LEVEL SECURITY;  -- not FORCE
-CREATE POLICY mistri_tenant ON public.lead TO app_runtime
-  USING (tenant = NULLIF(current_setting('mistri.tenant', true), ''))
-  WITH CHECK (tenant = NULLIF(current_setting('mistri.tenant', true), ''));
+```sh
+mistri migrate backstop new    --app <dir> --policy <file> --runtime app_runtime
+mistri migrate up              # as the owner role
+mistri migrate backstop status --app <dir> --policy <file>
 ```
+
+`new` writes the next `V…__tenant_backstop.sql`: the runtime role (made
+`NOLOGIN NOBYPASSRLS` only if it does not exist), `USAGE` on each schema, read
+and write grants on each tenant table, `SELECT` alone on a read-only global
+table, nothing on a platform table, `USAGE, SELECT` on the sequences of the
+tables it may write (a sequence no table owns, a `DEFAULT nextval(...)` without
+`OWNED BY`, is not granted: grant it by hand), and for each tenant table `ENABLE ROW LEVEL SECURITY`
+(never `FORCE`) and the `mistri_tenant` policy. It is idempotent, so a table
+added later is a second run. Letting the role sign in is yours, once, and is
+never written to a file: `ALTER ROLE app_runtime LOGIN PASSWORD '<secret>'`,
+and `GRANT CONNECT ON DATABASE …`. `--runtime` may be left out on a connection
+that declares the backstop: the role is the user in `url`.
+
+`status` reads the database as the owner and names each difference from that
+plan (a missing or widened policy, row security off or forced, a missing
+grant or one the plan does not make, a policy on a table that has none to
+fence), exiting 2. A grant is read as the role holds it: through `PUBLIC`,
+through a role it is a member of, on a column, or on a sequence. `new` writes
+grants and never revokes, so what the plan does not make is revoked by hand.
+`mistri check --policy <file>` runs the same question as its `backstop` step
+on a connection that declares the backstop, and fails on drift
+(`backstop-drift`); under `--pending` it is not judged, since the copy's roles
+and grants are the database's. The
+`mistri` schema's own tables are granted to the runtime role but not fenced:
+a tenant-keyed store row stays fenced by the App alone.
 
 - **The pinned policy.** Each tenant-owned table has row security enabled,
   not forced, and exactly one policy: `mistri_tenant`, permissive, for every
@@ -725,8 +745,11 @@ role's empty view of every tenant table. Point it at the owner's URL, or remove
 `"backstop"`.
 
 Verification: `test/tenant-backstop.test.ts` (configuration, the refusal of an
-unsaid tenant, routing) and, live-gated, `test/postgres-tenant-backstop.test.ts`
-(the role attestation, a tenant reading only its own rows, `42501` on a write
+unsaid tenant, routing), `test/tenant-backstop-plan.test.ts` (the plan, the
+SQL, the refusals) and, live-gated, `test/postgres-tenant-backstop.test.ts`
+(the generated SQL giving a green catalog check and no drift, each tampering
+named, the app fence removed with the database still bounding a tenant, an
+unset tenant seeing nothing, the role attestation, a tenant reading only its own rows, `42501` on a write
 carrying another tenant's value, and search indexing and the owner reader
 crossing tenants); `test/tenant-backstop-search.test.ts` holds the two refusals.
 

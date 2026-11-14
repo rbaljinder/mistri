@@ -1063,6 +1063,8 @@ What differs from SQLite:
   binds to one tenant per transaction, and only what crosses tenants by design
   runs as the tables' owner
   ([PostgreSQL guide](postgresql.md#row-security-backstop)).
+  `mistri migrate backstop new` writes the roles, grants and policies from the
+  App's policy, and `status` and `mistri check` name any drift.
 
 ### Authentication on PostgreSQL
 

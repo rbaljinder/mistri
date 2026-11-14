@@ -15,6 +15,10 @@
  * dirty working tree, because restoring is `git checkout --` and that would
  * take uncommitted work with it.
  *
+ * An entry may name its own `fixtures: { red, green }`: the files that must go red under the defect, and the files
+ * that must stay green (a defence that does not lean on the code the defect removed). Without a live server
+ * (TABLEWALK_TEST_PG) a green half prints "unproven" rather than passing, because the live suite would skip.
+ *
  * What this does not claim: it is not the seven reverts. It is the subset
  * whose mechanism I could state exactly, each one re-introduced at the line
  * the fix lives on. Where a defect's mechanism is not known well enough to
@@ -116,6 +120,16 @@ const MUTATIONS = [
       replace: "import { ANYONE, saidAt } from '@mistriwork/engine/shared/query.js';",
     },
   },
+  {
+    id: 'the-app-fence-removed-under-the-backstop',
+    defect:
+      "A tenant read scope that no longer carries the tenant condition: the application's fence is gone. The tenant HTTP fixture goes red, and the row-security backstop, which does not lean on it, still holds on a real server.",
+    file: 'packages/mistri/src/server/tenant/tenantReadScope.ts',
+    find: "      const tenant: Condition[] = rule.kind === 'tenant' ? [{ column: rule.column, op: '=', value: tenantId }] : [];",
+    // The scope composes with no tenant predicate at all, for every table.
+    replace: '      const tenant: Condition[] = [];',
+    fixtures: { red: ['test/tenant-http.test.ts'], green: ['test/postgres-tenant-backstop.test.ts'] },
+  },
 ];
 
 const git = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' });
@@ -124,8 +138,8 @@ const git = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' })
 const SOURCES = ':(glob)packages/*/src/**';
 const clean = () => git(['status', '--porcelain', '--', SOURCES]).trim() === '';
 
-function runFixture() {
-  const done = spawnSync('npx', ['tsx', '--test', FIXTURE], { cwd: ROOT, encoding: 'utf8', timeout: 600_000 });
+function runFixture(files = [FIXTURE]) {
+  const done = spawnSync('npx', ['tsx', '--test', ...files], { cwd: ROOT, encoding: 'utf8', timeout: 600_000 });
   return { code: done.status, output: `${done.stdout}${done.stderr}` };
 }
 
@@ -141,7 +155,22 @@ function main() {
     process.exitCode = 1;
     return;
   }
-  console.log(`Green to start with: ${FIXTURE}\n`);
+  /* A mutation's own files must be green before it runs, or a red under it proves nothing: each distinct set once. The
+     green halves only where a live server can run them; without one they print "unproven" below anyway. */
+  const sets = new Map();
+  for (const { fixtures } of MUTATIONS) {
+    if (fixtures?.red) sets.set(fixtures.red.join(' '), fixtures.red);
+    if (fixtures?.green && process.env.TABLEWALK_TEST_PG) sets.set(fixtures.green.join(' '), fixtures.green);
+  }
+  sets.delete(FIXTURE);
+  for (const [name, files] of sets) {
+    if (runFixture(files).code !== 0) {
+      console.error(`${name} is already failing; a defect turning it red would prove nothing.`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+  console.log(`Green to start with: ${[FIXTURE, ...sets.keys()].join(', ')}\n`);
 
   const results = [];
   for (const mutation of MUTATIONS) {
@@ -153,11 +182,20 @@ function main() {
         if (!text.includes(edit.find)) throw new Error(`the line this defect lived on is gone: ${edit.file}`);
         writeFileSync(path, text.replace(edit.find, edit.replace));
       }
-      const { code, output } = runFixture();
+      const { code, output } = runFixture(mutation.fixtures?.red);
       const red = code !== 0;
+      /* The defence that must hold: only a live server can say so (its suite skips without one). */
+      const green = !mutation.fixtures?.green
+        ? undefined
+        : !process.env.TABLEWALK_TEST_PG
+          ? 'unproven'
+          : runFixture(mutation.fixtures.green).code === 0
+            ? 'held'
+            : 'broke';
       results.push({
         id: mutation.id,
-        red,
+        red: red && green !== 'broke',
+        green,
         defect: mutation.defect,
         caught: red ? (output.match(/✖ (combination: [^(]+)/g) ?? []).map((line) => line.slice(2).trim()) : [],
       });
@@ -171,6 +209,8 @@ function main() {
   for (const result of results) {
     console.log(`${result.red ? 'CAUGHT ' : 'MISSED '} ${result.id}`);
     console.log(`         ${result.defect}`);
+    if (result.green)
+      console.log(`         the backstop: ${result.green === 'unproven' ? 'unproven (no TABLEWALK_TEST_PG)' : result.green}`);
     if (result.error) console.log(`         ${result.error}`);
     for (const test of result.caught ?? []) console.log(`         red: ${test}`);
   }
