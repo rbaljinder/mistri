@@ -1,8 +1,8 @@
 import { type ChildProcess } from 'node:child_process';
+import { withFreePort } from './support/freePort';
 import { spawn } from './support/spawned';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -51,39 +51,37 @@ export default defineApp({
 });
 `,
       );
-      const reservation = createServer();
-      await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-      const port = (reservation.address() as { port: number }).port;
-      await new Promise<void>((done) => reservation.close(() => done()));
-      origin = `http://127.0.0.1:${port}`;
-      const started = spawn(
-        process.execPath,
-        ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port), '--dev'],
-        {
-          cwd: resolve('.'),
-          env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
-          stdio: ['ignore', 'pipe', 'pipe'],
-        },
-      );
-      child = started;
-      let log = '';
-      started.stdout!.on('data', (chunk) => {
-        log += String(chunk);
-      });
-      started.stderr!.on('data', (chunk) => {
-        log += String(chunk);
-      });
-      await new Promise<void>((done, fail) => {
-        const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 30_000);
-        started.stdout!.on('data', () => {
-          if (log.includes('Listening on ')) {
-            clearTimeout(timer);
-            done();
-          }
+      await withFreePort(async (port) => {
+        origin = `http://127.0.0.1:${port}`;
+        const started = spawn(
+          process.execPath,
+          ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port), '--dev'],
+          {
+            cwd: resolve('.'),
+            env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
+            stdio: ['ignore', 'pipe', 'pipe'],
+          },
+        );
+        child = started;
+        let log = '';
+        started.stdout!.on('data', (chunk) => {
+          log += String(chunk);
         });
-        started.once('exit', () => {
-          clearTimeout(timer);
-          fail(new Error(`The fixture exited: ${log}`));
+        started.stderr!.on('data', (chunk) => {
+          log += String(chunk);
+        });
+        await new Promise<void>((done, fail) => {
+          const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 30_000);
+          started.stdout!.on('data', () => {
+            if (log.includes('Listening on ')) {
+              clearTimeout(timer);
+              done();
+            }
+          });
+          started.once('exit', () => {
+            clearTimeout(timer);
+            fail(new Error(`The fixture exited: ${log}`));
+          });
         });
       });
     },

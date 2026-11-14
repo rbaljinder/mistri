@@ -29,9 +29,15 @@ import {
   CommandTransactionFailure,
 } from '../packages/mistri/src/adapters/commands/commandJournal.js';
 import { postgresAuditRows } from './support/commandTargets.js';
+import { TenantContextError } from '../packages/engine/src/server/evidence.js';
+import { attestPostgresTenantRelations, type TenantRelationOptions } from '../packages/mistri/src/server/tenant/tenantPostgresCatalog.js';
+import type { TenantOwnershipSnapshot } from '../packages/mistri/src/server/tenant/tenantOwnership.js';
 import { migratePostgresCommandJournal } from '../packages/mistri/src/adapters/commands/postgresCommandJournal.js';
 import { PostgresAdapter } from '../packages/engine/src/adapters/postgres.js';
 import type { PgConnectionManager, PgQuery } from '../packages/engine/src/adapters/postgresPool.js';
+import { postgresRuntimeSchemaProblems } from '../packages/engine/src/adapters/postgresMaintenance.js';
+import type { PostgresReadSnapshot } from '../packages/engine/src/adapters/postgresReadSnapshot.js';
+import { tenantSession } from '../packages/engine/src/adapters/postgresTransactionOpening.js';
 import { AppAccessDenied } from '../packages/mistri/src/server/app/appAccess.js';
 import { createAppResources } from '../packages/mistri/src/server/app/appResources.js';
 import type { RuntimeResources } from '../packages/mistri/src/server/app/appRuntimeResources.js';
@@ -402,6 +408,325 @@ describe('row-scoped transactions on PostgreSQL, against a real server', { skip:
       });
     });
   }
+
+  /* ---------- the tenant row-security backstop ---------- */
+
+  /* Under `rowSecurity` a row policy is taken as given only in mistri's one shape: named mistri_tenant, FOR ALL,
+     permissive, to the runtime role alone, USING and WITH CHECK both the tenant column against the transaction's
+     setting. The test role bypasses row security, so what is proven here is the catalog's judgement and the setting
+     each transaction sends, not the server's filtering of rows. */
+  const MATCH = `tenant = NULLIF(current_setting('mistri.tenant', true), '')`;
+  const TENANT_POLICY = `CREATE POLICY mistri_tenant ON public.scoped_item TO CURRENT_USER USING (${MATCH}) WITH CHECK (${MATCH})`;
+  const SECURED = `ALTER TABLE public.scoped_item ENABLE ROW LEVEL SECURITY`;
+  const NOT_OURS = /a row policy that is not mistri's tenant policy/;
+  const runtimeRole = async () => String((await control.query('SELECT current_user AS role')).rows[0].role);
+
+  async function withBackstop<T>(run: (adapter: PostgresAdapter, role: string) => Promise<T>, force = false): Promise<T> {
+    await reset();
+    const role = await runtimeRole();
+    const adapter = new PostgresAdapter(LIVE!, 'scoped proof', ['public'], undefined, undefined, { rowSecurity: { role, force } });
+    try {
+      return await run(adapter, role);
+    } finally {
+      await adapter.close();
+    }
+  }
+  const setting = async (client: PgQuery) =>
+    (await client.query(`SELECT current_setting('mistri.tenant', true) AS tenant`)).rows[0].tenant as string | null;
+  const rename = (tx: WriteTransaction) => tx.update({ table: ITEM, key: { id: 1 }, values: { name: 'Guarded' } });
+
+  test("mistri's tenant policy, and only it, lets a scoped write through under row security", async () => {
+    await withBackstop(async (adapter) => {
+      await control.query(SECURED);
+      await control.query(TENANT_POLICY);
+      let seen: unknown[] = [];
+      await adapter.scopeVerifiedTransaction(
+        rowsA(),
+        async (client, catalog) => {
+          seen = [catalog.writable.has(ITEM), catalog.tenantPolicies?.get(ITEM), catalog.tenantPolicies?.has(OWNER), await setting(client)];
+        },
+        rename,
+        { tenant: 'a' },
+      );
+      assert.deepEqual(seen, [true, 'tenant', false, 'a']);
+      assert.equal((await item(1)).name, 'Guarded');
+    });
+    // Without the option the same policy is row-level security, refused as it always was.
+    await withAdapter(async (adapter) => {
+      await control.query(SECURED);
+      await control.query(TENANT_POLICY);
+      assert.match(
+        String(
+          refusalCause(
+            await adapter.scopeTransaction(rowsA(), rename).then(
+              () => assert.fail('not refused'),
+              (error: unknown) => error,
+            ),
+          ),
+        ),
+        /row-level security/,
+      );
+      assert.equal((await item(1)).name, 'Alpha');
+    });
+  });
+
+  for (const [name, ddl] of [
+    ['a second policy', `${TENANT_POLICY}; CREATE POLICY scoped_more ON public.scoped_item TO CURRENT_USER USING (true)`],
+    ['a restrictive policy', TENANT_POLICY.replace('TO CURRENT_USER', 'AS RESTRICTIVE TO CURRENT_USER')],
+    ['USING (true)', `CREATE POLICY mistri_tenant ON public.scoped_item TO CURRENT_USER USING (true) WITH CHECK (${MATCH})`],
+    ['a changed qual', TENANT_POLICY.replace(`USING (${MATCH})`, `USING (tenant = current_setting('mistri.tenant', true))`)],
+    ['a widened check', TENANT_POLICY.replace(`WITH CHECK (${MATCH})`, `WITH CHECK (${MATCH} OR tenant IS NULL)`)],
+    ['no WITH CHECK', TENANT_POLICY.replace(` WITH CHECK (${MATCH})`, '')],
+    ['the wrong role', TENANT_POLICY.replace(' TO CURRENT_USER', '')],
+    ['one command only', TENANT_POLICY.replace(' TO CURRENT_USER', ' FOR UPDATE TO CURRENT_USER')],
+    ['another name', TENANT_POLICY.replace('mistri_tenant', 'tenant_rows')],
+    ['FORCE when not allowed', `${TENANT_POLICY}; ALTER TABLE public.scoped_item FORCE ROW LEVEL SECURITY`],
+  ] as const) {
+    test(`under row security, ${name} refuses every scoped write as not mistri's tenant policy`, async () => {
+      await withBackstop(async (adapter) => {
+        await control.query(SECURED);
+        await control.query(ddl);
+        const before = await items();
+        for (const write of [
+          rename,
+          (tx: WriteTransaction) => tx.insert({ table: ITEM, values: { id: 7 } }),
+          (tx: WriteTransaction) => tx.remove({ table: ITEM, key: { id: 1 } }),
+        ] as ((tx: WriteTransaction) => Promise<unknown>)[]) {
+          const error = await adapter.scopeTransaction(rowsA(), write, undefined, { tenant: 'a' }).then(
+            () => assert.fail('the write was not refused'),
+            (caught: unknown) => caught,
+          );
+          assert.ok(error instanceof Refusal, name);
+          assert.match(String(refusalCause(error)), NOT_OURS, name);
+        }
+        assert.deepEqual(await items(), before);
+      });
+    });
+  }
+
+  test("under row security, mistri's policy on a table without row security enabled is refused too", async () => {
+    await withBackstop(async (adapter) => {
+      await control.query(TENANT_POLICY);
+      assert.match(
+        String(
+          refusalCause(
+            await adapter.scopeTransaction(rowsA(), rename, undefined, { tenant: 'a' }).then(
+              () => assert.fail('not refused'),
+              (e: unknown) => e,
+            ),
+          ),
+        ),
+        NOT_OURS,
+      );
+    });
+  });
+
+  test('FORCE row security is accepted only where the backstop allows it', async () => {
+    await withBackstop(async (adapter) => {
+      await control.query(SECURED);
+      await control.query(`${TENANT_POLICY}; ALTER TABLE public.scoped_item FORCE ROW LEVEL SECURITY`);
+      await adapter.scopeTransaction(rowsA(), rename, undefined, { tenant: 'a' });
+      assert.equal((await item(1)).name, 'Guarded');
+    }, true);
+  });
+
+  test("a transaction's tenant is set, quoted, in the message that begins it, and one that cannot be set refuses", async () => {
+    assert.equal(tenantSession('a'), `; SET LOCAL mistri.tenant = 'a'`);
+    assert.equal(tenantSession("o'brien"), `; SET LOCAL mistri.tenant = 'o''brien'`);
+    for (const bad of ['', 'a\0b', 'a\\b']) assert.throws(() => tenantSession(bad), Refusal, JSON.stringify(bad));
+    await withBackstop(async (adapter) => {
+      // The write path: seen by the verifier on the writer, before and after the callback.
+      const tenants: (string | null)[] = [];
+      await adapter.scopeVerifiedTransaction(
+        rowsA(),
+        async (client) => void tenants.push(await setting(client)),
+        async () => {},
+        {
+          tenant: "o'brien; RESET mistri.tenant",
+        },
+      );
+      assert.deepEqual(tenants, ["o'brien; RESET mistri.tenant", "o'brien; RESET mistri.tenant"]);
+      // Set LOCAL: the pooled writer carries nothing into the next transaction.
+      const after: (string | null)[] = [];
+      await adapter.scopeVerifiedTransaction(
+        rowsA(),
+        async (client) => void after.push(await setting(client)),
+        async () => {},
+      );
+      assert.ok(
+        after.every((each) => !each),
+        'no tenant is left behind',
+      );
+      for (const bad of ['', 'a\0b', 'a\\b'])
+        await assert.rejects(adapter.scopeTransaction(rowsA(), rename, undefined, { tenant: bad }), Refusal, JSON.stringify(bad));
+      assert.equal((await item(1)).name, 'Alpha');
+      // The read path, in every form a snapshot is opened.
+      const read = (snapshot: PostgresReadSnapshot) => setting(snapshot.client);
+      assert.equal(await adapter.readSnapshot(read, false, undefined, false, false, "it's"), "it's");
+      const probe = `SELECT current_setting('mistri.tenant', true) AS tenant`;
+      assert.deepEqual(
+        await adapter.readSnapshot(
+          (s) => Promise.resolve(s.prologue!.map((r) => r.rows[0].tenant)),
+          false,
+          `${probe}; SELECT 2 AS tenant`,
+          false,
+          false,
+          'b',
+        ),
+        ['b', 2],
+      );
+      assert.deepEqual(
+        await adapter.readSnapshot((s) => Promise.resolve(s.prologue!.map((r) => r.rows[0].tenant)), false, probe, false, true, 'b'),
+        ['b'],
+      );
+      assert.deepEqual(
+        await adapter.readSnapshot(async (s) => (await s.finish!(probe)).map((r) => r.rows[0].tenant), false, undefined, false, false, 'c'),
+        ['c'],
+      );
+      await assert.rejects(adapter.readSnapshot(read, false, undefined, false, false, 'a\0'), Refusal);
+      // Autocommit reads have no transaction to set a tenant in.
+      await assert.rejects(adapter.scopeReads(rowsA()), Refusal);
+    });
+    // Without the option a tenant passed sends nothing.
+    await withAdapter(async (adapter) => {
+      assert.ok(!(await adapter.readSnapshot((s) => setting(s.client), false, undefined, false, false, 'a')));
+      const seen: (string | null)[] = [];
+      await adapter.scopeVerifiedTransaction(
+        rowsA(),
+        async (client) => void seen.push(await setting(client)),
+        async () => {},
+        { tenant: 'a' },
+      );
+      assert.ok(seen.every((each) => !each));
+    });
+  });
+
+  test("the runtime role alone may use a store's schema and read and write its tables, never more", async () => {
+    await reset();
+    const [runtime, other] = ['scoped_runtime_proof', 'scoped_other_proof'];
+    const drop = async () => {
+      await control.query(`DROP SCHEMA IF EXISTS mistri CASCADE`);
+      for (const role of [runtime, other]) await control.query(`DROP ROLE IF EXISTS ${role}`);
+    };
+    await drop();
+    try {
+      for (const role of [runtime, other]) await control.query(`CREATE ROLE ${role} NOLOGIN`);
+      await control.query(`CREATE SCHEMA mistri; REVOKE ALL ON SCHEMA mistri FROM PUBLIC;
+        CREATE TABLE mistri.proof_store (id serial PRIMARY KEY, name text)`);
+      const problems = (options: { runtime?: string } = {}) => postgresRuntimeSchemaProblems(control, 'proof_', options);
+      assert.deepEqual(await problems(), []);
+      await control.query(`GRANT USAGE ON SCHEMA mistri TO ${runtime};
+        GRANT SELECT, INSERT, UPDATE, DELETE ON mistri.proof_store TO ${runtime};
+        GRANT USAGE ON SEQUENCE mistri.proof_store_id_seq TO ${runtime};
+        GRANT UPDATE (name) ON mistri.proof_store TO ${runtime}`);
+      assert.deepEqual(await problems(), ['another role may use it', 'another role holds privileges on its tables']);
+      assert.deepEqual(await problems({ runtime }), []);
+      assert.deepEqual(await problems({ runtime: other }), ['another role may use it', 'another role holds privileges on its tables']);
+      assert.deepEqual(await problems({ runtime: 'no_such_role_proof' }), [
+        'another role may use it',
+        'another role holds privileges on its tables',
+      ]);
+      for (const [name, grant, revoke, refused] of [
+        ['PUBLIC usage', 'GRANT USAGE ON SCHEMA mistri TO PUBLIC', 'REVOKE USAGE ON SCHEMA mistri FROM PUBLIC', 'another role may use it'],
+        [
+          'PUBLIC rows',
+          'GRANT SELECT ON mistri.proof_store TO PUBLIC',
+          'REVOKE SELECT ON mistri.proof_store FROM PUBLIC',
+          'another role holds privileges on its tables',
+        ],
+        [
+          'another role',
+          `GRANT SELECT ON mistri.proof_store TO ${other}`,
+          `REVOKE SELECT ON mistri.proof_store FROM ${other}`,
+          'another role holds privileges on its tables',
+        ],
+        [
+          'CREATE',
+          `GRANT CREATE ON SCHEMA mistri TO ${runtime}`,
+          `REVOKE CREATE ON SCHEMA mistri FROM ${runtime}`,
+          'another role may create objects in it',
+        ],
+        [
+          'TRUNCATE',
+          `GRANT TRUNCATE ON mistri.proof_store TO ${runtime}`,
+          `REVOKE TRUNCATE ON mistri.proof_store FROM ${runtime}`,
+          'another role holds privileges on its tables',
+        ],
+        [
+          'GRANT OPTION',
+          `GRANT SELECT ON mistri.proof_store TO ${runtime} WITH GRANT OPTION`,
+          `REVOKE GRANT OPTION FOR SELECT ON mistri.proof_store FROM ${runtime}`,
+          'another role holds privileges on its tables',
+        ],
+        [
+          'a column GRANT OPTION',
+          `GRANT SELECT (name) ON mistri.proof_store TO ${runtime} WITH GRANT OPTION`,
+          `REVOKE SELECT (name) ON mistri.proof_store FROM ${runtime}`,
+          'another role holds privileges on its tables',
+        ],
+      ] as const) {
+        await control.query(grant);
+        assert.ok((await problems({ runtime })).includes(refused), name);
+        await control.query(revoke);
+        assert.deepEqual(await problems({ runtime }), [], `${name} revoked`);
+      }
+      await assert.rejects(problems({ runtime: '' }), TypeError);
+    } finally {
+      await drop();
+    }
+  });
+
+  test("a tenant source's attestation under the backstop holds the catalog to mistri's one shape", async () => {
+    await reset();
+    const role = await runtimeRole();
+    const ownership = {
+      resources: { item: ITEM, owner: OWNER },
+      ownership: { item: { kind: 'tenant', column: 'tenant' }, owner: { kind: 'global', access: 'read-only' } },
+    } as unknown as TenantOwnershipSnapshot;
+    const attest = (options: TenantRelationOptions = { rowSecurity: { role } }, given = ownership) =>
+      attestPostgresTenantRelations(control, given, options);
+    // Each near miss is made inside a transaction the check reads, and rolled back.
+    const refuses = async (setup: string, options?: TenantRelationOptions, given?: TenantOwnershipSnapshot) => {
+      await control.query('BEGIN');
+      try {
+        await control.query(setup);
+        await assert.rejects(attest(options, given), TenantContextError, setup);
+      } finally {
+        await control.query('ROLLBACK');
+      }
+    };
+    try {
+      // Without the backstop nothing about row security is judged; with it, a tenant table without the policy refuses.
+      assert.equal(typeof (await attest({})), 'string');
+      await assert.rejects(attest(), TenantContextError);
+      await control.query(`${SECURED}; ${TENANT_POLICY}`);
+      assert.equal(typeof (await attest()), 'string');
+      await refuses(`ALTER TABLE public.scoped_item FORCE ROW LEVEL SECURITY`);
+      await control.query('BEGIN; ALTER TABLE public.scoped_item FORCE ROW LEVEL SECURITY');
+      assert.equal(typeof (await attest({ rowSecurity: { role, force: true } })), 'string');
+      await control.query('ROLLBACK');
+      await refuses(`SELECT 1`, { rowSecurity: { role: 'pg_monitor' } });
+      await refuses(`SELECT 1`, undefined, {
+        ...ownership,
+        ownership: { ...ownership.ownership, item: { kind: 'tenant', column: 'name' } },
+      } as unknown as TenantOwnershipSnapshot);
+      await refuses(`ALTER TABLE public.scoped_item DISABLE ROW LEVEL SECURITY`);
+      await refuses(`CREATE POLICY another ON public.scoped_item USING (true)`);
+      await refuses(`ALTER TABLE public.scoped_owner ENABLE ROW LEVEL SECURITY`);
+      await refuses(`CREATE POLICY mistri_tenant ON public.scoped_owner USING (true)`);
+      // A view reads with its owner's rights unless it is an invoker's view, however far it sits from the tenant table.
+      await refuses(`CREATE VIEW public.scoped_view AS SELECT * FROM public.scoped_item`);
+      await refuses(`CREATE VIEW public.scoped_view WITH (security_invoker = true) AS SELECT * FROM public.scoped_item;
+        CREATE VIEW public.scoped_over AS SELECT * FROM public.scoped_view`);
+      await refuses(`CREATE MATERIALIZED VIEW public.scoped_kept AS SELECT * FROM public.scoped_item`);
+      await refuses(`CREATE FUNCTION public.scoped_definer() RETURNS int LANGUAGE sql SECURITY DEFINER AS 'SELECT 1'`);
+      await control.query(`CREATE VIEW public.scoped_view WITH (security_invoker = true) AS SELECT * FROM public.scoped_item`);
+      assert.equal(typeof (await attest()), 'string');
+    } finally {
+      await control.query('ROLLBACK').catch(() => {});
+      await control.query('DROP VIEW IF EXISTS public.scoped_view');
+    }
+  });
 
   /* A field report: a validation-only trigger blocked every write to its table, though the write never fired it. A
      trigger now blocks only the writes that fire it, and none if its function is proven to check NEW and OLD and

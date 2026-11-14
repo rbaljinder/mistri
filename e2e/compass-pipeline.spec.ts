@@ -1,8 +1,8 @@
 import { execFileSync, type ChildProcess } from 'node:child_process';
+import { withFreePort } from './support/freePort';
 import { spawn } from './support/spawned';
 import { once } from 'node:events';
 import { mkdtempSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, test as base, type Page } from './support/harness';
@@ -20,48 +20,46 @@ const test = base.extend<object, { started: void }>({
       });
       const config = join(directory, 'crm.json');
       writeFileSync(config, JSON.stringify({ connections: [{ name: 'crm', url: db, writable: true }] }));
-      const reservation = createServer();
-      await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-      const port = (reservation.address() as { port: number }).port;
-      await new Promise<void>((done) => reservation.close(() => done()));
-      origin = `http://127.0.0.1:${port}`;
-      const started = spawn(
-        process.execPath,
-        [
-          '--import',
-          'tsx',
-          'packages/mistri/src/server/index.ts',
-          '--config',
-          config,
-          '--app',
-          'test/fixtures/apps/crm',
-          '--port',
-          String(port),
-        ],
-        {
-          env: { ...process.env, XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0', MISTRI_CLOCK: CRM_CLOCK },
-          stdio: ['ignore', 'pipe', 'pipe'],
-        },
-      );
-      child = started;
-      let log = '';
-      started.stdout!.on('data', (chunk) => {
-        log += String(chunk);
-      });
-      started.stderr!.on('data', (chunk) => {
-        log += String(chunk);
-      });
-      await new Promise<void>((done, fail) => {
-        const timer = setTimeout(() => fail(new Error(`Compass did not start: ${log}`)), 20_000);
-        started.stdout!.on('data', () => {
-          if (log.includes('Listening on ')) {
-            clearTimeout(timer);
-            done();
-          }
+      await withFreePort(async (port) => {
+        origin = `http://127.0.0.1:${port}`;
+        const started = spawn(
+          process.execPath,
+          [
+            '--import',
+            'tsx',
+            'packages/mistri/src/server/index.ts',
+            '--config',
+            config,
+            '--app',
+            'test/fixtures/apps/crm',
+            '--port',
+            String(port),
+          ],
+          {
+            env: { ...process.env, XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0', MISTRI_CLOCK: CRM_CLOCK },
+            stdio: ['ignore', 'pipe', 'pipe'],
+          },
+        );
+        child = started;
+        let log = '';
+        started.stdout!.on('data', (chunk) => {
+          log += String(chunk);
         });
-        started.once('exit', () => {
-          clearTimeout(timer);
-          fail(new Error(`Compass exited: ${log}`));
+        started.stderr!.on('data', (chunk) => {
+          log += String(chunk);
+        });
+        await new Promise<void>((done, fail) => {
+          const timer = setTimeout(() => fail(new Error(`Compass did not start: ${log}`)), 20_000);
+          started.stdout!.on('data', () => {
+            if (log.includes('Listening on ')) {
+              clearTimeout(timer);
+              done();
+            }
+          });
+          started.once('exit', () => {
+            clearTimeout(timer);
+            fail(new Error(`Compass exited: ${log}`));
+          });
         });
       });
     },

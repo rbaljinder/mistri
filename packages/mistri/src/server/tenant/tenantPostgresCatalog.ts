@@ -24,12 +24,21 @@
  *   deterministic collation, except the primary key of a single opaque
  *   text, varchar or uuid identifier. Expression keys and exclusion
  *   constraints refuse: neither says which tenant it compares within.
+ * - Under the row-security backstop (TenantRelationOptions.rowSecurity), the
+ *   database's own second fence, attested: every tenant table carries
+ *   exactly mistri's tenant policy on its own ownership column, every global
+ *   and platform table none, no view reaches a tenant table but as the person
+ *   reading it, and no SECURITY DEFINER function in an App schema reads as
+ *   someone else. The engine refuses a write to any other shape of policy
+ *   (postgresScopeCatalog.ts); which table carries it, on which column, is
+ *   the ownership's to say, so it is said here.
  */
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { postgresCatalogDigestOf } from '@mistriwork/engine/adapters/postgresCatalogDigest.js';
 import { denyTenant } from '@mistriwork/engine/server/evidence.js';
 import { tenantKeyRefusal, tenantUniqueRefusal, type TenantOwnershipSnapshot } from './tenantOwnership.js';
 import { EPOCHLESS_TTL_MS } from '@mistriwork/engine/adapters/postgresSchemaEpoch.js';
+import { TENANT_POLICY, TENANT_POLICY_TAIL } from '@mistriwork/engine/adapters/scoped/postgresScopeCatalog.js';
 
 let catalogTrust = EPOCHLESS_TTL_MS;
 /** How long a tenant read source's catalog attestation stands before a snapshot reads the digest again
@@ -77,6 +86,114 @@ interface Relation {
   triggers: number;
   rules: number;
   policies: number;
+  /** Read under the backstop only: each policy as deparsed, and the server, views and functions around them. */
+  policy_detail?: RelationPolicy[];
+  version?: number;
+  views?: Array<{ id: string; kind: string; options: string[] | null }>;
+  definers?: string[];
+}
+interface RelationPolicy {
+  name: string;
+  cmd: string;
+  permissive: boolean;
+  /** Each role's name; null for PUBLIC, or for a role the catalog no longer names. */
+  roles: Array<string | null>;
+  qual: string | null;
+  check: string | null;
+  /** The column whose tenant comparison both expressions are, exactly (TENANT_POLICY_TAIL); null where they are not. */
+  column: string | null;
+}
+
+/** Under the backstop: the runtime role its policies name, and whether FORCE ROW LEVEL SECURITY may be on. */
+export interface TenantRelationOptions {
+  readonly rowSecurity?: { readonly role: string; readonly force?: boolean };
+}
+
+/* PostgreSQL 15 is the first with a view's `security_invoker`, without which a view reads its tables as its owner. */
+const BACKSTOP_VERSION = 150000;
+/* What PostgreSQL's parse_bool reads as true, as a reloption may be spelt (`security_invoker`, `=on`, `=1`). */
+const TRUE_OPTION = /^(t|tr|tru|true|y|ye|yes|on|1)$/i;
+const invoker = (options: readonly string[] | null) =>
+  (options ?? []).some((option) => option.startsWith('security_invoker=') && TRUE_OPTION.test(option.slice('security_invoker='.length)));
+
+/**
+ * The backstop's reads, appended to the description so that it costs no round trip: each relation's policies as
+ * deparsed (and which column each compares, matched as the engine matches it), the server version, every view that
+ * reaches a tenant table through other views, and the SECURITY DEFINER functions in the schemas the App maps.
+ * `$4` is the tenant tables' ids, `$5` the expression's tail.
+ */
+const BACKSTOP_COLUMNS = `,
+            COALESCE((SELECT json_agg(json_build_object('name', p.polname, 'cmd', p.polcmd, 'permissive', p.polpermissive,
+                'roles', (SELECT json_agg(CASE WHEN r.oid = 0 THEN NULL ELSE ro.rolname END ORDER BY r.ord)
+                            FROM unnest(p.polroles) WITH ORDINALITY AS r(oid, ord) LEFT JOIN pg_catalog.pg_roles ro ON ro.oid = r.oid),
+                'qual', pg_catalog.pg_get_expr(p.polqual, p.polrelid), 'check', pg_catalog.pg_get_expr(p.polwithcheck, p.polrelid),
+                'column', (SELECT a.attname FROM pg_catalog.pg_attribute a
+                   CROSS JOIN LATERAL (SELECT CASE a.atttypid
+                       WHEN 25::oid THEN '(' || pg_catalog.quote_ident(a.attname) || $5::text
+                       WHEN 1043::oid THEN '((' || pg_catalog.quote_ident(a.attname) || ')::text' || $5::text END AS said) AS e
+                  WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+                    AND pg_catalog.pg_get_expr(p.polqual, p.polrelid) = e.said AND pg_catalog.pg_get_expr(p.polwithcheck, p.polrelid) = e.said
+                  LIMIT 1))
+                ORDER BY p.polname)
+               FROM pg_catalog.pg_policy p WHERE p.polrelid = c.oid), '[]'::json) AS policy_detail,
+            (SELECT pg_catalog.current_setting('server_version_num')::int) AS version,
+            (WITH RECURSIVE tenant AS (
+                 SELECT tc.oid FROM unnest($4::text[]) AS t(id)
+                   JOIN pg_catalog.pg_namespace tn ON tn.nspname = split_part(t.id, '.', 1)
+                   JOIN pg_catalog.pg_class tc ON tc.relnamespace = tn.oid AND tc.relname = substr(t.id, length(split_part(t.id, '.', 1)) + 2)),
+               -- A view's query is its rewrite rule, which depends on every relation the query reads.
+               over(oid) AS (
+                 SELECT r.ev_class FROM pg_catalog.pg_depend d JOIN pg_catalog.pg_rewrite r ON r.oid = d.objid
+                  WHERE d.classid = 'pg_catalog.pg_rewrite'::regclass AND d.refclassid = 'pg_catalog.pg_class'::regclass
+                    AND d.refobjid IN (SELECT oid FROM tenant) AND r.ev_class <> d.refobjid
+                 UNION
+                 SELECT r.ev_class FROM over o JOIN pg_catalog.pg_depend d ON d.refobjid = o.oid
+                   JOIN pg_catalog.pg_rewrite r ON r.oid = d.objid
+                  WHERE d.classid = 'pg_catalog.pg_rewrite'::regclass AND d.refclassid = 'pg_catalog.pg_class'::regclass AND r.ev_class <> o.oid)
+             SELECT COALESCE(json_agg(json_build_object('id', vn.nspname || '.' || v.relname, 'kind', v.relkind, 'options', v.reloptions)
+                      ORDER BY vn.nspname, v.relname), '[]'::json)
+               FROM over JOIN pg_catalog.pg_class v ON v.oid = over.oid JOIN pg_catalog.pg_namespace vn ON vn.oid = v.relnamespace) AS views,
+            (SELECT COALESCE(json_agg(fn.nspname || '.' || f.proname ORDER BY fn.nspname, f.proname), '[]'::json)
+               FROM pg_catalog.pg_proc f JOIN pg_catalog.pg_namespace fn ON fn.oid = f.pronamespace
+              WHERE f.prosecdef AND fn.nspname = ANY ($2::text[])) AS definers`;
+
+/** Under the backstop, what the database must say beside the description; refuses where it says anything else. */
+function attestBackstop(
+  rows: readonly Relation[],
+  ownership: TenantOwnershipSnapshot,
+  security: { readonly role: string; readonly force?: boolean },
+): void {
+  // Nothing mapped, nothing to fence: the server-wide reads ride on a relation's row.
+  const first = rows[0];
+  if (!first) return;
+  if (typeof first.version !== 'number' || first.version < BACKSTOP_VERSION) return denyTenant();
+  if (!Array.isArray(first.definers) || first.definers.length) return denyTenant();
+  if (!Array.isArray(first.views) || first.views.some((view) => view.kind !== 'v' || !invoker(view.options))) return denyTenant();
+  const described = new Map(rows.map((row) => [row.id, row]));
+  for (const [logical, rule] of Object.entries(ownership.ownership)) {
+    const row = described.get(ownership.resources[logical]);
+    if (!row || !Array.isArray(row.policy_detail)) return denyTenant();
+    if (rule.kind !== 'tenant') {
+      if (row.rls || row.force || row.policies !== 0 || row.policy_detail.length) return denyTenant();
+      continue;
+    }
+    const [policy, ...others] = row.policy_detail;
+    if (
+      !row.rls ||
+      (row.force && security.force !== true) ||
+      row.policies !== 1 ||
+      others.length ||
+      !policy ||
+      policy.name !== TENANT_POLICY ||
+      policy.cmd !== '*' ||
+      policy.permissive !== true ||
+      !Array.isArray(policy.roles) ||
+      policy.roles.length !== 1 ||
+      policy.roles[0] !== security.role ||
+      policy.column !== rule.column
+    )
+      return denyTenant();
+  }
 }
 
 /**
@@ -84,8 +201,16 @@ interface Relation {
  * returns the description as one comparable string. Call on the source's own
  * snapshot or writer, after the relations are locked.
  */
-export async function attestPostgresTenantRelations(client: PgQuery, ownership: TenantOwnershipSnapshot): Promise<string> {
+export async function attestPostgresTenantRelations(
+  client: PgQuery,
+  ownership: TenantOwnershipSnapshot,
+  options: TenantRelationOptions = {},
+): Promise<string> {
   const ids = [...new Set(Object.values(ownership.resources))].sort(byCodeUnit);
+  const security = options.rowSecurity;
+  const tenantIds = Object.entries(ownership.ownership)
+    .filter(([, rule]) => rule.kind === 'tenant')
+    .map(([logical]) => ownership.resources[logical]);
   const rows = (
     await client.query(
       `SELECT w.id, c.relkind::text AS kind, COALESCE(c.relrowsecurity, false) AS rls, COALESCE(c.relforcerowsecurity, false) AS force,
@@ -103,11 +228,11 @@ export async function attestPostgresTenantRelations(client: PgQuery, ownership: 
                FROM pg_catalog.pg_index i WHERE i.indrelid = c.oid), '[]'::json) AS indexes,
             (SELECT count(*) FROM pg_catalog.pg_trigger t WHERE t.tgrelid = c.oid AND NOT t.tgisinternal)::int AS triggers,
             (SELECT count(*) FROM pg_catalog.pg_rewrite r WHERE r.ev_class = c.oid)::int AS rules,
-            (SELECT count(*) FROM pg_catalog.pg_policy p WHERE p.polrelid = c.oid)::int AS policies
+            (SELECT count(*) FROM pg_catalog.pg_policy p WHERE p.polrelid = c.oid)::int AS policies${security ? BACKSTOP_COLUMNS : ''}
        FROM unnest($1::text[], $2::text[], $3::text[]) AS w(id, schema, name)
        LEFT JOIN pg_catalog.pg_namespace n ON n.nspname = w.schema
        LEFT JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = w.name`,
-      targets(ids),
+      security ? [...targets(ids), tenantIds, TENANT_POLICY_TAIL] : targets(ids),
     )
   ).rows as unknown as Relation[];
   if (rows.length !== ids.length || rows.some((row) => typeof row.kind !== 'string' || !Array.isArray(row.columns))) return denyTenant();
@@ -117,6 +242,7 @@ export async function attestPostgresTenantRelations(client: PgQuery, ownership: 
     const column = described.get(ownership.resources[logical])?.columns.find((field) => field.name === rule.column);
     if (!column || column.deterministic !== true || !/^(text|character varying(\(\d+\))?)$/.test(column.type)) return denyTenant();
   }
+  if (security) attestBackstop(rows, ownership, security);
   return JSON.stringify(
     rows
       .map((row) => ({ ...row, constraints: [...row.constraints].sort(byCodeUnit), indexes: [...row.indexes].sort(byCodeUnit) }))

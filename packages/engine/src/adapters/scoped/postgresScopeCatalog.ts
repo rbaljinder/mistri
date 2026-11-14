@@ -59,7 +59,25 @@ export interface PostgresScopeCatalog extends ScopeCatalog {
   /** Each table in `triggered`, what its triggers' proof was read from (postgresTriggers.ts triggerVersion): read
    * again before COMMIT by a transaction that relied on it (attestPostgresTriggers). */
   triggerVersions?: ReadonlyMap<string, string>;
+  /** Under row security (PostgresAdapterOptions.rowSecurity): each table carrying mistri's tenant policy, and the
+   * column that policy compares. Which column a table's policy must be on, and which tables must carry one, is the
+   * App's ownership to say (mistri's tenantPostgresCatalog.ts); the engine says only that the shape is exactly this. */
+  tenantPolicies?: ReadonlyMap<string, string>;
 }
+
+/** Row security as the adapter runs under it: the role a policy names, and whether FORCE ROW LEVEL SECURITY may be on. */
+type RowSecurityShape = Readonly<{ role: string; force: boolean }>;
+
+/** The only policy a scoped write accepts under row security, by name. */
+export const TENANT_POLICY = 'mistri_tenant';
+
+/**
+ * What follows the column in the policy's expression as `pg_get_expr` deparses it (PostgreSQL 16.15): a text column
+ * reads `(tenant = NULLIF(current_setting('mistri.tenant'::text, true), ''::text))`, a varchar one
+ * `((tenant)::text = NULLIF(…))`. Compared as text so that any other expression — `USING (true)`, another setting, an
+ * OR — is not mistri's policy, whatever it would filter.
+ */
+export const TENANT_POLICY_TAIL = " = NULLIF(current_setting('mistri.tenant'::text, true), ''::text))";
 
 interface FactRow {
   schema: string;
@@ -78,6 +96,11 @@ interface FactRow {
   /** The first primary key column of a type a scoped write does not take as a row's identity (keyTypes.ts), and that type. */
   unkeyed_column: string | null;
   unkeyed_type: string | null;
+  /** Read only under row security: FORCE ROW LEVEL SECURITY, how many policies the table has, and the column of the
+   * one policy that is exactly mistri's tenant policy (TENANT_POLICY_TAIL), or null where none is. */
+  force?: boolean;
+  policy_count?: number;
+  tenant_column?: string | null;
 }
 
 const refuse = (): never => {
@@ -100,9 +123,39 @@ const saidType = (type: string, typmod: string, base: string, basemod: string) =
 /** Everything that decides whether a write to a relation means what the
  * scope assumes: its kind, row security, and the presence of triggers,
  * rules and policies — and whether this role may update it at all. */
-async function facts(client: PgQuery, targets: Array<{ schema: string; name: string }>): Promise<Map<string, FactRow>> {
+async function facts(
+  client: PgQuery,
+  targets: Array<{ schema: string; name: string }>,
+  backstop?: RowSecurityShape,
+): Promise<Map<string, FactRow>> {
   const result = new Map<string, FactRow>();
   if (!targets.length) return result;
+  /* Under row security only, so a deployment without it asks the statement it always did. The policy is matched in
+     full here — its name, command, permissiveness, its one role, and both expressions as deparsed against a column of
+     the table — and anything else is a policy that is not mistri's (tenantShape). */
+  const policy = backstop
+    ? {
+        columns: `,
+            c.relforcerowsecurity AS force,
+            (SELECT pg_catalog.count(*) FROM pg_catalog.pg_policy p WHERE p.polrelid ${EQ} c.oid)::pg_catalog.int4 AS policy_count,
+            tenant.name AS tenant_column`,
+        join: `
+       LEFT JOIN LATERAL (SELECT a.attname::pg_catalog.text AS name
+           FROM pg_catalog.pg_policy p
+           JOIN pg_catalog.pg_attribute a ON a.attrelid ${EQ} c.oid AND a.attnum ${GT} 0 AND NOT a.attisdropped
+           CROSS JOIN LATERAL (SELECT CASE a.atttypid
+               WHEN 25::pg_catalog.oid THEN '(' ${CONCAT} pg_catalog.quote_ident(a.attname::pg_catalog.text) ${CONCAT} $4::pg_catalog.text
+               WHEN 1043::pg_catalog.oid THEN '((' ${CONCAT} pg_catalog.quote_ident(a.attname::pg_catalog.text) ${CONCAT} ')::text' ${CONCAT} $4::pg_catalog.text
+             END AS said) AS expected
+          WHERE p.polrelid ${EQ} c.oid AND p.polname ${EQ} '${TENANT_POLICY}' AND p.polcmd ${EQ} '*' AND p.polpermissive
+            AND pg_catalog.cardinality(p.polroles) ${EQ} 1
+            AND p.polroles[1] ${EQ} (SELECT r.oid FROM pg_catalog.pg_roles r WHERE r.rolname::pg_catalog.text ${EQ} $3::pg_catalog.text)
+            AND pg_catalog.pg_get_expr(p.polqual, p.polrelid) ${EQ} expected.said
+            AND pg_catalog.pg_get_expr(p.polwithcheck, p.polrelid) ${EQ} expected.said
+          LIMIT 1) AS tenant ON true`,
+        values: [backstop.role, TENANT_POLICY_TAIL],
+      }
+    : { columns: '', join: '', values: [] };
   const rows = await client.query(
     /* Every function and operator named in pg_catalog (postgresTriggers.ts CAT): with `cardinality` found through the
        search_path, `public.cardinality(text[])` answered 0 for every table, which read as no triggers at all. */
@@ -114,7 +167,7 @@ async function facts(client: PgQuery, targets: Array<{ schema: string; name: str
             c.relkind ${EQ} 'p' OR EXISTS (SELECT 1 FROM pg_catalog.pg_inherits i WHERE i.inhrelid ${EQ} c.oid OR i.inhparent ${EQ} c.oid)
               AS hierarchy,
             c.relkind ${EQ} 'r' AND EXISTS (SELECT 1 FROM pg_catalog.pg_inherits i WHERE i.inhparent ${EQ} c.oid) AS inherited,
-            unkeyed.name AS unkeyed_column, unkeyed.said AS unkeyed_type
+            unkeyed.name AS unkeyed_column, unkeyed.said AS unkeyed_type${policy.columns}
        FROM ${WANTED}
        -- A key column whose type is not on the list (keyTypes.ts), its domains unwrapped: no scoped write targets the table.
        LEFT JOIN LATERAL (SELECT a.attname::pg_catalog.text AS name, ${saidType('a.atttypid', 'a.atttypmod', 'b.type', 'b.typmod')} AS said
@@ -123,8 +176,8 @@ async function facts(client: PgQuery, targets: Array<{ schema: string; name: str
           WHERE i.indrelid ${EQ} c.oid AND i.indisprimary AND NOT ${postgresKeyType('b.type')}
           ORDER BY a.attnum LIMIT 1) AS unkeyed ON true
        -- Its partitions' and inheritance children's too: a write through it reaches their rows and fires theirs.
-       CROSS JOIN LATERAL (SELECT ${postgresTreeTriggerNames('c.oid')} AS names) AS fired`,
-    [targets.map((target) => target.schema), targets.map((target) => target.name)],
+       CROSS JOIN LATERAL (SELECT ${postgresTreeTriggerNames('c.oid')} AS names) AS fired${policy.join}`,
+    [targets.map((target) => target.schema), targets.map((target) => target.name), ...policy.values],
   );
   for (const row of rows.rows as unknown as FactRow[]) {
     if (
@@ -138,6 +191,10 @@ async function facts(client: PgQuery, targets: Array<{ schema: string; name: str
       row.trigger_names.some((name) => typeof name !== 'string') ||
       (row.unkeyed_column !== null && typeof row.unkeyed_column !== 'string') ||
       (row.unkeyed_type !== null && typeof row.unkeyed_type !== 'string') ||
+      (backstop &&
+        (typeof row.force !== 'boolean' ||
+          !Number.isInteger(row.policy_count) ||
+          (row.tenant_column !== null && typeof row.tenant_column !== 'string'))) ||
       result.has(key(row))
     )
       return refuse();
@@ -147,9 +204,27 @@ async function facts(client: PgQuery, targets: Array<{ schema: string; name: str
 }
 
 const lockable = (fact: FactRow | undefined): boolean => fact !== undefined && ['r', 'p'].includes(fact.kind) && fact.updatable;
-const clean = (fact: FactRow): boolean => !fact.rls && !fact.triggers && !fact.rules && !fact.policies;
+/**
+ * Under row security, the one shape of row security a scoped write accepts: enabled, FORCE off unless the deployment
+ * allows it, and exactly one policy, mistri's (facts). Anything else — a second policy, a RESTRICTIVE one, `USING
+ * (true)`, another role — refuses as it always did, named as a policy that is not mistri's.
+ */
+const tenantShape = (fact: FactRow, backstop: RowSecurityShape | undefined): boolean =>
+  backstop !== undefined &&
+  fact.rls &&
+  fact.policies &&
+  (!fact.force || backstop.force) &&
+  fact.policy_count === 1 &&
+  typeof fact.tenant_column === 'string';
+/** Row security a scoped write does not take as given: none at all is clean, and under row security mistri's own is. */
+const secured = (fact: FactRow, backstop: RowSecurityShape | undefined): boolean =>
+  (fact.rls || fact.policies) && !tenantShape(fact, backstop);
+const clean = (fact: FactRow, backstop?: RowSecurityShape): boolean => !secured(fact, backstop) && !fact.triggers && !fact.rules;
 /** Clean but for its triggers: each write is then judged by the triggers it fires (scopedTransaction.ts target). */
-const cleanButTriggers = (fact: FactRow): boolean => fact.triggers && !fact.rls && !fact.rules && !fact.policies;
+const cleanButTriggers = (fact: FactRow, backstop?: RowSecurityShape): boolean => fact.triggers && !secured(fact, backstop) && !fact.rules;
+/** Row security as a refusal names it: under row security, any that is not mistri's tenant policy. */
+const securityNamed = (backstop: RowSecurityShape | undefined): string =>
+  backstop ? "a row policy that is not mistri's tenant policy" : 'row-level security';
 
 /** The rows of the triggers of `tables`, read on the writer. */
 async function triggerRows(client: PgQuery, tables: ReadonlyArray<{ schema: string; name: string }>): Promise<unknown[]> {
@@ -478,13 +553,13 @@ async function foreignKeyComparisons(client: PgQuery, schema: DatabaseSchema): P
 }
 
 /** What blocks a scoped write to a table beyond its triggers, as a refusal names it; undefined where nothing does. */
-const blockerOf = (fact: FactRow): string | undefined =>
+const blockerOf = (fact: FactRow, backstop?: RowSecurityShape): string | undefined =>
   !['r', 'p'].includes(fact.kind)
     ? 'a kind a scoped write cannot target'
     : !fact.updatable
       ? 'no UPDATE privilege for the role that writes'
-      : fact.rls || fact.rules || fact.policies
-        ? [fact.rules ? 'a rule' : '', fact.policies || fact.rls ? 'row-level security' : ''].filter(Boolean).join(' and ')
+      : fact.rules || secured(fact, backstop)
+        ? [fact.rules ? 'a rule' : '', secured(fact, backstop) ? securityNamed(backstop) : ''].filter(Boolean).join(' and ')
         : undefined;
 
 /**
@@ -492,23 +567,27 @@ const blockerOf = (fact: FactRow): string | undefined =>
  * (readPostgresScopeCatalog), read on `client` outside a write: the keys, the tables in a partition or inheritance
  * hierarchy, and the tables a scoped write cannot target for row security, a rule, or the role's privileges.
  */
-export async function effectCatalogFacts(client: PgQuery, given: readonly string[]): Promise<TriggerKeyFacts> {
+export async function effectCatalogFacts(client: PgQuery, given: readonly string[], backstop?: RowSecurityShape): Promise<TriggerKeyFacts> {
   const ids = [...new Set(given)];
-  const read = await facts(client, ids.map(located));
+  const read = await facts(client, ids.map(located), backstop);
   const blocked = new Map<string, string>();
   const hierarchy = new Set<string>();
   for (const id of ids) {
     const fact = read.get(key(located(id)));
     if (fact?.hierarchy) hierarchy.add(id);
-    const blocker = fact && blockerOf(fact);
+    const blocker = fact && blockerOf(fact, backstop);
     if (blocker) blocked.set(id, blocker);
   }
   return { ...(await effectKeyFacts(client, ids)), hierarchy, blocked };
 }
 
 /** What makes a table unclean, as a refusal names it. */
-const unclean = (fact: FactRow): string =>
-  [fact.triggers ? triggerNames(fact.trigger_names) : '', fact.rules ? 'a rule' : '', fact.policies || fact.rls ? 'row-level security' : '']
+const unclean = (fact: FactRow, backstop?: RowSecurityShape): string =>
+  [
+    fact.triggers ? triggerNames(fact.trigger_names) : '',
+    fact.rules ? 'a rule' : '',
+    secured(fact, backstop) ? securityNamed(backstop) : '',
+  ]
     .filter(Boolean)
     .join(' and ');
 
@@ -519,10 +598,11 @@ export async function readPostgresScopeCatalog(
   client: PgQuery,
   scope: RowScope,
   describe: (client: PgQuery) => Promise<DatabaseSchema>,
+  backstop?: RowSecurityShape,
 ): Promise<PostgresScopeCatalog> {
   try {
     const wanted = Object.keys(scope).map(located);
-    const before = await facts(client, wanted);
+    const before = await facts(client, wanted, backstop);
     const pinned = wanted.filter((target) => lockable(before.get(key(target))));
     const relations = pinned.map((target) => `${POSTGRES_STYLE.quote(target.schema)}.${POSTGRES_STYLE.quote(target.name)}`);
     if (pinned.length) await client.query(`LOCK TABLE ${relations.join(', ')} IN ROW EXCLUSIVE MODE`);
@@ -531,6 +611,7 @@ export async function readPostgresScopeCatalog(
     const after = facts(
       client,
       schema.tables.map((table) => ({ schema: table.schema, name: table.name })),
+      backstop,
     );
     const held = new Set(pinned.map(key));
     const writable = new Set<string>();
@@ -540,6 +621,7 @@ export async function readPostgresScopeCatalog(
     const inheritanceParents = new Set<string>();
     const locks = new Set<string>();
     const withTriggers: Array<{ id: string; schema: string; name: string }> = [];
+    const tenantPolicies = new Map<string, string>();
     for (const table of schema.tables) {
       const fact = (await after).get(key(table));
       // A relation the catalog listed a moment ago and cannot describe now
@@ -550,15 +632,16 @@ export async function readPostgresScopeCatalog(
       // Never a target, but still lockable: a reference to a partitioned table holds its parent row through it.
       if (fact.hierarchy) hierarchy.add(table.id);
       if (fact.inherited) inheritanceParents.add(table.id);
+      if (tenantShape(fact, backstop)) tenantPolicies.set(table.id, fact.tenant_column as string);
       if (!lockable(fact)) continue;
       locks.add(table.id);
       if (fact.hierarchy) continue;
       // Writable means pinned: a table that became clean after the pin
       // decision could be dirtied again before COMMIT, so it stays read-only.
       const ordinary = held.has(table.id) && !table.isView && table.columns.some((column) => column.primaryKey);
-      if (ordinary && clean(fact)) writable.add(table.id);
-      else if (ordinary && cleanButTriggers(fact)) withTriggers.push({ id: table.id, schema: table.schema, name: table.name });
-      else if (!clean(fact)) blockedBy.set(table.id, unclean(fact));
+      if (ordinary && clean(fact, backstop)) writable.add(table.id);
+      else if (ordinary && cleanButTriggers(fact, backstop)) withTriggers.push({ id: table.id, schema: table.schema, name: table.name });
+      else if (!clean(fact, backstop)) blockedBy.set(table.id, unclean(fact, backstop));
     }
     /* Read only where a table has triggers: a database without them asks nothing more than it did. */
     const read = withTriggers.length ? await readTriggers(client, withTriggers) : undefined;
@@ -596,6 +679,7 @@ export async function readPostgresScopeCatalog(
       ...(hierarchy.size ? { hierarchy } : {}),
       ...(inheritanceParents.size ? { inheritanceParents } : {}),
       ...(triggered.size ? { triggered, triggerVersions } : {}),
+      ...(tenantPolicies.size ? { tenantPolicies } : {}),
       lockable: locks,
       pinned: relations,
     };

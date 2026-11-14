@@ -3,6 +3,7 @@
  * isolation a snapshot read begins with, and the session text its BEGIN sets. Pure parts of the adapter's opening, kept
  * apart from the connection and the writes that use them (postgres.ts).
  */
+import { Refusal } from './adapter.js';
 import type { DatabaseSchema } from '../shared/schema.js';
 import type { PgQuery } from './postgresPool.js';
 import type { PostgresScopeCatalog } from './scoped/postgresScopeCatalog.js';
@@ -51,3 +52,14 @@ export const beginOf = (write: PgQuery) => (snapshotHandles.has(write) ? 'BEGIN 
    field order, which decides how a person's own 01/02/2026 is read, stays the database's. The float and interval
    text, which no key is (keyTypes.ts), is pinned as well, so a value a trigger's proof compares reads as stored. */
 export const SCOPED_SESSION = '; SET LOCAL DateStyle = ISO; SET LOCAL IntervalStyle = postgres; SET LOCAL extra_float_digits = 3';
+
+/* The tenant a row policy reads (`current_setting('mistri.tenant', true)`), said in the BEGIN's own message as the
+   session above is: SET LOCAL ends with the transaction, so a pooled connection never carries one tenant's setting
+   into another's. SET takes no parameter, so the value is a literal; it is a tenant id (tenantMembership.ts
+   parseTenantSelector) and a quote is doubled all the same. NUL cannot be sent at all, and a backslash would be an
+   escape under `standard_conforming_strings = off`, so either refuses rather than being said some other way. */
+export function tenantSession(id: string): string {
+  if (typeof id !== 'string' || !id || id.includes('\0') || id.includes('\\'))
+    throw new Refusal('This tenant cannot be set on the transaction.');
+  return `; SET LOCAL mistri.tenant = '${id.replaceAll("'", "''")}'`;
+}

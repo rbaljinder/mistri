@@ -1,8 +1,8 @@
 import { type ChildProcess } from 'node:child_process';
+import { withFreePort } from './support/freePort';
 import { spawn } from './support/spawned';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -22,14 +22,6 @@ const origins: Record<string, string> = {};
 const mark = (colour: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" fill="${colour}"/></svg>`;
 
-async function freePort(): Promise<number> {
-  const reservation = createServer();
-  await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((done) => reservation.close(() => done()));
-  return port;
-}
-
 async function start(
   name: string,
   config: string,
@@ -37,31 +29,43 @@ async function start(
   extra: string[],
   environment: Record<string, string> = {},
 ): Promise<void> {
-  const port = await freePort();
-  origins[name] = `http://127.0.0.1:${port}`;
-  const started = spawn(
-    process.execPath,
-    ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', appDirectory, '--port', String(port), ...extra],
-    {
-      cwd: resolve('.'),
-      env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0', ...environment },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-  children.push(started);
-  let log = '';
-  for (const stream of [started.stdout!, started.stderr!]) stream.on('data', (chunk) => (log += String(chunk)));
-  await new Promise<void>((done, fail) => {
-    const timer = setTimeout(() => fail(new Error(`The ${name} instance did not start: ${log}`)), 20_000);
-    started.stdout!.on('data', () => {
-      if (log.includes('Listening on ')) {
+  await withFreePort(async (port) => {
+    origins[name] = `http://127.0.0.1:${port}`;
+    const started = spawn(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        'packages/mistri/src/server/index.ts',
+        '--config',
+        config,
+        '--app',
+        appDirectory,
+        '--port',
+        String(port),
+        ...extra,
+      ],
+      {
+        cwd: resolve('.'),
+        env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0', ...environment },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    children.push(started);
+    let log = '';
+    for (const stream of [started.stdout!, started.stderr!]) stream.on('data', (chunk) => (log += String(chunk)));
+    await new Promise<void>((done, fail) => {
+      const timer = setTimeout(() => fail(new Error(`The ${name} instance did not start: ${log}`)), 20_000);
+      started.stdout!.on('data', () => {
+        if (log.includes('Listening on ')) {
+          clearTimeout(timer);
+          done();
+        }
+      });
+      started.once('exit', () => {
         clearTimeout(timer);
-        done();
-      }
-    });
-    started.once('exit', () => {
-      clearTimeout(timer);
-      fail(new Error(`The ${name} instance exited: ${log}`));
+        fail(new Error(`The ${name} instance exited: ${log}`));
+      });
     });
   });
 }

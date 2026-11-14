@@ -4,10 +4,10 @@
  * the open sign-up the override turns on.
  */
 import { execFileSync } from 'node:child_process';
+import { withFreePort } from './freePort';
 import { spawn } from './spawned';
 import { once } from 'node:events';
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -45,75 +45,70 @@ export async function startDeskBlocks() {
       `import app from ${JSON.stringify(pathToFileURL(join(FIXTURE, 'app.ts')).href)};
       export default {...app, auth: {...app.auth, signUp:'open', store:${JSON.stringify(join(directory, 'sessions.db'))}}};`,
     );
-    const reservation = createServer();
-    await new Promise<void>((done, reject) => {
-      reservation.once('error', reject);
-      reservation.listen(0, '127.0.0.1', done);
-    });
-    const port = (reservation.address() as { port: number }).port;
-    await new Promise<void>((done, reject) => reservation.close((error) => (error ? reject(error) : done())));
-    const origin = `http://127.0.0.1:${port}`;
-    child = spawn(
-      process.execPath,
-      [
-        '--import',
-        'tsx',
-        'packages/mistri/src/server/index.ts',
-        '--config',
-        `${database}.json`,
-        // From its directory, where the widgets live, with this manifest in place of the fixture's own.
-        '--app',
-        authoring,
-        '--app-entry',
-        app,
-        '--commands',
-        join(FIXTURE, 'commands.ts'),
-        '--port',
-        String(port),
-      ],
-      {
-        env: {
-          ...process.env,
-          DATABASE_URL: '',
-          XDG_CONFIG_HOME: join(directory, 'xdg'),
-          MISTRI_OPEN: '0',
-          BETTER_AUTH_SECRET: 'isolated-service-desk-secret-at-least-thirty-two-characters',
-          MISTRI_AUTH_ADMIN_EMAIL: '',
-          MISTRI_AUTH_ADMIN_PASSWORD: '',
+    const origin = await withFreePort(async (port) => {
+      child = spawn(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          'packages/mistri/src/server/index.ts',
+          '--config',
+          `${database}.json`,
+          // From its directory, where the widgets live, with this manifest in place of the fixture's own.
+          '--app',
+          authoring,
+          '--app-entry',
+          app,
+          '--commands',
+          join(FIXTURE, 'commands.ts'),
+          '--port',
+          String(port),
+        ],
+        {
+          env: {
+            ...process.env,
+            DATABASE_URL: '',
+            XDG_CONFIG_HOME: join(directory, 'xdg'),
+            MISTRI_OPEN: '0',
+            BETTER_AUTH_SECRET: 'isolated-service-desk-secret-at-least-thirty-two-characters',
+            MISTRI_AUTH_ADMIN_EMAIL: '',
+            MISTRI_AUTH_ADMIN_PASSWORD: '',
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
         },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
-    const running = child;
-    let log = '';
-    running.stdout!.on('data', (chunk) => {
-      log += String(chunk);
-    });
-    running.stderr!.on('data', (chunk) => {
-      log += String(chunk);
-    });
-    // A server that dies mid-test leaves the page saying only "not answering": say why, in the test's output.
-    running.once('exit', (code, signal) => {
-      if (!stopping) console.error(`Desk blocks server exited (${code ?? signal}) before the test stopped it:\n${log}`);
-    });
-    await new Promise<void>((done, reject) => {
-      const finish = (error?: Error) => {
-        clearTimeout(timer);
-        running.stdout!.off('data', ready);
-        running.off('exit', failed);
-        running.off('error', finish);
-        if (error) reject(error);
-        else done();
-      };
-      const ready = () => {
-        if (log.includes('Listening on ')) finish();
-      };
-      const failed = () => finish(new Error(`Desk blocks fixture exited: ${log}`));
-      const timer = setTimeout(() => finish(new Error(`Desk blocks fixture startup timed out: ${log}`)), 20_000);
-      running.stdout!.on('data', ready);
-      running.once('exit', failed);
-      running.once('error', finish);
-      ready();
+      );
+      const running = child;
+      let log = '';
+      running.stdout!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      running.stderr!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      // A server that dies mid-test leaves the page saying only "not answering": say why, in the test's output.
+      running.once('exit', (code, signal) => {
+        if (!stopping) console.error(`Desk blocks server exited (${code ?? signal}) before the test stopped it:\n${log}`);
+      });
+      await new Promise<void>((done, reject) => {
+        const finish = (error?: Error) => {
+          clearTimeout(timer);
+          running.stdout!.off('data', ready);
+          running.off('exit', failed);
+          running.off('error', finish);
+          if (error) reject(error);
+          else done();
+        };
+        const ready = () => {
+          if (log.includes('Listening on ')) finish();
+        };
+        const failed = () => finish(new Error(`Desk blocks fixture exited: ${log}`));
+        const timer = setTimeout(() => finish(new Error(`Desk blocks fixture startup timed out: ${log}`)), 20_000);
+        running.stdout!.on('data', ready);
+        running.once('exit', failed);
+        running.once('error', finish);
+        ready();
+      });
+      return `http://127.0.0.1:${port}`;
     });
     const account = { name: 'desk-agent', email: 'desk-agent@example.test', password: 'desk-blocks-agent-password' };
     const response = await fetch(`${origin}/api/auth/sign-up/email`, {

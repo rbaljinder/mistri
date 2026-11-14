@@ -10,21 +10,18 @@ import { openSuiteIdentity } from '../packages/mistri/src/server/auth/suiteIdent
 import { createSuite } from '../packages/mistri/src/server/http/suite';
 import { parseAppConfig } from '../packages/mistri/src/shared/app';
 import type { LoadedApp } from '../packages/mistri/src/server/app/apps';
+import { withFreePort } from './support/freePort';
 
 /** Real redirects and native cookies: fulfilled Playwright redirects can leave
  * interception and attempt DNS for the fake origin. Only the child document
  * contents are fixture pages; entry, sign-in, grants and preferences are real. */
-async function openEntrySuite() {
+async function openEntrySuiteOn(port: number) {
   const temporaryRoot = join(tmpdir(), 'opencode');
   mkdirSync(temporaryRoot, { recursive: true });
   const dir = mkdtempSync(join(temporaryRoot, 'tw-suite-entry-browser-'));
   let identity: Awaited<ReturnType<typeof openSuiteIdentity>> | undefined;
   let suite: Awaited<ReturnType<typeof createSuite>> | undefined;
   try {
-    const reservation = createServer();
-    await new Promise<void>((resolve) => reservation.listen(0, '127.0.0.1', resolve));
-    const port = (reservation.address() as { port: number }).port;
-    await new Promise<void>((resolve, reject) => reservation.close((error) => (error ? reject(error) : resolve())));
     const businessPath = join(dir, 'business.db'),
       db = new DatabaseSync(businessPath);
     try {
@@ -111,7 +108,10 @@ async function openEntrySuite() {
     suite.server.on('request', (req) => {
       if (req.method === 'GET' && req.url?.split('?')[0] === '/tools/') rootRequests++;
     });
-    await new Promise<void>((resolve) => suite!.server.listen(port, '127.0.0.1', resolve));
+    await new Promise<void>((resolve, reject) => {
+      suite!.server.once('error', reject);
+      suite!.server.listen(port, '127.0.0.1', resolve);
+    });
     return {
       origin: `http://127.0.0.1:${port}`,
       rootRequests: () => rootRequests,
@@ -143,6 +143,9 @@ async function openEntrySuite() {
     throw error;
   }
 }
+
+// Each attempt owns a fresh directory and stores (the catch above removes them), so a lost port starts over cleanly.
+const openEntrySuite = () => withFreePort(openEntrySuiteOn);
 
 for (const destination of ['preferred', 'explicit-root', 'ask', 'revoked'] as const) {
   test(`signed-out root resumes ${destination} after shared sign-in without chooser loops`, async ({ page }) => {

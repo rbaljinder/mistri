@@ -1,7 +1,7 @@
 import { spawn } from './spawned';
+import { withFreePort } from './freePort';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -184,68 +184,63 @@ export default defineCommands({
       ${options.deletedPolicy ? "authorizeDeletedRecord: (principal, record) => principal.roles.includes('agent') && record.table === 'ticket' && record.row.id !== 2," : ''}
       resolveRows: () => ({ticket:{groups:[[{column:'id',op:'!=',value:2}]]}})};`,
       );
-    const reservation = createServer();
-    await new Promise<void>((resolve, reject) => {
-      reservation.once('error', reject);
-      reservation.listen(0, '127.0.0.1', resolve);
-    });
-    const port = (reservation.address() as { port: number }).port;
-    await new Promise<void>((resolve, reject) => reservation.close((error) => (error ? reject(error) : resolve())));
-    const origin = `http://127.0.0.1:${port}`;
-    child = spawn(
-      process.execPath,
-      [
-        '--import',
-        'tsx',
-        'packages/mistri/src/server/index.ts',
-        '--config',
-        config,
-        '--app',
-        app,
-        ...(options.rowPolicy ? ['--policy', policy] : []),
-        '--port',
-        String(port),
-      ],
-      {
-        env: {
-          ...process.env,
-          DATABASE_URL: '',
-          XDG_CONFIG_HOME: join(directory, 'xdg'),
-          MISTRI_OPEN: '0',
-          BETTER_AUTH_SECRET: 'isolated-browser-session-secret-at-least-thirty-two-characters',
-          MISTRI_AUTH_ADMIN_EMAIL: '',
-          MISTRI_AUTH_ADMIN_PASSWORD: '',
-          ...(options.stamps ? { MISTRI_CLOCK: STAMP_CLOCK } : {}),
+    const origin = await withFreePort(async (port) => {
+      child = spawn(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          'packages/mistri/src/server/index.ts',
+          '--config',
+          config,
+          '--app',
+          app,
+          ...(options.rowPolicy ? ['--policy', policy] : []),
+          '--port',
+          String(port),
+        ],
+        {
+          env: {
+            ...process.env,
+            DATABASE_URL: '',
+            XDG_CONFIG_HOME: join(directory, 'xdg'),
+            MISTRI_OPEN: '0',
+            BETTER_AUTH_SECRET: 'isolated-browser-session-secret-at-least-thirty-two-characters',
+            MISTRI_AUTH_ADMIN_EMAIL: '',
+            MISTRI_AUTH_ADMIN_PASSWORD: '',
+            ...(options.stamps ? { MISTRI_CLOCK: STAMP_CLOCK } : {}),
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
         },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
-    const processChild = child;
-    let log = '';
-    processChild.stdout!.on('data', (chunk) => {
-      log += String(chunk);
-    });
-    processChild.stderr!.on('data', (chunk) => {
-      log += String(chunk);
-    });
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => done(new Error(`Session fixture startup timed out: ${log}`)), 30_000);
-      const ready = () => {
-        if (log.includes('Listening on ')) done();
-      };
-      const failed = () => done(new Error(`Session fixture exited during startup: ${log}`));
-      const done = (error?: Error) => {
-        clearTimeout(timer);
-        processChild.stdout!.off('data', ready);
-        processChild.off('exit', failed);
-        processChild.off('error', done);
-        if (error) reject(error);
-        else resolve();
-      };
-      processChild.stdout!.on('data', ready);
-      processChild.once('exit', failed);
-      processChild.once('error', done);
-      ready();
+      );
+      const processChild = child;
+      let log = '';
+      processChild.stdout!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      processChild.stderr!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => done(new Error(`Session fixture startup timed out: ${log}`)), 30_000);
+        const ready = () => {
+          if (log.includes('Listening on ')) done();
+        };
+        const failed = () => done(new Error(`Session fixture exited during startup: ${log}`));
+        const done = (error?: Error) => {
+          clearTimeout(timer);
+          processChild.stdout!.off('data', ready);
+          processChild.off('exit', failed);
+          processChild.off('error', done);
+          if (error) reject(error);
+          else resolve();
+        };
+        processChild.stdout!.on('data', ready);
+        processChild.once('exit', failed);
+        processChild.once('error', done);
+        ready();
+      });
+      return `http://127.0.0.1:${port}`;
     });
     const accounts = await Promise.all(
       ['alice', 'bob'].map(async (name) => {

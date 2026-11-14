@@ -121,7 +121,14 @@ import {
   suspectsStores,
 } from './postgresTransactionHandle.js';
 import { snapshotRead, withoutSnapshotRead } from './snapshotRead.js';
-import { SCOPED_SESSION, beginOf, snapshotHandles, verifierPin, type PostgresTransactionVerifier } from './postgresTransactionOpening.js';
+import {
+  SCOPED_SESSION,
+  beginOf,
+  snapshotHandles,
+  tenantSession,
+  verifierPin,
+  type PostgresTransactionVerifier,
+} from './postgresTransactionOpening.js';
 import { withoutWriteAhead, writeAhead, type WriteAhead } from './writeAhead.js';
 import { KeyRows } from './scoped/keyRows.js';
 import {
@@ -222,6 +229,17 @@ async function aheadsFailed(aheads: readonly Promise<unknown>[]): Promise<boolea
   if (waited) throw waited.reason;
   return settled.some((outcome) => outcome.status === 'rejected');
 }
+/** What an adapter is built with beyond its connection. */
+export interface PostgresAdapterOptions {
+  /**
+   * The database's own tenant backstop (row security): the role this adapter's connections run as, which every
+   * tenant table's one row policy names. With it, a scoped transaction and a read snapshot given a tenant set
+   * `mistri.tenant` for the policy to read, the scope catalog accepts exactly that policy (postgresScopeCatalog.ts),
+   * and an autocommit scoped read, which no tenant rides with, refuses. Without it, nothing the adapter sends changes.
+   */
+  readonly rowSecurity?: { readonly role: string; readonly force?: boolean };
+}
+
 export class PostgresAdapter implements Adapter {
   readonly dialect = 'postgres' as const;
   private connections: PgConnectionManager;
@@ -243,6 +261,8 @@ export class PostgresAdapter implements Adapter {
   /* Whether the database holds the epoch store: learned from the first
      write transaction; absent, every transaction reads the digest as before. */
   private epochStore: boolean | undefined;
+  /* The tenant backstop this adapter runs under (PostgresAdapterOptions.rowSecurity), copied at construction. */
+  private readonly rowSecurity: Readonly<{ role: string; force: boolean }> | undefined;
 
   /** `work`, forgetting the kept catalog if it dies on a table or column that is gone: what was kept is wrong. */
   private watched<T>(work: Promise<T>): Promise<T> {
@@ -263,7 +283,15 @@ export class PostgresAdapter implements Adapter {
     connections?: PgConnectionManager,
     /** The reader count the connection's config names; the process defaults fill the rest. */
     pool?: PgConnectionOptions,
+    options: PostgresAdapterOptions = {},
   ) {
+    const security = options.rowSecurity;
+    if (
+      security !== undefined &&
+      (typeof security.role !== 'string' || !security.role || (security.force !== undefined && typeof security.force !== 'boolean'))
+    )
+      throw new TypeError('A row-security role is a role name.');
+    this.rowSecurity = security && Object.freeze({ role: security.role, force: security.force === true });
     this.connections = connections ?? new PgConnectionManager(connectionString, keepDatesAsText, undefined, pool);
     this.describes = `${connectionString}\0${schemas.join('\0')}`;
     this.database = connectionString;
@@ -404,12 +432,12 @@ export class PostgresAdapter implements Adapter {
       .withWriteClient(async (write) => {
         await write.query('BEGIN');
         try {
-          return await effectCatalogFacts(write, tables);
+          return await effectCatalogFacts(write, tables, this.rowSecurity);
         } finally {
           await write.query('ROLLBACK');
         }
       })
-      .catch(() => primaryReads(async () => effectCatalogFacts(await this.conn(), tables)));
+      .catch(() => primaryReads(async () => effectCatalogFacts(await this.conn(), tables, this.rowSecurity)));
   }
 
   /** The catalog as one handle sees it, read by postgresCatalog.ts: the
@@ -630,6 +658,9 @@ export class PostgresAdapter implements Adapter {
   }
 
   async scopeReads(input: RowScope): Promise<ScopedReads> {
+    /* Each read here is its own autocommit statement, with no transaction for a tenant to be set in: under the
+       backstop it would see nothing, and an empty answer would read as an empty tenant. Loud instead. */
+    if (this.rowSecurity) throw new Refusal('Autocommit scoped reads are unavailable under row security; read in a snapshot.');
     // Capture before metadata I/O: callers cannot change an in-flight policy.
     const scope = captureRowScope(input);
     const schema = await this.schema();
@@ -1364,6 +1395,7 @@ export class PostgresAdapter implements Adapter {
       options.verify,
       options.bound,
       options.triggers,
+      options.tenant,
     );
   }
 
@@ -1488,9 +1520,19 @@ export class PostgresAdapter implements Adapter {
     input: RowScope,
     run: (tx: WriteTransaction, catalog: DatabaseSchema) => Promise<T>,
     triggers?: TriggerAcceptance,
+    /** `tenant`: what the row policy reads, under the backstop (PostgresAdapterOptions.rowSecurity); ignored without it. */
+    options: { readonly tenant?: string } = {},
   ): Promise<T> {
     const scope = captureRowScope(input);
-    return this.scopedTransact(scope, undefined, (tx, _journal, catalog) => run(tx, catalog!), undefined, undefined, triggers);
+    return this.scopedTransact(
+      scope,
+      undefined,
+      (tx, _journal, catalog) => run(tx, catalog!),
+      undefined,
+      undefined,
+      triggers,
+      options.tenant,
+    );
   }
 
   /**
@@ -1511,11 +1553,21 @@ export class PostgresAdapter implements Adapter {
     input: RowScope,
     verify: PostgresTransactionVerifier,
     run: (tx: WriteTransaction, catalog: DatabaseSchema) => Promise<T>,
+    /** As scopeTransaction's. */
+    options: { readonly tenant?: string } = {},
   ): Promise<T> {
     const scope = captureRowScope(input);
     if (typeof verify !== 'function' || typeof run !== 'function' || Object.keys(scope).some(isRuntimeRelation))
       throw new Refusal('This verified transaction is unavailable.');
-    return this.scopedTransact(scope, undefined, (tx, _journal, catalog) => run(tx, catalog!), verify);
+    return this.scopedTransact(
+      scope,
+      undefined,
+      (tx, _journal, catalog) => run(tx, catalog!),
+      verify,
+      undefined,
+      undefined,
+      options.tenant,
+    );
   }
 
   /**
@@ -1538,6 +1590,8 @@ export class PostgresAdapter implements Adapter {
     /* The prologue is the snapshot's whole question (a membership fence): BEGIN, the prologue and COMMIT in one
        round trip where they were two. `run` is handed its answers and nothing it can ask. */
     whole = false,
+    /** What the row policy reads, under the backstop (PostgresAdapterOptions.rowSecurity); ignored without it. */
+    tenant?: string,
   ): Promise<T> {
     return readSnapshotOn(
       this.connections,
@@ -1547,7 +1601,14 @@ export class PostgresAdapter implements Adapter {
       prologue,
       ahead,
       whole,
+      this.tenantSet(tenant),
     );
+  }
+
+  /* The tenant's SET in a BEGIN's message (tenantSession), under the backstop alone: without it a tenant passed
+     changes nothing sent. Under it, a transaction given none sets none, and the policy then admits no row. */
+  private tenantSet(tenant: string | undefined): string {
+    return this.rowSecurity && tenant !== undefined ? tenantSession(tenant) : '';
   }
 
   /** Private source-shape owner, not an authorization proof or generic Adapter
@@ -1589,7 +1650,10 @@ export class PostgresAdapter implements Adapter {
     verify?: PostgresTransactionVerifier,
     bound?: RowScope,
     triggers?: TriggerAcceptance,
+    tenant?: string,
   ): Promise<T> {
+    // Said before the transaction is queued: a tenant that cannot be set refuses with nothing begun.
+    const session = SCOPED_SESSION + this.tenantSet(tenant);
     /* The proof is loaded where a transaction accepts triggers, not at startup; and awaited in the transaction's turn,
        not before it is queued: a write asked after this one would otherwise take its turn while the module loads. */
     const loading = triggers && !journal?.fixedRecords ? import('./scoped/triggerProof.js') : undefined;
@@ -1629,7 +1693,7 @@ export class PostgresAdapter implements Adapter {
           // The rows whose locks were sent ahead, held from the moment their answers came back (sendWriteAhead), with what each lock said.
           const lockedAhead = new Map<string, { text: string; values: unknown[] }>();
           let aheads: Promise<unknown>[] = [];
-          const opening = { lock: pinned, pin, digest: true, session: SCOPED_SESSION };
+          const opening = { lock: pinned, pin, digest: true, session };
           let opened = await this.openWrite(
             write,
             {
@@ -1654,7 +1718,11 @@ export class PostgresAdapter implements Adapter {
           if (journal) await this.attestJournal(write, journal);
           const catalog =
             (this.catalogCache.get(opened.epoch, scopeKey) as PostgresScopeCatalog | undefined) ??
-            this.catalogCache.set(opened.epoch, scopeKey, await readPostgresScopeCatalog(write, scope, (db) => this.describeScoped(db)));
+            this.catalogCache.set(
+              opened.epoch,
+              scopeKey,
+              await readPostgresScopeCatalog(write, scope, (db) => this.describeScoped(db), this.rowSecurity),
+            );
           // Rows read under another epoch's catalog answer nothing: the statements sent ahead were built from it.
           if (catalog !== peeked) {
             keyRows.forget();

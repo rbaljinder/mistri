@@ -1,8 +1,8 @@
 import { type ChildProcess } from 'node:child_process';
+import { withFreePort } from './support/freePort';
 import { spawn } from './support/spawned';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -87,36 +87,34 @@ export default defineApp({
 });
 `,
   );
-  const reservation = createServer();
-  await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((done) => reservation.close(() => done()));
-  const child = spawn(
-    process.execPath,
-    ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port)],
-    {
-      cwd: resolve('.'),
-      env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-  let log = '';
-  child.stdout!.on('data', (chunk) => (log += String(chunk)));
-  child.stderr!.on('data', (chunk) => (log += String(chunk)));
-  await new Promise<void>((done, fail) => {
-    const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 30_000);
-    child.stdout!.on('data', () => {
-      if (log.includes('Listening on ')) {
+  servers[name] = await withFreePort(async (port) => {
+    const child = spawn(
+      process.execPath,
+      ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port)],
+      {
+        cwd: resolve('.'),
+        env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    let log = '';
+    child.stdout!.on('data', (chunk) => (log += String(chunk)));
+    child.stderr!.on('data', (chunk) => (log += String(chunk)));
+    await new Promise<void>((done, fail) => {
+      const timer = setTimeout(() => fail(new Error(`The fixture did not start: ${log}`)), 30_000);
+      child.stdout!.on('data', () => {
+        if (log.includes('Listening on ')) {
+          clearTimeout(timer);
+          done();
+        }
+      });
+      child.once('exit', () => {
         clearTimeout(timer);
-        done();
-      }
+        fail(new Error(`The fixture exited: ${log}`));
+      });
     });
-    child.once('exit', () => {
-      clearTimeout(timer);
-      fail(new Error(`The fixture exited: ${log}`));
-    });
+    return { origin: `http://127.0.0.1:${port}`, child, directory };
   });
-  servers[name] = { origin: `http://127.0.0.1:${port}`, child, directory };
 }
 
 /** What the page is before any of the client's script has run: its scripts are refused, the inline boot script is not. */

@@ -1,4 +1,5 @@
 import { SHOT_MS } from './support/budgets';
+import { withFreePort } from './support/freePort';
 /**
  * Signing in through an OpenID Connect provider in a real browser: the App's
  * own server (spawned over a temporary database and config, on a port of its
@@ -11,7 +12,6 @@ import { SHOT_MS } from './support/budgets';
 import { spawn } from './support/spawned';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -75,54 +75,51 @@ export default defineApp({
 });
 `,
     );
-    const reservation = createServer();
-    await new Promise<void>((done, fail) => {
-      reservation.once('error', fail);
-      reservation.listen(0, '127.0.0.1', done);
-    });
-    const port = (reservation.address() as { port: number }).port;
-    await new Promise<void>((done, fail) => reservation.close((error) => (error ? fail(error) : done())));
-    const origin = `http://127.0.0.1:${port}`;
-    child = spawn(
-      process.execPath,
-      ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port)],
-      {
-        // The callback comes back to the public URL, where the sign-in's state cookie was set: the address the browser uses.
-        env: {
-          ...process.env,
-          DATABASE_URL: '',
-          XDG_CONFIG_HOME: join(directory, 'xdg'),
-          MISTRI_OPEN: '0',
-          MISTRI_PUBLIC_URL: origin,
-          BETTER_AUTH_SECRET: 'isolated-browser-oidc-secret-at-least-thirty-two-characters',
-          CREW_OIDC_SECRET: idp.clientSecret,
-          MISTRI_AUTH_ADMIN_EMAIL: '',
-          MISTRI_AUTH_ADMIN_PASSWORD: '',
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
-    const running = child;
     let log = '';
-    running.stdout!.on('data', (chunk) => {
-      log += String(chunk);
-    });
-    running.stderr!.on('data', (chunk) => {
-      log += String(chunk);
-    });
-    await new Promise<void>((done, fail) => {
-      const timer = setTimeout(() => fail(new Error(`The App did not start: ${log}`)), 60_000);
-      const ready = () => {
-        if (log.includes('Listening on ')) {
-          clearTimeout(timer);
-          done();
-        }
-      };
-      running.stdout!.on('data', ready);
-      running.once('exit', () => {
-        clearTimeout(timer);
-        fail(new Error(`The App exited while starting: ${log}`));
+    const origin = await withFreePort(async (port) => {
+      const url = `http://127.0.0.1:${port}`;
+      child = spawn(
+        process.execPath,
+        ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port)],
+        {
+          // The callback comes back to the public URL, where the sign-in's state cookie was set: the address the browser uses.
+          env: {
+            ...process.env,
+            DATABASE_URL: '',
+            XDG_CONFIG_HOME: join(directory, 'xdg'),
+            MISTRI_OPEN: '0',
+            MISTRI_PUBLIC_URL: url,
+            BETTER_AUTH_SECRET: 'isolated-browser-oidc-secret-at-least-thirty-two-characters',
+            CREW_OIDC_SECRET: idp.clientSecret,
+            MISTRI_AUTH_ADMIN_EMAIL: '',
+            MISTRI_AUTH_ADMIN_PASSWORD: '',
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      const running = child;
+      log = '';
+      running.stdout!.on('data', (chunk) => {
+        log += String(chunk);
       });
+      running.stderr!.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      await new Promise<void>((done, fail) => {
+        const timer = setTimeout(() => fail(new Error(`The App did not start: ${log}`)), 60_000);
+        const ready = () => {
+          if (log.includes('Listening on ')) {
+            clearTimeout(timer);
+            done();
+          }
+        };
+        running.stdout!.on('data', ready);
+        running.once('exit', () => {
+          clearTimeout(timer);
+          fail(new Error(`The App exited while starting: ${log}`));
+        });
+      });
+      return url;
     });
     return { origin, stop, log: () => log };
   } catch (error) {

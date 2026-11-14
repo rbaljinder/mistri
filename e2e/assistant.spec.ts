@@ -1,8 +1,8 @@
 import { execFileSync, type ChildProcess } from 'node:child_process';
+import { withFreePort } from './support/freePort';
 import { spawn } from './support/spawned';
 import { once } from 'node:events';
 import { mkdtempSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, test as base, type Page } from './support/harness';
@@ -63,57 +63,55 @@ const children: ChildProcess[] = [];
 async function serve(directory: string, name: string, writable: boolean): Promise<string> {
   const config = join(directory, `${name}.json`);
   writeFileSync(config, JSON.stringify({ connections: [{ name: 'crm', url: db, writable }] }));
-  const reservation = createServer();
-  await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((done) => reservation.close(() => done()));
-  const started = spawn(
-    process.execPath,
-    [
-      '--import',
-      'tsx',
-      'packages/mistri/src/server/index.ts',
-      '--config',
-      config,
-      '--app',
-      'test/fixtures/apps/crm',
-      '--port',
-      String(port),
-    ],
-    {
-      env: {
-        ...process.env,
-        ANTHROPIC_API_KEY: '',
-        MISTRI_ASSISTANT_SCRIPT: resolve('test/fixtures/assistant/compass.json'),
-        XDG_CONFIG_HOME: join(directory, `xdg-${name}`),
-        MISTRI_OPEN: '0',
-        MISTRI_CLOCK: CRM_CLOCK,
+  return withFreePort(async (port) => {
+    const started = spawn(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        'packages/mistri/src/server/index.ts',
+        '--config',
+        config,
+        '--app',
+        'test/fixtures/apps/crm',
+        '--port',
+        String(port),
+      ],
+      {
+        env: {
+          ...process.env,
+          ANTHROPIC_API_KEY: '',
+          MISTRI_ASSISTANT_SCRIPT: resolve('test/fixtures/assistant/compass.json'),
+          XDG_CONFIG_HOME: join(directory, `xdg-${name}`),
+          MISTRI_OPEN: '0',
+          MISTRI_CLOCK: CRM_CLOCK,
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
-  children.push(started);
-  let log = '';
-  started.stdout!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  started.stderr!.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  await new Promise<void>((done, fail) => {
-    const timer = setTimeout(() => fail(new Error(`Compass did not start: ${log}`)), 20_000);
-    started.stdout!.on('data', () => {
-      if (log.includes('Listening on ')) {
+    );
+    children.push(started);
+    let log = '';
+    started.stdout!.on('data', (chunk) => {
+      log += String(chunk);
+    });
+    started.stderr!.on('data', (chunk) => {
+      log += String(chunk);
+    });
+    await new Promise<void>((done, fail) => {
+      const timer = setTimeout(() => fail(new Error(`Compass did not start: ${log}`)), 20_000);
+      started.stdout!.on('data', () => {
+        if (log.includes('Listening on ')) {
+          clearTimeout(timer);
+          done();
+        }
+      });
+      started.once('exit', () => {
         clearTimeout(timer);
-        done();
-      }
+        fail(new Error(`Compass exited: ${log}`));
+      });
     });
-    started.once('exit', () => {
-      clearTimeout(timer);
-      fail(new Error(`Compass exited: ${log}`));
-    });
+    return `http://127.0.0.1:${port}`;
   });
-  return `http://127.0.0.1:${port}`;
 }
 
 /* A record put back as the scripted turns expect it, so a repeat starts where the first run did. */

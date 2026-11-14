@@ -1,8 +1,8 @@
 import { execFileSync, type ChildProcess } from 'node:child_process';
+import { withFreePort } from './support/freePort';
 import { spawn } from './support/spawned';
 import { once } from 'node:events';
 import { mkdtempSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { expect, test as base } from './support/harness';
 import { fixture } from './support/fixture';
@@ -15,46 +15,44 @@ const test = base.extend<object, { started: void }>({
       const directory = mkdtempSync(join(TMP, 'order-lines-'));
       db = join(directory, 'shop.db');
       execFileSync(process.execPath, [resolve('test/fixtures/apps/order-desk/seed.mjs'), db], { stdio: 'pipe' });
-      const reservation = createServer();
-      await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-      const port = (reservation.address() as { port: number }).port;
-      await new Promise<void>((done) => reservation.close(() => done()));
-      origin = `http://127.0.0.1:${port}`;
-      const started = spawn(
-        process.execPath,
-        [
-          '--import',
-          'tsx',
-          'packages/mistri/src/server/index.ts',
-          '--config',
-          `${db}.json`,
-          '--app',
-          'test/fixtures/apps/order-desk',
-          '--port',
-          String(port),
-        ],
-        { env: { ...process.env, XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' }, stdio: ['ignore', 'pipe', 'pipe'] },
-      );
-      child = started;
-      let log = '';
-      started.stdout!.on('data', (chunk) => {
-        log += String(chunk);
-      });
-      started.stderr!.on('data', (chunk) => {
-        log += String(chunk);
-      });
-      await new Promise<void>((done, fail) => {
-        const timer = setTimeout(() => fail(new Error(`Order desk did not start: ${log}`)), 20_000);
-        const ready = () => {
-          if (log.includes('Listening on ')) {
+      await withFreePort(async (port) => {
+        origin = `http://127.0.0.1:${port}`;
+        const started = spawn(
+          process.execPath,
+          [
+            '--import',
+            'tsx',
+            'packages/mistri/src/server/index.ts',
+            '--config',
+            `${db}.json`,
+            '--app',
+            'test/fixtures/apps/order-desk',
+            '--port',
+            String(port),
+          ],
+          { env: { ...process.env, XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' }, stdio: ['ignore', 'pipe', 'pipe'] },
+        );
+        child = started;
+        let log = '';
+        started.stdout!.on('data', (chunk) => {
+          log += String(chunk);
+        });
+        started.stderr!.on('data', (chunk) => {
+          log += String(chunk);
+        });
+        await new Promise<void>((done, fail) => {
+          const timer = setTimeout(() => fail(new Error(`Order desk did not start: ${log}`)), 20_000);
+          const ready = () => {
+            if (log.includes('Listening on ')) {
+              clearTimeout(timer);
+              done();
+            }
+          };
+          started.stdout!.on('data', ready);
+          started.once('exit', () => {
             clearTimeout(timer);
-            done();
-          }
-        };
-        started.stdout!.on('data', ready);
-        started.once('exit', () => {
-          clearTimeout(timer);
-          fail(new Error(`Order desk exited: ${log}`));
+            fail(new Error(`Order desk exited: ${log}`));
+          });
         });
       });
     },

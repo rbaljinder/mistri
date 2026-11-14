@@ -106,6 +106,9 @@ export async function ensurePostgresRuntimeSchema(client: PgQuery): Promise<bool
    of an owning group and run as another. A superuser is an implicit member
    of every role, which would make every owner pass, so for a superuser
    only itself counts. PUBLIC (grantee 0) is never ours. */
+/* What the runtime role may hold on a store's relation or column: reading and writing its rows, and a sequence's nextval. */
+const DML = `'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'USAGE'`;
+
 const ours = (role: string) =>
   `COALESCE(${role} = me.oid OR (NOT me.rolsuper AND ${role} <> 0 AND pg_catalog.pg_has_role(me.oid, ${role}, 'USAGE')), false)`;
 
@@ -121,15 +124,27 @@ const ours = (role: string) =>
  * the ones named under `prefix`: owned by this role, with no privilege held on
  * them or their columns by any other. A grant on `public`, a reporting role's
  * `SELECT ON ALL TABLES IN SCHEMA public`, reaches none of this.
+ *
+ * `runtime`, under the tenant row-security backstop: the role the App runs
+ * as, which is not this one and needs the store too. It alone may hold USAGE
+ * on the schema and SELECT, INSERT, UPDATE, DELETE or a sequence's USAGE on
+ * the store's relations and columns, never with GRANT OPTION — never CREATE,
+ * never ownership, and PUBLIC and every other role are refused as before.
  */
 export async function postgresRuntimeSchemaProblems(
   client: PgQuery,
   prefix: string,
-  options: { delegated?: boolean } = {},
+  options: { delegated?: boolean; runtime?: string } = {},
 ): Promise<string[]> {
+  if (options.runtime !== undefined && (typeof options.runtime !== 'string' || !options.runtime))
+    throw new TypeError('A runtime role is a role name.');
+  /* `rt.oid` is null without a runtime role, so nothing, PUBLIC included, is the runtime's and every grant counts as before. */
+  const runtime = (grantee: string, privilege: string, kinds: string) =>
+    `COALESCE(${grantee} = rt.oid AND ${privilege} IN (${kinds}), false)`;
   const row = (
     await client.query(
       `WITH me AS (SELECT r.oid, r.rolsuper FROM pg_catalog.pg_roles r WHERE r.rolname = CURRENT_USER),
+          rt AS (SELECT (SELECT r.oid FROM pg_catalog.pg_roles r WHERE r.rolname = $6::text) AS oid),
           ns AS (SELECT n.oid, n.nspowner, n.nspacl FROM pg_catalog.pg_namespace n WHERE n.nspname = $1),
           acl AS (SELECT a.grantee, a.privilege_type FROM ns, pg_catalog.aclexplode(COALESCE(ns.nspacl, pg_catalog.acldefault('n', ns.nspowner))) a),
           control AS (SELECT DISTINCT c.relowner AS role FROM ns, pg_catalog.pg_class c
@@ -141,12 +156,15 @@ export async function postgresRuntimeSchemaProblems(
             COALESCE((SELECT pg_catalog.has_schema_privilege(ns.oid, 'CREATE') AND pg_catalog.has_schema_privilege(ns.oid, 'USAGE') FROM ns), false) AS granted,
             EXISTS (SELECT 1 FROM acl, ns, me WHERE acl.privilege_type = 'CREATE' AND acl.grantee <> ns.nspowner AND NOT ${ours('acl.grantee')}
                      AND acl.grantee NOT IN (SELECT role FROM control)) AS "foreignCreate",
-            EXISTS (SELECT 1 FROM acl, ns, me WHERE acl.grantee <> ns.nspowner AND NOT ${ours('acl.grantee')}
-                     AND acl.grantee NOT IN (SELECT role FROM control)) AS "foreignUsage",
+            EXISTS (SELECT 1 FROM acl, ns, me, rt WHERE acl.grantee <> ns.nspowner AND NOT ${ours('acl.grantee')}
+                     AND acl.grantee NOT IN (SELECT role FROM control)
+                     AND NOT ${runtime('acl.grantee', 'acl.privilege_type', "'USAGE'")}) AS "foreignUsage",
             EXISTS (SELECT 1 FROM rel, me WHERE NOT ${ours('rel.relowner')}) AS "foreignOwner",
-            EXISTS (SELECT 1 FROM rel, me, pg_catalog.aclexplode(rel.relacl) a WHERE NOT ${ours('a.grantee')})
-            OR EXISTS (SELECT 1 FROM rel, me, pg_catalog.pg_attribute t, pg_catalog.aclexplode(t.attacl) a
-                        WHERE t.attrelid = rel.oid AND NOT ${ours('a.grantee')}) AS "foreignGrant",
+            EXISTS (SELECT 1 FROM rel, me, rt, pg_catalog.aclexplode(rel.relacl) a WHERE NOT ${ours('a.grantee')}
+                     AND NOT (${runtime('a.grantee', 'a.privilege_type', DML)} AND NOT a.is_grantable))
+            OR EXISTS (SELECT 1 FROM rel, me, rt, pg_catalog.pg_attribute t, pg_catalog.aclexplode(t.attacl) a
+                        WHERE t.attrelid = rel.oid AND NOT ${ours('a.grantee')}
+                          AND NOT (${runtime('a.grantee', 'a.privilege_type', DML)} AND NOT a.is_grantable)) AS "foreignGrant",
             COALESCE((SELECT (SELECT count(*) FROM pg_catalog.pg_proc WHERE pronamespace = ns.oid AND proname <> ALL ($5::text[]))
                            + (SELECT count(*) FROM pg_catalog.pg_operator WHERE oprnamespace = ns.oid)
                            + (SELECT count(*) FROM pg_catalog.pg_type t WHERE t.typnamespace = ns.oid AND t.typrelid = 0
@@ -171,6 +189,7 @@ export async function postgresRuntimeSchemaProblems(
         prefix.length,
         RUNTIME_CONTROL_PREFIXES.map((each) => `${each.replaceAll('_', '\\_')}%`),
         RUNTIME_SCHEMA_FUNCTIONS,
+        options.runtime ?? null,
       ],
     )
   ).rows[0] as

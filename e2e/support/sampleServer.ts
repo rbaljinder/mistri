@@ -1,8 +1,8 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, type ChildProcess } from 'node:child_process';
+import { withFreePort } from './freePort.js';
 import { spawn } from './spawned.js';
 import { once } from 'node:events';
 import { constants, copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { TMP } from './fixtures.js';
@@ -161,58 +161,13 @@ export async function startSample(
   }
   const commands = options.built ? join(appDirectory, 'server', 'commands.mjs') : join(source, 'commands.ts');
   const policy = options.built ? join(appDirectory, 'server', 'policy.mjs') : join(source, 'policy.ts');
-  const reservation = createServer();
-  await new Promise<void>((resolve) => reservation.listen(0, '127.0.0.1', resolve));
-  const port = (reservation.address() as { port: number }).port;
-  await new Promise<void>((resolve, reject) => reservation.close((error) => (error ? reject(error) : resolve())));
-  const origin = `http://127.0.0.1:${port}`;
-  const child = spawn(
-    process.execPath,
-    [
-      '--import',
-      'tsx',
-      'packages/mistri/src/server/index.ts',
-      '--config',
-      `${db}.json`,
-      '--app',
-      appDirectory,
-      ...(commanded ? ['--commands', commands] : []),
-      ...(forecourt ? ['--policy', policy] : []),
-      ...(options.dev ? ['--dev'] : []),
-      ...(options.jobs ? ['--jobs', join(source, 'jobs.ts')] : []),
-      '--port',
-      String(port),
-    ],
-    {
-      env: {
-        ...process.env,
-        XDG_CONFIG_HOME: join(directory, 'xdg'),
-        MISTRI_OPEN: '0',
-        ...(name === 'tick' ? { MISTRI_CLOCK: '2026-09-08T12:00:00Z' } : {}),
-        ...(signsIn
-          ? {
-              BETTER_AUTH_SECRET: 'disposable-forecourt-browser-secret-at-least-thirty-two-characters',
-              MISTRI_AUTH_ADMIN_EMAIL: account.email,
-              MISTRI_AUTH_ADMIN_PASSWORD: account.password,
-            }
-          : {}),
-        ...options.env,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
+  let child: ChildProcess | undefined;
   let log = '';
-  child.stdout.on('data', (chunk) => {
-    log += String(chunk);
-  });
-  child.stderr.on('data', (chunk) => {
-    log += String(chunk);
-  });
   const stop = async () => {
-    if (child.exitCode !== null || child.signalCode !== null) return;
+    if (!child || child.exitCode !== null || child.signalCode !== null) return;
     const closed = once(child, 'close');
     child.kill('SIGTERM');
-    const force = setTimeout(() => child.kill('SIGKILL'), 5000);
+    const force = setTimeout(() => child?.kill('SIGKILL'), 5000);
     try {
       await closed;
     } finally {
@@ -220,28 +175,74 @@ export async function startSample(
     }
   };
   try {
-    await new Promise<void>((resolve, reject) => {
-      /* A commanded sample loads its TypeScript commands before it listens:
-         nine seconds on a quiet machine, past fifteen on a busy one. */
-      const timer = setTimeout(() => done(new Error(`Sample startup timed out: ${log}`)), 30_000);
-      const ready = () => {
-        if (log.includes('Listening on ')) done();
-      };
-      const failed = () => done(new Error(`Sample exited during startup: ${log}`));
-      const done = (error?: Error) => {
-        clearTimeout(timer);
-        child.stdout.off('data', ready);
-        child.off('exit', failed);
-        child.off('error', done);
-        if (error) reject(error);
-        else resolve();
-      };
-      child.stdout.on('data', ready);
-      child.once('exit', failed);
-      child.once('error', done);
-      ready();
+    const port = await withFreePort(async (port) => {
+      const started = spawn(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          'packages/mistri/src/server/index.ts',
+          '--config',
+          `${db}.json`,
+          '--app',
+          appDirectory,
+          ...(commanded ? ['--commands', commands] : []),
+          ...(forecourt ? ['--policy', policy] : []),
+          ...(options.dev ? ['--dev'] : []),
+          ...(options.jobs ? ['--jobs', join(source, 'jobs.ts')] : []),
+          '--port',
+          String(port),
+        ],
+        {
+          env: {
+            ...process.env,
+            XDG_CONFIG_HOME: join(directory, 'xdg'),
+            MISTRI_OPEN: '0',
+            ...(name === 'tick' ? { MISTRI_CLOCK: '2026-09-08T12:00:00Z' } : {}),
+            ...(signsIn
+              ? {
+                  BETTER_AUTH_SECRET: 'disposable-forecourt-browser-secret-at-least-thirty-two-characters',
+                  MISTRI_AUTH_ADMIN_EMAIL: account.email,
+                  MISTRI_AUTH_ADMIN_PASSWORD: account.password,
+                }
+              : {}),
+            ...options.env,
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      child = started;
+      log = '';
+      started.stdout.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      started.stderr.on('data', (chunk) => {
+        log += String(chunk);
+      });
+      await new Promise<void>((resolve, reject) => {
+        /* A commanded sample loads its TypeScript commands before it listens:
+           nine seconds on a quiet machine, past fifteen on a busy one. */
+        const timer = setTimeout(() => done(new Error(`Sample startup timed out: ${log}`)), 30_000);
+        const ready = () => {
+          if (log.includes('Listening on ')) done();
+        };
+        const failed = () => done(new Error(`Sample exited during startup: ${log}`));
+        const done = (error?: Error) => {
+          clearTimeout(timer);
+          started.stdout.off('data', ready);
+          started.off('exit', failed);
+          started.off('error', done);
+          if (error) reject(error);
+          else resolve();
+        };
+        started.stdout.on('data', ready);
+        started.once('exit', failed);
+        started.once('error', done);
+        ready();
+      });
+      return port;
     });
-    return { origin, db, stop, log: () => log };
+    return { origin: `http://127.0.0.1:${port}`, db, stop, log: () => log };
   } catch (error) {
     await stop();
     throw error;

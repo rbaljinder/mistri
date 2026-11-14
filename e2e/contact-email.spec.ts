@@ -1,9 +1,9 @@
 import { execFileSync, type ChildProcess } from 'node:child_process';
+import { withFreePort } from './support/freePort';
 import { spawn } from './support/spawned';
 import { createHmac } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -83,39 +83,37 @@ const test = base.extend<object, { started: void }>({
           stdio: 'pipe',
         },
       );
-      const reservation = createServer();
-      await new Promise<void>((done) => reservation.listen(0, '127.0.0.1', done));
-      const port = (reservation.address() as { port: number }).port;
-      await new Promise<void>((done) => reservation.close(() => done()));
-      origin = `http://127.0.0.1:${port}`;
-      const started = spawn(
-        process.execPath,
-        ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port)],
-        {
-          cwd: resolve('.'),
-          env: environment,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        },
-      );
-      child = started;
-      started.stdout!.on('data', (chunk) => {
-        log += String(chunk);
-      });
-      started.stderr!.on('data', (chunk) => {
-        log += String(chunk);
-      });
-      await new Promise<void>((done, fail) => {
-        const timer = setTimeout(() => fail(new Error(`Desk did not start: ${log}`)), 30_000);
-        const ready = () => {
-          if (log.includes('Listening on ')) {
+      await withFreePort(async (port) => {
+        origin = `http://127.0.0.1:${port}`;
+        const started = spawn(
+          process.execPath,
+          ['--import', 'tsx', 'packages/mistri/src/server/index.ts', '--config', config, '--app', app, '--port', String(port)],
+          {
+            cwd: resolve('.'),
+            env: environment,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          },
+        );
+        child = started;
+        started.stdout!.on('data', (chunk) => {
+          log += String(chunk);
+        });
+        started.stderr!.on('data', (chunk) => {
+          log += String(chunk);
+        });
+        await new Promise<void>((done, fail) => {
+          const timer = setTimeout(() => fail(new Error(`Desk did not start: ${log}`)), 30_000);
+          const ready = () => {
+            if (log.includes('Listening on ')) {
+              clearTimeout(timer);
+              done();
+            }
+          };
+          started.stdout!.on('data', ready);
+          started.once('exit', () => {
             clearTimeout(timer);
-            done();
-          }
-        };
-        started.stdout!.on('data', ready);
-        started.once('exit', () => {
-          clearTimeout(timer);
-          fail(new Error(`Desk exited: ${log}`));
+            fail(new Error(`Desk exited: ${log}`));
+          });
         });
       });
     },

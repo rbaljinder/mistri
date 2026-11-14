@@ -1,22 +1,18 @@
 /** One suite login on a phone, with only explicitly granted App links. */
-import { createServer } from 'node:http';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, test } from './support/harness';
 import { startConfiguredSuite } from '../packages/mistri/src/server/cli/suiteCommand';
+import { withFreePort } from './support/freePort';
 import { changeSuiteGrant } from '../packages/mistri/src/server/cli/suiteGrant';
 
 test('suite chooser signs in once, reveals only granted Apps and signs out everywhere', async ({ page, playwright }) => {
   const dir = mkdtempSync(join(tmpdir(), 'tw-suite-chooser-'));
   let suite: Awaited<ReturnType<typeof startConfiguredSuite>> | undefined;
   try {
-    const reservation = createServer();
-    await new Promise<void>((resolve) => reservation.listen(0, '127.0.0.1', resolve));
-    const port = (reservation.address() as { port: number }).port;
-    await new Promise<void>((resolve) => reservation.close(() => resolve()));
-    const apps = [];
+    const apps: Array<{ id: string; directory: string; config: string; mount: string }> = [];
     for (const id of ['alpha', 'beta']) {
       const home = join(dir, id);
       mkdirSync(home);
@@ -38,25 +34,27 @@ test('suite chooser signs in once, reveals only granted Apps and signs out every
       apps.push({ id, directory: `./${id}`, config: `./${id}/connections.json`, mount: `/${id}` });
     }
     const file = join(dir, 'suite.json');
-    writeFileSync(
-      file,
-      JSON.stringify({
-        port,
-        basePath: '/tools',
-        apps,
-        identity: {
-          id: 'shared',
-          name: 'Shared Suite',
-          store: './identity.db',
-          grants: './grants.db',
-          environment: { BETTER_AUTH_SECRET: 'SECRET', MISTRI_TEST_AUTH_LIMITS: 'LIMITS', NODE_ENV: 'MODE' },
-        },
-      }),
-    );
     /* The per-address sign-in limits stay on in the product; the spec lifts them for its own loopback suite through the
        test seam (requestRules.ts), as suite-navigation.spec does, so a loaded machine's retries cannot spend them. */
     const environment = { SECRET: 'test-suite-secret-longer-than-thirty-two-characters', LIMITS: 'off', MODE: 'test' };
-    suite = await startConfiguredSuite(file, environment);
+    suite = await withFreePort(async (port) => {
+      writeFileSync(
+        file,
+        JSON.stringify({
+          port,
+          basePath: '/tools',
+          apps,
+          identity: {
+            id: 'shared',
+            name: 'Shared Suite',
+            store: './identity.db',
+            grants: './grants.db',
+            environment: { BETTER_AUTH_SECRET: 'SECRET', MISTRI_TEST_AUTH_LIMITS: 'LIMITS', NODE_ENV: 'MODE' },
+          },
+        }),
+      );
+      return startConfiguredSuite(file, environment);
+    });
     const origin = suite.publicURL;
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${origin}/tools/_mistri/apps`);
