@@ -144,15 +144,19 @@ modules that remain are stores, models and behaviour — the walk in
 the per-room stores — plus `boot.js`, which is boot, and `app.js`, the
 shell it loads. A vanilla module that
 still needs to draw crosses over through `components/mount.tsx`. Headless
-behaviour comes from Base UI (`@base-ui/react`), dressed in the tool's own
-classes: `Modal.tsx` (every dialog), `DropMenu.tsx`/`OverflowMenu.tsx`/
-`ThMenu.tsx`/`TopNav.tsx` (every menu), `Dropdown.tsx` (the listbox) and
-`Typeahead.tsx` (every box-with-a-list); the walk-free ones are `@mistriwork/ui`'s
-(`packages/ui/src/`) and take their words as props. Popups are anchored through
-`anchor.ts`, which measures on the zoom-aware ruler (`packages/ui/src/internal/ruler.ts`) — Floating UI does not
-know about the density zoom on the root — and are drawn inside the
-enclosing dialog when there is one. The assessment's step 4 says what was
-left by hand and why.
+behaviour comes from UI SDK (`@ui-sdk/core`, `@ui-sdk/react`): `Modal.tsx`
+(every dialog), `DropMenu.tsx`/`OverflowMenu.tsx`/`ThMenu.tsx`/`TopNav.tsx`
+(every menu), `Dropdown.tsx` (the listbox) and `Typeahead.tsx` (every
+box-with-a-list); the walk-free ones are `@mistriwork/ui`'s
+(`packages/ui/src/`) and take their words as props. A part is known by the
+`data-slot` it carries and its state by attributes, never by a class, and
+`@mistriwork/ui/controls.css` dresses them (UI SDK's own sheet is carried in it,
+trimmed to the parts the packages draw: `scripts/ui-sdk-css.mjs`). Every drawn
+component is a slot of the control kit (`packages/ui/src/uiKitSlots.ts`,
+`UiKit.tsx`). Popups are drawn in the top layer and placed by UI SDK, inside
+the enclosing dialog when there is one; the zoom-aware ruler
+(`packages/ui/src/internal/ruler.ts`) is for what the client measures by
+hand. The assessment's step 4 says what was left by hand and why.
 
 ## Facts that are written in more than one place — keep them in sync
 
@@ -272,6 +276,11 @@ range widens.
   refused, not found, settings) side by side in `.visual/atlas.html`, read from
   the matrix's captures and filling the rest; `--mode`, `--device`, `--width`.
   Read across a row for drift between kinds: label, field, button order, words.
+- A cold read. Ten screens of Lintel in its own look (sign-in, Today, the rent roll, a lease, the repair board, a
+  New form after a failed send, the command dialog, a list on a phone, and the rent roll in two other looks), each
+  from `mistri shot --app examples/apps/lintel <route>… --both` (`--theme` for the other looks), given to someone who has not seen
+  the change and knows nothing of how it was made: a first impression, what looks unfinished ranked by how much it
+  hurts, and a mark out of ten for visual polish. Under 8 for the default look is a finding to fix, not a note.
 - `npm run build` runs `scripts/bundle-budget.mjs` and `scripts/type-budget.mjs`: each surface's first
   paint (public, App, Workshop) has script and stylesheet ceilings, raw and
   in brotli, and

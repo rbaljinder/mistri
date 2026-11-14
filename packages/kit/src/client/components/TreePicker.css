@@ -2,7 +2,7 @@
    the popup and its rows are the record picker's own (features.css); this is what a tree adds to them. */
 @layer components {
 .tree-picker { display: grid; gap: var(--space-1h); min-width: 0; }
-/* The record picker's list measures its room from Base UI's --available-height, as this one does. */
+/* The record picker's list measures its room from the popup's --available-height, as this one does. */
 .tree-picker-popup { width: 100%; }
 .tree-picker-option { justify-content: flex-start; align-items: center; gap: var(--space-2); }
 .tree-picker-option .picker-option-label { flex: 0 1 auto; }

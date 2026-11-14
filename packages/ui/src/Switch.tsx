@@ -1,6 +1,6 @@
 /**
- * A switch: one on/off choice, said as a switch, not a checkbox. Over Base
- * UI's Switch, which gives it the role, the keyboard (Space toggles, as a
+ * A switch: one on/off choice, said as a switch, not a checkbox. Over UI
+ * SDK's Switch, which gives it the role, the keyboard (Space toggles, as a
  * checkbox does) and the checked state; the label beside it is a click
  * target too, and a description under it never is. Controlled with
  * `checked`/`onCheckedChange`, uncontrolled with `defaultChecked`.
@@ -8,9 +8,10 @@
  * the focus it holds, so a switch that is working says `aria-disabled`
  * and refuses the press itself.
  */
+import { Switch as Toggle, SwitchThumb } from '@ui-sdk/react/switch';
 import { useId, type ReactNode, type Ref } from 'react';
-import { Switch as BaseSwitch } from '@base-ui/react/switch';
-import { fromBaseUi, type ChangeDetails } from './changeDetails.js';
+import type { ChangeDetails } from './changeDetails.js';
+import { told } from './internal/told.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface SwitchProps {
@@ -42,34 +43,30 @@ function DefaultSwitch({
   ref,
 }: SwitchProps) {
   /* The label names the switch by its id; a caller who gives none gets
-     a generated one, never Base UI's own, which the label cannot know. */
+     a generated one, never UI SDK's own, which the label cannot know. */
   const generatedId = useId();
   const switchId = id ?? generatedId;
   return (
-    <span className={['ui-switch-row', className].filter(Boolean).join(' ')}>
-      <BaseSwitch.Root
+    <span data-slot="switch-row" className={className}>
+      <Toggle
         id={switchId}
         ref={ref}
-        className="ui-switch"
         checked={checked}
         defaultChecked={defaultChecked}
         disabled={disabled}
         aria-disabled={busy || undefined}
         onCheckedChange={(next, details) => {
-          if (busy) return;
-          onCheckedChange?.(next, fromBaseUi(details, 'toggle'));
+          // Refused in UI SDK's own words, so an uncontrolled switch does not move either.
+          if (busy) return details.cancel();
+          onCheckedChange?.(next, told('toggle', details));
         }}
       >
-        <BaseSwitch.Thumb className="ui-switch-thumb" />
-      </BaseSwitch.Root>
+        <SwitchThumb />
+      </Toggle>
       {label !== undefined || description !== undefined ? (
-        <span className="ui-switch-copy">
-          {label !== undefined ? (
-            <label htmlFor={switchId} className="ui-switch-label">
-              {label}
-            </label>
-          ) : null}
-          {description !== undefined ? <span className="ui-switch-description">{description}</span> : null}
+        <span data-slot="switch-copy">
+          {label !== undefined ? <label htmlFor={switchId}>{label}</label> : null}
+          {description !== undefined ? <span data-slot="switch-description">{description}</span> : null}
         </span>
       ) : null}
     </span>

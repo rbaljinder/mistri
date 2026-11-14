@@ -112,7 +112,7 @@ function EmailProof({ form, typed }: { form: string; typed: string }) {
           <p>{say('optionalWeEmailACode')}</p>
           <Field label={say('common.email')}>
             <input
-              className="field-control"
+              data-slot="input"
               type="email"
               autoComplete="email"
               value={email}
@@ -125,7 +125,7 @@ function EmailProof({ form, typed }: { form: string; typed: string }) {
           {sent && (
             <Field label={say('codeFromTheEmail')}>
               <input
-                className="field-control"
+                data-slot="input"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 maxLength={6}

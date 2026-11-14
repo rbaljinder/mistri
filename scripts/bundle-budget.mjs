@@ -74,11 +74,24 @@ const EMBED = join(ROOT, 'packages/mistri/dist/embed/react');
    402,006, style 408,234 / 54,814; public style 408,120 / 54,758. The public script kept its target. rc.24 to rc.39
    grew inside them. rc.40 moved the public script: the UI seam, which every public form's controls now draw through
    (each primitive asks the installed kit for its slot; the kit itself is a module fetched only when an App names one).
-   Measured: public script 700,146 / 195,250. */
+   Measured: public script 700,146 / 195,250.
+
+   Moved when the controls left Base UI for UI SDK (@mistriwork/ui drawn over @ui-sdk/core and @ui-sdk/react), every
+   target at once, because the change is the dependency under every control and no part of it can wait behind
+   onDemand: a first page draws a button, a field, a listbox and a date. What it costs, measured against the build
+   before it (raw / br): the public script 710,800 -> 755,253 / 198,000 -> 211,726, the App script 1,502,000 ->
+   1,543,400 / 411,200 -> 424,364, the stylesheet 411,700 -> 498,348 / 55,100 -> 64,377. In the script, UI SDK's
+   core is about 45 KB heavier than Base UI and Floating UI were for the same controls (its popup, list and platform
+   foundations are shared by every part, so the first control pays for them). It was 22 KB more on a public page
+   until the splitter stopped following UI SDK's barrel (the kit's vite.ts, BARRELS). In the stylesheet, UI SDK's own
+   sheet is carried for the parts drawn (42 KB), the controls' dress over it is 50 KB where the old four sheets were
+   about 40 KB, and naming a part by `[data-slot='button']` where a class was four letters is the rest; brotli takes most
+   of the last back. What would bring it down: the calendar behind onDemand (about 21 KB of script on both pages),
+   and the carried sheet cut to the slots drawn instead of the families (scripts/ui-sdk-css.mjs, up to 14 KB). */
 export const BUDGET = {
   mistri: {
-    public: { script: { raw: 721_000, br: 201_000 }, style: { raw: 420_000, br: 56_500 } },
-    app: { script: { raw: 1_510_000, br: 414_000 }, style: { raw: 420_000, br: 56_500 } },
+    public: { script: { raw: 778_000, br: 218_000 }, style: { raw: 514_000, br: 66_700 } },
+    app: { script: { raw: 1_590_000, br: 437_000 }, style: { raw: 514_000, br: 66_700 } },
   },
 };
 
@@ -108,7 +121,9 @@ export const EMBED_BUDGET = {
      each saved step and submit, and the per-answer choice narrowing the server serves. */
   headless: { raw: 137_500, br: 36_300 },
   adapter: { raw: 3_600, br: 1_400 },
-  shell: { raw: 670_000, br: 94_000 },
+  /* Moved with the first paint's, for the same reason (see BUDGET): the controls are drawn over UI SDK, and the
+     shell carries their script and their sheets as scoped text. Measured 762,581 / 102,604, from 657,900 / 93,000. */
+  shell: { raw: 785_000, br: 105_700 },
 };
 
 /* The chrome's words in a language besides English (vite.config.ts LOCALE_GROUP, src/client/copy/<lang>.ts), one chunk

@@ -26,6 +26,8 @@
 .decision-chip .decision-chip-accept,
 .decision-chip .decision-chip-more {
   position: relative;
+  /* The button's own height is a compact control's; here it is a word in the line. */
+  height: auto;
   min-height: 0;
   padding-block: 0;
   line-height: inherit;

@@ -43,11 +43,11 @@ test.describe('A public door', () => {
     await page.goto(`${app.origin}/`);
     await settled(page);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Paint that outlasts the weather');
-    await expect(page.locator('.front-badge')).toHaveText('Mixed while you wait');
+    await expect(page.locator('[data-slot="badge"][data-kind="hero"]')).toHaveText('Mixed while you wait');
     // The hero's rules are the public chunk's sheet, not the shell's (landingHero.css): they came with it.
-    await expect(page.locator('.front-badge')).toHaveCSS('justify-self', 'start');
-    await expect(page.locator('.front-hero-tiles')).toHaveCSS('display', 'grid');
-    const tiles = page.locator('.front-hero-tiles img');
+    await expect(page.locator('[data-slot="badge"][data-kind="hero"]')).toHaveCSS('justify-self', 'start');
+    await expect(page.locator('[data-slot="photo-tiles"]')).toHaveCSS('display', 'grid');
+    const tiles = page.locator('[data-slot="photo-tiles"] img');
     await expect(tiles).toHaveCount(3);
     for (const alt of ['A wall of paint tins', 'A brush on a fresh coat', 'The mixing counter']) {
       const tile = page.getByRole('img', { name: alt });
@@ -55,7 +55,7 @@ test.describe('A public door', () => {
       // Each photo arrived: the public image pipeline served it.
       expect(await tile.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
     }
-    const points = page.locator('.front-points li');
+    const points = page.locator('[data-slot="icon-rows"] li');
     await expect(points).toHaveText(['Ten-year finish guarantee', 'Ready in fifteen minutes']);
     await expect(points.first().locator('svg')).toHaveCount(1);
   });

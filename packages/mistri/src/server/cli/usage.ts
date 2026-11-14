@@ -526,7 +526,8 @@ Rows to look at — a draft judged on believable data, with no seed script:
   an App, one read off the vocabulary) is spread over its states — most work
   open, about a third done, a little called off — each record with the
   stamps of the states it passed through. Dates fall across the last 90
-  days, and some open work is due today or overdue. Names, emails
+  days, and some open work is due today or overdue; a schedule's dates (an
+  appointment's, a booking's) fall behind, today and ahead. Names, emails
   (example.com) and phone numbers (555-01xx) come from a small word list.
   Writes only to a connection whose config says "writable": true.
       --rows <n>      rows per main table (default 40); staff and lookups
@@ -578,7 +579,8 @@ A theme as it is worn — every color, recipe, type and shape after extends:
 
   mistri theme show <look|theme-id|.> [--app <dir>] [--diff <look|theme-id>] [--json]
 
-  A built-in look (workshop, lumen, mono, sage, ledger), or a theme of the App in --app (else
+  A built-in look (workshop, lumen, mono, sage, ledger, atelier, graphite,
+  bloom), or a theme of the App in --app (else
   the current directory); . is the one the App wears. Every color in light
   and dark and each palette's changes, every recipe, the type and the shape,
   each value it inherits marked with where from: the look it extends, its
@@ -1048,6 +1050,14 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 `.trim();
 
 /** `mistri schema --help`: the one form of the command, with the connection flags it reads. */
+/* `mistri dev --help`: the command's own paragraph of USAGE, cut out rather than written twice, so the two cannot
+   come to disagree. */
+export const DEV_USAGE = (() => {
+  const from = USAGE.indexOf('  mistri dev [--app <dir>] [<db>');
+  const to = USAGE.indexOf('  mistri test init', from);
+  return `${USAGE.slice(from, to).replace(/^ {2}/gm, '').trimEnd()}\n\nEvery serving option applies (mistri --help lists them).\n`;
+})();
+
 export const SCHEMA_USAGE = `mistri schema --brief [<db> | --db <target> | --config <path>] [--schema <name>]
 
 The schema as one line per table, for an agent's context: columns with short types,

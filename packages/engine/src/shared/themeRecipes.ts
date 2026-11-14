@@ -31,39 +31,53 @@ import type {
  * its sheet.
  */
 export const RECIPE_MENU = {
-  nav: { tint: null, inverted: null, wash: 'brand', underline: 'brand', pill: 'lumen', quiet: 'sage', slot: 'workshop' },
+  nav: { tint: null, inverted: null, wash: 'brand', underline: 'brand', pill: 'lumen', quiet: 'sage', slot: 'workshop', float: 'tiles' },
   bar: { plain: null, ruled: null, dark: 'brand', airy: 'lumen', soft: 'sage' },
-  tabs: { pill: null, inverted: null, underline: 'lumen', rule: 'brand', chosen: 'sage' },
-  windows: { segmented: null, lifted: 'lumen', chosen: 'sage' },
-  stat: { plain: null, framed: null, topline: 'brand', ruled: 'brand', icon: 'lumen', panel: 'sage', divided: 'lumen' },
+  tabs: { pill: null, inverted: null, underline: 'lumen', rule: 'brand', tint: 'sage', lifted: 'tiles' },
+  windows: { segmented: null, lifted: 'lumen', tint: 'sage' },
+  stat: { plain: 'brand', framed: null, topline: 'brand', ruled: 'brand', icon: 'lumen', panel: 'sage', divided: 'lumen', bento: 'tiles' },
   section: { open: null, card: 'lumen', panel: 'sage' },
   fields: { open: null, panel: 'sage', card: 'lumen', rail: 'lumen' },
-  table: { open: null, tinted: 'brand', hairline: 'sage', card: 'lumen', quiet: 'lumen', banded: 'brand' },
+  table: { open: null, tinted: 'brand', hairline: 'sage', card: 'lumen', quiet: 'lumen', banded: 'brand', rows: 'tiles' },
   status: { dot: null, pill: 'sage', 'pill-dot': 'lumen', quiet: 'lumen' },
   board: { ruled: null, soft: 'sage', strip: 'lumen' },
   chart: { plain: null, wash: 'sage', gradient: 'lumen', line: 'lumen' },
   buttons: { accent: null, raised: 'lumen', keyed: 'workshop' },
-  links: { plain: null, underline: null },
+  links: { plain: null, underline: null, name: null },
   rules: { ink: null, hairline: null, double: 'ledger' },
   avatar: { plain: null, large: 'sage', round: 'lumen' },
-  workflow: { markers: null, pills: 'lumen' },
+  workflow: { markers: null, pills: 'lumen', segments: 'tiles' },
   banner: { tint: null, gradient: 'lumen', plain: 'lumen' },
   steps: { flat: null, tinted: 'lumen', strip: 'lumen' },
   lanes: { tint: null, tag: 'brand', plain: 'brand' },
   header: { plain: null, band: null, hero: null },
   /* A list's filter not yet asked for: its own part, so a theme may keep its keyed or raised buttons and still pick the
      adders' edge (Workshop keys them solid; Lumen's are quiet, as its raised buttons were). */
-  filters: { dashed: null, solid: 'workshop', quiet: 'lumen' },
-  /* The four below are a form's: their rules are in @mistriwork/ui's forms.css, which arrives with the first control
-     a page draws, so no first stylesheet carries them and the menu names no sheet of a look. */
+  /* `solid` first: it is the default, drawn by the filter bar's own sheet. A dashed edge read as a place left empty. */
+  filters: { solid: null, dashed: null, quiet: 'lumen' },
+  /* The three below are a form's: their rules are in @mistriwork/ui's controls.css, which arrives with the first
+     control a page draws, so no first stylesheet carries them and the menu names no sheet of a look. */
   required: { star: null, 'optional-word': null },
-  checkbox: { native: null, drawn: null },
   formStep: { plain: null, ruled: null },
   actionBar: { plain: null, raised: null },
 } as const satisfies Record<keyof ThemeRecipes, Record<string, string | null>>;
 
 /** Recipe parts renamed before 1.0, refused with the new name: "head" is a table's column heads (`rules.head`). */
 export const RECIPES_RENAMED: Readonly<Record<string, string>> = { head: 'header' };
+
+/** Recipe values renamed before 1.0, refused with the new one. One word for one drawing across the parts: what sits on
+    a tint of the accent is `tint` wherever it is (the menu's entry always was), and a key lifted out of a track is
+    `lifted` on a record's tabs as on a dashboard's windows. */
+export const RECIPE_VALUES_RENAMED: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  tabs: { chosen: 'tint', segment: 'lifted' },
+  windows: { chosen: 'tint' },
+};
+
+/** Recipe parts taken off the menu before 1.0, refused with why. No rule has read `checkbox` since the controls moved
+    to UI SDK, which draws the box itself: the part chose between two words and nothing else. */
+export const RECIPES_REMOVED: Readonly<Record<string, string>> = {
+  checkbox: 'it chose nothing: @mistriwork/ui draws a checkbox itself, filled in the accent when ticked. Delete the line',
+};
 
 /** Shape rides the same attributes (`data-look-elevation`); type rides its own (`data-type-<role>`, themeType.ts). */
 export const ELEVATIONS = { hairline: null, flat: null, soft: 'sage', raised: 'lumen' } as const satisfies Record<
@@ -94,13 +108,15 @@ export const DEFAULT_RECIPES = Object.fromEntries(RECIPE_PARTS.map((part) => [pa
 /** The sheet that declares each face the kit ships for an interface, by the family a stack begins with: a sheet of its
     own (interFace.css, barlowFace.css), apart from the look it was made for, so a theme set in the face fetches its
     declaration and not the whole of that look's rules. */
-const KIT_FACE_SHEETS: Readonly<Record<string, string>> = { Inter: 'inter', Barlow: 'barlow', 'Barlow Semi Condensed': 'barlow' };
+const KIT_FACE_SHEETS: Readonly<Record<string, string>> = {
+  Inter: 'inter',
+  Barlow: 'barlow',
+  'Barlow Semi Condensed': 'barlow',
+  Manrope: 'manrope',
+};
 
 /** The attributes a worn theme sets on the root, and the look sheets they need. */
-export function recipeAttributes(
-  theme: ThemeDefinition,
-  lookNav?: ThemeTypeRoleDefinition,
-): { attributes: Record<string, string>; sheets: string[] } {
+export function recipeAttributes(theme: ThemeDefinition): { attributes: Record<string, string>; sheets: string[] } {
   const recipes = { ...DEFAULT_RECIPES, ...theme.recipes };
   const attributes: Record<string, string> = {};
   const sheets = new Set<string>();
@@ -137,7 +153,7 @@ export function recipeAttributes(
   }
 
   Object.assign(attributes, typeAttributes(theme.type));
-  const side = sideNavWords(theme.type, lookNav);
+  const side = sideNavWords(theme.type);
   if (side.length) attributes['data-type-nav-side'] = side.join(' ');
   const bar = barGround(theme, recipes.bar);
   if (bar) attributes['data-bar-ground'] = bar;
@@ -211,19 +227,14 @@ function roleWords(name: ThemeTypeRole, role: ThemeTypeRoleDefinition | undefine
 }
 
 /**
- * What the theme itself says of the nav role, beyond what its base look already says: `data-type-nav-side`, which
- * dresses the side menu's entries. The compiled theme carries the look's roles merged under its own, and a look that
- * sets nav (Mono's mono capitals) dresses the bar's entries only, as it always did; the side menu keeps the look's
- * face until a theme sets the role itself. Compared per property, so a theme that only changes the weight does not
- * bring the look's capitals down the side.
+ * `data-type-nav-side`: the nav role down the side menu. The menu's entries are one thing wherever the menu stands, so
+ * the side wears what the bar does, a look's own role included (Mono's mono capitals). It was the theme's own words
+ * alone, from when the role first reached the side and a look's menu was to stay as it had been; a look then read one
+ * way under a top menu and another beside a side one.
  */
-function sideNavWords(type: ThemeTypeDefinition | undefined, lookNav: ThemeTypeRoleDefinition | undefined): string[] {
+function sideNavWords(type: ThemeTypeDefinition | undefined): string[] {
   const role = type?.roles?.nav;
-  if (!role) return [];
-  const own: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(role))
-    if (JSON.stringify(value) !== JSON.stringify((lookNav as Record<string, unknown> | undefined)?.[key])) own[key] = value;
-  return roleWords('nav', own as ThemeTypeRoleDefinition);
+  return role ? roleWords('nav', role) : [];
 }
 
 /**

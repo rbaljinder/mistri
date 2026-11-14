@@ -101,6 +101,10 @@ function declaredKeys(node: unknown, into = new Set<string>()): Set<string> {
   if (o.properties && typeof o.properties === 'object') {
     for (const key of Object.keys(o.properties)) into.add(key);
   }
+  /* A map that takes only names the schema lists (a theme's `parts`, keyed by the published part) declares those names
+     as its keys, as `properties` does. */
+  const names = (o.propertyNames as { enum?: unknown } | undefined)?.enum;
+  if (Array.isArray(names)) for (const key of names) if (typeof key === 'string') into.add(key);
   for (const value of Object.values(o)) declaredKeys(value, into);
   return into;
 }
@@ -340,7 +344,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
        and `claims` (`from` until 1.0): the identity provider's claims that give the role.
        `service` (1.0): a role only a service principal holds (a jobs module's
        principal, an App API token), which a free-form page is offered to only
-       where it names it. `extends` (0.9.2): another role whose grants it holds too. */
+       where it names it. `extends` (0.9.2): another role whose grants it holds too. `portal` (1.0): a role the
+       App's own public holds, drawn none of the office's tools. */
     assert.deepEqual(props(a.roleGrant), [
       'actions',
       'claims',
@@ -353,6 +358,7 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
       'flags',
       'label',
       'operations',
+      'portal',
       'read',
       'realm',
       'service',
@@ -761,7 +767,15 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // name): 1761/522.
     // 1.0.0-rc.49: a resource action's `submitLabel`, the words on its dialog's submit (one entry; the name was a
     // landing search's already): 1762/522.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1762, names: 522 });
+    // The theme menu consolidated: a theme's `recipes.blocks` and `recipes.current`, the two families (two entries;
+    // both names were keys already), and `recipes.checkbox` off the menu (one entry and its name gone): 1763/521.
+    // A summary's `notes`, a line under a figure by its field (one entry; the name was a breakdown's already): 1764/521.
+    // A list view's `summary`, its strip of a dashboard's metrics (one entry and its name): 1765/522.
+    // A theme's `brand`, its one colour (one entry and its name): 1766/523.
+    // A role's `portal`, the App's own public (one entry and its name), and a list view's `primary`, a row's title
+    // there (one entry; the name was a card's already): 1768/524.
+    // A dashboard's rows and a record page's related list take that `primary` too (two entries, no new name): 1770/524.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1770, names: 524 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

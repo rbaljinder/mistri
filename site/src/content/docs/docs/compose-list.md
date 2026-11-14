@@ -13,11 +13,11 @@ the worked examples.
 
 - **Always**, `show` 4–7 columns: the name first, then the state, the parent
   by name (`unit_id`, drawn as the home's label), a figure and a date; never a raw id —
-  `examples/apps/lintel/views.ts:65`.
+  `examples/apps/lintel/views.ts:72`.
 - **When the rows are people or companies**, an `avatar` and a muted
   `subtitle` on the first column.
 - **When the work divides by state or date**, `tabs` in the order it is
-  worked, All last — `examples/apps/lintel/views.ts:151`.
+  worked, All last — `examples/apps/lintel/views.ts:158`.
 - **When it is worked by narrowing on three or more facets**,
   `filterBar: 'rail'` — `examples/apps/lintel/views.ts:28`; fewer,
   the bar's chips of `filters` — `examples/apps/lintel/views.ts:52`.
@@ -25,13 +25,13 @@ the worked examples.
   `examples/apps/lintel/views.ts:51`.
 - **When each row is worked by talking**, a `split` with a `row`: the queue
   beside the one picked, its conversation page drawn whole —
-  `examples/apps/lintel/views.ts:150`.
+  `examples/apps/lintel/views.ts:157`.
 - **When a record's verbs are the work**, `rowActions: true` —
-  `examples/apps/lintel/views.ts:104`.
+  `examples/apps/lintel/views.ts:111`.
 - **When a figure adds up**, `totals` under the rows —
   `examples/apps/lintel/views.ts:53`; when a count or sum of children
   says more, a rollup such as `balance` shown like a column —
-  `examples/apps/lintel/views.ts:86`.
+  `examples/apps/lintel/views.ts:93`.
 - **When the rows fall into a few kinds that are read apart**, `group`
   on that column — `group: 'stage'` — each kind under a head with its
   count and its share of the `totals`.

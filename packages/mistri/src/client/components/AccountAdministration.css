@@ -2,7 +2,7 @@
 @layer components {
 /* The accounts screen: one panel, rules not boxes inside it. A look dresses
    its fields, buttons and table heads as everywhere else. */
-.modal.account-administration { width: min(46rem, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto; box-sizing: border-box;
+[data-slot='dialog-content'][data-kind='modal'].account-administration { width: min(46rem, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto; box-sizing: border-box;
   padding: var(--space-6); font-family: var(--sans); background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius); }
 .account-administration > header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4h); min-height: 34px; }
 .account-administration h2 { margin: 0; font-size: calc(18px * var(--type-k)); overflow-wrap: anywhere; }
@@ -39,7 +39,7 @@
 
 .account-admin-editor { margin-top: var(--space-4h); }
 /* The 20px field gap; the last field's and the actions' margin make the 24px under it (style.css, .form-actions). */
-.account-administration .form-field { margin-bottom: var(--field-gap); }
+.account-administration [data-slot='field'] { margin-bottom: var(--field-gap); }
 .account-admin-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-2h) var(--space-4h); margin: var(--space-4h) 0 var(--space-6); font-size: var(--text-md); }
 .account-admin-facts dt { color: var(--ink-muted); }
 .account-admin-facts dd { margin: 0; overflow-wrap: anywhere; }
@@ -56,7 +56,7 @@
 @media (max-width: 760px) {
   .account-admin-bar { flex-wrap: wrap; }
   .account-admin-bar input { max-width: none; }
-  .account-admin-bar .btn { width: 100%; min-height: 44px; }
+  .account-admin-bar [data-slot='button'] { width: 100%; min-height: 44px; }
   .account-admin-heads { display: none; }
   .account-admin-list li { grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-4h); }
   .account-admin-open { grid-column: 1 / -1; }
@@ -65,6 +65,6 @@
   .account-trail .account-admin-fact:first-child { color: var(--ink-muted); font-size: var(--text-base); }
   .account-trail .account-admin-fact:not(:last-child) .account-admin-caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .account-admin-caption { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
-  .account-administration .form-actions .btn, .account-admin-access .btn { width: 100%; min-height: 44px; }
+  .account-administration .form-actions [data-slot='button'], .account-admin-access [data-slot='button'] { width: 100%; min-height: 44px; }
 }
 }

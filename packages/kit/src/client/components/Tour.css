@@ -1,0 +1,96 @@
+/* What dresses the tour's card. These rules match nothing else, so they travel with the component's chunk and are not in
+   every first paint (scripts/bundle-budget.mjs); each keeps the layer it stood in. */
+@layer base {
+  /* ---------- the tour ----------
+
+     A scrim, a ring around the thing being talked about, and a card beside it.
+     The scrim is light: this is a tool someone is trying to read, and a
+     near-black overlay makes the interface behind it unreadable at exactly the
+     moment the card is telling them to look at it. */
+  /* The dim is painted by the ring's own outward shadow, not by this, so that
+     the one element being talked about is the one element at full strength. A
+     full-bleed layer with the ring on top of it tints the anchor as well —
+     which is the whole interface saying "look here" while making "here" the
+     hardest thing on screen to read.
+
+     This stays as the thing that catches a click outside. */
+  .tour-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+  }
+  /* The stop with no anchor has no hole to punch, so the scrim paints it. */
+  .tour-scrim.dim { background: var(--tour-veil); }
+  .tour-ring {
+    position: fixed;
+    z-index: 61;
+    border: 2px solid var(--accent);
+    border-radius: var(--radius);
+    /* Everything outside the ring, dimmed, in one shadow — which is what makes
+       the inside of it untouched. `100vmax` rather than a round number of
+       pixels so it still covers the corners of a very wide window. */
+    box-shadow: 0 0 0 100vmax var(--tour-veil);
+    pointer-events: none;
+    transition: top var(--t-popover) var(--ease-out), left var(--t-popover) var(--ease-out),
+                width var(--t-popover) var(--ease-out), height var(--t-popover) var(--ease-out);
+  }
+  .tour-card {
+    position: fixed;
+    z-index: 62;
+    width: min(23rem, calc(100vw - 2rem));
+    padding: 1rem 1.1rem 0.9rem;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-panel);
+  }
+  .tour-step {
+    margin: 0 0 0.35rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+  .tour-title {
+    margin: 0 0 0.4rem;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  .tour-body {
+    margin: 0;
+    font-size: 0.87rem;
+    line-height: 1.55;
+    color: var(--ink-muted);
+  }
+  .tour-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    align-items: center;
+  }
+  /* Skip sits away from the two that move through the tour, so "leave" is never
+     the button next to the one the hand is already on. */
+  .tour-skip { margin-right: auto; }
+  .tour-actions button { font-size: 0.83rem; padding: 0.35rem 0.8rem; }
+  @media (prefers-reduced-motion: reduce) {
+    .tour-ring { transition: none; }
+  }
+  /* The example query on the stop that explains the bar. Its own line, because
+     it is the thing to be typed rather than part of the sentence around it. */
+  .tour-code {
+    display: block;
+    margin: 0 0 0.55rem;
+    padding: 0.4rem 0.55rem;
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    font-family: var(--mono);
+    font-size: 0.79rem;
+    color: var(--ink);
+    /* Wrapped rather than scrolled. A horizontal scrollbar inside a 23rem card
+       hides the end of the one line the reader is being asked to copy, and a
+       query reads perfectly well over two lines. */
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}

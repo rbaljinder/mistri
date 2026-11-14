@@ -5,13 +5,14 @@
  * this never logs it, stores it or writes it anywhere, the box turns off autofill and spellcheck, and while hidden the
  * dots are all the page holds. Preview: @mistriwork/ui is Preview at 1.0.
  */
+import { Input } from '@ui-sdk/react/input';
 import { useState, type ReactNode } from 'react';
 import { Button } from './Button.js';
-import { Field } from './Field.js';
-import { frameOf, type FieldFrame } from './fieldFrame.js';
+import type { FieldFrame } from './fieldFrame.js';
 import { digits, type Mask } from './masks.js';
 import { ValidMark } from './TextField.js';
 import { changeDetails, type ChangeDetails } from './changeDetails.js';
+import { Frame } from './internal/Frame.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface SensitiveFieldProps extends FieldFrame {
@@ -41,40 +42,38 @@ function DefaultSensitiveField(props: SensitiveFieldProps): ReactNode {
     props.onChange(props.mask.parse(digits(kept) + digits(typed)), details);
   };
   return (
-    <Field {...frameOf(props)}>
-      {(control) => (
-        <>
-          <div className="field-with-action">
-            <div className={`field-box${props.valid === undefined ? '' : ' has-mark'}`}>
-              <input
-                {...control}
-                className={`field-control${shown ? '' : ' field-hidden'}`}
-                value={display}
-                inputMode={props.mask.inputMode ?? 'numeric'}
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                data-1p-ignore
-                data-lpignore="true"
-                onChange={(e) => change(e.target.value, changeDetails('input-change', e))}
-                onBlur={props.onBlur}
-              />
-              {props.valid ? <ValidMark icon={props.validIcon} /> : null}
-            </div>
-            <Button intent="quiet" onClick={() => setShown(!shown)}>
-              {shown ? props.hideLabel : props.showLabel}
-            </Button>
-          </div>
-          {props.note ? (
-            <p className="field-note">
-              {props.noteIcon}
-              {props.note}
-            </p>
-          ) : null}
-        </>
-      )}
-    </Field>
+    <Frame {...props}>
+      <div data-slot="field-with-action">
+        <div data-slot="field-box" data-has-mark={props.valid === undefined ? undefined : ''}>
+          <Input
+            id={props.id}
+            data-hidden={shown ? undefined : ''}
+            value={display}
+            inputMode={props.mask.inputMode ?? 'numeric'}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-1p-ignore=""
+            data-lpignore="true"
+            aria-required={props.required || undefined}
+            // React's own change, as the text box hears it (TextField.tsx says why).
+            onChange={(event) => change(event.target.value, changeDetails('input-change', event))}
+            onBlur={props.onBlur}
+          />
+          {props.valid ? <ValidMark icon={props.validIcon} /> : null}
+        </div>
+        <Button intent="quiet" onClick={() => setShown(!shown)}>
+          {shown ? props.hideLabel : props.showLabel}
+        </Button>
+      </div>
+      {props.note ? (
+        <p data-slot="field-note">
+          {props.noteIcon}
+          {props.note}
+        </p>
+      ) : null}
+    </Frame>
   );
 }
 

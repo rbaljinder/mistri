@@ -166,7 +166,13 @@ describe("the app's dress", () => {
     // Local, not UTC: relativeDay counts from the reader's own today.
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    expect(dressFor({ format: 'relative' }, today)).toEqual({ kind: 'relative', text: 'today', title: today });
+    // A near day keeps its date beside its words, for a record's head ("Nov 8, 2026 · 7 days ago").
+    expect(dressFor({ format: 'relative' }, today)).toMatchObject({
+      kind: 'relative',
+      text: 'today',
+      title: today,
+      date: expect.stringMatching(/\d{4}/),
+    });
   });
 
   test('a toned day says what it would untoned: a relative one from today, a plain one as a date (a field report)', () => {

@@ -243,9 +243,9 @@ test('an empty conversation offers the App’s starters, and one sends as the pe
   // Send is quiet until there is something to send, then the one filled action.
   const send = screen.getByRole('button', { name: 'Send' });
   expect(send).toBeDisabled();
-  expect(send).not.toHaveClass('btn-primary');
+  expect(send).not.toHaveAttribute('data-variant', 'solid');
   await user.type(screen.getByRole('textbox', { name: 'Message the assistant' }), 'x');
-  expect(screen.getByRole('button', { name: 'Send' })).toHaveClass('btn-primary');
+  expect(screen.getByRole('button', { name: 'Send' })).toHaveAttribute('data-variant', 'solid');
   await user.clear(screen.getByRole('textbox', { name: 'Message the assistant' }));
   await user.click(within(starters).getByRole('button', { name: 'Pipeline by stage' }));
   expect(await screen.findByRole('region', { name: 'Proposed change' })).toBeInTheDocument();

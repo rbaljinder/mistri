@@ -318,11 +318,12 @@ function MoreConditions({
                 <span className="facet-option-label">{MORE_LABELS[condition]}</span>
               </label>
               {takesText(condition) && picked === condition && (
-                <div className="form-field form-field-compact">
+                <div data-slot="field" data-size="compact">
                   <input
                     ref={box$}
                     type="text"
-                    className="field-control facet-input"
+                    data-slot="input"
+                    className="facet-input"
                     aria-label={MORE_LABELS[condition]}
                     data-value={`${condition}-text`}
                     value={text}
@@ -831,7 +832,8 @@ function RangeFacet({ box, tail, table, set, unit, onEnter, more }: FacetProps &
             {...control}
             type="text"
             inputMode="decimal"
-            className="field-control facet-input"
+            data-slot="input"
+            className="facet-input"
             data-value={which}
             value={value}
             placeholder={say('common.any')}
@@ -876,7 +878,9 @@ function TextFacet({ box, tail, table, standing, set, onEnter, more }: FacetProp
   const inputProps = {
     id,
     type: 'search',
-    className: 'field-control facet-input',
+    /* The text box's own name as a part, for the box drawn here by hand; a suggest box names its own. */
+    'data-slot': 'input',
+    className: 'facet-input',
     'data-value': 'text',
     placeholder: fuzzy ? say('contains') : say('equals'),
     title: fuzzy ? say('common.matchesAnywhereInTheValue') : undefined,
@@ -896,7 +900,7 @@ function TextFacet({ box, tail, table, standing, set, onEnter, more }: FacetProp
       </label>
       {tail && !initial && <Unshown box={box} table={table} tail={tail} />}
       {/* In a compact field's dress: the facet's name above is its label. */}
-      <div className="form-field form-field-compact">
+      <div data-slot="field" data-size="compact">
         {suggesting && box.suggest ? (
           <SuggestBox
             table={table.id}

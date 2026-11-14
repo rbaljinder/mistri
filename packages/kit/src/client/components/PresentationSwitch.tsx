@@ -1,3 +1,5 @@
+import { personFacing } from '../audience.js';
+
 /**
  * How the same rows are read on a phone — as records or as the table — as a
  * two-icon segmented control at the row's end, not a second row of tabs
@@ -17,6 +19,8 @@ export function PresentationSwitch({
   records: string;
   table: string;
 }) {
+  /* How the rows are read is the office's choice: the App's own public is given the records (audience.ts). */
+  if (personFacing()) return null;
   return (
     <div className="record-presentation" role="group" aria-label={label}>
       {(['records', 'table'] as const).map((mode) => (

@@ -1,8 +1,8 @@
 /**
  * A record that is gone — deleted under an open page, or a link to one that
- * never was — said once in plain words, with the way back to its list. The
- * sentence starts on the content's own edge (the empty block, Notes.tsx), and
- * names no key: "1 names nothing" read like a bug to the person who followed
+ * never was — said once in plain words, with the way back to its list. It is
+ * all the page has to say, so the block stands in the page's middle (the empty
+ * block's `room`, Notes.tsx), and names no key: "1 names nothing" read like a bug to the person who followed
  * the link. The caller says the table's name as its page does (`spoken` in
  * pageContext.ts): this module imports nothing of the page around it, so the
  * page may import it without a cycle.
@@ -22,6 +22,7 @@ export function RecordGone({ base, spoken, className }: { base: TableMeta; spoke
   const name = spoken.toLowerCase();
   return (
     <Empty
+      room
       className={className}
       text={say('common.thatIsNoLonger', { spoken: name })}
       action={

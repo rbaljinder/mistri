@@ -108,15 +108,14 @@ test('a title and a display line may lead down to 0.85, with a warning under 1.0
 test('the form recipes are on the menu, default to the plain forms, and are worn as attributes', () => {
   const plain = recipeAttributes(wear({})).attributes;
   assert.equal(plain['data-look-required'], 'star');
-  assert.equal(plain['data-look-checkbox'], 'native');
   assert.equal(plain['data-look-form-step'], 'plain');
   assert.equal(plain['data-look-action-bar'], 'plain');
-  const worn = recipeAttributes(
-    wear({ recipes: { required: 'optional-word', checkbox: 'drawn', formStep: 'ruled', actionBar: 'raised' } }),
-  ).attributes;
+  const worn = recipeAttributes(wear({ recipes: { required: 'optional-word', formStep: 'ruled', actionBar: 'raised' } })).attributes;
   assert.equal(worn['data-look-required'], 'optional-word');
-  assert.equal(worn['data-look-checkbox'], 'drawn');
   assert.equal(worn['data-look-form-step'], 'ruled');
   assert.equal(worn['data-look-action-bar'], 'raised');
   refuse({ recipes: { required: 'bold' } }, /theme\.recipes\.required is not on the menu: pick one of star, optional-word/);
+  /* A checkbox was a part until the controls drew the box themselves: a theme that still says it is told it is gone. */
+  assert.equal('data-look-checkbox' in plain, false);
+  refuse({ recipes: { checkbox: 'drawn' } }, /theme\.recipes\.checkbox is off the menu: it chose nothing/);
 });

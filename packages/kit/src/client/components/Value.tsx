@@ -62,7 +62,10 @@ function ValueLink({ link }: { link: NonNullable<ReturnType<typeof linkFor>> }) 
    marks — where a reader sees the parts — and nowhere else unless one part
    alone is wider than its column (overflow-wrap). The text is unchanged. */
 function breakable(text: string): ReactNode {
-  const parts = text.split(/(?<=[@/])|(?=[.\-_?#&=])/);
+  /* A mail address breaks after its @ and nowhere else: offered its dots too, a card a few letters short broke
+     "name@example" from ".test", the address's last four letters alone on a line. */
+  const mail = /^[^@/\s]+@[^@/\s]+$/.test(text);
+  const parts = text.split(mail ? /(?<=@)/ : /(?<=[@/])|(?=[.\-_?#&=])/);
   if (parts.length < 2) return text;
   return parts.map((part, index) => (
     <Fragment key={index}>

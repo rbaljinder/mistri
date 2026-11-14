@@ -10,7 +10,7 @@ describe('a hint', () => {
     return start < 0 ? '' : css.slice(start, css.indexOf('}', start));
   };
   it.each([
-    ['packages/ui/src/primitives.css', '.form-field-hint'],
+    ['packages/ui/src/styles/screens.css', ":is([data-slot='field-description'], [data-slot='field-error'])"],
     ['packages/kit/src/client/style.css', '.command-help'],
     ['packages/kit/src/client/style.css', '.field-hint'],
   ])('%s %s stops at a reading measure', (file, selector) => {

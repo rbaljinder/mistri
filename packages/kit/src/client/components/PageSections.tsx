@@ -362,6 +362,7 @@ function ListTabs({
   draw,
   scoped,
   counting,
+  countEach,
   pages,
 }: {
   items: Shown[];
@@ -372,8 +373,10 @@ function ListTabs({
   onTab: (tab: string | undefined) => void;
   draw: (item: Shown) => ReactNode;
   scoped: boolean;
-  /** On an inferred page: the record whose rows each tab counts. */
+  /** The record whose rows each tab counts. */
   counting?: Counting;
+  /** Each tab asks for its own count: the lists stand alone to the server, which composed a count for each. */
+  countEach?: boolean;
   pages?: PageTab[];
 }) {
   useMessageLanguage();
@@ -404,9 +407,13 @@ function ListTabs({
         (findTable(item.section.from ?? '') as TableMeta | undefined)?.name ??
         item.section.from ??
         '');
+  /* Asked of the whole run, not of the tabs that stand now: a list that hides while empty comes and goes with its
+     rows, and the server composed one count for the run as it was written (recordReads.ts). A body that followed the
+     tabs was a second request the moment one arrived. */
   const counts = useRelatedCounts(
-    items.map((item) => item.section),
+    run.map((item) => item.section),
     counting,
+    countEach,
   );
   const word = (item: Shown) =>
     item.section.kind === 'history' && item.section.title === undefined
@@ -544,7 +551,7 @@ export function Sections({
   const scoped = region === 'aside';
   /* Each section stands behind its own boundary: one that throws while
      drawing says so under its heading, and the rest of the page stays. */
-  const draw = (item: Shown, collapsed?: boolean, counted?: boolean) => (
+  const draw = (item: Shown, collapsed?: boolean, counted?: boolean | 'seen') => (
     <ErrorBoundary
       key={`${item.index}${collapsed ? '-add' : ''}`}
       fallback={(note) => <SectionBox section={item.section} body={null} foldable={false} crashed={note} />}
@@ -636,7 +643,10 @@ export function Sections({
               onTab={onTab}
               draw={draw}
               scoped={scoped}
-              counting={inferred ? { base, recordKey: key } : undefined}
+              counting={inferred ? { base, recordKey: key } : inAppPage() ? { base, recordKey: key, seen: true } : undefined}
+              /* A strip the record's page tabs made, on a page that did not ask for one: the server stood these
+                 lists alone and composed a count to each (recordReads.ts), so each is asked as it was composed. */
+              countEach={!inferred && page.listTabs !== true}
               pages={grouped ? undefined : takePageTabs()}
             />,
           );
@@ -665,8 +675,21 @@ export function Sections({
         return;
       }
       leave = null;
-      /* A related list alone on an inferred page says its count in its head, as it would on its tab. */
-      laid.push(draw(item, false, inferred && listTabs && autoTabs && item.section.kind === 'list' && tabbed(item.section)));
+      /* A related list alone says its count in its head, as it would on its tab: on an inferred page where it would
+         have been a tab, and on a page an author wrote wherever it stands ("Charges 7"). */
+      laid.push(
+        draw(
+          item,
+          false,
+          item.section.kind !== 'list'
+            ? false
+            : inferred
+              ? Boolean(listTabs && autoTabs && tabbed(item.section))
+              : inAppPage()
+                ? 'seen'
+                : false,
+        ),
+      );
     });
     return laid;
   };

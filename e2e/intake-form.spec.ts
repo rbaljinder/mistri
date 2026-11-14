@@ -196,11 +196,12 @@ test.describe('The intake style of a public command form', () => {
     await page.getByRole('radio', { name: 'Yes', exact: true }).check({ force: true });
     const face = (name: string) =>
       page
-        .locator('label.choice-pick', { has: page.getByRole('radio', { name, exact: true }) })
+        .locator('label[data-slot="choice"]', { has: page.getByRole('radio', { name, exact: true }) })
         .evaluate((el) => ({ well: getComputedStyle(el).backgroundColor, weight: getComputedStyle(el).fontWeight }));
+    /* The edge alone was a hairline on a field that is its own fill: the face carries a tint and heavier words too.
+       The tint arrives over the hover's 120ms, so it is waited for, not read the instant the radio is checked. */
+    await expect.poll(async () => (await face('Yes')).well !== (await face('No')).well).toBe(true);
     const [yes, no] = [await face('Yes'), await face('No')];
-    /* The edge alone was a hairline on a field that is its own fill: the face carries a tint and heavier words too. */
-    expect(yes.well).not.toBe(no.well);
     expect(Number(yes.weight)).toBeGreaterThan(Number(no.weight));
   });
 

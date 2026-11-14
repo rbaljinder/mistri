@@ -6,11 +6,12 @@
  * Advanced — the heaviest thing above a quiet table, and on a phone more than
  * half the first screen. So the list's name column keeps one search box, a
  * real field with the 3:1 edge; every other filter the view declares is a
- * quiet "+ Status" that opens, in a popover, the picker the rail draws for it
+ * quiet "Status ▾" that opens, in a popover, the picker the rail draws for it
  * (a checklist, Min/Max, date presets; a reference is the typeahead its box
  * was); and what is applied is said in the same row as chips, each in its
- * filter's place: a chip opens its picker again, its × (or Backspace) takes
- * it out, and two or more earn one Clear all. On a phone the pickers are the
+ * filter's place and under its filter's label ("Status: Open +1"): a chip
+ * opens its picker again, its × (or Backspace) takes it out, and two or more
+ * earn one Clear all. On a phone the pickers are the
  * rail's sheet, behind one Filters button that says how many apply.
  *
  * No picker writes a new kind of question. Each hands a condition tail to
@@ -22,11 +23,10 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Button } from '@mistriwork/ui/Button.js';
-import { Popover } from '@base-ui/react/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@ui-sdk/react/popover';
 import { WHOLE, canonicalize, conditionTail, mentionsColumn, ownedTails, squeeze, stripCondition, withCondition } from '../filterbar.js';
 import { formatNumber } from '../locale.js';
 import { columnKind, type TableMeta } from '@mistriwork/engine/shared/schema.js';
-import { layoutViewport, zoomAnchor } from '@mistriwork/ui/internal/anchor.js';
 import { RefBox, boxTail, boxText, wrongForNumber, type Box, type BoxEdit } from './FilterBoxes.js';
 import { useConditionWords } from './useConditionWords.js';
 import { useArrived } from './onDemand.js';
@@ -34,7 +34,7 @@ import { SuggestBox } from './suggestPart.js';
 import { FacetFor, useDraftCount, type FacetUnit } from './FilterRail.js';
 import { clearFacets, facetActive } from './filterRailModel.js';
 import { say } from '../copy/filters/components/ListFilterBar.js';
-import { popupContainer } from '../shellHost.js';
+import { popupContainer, portalRoot } from '../shellHost.js';
 
 interface ListFilterBarProps {
   table: TableMeta;
@@ -89,7 +89,7 @@ export function ListFilterBar(props: ListFilterBarProps) {
       </button>
     ) : null;
   const residueChip = residue ? (
-    <span className="applist-chip">
+    <span className="applist-chip" title={residue.text}>
       <span className="applist-chip-text">{residue.text}</span>
       <button type="button" className="applist-chip-x" aria-label={say('common.remove2', { text: residue.text })} onClick={residue.remove}>
         ×
@@ -97,12 +97,14 @@ export function ListFilterBar(props: ListFilterBarProps) {
     </span>
   ) : null;
   const searchBox = search ? <SearchBox {...props} box={search} /> : null;
-  /* On a desk the row keeps one line: the filters not yet asked for give way
-     from the end, into one "+ Filter" that opens every picker in the sheet,
-     rather than the last of them standing cut at the window's edge ("+ Orde…").
-     A chip never gives way — it says what the rows are. Counted before the
-     row is painted, so nothing is seen to jump. */
-  const idle = pickers.filter((box) => !facetActive(refinement, box.column, tabQuery));
+  /* On a desk the row keeps one line: the filters give way from the end, into
+     one "More filters" that opens every picker in the sheet, rather than the
+     last of them standing cut at the window's edge ("Orde…") or the row taking
+     a second line and moving the table down. A filter that is set gives way as
+     one not yet asked for does, and the button counts the set ones it holds, so
+     none narrows the rows unsaid; a filter never changes place, set or not.
+     Counted before the row is painted, so nothing is seen to jump. */
+  const idle = pickers;
   const [folded, setFolded] = useState(0);
   /* A new width is measured afresh even where nothing was folded: the fold
      below runs after a render, and unfolding nothing renders nothing. */
@@ -125,7 +127,9 @@ export function ListFilterBar(props: ListFilterBarProps) {
        and the one before them. Never more than are needed — the "+ Filter" that folding brings takes room of its own —
        so a row still too wide folds again on its next render. One a render, it was a render and a measure of the whole
        row per picker, in every sort, filter and tab (test/built-client-vitals.mjs). */
-    const slots = [...row.querySelectorAll<HTMLElement>('.applist-slot[data-column]')];
+    const slots = [...row.querySelectorAll<HTMLElement>(':is(.applist-slot, .applist-chip)[data-column]')].filter((slot) =>
+      idle.some((box) => box.column === slot.dataset.column),
+    );
     const end = (node?: Node | null) => (node ? (node as HTMLElement).offsetLeft + (node as HTMLElement).offsetWidth : 0);
     const limit = end(slots.at(-1)) - over;
     setFolded(folded + 1 + slots.filter((slot) => end(slot.previousSibling) > limit).length);
@@ -178,6 +182,7 @@ export function ListFilterBar(props: ListFilterBarProps) {
     );
   }
   const rest = idle.filter((box) => hidden.has(box.column));
+  const heldSet = rest.filter((box) => facetActive(refinement, box.column, tabQuery)).length;
   return (
     <>
       <span ref={mark} hidden />
@@ -194,13 +199,14 @@ export function ListFilterBar(props: ListFilterBarProps) {
             type="button"
             className="applist-add"
             aria-haspopup="dialog"
-            aria-label={say('moreFilters', { filter: say('common.filter'), map: rest.map((box) => box.label).join(', ') })}
+            aria-label={say('moreFilters', { filter: say('moreFiltersButton'), map: rest.map((box) => box.label).join(', ') })}
             onClick={onSheet}
           >
+            {say('moreFiltersButton')}
+            {heldSet > 0 && <span className="applist-add-count">{heldSet}</span>}
             <span className="applist-add-mark" aria-hidden="true">
-              +
+              ▾
             </span>
-            {say('common.filter')}
           </button>
         </span>
       )}
@@ -222,7 +228,7 @@ function FilterSlot(props: SlotProps) {
   const tails = owned ? [] : (ownedTails(refinement, box.column) as string[]);
   /* In the App's words: the label, the rule's word for a value, and a
      reference by the name its box shows, not the id beneath it. */
-  const { speaker, sayTails } = useConditionWords(
+  const { speaker, sayTails, sayChip } = useConditionWords(
     props.table,
     tails.map((tail) => `${box.column} ${tail}`),
   );
@@ -237,19 +243,38 @@ function FilterSlot(props: SlotProps) {
       e.preventDefault();
       remove();
     };
+    /* The label stays where the unset filter said it, then what is asked: the first value and a count of the rest,
+       a long one cut at a cap, so setting a filter adds the value's width and moves nothing before it. The whole
+       phrase is the chip's name and its title. */
+    const { label, value, values } = sayChip(speaker, box.column, tails);
+    const words = (
+      <>
+        {/* The spaces are in the words, for what is read out and copied; the row's gap draws them. */}
+        {label && <span className="applist-chip-label">{value ? `${label}: ` : label}</span>}
+        {value && <span className="applist-chip-value">{values ? values[0] : value}</span>}
+        {values && values.length > 1 && <span className="applist-chip-more">{` +${values.length - 1}`}</span>}
+      </>
+    );
     const open = isSearch ? (
-      <span className="applist-chip-text">{text}</span>
+      <span className="applist-chip-text">{words}</span>
     ) : phone ? (
-      <button type="button" className="applist-chip-text applist-chip-open" aria-haspopup="dialog" onClick={onSheet} onKeyDown={onKeyDown}>
-        {text}
+      <button
+        type="button"
+        className="applist-chip-text applist-chip-open"
+        aria-haspopup="dialog"
+        aria-label={text}
+        onClick={onSheet}
+        onKeyDown={onKeyDown}
+      >
+        {words}
       </button>
     ) : (
-      <Picker {...props} owned={false} className="applist-chip-text applist-chip-open" onKeyDown={onKeyDown}>
-        {text}
+      <Picker {...props} owned={false} className="applist-chip-text applist-chip-open" label={text} onKeyDown={onKeyDown}>
+        {words}
       </Picker>
     );
     return (
-      <span className="applist-chip" data-column={box.column}>
+      <span className="applist-chip" data-column={box.column} title={text}>
         {open}
         <button
           type="button"
@@ -266,10 +291,10 @@ function FilterSlot(props: SlotProps) {
   if (chipOnly || isSearch) return null;
   const plus = (
     <>
-      <span className="applist-add-mark" aria-hidden="true">
-        +
-      </span>
       {box.label}
+      <span className="applist-add-mark" aria-hidden="true">
+        ▾
+      </span>
     </>
   );
   if (box.kind === 'flag') {
@@ -361,9 +386,10 @@ function SearchBox({ box, table, standing, refinement, typed, onType, onSearch, 
 }
 
 /**
- * A "+" or a chip, and the popover it opens: anchored on the zoom-aware
- * ruler, drawn inside the enclosing dialog when there is one, the focus on
- * its first field as it opens and back on its button when Escape closes it.
+ * A "+" or a chip, and the popover it opens, over UI SDK's Popover: placed
+ * under its button, drawn inside the enclosing dialog when there is one, the
+ * focus on its first field as it opens and back on its button when Escape
+ * closes it.
  */
 function Picker({
   className,
@@ -388,42 +414,41 @@ function Picker({
     setContainer(trigger.current?.closest('dialog, [role="dialog"]') as HTMLElement | null);
   }, []);
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger render={<button type="button" className={className} aria-label={label} ref={trigger} onKeyDown={onKeyDown} />}>
+    <Popover open={open} onOpenChange={setOpen}>
+      {/* The chip is the kit's own drawing, whole (`data-own`): none of a button's height, edge or padding under it. */}
+      <PopoverTrigger className={className} data-own="" aria-label={label} ref={trigger} onKeyDown={onKeyDown}>
         {children}
-      </Popover.Trigger>
-      <Popover.Portal container={container ?? popupContainer()}>
-        <Popover.Positioner
-          anchor={() => (trigger.current ? zoomAnchor(trigger.current) : null)}
-          positionMethod="fixed"
-          side="bottom"
-          align="start"
-          sideOffset={6}
-          collisionBoundary={layoutViewport()}
-          collisionPadding={8}
-          style={{ zIndex: 40 }}
-        >
-          <Popover.Popup
-            ref={popup}
-            className="filter-pop"
-            aria-label={say('common.filter2', { label: box.label })}
-            data-column={box.column}
-            initialFocus={() => popup.current?.querySelector<HTMLElement>('input:not([type="hidden"]):not([aria-hidden="true"])') ?? true}
-          >
-            <FilterPicker
-              box={box}
-              table={props.table}
-              refinement={refinement}
-              standing={props.standing}
-              unit={props.unitOf(box.column)}
-              owned={owned}
-              apply={props.apply}
-              close={() => setOpen(false)}
-            />
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+      </PopoverTrigger>
+      <PopoverContent
+        ref={popup}
+        className="filter-pop"
+        aria-label={say('common.filter2', { label: box.label })}
+        /* Named for the column it filters, not by the chip that opened it, whose words are the filter as it
+           stands ("Status is Open or Done"): UI SDK's `aria-labelledby` would outrank the label. */
+        render={(drawn) => <div {...drawn} aria-labelledby={undefined} />}
+        data-column={box.column}
+        side="bottom"
+        align="start"
+        sideOffset={6}
+        collisionPadding={8}
+        /* Out of the bar, by name: the picker is a form and the bar is one, and UI SDK draws a popover where its
+           trigger is unless it is told where. A form in a form is not HTML, and its Show sent the page instead of
+           the filter. */
+        container={container ?? popupContainer() ?? portalRoot()}
+        initialFocus={() => popup.current?.querySelector<HTMLElement>('input:not([type="hidden"]):not([aria-hidden="true"])')}
+      >
+        <FilterPicker
+          box={box}
+          table={props.table}
+          refinement={refinement}
+          standing={props.standing}
+          unit={props.unitOf(box.column)}
+          owned={owned}
+          apply={props.apply}
+          close={() => setOpen(false)}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }
 

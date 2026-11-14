@@ -7,4 +7,5 @@ export const say = defineMessages({
   availableFromHere: '(available from here)',
   currentState: 'Current state:',
   notSet: 'Not set',
+  otherOutcomes: 'Other outcomes',
 });

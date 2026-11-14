@@ -25,7 +25,7 @@
  *   node scripts/build-packages.mjs
  */
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { untypedExports } from './export-types.mjs';
@@ -66,9 +66,33 @@ cpSync(join(ROOT, 'packages/kit/src/client'), join(ROOT, 'packages/kit/dist/clie
   recursive: true,
   filter: (source) => !/\.(?:[jt]sx?)$/.test(source) || source.endsWith('.d.ts'),
 });
-/* @mistriwork/ui's stylesheets are its own files, which tsc does not carry: copied as they are. */
+/* @mistriwork/ui's stylesheets are its own files, which tsc does not carry: copied as they are, with the sheets its
+   entry points import beside them (styles/). */
 for (const name of readdirSync(join(ROOT, 'packages/ui/src')))
   if (name.endsWith('.css')) cpSync(join(ROOT, 'packages/ui/src', name), join(ROOT, 'packages/ui/dist', name));
+cpSync(join(ROOT, 'packages/ui/src/styles'), join(ROOT, 'packages/ui/dist/styles'), { recursive: true });
+/* The behaviors' declarations are written by hand. UI SDK does not export the type a primitive's slots are inferred
+   as, so tsc cannot write a primitive's declaration in a form another package can read (TS2883), and the parts are
+   typed from the primitives. The parts are declared once, for an App's components
+   (packages/mistri/schema/behaviors.d.ts, held to the source by packages/mistri's SDK tests); @mistriwork/ui's own
+   entry adds what only it exports: the primitives, as UI SDK's own `Primitive`, their option types, which are the
+   roots' props without the element's own, `createParts` and the zoom helper. */
+const BEHAVIOR_PRIMITIVES = ['days', 'editable', 'pick', 'scrub', 'sortable', 'spans', 'transfer', 'turns', 'widths'];
+const titled = (name) => name[0].toUpperCase() + name.slice(1);
+writeFileSync(
+  join(ROOT, 'packages/ui/dist/behaviors/index.d.ts'),
+  `${readFileSync(join(ROOT, 'packages/mistri/schema/behaviors.d.ts'), 'utf8')}
+import type { Primitive } from '@ui-sdk/core';
+export { createParts } from '@ui-sdk/react/primitive';
+/** How much the page is zoomed where an element stands. */
+export declare function zoomOf(el: HTMLElement): number;
+export type SortableOrientation = 'vertical' | 'horizontal' | 'grid';
+export type SpansChange = Change<SpansReason, { id: string; action: SpanAction }>;
+${BEHAVIOR_PRIMITIVES.map(
+  (name) => `export declare const ${name}: Primitive;\nexport type ${titled(name)}Options = Record<string, unknown>;`,
+).join('\n')}
+`,
+);
 
 node('scripts/package-docs.mjs');
 node('--conditions=mistri-built', 'scripts/package-console.mjs');

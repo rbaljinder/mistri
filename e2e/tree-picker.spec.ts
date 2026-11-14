@@ -67,7 +67,9 @@ test.describe('a reference picked from its hierarchy', () => {
     await box.press('ArrowDown');
     // The dialog's entrance (a scale) settled, so the picture is of the popup drawn over its edge, as it rests.
     if (shots) {
-      await expect.poll(() => page.locator('.modal').evaluate((modal) => getComputedStyle(modal).transform)).toBe('none');
+      await expect
+        .poll(() => page.locator('[data-slot="dialog-content"][data-kind="modal"]').evaluate((modal) => getComputedStyle(modal).transform))
+        .toBe('none');
       await page.screenshot({ path: `${shots}/tree-picker-desk.png` });
     }
     await box.press('Enter');

@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 describe('the shell host, served', () => {
-  it('is the page itself: <html>, <body>, and Base UI left to choose', () => {
+  it('is the page itself: <html>, <body>, and UI SDK left to choose', () => {
     expect(shellRoot()).toBe(document.documentElement);
     expect(shellBody()).toBe(document.body);
     expect(portalRoot()).toBe(document.body);

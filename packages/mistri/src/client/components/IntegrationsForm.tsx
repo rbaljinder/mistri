@@ -73,7 +73,8 @@ function IntegrationCard({ integration, editor, saved }: { integration: Integrat
       {integration.webhook ? (
         <Field label={say('webhook')} hint={say('webhookHint')} size="compact">
           <input
-            className="field-control integrations-form-address"
+            data-slot="input"
+            className="integrations-form-address"
             readOnly
             value={integration.webhook}
             onFocus={(event) => event.target.select()}
@@ -91,7 +92,7 @@ function IntegrationCard({ integration, editor, saved }: { integration: Integrat
             size="compact"
           >
             <input
-              className="field-control"
+              data-slot="input"
               type="password"
               name={secret.name}
               autoComplete="off"

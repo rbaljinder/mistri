@@ -145,6 +145,10 @@ export function useGridKeyboard(
     };
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as Element).closest('input, textarea, select, [contenteditable]')) return;
+      /* A layer opened from the grid (a column's menu, a cell's listbox) may be drawn inside the table, where its
+         trigger is: its keys are its own. Taken here, Escape left the menu open and sent the focus to the filter,
+         and an arrow moved the cursor out from under the list. */
+      if ((e.target as Element).closest('[popover]')) return;
       if (e.altKey) return;
       /* A control inside the grid — a header's sort, a row's expander, what a
          decoration puts in a row — answers its own Enter. The cursor's Enter

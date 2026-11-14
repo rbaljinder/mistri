@@ -1,0 +1,76 @@
+/* What a control owes the screen it stands on, whatever it looks like: an answer's width, a line's measure, a
+   finger's target and a phone's text size. These were promises of the stylesheet the controls wore before they were
+   drawn over UI SDK, and the screens were built on them; they are said here of the parts. */
+@layer m-components {
+  /* A field is as wide as its answer (docs/design.md, Forms): a count, an amount, a day and a time are a few
+     characters long, and a box the width of the column for them says "write a paragraph". The cap is on the control,
+     not the field, so its label, hint and problem keep the column's measure. Set from the data kind the form already
+     knows (Field's `kind`, worn as `data-answer`), never measured, so no answer resizes its field. Consecutive short
+     fields share a row where the form lays its fields on a grid. */
+  [data-slot='field']:is([data-answer='number'], [data-answer='time']) {
+    --answer-max: 160px;
+  }
+  [data-slot='field'][data-answer='money'] {
+    --answer-max: 200px;
+  }
+  [data-slot='field'][data-answer='date'] {
+    --answer-max: 240px;
+  }
+  [data-slot='field'][data-answer='datetime'] {
+    --answer-max: 280px;
+  }
+  [data-slot='field'][data-answer] > :is(input, [data-slot='field-box'], [data-slot='field-with-action'], [data-slot='date-field'], [data-slot='dropdown']) {
+    max-inline-size: var(--answer-max);
+  }
+
+  /* A hint and a problem stand at a reading measure, not the width of a wide room (a field report: one line of 150
+     characters). */
+  :is([data-slot='field-description'], [data-slot='field-error']) {
+    max-width: 70ch;
+  }
+
+  /* A finger needs 44px (WCAG 2.5.5) whatever height a theme draws, through the density's zoom: under any coarse
+     pointer, and at a phone's width, where a narrow window on a desk is read as a phone is (grade measures the targets
+     at 390px with no touch). A small button stays small: it is the one a toolbar asks for. */
+  @media (pointer: coarse), (max-width: 40rem) {
+    :is(
+      [data-slot='input'],
+      [data-slot='textarea'],
+      [data-slot='select-trigger'],
+      [data-slot='autocomplete-input'],
+      [data-slot='choice'],
+      [data-slot='check-cards-card'],
+      [data-slot='button']:not([data-size='sm'])
+    ) {
+      min-height: calc(44px / var(--density-zoom, 1));
+    }
+    /* The calendar's button is the box's own height and wide enough to be hit. */
+    [data-slot='date-field'] > [data-slot='popover-trigger'] {
+      min-width: calc(44px / var(--density-zoom, 1));
+      min-height: calc(44px / var(--density-zoom, 1));
+    }
+    /* A page's number is a square, so it is given both ways; the steps are words and already wide enough. */
+    :is([data-slot='pagination-link'], [data-slot='pagination-previous'], [data-slot='pagination-next']) {
+      min-width: calc(44px / var(--density-zoom, 1));
+      min-height: calc(44px / var(--density-zoom, 1));
+    }
+  }
+
+  /* iOS Safari zooms the page when a field under 16px is focused, and does not zoom back. The density zoom only
+     enlarges (1, 1.12, 1.24), so a flat 16px is at least 16px drawn. Not verified on WebKit: it is not installed
+     where this was written, so a real iPhone is the test of this rule. */
+  @media (pointer: coarse) {
+    :is([data-slot='input'], [data-slot='textarea'], [data-slot='select-trigger'], [data-slot='autocomplete-input']) {
+      font-size: max(16px, var(--m-text));
+    }
+  }
+
+  /* A card with a mark at its end keeps room for its words at a phone's width: at the desk's 7rem floor three cards
+     stood across 354px and "Heating and cooling" was set one word to a line. Two across, or one where even that is
+     too narrow. A pick (a row, a pair) and a stack say their own columns. */
+  @media (max-width: 40rem) {
+    [data-slot='radio-group'][data-kind='cards']:not([data-fit='row'], [data-fit='pair'], [data-fit='stack'], [data-shape='pair']) {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+    }
+  }
+}

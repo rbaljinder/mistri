@@ -5,7 +5,7 @@ with `npx @mistriwork/mistri test init`: it writes `tests/` (a journey per role 
 permissions matrix from `authority.lock`, run with `node --test 'tests/*.test.ts'`)
 on the kit's helpers, so no test hand-writes a request. `host.as(role)` signs a
 role in; on the signed-in client, `.update(table, key, values)`,
-`.command(name, key, input)` and `.act(table, action)` return a result, never
+`.command(name, key, input)` (a list of keys for a `targets: 'many'` command) and `.act(table, action)` return a result, never
 throw: `{ ok: true, value }` or `{ ok: false, status, code, message }`, and
 `assertPermissions` checks a role × resource and command table. `host.seed(table, rows)`
 arranges rows as setup (past grants, ids returned), `host.runJob(name)` runs a job at

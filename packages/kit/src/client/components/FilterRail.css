@@ -34,7 +34,7 @@
 /* The rarer conditions: a quiet disclosure under the facet's own control, its
    box under the choice that asks for text, in line with the choice's words. */
 .facet-more-conditions > .facet-values { margin-top: var(--space-2h); }
-.facet-more-conditions .form-field { margin: var(--space-1) 0 var(--space-2) var(--space-6); }
+.facet-more-conditions [data-slot='field'] { margin: var(--space-1) 0 var(--space-2) var(--space-6); }
 
 .facet { position: relative; min-width: 0; margin: 0; padding: var(--space-4) 0; border: 0; border-top: 1px solid var(--line); }
 /* Floated, a legend is laid out as any child: a rendered legend sits in the

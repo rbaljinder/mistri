@@ -1,5 +1,5 @@
 /**
- * A popover: a small layer anchored to a trigger, over Base UI's Popover,
+ * A popover: a small layer anchored to a trigger, over UI SDK's Popover,
  * which gives it the anchoring, Escape and a click outside to dismiss,
  * and focus handed back on close. The trigger is the caller's element
  * (a button, a word); the popup is the layer's children. Controlled with
@@ -7,17 +7,15 @@
  * popup is a menu of actions, DropMenu is the right primitive instead:
  * a popover is a layer, not a list of commands.
  *
- * Placed as DropMenu places its menu: anchored on the zoom-aware ruler
- * (anchor.ts) and fixed to the viewport, and drawn inside an enclosing
- * dialog, so the density zoom cannot throw it a room away from its trigger
- * and a dialog's focus trap keeps it as its own.
+ * Drawn inside an enclosing dialog, so a dialog's focus trap keeps it as
+ * its own, and otherwise where the page says its popups go (popups.ts).
  */
-import { isValidElement, useContext, useRef, type ReactNode } from 'react';
-import { Popover as BasePopover } from '@base-ui/react/popover';
-import { layoutViewport, zoomAnchor } from './internal/anchor.js';
+import { Popover as Layer, PopoverContent, PopoverTrigger } from '@ui-sdk/react/popover';
+import { useContext, useRef, type ReactNode } from 'react';
+import type { ChangeDetails } from './changeDetails.js';
 import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
+import { heard, triggerElement } from './internal/layers.js';
 import { popupContainer, useDialogContainer } from './internal/popups.js';
-import { fromBaseUi, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface PopoverProps {
@@ -45,40 +43,29 @@ export interface PopoverProps {
 }
 
 function DefaultPopover({ trigger, children, open, defaultOpen, onOpenChange, className, ariaLabel }: PopoverProps) {
-  /* The trigger is rendered as the trigger, not inside one: a button
-     passed as a child nested inside Base UI's own button, giving two
-     buttons for one control. The render prop merges onto the caller's
-     element (DropMenu.tsx does the same for its trigger). */
-  const triggerElement = isValidElement(trigger) ? trigger : <button type="button">{trigger}</button>;
   const anchor = useRef<HTMLButtonElement>(null);
   const container = useDialogContainer(anchor);
   /* The layer is drawn outside the page that opened it; the page's scope goes with it (Modal.tsx). */
   const componentScope = useContext(ComponentStyleScope);
   return (
-    <BasePopover.Root
-      open={open}
-      defaultOpen={defaultOpen}
-      onOpenChange={onOpenChange && ((next, details) => onOpenChange(next, fromBaseUi(details, 'implicit')))}
-    >
-      <BasePopover.Trigger className="ui-popover-trigger" render={triggerElement} ref={anchor} />
-      <BasePopover.Portal container={container ?? popupContainer()}>
-        <BasePopover.Positioner
-          anchor={() => (anchor.current ? zoomAnchor(anchor.current) : null)}
-          positionMethod="fixed"
-          sideOffset={8}
-          collisionBoundary={layoutViewport()}
-          collisionPadding={8}
-        >
-          <BasePopover.Popup
-            data-component={componentScope}
-            className={['ui-popover', className].filter(Boolean).join(' ')}
-            aria-label={ariaLabel}
-          >
-            {children}
-          </BasePopover.Popup>
-        </BasePopover.Positioner>
-      </BasePopover.Portal>
-    </BasePopover.Root>
+    <Layer open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange && ((next, details) => onOpenChange(next, heard(details)))}>
+      {/* The trigger is rendered as the trigger, not inside one: a button passed as a child would nest inside the
+          part's own button, giving two buttons for one control (DropMenu.tsx does the same for its trigger). */}
+      <PopoverTrigger render={triggerElement(trigger)} ref={anchor} />
+      <PopoverContent
+        className={className}
+        data-component={componentScope}
+        aria-label={ariaLabel}
+        /* UI SDK names the popup by its trigger. A name the caller gives is the popup's own, and the trigger's
+           words would be read in its place: `aria-labelledby` outranks `aria-label`. */
+        render={ariaLabel ? (drawn) => <div {...drawn} aria-labelledby={undefined} /> : undefined}
+        sideOffset={8}
+        collisionPadding={8}
+        container={container ?? popupContainer()}
+      >
+        {children}
+      </PopoverContent>
+    </Layer>
   );
 }
 

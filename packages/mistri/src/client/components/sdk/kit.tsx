@@ -488,7 +488,8 @@ export function Segmented<T extends string>({
       </div>
       {folds && (
         <select
-          className={`kit-segmented-pick field-control${className ? ` ${className}` : ''}`}
+          data-slot="input"
+          className={`kit-segmented-pick${className ? ` ${className}` : ''}`}
           aria-label={label}
           value={options.some((option) => option.value === value) ? value : ''}
           onChange={(event) => onChange(event.target.value as T)}

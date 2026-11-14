@@ -1,0 +1,130 @@
+/* What the page parts in rest.tsx wear that the library's stylesheet does not have: the help tip now that it is a
+   note and not a popover, a row of columns given its own template, and the carousel that is drawn here by hand. */
+@layer m-components {
+  /* More about a field: a small round button beside the label. The note it opens is UI SDK's tooltip, so the
+     button is that tooltip's trigger. */
+  [data-slot='tooltip-trigger'][data-kind='help-tip'] {
+    display: inline-grid;
+    place-items: center;
+    width: 1.125rem;
+    height: 1.125rem;
+    min-width: 0;
+    padding: 0;
+    border: 1px solid var(--m-line-control);
+    border-radius: 999px;
+    background: var(--m-raised);
+    box-shadow: none;
+    color: var(--m-ink-muted);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    vertical-align: middle;
+    cursor: pointer;
+
+    & svg {
+      width: 0.6875rem;
+      height: 0.6875rem;
+    }
+
+    &:hover,
+    &[aria-expanded='true'] {
+      background: var(--m-accent-soft);
+      color: var(--m-accent-ink);
+    }
+  }
+
+  /* A sentence or two to read, not a word to glance at: the surface of a popover and room for its lines, where a
+     tooltip is a dark chip of one. */
+  [data-slot='tooltip-content'][data-kind='help-tip'] {
+    max-width: 18rem;
+    padding: var(--m-space-3h) var(--m-space-4);
+    border: 1px solid var(--ui-border);
+    border-radius: calc(var(--ui-radius) * 1.5);
+    background: var(--ui-background);
+    box-shadow: var(--ui-shadow);
+    color: var(--m-ink-muted);
+    font-size: var(--ui-font-size);
+    line-height: var(--m-leading);
+  }
+
+  /* The caller's own column list. Under a width where two fields cannot stand side by side the row is one
+     column, whatever the list says. */
+  [data-slot='columns'][data-kind='template'] {
+    grid-template-columns: var(--form-columns);
+    align-items: start;
+
+    @media (max-width: 22rem) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* The carousel's slides stand edge to edge on a track that is moved a whole slide at a time, so no gap may
+     stand between them. The move is shown only to a reader who has not asked for stillness; the rest get a cut. */
+  section[data-slot='carousel'] {
+    /* As wide as where it stands, as mistri's is: the base sheet centres a carousel and caps it. */
+    align-items: stretch;
+    max-width: none;
+    min-width: 0;
+
+    &:focus {
+      outline: none;
+    }
+
+    & [data-slot='carousel-content'] {
+      gap: 0;
+    }
+
+    & :is([data-slot='carousel-previous'], [data-slot='carousel-next']) {
+      display: inline-grid;
+      place-items: center;
+      height: calc(var(--ui-spacing) * 8);
+      border: 0;
+      background: transparent;
+      color: var(--m-ink-muted);
+      cursor: pointer;
+
+      &:hover:not(:disabled) {
+        background: var(--m-raised);
+        color: var(--m-ink);
+      }
+
+      &:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--m-accent);
+        outline-offset: 2px;
+      }
+    }
+
+    & [data-slot='carousel-indicator']:focus-visible {
+      outline: 2px solid var(--m-accent);
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      & [data-slot='carousel-content'] {
+        transition: transform var(--m-enter) var(--m-ease-out);
+      }
+    }
+  }
+
+  /* The landing's badge: a few words over the heading, in the accent's quiet tint so it reads as a note on the
+     page and never as a button. As wide as its words, wherever it stands. */
+  [data-slot='badge'][data-kind='hero'] {
+    align-self: flex-start;
+    justify-self: start;
+    width: fit-content;
+    height: auto;
+    padding: var(--m-space-2) var(--m-space-4);
+    background: var(--m-accent-soft);
+    color: var(--m-ink);
+    font-size: var(--m-size-sm);
+    font-weight: var(--m-weight-medium);
+
+    & svg {
+      color: var(--m-accent-ink);
+    }
+  }
+}

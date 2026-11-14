@@ -1223,6 +1223,10 @@ export interface AppRoleGrant<Resource extends string = string, Role extends str
       `{ integration: { service: true, read: true, commands: ['recordCreditResult'] } }`. A free-form page is offered
       to it only where the page names it; it is never `defaultRole` and has no `claims`. */
   service?: true;
+  /** A role the App's own public holds (a customer, a patient, a resident), who came for their own things. The shell
+      offers its holder what they can use and none of the office's tools: no search across every table, no look
+      picker, no view switch, column chooser or record pager. It arranges and grants nothing. Never with `service`. */
+  portal?: true;
 }
 
 /** A role's claims: each claim (a name, or a dotted path into one) with the values that give the role, and
@@ -1371,14 +1375,14 @@ export interface AppBoardList<Column extends string = string, OneHop extends str
   /** One line under the title: a column, a rollup or computed column of the row — a problem's open tickets — or a
       one-hop label path (`owner_id.name`). */
   lines?: readonly [OneHop];
-  /** A column whose value is the card's kind — design, research, ops: a chip over the title, in the color its
-      display rule's `colors` gives the value (else one fixed by its text), and the card's stripe where the look draws
-      one. */
+  /** A column whose value is the card's kind — design, research, ops: the word that leads the card's line of facts,
+      in the color its display rule's `colors` gives the value (else one fixed by its text), and the card's stripe
+      where the look draws one. */
   category?: Column;
-  /** Up to four facts along the card's foot — a due date, a count of comments, the people on it — each a column,
-      with an App icon before it where given: `footer: [{ column: 'due_on', icon: 'calendar' }, 'assignees']`. A
-      fact may be a one-hop label path (`owner_id.name`). A person (an `avatar` or `avatars` column) stands at the
-      right end. */
+  /** Up to four facts about the card — a due date, a count of comments, the people on it — each a column, with an
+      App icon before it where given: `footer: [{ column: 'due_on', icon: 'calendar' }, 'assignees']`. A fact may be
+      a one-hop label path (`owner_id.name`). They follow the card's line under its name, a dot between them; a
+      person (an `avatar` or `avatars` column) stands at the end of the card's foot, beside its next step. */
   footer?: readonly (OneHop | { column: OneHop; icon?: AppIcon })[];
   /** A numeric column summed in each lane's head beside its count: "Discovery · 3 · $92.8K". Absent, the first money
       column the card shows (a line, a fact) is summed; a card and a lane say money short ($240K), whole in the title. */
@@ -1650,6 +1654,11 @@ export interface AppListView<Table extends string = string, Column extends strin
   suggest?: Partial<Record<Column, readonly Column[]>>;
   /** Opt in to the raw query editor and Advanced filter action. Hidden by default. */
   advancedFilters?: boolean;
+  /** What a row is called in this list alone, where it is read as records (a phone, a record's related list): one
+      of the columns `show` lists; a reference says the record it names. A patient's visits titled by the therapist
+      (`primary: 'therapist_id'`) read "Maya Okafor", not the record's name "Ana Ruiz with Maya Okafor" on every
+      row. Absent, the record's name (`recordLabel`). */
+  primary?: Column;
   /** Inline the resource's New form above the rows. */
   quickAdd?: boolean;
   /** This list's own CSV import, or `false` for none where its resource offers one. A command import finds each row's
@@ -1660,6 +1669,12 @@ export interface AppListView<Table extends string = string, Column extends strin
   /** Numeric columns, rollups or computed numbers summed in a footer row, over everything the list's conditions match,
       not just the page. A grid only. */
   totals?: readonly Column[];
+  /** Up to four figures in one strip over the list's tabs, each a dashboard's `metric` in a dashboard's own words:
+      `summary: [metric('Vacant', { query: 'available' }), metric('Asking rent', { measure: 'sum market_rent' })]`. A
+      metric that names no resource counts the list's own; one that names another (`metric('Balance due', 'lease',
+      { measure: 'sum balance' })`) reads it as a dashboard would. A `target` draws the meter and says the share. No
+      `over`: a list has no window to pick, so the period is said in the metric's `query`. @preview */
+  summary?: readonly MetricDashSection[];
   /** One of the resource's own columns whose values group the rows: `group: 'stage'`. The grid reads its rows in that
       column's order, each group under a head that says the value, how many rows it holds and, where the view has
       `totals`, each one's subtotal under its column; a head folds its group away and opens it again. The heads are one
@@ -1920,6 +1935,10 @@ export interface RowsDashSection extends DashTableSection {
   /** Written like the query bar. */
   sort?: string;
   limit?: number;
+  /** What a row is called in this section alone, as on a list view: one of the columns `show` lists; a reference
+      says the record it names. The rows then lead with it (a worklist in the main column), and a phone's records
+      are titled by it. Absent, the first column shown. */
+  primary?: string;
   /** Fit available width (default), or scroll at content widths. */
   sizing?: TableSizing;
   /** What the section says while it has no row: what belongs here, and where to start; or `'hide'`, which leaves it
@@ -2410,6 +2429,10 @@ export interface FieldsSection extends SectionCommon {
       the whole block when none is left; 'show' says each as a dash. Default: 'hide' for a property rail (the aside's),
       'show' otherwise. A field the reader may fill in place (`editable`) stays, as the place to set it. */
   empty?: 'hide' | 'show';
+  /** A line of words under a summary's figure, by the field it stands under: `notes: { balance: 'Charged less paid' }`
+      says what the figure counts, as a breakdown's `notes` say of its steps. Each a line of at most 80 characters,
+      for a field the block shows; a summary only. */
+  notes?: Readonly<Record<string, string>>;
 }
 
 /** A box for the record a reference names — who sells a car, who owns an account — made by `card()`: the reference
@@ -2604,6 +2627,9 @@ export interface ListSection extends SectionCommon {
   /** true puts a ⋯ menu at the end of each row with that row's own actions and machine verbs, as its page offers
       them: an order's payments are voided and refunded from the order. Not with a presentation. */
   rowActions?: boolean;
+  /** What a row is called in this list alone, where it is read as records (a phone): one of the columns `show`
+      lists, as on a list view. Absent, the record's name. */
+  primary?: string;
   /** The rows under a header for each record they share, one level deep: a household's charges under their lease.
       `limit` then counts the rows to a group (at most 50, "Show all" opens a group to them) and `group.limit` the
       groups to a page. Tables only: not with a presentation, `same` or on a `current()` card; `rowActions` draws its ⋯ on each group's rows. */
@@ -3135,9 +3161,10 @@ export interface AppShell {
   /** With the side placement: folding the sidebar (its « button, ⌘B) leaves a
       rail of the entries' icons by default. Set false to hide it completely. An App with no `nav` has no menu. */
   rail?: boolean;
-  /** With the side placement, where the bar's furniture stands on a signed-in screen at a desk: in the sidebar
-      (`'sidebar'`, the default), full height — its head the App's mark and name, New and the search (⌘K), its foot
-      the bell, the account, `sidebar.footer` and Collapse — so each room's own head row is its first line; or across
+  /** With the side placement, where the bar's furniture stands on a signed-in screen at a desk: beside the sidebar
+      (`'sidebar'`, the default) — the sidebar runs the window's height, its head the App's mark and name and New, its
+      foot `sidebar.footer` and Collapse, and the room is a pane beside it whose own bar says where the reader is and
+      holds the search (⌘K), the bell and the account at its far end; or across
       the top of the window (`'bar'`). The bar's theme recipe (`recipes.bar`) dresses the sidebar's head instead. A
       phone, the top placement, public pages and sign-in keep the bar. Folding leaves the rail, so `'sidebar'` refuses
       `rail: false`, and an App that says `rail: false` and no header keeps the bar. */
@@ -4097,6 +4124,13 @@ export declare function metric<T extends string, Over extends string = never, co
 export declare function metric<const F extends string, const O extends PageMetricOpts & MetricGuard<F, O>>(
   title: string | AppMessageRef, from: F & NoInfer<SourceGuard<F>>, opts: O,
 ): NoInfer<{ kind: 'metric'; readonly [madeBy]: 'metric'; title: string | AppMessageRef; from: QueryTable<F> } & Authored<O>>;
+/** A metric over the table its place already names — a list's own in its `summary`, a dashboard's `from`:
+    `summary: [metric('Vacant', { query: 'available' })]`. Its words are not checked against a table here; the App's
+    load checks them against the one it is read over. */
+export declare function metric<const O extends Omit<SectionOpts<MetricDashSection, never, never>, 'over'> & object = {}>(
+  title: string | AppMessageRef,
+  opts: O & Record<Exclude<keyof O, keyof Omit<SectionOpts<MetricDashSection, never, never>, 'over'>>, never>,
+): MetricDashSection;
 /** A dashboard chart — a line over a bucketed by, a donut over categories: `chart('Bookings', 'opportunity', 'month close_date')`.
     `auto close_date` picks the unit from the window. */
 export declare function chart<T extends string, const By extends string, Over extends string = never, const O extends Omit<SectionOpts<ChartDashSection, 'by', Over>, 'over'> = {}>(
@@ -4160,7 +4194,7 @@ export declare function dashboard<const Sec extends AppDashSection | AppViewDash
   const Aside extends readonly (AppDashSection | AppViewDashSection)[] | undefined = undefined, const F extends readonly string[] = readonly [],
   const Ro extends readonly string[] = never>(
   label: string | AppMessageRef, sections: readonly Sec[],
-  opts?: Pick<AppDashboardView, 'heading' | 'description' | 'areas' | 'windows' | 'window' | 'windowControl' | 'realm' | 'icon' | 'path'> & { aside?: Aside; from?: T; filters?: F; roles?: Ro },
+  opts?: Pick<AppDashboardView, 'heading' | 'head' | 'description' | 'areas' | 'windows' | 'window' | 'windowControl' | 'realm' | 'icon' | 'path'> & { aside?: Aside; from?: T; filters?: F; roles?: Ro },
 ): NoInfer<Omit<AppDashboardView, 'sections' | 'aside' | 'from' | 'filters'> & { kind: 'dashboard'; sections: Authored<Sec>[]; from?: T; filters?: F }
   & (Aside extends readonly (infer A)[] ? { aside: Authored<A>[] } : {}) & ([Ro] extends [never] ? {} : { roles: Ro })>;
 /** A dashboard's feed of recent changes across resources, from their record history:

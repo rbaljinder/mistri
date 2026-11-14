@@ -35,11 +35,27 @@ export const SLOT_NAMES = [
   'Tabs',
   'Pagination',
   'Avatar',
+  'Field',
+  'TextArea',
+  'FileField',
+  'ValidMark',
+  'HelpTip',
+  'ProgressBar',
+  'StepHeader',
+  'ActionBar',
+  'Columns',
+  'ReviewList',
+  'Badge',
+  'PhotoTiles',
+  'IconRows',
+  'Carousel',
+  'Resizable',
+  'ScrollArea',
 ] as const;
 export type SlotName = (typeof SLOT_NAMES)[number];
 
-/* The parts that share one state of their own: a kit that drew a menu's items but not its menu would hand Base UI's
-   items a menu they cannot find. */
+/* The parts that share one state of their own: a kit that drew a menu's items but not its menu would hand the
+   platform's items a menu they cannot find. */
 const FAMILIES: ReadonlyArray<readonly SlotName[]> = [['DropMenu', 'DropGroup', 'DropItem', 'DropSeparator']];
 
 const isSlot = (name: string): name is SlotName => (SLOT_NAMES as readonly string[]).includes(name);

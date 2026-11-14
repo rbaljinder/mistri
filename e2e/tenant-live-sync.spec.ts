@@ -115,7 +115,11 @@ test.describe('live sync in a tenant App', () => {
     const actions = form.locator('.confirm-actions');
     /* Where the actions stand once the dialog has finished opening: its scale-in run out first, since two reads in one
        frame of it agree and passed the check below while the dialog was still at 0.98. */
-    await actions.evaluate((el) => Promise.all((el.closest('.modal')?.getAnimations() ?? []).map((animation) => animation.finished)));
+    await actions.evaluate((el) =>
+      Promise.all(
+        (el.closest('[data-slot="dialog-content"][data-kind="modal"]')?.getAnimations() ?? []).map((animation) => animation.finished),
+      ),
+    );
     let before = await actions.boundingBox();
     await expect(async () => {
       const now = await actions.boundingBox();

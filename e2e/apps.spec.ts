@@ -41,8 +41,8 @@ async function open(page: Page, query = ''): Promise<void> {
 }
 
 /** Into the Work orders list the way the app offers it: its own menu. Wide
-    enough that its five tabs, its search and its three filters share one row;
-    at 1100 the filters give way to one "+ Filter" (the test below). */
+    enough that its five tabs fit their row and its search and three filters theirs;
+    in a narrower room the filters give way to one "More filters" (the test below). */
 async function openWorkOrders(page: Page): Promise<void> {
   await page.setViewportSize({ width: 1680, height: 900 });
   await open(page);
@@ -108,15 +108,16 @@ test('a nav entry opens its list page: the app’s words over the real table vie
   await expect(page.getByRole('button', { name: 'Filter', exact: true })).toHaveCount(0);
 });
 
-test('a row too narrow for every filter keeps one line: the filters give way to one "+ Filter"', async ({ page }) => {
+test('a row too narrow for every filter keeps one line: the filters give way to one "More filters"', async ({ page }) => {
   await openWorkOrders(page);
-  /* Narrower than the row needs in any look: Workshop's condensed face kept all three filters in a 1280 window, which
-     Lumen's did not. */
-  await page.setViewportSize({ width: 1100, height: 900 });
-  const more = page.getByRole('button', { name: /^Filter: / });
-  await expect(more).toBeVisible();
-  // The row does not run past the window; what gave way is named, from the end.
+  /* Narrower than the bar's row needs in any look. The bar has a row of its own under the tabs, so it holds its
+     search, three filters and Columns in any desk window this list is drawn in; the room is narrowed instead, as a
+     panel beside it or a longer list of filters would narrow it. */
   const row = page.locator('.applist-controls');
+  await row.evaluate((element) => ((element as HTMLElement).style.width = '460px'));
+  const more = page.getByRole('button', { name: /^More filters: / });
+  await expect(more).toBeVisible();
+  // The row does not run past its room; what gave way is named, from the end.
   expect(await row.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
   await expect(more).toHaveAttribute('aria-label', /Is urgent$/);
   // It opens every picker, in the sheet.
@@ -124,7 +125,7 @@ test('a row too narrow for every filter keeps one line: the filters give way to 
   await expect(page.getByRole('dialog', { name: 'Filters' })).toBeVisible();
   await page.keyboard.press('Escape');
   // Room again, and they come back.
-  await page.setViewportSize({ width: 1680, height: 900 });
+  await row.evaluate((element) => ((element as HTMLElement).style.width = ''));
   await expect(page.getByRole('button', { name: 'Filter by Status' })).toBeVisible();
   await expect(more).toHaveCount(0);
 });
@@ -164,7 +165,7 @@ test('a filter box narrows the list and says so as a chip, whose × undoes it', 
      tab would be the page saying one thing twice. */
   await pickValue(page, 'Priority', '2');
 
-  const chip = page.locator('.applist-chip', { hasText: 'Priority is 2' });
+  const chip = page.locator('.applist-chip[title="Priority is 2"]');
   await expect(chip).toBeVisible();
   await expect(page.locator('.applist-count')).toHaveText(narrowed.toLocaleString());
   /* And the tab survives the refinement: narrowing Open is still Open. */
@@ -202,9 +203,10 @@ test('Save view… keeps a refinement as a saved view, and its × removes it', a
   /* A refinement no manifest tab covers — Open narrowed by priority — is
      exactly the state worth keeping; the Save button only exists then. */
   await pickValue(page, 'Priority', '2');
-  await expect(page.locator('.applist-chip', { hasText: 'Priority is 2' })).toBeVisible();
+  await expect(page.locator('.applist-chip[title="Priority is 2"]')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Save view…' }).click();
+  await page.getByRole('button', { name: 'Views' }).click();
+  await page.getByRole('menuitem', { name: 'Save view…' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('Save this view');
   await dialog.getByLabel('Name').fill('Open twos');
@@ -266,15 +268,14 @@ test('app mode humanizes column headers without hiding the real names', async ({
   await expect(header).toHaveAttribute('title', /first_name/);
 });
 
-test('a head’s sort ends where its resizer begins, with a reference’s arrow and the sort’s at its floor, in every look', async ({
-  page,
-}) => {
+test('a head’s sort ends where its resizer begins, with the sort’s arrow at its floor, in every look', async ({ page }) => {
   /* At 768 a column sits at the floor its head sets, and the sort filled the head to its edge, under the resizer's
-     12px: "Engineer→↑" (a reference, sorted) shared 6-10px with "Resize Engineer column" in four looks, the overlap
-     grade reports as an error (a field report: "Customer→" on /jobs@768). Looked at as the grade does, by the boxes,
-     and the label is not cut for it. */
+     12px: "Engineer↑" (sorted) shared 6-10px with "Resize Engineer column" in four looks, the overlap grade reports
+     as an error (a field report: "Customer→" on /jobs@768, when an App's head still drew a reference's arrow).
+     Looked at as the grade does, by the boxes. A head stays one line; one wider than its column's values may be cut
+     with an ellipsis where the room is short (gridSizing.ts), which is not an overlap. */
   await page.setViewportSize({ width: 768, height: 900 });
-  for (const look of ['workshop', 'lumen', 'mono', 'sage', 'ledger']) {
+  for (const look of ['workshop', 'lumen', 'mono', 'sage', 'ledger', 'atelier', 'graphite', 'bloom']) {
     await page.goto(`${APP}/`);
     await page.evaluate((chosen) => {
       localStorage.setItem('mistri.visual-theme', chosen);
@@ -282,7 +283,8 @@ test('a head’s sort ends where its resizer begins, with a reference’s arrow 
     }, look);
     await page.goto(`${APP}/work-orders?sort=assigned_to`);
     await expect(page.locator('html')).toHaveAttribute('data-visual-theme', look);
-    await expect(page.locator('th.sorted .th-sort', { hasText: /^Engineer/ })).toBeVisible();
+    // The sorted column is drawn where the room holds it; folded under the row's name, the other heads still stand.
+    await expect(page.locator('th .th-sort').first()).toBeVisible();
     const heads = await page.evaluate(() =>
       [...document.querySelectorAll('th')]
         .filter((th) => th.querySelector(':scope > .th-resizer'))
@@ -293,14 +295,15 @@ test('a head’s sort ends where its resizer begins, with a reference’s arrow 
           return {
             head: th.querySelector('.th-sort')!.textContent,
             shared: Math.round((Math.min(sort.right, resizer.right) - Math.max(sort.left, resizer.left)) * 10) / 10,
-            cut: label.scrollWidth > label.clientWidth + 1 || label.scrollHeight > label.clientHeight + 1,
+            // Two lines of the label's own size or more: a head that wrapped.
+            wrapped: label.getBoundingClientRect().height >= parseFloat(getComputedStyle(label).fontSize) * 2,
           };
         }),
     );
     expect(heads.length, look).toBeGreaterThan(3);
     for (const h of heads) {
       expect(h.shared, `${look}: ${h.head}`).toBeLessThanOrEqual(0);
-      expect(h.cut, `${look}: ${h.head}`).toBe(false);
+      expect(h.wrapped, `${look}: ${h.head}`).toBe(false);
     }
   }
 });
@@ -352,13 +355,14 @@ test('a reference box takes a name and writes the id underneath', async ({ page 
   await page.getByRole('button', { name: 'Filter by Author', exact: true }).click();
   const box = page.getByRole('combobox', { name: 'Filter by Author' });
   await box.fill('a');
-  const option = page.locator('.dd-list:not([hidden]) .dd-option').first();
+  const option = page.locator('[data-slot="autocomplete-item"]').first();
   await expect(option).toBeVisible();
-  const pickedName = await option.locator('.dd-label').textContent();
+  // The option's name is its first line; a detail, where the list shows one, follows it.
+  const pickedName = await option.locator('span').first().textContent();
   await option.click();
   await expect(page).toHaveURL(/author_id(%20%3D%20| = )\d+/);
   // The chip says the person; the id stays in the question, because it is the truth.
-  await expect(page.locator('.applist-chip', { hasText: `Author is ${pickedName ?? ''}` })).toBeVisible();
+  await expect(page.locator(`.applist-chip[title="Author is ${pickedName ?? ''}"]`)).toBeVisible();
 });
 
 test('a page whose record is gone says so instead of rendering zeros', async ({ page }) => {
@@ -517,11 +521,11 @@ test('a dashboard is a screen of the app’s own: strip, breakdowns, lists', asy
      the windowed count changes — and Any brings it back. */
   await expect(page.locator('.dash-count').first()).toHaveText(/in all|~/);
   const before = await page.locator('.dash-count').first().textContent();
-  await page.locator('.dash-pick .dd-button').first().click();
+  await page.locator('.dash-pick [data-slot="select-trigger"]').first().click();
   await page.getByRole('option', { name: 'completed' }).click();
   await expect(page.locator('.dash-count').first()).not.toHaveText(before ?? '');
   await expect(page.locator('tbody tr').first()).toBeVisible();
-  await page.locator('.dash-pick .dd-button').first().click();
+  await page.locator('.dash-pick [data-slot="select-trigger"]').first().click();
   await page.getByRole('option', { name: /Any status/ }).click();
   await expect(page.locator('.dash-count').first()).toHaveText(before ?? '');
 

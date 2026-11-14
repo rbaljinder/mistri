@@ -522,6 +522,38 @@ test('a verb that leads each state elsewhere offers each card its own lane, and 
   mocks.allowed = true;
 });
 
+test("a card's next step is the first verb that moves it on, ahead of a step aside, and its button runs that verb", async () => {
+  serve([bigId, 2]);
+  mocks.allowed = false;
+  commands.granted = new Set(['holdTicket', 'advanceTicket']);
+  commands.runs.length = 0;
+  const verb = (id: string, label: string, command: string, edges: Array<{ from: string; to: string }>) =>
+    ({
+      id,
+      label,
+      command: { id: command, version: 1, target: 'ticket', input: [] },
+      move: { column: 'status', edges },
+    }) as unknown as AppAction;
+  /* Said first, Put on hold would be the step of a card in progress by the order alone; it leads to a state whose
+     own verb leads straight back, so it is a step aside and Advance is the step. */
+  draw([
+    verb('hold', 'Put on hold', 'holdTicket', [{ from: 'in_progress', to: 'new' }]),
+    verb('advance', 'Advance', 'advanceTicket', [
+      { from: 'new', to: 'in_progress' },
+      { from: 'in_progress', to: 'done' },
+    ]),
+  ]);
+  await waitFor(() => expect(screen.getAllByRole('button', { name: 'Advance' })).toHaveLength(2));
+  expect(screen.queryByRole('button', { name: 'Put on hold' })).toBeNull();
+  // The step aside is still a move the card may make, from its menu.
+  expect(await lanesFor('Slow export')).toContain('New');
+  const step = within(screen.getByText('Broken login').closest('.triage-card') as HTMLElement).getByRole('button', { name: 'Advance' });
+  await userEvent.click(step);
+  await waitFor(() => expect(commands.runs).toEqual([{ id: 'advanceTicket', key: { id: bigId }, input: {} }]));
+  commands.granted = new Set();
+  mocks.allowed = true;
+});
+
 test("a verb dropped on a lane says the command's own words when it said any, else that it is done", async () => {
   serve([bigId]);
   mocks.allowed = false;

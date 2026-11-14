@@ -33,7 +33,7 @@ const checked = () => cards().map((card) => card.getAttribute('aria-checked'));
 test('each choice is a full-width card saying aria-checked, in one group named by the question', async () => {
   render(<FormSurface form={form} appName="Harbor" submit={vi.fn()} />);
   const group = await screen.findByRole('group', { name: /Which accounts do you have\?/ });
-  expect(group).toHaveClass('choice-cards');
+  expect(group).toHaveAttribute('data-slot', 'check-cards');
   expect(cards().map((card) => card.textContent)).toEqual([
     'Checking account',
     'Savings accountAny bank or credit union',
@@ -42,7 +42,7 @@ test('each choice is a full-width card saying aria-checked, in one group named b
   ]);
   expect(checked()).toEqual(['false', 'false', 'false', 'false']);
   // The square at the end is drawn, not read; there is no second checkbox under the card.
-  for (const card of cards()) expect(card.querySelector('.choice-box')).toHaveAttribute('aria-hidden', 'true');
+  for (const card of cards()) expect(card.querySelector('[data-slot="checkbox"]')).toHaveAttribute('aria-hidden', 'true');
   expect(group.querySelector('input')).toBeNull();
 });
 
@@ -59,7 +59,7 @@ test('one Tab stop for the group; the arrows move between cards, Space turns one
   expect(cards()[1]).toHaveFocus();
   await user.keyboard(' ');
   expect(checked()).toEqual(['true', 'true', 'false', 'false']);
-  expect(cards()[1]).toHaveClass('is-on');
+  expect(cards()[1]).toHaveAttribute('data-checked');
   // The Tab stop follows the card in hand, so Tab leaves the group and Shift+Tab comes back to it.
   expect(cards().map((card) => card.tabIndex)).toEqual([-1, 0, -1, -1]);
   await user.keyboard('{ArrowUp}{ArrowUp}');

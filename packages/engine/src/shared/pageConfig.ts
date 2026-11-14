@@ -113,7 +113,7 @@ const MAX_TAB_NAME = 40;
 /* `view` is an authored kind with no section of its own: `embed(view, { whose })`
    is read into a related list that remembers the view (PageList.view). */
 export const PAGE_SECTION_KEYS: Record<PageSection['kind'] | 'view' | 'header' | 'current' | 'card' | 'headline', readonly string[]> = {
-  fields: [...SECTION_COMMON, 'show', 'columns', 'names', 'presentation', 'editable', 'empty'],
+  fields: [...SECTION_COMMON, 'show', 'columns', 'names', 'presentation', 'editable', 'empty', 'notes'],
   /* The record a reference names, in a box of its own: the first shown field is its title, the rest its facts. */
   card: [...SECTION_COMMON, 'show'],
   /* A figure with its facts, its earlier value, its estimate and the calls to action beside it. */
@@ -170,6 +170,7 @@ export const PAGE_SECTION_KEYS: Record<PageSection['kind'] | 'view' | 'header' |
     'opens',
     'rowActions',
     'actions',
+    'primary',
     'group',
   ],
 };
@@ -512,6 +513,22 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
     if (s.note !== undefined && (typeof s.note !== 'string' || !s.note.trim() || s.note.trim().length > 300)) {
       throw new Error(`${at} has a "note" that is not text of at most 300 characters.`);
     }
+    /* A line under a summary's figure, by the field it stands under: what the figure counts, as a breakdown's `notes`
+       say of its steps (appDashShapes.ts). Words only: a second value is a second field. */
+    if (s.notes !== undefined) {
+      const notes = s.notes as Record<string, unknown>;
+      if (written !== 'fields' || (s.presentation !== undefined && s.presentation !== 'summary'))
+        throw new Error(`${at} has "notes", which only a summary of figures carries: fields([...], { notes }) with no other presentation.`);
+      if (!notes || typeof notes !== 'object' || Array.isArray(notes) || Object.keys(notes).length > 12)
+        throw new Error(`${at} has "notes" that is not a map of at most 12 fields to a line each: { balance: 'Charged less paid' }.`);
+      const shown = new Set(Array.isArray(s.show) ? (s.show as unknown[]).map(String) : []);
+      for (const [field, note] of Object.entries(notes)) {
+        if (!shown.has(field))
+          throw new Error(`${at} has a note for "${field}", which it does not show: a note stands under a field named in "show".`);
+        if (typeof note !== 'string' || !note.trim() || note.trim().length > 80)
+          throw new Error(`${at} has a note for "${field}" that is not a line of 1 to 80 characters.`);
+      }
+    }
     /* A reference says the record it names by default in an App, so the
        one thing worth writing is the opt-out. */
     if (s.names !== undefined && s.names !== false) {
@@ -539,6 +556,9 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
       ...(s.subtitle === undefined ? {} : { subtitle: (s.subtitle as string).trim() }),
       ...(s.was === undefined ? {} : { was: (s.was as string).trim() }),
       ...(s.note === undefined ? {} : { note: (s.note as string).trim() }),
+      ...(s.notes === undefined
+        ? {}
+        : { notes: Object.fromEntries(Object.entries(s.notes as Record<string, string>).map(([field, note]) => [field, note.trim()])) }),
     };
   }
 
@@ -980,6 +1000,15 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
     throw new Error(`${at} has a "show" that is not an array of column names.`);
   }
   const shown = s.show === undefined ? undefined : parseShowEntries(s.show as unknown[], at);
+  /* What a row is called in this list alone, as on a list view: one of the columns it shows. */
+  if (s.primary !== undefined) {
+    if (typeof s.primary !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(s.primary.trim()))
+      throw new Error(`${at}: "primary" must name one of the list's own columns, the one a row is titled by: primary: 'title'.`);
+    if (!shown?.columns.includes(s.primary.trim()))
+      throw new Error(
+        `${at}: "primary" names "${s.primary.trim()}", which "show" does not list: a row is titled by a column the list shows.`,
+      );
+  }
   /* A gallery draws a related list of image files; whether the rows are
      files is the App's to say (`file` on the resource), judged where the
      page meets the App. */
@@ -1112,6 +1141,7 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
     ...(totals ? { totals } : {}),
     ...(s.rowActions === true ? { rowActions: true as const } : {}),
     ...(listActions ? { listActions } : {}),
+    ...(typeof s.primary === 'string' ? { primary: s.primary.trim() } : {}),
   };
 }
 

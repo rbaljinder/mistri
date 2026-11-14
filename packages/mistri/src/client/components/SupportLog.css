@@ -3,7 +3,7 @@
 /* One box, hairlines inside: a visit is separated from the next by a rule,
    never by a card of its own. Hierarchy is the 20px seam between visits
    against the 4px gap inside one, not more boxes. */
-.modal.support-log { width: min(46rem, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto; box-sizing: border-box;
+[data-slot='dialog-content'][data-kind='modal'].support-log { width: min(46rem, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto; box-sizing: border-box;
   padding: 22px; font-family: var(--sans); background: var(--surface); color: var(--ink);
   border: 1px solid var(--line-strong); border-radius: var(--radius); }
 .support-log > header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3h); }

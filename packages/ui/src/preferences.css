@@ -1,5 +1,5 @@
-/* @mistriwork/ui's answers to the reader's own settings: more contrast, and less transparency. Apart from forms.css, whose
-   sheet holds that nothing in it is !important: this one is, on purpose. A worn theme writes its colours on the root as
+/* @mistriwork/ui's answers to the reader's own settings: more contrast, and less transparency. Apart from controls.css, whose
+   sheets say nothing !important but in the same cause (styles/preferences.css): this one is, on purpose. A worn theme writes its colours on the root as
    inline custom properties, which nothing but !important beats, and the reader's setting must beat the theme's. Loaded
    beside the form controls (formControls.css) because the first stylesheet has no bytes to spare for it; a page that
    draws no control keeps its themed ink and scrims. Moving it to tokens.css costs about 0.5 KB raw there. */
@@ -22,5 +22,4 @@
     --scrim-light: color-mix(in srgb, black 45%, var(--ground)) !important;
     --lightbox-ground: rgb(10 12 16) !important;
   }
-  .modal-backdrop { background: var(--scrim-light); }
 }

@@ -257,7 +257,8 @@ describe('the editor', () => {
     const due = screen.getByRole('textbox', { name: 'Due' });
     expect(due).toHaveValue('09/05/2026');
     await user.click(screen.getByRole('button', { name: 'Choose date for Due' }));
-    await user.click(await screen.findByRole('button', { name: /September 7, 2026/ }));
+    // A day is a cell of the month's grid, not a button in one.
+    await user.click(await screen.findByRole('gridcell', { name: /September 7, 2026/ }));
     expect(stagedValue('due')).toBe('2026-09-07');
     expect(due).toHaveValue('09/07/2026');
     act(() => {

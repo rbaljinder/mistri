@@ -256,6 +256,7 @@ export function parseAuthGrants(
           'realm',
           'claims',
           'service',
+          'portal',
           'flags',
           'experiments',
         ],
@@ -387,6 +388,7 @@ export function parseAuthGrants(
         ...sessions,
         ...(claims === undefined ? {} : { claims }),
         ...(service ? { service } : {}),
+        ...(portalRole(rawGrant, here) ? { portal: true as const } : {}),
       };
     });
   if (roleProblems.length) throw new AppProblems(roleProblems);
@@ -584,6 +586,16 @@ function claimMappingProblems(roles: Record<string, AppRoleGrant>, providers: re
    they are declared and never defaulted: present means exactly true. A `false`
    would read as "declared and denied", which is the same as absent and invites
    the reader to think one of the two spellings grants something. */
+/** `portal: true`: a role the App's own public holds (a customer, a patient, a resident); the shell offers its holder
+    only what they can use (appAudience.ts). A service is nobody's public, so the two are never said together. */
+function portalRole(rawGrant: Record<string, unknown>, here: string): true | undefined {
+  if (rawGrant.portal === undefined) return undefined;
+  if (rawGrant.portal !== true)
+    throw new Error(`${here} has a "portal" that is not true: say it on a role the App's own public holds, or leave it out.`);
+  if (rawGrant.service === true) throw new Error(`${here} says both "portal" and "service": a service principal is no one's public.`);
+  return true;
+}
+
 /** `service: true`: a role only a service principal holds; anything else said there is refused. */
 function serviceRole(rawGrant: Record<string, unknown>, here: string): true | undefined {
   if (rawGrant.service === undefined) return undefined;
@@ -886,6 +898,7 @@ export function checkedGrants(app: Pick<AppDef, 'name' | 'resources' | 'auth' | 
           'supportAudit',
           'claims',
           'service',
+          'portal',
           'flags',
           'experiments',
         ],
@@ -954,6 +967,7 @@ export function checkedGrants(app: Pick<AppDef, 'name' | 'resources' | 'auth' | 
               ),
             }),
         ...(serviceRole(rawGrant, here) ? { service: true as const } : {}),
+        ...(portalRole(rawGrant, here) ? { portal: true as const } : {}),
       };
       return [name, grant];
     }),

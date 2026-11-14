@@ -21,7 +21,7 @@ test.describe('built-in own-account profile', () => {
   });
 
   for (const mode of ['light', 'dark'] as const) {
-    test(`${mode}: desktop/phone themed profile edits only name and restores keyboard focus`, async ({ page }) => {
+    test(`${mode}: desktop/phone themed profile edits only name, on the settings page`, async ({ page }) => {
       await page.addInitScript((mode) => {
         localStorage.setItem('mistri.theme', mode);
       }, mode);
@@ -38,8 +38,10 @@ test.describe('built-in own-account profile', () => {
         await page.keyboard.press('ArrowDown');
         await expect(page.getByRole('menuitem', { name: 'Your profile' })).toBeFocused();
         await page.keyboard.press('Enter');
-        const dialog = page.getByRole('dialog', { name: 'Your profile' });
+        /* In an App the profile is a section of the settings page, at its own address: no dialog. */
+        const dialog = page.getByRole('region', { name: 'Your profile' });
         await expect(dialog).toBeVisible();
+        await expect(page).toHaveURL(/\/settings$/);
         await expect(dialog.getByLabel('Name', { exact: true })).toBeFocused();
         await expect(dialog.getByLabel('Email', { exact: true })).toHaveAttribute('readonly', '');
         await expect(dialog.getByLabel('Email', { exact: true })).toHaveValue(app.accounts[0].email);
@@ -48,22 +50,16 @@ test.describe('built-in own-account profile', () => {
           const probe = document.createElement('div');
           probe.style.background = 'var(--surface)';
           probe.style.color = 'var(--ink)';
-          // A dialog wears the dialog's step (design.md, Tokens): the look's larger radius, not a control's.
-          probe.style.borderRadius = 'var(--radius-dialog)';
           // A field's edge is the control border, at 3:1 (design.md, Access), not the section hairline.
           probe.style.border = '1px solid var(--line-control)';
           node.append(probe);
           const style = getComputedStyle(probe);
-          const result = { background: style.backgroundColor, color: style.color, radius: style.borderRadius, border: style.borderColor };
+          const result = { background: style.backgroundColor, color: style.color, border: style.borderColor };
           probe.remove();
           return result;
         });
-        await expect(dialog).toHaveCSS('background-color', tokens.background);
+        /* A section of a page stands on the page's own ground, in its ink: no box of its own to dress. */
         await expect(dialog).toHaveCSS('color', tokens.color);
-        /* A dialog takes the whole screen on a phone (Modal's default), and a
-           full-screen dialog is square: there is no page behind its corners
-           for a radius to round against. At desk width it wears the look's. */
-        await expect(dialog).toHaveCSS('border-radius', width > 640 ? tokens.radius : '0px');
         await expect(dialog.getByLabel('Name', { exact: true })).toHaveCSS('background-color', tokens.background);
         await expect(dialog.getByLabel('Email', { exact: true })).toHaveCSS('border-top-color', tokens.border);
         await expect(dialog.getByRole('button', { name: 'Save name' })).toBeDisabled();
@@ -75,9 +71,9 @@ test.describe('built-in own-account profile', () => {
         await dialog.getByLabel('Name', { exact: true }).fill(`Alice ${width}`);
         await dialog.getByRole('button', { name: 'Save name' }).click();
         await expect(dialog).toContainText('Name saved.');
-        await page.keyboard.press('Escape');
+        /* Leaving the page is going back, as from any room. */
+        await page.goBack();
         await expect(dialog).toHaveCount(0);
-        await expect(trigger).toBeFocused();
         const current = await page.request.get(`${app.origin}/api/auth/profile?app=${SESSION_APP_ID}`, {
           headers: { 'x-mistri-account': app.accounts[0].id },
         });
@@ -94,7 +90,7 @@ test.describe('built-in own-account profile', () => {
     await page.goto(`${app.origin}/@ticket~1`);
     await page.getByRole('button', { name: /^Account:/ }).click();
     await page.getByRole('menuitem', { name: 'Your profile' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Your profile' });
+    const dialog = page.getByRole('region', { name: 'Your profile' });
     await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue('Alice');
     let saves = 0;
     await page.route('**/api/auth/profile?*', async (route) => {

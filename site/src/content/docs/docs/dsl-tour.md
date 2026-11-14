@@ -60,7 +60,7 @@ snippet below is cut from those files ([run it](#run-it)). Tick
   },
 ```
 
-See it in the sample (`examples/apps/lintel/resources.ts:106`)
+See it in the sample (`examples/apps/lintel/resources.ts:101`)
 
 Everything the App says about a table lives in its resource, and every list,
 page and form reads it from there:
@@ -91,7 +91,7 @@ page and form reads it from there:
   }),
 ```
 
-See it in the sample (`examples/apps/lintel/views.ts:62`)
+See it in the sample (`examples/apps/lintel/views.ts:69`)
 
 The key, `leases`, is the address: `/leases`. `show` picks the columns, with
 a reference drawn as the record's words, and each tab names a segment, a
@@ -116,10 +116,11 @@ export default page(
       show: ['description', 'due_on', 'amount', 'status'],
       sort: 'due_on desc',
       limit: 12,
+      // …
     }),
 ```
 
-See it in the sample (`examples/apps/lintel/pages/lease.ts:7`)
+See it in the sample (`examples/apps/lintel/pages/lease.ts:9`)
 
 A page is a list of sections, and a file in `pages/` whose default export is
 a page is that page, keyed by its name. `header` draws the name, the status

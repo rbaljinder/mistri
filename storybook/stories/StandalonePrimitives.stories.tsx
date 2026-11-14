@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-/* The standalone primitives' rules ride standalone.css, not the kit's
-   wholesale import: a page drawn with the primitives alone takes them
-   the same way, through style.css, which joins this sheet. */
-import '@mistriwork/ui/standalone.css';
+/* The primitives' rules are the kit's own first stylesheet's (controls.css, which the preview loads with it): a page
+   drawn with the primitives alone takes the same sheet through style.css. */
 import { Button } from '@mistriwork/ui/Button.js';
 import { Switch } from '@mistriwork/ui/Switch.js';
 import { Tabs } from '@mistriwork/ui/Tabs.js';

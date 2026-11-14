@@ -28,7 +28,8 @@ npx @mistriwork/mistri agent init
 
 The skill is a decision guide in the [Agent Skills](https://agentskills.io)
 format: a first-shot recipe per kind of App (CRM, service desk, inventory,
-forum, admin tool), which look and which block fits an intent, how each page
+forum, admin tool), a pattern for each kind of room (a list of work, a record page, a home, a board, a calendar, a
+public listing) with the rows to judge it on, which look and which block fits an intent, how each page
 should look, which choices are hard to undo (data, access, secrets, public
 forms, environment), and the loop and rubric below. Each rule links one line of a sample App. For keys, it
 sends the agent to `npx @mistriwork/mistri docs <topic>`, which ships in the package.
@@ -329,6 +330,8 @@ npx @mistriwork/mistri grade --config ../mistri.json            # findings, cove
 npx @mistriwork/mistri grade --config ../mistri.json --as desk  # as a role sees it
 ```
 
+Seed first (`npx @mistriwork/mistri seed --app .`): pages measured with nothing on them say little, and where
+most lists are empty the grade says so (`unseeded-list`) with that command as its fix.
 Run it last, after `check` and `check --design`, and fix each error (exit code
 2) before handing back: a page that scrolls sideways, a cut figure, two
 controls on each other, text under the contrast rule, a jump after the first
@@ -374,6 +377,33 @@ Keep the handoff compact, with distinct evidence for each claim:
 
 Screenshots establish layout, not write safety, authorization, concurrency or
 production readiness. Do not promote an untested claim into a pass.
+
+## From a source checkout
+
+Everything above runs the installed package. To build against a clone of the repository instead, run the same
+commands through the checkout's entry, with Node 24 first on `PATH`:
+
+```sh
+M="npx --prefix /path/to/mistri tsx /path/to/mistri/packages/mistri/src/server/index.ts"
+$M new --brief BRIEF.md my-app && cd my-app
+$M migrate up --app . && $M seed --app .
+$M check --app . --design     # schema types, typecheck, validation, design findings
+$M dev --app .                # serve it; a save reloads it
+$M grade --app . --as <role>  # the drawn pages, measured
+$M shot --app . /             # look at a page
+$M test init --app .          # a starter suite
+```
+
+An App outside the checkout has no `node_modules` above it. The checkout answers its `@mistriwork/…` imports for
+every command above, so none of them needs an install. Two things are the project's own and still need one line each:
+
+- **Typecheck** reads TypeScript and Node's types from the App's project: `npm i -D typescript @types/node`, or
+  `check` says the step was skipped.
+- **The generated tests** are run by Node, not by `mistri`: `test init` prints the exact command for a checkout
+  (`node --import <checkout>/node_modules/tsx/dist/loader.mjs --test 'tests/*.test.ts'`) and, for an App outside
+  the checkout, the one `ln -s` that lets Node find the packages.
+
+Inside the checkout (`examples/apps/<name>`), nothing extra is needed: `npm run start -- --app examples/apps/tick`.
 
 ## Related
 

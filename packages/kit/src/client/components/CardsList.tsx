@@ -202,9 +202,25 @@ export function CardsList({
           )
         : undefined;
     const before = word !== undefined && spec.factLabels![name].position === 'before';
+    /* A number that says nothing of what it counts ("2", among "2 ba" and "1,240 sq ft") is said with its column's
+       own caption before it, "Beds 2": a unit, a format or a word of its own already says what a value is. */
+    const display =
+      word === undefined
+        ? (columnDisplay(table.id, name) as { format?: string; unit?: string; values?: Record<string, unknown> } | null)
+        : null;
+    /* On the summary line, where the facts stand together; the foot's values keep their captions for assistive
+       technology alone, as they have. */
+    const bare =
+      className === 'cards-summary-item' &&
+      word === undefined &&
+      typeof row[name] === 'number' &&
+      !display?.unit &&
+      !display?.format &&
+      !(display?.values && Object.hasOwn(display.values, String(row[name])));
     return (
       <span key={name} className={className}>
-        {word === undefined && <span className="visually-hidden">{caption(name)}: </span>}
+        {word === undefined && !bare && <span className="visually-hidden">{caption(name)}: </span>}
+        {bare && <span className="cards-summary-word">{caption(name)} </span>}
         {before && <span className="cards-summary-word">{word} </span>}
         {said(row, name)}
         {word !== undefined && !before && <span className="cards-summary-word"> {word}</span>}

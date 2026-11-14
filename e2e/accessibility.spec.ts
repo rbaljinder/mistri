@@ -55,7 +55,7 @@ const ALLOWED: Array<{ rule: string; target: string; why: string }> = [
     rule: 'scrollable-region-focusable',
     target: 'role="menu"',
     why:
-      'An open menu (Base UI) holds the focus itself and moves it through its items with the arrow keys, ' +
+      'An open menu (UI SDK) holds the focus itself and moves it through its items with the arrow keys, ' +
       'which scroll it; axe asks for a Tab stop inside, and a menu has none by design (APG menu pattern).',
   },
 ];
@@ -86,7 +86,30 @@ async function audit(page: Page, where: string, findings: Finding[]) {
   );
   for (const violation of violations) {
     if (!GATED.has(violation.impact ?? '')) continue;
+    /* Behind a modal dialog the page is inert (UI SDK sets it on what stands beside the dialog): nothing in it takes
+       the keyboard, by design, and axe, which does not read `inert`, asks a scrolling pane there for a Tab stop. The
+       pane itself is not always the inert element: where it holds a layer the dialog's own page keeps (a record's
+       closed listbox), UI SDK marks what stands beside that layer, one level in, and the pane's every control is
+       inert all the same. So a pane is let stand only while a modal is open and nothing left in it can be focused. */
+    const nodes =
+      violation.id === 'scrollable-region-focusable'
+        ? await page.evaluate(
+            (selectors) => {
+              const modal = document.querySelector('[role="dialog"][aria-modal="true"]');
+              const reachable = 'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])';
+              return selectors.map((selector) => {
+                const pane = selector ? document.querySelector(selector) : null;
+                if (!pane || !modal || pane.contains(modal)) return false;
+                return (
+                  Boolean(pane.closest('[inert]')) || ![...pane.querySelectorAll(reachable)].some((control) => !control.closest('[inert]'))
+                );
+              });
+            },
+            violation.nodes.map((node) => (node.target.length === 1 && typeof node.target[0] === 'string' ? node.target[0] : '')),
+          )
+        : [];
     const targets = violation.nodes
+      .filter((_, index) => !nodes[index])
       .map((node) => `${node.target.join(' ')}  ${node.html.slice(0, 160)}`)
       .filter((target) => !ALLOWED.some((allowed) => allowed.rule === violation.id && target.includes(allowed.target)));
     if (targets.length)
@@ -136,7 +159,7 @@ test('an App’s smoke rooms, in every look', async ({ page }) => {
   }
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('menuitem', { name: /^Preferences/ }).click();
-  await expect(page.getByRole('dialog', { name: 'Preferences' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Preferences' })).toBeVisible();
   await audit(page, 'app preferences', findings);
   expect(findings, report(findings)).toEqual([]);
 });

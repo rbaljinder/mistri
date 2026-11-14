@@ -776,14 +776,18 @@ const partialName = (label: string, key: unknown, partial: PartialPeriods | unde
 /** Whether a key is a period the grammar buckets by ("2026-08", "2026-Q3"). */
 const PERIOD = /^\d{4}(-\d{2}(-\d{2})?|-Q[1-4])?$/;
 
+/** How few bars count as a handful, and the most room a handful takes. */
+const FEW_BARS = 6;
+const FEW_HIGH = 200;
+
 /**
  * Bars: one series, a bar per group — how much each week or each stage
  * holds, where a line says how a number moved. Over calendar buckets one bar
  * is the current one, drawn in the ink while the rest stay quiet: the last
- * (the period in hand) until the pointer names another. Its value is said in
- * a pill over it, and a guide runs from it across the levels, so the reader
- * can read it off the scale without a tooltip's delay; there the pill is
- * information, not a hover effect, so it is always there. Over categories (a
+ * (the period in hand) until the pointer names another. Its value is always
+ * said, so the reader has it without a tooltip's delay: at rest as the plot's
+ * headline in the corner over the levels, and in a pill over the bar the
+ * pointer names. A guide runs from the bar across the levels. Over categories (a
  * stage, a source) no bar is the one in hand — the last is only last in the
  * vocabulary — so at rest none is inked, with no pill and no guide, until the
  * pointer names one. Nothing moves (motion rule 8).
@@ -841,7 +845,13 @@ export function BarChart({
   const named = bars.map((b, i) => (periods ? periodTick(String(b.raw), i ? String(bars[i - 1].raw) : undefined) : label(b.raw)));
   const whole = bars.map((b) => partialName(periods ? periodTick(String(b.raw)) : label(b.raw), b.raw, partial));
   const W = measured > 0 ? measured : wide;
-  const H = high ? Math.max(120, Math.round(high)) : Math.max(160, Math.min(Math.round(W / 3), 240));
+  /* A handful of bars is read at a glance: it does not stand as tall as a month of them. */
+  const few = bars.length <= FEW_BARS;
+  const H = high
+    ? Math.max(120, Math.min(Math.round(high), few ? FEW_HIGH : Infinity))
+    : few
+      ? 160
+      : Math.max(160, Math.min(Math.round(W / 3), 240));
   const goal = target !== undefined && Number.isFinite(target) ? target : undefined;
   const max = Math.max(...bars.map((b) => b.value), 0, goal ?? 0);
   const min = Math.min(...bars.map((b) => b.value), 0);
@@ -932,14 +942,23 @@ export function BarChart({
             {periods ? text : named[index]}
           </text>
         ))}
-        {active !== null && (
-          <g className="chart-bar-tip" aria-hidden="true">
-            <rect x={f1(tipLeft)} y={f1(tipTop)} width={f1(tipWide)} height={20} />
-            <text x={f1(tipLeft + tipWide / 2)} y={f1(tipTop + 14)} textAnchor="middle">
-              {tip}
-            </text>
-          </g>
-        )}
+        {active !== null &&
+          (near === null ? (
+            /* At rest the period in hand is said as the plot's headline, in the room over the levels: a pill over
+               its bar read as a tooltip left behind, and stood on the neighbours' tops. */
+            <g className="chart-bar-tip is-rest" aria-hidden="true">
+              <text x={f1(W - PAD.right)} y={14} textAnchor="end">
+                {tip}
+              </text>
+            </g>
+          ) : (
+            <g className="chart-bar-tip" aria-hidden="true">
+              <rect x={f1(tipLeft)} y={f1(tipTop)} width={f1(tipWide)} height={20} />
+              <text x={f1(tipLeft + tipWide / 2)} y={f1(tipTop + 14)} textAnchor="middle">
+                {tip}
+              </text>
+            </g>
+          ))}
       </svg>
       {/* The hider is a block round the table, not the table itself: a table is
         never shorter than its rows, so a hidden one of 700 days stood 16,000px
@@ -959,6 +978,9 @@ export function BarChart({
     </>
   );
 }
+
+/** The gap between two parts of a stacked column, in the drawing's units, which are CSS pixels (it is measured). */
+const PART_SEAM = 2;
 
 /**
  * Stacked columns: a column per period, divided by series — how much each day
@@ -1021,7 +1043,12 @@ export function StackedColumns({
   const periods = columns.every((c) => PERIOD.test(c.key));
   const named = columns.map((c) => (periods ? periodTick(c.key) : c.key));
   const W = measured > 0 ? measured : wide;
-  const H = high ? Math.max(120, Math.round(high)) : Math.max(160, Math.min(Math.round(W / 3.5), 220));
+  const fewColumns = columns.length <= FEW_BARS;
+  const H = high
+    ? Math.max(120, Math.min(Math.round(high), fewColumns ? FEW_HIGH : Infinity))
+    : fewColumns
+      ? 160
+      : Math.max(160, Math.min(Math.round(W / 3.5), 220));
   const goal = target !== undefined && Number.isFinite(target) && target > 0 ? target : undefined;
   const max = Math.max(...columns.map((c) => c.total), 1);
   const scale = niceScale(0, Math.max(max, goal ?? 0), 2, say.tick?.steps);
@@ -1100,14 +1127,18 @@ export function StackedColumns({
                 const from = base;
                 base += v;
                 if (!v) return null;
+                /* A part stands a hair off the one under it, so two series of near hues read as two; the column's top
+                   part alone is rounded (Chart.css), so the column is one shape. */
+                const tall = y(from) - y(base);
+                const seam = from > 0 && tall > PART_SEAM + 1 ? PART_SEAM : 0;
                 return (
                   <rect
                     key={k}
-                    className="chart-column-part"
+                    className={`chart-column-part${base >= c.total ? ' is-top' : ''}`}
                     x={f1(x(i))}
                     y={f1(y(base))}
                     width={f1(colWide)}
-                    height={f1(Math.max(1, y(from) - y(base)))}
+                    height={f1(Math.max(1, tall - seam))}
                     style={paint ? paint(k) : { fill: color(k) }}
                   />
                 );
@@ -1184,12 +1215,20 @@ export function StackedColumns({
             {text}
           </text>
         ))}
-        <g className="chart-bar-tip" aria-hidden="true">
-          <rect x={f1(tipLeft)} y={f1(tipTop)} width={f1(tipWide)} height={20} />
-          <text x={f1(tipLeft + tipWide / 2)} y={f1(tipTop + 14)} textAnchor="middle">
-            {tip}
-          </text>
-        </g>
+        {near === null && !pointer ? (
+          <g className="chart-bar-tip is-rest" aria-hidden="true">
+            <text x={f1(W - PAD.right)} y={14} textAnchor="end">
+              {tip}
+            </text>
+          </g>
+        ) : (
+          <g className="chart-bar-tip" aria-hidden="true">
+            <rect x={f1(tipLeft)} y={f1(tipTop)} width={f1(tipWide)} height={20} />
+            <text x={f1(tipLeft + tipWide / 2)} y={f1(tipTop + 14)} textAnchor="middle">
+              {tip}
+            </text>
+          </g>
+        )}
       </svg>
       {legend && (
         <ul className="chart-legend chart-columns-legend">

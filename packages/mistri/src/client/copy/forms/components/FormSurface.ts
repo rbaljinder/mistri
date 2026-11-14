@@ -5,6 +5,8 @@ export const say = defineMessages({
   theFormCouldNotBeSubmitted: 'The form could not be submitted ({status}).',
   tooManySubmissionsFromThisAddress: 'Too many submissions from this address. Try again in {retryAfter} seconds.',
   review: 'Review',
+  answersNeedALook: { one: 'One answer needs another look.', other: '{count} answers need another look.' },
+  fieldsNeedFixing: { one: 'One field needs fixing.', other: '{count} fields need fixing.' },
   reviewTitle: 'Review your answers',
   reviewLead: 'Check each section. Change anything that is not right.',
   keepThisReference: 'Keep this reference.',

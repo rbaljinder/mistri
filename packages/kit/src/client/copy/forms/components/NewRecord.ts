@@ -4,6 +4,8 @@ import { defineMessages } from '../../../messages.js';
 export const say = defineMessages({
   yyyyMmDdHh: 'YYYY-MM-DD HH:MM',
   fill: 'Fill in {column}.',
+  answersNeedALook: { one: 'One answer needs another look.', other: '{count} answers need another look.' },
+  fieldsNeedFixing: { one: 'One field needs fixing.', other: '{count} fields need fixing.' },
   enterAValidDate: 'Enter a valid date and time.',
   enterAValidDateInYyyy: 'Enter a valid date in YYYY-MM-DD format.',
   useAtLeast: 'Use at least {min} characters.',

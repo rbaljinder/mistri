@@ -61,6 +61,7 @@ const load = () => (arriving ??= import('./conditionWords.js').then((module) => 
 interface ConditionWords {
   speaker: ConditionSpeaker | null;
   sayTails(speaker: ConditionSpeaker | null, column: string, tails: readonly string[]): string;
+  sayChip(speaker: ConditionSpeaker | null, column: string, tails: readonly string[]): { label: string; value: string; values?: string[] };
   sayCondition(speaker: ConditionSpeaker | null, condition: string): string;
   sayFilter(speaker: ConditionSpeaker | null, filter: string): string[];
   sayQuestion(speaker: ConditionSpeaker | null, text: string): string[];
@@ -69,6 +70,7 @@ interface ConditionWords {
 
 const AS_WRITTEN: Omit<ConditionWords, 'speaker'> = {
   sayTails: (_, column, tails) => written.tails(column, tails),
+  sayChip: (_, column, tails) => ({ label: '', value: written.tails(column, tails) }),
   sayCondition: (_, condition) => written.condition(condition),
   sayFilter: (_, filter) => written.filter(filter),
   sayQuestion: (_, text) => written.question(text),
@@ -111,10 +113,11 @@ export function useConditionWords(table: TableMeta | undefined, texts: readonly 
   const names = useQueries({ queries: wanted.map(({ column, id }) => referenceNameQuery(base?.column(column), id)) });
   if (!base || !loaded) return { speaker: null, ...AS_WRITTEN };
   const known = new Map(wanted.map(({ column, id }, i) => [`${column}\n${id}`, names[i]?.data ?? undefined]));
-  const { sayTails, sayCondition, sayFilter, sayQuestion } = loaded;
+  const { sayTails, sayChip, sayCondition, sayFilter, sayQuestion } = loaded;
   return {
     speaker: { ...base, recordName: (column, id) => known.get(`${column}\n${id}`) ?? undefined },
     sayTails,
+    sayChip,
     sayCondition,
     sayFilter,
     sayQuestion,

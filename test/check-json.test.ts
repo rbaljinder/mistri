@@ -191,6 +191,7 @@ describe('mistri check --json', () => {
       'validation warning admin-grants-nothing auth.roles.admin 12',
       'components error component-markup components.loud 2',
       'design warning default-shell ui.shell 0',
+      'design warning unbranded ui.shell 0',
     ]);
     // The Workbench's undo journal is not the App's to provision: its notice is run narration, never a finding.
     assert.ok(!problems.some((problem) => /undo-journal/.test(problem.message)), 'no finding names the undo-journal store');

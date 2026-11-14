@@ -21,6 +21,7 @@ const words = (): DateFieldWords => ({
   nextMonth: say('nextMonth'),
   clear: say('common.clear'),
   today: say('common.today'),
+  time: (label) => (label ? say('timeFor', { label }) : say('time')),
 });
 
 /** A date field, or a date and a wall-clock time. No input is parsed as an instant or shifted by a timezone. */

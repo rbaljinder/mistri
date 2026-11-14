@@ -82,6 +82,9 @@ export const ASSISTANT_PAGE = 'app:assistant';
 /** The page id the Directory rides (Directory.tsx): every list, page and New of a menu past a dozen places. */
 export const DIRECTORY_PAGE = 'app:directory';
 
+/** The page id the reader's settings ride (SettingsRoom.tsx): their profile and their preferences, at `/{app}/settings`. */
+export const SETTINGS_PAGE = 'app:settings';
+
 /** Whether a room is the assistant's page. */
 export const isAssistantRoom = (room: object): room is AssistantRoom => Object.hasOwn(room, 'assistant');
 

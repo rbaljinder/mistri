@@ -56,4 +56,23 @@ describe('workflow status', () => {
     rerender(<WorkflowStatus definition={definition} value="new" />);
     expect(screen.getByRole('list', { name: 'Workflow status' })).toBeTruthy();
   });
+  it('draws a way off the road apart from the steps, never as the next of them', () => {
+    const ended = {
+      field: 'status',
+      ordered: true as const,
+      steps: [...definition.steps, { value: 'returned', label: 'Returned', outcome: true as const }],
+    };
+    const { container, rerender } = render(<WorkflowStatus definition={ended} value="active" />);
+    expect([...container.querySelectorAll('.workflow-steps li')].map((step) => step.textContent)).toEqual([
+      'New (passed)',
+      'Active',
+      'Closed',
+    ]);
+    expect(screen.getByRole('list', { name: 'Other outcomes' }).textContent).toBe('Returned');
+    // Ended there: the outcome is the current one, no step is, and nothing says the state is unknown.
+    rerender(<WorkflowStatus definition={ended} value="returned" />);
+    expect(container.querySelector('.workflow-outcomes [aria-current="step"]')?.textContent).toBe('Returned');
+    expect(container.querySelector('.workflow-steps [aria-current="step"]')).toBeNull();
+    expect(container.querySelector('.workflow-unmapped')).toBeNull();
+  });
 });

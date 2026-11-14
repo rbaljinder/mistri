@@ -1,7 +1,7 @@
 /*
  * What an install of the package pulls, and what the server may import.
  *
- * The client's libraries — React, Base UI, Phosphor, TanStack — are bundled
+ * The client's libraries — React, UI SDK, Phosphor, TanStack — are bundled
  * into dist/client at `npm run build`, and nothing in dist/server imports
  * them. As runtime `dependencies` they were most of what `npx tablewalk`
  * downloaded, some 97 MB, for files the package never loads. They are
@@ -62,7 +62,8 @@ const PACKAGES = readdirSync(join(root, 'packages'))
 const CLIENT_LIBRARIES = [
   'react',
   'react-dom',
-  '@base-ui/react',
+  '@ui-sdk/core',
+  '@ui-sdk/react',
   '@phosphor-icons/react',
   '@tanstack/react-form',
   '@tanstack/react-query',
@@ -177,7 +178,7 @@ test('@mistriwork/mistri/ui and @mistriwork/mistri/react import only optional pe
 
 test("the kit's client and its Vite preset import only what an install brings, or an optional peer the product installs", () => {
   /* The kit publishes its client as modules a product bundles (config/tsconfig.kit-client.json) and the preset that
-     bundles them (@mistriwork/kit/vite): the product that builds a page installs React, TanStack, Base UI, tiptap and
+     bundles them (@mistriwork/kit/vite): the product that builds a page installs React, TanStack, UI SDK, tiptap and
      Vite, at the versions the kit declares — this checkout's (the client libraries above are devDependencies here). */
   const KIT = PACKAGES.find(({ pkg }) => pkg.name === '@mistriwork/kit')!;
   const kitFile = /\.(test|spec|stories)\.tsx?$|\.d\.ts$|components\/dragTesting\.ts$/;

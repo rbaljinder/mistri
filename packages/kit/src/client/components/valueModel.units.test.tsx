@@ -217,6 +217,36 @@ test('a relative date column says one way: from today only where every value is 
   expect(datesAmong(rule, mixed)).toBe(datesAmong(rule, [day(-90)]));
 });
 
+test('moments that are all of today say their time alone in an App; one of another day and each keeps its day', async () => {
+  const { datesAmong, dressFor } = await import('./valueModel.js');
+  const at = (offset: number, clock: string) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${clock}`;
+  };
+  const today = [at(0, '09:30'), null, at(0, '14:05')];
+  // Outside an App nothing changes: the database browser says what is stored.
+  expect(datesAmong(null, today)).toBeNull();
+  document.body.classList.add('app-mode');
+  try {
+    const rule = datesAmong(null, today);
+    expect(rule).toEqual({ format: 'time' });
+    expect((dressFor(rule, today[0]) as { text: string }).text).toMatch(/^9:30/);
+    // The same rule for the same column, so a grid keeps its columns.
+    const relative: import('./valueModel.js').DisplayRule = { format: 'relative' };
+    expect(datesAmong(relative, today)).toBe(datesAmong(relative, today));
+    expect(datesAmong(relative, today)?.format).toBe('time');
+    // Mixed days, a day with no time, an authored date form: each as it was.
+    expect(datesAmong(null, [at(0, '09:30'), at(1, '09:30')])).toBeNull();
+    expect(datesAmong(null, [at(0, '00:00')])).toBeNull();
+    const dated: import('./valueModel.js').DisplayRule = { format: 'date' };
+    expect(datesAmong(dated, today)).toBe(dated);
+    expect(datesAmong(null, [null, ''])).toBeNull();
+  } finally {
+    document.body.classList.remove('app-mode');
+  }
+});
+
 test("a date column wears a tone by the same date phrases a list takes, on the App's today", () => {
   vi.useFakeTimers();
   try {
@@ -241,4 +271,16 @@ test("a date column wears a tone by the same date phrases a list takes, on the A
   } finally {
     vi.useRealTimers();
   }
+});
+
+/* A SQLite list read "1" and "0" under an author's words for true and false: a computed truth is stored as the engine
+   spells it, and the rule words every spelling. */
+test('a rule that words true and false words a truth however the engine stores it', async () => {
+  const { wordFor } = await import('./valueModel.js');
+  const rule = { values: { true: 'Running low', false: 'OK' } };
+  expect(wordFor(rule, '1')).toBe('Running low');
+  expect(wordFor(rule, '0')).toBe('OK');
+  expect(wordFor(rule, 'true')).toBe('Running low');
+  expect(wordFor({ values: { '1': 'One' } }, '1')).toBe('One');
+  expect(wordFor({ values: { open: 'Open' } }, '1')).toBeUndefined();
 });

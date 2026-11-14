@@ -13,7 +13,7 @@ Each built-in building block an App is drawn with, by category, with the declara
     split: { row: { primary: 'title', lines: ['unit_id'], badge: 'status' } },
 ```
 
-See it in the sample (`examples/apps/lintel/views.ts:143`). Each block below is shown once, with a link to it in the [component library](/components/), where you can switch between the looks, light and dark.
+See it in the sample (`examples/apps/lintel/views.ts:150`). Each block below is shown once, with a link to it in the [component library](/components/), where you can switch between the looks, light and dark.
 
 The library is Storybook, built with this site: each story draws the real component over fixture data, with no server behind it. The pictures here are in Mono; the toolbar's Look and Mode buttons dress any story in the others.
 

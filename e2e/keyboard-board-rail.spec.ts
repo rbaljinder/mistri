@@ -65,7 +65,7 @@ test('a glance holds Tab as a dialog does: the focus moves in, Tab and Shift+Tab
 
   /* Round the glance's stops and past them, both ways: the focus never walks on
      under it. Past either end it passes a focus guard beside the panel, which
-     hands it to the far end a frame later (Base UI), so each press is awaited. */
+     hands it to the far end a frame later, so each press is awaited. */
   const stops = await glance.evaluate(
     (box) => box.querySelectorAll('button:not(:disabled), a[href], input, select, textarea, [tabindex="0"]').length,
   );

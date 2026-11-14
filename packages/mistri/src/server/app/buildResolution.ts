@@ -89,3 +89,33 @@ export function resolveMistriFromBuild(dir: string): void {
     },
   });
 }
+
+let checkoutAnswers = false;
+
+/**
+ * Run from a source checkout (`npx tsx packages/mistri/src/server/index.ts`), answer an App's `@mistriwork/…` imports
+ * from the checkout when the App's own project cannot: an App written outside the checkout has no `node_modules`
+ * above it, and its first `mistri check` said only "Cannot find package '@mistriwork/mistri'". The App's project is
+ * asked first, so one that installed a mistri of its own still runs against that. An installed mistri never needs
+ * this: it is found from the project that installed it. Idempotent.
+ */
+export function resolveMistriFromCheckout(): void {
+  if (!FROM_SOURCE || checkoutAnswers) return;
+  checkoutAnswers = true;
+  registerHooks({
+    resolve(specifier, context, nextResolve) {
+      if (!FRAMEWORK.test(specifier)) return nextResolve(specifier, context);
+      try {
+        return nextResolve(specifier, context);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ERR_MODULE_NOT_FOUND') throw error;
+        return nextResolve(specifier, { ...context, parentURL: OWN_MANIFEST });
+      }
+    },
+  });
+}
+
+/** The checkout's manifest as a parent to resolve `@mistriwork/…` from, for a loader in another thread; undefined when installed. */
+export function checkoutManifest(): string | undefined {
+  return FROM_SOURCE ? OWN_MANIFEST : undefined;
+}

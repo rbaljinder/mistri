@@ -93,8 +93,8 @@ mechanic: { read: true, write: ['work_order', 'work_order_part'], commands: ['st
 manager: { extends: 'mechanic', write: ['customer'], commands: ['approveQuote'] },
 ```
 
-Every grant passes down as the union of both; `label`, `claims` and `service`
-stay the role's own. A loop or a role of another realm is refused, and
+Every grant passes down as the union of both; `label`, `claims`, `service` and
+`portal` stay the role's own. A loop or a role of another realm is refused, and
 `authority.lock` lists all the manager holds, beneath `role manager extends mechanic`.
 
 A view's or page's `roles` open to a role that extends one they name:
@@ -159,7 +159,7 @@ public: {
     // …
 ```
 
-See it in the sample (`examples/apps/lintel/app.ts:140`).
+See it in the sample (`examples/apps/lintel/app.ts:142`).
 
 Each resource is named; `read: true` is refused, so nothing is public by
 accident. A public resource's record opens for a visitor at its own address
@@ -202,3 +202,19 @@ same answer for a private table and for a name that is no table.
 - [Row access](/docs/row-access/): which rows each person sees.
 - [Secrets and hidden columns](/docs/secrets/): what holds without sign-in, and what hides nothing.
 - [Resources and fields](/docs/access-model/): declared resources, `access` and `delete`.
+
+## The App's own public
+
+A role a customer, a patient or a resident holds says `portal: true`:
+
+```ts
+patient: { label: 'Patient', portal: true, read: ['visit', 'patient'], commands: ['askToReschedule'] },
+```
+
+It grants nothing. It says who the screen is for: the shell offers that reader their own things and none of the
+office's tools. The search across every table, the look picker, a list's view switch and column chooser and a
+record's "3 of 20" pager are not drawn, their settings keep their profile and language, and a form asks them more
+gently. They see a bell once a notice has reached them and none before. A signed-out visitor of an App that signs people in is read the same way. Someone who also holds an office
+role is the office. Title their lists for them with a list view's `primary` (a patient's visits by the therapist, not
+by their own name on every row), and give them their own record with `settings` on the resource, which opens the
+one row their row policy leaves them.

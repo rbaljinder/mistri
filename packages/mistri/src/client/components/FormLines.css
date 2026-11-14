@@ -347,7 +347,7 @@
     outline-offset: 0;
     border-color: var(--focus);
   }
-  .form-lines-grid td.is-invalid .lines-box {
+  .form-lines-grid td[data-invalid] .lines-box {
     border-color: var(--status-critical);
   }
   @media (hover: none) {
@@ -355,7 +355,7 @@
       border-color: var(--line-control);
     }
   }
-  .form-lines-grid .lines-box :is(.lines-input, .picker, .picker-input, .dd-button, input) {
+  .form-lines-grid .lines-box :is(.lines-input, .picker, .picker-input,[data-slot='select-trigger'], input) {
     min-height: 0;
     margin: 0;
     border: 0;
@@ -366,11 +366,11 @@
     font: var(--text-base) var(--sans);
     line-height: 20px;
   }
-  .form-lines-grid .lines-box :is(.lines-input, .picker, .picker-input, .dd-button, input):focus-visible,
+  .form-lines-grid .lines-box :is(.lines-input, .picker, .picker-input,[data-slot='select-trigger'], input):focus-visible,
   .form-lines-grid .lines-box .picker:focus-within {
     outline: none;
   }
-  .form-lines-grid .lines-box :is(.lines-input, .lines-control input, .dd-button) {
+  .form-lines-grid .lines-box :is(.lines-input, .lines-control input,[data-slot='select-trigger']) {
     width: 100%;
     height: 30px;
     padding: 0 var(--space-3);

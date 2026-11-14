@@ -40,7 +40,7 @@ test("a New form's fields stand at a finger's 44px on a touch screen, and at the
       await expect(form).toBeVisible();
       // A typeahead's input is drawn inside its picker's box, which is the field the finger meets.
       const fields = form.locator(
-        '.insert-field :is(input:not(.picker-input, [type=checkbox], [type=radio], [role=switch]), .dd-button, .record-picker-trigger, .picker)',
+        '.insert-field :is(input:not(.picker-input, [type=checkbox], [type=radio], [role=switch]), [data-slot="select-trigger"], .record-picker-trigger, .picker)',
       );
       expect(await fields.count()).toBeGreaterThan(2);
       const heights = await fields.evaluateAll((list) =>

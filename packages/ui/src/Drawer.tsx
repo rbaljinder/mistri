@@ -1,10 +1,9 @@
 /**
- * A drawer: a sheet that slides in from an edge, over Base UI's Drawer,
+ * A drawer: a sheet that slides in from an edge, over UI SDK's Drawer,
  * which gives it the scrim, focus held inside, Escape and a click on the
  * scrim to dismiss, focus handed back on close, and the swipe to dismiss
  * on a phone. Controlled with `open`/`onOpenChange`; a closed drawer is
- * dismissed (its exit animation aside, the sheet stays in the tree only
- * while that runs), so nothing inside it is read while it is shut.
+ * out of the tree, so nothing inside it is read while it is shut.
  * `side` is the edge it comes from, right by default,
  * and the panel is at most 420px wide (a left drawer the same), full
  * width on a phone. The sheet is named by its `title` or, where it draws
@@ -16,11 +15,12 @@
  * apply to the markup it puts in here as they do in the page (Modal.tsx does
  * the same).
  */
+import { Drawer as Sheet, DrawerBackdrop, DrawerClose, DrawerContent, DrawerTitle } from '@ui-sdk/react/drawer';
 import { useContext, type ReactNode } from 'react';
-import { Drawer as BaseDrawer } from '@base-ui/react/drawer';
+import type { ChangeDetails } from './changeDetails.js';
 import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
+import { heard } from './internal/layers.js';
 import { popupContainer } from './internal/popups.js';
-import { fromBaseUi, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export type DrawerSide = 'left' | 'right';
@@ -66,37 +66,37 @@ function DefaultDrawer({
 }: DrawerProps) {
   const componentScope = useContext(ComponentStyleScope);
   return (
-    <BaseDrawer.Root
+    <Sheet
+      container={popupContainer()}
       open={open}
-      disablePointerDismissal={closeDisabled}
+      side={side}
       onOpenChange={(next, details) => {
         /* A non-cancellable operation: a dismissal request (Escape, a
            click outside) is refused here, as Modal's beforeClose refuses
            one, and the controlled drawer stays open. */
-        if (!next && closeDisabled) return;
-        onOpenChange?.(next, fromBaseUi(details, 'implicit'));
+        if (!next && closeDisabled) return details.cancel();
+        onOpenChange?.(next, heard(details));
       }}
     >
-      <BaseDrawer.Portal container={popupContainer()}>
-        <BaseDrawer.Backdrop className="ui-drawer-backdrop" />
-        <BaseDrawer.Viewport
-          className={['ui-drawer-viewport', `ui-drawer-${side}`, className].filter(Boolean).join(' ')}
-          data-component={componentScope}
-        >
-          <BaseDrawer.Popup className="ui-drawer" aria-label={ariaLabel ?? (typeof title === 'string' ? title : undefined)}>
-            <div className="ui-drawer-head">
-              {title !== undefined ? <BaseDrawer.Title className="ui-drawer-title">{title}</BaseDrawer.Title> : null}
-              <BaseDrawer.Close className="ui-drawer-close" aria-label={closeLabel} disabled={closeDisabled}>
-                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-                  <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </BaseDrawer.Close>
-            </div>
-            {children}
-          </BaseDrawer.Popup>
-        </BaseDrawer.Viewport>
-      </BaseDrawer.Portal>
-    </BaseDrawer.Root>
+      <DrawerBackdrop />
+      <DrawerContent
+        data-kind="sheet"
+        data-component={componentScope}
+        className={className}
+        aria-label={ariaLabel ?? (typeof title === 'string' ? title : undefined)}
+      >
+        <header data-slot="sheet-head">
+          {/* Without a title the head still has two ends, so the close control stays at the far one. */}
+          {title !== undefined ? <DrawerTitle>{title}</DrawerTitle> : <span />}
+          <DrawerClose aria-label={closeLabel} disabled={closeDisabled} data-variant="quiet">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+              <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </DrawerClose>
+        </header>
+        <div data-slot="sheet-body">{children}</div>
+      </DrawerContent>
+    </Sheet>
   );
 }
 

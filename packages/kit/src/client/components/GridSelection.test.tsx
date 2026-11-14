@@ -64,6 +64,7 @@ beforeEach(bridgeShell);
 const { GridSelection } = await import('./GridSelection.js');
 const { RowHosts, useRowHostScope } = await import('./RowHost.js');
 const { bulkKey } = await import('../bulkActions.js');
+const groupKeys = await import('./Grid.js');
 
 const rows = [
   { id: '9007199254740993', subject: 'Printer jammed', status: 'open' },
@@ -227,4 +228,63 @@ test('a reader who may not write gets no "Set field…"', () => {
   mocks.allowed = false;
   drawEditable(['subject']);
   expect(screen.queryByRole('checkbox')).toBeNull();
+});
+
+test('a grouped list gives each group head a box for its rows: unchecked, mixed when some are chosen, and it takes or clears the group alone', async () => {
+  const grouped = [
+    { id: 1, subject: 'Printer jammed', status: 'open' },
+    { id: 2, subject: 'VPN drops', status: 'open' },
+    { id: 3, subject: 'Badge lost', status: 'closed' },
+  ];
+  const group = { column: 'status', head: (value: unknown) => ({ label: value === 'open' ? 'Open' : 'Closed' }) };
+  function GroupedGrid() {
+    const store = useRowHostScope()!;
+    const { groupHostKey } = groupKeys;
+    return (
+      <table>
+        <tbody>
+          {grouped.map((row, i) => {
+            const id = bulkKey(table, { id: row.id });
+            const starts = i === 0 || grouped[i - 1].status !== row.status;
+            return [
+              starts ? (
+                <tr key={`g-${row.status}`} className="grid-group-head">
+                  <td className="row-host" ref={store.ref(groupHostKey(row.status))} />
+                  <td>{row.status}</td>
+                </tr>
+              ) : null,
+              <tr key={id}>
+                <td className="row-host" ref={store.ref(id)} />
+                <td>{row.subject}</td>
+              </tr>,
+            ];
+          })}
+        </tbody>
+      </table>
+    );
+  }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <RowHosts>
+        <GridSelection table={table} rows={grouped} actions={[close]} interactive group={group} />
+        <GroupedGrid />
+      </RowHosts>
+    </QueryClientProvider>,
+  );
+  const open = await screen.findByRole('checkbox', { name: 'Select all in Open' });
+  expect(open.closest('tr')).toHaveClass('grid-group-head');
+  expect(open).not.toBeChecked();
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Select VPN drops' }));
+  expect(open).toBePartiallyChecked();
+  await userEvent.click(open);
+  expect(open).toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'Select Printer jammed' })).toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'Select Badge lost' })).not.toBeChecked();
+  expect(screen.getByRole('toolbar', { name: 'Selected records' })).toHaveTextContent('2 selected');
+  await userEvent.click(screen.getByRole('checkbox', { name: 'Select Badge lost' }));
+  await userEvent.click(open);
+  expect(screen.getByRole('checkbox', { name: 'Select VPN drops' })).not.toBeChecked();
+  expect(screen.getByRole('checkbox', { name: 'Select Badge lost' })).toBeChecked();
+  expect(screen.getByRole('toolbar', { name: 'Selected records' })).toHaveTextContent('1 selected');
 });

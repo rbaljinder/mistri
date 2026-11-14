@@ -146,6 +146,32 @@ test('rows({ show }) reads a rollup through the projection the list reads', asyn
   assert.ok(!('headcount' in plain.value[0]!), JSON.stringify(plain.value[0]));
 });
 
+test('a command declared targets: "many" takes its records as one list, every one committing together', async (t) => {
+  const directory = await exampleApp('depot');
+  const workspace = await createTestWorkspace();
+  t.after(() => workspace.close());
+  const config = await workspace.copyConfig(join(directory, 'mistri.json'));
+  const host = await startTestApp({ workspace, directory, config });
+  const url = JSON.parse(readFileSync(config, 'utf8')).connections[0].url;
+  const picked = () => {
+    const db = new DatabaseSync(url, { readOnly: true });
+    try {
+      return db
+        .prepare(`SELECT id FROM pick_list WHERE status = 'picked' ORDER BY id`)
+        .all()
+        .map((row) => Number(row.id));
+    } finally {
+      db.close();
+    }
+  };
+  const before = picked();
+  assert.ok(before.length >= 2, `the seed has ${before.length} picked lists`);
+  const keys = before.slice(0, 2).map((id) => ({ id }));
+  const operator = await host.as('operator');
+  assertApplied(await operator.command('packLists', keys));
+  assert.deepEqual(picked(), before.slice(2));
+});
+
 /* Depot's receiving is a machine verb on the order whose command runs on one of its lines. */
 for (const name of ['tick', 'payday', 'depot'] as const) {
   test(`test init writes a suite that passes on ${name}`, async () => {

@@ -214,8 +214,8 @@ test('the band stripes a list or grid (.table-wrap) and never the calendar, whic
 
 test('a full-screen dialog has no edge for dialog:edge to draw: the structure layer, which outranks the theme layer, zeroes it (a dark phone showed a light 1px line)', () => {
   const css = readFileSync(new URL('../packages/kit/src/client/structure.css', import.meta.url), 'utf8');
-  assert.match(css, /\[role='dialog'\]\.modal-fullscreen \{[^}]*border: 0/);
-  assert.match(css, /\.modal-fullscreen-mobile \{[^}]*border: 0/);
+  assert.match(css, /\[role='dialog'\]\[data-slot='dialog-content'\]\[data-fullscreen='always'\] \{[^}]*border: 0/);
+  assert.match(css, /\[data-slot='dialog-content'\]\[data-fullscreen='mobile'\] \{[^}]*border: 0/);
   assert.match(css, /^@layer structure/m);
 });
 

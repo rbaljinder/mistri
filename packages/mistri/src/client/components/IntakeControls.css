@@ -10,8 +10,8 @@
 }
 /* An amount in the valid check's box (CommandFields' marked): the box is the row, and the mark keeps its room inside
    the amount's own input, as a plain box's does (forms.css). */
-.field-box > .intake-money { flex: 1 1 auto; min-width: 0; }
-.field-box.has-mark > .intake-money > .field-control { padding-inline-end: calc(var(--space-3h) + 16px + var(--space-3)); }
+[data-slot='field-box'] > .intake-money { flex: 1 1 auto; min-width: 0; }
+[data-slot='field-box'][data-has-mark] > .intake-money > :is([data-slot='input'], [data-slot='textarea']) { padding-inline-end: calc(var(--space-3h) + 16px + var(--space-3)); }
 .intake-month { max-width: 10ch; box-sizing: content-box; }
 .intake-slider { display: grid; gap: var(--space-2); }
 .intake-slider-ends { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-sm); color: var(--ink-muted); }

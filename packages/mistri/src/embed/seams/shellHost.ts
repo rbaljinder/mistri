@@ -15,7 +15,7 @@ export const shellBody = (): HTMLElement => binding().body;
 
 export const portalRoot = (): HTMLElement => binding().portals;
 
-/* Base UI would choose the document's body, outside the scoped sheets and the density zoom. */
+/* UI SDK would choose the document's body, outside the scoped sheets and the density zoom. */
 export const popupContainer = (): HTMLElement | undefined => binding().portals;
 
 export const shellById = (id: string): HTMLElement | null => binding().root.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
@@ -140,7 +140,7 @@ export function navFollow(href: string): void {
   announceNavigation();
 }
 
-/* The ui primitives (packages/ui) measure against the page's root and draw their popups where Base UI chooses, which
+/* The ui primitives (packages/ui) measure against the page's root and draw their popups where UI SDK chooses, which
    is the served shell's answer; bound to a host, they take the host's, as everything above does. */
 measureFrom(shellRoot);
 drawPopupsIn(popupContainer);

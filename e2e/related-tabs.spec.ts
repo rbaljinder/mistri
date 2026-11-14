@@ -2,6 +2,9 @@ import { expect, test, type Page } from './support/harness';
 import { COMMAND_APP_ID, startCommandApp } from './support/commandDeskServer';
 import { FIXTURE_MS } from './support/budgets';
 
+/* A related tab says how many rows it holds after its word ("Reviews 1"), on an App's own page as on an inferred one. */
+const tabNamed = (word: string) => new RegExp(`^${word}(\\s+[\\d,]+\\+?)?$`);
+
 // The fixture App's own record page over disposable data; never the user's preview.
 test.describe('related-list layout stability', () => {
   test.setTimeout(60_000);
@@ -50,7 +53,7 @@ test.describe('related-list layout stability', () => {
         for (const key of ['top', 'height', 'scroll'] as const) expect(Math.abs(after[key] - before[key]), key).toBeLessThan(1);
       };
 
-      await page.getByRole('tab', { name: 'Reviews', exact: true }).click();
+      await page.getByRole('tab', { name: tabNamed('Reviews') }).click();
       await expect(panel.locator('tbody tr')).toHaveCount(1);
       await stable();
 
@@ -65,7 +68,7 @@ test.describe('related-list layout stability', () => {
         await route.continue();
       });
       try {
-        await page.getByRole('tab', { name: 'Decisions', exact: true }).click();
+        await page.getByRole('tab', { name: tabNamed('Decisions') }).click();
         await expect(panel.locator('.loading')).toBeVisible();
         await stable();
       } finally {
@@ -82,10 +85,10 @@ test.describe('related-list layout stability', () => {
         await expect(hidden).toBeHidden();
         await expect(hidden).toHaveAttribute('inert', '');
       }
-      await page.getByRole('tab', { name: 'Decisions', exact: true }).press('ArrowLeft');
-      await expect(page.getByRole('tab', { name: 'Reviews', exact: true })).toBeFocused();
+      await page.getByRole('tab', { name: tabNamed('Decisions') }).press('ArrowLeft');
+      await expect(page.getByRole('tab', { name: tabNamed('Reviews') })).toBeFocused();
       await stable();
-      await page.getByRole('tab', { name: initial, exact: true }).click();
+      await page.getByRole('tab', { name: tabNamed(initial) }).click();
       await expect(panel.locator('tbody tr')).toHaveCount(initial === 'Documents' ? 3 : 1);
       await stable();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

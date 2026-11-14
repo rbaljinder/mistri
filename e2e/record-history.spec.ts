@@ -180,6 +180,6 @@ test('a record nothing has changed says so, and reads on a phone', async ({ page
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${origin}/history/@task~2`);
   const section = page.locator('.page-history');
-  await expect(section.locator('.empty-note')).toContainText('No changes recorded yet.');
+  await expect(section.locator('.empty-note')).toContainText('No edits since this record was added.');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

@@ -6,7 +6,7 @@
  */
 import { PresentationSwitch } from './PresentationSwitch.js';
 import { useContext, useMemo, useRef, useState } from 'react';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ownedBy } from '../requestIdentity.js';
 import type { ResourceClientReply } from '@mistriwork/engine/shared/resourceHttp.js';
 import { columnDisplay, columnLabel, recordLabel, api as coreApi, findTable, openRecord, rowLabel, state, writeAllowed } from '../core.js';
@@ -44,6 +44,7 @@ import { Loading, SectionBox } from './PageSectionBox.js';
 import { ListEmpty } from './ListEmpty.js';
 import { Empty } from './Notes.js';
 import { RecordSummaries } from './RecordSummaries.js';
+import { RowTitleContext } from './rowTitle.js';
 import { canDelete } from '../delete.js';
 import { updateAttempts } from '../updateAttempts.js';
 import { shell } from '../shellMode.js';
@@ -88,6 +89,10 @@ interface Counted {
 export interface Counting {
   base: TableMeta;
   recordKey: Record<string, unknown>;
+  /** On a page an author wrote the figure is seen and not heard: it stays out of the name of the heading or the tab
+      it stands in, so "Charges" is still the heading a reader, a script and an address ask for by name. An inferred
+      page's count is part of the name, as it has been. */
+  seen?: boolean;
 }
 
 /**
@@ -99,35 +104,44 @@ export interface Counting {
 export function useRelatedCounts(
   sections: readonly SlotProps['section'][],
   counting: Counting | undefined,
+  /** One request to a list, where the server composed them so (a page an author wrote that stands its lists alone,
+      recordReads.ts): a strip the record's page tabs made of them asks as the lists alone would have. */
+  each = false,
 ): Map<string, Counted | null> | undefined {
   const api = usePageApi();
   const { connection, preview } = useContext(PageRenderContext);
-  const body =
+  const schema = state.schema as unknown as DatabaseSchema;
+  const bodies =
     counting && !preview && !shell().publicVisitor()
-      ? relatedCountsBody(state.schema as unknown as DatabaseSchema, sections, counting.base, counting.recordKey)
-      : undefined;
-  return useQuery({
-    queryKey: ['count', connection ?? state.activeConnection ?? '', 'related', body?.items ?? []],
-    queryFn: async () => {
-      const data = (await api('/api/counts', body!)) as {
-        results?: Array<{ total?: number; cappedTotal?: boolean; errors?: unknown[] }>;
-      };
-      /* In the shape a list's badges keep theirs (AppList.tsx), under the same key, so either reads the other's. */
-      return new Map(
-        body!.items.map((question, i): [string, Counted | null] => {
-          const result = data.results?.[i];
-          return [
-            question,
-            result && !result.errors?.length && typeof result.total === 'number'
-              ? { total: result.total, capped: result.cappedTotal === true }
-              : null,
-          ];
-        }),
-      );
-    },
-    enabled: Boolean(body),
-    staleTime: 0,
-  }).data;
+      ? (each ? sections.map((section) => [section]) : [sections]).flatMap(
+          (asked) => relatedCountsBody(schema, asked, counting.base, counting.recordKey) ?? [],
+        )
+      : [];
+  const answers = useQueries({
+    queries: bodies.map((body) => ({
+      queryKey: ['count', connection ?? state.activeConnection ?? '', 'related', body.items],
+      queryFn: async () => {
+        const data = (await api('/api/counts', body)) as {
+          results?: Array<{ total?: number; cappedTotal?: boolean; errors?: unknown[] }>;
+        };
+        /* In the shape a list's badges keep theirs (AppList.tsx), under the same key, so either reads the other's. */
+        return new Map(
+          body.items.map((question, i): [string, Counted | null] => {
+            const result = data.results?.[i];
+            return [
+              question,
+              result && !result.errors?.length && typeof result.total === 'number'
+                ? { total: result.total, capped: result.cappedTotal === true }
+                : null,
+            ];
+          }),
+        );
+      },
+      staleTime: 0,
+    })),
+  });
+  const known = answers.flatMap((answer) => (answer.data ? [...(answer.data as Map<string, Counted | null>)] : []));
+  return known.length ? new Map(known) : undefined;
 }
 
 /**
@@ -148,7 +162,11 @@ export function RelatedCount({
   const question = relatedCountsBody(state.schema as unknown as DatabaseSchema, [section], counting.base, counting.recordKey)?.items[0];
   if (question === undefined) return null;
   const known = counts?.get(question);
-  return <span className="tab-count">{known && <span>{`${formatNumber(known.total)}${known.capped ? '+' : ''}`}</span>}</span>;
+  return (
+    <span className="tab-count" aria-hidden={counting.seen || undefined}>
+      {known && <span>{`${formatNumber(known.total)}${known.capped ? '+' : ''}`}</span>}
+    </span>
+  );
 }
 
 /** Rows related to the root: the real list. */
@@ -233,7 +251,7 @@ export function relatedDoor(
 function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counted }: SlotProps) {
   const api = usePageApi('related');
   const { preview, isCurrent, openRelated, connection, recordName, onActionDone, actions: recordActions } = useContext(PageRenderContext);
-  const counting = counted ? { base, recordKey } : undefined;
+  const counting = counted ? { base, recordKey, ...(counted === 'seen' ? { seen: true } : {}) } : undefined;
   const counts = useRelatedCounts(counted ? [section] : [], counting);
   const queries = useQueryClient();
   const [added, setAdded] = useState(false);
@@ -720,9 +738,13 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
       ? rows.flatMap((row) => {
           const rowKey = recordViewKey(keyColumns, got.columns, row);
           if (!rowKey) return [];
+          /* A column that describes the picture for someone who cannot see it (`alt`, `alt_text`) is its alt and
+             never its caption: printed under the photo it told a sighted visitor what they were looking at. */
+          const described = (got.columns ?? []).find((column) => /^alt(_text)?$/i.test(column) && captions(column));
           const words = (got.columns ?? [])
             .filter(
               (column) =>
+                column !== described &&
                 ![file.name, file.content, file.type, file.size, file.thumbnail].includes(column) &&
                 !(keyColumns as ReadonlyArray<{ column: string }>).some((key) => key.column === column) &&
                 !(hidden as string[]).includes(column) &&
@@ -731,7 +753,8 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
                 captions(column),
             )
             .map((column) => worded(column, row[column]) ?? String(row[column]));
-          const alt = words[0] ?? String(row[file.name] ?? '');
+          const said = described ? row[described] : undefined;
+          const alt = said != null && said !== '' ? String(said) : (words[0] ?? String(row[file.name] ?? ''));
           return [
             {
               id: JSON.stringify(rowKey),
@@ -976,21 +999,23 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
                         table={say('common.table')}
                       />
                       {/* A summary's title is the row's name, which on its parent's page says the word alone too. */}
-                      <RecordSummaries
-                        table={table}
-                        data={{ ...got, rows }}
-                        columns={got.columns.filter((name) => !hiddenColumns.has(name))}
-                        referenceLabels={labelColumns}
-                        parent={!section.similar && section.path && !section.path.includes('.') ? section.path : undefined}
-                        recordForRow={
-                          section.similar
-                            ? recordForRow
-                            : (row) => {
-                                const record = recordForRow(row);
-                                return { ...record, label: withoutParent(record.label, recordName) };
-                              }
-                        }
-                      />
+                      <RowTitleContext.Provider value={section.primary}>
+                        <RecordSummaries
+                          table={table}
+                          data={{ ...got, rows }}
+                          columns={got.columns.filter((name) => !hiddenColumns.has(name))}
+                          referenceLabels={labelColumns}
+                          parent={!section.similar && section.path && !section.path.includes('.') ? section.path : undefined}
+                          recordForRow={
+                            section.similar
+                              ? recordForRow
+                              : (row) => {
+                                  const record = recordForRow(row);
+                                  return { ...record, label: withoutParent(record.label, recordName) };
+                                }
+                          }
+                        />
+                      </RowTitleContext.Provider>
                     </>
                   )}
                   <div className="result-table">

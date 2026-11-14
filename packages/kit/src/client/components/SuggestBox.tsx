@@ -73,8 +73,8 @@ export function SuggestBox({ table, columns, standing = '', text, onText, onPick
       items={items}
       itemKey={(item) => item.value}
       itemLabel={(item) => item.value}
-      itemClassName={(_item, highlighted) => `dd-option${highlighted ? ' active' : ''}`}
-      renderItem={(item) => <span className="dd-label">{item.value}</span>}
+      itemClassName={() => ''}
+      renderItem={(item) => <span data-slot="option-label">{item.value}</span>}
       onPick={(item) => {
         setWanted(false);
         onText(item.value);
@@ -94,8 +94,8 @@ export function SuggestBox({ table, columns, standing = '', text, onText, onPick
           onKeyDown?.(e);
         },
       }}
-      popupClassName="dd-popup"
-      listClassName="dd-list"
+      popupClassName=""
+      listClassName=""
       fit="min-width"
     />
   );

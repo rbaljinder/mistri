@@ -361,6 +361,11 @@ if (!(HOST_GLOBAL in globalThis)) {
         '@mistriwork/mistri/ui': ui,
         '@mistriwork/mistri/page': page,
       }),
+      /* What the page fetches when a component first asks (shared/uiSdk.ts, LAZY_HOST_MODULES): the behaviors are a
+         chunk of their own, which a page without a component built on one never downloads. */
+      load: Object.freeze({
+        '@mistriwork/mistri/behaviors': () => import('./behaviors.js'),
+      }),
     }),
     enumerable: false,
     writable: false,

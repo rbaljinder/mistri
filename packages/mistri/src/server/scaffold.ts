@@ -57,7 +57,6 @@ import { isMoneyColumn, isPeople, UNITS, vocabularyTones } from '@mistriwork/eng
 import { DUE } from '@mistriwork/engine/shared/dueDate.js';
 import { headingOf, pluralOf } from '@mistriwork/engine/shared/appNoun.js';
 import { validatePage } from '@mistriwork/engine/shared/page.js';
-import { RESERVED_PATHS } from '../shared/appAddress.js';
 import { anatomySections, recordAnatomy } from '@mistriwork/engine/shared/pageAnatomy.js';
 import { describeSchema } from '@mistriwork/engine/shared/shape.js';
 import { accessibleSchema } from './app/appAccess.js';
@@ -66,12 +65,31 @@ import { createAppSourceCatalog } from './app/appSourceCatalog.js';
 import { runtimeVersion } from '@mistriwork/engine/server/packageVersion.js';
 import { LANGUAGE_WORDS } from '../shared/appSegments.js';
 import { draftMachine, machineWrites, type DraftedMachine } from '@mistriwork/engine/server/scaffoldMachine.js';
+import { SHORT_NAME_MAX } from '../shared/app.js';
 import { inferredFormDefaults } from '../shared/formRules.js';
 import { withDeclaredDates } from '../shared/declaredDates.js';
 import type { DeclaredDate } from '../shared/appModel.js';
 import { moduleTypeProblem } from './cli/projectSetup.js';
 import { typesForSchema } from './typegen.js';
 import { recordTabWordsByView } from './app/recordTabWords.js';
+import {
+  SUMMED,
+  DATE_PICK,
+  VERSION,
+  SECRET,
+  LONG_TEXT,
+  HOUSEKEEPING,
+  OPAQUE,
+  WORD,
+  IRREGULAR_PLURAL,
+  MASS,
+  spoken,
+  singularOf,
+  pluralNoun,
+  iconFor,
+  keyFor,
+  identifier,
+} from './scaffoldWords.js';
 
 /* ---------- the plan: helper calls, rendered or evaluated ---------- */
 
@@ -211,233 +229,6 @@ function render(value: unknown, indent: string, used: number): string {
 }
 
 /* ---------- reading the schema ---------- */
-
-/* What a column holds, read off its name and type, is displayDefaults.ts's: the one reading the runtime applies. */
-const SUMMED = /(amount|total|subtotal|balance|revenue|paid|billed)$/i;
-/** Date columns worth sorting and charting by, most tellingly named first. */
-const DATE_PICK = [
-  /created/i,
-  /opened/i,
-  /ordered/i,
-  /placed/i,
-  /received|registered|reported|requested|raised|booked|logged/i,
-  /submitted/i,
-  /happened/i,
-  /date/i,
-  /_on$/i,
-  /_at$/i,
-];
-const VERSION = /^(version|lock_version|row_version|rowversion|revision)$/i;
-const SECRET = /(password|passwd|secret|token|hash|salt)/i;
-const LONG_TEXT = /(description|body|notes?|summary|content|details|comments?|bio|message|text|address|html|markdown)$/i;
-const HOUSEKEEPING = /^(updated|modified|sys_|deleted)/i;
-const OPAQUE = /blob|bytea|binary|json|xml|tsvector|vector/i;
-const WORD = /^[A-Za-z0-9_]+$/;
-
-const IRREGULAR: Record<string, string> = {
-  people: 'person',
-  children: 'child',
-  men: 'man',
-  women: 'woman',
-  staff: 'staff',
-  data: 'data',
-  media: 'media',
-};
-const IRREGULAR_PLURAL = Object.fromEntries(Object.entries(IRREGULAR).map(([many, one]) => [one, many]));
-/* Words that have no plural: a list of stock is "Stock", never "Stocks". */
-const MASS = new Set([
-  'stock',
-  'inventory',
-  'equipment',
-  'staff',
-  'data',
-  'media',
-  'information',
-  'software',
-  'hardware',
-  'furniture',
-  'feedback',
-  'news',
-  'mail',
-  'luggage',
-  'baggage',
-  'freight',
-  'cargo',
-  'merchandise',
-  'clothing',
-  'payroll',
-  'research',
-  'evidence',
-  'advice',
-  'traffic',
-  'weather',
-  'knowledge',
-  'personnel',
-  'livestock',
-  'produce',
-  'machinery',
-]);
-/* Letters a person says one by one: a table named `po_line` is "PO lines". */
-const ACRONYMS = new Set([
-  'po',
-  'sku',
-  'id',
-  'api',
-  'url',
-  'crm',
-  'erp',
-  'hr',
-  'qa',
-  'ui',
-  'ux',
-  'vat',
-  'gst',
-  'pdf',
-  'csv',
-  'ip',
-  'faq',
-  'kpi',
-  'roi',
-  'sla',
-  'rma',
-  'bom',
-  'usa',
-  'uk',
-  'eu',
-  'us',
-  'sms',
-  'tax_id',
-  'ssn',
-  'ein',
-  'iban',
-  'swift',
-  'rfq',
-  'rfp',
-  'ach',
-]);
-const spoken = (words: string) =>
-  words
-    .split(' ')
-    .map((word) => (ACRONYMS.has(word.toLowerCase()) ? word.toUpperCase() : word))
-    .join(' ');
-
-/* A field of study or work said with an -ics that is one thing, not many: "Logistics", never "Logistic". Any
-   other -ics is a plural (mechanics, clinics, topics). */
-const ICS =
-  /(analytics|logistics|physics|economics|statistics|ethics|mathematics|electronics|athletics|politics|genetics|linguistics|robotics|aerobics|optics|acoustics|aesthetics|semantics|ergonomics|forensics|diagnostics|metrics)$/;
-
-/** The singular of a noun's last word, by rule: what a table named in the plural calls one row. */
-function singularOf(noun: string): string {
-  const words = noun.split(' ');
-  const last = words.pop()!;
-  const lower = last.toLowerCase();
-  const one =
-    IRREGULAR[lower] ??
-    (MASS.has(lower) || ICS.test(lower)
-      ? last
-      : /[^aeiou]ies$/.test(lower)
-        ? `${last.slice(0, -3)}y`
-        : /(ss|us|is)$/.test(lower)
-          ? last
-          : /(sses|xes|ches|shes|zes)$/.test(lower)
-            ? last.slice(0, -2)
-            : lower.endsWith('s')
-              ? last.slice(0, -1)
-              : last);
-  return [...words, one].join(' ');
-}
-
-const pluralNoun = (one: string) => {
-  const words = one.split(' ');
-  const last = words.pop()!;
-  return [...words, MASS.has(last.toLowerCase()) ? last : (IRREGULAR_PLURAL[last] ?? pluralOf(last))].join(' ');
-};
-
-/* Icons by what a table's name says: the whole name where it is listed (`work_order` is a wrench), else head noun
-   first (`purchase_order` is an order). */
-const ICONS: Array<[RegExp, string]> = [
-  [/^(ticket|incident|case|request|issue)$/, 'ticket'],
-  [/^(bug|defect)$/, 'bug'],
-  [/^(contact|lead)$/, 'address-book'],
-  [/^(opportunity|deal)$/, 'handshake'],
-  [/^(customer|client|person|people|member|user|team|group|patient|student|guest|owner)$/, 'users'],
-  [/^(employee|staff|agent|rep|worker|author|driver|technician|mechanic|operator|engineer)$/, 'user'],
-  [/^(company|account|organization|organisation|org|vendor|supplier|partner|dealer|tenant|industry)$/, 'buildings'],
-  [/^(store|shop|branch|dealership)$/, 'storefront'],
-  [/^(order|cart|purchase|basket)$/, 'shopping-cart'],
-  [/^(invoice|bill|receipt|transaction|expense)$/, 'receipt'],
-  [/^(payment|charge|card)$/, 'credit-card'],
-  [/^(payroll|salary|pay|wage|price|budget|payout)$/, 'currency-dollar'],
-  [/^(ledger|bank|deposit)$/, 'bank'],
-  [/^(product|item|sku|inventory|stock|part|asset|equipment|line)$/, 'package'],
-  [/^(warehouse|depot|storage|stockroom|bin|shelf)$/, 'archive'],
-  [/^(shipment|delivery|parcel|package|route|trip)$/, 'truck'],
-  [/^(vehicle|car|fleet)$/, 'car'],
-  [/^(project|board|sprint|milestone|epic)$/, 'kanban'],
-  [/^(task|todo|checklist|chore|job)$/, 'list-checks'],
-  [/^(event|meeting|appointment|visit|booking|reservation|cycle|schedule|shift|session|period)$/, 'calendar'],
-  [/^(property|unit|home|house|apartment|building|room|listing)$/, 'house'],
-  [/^(lease|contract|agreement)$/, 'file'],
-  [/^(maintenance|repair|work_order|service)$/, 'wrench'],
-  [/^(milestone|goal|deadline)$/, 'flag'],
-  [/^(time|timesheet|hour|entry)$/, 'clock'],
-  [/^(provider|doctor|physician|nurse|clinician|instructor|teacher)$/, 'user'],
-  [/^(insurer|payer|carrier|lender|bank)$/, 'buildings'],
-  [/^(claim)$/, 'receipt'],
-  [/^(prescription|medication|treatment|diagnosis)$/, 'note'],
-  [/^(comment|reply|message|conversation|thread|chat|activity)$/, 'chat-circle'],
-  [/^(note|memo)$/, 'note'],
-  [/^(document|file|attachment|photo|image|upload)$/, 'file'],
-  [/^(label|tag|category|type|kind|status)$/, 'tag'],
-  [/^(country|region|location|address|site|city|place|area|zone|territory)$/, 'map-pin'],
-  [/^(campaign|announcement|promotion)$/, 'megaphone'],
-  [/^(email|mail|newsletter)$/, 'envelope'],
-  [/^(setting|config|configuration|preference)$/, 'gear'],
-  [/^(log|audit|history|event_log)$/, 'clock'],
-  [/^(role|permission|policy)$/, 'shield-check'],
-  [/^(key|token|credential)$/, 'key'],
-  [/^(review|rating|favorite|favourite)$/, 'star'],
-  [/^(report|metric)$/, 'chart-bar'],
-];
-
-function iconFor(table: string): string {
-  const words = table
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean)
-    .map((word) => IRREGULAR[word] ?? singularOf(word));
-  /* The whole name, as written or said in the singular: `work_orders` is a wrench, like `work_order`. */
-  const whole = ICONS.find(([pattern]) => pattern.test(table.toLowerCase()) || pattern.test(words.join('_')));
-  if (whole) return whole[1];
-  for (const word of words.reverse()) {
-    const hit = ICONS.find(([pattern]) => pattern.test(word));
-    if (hit) return hit[1];
-  }
-  return 'table';
-}
-
-/** A view, page or App key: lowercase letters, digits and hyphens, unique among `taken`. */
-function keyFor(name: string, taken: Set<string>): string {
-  const said =
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 56) || 'view';
-  /* A table named like an address the server keeps (`assets`, `new`) is listed under another: "/assets-list". */
-  const base = RESERVED_PATHS.includes(said) ? `${said}-list` : said;
-  let key = base;
-  for (let n = 2; taken.has(key); n++) key = `${base}-${n}`;
-  taken.add(key);
-  return key;
-}
-
-/** A module-level name for a key: `work-orders` → `workOrders`. */
-function identifier(key: string, suffix = ''): string {
-  const camel = key.replace(/[^A-Za-z0-9]+([A-Za-z0-9])/g, (_, c: string) => c.toUpperCase()).replace(/[^A-Za-z0-9]/g, '');
-  const name = `${camel.charAt(0).toLowerCase()}${camel.slice(1)}${suffix}`;
-  return /^[0-9]/.test(name) || !name ? `_${name}` : name;
-}
 
 interface TableInfo {
   table: TableMeta;
@@ -733,7 +524,9 @@ function lineTotalOf(info: TableInfo): { name: string; expression: string } | un
 function machineCall(machine: DraftedMachine): Call {
   const states = Object.fromEntries(
     machine.states.map((state) => {
-      if (state === machine.path.at(-1) || machine.exits.includes(state)) return [state, { final: true }];
+      /* The path's end and the ways out are final, unless the brief has a step leave one (a return after delivery). */
+      const leaves = machine.verbs.some((verb) => verb.from.includes(state));
+      if (!leaves) return [state, { final: true }];
       const on = Object.fromEntries(
         machine.verbs
           .filter((verb) => verb.from.includes(state))
@@ -854,30 +647,85 @@ function withoutCommandActions(app: Record<string, unknown>, commands: ReadonlyS
       /* A verb that names a command is renamed, not dropped: a state's step still has to be one. */
       for (const verb of Object.keys(state.on ?? {}))
         if (commands.has(verb)) {
-          state.on![verb.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase()] = state.on![verb];
+          /* A one-word id (`enroll`) is its own snake case: renamed onto itself it was then deleted, and the state
+             was left with no step at all. */
+          const snake = verb.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+          const step = state.on![verb];
           delete state.on![verb];
+          state.on![snake === verb ? `${verb}_step` : snake] = step;
         }
   }
   return copy as Record<string, unknown>;
+}
+
+/** The leading words of a name that fit a phone's bar, or undefined when even the first does not. */
+function shortNameOf(name: string): string | undefined {
+  let short = '';
+  for (const word of name.split(/\s+/)) {
+    const next = short ? `${short} ${word}` : word;
+    if (next.length > SHORT_NAME_MAX) break;
+    short = next;
+  }
+  return short.replace(/\s*[&+-]$/, '') || undefined;
+}
+
+/**
+ * The states a brief's condition names for a machine's column: `status = shipped or delivered`, `status is paid`,
+ * `status in (a, b)`. Undefined where the condition says anything else, so the caller can say it was not drawn.
+ */
+function statesNamed(when: string | undefined, column: string, states: readonly string[]): string[] | undefined {
+  if (!when) return [];
+  const bare = (state: string) => state.trim().replace(/^['"]|['"]$/g, '');
+  const named: string[] = [];
+  /* Each alternative is one clause on the column: `status = shipped or status = delivered` as well as the short form. */
+  for (const clause of when.trim().split(/\s+or\s+/i)) {
+    const said = clause.match(new RegExp(`^(?:${column}\\s*(?:=|is|in)\\s*)?\\(?\\s*(.+?)\\s*\\)?$`, 'i'));
+    if (!said) return undefined;
+    named.push(...said[1].split(/\s*,\s*/).map(bare));
+  }
+  return named.length && named.every((state) => states.includes(state)) ? named : undefined;
 }
 
 /** Sign-in with the roles a brief names: the first that is not an admin one is what a new account gets. */
 function authFromBrief(
   roles: NonNullable<NonNullable<ScaffoldOptions['brief']>['roles']>,
   people?: { table: string; column: string },
+  commanded: ReadonlyMap<string, { columns: string[]; held: Set<string> }> = new Map(),
 ): Record<string, unknown> {
   const grant = (list: true | string[] | undefined) => (list === true ? true : list?.length ? list : undefined);
+  /* A role that edits a table a command also writes names the columns it edits: all of them but the command's. */
+  const fieldsOf = (write: true | string[] | undefined) => {
+    const rules = [...commanded]
+      .filter(([table]) => write === true || write?.includes(table))
+      .map(([table, { columns, held }]) => [table, { write: columns.filter((column) => !held.has(column)) }] as const);
+    return rules.length ? { fields: Object.fromEntries(rules) } : {};
+  };
+  /* The first account and every administrator hold `admin`: a brief that names none would sign them in to an App
+     that shows them nothing (admin-grants-nothing), so the draft grants it everything. */
+  const named = roles.some((role) => role.id === 'admin')
+    ? roles
+    : [
+        ...roles,
+        {
+          id: 'admin',
+          label: 'Administrator',
+          read: true as const,
+          write: true as const,
+          commands: [...new Set(roles.flatMap((role) => role.commands))],
+        },
+      ];
   return {
     providers: ['email'],
     ...(people ? { me: { from: people.table, column: people.column } } : {}),
     defaultRole: (roles.find((role) => !/admin|owner/.test(role.id)) ?? roles[0]).id,
     roles: Object.fromEntries(
-      roles.map((role) => [
+      named.map((role) => [
         role.id,
         {
           label: role.label,
           ...(grant(role.read) ? { read: grant(role.read) } : {}),
           ...(grant(role.write) ? { write: grant(role.write) } : {}),
+          ...fieldsOf(role.write),
           ...(role.commands.length ? { commands: role.commands } : {}),
         },
       ]),
@@ -1063,6 +911,16 @@ function formFor(info: TableInfo, byId: Map<string, TableInfo>): Record<string, 
 
 /* ---------- the draft ---------- */
 
+/* A draft's colour when its brief names none: one of the look's own palettes, each already held to its contrast in
+   every look, picked by the App's name so two drafts differ and the same name always draws the same. It is a start,
+   written into app.ts to be changed (a palette, an accent, or a theme of the App's own with a `brand`). */
+const DRAFT_PALETTES = ['cobalt', 'teal', 'emerald', 'violet', 'plum', 'crimson', 'amber', 'moss'];
+function draftPalette(name: string): string {
+  let sum = 0;
+  for (const letter of name) sum = (sum * 31 + letter.charCodeAt(0)) >>> 0;
+  return DRAFT_PALETTES[sum % DRAFT_PALETTES.length]!;
+}
+
 interface ScaffoldOptions {
   name?: string;
   /**
@@ -1074,7 +932,7 @@ interface ScaffoldOptions {
     theme?: string;
     logo?: string;
     roles?: Array<{ id: string; label: string; read: true | string[]; write?: true | string[]; commands: string[] }>;
-    commands?: Array<{ id: string; table: string; label: string; set: Record<string, string> }>;
+    commands?: Array<{ id: string; table: string; label: string; set: Record<string, string>; when?: string; refuse?: string[] }>;
   };
   /** The tables to draft a list view of, in nav order. Absent means every non-join, non-view table. */
   tables?: string[];
@@ -1208,7 +1066,23 @@ function recordPage(info: TableInfo, infos: TableInfo[], schema: DatabaseSchema,
   if (anatomy) {
     for (const section of anatomySections(anatomy)) {
       if (section.kind === 'fields' && section.presentation === 'header') {
-        const facts = (section.paths ?? []).filter((path) => !named.has(path.split('.')[0]));
+        /* A count with no unit beside another fact reads as a code ("3 · 1", unitless-fact): the header says what
+           carries its own meaning, and a bare number stays in the fields below, under its caption. */
+        const bare = (path: string) => {
+          const column = info.table.columns.find((candidate) => candidate.name === path);
+          return (
+            !!column &&
+            !column.primaryKey &&
+            !column.references &&
+            !column.flag &&
+            !column.allowed?.length &&
+            /int|numeric|decimal|real|double|float/i.test(column.type) &&
+            !isMoney(column) &&
+            !UNITS.some(([test]) => test.test(column.name)) &&
+            !/(^|_)year$/i.test(column.name)
+          );
+        };
+        const facts = (section.paths ?? []).filter((path) => !named.has(path.split('.')[0]) && !bare(path));
         /* A header with nothing to say is the served default page's way of
            holding a name-only record's name (pageAnatomy.ts); written, a
            header says a status or facts, so the scaffold leaves it out. */
@@ -1358,13 +1232,54 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
   /* A brief's command that moves a status its table's machine already draws takes that verb over: the machine names the
      command (`confirmBooking: 'confirmed'`) instead of the draft offering a second button for the same step. */
   const verbs = new Set<string>();
+  /* What the brief asked for that the draft does not do, said in the README: never dropped without a word. */
+  const notDrafted: string[] = [];
   for (const command of opts.brief?.commands ?? []) {
     const machine = described.find((info) => info.table.name === command.table)?.machine;
     const to = machine ? command.set[machine.column] : undefined;
     const verb = to === undefined ? undefined : machine!.verbs.find((candidate) => candidate.to === to);
     if (!verb) continue;
     verb.verb = command.id;
+    /* A command asks what it needs through its own input and writes its own stamps: a fixed move's `reason` and
+       `set` on the verb are refused beside one (appMachine.ts), so the draft leaves both to the handler. */
+    if (verb.reason || verb.stamps.length)
+      notDrafted.push(
+        `\`${command.id}\` is a command, so the machine no longer ${[verb.reason ? `asks its reason (\`${verb.reason}\`)` : '', verb.stamps.length ? `stamps ${verb.stamps.map((stamp) => `\`${stamp}\``).join(', ')}` : ''].filter(Boolean).join(' or ')}: the handler in \`commands.ts\` does.`,
+      );
+    verb.reason = undefined;
+    verb.stamps = [];
+    /* Where the brief says the step starts (`status = shipped or delivered`), the verb leaves each of those states:
+       the vocabulary's order alone drew one edge and dropped the other. */
+    const from = statesNamed(command.when, machine!.column, machine!.states);
+    if (from === undefined && command.when)
+      notDrafted.push(`\`${command.id}\`: its condition "${command.when}" is on the command, not drawn as edges of the machine.`);
+    /* Added to the edges the vocabulary's order drew, never taken from them: a state left with no step out would not
+       be a machine, and the command's own `when` already keeps the step to where the brief put it. */
+    for (const state of from ?? []) if (state !== to && !verb.from.includes(state)) verb.from.push(state);
     verbs.add(command.id);
+  }
+  for (const command of opts.brief?.commands ?? [])
+    if (command.refuse?.length)
+      notDrafted.push(
+        `\`${command.id}\` refuses until its ${command.refuse.length === 1 ? 'rule is' : `${command.refuse.length} rules are`} written: each is a TODO line in \`commands.ts\`.`,
+      );
+  if (opts.brief?.commands?.length)
+    notDrafted.push(
+      'What a command asks the person (a carrier, a reason, a quantity): a brief names no inputs, so each stub runs at one click. Give it an `input` in `commands.ts`.',
+    );
+  /* The columns a brief's command writes on a table with no machine for it: a role that edits that table in place
+     must say which columns it edits (command-and-edit), so the draft says every column but the command's. */
+  const commanded = new Map<string, { columns: string[]; held: Set<string> }>();
+  for (const command of opts.brief?.commands ?? []) {
+    if (verbs.has(command.id)) continue;
+    const info = described.find((candidate) => candidate.table.name === command.table);
+    if (!info) continue;
+    const entry = commanded.get(command.table) ?? {
+      columns: info.table.columns.filter((column) => !column.primaryKey).map((column) => column.name),
+      held: new Set<string>(),
+    };
+    for (const column of Object.keys(command.set)) entry.held.add(column);
+    commanded.set(command.table, entry);
   }
   const resources: Record<string, Record<string, unknown>> = {};
   /* Each list's tabs, by the segments its resource declares for them. */
@@ -1699,15 +1614,26 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
   ];
   const roomy = grouped(paged, []);
   const nav: unknown[] =
-    opts.tables?.length || flat.length <= 6
+    /* The "My …" list joins the bar below, so it is counted here: six rooms and it are seven, a flat menu too long. */
+    opts.tables?.length || flat.length + (mine && !flat.includes(mine.key) ? 1 : 0) <= 6
       ? flat
-      : roomy.length <= 7
+      : /* Only where folding the rest made a group: every table with a page of its own leaves `roomy` as flat as it was. */
+        roomy.length < flat.length && roomy.length <= 7
         ? roomy
         : grouped(
             main,
             paged.filter((info) => !main.includes(info)),
           );
   if (mine && !nav.includes(mine.key)) nav.splice(overview ? 1 : 0, 0, mine.key);
+  /* Every table a main one with a page of its own: nothing above folded, and seven rooms in a row is the flat menu
+     the design check names (default-shell). The first four stay on the bar and the rest fold behind them. */
+  if (!opts.tables?.length && nav.length > 6 && nav.every((entry) => typeof entry === 'string')) {
+    const keys = nav as string[];
+    const kept = keys.slice(0, (overview ? 1 : 0) + (mine ? 1 : 0) + 3);
+    const rest = keys.slice(kept.length).flatMap((key) => infos.filter((info) => info.key === key));
+    const folded: unknown[] = [...kept, ...navGroups(rest, [])];
+    (nav as unknown[]).splice(0, nav.length, ...folded);
+  }
   /* Without an overview of its own, the App names no home and starts on the one inferred from its main table (appOverview.ts). */
   const home = overview ? 'overview' : undefined;
   /* The brief's commands: a button on the record that runs each by id. The resource is written to, or the verb
@@ -1727,14 +1653,18 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
      a budget"). The menu is folded short above, so it fits a bar. */
   const ui = {
     logo: opts.brief?.logo ?? (hero ? (hero.icon === 'table' ? 'stack' : hero.icon) : 'stack'),
-    /* Lumen is the default look, written out so the choice is the author's to see and change. */
-    theme: { preset: opts.brief?.theme ?? 'workshop' },
+    /* Lumen is a new App's look, and one of its palettes over it, both written out so each is the author's to
+       see and change: an App left in a look's own colour is every App on that look (`unbranded`, designLint.ts).
+       The framework's built-in default stays Workshop for an App that names no look; only a draft starts here. */
+    theme: { preset: opts.brief?.theme ?? 'lumen', palette: draftPalette(name) },
     shell: { placement: 'top' },
   };
   const pagesTree = Object.fromEntries(pages.map(({ key, page }) => [key, new Ref(identifier(key, 'Page'), page)]));
   const appTree: Record<string, unknown> = {
     id,
     name,
+    /* A phone's bar and an installed icon cut a long name short (short-name): its first words that fit, the author's to change. */
+    ...(name.length > SHORT_NAME_MAX && shortNameOf(name) ? { shortName: shortNameOf(name) } : {}),
     ...(opts.sources?.length
       ? {
           sources: Object.fromEntries(
@@ -1752,7 +1682,13 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
         ? { connection: opts.connection }
         : {}),
     ...(opts.brief?.roles?.length
-      ? { auth: authFromBrief(opts.brief.roles, people && peopleEmail ? { table: people.table.name, column: peopleEmail } : undefined) }
+      ? {
+          auth: authFromBrief(
+            opts.brief.roles,
+            people && peopleEmail ? { table: people.table.name, column: peopleEmail } : undefined,
+            commanded,
+          ),
+        }
       : people && peopleEmail
         ? { auth: authFor(people, peopleEmail, described.filter(writable)) }
         : {}),
@@ -1818,6 +1754,7 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
       connections: opts.connections,
       database: opts.database,
       tabs: tabsOver?.(typed),
+      notDrafted,
     }),
   };
 }
@@ -1847,7 +1784,10 @@ function projectFiles({
   connections,
   database,
   tabs,
+  notDrafted = [],
 }: {
+  /** What a brief asked for that the draft leaves to its author, each a sentence for the README. */
+  notDrafted?: string[];
   recipe: Recipe;
   people?: { label: string; email: string };
   appTree: Record<string, unknown>;
@@ -2041,6 +1981,16 @@ function projectFiles({
           '',
         ]
       : []),
+    ...(notDrafted.length
+      ? [
+          '## Not drafted',
+          '',
+          'The brief asked for these and the draft leaves them to you:',
+          '',
+          ...notDrafted.map((line) => `- ${line}`),
+          '',
+        ]
+      : []),
     `## Recipe: ${recipe.name}`,
     '',
     `Nearest first-shot recipe: ${recipe.name}, because ${recipe.why} \`npx @mistriwork/mistri docs\` and the`,
@@ -2077,6 +2027,9 @@ function projectFiles({
     'database adapter otherwise, whatever the App says.',
     '',
     '- `app.ts` — the App: its id, name, `home`, `nav` and `ui` — the look, logo and shell it was drafted with.',
+    "  `ui.theme` names the look and the App's one colour. The looks, by what they are for: `lumen` an internal tool,",
+    '  `sage` a clinic or anything a member of the public reads, `ledger` finance, `graphite` operations, `bloom` a',
+    '  consumer App, `atelier` reporting, `mono` a terminal, `workshop` a dense desk.',
     "- `resources.ts` — what each table's records are called, how values dress, and each New form.",
     '- `views.ts`, `dashboard.ts` — the lists and the Overview.',
     '- `pages/` — record pages, one per file.',

@@ -125,8 +125,8 @@ describe('Choose over a read', () => {
     const user = userEvent.setup();
     renderPage(page, { data: CLASSES });
     const trigger = await screen.findByRole('button', { name: /^Class\b/ });
-    // A field box, like the search box a page sets beside it, never the grid's small bare listbox.
-    expect(trigger).toHaveClass('field-control', 'field-select');
+    // The package's own listbox button, which is dressed as a control wherever it stands.
+    expect(trigger).toHaveAttribute('data-slot', 'select-trigger');
     await user.click(trigger);
     const options = await screen.findAllByRole('option');
     expect(options).toHaveLength(3);

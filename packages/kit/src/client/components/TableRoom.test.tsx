@@ -120,11 +120,40 @@ test('an App list over a table the reader cannot read is not a query to fix', as
   setAppKeepsRoles(true);
   try {
     render(wrap(<TableRoom entry={entry} chrome={false} />));
-    expect(await screen.findByText('This page is not available to your role.')).toBeInTheDocument();
+    expect(await screen.findByText('Your account does not open this page.')).toBeInTheDocument();
     expect(screen.queryByText('Fix the query above to see results.')).not.toBeInTheDocument();
   } finally {
     setAppKeepsRoles(false);
   }
+});
+
+test('a refusal standing in place of the rows titles its room, in the head and in the pane bar, and gives the title back when it goes', async () => {
+  request.mockResolvedValue({ errors: [{ message: 'No table called "invoice".', at: 0 }] });
+  setAppKeepsRoles(true);
+  const onRefused = vi.fn();
+  const said: unknown[] = [];
+  const hear = (event: Event) => said.push((event as CustomEvent).detail);
+  document.addEventListener('mistri:room-title', hear);
+  try {
+    const { unmount } = render(wrap(<TableRoom entry={entry} chrome={false} onRefused={onRefused} />));
+    await screen.findByText('Your account does not open this page.');
+    expect(onRefused).toHaveBeenLastCalledWith('Not available');
+    expect(said.at(-1)).toBe('Not available');
+    unmount();
+    expect(onRefused).toHaveBeenLastCalledWith(null);
+    expect(said.at(-1)).toBe('');
+  } finally {
+    document.removeEventListener('mistri:room-title', hear);
+    setAppKeepsRoles(false);
+  }
+});
+
+test('rows that came, or a question to fix, title nothing: the room keeps the name it had', async () => {
+  request.mockResolvedValue({ errors: [{ message: 'Incomplete query.' }], explain: 'parse context' });
+  const onRefused = vi.fn();
+  render(wrap(<TableRoom entry={entry} onRefused={onRefused} />));
+  await screen.findByText('Fix the query above to see results.');
+  expect(onRefused).not.toHaveBeenCalled();
 });
 
 // A field report from the user's own App: in an App with no roles the refusal named a role no one could hold.
@@ -158,7 +187,7 @@ test("a signed-out visitor on a tenant's public address is told the list is for 
   try {
     render(wrap(<TableRoom entry={entry} chrome={false} />));
     expect(await screen.findByText('This page is for signed-in members.')).toBeInTheDocument();
-    expect(screen.queryByText('This page is not available to your role.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Your account does not open this page.')).not.toBeInTheDocument();
   } finally {
     placement.arrived = undefined;
     setPublicVisitor(false);
@@ -172,7 +201,7 @@ test('a signed-out visitor refused a list is offered the sign-in, drawn where th
   try {
     render(wrap(<TableRoom entry={entry} chrome={false} />));
     expect(await screen.findByText(/This page is for signed-in members\./)).toBeInTheDocument();
-    expect(screen.queryByText('This page is not available to your role.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Your account does not open this page.')).not.toBeInTheDocument();
     await act(async () => screen.getByRole('button', { name: 'Sign in' }).click());
     expect(signInHere).toHaveBeenCalledWith('demo');
   } finally {

@@ -72,6 +72,8 @@ export default defineApp({
   home: 'tasks',
   ui: {
     logo: 'list-checks',
+    // The App's one colour, over the look it wears: its accent, links and the ring. Without it Tick is any App on Workshop.
+    theme: { preset: 'workshop', accent: '#0f766e' },
     shell: {
       placement: 'top',
       headerWidth: 'content',

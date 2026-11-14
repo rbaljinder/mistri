@@ -24,6 +24,7 @@ import {
 import { DropMenu } from '@mistriwork/ui/DropMenu.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
+import { personFacing } from '@mistriwork/kit/client/audience.js';
 import { INBOX_QUERY, unreadWord } from './inboxModel.js';
 import './InboxBell.css';
 
@@ -43,12 +44,16 @@ export function InboxBell() {
   const tenant = useSyncExternalStore(subscribeTenantLease, leaseSnapshot, leaseSnapshot);
   const count = useQuery({
     queryKey: [INBOX_QUERY, 'count', tenant],
-    queryFn: async () => (await api('/api/inbox', { limit: 1 })) as { unread: number },
+    queryFn: async () => (await api('/api/inbox', { limit: 1 })) as { unread: number; notices?: unknown[] },
     enabled: !identity.tenantRequired || tenant !== '',
     refetchInterval: EVERY,
     staleTime: EVERY / 2,
   });
   const unread = count.data?.unread ?? 0;
+  /* The App's own public is shown a bell once something has reached them, and none before: a notice names who it
+     tells by the record (a column, a reference), never by role, so whether a resident is ever told is known only
+     by their inbox. An empty bell on a patient's screen is the office's tool left in. The office keeps its bell. */
+  if (personFacing() && !(count.data?.notices?.length || unread)) return null;
   const name = unread ? `Notifications, ${unreadWord(unread)} unread` : 'Notifications';
   return (
     <DropMenu

@@ -2,8 +2,8 @@ import { afterEach, expect, test } from 'vitest';
 import { trapFocus } from './dom.js';
 
 /* trapFocus (dom.js) keeps the keyboard inside a plain `aria-modal` panel.
-   A modal opened over it — every dialog is Base UI's now, an `aria-modal`
-   element on a portal of its own, not a `<dialog open>` — keeps its own
+   A modal opened over it — every dialog is Modal.tsx's, an `aria-modal`
+   element in a layer of its own, not a `<dialog open>` — keeps its own
    focus: the panel pulling it back while the modal pulled it in again sent
    the connection form's typed name into its URL box. */
 

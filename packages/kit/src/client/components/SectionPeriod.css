@@ -7,7 +7,7 @@
 .dash-section-head { display: flex; align-items: center; gap: var(--space-3h); }
 .dash-section-head > .page-section-title { flex: 1; min-width: 0; }
 .dash-period { flex: none; margin-left: auto; }
-.dash-period .dd-button { font-size: var(--text-sm); padding: var(--space-1h) var(--space-3); }
+.dash-period [data-slot='select-trigger'] { font-size: var(--text-sm); padding: var(--space-1h) var(--space-3); }
 .home-card-period { cursor: default; }
 .home-card-period .home-card-label { display: flex; align-items: center; gap: var(--space-3); width: 100%; }
 .home-card-open { display: inline-flex; align-items: center; gap: var(--space-2h); padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }

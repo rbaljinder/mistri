@@ -7,6 +7,10 @@
    lookSheetReady). They stand in `look` as every look's rules do; the rules
    all the looks share stay in themeFamilies.css. */
 @layer look {
+  /* A dark bar is the look's one hard edge: the pane's bar is ruled in the ink under it (structure.css). */
+  :root[data-look-bar='dark'] {
+    --pane-rule: 2px solid var(--ink);
+  }
   /* A bar in the navigation's colour, with light text, the brand in the bar's ink. */
   :root[data-look-bar='dark'] .topbar {
     background: var(--nav-ground);
@@ -32,6 +36,12 @@
     border-color: var(--nav-line);
     color: var(--nav-ink);
     box-shadow: none;
+    /* As tall as the search beside them: a key padded as the page's buttons are stood 6px over the box it is drawn
+       like, on a bar with 4px to spare. */
+    padding-block: var(--space-2);
+  }
+  :root[data-look-bar='dark'] .app-mode .topbar :is(.new-menu, .tenant-control-host) {
+    align-self: center;
   }
   :root[data-look-bar='dark'] .app-mode .topbar :is(.new-menu-trigger, .tenant-control-trigger):hover {
     background: color-mix(in srgb, var(--nav-ink) 14%, transparent);
@@ -70,8 +80,46 @@
     border-top: 2px solid var(--ink);
     border-radius: 0;
     box-shadow: none;
+    /* Open under its rule: the words start where the rule does, as a printed figure's do, and a label has the
+       card's whole width before it wraps and sets its figure a line under its neighbours'. */
+    padding-inline: 0;
   }
-  :root[data-look-table='tinted'] tbody tr:hover td {
+  /* `plain`: a figure open on the page with no box and no rule, the gap alone between it and the next. */
+  :root[data-look-stat='plain'] .dash-strip .home-card:nth-child(n) {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding-inline: 0;
+  }
+  /* A record's summary is the record's own row of figures: set as the dashboard's are, a size down, each under a
+     hairline (lumenLook.css does the same for `divided`). Prose in a summary is a paragraph, never a figure. */
+  :root[data-look-stat='ruled'] .page-field-summary .page-field {
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--line-strong);
+  }
+  :root:is([data-look-stat='ruled'], [data-look-stat='plain']) .page-field-summary .page-field:not(.page-field-prose) > dd {
+    font-family: var(--type-figure-font, inherit);
+    font-size: var(--text-xl);
+    font-weight: var(--type-figure-weight, 600);
+    letter-spacing: var(--type-figure-tracking, -0.012em);
+    line-height: 1.2;
+  }
+  /* Open on the page there is no box to fit: the record's figures are set at the figure's own size. */
+  :root[data-look-stat='plain'] .page-field-summary .page-field:not(.page-field-prose) > dd {
+    font-size: var(--type-figure-size, var(--text-xl));
+  }
+  /* A figure with a tone is a word in a colour, on the line its neighbours stand on: as a centred inline box it sat
+     a pixel and a half under an untoned figure beside it. */
+  :root:is([data-look-stat='ruled'], [data-look-stat='plain']) .page-field-summary .page-field > dd > .tone-figure {
+    display: inline;
+    vertical-align: baseline;
+  }
+  /* An amount is set in the figures' face wherever a record says one (themeFamilies.css); here it is the figure. */
+  :root:root:is([data-look-stat='ruled'], [data-look-stat='plain']) .app-mode .page-field-summary .page-field > dd :is(.num-value, .date-value) {
+    font-family: inherit;
+  }
+  :root[data-look-table='tinted'] tbody tr:hover td:where(:not([data-slot])) {
     background: color-mix(in srgb, var(--accent) 4%, var(--surface));
   }
   :root[data-look-table='tinted'] .row-host .row-select {

@@ -161,13 +161,13 @@ test('each write is one entry: who, the action it came from, and each field from
 test('a history shows eight writes unless it says more, and an untitled one is headed with the shell word', async () => {
   pages = [{ entries: [] }];
   draw();
-  expect(await screen.findByText('No changes recorded yet.')).toBeTruthy();
+  expect(await screen.findByText('No edits since this record was added.')).toBeTruthy();
   expect(calls[0].body.limit).toBe(8);
   expect(screen.getByRole('heading', { name: 'History' })).toBeTruthy();
   cleanup();
   calls.length = 0;
   draw({ limit: 50 });
-  await screen.findByText('No changes recorded yet.');
+  await screen.findByText('No edits since this record was added.');
   expect(calls[0].body.limit).toBe(50);
 });
 
@@ -212,7 +212,7 @@ test('a reference named by a template is read where the name is computed, a view
 test('a record nothing has changed says so in the shared empty note', async () => {
   pages = [{ entries: [] }];
   draw({ title: 'Changes' });
-  expect(await screen.findByText('No changes recorded yet.')).toBeTruthy();
+  expect(await screen.findByText('No edits since this record was added.')).toBeTruthy();
   expect(document.querySelector('.empty-note')).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Changes' })).toBeTruthy();
 });

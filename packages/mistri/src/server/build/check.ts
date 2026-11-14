@@ -70,7 +70,8 @@ import { inferredReport } from '@mistriwork/engine/shared/displayDefaults.js';
 import { chooseLayout } from '@mistriwork/engine/shared/pageLayouts.js';
 import { defaultAsidePaths } from '@mistriwork/engine/shared/pageAnatomy.js';
 import { inferredFormDefaults } from '../../shared/formRules.js';
-import { fixRepeatedQueries, fixRestated } from './checkFix.js';
+import { fixCommandLabels, fixRepeatedQueries, fixRestated } from './checkFix.js';
+import { commandRestatedWarnings } from '../commands/commandRestated.js';
 import { checkedRoutes, indexStep, problem, queryStep, servedFactsOf, shown, type Status, type Step } from './checkSteps.js';
 import { previewFieldsUsed, previewKeysUsed } from '../../shared/preview.js';
 import { appCommandOccurrences } from '../../shared/appCommandOccurrences.js';
@@ -1223,6 +1224,10 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
         );
         // A query said in several places becomes a segment said once (appSegments.ts repeatedQueries).
         const lifted = fixRepeatedQueries(before.app, withRollups(before.app, schema), appDir);
+        // A command's input label that is its key made words goes the same way, from the commands module.
+        const relabeled = fixCommandLabels(commandRestatedWarnings(before.commands?.registry), before.commands?.file);
+        fixed.push(...relabeled.fixed);
+        left.push(...relabeled.left);
         fixStep = {
           name: 'fix',
           status: 'passed',
@@ -1922,7 +1927,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       if (design) {
         if (!schema) steps.push({ name: 'design', status: 'skipped', detail: why, lines: [] });
         else {
-          const findings = designLint(loaded.app, loaded.pages, schema);
+          const findings = designLint(loaded.app, loaded.pages, schema, loaded.commands?.registry);
           const where = (at: string): string | undefined => {
             const m = /^(page|view|resource) "([^"]+)"/.exec(at);
             return m

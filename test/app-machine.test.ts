@@ -208,6 +208,9 @@ test('a page over the resource draws the road as a stepper on its summary, and t
       { value: 'in_review', label: 'In review' },
       { value: 'manager_review', label: 'With a manager' },
       { value: 'approved', label: 'Approved' },
+      /* The ways off the road are said apart from it, never as its next steps. */
+      { value: 'declined', label: 'Declined', outcome: true },
+      { value: 'withdrawn', label: 'Withdrawn', outcome: true },
     ],
   });
   assert.equal((stepped.sections[1] as { workflow?: unknown }).workflow, undefined);

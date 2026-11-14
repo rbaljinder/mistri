@@ -44,9 +44,32 @@ Use it when an App has to match a design system that already has its own control
 
 ## Options
 
-The slots are the [`@mistriwork/ui`](/docs/mistri-ui/) controls: `Button`, `ButtonLink`, `TextField`, `MaskedField`, `MoneyField`, `SensitiveField`, `Select`, `MultiSelect`, `Dropdown`, `MultiDropdown`, `Typeahead`, `DateField`, `Checkbox`, `YesNo`, `ChoiceCards`, `CheckCards`, `Consent`, `Switch`, `Slider`, `Modal`, `Drawer`, `Popover`, `Tooltip`, `DropMenu`, `DropGroup`, `DropItem`, `DropSeparator`, `Tabs`, `Pagination` and `Avatar`. A slot takes the same props as the control it replaces; `UiKitSlots['Modal']` and the others give you the types.
+The slots are everything [`@mistriwork/ui`](/docs/mistri-ui/) draws. A slot takes the same props as the control it replaces; `UiKitSlots['Modal']` and the others give you the types, and `SlotProps<'Modal'>` the props alone.
+
+| What | Slots |
+| --- | --- |
+| Buttons | `Button`, `ButtonLink` |
+| Text | `TextField`, `MaskedField`, `MoneyField`, `SensitiveField`, `TextArea`, `FileField`, `ValidMark` |
+| Lists and dates | `Select`, `MultiSelect`, `Dropdown`, `MultiDropdown`, `Typeahead`, `DateField` |
+| Choices | `Checkbox`, `YesNo`, `ChoiceCards`, `CheckCards`, `Consent`, `Switch`, `Slider` |
+| Layers | `Modal`, `Drawer`, `Popover`, `Tooltip`, `DropMenu`, `DropGroup`, `DropItem`, `DropSeparator` |
+| A form's parts | `Field`, `HelpTip`, `ProgressBar`, `StepHeader`, `ActionBar`, `Columns`, `ReviewList` |
+| Display | `Tabs`, `Pagination`, `Avatar`, `Carousel`, `Resizable`, `ScrollArea` |
+| The landing's blocks | `Badge`, `PhotoTiles`, `IconRows` |
 
 - **The menu is one family.** `DropMenu`, `DropGroup`, `DropItem` and `DropSeparator` are drawn together or not at all.
+- **Dress a control instead of redrawing it.** `dress` hands you the platform's own control and the props it was drawn with, so a slot can change a size, add a class or wrap it and keep everything else:
+
+  ```tsx
+  import { defineUiKit, dress } from '@mistriwork/mistri/page';
+
+  export default defineUiKit({
+    Button: dress('Button', (Button, props) => <Button {...props} size="large" className={`brand ${props.className ?? ''}`} />),
+  });
+  ```
+
+- **Start from another kit.** `extendUiKit(theirs, { Button })` makes one kit of several, a later one's slots over an earlier one's, held to the same rules.
+- **A popup of your own** that is drawn outside its place in the tree asks `usePopupHost(triggerRef)` where to go (the dialog it was opened in, so it is not drawn behind it) and `useComponentScope()` for the name to carry as `data-component`, so the component that opened it can still style it.
 - **A stylesheet imported by the kit** is served with it and placed in the `components` layer, page-wide. Map it onto the look's tokens (`var(--accent)`, `var(--radius)`, …) so a change of look still reaches your controls.
 - **A change callback takes its details second** (`onChange(value, details)`): `{ reason, source, event? }`, as the [primitives](/docs/mistri-ui/) give them. A kit may call it with the value alone; the platform fills the details in. If the kit gives them, they must have that shape.
 - **What the platform relies on** — a `Modal`'s handle and its focus return, `onOpenChange`, a change's details, the `words` props, `disabled`, and drawing a popup inside the dialog that opened it — is checked by the conformance suite. Run it from your own tests:
@@ -71,3 +94,4 @@ uiKitConformance(kit, test);
 - [`@mistriwork/ui`](/docs/mistri-ui/): the controls the slots replace
 - [Looks](/docs/looks/): colors, type and shape without new components
 - [Custom components](/docs/custom-components/): your own sections and pages
+- [Build a component on the behaviors](/docs/behaviors/): what a reader moves, walks or edits in place, in a component of your own

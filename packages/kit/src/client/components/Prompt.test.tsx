@@ -83,10 +83,10 @@ test('date range validates both typed ends and keeps the calendar inside the dia
   expect(to).toHaveFocus();
   const trigger = screen.getByRole('button', { name: 'Choose date for From' });
   await user.click(trigger);
-  const popup = document.querySelector<HTMLElement>('.date-field-popup')!;
+  const popup = document.querySelector<HTMLElement>('[data-slot="popover-content"][data-kind="calendar"]')!;
   expect(from.closest('[role="dialog"]')).toContainElement(popup);
   await user.keyboard('{Escape}');
-  await waitFor(() => expect(document.querySelector('.date-field-popup')).toBeNull());
+  await waitFor(() => expect(document.querySelector('[data-slot="popover-content"][data-kind="calendar"]')).toBeNull());
   expect(onDone).not.toHaveBeenCalled();
   expect(trigger).toHaveFocus();
   fireEvent.change(to, { target: { value: '2026-09-14' } });

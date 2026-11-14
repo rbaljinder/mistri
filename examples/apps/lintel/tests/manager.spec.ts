@@ -6,7 +6,7 @@ test('the manager starts on Today and reads the buildings at a glance', async ({
   // Today greets the person by the hour.
   await expect(page.getByRole('heading', { level: 1, name: /^Good (morning|afternoon|evening)/ })).toBeVisible();
   await expect(page.getByText('Occupied homes').first()).toBeVisible();
-  await expect(page.getByText('Repairs by state').first()).toBeVisible();
+  await expect(page.getByText('Repairs by status').first()).toBeVisible();
   if (isMobile) await fitsTheWidth(page);
 });
 
@@ -40,7 +40,8 @@ test('the desk’s New work order asks for the kind of problem as one row of cho
   await signIn(page, lintel, 'manager');
   await open(page, lintel, '/repairs/new');
   // Five words with no description each: a row of inline choices, not a stack of cards (design.md, forms).
-  const cards = page.locator('.choice-row');
+  // The group is known by its part and how its cards fit, never by a class.
+  const cards = page.locator('[data-slot="radio-group"][data-fit="row"]');
   await expect(cards).toBeVisible();
   await expect(cards.getByRole('radio')).toHaveCount(5);
   await cards.getByRole('radio', { name: 'Plumbing' }).check({ force: true });

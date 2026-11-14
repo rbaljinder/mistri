@@ -31,7 +31,7 @@
 /* A saved draft's note on a phone (SavedFormSurface.tsx): one line, the sentence clipped before Start over is pushed off. */
 .form-note-compact { display: flex; align-items: center; gap: var(--space-3); padding-block: var(--space-2h); }
 .form-note-compact > .form-note-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.form-note-compact > .btn { flex: none; }
+.form-note-compact > [data-slot='button'] { flex: none; }
 /* The review, the stepper's and the intake's alike (MultiStepForm.css keeps only the intake's larger heading): each
    step a section, more room between sections than between rows; its name with Change attached to it, a quiet link in
    the link ink, so the eye that finds the step finds the way back to it and the Tab order runs name, Change, answers.
@@ -42,12 +42,12 @@
 :is(.form-review > section:last-of-type, .intake-review-section:last-child) { border-bottom: 1px solid var(--line); }
 :is(.form-review-head, .intake-review-head) { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: flex-start; column-gap: var(--space-3); row-gap: 0; min-width: 0; }
 :is(.form-review-head, .intake-review-head) > :is(h2, h3) { flex: 0 1 auto; min-width: 0; margin: 0; font: 600 var(--text-md)/1.35 var(--sans); color: var(--ink); text-wrap: pretty; overflow-wrap: anywhere; }
-:is(.form-review-head, .intake-review-head) > .btn {
+:is(.form-review-head, .intake-review-head) > [data-slot='button'] {
   flex: none; min-height: 24px; padding: 0; border: 0; background: none; white-space: nowrap;
   font-weight: 500; color: var(--accent-ink, var(--accent));
   text-decoration: underline; text-decoration-color: color-mix(in oklab, currentColor 35%, transparent); text-underline-offset: 3px;
 }
-@media (hover: hover) { :is(.form-review-head, .intake-review-head) > .btn:hover:not(:disabled, [aria-disabled='true']) { background: none; text-decoration-color: currentColor; } }
+@media (hover: hover) { :is(.form-review-head, .intake-review-head) > [data-slot='button']:hover:not(:disabled, [aria-disabled='true']) { background: none; text-decoration-color: currentColor; } }
 :is(.form-review, .intake-review) dl { margin: 0; display: grid; gap: var(--space-2h); }
 /* Stacked on a phone, a label sits 2px over its answer, so the pairs need
    more air between them than inside them or the list reads as one column of

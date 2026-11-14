@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { columnSizeHint, fitGridColumns, holdFold, keepFitting, tagsThatFit, twoLineWidth, GRID_EXPANDER_WIDTH } from './gridSizing.js';
+import { columnSizeHint, fitGridColumns, holdFold, keepFitting, tagsThatFit, isGroupedNumber, GRID_EXPANDER_WIDTH } from './gridSizing.js';
 
 const catalog = [
   { label: 'Name', kind: 'text', values: ['Managed laptop'] },
@@ -159,10 +159,14 @@ describe('fit table allocation', () => {
     const fit = fitGridColumns(stock, 1176, false, false, undefined, measure);
     expect(fit.width).toBe(1176);
     expect(fit.columns[1]).toBeGreaterThanOrEqual(Math.ceil('2024 Volkswagen Jetta SE'.length * 7.4) + 24);
-    // The dealer gives way to its head so the table need not scroll; on a phone, where it scrolls anyway, nothing is cut.
+    // The heads wider than their figures give way, and then the dealer, so the table need not scroll; on a phone,
+    // where it scrolls anyway, nothing is cut.
     const tight = fitGridColumns(stock, 1100, false, false, undefined, measure);
     expect(tight.width).toBe(1100);
-    expect(tight.columns[9]).toBeLessThan(columnSizeHint(stock[9]!, undefined, measure).minimum);
+    const tighter = fitGridColumns(stock, 1000, false, false, undefined, measure);
+    expect(tighter.width).toBe(1000);
+    expect(tighter.columns[9]).toBeLessThan(columnSizeHint(stock[9]!, undefined, measure).minimum);
+    expect(tighter.columns[1]).toBe(columnSizeHint(stock[1]!, undefined, measure).minimum);
     const phone = fitGridColumns(stock, 358, false, false, undefined, measure);
     phone.columns.forEach((size, index) => expect(size).toBe(columnSizeHint(stock[index]!, undefined, measure).minimum));
     // A drawn figure is as wide as itself, or its head; a figure counted from its raw value keeps its spare.
@@ -241,8 +245,10 @@ describe('fit table allocation', () => {
     const mono = (text: string) => text.length * 10;
     const created = { label: 'Created', kind: 'date', drawnDate: true, values: ['Sep 2, 2026', 'Aug 22, 2026'] };
     expect(columnSizeHint(created, undefined, mono).minimum).toBe(120 + 24);
-    // A narrow face keeps the usual width; and without a measure the usual width is all there is.
-    expect(columnSizeHint(created, undefined, (text) => text.length * 6).minimum).toBe(112);
+    // A narrow face gives the room back, down to a floor sixteen under the usual width; and without a measure the
+    // usual width is all there is.
+    expect(columnSizeHint(created, undefined, (text) => text.length * 7).minimum).toBe(12 * 7 + 24);
+    expect(columnSizeHint(created, undefined, (text) => text.length * 5).minimum).toBe(96);
     expect(columnSizeHint(created).minimum).toBe(112);
     expect(columnSizeHint({ ...created, showTime: true, values: ['Aug 22, 2026, 3:45 PM'] }, undefined, mono).minimum).toBe(234);
   });
@@ -319,76 +325,69 @@ describe('fit table allocation', () => {
   });
 });
 
-describe('an App head that may wrap to two lines', () => {
-  const chars = (text: string) => text.length * 7;
-  test('its two-line width is the widest line at the best word break, and a single word cannot break', () => {
-    expect(twoLineWidth('Listed online', chars)).toBe(6 * 7);
-    expect(twoLineWidth('Available', chars)).toBe(9 * 7);
-    expect(twoLineWidth('Rent per square foot', chars)).toBe(11 * 7);
-  });
-
-  test('the floor is the two-line width and the whole label stays what the column wants', () => {
-    const whole = columnSizeHint({ label: 'Listed online', kind: 'text', values: [] });
-    const wrapped = columnSizeHint({ label: 'Listed online', kind: 'text', values: [], wrapHead: true });
-    expect(wrapped.minimum).toBeLessThan(whole.minimum);
-    expect(wrapped.wanted).toBe(whole.wanted);
-  });
-
-  test('a table whose heads fit whole keeps them whole; one that would run past its room wraps them', () => {
+describe('a row is one line, and so is a head', () => {
+  test('a head never breaks onto a second line: with room it is whole, and short of it the head wider than its values is cut first', () => {
     const columns = [
-      { label: 'Listed online', kind: 'boolean', values: [], wrapHead: true },
-      { label: 'Available from', kind: 'date', values: [], wrapHead: true },
-      { label: 'Monthly asking rent', kind: 'text', values: ['x'], wrapHead: true },
+      { label: 'Listed online', kind: 'boolean', values: [true] },
+      { label: 'Available from', kind: 'date', values: ['2026-09-12'] },
+      { label: 'Monthly asking rent', kind: 'text', values: ['x'] },
     ];
-    const whole = columns.map((column) => columnSizeHint({ ...column, wrapHead: false }).minimum);
+    const hints = columns.map((column) => columnSizeHint(column));
+    const whole = hints.map((hint) => hint.minimum);
     const roomy = fitGridColumns(columns, whole.reduce((a, b) => a + b, 0) + 50);
     roomy.columns.forEach((size, index) => expect(size).toBeGreaterThanOrEqual(whole[index]!));
+    /* Each head here is wider than what stands under it, so each may give: the last first, and no further than its
+       values' own width (a tick's 64px, a date's 112). */
+    hints.forEach((hint) => expect(hint.head).toBeGreaterThan(0));
     const tight = fitGridColumns(columns, whole.reduce((a, b) => a + b, 0) - 60);
     expect(tight.width).toBe(whole.reduce((a, b) => a + b, 0) - 60);
+    expect(tight.columns.slice(0, 2)).toEqual(whole.slice(0, 2));
+    expect(tight.columns[2]).toBe(whole[2]! - 60);
+    expect(hints[0]!.least).toBe(64);
+    expect(hints[1]!.least).toBe(112);
   });
 
-  test('a word column given less than its widest value wraps it whole on two lines, rather than cutting it', () => {
-    const tenant = ['Northwind Trading', 'Harbor Pine Dental', 'Ostrander Bakery'];
+  test('short of its room, the secondary text is cut from the last column first; the name and the figures keep their width', () => {
+    const measure = (text: string) => text.length * 7;
     const columns = [
-      { label: 'Unit', kind: 'text', values: ['A-101', 'B-204'], title: true, wrapHead: true },
-      { label: 'Tenant', kind: 'text', values: tenant, wrapHead: true, wrapValues: true },
-      { label: 'Monthly rent', kind: 'number', values: ['$12,450.00'], wrapHead: true },
+      { label: 'Unit', kind: 'text', values: ['A-101', 'B-204'], title: true },
+      { label: 'Tenant', kind: 'text', values: ['Northwind Trading', 'Harbor Pine Dental'] },
+      { label: 'Agent', kind: 'text', values: ['Margot Fontaine'] },
+      { label: 'Rent', kind: 'number', dressed: true, values: ['$12,450.00'] },
     ];
-    const hint = columnSizeHint(columns[1]!);
-    expect(hint.twoLines).toBeLessThan(hint.whole!);
-    const plain = columns.map((column) => columnSizeHint({ ...column, wrapValues: false }));
-    const needs = plain.reduce((sum, column) => sum + column.wanted, 0);
-    expect(fitGridColumns(columns, needs + 40).wraps).toEqual([false, false, false]);
-    /* Short of the tenant's whole width and past its two-line width: it wraps. */
-    const tight = fitGridColumns(columns, plain[0]!.minimum + plain[2]!.minimum + hint.twoLines! + 24);
-    expect(tight.wraps).toEqual([false, true, false]);
-    expect(tight.columns[1]).toBeGreaterThanOrEqual(hint.twoLines!);
-    /* Short of that too, the value is cut as before: a column is never wrapped to three lines. */
-    expect(fitGridColumns(columns, plain[0]!.minimum + plain[2]!.minimum + 84).wraps).toEqual([false, false, false]);
-    /* The row's name may take two lines too, but never in a room too small even for those. */
-    expect(fitGridColumns([{ ...columns[0]!, wrapValues: true }], 10).wraps).toEqual([false]);
+    const hints = columns.map((column) => columnSizeHint(column, undefined, measure));
+    // No head here is wider than its values, so none has anything to give.
+    hints.forEach((hint) => expect(hint.head).toBe(0));
+    const floors = hints.reduce((sum, hint) => sum + hint.minimum, 0);
+    const tight = fitGridColumns(columns, floors - 20, false, false, undefined, (text) => measure(text));
+    expect(tight.width).toBe(floors - 20);
+    expect(tight.columns[0]).toBe(hints[0]!.minimum);
+    expect(tight.columns[1]).toBe(hints[1]!.minimum);
+    expect(tight.columns[2]).toBe(hints[2]!.minimum - 20);
+    expect(tight.columns[3]).toBe(hints[3]!.minimum);
   });
 
-  test("the row's name takes its second line before a short secondary value is given one", () => {
-    const name = 'Review date boundaries across time zones';
-    const columns = [
-      { label: 'Name', kind: 'text', title: true, wrapValues: true, values: [name] },
-      { label: 'Assignee', kind: 'text', wrapValues: true, avatar: true, values: ['Sam Rivera', 'Maya Chen'] },
-      { label: 'Project', kind: 'text', wrapValues: true, values: ['Accessible authoring'] },
+  test("an App's own list cuts its secondary text to its floor before it folds a column; an embedded grid leaves one out first", () => {
+    const measure = (text: string) => text.length * 7;
+    const leads = [
+      { label: 'Name', kind: 'text', title: true, values: ['Margot Fontaine'] },
+      { label: 'Company', kind: 'text', values: ['Stonebridge Marine Inc'] },
+      { label: 'Owner', kind: 'text', avatar: true, values: ['Tariq Andersen'] },
+      { label: 'Created', kind: 'date', drawnDate: true, values: ['Aug 22, 2026'] },
     ];
-    const hint = columns.map((column) => columnSizeHint(column));
-    const named = columnSizeHint({ ...columns[0]!, wrapValues: false });
-    const secondary = columns.slice(1).map((column) => columnSizeHint({ ...column, wrapValues: false }));
-    /* Room for the others' whole floors and the name on two lines, short of the name's own floor. */
-    const room = secondary.reduce((sum, column) => sum + column.minimum, 0) + hint[0]!.twoLines! + 8;
-    expect(room).toBeLessThan(named.minimum + secondary.reduce((sum, column) => sum + column.minimum, 0));
-    const fit = fitGridColumns(columns, room);
-    expect(fit.width).toBe(room);
-    expect(fit.wraps[0]).toBe(true);
-    expect(fit.columns[0]).toBeGreaterThanOrEqual(hint[0]!.twoLines!);
-    /* The others kept their floors, not their two-line ones. */
-    expect(fit.columns[1]).toBeGreaterThanOrEqual(secondary[0]!.minimum);
-    expect(fit.columns[2]).toBeGreaterThanOrEqual(secondary[1]!.minimum);
+    const hints = leads.map((column) => columnSizeHint(column, undefined, measure));
+    const floors = hints.reduce((sum, hint) => sum + hint.minimum, 0);
+    const least = hints.reduce((sum, hint) => sum + hint.least, 0);
+    expect(least).toBeLessThan(floors);
+    expect(keepFitting(leads, floors - 10, false, false, undefined, measure)).not.toBeNull();
+    expect(keepFitting(leads, floors - 10, false, false, undefined, measure, true)).toBeNull();
+    /* Past the floors there is nothing left to give: the list folds, from the end. */
+    const folded = keepFitting(leads, least - 10, false, false, undefined, measure, true);
+    expect(folded).not.toBeNull();
+    expect(folded![0]).toBe(true);
+    /* A name beside an initials disc keeps the disc and a word of the name: its floor is its own, not a bare text's. */
+    expect(hints[2]!.least).toBe(hints[2]!.minimum);
+    expect(hints[1]!.least).toBe(96);
   });
 });
 
@@ -410,5 +409,48 @@ describe('holdFold', () => {
     const narrower = [true, false, false];
     expect(holdFold(held, narrower, 990, of).kept).toBe(narrower);
     expect(holdFold(held, null, 1000, [of[0], []]).kept).toBeNull();
+  });
+});
+
+describe('a column of numbers set in groups', () => {
+  const chars = (text: string) => text.length * 7;
+  test('a telephone number is a number: its column is as wide as the widest, so it is neither cut nor broken at a space', () => {
+    expect(isGroupedNumber(['(720) 555-4381', '+1 720 555 2387'])).toBe(true);
+    expect(isGroupedNumber(['Cedar Row #4'])).toBe(false);
+    expect(isGroupedNumber([])).toBe(false);
+    const hint = columnSizeHint({ label: 'Phone', kind: 'text', values: ['(720) 555-4381', '(720) 555-2387'] }, 7, chars);
+    expect(hint.minimum).toBe(14 * 7 + 24);
+    expect(hint.least).toBe(hint.minimum);
+  });
+});
+
+describe('heads that give their room to a value', () => {
+  /* A rent roll in a monospace look at a 1280 desk, as it measured: the minima run three pixels past the room, and
+     two names are each fifteen short of whole. */
+  const widths = [46.8, 117, 46.8, 85.8, 46.8, 39, 62.4, 117, 93.6, 7.8];
+  const roll = [
+    { label: 'Code', kind: 'text', headWidth: 28.16, title: true },
+    { label: 'Building', kind: 'text', headWidth: 56.32 },
+    { label: 'Beds', kind: 'number', headWidth: 28.16, dressed: true },
+    { label: 'Size', kind: 'number', headWidth: 28.16, dressed: true },
+    { label: 'Asking rent', kind: 'number', headWidth: 77.44, dressed: true },
+    { label: 'Per ft²', kind: 'number', headWidth: 49.28, dressed: true },
+    { label: 'Status', kind: 'text', headWidth: 42.24, chip: true, chipExtra: 14, dressed: true },
+    { label: 'Resident', kind: 'text', headWidth: 56.32 },
+    { label: 'Available', kind: 'date', headWidth: 63.36, drawnDate: true },
+    { label: 'Listed', kind: 'boolean', headWidth: 42.24, pad: 24 },
+  ].map((column) => ({ pad: 17, controls: true, values: ['x'], ...column }));
+  const measure = (_text: string, column: number) => widths[column]!;
+
+  test('what a head gave or lent is the value’s: it is not handed back to the head as the column least short', () => {
+    const { width, columns } = fitGridColumns(roll, 978, true, false, 8, measure);
+    expect(width).toBe(978);
+    // Both names whole: their widest value and the cell's padding.
+    expect(columns[1]).toBe(117 + 17);
+    expect(columns[7]).toBe(117 + 17);
+    // The heads over a short figure and a tick paid for it, the last first, none below its floor.
+    expect(columns[4]).toBeLessThan(columnSizeHint(roll[4]!, 8, (text) => measure(text, 4)).minimum);
+    expect(columns[9]).toBeGreaterThanOrEqual(columnSizeHint(roll[9]!, 8, (text) => measure(text, 9)).least);
+    expect(columns.reduce((sum, size) => sum + size, GRID_EXPANDER_WIDTH)).toBe(978);
   });
 });

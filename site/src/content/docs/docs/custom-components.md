@@ -423,6 +423,7 @@ const page = definePage({
 - Check it in grayscale in two distinct looks. Hierarchy should hold without hue.
 - An App's own composition variants follow `useLook()` (`look`, `preset`, `mode`, `density`), not a prop of your own.
 - A button waiting on the server is `busy`, never `disabled`.
+- What the reader moves, walks or edits in place (a list to order, cards carried between lanes, a month of days) is built on [the behaviors](/docs/behaviors/), which answer the keyboard, a finger and a screen reader.
 
 ## Security
 

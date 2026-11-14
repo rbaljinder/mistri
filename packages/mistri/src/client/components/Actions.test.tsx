@@ -88,12 +88,19 @@ afterEach(() => {
 describe('the action bar on a phone', () => {
   test('the first shown verb stays a button, and the rest fold into More', async () => {
     const user = userEvent.setup();
-    draw({ compact: true });
+    draw({ compact: true, actions: [...actions, { id: 'archive', label: 'Archive', set: { status: 'archived' } }] });
     const more = await screen.findByRole('button', { name: 'More actions' });
     expect(screen.getByRole('button', { name: 'Start working' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Mark lost' })).toBeNull();
     await user.click(more);
-    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual(['Mark lost']);
+    expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual(['Mark lost', 'Archive']);
+  });
+
+  test('a record with two verbs shows both: More over one entry hid the only other thing to do', async () => {
+    draw({ compact: true });
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Mark lost' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull();
   });
 
   test('one shown verb stays a button, with no menu to open', async () => {
@@ -144,8 +151,8 @@ describe('the toolbar on a wide screen', () => {
     const user = userEvent.setup();
     draw({ actions: four });
     const lead = await screen.findByRole('button', { name: 'Qualify' });
-    expect(lead.className).toContain('primary');
-    for (const name of ['Nurture', 'Reassign']) expect(screen.getByRole('button', { name }).className).toContain('ghost');
+    expect(lead).toHaveAttribute('data-variant', 'solid');
+    for (const name of ['Nurture', 'Reassign']) expect(screen.getByRole('button', { name })).not.toHaveAttribute('data-variant');
     expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
     await user.click(screen.getByRole('button', { name: 'More actions' }));
     expect((await screen.findAllByRole('menuitem')).map((item) => item.textContent)).toEqual(['Archive']);
@@ -159,10 +166,10 @@ describe('the toolbar on a wide screen', () => {
     ];
     draw({ actions: lostFirst, destructive: (action) => action.label === 'Mark lost' });
     const lead = await screen.findByRole('button', { name: 'Qualify' });
-    expect(lead.className).toContain('primary');
+    expect(lead).toHaveAttribute('data-variant', 'solid');
     const lost = screen.getByRole('button', { name: 'Mark lost' });
-    expect(lost.className).toContain('btn-quiet');
-    expect(lost.className).not.toContain('primary');
+    expect(lost).toHaveAttribute('data-variant', 'quiet');
+    expect(lost).not.toHaveAttribute('data-variant', 'solid');
     const order = screen.getAllByRole('button').map((button) => button.textContent);
     expect(order.indexOf('Mark lost')).toBeGreaterThan(order.indexOf('Nurture'));
   });
@@ -171,8 +178,8 @@ describe('the toolbar on a wide screen', () => {
     draw();
     const shown = await screen.findByRole('button', { name: 'Mark lost' });
     await screen.findByRole('button', { name: 'Start working' });
-    expect(screen.getByRole('button', { name: 'Start working' }).className).toContain('primary');
-    expect(shown.className).toContain('ghost');
+    expect(screen.getByRole('button', { name: 'Start working' })).toHaveAttribute('data-variant', 'solid');
+    expect(shown).not.toHaveAttribute('data-variant');
   });
 
   test("a header's actions are the buttons, in its order, and every other verb is in More", async () => {
@@ -274,7 +281,7 @@ describe('the action bar', () => {
     const dialog = screen.getByRole('dialog', { hidden: true });
     expect(dialog).toHaveAccessibleName('Mark lost?');
     expect(calls).toEqual([]);
-    await user.click(dialog.querySelector('.primary')!);
+    await user.click(dialog.querySelector('[data-slot="button"][data-variant="solid"]')!);
     await vi.waitFor(() => expect(onDone).toHaveBeenCalledOnce());
     expect(calls).toHaveLength(1);
   });
@@ -323,7 +330,7 @@ describe('the action bar', () => {
     const { onDone } = draw();
     await user.click(screen.getByRole('button', { name: 'Mark lost' }));
     const dialog = screen.getByRole('dialog', { hidden: true });
-    await user.click(dialog.querySelector('.primary')!);
+    await user.click(dialog.querySelector('[data-slot="button"][data-variant="solid"]')!);
     await vi.waitFor(() => expect(onDone).toHaveBeenCalled());
     expect((calls[0].body as { values: unknown }).values).toEqual({ status: 'lost', owner_id: null });
   });
@@ -335,7 +342,7 @@ describe('the action bar', () => {
     await user.click(screen.getByRole('button', { name: 'Set amount' }));
     const dialog = screen.getByRole('dialog', { name: 'Set amount?' });
     expect(dialog).toHaveTextContent('$1,250');
-    await user.click(dialog.querySelector('.primary')!);
+    await user.click(dialog.querySelector('[data-slot="button"][data-variant="solid"]')!);
     await vi.waitFor(() => expect(calls).toHaveLength(1));
     expect((calls[0].body as { values: unknown }).values).toEqual({ amount: 1250 });
   });
@@ -437,7 +444,7 @@ describe('an action that asks a reason', () => {
     draw({ actions: [cancel] });
     await user.click(await screen.findByRole('button', { name: 'Cancel issue' }));
     const dialog = screen.getByRole('dialog', { name: 'Cancel issue: reason' });
-    await user.click(dialog.querySelector('button.ghost') as HTMLButtonElement);
+    await user.click(dialog.querySelector('button[data-slot="button"]:not([data-variant])') as HTMLButtonElement);
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(calls).toEqual([]);
   });

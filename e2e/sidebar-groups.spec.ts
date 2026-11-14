@@ -54,10 +54,10 @@ test('nested sidebar preferences survive reload and reveal filtering, rail and a
   await expect(group).toHaveAttribute('aria-disabled', 'true');
   await page.locator('#table-filter').fill('');
   await expect(leads).toHaveCount(0);
-  await page.locator('.sidebar-footer > .sidebar-collapse').click();
+  await page.locator('.sidebar-collapse').click();
   await expect(leads).toBeVisible();
   await expect(page.locator('#table-list .nav-group-fold')).toHaveCount(0);
-  await page.locator('.sidebar-footer > .sidebar-collapse').click();
+  await page.locator('.sidebar-collapse').click();
   await expect(leads).toHaveCount(0);
   await page.goto(`${CRM}/leads`);
   await expect(leads).toBeVisible();

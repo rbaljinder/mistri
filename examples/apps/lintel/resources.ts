@@ -20,7 +20,6 @@ export const resources = {
   /* ---------- the buildings ---------- */
   property: {
     access: 'write',
-    recordLabel: 'name',
     rollups: {
       homes: rollup.count('unit'),
       vacant: rollup.count('unit', { query: 'available' }),
@@ -54,9 +53,9 @@ export const resources = {
       resident: rollup.latest('lease', 'resident_id', { query: "status != 'ended' and status != 'draft'", sort: 'start_on' }),
     },
     display: {
-      market_rent: dollars,
-      // Cents a square foot, said as dollars.
-      rent_per_sqft: { format: 'money', minor: true, unit: '/sq ft' },
+      market_rent: { ...dollars, whole: true }, // a round figure, said without ".00": the rent roll's names need the room
+      // Cents a square foot, said as dollars; its caption, "Per ft²", is the unit, so no cell repeats it.
+      rent_per_sqft: dollars,
       // A studio has no bedroom to count: said as the word a listing uses, not "0 bd".
       bedrooms: { values: { 0: 'Studio' } },
       status: {
@@ -69,11 +68,10 @@ export const resources = {
       number: 'Home',
       property_id: 'Building',
       market_rent: 'Asking rent',
-      rent_per_sqft: 'Per sq ft',
+      rent_per_sqft: 'Per ft²',
       bedrooms: 'Beds',
       bathrooms: 'Baths',
       sqft: 'Size',
-      listed: 'Listed online',
     },
     validation: [
       { must: 'bedrooms <= 4', message: 'Lintel’s homes have at most four bedrooms.' },
@@ -85,7 +83,6 @@ export const resources = {
   /* ---------- the people ---------- */
   resident: {
     access: 'write',
-    recordLabel: 'name',
     rollups: {
       balance: rollup.sum('charge', 'amount', { whose: 'lease_id.resident_id', query: 'unpaid' }),
       open_requests: rollup.count('maintenance_request', { query: 'outstanding' }),
@@ -98,9 +95,7 @@ export const resources = {
     },
     labels: { email_ok: 'Email updates', since: 'Resident since', balance: 'Balance due' },
   },
-  staff: {
-    recordLabel: 'name',
-  },
+  staff: {},
 
   /* ---------- leasing ---------- */
   lease: {
@@ -119,7 +114,7 @@ export const resources = {
       paid: rollup.sum('payment', 'amount'),
     },
     display: {
-      rent: dollars,
+      rent: { ...dollars, unit: '/mo' },
       deposit: dollars,
       balance: { ...dollars, tone: { '> 0': 'warn' } },
       charged: dollars,
@@ -164,7 +159,7 @@ export const resources = {
       kind: {
         tone: { rent: 'neutral', late_fee: 'warn', utility: 'info', repair: 'warn', other: 'neutral' },
       },
-      status: { tone: { open: 'warn', paid: 'good', waived: 'neutral' } },
+      status: { values: { open: 'Unpaid' }, tone: { open: 'warn', paid: 'good', waived: 'neutral' } },
     },
     labels: { waived_reason: 'Why waived' },
     // A charge is paid by a payment, recorded by the desk or settled by the processor, or waived with a reason.
@@ -182,16 +177,17 @@ export const resources = {
   },
   payment: {
     access: 'write',
-    recordLabel: 'reference',
     display: { amount: dollars, method: { values: { ach: 'Bank transfer (ACH)' } } },
   },
 
   /* ---------- maintenance ---------- */
   maintenance_request: {
     segments: {
-      to_triage: 'status = new',
+      to_triage: { query: 'status = new', label: 'To review' },
       // Not yet done or called off: every state before the end of the road.
       outstanding: 'status is open',
+      // What a resident still waits on: open, and the work not yet done.
+      underway: "status is open and status != 'completed'",
       visits: 'status is onSite',
       urgent: 'priority = urgent and status is open',
       mine: 'assigned_to = me and status is open',
@@ -212,6 +208,9 @@ export const resources = {
     },
     display: {
       category: { values: { hvac: 'Heating and cooling' } },
+      priority: { tone: { urgent: 'bad' } },
+      // How long a repair has waited is the news: "5 days ago", and its date where the list's dates are not near today.
+      reported_on: { format: 'relative' },
       status: {
         icons: {
           new: 'envelope',
@@ -241,7 +240,7 @@ export const resources = {
       {
         new: {
           on: {
-            triage: { to: 'triaged', label: 'Triage' },
+            triage: { to: 'triaged', label: 'Review' },
             assignTechnician: 'triaged',
             scheduleVisit: 'scheduled',
             cancelRequest: cancel,
@@ -315,7 +314,6 @@ export const resources = {
     access: 'write',
     // A supplier's catalog arrives as a spreadsheet: new SKUs are imported, never typed.
     import: true,
-    recordLabel: 'name',
     rollups: { used: rollup.sum('request_part', 'quantity'), received: rollup.sum('part_receipt', 'quantity') },
     display: {
       unit_cost: dollars,
@@ -363,7 +361,6 @@ export const resources = {
   viewing: {
     segments: { upcoming: 'status = requested or status = confirmed', past: 'status = completed or status = cancelled' },
     access: 'write',
-    recordLabel: 'name',
     display: { status: { tone: { requested: 'info', confirmed: 'good', completed: 'neutral', cancelled: 'neutral' } } },
     labels: { unit_id: 'Home', preferred_on: 'Preferred day' },
     /* A visitor's ask, confirmed for a time and then shown, or called off. Written first by the public form, and

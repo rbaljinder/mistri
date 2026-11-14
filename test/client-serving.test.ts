@@ -412,7 +412,7 @@ test("the face is asked for where the App's look is set in it, not wherever its 
   const { compileTheme } = await import('../packages/mistri/src/shared/themeSpec.js');
   const { themePreset } = await import('../packages/engine/src/shared/themePresets.js');
   assert.deepEqual(lookFacesFor({}), ['barlow'], 'an App that names no look wears Workshop, set in Barlow');
-  assert.deepEqual(lookFacesFor({ theme: { preset: 'lumen' } }), ['inter']);
+  assert.deepEqual(lookFacesFor({ theme: { preset: 'lumen' } }), ['inter', 'manrope'], "Lumen's interface face and its headings' own");
   assert.deepEqual(lookFacesFor({ theme: { preset: 'sage' } }), []);
   assert.deepEqual(lookFacesFor({ theme: { preset: 'mono' } }), []);
   assert.deepEqual(lookFacesFor(undefined), [], 'the Workbench');

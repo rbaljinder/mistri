@@ -127,6 +127,17 @@ for (const size of [
     ).toEqual([]);
     expect(shifts, 'layout shifts on record → related record').toEqual([]);
 
+    /* Back is watched from a settled screen: on a loaded machine the related record's own entrance can still be
+       running 300 ms after its title is there, and it would be counted as Back's. */
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            !document.querySelector('#content > .nav-held') &&
+            !document.getAnimations().some((a) => (a as CSSAnimation).animationName === 'nav-enter'),
+        ),
+      )
+      .toBe(true);
     await watch(page);
     await page.goBack();
     await expect(page.locator('.page-head .root-current')).toHaveText(name);

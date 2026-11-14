@@ -1,12 +1,13 @@
 /**
- * The listbox of a form: one choice, or several, in a field. It is the Dropdown (Base UI's Select) dressed as a field
- * box, so the keyboard is the one it has: ArrowDown opens it, the arrows move, Enter and Space choose, Escape closes and
+ * The listbox of a form: one choice, or several, in a field. It is the Dropdown (UI SDK's Select) in a field's frame,
+ * so the keyboard is the one it has: ArrowDown opens it, the arrows move, Enter and Space choose, Escape closes and
  * returns focus to the box. Props only. Preview: @mistriwork/ui is Preview at 1.0.
  */
+import { useFieldControl } from '@ui-sdk/react/field';
 import { useId, type ReactNode, type Ref } from 'react';
 import { Dropdown, MultiDropdown, type DropdownChange, type DropdownItem } from './Dropdown.js';
-import { Field } from './Field.js';
-import { frameOf, type FieldFrame } from './fieldFrame.js';
+import type { FieldFrame } from './fieldFrame.js';
+import { Frame } from './internal/Frame.js';
 import { slotted } from './internal/uiKitContext.js';
 
 interface ListFrame extends FieldFrame {
@@ -17,29 +18,54 @@ interface ListFrame extends FieldFrame {
   buttonRef?: Ref<HTMLButtonElement>;
 }
 
+/* What the field this stands in says of its control: the label's id, what describes it and whether it holds a
+   problem. The frame's field names its control by that label alone and wires the hint, the problem and validity to
+   it; a list's button is named by the label and then by what it shows, so a reader hears "Make, Alfa Romeo". The
+   description and the validity are handed on as the Dropdown's own props, and not left to UI SDK's field to wire,
+   because the Dropdown is a slot: a kit that draws only the Dropdown is not inside UI SDK's field and would hear
+   neither. */
+interface Wiring {
+  label?: string;
+  describedBy?: string;
+  invalid?: boolean;
+}
+function Wired({ children }: { children: (field: Wiring) => ReactNode }) {
+  const said = useFieldControl()?.props({}) as Record<string, unknown> | undefined;
+  const text = (value: unknown) => (typeof value === 'string' && value ? value : undefined);
+  return (
+    <>
+      {children({
+        label: text(said?.['aria-labelledby']),
+        describedBy: text(said?.['aria-describedby']),
+        invalid: said?.['aria-invalid'] === true || said?.['aria-invalid'] === 'true' || undefined,
+      })}
+    </>
+  );
+}
+
 /** One choice from a list, under a field box. */
 function DefaultSelect(props: ListFrame & { value: string; onChange: (value: string, details: DropdownChange) => void }): ReactNode {
   const valueId = useId();
   return (
-    <Field {...frameOf(props)} group>
-      {(control) => (
-        <Dropdown
-          items={props.options}
-          value={props.value}
-          onChange={props.onChange}
-          id={control.id}
-          ariaLabelledBy={`${control['aria-labelledby']} ${valueId}`}
-          ariaDescribedBy={control['aria-describedby']}
-          ariaInvalid={control['aria-invalid']}
-          valueId={valueId}
-          buttonClassName="field-control field-select"
-          listClassName="field-list"
-          buttonRef={props.buttonRef}
-          placeholder={props.placeholder}
-          disabled={props.disabled}
-        />
-      )}
-    </Field>
+    <Frame {...props}>
+      <Wired>
+        {({ label, describedBy, invalid }) => (
+          <Dropdown
+            items={props.options}
+            value={props.value}
+            onChange={props.onChange}
+            id={props.id}
+            ariaLabelledBy={label && `${label} ${valueId}`}
+            ariaDescribedBy={describedBy}
+            ariaInvalid={invalid}
+            valueId={valueId}
+            buttonRef={props.buttonRef}
+            placeholder={props.placeholder}
+            disabled={props.disabled}
+          />
+        )}
+      </Wired>
+    </Frame>
   );
 }
 
@@ -49,25 +75,25 @@ function DefaultMultiSelect(
 ): ReactNode {
   const valueId = useId();
   return (
-    <Field {...frameOf(props)} group>
-      {(control) => (
-        <MultiDropdown
-          items={props.options}
-          value={props.value}
-          onChange={props.onChange}
-          id={control.id}
-          ariaLabelledBy={`${control['aria-labelledby']} ${valueId}`}
-          ariaDescribedBy={control['aria-describedby']}
-          ariaInvalid={control['aria-invalid']}
-          valueId={valueId}
-          buttonClassName="field-control field-select"
-          listClassName="field-list"
-          buttonRef={props.buttonRef}
-          placeholder={props.placeholder}
-          disabled={props.disabled}
-        />
-      )}
-    </Field>
+    <Frame {...props}>
+      <Wired>
+        {({ label, describedBy, invalid }) => (
+          <MultiDropdown
+            items={props.options}
+            value={props.value}
+            onChange={props.onChange}
+            id={props.id}
+            ariaLabelledBy={label && `${label} ${valueId}`}
+            ariaDescribedBy={describedBy}
+            ariaInvalid={invalid}
+            valueId={valueId}
+            buttonRef={props.buttonRef}
+            placeholder={props.placeholder}
+            disabled={props.disabled}
+          />
+        )}
+      </Wired>
+    </Frame>
   );
 }
 

@@ -24,17 +24,17 @@ A [list](/docs/lists/) is a grid unless its `presentation` says otherwise; tabs,
 
 | When | Use | Not when | In a sample |
 | --- | --- | --- | --- |
-| Rows to scan and compare (most lists) | the grid: `show` of 4–7 columns, the name first, then the state, the parent by name, a figure, a date | a raw id, or every column | `examples/apps/lintel/views.ts:65` |
+| Rows to scan and compare (most lists) | the grid: `show` of 4–7 columns, the name first, then the state, the parent by name, a figure, a date | a raw id, or every column | `examples/apps/lintel/views.ts:72` |
 | Things to look at: homes, people, projects with photos | `presentation: cards(...)` | rows people compare figure by figure | `examples/apps/lintel/views.ts:13` |
-| Work that moves through stages, a card at a time | `board: { by: 'status', … }`; lanes follow the resource's `machine` | more than about six lanes, or nobody moves the cards | `examples/apps/lintel/views.ts:134` |
-| An inbox someone clears, one decision per row | `queue(...)` with a `badge`, a few `properties` and an `openLabel` naming the verb | browsing | `examples/apps/lintel/views.ts:170` |
+| Work that moves through stages, a card at a time | `board: { by: 'status', … }`; lanes follow the resource's `machine` | more than about six lanes, or nobody moves the cards | `examples/apps/lintel/views.ts:141` |
+| An inbox someone clears, one decision per row | `queue(...)` with a `badge`, a few `properties` and an `openLabel` naming the verb | browsing | `examples/apps/lintel/views.ts:177` |
 | Reading one record after another without leaving the list | `split: { … }` | the record has children to walk | — |
-| Records that happen on a day | `calendar(date, title)`, beside the grid as the resource's own view | records need an address of their own under the calendar | `examples/apps/lintel/views.ts:93` |
-| The work divides by state or date | `tabs` in the order it is worked, All last | one tab per stored value nobody works by | `examples/apps/lintel/views.ts:151` |
+| Records that happen on a day | `calendar(date, title)`, beside the grid as the resource's own view | records need an address of their own under the calendar | `examples/apps/lintel/views.ts:100` |
+| The work divides by state or date | `tabs` in the order it is worked, All last | one tab per stored value nobody works by | `examples/apps/lintel/views.ts:158` |
 | Narrowed on three or more facets | `filterBar: 'rail'`; fewer, the bar's chips from `filters` | a list read top to bottom | `examples/apps/lintel/views.ts:28` |
 | Triage in place: owner, priority, due date | `editable` columns | a column a rule or a command must decide | `examples/apps/lintel/views.ts:51` |
-| The record's verbs are the work | `rowActions: true`; the same verb on many rows: `bulk: true` on the action | one atomic change to many rows (a command with `targets: 'many'`) | `examples/apps/lintel/views.ts:104` |
-| A figure that adds up | `totals` (over the whole tab); a count or sum of children: a `rollups` entry shown as a column | a figure across tables (a dashboard) | `examples/apps/lintel/views.ts:53`, `examples/apps/lintel/resources.ts:89` |
+| The record's verbs are the work | `rowActions: true`; the same verb on many rows: `bulk: true` on the action | one atomic change to many rows (a command with `targets: 'many'`) | `examples/apps/lintel/views.ts:111` |
+| A figure that adds up | `totals` (over the whole tab); a count or sum of children: a `rollups` entry shown as a column | a figure across tables (a dashboard) | `examples/apps/lintel/views.ts:53`, `examples/apps/lintel/resources.ts:86` |
 | A glance without losing the list | `open: 'drawer'` | a record people work on for minutes | — |
 | A list that can be empty | an `empty` that says what belongs there | — | `examples/apps/lintel/views.ts:35` |
 
@@ -45,15 +45,15 @@ One skeleton ([Design a record page](/docs/compose-record-page/)): head, figures
 | When | Use | Not when | In a sample |
 | --- | --- | --- | --- |
 | Always: the head | `header({ status, facts })`: the state beside the name, 3–4 facts; a date says what it is first (`{ column: 'ends_on', before: 'Ends' }`) | a custom section repeating the name | `examples/apps/lintel/pages/maintenance_request.ts:15` |
-| The record has figures | a `summary` of 3–4 rollups: the first `fields()` under the head | metric cards beside an aside; they wrap | `examples/apps/lintel/pages/lease.ts:16` |
-| The state is an ordered pipeline of 3–6 steps | a `machine` on the resource; the summary draws its stepper | side exits (lost, canceled) as steps: they stay tones | `examples/apps/lintel/resources.ts:239` |
-| Two or more child lists | `related` lists as tabs, `listTabs: true`, 4 columns each, the status last | a stack of tables | `examples/apps/lintel/pages/lease.ts:17` |
+| The record has figures | a `summary` of 3–4 rollups: the first `fields()` under the head | metric cards beside an aside; they wrap | `examples/apps/lintel/pages/lease.ts:19` |
+| The state is an ordered pipeline of 3–6 steps | a `machine` on the resource; the summary draws its stepper | side exits (lost, canceled) as steps: they stay tones | `examples/apps/lintel/resources.ts:238` |
+| Two or more child lists | `related` lists as tabs, `listTabs: true`, 4 columns each, the status last | a stack of tables | `examples/apps/lintel/pages/lease.ts:22` |
 | Children are added from the record | a related list's `create`, whose `prefill` carries what the record knows | — | `examples/apps/lintel/pages/maintenance_request.ts:30` |
 | The siblings matter | `related(title, table, { same: ['account_id'] })` | — | `examples/apps/lintel/pages/unit.ts:41` |
-| It has a parent | the parent as a `card(title, reference, [...])` first in the aside, with two of its fields | its name alone | `examples/apps/lintel/pages/lease.ts:27` |
-| One child row matters now: the next task, the active lease | `current(...)` in the aside, with an `empty` that says what none means | — | — |
+| It has a parent | the parent as a `card(title, reference, [...])` first in the aside, with two of its fields | its name alone | `examples/apps/lintel/pages/lease.ts:33` |
+| One child row matters now: the next task, the active lease | `current(...)` in the aside, with an `empty: { title: 'No lease yet' }` that says what none means (or `empty: 'hide'`) | — | — |
 | The remaining fields | a `properties` rail in the aside, `fields()` with `region: 'aside'`, edited in place | a block of fields opening the page | — |
-| Who changed what | `history()` last in the aside, with the record history store provisioned | — | `examples/apps/lintel/pages/lease.ts:29` |
+| Who changed what | `history()` last in the aside, with the record history store provisioned | — | `examples/apps/lintel/pages/lease.ts:35` |
 | A child list that is usually empty | `empty: 'hide'`: left out rather than drawn empty, or `'collapse'`: one line for the empty lists together | — | `examples/apps/lintel/pages/unit.ts:33` |
 | A person or a company read as a profile | an [overview page](/docs/compose-overview/): `avatar` and `subtitle`, a summary of five, a `chart` of activity, no aside | an operational record | — |
 | A dashboard chart for one record | the same `chart` narrowed with `whose` | — | — |
@@ -65,12 +65,12 @@ From the lightest to the heaviest: Save, a fixed action, a machine, a command. E
 
 | When | Use | Not when | In a sample |
 | --- | --- | --- | --- |
-| Create or edit a record's own columns | the resource's [`form`](/docs/forms/) and `access: 'write'` | a rule must hold against stored state as it runs | `examples/apps/lintel/resources.ts:82` |
+| Create or edit a record's own columns | the resource's [`form`](/docs/forms/) and `access: 'write'` | a rule must hold against stored state as it runs | `examples/apps/lintel/resources.ts:80` |
 | Move a record to a fixed state: start, mark done | a fixed [action](/docs/actions/) with `set` and `when` | `when` meant as a permission: it only draws the button | `examples/apps/tick/app.ts:43` |
-| A record's states and the only moves between them | a `machine` on the resource: buttons, stepper, board lanes and the server's refusal | the column is edited freely | `examples/apps/lintel/resources.ts:140`, `examples/apps/lintel/resources.ts:171` |
-| Two fields must agree | `validation`: `{ must, when?, message }` | the check reads other rows (a command) | `examples/apps/lintel/resources.ts:78`, `examples/apps/lintel/resources.ts:148` |
+| A record's states and the only moves between them | a `machine` on the resource: buttons, stepper, board lanes and the server's refusal | the column is edited freely | `examples/apps/lintel/resources.ts:135`, `examples/apps/lintel/resources.ts:166` |
+| Two fields must agree | `validation`: `{ must, when?, message }` | the check reads other rows (a command) | `examples/apps/lintel/resources.ts:76`, `examples/apps/lintel/resources.ts:143` |
 | A decision checked against stored state, who acts, or several tables in one transaction | a [command](/docs/commands/): `defineCommand` in the server-only commands module, named by an `action` | a plain `set` would do | `examples/apps/lintel/commands/leasing.ts:11` |
-| Create records through a guided form, signed in | [`commandForm(...)`](/docs/command-forms/), granted by `commands` | a resource `form` would do | `examples/apps/lintel/views.ts:228` |
+| Create records through a guided form, signed in | [`commandForm(...)`](/docs/command-forms/), granted by `commands` | a resource `form` would do | `examples/apps/lintel/views.ts:235` |
 | Take a submission from anyone | a `commandForm` with `public: true` | the visitor must read anything back | `examples/apps/lintel/views.ts:38`, `examples/apps/lintel/commands/viewing.ts:12` |
 | A long public application, not lost to a closed tab | a public form whose `step()`s each run a command | it fits one sitting | — |
 
@@ -80,19 +80,19 @@ Figures first, then how they move and divide, then what waits ([Design a dashboa
 
 | When | Use | Not when | In a sample |
 | --- | --- | --- | --- |
-| The headline numbers | 3 or 4 `metric` cards of one `width` | more than four in a row | `examples/apps/lintel/dashboards.ts:11` |
-| A figure with a before | `over` with `better` (the change and its trend come unasked) | `better` alone: there is no change to color | `examples/apps/lintel/dashboards.ts:17` |
-| Movement over time | a `chart` over `auto` (or by month) | `week`: it is a window, not a grouping | `examples/apps/lintel/dashboards.ts:41` |
-| A total divided by a vocabulary; two divisions crossed | a `breakdown` at half width; a `matrix` | — | `examples/apps/lintel/dashboards.ts:50` |
-| Work waiting | `rows` of it with a `limit`, two to a row | — | `examples/apps/lintel/dashboards.ts:51` |
-| Read by period | `windows` on the dashboard, `over` on each section | — | `examples/apps/lintel/dashboards.ts:74` |
+| The headline numbers | 3 or 4 `metric` cards of one `width` | more than four in a row | `examples/apps/lintel/dashboards.ts:12` |
+| A figure with a before | `over` with `better` (the change and its trend come unasked) | `better` alone: there is no change to color | `examples/apps/lintel/dashboards.ts:24` |
+| Movement over time | a `chart` over `auto` (or by month) | `week`: it is a window, not a grouping | `examples/apps/lintel/dashboards.ts:48` |
+| A total divided by a vocabulary; two divisions crossed | a `breakdown` at half width; a `matrix` | — | `examples/apps/lintel/dashboards.ts:57` |
+| Work waiting | `rows` of it with a `limit`, two to a row | — | `examples/apps/lintel/dashboards.ts:58` |
+| Read by period | `windows` on the dashboard, `over` on each section | — | `examples/apps/lintel/dashboards.ts:101` |
 
 ## Arrange the App
 
 | When | Use | Not when | In a sample |
 | --- | --- | --- | --- |
 | The menu has more than six entries | `navGroup` in the order the day runs, each with an icon | — | `examples/apps/lintel/navigation.ts:15` |
-| Roles start in different places | `home` as a list of rules | — | `examples/apps/lintel/app.ts:165` |
+| Roles start in different places | `home` as a list of rules | — | `examples/apps/lintel/app.ts:167` |
 | A front page for signed-out visitors | a [`landing(...)`](/docs/landing-pages/) with a `hero`, embedded lists and a call to action | an App without sign-in | `examples/apps/lintel/landing.ts:6` |
 
 ## Later or elsewhere

@@ -29,8 +29,8 @@
   .held-files-name:not(.is-plain):hover { text-decoration: underline; }
 }
 .held-files-meta { color: var(--ink-muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
-.held-files .progress-bar { align-self: stretch; height: 4px; border-radius: var(--radius-item); background: var(--raised); overflow: hidden; }
-.held-files .progress-bar-fill { display: block; height: 100%; border-radius: var(--radius-item); background: var(--accent); }
+.held-files [data-slot='progress-track'][data-kind='bar'] { align-self: stretch; height: 4px; border-radius: var(--radius-item); background: var(--raised); overflow: hidden; }
+.held-files :is([data-slot='progress-track'][data-kind='bar'] > [data-slot='progress-indicator']) { display: block; height: 100%; border-radius: var(--radius-item); background: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
   .held-files { transition: none; }
 }

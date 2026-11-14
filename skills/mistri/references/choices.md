@@ -84,7 +84,7 @@ is shown, not what is served.
 
 - **Signed-out reads are named per resource**: `auth.public.read`, needs
   `auth.roles`; `read: true` is refused —
-  [lintel/app.ts:141](../../../examples/apps/lintel/app.ts#L141).
+  [lintel/app.ts:143](../../../examples/apps/lintel/app.ts#L143).
 - **A public form is write-only**: `public: true` on the `commandForm`
   ([lintel/views.ts:38](../../../examples/apps/lintel/views.ts#L38)) and its command, whose `output`
   is a reference and a fixed sentence

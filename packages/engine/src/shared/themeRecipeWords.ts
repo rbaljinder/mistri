@@ -22,6 +22,8 @@ export const RECIPE_WORDS = {
     pill: 'Every row is a rounded pill with room around it; the current one is filled in the accent’s tint, its word in the accent.',
     quiet: 'The current entry is barely shaded in the menu’s ink, with no accent at all: the calmest mark.',
     slot: 'The current entry is an ink block, as inverted, with a 3px marker of the menu’s accent beside it, like a tool’s slot on a pegboard.',
+    float:
+      'The side menu is a card of its own, standing off the window’s edge with rounded corners; the current entry is a pill in the accent’s tint.',
   },
   bar: {
     plain: 'The top bar is the menu’s ground with a hairline under it.',
@@ -31,16 +33,17 @@ export const RECIPE_WORDS = {
     soft: 'The top bar is a panel in the surface color with a hairline under it, apart from the menu beside it.',
   },
   tabs: {
-    pill: 'The chosen tab is a filled pill; the others are plain words.',
+    pill: 'The chosen tab is a soft pill in the ink with an edge of its own; the others are plain words.',
     inverted: 'The chosen tab is inverted, the ink as its ground: square, high-contrast.',
     underline: 'The tabs stand on a hairline, wide apart, the chosen one underlined in the accent with no fill.',
     rule: 'The chosen tab is underlined by a 2px rule in the link color with no fill, the tabs packed as written.',
-    chosen: 'The chosen tab sits on a soft tint of the accent in the ink, wider apart, with no underline.',
+    tint: 'The chosen tab sits on a soft tint of the accent in the ink, wider apart, with no underline.',
+    lifted: 'The tabs stand in a sunken track; the chosen one is a raised key lifted out of it, with no underline.',
   },
   windows: {
     segmented: 'The period picker is a segmented control, the chosen period filled.',
     lifted: 'The period picker is a sunken tray, the chosen period a raised white key on it.',
-    chosen: 'The period picker has no tray; the chosen period sits on a soft tint of the accent.',
+    tint: 'The period picker has no tray; the chosen period sits on a soft tint of the accent.',
   },
   stat: {
     plain: 'A stat is a figure and its label with no frame.',
@@ -49,7 +52,8 @@ export const RECIPE_WORDS = {
     ruled: 'Each stat stands open under a 2px rule in the ink, with no card or shadow, like a printed page.',
     icon: 'Each stat is a card with its icon in a round tint of a chart color above the label, and a large bold figure.',
     panel: 'Each stat is a panel on the surface with a hairline and the look’s card shadow.',
-    divided: 'The stats share one strip, parted by hairlines, with no cards: the quietest arrangement.',
+    divided: 'The stats share one strip, a hairline round it and one between its figures, with no card to each: the quietest arrangement.',
+    bento: 'Each stat is a soft tile of its own in the raised ground, with no edge and a large figure: the roundest arrangement.',
   },
   section: {
     open: 'A dashboard section stands open on the page under its rule.',
@@ -69,6 +73,7 @@ export const RECIPE_WORDS = {
     card: 'The table is a card: muted 12px heads on a hairline, faint row rules and taller rows.',
     quiet: 'The table is a card of quiet rows, a work queue’s open button folded to a chevron at the row’s end.',
     banded: 'As open, but every other row lies on the band color (colors.band, or the raised ground), each ink measured on it.',
+    rows: 'The list is one soft tile on the page’s ground: rows ruled apart by hairlines, the head plain words inside it, the tile’s corners its own.',
   },
   status: {
     dot: 'A status word in its tone with a dot before it.',
@@ -78,8 +83,9 @@ export const RECIPE_WORDS = {
   },
   board: {
     ruled: 'A board’s lanes are outlined by a hairline; its cards lie flat on them.',
-    soft: 'As ruled, but each card casts the look’s card shadow: only the cards lift.',
-    strip: 'Each lane is headed by a strip tinted with its tone, its cards white on the lane.',
+    soft: 'Each lane is a quiet tray that holds its head and its cards, each card a sheet on it under the look’s card shadow.',
+    strip:
+      'Each lane is headed by a strip tinted with its tone, its cards white under it; a card with a category wears its color as a stripe.',
   },
   chart: {
     plain: 'A chart is its lines or bars on a light grid.',
@@ -96,6 +102,7 @@ export const RECIPE_WORDS = {
   links: {
     plain: 'A link to another record is in the link color without an underline.',
     underline: 'A link to another record is underlined, so it reads as one without color.',
+    name: 'A row’s name is underlined, as an index’s entry is, and what the row or a record’s facts refer to reads as text; the line that goes on to another record keeps its underline.',
   },
   rules: {
     ink: 'A record’s sections are announced by a 2px rule in the ink.',
@@ -109,8 +116,11 @@ export const RECIPE_WORDS = {
     round: 'A record’s avatar is 44px and round, and the menu’s and the account’s marks are round too.',
   },
   workflow: {
-    markers: 'A workflow is a track of thin segments, the label under each.',
+    markers:
+      'A workflow whose steps are an order is numbered marks joined by a rule, the label under each; a set of states with no order is a track of thin segments.',
     pills: 'A workflow is a row of pills with a dot each: a step walked in the good tint, the current one in the accent’s.',
+    segments:
+      'A workflow is one bar cut into segments, a word in each: the steps walked on a tint in the ink, the current one on the accent’s tint, those ahead muted.',
   },
   banner: {
     tint: 'A dashboard’s banner note is a box tinted with the accent.',
@@ -133,8 +143,8 @@ export const RECIPE_WORDS = {
     hero: 'A band, with the record’s avatar large beside its title (above it on a phone); a record without one, and a list, draw the band.',
   },
   filters: {
-    dashed: 'A list’s filter not yet asked for is its name behind a +, on a dashed hairline: a place for a filter, not a field.',
-    solid: 'A list’s filter not yet asked for is its name behind a + on a solid edge: a key, as the search beside it is, not a place.',
+    solid: 'A list’s filter not yet asked for is its name before a caret on a solid edge: a key, as the search beside it is.',
+    dashed: 'The same key on a dashed hairline. No built-in look wears it: to people meeting a list it read as a place left empty.',
     quiet:
       'A list’s filter not yet asked for has no edge, its name in the muted ink, until a pointer is over it: then it sits on the raised ground.',
   },
@@ -142,10 +152,6 @@ export const RECIPE_WORDS = {
     star: 'A required field wears a red star after its label; an optional one wears nothing.',
     'optional-word':
       'A required field wears nothing and an optional one says “(optional)” after its label, quietly; the form’s own words, in the reader’s language.',
-  },
-  checkbox: {
-    native: 'A checkbox is the browser’s own, in the accent.',
-    drawn: 'A checkbox is drawn: a square in the field’s fill with the control’s edge and corner, the accent with a check when on.',
   },
   formStep: {
     plain: 'A multi-step form’s step header is its title over its lead, with nothing between it and the fields.',
@@ -180,7 +186,7 @@ export const TYPE_WORDS: { readonly [Role in ThemeTypeRole]: string } = {
   body: 'Prose, fields and the interface, at the base size: its leading (1.35 to 1.8) and features.',
   label:
     'A column’s head, a stat’s label and a record’s tabs, at the base size: their face, size (11px to 14px), tracking, weight (400 to 700), case and features; upper sets them a step smaller unless a size is said.',
-  data: 'A table’s cells and a record’s values, in the data face at the base size: their features, tabular figures kept, and its reach: every value, or figures only (figures, keys and dates, a record header’s facts too).',
+  data: 'A table’s cells and a record’s values, in the data face at the base size: their features, tabular figures kept, and its reach: every value, or figures only (figures, keys and dates). A record header’s facts keep the head’s face, their figures tabular.',
   figure: 'A stat’s figure: its face, size (18px to 40px), tracking, weight and features, tabular figures kept.',
   nav: 'The menu’s entries in the bar, at the base size: their face, tracking, weight (400 to 600) and case; upper sets them a step smaller.',
 };

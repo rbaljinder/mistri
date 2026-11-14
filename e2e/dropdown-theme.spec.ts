@@ -78,11 +78,11 @@ for (const theme of themes)
         await page.keyboard.press('Escape');
         await expect(trigger).toBeFocused();
       }
-      // Preferences render the same dropdown inside a dialog's portal container.
+      // Preferences draw the same dropdown from a page, the settings room.
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       await page.getByRole('menuitem', { name: /^Preferences/ }).click();
       await page
-        .getByRole('dialog', { name: 'Preferences', exact: true })
+        .getByRole('region', { name: 'Preferences', exact: true })
         .getByRole('button', { name: /^Color mode(?: |$)/ })
         .click();
       const list = page.getByRole('listbox', { name: 'Color mode', exact: true });

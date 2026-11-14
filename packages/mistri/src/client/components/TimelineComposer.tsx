@@ -129,7 +129,8 @@ export function TimelineComposer({
           <textarea
             id={label}
             ref={input}
-            className="field-control timeline-input"
+            data-slot="textarea"
+            className="timeline-input"
             rows={3}
             value={text}
             placeholder={placeholder}

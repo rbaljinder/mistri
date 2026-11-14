@@ -314,6 +314,10 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
     >
       {/* A modal in all but its host: the page under the scrim is out of reach, so it is out of the reading too. */}
       <div className={`palette${inApp ? ' palette-grouped' : ''}`} role="dialog" aria-modal="true" aria-label={say('navigation.search')}>
+        {/* The magnifier the bar's search wears, so the dialog reads as that box opened; the input keeps the row's rule. */}
+        <span className="palette-glyph" aria-hidden="true">
+          <Icon name="magnifying-glass" size={16} />
+        </span>
         <input
           ref={input}
           type="text"

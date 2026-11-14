@@ -1,4 +1,3 @@
-import '@mistriwork/ui/hero.css';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Badge, IconRows, PhotoTiles } from '@mistriwork/ui/HeroBlocks.js';
 

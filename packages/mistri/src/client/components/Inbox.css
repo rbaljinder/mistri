@@ -15,30 +15,32 @@
 .inbox-meta { color: var(--ink-muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .inbox-meta time { white-space: nowrap; }
 
-/* The bell's menu: a head, the latest few, and the way to all of them. */
-.inbox-popup { width: min(24rem, var(--available-width, 100vw - 16px)); padding: 0; }
+/* The bell's menu: a head, the latest few, and the way to all of them. One padded panel whose rows are rounded
+   targets a hairline's width apart, with no rule between them: in a panel this small the rules read as a table,
+   and the hover's fill already says where a row ends. */
+.inbox-popup { width: min(22rem, var(--available-width, 100vw - 16px)); padding: var(--space-2h); border-radius: var(--radius-lg); }
 .inbox-menu-head {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
-  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4); border-bottom: 1px solid var(--line);
+  min-height: 28px; padding: var(--space-1) var(--space-1) var(--space-2) var(--space-2h);
 }
 .inbox-menu-title { font: 600 var(--text-base) var(--sans); color: var(--ink); }
 .inbox-menu-mark, .inbox-menu-all {
   padding: var(--space-2) var(--space-2h); border: 0; border-radius: var(--radius); background: none;
   color: var(--link); font: var(--text-sm) var(--sans); cursor: pointer;
 }
-.inbox-menu-all { display: block; width: 100%; padding: var(--space-3h) var(--space-4); text-align: left; border-top: 1px solid var(--line); border-radius: 0; }
+.inbox-menu-all { display: block; width: 100%; margin-top: var(--space-1); padding: var(--space-2h) var(--space-2h); text-align: left; }
 .inbox-item {
-  display: flex; gap: var(--space-3h); width: 100%; padding: var(--space-3) var(--space-4); text-align: left;
-  border: 0; border-radius: 0; background: none; font: var(--text-base)/1.4 var(--sans); cursor: pointer;
+  display: flex; gap: var(--space-3); width: 100%; padding: var(--space-3) var(--space-3) var(--space-3) var(--space-2h); text-align: left;
+  border: 0; border-radius: calc(var(--radius) - 2px); background: none; font: var(--text-base)/1.4 var(--sans); cursor: pointer;
 }
-.inbox-item + .inbox-item { border-top: 1px solid var(--line); }
+.inbox-item + .inbox-item { margin-top: 1px; }
 .inbox-item:hover, .inbox-item[data-highlighted], .inbox-menu-mark[data-highlighted], .inbox-menu-all[data-highlighted] { background: var(--raised); }
-.inbox-menu-note { margin: 0; padding: var(--space-4); color: var(--ink-muted); font: var(--text-base)/1.45 var(--sans); }
+.inbox-menu-note { margin: 0; padding: var(--space-5) var(--space-3); color: var(--ink-muted); font: var(--text-base)/1.45 var(--sans); text-align: center; text-wrap: balance; }
 
 /* The room: the page's one content edge, a list's heading and tabs, then the rows. */
 .inbox-room { padding-bottom: 40px; }
 .inbox-room-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-4); padding: var(--space-4h) var(--room-inset) 0; }
-.inbox-room-head .btn-quiet { margin-left: auto; }
+.inbox-room-head [data-slot='button'][data-variant='quiet'] { margin-left: auto; }
 .inbox-room > .empty-note, .inbox-room > .note, .inbox-room > .loading { margin: var(--space-5) var(--room-inset); }
 .inbox-list { list-style: none; margin: 0; padding: 0; }
 .inbox-row { display: flex; align-items: flex-start; gap: var(--space-3); padding-inline: var(--room-inset); border-bottom: 1px solid var(--line); }

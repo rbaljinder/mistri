@@ -257,6 +257,28 @@ export function sayTails(sp: ConditionSpeaker | null, column: string, tails: rea
   return sayReads(sp, column, tails.map(readTail));
 }
 
+/**
+ * The same conditions as a filter chip says them: the column's label, which stays put whatever is asked, and what is
+ * asked of it. Values chosen from a list come apart, so a chip can say the first and count the rest ("Building:
+ * Alder Court +2"); anything else is the phrase without its label ("Due: in the last 30 days", "Rent: up to $1,500").
+ */
+export function sayChip(
+  sp: ConditionSpeaker | null,
+  column: string,
+  tails: readonly string[],
+): { label: string; value: string; values?: string[] } {
+  const whole = sayTails(sp, column, tails);
+  const who = sp ? subject(sp, column) : null;
+  if (!sp || !who) return { label: '', value: whole };
+  const label = sp.label(who.column);
+  const reads = tails.map(readTail);
+  const only = reads.length === 1 ? reads[0] : null;
+  const value = (v: Operand) => sayValue(sp, who.column, who.meta, v);
+  if (only?.op === 'in') return { label, value: joined(only.values.map(value), 'filter.or'), values: only.values.map(value) };
+  if (only?.op === '=' && !datePhrase(only.value)) return { label, value: value(only.value), values: [value(only.value)] };
+  return { label, value: whole.startsWith(label) ? whole.slice(label.length).trim() : whole };
+}
+
 function sayReads(sp: ConditionSpeaker, column: string, reads: Array<Read | null>): string {
   const who = subject(sp, column);
   if (!who || !reads.length || reads.some((read) => !read)) return sayCopy('other');

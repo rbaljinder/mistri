@@ -84,6 +84,9 @@ const ROW_MENU = 44;
    column holds as many as fit its width — two beside the side menu. */
 const METRIC = 192;
 const METRIC_GAP = 24;
+/* Between the cards of a strip in a look (visualThemes.css): what a layout's area is divided by. */
+const STRIP_GAP = 20;
+const COUNT_WORDS: Record<number, string> = { 1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six' };
 /* A summary's figure keeps 9rem and the looks' 28px gap (page.css): four in 660px, three in 488. */
 const FIGURE = 144;
 const FIGURE_GAP = 28;
@@ -491,8 +494,12 @@ function pageFindings(catalog: Catalog, page: PageDef): DesignFinding[] {
         machine.states.some((state) => state.final && state.name === flow.steps[1]?.value);
       /* Named by its reason, each that holds: a strip of a machine's road reads as derived, and "thin" alone left an
          author guessing which of the two to fix (a field report). */
-      const few = flow.steps.length <= 2 && !endsFinal;
-      const most = allowed.length > 0 && outside.length > allowed.length / 2;
+      /* A machine's own strip is its road, drawn from the graph: a way back (reopen, send back) or a side state
+         shortens the road without the author having written a thin pipeline, so the rule is for a strip written by hand. */
+      const derived = machine?.column === flow.field && flow.ordered === true && machine.edges.length > 0;
+      const road = flow.steps.filter((step) => !step.outcome);
+      const few = !derived && road.length <= 2 && !endsFinal;
+      const most = !derived && allowed.length > 0 && outside.length > allowed.length / 2;
       if (few || most) {
         const reasons = [
           ...(few ? [`has only ${flow.steps.length} step${flow.steps.length === 1 ? '' : 's'}`] : []),
@@ -838,7 +845,10 @@ function stripFindings(key: string, sections: AppDashSection[], grid: LayoutGrid
   for (const area of areas) {
     const room = area === undefined ? undefined : areaRoom(grid, area, full);
     if (!room) continue;
-    const perRow = Math.min(3, Math.max(1, Math.floor((room.width + METRIC_GAP) / (METRIC + METRIC_GAP))));
+    /* As many as the area's width holds at a card's 12rem and the strip's gap, which is how the page wraps them
+       (features.css): four share an area as wide as the side menu's pane, so a strip of four there is one row. It was
+       capped at three, from before the pane, and told a full row of four its last one wrapped. */
+    const perRow = Math.max(1, Math.floor((room.width + STRIP_GAP) / (METRIC + STRIP_GAP)));
     const strips: AppDashSection[][] = [];
     const inArea = sections.filter((section) => section.area === area);
     inArea.forEach((section, index) => {
@@ -855,7 +865,7 @@ function stripFindings(key: string, sections: AppDashSection[], grid: LayoutGrid
         code: 'lone-metric',
         at: `view "${key}"`,
         text:
-          `its ${count} metrics in "${area}" sit ${perRow === 2 ? 'two' : 'three'} to a row, ` +
+          `its ${count} metrics in "${area}" sit ${COUNT_WORDS[perRow] ?? perRow} to a row, ` +
           `so the last ${alone ? 'one wraps alone and stretches across the area' : `${count % perRow} wrap and stretch`} ` +
           `→ make it ${lower} or ${Math.ceil(count / perRow) * perRow}.`,
       });
@@ -982,8 +992,152 @@ function shellFindings(app: AppDef): DesignFinding[] {
     missing.push(`${plain} of ${rooms.length} rooms with the table icon`);
     fixes.push("an icon: on each view ('users', 'package', 'calendar'…)");
   }
-  if (missing.length < 2) return [];
-  return [{ code: 'default-shell', at: 'the shell', text: `${missing.join(', ')}: the App will read as unstyled → ${fixes.join('; ')}.` }];
+  const found: DesignFinding[] = [];
+  if (missing.length >= 2)
+    found.push({
+      code: 'default-shell',
+      at: 'the shell',
+      text: `${missing.join(', ')}: the App will read as unstyled → ${fixes.join('; ')}.`,
+    });
+  /* `unbranded`: the App wears a built-in look as it ships, with no colour of its own. Two Apps on one look are then
+     the same App to the eye. A theme of the App's own (ui.customThemes) is taken as its brand, whatever it says. */
+  const worn = app.ui.theme as { preset?: string; accent?: unknown; palette?: unknown } | undefined;
+  const own = (app.ui.customThemes ?? []).some((theme) => theme.id === worn?.preset);
+  if (!own && !worn?.accent && !worn?.palette) {
+    const look = worn?.preset ?? 'lumen';
+    found.push({
+      code: 'unbranded',
+      at: 'the shell',
+      text:
+        `the App wears ${worn?.preset ? `"${worn.preset}"` : 'the default look'} in the look's own color, as every App on it does → name its color once: ` +
+        `ui: { theme: { preset: '${look}', accent: '#…' } }, or a theme of its own whose brand also turns the shell's neutrals: ` +
+        `defineTheme({ id: 'mine', label: 'Mine', extends: '${look}', brand: '#…' }) in ui.customThemes.`,
+    });
+  }
+  return found;
+}
+
+/* What a person takes in at once: a form's group past seven fields reads as one wall (the per-page rubric's count),
+   and a dashboard past eight figures has no first thing to look at. */
+const GROUP_FIELDS = 7;
+const DASH_FIGURES = 8;
+
+/**
+ * Rules 27–30: what an App built in one pass leaves out, each read off the definition alone.
+ *
+ * - `long-group`: a New form's group or step that asks more than seven things.
+ * - `stuck-state`: a state that is not final and that no verb, timer or service leaves. Its records show no next
+ *   step on their page, and on a board their card has no button.
+ * - `crowded-dashboard`: more than eight figures on one dashboard.
+ * - `home-without-work`: the home dashboard of an App whose records move through states lists none of them, so a
+ *   person starts the day on figures and has to go looking for what waits.
+ */
+function workFindings(catalog: Catalog, pages: readonly PageDef[], commands: CommandTargets | undefined): DesignFinding[] {
+  const found: DesignFinding[] = [];
+  for (const [table, { name, resource }] of catalog.byTable) {
+    for (const part of [...(resource.form?.groups ?? []), ...(resource.form?.steps ?? [])]) {
+      const fields = (part as { fields?: readonly string[] }).fields ?? [];
+      if (fields.length > GROUP_FIELDS)
+        found.push({
+          code: 'long-group',
+          at: `resource "${name}"`,
+          text:
+            `the New form's ${part.label ? `"${part.label}"` : 'group'} asks ${fields.length} things in one run → split it into groups named by what they hold, ` +
+            `none longer than ${GROUP_FIELDS}, and leave out what a person can fill later on the record's page.`,
+        });
+    }
+    const machine = resource.machine;
+    if (!machine) continue;
+    const stuck = machine.states.filter(
+      (state) => !state.final && !state.after?.length && !state.by?.length && !machine.edges.some((edge) => edge.from === state.name),
+    );
+    /* A machine no verb moves at all is moved by the App's own writes (a form's status field): nothing to say here. */
+    if (stuck.length && machine.edges.length)
+      found.push({
+        code: 'stuck-state',
+        at: `resource "${name}"`,
+        text:
+          `${stuck.map((state) => `"${state.label}"`).join(', ')} ${stuck.length === 1 ? 'is a state' : 'are states'} nothing leaves and that ${stuck.length === 1 ? 'is' : 'are'} not final: ` +
+          `a record there offers no next step, on its page or on a board's card → give ${stuck.length === 1 ? 'it' : 'each'} the verb the work moves on by ` +
+          `(${stuck[0]!.name}: { on: { finish: '…' } }), or say the work ends there: ${stuck[0]!.name}: { final: true }.`,
+      });
+    /* A record whose states only other records' commands and forms move shows no button at all: the graph is whole,
+       and the person looking at the item cannot send it on from where they are. */
+    const moves = (resource.actions ?? []).some(
+      (action) =>
+        ('move' in action && Boolean(action.move)) ||
+        ('set' in action && Boolean(action.set) && Object.hasOwn(action.set as object, machine.column)),
+    );
+    if (machine.edges.length && !moves)
+      found.push({
+        code: 'no-next-step',
+        at: `resource "${name}"`,
+        text:
+          `a ${name} moves through its states only by other records' commands and forms, so its own page offers no verb: ` +
+          `a person looking at one cannot send it on → give its next step a verb of its own ` +
+          `(machine: { states: { ${machine.states[0]!.name}: { on: { <verb>: '<next state>' } } } }), or put the command that moves it among its actions.`,
+      });
+    /* The same, a state at a time: every way out of a state is another table's command (a line checked in at the
+       counter moves the item it names). The item's page then shows its state and no way on, unless the page lists
+       those other records with their verbs in each row. A timer or a service that leaves the state needs no button. */
+    if (commands && machine.edges.length && moves) {
+      /* A command names its table bare, a page and the catalog by the schema's id: one table either way. */
+      const same = (a: string, b: string) => a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`);
+      const page = pages.find((def) => same(def.base, table));
+      const reachable = (other: string) =>
+        Boolean(page?.sections.some((section) => section.kind === 'list' && same(section.from, other) && section.rowActions));
+      const stranded = machine.states.flatMap((state) => {
+        if (state.final || state.after?.length || state.by?.length) return [];
+        const out = machine.edges.filter((edge) => edge.from === state.name);
+        const elsewhere = out.map((edge) => (edge.command ? commands[edge.command]?.target : undefined));
+        if (!out.length || elsewhere.some((target) => !target || same(target, table) || target === name)) return [];
+        const others = [...new Set(elsewhere as string[])];
+        return others.every(reachable) ? [] : [{ state, others, verb: out[0]!.verb }];
+      });
+      if (stranded.length) {
+        const first = stranded[0]!;
+        found.push({
+          code: 'no-next-step',
+          at: `resource "${name}"`,
+          text:
+            `${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name} in ${stranded.map(({ state }) => `"${state.label}"`).join(', ')} is moved on only by a command of ${first.others.map((other) => `"${other}"`).join(', ')}, ` +
+            `so its own page shows the state and no way on → list those records on its page with their verbs in each row ` +
+            `(related('…', '${first.others[0]}', '<the column naming the ${name}>', { rowActions: true })), ` +
+            `or give the step a command that acts on the ${name} itself (defineCommand({ target: '${name}', … }), named in the state's on: { ${first.verb}: … }).`,
+        });
+      }
+    }
+  }
+  const worked = [...catalog.byTable.values()].filter(({ resource }) =>
+    resource.machine?.states.some((state) => !state.final && resource.machine!.states.length >= 3),
+  );
+  const homes = new Set(catalog.app.home.filter((rule) => !rule.signedOut).map((rule) => rule.view));
+  for (const [key, view] of Object.entries(catalog.app.views)) {
+    const sections = asDashboard(view)?.sections;
+    if (!sections) continue;
+    const figures = sections.filter((section) => section.kind === 'metric').length;
+    if (figures > DASH_FIGURES)
+      found.push({
+        code: 'crowded-dashboard',
+        at: `view "${key}"`,
+        text:
+          `it opens on ${figures} figures, which gives a person no first thing to read → keep the three or four the day turns on in the first row, ` +
+          `and say the rest where they are used: a list's summary: [metric(…)], a record's fields([...]) of rollups, or a breakdown.`,
+      });
+    const lists = sections.some(
+      (section) =>
+        ['rows', 'board', 'activity', 'firstRun', 'custom'].includes(section.kind) || (section as { kind: string }).kind === 'view',
+    );
+    if (homes.has(key) && worked.length && !lists)
+      found.push({
+        code: 'home-without-work',
+        at: `view "${key}"`,
+        text:
+          `it is where a person starts the day and it lists no work, though ${worked[0]!.name} records move through states → under the figures, ` +
+          `one or two short lists of what waits: rows('Needs you', '${worked[0]!.name}', { query: '…', show: [...], limit: 5 }).`,
+      });
+  }
+  return found;
 }
 
 /**
@@ -991,7 +1145,10 @@ function shellFindings(app: AppDef): DesignFinding[] {
  * page, resource and view by its key. A rule that cannot tell (a path the
  * catalog does not resolve) says nothing: mistri check is where that is wrong.
  */
-export function designLint(app: AppDef, pages: readonly PageDef[], schema: DatabaseSchema): DesignFinding[] {
+/** What the lint reads of the App's commands: the table each acts on. Absent, the rules that need it say nothing. */
+type CommandTargets = Readonly<Record<string, { readonly target?: string } | undefined>>;
+
+export function designLint(app: AppDef, pages: readonly PageDef[], schema: DatabaseSchema, commands?: CommandTargets): DesignFinding[] {
   const catalog = new Catalog(app, schema);
   return [
     ...shellFindings(app),
@@ -1000,6 +1157,7 @@ export function designLint(app: AppDef, pages: readonly PageDef[], schema: Datab
     ...dashboardFindings(catalog),
     ...railFindings(catalog),
     ...boardFindings(catalog),
+    ...workFindings(catalog, pages, commands),
     ...addressFindings(catalog),
     ...repeatedQueryFindings(app, schema),
     ...defaultsFindings(catalog),

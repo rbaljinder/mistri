@@ -94,6 +94,8 @@ for (const phone of [false, true])
       await preview(recipient, token);
       expect(app.snapshot().memberships.map((m) => m.status)).toEqual(['invited']);
       if (phone) {
+        // Measured once its scale-in has run out: at the start of the 160 ms open the sheet is a hair under the screen.
+        await dialog(recipient, false).evaluate((el) => Promise.all(el.getAnimations().map((animation) => animation.finished)));
         const bounds = await dialog(recipient, false).boundingBox();
         expect(bounds?.width).toBeCloseTo(viewport.width, 0);
         expect(bounds?.height).toBeCloseTo(viewport.height, 0);

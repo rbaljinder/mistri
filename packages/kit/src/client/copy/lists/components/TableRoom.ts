@@ -3,8 +3,10 @@ import { defineMessages } from '../../../messages.js';
 
 export const say = defineMessages({
   fixTheQueryAbove: 'Fix the query above to see results.',
-  notAvailableToYou: 'This {thing} is not available to your role.',
+  notAvailableToYou: 'Your account does not open this {thing}.',
+  goHome: 'Go to your home page',
   notAvailableHere: 'This {thing} is not available.',
+  notAvailable: 'Not available',
   signInToSeeThis: 'This {thing} is for signed-in members.',
   thingList: 'list',
   thingRecord: 'record',

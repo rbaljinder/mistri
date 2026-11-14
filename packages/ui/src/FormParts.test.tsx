@@ -86,6 +86,8 @@ test('columns carry their template and a review is one labelled group', () => {
       </ReviewList>
     </>,
   );
-  expect(document.querySelector('.form-columns')).toHaveStyle({ '--form-columns': '1fr 1.8fr' });
-  expect(screen.getByRole('group', { name: 'Your answers' })).toBeInTheDocument();
+  const columns = document.querySelector<HTMLElement>('[data-slot="columns"]')!;
+  expect(columns.style.getPropertyValue('--form-columns')).toBe('1fr 1.8fr');
+  expect(columns.children).toHaveLength(2);
+  expect(screen.getByRole('group', { name: 'Your answers' })).toHaveTextContent('c');
 });

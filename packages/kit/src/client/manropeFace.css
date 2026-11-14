@@ -1,0 +1,32 @@
+/* Manrope, the face Lumen's headings and hero figures are set in, and any theme's that names it first
+   (themeRecipes.ts recipeAttributes): a sheet of its own, as interFace.css is the interface's, so a page that draws no
+   heading in it never asks for it. A stack that begins with the face brings this sheet; the server preloads the file
+   beside it where a heading leads with it (server/clientSurface.ts, SHEET_FACES, lookPreloads). */
+/* Why a second face: Lumen in Inter alone read as a template, the same title and figure every other product has
+   (docs/design.md, Lumen). Manrope is a geometric grotesque with open counters and figures that hold at a stat's
+   size, drawn for titles, section heads, the App's name and a strip's figures only; a sentence stays in Inter. Its
+   variable face, the Latin subset (25 KB, weights 200 to 800 in one file; SIL Open Font License, its text in
+   fonts/Manrope-OFL.txt and dist/client/fonts/). `swap`, as Inter: the page is held until this sheet is in, and the
+   fallback below is cut to Manrope's measure, so the swap barely moves a line. */
+@font-face {
+  font-family: Manrope;
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url('./fonts/manrope-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* The face that stands in until Manrope arrives: Arial Bold (Liberation Sans Bold on Linux), since Manrope is worn
+   at a heading's weights. Measured in Chromium over a line of titles with their figures: Manrope's 600, 700 and 800
+   are 98.7%, 100.4% and 102.0% of Arial Bold's, so one cut at 100.4% serves the three; its ascent and descent are
+   1.066 and 0.3 of the em, said of the adjusted size. */
+@font-face {
+  font-family: 'Manrope Fallback';
+  src: local('Arial Bold'), local('Arial-BoldMT'), local('Liberation Sans Bold'), local('LiberationSans-Bold'), local('Helvetica Bold');
+  size-adjust: 100.4%;
+  ascent-override: 106.18%;
+  descent-override: 29.88%;
+  line-gap-override: 0%;
+}

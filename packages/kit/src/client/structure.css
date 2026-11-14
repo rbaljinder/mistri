@@ -89,8 +89,7 @@
     :is(
       input:not([type='checkbox'], [type='radio'], [type='range'], [role='switch']),
       textarea,
-      select,
-      .dd-button,
+      select,[data-slot='select-trigger'],
       .record-picker-trigger,
       .picker,
       .cell-edit
@@ -297,6 +296,10 @@
     body.app-mode :is(.crumb-tools, .applist-head-tools) .export-summary .export-more {
       display: inline;
     }
+    /* Export's menu is said by its dots there, as it was: the download mark would be a second mark beside them. */
+    body.app-mode :is(.crumb-tools, .applist-head-tools) .applist-verb-mark:has(~ .export-more) {
+      display: none;
+    }
     body.app-mode :is(.crumb-tools, .applist-head-tools) .export-summary::after {
       content: none;
     }
@@ -317,11 +320,15 @@
     }
   }
 
-  /* The controls row is one strip: its tabs and filter bar give up the spacing a look gives them elsewhere. */
+  /* A list's tabs are a row of their own on a rule, the width of the room: they give up the spacing a look gives a
+     strip elsewhere. The rule is drawn inside the strip, under a pixel of padding, so a chosen tab's mark
+     (bottom: -1px, lumenLook.css) lands on it within the padding box the strip clips to. */
   .applist-controls .tabs {
-    padding: 0;
+    padding: 0 0 1px;
     border-bottom: 0;
-    flex: none;
+    /* A look whose tabs are a tray of their own (lifted) says none (`--tabs-rule`). */
+    box-shadow: var(--tabs-rule, inset 0 -1px 0 var(--line));
+    flex: 1 0 100%;
     overflow: visible;
   }
   /* A record's strip fits its row: what does not fit is under More (useTabFold.ts), so it clips and never scrolls.
@@ -352,23 +359,15 @@
     visibility: hidden;
     pointer-events: none;
   }
-  /* The list's tabs fit the row (useTabFold.ts): the strip asks for every tab (its basis is their width, measured)
-   and gives way only where the row cannot hold them, the tabs past its end under More. It clips; it never scrolls.
-   The filters give way first, into "+ Filter" (ListFilterBar.tsx, which says when it has nothing left to give);
-   only then does the strip narrow, and the filter bar keeps what is left of it. */
+  /* The list's tabs fit their row (useTabFold.ts): the strip is the row's width, and the tabs past its end go under
+   More. It clips; it never scrolls. */
   .applist-controls .tabs.folds {
     position: relative;
-    flex: 0 0 var(--tabs-natural, auto);
+    flex: 1 1 100%;
     /* Never narrower than the chosen tab and More beside it (useTabFold.ts): a phone's Records/Table switch takes the
        next line instead, where at 320px the two were drawn over each other. */
     min-width: var(--tabs-least, 0);
     overflow: clip;
-  }
-  .applist-controls:is([data-filters-spent], :not(:has(> .applist-filterbar))) > .tabs.folds {
-    flex-shrink: 1;
-  }
-  .applist-controls[data-filters-spent] > .applist-filterbar {
-    flex-shrink: 0;
   }
   .tabs.folds > .tabs-row {
     display: flex;
@@ -386,48 +385,41 @@
     align-self: stretch;
     gap: inherit;
   }
-  /* On a desk the row gives way before it scrolls: the search box narrows to a
-   floor, so a list's last filter is not cut off at the window's edge. Where
-   the bar leads the tabs (features.css, ≤860px) the row scrolls as it was. */
+  /* The bar is the row under the tabs, the room's width: its search narrows to a floor before a filter folds into
+   "+ Filter" (ListFilterBar.tsx), so a list's last filter is not cut off at the room's edge. */
   .applist-controls .applist-filterbar {
     margin: 0;
     padding: 0;
-    flex: 1 0 auto;
+    flex: 1 1 100%;
+    min-width: 0;
   }
-  @media (min-width: 861px) {
-    .applist-controls .applist-filterbar {
-      flex-shrink: 1;
-      min-width: 0;
-    }
-    .applist-controls .applist-fields > .applist-search {
-      flex: 0 1 17rem;
-      min-width: 10rem;
-    }
+  .applist-controls .applist-fields > .applist-search {
+    flex: 0 1 15rem;
+    min-width: 10rem;
   }
   /* On a phone the tabs take a row of their own under the search and Filters: sharing the one row, the first tab's
    count was cut off and the next out of sight. The strip clips to its padding box (it folds, below),
    so a pixel of padding keeps an underlined look's mark (bottom: -1px, lumenLook.css) in it. */
   @media (max-width: 760px) {
-    .applist-controls {
-      flex-wrap: wrap;
-    }
     /* Its search, Filters and sort wrap to a second line rather than run past a phone's edge: the search gives way
-       to a floor, and a sort that still does not fit takes the next line (Commons' members ran 14px past). */
-    .applist-controls > .applist-filterbar {
-      flex: 1 1 100%;
-      min-width: 0;
-    }
-    .applist-controls .applist-fields {
-      flex-wrap: wrap;
-    }
-    .applist-controls .applist-fields > .applist-search {
-      flex: 1 1 9rem;
-      min-width: 0;
+       to a floor, and a sort that still does not fit takes the next line (Commons' members ran 14px past). Only on a
+       phone, where the pickers are one button (ListFilterBar.tsx): a narrow desk keeps one line and folds its
+       filters into "More filters", so setting one never moves the rows down. */
+    @media (max-width: 600px) {
+      .applist-controls .applist-fields {
+        flex-wrap: wrap;
+      }
+      .applist-controls .applist-fields > .applist-search {
+        flex: 1 1 9rem;
+        min-width: 0;
+      }
     }
     .applist-controls > .tabs {
       order: 1;
       flex: 1 0 100%;
       min-width: 0;
+      /* The last row over the records, beside the Records/Table switch: it has no rule of its own there. */
+      box-shadow: none;
       overflow-x: auto;
       padding-bottom: 1px;
       container-type: scroll-state;
@@ -451,8 +443,9 @@
       }
     }
     /* The Records/Table switch stands at the tabs' end (TableView): on a row of its own over the rows it cost every
-       list 56px of its first screen. With no tabs it takes the line under the search, at its end. */
-    .applist-controls:has(> .applist-presentation > .record-presentation) > .tabs {
+       list 56px of its first screen. With no tabs it takes the line under the search, at its end. Its room is held while a
+       chosen tab's rows load (`data-held`, AppList.tsx), so the strip beside it is one width throughout. */
+    .applist-controls:has(> .applist-presentation:is([data-held], :has(> .record-presentation))) > .tabs {
       flex: 1 1 0;
     }
     /* The phone's row of tabs folds as a desk's does: it fills its line, and what does not fit is under More. */
@@ -461,7 +454,7 @@
       overflow: clip;
       container-type: normal;
     }
-    .applist-controls:has(> .applist-presentation > .record-presentation) > .tabs.folds {
+    .applist-controls:has(> .applist-presentation:is([data-held], :has(> .record-presentation))) > .tabs.folds {
       flex: 1 1 0;
     }
     .applist-controls > .tabs.folds::after {
@@ -499,8 +492,10 @@
    ledger, in every look; a reader's zoom still scales them. In the base layer
    these lost to each look's 10px cell padding and 14px text once the sheets
    stood in layers, so a compact list read as a comfortable one. */
+  /* A step of air, not 5px: at 5 a compact list drew 31px rows, 28 to a 1080p screen where a counter's ledger wants
+     the mid thirties. The words' own line box (12px at the sans' leading) holds their descenders. */
   body.app-mode .table-wrap.grid-dense :is(td, th) {
-    padding-block: 5px;
+    padding-block: var(--space-2);
   }
   body.app-mode .table-wrap.grid-dense td {
     height: auto;
@@ -509,8 +504,8 @@
     font-size: var(--text-sm);
   }
   body.app-mode .table-wrap.grid-dense .avatar {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     font-size: var(--text-xs);
   }
   /* A group's head (Grid.tsx GroupHeadRow) is a hairline, not a row a reader opens: no look's row fill or hover tint
@@ -529,7 +524,7 @@
   }
   /* A dialog that fills the screen (and, on a phone, every dialog that asks to)
    is the screen: no width, radius or margin a component gives it on a desk. */
-  [role='dialog'].modal-fullscreen {
+  [role='dialog'][data-slot='dialog-content'][data-fullscreen='always'] {
     position: fixed;
     inset: 0;
     margin: 0;
@@ -542,7 +537,7 @@
     transform: none;
   }
   @media (max-width: 640px) {
-    [role='dialog'].modal-fullscreen-mobile {
+    [role='dialog'][data-slot='dialog-content'][data-fullscreen='mobile'] {
       position: fixed;
       inset: 0;
       margin: 0;
@@ -555,23 +550,12 @@
       transform: none;
     }
   }
-  /* A date picker's month is a control's grid, not a table of data: no look's cell rules reach it. */
-  .date-field-popup table.date-field-calendar :is(th, td) {
-    border: 0;
-    padding: 1px;
-    text-align: center;
-    background: transparent;
-    position: static;
-  }
-  .date-field-popup table.date-field-calendar tbody tr:hover td {
-    background: transparent;
-  }
   /* A calendar week is not a list row: the looks' row-hover tint stays off it (docs/design.md, Access). */
   .app-mode .calendar-grid tbody tr:hover > td.calendar-day {
     background: none;
   }
   .app-mode .calendar-grid tbody tr:hover > td.calendar-day.is-outside {
-    background: var(--ground);
+    background: var(--calendar-outside, color-mix(in srgb, var(--ink) 3%, transparent));
   }
   /* A checklist the reader cannot change still says what is done, in the text's
    ink: the browser's disabled box drew its tick grey on grey, about 1.5:1.
@@ -717,7 +701,7 @@
    exactly like an enabled one — and an invalid field wears the danger edge
    beside its written problem, keeping the focus ring. In an App only. */
   :root[data-visual-theme]
-    :is(input:not(.picker-input), textarea, select, .dd-button, .record-picker-trigger, .cell-edit, .field-control):is(
+    :is(input:not(.picker-input), textarea, select,[data-slot='select-trigger'], .record-picker-trigger, .cell-edit,:is([data-slot='input'], [data-slot='textarea'])):is(
       :disabled,
       [aria-disabled='true']
     ),
@@ -731,7 +715,7 @@
   /* In a command form, whose fields at rest are a clean outline on the ground (formDress.css), a raised fill would
      read as a field to fill in: a disabled one there keeps the ground, and its edge goes dashed and faint. */
   :root[data-visual-theme] :is(.form-page, .command-form, .insert-form-app)
-    :is(input:not(.picker-input), textarea, select, .dd-button, .record-picker-trigger, .field-control):is(:disabled, [aria-disabled='true']):not(.form-lines *),
+    :is(input:not(.picker-input), textarea, select,[data-slot='select-trigger'], .record-picker-trigger,:is([data-slot='input'], [data-slot='textarea'])):is(:disabled, [aria-disabled='true']):not(.form-lines *),
   :root[data-visual-theme] :is(.form-page, .command-form, .insert-form-app) .picker:has(> .picker-input:disabled) {
     background: transparent;
     border-style: dashed;
@@ -744,9 +728,9 @@
     cursor: not-allowed;
   }
   :root[data-visual-theme]
-    :is(input:not(.picker-input), textarea, select, .dd-button, .record-picker-trigger, .cell-edit, .field-control)[aria-invalid='true'],
+    :is(input:not(.picker-input), textarea, select,[data-slot='select-trigger'], .record-picker-trigger, .cell-edit,:is([data-slot='input'], [data-slot='textarea']))[aria-invalid='true'],
   :root[data-visual-theme] .picker:has(> .picker-input[aria-invalid='true']),
-  :root[data-visual-theme] .form-field.is-invalid .picker {
+  :root[data-visual-theme] [data-slot='field'][data-invalid] .picker {
     border-color: var(--status-critical);
   }
   /* A section's lone field whose label the section title already says: the
@@ -757,7 +741,7 @@
   /* A button that cannot be pressed says so in every look (B03): the ghost
    and the primary dress read exactly as they did enabled, so a guided form's
    Back on its first step looked like a way back. */
-  :root[data-visual-theme] button:is(.ghost, .primary, .btn, .danger):disabled {
+  :root[data-visual-theme] button:is(.ghost, .primary,[data-slot='button'], .danger):disabled {
     opacity: 0.5;
     cursor: not-allowed;
     box-shadow: none;
@@ -770,7 +754,7 @@
       flex-direction: column-reverse;
       align-items: stretch;
     }
-    .form-actions > .btn {
+    .form-actions > [data-slot='button'] {
       width: 100%;
       min-height: 44px;
       margin: 0;
@@ -781,18 +765,18 @@
    scrolls. They sat under the question at the top, 36px tall, with the rest of
    the screen blank below them. */
   @media (max-width: 640px) {
-    [role='dialog'].confirm.modal-fullscreen-mobile {
+    [role='dialog'].confirm[data-slot='dialog-content'][data-fullscreen='mobile'] {
       display: flex;
       flex-direction: column;
       overflow-y: auto;
       padding-bottom: 0;
     }
-    [role='dialog'].confirm.modal-fullscreen-mobile > form {
+    [role='dialog'].confirm[data-slot='dialog-content'][data-fullscreen='mobile'] > form {
       display: flex;
       flex-direction: column;
       flex: 1 0 auto;
     }
-    [role='dialog'].confirm.modal-fullscreen-mobile .confirm-actions {
+    [role='dialog'].confirm[data-slot='dialog-content'][data-fullscreen='mobile'] .confirm-actions {
       position: sticky;
       bottom: 0;
       margin-top: auto;
@@ -801,15 +785,14 @@
       align-items: stretch;
       background: var(--surface);
     }
-    [role='dialog'].confirm.modal-fullscreen-mobile .confirm-actions > button {
+    [role='dialog'].confirm[data-slot='dialog-content'][data-fullscreen='mobile'] .confirm-actions > button {
       width: 100%;
       min-height: 44px;
       margin: 0;
     }
   }
-  /* Sign-in on a phone is the screen, not a card on it (N03): no box, no inset,
-   the fields the width of the window less its gutter. Boxed, they were 255px
-   wide on a 390px phone. */
+  /* Sign-in on a phone is the screen (N03): the column the width of the window less its gutter, and not 22rem
+   centred in it. */
   @media (max-width: 760px) {
     .signin {
       padding: var(--space-6) var(--space-5) 40px;
@@ -817,24 +800,19 @@
     }
     .signin-card {
       width: 100%;
-      padding: 0;
-      border: 0;
-      border-radius: 0;
-      background: none;
-      box-shadow: none;
     }
     .signin-home {
       width: 100%;
     }
     /* The fields stand at the submit's 44px: a thumb's target, one height down the card. */
-    .signin-card :is(.btn-large, .field-control:not(textarea)) {
+    .signin-card :is([data-slot='button'][data-size='lg'],:is([data-slot='input'], [data-slot='textarea']):not(textarea)) {
       min-height: 44px;
     }
     /* A phone's actions take the form's width, the primary on top. */
     .oauth-consent-actions {
       flex-direction: column-reverse;
     }
-    .oauth-consent-actions > .btn {
+    .oauth-consent-actions > [data-slot='button'] {
       width: 100%;
     }
   }
@@ -874,8 +852,8 @@
     body.app-mode
       :is(
         .insert-field
-          :is(input:not(.picker-input, [role='switch'], [type='checkbox'], [type='radio']), .dd-button, .record-picker-trigger, .picker),
-        .page-field-edit :is(.cell-edit:not(textarea), .dd-button, .record-picker-trigger, .picker)
+          :is(input:not(.picker-input, [role='switch'], [type='checkbox'], [type='radio']),[data-slot='select-trigger'], .record-picker-trigger, .picker),
+        .page-field-edit :is(.cell-edit:not(textarea),[data-slot='select-trigger'], .record-picker-trigger, .picker)
       ) {
       min-height: 44px;
     }
@@ -908,7 +886,7 @@
     @media (max-width: 600px) {
       .applist-search-input,
       .applist-sheet-open,
-      .applist-sort .dd-button {
+      .applist-sort [data-slot='select-trigger'] {
         min-height: 44px;
       }
     }
@@ -937,13 +915,11 @@
     :where(
       .brand,
       .icon-button,
-      .tab,
-      .btn,
+      .tab,[data-slot='button']:not(.signin-reveal),
       button.ghost,
       .checklist-title,
       .inline-edit-value,
-      .crumbs > button,
-      .dd-button,
+      .crumbs > button,[data-slot='select-trigger'],
       .ref-jump,
       .export-summary,
       .applist-add,
@@ -968,17 +944,16 @@
       position: relative;
     }
     /* A date's calendar button is placed in its field already (@mistriwork/ui, a layer this unlayered rule would
-       outrank whatever its weight), so it is its own hit area's frame and is not made relative. */
+       outrank whatever its weight), so it is its own hit area's frame and is not made relative. The password box's
+       Show the same, above: made relative it left the box and stood under it on every phone. */
     :is(
       .brand,
       .icon-button,
-      .tab,
-      .btn,
+      .tab,[data-slot='button'],
       button.ghost,
       .checklist-title,
       .inline-edit-value,
-      .crumbs > button,
-      .dd-button,
+      .crumbs > button,[data-slot='select-trigger'],
       .ref-jump,
       .export-summary,
       .applist-add,
@@ -994,8 +969,7 @@
       .tn-search,
       .presentation-seg,
       .page-metric-value,
-      .dashboard-note-action,
-      .date-field-trigger,
+      .dashboard-note-action,:is([data-slot='date-field'] > [data-slot='popover-trigger']),
       .peekpanel-close,
       .inline-edit-button,
       .value-copy,
@@ -1122,9 +1096,10 @@
     .dash-strip .home-card:first-child:nth-last-child(odd) {
       grid-column: 1 / -1;
     }
-    /* A compact figure: a look's 30px figure broke "175,460" across two lines at half a phone. */
+    /* A compact figure: a look's 30px figure broke "175,460" across two lines at half a phone. A look whose figure
+       is a monospace says a smaller one (--stat-figure-phone): at this size "$56,130.00" is 144px in a 129px card. */
     .dash-strip .home-card-value {
-      font-size: calc(24px * var(--type-k));
+      font-size: var(--stat-figure-phone, calc(24px * var(--type-k)));
     }
   }
   /* A strip's mark stands at its card's right, level with its label, in every look. Over the label it set the label
@@ -1201,7 +1176,8 @@
     min-width: 0;
     grid-template-columns: repeat(var(--dash-columns), minmax(0, 1fr));
     grid-template-areas: var(--dash-template);
-    column-gap: var(--space-7);
+    /* A look that draws every block as a tile says one gap for all of them (tilesLook.css). */
+    column-gap: var(--dash-column-gap, var(--space-7));
     row-gap: var(--page-row-gap, var(--section-seam));
   }
   .dash-area {
@@ -1238,6 +1214,22 @@
   }
   .dash-area > .page-section:not(:has(~ .page-section:not([hidden]))) {
     flex: 1 1 auto;
+  }
+  /* A strip of figures that shares a row with a taller one (a figure with its trend drawn under it) is as tall as the
+     row, and its tiles with it. The strip took the row's height and its tiles did not, so two blocks of figures side
+     by side stood at two heights, in every look that draws a figure as a box. */
+  .dash-area > .dash-strip {
+    display: flex;
+    flex-direction: column;
+  }
+  .dash-area > .dash-strip > .home-cards {
+    flex: 1 1 auto;
+  }
+  /* A dashboard's section stands one gap under what is above it, and its title starts it. The title's own top margin
+     was a second space on the section's: a title stood 60px under a row of figures and 34px inside a look's card,
+     where the grid's gap and the card's padding had already said how far. */
+  .dash-body .page-section .page-section-title {
+    margin-top: 0;
   }
   /* A template that does not fit its room is one column, the areas in reading order. Asked of the room the grid has
      and not of the window, so the side menu's narrower column collapses where it should: a column wants 13rem, the
@@ -1306,8 +1298,8 @@
     /* Cards whose words are short (IntakeControls' cardFit) stand side by side rather than stretching "Tile" across
        the column: a label alone three to a row, a label and a short line two, and four of either two by two so no
        row is left with one. They share a row's height, as a row of fields does. A phone and a dialog keep one a row. */
-    .form-page:has(.multi-step-aside) .choice-cards[data-fit] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .form-page:has(.multi-step-aside) .choice-cards[data-fit='short']:not(:has(> :nth-child(4):last-child)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .form-page:has(.multi-step-aside) :is([data-slot='radio-group'][data-kind='cards'], [data-slot='check-cards'])[data-fit] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .form-page:has(.multi-step-aside) :is([data-slot='radio-group'][data-kind='cards'], [data-slot='check-cards'])[data-fit='short']:not(:has(> :nth-child(4):last-child)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
   @container form-page (min-width: 56rem) {
     .form-page.form-page > * { max-width: none; }
@@ -1325,19 +1317,19 @@
      row is @mistriwork/ui's Columns, drawn here as forms.css draws it (align-items: start, so a help line or an error
      under one half moves nothing beside it), because a New form of plain boxes never fetches forms.css. */
   .insert-form-app > .insert-fields { container: record-form / inline-size; }
-  .insert-form-app .form-columns {
+  .insert-form-app [data-slot='columns'] {
     display: grid;
     grid-template-columns: var(--form-columns, repeat(auto-fit, minmax(min(100%, 9rem), 1fr)));
     align-items: start;
   }
   /* Stacked, a row's fields stand as far apart as any two (features.css, .insert-group-fields). The intake style spaces
      its own rows (MultiStepForm.css). */
-  .insert-form-app .form-columns:not([data-style='intake'] .form-columns) {
+  .insert-form-app [data-slot='columns']:not([data-style='intake'] [data-slot='columns']) {
     column-gap: var(--space-4);
     row-gap: calc(var(--space-6) - var(--space-2));
   }
   @container record-form (max-width: 30rem) {
-    .insert-form-app .form-columns:not(.multi-step-form .form-columns) { grid-template-columns: minmax(0, 1fr); }
+    .insert-form-app [data-slot='columns']:not(.multi-step-form [data-slot='columns']) { grid-template-columns: minmax(0, 1fr); }
   }
 }
 
@@ -1391,11 +1383,29 @@
 .page-tabpanel > .page-section > .page-section-bar {
   justify-content: flex-end;
 }
+/* At a desk a tab's list says its verbs on the strip's own line, at its far end, as a section's heading row does:
+   the heading is the tab, and under it the verb stood alone on a row of its own over the table. The strip keeps
+   room for it, so a long run of tabs folds before it and never runs under it. */
+@media (min-width: 761px) {
+  .page-tabpanel > .page-section > .page-section-bar {
+    width: fit-content;
+    margin-block-start: calc(-1 * (var(--control-h) + var(--space-3) + var(--space-2) + var(--space-2)));
+    margin-inline-start: auto;
+    /* Drawn over the strip it is pulled into: the strip is positioned (its fold and marker), so a static bar under
+       it painted below it and the strip took the click. */
+    position: relative;
+    z-index: 1;
+  }
+  .page-tabs:has(> .page-tabpanel:not([hidden]) > .page-section > .page-section-bar) > .page-tabstrip {
+    padding-inline-end: 11rem;
+  }
+}
 
 /* The bar in the sidebar (`ui.shell.header: 'sidebar'`, the default; docs/design.md, the shell): a side-placed App
    draws no band across the window. The sidebar runs the window's height — its head the App's mark and name with New
-   beside them, the search under them; its foot the bell and the account over the workspace and Collapse — and each
-   room's own head row is the content's first line. The header element itself stands in the sidebar
+   beside them; its foot the workspace — the room is a pane beside it under a bar of its own (the menu's toggle, where
+   the reader is, the search, the bell, the settings and the account), and each room's own head row is the pane's
+   first line. The header element itself stands in the sidebar
    (packages/mistri/src/client/sidebarShell.js), still `.topbar`, so a theme's bar recipe dresses the head. Only at a
    desk and signed in: a phone's drawer, the top placement and public pages keep the bar, and the class is not set
    there. */
@@ -1404,14 +1414,160 @@
   body.app-sidebar-shell:not(.sidebar-hidden) .layout > .sidebar[data-density] {
     width: 240px;
   }
+  /* The room is a pane standing on the menu's ground (docs/design.md, the shell): inset from the window's edge on the
+     three sides the menu is not, a hairline round it and corners a step rounder than a control's. The menu and the
+     room then read as two things, and the room as the one that changes. The menu's own edge would be a second
+     line beside the pane's. */
+  body.app-sidebar-shell .layout {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    background: var(--nav-ground, var(--surface));
+  }
+  body.app-sidebar-shell .layout > .sidebar {
+    grid-row: 1 / -1;
+    border-right-color: transparent;
+  }
+  /* The pane's bar (sidebarShell.js): where the reader is, then what is the same in every room — the search, the
+     bell, the account — at its far end, over a rule. It is the pane's head: its corners are the pane's, the room
+     scrolls under it and nothing in it moves between rooms. A look that rules its bar in ink says so
+     (`--pane-rule`). */
+  body.app-sidebar-shell .layout > .pane-bar {
+    grid-column: 2;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    box-sizing: border-box;
+    min-width: 0;
+    height: 52px;
+    margin: var(--space-3) var(--space-3) 0 0;
+    padding-inline: calc(var(--space-5) + var(--room-inset)) var(--space-4);
+    border: 1px solid var(--line);
+    border-bottom: 0;
+    border-radius: calc(var(--radius) + 4px) calc(var(--radius) + 4px) 0 0;
+    background: var(--surface);
+  }
+  body.app-sidebar-shell .layout > .content {
+    grid-column: 2;
+    margin: 0 var(--space-3) var(--space-3) 0;
+    border: 1px solid var(--line);
+    border-top: var(--pane-rule, 1px solid var(--line));
+    border-radius: 0 0 calc(var(--radius) + 4px) calc(var(--radius) + 4px);
+    background: var(--surface);
+  }
+  /* The pane's own edge is a margin already: the room keeps a step less of its gutter inside it, so what stands
+     in it starts where it would under a bar. An App's own gutter and a bare page keep theirs (features.css). */
+  body.app-sidebar-shell:not(.app-custom-gutter, .page-bare) .layout > .content {
+    padding-inline: var(--space-5);
+  }
+  /* A bare page owns the window (features.css): no bar over it, and no pane round it. */
+  body.app-sidebar-shell.page-bare .layout > .pane-bar {
+    display: none;
+  }
+  body.app-sidebar-shell.page-bare .layout > .content {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  /* Where the reader is: the menu's group, then the room, said once more for the eye (the menu's current row and
+     the room's heading say it to everyone else). The room's name gives way first. */
+  .pane-trail {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    font: var(--text-base) var(--sans);
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
+  .pane-trail > i {
+    font-style: normal;
+    color: var(--ink-subtle);
+  }
+  .pane-trail > b {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  /* The menu's rows are one size in every look (docs/design.md, the shell): a control's height, a 16px mark and two
+     pixels between rooms, so forty rooms are still a list a pointer can walk. A look says how the current room is
+     marked and nothing about how tall a room is; the roomier menu an App may ask for keeps its own (features.css). */
+  body.app-mode .sidebar:not([data-density='comfortable']) #table-list button:not(.nav-group-fold) {
+    align-items: center;
+    min-height: 32px;
+  }
+  body.app-mode .sidebar:not([data-density='comfortable']) #table-list li:not(.nav-group) {
+    margin-bottom: var(--space-1);
+  }
+  body.app-mode:not(.sidebar-hidden) .sidebar:not([data-density='comfortable']) #table-list .nav-icon {
+    width: 16px;
+    height: 16px;
+  }
+  /* A room with no mark among rooms with one keeps the mark's place empty, so its words start where theirs do. Set
+     at the row's edge it read as a heading among the rooms (a first-time reader took "Post rent" for one). A menu
+     in which no room has a mark is untouched: nothing is held where nothing is drawn. */
+  body.app-mode:not(.sidebar-hidden) #table-list:has(.nav-icon) button:not(.nav-group-fold):not(:has(> :is(.nav-icon, .nav-dot)))::before {
+    content: '';
+    flex: none;
+    width: 16px;
+  }
+  /* The menu's toggle, the bar's first key: its mark starts on the room's own left edge, so the square it is
+     pressed in hangs a step outside it. */
+  .pane-bar > .sidebar-collapse {
+    width: 32px;
+    height: 32px;
+    margin-inline: calc(-1 * var(--space-3)) 0;
+  }
+  body.app-sidebar-shell .pane-bar > #search-button {
+    flex: 0 1 20rem;
+    min-width: 8rem;
+    height: 32px;
+    min-height: 0;
+    box-sizing: border-box;
+    margin: 0 var(--space-2) 0 0;
+  }
+  body.app-sidebar-shell .pane-bar > .topbar-actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+  }
+  body.app-sidebar-shell .pane-bar .account-with-inbox {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  /* The account is its disc here, a key the bell's size; who it is, is said in its name for a reader and at the
+     head of its menu. */
+  .pane-bar .account-name {
+    display: none;
+  }
+  body.app-sidebar-shell .pane-bar button.account {
+    width: 32px;
+    min-height: 32px;
+    height: 32px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+  }
+  .pane-bar .account-avatar {
+    width: 28px;
+    height: 28px;
+  }
   body.app-sidebar-shell .sidebar > .topbar {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: 48px auto;
-    grid-template-areas: 'brand new' 'search search';
+    grid-template-rows: 52px;
+    grid-template-areas: 'brand new';
     align-items: center;
     gap: 0 var(--space-2);
-    padding: 0 var(--space-3) var(--space-3);
+    /* As tall as the pane's bar and from the same top, so the mark and the trail stand on one line. */
+    padding: var(--space-3) var(--space-3) 0;
     flex: none;
     /* The bar's own height and inset (style.css, a look's) were a band's. */
     min-height: 0;
@@ -1460,80 +1616,11 @@
     font: 300 calc(22px * var(--type-k)) / 1 var(--sans); /* off-scale: a glyph sized as a mark in its 28px square, not text */
     color: var(--nav-muted, var(--ink-muted));
   }
-  body.app-sidebar-shell .sidebar > .topbar > #search-button {
-    grid-area: search;
-    width: 100%;
-    min-width: 0;
-    height: 32px;
-    min-height: 0;
-    box-sizing: border-box;
-    margin: 0;
-    /* In the menu the search is a field on the menu's ground, as the menu's filter is (visualThemes.css): the bar's
-       field takes the page's surface, and the menu's inks there (nav.muted on white under a dark nav) read 1.9:1.
-       Tokens rather than a background, so whatever field a look or an author's parts draw stands on the nav. */
-    --surface: var(--nav-ground, var(--ground));
-    --line: color-mix(in srgb, var(--nav-ink, var(--ink)) 45%, var(--nav-ground, var(--ground)));
-  }
-  /* The foot: the bar's keys (the bell and the account, an authoring badge, the assistant's door) on one row over the
-     workspace's identity and Collapse. */
-  body.app-sidebar-shell .sidebar-account {
-    flex: none;
-    padding: var(--space-2h) var(--space-3);
-    border-top: 1px solid var(--line);
-  }
-  body.app-sidebar-shell .sidebar-account > .topbar-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    margin: 0;
-    min-width: 0;
-  }
-  body.app-sidebar-shell .sidebar-account .account-with-inbox {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  body.app-sidebar-shell .sidebar-account button.account {
-    color: var(--ink);
-  }
-  body.app-sidebar-shell .sidebar-account :is(.inbox-trigger, .icon-button) {
-    color: var(--ink-muted);
-  }
-  /* The workspace chooser docks here with the bar's other keys, outside the .topbar the dark bar's rule dresses
-     (brandLook.css), so it stood on the page's surface key in the menu's ink: pale on pale under a dark nav. The
-     sidebar's --ink and --line are the nav's (visualThemes.css), so a tint of its ink reads on any ground it wears. */
-  body.app-sidebar-shell .sidebar-account .tenant-control-trigger {
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
-    border-color: var(--line);
-    color: var(--ink);
-    box-shadow: none;
-  }
-  @media (hover: hover) {
-    body.app-sidebar-shell .sidebar-account .tenant-control-trigger:hover {
-      background: color-mix(in srgb, var(--ink) 14%, transparent);
-    }
-  }
-  /* The foot is as wide as the menu (240px): the picker takes its row and the buttons stand under it, each as wide as
-     its words, not three boxes in one row that ran past the menu's edge (a field report, 330/360). */
-  body.app-sidebar-shell .sidebar-account .tenant-control-host {
-    display: flex;
-    max-width: 100%;
-    min-width: 0;
-  }
-  body.app-sidebar-shell .sidebar-account .tenant-control-inner,
-  body.app-sidebar-shell .sidebar-account .tenant-control-inner .tenant-control-trigger {
-    max-width: 100%;
-  }
-  body.app-sidebar-shell .sidebar-account + #sidebar-app-footer .sidebar-identity {
-    padding-top: var(--space-3);
-  }
-  /* Folded to the rail: the head and the foot stand in one column of marks — the App's mark, New, the search's
-     magnifier; the bell and the avatar. */
+  /* Folded to the rail: the head is one column of marks, the App's mark and New. */
   body.app-sidebar-shell.sidebar-hidden .sidebar > .topbar {
     grid-template-columns: 1fr;
-    grid-template-rows: 48px auto auto;
-    grid-template-areas: 'brand' 'new' 'search';
+    grid-template-rows: 52px auto;
+    grid-template-areas: 'brand' 'new';
     justify-items: center;
     row-gap: var(--space-2);
     padding-inline: var(--space-2);
@@ -1542,24 +1629,6 @@
     justify-self: center;
   }
   body.app-sidebar-shell.sidebar-hidden .sidebar > .topbar .brand-name {
-    display: none;
-  }
-  body.app-sidebar-shell.sidebar-hidden .sidebar > .topbar > #search-button {
-    width: 32px;
-    justify-content: center;
-    padding: 0;
-  }
-  body.app-sidebar-shell.sidebar-hidden .sidebar > .topbar > #search-button :is(.tn-search-hint, .tn-search-key) {
-    display: none;
-  }
-  body.app-sidebar-shell.sidebar-hidden .sidebar-account {
-    padding-inline: var(--space-2);
-  }
-  body.app-sidebar-shell.sidebar-hidden .sidebar-account :is(.topbar-actions, .account-with-inbox) {
-    flex-direction: column;
-    justify-content: center;
-  }
-  body.app-sidebar-shell.sidebar-hidden .sidebar-account .account-caret {
     display: none;
   }
   /* Each room's head row is the content's first line: the trail's bar, a list's or a dashboard's title and verbs —
@@ -1575,11 +1644,22 @@
   body.app-sidebar-shell #content > .applist-host:first-child > .applist-head,
   body.app-sidebar-shell #content > .applist-head:first-child {
     margin-top: 0;
-    padding-block: var(--space-3h);
+    /* A step of air under the pane's bar: at the row's own 10px a list's title stood against the bar's rule. */
+    padding-block: var(--space-5) var(--space-3h);
     border-bottom: 1px solid var(--line);
+  }
+  /* The trail's bar stands on the pane it is in: on the window's ground it was a grey band across a white pane in
+     every look whose ground is not its surface. A look that lays a band under the head says so (themeFamilies.css). */
+  body.app-sidebar-shell #content > .crumbs-host:first-child > .crumbs {
+    background: var(--surface);
   }
   body.app-sidebar-shell #content > .applist-host:first-child > .applist-head + .applist-controls {
     padding-top: var(--page-head-gap);
+  }
+  /* Over a list's controls the head row draws no rule: the tabs stand on one, a line under, and two rules a row
+     apart boxed the title in. */
+  body.app-sidebar-shell #content > .applist-host:first-child > .applist-head:has(~ .applist-controls) {
+    border-bottom-color: transparent;
   }
   body.app-sidebar-shell #content > .applist-head:first-child + * {
     padding-top: var(--space-4);

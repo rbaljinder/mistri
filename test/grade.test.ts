@@ -114,6 +114,9 @@ describe('each measurement is its finding', () => {
     assert.deepEqual(codes({ shift: 0.25 }), ['layout-shift']);
     assert.deepEqual(codes({ shift: 0.05 }), []);
     assert.deepEqual(codes({ empty: ['"Visits"'] }), ['empty-section']);
+    // A list with no rows is read once, at the desk in light; the run keeps it only where most lists are empty (grade.ts).
+    assert.deepEqual(codes({ rowless: true }), ['unseeded-list']);
+    assert.deepEqual(codes({ rowless: true }, phone), []);
   });
   test('two vertical scroll containers in one room are a finding; one is the room itself', () => {
     assert.deepEqual(codes({ scrolls: ['div.content'] }), []);

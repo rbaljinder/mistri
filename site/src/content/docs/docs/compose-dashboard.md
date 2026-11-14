@@ -13,22 +13,26 @@ Today dashboard is the worked example.
 
 - **Always**, lead with a strip of three or four `metric`s of equal
   `width`; a strip that does not divide leaves one card alone on a row —
-  `examples/apps/lintel/dashboards.ts:11`.
+  `examples/apps/lintel/dashboards.ts:12`.
 - **When a figure has a before**, `over` (its date column) with `better`:
   the change from the period before and the trend across the window come
   unasked —
-  `examples/apps/lintel/dashboards.ts:17`.
+  `examples/apps/lintel/dashboards.ts:24`.
 - **When the board is read by period**, `windows` on the dashboard and
   `over` on each section they narrow —
-  `examples/apps/lintel/dashboards.ts:74`.
+  `examples/apps/lintel/dashboards.ts:101`.
 - **When a figure moves over time**, a `chart` over `auto`, which picks
-  the day, week, month or quarter the window calls for — `examples/apps/lintel/dashboards.ts:41`.
+  the day, week, month or quarter the window calls for — `examples/apps/lintel/dashboards.ts:48`.
 - **When a total divides by a vocabulary**, a `breakdown` at a third or
   half width, beside a donut of another division —
-  `examples/apps/lintel/dashboards.ts:50`.
+  `examples/apps/lintel/dashboards.ts:57`.
 - **When two divisions cross**, a `matrix`.
 - **When there is work waiting**, `rows` of it with a `limit`, two to a row —
-  `examples/apps/lintel/dashboards.ts:51`.
+  `examples/apps/lintel/dashboards.ts:58`. Name one to three columns in `show`
+  that lead with the record's own name (a name, a line under it, a value at
+  the end) and the rows are a worklist, each led by the section's `icon` and
+  opening its record; four or more, or three that lead with a date or an
+  amount, are a table.
 - **When a number needs a sentence**, a `note` last.
 
 The sections are in [Dashboards](/docs/dashboards/).

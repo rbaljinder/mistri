@@ -61,7 +61,7 @@ test.describe('Service Atlas catalog filters', () => {
       expect(decodeURIComponent(page.url())).toContain(falseQuery);
       /* `active = false` is said as its chip; the chip opens the flag's picker —
        a popover at a desk, the filter sheet on a phone — and a tick applies there. */
-      await page.locator('.applist-chip', { hasText: 'Active is No' }).locator('.applist-chip-open').click();
+      await page.locator('.applist-chip[title*="Active is No"]').locator('.applist-chip-open').click();
       const picker = page.getByRole('dialog', { name: width > 600 ? 'Filter by Active' : 'Filters' });
       const active = picker.getByRole('checkbox', { name: /^Active/ });
       await expect(active).not.toBeChecked();

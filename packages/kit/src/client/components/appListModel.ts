@@ -62,6 +62,8 @@ export interface ListSpec {
   icon?: string;
   /** Columns summed in the grid's footer, over the whole query. */
   totals?: string[];
+  /** The list's summary: a dashboard's metrics, as the App serves them, drawn through the shell's slot (Rooms.tsx). */
+  summary?: readonly unknown[];
   /** The column the grid's rows are grouped by: read in its order, each group under a head with its count and subtotals. */
   group?: string;
   /** Row height; 'comfortable' is the default. */
@@ -75,6 +77,8 @@ export interface ListSpec {
   /** A text filter's suggestions: the columns whose values it offers as the reader types. */
   suggest?: Record<string, readonly string[]>;
   advancedFilters?: boolean;
+  /** The shown column a row is titled by where the list is read as records (rowTitle.ts); absent, the record's name. */
+  primary?: string;
   /** A split's single keys: a key → the id of an action of the picked record. */
   keys?: Record<string, string>;
   /** false draws the list without its title; it stays for a screen reader. */

@@ -12,10 +12,10 @@ import { expect, test as base } from './support/harness';
 import { fixture } from './support/fixture';
 
 /*
- * The bar in the sidebar (`ui.shell.header`, unsaid, so the default; docs/design.md, the shell): no band across the
- * window — the sidebar runs its full height with the mark, New and the search at its head and the account's row at its
- * foot, and the room's own head row is the content's first line. Walking between rooms moves none of it; folding
- * leaves the rail with the mark and the search still in it; a phone keeps the bar.
+ * The bar beside the sidebar (`ui.shell.header`, unsaid, so the default; docs/design.md, the shell): no band across
+ * the window — the sidebar runs its full height with the mark and New at its head, and the room is a pane beside it
+ * whose own bar says where the reader is and holds the search, the bell and the account. Walking between rooms
+ * moves none of it; folding leaves the rail with the mark and New still in it; a phone keeps the bar.
  *
  * A server of its own over a fresh database (listen(0), mkdtemp), so the spec runs in the parallel lane.
  */
@@ -128,11 +128,13 @@ function shellGeometry(page: Page) {
       content: box('#content'),
       brand: box('.sidebar .brand-mark'),
       name: box('.sidebar .brand-name'),
-      search: box('.sidebar #search-button'),
+      paneBar: box('.layout > #pane-bar'),
+      search: box('#pane-bar > #search-button'),
+      keys: box('#pane-bar > .topbar-actions'),
       newButton: box('.sidebar .new-menu-trigger'),
-      foot: box('#sidebar-account'),
       identity: box('.sidebar-identity'),
-      collapse: box('.sidebar-footer .sidebar-collapse'),
+      collapse: box('#pane-bar > .sidebar-collapse'),
+      trail: box('#pane-bar > .pane-trail'),
     } as Record<string, Box | boolean>;
   });
 }
@@ -148,7 +150,9 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('the sidebar holds the bar: full height, the mark, New and search at its head, the account row at its foot', async ({ page }) => {
+test("the sidebar runs the window's height with the mark and New at its head; the pane's bar holds the trail, the search and the account", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`${origin}/suppliers`);
   // The first visit compiles the client under tsx (devclient.ts): give it the time a cold start takes.
@@ -160,36 +164,45 @@ test('the sidebar holds the bar: full height, the mark, New and search at its he
   expect(at.inSidebar).toBe(true);
   const sidebar = at.sidebar as NonNullable<Box>;
   const content = at.content as NonNullable<Box>;
-  // No band over either: both start at the window's top, and the sidebar runs its height.
+  // No band over either: the sidebar runs the window's height, and the room is a pane beside it, inset from the
+  // window's edge on the three sides the menu is not.
   expect(sidebar).toMatchObject({ x: 0, y: 0, width: 240, height: 800 });
-  expect(content.y).toBe(0);
+  const paneBar = at.paneBar as NonNullable<Box>;
+  expect(paneBar).toMatchObject({ x: 240, y: 8, height: 52 });
   expect(content.x).toBe(240);
-  // The head: the mark and the name on its first row, New beside them as a 28px square, the search under them.
+  expect(content.y).toBe(paneBar.y + paneBar.height);
+  expect(content.x + content.width).toBe(1272);
+  expect(content.y + content.height).toBe(792);
+  // The head: the mark and the name, New beside them as a 28px square, on the pane's bar's line.
   const brand = at.brand as NonNullable<Box>;
   const newButton = at.newButton as NonNullable<Box>;
-  const search = at.search as NonNullable<Box>;
-  expect(brand.y + brand.height).toBeLessThanOrEqual(48);
   expect(newButton).toMatchObject({ width: 28, height: 28 });
   expect(Math.abs(newButton.y + newButton.height / 2 - (brand.y + brand.height / 2))).toBeLessThanOrEqual(2);
+  expect(Math.abs(brand.y + brand.height / 2 - (paneBar.y + paneBar.height / 2))).toBeLessThanOrEqual(2);
+  // The pane's bar: where the reader is, then the search and the bar's keys at its far end.
+  await expect(page.locator('#pane-bar > .pane-trail')).toHaveText(/Suppliers$/);
+  const search = at.search as NonNullable<Box>;
+  const keys = at.keys as NonNullable<Box>;
   expect(search.height).toBe(32);
-  expect(search.y).toBeGreaterThanOrEqual(48);
-  await expect(page.locator('.sidebar #search-button')).toContainText('⌘K');
-  // The foot: the account's row over the workspace's identity, over Collapse.
-  const foot = at.foot as NonNullable<Box>;
+  expect(search.x + search.width).toBeLessThanOrEqual(keys.x);
+  expect(keys.x + keys.width).toBeLessThanOrEqual(paneBar.x + paneBar.width);
+  await expect(page.locator('#pane-bar #search-button')).toContainText('⌘K');
+  // The foot is the workspace's identity alone: the menu's toggle is the pane's bar's first key, before the trail.
   const identity = at.identity as NonNullable<Box>;
   const collapse = at.collapse as NonNullable<Box>;
-  expect(foot.y).toBeLessThan(identity.y);
-  expect(identity.y).toBeLessThan(collapse.y);
-  expect(collapse.y + collapse.height).toBeLessThanOrEqual(800);
-  // The room's head row is the content's first line, on a hairline.
+  expect(identity.y + identity.height).toBeLessThanOrEqual(800);
+  await expect(page.locator('.sidebar-footer')).toBeHidden();
+  expect(collapse).toMatchObject({ width: 32, height: 32 });
+  expect(collapse.x).toBeGreaterThanOrEqual(paneBar.x);
+  expect(collapse.x + collapse.width).toBeLessThanOrEqual((at.trail as NonNullable<Box>).x);
+  // The room's head row is the pane's first line under its bar.
   const head = page.locator('#content .applist-head').first();
   const headBox = (await head.boundingBox())!;
-  expect(headBox.y).toBe(0);
+  expect(Math.abs(headBox.y - content.y)).toBeLessThanOrEqual(1);
   expect(headBox.height).toBeGreaterThanOrEqual(52);
-  expect(await head.evaluate((element) => getComputedStyle(element).borderBottomWidth)).toBe('1px');
 
-  // The search is the palette's door, and New opens its menu, from the sidebar.
-  await page.locator('.sidebar #search-button').click();
+  // The search is the palette's door, from the pane's bar, and New opens its menu, from the sidebar.
+  await page.locator('#pane-bar #search-button').click();
   await expect(page.getByRole('combobox', { name: 'Search' })).toBeFocused();
   await page.keyboard.press('Escape');
   await page.locator('.sidebar .new-menu-trigger').click();
@@ -226,25 +239,27 @@ test('walking between rooms moves nothing in the sidebar', async ({ page }) => {
   expect(await page.evaluate(() => (window as unknown as { shifts_: string[] }).shifts_)).toEqual([]);
 });
 
-test('folded, the sidebar is a rail that keeps the mark, New and the search; a phone keeps the bar', async ({ page }) => {
+test("folded, the sidebar is a rail that keeps the mark and New, and the pane's bar keeps the search; a phone keeps the bar", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`${origin}/suppliers`);
   await expect(page.getByRole('heading', { level: 1, name: 'Suppliers' })).toBeVisible({ timeout: 45_000 });
   await expect(page.locator('.sidebar .new-menu-trigger')).toBeVisible();
-  await page.locator('.sidebar-footer .sidebar-collapse').click();
+  await page.locator('#pane-bar > .sidebar-collapse').click();
   await expect(page.locator('body')).toHaveClass(/\bsidebar-hidden\b/);
   const folded = await shellGeometry(page);
   expect((folded.sidebar as NonNullable<Box>).width).toBe(56);
   expect(folded.name).toBeNull();
-  for (const part of ['brand', 'newButton', 'search'] as const) {
+  for (const part of ['brand', 'newButton'] as const) {
     const box = folded[part] as NonNullable<Box>;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(56);
   }
-  await page.locator('.sidebar #search-button').click();
+  await page.locator('#pane-bar #search-button').click();
   await expect(page.getByRole('combobox', { name: 'Search' })).toBeFocused();
   await page.keyboard.press('Escape');
-  await page.locator('.sidebar-footer .sidebar-collapse').click();
+  await page.locator('#pane-bar > .sidebar-collapse').click();
   await expect(page.locator('body')).not.toHaveClass(/\bsidebar-hidden\b/);
   expect(((await shellGeometry(page)).sidebar as NonNullable<Box>).width).toBe(240);
 
@@ -256,22 +271,23 @@ test('folded, the sidebar is a rail that keeps the mark, New and the search; a p
   // And back at a desk, the sidebar holds it again.
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.locator('.layout > .sidebar > header.topbar')).toBeVisible();
-  expect((await shellGeometry(page)).foot).not.toBeNull();
+  expect((await shellGeometry(page)).paneBar).not.toBeNull();
 });
 
 test('docked, the controls are named by what they show (WCAG 2.5.3, label in name)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`${origin}/suppliers`);
   await expect(page.getByRole('heading', { level: 1, name: 'Suppliers' })).toBeVisible({ timeout: 45_000 });
-  const sidebar = page.locator('.sidebar');
-  await expect(sidebar.getByRole('button', { name: 'Search ⌘K', exact: true })).toBeVisible();
-  const collapse = sidebar.getByRole('button', { name: 'Collapse menu', exact: true });
-  await expect(collapse).toHaveText('Collapse');
+  await expect(page.locator('#pane-bar').getByRole('button', { name: 'Search ⌘K', exact: true })).toBeVisible();
+  // The toggle shows a mark and no word in the pane's bar, so its name is its own to say.
+  const collapse = page.locator('#pane-bar').getByRole('button', { name: 'Collapse menu', exact: true });
+  await expect(collapse).toHaveText('');
   // axe-core ships the rule off (experimental); here it is on, over the sidebar, open and folded.
   const audit = async () =>
     (
       await new AxeBuilder({ page })
         .include('.sidebar')
+        .include('#pane-bar')
         .options({ rules: { 'label-content-name-mismatch': { enabled: true } } })
         .withRules(['label-content-name-mismatch'])
         .analyze()
@@ -279,6 +295,6 @@ test('docked, the controls are named by what they show (WCAG 2.5.3, label in nam
   expect(await audit()).toEqual([]);
   await collapse.click();
   await expect(page.locator('body')).toHaveClass(/\bsidebar-hidden\b/);
-  await expect(sidebar.getByRole('button', { name: 'Expand menu', exact: true })).toBeVisible();
+  await expect(page.locator('#pane-bar').getByRole('button', { name: 'Expand menu', exact: true })).toBeVisible();
   expect(await audit()).toEqual([]);
 });

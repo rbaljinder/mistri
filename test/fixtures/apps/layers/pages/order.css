@@ -1,0 +1,6 @@
+.c-page-order { display: grid; gap: var(--space-6); max-width: 36rem; }
+.c-page-order-steps { display: grid; gap: var(--space-2); }
+.c-page-order-step { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.c-page-order-lanes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); }
+.c-page-order-cards { display: grid; gap: var(--space-2); min-height: 3rem; margin: 0; padding: var(--space-2); border-radius: var(--radius); background: var(--raised); list-style: none; }
+.c-page-order-card { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); cursor: grab; }

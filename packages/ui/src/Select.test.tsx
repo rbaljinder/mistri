@@ -122,3 +122,33 @@ test('a multiple list opens from the keyboard and closes on Escape with the focu
   await waitFor(() => expect(button).toHaveFocus());
   expect(button).toHaveTextContent(/Acura|Alfa Romeo|Audi/);
 });
+
+test('a kit that draws only the Dropdown still hears what describes the field and that it holds a problem', async () => {
+  const heard: Array<{ describedBy?: string; invalid?: boolean; labelledBy?: string }> = [];
+  const KitDropdown = (props: { ariaDescribedBy?: string; ariaInvalid?: boolean; ariaLabelledBy?: string }) => {
+    heard.push({ describedBy: props.ariaDescribedBy, invalid: props.ariaInvalid, labelledBy: props.ariaLabelledBy });
+    return <button data-kit="dropdown" />;
+  };
+  const { UiKitProvider } = await import('./UiKit.js');
+  render(
+    <UiKitProvider kit={{ Dropdown: KitDropdown as never }}>
+      <Select
+        label="Make"
+        hint="As on the title"
+        problem="Choose a make"
+        options={[{ value: 'a', label: 'Alfa Romeo' }]}
+        value=""
+        onChange={() => {}}
+      />
+    </UiKitProvider>,
+  );
+  const last = heard.at(-1)!;
+  const words = (last.describedBy ?? '')
+    .split(/\s+/)
+    .map((id) => document.getElementById(id)?.textContent ?? '')
+    .join(' ');
+  expect(words).toContain('As on the title');
+  expect(words).toContain('Choose a make');
+  expect(last.invalid).toBe(true);
+  expect(document.getElementById(last.labelledBy!.split(' ')[0]!)?.textContent).toBe('Make');
+});

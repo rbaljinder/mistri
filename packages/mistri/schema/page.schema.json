@@ -183,6 +183,16 @@
           ],
           "description": "What a block of fields does with the values the record does not have: hide leaves them out (and the block, when none is left), show says each as a dash. Default: hide for a property rail, show otherwise. A field the reader may fill in place stays."
         },
+        "notes": {
+          "type": "object",
+          "maxProperties": 12,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "description": "A summary's lines under its figures, by the field each stands under: what the figure counts. For a field the block shows."
+        },
         "presentation": {
           "enum": [
             "summary",
@@ -1208,6 +1218,7 @@
           },
           "description": "Numeric columns, rollups or computed numbers summed in one ruled footer row, over every row that points at the record through its path. No query or same, no presentation."
         },
+        "primary": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "The shown column a row is titled by in this list alone, where it is read as records (a phone), as on a list view. Absent, the record's name." },
         "rowActions": {
           "type": "boolean",
           "description": "true puts a \u22ef menu at the end of each row with that row's own actions and machine verbs, as its page offers them. Not with a presentation."

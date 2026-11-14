@@ -91,7 +91,7 @@ test.describe('The page kit vocabulary', () => {
     await page.evaluate(() => ((window as unknown as { marker: number }).marker = 1));
     const open = page.getByRole('link', { name: 'Open' });
     await expect(open).toHaveAttribute('href', '/vocabulary?opened=1');
-    expect(await open.getAttribute('class')).toContain('btn');
+    expect(await open.getAttribute('data-slot')).toBe('button');
     await open.click();
     await expect(page).toHaveURL(/opened=1/);
     expect(await page.evaluate(() => (window as unknown as { marker: number }).marker)).toBe(1);
@@ -173,6 +173,6 @@ test.describe('The page kit vocabulary', () => {
   test('a file field is drawn with the house button', async ({ page }) => {
     await page.goto(`${app.origin}/vocabulary`);
     await settled(page);
-    await expect(page.locator('.btn', { hasText: /Choose file/ }).first()).toBeVisible();
+    await expect(page.locator('[data-slot="button"]', { hasText: /Choose file/ }).first()).toBeVisible();
   });
 });

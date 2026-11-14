@@ -103,7 +103,7 @@ test.describe('the tenant shell', () => {
     await page.goto(`${app.origin}/${app.appId}/item/shared-1`);
     await expect(page).toHaveURL(new RegExp(`/${app.appId}/items/shared-1(\\?|$)`));
     await expect(page.getByText('North item').first()).toBeVisible();
-    await expect(page.locator('body')).not.toContainText('not available to your role');
+    await expect(page.locator('body')).not.toContainText('does not open this');
   });
 
   test("the New menu makes a record in the tenant, and the bell counts that tenant's notices", async ({ page, browser }) => {

@@ -110,7 +110,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=dashboard].filters` | array | Stable | Pick-filters: column names offered as selectors in the control row. A pick narrows every section whose table has the column; a vocabulary column offers its values, a whole single-column reference offers the records it points at, by name. Used in `examples/apps/lintel/views.ts`. |
+| `views.*[kind=dashboard].filters` | array | Stable | Pick-filters: column names offered as selectors in the control row. A pick narrows every section whose table has the column; a vocabulary column offers its values, a whole single-column reference offers the records it points at, by name. Used in `examples/apps/lintel/theme.ts`. |
 
 ## `views.*[kind=dashboard].from`
 
@@ -282,7 +282,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `views.*[kind=dashboard].sections[][kind=custom].component` | object | Stable | An author's own React module, referenced by path — component('id', { module }) — and placed through a declared kind: a custom section, a value renderer where a display rule stands, an input where a form draws a field, a list view's rows (customList) or a free-form page (definePage, in pages/&lt;path>.page.tsx). One of `&lt;component>`. |
-| `views.*[kind=dashboard].sections[][kind=custom].figures` | object | Stable | Named aggregate reads, at most eight; the component receives each as figures.&lt;name>: exact over every row the reader may see, a number with no by, a group for each value with one. |
+| `views.*[kind=dashboard].sections[][kind=custom].figures` | object | Stable | Named aggregate reads, at most eight; the component receives each as figures.&lt;name>: exact over every row the reader may see, a number with no by, a group for each value with one. Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=dashboard].sections[][kind=custom].figures.*.by` | string | Stable | Group the figure: a column, a path or a period and a date column (status, month opened_on). Used in `examples/apps/lintel/pages/resident.ts`. |
 | `views.*[kind=dashboard].sections[][kind=custom].figures.*.from` | string | Stable | The resource it measures. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=custom].figures.*.limit` | integer | Stable | With a by, the most groups returned. Default 100. |
@@ -395,6 +395,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=dashboard].sections[][kind=rows].empty.title` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
 | `views.*[kind=dashboard].sections[][kind=rows].kind` |  | Stable |  One of `rows`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `views.*[kind=dashboard].sections[][kind=rows].limit` | integer | Stable |  |
+| `views.*[kind=dashboard].sections[][kind=rows].primary` | string | Stable | The shown column a row is titled by in this section alone, as on a list view; the rows then lead with it. Absent, the first column shown. Used in `examples/apps/lintel/tidelight.ts`. |
 | `views.*[kind=dashboard].sections[][kind=rows].show` | array | Stable | In the dashboard's aside the rows draw as a list, not a table: the first column names each row, the second is a quiet line under it and the third a value at its end — at most three. |
 | `views.*[kind=dashboard].sections[][kind=rows].sizing` | `"fit"` · `"scroll"` | Stable | Fit available width (default), or preserve content widths with horizontal scrolling. One of `fit`, `scroll`. |
 | `views.*[kind=dashboard].sections[][kind=rows].sort` | string | Stable | Written like the query bar. |
@@ -639,7 +640,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=landing].hero.points[].icon` | `"house"` · `"tray"` · `"list"` · `"list-checks"` · `"kanban"` · `"table"` · `"calendar"` · `"calendar-check"` · `"clock"` · `"chart-bar"` · `"chart-line"` · `"chart-pie"` · `"gauge"` · `"target"` · `"flag"` · `"user"` · `"users"` · `"user-circle"` · `"address-book"` · `"handshake"` · `"buildings"` · `"storefront"` · `"briefcase"` · `"package"` · `"truck"` · `"car"` · `"shopping-cart"` · `"receipt"` · `"currency-dollar"` · `"credit-card"` · `"wallet"` · `"bank"` · `"file"` · `"file-text"` · `"folder"` · `"clipboard-text"` · `"note"` · `"archive"` · `"tag"` · `"ticket"` · `"star"` · `"bookmark-simple"` · `"bell"` · `"envelope"` · `"chat-circle"` · `"phone"` · `"headset"` · `"megaphone"` · `"globe"` · `"map-pin"` · `"magnifying-glass"` · `"gear"` · `"sliders"` · `"wrench"` · `"bug"` · `"shield-check"` · `"lock"` · `"key"` · `"database"` · `"stack"` · `"lightning"` · `"check-circle"` · `"warning"` · `"info"` · `"cell-signal-low"` · `"cell-signal-medium"` · `"cell-signal-high"` · `"cell-signal-full"` · `"fire"` · `"hourglass"` · `"circle-dashed"` · `"x-circle"` · `"plus-circle"` · `"pencil-simple"` · `"paper-plane-tilt"` · `"arrows-left-right"` · `"arrow-circle-down"` · `"arrow-circle-up"` · `"laptop"` · `"monitor"` · `"device-mobile"` · `"printer"` · `"stethoscope"` · `"heartbeat"` · `"heart"` · `"pill"` · `"syringe"` · `"first-aid-kit"` · `"thermometer"` · `"flask"` · `"test-tube"` · `"microscope"` · `"bed"` · `"hospital"` · `"ambulance"` · `"tooth"` · `"eyeglasses"` · `"wheelchair"` · `"baby"` · `"dna"` · `"brain"` · `"bandaids"` · `"hand-heart"` · `"graduation-cap"` · `"book-open"` · `"student"` · `"chalkboard-teacher"` · `"factory"` · `"warehouse"` · `"house-line"` · `"plant"` · `"leaf"` · `"sun"` · `"cloud"` · `"drop"` · `"airplane"` · `"bicycle"` · `"bus"` · `"train"` · `"boat"` · `"hammer"` · `"toolbox"` · `"plug"` · `"lightbulb"` · `"cube"` · `"camera"` · `"image"` · `"trophy"` · `"gift"` · `"coffee"` · `"fork-knife"` · `"shopping-bag"` · `"basket"` · `"barcode"` · `"qr-code"` · `"scales"` · `"gavel"` · `"certificate"` · `"identification-card"` · `"fingerprint"` · `"eye"` · `"link"` · `"paperclip"` · `"scissors"` · `"palette"` · `"code"` · `"terminal"` · `"users-three"` · `"user-plus"` · `"caret-left"` · `"caret-right"` · `"caret-up"` · `"caret-down"` · `"arrow-left"` · `"arrow-right"` · `"x"` · `"plus"` · `"dots-three"` | Stable | A menu mark: one of Phosphor's icons by its own name (phosphoricons.com, MIT), from the curated set in packages/engine/src/shared/appIcons.ts. One of `&lt;appIcon>`. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=landing].hero.points[].text` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=landing].hero.search` | object | Stable | The search panel inside the hero: the search section's keys without its title. Used in `examples/apps/tick/app.ts`. |
-| `views.*[kind=landing].hero.search.filters` | array | Stable |  Used in `examples/apps/lintel/views.ts`. |
+| `views.*[kind=landing].hero.search.filters` | array | Stable |  Used in `examples/apps/lintel/theme.ts`. |
 | `views.*[kind=landing].hero.search.submitLabel` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=landing].hero.search.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=landing].hero.tiles` | array | Stable | Two to four photos as tiles beside the words, in place of image: each a row of a file resource that auth.public reads. |
@@ -714,7 +715,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=landing].sections[][kind=search].filters` | array | Stable | Columns from the view's filters. Used in `examples/apps/lintel/views.ts`. |
+| `views.*[kind=landing].sections[][kind=search].filters` | array | Stable | Columns from the view's filters. Used in `examples/apps/lintel/theme.ts`. |
 | `views.*[kind=landing].sections[][kind=search].kind` |  | Stable |  One of `search`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `views.*[kind=landing].sections[][kind=search].submitLabel` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=landing].sections[][kind=search].view` | string | Stable | A list view over a resource auth.public reads. Used in `examples/apps/lintel/app.ts`. |
@@ -762,9 +763,9 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=list].board` | object | Stable | Lanes of cards by one local column; a card moves only through an update that sets exactly that column, judged by its when, or a machine's command verb that leads there from the card's state (told the lane where its command asks for the column), run as its button runs it. Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=list].board.by` | string | Stable |  Used in `examples/apps/lintel/pages/resident.ts`. |
-| `views.*[kind=list].board.category` | string | Stable | A column whose value is the card's kind: a chip over the title in the color its display rule's colors give the value, and the card's stripe where the look draws one. Used in `examples/apps/lintel/resources.ts`. |
+| `views.*[kind=list].board.category` | string | Stable | A column whose value is the card's kind: the word that leads the card's line of facts, in the color its display rule's colors give the value, and the card's stripe where the look draws one. Used in `examples/apps/lintel/resources.ts`. |
 | `views.*[kind=list].board.folded` | array | Stable | Lane values drawn folded until a reader opens one (a closed stage: won, lost): a narrow strip with its name, count and sum. Remembered per board in the reader's browser. |
-| `views.*[kind=list].board.footer` | array | Stable | Facts along the card's foot, each a column or a one-hop label path with an optional icon; a person stands at the right end. Used in `examples/apps/lintel/app.ts`. |
+| `views.*[kind=list].board.footer` | array | Stable | Facts about the card, each a column or a one-hop label path with an optional icon: they follow the card's line under its name, a dot between them, and a person stands at the end of the card's foot, beside its next step. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=list].board.footer[].column` | string | Stable | A local column or a one-hop reference label path. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=list].board.footer[].icon` | `"house"` · `"tray"` · `"list"` · `"list-checks"` · `"kanban"` · `"table"` · `"calendar"` · `"calendar-check"` · `"clock"` · `"chart-bar"` · `"chart-line"` · `"chart-pie"` · `"gauge"` · `"target"` · `"flag"` · `"user"` · `"users"` · `"user-circle"` · `"address-book"` · `"handshake"` · `"buildings"` · `"storefront"` · `"briefcase"` · `"package"` · `"truck"` · `"car"` · `"shopping-cart"` · `"receipt"` · `"currency-dollar"` · `"credit-card"` · `"wallet"` · `"bank"` · `"file"` · `"file-text"` · `"folder"` · `"clipboard-text"` · `"note"` · `"archive"` · `"tag"` · `"ticket"` · `"star"` · `"bookmark-simple"` · `"bell"` · `"envelope"` · `"chat-circle"` · `"phone"` · `"headset"` · `"megaphone"` · `"globe"` · `"map-pin"` · `"magnifying-glass"` · `"gear"` · `"sliders"` · `"wrench"` · `"bug"` · `"shield-check"` · `"lock"` · `"key"` · `"database"` · `"stack"` · `"lightning"` · `"check-circle"` · `"warning"` · `"info"` · `"cell-signal-low"` · `"cell-signal-medium"` · `"cell-signal-high"` · `"cell-signal-full"` · `"fire"` · `"hourglass"` · `"circle-dashed"` · `"x-circle"` · `"plus-circle"` · `"pencil-simple"` · `"paper-plane-tilt"` · `"arrows-left-right"` · `"arrow-circle-down"` · `"arrow-circle-up"` · `"laptop"` · `"monitor"` · `"device-mobile"` · `"printer"` · `"stethoscope"` · `"heartbeat"` · `"heart"` · `"pill"` · `"syringe"` · `"first-aid-kit"` · `"thermometer"` · `"flask"` · `"test-tube"` · `"microscope"` · `"bed"` · `"hospital"` · `"ambulance"` · `"tooth"` · `"eyeglasses"` · `"wheelchair"` · `"baby"` · `"dna"` · `"brain"` · `"bandaids"` · `"hand-heart"` · `"graduation-cap"` · `"book-open"` · `"student"` · `"chalkboard-teacher"` · `"factory"` · `"warehouse"` · `"house-line"` · `"plant"` · `"leaf"` · `"sun"` · `"cloud"` · `"drop"` · `"airplane"` · `"bicycle"` · `"bus"` · `"train"` · `"boat"` · `"hammer"` · `"toolbox"` · `"plug"` · `"lightbulb"` · `"cube"` · `"camera"` · `"image"` · `"trophy"` · `"gift"` · `"coffee"` · `"fork-knife"` · `"shopping-bag"` · `"basket"` · `"barcode"` · `"qr-code"` · `"scales"` · `"gavel"` · `"certificate"` · `"identification-card"` · `"fingerprint"` · `"eye"` · `"link"` · `"paperclip"` · `"scissors"` · `"palette"` · `"code"` · `"terminal"` · `"users-three"` · `"user-plus"` · `"caret-left"` · `"caret-right"` · `"caret-up"` · `"caret-down"` · `"arrow-left"` · `"arrow-right"` · `"x"` · `"plus"` · `"dots-three"` | Stable | A menu mark: one of Phosphor's icons by its own name (phosphoricons.com, MIT), from the curated set in packages/engine/src/shared/appIcons.ts. One of `&lt;appIcon>`. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=list].board.lanes` | array | Stable |  |
@@ -822,7 +823,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=list].filters` | array | Stable | Columns offered as quick filter boxes — a rollup or computed column too, a number's Min and Max (spent). A path up a reference (account_id.industry_id) filters by the record it names, and { has } by the rows that point at it. Empty means none, on purpose. Used in `examples/apps/lintel/views.ts`. |
+| `views.*[kind=list].filters` | array | Stable | Columns offered as quick filter boxes — a rollup or computed column too, a number's Min and Max (spent). A path up a reference (account_id.industry_id) filters by the record it names, and { has } by the rows that point at it. Empty means none, on purpose. Used in `examples/apps/lintel/theme.ts`. |
 
 ## `views.*[kind=list].filters[]`
 
@@ -1010,6 +1011,12 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=list].presentation[kind=tree].parent` | string | Stable |  |
 | `views.*[kind=list].presentation[kind=tree].primary` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
 
+## `views.*[kind=list].primary`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `views.*[kind=list].primary` | string | Stable | The shown column a row is titled by in this list alone, where it is read as records (a phone, a related list); a reference says the record it names. Absent, the record's name (recordLabel). Used in `examples/apps/lintel/tidelight.ts`. |
+
 ## `views.*[kind=list].query`
 
 | Key | Type | Status | What it does |
@@ -1096,6 +1103,42 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `views.*[kind=list].suggest` | object | Stable | A text filter (one of filters) to the text columns whose values it suggests as the reader types, like { "title": ["make", "model"] }. |
+
+## `views.*[kind=list].summary`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `views.*[kind=list].summary` | array | Preview | Preview. Up to four figures in one strip over the list's tabs, each a dashboard's metric in a dashboard's own words: summary: [metric('Vacant', { query: 'available' })]. A metric that names no resource counts the list's own. No "over": a list has no window to pick. Used in `examples/apps/lintel/views.ts`. |
+
+## `views.*[kind=list].summary[]`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `views.*[kind=list].summary[].area` | string | Preview | The area of the dashboard's areas this section is placed in. Sections in one area stack in source order. Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=list].summary[].better` | `"up"` · `"down"` | Preview | Which way is good news, so the delta wears good/bad. Absent means neutral. Without "compare" or "over" there is no delta to color. One of `down`, `up`. Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=list].summary[].compare` | string | Preview | A second query for the same measure; the card shows the delta. The phrase "previous period" derives it from the query's one "last N days/weeks/months/years" window; with no window in the query and an "over", it is the period before the window the reader picks. Unsaid on a metric with an "over", it is "previous period"; with neither an "over" nor a window in the query, "previous period" is refused. |
+| `views.*[kind=list].summary[].figure` | `"exact"` · `"compact"` · `"whole"` | Preview | How money is said on the card: exact (the default), to the currency's minor digits at any size ("$28,123.45", a balance read to the cent), compact from a thousand ("$28.1K"), or whole, rounded to the currency's major unit at any size ("$28,123"). Its change and goal follow it; the card's title and what a screen reader hears are exact either way. One of `compact`, `exact`, `whole`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=list].summary[].format` | `"percent"` · `"number"` · `"money"` · `"duration"` | Preview | metric: how the figure is said where its measure is not one column's: percent (the figure is 0–100, said with %), number, money in the App's currency, or duration (the figure is seconds, said as "10h 2m"). One of `duration`, `money`, `number`, `percent`. Used in `examples/apps/lintel/resources.ts`. |
+| `views.*[kind=list].summary[].from` | string | Preview | The table the section reads. Absent means the dashboard-level table. Used in `examples/apps/lintel/app.ts`. |
+| `views.*[kind=list].summary[].icon` | `"house"` · `"tray"` · `"list"` · `"list-checks"` · `"kanban"` · `"table"` · `"calendar"` · `"calendar-check"` · `"clock"` · `"chart-bar"` · `"chart-line"` · `"chart-pie"` · `"gauge"` · `"target"` · `"flag"` · `"user"` · `"users"` · `"user-circle"` · `"address-book"` · `"handshake"` · `"buildings"` · `"storefront"` · `"briefcase"` · `"package"` · `"truck"` · `"car"` · `"shopping-cart"` · `"receipt"` · `"currency-dollar"` · `"credit-card"` · `"wallet"` · `"bank"` · `"file"` · `"file-text"` · `"folder"` · `"clipboard-text"` · `"note"` · `"archive"` · `"tag"` · `"ticket"` · `"star"` · `"bookmark-simple"` · `"bell"` · `"envelope"` · `"chat-circle"` · `"phone"` · `"headset"` · `"megaphone"` · `"globe"` · `"map-pin"` · `"magnifying-glass"` · `"gear"` · `"sliders"` · `"wrench"` · `"bug"` · `"shield-check"` · `"lock"` · `"key"` · `"database"` · `"stack"` · `"lightning"` · `"check-circle"` · `"warning"` · `"info"` · `"cell-signal-low"` · `"cell-signal-medium"` · `"cell-signal-high"` · `"cell-signal-full"` · `"fire"` · `"hourglass"` · `"circle-dashed"` · `"x-circle"` · `"plus-circle"` · `"pencil-simple"` · `"paper-plane-tilt"` · `"arrows-left-right"` · `"arrow-circle-down"` · `"arrow-circle-up"` · `"laptop"` · `"monitor"` · `"device-mobile"` · `"printer"` · `"stethoscope"` · `"heartbeat"` · `"heart"` · `"pill"` · `"syringe"` · `"first-aid-kit"` · `"thermometer"` · `"flask"` · `"test-tube"` · `"microscope"` · `"bed"` · `"hospital"` · `"ambulance"` · `"tooth"` · `"eyeglasses"` · `"wheelchair"` · `"baby"` · `"dna"` · `"brain"` · `"bandaids"` · `"hand-heart"` · `"graduation-cap"` · `"book-open"` · `"student"` · `"chalkboard-teacher"` · `"factory"` · `"warehouse"` · `"house-line"` · `"plant"` · `"leaf"` · `"sun"` · `"cloud"` · `"drop"` · `"airplane"` · `"bicycle"` · `"bus"` · `"train"` · `"boat"` · `"hammer"` · `"toolbox"` · `"plug"` · `"lightbulb"` · `"cube"` · `"camera"` · `"image"` · `"trophy"` · `"gift"` · `"coffee"` · `"fork-knife"` · `"shopping-bag"` · `"basket"` · `"barcode"` · `"qr-code"` · `"scales"` · `"gavel"` · `"certificate"` · `"identification-card"` · `"fingerprint"` · `"eye"` · `"link"` · `"paperclip"` · `"scissors"` · `"palette"` · `"code"` · `"terminal"` · `"users-three"` · `"user-plus"` · `"caret-left"` · `"caret-right"` · `"caret-up"` · `"caret-down"` · `"arrow-left"` · `"arrow-right"` · `"x"` · `"plus"` · `"dots-three"` | Preview | A curated mark in the section’s heading row. One of `&lt;appIcon>`. Used in `examples/apps/lintel/app.ts`. |
+| `views.*[kind=list].summary[].kind` |  | Preview |  One of `metric`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=list].summary[].measure` | string | Preview | "count" (default), "sum amount as pipeline", "median amount" (PostgreSQL only), or a computed measure: aggregates and numbers joined by + - * /, "sum won / sum amount as win_rate". Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=list].summary[].minor` |  | Preview | The measure counts a currency's minor units (cents), said in its major unit: money where format is unsaid. For a measure whose column has no money rule to say so, such as one drawn by a component. One of `true`. Used in `examples/apps/lintel/resources.ts`. |
+| `views.*[kind=list].summary[].over` | string | Preview | The date column the dashboard’s time window narrows this section by, stored or computed. Absent means the window passes this section over. Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=list].summary[].query` | string | Preview | The query language, without the leading table name. |
+| `views.*[kind=list].summary[].segment` | string | Preview | One of the table's segments (resources.&lt;table>.segments), its conditions ANDed with query. Used in `examples/apps/tick/app.ts`. |
+| `views.*[kind=list].summary[].spark` | boolean | Preview | Draw the measure’s monthly trend (last 12 months of "over") inside the card while no window stands; a windowed metric draws its trend across the window unless this is false. Composes with the card’s own query — best on cards whose query carries no time clause, and whose clock points backward (an opened_on, not an open deal’s close_date). |
+| `views.*[kind=list].summary[].target` | number \| object | Preview | A goal for the measure: the card draws a meter under the number and says the share reached. A number, or a goal read from data in the metric's own words: { table, query, measure }. |
+| `views.*[kind=list].summary[].target.from` | string | Preview | The resource the goal is read from. Absent means the metric's. Used in `examples/apps/lintel/app.ts`. |
+| `views.*[kind=list].summary[].target.measure` | string | Preview | The goal's measure. Absent means the metric's. Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=list].summary[].target.query` | string | Preview | The query language, without the leading table name. |
+| `views.*[kind=list].summary[].title` | string \| object | Preview |  |
+| `views.*[kind=list].summary[].title.args` | object | Preview | Each ICU argument's column path: { "title": "thread_id.title" }. |
+| `views.*[kind=list].summary[].title.message` | string | Preview |  Used in `examples/apps/lintel/resources.ts`. |
+| `views.*[kind=list].summary[].to` | string | Preview | A list view over the same table that the card opens, narrowed by the metric's query; the whole card is the link, marked with an arrow. false: the card is a figure read where it stands and opens nothing. One of `false`. Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=list].summary[].unit` | string | Preview | metric: a word said after the figure ("days", "/mo"). Used in `examples/apps/lintel/app.ts`. |
+| `views.*[kind=list].summary[].width` | `"full"` · `"two-thirds"` · `"half"` · `"third"` | Preview |  One of `full`, `half`, `third`, `two-thirds`. Used in `examples/apps/tick/app.ts`. |
+| `views.*[kind=list].summary[].windows` | array | Preview | The section's own time windows, in the query grammar's words ("last 7 days"): the reader picks this section's period in its heading, apart from the dashboard's window, and the first is where it starts. Needs "over". Named in the address by the section's title: ?period.lines-moved-by-day=last-7-days. Used in `examples/apps/lintel/dashboards.ts`. |
 
 ## `views.*[kind=list].tabs`
 

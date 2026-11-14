@@ -1,29 +1,27 @@
 /**
  * A tooltip: a short note on an element, said on hover and on focus alike,
- * never on hover alone. Over Base UI's Tooltip, which gives it the
- * anchoring and the Escape to dismiss. Base UI does not name the note
- * itself in this version — no `role="tooltip"`, no `aria-describedby` on
- * the trigger — so this wrapper owns both: the popup carries the role
- * and an id, and the trigger carries that id as its description while
- * the note is open. The trigger is the caller's element (a button, a
- * word); the note is the popup's children. The render prop merges onto
- * the caller's element (Popover.tsx does the same), so a button passed as
- * the trigger is never nested inside Base UI's own button.
+ * never on hover alone. Over UI SDK's Tooltip, which gives it the
+ * anchoring, the Escape to dismiss, the note's role and the wire from the
+ * trigger to it. The trigger is the caller's element (a button, a word);
+ * the note is the popup's children. The note is added to a description
+ * the trigger already had (a field's hint) and does not take its place,
+ * and a button passed as the trigger is never nested inside the part's
+ * own button (internal/layers.tsx).
  *
  * A tooltip says something extra, never something essential: a reader who
  * never hovers must still understand the trigger from its own label, and
  * a note that carries an action belongs in a Popover instead, where it
  * can be reached and used.
  *
- * Placed as Popover.tsx places its layer: on the zoom-aware ruler, fixed to
- * the viewport, and inside an enclosing dialog.
+ * Drawn where Popover.tsx draws its layer: inside an enclosing dialog,
+ * and otherwise where the page says its popups go.
  */
-import { cloneElement, isValidElement, useContext, useId, useRef, useState, type ReactNode } from 'react';
-import { Tooltip as BaseTooltip } from '@base-ui/react/tooltip';
-import { layoutViewport, zoomAnchor } from './internal/anchor.js';
+import { Tooltip as Note, TooltipContent, TooltipTrigger } from '@ui-sdk/react/tooltip';
+import { useContext, useRef, type ReactNode } from 'react';
+import type { ChangeDetails } from './changeDetails.js';
 import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
+import { describedTrigger, heard } from './internal/layers.js';
 import { popupContainer, useDialogContainer } from './internal/popups.js';
-import { fromBaseUi, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface TooltipProps {
@@ -43,50 +41,23 @@ export interface TooltipProps {
 }
 
 function DefaultTooltip({ trigger, children, open, defaultOpen, onOpenChange, className }: TooltipProps) {
-  const tooltipId = useId();
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen ?? false);
-  const isOpen = open ?? uncontrolledOpen;
-  const base = isValidElement(trigger) ? trigger : <button type="button">{trigger}</button>;
-  /* The description wire exists only while the note is open, so a closed
-     tooltip never points at an id that is not in the tree. It joins the
-     trigger's own description (a field's hint) rather than replacing it. */
-  const existing = (base.props as { 'aria-describedby'?: string })['aria-describedby'];
-  const triggerElement = isOpen
-    ? cloneElement(base, { 'aria-describedby': [existing, tooltipId].filter(Boolean).join(' ') } as Record<string, unknown>)
-    : base;
   const anchor = useRef<HTMLButtonElement>(null);
   const container = useDialogContainer(anchor);
   /* The layer is drawn outside the page that opened it; the page's scope goes with it (Modal.tsx). */
   const componentScope = useContext(ComponentStyleScope);
   return (
-    <BaseTooltip.Root
-      open={open}
-      defaultOpen={defaultOpen}
-      onOpenChange={(next, details) => {
-        if (open === undefined) setUncontrolledOpen(next);
-        onOpenChange?.(next, fromBaseUi(details, 'implicit'));
-      }}
-    >
-      <BaseTooltip.Trigger className="ui-tooltip-trigger" render={triggerElement} ref={anchor} />
-      <BaseTooltip.Portal container={container ?? popupContainer()}>
-        <BaseTooltip.Positioner
-          anchor={() => (anchor.current ? zoomAnchor(anchor.current) : null)}
-          positionMethod="fixed"
-          sideOffset={8}
-          collisionBoundary={layoutViewport()}
-          collisionPadding={8}
-        >
-          <BaseTooltip.Popup
-            data-component={componentScope}
-            id={tooltipId}
-            role="tooltip"
-            className={['ui-tooltip', className].filter(Boolean).join(' ')}
-          >
-            {children}
-          </BaseTooltip.Popup>
-        </BaseTooltip.Positioner>
-      </BaseTooltip.Portal>
-    </BaseTooltip.Root>
+    <Note open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange && ((next, details) => onOpenChange(next, heard(details)))}>
+      <TooltipTrigger render={describedTrigger(trigger)} ref={anchor} />
+      <TooltipContent
+        className={className}
+        data-component={componentScope}
+        sideOffset={8}
+        collisionPadding={8}
+        container={container ?? popupContainer()}
+      >
+        {children}
+      </TooltipContent>
+    </Note>
   );
 }
 

@@ -251,7 +251,7 @@ test('a box that must be checked sits beside its label, and unchecked it is caug
   render(<FormSurface form={consent} appName="Workshop" submit={submit} />);
   const box = screen.getByRole('checkbox', { name: 'I have read the rules (required)' });
   // The label is beside the box, after it, and checks it.
-  const label = box.closest('.form-field')!.querySelector('label')!;
+  const label = box.closest('[data-slot="field"]')!.querySelector('label')!;
   expect(box.parentElement).toBe(label.parentElement);
   expect(box.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   // A yes-or-no that may be left as no is not called required.

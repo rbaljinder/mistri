@@ -78,7 +78,7 @@ rewrite the lock.
 | `features[].api.resources.*.delete` |  | Stable |  One of `true`. Used in `examples/apps/tick/app.ts`. |
 | `features[].api.resources.*.description` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `features[].api.resources.*.fields` | array | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `features[].api.resources.*.filters` | array | Stable |  Used in `examples/apps/lintel/views.ts`. |
+| `features[].api.resources.*.filters` | array | Stable |  Used in `examples/apps/lintel/theme.ts`. |
 | `features[].api.resources.*.sorts` | array | Stable |  |
 | `features[].api.resources.*.update` |  | Stable |  One of `true`. |
 | `features[].api.views` | array | Stable |  Used in `examples/apps/tick/app.ts`. |

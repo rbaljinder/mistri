@@ -316,3 +316,45 @@ test("served: an App's resource with no page opens on the anatomy, in the App's 
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('a record an open list shows as a card is drawn as that card, large: pictures first, its figure beside them, its facts under the name', () => {
+  const shop: DatabaseSchema = {
+    label: 'Shop',
+    dialect: 'sqlite',
+    readAt: '',
+    tables: [
+      {
+        id: 'product',
+        name: 'product',
+        schema: '',
+        isView: false,
+        columns: [key('id'), column('name', 'TEXT'), column('price', 'INTEGER'), column('size', 'TEXT'), column('description', 'TEXT')],
+      },
+      {
+        id: 'product_photo',
+        name: 'product_photo',
+        schema: '',
+        isView: false,
+        columns: [key('id'), column('product_id', 'INTEGER'), column('position', 'INTEGER'), column('file', 'TEXT')],
+      },
+    ],
+    foreignKeys: [
+      { name: 'photo_product', from: { table: 'product_photo', columns: ['product_id'] }, to: { table: 'product', columns: ['id'] } },
+    ],
+  } as unknown as DatabaseSchema;
+  const card = () => ({ value: 'price', facts: ['size'], image: { from: 'product_photo', whose: 'product_id', sort: 'position' } });
+  const page = anatomyPage(shop, 'product', { card });
+  assert.equal(page?.layout, 'showcase');
+  const [head, gallery, figure, ...body] = page!.sections;
+  assert.deepEqual(head.kind === 'fields' && [head.presentation, head.paths], ['header', ['size']]);
+  assert.deepEqual(gallery.kind === 'list' && [gallery.presentation, gallery.from, gallery.path], [
+    'gallery',
+    'product_photo',
+    'product_id',
+  ]);
+  assert.deepEqual(figure.kind === 'fields' && [figure.presentation, figure.region, figure.paths], ['headline', 'aside', ['price']]);
+  /* What the head and the figure say is not said again under them. */
+  for (const section of body) if (section.kind === 'fields') assert.ok(!section.paths?.some((path) => path === 'price' || path === 'size'));
+  /* Without the card the record is the office's, as before. */
+  assert.notEqual(anatomyPage(shop, 'product')?.layout, 'showcase');
+});

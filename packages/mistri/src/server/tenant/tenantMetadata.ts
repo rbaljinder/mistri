@@ -137,9 +137,13 @@ function normalizedPage(page: Record<string, unknown>): void {
         return denyTenant(new Error('a page section workflow is ordered or says nothing'));
       }
       for (const step of section.workflow.steps) {
-        tenantRecord(step, ['value', 'label']);
+        // `outcome` marks a final state off the forward path, drawn after the steps (appMachine.ts).
+        tenantRecord(step, ['value', 'label', 'outcome']);
         if (typeof step.value !== 'string' || typeof step.label !== 'string') {
           return denyTenant(new Error('a workflow step needs a value and a label'));
+        }
+        if (step.outcome !== undefined && step.outcome !== true) {
+          return denyTenant(new Error('a workflow step is an outcome or says nothing'));
         }
       }
     }

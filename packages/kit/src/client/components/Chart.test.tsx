@@ -30,6 +30,9 @@ describe('the bars', () => {
     ]);
     expect(bars.map((bar) => bar.classList.contains('is-active'))).toEqual([false, false, false, true]);
     expect(container.querySelector('.chart-bar-tip text')).toHaveTextContent('Apr 2026 · $20');
+    // At rest it is the plot's headline, not a pill over a bar: a pill is drawn only where the pointer names one.
+    expect(container.querySelector('.chart-bar-tip.is-rest')).not.toBeNull();
+    expect(container.querySelector('.chart-bar-tip rect')).toBeNull();
     // The guide runs across the levels at the current bar's top.
     const guide = container.querySelector('.chart-bar-guide')!;
     expect(guide.getAttribute('y1')).toBe(bars[3].getAttribute('y'));

@@ -6,6 +6,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { sqliteTargetFrom } from '@mistriwork/engine/server/configPaths.js';
 
 /** Every test owns its directory. Register close with your runner immediately. */
+/** The keys of a config's App entry that name a file or folder, read from the config's own folder. */
+const APP_PATHS = ['dir', 'policy', 'commands', 'jobs', 'entry'] as const;
+
 export async function createTestWorkspace() {
   const directory = await mkdtemp(join(tmpdir(), 'mistri-test-'));
   // Authored TypeScript Apps use ESM, including when copied outside their repository.
@@ -94,7 +97,23 @@ export async function createTestWorkspace() {
           copied = { ...copied, migrations: { ...migrations, dir: resolve(folder, migrations.dir) } };
         connections.push(copied);
       }
-      return write(name, { ...config, connections });
+      /* The App and the modules beside it are named from the config's folder too (`"policy": "policy.ts"`): the
+         copy sits elsewhere, so each is written as the path it was, or the server looks for them beside the copy. */
+      const placed = (entry: unknown) => {
+        if (!entry || typeof entry !== 'object') return entry;
+        const out: Record<string, unknown> = { ...(entry as Record<string, unknown>) };
+        for (const key of APP_PATHS) if (typeof out[key] === 'string') out[key] = resolve(folder, out[key] as string);
+        return out;
+      };
+      const whole = config as Record<string, unknown>;
+      return write(name, {
+        ...config,
+        ...(whole.app !== undefined ? { app: typeof whole.app === 'string' ? resolve(folder, whole.app) : placed(whole.app) } : {}),
+        ...(Array.isArray(whole.apps)
+          ? { apps: whole.apps.map((entry) => (typeof entry === 'string' ? resolve(folder, entry) : placed(entry))) }
+          : {}),
+        connections,
+      });
     },
     async database(name: string, setup: (database: DatabaseSync) => void) {
       const target = path(name);

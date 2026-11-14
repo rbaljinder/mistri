@@ -729,3 +729,11 @@ test("a related list's actions are the record's own verbs, each one its head may
     ],
   );
 });
+
+test("a related list's primary names one of the columns it shows: what a row is called where it is read as records", () => {
+  const list = (extra: Record<string, unknown>) =>
+    page({ kind: 'list', title: 'Photos', from: 'vehicle_photo', whose: 'vehicle_id', ...extra });
+  assert.equal((list({ show: ['caption', 'position'], primary: 'caption' }) as { primary?: string }).primary, 'caption');
+  assert.throws(() => list({ show: ['position'], primary: 'caption' }), /which "show" does not list/);
+  assert.throws(() => list({ show: ['caption'], primary: 'a b' }), /"primary" must name one of the list's own columns/);
+});

@@ -48,7 +48,7 @@ test('an unanswered required yes or no is asked by name on submit, never "check 
   await screen.findByRole('radiogroup', { name: /May we let ourselves in\?/ });
   fireEvent.change(screen.getByLabelText(/What needs fixing\?/), { target: { value: 'Tap drips' } });
   fireEvent.click(screen.getByRole('button', { name: /Report an issue|Submit|Send/ }));
-  await waitFor(() => expect(screen.getByText(/May we let ourselves in\? is required/)).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByText('Please answer “May we let ourselves in?”')).toBeInTheDocument());
   expect(screen.queryByText(/Check this box/i)).toBeNull();
   expect(submit).not.toHaveBeenCalled();
 });

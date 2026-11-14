@@ -131,8 +131,8 @@ export function OAuthConsent({ view }: { view: ConsentView }) {
           {tenants &&
             (tenants.length ? (
               <fieldset className="oauth-consent-roles">
-                <legend className="form-field-label">{say('tenant')}</legend>
-                <p className="form-field-hint">{say('tenantHint')}</p>
+                <legend data-slot="field-label">{say('tenant')}</legend>
+                <p data-slot="field-description">{say('tenantHint')}</p>
                 {tenants.map((candidate) => (
                   <Field key={candidate.id} check label={candidate.name}>
                     <input
@@ -150,8 +150,8 @@ export function OAuthConsent({ view }: { view: ConsentView }) {
             ))}
           {tenants && !tenant ? null : offered.length ? (
             <fieldset className="oauth-consent-roles">
-              <legend className="form-field-label">{say('roles')}</legend>
-              <p className="form-field-hint">{say('rolesHint')}</p>
+              <legend data-slot="field-label">{say('roles')}</legend>
+              <p data-slot="field-description">{say('rolesHint')}</p>
               {offered.map((role) => (
                 <Field key={role} check label={roleLabel(role) ?? role}>
                   <input

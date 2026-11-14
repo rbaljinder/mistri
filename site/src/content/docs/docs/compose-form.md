@@ -18,7 +18,7 @@ Lintel's Report a problem are the worked examples.
   [Forms](/docs/forms/) options show.
 - **When a required field has an obvious value**, put it in `defaults`:
   the first state where the column has no DEFAULT, `today` on a created-on date, `now` on a timestamp,
-  `me` on an owner (constants from `@mistriwork/mistri/app`) — `examples/apps/lintel/resources.ts:305`.
+  `me` on an owner (constants from `@mistriwork/mistri/app`) — `examples/apps/lintel/resources.ts:304`.
 - **When a field is not obvious, or is optional**, give it `help` that
   says what to put there or what leaving it empty does, and a `placeholder`
   for its shape — `examples/apps/lintel/commands/maintenance.ts:39`. The
@@ -26,22 +26,22 @@ Lintel's Report a problem are the worked examples.
 - **When two or three short fields are read together** (what came and how
   many, a day and a time), make them a row: `show: [['part_id', 'quantity'], …]`,
   up to three to a row, the same in a group's `fields` and a step —
-  `examples/apps/lintel/resources.ts:334`.
+  `examples/apps/lintel/resources.ts:332`.
 - **When a reference's choices belong to another field's choice** (a task's
   deal is one of its account's), narrow it with `where`.
 - **When two fields must agree**, say it as `validation` with a sentence,
-  beside the form — `examples/apps/lintel/resources.ts:78`.
+  beside the form — `examples/apps/lintel/resources.ts:76`.
 - **When a child is added from its parent's page**, give the related list a
   `create` with the few fields it needs and `prefill` for the references the
   parent already knows — `examples/apps/lintel/pages/maintenance_request.ts:30`.
 - **When the form decides something against stored state, runs in steps, or
   is filled all day**, make it a `commandForm` with `step`s and
-  `field.*({ help })` — `examples/apps/lintel/views.ts:228`,
+  `field.*({ help })` — `examples/apps/lintel/views.ts:235`,
   `examples/apps/lintel/commands/maintenance.ts:37`.
 - **When it is a long application, public or not**, give it `style: 'intake'`:
   one question a step, the step's `title`, `lead` and `next`, a `note` of
   reassurance and a review before submitting —
-  `examples/apps/lintel/views.ts:237`.
+  `examples/apps/lintel/views.ts:244`.
 
 Text named like prose (`notes`, `description`) is a box of several lines on
 its own; `fields.<name>.multiline` says so for any other. The keys are in

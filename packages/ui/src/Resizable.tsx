@@ -1,8 +1,7 @@
 /**
  * Resizable panels: two or more panes side by side (or stacked), divided
- * by a handle the reader drags or walks with the keyboard. Plain React —
- * Base UI has no resizable, and a flex row with a draggable divider is all
- * one is. The panes are the caller's array; each names its own `minSize`
+ * by a handle the reader drags or walks with the keyboard, over UI SDK's
+ * Resizable. The panes are the caller's array; each names its own `minSize`
  * in percent (10 by default) and its starting `defaultSize`, and sizes
  * that do not add to 100 are scaled to it, so a caller who writes 1 and 2
  * gets a third and two thirds. Controlled with `sizes`/`onSizesChange`,
@@ -17,8 +16,11 @@
  * themselves never shrink below their minimum, and a drag that would push
  * a neighbour below its minimum stops at that neighbour's edge.
  */
-import { Fragment, useId, useRef, useState, type ReactNode } from 'react';
-import { changeDetails, type ChangeDetails } from './changeDetails.js';
+import { Resizable as Group, ResizableHandle, ResizablePanel } from '@ui-sdk/react/resizable';
+import { Fragment, useState, type ReactNode } from 'react';
+import type { ChangeDetails } from './changeDetails.js';
+import { told } from './internal/told.js';
+import { slotted } from './internal/uiKitContext.js';
 
 export interface ResizablePanel {
   /** The pane's accessible name, said by its handle's controls. */
@@ -61,139 +63,37 @@ function initialSizes(panels: readonly ResizablePanel[]): number[] {
   return panels.map(() => 100 / panels.length);
 }
 
-function clampSizes(panels: readonly ResizablePanel[], sizes: readonly number[]): number[] {
-  const mins = panels.map((panel) => panel.minSize ?? 10);
-  const clamped = sizes.map((size, i) =>
-    Math.min(Math.max(size, mins[i]!), 100 - mins.reduce((sum, min, j) => (j === i ? sum : sum + min), 0)),
-  );
-  const total = clamped.reduce((sum, size) => sum + size, 0);
-  return total ? clamped.map((size) => (size / total) * 100) : clamped;
-}
-
-export function Resizable({ panels, direction = 'horizontal', sizes, onSizesChange, ariaLabel, words: given, className }: ResizableProps) {
+/* The sizes are shares of the whole, in the panes' order. A pane scrolls inside itself on purpose and says so
+   (`data-scrolls`), for the check that looks for a page scrolling twice (gradeProbe.ts). */
+function DefaultResizable({ panels, direction = 'horizontal', sizes, onSizesChange, ariaLabel, words: given, className }: ResizableProps) {
   const words = { ...ENGLISH, ...given };
-  const [uncontrolled, setUncontrolled] = useState(() => initialSizes(panels));
-  const containerRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ handle: number; start: number; sizes: number[] } | null>(null);
-  const baseId = useId();
+  const [start] = useState(() => initialSizes(panels));
   if (panels.length < 2) return null;
-  const current = clampSizes(panels, sizes ?? uncontrolled);
-  const mins = panels.map((panel) => panel.minSize ?? 10);
-  const setSizes = (next: number[], event: { nativeEvent: Event }) => {
-    const clamped = clampSizes(panels, next);
-    if (sizes === undefined) setUncontrolled(clamped);
-    onSizesChange?.(clamped, changeDetails('resize', event));
-  };
-  /** Move handle `i` so pane `i` grows by `delta` points and pane `i + 1` shrinks by the same. */
-  const move = (i: number, delta: number, event: { nativeEvent: Event }) => {
-    const next = [...current];
-    const low = mins[i]! - current[i]!;
-    const high = current[i + 1]! - mins[i + 1]!;
-    const applied = Math.min(Math.max(delta, low), high);
-    next[i] = current[i]! + applied;
-    next[i + 1] = current[i + 1]! - applied;
-    setSizes(next, event);
-  };
-  const onHandleKeyDown = (i: number) => (event: React.KeyboardEvent) => {
-    const horizontal = direction === 'horizontal';
-    const step = event.shiftKey ? 10 : 5;
-    if (event.key === (horizontal ? 'ArrowRight' : 'ArrowDown')) {
-      event.preventDefault();
-      move(i, step, event);
-    } else if (event.key === (horizontal ? 'ArrowLeft' : 'ArrowUp')) {
-      event.preventDefault();
-      move(i, -step, event);
-    } else if (event.key === 'Home') {
-      event.preventDefault();
-      move(i, -(current[i]! - mins[i]!), event);
-    } else if (event.key === 'End') {
-      event.preventDefault();
-      move(i, current[i + 1]! - mins[i + 1]!, event);
-    }
-  };
-  const onPointerDown = (i: number) => (event: React.PointerEvent) => {
-    const container = containerRef.current;
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    const horizontal = direction === 'horizontal';
-    const pos = horizontal ? event.clientX - rect.left : event.clientY - rect.top;
-    const span = horizontal ? rect.width : rect.height;
-    dragRef.current = { handle: i, start: span ? (pos / span) * 100 : 0, sizes: current };
-    (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
-  };
-  const onPointerMove = (event: React.PointerEvent) => {
-    const drag = dragRef.current;
-    const container = containerRef.current;
-    if (!drag || !container) return;
-    const rect = container.getBoundingClientRect();
-    const horizontal = direction === 'horizontal';
-    const pos = horizontal ? event.clientX - rect.left : event.clientY - rect.top;
-    const span = horizontal ? rect.width : rect.height;
-    if (!span) return;
-    const delta = (pos / span) * 100 - drag.start;
-    const next = [...drag.sizes];
-    const low = mins[drag.handle]! - drag.sizes[drag.handle]!;
-    const high = drag.sizes[drag.handle + 1]! - mins[drag.handle + 1]!;
-    const applied = Math.min(Math.max(delta, low), high);
-    next[drag.handle] = drag.sizes[drag.handle]! + applied;
-    next[drag.handle + 1] = drag.sizes[drag.handle + 1]! - applied;
-    setSizes(next, event);
-  };
-  const onPointerUp = () => {
-    dragRef.current = null;
-  };
+  const name = (place: number) => panels[place]?.label ?? words.panel(place + 1);
   return (
-    <div
-      ref={containerRef}
-      className={['ui-resizable', direction === 'vertical' ? 'ui-resizable-vertical' : 'ui-resizable-horizontal', className]
-        .filter(Boolean)
-        .join(' ')}
+    <Group
       role="group"
+      orientation={direction}
       aria-label={ariaLabel}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
+      className={className}
+      step={5}
+      largeStep={10}
+      layout={sizes ? [...sizes] : undefined}
+      defaultLayout={sizes ? undefined : start}
+      onLayoutChange={(layout, details) => onSizesChange?.(layout, told('resize', details))}
     >
-      {panels.map((panel, i) => (
-        /* A fragment, not a wrapper: the flex row's children must be the
-           panes and their handles, or the handles never sit between them. */
-        <Fragment key={i}>
-          {/* Grow shares, not basis percents: basis percents add to 100%
-              before the handles' fixed widths, so every extra pane
-              overflowed sideways by one handle width. With basis zero the
-              handles take their width first and the free space splits by
-              share, so panes plus handles always fit the container. */}
-          {/* A pane scrolls inside itself (overflow: auto) on purpose, and says so, so the double-scroll probe
-              (gradeProbe.ts) does not take it for a page that scrolls twice. A name needs a role to be spoken. */}
-          <div
-            id={`${baseId}-panel-${i}`}
-            className="ui-resizable-panel"
-            style={{ flex: `${current[i]} 1 0` }}
-            role="group"
-            aria-label={panel.label}
-            data-scrolls=""
-          >
+      {panels.map((panel, place) => (
+        <Fragment key={place}>
+          {place > 0 && <ResizableHandle aria-label={words.resize(name(place - 1), name(place))} />}
+          {/* A named pane has a role to be named by. */}
+          <ResizablePanel minSize={panel.minSize ?? 10} role="group" aria-label={panel.label} data-scrolls="">
             {panel.children}
-          </div>
-          {i < panels.length - 1 ? (
-            <div
-              className="ui-resizable-handle"
-              role="separator"
-              /* The separator's orientation is the line's, not the layout's: panes side by side ('horizontal') are
-                 parted by a vertical line, and stacked panes by a horizontal one. */
-              aria-orientation={direction === 'horizontal' ? 'vertical' : 'horizontal'}
-              aria-valuenow={Math.round(current[i]!)}
-              aria-valuemin={mins[i]}
-              aria-valuemax={100 - mins[i + 1]!}
-              aria-controls={`${baseId}-panel-${i} ${baseId}-panel-${i + 1}`}
-              aria-label={words.resize(panels[i]?.label ?? words.panel(i + 1), panels[i + 1]?.label ?? words.panel(i + 2))}
-              tabIndex={0}
-              onKeyDown={onHandleKeyDown(i)}
-              onPointerDown={onPointerDown(i)}
-            />
-          ) : null}
+          </ResizablePanel>
         </Fragment>
       ))}
-    </div>
+    </Group>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Resizable = slotted('Resizable', DefaultResizable, { onSizesChange: [1, 'resize'] });

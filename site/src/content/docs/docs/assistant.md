@@ -17,7 +17,7 @@ assistant: assistant({
     'A property operations App. Staff ask about their leases, charges and repairs: find leases ending soon, ' +
     'sum up a resident before a call, and log what was done on a repair.',
   // Questions an empty conversation offers, one press each.
-  starters: ['Which leases end soon?', 'Repairs by state', 'Which rent is overdue?'],
+  starters: ['Which leases end soon?', 'Repairs by status', 'Which rent is overdue?'],
   // Beside every room, about the open record, and a room of its own at /assistant.
   placement: ['panel', 'record', 'page'],
   // Ending a lease is the desk's call, made on the lease itself.

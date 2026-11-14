@@ -35,7 +35,7 @@ makes the picture sharper without changing the layout.
 | `aside-summary` | A summary beside an aside wraps: 4 figures share a row in the top menu's shell, 3 beside the side menu | fewer figures, or `shell: { placement: 'top' }` |
 | `aside-table` | A list in the aside has more than 2 columns | 2 columns, or `presentation: cards(...)` |
 | `aside-metrics` | 3 or more metric cards beside an aside wrap | a `fields([...])` of rollups |
-| `lone-metric` | A strip of metrics wraps its last onto a row alone: three share a row, two beside a dashboard's aside in the side menu's shell (at `width: 'third'` too) | a multiple of the row, or `width: 'half'`; beside the side menu, no aside |
+| `lone-metric` | A strip of metrics wraps its last onto a row alone: three share a row, two beside a dashboard's aside in the side menu's shell (at `width: 'third'` too), and in a layout's area as many as it holds | a multiple of the row, or `width: 'half'`; beside the side menu, no aside |
 | `board-reference` | A list board's `category` names a reference, which a card tags with its stored key (its `lines` and `footer` say the name) | a category of the record's own; the reference among the card's lines |
 | `rail-columns` | A list beside its filter rail (`filterBar: 'rail'`) has more columns than a desk holds there (about 627px beside the side menu, 855 under the top menu, less a row menu); the rest are left out | `show:` the ones that fit, first, or drop `filterBar: 'rail'` |
 | `dashboard-columns` | A dashboard's `rows` at half, a third or two thirds of the page (or in an area of that width) shows more columns than fit there; the rest are left out | `show:` the ones that fit, or `width: 'full'` (an area of more columns) |
@@ -56,8 +56,14 @@ makes the picture sharper without changing the layout.
 | `undressed-vocabulary` | A status without tones reads as body text | `{ tone: { open: 'info', '*': 'neutral' } }` |
 | `raw-label` | A `recordLabel` template names an amount, which it prints raw (a date or a timestamp is said as its day, so it is no smell) | words and references: `'{lease_id} · {kind}'` |
 | `required-unfilled` | A New form or a related `create` leaves a required column empty, or a status unchosen | `show` it, or `defaults: { status: 'new' }` |
+| `long-group` | A New form's group or step asks more than 7 things in one run | groups named by what they hold, none longer than 7; the rest on the record's page |
+| `stuck-state` | A state that is not final and that no verb, timer or service leaves: its records offer no next step, on their page or on a board's card | the verb the work moves on by (`on: { finish: '…' }`), or `final: true` |
+| `no-next-step` | A resource whose states only other records' commands and forms move, or one state that only another table's command leaves (an item a booking line checks in): its own page shows the state and no way on | a verb of its own on the step (`on: { <verb>: '<state>' }`), a command that acts on the record itself, or the records that move it listed on its page with their verbs (`related(…, { rowActions: true })`) |
+| `crowded-dashboard` | A dashboard opens on more than 8 figures | three or four in the first row; the rest as a list's `summary`, a record's rollups or a breakdown |
+| `home-without-work` | The home dashboard of an App whose records move through states lists none of them | `rows('Needs you', '<resource>', { query, show, limit })` under the figures |
 | `calendar-address` | Records are addressed under a calendar or board | `view: 'the-grid'` on the resource |
 | `default-shell` | No look, no logo, a flat menu or table icons | `ui.theme`, `ui.logo`, `navGroup`, `icon:` |
+| `unbranded` | The App wears a built-in look in the look's own color: no accent, no palette, no theme of its own | `ui: { theme: { preset: 'lumen', accent: '#…' } }`, or `defineTheme({ extends: 'lumen', brand: '#…' })` in `ui.customThemes`, whose brand also turns the shell's neutrals |
 | `repeated-query` | The same query written in two places or more over one resource | `segments: { open: 'status is open' }`, then `'open'` in each place; `--fix` lifts one whose name reads off its condition |
 | `list-shows-key` | A list's columns show the number the database handed out (`id`), which no reader quotes | leave it out of `show`; a record is opened by its name. A key the App dresses as the name (`recordLabel: 'SO-{id}'`) is quoted, and says nothing |
 | `unnamed-records` | A listed resource has no name column, or only one a record may leave blank or a paragraph, so the App titles its records by what it can find: their parent and day, else noun and number | `recordLabel: '{job_id.title} · {starts_at}'`, or the column people call it by |
@@ -110,6 +116,7 @@ npx @mistriwork/mistri grade --config mistri.json --theme all --palette all --as
 | `clipped-text` | Words cut mid-word with no ellipsis: a chip, a label (warning) | let them wrap, or say less |
 | `small-target` | On a phone, a control under 44px either way (warning) | padding, not a smaller box; report the platform's own controls rather than restyle them |
 | `empty-section` | A section drawn with nothing but its heading (warning) | `empty: 'No visits yet.'`, or hide it when empty |
+| `unseeded-list` | Half the App's lists or more, and at least two, have no rows: the pages were measured with nothing on them (warning) | `npx @mistriwork/mistri seed --app .` (`--rows <n>` for more), then grade again |
 | `mixed-format` | One column or section says its figures two ways: cents and none, grouped and not, compact and full; a section's quantity beside its price is two measures, not one (warning) | one `format` for the column, not text built by hand |
 | `round-ticks` | A chart's axis counts in steps that are not 1, 2, 2.5 or 5 of a power of ten (warning) | let the chart choose its scale; say the figure's `format` |
 | `header-wrap` | A record's name takes more than two lines on a phone 390 wide (warning) | a shorter `recordLabel`, the rest as header facts |

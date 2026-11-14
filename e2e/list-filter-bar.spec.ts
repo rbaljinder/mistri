@@ -35,7 +35,7 @@ test.describe('Thread Issues filter bar', () => {
   };
 
   test('a "+" adds a filter, its chip edits and removes it, and two earn one Clear all', async ({ page }) => {
-    /* Wide enough that no "+" gives way to "+ Filter" when the Priority chip
+    /* Wide enough that no filter gives way to "More filters" when the Priority chip
        grows to "in (urgent, high)". At 1440 that row is exactly full on a Mac
        (1010 of 1010px) and a few pixels over with Linux's wider fonts, where
        Assignee folds, as the bar means it to, and this walk could not find
@@ -58,7 +58,7 @@ test.describe('Thread Issues filter bar', () => {
     await expect(priority.getByRole('button', { name: /^Show/ })).toHaveText(`Show ${many(highs)}`);
     expect(address(page)).toBe('/issues');
     await priority.getByRole('button', { name: /^Show/ }).click();
-    await expect(page.locator('.applist-chip', { hasText: 'Priority is High' })).toBeVisible();
+    await expect(page.locator('.applist-chip[title="Priority is High"]')).toBeVisible();
     await expect.poll(() => address(page)).toBe('/issues?priority=high');
     await expect(count(page)).toHaveText(many(highs));
     // Narrowing Active is still Active, and the focus is on the chip that says it.
@@ -70,7 +70,7 @@ test.describe('Thread Issues filter bar', () => {
     await expect(priority.locator('input[data-value="high"]')).toBeChecked();
     await priority.locator('input[data-value="urgent"]').check();
     await priority.getByRole('button', { name: /^Show/ }).click();
-    await expect(page.locator('.applist-chip', { hasText: 'Priority is Urgent or High' })).toBeVisible();
+    await expect(page.locator('.applist-chip[title="Priority is Urgent or High"]')).toBeVisible();
     await expect.poll(() => address(page)).toBe('/issues?priority=urgent,high');
     await expect(count(page)).toHaveText(
       many(scalar(sample.db, `SELECT count(*) FROM issue WHERE ${ACTIVE} AND priority IN ('urgent', 'high')`)),
@@ -81,9 +81,9 @@ test.describe('Thread Issues filter bar', () => {
     const assignee = picker(page, 'Assignee').getByRole('combobox', { name: 'Filter by Assignee' });
     await expect(assignee).toBeFocused();
     await assignee.fill('Maya');
-    await page.locator('.dd-popup .dd-option', { hasText: 'Maya Chen' }).click();
+    await page.locator('[data-slot="autocomplete-item"]', { hasText: 'Maya Chen' }).click();
     const maya = scalar(sample.db, "SELECT id FROM member WHERE name = 'Maya Chen'");
-    await expect(page.locator('.applist-chip', { hasText: 'Assignee is Maya Chen' })).toBeVisible();
+    await expect(page.locator('.applist-chip[title="Assignee is Maya Chen"]')).toBeVisible();
     await expect.poll(() => address(page)).toBe(`/issues?priority=urgent,high&assignee_id=${maya}`);
     await expect(count(page)).toHaveText(
       many(scalar(sample.db, `SELECT count(*) FROM issue WHERE ${ACTIVE} AND priority IN ('urgent', 'high') AND assignee_id = ?`, maya)),
@@ -176,9 +176,9 @@ test.describe('Thread Issues filter bar', () => {
     await expect.poll(() => address(page)).toBe('/issues?priority=high');
     await expect(count(page)).toHaveText(many(scalar(sample.db, `SELECT count(*) FROM issue WHERE ${ACTIVE} AND priority = 'high'`)));
     await expect(page.getByRole('button', { name: 'Filters · 1' })).toBeVisible();
-    const chip = page.locator('.applist-chip', { hasText: 'Priority is High' });
+    const chip = page.locator('.applist-chip[title="Priority is High"]');
     await expect(chip).toBeVisible();
-    /* With a filter applied, Save view… joins the search row and the chips wrap onto a row of their own (a strip
+    /* With a filter applied the chips wrap onto a row of their own under the search and Filters (a strip
        wraps on a phone rather than scrolling sideways, docs/design.md "Standing layout rules"). They must stay in
        the window, clear of the search, and leave no sideways scroll. */
     const [box, pill] = [(await search.boundingBox())!, (await chip.boundingBox())!];

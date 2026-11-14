@@ -33,14 +33,15 @@ test('date filter calendar is nested, keyboard accessible, and leaves its filter
   await from.fill('2026-09-13');
   const trigger = form.getByRole('button', { name: 'Choose date for From', exact: true });
   await trigger.click();
-  await expect(page.locator('.date-field-popup')).toBeVisible();
-  await expect(page.locator('.date-field-calendar td').first()).toHaveCSS('padding-top', '1px');
-  const height = await page.locator('.date-field-calendar').evaluate((element) => element.getBoundingClientRect().height);
+  await expect(page.locator('[data-slot="popover-content"][data-kind="calendar"]')).toBeVisible();
+  // A day is a cell of the month's table, and takes none of the padding the page's tables give a cell.
+  await expect(page.locator('td[data-slot="calendar-day"]').first()).toHaveCSS('padding-top', '0px');
+  const height = await page.locator('[data-slot="calendar-grid"]').evaluate((element) => element.getBoundingClientRect().height);
   expect(height).toBeLessThan(300);
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('.date-field-calendar [data-date="2026-09-14"]')).toBeFocused();
+  await expect(page.locator('[data-slot="calendar-day"][data-value="2026-09-14"]')).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(page.locator('.date-field-popup')).toHaveCount(0);
+  await expect(page.locator('[data-slot="popover-content"][data-kind="calendar"]')).toHaveCount(0);
   await expect(form).toBeVisible();
   await expect(trigger).toBeFocused();
 });
@@ -76,7 +77,7 @@ for (const width of [1440, 390])
       await due.fill('2026-09-13');
       const trigger = form.getByRole('button', { name: 'Choose date for Due', exact: true });
       await trigger.click();
-      await expect(page.locator('.newpanel .date-field-popup')).toBeVisible();
+      await expect(page.locator('.newpanel [data-slot="popover-content"][data-kind="calendar"]')).toBeVisible();
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('Enter');
       await expect(due).toHaveValue('09/14/2026');

@@ -2690,6 +2690,10 @@
         "service": {
           "const": true,
           "description": "A role only a service principal holds (a jobs module's principals, an App API token), never a person: a free-form page is offered to it only where the page names it; it is never defaultRole and has no claims."
+        },
+        "portal": {
+          "const": true,
+          "description": "A role the App's own public holds (a customer, a patient, a resident). The shell offers its holder what they can use and none of the office's tools: no search across every table, no look picker, no view switch, column chooser or record pager. It arranges and grants nothing; never with service."
         }
       }
     },
@@ -3044,13 +3048,13 @@
           "type": "string",
           "minLength": 1,
           "pattern": "^[^.]*[^.\\s][^.]*$",
-          "description": "A column whose value is the card's kind: a chip over the title in the color its display rule's colors give the value, and the card's stripe where the look draws one."
+          "description": "A column whose value is the card's kind: the word that leads the card's line of facts, in the color its display rule's colors give the value, and the card's stripe where the look draws one."
         },
         "footer": {
           "type": "array",
           "minItems": 1,
           "maxItems": 4,
-          "description": "Facts along the card's foot, each a column or a one-hop label path with an optional icon; a person stands at the right end.",
+          "description": "Facts about the card, each a column or a one-hop label path with an optional icon: they follow the card's line under its name, a dot between them, and a person stands at the end of the card's foot, beside its next step.",
           "items": {
             "oneOf": [
               { "$ref": "#/$defs/oneHopName" },
@@ -3914,6 +3918,11 @@
           "default": false,
           "description": "Opt in to the Advanced action and raw query editor. Hidden by default in App lists; filterBar 'none' still hides the whole bar."
         },
+        "primary": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "The shown column a row is titled by in this list alone, where it is read as records (a phone, a related list); a reference says the record it names. Absent, the record's name (recordLabel)."
+        },
         "quickAdd": {
           "type": "boolean",
           "description": "Inline the resource's New form above the rows."
@@ -3935,6 +3944,15 @@
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
           },
           "description": "Numeric columns, rollups or computed numbers summed in a footer row, over everything the list's conditions match, not just the page. A grid only."
+        },
+        "summary": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/dashSection/oneOf/0"
+          },
+          "description": "Preview. Up to four figures in one strip over the list's tabs, each a dashboard's metric in a dashboard's own words: summary: [metric('Vacant', { query: 'available' })]. A metric that names no resource counts the list's own. No \"over\": a list has no window to pick."
         },
         "group": {
           "type": "string",
@@ -4370,6 +4388,7 @@
                 "third"
               ]
             },
+            "primary": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "The shown column a row is titled by in this section alone, as on a list view; the rows then lead with it. Absent, the first column shown." },
             "sizing": {
               "enum": [
                 "fit",
@@ -6845,7 +6864,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["preset"],
-          "properties": { "preset": { "enum": ["workshop", "lumen", "mono", "sage", "ledger"] } }
+          "properties": { "preset": { "enum": ["workshop", "lumen", "mono", "sage", "ledger", "atelier", "graphite", "bloom"] } }
         },
         "fields": {
           "type": "object",
@@ -6945,7 +6964,7 @@
             "header": {
               "enum": ["bar", "sidebar"],
               "default": "sidebar",
-              "description": "With the side placement, where the bar's furniture stands on a signed-in screen at a desk: in the sidebar ('sidebar', the default), full height, its head the App's mark, New and the search, its foot the bell, the account and Collapse; or across the top of the window ('bar'). A phone, the top placement, public pages and sign-in keep the bar; with rail: false and no header, the bar."
+              "description": "With the side placement, where the bar's furniture stands on a signed-in screen at a desk: beside the sidebar ('sidebar', the default): the sidebar runs the window's height with the App's mark and New at its head and Collapse at its foot, and the room is a pane beside it whose own bar holds the trail, the search, the bell and the account; or across the top of the window ('bar'). A phone, the top placement, public pages and sign-in keep the bar; with rail: false and no header, the bar."
             },
             "menuSearch": {
               "type": "boolean",

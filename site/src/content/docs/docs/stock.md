@@ -10,7 +10,7 @@ Declare consumes on a line so the stock it uses is taken, given back and refused
 consumes: { column: 'part_id.on_hand', by: 'quantity', message: 'Only {part_id.on_hand} of {part_id.name} left in the storeroom' },
 ```
 
-See it in the sample (`examples/apps/lintel/resources.ts:296`).
+See it in the sample (`examples/apps/lintel/resources.ts:295`).
 
 ## What a write does
 
@@ -45,7 +45,7 @@ Receiving stock is a line too: `restocks` is `consumes` the other way round, so 
 restocks: { column: 'part_id.on_hand', by: 'quantity', message: 'Only {part_id.on_hand} of {part_id.name} are still on the shelf' },
 ```
 
-See it in the sample (`examples/apps/lintel/resources.ts:331`).
+See it in the sample (`examples/apps/lintel/resources.ts:329`).
 
 An insert adds `by`, an update moves the difference, and a delete takes it back out, refused where those parts were used since. It takes the same keys and is held on the same doors.
 

@@ -638,16 +638,24 @@ export function recordPageReads(
       if (listed) view({ view: listed, offset: 0 });
     }
   }
-  /* An inferred page's tabs say how many rows each holds, all of them in one read; a list alone says it in its head. */
-  if (isInferredPage(page, names.app))
-    for (const run of runs) {
-      const body = relatedCountsBody(
-        names.schema,
-        run.map((index) => page.sections[index]),
-        base,
-        key,
-      );
+  /* An App page's tabs say how many rows each holds, all of them in one read; a list alone says it in its head. An
+     inferred page's lists are all runs, of one or more; a page an author wrote also stands lists alone outside any
+     strip (`listTabs: false`), and each of those asks for its own count, as the kit's list does (PageSections.tsx). */
+  if (names.app) {
+    const counted = (sections: readonly ReadSection[]) => {
+      const body = relatedCountsBody(names.schema, sections, base, key);
       if (body) reads.push({ path: '/api/counts', body, kind: 'related' });
+    };
+    for (const run of runs) counted(run.map((index) => page.sections[index]));
+    if (!isInferredPage(page, names.app)) {
+      const inRun = new Set(runs.flat());
+      for (const index of [...drawn].sort((a, b) => a - b)) {
+        const section = page.sections[index];
+        /* A list that hides or collapses while empty is drawn with its neighbours' line and says no count (PageEmptyRun.tsx). */
+        const leaves = Boolean(section.emptyMode) && (section.presentation !== 'card' || section.emptyMode === 'hide');
+        if (!inRun.has(index) && section.kind === 'list' && !section.hidden && !leaves) counted([section]);
+      }
     }
+  }
   return { row: [...new Set(parts.flatMap((part) => part.columns))], parts, reads };
 }

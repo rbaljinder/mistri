@@ -3,8 +3,9 @@
  * for a date, or with `withTime` for a date and a wall-clock time. The text
  * is the value — typed drafts survive, the calendar only ever writes the
  * date part — and nothing here converts a value through an instant. The
- * arithmetic and the bounds are datePickerModel.ts's. Its words and the
- * calendar button's icon are props: the kit lends its catalog's and its icon.
+ * arithmetic and the bounds are datePickerModel.ts's; the popover and the
+ * month's grid, with its keys, are UI SDK's. Its words and the calendar
+ * button's icon are props: the kit lends its catalog's and its icon.
  */
 import {
   useCallback,
@@ -21,28 +22,39 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
-import { Popover } from '@base-ui/react/popover';
-import { layoutViewport, zoomAnchor } from './internal/anchor.js';
+import { Button } from '@ui-sdk/react/button';
 import {
-  addDateDays,
-  addDateMonths,
+  Calendar,
+  CalendarDay,
+  CalendarGrid,
+  CalendarHeading,
+  CalendarNext,
+  CalendarPrevious,
+  CalendarWeekday,
+  CalendarWeekdays,
+  CalendarWeeks,
+  createCalendarController,
+} from '@ui-sdk/react/calendar';
+import { Input } from '@ui-sdk/react/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@ui-sdk/react/popover';
+import { changeDetails, type ChangeDetails } from './changeDetails.js';
+import {
   clampDate,
   dateBounds,
   dateFormat,
   dateParts,
   dateTimeWithinBounds,
   dateWithinBounds,
+  FIRST_DATE,
   isPickerDate,
   isPickerDateTime,
-  monthGrid,
-  monthLabel,
+  LAST_DATE,
   splitDateTime,
   todayInZone,
-  weekdayLabels,
   withDate,
 } from './internal/datePickerModel.js';
-import { changeDetails, fromBaseUi, type ChangeDetails } from './changeDetails.js';
-import { popupContainer } from './internal/popups.js';
+import { popupContainer, useDialogContainer } from './internal/popups.js';
+import { told } from './internal/told.js';
 import { slotted } from './internal/uiKitContext.js';
 
 /** What a date field says. A `format` is the locale's numeric date pattern ("MM/DD/YYYY"). */
@@ -67,6 +79,8 @@ export interface DateFieldWords {
   nextMonth: string;
   clear: string;
   today: string;
+  /** The clock's name beside a date and a time, with the field's label when it has one. Absent, no clock is drawn. */
+  time?: (label?: string) => string;
 }
 
 /** How a locale writes a numeric date: the order of its parts and its separator ("MM/DD/YYYY" in en-US). */
@@ -141,7 +155,7 @@ export interface DateFieldProps {
   withTime?: boolean;
   /** The calendar is drawn in a portal; an owner that watches focus (an autosaving field) is told where. */
   popupRef?: (node: HTMLDivElement | null) => void;
-  /** Base UI's popover words, `day-press` when a choice closed it, `open-key` for Alt+ArrowDown, and `disabled` when the
+  /** A popover's words (`trigger-press`, `outside-press`, `escape-key` …), `day-press` when a choice closed it, `open-key` for Alt+ArrowDown, and `disabled` when the
       field was disabled or its bounds stopped agreeing while it was open. */
   onOpenChange?: (open: boolean, details: ChangeDetails<DateFieldOpenReason>) => void;
   'aria-label'?: string;
@@ -163,7 +177,23 @@ export type DateFieldOpenReason =
   | 'open-key'
   | 'disabled';
 
-/** A date field, or a date and a wall-clock time. No input is parsed as an instant or shifted by a timezone. */
+/* What UI SDK's popover says of an open or a close, in the words this field says them. */
+const OPENS = new Set<string>(['trigger-hover', 'trigger-press', 'outside-press', 'escape-key', 'close-press', 'focus-out']);
+const openReason = (said: string | undefined): DateFieldOpenReason =>
+  said === 'imperative' ? 'imperative-action' : said && OPENS.has(said) ? (said as DateFieldOpenReason) : 'implicit';
+
+/* The month's two arrows. */
+function Caret({ to }: { to: 'left' | 'right' }) {
+  return (
+    <svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <path d={to === 'left' ? 'M10 3.5L5.5 8l4.5 4.5' : 'M6 3.5L10.5 8 6 12.5'} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** A date field, or a date and a wall-clock time. No input is parsed as an instant or shifted by a timezone. The box
+    and the calendar are one field to whoever listens for its blur: `onBlur` is not said while the keyboard goes
+    between them, and is said once when it leaves both. */
 function DefaultDateField({
   id,
   words,
@@ -180,7 +210,7 @@ function DefaultDateField({
   timezone,
   now,
   firstDay = 1,
-  className = '',
+  className,
   name,
   inputRef,
   placeholder,
@@ -193,8 +223,8 @@ function DefaultDateField({
 }: DateFieldProps) {
   // The calendar only ever sees the date; a wall time's clock stays in the box.
   const datePart = withTime ? (splitDateTime(value)?.date ?? value.slice(0, 10)) : value;
-  // A range facet may temporarily supply an incomplete or reversed bound.
-  // Keep text editable but disable calendar selection until both ends agree.
+  /* A range's two ends may for a moment be half typed or the wrong way round. The text stays editable, and the
+     calendar is shut until they agree. */
   const configuredBounds = useMemo(() => {
     try {
       return dateBounds(withTime ? min?.slice(0, 10) : min, withTime ? max?.slice(0, 10) : max);
@@ -205,18 +235,21 @@ function DefaultDateField({
   const bounds = configuredBounds ?? dateBounds();
   const today = todayInZone(now ?? new Date(), timezone);
   const seed = () => clampDate(isPickerDate(datePart) ? datePart : today, bounds);
-  const [active, setActive] = useState(seed);
   const [open, setOpenState] = useState(false);
   const openCallback = useRef(onOpenChange);
+  const blurCallback = useRef(onBlur);
   useLayoutEffect(() => {
     openCallback.current = onOpenChange;
+    blurCallback.current = onBlur;
   });
   const setOpen = (next: boolean, details: ChangeDetails<DateFieldOpenReason>) => {
     setOpenState(next);
     openCallback.current?.(next, details);
   };
-  const [container, setContainer] = useState<HTMLElement | null>(null);
   const group = useRef<HTMLSpanElement>(null);
+  /* A calendar opened inside a dialog is drawn inside it, so the dialog's focus trap and its stacking keep it as
+     their own; elsewhere it goes where every popup here does (internal/popups.ts). */
+  const container = useDialogContainer(group);
   const trigger = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
   useImperativeHandle(inputRef, () => input.current!, []);
@@ -228,33 +261,19 @@ function DefaultDateField({
     },
     [popupRef],
   );
+  const month = useMemo(() => createCalendarController(), []);
   const ownedFocus = useRef(false);
-  const moveFocus = useRef(false);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const restoreFocus = useRef(false);
-  const blurCallback = useRef(onBlur);
-  useLayoutEffect(() => {
-    blurCallback.current = onBlur;
-  });
-  const caption = useId();
+  useEffect(() => () => clearTimeout(blurTimer.current), []);
   const hint = useId();
   /* A date alone is shown as the locale writes it and kept as ISO; what is being typed stays as typed until the
      field is left, so a half-typed date is never rewritten under the caret. A date with a time stays ISO text. */
   const mask = useMemo(() => dateMask(locale), [locale]);
   const [draft, setDraft] = useState<string | null>(null);
   const shown = withTime ? value : (draft ?? (isPickerDate(value) ? localeText(value, mask) : value));
-  const formatHint = withTime ? words.dateTimePattern : mask.hint;
   useEffect(() => {
     if (draft !== null && value !== (readDate(draft, mask) ?? draft)) setDraft(null);
   }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
-  const days = monthGrid(active, firstDay, bounds);
-  const weekdays = weekdayLabels(locale, firstDay);
-  useEffect(() => {
-    setContainer(trigger.current?.closest('dialog, [role="dialog"]') as HTMLElement | null);
-    return () => {
-      clearTimeout(blurTimer.current);
-    };
-  }, []);
   const bad =
     !configuredBounds ||
     (value !== '' &&
@@ -264,54 +283,40 @@ function DefaultDateField({
   useEffect(() => {
     input.current?.setCustomValidity(!bad ? '' : withTime ? words.enterDateAndTime : words.enterDate(mask.hint));
   }, [bad, withTime, mask]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* While the calendar is open and what bounds it moves under it, the month in view goes to where a day can still
+     be chosen, and the keyboard goes with it where it was on a day. */
   useLayoutEffect(() => {
     if (!open) return;
     if (!configuredBounds || disabled) {
       setOpen(false, changeDetails('disabled'));
       return;
     }
-    const next = clampDate(isPickerDate(datePart) ? datePart : active, configuredBounds);
-    if (next !== active) {
-      moveFocus.current = Boolean(popup.current?.querySelector('[data-date]:focus'));
-      setActive(next);
-    }
-    // Synchronize external changes, not arrow-key movement within the calendar.
-  }, [value, min, max, disabled]);
-  useLayoutEffect(() => {
-    if (!open || !moveFocus.current) return;
-    popup.current?.querySelector<HTMLButtonElement>(`[data-date="${active}"]`)?.focus();
-    moveFocus.current = false;
-  }, [active, open]);
+    const next = seed();
+    if (month.getMonth() !== next.slice(0, 7)) month.setMonth(next.slice(0, 7));
+    if (popup.current?.querySelector('[data-slot="calendar-day"]:focus')) month.focus(next);
+  }, [value, min, max, disabled]); // eslint-disable-line react-hooks/exhaustive-deps
   const within = (node: Node | null) => Boolean(node && (group.current?.contains(node) || popup.current?.contains(node)));
   const commitBlur = () => {
-    if (ownedFocus.current) {
-      ownedFocus.current = false;
-      setDraft(null);
-      blurCallback.current?.();
-    }
+    if (!ownedFocus.current) return;
+    ownedFocus.current = false;
+    setDraft(null);
+    blurCallback.current?.();
   };
   const checkBlur = () => {
     clearTimeout(blurTimer.current);
-    // Let the portal's focus restoration finish before deciding the field was left.
+    // The focus a closing popup hands back lands a moment later; the field is left only if it is not there then.
     blurTimer.current = setTimeout(() => {
       if (!within(document.activeElement)) commitBlur();
     }, 0);
   };
   const leave = (event: FocusEvent<HTMLSpanElement>) => {
-    if (!event.relatedTarget) {
-      checkBlur();
-      return;
-    }
+    if (!event.relatedTarget) return checkBlur();
     clearTimeout(blurTimer.current);
-    // Pointer focus leaves before the destination's click/submit. Publish the
-    // draft now so a surrounding filter's Apply button reads the new value.
+    // A pointer's focus leaves before the click it lands with: the draft is published now, so a button pressed
+    // outside (a filter's Apply) reads the new value.
     if (!within(event.relatedTarget)) commitBlur();
   };
   const changeOpen = (next: boolean, details: ChangeDetails<DateFieldOpenReason>) => {
-    if (next) {
-      restoreFocus.current = false;
-      setActive(seed());
-    }
     setOpen(next, details);
     if (!next) checkBlur();
   };
@@ -321,203 +326,167 @@ function DefaultDateField({
       target.focus({ preventScroll: true });
     }
   };
-  const choose = (date: string, event: { nativeEvent: Event }) => {
-    const details = changeDetails('day-press', event);
-    restoreFocus.current = true;
+  const choose = (date: string, details: ChangeDetails<'day-press'>) => {
     setDraft(null);
-    // Move focus before removing the focused day. Otherwise an enclosing
-    // modal sees focus fall to body and starts its own recovery to the dialog.
+    // The keyboard goes back to the button before the day it was on is taken away, and before the caller hears the
+    // value: an enclosing dialog would see the focus fall to the page, and a caller may unmount the field.
     returnToTrigger();
     onChange(withTime && date ? withDate(value, date) : date, details);
     changeOpen(false, details);
   };
-  const move = (date: string) => {
-    moveFocus.current = true;
-    setActive(clampDate(date, bounds));
-  };
-  const onDayKey = (event: KeyboardEvent<HTMLButtonElement>) => {
-    const index = days.findIndex((day) => day.date === active) % 7;
-    const steps: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7, Home: -index, End: 6 - index };
-    if (Object.hasOwn(steps, event.key)) {
-      event.preventDefault();
-      event.stopPropagation();
-      move(addDateDays(active, steps[event.key]));
-    } else if (event.key === 'PageUp' || event.key === 'PageDown') {
-      event.preventDefault();
-      event.stopPropagation();
-      move(addDateMonths(active, (event.key === 'PageUp' ? -1 : 1) * (event.shiftKey ? 12 : 1)));
-    }
-  };
-  const dayName = (date: string) => {
-    const p = dateParts(date),
-      ruler = new Date(0);
-    ruler.setUTCFullYear(p.year, p.month - 1, p.day);
-    return dateFormat(locale, { calendar: 'gregory', timeZone: 'UTC', dateStyle: 'full' }).format(ruler);
-  };
-  const previous = addDateMonths(active, -1),
-    next = addDateMonths(active, 1);
+  const shut = disabled || !configuredBounds;
   return (
-    <Popover.Root
-      open={open && !disabled && Boolean(configuredBounds)}
-      onOpenChange={(next, details) => {
-        restoreFocus.current = !next && details.reason === 'escape-key';
-        if (restoreFocus.current) returnToTrigger();
-        changeOpen(next, fromBaseUi(details, 'implicit'));
+    <span
+      ref={group}
+      data-slot="date-field"
+      data-kind={withTime ? 'with-time' : undefined}
+      // The caller's class is a box's, and the box here is the text and its button together.
+      className={className}
+      onFocus={() => {
+        ownedFocus.current = true;
       }}
+      onBlur={leave}
     >
-      <span
-        ref={group}
-        className={withTime ? 'date-field with-time' : 'date-field'}
-        onFocus={() => {
-          ownedFocus.current = true;
+      <Input
+        id={id}
+        ref={input}
+        name={name}
+        type="text"
+        value={shown}
+        placeholder={placeholder ?? (withTime ? words.dateTimePattern : mask.hint)}
+        disabled={disabled}
+        required={required}
+        autoComplete="off"
+        spellCheck={false}
+        aria-required={required}
+        aria-label={label}
+        aria-invalid={invalid || bad || undefined}
+        aria-describedby={[describedBy, hint].filter(Boolean).join(' ')}
+        /* React's own change, not UI SDK's `onValueChange`: that one hears the `input` event alone, and a value
+           put in the box without one (a browser's autofill, a script that sets it and says `change`) would be
+           shown and never reported. */
+        onChange={(event) => {
+          const text = event.target.value;
+          const said = changeDetails('input-change', event);
+          if (withTime) return onChange(text, said);
+          setDraft(text);
+          onChange(readDate(text, mask) ?? text, said);
         }}
-        onBlur={leave}
-      >
+        onKeyDown={(event) => {
+          if (event.altKey && event.key === 'ArrowDown') {
+            event.preventDefault();
+            event.stopPropagation();
+            if (configuredBounds && !disabled) changeOpen(true, changeDetails('open-key', event));
+          } else onKeyDown?.(event);
+        }}
+      />
+      {/* A date and a time has a clock of its own beside the text: the platform's time control, which a phone answers
+          with its wheel and a keyboard with its arrows, so nobody has to type "HH:MM" from a hint. It writes the
+          text's time and keeps its date; with no date yet it starts on today's. */}
+      {withTime && words.time && (
         <input
-          ref={input}
-          id={id}
-          name={name}
-          type="text"
-          value={shown}
-          className={`date-field-input ${className}`}
-          placeholder={placeholder ?? (withTime ? words.dateTimePattern : mask.hint)}
-          autoComplete="off"
-          spellCheck={false}
+          type="time"
+          data-slot="date-field-time"
+          aria-label={words.time(label || undefined)}
           disabled={disabled}
-          required={required}
-          aria-required={required}
-          aria-label={label}
-          aria-invalid={invalid || bad || undefined}
-          aria-describedby={[describedBy, hint].filter(Boolean).join(' ')}
+          value={(splitDateTime(value)?.time ?? '').slice(0, 5)}
           onChange={(event) => {
-            const text = event.target.value;
-            const details = changeDetails('input-change', event);
-            if (withTime) return onChange(text, details);
-            setDraft(text);
-            onChange(readDate(text, mask) ?? text, details);
-          }}
-          onKeyDown={(event) => {
-            if (event.altKey && event.key === 'ArrowDown') {
-              event.preventDefault();
-              event.stopPropagation();
-              if (configuredBounds) changeOpen(true, changeDetails('open-key', event));
-            } else onKeyDown?.(event);
+            const clock = event.target.value;
+            if (!clock) return;
+            const day = isPickerDate(datePart) ? datePart : today;
+            onChange(`${day} ${clock}`, changeDetails('input-change', event));
           }}
         />
-        <span id={hint} className="date-field-hint">
-          {withTime ? words.dateAndTimeFormat : words.dateFormat(formatHint)} {words.openWithKeys}
-        </span>
-        <Popover.Trigger
-          render={
-            <button
-              ref={trigger}
-              type="button"
-              className="date-field-trigger"
-              disabled={disabled || !configuredBounds}
-              aria-label={words.chooseDate(label || undefined)}
-            />
-          }
-        >
-          {calendarIcon}
-        </Popover.Trigger>
-        <Popover.Portal container={container ?? popupContainer()}>
-          <Popover.Positioner
-            anchor={() => (trigger.current ? zoomAnchor(trigger.current) : null)}
-            positionMethod="fixed"
-            side="bottom"
-            align="end"
-            sideOffset={6}
-            collisionBoundary={layoutViewport()}
-            collisionPadding={8}
-            style={{ zIndex: 45 }}
-          >
-            <Popover.Popup
-              ref={setPopup}
-              finalFocus={() => {
-                const target = trigger.current,
-                  focused = document.activeElement;
-                return restoreFocus.current &&
-                  target?.isConnected &&
-                  (!container || (container.isConnected && !container.hasAttribute('data-closed'))) &&
-                  (focused === target || focused === document.body || focused === container)
-                  ? target
-                  : false;
-              }}
-              className="date-field-popup"
-              aria-label={words.calendar(label || undefined)}
-              initialFocus={() => popup.current?.querySelector<HTMLElement>(`[data-date="${active}"]`) ?? true}
-            >
-              <div className="date-field-head">
-                <button
-                  type="button"
-                  aria-label={words.previousMonth}
-                  disabled={previous.slice(0, 7) === active.slice(0, 7) || previous.slice(0, 7) < bounds.min.slice(0, 7)}
-                  onClick={() => setActive(clampDate(previous, bounds))}
-                >
-                  ←
-                </button>
-                <span id={caption} aria-live="polite" aria-atomic="true">
-                  {monthLabel(active, locale)}
-                </span>
-                <button
-                  type="button"
-                  aria-label={words.nextMonth}
-                  disabled={next.slice(0, 7) === active.slice(0, 7) || next.slice(0, 7) > bounds.max.slice(0, 7)}
-                  onClick={() => setActive(clampDate(next, bounds))}
-                >
-                  →
-                </button>
-              </div>
-              <table className="date-field-calendar" role="grid" aria-labelledby={caption}>
-                <thead>
-                  <tr>
-                    {weekdays.map((day) => (
-                      <th key={day.long} scope="col" aria-label={day.long}>
-                        {day.short}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {Array.from({ length: 6 }, (_, week) => (
-                    <tr key={week}>
-                      {days.slice(week * 7, week * 7 + 7).map((day, index) => (
-                        <td key={day.date ?? index} aria-selected={day.date === datePart}>
-                          {day.date && (
-                            <button
-                              type="button"
-                              data-date={day.date}
-                              data-outside={!day.inMonth || undefined}
-                              data-selected={day.date === datePart || undefined}
-                              aria-current={day.date === today ? 'date' : undefined}
-                              disabled={day.disabled}
-                              tabIndex={day.date === active ? 0 : -1}
-                              aria-label={dayName(day.date)}
-                              onKeyDown={onDayKey}
-                              onClick={(event) => choose(day.date!, event)}
-                            >
-                              {Number(day.date.slice(8))}
-                            </button>
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="date-field-foot">
-                <button type="button" onClick={(event) => choose('', event)}>
-                  {words.clear}
-                </button>
-                <button type="button" disabled={!dateWithinBounds(today, bounds)} onClick={(event) => choose(today, event)}>
-                  {words.today}
-                </button>
-              </div>
-            </Popover.Popup>
-          </Popover.Positioner>
-        </Popover.Portal>
+      )}
+      {/* Read with the box and not seen: how a date is typed, and the key that opens the calendar. */}
+      <span id={hint} data-slot="date-field-hint" data-kind="visually-hidden">
+        {withTime ? words.dateAndTimeFormat : words.dateFormat(mask.hint)} {words.openWithKeys}
       </span>
-    </Popover.Root>
+      <Popover
+        open={open && !shut}
+        onOpenChange={(next, details) => {
+          // Escape hands the keyboard back to the button; a press elsewhere leaves it where the press put it.
+          if (!next && details.reason === 'escape-key') returnToTrigger();
+          changeOpen(next, told(openReason(details.reason), details));
+        }}
+      >
+        <PopoverTrigger ref={trigger} aria-label={words.chooseDate(label || undefined)} disabled={shut} data-variant="quiet">
+          {calendarIcon}
+        </PopoverTrigger>
+        <PopoverContent
+          ref={setPopup}
+          aria-label={words.calendar(label || undefined)}
+          data-kind="calendar"
+          align="end"
+          sideOffset={6}
+          container={container ?? popupContainer()}
+          // The keyboard starts on the day, not on the month's arrows, and where it goes on a close is said above.
+          initialFocus={() => popup.current?.querySelector<HTMLElement>('[data-slot="calendar-day"][tabindex="0"]')}
+          finalFocus="none"
+          // The calendar is called what the caller's words call it. UI SDK names a popover by its button, which
+          // here would say "Choose a date" for the dialog too, so the name it adds is taken off what it draws.
+          render={(drawn) => <div {...drawn} aria-labelledby={undefined} />}
+        >
+          <Calendar
+            controller={month}
+            value={isPickerDate(datePart) ? datePart : null}
+            defaultMonth={seed().slice(0, 7)}
+            min={bounds.min === FIRST_DATE ? undefined : bounds.min}
+            max={bounds.max === LAST_DATE ? undefined : bounds.max}
+            locale={locale}
+            timeZone={timezone}
+            today={today}
+            weekStartsOn={firstDay}
+            onValueChange={(next, details) => {
+              if (typeof next === 'string') choose(next, told('day-press', details));
+            }}
+          >
+            <CalendarPrevious aria-label={words.previousMonth}>
+              <Caret to="left" />
+            </CalendarPrevious>
+            <CalendarHeading />
+            <CalendarNext aria-label={words.nextMonth}>
+              <Caret to="right" />
+            </CalendarNext>
+            <CalendarGrid>
+              <CalendarWeekdays>{(index) => <CalendarWeekday index={index} />}</CalendarWeekdays>
+              <CalendarWeeks>
+                {(cell) =>
+                  cell.date === datePart ? (
+                    /* The day already chosen is no change to UI SDK's calendar, and is still an answer here: the
+                       reader opened the calendar, saw the day was right, and said so. */
+                    <CalendarDay
+                      value={cell.date}
+                      onClick={(event) => choose(cell.date, changeDetails('day-press', event))}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return;
+                        event.preventDefault();
+                        choose(cell.date, changeDetails('day-press', event));
+                      }}
+                    />
+                  ) : (
+                    <CalendarDay value={cell.date} />
+                  )
+                }
+              </CalendarWeeks>
+            </CalendarGrid>
+          </Calendar>
+          <div data-slot="action-bar">
+            <Button data-variant="quiet" data-size="sm" onClick={(event) => choose('', changeDetails('day-press', event))}>
+              {words.clear}
+            </Button>
+            <Button
+              data-variant="quiet"
+              data-size="sm"
+              disabled={!dateWithinBounds(today, bounds)}
+              onClick={(event) => choose(today, changeDetails('day-press', event))}
+            >
+              {words.today}
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </span>
   );
 }
 

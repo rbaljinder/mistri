@@ -93,7 +93,7 @@ export type Columns = {
   "carrier.shipments": { tracking_number: 'text'; status: ["label_created", "in_transit", "out_for_delivery", "delivered", "exception"]; service: ["ground", "expedited", "freight"]; origin_city: 'text'; origin_state: 'text'; eta: 'date'; last_scan_location: 'text'; last_scan_at: 'date'; delivered_at: 'date'; signed_by: 'text'; exception_reason: 'text' };
   charge: { id: 'number'; lease_id: 'number'; kind: ["rent", "late_fee", "utility", "repair", "other"]; period: 'text'; description: 'text'; due_on: 'date'; amount: 'number'; status: ["open", "paid", "waived"]; posted_on: 'date'; paid_on: 'date'; waived_reason: 'text'; version: 'number' };
   lease: { id: 'number'; unit_id: 'number'; resident_id: 'number'; start_on: 'date'; end_on: 'date'; rent: 'number'; deposit: 'number'; status: ["draft", "active", "notice", "ended"]; signed_on: 'date'; notice_on: 'date'; ended_on: 'date'; version: 'number'; balance: 'number'; charged: 'number'; paid: 'number' };
-  maintenance_request: { id: 'number'; unit_id: 'number'; resident_id: 'number'; title: 'text'; description: 'text'; category: ["plumbing", "electrical", "appliance", "hvac", "general"]; priority: ["low", "normal", "urgent"]; status: ["new", "triaged", "scheduled", "in_progress", "on_hold", "completed", "closed", "cancelled"]; assigned_to: 'number'; entry_ok: 'boolean'; reported_on: 'date'; scheduled_on: 'date'; completed_on: 'date'; resolution: 'text'; status_since: 'date'; version: 'number'; parts_used: 'number' };
+  maintenance_request: { id: 'number'; unit_id: 'number'; resident_id: 'number'; title: 'text'; description: 'text'; category: ["plumbing", "electrical", "appliance", "hvac", "general"]; priority: ["low", "normal", "urgent"]; status: ["new", "triaged", "scheduled", "in_progress", "on_hold", "completed", "closed", "cancelled", "waiting", "onSite", "done"]; assigned_to: 'number'; entry_ok: 'boolean'; reported_on: 'date'; scheduled_on: 'date'; completed_on: 'date'; resolution: 'text'; status_since: 'date'; version: 'number'; parts_used: 'number' };
   part: { id: 'number'; sku: 'text'; name: 'text'; category: ["plumbing", "electrical", "appliance", "hvac", "hardware", "paint"]; on_hand: 'number'; reorder_at: 'number'; unit_cost: 'number'; bin: 'text'; version: 'number'; used: 'number'; received: 'number' };
   part_receipt: { id: 'number'; part_id: 'number'; quantity: 'number'; received_on: 'date'; vendor: 'text'; tracking_number: 'text' };
   payment: { id: 'number'; lease_id: 'number'; charge_id: 'number'; received_on: 'date'; amount: 'number'; method: ["ach", "card", "check", "cash"]; reference: 'text' };
@@ -112,7 +112,7 @@ export type Segments = {
   "carrier.shipments": "coming" | "out_for_delivery" | "held" | "delivered";
   charge: "unpaid" | "overdue" | "rent" | "late_fees";
   lease: "current" | "ending_soon" | "notice_given" | "drafts" | "past";
-  maintenance_request: "to_triage" | "outstanding" | "visits" | "urgent" | "mine" | "coming" | "behind" | "finished";
+  maintenance_request: "to_triage" | "outstanding" | "underway" | "visits" | "urgent" | "mine" | "coming" | "behind" | "finished";
   part: "low" | "out";
   unit: "occupied" | "on_notice" | "vacant" | "turnover" | "available" | "advertised";
   viewing: "upcoming" | "past";

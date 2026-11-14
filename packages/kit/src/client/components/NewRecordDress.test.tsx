@@ -16,6 +16,10 @@ import { writeValues } from '../resourceRequests.js';
 const calls: Array<{ path: string; body: unknown }> = [];
 const answers: Record<string, unknown> = {};
 
+/* An option by its role and name: the typed letters are picked out in a span of their own, so the words are not one
+   text node for `findByText`. */
+const option = (words: string) => screen.findByRole('option', { name: new RegExp(`^${words}`) });
+
 vi.mock('../core.js', () => ({
   state: { activeConnection: 'demo' },
   api: async (path: string, body: unknown) => {
@@ -178,7 +182,7 @@ describe('each field wears its dress', () => {
     draw(<NewRecordForm {...p} form={{ show: ['title', 'project_id', 'priority', 'billable'] }} />);
     await user.type(screen.getByRole('textbox', { name: 'Title' }), 'Draft');
     await user.type(screen.getByRole('combobox', { name: 'Project' }), 'La');
-    await user.click(await screen.findByText('Launch'));
+    await user.click(await option('Launch'));
     await user.click(screen.getByRole('radio', { name: 'Urgent' }));
     await user.click(screen.getByRole('button', { name: 'Add' }));
     await vi.waitFor(() => expect(p.onAdded).toHaveBeenCalled());
@@ -202,15 +206,14 @@ describe("`as` draws a vocabulary or a flag the author's way", () => {
     );
     // Three words the author asks as cards are a row of picks (a short choice is not five stacked cards); a flag is a Yes and a No, not a switch.
     const cards = await screen.findByRole('radiogroup', { name: 'Priority' });
-    expect(cards).toHaveClass('choice-row');
-    expect(cards.querySelector('.choice-card, .choice-box')).toBeNull();
+    expect(cards).toHaveAttribute('data-fit', 'row');
     expect(
       within(cards)
         .getAllByRole('radio')
         .map((radio) => radio.closest('label')!.textContent),
     ).toEqual(['Low', 'Normal', 'Urgent']);
     const pair = screen.getByRole('radiogroup', { name: 'Billable' });
-    expect(pair).toHaveClass('choice-pair');
+    expect(pair).toHaveAttribute('data-fit', 'pair');
     expect(screen.queryByRole('switch')).toBeNull();
     await user.type(screen.getByRole('textbox', { name: 'Title' }), 'Draft');
     await user.click(within(cards).getByRole('radio', { name: 'Urgent' }));
@@ -236,12 +239,12 @@ describe("`as` draws a vocabulary or a flag the author's way", () => {
       return screen.findByRole('radiogroup', { name: 'Kind' });
     };
     const stacked = await row(wide);
-    expect(stacked).toHaveClass('choice-cards');
-    expect(stacked.querySelectorAll('.choice-card')).toHaveLength(6);
+    expect(stacked).toHaveAttribute('data-fit', 'stack');
+    expect(stacked.querySelectorAll('[data-slot="choice"]')).toHaveLength(6);
     cleanup();
     const picks = await row(five);
-    expect(picks).toHaveClass('choice-row');
-    expect(picks.querySelectorAll('.choice-pick')).toHaveLength(5);
+    expect(picks).toHaveAttribute('data-fit', 'row');
+    expect(picks.querySelectorAll('[data-slot="choice"]')).toHaveLength(5);
     // Still radios to the keyboard and a screen reader: one group, one answer.
     await userEvent.setup().click(within(picks).getByRole('radio', { name: 'C' }));
     expect(within(picks).getByRole('radio', { name: 'C' })).toBeChecked();
@@ -310,7 +313,7 @@ describe('a picker narrowed by an earlier field', () => {
     expect(picker).toBeDisabled();
     expect(picker).toHaveAccessibleDescription('Choose Project first.');
     await user.type(screen.getByRole('combobox', { name: 'Project' }), 'La');
-    await user.click(await screen.findByText('Launch'));
+    await user.click(await option('Launch'));
     expect(screen.getByRole('combobox', { name: 'Milestone' })).toBeEnabled();
     calls.length = 0;
     await user.type(screen.getByRole('combobox', { name: 'Milestone' }), 'B');
@@ -330,7 +333,7 @@ describe('a picker narrowed by an earlier field', () => {
     // The project's list is open over the form, so the milestone is found by its label.
     expect(screen.getByLabelText('Milestone')).toBeDisabled();
     await user.type(screen.getByRole('combobox', { name: 'Project' }), 'La');
-    await user.click(await screen.findByText('Launch'));
+    await user.click(await option('Launch'));
     await user.click(screen.getByRole('button', { name: 'Add' }));
     await vi.waitFor(() => expect(p.onAdded).toHaveBeenCalled());
     expect(sent()).toEqual({ title: 'Draft', project_id: '7', priority: 'normal', billable: false });
@@ -354,7 +357,7 @@ describe('a picker narrowed by an earlier field', () => {
     );
     await user.type(screen.getByRole('textbox', { name: 'Title' }), 'Draft');
     await user.type(screen.getByRole('combobox', { name: 'Project' }), 'La');
-    await user.click(await screen.findByText('Launch'));
+    await user.click(await option('Launch'));
     await vi.waitFor(() =>
       expect(calls.some((call) => call.path === '/api/query' && (call.body as { table?: string }).table === 'milestone')).toBe(true),
     );
@@ -451,7 +454,7 @@ describe('a value from the chosen record', () => {
     const description = screen.getByRole('textbox', { name: 'Description' }) as HTMLInputElement;
     await user.type(screen.getByRole('textbox', { name: 'Title' }), 'Draft');
     await user.type(screen.getByRole('combobox', { name: 'Project' }), 'La');
-    await user.click(await screen.findByText('Launch'));
+    await user.click(await option('Launch'));
     await vi.waitFor(() => expect(description.value).toBe('Launch plan'));
     await user.click(screen.getByRole('radio', { name: 'Urgent' }));
     expect(calls.find((call) => call.path === '/api/query')?.body).toMatchObject({
@@ -498,7 +501,7 @@ describe('a value from the chosen record', () => {
     expect(p.onAdded).not.toHaveBeenCalled();
     expect(calls.some((call) => call.path === '/api/insert')).toBe(false);
     await user.type(screen.getByRole('combobox', { name: 'Project' }), 'La');
-    await user.click(await screen.findByText('Launch'));
+    await user.click(await option('Launch'));
     await user.click(screen.getByRole('button', { name: 'Add' }));
     await vi.waitFor(() => expect(p.onAdded).toHaveBeenCalled());
     expect(sent()).toMatchObject({ project_id: '7', title: 'Draft' });
@@ -514,7 +517,7 @@ describe('a value from the chosen record', () => {
     const description = screen.getByRole('textbox', { name: 'Description' }) as HTMLInputElement;
     await user.type(description, 'Mine');
     await user.type(screen.getByRole('combobox', { name: 'Project' }), 'La');
-    await user.click(await screen.findByText('Launch'));
+    await user.click(await option('Launch'));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(description.value).toBe('Mine');
     // The picker reads the chosen label (id and name); nothing asks for the value the person already wrote.
@@ -526,7 +529,7 @@ describe('a value from the chosen record', () => {
 
 describe('a record form draws its rows', () => {
   /* The parsed shape the server sends: the flat list, and the rows beside it (formRules.ts). */
-  const rowOf = (name: string) => screen.getByRole('textbox', { name }).closest('.form-columns');
+  const rowOf = (name: string) => screen.getByRole('textbox', { name }).closest('[data-slot="columns"]');
 
   test('a row of show stands in one Columns in the drawer, the rest one to a row, and the form measures itself', () => {
     draw(
@@ -570,10 +573,10 @@ describe('a record form draws its rows', () => {
 });
 
 describe('a short answer says its kind, so the form sizes it by the data', () => {
-  test('a count, an amount, a day and a day with its time carry data-kind; text and a choice carry none', () => {
+  test('a count, an amount, a day and a day with its time carry data-answer; text and a choice carry none', () => {
     const counted = keyed('counted', col('title', 'TEXT', { nullable: false }), col('seats', 'INTEGER'));
     draw(<NewRecordForm {...props()} table={counted} form={{ show: ['title', 'seats'] }} />);
-    const kindOf = (name: string) => screen.getByRole('textbox', { name }).closest('.insert-field')?.getAttribute('data-kind');
+    const kindOf = (name: string) => screen.getByRole('textbox', { name }).closest('.insert-field')?.getAttribute('data-answer');
     expect(kindOf('Title')).toBeNull();
     expect(kindOf('Seats')).toBe('number');
     cleanup();
@@ -581,11 +584,11 @@ describe('a short answer says its kind, so the form sizes it by the data', () =>
     expect(kindOf('Budget')).toBe('money');
     expect(kindOf('Due on')).toBe('date');
     expect(kindOf('Starts at')).toBe('datetime');
-    expect(screen.getByRole('radiogroup', { name: 'Priority' }).closest('.insert-field')?.getAttribute('data-kind')).toBeNull();
+    expect(screen.getByRole('radiogroup', { name: 'Priority' }).closest('.insert-field')?.getAttribute('data-answer')).toBeNull();
   });
 
   test('the Workbench form has no kinds: its label-beside-value layout is its own', () => {
     draw(<NewRecordForm {...props()} app={false} form={undefined} />);
-    expect(document.querySelector('[data-kind]')).toBeNull();
+    expect(document.querySelector('[data-answer]')).toBeNull();
   });
 });

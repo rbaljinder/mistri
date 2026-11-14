@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/kit",
-  "version": "1.0.0-rc.58",
+  "version": "1.0.0-rc.59",
   "description": "The shared React client both shells are drawn with: the walk and the address, Grid, Value, the record page, lists, filters and charts.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -180,6 +180,10 @@
     "./client/components/Page.js": {
       "mistri-built": "./dist/client/components/Page.js",
       "default": "./src/client/components/Page.tsx"
+    },
+    "./client/components/Prefs.js": {
+      "mistri-built": "./dist/client/components/Prefs.js",
+      "default": "./src/client/components/Prefs.tsx"
     },
     "./client/components/PageHistory.js": {
       "mistri-built": "./dist/client/components/PageHistory.js",
@@ -557,6 +561,10 @@
       "mistri-built": "./dist/client/fonts/inter-latin.woff2",
       "default": "./src/client/fonts/inter-latin.woff2"
     },
+    "./client/fonts/manrope-latin.woff2": {
+      "mistri-built": "./dist/client/fonts/manrope-latin.woff2",
+      "default": "./src/client/fonts/manrope-latin.woff2"
+    },
     "./client/help.js": {
       "mistri-built": "./dist/client/help.js",
       "default": "./src/client/help.js"
@@ -669,6 +677,10 @@
       "mistri-built": "./dist/client/savedPages.js",
       "default": "./src/client/savedPages.js"
     },
+    "./client/audience.js": {
+      "mistri-built": "./dist/client/audience.js",
+      "default": "./src/client/audience.ts"
+    },
     "./client/sessionIdentity.js": {
       "mistri-built": "./dist/client/sessionIdentity.js",
       "default": "./src/client/sessionIdentity.ts"
@@ -773,13 +785,12 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "dependencies": {
-    "@mistriwork/engine": "1.0.0-rc.58",
-    "@mistriwork/ui": "1.0.0-rc.58",
+    "@mistriwork/engine": "1.0.0-rc.59",
+    "@mistriwork/ui": "1.0.0-rc.59",
     "intl-messageformat": "12.1.2",
     "qrcode-generator": "^2.0.4"
   },
   "peerDependencies": {
-    "@base-ui/react": "^1.8.0",
     "@tanstack/react-form": "^1.33.5",
     "@tanstack/react-query": "^5.102.8",
     "@tanstack/react-table": "^9.2.4",
@@ -794,6 +805,7 @@
     "@tiptap/react": "^3.31.4",
     "@tiptap/starter-kit": "^3.31.4",
     "@tiptap/suggestion": "^3.31.4",
+    "@ui-sdk/react": "0.1.0-beta.2",
     "@vitejs/plugin-react": "^6.1.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -801,9 +813,6 @@
     "vite": "^8.2.4"
   },
   "peerDependenciesMeta": {
-    "@base-ui/react": {
-      "optional": true
-    },
     "@tanstack/react-form": {
       "optional": true
     },
@@ -844,6 +853,9 @@
       "optional": true
     },
     "@tiptap/suggestion": {
+      "optional": true
+    },
+    "@ui-sdk/react": {
       "optional": true
     },
     "@vitejs/plugin-react": {

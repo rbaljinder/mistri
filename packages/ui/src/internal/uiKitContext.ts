@@ -40,7 +40,8 @@ export function slotted<C extends AnyComponent>(name: string, Default: C, fills?
   }) as unknown as C;
 }
 
-/* A kit may call a change callback with the value alone, or with details of its own that name no hand (Base UI's); every
+/* A kit may call a change callback with the value alone, or with details of its own that name no hand (a kit built over
+   Base UI passes Base UI's); every
    caller reads `{ reason, source }` second, so the seam fills in what is missing. Only under a kit: the defaults always
    give them. A wrapper's identity is stable, so a kit that puts the callback in an effect's dependencies does not rerun it
    on every render. */
@@ -64,15 +65,16 @@ function filled(
   return out;
 }
 
-/* Details as the kit gave them, a hand and a word added where they lack one. A raw `none` is Base UI's, and no caller
-   hears it. Filled in place where it can be: Base UI's details carry `cancel()` and an `isCanceled` that must stay live. */
+/* Details as the kit gave them, a hand and a word added where they lack one. A raw `none` is what a kit built over
+   Base UI passes for a change Base UI does not name, and no caller hears it. Filled in place where it can be: such
+   details carry `cancel()` and an `isCanceled` that must stay live. */
 function withSource(given: unknown, reason: string): unknown {
   const kept = keptDetails(reason);
   if (typeof given !== 'object' || given === null) return kept;
   const details = given as { reason?: unknown; source?: unknown; event?: unknown };
   if (details.source !== undefined) return given;
   const word = typeof details.reason === 'string' && details.reason !== 'none' ? details.reason : reason;
-  // Base UI's stand-in event, named `base-ui`, says the page made the change (changeDetails.ts).
+  // Under such a kit, Base UI's stand-in event, named `base-ui`, says the page made the change (changeDetails.ts).
   const source =
     details.event instanceof Event ? (details.event.type === 'base-ui' ? 'program' : changeSource(details.event)) : kept.source;
   if (!Object.isExtensible(given)) return { ...details, reason: word, source };

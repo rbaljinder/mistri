@@ -201,3 +201,90 @@ test("with nothing matched, the empty message is drawn on the list's surface and
   await user.keyboard('{Escape}');
   expect(drawerEscape).not.toHaveBeenCalled();
 });
+
+/* A list its caller filters, with a class on the row in hand. */
+function People({ heard = () => {} }: { heard?: (open: boolean, reason: string) => void }) {
+  const all = ['Acme', 'Bolt', 'Bark', 'Cask'];
+  const [text, setText] = useState('');
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Typeahead
+        text={text}
+        onText={(value) => {
+          setText(value);
+          setOpen(true);
+        }}
+        items={all.filter((name) => name.toLowerCase().startsWith(text.toLowerCase()))}
+        itemKey={(name) => name}
+        itemLabel={(name) => name}
+        itemClassName={(_name, lit) => (lit ? 'lit' : '')}
+        renderItem={(name) => name}
+        onPick={(name) => {
+          setText(name);
+          setOpen(false);
+        }}
+        open={open}
+        onOpenChange={(next, details) => {
+          heard(next, details.reason);
+          setOpen(next);
+        }}
+        inputProps={{ 'aria-label': 'Owner' }}
+        popupClassName="people"
+        listClassName="people-list"
+      />
+      <button type="button">Elsewhere</button>
+    </>
+  );
+}
+const inHand = () => document.querySelector('.lit')?.textContent ?? null;
+
+test('a row whose name is already the text is still chosen when pressed: typing a name out in full and pressing it picks it', async () => {
+  // UI SDK reports no value change for that press, the value being what the box already holds; only that the list closed.
+  const user = userEvent.setup();
+  const pick = vi.fn();
+  render(<Harness pick={pick} />);
+  const box = screen.getByRole('combobox');
+  await user.click(box);
+  await user.keyboard('Beta');
+  await user.click(await screen.findByRole('option', { name: 'Beta' }));
+  expect(pick).toHaveBeenCalledTimes(1);
+  expect(pick).toHaveBeenCalledWith('Beta');
+});
+
+test('a press opens the list with no row in hand; typing takes the first, so Enter chooses it', async () => {
+  const user = userEvent.setup();
+  render(<People />);
+  const box = screen.getByRole('combobox', { name: 'Owner' });
+  await user.click(box);
+  await screen.findAllByRole('option');
+  expect(inHand()).toBeNull();
+  // The arrows start from the top.
+  await user.keyboard('{ArrowDown}{ArrowDown}');
+  expect(inHand()).toBe('Bolt');
+  await user.keyboard('{Escape}');
+  await user.keyboard('b');
+  await screen.findAllByRole('option');
+  expect(inHand()).toBe('Bolt');
+  await user.keyboard('a{Enter}');
+  expect(box).toHaveValue('Bark');
+});
+
+test('a list held open with nothing to list still says it closed: a press elsewhere, or the keyboard leaving', async () => {
+  const user = userEvent.setup();
+  const heard = vi.fn();
+  render(<People heard={heard} />);
+  const box = screen.getByRole('combobox', { name: 'Owner' });
+  await user.click(box);
+  await user.keyboard('zz');
+  expect(screen.queryByRole('option')).toBeNull();
+  heard.mockClear();
+  await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
+  expect(heard).toHaveBeenCalledExactlyOnceWith(false, 'outside-press');
+
+  await user.click(box);
+  await user.keyboard('z');
+  heard.mockClear();
+  await user.tab();
+  expect(heard).toHaveBeenCalledExactlyOnceWith(false, 'focus-out');
+});

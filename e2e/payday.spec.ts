@@ -276,7 +276,9 @@ test.describe('Payday payroll workflow', () => {
        Documents fell out of a 1440x900 window. The fold is held to a plain heading drawn beside it, and the
        offsets below are measured: 0.8.8's at Sage's comfortable zoom (24px at 1.1), re-measured when Sage
        began an App compact (ca0a0ed8d) and the heading's 10px text stood on the 11px step (80077020f), and again
-       when a heading's line became its capitals' own height (style.css, line-height 1), 2px shorter. */
+       when a heading's line became its capitals' own height (style.css, line-height 1), 2px shorter, and once more
+       when a room's row became 32px with 2px between rooms in every look (structure.css): the headings kept their
+       height and their gap, and the last room still ends inside the window. */
     const sample = await startSample('payday');
     try {
       await page.setViewportSize({ width: 1440, height: 900 });
@@ -313,7 +315,7 @@ test.describe('Payday payroll workflow', () => {
         expect(first.top - group.top).toBeCloseTo(24, 0);
       }
       const offsets = groups.map((group) => group.top - rows[0].top);
-      [25.2, 149.9, 249.5, 399.4].forEach((offset, i) => expect(Math.abs(offsets[i] - offset)).toBeLessThan(1));
+      [34, 194, 320, 514].forEach((offset, i) => expect(Math.abs(offsets[i] - offset)).toBeLessThan(1));
       expect(rows.at(-1)!.bottom).toBeLessThanOrEqual(900);
     } finally {
       await sample.stop();
@@ -341,9 +343,9 @@ test.describe('Payday payroll workflow', () => {
       await page.getByRole('menuitem', { name: /^Preferences/ }).click();
       await page.getByRole('button', { name: /^Language(?: |$)/ }).click();
       await page.getByRole('option', { name: 'Español', exact: true }).click();
-      const prefs = page.getByRole('dialog', { name: 'Preferencias', exact: true });
+      const prefs = page.getByRole('region', { name: 'Preferencias', exact: true });
       await expect(prefs.getByRole('button', { name: /^Idioma(?: |$)/ })).toContainText('Español');
-      await prefs.getByRole('button', { name: 'Cerrar', exact: true }).click();
+      await page.goBack();
       await expect(page).toHaveURL(before);
       await expect(page.locator('html')).toHaveAttribute('lang', 'es');
       await expect(page.getByRole('button', { name: 'Ver todo', exact: true }).first()).toBeVisible();

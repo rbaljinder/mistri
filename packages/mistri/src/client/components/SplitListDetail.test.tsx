@@ -139,7 +139,7 @@ test('uses the existing fullscreen modal as the narrow-screen fallback', async (
   );
   const dialog = screen.getByRole('dialog', { name: 'Details' });
   expect(dialog).toHaveAttribute('aria-modal', 'true');
-  expect(dialog).toHaveClass('modal-fullscreen-mobile');
+  expect(dialog).toHaveAttribute('data-fullscreen', 'mobile');
   expect(within(dialog).getByRole('button', { name: 'Details →' })).toBeInTheDocument();
   expect(screen.queryByRole('region', { name: 'Details' })).toBeNull();
   await user.click(screen.getByRole('button', { name: 'Close task' }));

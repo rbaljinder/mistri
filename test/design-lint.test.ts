@@ -94,7 +94,7 @@ const composed: AppDef = {
   name: 'Shop',
   nav: [{ group: 'work', label: 'Work', children: [{ view: 'orders' }] }],
   home: [{ view: 'orders' }],
-  ui: { logo: 'package', theme: { preset: 'lumen' }, shell: { placement: 'top' } } as AppDef['ui'],
+  ui: { logo: 'package', theme: { preset: 'lumen', accent: '#2d4fd6' }, shell: { placement: 'top' } } as AppDef['ui'],
   resources: {
     customer: {},
     line: { display: { price: { format: 'money' } } },
@@ -255,6 +255,7 @@ describe('mistri check --design', () => {
       'stacked-lists',
       'thin-card',
       'thin-workflow',
+      'unbranded',
       'unitless-fact',
       'vague-heading',
     ]);
@@ -606,10 +607,12 @@ describe('mistri check --design', () => {
     assert.match(narrow.find((f) => f.code === 'area-too-narrow')!.text, /two columns of the template/);
     // Two columns is a half, which a list can bear.
     assert.equal(lint(['a b'], [rows('a'), rows('b')]).filter((f) => f.code === 'area-too-narrow').length, 0);
-    // The metrics stacked in an area are a strip at that area's width: four in the whole row wrap; four in one column stack.
+    // The metrics stacked in an area are a strip at that area's width, as many to a row as it holds: four in the whole
+    // row are one row (the strip Lintel's Today leads with), six wrap their last; four in one column stack.
+    assert.equal(lint(['a a a'], [...metrics('a', 4)]).filter((f) => f.code === 'lone-metric').length, 0);
     assert.match(
-      lint(['a a a'], [...metrics('a', 4)]).find((f) => f.code === 'lone-metric')!.text,
-      /its 4 metrics in "a" sit three to a row/,
+      lint(['a a a'], [...metrics('a', 6)]).find((f) => f.code === 'lone-metric')!.text,
+      /its 6 metrics in "a" sit five to a row, so the last one wraps alone/,
     );
     assert.equal(lint(['a b c'], [...metrics('a', 4), rows('b'), rows('c')]).filter((f) => f.code === 'lone-metric').length, 0);
   });
@@ -919,5 +922,109 @@ describe('what a bare App leaves to the defaults', () => {
       ]),
     );
     assert.deepEqual(quiet, []);
+  });
+});
+
+describe('what an App built in one pass leaves out', () => {
+  const bare: DatabaseSchema = {
+    label: 'desk',
+    dialect: 'sqlite',
+    readAt: '2026-09-25T00:00:00Z',
+    foreignKeys: [],
+    tables: [
+      {
+        id: 'ticket',
+        name: 'ticket',
+        schema: 'main',
+        isView: false,
+        columns: [id, column('title', 'TEXT', { nullable: false }), column('status', 'TEXT', { nullable: false })],
+      },
+    ],
+  };
+  const state = (name: string, more: object = {}) => ({ name, label: name, ...more });
+  const edge = (from: string, to: string) => ({ verb: `to_${to}`, from, to: [to], label: to });
+  const moving = {
+    column: 'status',
+    states: [state('new'), state('working'), state('done', { final: true })],
+    edges: [edge('new', 'working'), edge('working', 'done')],
+  };
+  const metric = (title: string) => ({ kind: 'metric', title, table: 'ticket' });
+  const app = (ticket: object, home: object[]): AppDef =>
+    ({
+      id: 'desk',
+      label: 'Desk',
+      ui: { theme: { preset: 'lumen', accent: '#2d4fd6' }, logo: 'lifebuoy' },
+      nav: [{ view: 'home' }, { view: 'tickets' }],
+      home: [{ view: 'home' }],
+      resources: { ticket },
+      views: {
+        home: { kind: 'dashboard', sections: home },
+        tickets: { table: 'ticket', icon: 'ticket', show: ['title', 'status'], tabs: [{ label: 'All' }] },
+      },
+    }) as unknown as AppDef;
+  const codes = (def: AppDef) =>
+    designLint(def, [], bare)
+      .filter((finding) => ['long-group', 'stuck-state', 'crowded-dashboard', 'home-without-work'].includes(finding.code))
+      .map((finding) => [finding.code, finding.at]);
+  const rows = { kind: 'rows', title: 'Needs you', table: 'ticket', show: ['title'] };
+
+  test('a home of figures and a list of what waits, over a machine every state of which moves on, says nothing', () => {
+    assert.deepEqual(codes(app({ machine: moving }, [metric('Open'), rows])), []);
+  });
+  test('a state nothing leaves, a home with no work on it, nine figures and a group of eight are each said with a fix', () => {
+    const stuck = { ...moving, edges: [edge('new', 'working')] };
+    const eight = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    const found = designLint(
+      app(
+        { machine: stuck, form: { groups: [{ label: 'Ticket', fields: eight }] } },
+        Array.from({ length: 9 }, (_, i) => metric(`M${i}`)),
+      ),
+      [],
+      bare,
+    );
+    assert.deepEqual(
+      found
+        .filter((finding) => ['long-group', 'stuck-state', 'crowded-dashboard', 'home-without-work'].includes(finding.code))
+        .map((f) => f.code),
+      ['long-group', 'stuck-state', 'crowded-dashboard', 'home-without-work'],
+    );
+    const said = (code: string) => sayDesignFinding(found.find((finding) => finding.code === code)!);
+    assert.match(said('stuck-state'), /"working" is a state nothing leaves .*working: \{ final: true \}/);
+    assert.match(said('home-without-work'), /rows\('Needs you', 'ticket'/);
+    assert.match(said('long-group'), /asks 8 things .* none longer than 7/);
+    assert.match(said('crowded-dashboard'), /9 figures/);
+  });
+  test("a state only another table's command leaves is said, unless the page lists those records with their verbs", () => {
+    /* An item goes out by its own verb and comes back by a line's command: a person on the item's page sees "out"
+       and no way on. */
+    const lent = {
+      ...moving,
+      edges: [edge('new', 'working'), { ...edge('working', 'done'), command: 'returnLine' }],
+    };
+    const def = { ...app({ machine: lent, actions: [{ id: 'to_working', move: { column: 'status' } }] }, [metric('Open'), rows]) };
+    const next = (commands: object | undefined, pages: PageDef[] = []) =>
+      designLint(def, pages, bare, commands as never)
+        .filter((finding) => finding.code === 'no-next-step')
+        .map(sayDesignFinding);
+    assert.match(
+      next({ returnLine: { target: 'line' } })[0]!,
+      /a ticket in "working" is moved on only by a command of "line".*rowActions: true/,
+    );
+    // The command acts on the ticket itself: its page has the button.
+    assert.deepEqual(next({ returnLine: { target: 'ticket' } }), []);
+    // No registry to read: the rule cannot tell, and says nothing.
+    assert.deepEqual(next(undefined), []);
+    // The page lists the lines with each row's verbs: the way on is there.
+    const listed = {
+      id: 'p',
+      name: 'Ticket',
+      base: 'ticket',
+      source: 'config',
+      sections: [{ kind: 'list', from: 'line', path: 'line.ticket_id', rowActions: true }],
+    };
+    assert.deepEqual(next({ returnLine: { target: 'line' } }, [listed as unknown as PageDef]), []);
+  });
+  test("a machine no verb moves at all is the App's to move by its own writes: not a stuck state", () => {
+    assert.deepEqual(codes(app({ machine: { ...moving, edges: [] } }, [metric('Open'), rows])), []);
   });
 });

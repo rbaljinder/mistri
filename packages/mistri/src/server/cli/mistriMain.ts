@@ -18,6 +18,7 @@ import { MISTRI } from './usage.js';
 import type { Main } from '@mistriwork/engine/server/cli/startup.js';
 import { runSubcommand, subcommandIn } from '@mistriwork/engine/server/cli/subcommand.js';
 import { setProduct } from '@mistriwork/engine/server/product.js';
+import { resolveMistriFromCheckout } from '../app/buildResolution.js';
 import type { ProfileTakes } from '@mistriwork/engine/server/config/profile.js';
 
 /** The command line as it was typed, for the `npx tablewalk …` that runs it: each word quoted only where a shell needs it. */
@@ -74,6 +75,8 @@ const POSITIONAL_AT: Record<string, (argv: readonly string[]) => string | undefi
 export const main: Main = async () => {
   /* Before any flag is read: the variables both binaries read are said in this one's name (MISTRI_*). */
   setProduct('mistri');
+  /* From a source checkout, an App outside it still finds the framework (buildResolution.ts). */
+  resolveMistriFromCheckout();
   /* Nothing typed: the first screen, since a start with no App and nothing to do serves nothing here. */
   if (process.argv.length <= 2) {
     console.error(MISTRI.shortUsage);
@@ -85,6 +88,10 @@ export const main: Main = async () => {
     const { existsSync } = await import('node:fs');
     const { globalsAfterCommand } = await import('./globalFlags.js');
     process.argv = globalsAfterCommand(process.argv, new Set([...Object.keys(MISTRI_COMMANDS), 'schema', 'dev', 'serve']), existsSync);
+  }
+  if (process.argv[2] === 'dev' && (process.argv.includes('--help') || process.argv.includes('-h'))) {
+    process.stdout.write((await import('./usage.js')).DEV_USAGE);
+    return;
   }
   if (process.argv[2] === 'schema' && (process.argv.includes('--help') || process.argv.includes('-h'))) {
     process.stdout.write((await import('./usage.js')).SCHEMA_USAGE);

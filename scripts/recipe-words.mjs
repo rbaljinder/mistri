@@ -19,6 +19,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RECIPE_MENU } from '../packages/engine/src/shared/themeRecipes.ts';
 import { RECIPE_WORDS, recipeDescription, TYPE_WORDS } from '../packages/engine/src/shared/themeRecipeWords.ts';
+import { RECIPE_FAMILIES, RECIPE_FAMILY_WORDS, familyDescription } from '../packages/engine/src/shared/themeRecipeFamilies.ts';
 import { TYPE_BASES, TYPE_FACES, TYPE_ROLES } from '../packages/engine/src/shared/themeType.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -35,6 +36,15 @@ export function schemaText(text = readFileSync(SCHEMA, 'utf8')) {
   for (const part of Object.keys(RECIPE_MENU)) {
     const { enum: values, description: _old, ...rest } = parts[part];
     parts[part] = { enum: values, description: recipeDescription(part), ...rest };
+  }
+  /* A family is said among the parts: its values in words, then the parts it sets, so a reader of the schema alone
+     knows what one word chooses. */
+  for (const family of Object.keys(RECIPE_FAMILIES)) {
+    const covers = Object.keys(Object.values(RECIPE_FAMILIES[family])[0]).join(', ');
+    parts[family] = {
+      enum: Object.keys(RECIPE_FAMILIES[family]),
+      description: `A family: one word that sets the default of ${covers}; a part said itself still wins. ${familyDescription(family)}`,
+    };
   }
   const { base: _base, roles: _roles, ...type } = schema.properties.type.properties;
   schema.properties.type.properties = {
@@ -90,9 +100,33 @@ function typeRolesSchema() {
 
 const TYPE_START = '<!-- type words -->';
 
+const FAMILY_START = (family) => `<!-- family words: ${family} -->`;
+const FAMILY_END = '<!-- /family words -->';
+
+/** A family's values in words, each with the parts it picks, between the markers the page keeps for it. */
+function familyList(family) {
+  return [
+    FAMILY_START(family),
+    '',
+    ...Object.entries(RECIPE_FAMILIES[family]).map(
+      ([value, picks]) =>
+        `- \`${value}\`: ${RECIPE_FAMILY_WORDS[family][value]} (${Object.entries(picks)
+          .map(([part, pick]) => `\`${part}: '${pick}'\``)
+          .join(', ')})`,
+    ),
+    '',
+    FAMILY_END,
+  ].join('\n');
+}
+
 /** The gallery page with each part's values listed in words under its picture, between markers this rewrites. */
 export function galleryText(text = readFileSync(GALLERY, 'utf8')) {
   let page = text;
+  for (const family of Object.keys(RECIPE_FAMILIES)) {
+    const at = page.indexOf(FAMILY_START(family));
+    if (at < 0) throw new Error(`${GALLERY} has no place for the ${family} family's words`);
+    page = page.slice(0, at) + familyList(family) + page.slice(page.indexOf(FAMILY_END, at) + FAMILY_END.length);
+  }
   for (const part of Object.keys(RECIPE_MENU)) {
     const list = [START(part), '', ...Object.entries(RECIPE_WORDS[part]).map(([value, words]) => `- \`${value}\`: ${words}`), '', END].join(
       '\n',

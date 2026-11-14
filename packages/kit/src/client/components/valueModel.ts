@@ -19,6 +19,7 @@ import {
   formatNumber,
   formatPercent,
   formatRelativeDay,
+  formatTimeOfDay,
   appToday,
   daysFromToday,
   NEAR_DAYS,
@@ -105,6 +106,13 @@ export interface DisplayRule {
  * else keeps its rule. Money needs no such reading: every figure says the currency's minor digits (moneyText).
  */
 export function datesAmong<R extends DisplayRule | null | undefined>(rule: R, values: readonly unknown[]): R {
+  /* Moments that are all of today say their time alone: under a head, on a page of today's visits, "9:30 AM" down
+     the column, not "today" on every row. One of another day and each keeps its day. An App's reading only, and
+     only where the author asked for no other form. */
+  if ((rule?.format === undefined || rule.format === 'datetime' || rule.format === 'relative') && allToday(values)) {
+    if (!rule) return TODAY_ONLY as R;
+    return (timed.get(rule) ?? (timed.set(rule, { ...rule, format: 'time' }), timed.get(rule)!)) as R;
+  }
   if (rule?.format !== 'relative') return rule;
   const far = values.some((value) => {
     if (value === null || value === undefined || value === '') return false;
@@ -116,6 +124,22 @@ export function datesAmong<R extends DisplayRule | null | undefined>(rule: R, va
   return (apart.get(rule) ?? (apart.set(rule, { ...rule, absolute: true }), apart.get(rule)!)) as R;
 }
 const apart = new WeakMap<DisplayRule, DisplayRule>();
+const timed = new WeakMap<DisplayRule, DisplayRule>();
+const TODAY_ONLY: DisplayRule = { format: 'time' };
+const MOMENT = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/;
+/** Whether every value there is a moment (a day with a time that is not midnight) of today, and there is one. */
+function allToday(values: readonly unknown[]): boolean {
+  if (!shellBody().classList.contains('app-mode')) return false;
+  let some = false;
+  for (const value of values) {
+    if (value === null || value === undefined || value === '') continue;
+    const text = String(value);
+    if (!MOMENT.test(text) || /[ T]00:00(:00(\.0+)?)?(Z|[+-]\d{2}(:?\d{2})?)?$/.test(text)) return false;
+    if (daysFromToday(text) !== 0) return false;
+    some = true;
+  }
+  return some;
+}
 
 /** A stored figure Intl can say exactly: a finite number, or a decimal's digits however long (formatMoney). */
 const exactFigure = (value: unknown) =>
@@ -259,7 +283,7 @@ export type Dress =
   /* A signature: the stored picture's address; `text` says it was signed. */
   | { kind: 'signature'; src: string; text: string }
   | { kind: 'number'; text: string; title: string }
-  | { kind: 'relative'; text: string; title: string; overdue?: true }
+  | { kind: 'relative'; text: string; title: string; date?: string; overdue?: true }
   /* A day or a moment said absolutely (`format: 'date'`, `'datetime'`): the same words on any day, for any reader. */
   | { kind: 'date'; text: string; title: string }
   | { kind: 'meter'; text: string; fill: number; tone: string | null; title: string }
@@ -504,13 +528,15 @@ export function dressFor(rule: DisplayRule | null | undefined, value: unknown): 
  * needs and "6 months ago" is never what a due date is for. Past about two weeks the date is the text and the
  * relative phrase its tooltip.
  */
-function relativeSaid(rule: DisplayRule, text: string): { text: string; title: string } | null {
+function relativeSaid(rule: DisplayRule, text: string): { text: string; title: string; date?: string } | null {
   const said = formatRelativeDay(text);
   if (!said) return null;
   const days = daysFromToday(text);
+  /* `date` is the day as a date column says it, kept beside a near day's words: a record's head draws both
+     ("Nov 8, 2026 · 7 days ago", page.css), and the stored ISO text is never what a reader is shown. */
   return days !== null && (rule.absolute || Math.abs(days) > NEAR_DAYS)
     ? { text: formatDate(text), title: said }
-    : { text: said, title: text };
+    : { text: said, title: text, date: formatDate(text) };
 }
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?)?$/;
@@ -564,7 +590,12 @@ function ownDrawing(rule: DisplayRule, value: unknown, text: string): Dress | nu
       return HEX.test(text.trim()) ? { kind: 'color', hex: text.trim().toLowerCase(), text: text.trim() } : null;
     case 'time': {
       const m = CLOCK.exec(text.trim());
-      if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+      /* A moment asked for as a time is its time of day: a list of today's visits says "9:30 AM", not the day again. */
+      if (!m) {
+        const clock = typeof value === 'string' ? formatTimeOfDay(text) : '';
+        return clock ? { kind: 'number', text: clock, title: text } : null;
+      }
+      if (Number(m[1]) > 23 || Number(m[2]) > 59) return null;
       const said = new Intl.DateTimeFormat(formatLocale(), { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' }).format(
         Date.UTC(2000, 0, 1, Number(m[1]), Number(m[2])),
       );
@@ -582,7 +613,7 @@ function ownDrawing(rule: DisplayRule, value: unknown, text: string): Dress | nu
     case 'date':
     case 'datetime': {
       if (typeof value !== 'string' || !text.trim()) return null;
-      const said = formatAbsolute(text, { time: rule.format === 'datetime', zone: rule.timezone });
+      const said = formatAbsolute(text, { time: rule.format === 'datetime', zone: rule.timezone, reader: true });
       if (said === text) return null;
       /* A day that satisfies a comparison ("<= today": overdue) wears its tone; the date is still said as itself. */
       const tone = rule.tone ? toneFor(rule, value, text) : null;

@@ -97,7 +97,8 @@ test('a question no facet can draw is said in words everywhere the list says it'
   await page.keyboard.press('Escape');
 
   // A view is named for its question until the reader names it.
-  await page.getByRole('button', { name: 'Save view…' }).click();
+  await page.getByRole('button', { name: 'Views' }).click();
+  await page.getByRole('menuitem', { name: 'Save view…' }).click();
   await expect(page.getByRole('dialog').getByLabel('Name')).toHaveValue('Status is not Done');
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
 });
@@ -107,7 +108,8 @@ test('a reader keeps the question as a saved view, renames it, and removes it', 
   await rail.getByRole('checkbox', { name: /^Urgent/ }).check();
   await expect(page.locator('.applist-chip', { hasText: 'Urgent' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Save view…' }).click();
+  await page.getByRole('button', { name: 'Views' }).click();
+  await page.getByRole('menuitem', { name: 'Save view…' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('Save this view');
   await dialog.getByLabel('Name').fill('Urgent');
@@ -122,7 +124,8 @@ test('a reader keeps the question as a saved view, renames it, and removes it', 
   await page.getByRole('tab', { name: /^Urgent/ }).click();
   await expect(page.locator('.applist-chip', { hasText: 'Urgent' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Rename view…' }).click();
+  await page.getByRole('button', { name: 'Views' }).click();
+  await page.getByRole('menuitem', { name: 'Rename view…' }).click();
   await page.getByRole('dialog').getByLabel('Name').fill('Hot');
   await page.getByRole('dialog').getByRole('button', { name: 'Rename' }).click();
   await expect(page.getByRole('tab', { name: /^Hot/ })).toHaveAttribute('aria-selected', 'true');

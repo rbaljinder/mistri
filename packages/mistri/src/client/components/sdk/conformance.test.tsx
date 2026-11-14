@@ -79,11 +79,37 @@ describe('overlays', () => {
     /* Screen pixels, as getBoundingClientRect answers under a zoom of 2: the layout box is half of each. */
     trigger.getBoundingClientRect = () =>
       ({ x: 200, y: 400, top: 400, left: 200, right: 300, bottom: 440, width: 100, height: 40, toJSON: () => ({}) }) as DOMRect;
-    fireEvent.click(trigger);
-    const positioner = (await screen.findByRole('dialog', { name: 'Help' })).parentElement!;
-    await waitFor(() => expect(positioner.style.getPropertyValue('--anchor-width')).toBe('50px'));
-    expect(positioner.style.getPropertyValue('--anchor-height')).toBe('20px');
-    expect(positioner.style.position).toBe('fixed');
+    /* The popup is placed by UI SDK, whose ruler is the popup's own box: how many screen pixels it covers against
+       the layout pixels it is wide. Here nothing is laid out, so the popup is given the two a zoom of 2 gives it. */
+    const isPopup = (element: Element) => element.getAttribute('data-slot') === 'popover-content';
+    const measured = HTMLElement.prototype.getBoundingClientRect;
+    const laidOut = { offsetWidth: 120, offsetHeight: 60 };
+    const own = Object.keys(laidOut).map((name) => [name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)] as const);
+    for (const [name, size] of Object.entries(laidOut))
+      Object.defineProperty(HTMLElement.prototype, name, {
+        configurable: true,
+        get(this: HTMLElement) {
+          return isPopup(this) ? size : 0;
+        },
+      });
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+      return isPopup(this)
+        ? ({ x: 0, y: 0, top: 0, left: 0, right: 240, bottom: 120, width: 240, height: 120, toJSON: () => ({}) } as DOMRect)
+        : measured.call(this);
+    };
+    try {
+      fireEvent.click(trigger);
+      const popup = await screen.findByRole('dialog', { name: 'Help' });
+      await waitFor(() => expect(popup.style.getPropertyValue('--anchor-width')).toBe('50px'));
+      expect(popup.style.getPropertyValue('--anchor-height')).toBe('20px');
+      expect(popup.style.position).toBe('fixed');
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = measured;
+      for (const [name, descriptor] of own) {
+        if (descriptor) Object.defineProperty(HTMLElement.prototype, name, descriptor);
+        else delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name];
+      }
+    }
   });
 });
 

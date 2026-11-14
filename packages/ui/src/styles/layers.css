@@ -1,0 +1,4 @@
+/* UI SDK's layers, in order. Inside an App they are named within mistri's `components` layer, so a look, a theme
+   and `structure` still stand over all of them. The last, `m-own`, takes the dress off a part its caller dresses
+   (`data-own`), so it has to stand over every other. */
+@layer m-guest, ui-sdk, m-tokens, m-parts, m-components, m-looks, m-own;

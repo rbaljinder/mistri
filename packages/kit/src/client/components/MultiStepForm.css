@@ -22,8 +22,8 @@
   /* The title runs a display size, not a record's: at 411px a record title's 21px sat barely above a 16px help line,
      and a two-line question at 1.1 read as two sentences. The step's help is one size and one color wherever it
      appears, a step's lead or a section's words under the title, well under the title and never bold. */
-  .intake-head .step-header { gap: var(--space-3); }
-  .intake-head .step-title {
+  .intake-head [data-slot='step-header'] { gap: var(--space-3); }
+  .intake-head :is([data-slot='step-header'] > :is(h1, h2)) {
     font-size: calc(28px * var(--type-k)); /* off-scale: the question's display size on a phone (docs/design.md, the intake style) */
     font-family: var(--type-title-font, inherit);
     font-weight: var(--heading-weight, 600);
@@ -35,8 +35,8 @@
     outline: none;
   }
   /* off-scale: the question's display size at a desk, above the scale's 20px like the landing's display */
-  @media (min-width: 601px) { .intake-head .step-title { font-size: calc(32px * var(--type-k)); } }
-  .intake-head .step-lead,
+  @media (min-width: 601px) { .intake-head :is([data-slot='step-header'] > :is(h1, h2)) { font-size: calc(32px * var(--type-k)); } }
+  .intake-head [data-slot='step-lead'],
   .multi-step-form[data-style='intake'] .command-group > legend {
     max-width: 60ch; text-wrap: pretty; font-size: var(--text-lg); font-weight: 400; line-height: 1.45; color: var(--ink-muted);
   }
@@ -44,7 +44,7 @@
      (a checkbox's words beside it) are answers, in the regular weight (formDress.css). */
   .multi-step-form[data-style='intake'] .command-group { border-top: 0; padding-top: 0; }
   .multi-step-form[data-style='intake'] .command-group-body { padding-top: var(--space-5); }
-  .multi-step-form[data-style='intake'] .form-field-check-row > .form-field-label { font-size: var(--text-lg); }
+  .multi-step-form[data-style='intake'] [data-slot='field-check-row'] > [data-slot='field-label'] { font-size: var(--text-lg); }
 
   /* The fields. A label stands a step clear of its well, and a field three times that clear of the next label. */
   .multi-step-form[data-style='intake'] {
@@ -52,15 +52,15 @@
   }
   .multi-step-form[data-style='intake'] :is(.multi-step-panel, .intake-actions) { --control-h: var(--intake-h); }
   .multi-step-form[data-style='intake'] .command-fields { gap: var(--space-6); }
-  .multi-step-form[data-style='intake'] .form-columns { column-gap: var(--space-4); row-gap: var(--space-6); }
-  .multi-step-form[data-style='intake'] .form-field { gap: var(--space-3); }
-  .multi-step-form[data-style='intake'] .form-field-label { font-size: var(--text-md); }
-  .multi-step-form[data-style='intake'] .form-field-problem { font-size: var(--text-base); }
-  .multi-step-form[data-style='intake'] .date-field .date-field-trigger { inset-inline-end: var(--space-2); }
+  .multi-step-form[data-style='intake'] [data-slot='columns'] { column-gap: var(--space-4); row-gap: var(--space-6); }
+  .multi-step-form[data-style='intake'] [data-slot='field'] { gap: var(--space-3); }
+  .multi-step-form[data-style='intake'] [data-slot='field-label'] { font-size: var(--text-md); }
+  .multi-step-form[data-style='intake'] [data-slot='field-error'] { font-size: var(--text-base); }
+  .multi-step-form[data-style='intake'] [data-slot='date-field'] :is([data-slot='date-field'] > [data-slot='popover-trigger']) { inset-inline-end: var(--space-2); }
 
   /* Show, at the intake's larger box. */
-  .multi-step-form[data-style='intake'] .field-with-action > .btn { min-height: 32px; margin-inline-end: var(--space-2); font-size: var(--text-base); }
-  .multi-step-form[data-style='intake'] .field-hidden { letter-spacing: 0.12em; }
+  .multi-step-form[data-style='intake'] [data-slot='field-with-action'] > [data-slot='button'] { min-height: 32px; margin-inline-end: var(--space-2); font-size: var(--text-base); }
+  .multi-step-form[data-style='intake'] [data-slot='input'][data-hidden] { letter-spacing: 0.12em; }
 
   /* The actions: Back a quiet word, the primary the one filled thing on the page, in the theme's primary-action color
      (formDress.css). No rule over them. */
@@ -71,14 +71,14 @@
     background: var(--ground);
     align-items: center;
   }
-  .intake-actions .btn { min-height: var(--control-h); }
+  .intake-actions [data-slot='button'] { min-height: var(--control-h); }
   /* Back's words stand on the content's edge; its press area reaches past it. */
-  .intake-actions .action-bar-back { flex: none; margin-inline-start: calc(-1 * var(--space-3)); padding-inline: var(--space-3); }
-  @media (pointer: coarse) { .intake-actions .btn { min-height: max(var(--control-h), 44px); } }
+  .intake-actions :is([data-slot='action-bar'] > [data-slot='button'][data-variant='quiet']) { flex: none; margin-inline-start: calc(-1 * var(--space-3)); padding-inline: var(--space-3); }
+  @media (pointer: coarse) { .intake-actions [data-slot='button'] { min-height: max(var(--control-h), 44px); } }
   /* At a desk the primary is weighted to the right, at its words' width, with Back at the left. */
   @media (min-width: 601px) {
     .intake-actions { justify-content: space-between; }
-    .intake-actions .action-bar-primary { flex: 0 1 auto; min-width: 10rem; margin-inline-start: auto; }
+    .intake-actions :is([data-slot='action-bar'] > [data-slot='button'][data-variant='solid']) { flex: 0 1 auto; min-width: 10rem; margin-inline-start: auto; }
   }
   /* On a phone the bar is the screen's foot, not the end of the form: a short step left it floating mid-screen. The
      page fills the scrolling container it is in (the shell's <main>), the form fills the page, and the bar takes the
@@ -109,14 +109,14 @@
 /* The intake field's own size, outside the layer, ranked by the :root it stands under over every look's field dress,
    and only on this on-demand sheet, so no first page carries an exception for it. Its colors, edge and ring are the
    quiet form's (formDress.css). */
-/* Every box a row can hold is one height: the command form's listbox is the shell's (.dd-button, without @mistriwork/ui's
-   .field-select), and stood 8px short of the text box beside it. */
-:root .multi-step-form[data-style='intake'] :is(.field-control, .dd-button, .date-field .date-field-input) {
+/* Every box a row can hold is one height: the command form's listbox is the shell's (a bare listbox button, not one
+   inside a field of @mistriwork/ui's), and stood 8px short of the text box beside it. */
+:root .multi-step-form[data-style='intake'] :is(:is([data-slot='input'], [data-slot='textarea']),[data-slot='select-trigger'],[data-slot='date-field'] :is([data-slot='date-field'] > [data-slot='input'])) {
   min-height: var(--control-h);
   padding-inline: var(--space-4);
   font-size: var(--text-lg);
   border-radius: var(--field-radius, var(--radius));
 }
-:root .multi-step-form[data-style='intake'] .field-control[readonly]:not(:disabled) { background: var(--raised); }
-:root .multi-step-form[data-style='intake'] .date-field .date-field-input { padding-inline-end: 40px; /* off-scale: the calendar button's 30px and its inset */ }
-:root .multi-step-form[data-style='intake'] .field-with-action .field-control { padding-inline-end: calc(5.5em + var(--space-3)); }
+:root .multi-step-form[data-style='intake'] :is([data-slot='input'], [data-slot='textarea'])[readonly]:not(:disabled) { background: var(--raised); }
+:root .multi-step-form[data-style='intake'] [data-slot='date-field'] :is([data-slot='date-field'] > [data-slot='input']) { padding-inline-end: 40px; /* off-scale: the calendar button's 30px and its inset */ }
+:root .multi-step-form[data-style='intake'] [data-slot='field-with-action'] :is([data-slot='input'], [data-slot='textarea']) { padding-inline-end: calc(5.5em + var(--space-3)); }

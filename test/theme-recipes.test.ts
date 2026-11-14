@@ -32,14 +32,15 @@ const SHEETS = new Map(
       .map((file) => [file.split('\\').join('/'), join(dir, file)] as const),
   ),
 );
-/* @mistriwork/ui's form controls' sheet arrives with the first control a page draws: the form recipes (required, checkbox,
-   formStep, actionBar) are answered there, not in a first stylesheet. */
-SHEETS.set('forms.css', join('packages/ui/src', 'forms.css'));
+/* @mistriwork/ui's controls answer a recipe for themselves (a tab, a status, a field, a button, the form recipes:
+   required, formStep, actionBar), in the one sheet of theirs that is about recipes. It is part of
+   controls.css, which the first stylesheet takes whole. */
+SHEETS.set('styles/looks.css', join('packages/ui/src/styles', 'looks.css'));
 const sheets = [...SHEETS.keys()].sort();
 const at = (sheet: string) => SHEETS.get(sheet) ?? sheet;
 
 /** The sheets a page always loads: a menu value that names none lives in one of these. */
-const FIRST_SHEETS = ['themeFamilies.css', 'components/sdk/kit.css', 'forms.css'];
+const FIRST_SHEETS = ['themeFamilies.css', 'components/sdk/kit.css', 'styles/looks.css'];
 
 const MENUS: Record<string, Record<string, string | null>> = {
   ...(RECIPE_MENU as Record<string, Record<string, string | null>>),
@@ -219,4 +220,11 @@ test('a face the kit ships is a sheet of its own: a theme set in it brings the f
   // And each face sheet exists, declaring the family its stack names.
   assert.match(readFileSync(at('interFace.css'), 'utf8'), /font-family: Inter;/);
   assert.match(readFileSync(at('barlowFace.css'), 'utf8'), /font-family: Barlow;/);
+  assert.ok(recipeAttributes(themePreset('lumen')!).sheets.includes('manrope'), "Lumen's headings bring their face");
+  assert.match(readFileSync(at('manropeFace.css'), 'utf8'), /font-family: Manrope;/);
+  // A worklist's tile is the section's mark, never the accent (a row in alarm wears its tone, DashboardBlocks.css): in the App's colour it would speak for what a colour
+  // means (a warning sign in a green brand reads as fine, everything in an orange one as a warning).
+  const tile =
+    /\.dash-worklist \.dash-mini-mark:not\(\[data-tone\]\) \{([^}]*)\}/.exec(readFileSync(at('lumenLook.css'), 'utf8'))?.[1] ?? '';
+  assert.ok(tile.includes('var(--raised)') && !tile.includes('--accent'), tile);
 });

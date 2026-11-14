@@ -19,6 +19,7 @@ import { onDemand } from './onDemand.js';
 import { Empty } from './Notes.js';
 import { say } from '../copy/lists/components/Gallery.js';
 import { imageSources, imageFallbackSet, MEDIA_IMAGE_SIZES } from '@mistriwork/engine/shared/imageWidths.js';
+import './Gallery.css';
 
 /* The lightbox draws its own dialog, fetched the first time a photo is opened. */
 const Lightbox = onDemand(() => import('./Lightbox.js'), 'Lightbox', { quiet: true });

@@ -398,6 +398,19 @@ card (one document listener over thousands of chips, where a per-trigger
 for a menu, a listbox, a dialog and a typeahead; those five are not any of
 them.
 
+Since then (2026-11-14) the layer under the primitives has changed and the
+reasoning has not: `@mistriwork/ui` is drawn over UI SDK (`@ui-sdk/core`,
+`@ui-sdk/react`), no file imports Base UI, and a control's parts are known by
+their `data-slot` and state attributes rather than by the classes named above
+(`@mistriwork/ui/controls.css` dresses them). The one thing to know about
+positioning went with it. UI SDK draws a popup in the browser's top layer and
+places it itself, and measured under the density zoom at 1.12 and 1.24 its
+date popup and its menus land where their triggers are, so the virtual anchor
+is gone (`anchor.ts`, with `zoomAnchor` and `layoutViewport`). The zoom-aware
+ruler stays (`packages/ui/src/internal/ruler.ts`) for what the client still
+measures by hand, and `test/check-client-geometry.mjs` still holds the client
+to it. A popup opened inside a dialog is still drawn into that dialog.
+
 ## Two rendering worlds, step 1: a host per row (2026-09-10)
 
 The release plan's item 5 was written as though the explorer grid were

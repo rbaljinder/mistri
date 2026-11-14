@@ -13,6 +13,7 @@ import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { FieldArranger } from './FieldArranger.js';
 import type { RecoveryStatus } from '../draftRecovery.js';
 import { say } from '../copy/record/components/LayoutBuilder.js';
+import './LayoutBuilder.css';
 
 export interface Section {
   kind: 'fields' | 'list';

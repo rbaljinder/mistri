@@ -161,7 +161,7 @@ export function commandPath(route: keyof typeof COMMAND_ROUTES, app: string): st
 }
 
 /**
- * An answer to each required question a command asks, when the test gives none: the first choice, a number within
+ * An answer to each question a command asks, when the test gives none: the first choice, a number within
  * its bounds, today, a sentence that fits (an address where it asks for an email, a link or a phone number). A
  * reference is the first record of the table it names. What a test means to say it passes as `input`; this only lets
  * a journey run a command whose form asks something. A required question it cannot answer — a pattern, a row-defined
@@ -189,12 +189,34 @@ export async function sampleInput(
       input[field.name] = inner.input;
       continue;
     }
-    if (!field.required || field.default !== undefined) continue;
+    /* What the form opens with is what it sends when nobody touches it: a yes/no that starts on, a quantity of one,
+       a first choice. The journey sends the same; a start that is computed where the form opens (today, the
+       record's own column) is answered below like any other question. */
+    if (field.default !== undefined) {
+      const start: unknown = field.default;
+      if (typeof start === 'boolean' || typeof start === 'number') {
+        input[field.name] = start;
+        continue;
+      }
+      if (typeof start === 'string' && (field.type === 'text' || field.type === 'textarea' || field.type === 'choice')) {
+        input[field.name] = start;
+        continue;
+      }
+    }
+    /* A question the form leaves optional is answered too where it can be: a handler often needs one the form cannot
+       require (a carrier unless it is a pickup), and a journey that left it empty was refused. One that cannot be
+       answered is left empty when optional, and only a required one stops the step. A yes/no left optional keeps
+       its own default: answering it would choose a branch. */
+    const must = field.required;
+    if (!must && field.type === 'boolean') continue;
     switch (field.type) {
       case 'text':
       case 'textarea':
       case 'richText': {
-        if ('pattern' in field && field.pattern !== undefined) return { input, unanswered: field.name };
+        if ('pattern' in field && field.pattern !== undefined) {
+          if (must) return { input, unanswered: field.name };
+          break;
+        }
         if (field.as === 'color') {
           input[field.name] = '#1d6a5a';
           break;
@@ -224,7 +246,10 @@ export async function sampleInput(
         input[field.name] = field.min && field.min > today.slice(0, 7) ? field.min : today.slice(0, 7);
         break;
       case 'choices':
-        if (!field.options.length) return { input, unanswered: field.name };
+        if (!field.options.length) {
+          if (must) return { input, unanswered: field.name };
+          break;
+        }
         input[field.name] = field.options.slice(0, Math.max(1, field.min ?? 1)).map((option) => option.value);
         break;
       case 'boolean':
@@ -234,7 +259,8 @@ export async function sampleInput(
         input[field.name] = field.min && field.min > today ? field.min : today;
         break;
       case 'datetime':
-        input[field.name] = new Date().toISOString();
+        /* A day ahead: what asks for a moment is far more often something to book than something to backdate. */
+        input[field.name] = new Date(Date.now() + 86_400_000).toISOString();
         break;
       case 'time':
         input[field.name] = field.min ?? (field.max !== undefined && field.max < '09:00' ? field.max : '09:00');
@@ -242,21 +268,31 @@ export async function sampleInput(
       case 'choice':
         if (field.source) {
           const row = await first(field.source.from);
-          if (!row) return { input, unanswered: field.name };
+          if (!row) {
+            if (must) return { input, unanswered: field.name };
+            break;
+          }
           input[field.name] = row[field.source.by];
           break;
         }
-        if (!field.options.length) return { input, unanswered: field.name };
+        if (!field.options.length) {
+          if (must) return { input, unanswered: field.name };
+          break;
+        }
         input[field.name] = field.options[0].value;
         break;
       case 'reference': {
         const row = await first(field.from);
-        if (!row) return { input, unanswered: field.name };
+        if (!row) {
+          if (must) return { input, unanswered: field.name };
+          break;
+        }
         input[field.name] = row[field.by];
         break;
       }
       default:
-        return { input, unanswered: field.name };
+        if (must) return { input, unanswered: field.name };
+        break;
     }
   }
   return { input };
@@ -329,6 +365,14 @@ export function appRequests(send: Send, options: { app?: string; base?: string }
     table: string,
     options: { where?: string; limit?: number; show?: readonly string[] } = {},
   ): Promise<TestResult<TestRow[]>> {
+    /* An option this read does not take was dropped without a word, and `{ query: 'status = paid' }` then read the
+       whole table: a test that passed for the wrong rows. It is refused by name, with the word that was meant. */
+    const unknown = Object.keys(options).filter((key) => !['where', 'limit', 'show'].includes(key));
+    if (unknown.length)
+      throw new Error(
+        `rows("${table}") takes where, limit and show; it was given ${unknown.map((key) => `"${key}"`).join(', ')}.` +
+          (unknown.some((key) => key === 'query' || key === 'filter') ? ' A condition is `where`.' : ''),
+      );
     const id = await app();
     const shown = options.show?.length ? ` show ${options.show.join(', ')}` : '';
     const q = `${options.where?.trim() ? `${table} ${options.where.trim()}` : table}${shown}`;
@@ -400,23 +444,49 @@ export function appRequests(send: Send, options: { app?: string; base?: string }
   /** Prepare, then execute, as the browser's form does (client/commandSend.ts). */
   async function command(
     name: string,
-    key: TestRecordKey,
+    key: TestRecordKey | readonly TestRecordKey[],
     input: Record<string, unknown> = {},
     options: { version?: number } = {},
   ): Promise<TestCommandResult> {
     const id = await app();
+    /* A command declared `targets: 'many'` takes its records as one ordered list, prepared and run together as the
+       bulk bar sends them (client/bulkActions.ts): every record commits or none does. */
+    if (Array.isArray(key)) {
+      const keys = key as readonly TestRecordKey[];
+      return versioned(name, options.version, async (commandVersion): Promise<TestCommandResult> => {
+        const prepared = await readResult<{ targets?: Array<{ expectedVersion?: number | null; eligible?: boolean }> }>(
+          await send(commandPath('prepare', id), { method: 'POST', json: { command: name, commandVersion, keys } }),
+        );
+        if (!prepared.ok) return prepared;
+        const targets = prepared.value.targets ?? [];
+        return readResult(
+          await send(commandPath('execute', id), {
+            method: 'POST',
+            json: {
+              command: name,
+              commandVersion,
+              keys,
+              expectedVersions: keys.map((_, index) => targets[index]?.expectedVersion ?? 0),
+              idempotencyKey: randomBytes(18).toString('base64url'),
+              input,
+            },
+          }),
+        );
+      });
+    }
+    const one = key as TestRecordKey;
     return versioned(name, options.version, async (commandVersion): Promise<TestCommandResult> => {
       const prepared = await readResult<{ expectedVersion: number }>(
         await send(commandPath('prepare', id), {
           method: 'POST',
-          json: { command: name, commandVersion, key } satisfies Pick<CommandRequest, 'command' | 'commandVersion' | 'key'>,
+          json: { command: name, commandVersion, key: one } satisfies Pick<CommandRequest, 'command' | 'commandVersion' | 'key'>,
         }),
       );
       if (!prepared.ok) return prepared;
       return readResult(
         await send(commandPath('execute', id), {
           method: 'POST',
-          json: commandEnvelope({ command: name, commandVersion, key, expectedVersion: prepared.value.expectedVersion, input }),
+          json: commandEnvelope({ command: name, commandVersion, key: one, expectedVersion: prepared.value.expectedVersion, input }),
         }),
       );
     });
@@ -518,6 +588,7 @@ export function appRequests(send: Send, options: { app?: string; base?: string }
       }
     }
     let last: TestRefusal | undefined;
+    let sampledInput = false;
     for (const { key } of tried.slice(0, tries)) {
       let input = options.input ?? {};
       if (!options.input && served.command) {
@@ -531,6 +602,7 @@ export function appRequests(send: Send, options: { app?: string; base?: string }
             `"${action}" asks "${sampled.unanswered}", which the kit cannot answer for you: pass it as act(${JSON.stringify(table)}, ${JSON.stringify(action)}, { input: { ... } }).`,
           );
         input = sampled.input;
+        sampledInput = (served.command.input ?? []).length > 0;
       }
       const result = served.command
         ? await command(served.command.id, key, input, { version: served.command.version })
@@ -544,6 +616,20 @@ export function appRequests(send: Send, options: { app?: string; base?: string }
          handler's of this record as often as of the request (refuse('…', 'parts_in')), so the next is tried. */
       if (result.status === 401 || result.status === 403) return result;
     }
+    /* The handler judged answers the kit made up (a time still to come, a carrier unless it is a pickup): that is a
+       question only the test can answer, said as one, not a failure of the App. */
+    if (sampledInput && last && last.code === 'invalid_input')
+      return pending(
+        'no_input',
+        `"${action}" refused the answers the kit gave it (${last.message}): pass yours as act(${JSON.stringify(table)}, ${JSON.stringify(action)}, { input: { ... } }).`,
+      );
+    /* Every record in the state was refused by the handler's own rule (only its therapist writes the note): none of
+       them is this session's to run it on. Name one with `where`, or seed one, and the step runs. */
+    if (!options.where && last && last.code === 'ineligible_state' && tried.length > 1)
+      return pending(
+        'no_record',
+        `No ${table} record${where ? ` where ${where}` : ''} took "${action}" from this session (${last.message}): narrow it with act(${JSON.stringify(table)}, ${JSON.stringify(action)}, { where: '...' }).`,
+      );
     return last!;
   }
 

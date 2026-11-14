@@ -1,5 +1,5 @@
 /** Built-in structural styles. Custom themes inherit one without changing app layout. */
-export type ThemeBase = 'workshop' | 'lumen' | 'mono' | 'sage' | 'ledger';
+export type ThemeBase = 'workshop' | 'lumen' | 'mono' | 'sage' | 'ledger' | 'atelier' | 'graphite' | 'bloom';
 
 /**
  * One mode's colors as a compiled theme holds them: `ThemeColors` flattened, each
@@ -296,21 +296,21 @@ export type ThemeDensity = 'compact' | 'comfortable' | 'spacious';
  */
 export interface ThemeRecipes {
   /** The side menu's current entry and its rows. */
-  nav?: 'tint' | 'inverted' | 'wash' | 'underline' | 'pill' | 'quiet' | 'slot';
+  nav?: 'tint' | 'inverted' | 'wash' | 'underline' | 'pill' | 'quiet' | 'slot' | 'float';
   /** The top bar and its search. */
   bar?: 'plain' | 'ruled' | 'dark' | 'airy' | 'soft';
   /** A record's tabs and the selected tab. */
-  tabs?: 'pill' | 'inverted' | 'underline' | 'rule' | 'chosen';
+  tabs?: 'pill' | 'inverted' | 'underline' | 'rule' | 'tint' | 'lifted';
   /** A dashboard's window picker (7 days, 30 days). */
-  windows?: 'segmented' | 'lifted' | 'chosen';
+  windows?: 'segmented' | 'lifted' | 'tint';
   /** A stat card. */
-  stat?: 'plain' | 'framed' | 'topline' | 'ruled' | 'icon' | 'panel' | 'divided';
+  stat?: 'plain' | 'framed' | 'topline' | 'ruled' | 'icon' | 'panel' | 'divided' | 'bento';
   /** A page section on a dashboard. */
   section?: 'open' | 'card' | 'panel';
   /** A record's field groups and forms; `rail` also sets an aside's cards open, as captioned groups between hairlines. */
   fields?: 'open' | 'panel' | 'card' | 'rail';
   /** A table's rows, hover and selection; `banded` lays every other row on the `band` color. */
-  table?: 'open' | 'tinted' | 'hairline' | 'card' | 'quiet' | 'banded';
+  table?: 'open' | 'tinted' | 'hairline' | 'card' | 'quiet' | 'banded' | 'rows';
   /** A status value. */
   status?: 'dot' | 'pill' | 'pill-dot' | 'quiet';
   /** A board's lanes and cards. */
@@ -320,13 +320,13 @@ export interface ThemeRecipes {
   /** The primary button. */
   buttons?: 'accent' | 'raised' | 'keyed';
   /** Links in text. */
-  links?: 'plain' | 'underline';
+  links?: 'plain' | 'underline' | 'name';
   /** A page section's rule: in the ink, a hairline, or a hairline with ruled boxes and double-ruled table heads (Ledger's). */
   rules?: 'ink' | 'hairline' | 'double';
   /** A record's avatar. */
   avatar?: 'plain' | 'large' | 'round';
   /** A workflow's steps. */
-  workflow?: 'markers' | 'pills';
+  workflow?: 'markers' | 'pills' | 'segments';
   /** A dashboard's banner note: a tint of the accent, a soft gradient across it, or plain on the ground. */
   banner?: 'tint' | 'gradient' | 'plain';
   /** A breakdown drawn as steps: cards on the surface with a hairline, each on a pale tint of its tone, or one strip of figures parted by hairlines, with no cards or marks. */
@@ -343,14 +343,30 @@ export interface ThemeRecipes {
   /** A required field's mark: a red star after its label, or the word "(optional)" after the labels of the fields that
       may be left empty (`aria-required` stays either way). The words are the form's, in the reader's language. */
   required?: 'star' | 'optional-word';
-  /** A checkbox: the browser's own, or drawn as a square in the field's fill with the control's edge and corner, and
-      the accent with a check when on. */
-  checkbox?: 'native' | 'drawn';
   /** A multi-step form's step header: plain, or ruled with a hairline under it. */
   formStep?: 'plain' | 'ruled';
   /** A form's sticky action bar: a hairline over the page, or raised on the surface with a soft lift. */
   actionBar?: 'plain' | 'raised';
 }
+
+/**
+ * Two words that each choose several parts at once, so a page's blocks agree without a theme saying each. A family
+ * sets the DEFAULT of its parts; a part the theme says itself still wins. They are a theme's to write, not a compiled
+ * theme's to carry: `defineTheme` resolves them into the parts (packages/engine/src/shared/themeRecipeFamilies.ts
+ * holds what each word picks).
+ */
+export interface ThemeRecipeFamilies {
+  /** How a page's blocks are held, whatever is in them: a dashboard's sections, a record's field groups, the stats,
+      a table and a breakdown's steps. `open` on the page, `ruled` off by rules as a printed page is, each a `card`,
+      each a `panel` on the surface, or each a soft `tile`. */
+  blocks?: 'open' | 'ruled' | 'card' | 'panel' | 'tile';
+  /** How the current one of several is shown: the menu's entry, a record's tab, a dashboard's window. On a `tint` of
+      the accent, `inverted` to the ink, `underline`d, a `pill`, or a key `lifted` out of a track. */
+  current?: 'tint' | 'inverted' | 'underline' | 'pill' | 'lifted';
+}
+
+/** A theme's recipes as it writes them: a family or two, and the parts where it means something else. */
+export type ThemeSpecRecipes = ThemeRecipes & ThemeRecipeFamilies;
 
 /** A mode's colors, by what they are for. Hex `#rrggbb` only. Each is worn as the custom property of its path
     (`ink` is `--ink`, `nav.ground` is `--nav-ground`), and `check` measures the pairs named here in light, dark
@@ -517,6 +533,13 @@ interface ThemeSpecCommon {
   palettes?: readonly { id: string; label: string; light?: ThemeColorsOver; dark?: ThemeColorsOver }[];
   defaultPalette?: string;
   /**
+   * The App's own color, said once: `brand: '#0b7a5c'`. With `extends`, it is the accent, links, the focus ring, the
+   * menu's mark and the first chart series, by day as written and by night lit until it reads; over Lumen, Sage and
+   * Bloom the raised ground, the menu's ground, hairlines and the muted inks take its hue as well, each as light as
+   * the look drew it. A color named under `colors` wins over the one worked out from it.
+   */
+  brand?: string;
+  /**
    * `'dark'`: worn dark until the reader picks a mode themselves, whatever their machine is set to; it still has
    * light colors, which are held to a printed page's white paper. `'dark-only'`: no light colors at all — `colors`
    * names `dark` alone, the theme is judged as dark and not as paper, and a reader cannot turn it light. Omitted,
@@ -560,7 +583,9 @@ interface ThemeSpecCommon {
   motion?: ThemeMotion;
   /** How far apart things stand: `house` (omitted), `tight` a quarter closer, or `airy` a quarter wider. */
   rhythm?: ThemeRhythm;
-  recipes?: ThemeRecipes;
+  /** A family or two (`blocks`, `current`) and each part's treatment where the theme means something else, from the
+      closed menu. Omitted parts take the family's pick, then the base's. */
+  recipes?: ThemeSpecRecipes;
   /**
    * Where the menu is drawn: beside the page or in the top bar. A suggestion: it holds when the theme is the App's
    * own (`ui.theme.preset`) and `ui.shell.placement` says nothing; a reader who picks another theme keeps the App's

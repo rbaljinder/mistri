@@ -1,14 +1,20 @@
 /**
  * Choices drawn as buttons, cards and checkboxes: Yes/No, icon cards (one or several), a checkbox and a consent. One
- * answer is a native radio dressed, so the arrows, Space and the form's own semantics are the browser's, and the focus
- * ring shows on the face when the keyboard is on the input. Several cards are one group as the radios are (CheckCards):
- * one Tab stop, the arrows move between them, Space turns one on or off, and each says `aria-checked`. Props only.
+ * answer is UI SDK's radio group, so the arrows move between the answers and choose, and the focus ring shows on the
+ * face when the keyboard is on the radio. Several cards are one group as the radios are (CheckCards): one Tab stop,
+ * the arrows move between them, Space turns one on or off, and each says `aria-checked`. Props only.
  * Preview: @mistriwork/ui is Preview at 1.0.
  */
-import { useId, useRef, useState, type AriaAttributes, type KeyboardEvent, type ReactNode } from 'react';
-import { Field } from './Field.js';
-import { frameOf, type FieldFrame } from './fieldFrame.js';
-import { changeDetails, type ChangeDetails } from './changeDetails.js';
+import { type ChangeDetails as SdkChangeDetails, createChange, definePrimitive } from '@ui-sdk/core';
+import { Checkbox as Box, CheckboxIndicator } from '@ui-sdk/react/checkbox';
+import { FieldControl } from '@ui-sdk/react/field';
+import { createParts } from '@ui-sdk/react/primitive';
+import { Radio, RadioGroup } from '@ui-sdk/react/radio';
+import { useId, type AriaAttributes, type ComponentProps, type ReactNode } from 'react';
+import type { FieldFrame } from './fieldFrame.js';
+import type { ChangeDetails } from './changeDetails.js';
+import { Frame } from './internal/Frame.js';
+import { told } from './internal/told.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface ChoiceOption {
@@ -29,33 +35,29 @@ export interface YesNoProps extends Omit<FieldFrame, 'label'> {
 }
 
 /** Two buttons answering a question. */
+/* Each radio is named by its word, by id, since the word stands beside the radio and not inside it. */
 function DefaultYesNo(props: YesNoProps): ReactNode {
-  const name = useId();
+  const id = useId();
   return (
-    <Field {...frameOf(props)} group>
-      {(control) => (
-        <div
-          className="choice-pair"
-          role="radiogroup"
-          aria-labelledby={control['aria-labelledby']}
-          aria-describedby={control['aria-describedby']}
-          aria-invalid={control['aria-invalid']}
-        >
-          {(['yes', 'no'] as const).map((v) => (
-            <label key={v} className={`choice-pick${props.value === v ? ' is-on' : ''}`}>
-              <input
-                type="radio"
-                name={name}
-                className="choice-input"
-                checked={props.value === v}
-                onChange={(e) => props.onChange(v, changeDetails('select', e))}
-              />
-              {props[v]}
-            </label>
-          ))}
-        </div>
-      )}
-    </Field>
+    <Frame {...props}>
+      <RadioGroup
+        data-kind="cards"
+        data-fit="pair"
+        value={props.value === '' ? null : props.value}
+        onValueChange={(next, details) => {
+          if (next === 'yes' || next === 'no') props.onChange(next, told('select', details));
+        }}
+      >
+        {(['yes', 'no'] as const).map((answer) => (
+          <label key={answer} data-slot="choice" data-checked={props.value === answer ? '' : undefined}>
+            <Radio value={answer} aria-labelledby={`${id}-${answer}`} />
+            <span data-slot="choice-label" id={`${id}-${answer}`}>
+              {props[answer]}
+            </span>
+          </label>
+        ))}
+      </RadioGroup>
+    </Frame>
   );
 }
 
@@ -71,62 +73,58 @@ export interface ChoiceCardsProps extends FieldFrame {
 
 /** Cards with an icon, a label and a box. One choice is a radio group; `multiple` a group of checkboxes. */
 function DefaultChoiceCards(props: ChoiceCardsProps): ReactNode {
-  const name = useId();
-  const toggle = (v: string, on: boolean, event: Event | undefined): void => {
-    const details = changeDetails('select', event);
-    if (!props.multiple) return props.onChange(on ? [v] : [], details);
-    if (v === props.exclusive) return props.onChange(on ? [v] : [], details);
-    const rest = props.value.filter((x) => x !== v && x !== props.exclusive);
-    props.onChange(on ? props.options.map((o) => o.value).filter((x) => x === v || rest.includes(x)) : rest, details);
-  };
+  const id = useId();
   if (props.multiple)
     return (
-      <Field {...frameOf(props)} group>
-        {(control) => (
-          <CheckCards
-            aria-labelledby={control['aria-labelledby']}
-            aria-describedby={control['aria-describedby']}
-            aria-invalid={control['aria-invalid']}
-            cards={props.options.map((o) => ({ key: o.value, label: o.label, icon: o.icon, on: props.value.includes(o.value) }))}
-            onToggle={(index, on, details) => toggle(props.options[index].value, on, details.event)}
-          />
-        )}
-      </Field>
+      <Frame {...props}>
+        {/* The cards are the field's control: it hands them their id, what names and describes them and whether
+            they hold a problem, as it does a box. Drawn through the slot, so a kit's cards stand here too. */}
+        <FieldControl
+          render={
+            <CheckCards
+              cards={props.options.map((option) => ({
+                key: option.value,
+                label: option.label,
+                icon: option.icon,
+                on: props.value.includes(option.value),
+              }))}
+              onToggle={(index, on, details) => {
+                const value = props.options[index]!.value;
+                const say: ChangeDetails<'select'> = { ...details, reason: 'select' };
+                if (value === props.exclusive) return props.onChange(on ? [value] : [], say);
+                const rest = props.value.filter((other) => other !== value && other !== props.exclusive);
+                props.onChange(
+                  on ? props.options.map((option) => option.value).filter((other) => other === value || rest.includes(other)) : rest,
+                  say,
+                );
+              }}
+            />
+          }
+        />
+      </Frame>
     );
   return (
-    <Field {...frameOf(props)} group>
-      {(control) => (
-        <div
-          className="choice-cards"
-          role="radiogroup"
-          aria-labelledby={control['aria-labelledby']}
-          aria-describedby={control['aria-describedby']}
-          aria-invalid={control['aria-invalid']}
-        >
-          {props.options.map((o) => {
-            const on = props.value.includes(o.value);
-            return (
-              <label key={o.value} className={`choice-card${on ? ' is-on' : ''}`}>
-                {o.icon ? (
-                  <span className="choice-card-icon" aria-hidden="true">
-                    {o.icon}
-                  </span>
-                ) : null}
-                <span className="choice-card-label">{o.label}</span>
-                <input
-                  type="radio"
-                  name={name}
-                  className="choice-input"
-                  checked={on}
-                  onChange={(e) => toggle(o.value, e.target.checked, e.nativeEvent)}
-                />
-                <span className="choice-box" aria-hidden="true" />
-              </label>
-            );
-          })}
-        </div>
-      )}
-    </Field>
+    <Frame {...props}>
+      <RadioGroup
+        data-kind="cards"
+        value={props.value[0] ?? null}
+        onValueChange={(next, details) => props.onChange(next === null ? [] : [String(next)], told('select', details))}
+      >
+        {props.options.map((option) => (
+          <label key={option.value} data-slot="choice" data-checked={props.value[0] === option.value ? '' : undefined}>
+            <Radio value={option.value} aria-labelledby={`${id}-${option.value}`} />
+            {option.icon ? (
+              <span data-slot="choice-icon" aria-hidden="true">
+                {option.icon}
+              </span>
+            ) : null}
+            <span data-slot="choice-label" id={`${id}-${option.value}`}>
+              {option.label}
+            </span>
+          </label>
+        ))}
+      </RadioGroup>
+    </Frame>
   );
 }
 
@@ -154,84 +152,143 @@ export interface CheckCardsProps {
   fit?: 'short' | 'brief';
 }
 
+/* Several cards, any of them on, as a UI SDK primitive: which are on is a value with a change. Each card is the
+   checkbox, saying `aria-checked`, and the square at its end is its picture. UI SDK's own checkbox is a Tab stop
+   each and says so in its slot, which a caller cannot take back; so the card is drawn here. */
+type CheckCardsReason = 'press';
+
+type CheckCardsOptions = {
+  /* The cards, in order, by their keys. */
+  keys: string[];
+  /* The keys of the cards that are on. */
+  value?: string[];
+  onValueChange?: (value: string[], details: SdkChangeDetails<CheckCardsReason>) => void;
+  disabled?: boolean;
+};
+
+const checkCards = definePrimitive({
+  name: 'check-cards',
+  options: { keys: 'list', value: 'list', onValueChange: 'callback', disabled: 'boolean' },
+  controlled: ['value'],
+  state: (options: CheckCardsOptions) => ({
+    value: (options.value ?? []) as string[],
+    /* The card the keyboard was last on. */
+    cursor: null as string | null,
+  }),
+  sync: (options) => (options.value === undefined ? {} : { value: options.value }),
+  api: (context) => {
+    const change = createChange(context);
+    const keys = (): string[] => context.options().keys ?? [];
+    return {
+      disabled: (): boolean => context.options().disabled === true,
+      on: (key: string): boolean => context.store.get().value.includes(key),
+      stop(): string | null {
+        const { value, cursor } = context.store.get();
+        const all = keys();
+        if (cursor !== null && all.includes(cursor)) return cursor;
+        return all.find((key) => value.includes(key)) ?? all[0] ?? null;
+      },
+      walked(key: string) {
+        if (context.store.get().cursor !== key) context.store.set({ cursor: key });
+      },
+      /* Where a key takes the keyboard from a card, round the ends, or nowhere. */
+      step(from: string, key: string): string | undefined {
+        const all = keys();
+        const at = all.indexOf(from);
+        const to = { ArrowDown: at + 1, ArrowRight: at + 1, ArrowUp: at - 1, ArrowLeft: at - 1, Home: 0, End: all.length - 1 }[key];
+        return to === undefined || at < 0 ? undefined : all[(to + all.length) % all.length];
+      },
+      toggle(key: string, event: Event): boolean {
+        if (context.options().disabled) return false;
+        const { value } = context.store.get();
+        const next = value.includes(key)
+          ? value.filter((other) => other !== key)
+          : keys().filter((other) => other === key || value.includes(other));
+        return change('value', next, { reason: 'press', event });
+      },
+    };
+  },
+  slots: (slot) => ({
+    root: slot<{}>({
+      attrs: (_state, part) => ({ role: 'group', 'data-disabled': part.api.disabled() ? '' : undefined }),
+    }),
+    card: slot<{ value: string }, { on: boolean }>({
+      props: { value: 'string' },
+      state: (state, part) => ({ on: state.value.includes(part.props.value) }),
+      attrs: (state, part) => ({
+        role: 'checkbox',
+        tabindex: part.api.stop() === part.props.value ? '0' : '-1',
+        'data-key': part.props.value,
+        'aria-checked': String(state.value.includes(part.props.value)),
+        'aria-disabled': part.api.disabled() ? 'true' : undefined,
+        'data-checked': state.value.includes(part.props.value) ? '' : undefined,
+      }),
+      on: {
+        keydown: (event, { api, el, props }) => {
+          const to = api.step(props.value, event.key);
+          if (to !== undefined) {
+            event.preventDefault();
+            api.walked(to);
+            el?.parentElement?.querySelector<HTMLElement>(`[data-slot="check-cards-card"][data-key="${CSS.escape(to)}"]`)?.focus();
+          } else if (event.key === ' ') {
+            // Space is the box's own key; the page does not scroll under it.
+            event.preventDefault();
+            api.toggle(props.value, event);
+          }
+        },
+        focus: (_event, { api, props }) => api.walked(props.value),
+        click: (event, { api, props }) => {
+          api.walked(props.value);
+          api.toggle(props.value, event);
+        },
+      },
+    }),
+  }),
+});
+
+const cardParts = createParts(checkCards, { root: 'div', card: 'div' });
+
 /**
  * Several cards, any of them on: full-width cards, each an icon, its words and a square at its end that fills when it
  * is on. They are one group to the keyboard, as radios are — one Tab stop (the card last moved to, else the first one
  * on, else the first), the arrows and Home and End move between them, and Space turns the one in hand on or off — and
  * each is a `checkbox` saying `aria-checked`, so a screen reader hears "checked" as it moves.
  */
+/* Whatever else it is handed goes on the group: a field that takes the cards as its control (ChoiceCards) gives
+   them a ref and its own attributes beside the props a caller names. */
 function DefaultCheckCards(props: CheckCardsProps): ReactNode {
-  const { cards } = props;
-  const [held, setHeld] = useState<number | undefined>(undefined);
-  const faces = useRef<(HTMLDivElement | null)[]>([]);
-  const first = cards.findIndex((card) => card.on);
-  const stop = held !== undefined && held < cards.length ? held : Math.max(first, 0);
-  const move = (to: number) => {
-    const next = (to + cards.length) % cards.length;
-    setHeld(next);
-    faces.current[next]?.focus();
-  };
-  const keys = (event: KeyboardEvent<HTMLDivElement>, index: number) => {
-    const to =
-      event.key === 'ArrowDown' || event.key === 'ArrowRight'
-        ? index + 1
-        : event.key === 'ArrowUp' || event.key === 'ArrowLeft'
-          ? index - 1
-          : event.key === 'Home'
-            ? 0
-            : event.key === 'End'
-              ? cards.length - 1
-              : undefined;
-    if (to !== undefined) {
-      event.preventDefault();
-      move(to);
-    } else if (event.key === ' ') {
-      // Space is the box's own key; the page does not scroll under it.
-      event.preventDefault();
-      if (!props.disabled) props.onToggle(index, !cards[index].on, changeDetails('toggle', event));
-    }
-  };
+  const { cards, onToggle, disabled, fit, ...rest } = props as CheckCardsProps &
+    Omit<ComponentProps<'div'>, keyof CheckCardsProps | 'children'>;
   return (
-    <div
-      className="choice-cards"
-      role="group"
-      data-fit={props.fit}
-      id={props.id}
-      aria-labelledby={props['aria-labelledby']}
-      aria-describedby={props['aria-describedby']}
-      aria-invalid={props['aria-invalid']}
+    <cardParts.Root
+      {...rest}
+      data-fit={fit}
+      keys={cards.map((card) => card.key)}
+      value={cards.filter((card) => card.on).map((card) => card.key)}
+      disabled={disabled}
+      onValueChange={(next, details) => {
+        // The primitive says the whole list; the caller hears the one card that moved.
+        const index = cards.findIndex((card) => card.on !== next.includes(card.key));
+        if (index >= 0) onToggle(index, !cards[index]!.on, told('toggle', details));
+      }}
     >
-      {cards.map((card, index) => (
-        <div
-          key={card.key}
-          ref={(face) => {
-            faces.current[index] = face;
-          }}
-          role="checkbox"
-          aria-checked={card.on}
-          aria-disabled={props.disabled || undefined}
-          tabIndex={index === stop ? 0 : -1}
-          className={`choice-card${card.on ? ' is-on' : ''}`}
-          onClick={(event) => {
-            setHeld(index);
-            if (!props.disabled) props.onToggle(index, !card.on, changeDetails('toggle', event));
-          }}
-          onFocus={() => setHeld(index)}
-          onKeyDown={(event) => keys(event, index)}
-        >
+      {cards.map((card) => (
+        <cardParts.Card key={card.key} value={card.key}>
           {card.icon ? (
-            <span className="choice-card-icon" aria-hidden="true">
+            <span data-slot="choice-icon" aria-hidden="true">
               {card.icon}
             </span>
           ) : null}
-          <span className="choice-card-label">
+          <span data-slot="choice-label">
             {card.label}
-            {card.help ? <span className="choice-card-help">{card.help}</span> : null}
+            {card.help ? <span data-slot="choice-hint">{card.help}</span> : null}
           </span>
-          <span className="choice-box" aria-hidden="true" />
-        </div>
+          <span data-slot="checkbox" data-checked={card.on ? '' : undefined} aria-hidden="true">
+            {card.on ? <span data-slot="checkbox-indicator" data-checked="" /> : null}
+          </span>
+        </cardParts.Card>
       ))}
-    </div>
+    </cardParts.Root>
   );
 }
 
@@ -246,24 +303,23 @@ export interface CheckboxProps extends Omit<FieldFrame, 'label'> {
 /** A checkbox beside its text. */
 function DefaultCheckbox(props: CheckboxProps): ReactNode {
   return (
-    <Field {...frameOf(props)} check>
-      {(control) => (
-        <input
-          {...control}
-          type="checkbox"
-          className="field-check"
-          checked={props.checked}
-          disabled={props.disabled}
-          onChange={(e) => props.onChange(e.target.checked, changeDetails('toggle', e))}
-        />
-      )}
-    </Field>
+    <Frame {...props} check>
+      <Box
+        id={props.id}
+        checked={props.checked}
+        disabled={props.disabled}
+        aria-required={props.required || undefined}
+        onCheckedChange={(next, details) => props.onChange(next === true, told('toggle', details))}
+      >
+        <CheckboxIndicator />
+      </Box>
+    </Frame>
   );
 }
 
 /** A checkbox for a long notice: the paragraph is the label, in the body's weight. */
 function DefaultConsent(props: CheckboxProps): ReactNode {
-  return <Checkbox {...props} className={['form-field-consent', props.className].filter(Boolean).join(' ')} />;
+  return <Checkbox {...props} className={['consent', props.className].filter(Boolean).join(' ')} />;
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */

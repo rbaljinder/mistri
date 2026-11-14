@@ -1,0 +1,173 @@
+/* The scales and names the UI SDK drawings are dressed by (the `--m-*` tokens), and what UI SDK's own stylesheet
+   reads (`--ui-*`). The colours, the faces and the corner are this package's tokens (../tokens.css), which a look
+   and a theme write. What only a theme says (a field's corner, a rule's colour, a heading's face) is nothing where
+   no theme says it, and the rule that reads it says what stands in.
+
+   They are said on the root and again on the body. A name that reads another is worked out where it is written,
+   not where it is used, and the package's tokens are written in both places: a look and the reader's density on
+   the root, an App's brand (its accent, its corner) and the reader's typeface on the body. Said on the root alone,
+   a button under a branded body would still be the look's colour.
+
+   The reader's own settings need no sheet of their own for the same reason: more contrast and less transparency
+   are answered on the package's tokens (../preferences.css), the muted inks, the lines, the focus ring and the
+   scrim, and every name here reads one of those.
+
+   No colour scheme is said here: ../tokens.css owns it (`data-theme`, and the system's where that is not set), and
+   every `light-dark()` in these sheets follows what it says. */
+@layer m-tokens {
+  :root,
+  body {
+    /* Paper, ink, the accent and the four statuses are this package's tokens (../tokens.css), under the names the
+       parts read. A look and a palette write those, light and dark, so nothing here is a colour of its own. The
+       page stands on the ground; controls, popups and the content pane on the surface. */
+    --m-ground: var(--ground);
+    --m-surface: var(--surface);
+    --m-raised: var(--raised);
+    --m-line: var(--line);
+    --m-line-strong: var(--line-strong);
+    --m-line-control: var(--line-control);
+    --m-ink: var(--ink);
+    --m-ink-muted: var(--ink-muted);
+    --m-ink-subtle: var(--ink-subtle);
+
+    /* The accent says what is current, selected, focused or followable. A look says which colour its primary
+       fills in; where it says none, the accent. */
+    --m-accent: var(--accent);
+    --m-on-accent: var(--on-accent);
+    --m-accent-ink: var(--accent-ink);
+    --m-accent-soft: var(--accent-soft);
+    --m-primary: var(--primary, var(--accent));
+    --m-on-primary: var(--on-primary, var(--on-accent));
+
+    --m-good: var(--status-good);
+    --m-warning: var(--status-warning);
+    --m-critical: var(--status-critical);
+    --m-info: var(--status-info);
+
+    /* The corner every box follows, and the four a theme may say apart from it: a field's, a button's, a pill's
+       and a panel's. */
+    --m-radius: var(--radius);
+    --m-radius-field: var(--field-radius);
+    --m-radius-control: var(--control-radius);
+    --m-radius-pill: var(--pill-radius);
+    --m-radius-panel: var(--panel-radius);
+    /* A theme's rules and its headings' face, read by the recipes (./looks.css). */
+    --m-rule-section: var(--rules-section);
+    --m-rule-weight: var(--rules-weight);
+    --m-font-heading: var(--heading-font);
+    --m-heading-weight: var(--heading-weight);
+    --m-unit: 0.25rem;
+    /* The base size, on the step a theme's type moves (`--type-k`, ../tokens.css). */
+    --m-text: calc(0.8125rem * var(--type-k, 1));
+    /* A list's row, in units, so density moves it with every control. */
+    --m-row: calc(var(--m-unit) * 10);
+
+    /* The space scale: every gap, margin and padding in the components' sheets is one of these. The steps are
+       mistri's (docs/design.md, Space and text), in rem, with one it has not (5h, 20px). Under 16px a step is a
+       control's own: an icon and its word, a field's inside. From 16px up it is the page's air, how far apart
+       things stand, and those steps and the seam between sections are what a theme's rhythm moves
+       (theme/looks.css). */
+    --m-space-1: 0.125rem;
+    --m-space-1h: 0.1875rem;
+    --m-space-2: 0.25rem;
+    --m-space-2h: 0.375rem;
+    --m-space-3: 0.5rem;
+    --m-space-3h: 0.625rem;
+    --m-space-4: 0.75rem;
+    --m-space-4h: 0.875rem;
+    --m-space-5: 1rem;
+    --m-space-5h: 1.25rem;
+    --m-space-6: 1.5rem;
+    --m-space-7: 2rem;
+    --m-space-8: 3rem;
+    --m-seam: 2.5rem;
+    /* Between two boxes that stand together (cards, panels, tiles), and from a box's edge to what is in it. A
+       look that draws a thing as a box gives it both, so nothing that becomes a box is left touching the next. */
+    /* The room an icon or a key takes at a field's side. A control's own, so no rhythm moves it: a field whose
+       words slid under its icon is what a tighter page must not cost. */
+    --m-inset-icon: 2rem;
+    --m-gap-box: var(--m-space-4);
+    --m-pad-box: var(--m-space-5);
+
+    /* The weights words are set in: five, by what they are for, so a theme whose face has no weight between the
+       regular and the bold (Barlow, Helvetica, most faces a machine has) can say which of its own stands for
+       each, and no sheet names a number. `strong` is a row's name, a label, a button; `bold` a heading; `heavy`
+       a figure and a title. */
+    --m-weight-regular: 400;
+    --m-weight-medium: 500;
+    --m-weight-strong: 550;
+    --m-weight-bold: 600;
+    --m-weight-heavy: 650;
+
+    /* The type scale. Every size has its own line height and each is a whole number of pixels, so a line of
+       text, and the box around it, and everything under that, lands on the pixel grid: a height of 19.5 puts
+       every edge below it on a half pixel, where a hairline is drawn as two grey ones. A theme moves the scale
+       here; nothing in the components' sheets names a size. */
+    --m-size-2xs: 0.6875rem;
+    --m-lead-2xs: 1rem;
+    --m-size-xs: 0.75rem;
+    --m-lead-xs: 1.125rem;
+    --m-size-sm: var(--m-text);
+    --m-lead-sm: 1.25rem;
+    --m-size-md: 0.875rem;
+    --m-lead-md: 1.25rem;
+    --m-size-lg: 0.9375rem;
+    --m-lead-lg: 1.375rem;
+    --m-size-xl: 1rem;
+    --m-lead-xl: 1.5rem;
+    --m-size-2xl: 1.125rem;
+    --m-lead-2xl: 1.5rem;
+    --m-size-3xl: 1.25rem;
+    --m-lead-3xl: 1.75rem;
+    --m-size-4xl: 1.375rem;
+    --m-lead-4xl: 1.75rem;
+    --m-size-5xl: 1.5rem;
+    --m-lead-5xl: 2rem;
+    --m-size-6xl: 1.75rem;
+    --m-lead-6xl: 2.25rem;
+    /* What running text is set at where nothing says otherwise: a host puts it on its page. */
+    --m-leading: var(--m-lead-sm);
+
+    /* The package's `--mono` is the face values are set in, which most looks leave as the interface's own; its
+       monospace is `--code`. */
+    --m-sans: var(--sans);
+    --m-mono: var(--code);
+
+    /* Tracking by size: display type closes up, a title a little (packages/ui/src/tokens.css). */
+    --m-track-display: -0.024em;
+    --m-track-title: -0.014em;
+
+    /* Enter with ease-out, leave at once (docs/design.md, Motion). */
+    --m-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --m-fast: 120ms;
+    --m-enter: 160ms;
+
+    --m-shadow-control: 0 1px 1px light-dark(rgb(23 23 26 / 0.05), rgb(0 0 0 / 0.3));
+    /* What floats casts the package's own shadow (../tokens.css), which a theme's lift and shadow colour move: a
+       listbox under Sage is lifted as Sage's menus are. */
+    --m-shadow-pop: var(--shadow-pop);
+
+    /* What UI SDK's web.css reads. Its primary fills checked and selected states, which here are the accent's. */
+    --ui-background: var(--m-surface);
+    --ui-foreground: var(--m-ink);
+    --ui-muted: var(--m-raised);
+    --ui-muted-foreground: var(--m-ink-muted);
+    --ui-border: var(--m-line);
+    /* A control's edge is the theme's own where it names one (`field.edge`), and the reader's under more contrast. */
+    --ui-input: var(--field-edge, var(--m-line-control));
+    --ui-primary: var(--m-accent);
+    --ui-primary-foreground: var(--m-on-accent);
+    --ui-destructive: var(--m-critical);
+    --ui-ring: color-mix(in oklab, var(--focus, var(--m-accent)) 72%, var(--m-surface));
+    --ui-ring-border: var(--focus, var(--m-accent));
+    --ui-overlay: var(--scrim);
+    --ui-shadow: var(--m-shadow-pop);
+    --ui-radius: var(--m-radius);
+    --ui-spacing: var(--m-unit);
+    --ui-font-size: var(--m-text);
+    /* UI SDK's own parts are set at this leading too: its 1.5 put a 13px line at 19.5. */
+    --ui-line-height: var(--m-leading);
+    --ui-font-sans: var(--m-sans);
+    --ui-font-mono: var(--m-mono);
+  }
+}

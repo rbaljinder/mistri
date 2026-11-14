@@ -106,6 +106,8 @@ export default defineApp({
          of the office they read who is coming, never an address book. */
       resident: {
         label: 'Resident',
+        // The company's own public: the shell offers them their things and none of the office's tools.
+        portal: true,
         read: [
           'property',
           'property_photo',

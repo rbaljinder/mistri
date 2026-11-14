@@ -28,8 +28,8 @@ export const shellBody = (): HTMLElement => document.body;
 export const portalRoot = (): HTMLElement => document.body;
 
 /**
- * The container handed to Base UI's portals. Undefined lets Base UI choose,
- * which is the body — or the enclosing portal for a popup inside a popup,
+ * The container handed to the primitives' layers. Undefined lets UI SDK choose,
+ * which is the body — or the enclosing layer for a popup inside a popup,
  * which an explicit body would not keep.
  */
 export const popupContainer = (): HTMLElement | undefined => undefined;

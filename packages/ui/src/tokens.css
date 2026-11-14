@@ -69,6 +69,14 @@
      defaults are the look they have always had. The corner is --field-radius, read where it is used, --radius unsaid. */
   --field-fill: var(--surface);
   --control-h: 34px;
+  /* The compact size: a control that stands in a bar or a toolbar (a list's search and filters, a record's actions in
+     the crumb bar, a dashboard's windows) and not in a form or a dialog. One step under the control's own, so a theme
+     that makes its fields taller makes its toolbars taller with them, and a row of mixed controls is one height. */
+  --control-h-sm: calc(var(--control-h) - 4px);
+  /* A form's controls: its text is a size up from a list's, so its field is two pixels taller, and what stands in the
+     form with the field (a choice's picks, the buttons under it) is that height too. Said here, where a theme writes
+     --control-h, because a scope cannot say a token from its own value. */
+  --form-control-h: max(var(--control-h), 36px);
   --control-border-w: 1px;
   /* A room's one content edge inside the pane's gutter: the crumb bar's
      words, a list's controls and rows, a board's first lane, a calendar and a
@@ -104,11 +112,14 @@
      from space (docs/design.md, the refusal list). Named where it was a literal, it stands where the literal stood:
      a theme's rhythm does not move it. */
   --field-gap: 20px;
-  /* A list's row, drawn: 32px at compact, 40px at comfortable and 44px at
+  /* A list's row, drawn: 40px at compact and at comfortable, 44px at
      spacious or under a finger, whatever the density's zoom (density.js
-     sets data-density beside the zoom, before the first paint). A cell
-     taller than its row (two lines, an avatar) grows it. */
-  --row-h: 32px;
+     sets data-density beside the zoom, before the first paint). Compact
+     was 32px, a ledger's row: at the text's 13px that is a line and nine
+     pixels of air, and a list read across ten columns lost its rows. A
+     view that is a ledger says so (`density: 'compact'`, structure.css).
+     A cell taller than its row (two lines, an avatar) grows it. */
+  --row-h: 40px;
   /* The text scale, each step over the theme's base like every size. */
   --text-xs: calc(11px * var(--type-k));
   --text-sm: calc(12px * var(--type-k));

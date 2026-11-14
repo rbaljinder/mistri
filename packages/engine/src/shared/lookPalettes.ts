@@ -1,6 +1,6 @@
 /**
  * The palettes every built-in look offers: one registry, so Cobalt is the same
- * blue in Workshop, Lumen, Mono, Sage and Ledger, and a reader who picks it keeps it
+ * blue in Workshop, Lumen, Mono, Sage, Ledger, Atelier, Graphite and Bloom, and a reader who picks it keeps it
  * when they pick another look. A palette is a color identity only — its hue at
  * the depths a look draws it, light and dark, and the chart series that starts
  * from it. Everything else stays the look's: its grounds and neutrals
@@ -147,7 +147,8 @@ export const LOOK_PALETTES: readonly LookPalette[] = [
       onSignal: '#15130f',
       chart: '#0c8ab0',
     },
-    looks: { workshop: { light: { link: '#00687e' } } },
+    /* A step deeper on Workshop's paper and on Atelier's, whose menu's hover is the warm ground a shade down. */
+    looks: { workshop: { light: { link: '#00687e' } }, atelier: { light: { link: '#00687e' } } },
   },
   {
     id: 'cobalt',
@@ -293,9 +294,74 @@ function ledSeries(series: readonly string[], lead: string): string[] {
  *   ink, on paper, with no tint.
  * - Lumen: the accent and its pale tint, links, the ring, the menu's mark and the first chart series.
  * - Mono and Sage: the same, on their own neutral tint for what is chosen (Mono's gray, Sage's warm cream).
+ * - Atelier: Mono's reach, on paper: links, the current tab, the ring, the first series, and the hue's wash under what
+ *   is chosen; its primary stays the ink.
+ * - Graphite: Lumen's reach, and the dark menu's marker in the hue's night depth by day as by night.
+ * - Bloom: Lumen's reach and the primary verb's fill.
  * - Ledger: Lumen's reach and the primary verb's fill, and the hue's ink and the rules (a table's double-ruled heads, a box's top rule) in it;
  *   the paper and the cover stay the book's own green, with the gilt mark for the current entry.
  */
+/** OKLab back to a hex colour, clipped to what a screen draws. */
+function hexOf([L, a, b]: readonly number[]): string {
+  const l = (L! + 0.3963377774 * a! + 0.2158037573 * b!) ** 3,
+    m = (L! - 0.1055613458 * a! - 0.0638541728 * b!) ** 3,
+    s = (L! - 0.0894841775 * a! - 1.291485548 * b!) ** 3;
+  const channel = (value: number) => {
+    const lit = Math.min(1, Math.max(0, value));
+    const coded = lit <= 0.0031308 ? lit * 12.92 : 1.055 * lit ** (1 / 2.4) - 0.055;
+    return Math.round(coded * 255)
+      .toString(16)
+      .padStart(2, '0');
+  };
+  return `#${channel(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s)}${channel(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)}${channel(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s)}`;
+}
+
+/** A palette's hue as one look draws it. */
+export function paletteAccent(look: ThemeBase, palette: LookPalette, mode: 'light' | 'dark'): string {
+  return { ...palette[mode], ...palette.looks?.[look]?.[mode] }.accent;
+}
+
+/** Whether two colours are near enough in hue to be taken for one: within forty degrees of each other on OKLab's
+    wheel, both with colour enough to have a hue at all. */
+export function sameHue(a: string, b: string): boolean {
+  const [, aA, aB] = oklab(linear(a));
+  const [, bA, bB] = oklab(linear(b));
+  if (Math.hypot(aA, aB) < 0.03 || Math.hypot(bA, bB) < 0.03) return false;
+  const turn = Math.abs(Math.atan2(aB, aA) - Math.atan2(bB, bA));
+  return Math.min(turn, 2 * Math.PI - turn) < (40 * Math.PI) / 180;
+}
+
+/**
+ * A look's own colours turned to another hue: every neutral keeps how light it is and how much colour it holds, and
+ * takes the hue of `like` in place of the hue of `was` (the look's default palette's accent). A look whose page is a
+ * tint of its hue (Bloom's lavender ground under violet) is that look in another palette only if the page turns with
+ * it: an emerald button on a lavender page is two looks at once. A palette with next to no colour of its own (Slate,
+ * Ink) takes the tint out in proportion, so the page under it is grey and not a guess at a hue. What a colour means
+ * (`status`) and a chart's series are not neutrals and stay as written.
+ */
+export function rehued(colors: ThemeColorsOver, like: string, was: string): ThemeColorsOver {
+  const [, likeA, likeB] = oklab(linear(like));
+  const [, wasA, wasB] = oklab(linear(was));
+  const turn = Math.atan2(likeB, likeA) - Math.atan2(wasB, wasA);
+  const hold = Math.min(1, Math.hypot(likeA, likeB) / Math.max(Math.hypot(wasA, wasB), 1e-6));
+  const one = (hex: string) => {
+    if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+    const [L, a, b] = oklab(linear(hex));
+    const chroma = Math.hypot(a, b) * hold;
+    const hue = Math.atan2(b, a) + turn;
+    return hexOf([L, chroma * Math.cos(hue), chroma * Math.sin(hue)]);
+  };
+  const walk = (value: unknown, key: string): unknown =>
+    key === 'status' || key === 'chart'
+      ? value
+      : typeof value === 'string'
+        ? one(value)
+        : value && typeof value === 'object' && !Array.isArray(value)
+          ? Object.fromEntries(Object.entries(value).map(([name, inner]) => [name, walk(inner, name)]))
+          : value;
+  return walk(colors, '') as ThemeColorsOver;
+}
+
 export function paletteColors(look: ThemeBase, palette: LookPalette, mode: 'light' | 'dark', series: readonly string[]): ThemeColorsOver {
   const tone: PaletteMode = { ...palette[mode], ...palette.looks?.[look]?.[mode] };
   const link = tone.link ?? tone.accent;
@@ -351,5 +417,38 @@ export function paletteColors(look: ThemeBase, palette: LookPalette, mode: 'ligh
         chart: ledSeries(series, tone.chart),
       };
     }
+    case 'atelier':
+      /* A second colour on a printed page: links, the current tab's rule, the ring and the first series. The primary
+         stays the ink and the paper its own. It says no soft accent: what is chosen sits on the hue's wash over the
+         paper, which the builder works out for each palette (themeBuild.ts). */
+      return { accent: tone.accent, link, focus: tone.focus, nav: { accent: link }, chart: ledSeries(series, tone.chart) };
+    case 'graphite': {
+      /* The menu is near-black by day too, so its marker is the hue at its night depth, which reads on it; the page
+         wears the day's. */
+      const night: PaletteMode = { ...palette.dark, ...palette.looks?.[look]?.dark };
+      return {
+        accent: tone.accent,
+        accentSoft: tone.soft,
+        link,
+        focus: tone.focus,
+        nav: { accent: night.link ?? night.accent },
+        chart: ledSeries(series, tone.chart),
+      };
+    }
+    case 'bloom':
+      /* The hue is the look: the primary button is filled in it, what is chosen sits on its tint. What is merely so
+         (a step that is new or under way, a note) is said in it too: the look's own blue beside an emerald page was a
+         second hue with nothing to say, and a tile tinted in it read as left over from another palette. What a colour
+         warns of or confirms keeps its own. */
+      return {
+        accent: tone.accent,
+        primary: tone.accent,
+        accentSoft: tone.soft,
+        link,
+        focus: tone.focus,
+        status: { info: link },
+        nav: { accent: link },
+        chart: ledSeries(series, tone.chart),
+      };
   }
 }

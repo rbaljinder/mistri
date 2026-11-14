@@ -113,7 +113,7 @@ test('a folded rail with a menu taller than the window leaves the page no taller
   await page.setViewportSize({ width: 1100, height: 500 });
   await page.goto(`${origin}/`);
   await expect(page.locator('#table-list button').first()).toBeVisible();
-  await page.locator('.sidebar-footer > .sidebar-collapse').click();
+  await page.locator('.sidebar-collapse').click();
   await expect(page.locator('body')).toHaveClass(/app-nav-rail/);
   await expect(page.locator('body')).toHaveClass(/sidebar-hidden/);
   const list = await page.locator('#table-list').evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
@@ -143,7 +143,7 @@ test('a sidebar folded on the desktop never empties or narrows the phone menu dr
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`${origin}/`);
   await expect(page.locator('#table-list button').first()).toBeVisible();
-  await page.locator('.sidebar-footer > .sidebar-collapse').click();
+  await page.locator('.sidebar-collapse').click();
   await expect(page.locator('body')).toHaveClass(/sidebar-hidden/);
 
   await page.setViewportSize({ width: 412, height: 800 });

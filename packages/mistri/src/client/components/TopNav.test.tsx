@@ -318,7 +318,7 @@ test('phone drill-in and Back retain names, destination behavior and parent focu
   await user.click(trigger);
   let menu = screen.getByRole('menu', { name: 'Menu' });
   await user.click(within(menu).getByRole('menuitem', { name: 'Directory' }));
-  // Base UI names the popup from its Menu trigger; the level also has a label.
+  // The menu is named from its trigger; the level also has a label.
   menu = screen.getByRole('menu', { name: 'Menu' });
   expect(menu).toHaveAttribute('aria-label', 'Directory');
   const back = within(menu).getByRole('menuitem', { name: 'Back Directory' });

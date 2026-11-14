@@ -1,0 +1,225 @@
+/* What dresses the layout builder and its field arranger. These rules match nothing else, so they travel with the component's chunk and are not in
+   every first paint (scripts/bundle-budget.mjs); each keeps the layer it stood in. */
+@layer base {
+  /* The layout's own name, edited in place in the builder's header. */
+  .tpl-title { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
+  .tpl-eyebrow {
+    font: var(--text-xs) var(--mono); text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--ink-subtle);
+  }
+  .tpl-name {
+    flex: 1 1 8rem; min-width: 0; max-width: 100%;
+    padding: var(--space-1) var(--space-2h); margin: 0 -6px;
+    border: 1px solid transparent; border-radius: var(--radius-item);
+    background: none; color: var(--ink);
+    font: 600 calc(15px * var(--type-k)) var(--mono); letter-spacing: 0;
+  }
+  .tpl-name:hover { border-color: var(--line); }
+  .tpl-name:focus { outline: none; border-color: var(--focus); background: var(--ground); }
+  .tpl-for { font: var(--text-xs) var(--mono); color: var(--ink-subtle); overflow-wrap: anywhere; }
+}
+
+@layer base {
+  @media (max-width: 700px) {
+    .tpl-title { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .tpl-name { width: 100%; margin: 0; }
+    .tpl-section-head { flex-wrap: wrap; }
+    .tpl-section-name { overflow-wrap: anywhere; }
+  }
+}
+
+@layer base {
+  .tpl-head {
+    padding: var(--space-4h) var(--space-5) var(--space-4);
+    border-bottom: 1px solid var(--line);
+    display: flex; flex-direction: column; gap: var(--space-2h);
+  }
+  .tpl-head h2 { margin: 0; font: 600 var(--text-base) var(--sans); letter-spacing: -0.01em; }
+  .tpl-head-actions { display: flex; gap: var(--space-2h); flex-wrap: wrap; margin-top: var(--space-1); }
+  .tpl-head-actions button { padding: var(--space-2) var(--space-3h); font-size: var(--text-sm); }
+  .tpl-error, .tpl-recovery p { margin: 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
+  .tpl-error { color: var(--status-critical); }
+  .tpl-recovery { padding-block: var(--space-3); border-block: 1px solid var(--line); }
+  .tpl-body[inert] { opacity: 0.6; }
+  .tpl-body { flex: 1; overflow-y: auto; padding: var(--space-4) var(--space-4h) var(--space-7); }
+  .tpl-section { border: 1px solid var(--line); border-radius: var(--radius-panel); margin-bottom: var(--space-3); background: var(--ground); }
+  .tpl-section.off { opacity: 0.55; }
+  .tpl-section-head {
+    display: flex; align-items: center; gap: var(--space-3h);
+    padding: var(--space-3h) var(--space-4);
+    border-bottom: 1px solid var(--line);
+  }
+  .tpl-section.off .tpl-section-head { border-bottom: none; }
+  .tpl-toggle { display: flex; align-items: center; gap: var(--space-3); cursor: pointer; }
+  .tpl-section-name { font: 600 var(--text-sm) var(--sans); color: var(--ink); }
+  .tpl-section-kind { font: var(--text-xs) var(--mono); color: var(--ink-subtle); }
+  .tpl-section-actions { margin-left: auto; display: flex; gap: var(--space-1); }
+  .tpl-move {
+    background: none; border: none; border-radius: min(4px, var(--radius));
+    color: var(--ink-muted); cursor: pointer; padding: var(--space-1h) var(--space-3); font-size: var(--text-xs);
+  }
+  .tpl-move:hover:not([disabled]) { color: var(--accent-ink); background: var(--accent-soft); }
+  .tpl-move[disabled] { color: var(--ink-subtle); cursor: default; }
+  /* The shared arranger (page.css, `.pb-*`) inside a layout card.
+
+     It is drawn there to hang off a builder row — no top border, its own tint,
+     rounded at the bottom only — and a card already provides all three. So it
+     keeps its contents and gives up its box. */
+  .tpl-section .pb-panel {
+    margin: 0; padding: var(--space-3) var(--space-3h) var(--space-3h);
+    background: none; border: none; border-radius: 0;
+  }
+  .tpl-section .pb-arrange { max-height: none; }
+  .tpl-rows {
+    display: flex; align-items: center; gap: var(--space-3);
+    padding: var(--space-2) var(--space-4) var(--space-4); font-size: var(--text-sm); color: var(--ink-muted);
+  }
+  .tpl-rows input {
+    width: 4.5rem; padding: var(--space-2) var(--space-3);
+    font: var(--text-sm) var(--mono); color: var(--ink);
+    background: var(--ground); border: 1px solid var(--line-control); border-radius: var(--radius);
+  }
+}
+
+@layer base {
+  .pb-label {
+    font: var(--text-xs) var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-subtle);
+    flex: none;
+  }
+  .pb-remove:hover {
+    color: var(--status-critical);
+  }
+  .pb-spacer {
+    flex: 1 1 auto;
+  }
+  .pb-panel {
+    margin: 0 var(--space-3) var(--space-1);
+    padding: var(--space-3) var(--space-3h) var(--space-3h);
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-top: none;
+    border-radius: 0 0 var(--radius) var(--radius);
+  }
+  .pb-panel-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    margin-bottom: var(--space-2h);
+  }
+  .pb-panel-head button {
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+  }
+  .pb-field-count {
+    font: var(--text-xs) var(--mono);
+    color: var(--ink-subtle);
+  }
+  .pb-field-name {
+    font: var(--text-sm) var(--mono);
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pb-field-type {
+    font: var(--text-xs) var(--mono);
+    color: var(--ink-subtle);
+    flex: none;
+  }
+  /* The fields on a group, laid out the way the page will lay them out — same
+   column count, same order — so arranging them is done on a picture of the
+   result rather than on a list that has to be imagined into one. */
+  .pb-arrange {
+    display: grid;
+    gap: var(--space-1) var(--space-3h);
+    max-height: 34vh;
+    overflow-y: auto;
+    margin-bottom: var(--space-3);
+  }
+  .pb-arrange-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding: var(--space-1h) var(--space-2) var(--space-1h) var(--space-1);
+    border-radius: var(--radius);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    cursor: grab;
+    min-width: 0;
+    position: relative;
+  }
+  .pb-arrange-row:focus-visible {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: 1px;
+  }
+  .pb-arrange-row.dragging {
+    opacity: 0.45;
+    cursor: grabbing;
+  }
+  .pb-arrange-row .pb-field-name {
+    flex: 1;
+  }
+  .pb-grip {
+    font: var(--text-sm) var(--mono);
+    color: var(--ink-subtle);
+    letter-spacing: -1px;
+    flex: none;
+    transform: rotate(90deg);
+  }
+  .pb-arrange-row .pb-send,
+  .pb-arrange-row .pb-remove {
+    flex: none;
+    padding: 0 var(--space-2);
+    font-size: var(--text-xs);
+    line-height: 1.6;
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .pb-arrange-row .pb-send,
+    .pb-arrange-row .pb-remove {
+      transition: opacity var(--t-hover) var(--ease-out);
+    }
+  }
+  .pb-arrange-row:hover .pb-send,
+  .pb-arrange-row:hover .pb-remove,
+  .pb-arrange-row:focus-within .pb-send,
+  .pb-arrange-row:focus-within .pb-remove {
+    opacity: 1;
+  }
+  /* Which group to send a field to, opened in the row itself: a dialog here
+   would cover the arrangement being made. */
+  .pb-send-menu {
+    position: absolute;
+    z-index: 3;
+    top: 100%;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: var(--space-1h);
+    gap: var(--space-1);
+    box-shadow: var(--shadow, var(--shadow-pop));
+  }
+  .pb-send-menu button {
+    font-size: var(--text-xs);
+    text-align: left;
+    white-space: nowrap;
+  }
+  /* Everything not on the page, as chips: short names, many of them, and each
+   one click from being added. */
+  .pb-pool {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2);
+  }
+  .pb-add-field {
+    font: var(--text-xs) var(--mono);
+    padding: var(--space-1) var(--space-3);
+  }
+}

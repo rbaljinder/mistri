@@ -28,6 +28,32 @@ import { collidingNames, referenceSubline, sublineText, type Subline } from '@mi
 import { sessionIdentity, subscribeSessionIdentity } from '../sessionIdentity.js';
 import { say } from '../copy/forms/components/RecordPicker.js';
 
+/**
+ * An option's name with what was typed picked out of it, so a reader running down a long list sees why each row is
+ * there. The first place the letters stand together, whatever their case; a name that matched some other way (by its
+ * key, by a word the server folded) is drawn as it is. The mark is a weight, not a colour: the lit row already has
+ * the accent's. A span and not a `mark`: the option's name is still its words, read in one piece, where a mark is
+ * announced as a highlight inside every option.
+ */
+/* Said on the span itself: a name is computed from what is drawn in line as one run of words, and a reader of the
+   tree that knows no stylesheet (the component tests' DOM) takes a bare span for a block and hears "La unch". */
+const IN_LINE = { display: 'inline' } as const;
+
+function typedIn(label: string, typed: string): ReactNode {
+  const wanted = typed.trim();
+  const at = wanted ? label.toLocaleLowerCase().indexOf(wanted.toLocaleLowerCase()) : -1;
+  if (at < 0) return label;
+  return (
+    <>
+      {label.slice(0, at)}
+      <span className="picker-match" style={IN_LINE}>
+        {label.slice(at, at + wanted.length)}
+      </span>
+      {label.slice(at + wanted.length)}
+    </>
+  );
+}
+
 const LIMIT = 20;
 
 interface Choice {
@@ -256,13 +282,18 @@ function RecordPickerControl(props: RecordPickerProps & { scope?: string }) {
   });
   /* A list still answering earlier text offers only the rows the box's text
      also names — its lit first row is otherwise a record nobody named. */
+  /* What was last offered for this value, so a list is not taken away while an answer for other text is on screen
+     (pickerStaleness.ts). Kept beside the value it was offered for: another record's choices are not this one's. */
+  const lastOffered = useRef<{ for: string; rows: Choice[] }>({ for: signature, rows: [] });
   const { choices: options, answered } = offeredChoices({
     typed: typedSearch,
     asked,
     placeholder: results.isPlaceholderData,
     rows: results.data,
     label: (o) => o.label,
+    last: lastOffered.current.for === signature ? lastOffered.current.rows : undefined,
   });
+  if (options.length || lastOffered.current.for !== signature) lastOffered.current = { for: signature, rows: options };
 
   const selected = useQuery<Choice[]>({
     queryKey: ['picker-labels', connection, table.id, valueColumn, ids, props.scope, labelPath(table), recordLabel(table), subline?.path],
@@ -416,11 +447,11 @@ function RecordPickerControl(props: RecordPickerProps & { scope?: string }) {
             <>
               {subOf(o) ? (
                 <span className="picker-option-name">
-                  <span className="picker-option-label">{o.label}</span>
+                  <span className="picker-option-label">{typedIn(o.label, typedSearch)}</span>
                   <span className="picker-option-sub">{subOf(o)}</span>
                 </span>
               ) : (
-                <span className="picker-option-label">{o.label}</span>
+                <span className="picker-option-label">{typedIn(o.label, typedSearch)}</span>
               )}
               {!props.hideKey && o.label !== o.value && <span className="picker-option-detail">{o.value}</span>}
             </>
@@ -450,11 +481,6 @@ function RecordPickerControl(props: RecordPickerProps & { scope?: string }) {
           ...(props.describedBy ? { 'aria-describedby': props.describedBy } : {}),
           /* Backspace on an empty box takes the last chip off. */
           onKeyDown: (e) => {
-            // Base UI clears text on closed-popup Escape. Let the editor receive
-            // that key without manufacturing a new search or selection first.
-            if (editing && e.key === 'Escape') {
-              (e as typeof e & { preventBaseUIHandler?: () => void }).preventBaseUIHandler?.();
-            }
             if (e.key === 'Backspace' && props.multiple && !text && ids.length) report(ids.slice(0, -1));
           },
         }}

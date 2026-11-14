@@ -148,7 +148,7 @@ export const Dressed = memo(function Dressed({ dress, compact = false }: { dress
       );
     case 'relative':
       return (
-        <span className={`date-value relative${dress.overdue ? ' overdue' : ''}`} title={dress.title}>
+        <span className={`date-value relative${dress.overdue ? ' overdue' : ''}`} title={dress.title} data-date={dress.date}>
           {dress.text}
         </span>
       );

@@ -6,7 +6,7 @@ import { applyTo, callToAction, embed, faq, hero, landing } from '@mistriwork/mi
 export const lintelLanding = landing(
   hero(
     'Homes in three Denver buildings, managed by people who answer',
-    'Studios to three-bedroom townhomes near Cheesman Park, in RiNo and in Washington Park. Repairs booked within a day, rent paid online.',
+    'Studios to three-bedroom townhomes near Cheesman Park, in RiNo and in Washington Park. Repairs booked within a day.',
     [{ label: 'See homes to let', to: 'listings' }, applyTo('request-viewing', 'Ask for a viewing', 'secondary')],
     {
       image: {

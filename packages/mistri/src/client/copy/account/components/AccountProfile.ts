@@ -19,7 +19,7 @@ export const say = defineMessages({
   theProfileSaveCouldNotBeConfirmed: 'The profile save could not be confirmed.',
   yourProfile: 'Your profile',
   closeProfile: 'Close profile',
-  yourNameIsEditable: 'Your name is editable. Email and sign-in methods are managed by your identity provider.',
+  yourNameIsEditable: 'Change your name here. How you sign in is listed below.',
   loadingProfile: 'Loading profile…',
   signInMethods: 'Sign-in methods',
   managedAccount: 'Managed account',

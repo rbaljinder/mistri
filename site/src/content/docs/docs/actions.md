@@ -115,7 +115,7 @@ machine: machine('status', {
 }),
 ```
 
-See it in the sample (`examples/apps/lintel/resources.ts:140`) (each verb is a command here; a fixed verb says `{ to, label, set }`).
+See it in the sample (`examples/apps/lintel/resources.ts:135`) (each verb is a command here; a fixed verb says `{ to, label, set }`).
 
 A new record starts in the first state. Each verb is a button where the state
 lists it, the page's summary draws the road as a stepper, and a board has a
@@ -170,7 +170,7 @@ whichever door took it; `on: { action: 'finish' }` hears one verb by name:
 },
 ```
 
-See it in the sample (`examples/apps/lintel/resources.ts:281`).
+See it in the sample (`examples/apps/lintel/resources.ts:280`).
 
 A verb that names another record's command moves this record with it: cancel
 an order, and its pending payment is voided and its pending parcel cancelled in

@@ -98,7 +98,6 @@ import {
   fitGridColumns,
   keepFitting,
   tagsThatFit,
-  twoLineWidth,
   GRID_EXPANDER_WIDTH,
   GRID_HEAD_CHAR,
   GRID_SIZE_SAMPLE,
@@ -219,6 +218,8 @@ const sameRecord = <T,>(a: Readonly<Record<string, T>>, b: Readonly<Record<strin
   return keys.length === Object.keys(b).length && keys.every((key) => key in b && a[key] === b[key]);
 };
 const groupKey = (value: unknown): string => (value === null || value === undefined ? '\u0000' : String(value));
+/** A group head's host in the row hosts' store: no row's key can spell it (a row's is a JSON array). */
+export const groupHostKey = (value: unknown): string => `group:${groupKey(value)}`;
 
 /** Beyond a few hundred rows the DOM, not the database, is the bottleneck. */
 const VIRTUAL_THRESHOLD = 300;
@@ -501,7 +502,6 @@ interface CellColumn {
   photoOwner: string | undefined;
   pin: number | undefined;
   edge: boolean;
-  wraps?: boolean;
   /** The columns the room could not hold, drawn under this one's value as a detail line (an App's list). */
   more?: { name: string; head: string; meta: ColumnMeta | undefined; plan: Plan; display: DisplayRule | null; label: string | undefined }[];
 }
@@ -667,7 +667,6 @@ function PlatformCell({
   pin,
   edge,
   photo,
-  wraps,
 }: {
   meta: ColumnMeta | undefined;
   plan: Plan;
@@ -676,8 +675,6 @@ function PlatformCell({
   display: unknown;
   pin: number | undefined;
   edge: boolean;
-  /** The room set this column's values on two lines (gridSizing.ts): the cell wraps at words, kept whole. */
-  wraps?: boolean;
   /** The avatar's photo, where the column draws one and the record has one. */
   photo?: string;
 }) {
@@ -694,8 +691,7 @@ function PlatformCell({
   /* The face the rule asks for wins; unasked, an App sets short text in the reading face unless it is a key or a code. */
   const face = (display as DisplayRule | null)?.face;
   const app = shellBody().classList.contains('app-mode');
-  const pinClass =
-    (pin !== undefined ? ` pinned${edge ? ' pinned-edge' : ''}` : '') + (face ? ` face-${face}` : '') + (wraps ? ' wraps' : '');
+  const pinClass = (pin !== undefined ? ` pinned${edge ? ' pinned-edge' : ''}` : '') + (face ? ` face-${face}` : '');
 
   /* A record's tags (tagLists.ts): a few chips, and how many more there are. */
   if (meta?.type === TAGS_TYPE) {
@@ -940,6 +936,10 @@ export function Grid({
      status as a pill spends 41px there, one that says it as a dot and a word 12, and sizing every column for the
      wider kept 30px of every table's room in a status that never used it. -1: the cell holds no chip. */
   const [cellChips, setCellChips] = useState<Readonly<Record<string, number>>>({});
+  /* Each column's cell padding as its first row draws it, a pixel spare: what a value is stood off its edges by. */
+  const [cellPads, setCellPads] = useState<Readonly<Record<string, number>>>({});
+  /* What each head stands its label off its edges by: its own padding and its sort's leading one (gridSizing.ts). */
+  const [headPads, setHeadPads] = useState<Readonly<Record<string, number>>>({});
   /* Counts the times a face arrived after the columns were sized in its fallback: the sizes are read again, once for
      each, so a table's columns never stay as the fallback face set them (textMeasure.ts). */
   const [faceEpoch, setFaceEpoch] = useState(0);
@@ -949,8 +949,11 @@ export function Grid({
     /* The look says how wide its heads' characters set (gridSizing.ts); read
        again when the reader picks another look, which moves no width. */
     let sizedInFallback = false;
+    /* The fonts the last measure was made in, to know a face that arrives later as one of them. */
+    let measuredIn = '';
     const measure = (contentWidth?: number) => {
       sizedInFallback = false;
+      measuredIn = '';
       const style = getComputedStyle(element);
       /* clientWidth rounds up fractional layout widths. At density zoom that
          can create a one-screen-pixel scroll range even when scrollWidth and
@@ -974,23 +977,62 @@ export function Grid({
           tracking: parseFloat(face.letterSpacing) || 0,
         };
         sizedInFallback = sizedInFallback || !fontLoaded(next.font);
+        measuredIn += next.font;
         setHeadFace((was) => (was && was.font === next.font && was.upper === next.upper && was.tracking === next.tracking ? was : next));
       }
+      const around: Record<string, number> = {};
+      for (const th of element.querySelector('thead tr')?.children ?? []) {
+        const name = th.getAttribute('data-col');
+        const sort = th.querySelector('.th-sort');
+        if (!name || !sort) continue;
+        const box = getComputedStyle(th);
+        around[name] =
+          (parseFloat(box.paddingLeft) || 0) + (parseFloat(box.paddingRight) || 0) + (parseFloat(getComputedStyle(sort).paddingLeft) || 0);
+      }
+      setHeadPads((was) => (sameRecord(was, around) ? was : around));
       /* A group's head is not a row of values: the first row that is one is sampled. */
       const valueRowSelector = 'tbody tr:not(.grid-group-head):not(.virtual-spacer):not(.grid-totals)';
       const first = element.querySelector(valueRowSelector);
       const heads = [...(element.querySelector('thead tr')?.children ?? [])].map((th) => th.getAttribute('data-col'));
       const cells = first ? [...first.querySelectorAll(':scope > td')] : [];
       if (cells.length) {
+        /* The font of what draws the value, which is not always the cell's: a look sets a telephone number or a code in
+           its data face on a span inside the cell, and measured in the cell's sans a column came out too narrow for
+           the monospace drawn in it, so Mono broke every number over two lines. The longest text in the cell is the
+           value (an avatar's initials beside a name are not). */
+        const drawing = (cell: Element): Element => {
+          const texts = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+          let longest: Element = cell;
+          let length = 0;
+          for (let node = texts.nextNode(); node; node = texts.nextNode()) {
+            const said = node.textContent?.trim().length ?? 0;
+            if (said > length && node.parentElement) {
+              length = said;
+              longest = node.parentElement;
+            }
+          }
+          return longest;
+        };
         const fonts = cells.map((cell) => {
-          const font = getComputedStyle(cell);
+          const font = getComputedStyle(drawing(cell));
           return `${font.fontStyle} ${font.fontWeight} ${font.fontSize} ${font.fontFamily}`;
         });
         sizedInFallback = sizedInFallback || !fonts.every(fontLoaded);
+        measuredIn += fonts.join(' ');
         const byColumn = (values: readonly string[]) =>
           Object.fromEntries(heads.flatMap((name, index) => (name && values[index] !== undefined ? [[name, values[index]]] : [])));
         const named = byColumn(fonts);
         setCellFonts((was) => (sameRecord(was, named) ? was : named));
+        /* Never more than the allowance a column had before it was measured: a look that pads a cell wider is
+           sized as it was. */
+        const pads: Record<string, number> = {};
+        heads.forEach((name, index) => {
+          const cell = cells[index];
+          if (!name || !cell) return;
+          const box = getComputedStyle(cell);
+          pads[name] = Math.min(24, Math.ceil((parseFloat(box.paddingLeft) || 0) + (parseFloat(box.paddingRight) || 0)) + 1);
+        });
+        setCellPads((was) => (sameRecord(was, pads) ? was : pads));
         /* The widest chip of the sampled rows, not the first row's: a look may draw a neutral state as a bare word
            and the rest as pills, and sized by a first-row "Ready" Sage cut every "In review" pill to "In rev…". */
         const rows = [...element.querySelectorAll(valueRowSelector)].slice(0, GRID_SIZE_SAMPLE);
@@ -1021,10 +1063,16 @@ export function Grid({
     const themeChanged = () => measure();
     addHostListener(window, VISUAL_THEME_EVENT, themeChanged);
     /* A face that arrives after the first measure: sized again with it, once, and only if the last measure was made
-       without it (a face already here moves nothing). */
+       without it (a face already here moves nothing). "Without it" is also a face not yet declared when the grid
+       measured — its sheet was still on its way, so nothing said to wait for it (textMeasure.ts): the arrival names
+       its family, and a family the grid measured in is measured again. */
     const faces = globalThis.document?.fonts;
-    const arrived = () => {
-      if (!sizedInFallback) return;
+    const arrived = (event: Event) => {
+      const families = ((event as Partial<FontFaceSetLoadEvent>).fontfaces ?? []).map((face) =>
+        face.family.replace(/["']/g, '').toLowerCase(),
+      );
+      const used = measuredIn.toLowerCase();
+      if (!sizedInFallback && !families.some((family) => family && used.includes(family))) return;
       measure();
       setFaceEpoch((was) => was + 1);
     };
@@ -1061,22 +1109,21 @@ export function Grid({
         const headSet = (text: string) => headMeasure!(headFace!.upper ? text.toUpperCase() : text) + headFace!.tracking * text.length;
         return {
           headWidth: headMeasure ? headSet(headText) : undefined,
-          /* An App's head wraps to two lines before it widens its column (style.css, .th-label). */
-          wrapHead: shell().inApp(),
-          /* An App's words may wrap too, once its heads have and the room is still short: kept whole on two lines. */
-          wrapValues: shell().inApp() && (Boolean(labelColumn) || plan.kind === 'text') && !display?.component,
-          headWrap: headMeasure && shell().inApp() ? twoLineWidth(headText, headSet) : undefined,
           /* The head's key badge is words too, where it is drawn (an App hides it, features.css): once a
              number was sized by its figures, the Workbench's "id KEY ↓" lost its "id" under the badge. */
           label: byName.get(name)?.primaryKey && !shell().inApp() ? `${label} ${say('common.key')}` : label,
           title: name === titleName,
           avatar: Boolean(display?.avatar),
           chipExtra: cellChips[name],
+          pad: cellPads[name],
+          headPad: headPads[name],
+          arrow: headMeasure ? headMeasure('↑') : undefined,
           kind: labelColumn ? 'text' : plan.kind,
           controls: language || Boolean(byName.get(name)?.primaryKey || byName.get(name)?.references),
           /* A reference's arrow stands beside its label in the sort (the head, below), after the sort's 4px gap:
-             uncounted, it took the room past the label that the resizer's strip is (style.css). */
-          mark: byName.get(name)?.references ? 4 + (headMeasure ? headSet(REFERENCE_MARK) : GRID_HEAD_CHAR) : undefined,
+             uncounted, it took the room past the label that the resizer's strip is (style.css). An App's head draws
+             none: a reference there is its record's name, and the arrow is the Workbench's word for a foreign key. */
+          mark: byName.get(name)?.references && !shell().inApp() ? 4 + (headMeasure ? headSet(REFERENCE_MARK) : GRID_HEAD_CHAR) : undefined,
           /* On touch the head's caret and moves stand beside its label, which gives way to them. The key's label is the
              shortest and gave way whole: a phone drew the Workbench's "id KEY ↓" as "KEY ↓". Its column keeps their
              room; any other head's label may still give way, as it was designed to. */
@@ -1144,6 +1191,8 @@ export function Grid({
       titleName,
       headFace,
       cellChips,
+      cellPads,
+      headPads,
       faceEpoch,
       ownLines,
     ],
@@ -1162,16 +1211,16 @@ export function Grid({
     [cellFonts, faceEpoch], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const measureAsked = useMemo(() => measureIn(asked), [measureIn, asked]);
-  /* An App's own list folds the columns its room cannot hold under the row's name, as a detail line, once its heads
-     and words have wrapped (gridSizing.ts): they are moved, not lost, and the list does not scroll sideways. An
-     embedded grid leaves them out, as it did. */
+  /* An App's own list folds the columns its room cannot hold under the row's name, as a detail line, once its
+     secondary text has given way to its floor (gridSizing.ts): they are moved, not lost, and the list does not scroll
+     sideways. An embedded grid leaves them out, as it did. */
   const folds = !dropColumns && sizing === 'fit' && shell().inApp();
   /* What folded, and the width it folded at (gridSizing.ts holdFold): a fold changes the rows' height, and the
      scrollbar that brings or takes away must not unfold it again. */
   const foldHeld = useRef<FoldHeld | null>(null);
   const kept = useMemo(() => {
     if (!((dropColumns || folds) && sizing === 'fit')) return null;
-    const next = keepFitting(sizeHints, availableWidth, slotted, trailing, headChar, measureAsked);
+    const next = keepFitting(sizeHints, availableWidth, slotted, trailing, headChar, measureAsked, folds);
     const decided = holdFold(foldHeld.current, next, availableWidth, [asked.join('\u0000'), rows]);
     foldHeld.current = decided.held;
     return decided.kept;
@@ -1466,7 +1515,6 @@ export function Grid({
         photoOwner: avatarOwner(table, name, display, data.columns),
         pin: lefts.get(name),
         edge: name === lastPinned,
-        ...(fit.wraps[ordered.indexOf(name)] ? { wraps: true } : {}),
         ...(name === foldsInto
           ? {
               more: folded.map((other) => ({
@@ -1604,7 +1652,7 @@ export function Grid({
           >
             <span className="th-label">{headLabel}</span>
             {meta?.primaryKey && <span className="pk">{say('common.key')}</span>}
-            {meta?.references && <span className="fk">{REFERENCE_MARK}</span>}
+            {meta?.references && !inApp && <span className="fk">{REFERENCE_MARK}</span>}
             {sorted && <span className="th-arrow">{sorted === 'desc' ? '↓' : '↑'}</span>}
           </button>
           {/* The column's own order, beside its sort: one step at a time,
@@ -1864,6 +1912,7 @@ export function Grid({
                     {starts && (
                       <GroupHeadRow
                         head={group.head(value)}
+                        hostRef={hosts.ref(groupHostKey(named))}
                         folded={shut}
                         onToggle={() =>
                           setShutGroups((was) => {
@@ -1944,6 +1993,7 @@ export function Grid({
  */
 function GroupHeadRow({
   head,
+  hostRef,
   folded,
   onToggle,
   slot,
@@ -1952,6 +2002,9 @@ function GroupHeadRow({
   table,
 }: {
   head: GroupHead;
+  /** The head's leading cell is a host as a row's is, under the group's key (`groupHostKey`): a selection puts its
+      "all in this group" box there. */
+  hostRef: (element: HTMLElement | null) => (() => void) | undefined;
   folded: boolean;
   onToggle: () => void;
   slot: boolean;
@@ -1965,7 +2018,7 @@ function GroupHeadRow({
   const lead = first < 0 ? columns.length : Math.max(1, first);
   return (
     <tr className={`grid-group-head${folded ? ' is-folded' : ''}`}>
-      {slot && <td className="expander-cell" />}
+      {slot && <td className="expander-cell row-host" ref={hostRef} />}
       <td colSpan={lead} className="grid-group-cell">
         <button type="button" className="grid-group-toggle" aria-expanded={!folded} onClick={onToggle}>
           <Icon name={folded ? 'caret-right' : 'caret-down'} size={14} className="grid-group-caret" />
@@ -2066,7 +2119,6 @@ const Row = memo(function Row({
           display={column.display}
           pin={column.pin}
           edge={column.edge}
-          wraps={column.wraps}
           more={column.more ? foldedOf(column.more, record) : undefined}
           sub={column.subtitle && Object.hasOwn(record, column.subtitle) ? record[column.subtitle] : undefined}
           currency={column.currency ? record[column.currency] : undefined}

@@ -203,6 +203,8 @@ interface AppRoomSlots {
   Assistant: ComponentType<{ conversation?: string }> | null;
   /** Every list, page and New of a long menu, with a filter box (Directory.tsx). */
   Directory: ComponentType<Record<string, never>> | null;
+  /** The reader's settings (SettingsRoom.tsx): their profile and preferences as one page, opened at `section`. */
+  Settings: ComponentType<{ section?: string }> | null;
   /** A free-form page (FreePage.tsx), where a dashboard entry names one. */
   Page: ComponentType<{ entry?: PageEntry; dashboard: DashboardDef; page: NonNullable<DashboardDef['page']> }> | null;
   /** A split's pick: its list kept beside the record (SplitRecordRoom.tsx). */
@@ -229,6 +231,9 @@ interface RecordSlots {
   SuitePreference: ComponentType<Record<string, never>> | null;
   /** A list's import from a file (ImportButton.tsx), beside its New; null where the shell offers none. */
   ImportButton: ComponentType<{ table: TableMeta | undefined; view?: string; noun: { one: string; many: string } }> | null;
+  /** A list's summary (`summary` on a list view): a dashboard's metrics in one strip over the list's tabs, drawn by
+      the shell that draws dashboards; null where the shell has none. */
+  ListSummary: ComponentType<{ sections: readonly unknown[] }> | null;
   /** A page section's list drawn by the App's own component (sdk/CustomList.tsx), fetched the first time one is drawn. */
   CustomList: ComponentType<{
     table: TableMeta;
@@ -446,6 +451,7 @@ const WORKBENCH: ShellMode = Object.freeze({
   slots: Object.freeze({
     SuitePreference: null,
     ImportButton: null,
+    ListSummary: null,
     CustomList: null,
     CustomSection: null,
     TimelineComposer: null,
@@ -459,6 +465,7 @@ const WORKBENCH: ShellMode = Object.freeze({
     Inbox: null,
     Assistant: null,
     Directory: null,
+    Settings: null,
     Page: null,
     SplitRecord: null,
     Document: null,

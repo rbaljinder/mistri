@@ -226,6 +226,48 @@
       }
     },
     {
+      "file": "looks/atelier.webp",
+      "app": "lintel",
+      "route": "/leases",
+      "as": "manager",
+      "viewport": "desk",
+      "look": "atelier",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
+      "file": "looks/graphite.webp",
+      "app": "lintel",
+      "route": "/leases",
+      "as": "manager",
+      "viewport": "desk",
+      "look": "graphite",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
+      "file": "looks/bloom.webp",
+      "app": "lintel",
+      "route": "/leases",
+      "as": "manager",
+      "viewport": "desk",
+      "look": "bloom",
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 800
+      }
+    },
+    {
       "file": "looks/lumen.webp",
       "app": "lintel",
       "route": "/leases",

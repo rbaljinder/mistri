@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Menu } from '@base-ui/react/menu';
+import { MenuItem } from '@ui-sdk/react/menu';
 import type { AppUi } from '../../shared/appModel.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { localAppNavTarget, type NavTargetApp } from '../appNavTargets.js';
@@ -155,6 +155,18 @@ function Switcher({
       removeHostListener(window, 'focus', refresh);
     };
   }, [refresh]);
+  /* Opening starts the checks again, so the menu opens with no item in it, and a menu that opens empty leaves the
+     keyboard on its button. When the links arrive the keyboard is given the first of them, as it would have been
+     had they been there, unless the reader has since gone somewhere else. */
+  useEffect(() => {
+    if (!open || view.loading) return undefined;
+    const frame = requestAnimationFrame(() => {
+      const at = document.activeElement;
+      if (!(at instanceof HTMLElement) || !at.classList.contains('suite-switcher-trigger')) return;
+      at.ownerDocument.querySelector<HTMLElement>('.suite-switcher-popup [role="menuitem"]:not([aria-disabled="true"])')?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open, view.loading]);
   if (!view.offered) return null;
   const label = config.label ?? say('apps');
   const content = (
@@ -171,9 +183,9 @@ function Switcher({
       <div className={isGrouped(config) ? 'suite-switcher-groups' : undefined}>
         {view.groups.map((group, index) => {
           const links = group.links.map((link, linkIndex) => (
-            <Menu.Item key={linkIndex} nativeButton={false} render={<a href={link.href} className="suite-switcher-link" />}>
+            <MenuItem key={linkIndex} render={<a href={link.href} className="suite-switcher-link" />}>
               {link.label}
-            </Menu.Item>
+            </MenuItem>
           ));
           return group.label ? (
             <DropGroup key={index} label={group.label} className="suite-switcher-group" labelClassName="suite-switcher-heading">
@@ -187,7 +199,7 @@ function Switcher({
     </>
   );
   // Mounted by the account popup itself: opening it starts fresh availability checks.
-  // No second Menu.Root or nested dropdown can capture the account menu's keyboard.
+  // No second menu or nested dropdown can capture the account menu's keyboard.
   if (config.placement === 'account')
     return (
       <DropGroup className="suite-switcher-account" labelClassName="suite-switcher-title" label={label}>

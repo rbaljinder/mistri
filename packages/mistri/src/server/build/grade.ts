@@ -483,6 +483,12 @@ export async function runGrade(
             seen.push({ page: shot.path, window: window.label, found });
           }
         }
+        /* One list with no rows is a list that starts empty (a resident's own repairs); most of them is a database
+           nobody seeded, which is the one thing worth saying: the pages were measured with nothing on them. */
+        const lists = rowShots.filter((shot) => shot.kind === 'view').length;
+        const rowless = new Set(seen.filter((one) => one.found.some((finding) => finding.code === 'unseeded-list')).map((one) => one.page));
+        if (rowless.size < Math.max(2, Math.ceil(lists / 2)))
+          for (const one of seen) one.found = one.found.filter((finding) => finding.code !== 'unseeded-list');
         const findings = merge(seen);
         for (const finding of findings) {
           /* The theme's finding is placed at the theme: the token it names, or its type. */

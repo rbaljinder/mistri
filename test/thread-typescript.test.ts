@@ -31,6 +31,8 @@ const appDirectory = resolve('test/fixtures/apps/thread');
 // Updated for 0.8.2 machine-derived action arrays and workflow metadata.
 // Updated for 0.9.0: the stepper sits on the first main-column fields(), which
 // is a summary unless it says otherwise; the aside's fields are a property rail.
+// Updated for 1.0.0-rc.59: a final state off the forward path follows the
+// steps as an outcome.
 // Keep independent of authoring so accidental contract drift shows.
 const originalContract = {
   app: {
@@ -662,6 +664,11 @@ const originalContract = {
               {
                 value: 'done',
                 label: 'Done',
+              },
+              {
+                value: 'canceled',
+                label: 'Canceled',
+                outcome: true,
               },
             ],
             ordered: true,

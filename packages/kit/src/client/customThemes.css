@@ -1,15 +1,15 @@
 /* Custom themes' token machinery, under every look (style.css names the order). */
 @layer kit {
 /* Public theme slots override the base style, without changing its layout. */
-:root[data-custom-theme] :is(button, input:not([role=switch]), select, textarea, .tn-search, .dd-button) { border-radius: var(--radius); }
+:root[data-custom-theme] :is(button, input:not([role=switch]), select, textarea, .tn-search,[data-slot='select-trigger']) { border-radius: var(--radius); }
 /* Round controls (`shape.radius.control: 'round'`) are pills; a check box, a radio and a slider keep their own
    shape, and a form's field keeps the field's corner (the rule below outranks this one). A look that corners its
    own controls (the dashboard's window and filters, a list's search and toggles) reads --control-radius there, unset
    in every built-in look; a card that is a button keeps the look's panel corner. */
-:root[data-control-radius] :is(button, input:not([role=switch], [type=checkbox], [type=radio], [type=range]), select, .tn-search, .dd-button) { border-radius: var(--control-radius); }
+:root[data-control-radius] :is(button, input:not([role=switch], [type=checkbox], [type=radio], [type=range]), select, .tn-search,[data-slot='select-trigger']) { border-radius: var(--control-radius); }
 :root[data-custom-theme] :is(.applist-title, .root-current, .page-section-title) { font-family: var(--heading-font, var(--sans)); }
 :root[data-custom-theme] .page-field-edit :is(.cell-edit, .record-picker-trigger),
-:root[data-custom-theme] .insert-field :is(input:not([role=switch]), textarea, .dd-button, .record-picker-trigger) { border-radius: var(--field-radius, 2px); }
+:root[data-custom-theme] .insert-field :is(input:not([role=switch]), textarea,[data-slot='select-trigger'], .record-picker-trigger) { border-radius: var(--field-radius, 2px); }
 
 .theme-lab {
   width: min(72rem, 94%); max-height: 90%; overflow: auto;

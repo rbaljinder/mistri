@@ -43,6 +43,7 @@ import {
   ASSISTANT_PAGE,
   DIRECTORY_PAGE,
   INBOX_PAGE,
+  SETTINGS_PAGE,
   dashPageId,
   dashViewKey,
   formViewKey,
@@ -79,6 +80,7 @@ import {
   INBOX_SEGMENT,
   ASSISTANT_ROOM,
   DIRECTORY_ROOM,
+  SETTINGS_ROOM,
   addressSlug,
   appAddressBook,
   readAppSegments,
@@ -534,6 +536,9 @@ function sayEntry(book: AddressBook, entry: Entry): Said | undefined {
     if (entry.pageId === INBOX_PAGE) return book.routes.get(INBOX_SEGMENT)?.kind === 'inbox' ? { segments: [INBOX_SEGMENT] } : undefined;
     if (entry.pageId === DIRECTORY_PAGE)
       return book.routes.get(DIRECTORY_ROOM)?.kind === 'directory' ? { segments: [DIRECTORY_ROOM] } : undefined;
+    // The section the room was opened at rides the walk, not the address: the page is one page.
+    if (entry.pageId === SETTINGS_PAGE)
+      return book.routes.get(SETTINGS_ROOM)?.kind === 'settings' ? { segments: [SETTINGS_ROOM] } : undefined;
     // The assistant's page, and one conversation on it (`tab` holds its id).
     if (entry.pageId === ASSISTANT_PAGE)
       return book.routes.get(ASSISTANT_ROOM)?.kind === 'assistant'
@@ -639,6 +644,15 @@ export const inboxEntry = (): Entry => ({ kind: 'page', pageId: INBOX_PAGE, tabl
 /** The Directory as the walk holds it. */
 const directoryEntry = (): Entry => ({ kind: 'page', pageId: DIRECTORY_PAGE, table: undefined, label: say('allPages') });
 
+/** The reader's settings as the walk holds them, opened at `section` when one is named (SettingsRoom.tsx). */
+const settingsEntry = (section?: string): Entry => ({
+  kind: 'page',
+  pageId: SETTINGS_PAGE,
+  table: undefined,
+  label: say('settings'),
+  ...(section ? { tab: section } : {}),
+});
+
 /** The assistant's page as the walk holds it, on one conversation when `conversation` names it. */
 export const assistantEntry = (conversation?: string): Entry => ({
   kind: 'page',
@@ -699,6 +713,7 @@ export function appStackFrom(hash: string): { connection: string; stack: Entry[]
     if (target.kind === 'page') return { connection, stack: [{ kind: 'page', pageId: target.page, table: target.table }] };
     if (target.kind === 'inbox') return { connection, stack: [inboxEntry()] };
     if (target.kind === 'directory') return { connection, stack: [directoryEntry()] };
+    if (target.kind === 'settings') return { connection, stack: [settingsEntry()] };
     if (target.kind === 'assistant') return { connection, stack: [assistantEntry()] };
     return { connection, stack: [tableView(target.table) as Entry] };
   }

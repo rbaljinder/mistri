@@ -73,7 +73,7 @@ import { listEntry, listLink, type ViewLink } from '@mistriwork/kit/client/compo
 import { TableRoom } from '@mistriwork/kit/client/components/TableRoom.js';
 import { referenceNames } from '@mistriwork/kit/client/components/appListModel.js';
 import { namedCell } from '@mistriwork/kit/client/components/listColumn.js';
-import { dressFor, groupLabel, maskedText, ruleSays, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
+import { datesAmong, dressFor, groupLabel, maskedText, ruleSays, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
 import { AvatarText, Dressed, Value } from '@mistriwork/kit/client/components/Value.js';
 import { avatarOwner, useAvatarPhotos } from '@mistriwork/kit/client/components/avatarPhotos.js';
 import { Sparkline, TONE_INK, periodTick } from '@mistriwork/kit/client/components/Chart.js';
@@ -108,6 +108,7 @@ import {
   windowed,
   windowTitle,
   metricWindow,
+  saysOwnTime,
   type DashboardDef,
   type DashboardProps,
   type Periods,
@@ -115,14 +116,15 @@ import {
   type Section,
 } from '@mistriwork/kit/client/components/dashboardModel.js';
 import { declaredOrder, orderDeclared } from '@mistriwork/kit/client/components/groupOrder.js';
-import { appNow, formatApprox, formatLocale, formatPercent } from '@mistriwork/kit/client/locale.js';
+import { appNow, formatApprox, formatDate, formatPercent, formatRelativeDay } from '@mistriwork/kit/client/locale.js';
 import { dateWindow } from '@mistriwork/engine/shared/queryDates.js';
 /* The dashboard's own blocks' sheet travels with this chunk (onDemand), not in the first stylesheet. */
 import './DashboardBlocks.css';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { say as sayCopy } from '../copy/dashboards/components/Dashboard.js';
 import { WindowRow, ownWindowOf } from './DashboardWindow.js';
-import { liveFollowing } from '@mistriwork/kit/client/liveState.js';
+import { changeTone, comparedWith, sayGroup } from './dashboardSay.js';
+import { TILE_FRESH, minuteTick } from './dashboardClock.js';
 
 /* An author's component, and the page's side of @mistriwork/mistri/ui with it: fetched
    the first time a dashboard holds one, never for a dashboard without. */
@@ -163,44 +165,6 @@ interface Rows {
 }
 type Row = Record<string, unknown>;
 
-/* What a read says about the time it is asked at: a window ("last 30 days"), a day or a period named from now. A
-   figure that says none changes only when the data does, and live sync (liveSync.ts) tells the page when. */
-const TIME_RELATIVE =
-  /\b(?:now|today|yesterday|tomorrow|ago|(?:this|last|next|past|previous)\s+(?:\d+\s+)?(?:day|week|month|quarter|year)s?)\b/i;
-
-/* The youngest answer the minute reads again. Query asks the interval again after every answer, so a tile read at
-   :00.2 ticks at the next :00, a minute old; one read at :58 waits for the minute after. */
-const TICK_FLOOR = 15_000;
-
-/**
- * The minute tick: asked again on the wall-clock minute, asleep with the tab (Query's refetchIntervalInBackground is
- * off). A read that depends on the time always ticks; every other read ticks while the page follows no changes to its
- * table (an App without `live: true`, `--no-live`, or a resource's own `live: false`), since nothing else would tell a
- * dashboard left on a wall that its data moved.
- */
-export const minuteTick = (
-  text: string | null | undefined,
-  table?: string,
-  following: (table?: string) => boolean = liveFollowing,
-): ((query?: { state: { dataUpdatedAt: number } }) => number | false) | false => {
-  if (!text) return false;
-  const timed = TIME_RELATIVE.test(text);
-  return (query) => {
-    if (!timed && following(table)) return false;
-    const now = Date.now();
-    const next = 60_000 - (now % 60_000);
-    /* An answer read moments before the minute (a page opened at :58, the first paint's carried answers) is not read
-       again at :00: the tick that would land on it goes to the minute after. */
-    const read = query?.state.dataUpdatedAt;
-    return read && now + next - read < TICK_FLOOR ? next + 60_000 : next;
-  };
-};
-
-/* A tile is an aggregate, and says what it is as of: re-read when a change
-   to its tables is announced (liveSync.ts), a write that invalidates it, the
-   minute for a read that depends on the time, or after two minutes, not every
-   time the dashboard is opened again or its tab regains focus. */
-const TILE_FRESH = 120_000;
 /* The most currencies a figure says apart: more than this is a report, not a card. */
 const CURRENCIES_SAID = 6;
 
@@ -366,27 +330,6 @@ function drillFor(section: Section): Drill | null {
   });
 }
 
-/** A group's key as its reader says it: the column's display rule, and in an
-    App the column's vocabulary as words (valueModel.ts, groupLabel). */
-function sayGroup(table: string | undefined, column: string | undefined) {
-  /* A weekday bucket answers 1 (Monday) to 7, an hour bucket 00 to 23: said as the reader's day and hour. */
-  const bucket = /^(weekday|hour)\s/i.exec(column ?? '')?.[1]?.toLowerCase();
-  if (bucket) return (key: unknown) => sayBucket(bucket, key);
-  const rule = columnDisplay(table ?? '', column ?? '') as DisplayRule | null;
-  const allowed = (findTable(table ?? '') as TableMeta | undefined)?.columns.find((c) => c.name === column)?.allowed;
-  return (key: unknown) => groupLabel(rule, key, allowed);
-}
-
-/** A weekday or hour bucket's key in the reader's words: 2024-01-01 was a Monday. */
-function sayBucket(bucket: string, key: unknown): string {
-  const n = Number(key);
-  if (key == null || key === '' || !Number.isInteger(n)) return String(key ?? '—');
-  const at = bucket === 'weekday' ? new Date(Date.UTC(2024, 0, n)) : new Date(Date.UTC(2024, 0, 1, n));
-  const options: Intl.DateTimeFormatOptions =
-    bucket === 'weekday' ? { weekday: 'short', timeZone: 'UTC' } : { hour: 'numeric', timeZone: 'UTC' };
-  return at.toLocaleString(formatLocale(), options);
-}
-
 /* The schema as the dashboard's asks read it (shared/dashboardAsks.ts), through the walk's own helpers. */
 const lookups: AskLookups = {
   table: (id) => findTable(id) as TableMeta | undefined,
@@ -400,20 +343,6 @@ const lookups: AskLookups = {
 /** A section's mark, leading its title: one of the App's curated icons, its glyph in the App payload. */
 function Mark({ section }: { section: Section }) {
   return section.icon ? <Icon name={section.icon} size={16} className="dash-section-icon" /> : null;
-}
-
-/** A change's news, as a class: ' good' or ' bad' where the metric says which way is better, else nothing. */
-export function changeTone(diff: number, better: 'up' | 'down' | undefined): '' | ' good' | ' bad' {
-  if (!better || diff === 0 || !Number.isFinite(diff)) return '';
-  return diff > 0 === (better === 'up') ? ' good' : ' bad';
-}
-
-/** What a compare window is, as a card says it beside its change: "vs prior 90 days". */
-export function comparedWith(compare: string | undefined, level = false): string | undefined {
-  const period = /\bprevious\s+(\d+)\s+(minute|hour|day|week|month|year)s?\b/i.exec(compare ?? '');
-  if (!period) return compare ? sayCopy(level ? 'sameAsTheCompareWindow' : 'vsTheCompareWindow') : undefined;
-  const n = Number(period[1]);
-  return sayCopy(level ? 'sameAsPrior' : 'vsPrior', { period: n === 1 ? period[2].toLowerCase() : `${n} ${period[2].toLowerCase()}s` });
 }
 
 interface MetricProps {
@@ -491,7 +420,11 @@ export const Metric = memo(function Metric({
           </span>
         ) : (
           <span className={`dash-delta${tone}`} title={sayCopy('inTheCompareWindow', { b: say(b), compare: section.compare })}>
-            <span className="dash-delta-figure">{`${diff > 0 ? '↑' : '↓'} ${say(Math.abs(diff))}`}</span>
+            {/* A change larger than the figure itself is said as a share of what was there: "↓ $229.3K" under
+                "$40.4K" read as money lost, and "↓ 85%" cannot. The title still names the earlier figure. */}
+            <span className="dash-delta-figure">{`${diff > 0 ? '↑' : '↓'} ${
+              b !== 0 && Math.abs(diff) > Math.abs(a) ? `${Math.round((Math.abs(diff) / Math.abs(b)) * 100)}%` : say(Math.abs(diff))
+            }`}</span>
             {against && (
               <>
                 {' '}
@@ -539,6 +472,10 @@ export const Metric = memo(function Metric({
         : section.targetWhole
           ? sayCopy('ofWhole', { figure: say(now.data), whole: say(goal), reached: share! })
           : sayCopy('ofTarget', { reached: share!, goal: say(goal) });
+  /* A card says one line under its figure: the meter with its words is that line, so a card with a meter does not
+     also say "Right now" over it. Two lines made it the tallest card of its strip, and every card beside it ended
+     in a band of nothing. Held while a goal is read, so the line does not arrive late. */
+  const metered = goal !== undefined || (goalAsk !== undefined && goalData.data === undefined && !section.error);
   /* What a screen reader hears: the figure once, then its share, never the visible words after the figure again. */
   const heard = wholeWords
     ? `${label}: ${sayCopy('ofWholeSaid', { figure: sayWhole(now.data), whole: sayWhole(goal), percent: String(Math.round(reached! * 100)) })}`
@@ -647,23 +584,25 @@ export const Metric = memo(function Metric({
           has picked one, a card without says so, quietly. Under All time no
           card is narrowed, so the note would only be noise on a card that
           was never about time — what is on order, what is short. */}
-      {offered && !section.over && !section.error && (
+      {offered && !section.over && !section.error && !metered && !saysOwnTime(section.query) && (
         <span className="dash-fixed" title={sayCopy('theTimeWindowAbove')}>
           {sayCopy('fixedWindow')}
         </span>
       )}
       {/* A card over a clock with no window counts every time; one with no clock counts what stands now. */}
-      {dated && !offered && !windowNote && !section.error && (
+      {dated && !offered && !windowNote && !section.error && !metered && !(saysOwnTime(section.query) && !section.over) && (
         <span className="dash-fixed">{sayCopy(section.over ? 'allTime' : 'fixedWindow')}</span>
       )}
       {/* The window the author set, said under the figure rather than wrapped into its label (metricWindow). */}
       {windowNote && !section.error && <span className="dash-fixed dash-window">{windowNote}</span>}
-      {goal !== undefined && (
+      {/* The meter's line is held while its goal is read: it arrived a moment after the figure and made the card,
+          and with it the strip and whatever stands under the strip, a line taller. */}
+      {metered && (
         <span className="dash-target">
           <span className="dash-target-meter" aria-hidden="true">
             <span style={{ width: `${Math.round(Math.min(1, Math.max(0, reached ?? 0)) * 100)}%` }} />
           </span>
-          <span className="dash-target-text">{goalWords}</span>
+          <span className="dash-target-text">{goal === undefined ? '\u00a0' : goalWords}</span>
         </span>
       )}
       {sparkSlot}
@@ -681,7 +620,10 @@ function SparkHost({
   say: (v: unknown) => string;
   tone: string;
 }) {
-  return <span className={`spark-host is-reserved${tone}`}>{points && points.length >= 4 && <Sparkline rows={points} say={say} />}</span>;
+  /* A trend is its shape: one bar standing in an empty window read as a mark left on the card, so it is drawn
+     where two of its points or more have something to show. */
+  const drawn = points && points.length >= 4 && points.filter((point) => Number(point.value) !== 0 && point.value != null).length >= 2;
+  return <span className={`spark-host is-reserved${tone}`}>{drawn && <Sparkline rows={points} say={say} />}</span>;
 }
 
 /* ---------- breakdown, chart, matrix ---------- */
@@ -1328,29 +1270,69 @@ function columnAt(table: TableMeta | undefined, name: string): ColumnMeta | unde
 }
 
 /**
- * A list in the aside: names, not a table. The aside is a narrow column,
+ * A list as names, not a table. The aside is a narrow column,
  * and a grid there cut its names short ("Riley C…") to keep columns nobody
  * compares. Each row is its first column, whole and wrapping; the second a
  * quiet line under it; a third a value at the row's end. The row opens its
  * record, the month's other rows its neighbours.
+ *
+ * In the main column the same rows are a worklist (`worklist`) where they lead
+ * with the record's name: what a reader came to act on, each row led by the
+ * section's mark in a soft tile and closed by a caret that says it opens. A
+ * name, a line and a value there were a three-column grid with a head row,
+ * drawn for comparing what nobody compares.
  */
+/** A rows question's closing `show a, b` clause, with the `limit` that may follow it. */
+const SHOWN = / show ([\w.,$ ]+?)( limit \d+)?$/;
+
+/** Whether a column's display rule colours its values. */
+const tonedBy = (table: string | undefined, column: string) => Boolean((columnDisplay(table ?? '', column) as DisplayRule | null)?.tone);
+
+/**
+ * What a worklist row's tile wears: the strongest alarm any of the record's toned columns says for this row — `bad`
+ * over `warn` — and nothing otherwise. The tile is never the App's colour (it would speak for the colour: fine under
+ * a green brand, a warning under an orange one), and a row that is merely good, new or informed stays quiet, so the
+ * tiles that are coloured are the ones to look at.
+ */
+function alarmOf(table: string | undefined, toned: string[], row: Row): 'bad' | 'warn' | undefined {
+  let alarm: 'bad' | 'warn' | undefined;
+  for (const column of toned) {
+    const { tone } = ruleSays(columnDisplay(table ?? '', column) as DisplayRule | null, row[column]);
+    if (tone === 'bad') return 'bad';
+    if (tone === 'warn') alarm = 'warn';
+  }
+  return alarm;
+}
+
 function AsideRows({
   section,
   table,
   query,
   empty,
   onRows,
+  worklist = false,
 }: {
   section: Section;
   table: TableMeta | undefined;
   query: string;
   empty?: ReactNode;
   onRows: (data: { total?: number; exactTotal?: boolean; rows?: unknown[] }) => void;
+  worklist?: boolean;
 }) {
+  /* A worklist row's tile wears the row's own alarm (below), which may stand in a column the section does not show:
+     the record's toned columns are read beside the shown ones, in the one statement. */
+  const toned = worklist && table ? table.columns.map((c) => c.name).filter((c) => tonedBy(section.table, c)) : [];
+  const asked =
+    toned.length && SHOWN.test(query)
+      ? query.replace(SHOWN, (_all, named: string, limit = '') => {
+          const have = named.split(',').map((one) => one.trim());
+          return ` show ${[...have, ...toned.filter((c) => !have.includes(c))].join(', ')}${limit}`;
+        })
+      : query;
   const rows = useQuery<Rows & { total?: number; exactTotal?: boolean; errors?: Array<{ message: string }> }>({
-    queryKey: ['run', query, section.limit ?? 5],
+    queryKey: ['run', asked, section.limit ?? 5],
     queryFn: () =>
-      batchedRun({ q: query, limit: section.limit ?? 5, offset: 0, ...(section.counted === false ? { count: 'none' as const } : {}) }),
+      batchedRun({ q: asked, limit: section.limit ?? 5, offset: 0, ...(section.counted === false ? { count: 'none' as const } : {}) }),
     refetchInterval: minuteTick(query, section.table),
     staleTime: TILE_FRESH,
     placeholderData: keepPreviousData,
@@ -1359,7 +1341,12 @@ function AsideRows({
   useEffect(() => {
     if (data && !data.errors?.length) onRows(data);
   }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [first, second, third] = section.show?.length ? section.show : table ? [labelColumn(table) ?? primaryKey(table)[0]] : [];
+  /* The section's own title for a row (`primary`) leads, whichever place `show` gave it; the rest keep their order. */
+  const shown =
+    section.primary && section.show?.includes(section.primary)
+      ? [section.primary, ...section.show.filter((one) => one !== section.primary)]
+      : section.show;
+  const [first, second, third] = shown?.length ? shown : table ? [labelColumn(table) ?? primaryKey(table)[0]] : [];
   /* A person named first wears their photo where the rule names one (avatarPhotos.tsx). */
   const nameRule = first ? (columnDisplay(section.table, first) as DisplayRule | null) : null;
   const photoOwner = first ? avatarOwner(table, first, nameRule, data?.rows?.length ? Object.keys(data.rows[0]) : undefined) : undefined;
@@ -1375,7 +1362,26 @@ function AsideRows({
   const said = (column: ColumnMeta | undefined, row: Row) => {
     if (!column || !table) return null;
     const { column: drawn, value } = namedCell(table, column.name, row, referenceLabels);
-    return value != null && value !== '' ? <Value tableId={section.table} col={drawn} value={value} compact /> : null;
+    if (value == null || value === '') return null;
+    /* A worklist row's `relative` day is said from today however far it is ("5 months ago"), its date the title: a
+       column of dates falls back to dates together (datesAmong), but a row of work waiting says how long it has
+       waited, which a bare "May 30, 2026" among August's left the reader to work out. */
+    const from =
+      worklist && (columnDisplay(section.table, column.name) as DisplayRule | null)?.format === 'relative'
+        ? formatRelativeDay(String(value))
+        : null;
+    if (from) return <span title={formatDate(String(value))}>{from}</span>;
+    /* Moments that are all of today say their time alone, as a list's column does (datesAmong). */
+    const rule = columnDisplay(section.table, column.name) as DisplayRule | null;
+    const together = datesAmong(
+      rule,
+      got.map((one) => one[column.name]),
+    );
+    if (together?.format === 'time' && rule?.format !== 'time') {
+      const clock = dressFor(together, value);
+      if (clock?.text) return <span title={formatDate(String(value))}>{clock.text}</span>;
+    }
+    return <Value tableId={section.table} col={drawn} value={value} compact />;
   };
   const named = (row: Row) => {
     const photo = photoOwner && name ? photoOf(first, row[photoOwner]) : undefined;
@@ -1384,7 +1390,7 @@ function AsideRows({
   const keyed = got.map((row) => ({ row, key: Object.fromEntries(pk.map((k) => [k, row[k]])), label: String(row[first] ?? '') }));
   const records = keyed.map(({ key, label }) => ({ key, label }));
   return (
-    <ul className="dash-mini" aria-label={section.title ?? untitled(section)}>
+    <ul className={worklist ? 'dash-mini dash-worklist' : 'dash-mini'} aria-label={section.title ?? untitled(section)}>
       {keyed.map(({ row, key, label }, i) => (
         <li key={i}>
           <button
@@ -1393,11 +1399,18 @@ function AsideRows({
             disabled={!pk.length}
             onClick={() => void openRecord(section.table, key, label, 'push', { records })}
           >
+            {/* A person named first is their own mark (the initials disc); anything else wears the section's. */}
+            {worklist && section.icon && !photoOwner && !nameRule?.avatar && (
+              <span className="dash-mini-mark" data-tone={alarmOf(section.table, toned, row)} aria-hidden="true">
+                <Icon name={section.icon} size={16} />
+              </span>
+            )}
             <span className="dash-mini-text">
               <span className="dash-mini-name">{named(row) ?? label}</span>
               {said(line, row) && <span className="dash-mini-line">{said(line, row)}</span>}
             </span>
             {said(value, row) && <span className="dash-mini-value">{said(value, row)}</span>}
+            {worklist && pk.length > 0 && <Icon name="caret-right" size={14} className="dash-mini-caret" />}
           </button>
         </li>
       ))}
@@ -1453,7 +1466,25 @@ const List = memo(function List({ section, aside = false, period }: { section: S
     setCount(data.exactTotal === false ? `~${formatApprox(data.total)}` : sayCopy('figureInAll', { figure: figure(data.total) }));
   };
   const presented = source?.presentation && source.presentation.kind !== 'split';
-  const mini = aside && !presented && (section.show?.length ?? 0) <= 3;
+  /* Names, not a table, wherever the section is the rows of a few columns: always in the aside, and in the main column
+     where the author named one to three columns of a plain `rows` that lead with the record's own name (a name, a
+     line, a value). Three columns that lead with anything else — a date, an amount, a reference — are figures to
+     compare under their heads, and a section that embeds a view, works as its room or offers row actions is that
+     view's table. */
+  const few = (section.show?.length ?? 0) <= 3;
+  /* The record's own name: the table's label column, or the one column the App's `recordLabel` says it by. */
+  const said = app ? (resourceOf(app, section.table as string) as { recordLabel?: unknown } | undefined)?.recordLabel : undefined;
+  const namesRecord = (column: string) =>
+    (table !== undefined && labelColumn(table) === column) || said === column || said === `{${column}}`;
+  const worklist =
+    !aside &&
+    few &&
+    /* Rows the section titles itself (`primary`) are named rows too, by that column. */
+    Boolean(table && section.show?.length && (section.primary !== undefined || namesRecord(section.show[0]))) &&
+    !source &&
+    !section.interactive &&
+    !section.rowActions;
+  const mini = !presented && few && (aside || worklist);
   /* An embed that opted in works as its room does, under this heading (DashboardList.tsx). */
   const works = section.interactive && source && table;
   return (
@@ -1473,7 +1504,7 @@ const List = memo(function List({ section, aside = false, period }: { section: S
           <InteractiveList section={section} source={source} onTotal={(total: number | undefined) => onRows({ total })} />
         </div>
       ) : mini ? (
-        <AsideRows section={section} table={table} query={query} empty={sourceEmpty} onRows={onRows} />
+        <AsideRows section={section} table={table} query={query} empty={sourceEmpty} onRows={onRows} worklist={worklist} />
       ) : (
         <div className="dash-list">
           <TableRoom
@@ -1484,6 +1515,7 @@ const List = memo(function List({ section, aside = false, period }: { section: S
               ...(section.counted === false ? { counted: false as const } : {}),
             }}
             sizing={section.sizing}
+            rowTitle={section.primary}
             chrome={false}
             interactive={false}
             embedded
@@ -2125,14 +2157,17 @@ export function Dashboard({
     setWindow(null);
     onWindow?.(null);
   };
-  const controls = Boolean(dashboard.windows?.length) || Boolean(dashboard.filters?.length);
+  /* A period picker over figures that each say their own time moves nothing: it is drawn only where some section is
+     over a date the reader's window stands on (`over`, with no periods of its own). */
+  const windowMoves = Boolean(dashboard.windows?.length) && allSections(dashboard).some((one) => Boolean(one.over) && !one.windows?.length);
+  const controls = windowMoves || Boolean(dashboard.filters?.length);
   return (
     <ProblemScopeProvider>
       <div>
         {lead && <div className="page-body dash-body">{lead}</div>}
         {controls && (
           <div className="dash-controls">
-            {dashboard.windows?.length ? (
+            {windowMoves && dashboard.windows?.length ? (
               <WindowRow
                 windows={dashboard.windows}
                 current={windowNow}

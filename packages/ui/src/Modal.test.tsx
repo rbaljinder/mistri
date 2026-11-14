@@ -15,7 +15,42 @@ test.each([true, 'mobile'] as const)('fullscreen %s preserves modal semantics', 
   );
   const dialog = screen.getByRole('dialog', { name: 'Overlay' });
   expect(dialog).toHaveAttribute('aria-modal', 'true');
-  expect(dialog).toHaveClass(fullscreen === true ? 'modal-fullscreen' : 'modal-fullscreen-mobile');
+  // The box wears the caller's class and nothing else; how much of the screen it takes is said on it.
+  expect(dialog.className).toBe('confirm');
+  expect(dialog).toHaveAttribute('data-fullscreen', fullscreen === true ? 'always' : 'mobile');
+});
+
+test('a named cross closes the box, stands last in it, and steps aside while the caller’s own button says its word', async () => {
+  const user = userEvent.setup();
+  const onClose = vi.fn();
+  const view = render(
+    <Modal className="confirm" ariaLabel="Add charge" closeLabel="Close" onClose={onClose}>
+      <h2>Add charge</h2>
+      <button>Cancel</button>
+    </Modal>,
+  );
+  const cross = screen.getByRole('button', { name: 'Close' });
+  expect(cross).toHaveAttribute('data-slot', 'dialog-close');
+  // Last in the box: the first Tab goes to the question, not to the way out.
+  expect(screen.getByRole('dialog').lastElementChild).toBe(cross);
+  // A form that has finished offers "Close" in its foot: one control of that name, the caller's.
+  view.rerender(
+    <Modal className="confirm" ariaLabel="Add charge" closeLabel="Close" onClose={onClose}>
+      <h2>Add charge</h2>
+      <button>Close</button>
+    </Modal>,
+  );
+  await vi.waitFor(() => expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(1));
+  expect(document.querySelector('[data-slot="dialog-close"]')).toBeNull();
+  view.rerender(
+    <Modal className="confirm" ariaLabel="Add charge" closeLabel="Close" onClose={onClose}>
+      <h2>Add charge</h2>
+      <button>Cancel</button>
+    </Modal>,
+  );
+  await vi.waitFor(() => expect(document.querySelector('[data-slot="dialog-close"]')).not.toBeNull());
+  await user.click(screen.getByRole('button', { name: 'Close' }));
+  expect(onClose).toHaveBeenCalledTimes(1);
 });
 
 test('a rejected close request leaves the modal open and can later be accepted', async () => {
@@ -113,6 +148,40 @@ test('a modal needs no class: the box is placed by `modal` alone and the scrim i
     </Modal>,
   );
   const dialog = screen.getByRole('dialog', { name: 'Bare' });
-  expect(dialog.className.split(' ')).toContain('modal');
-  expect(document.querySelector('.modal-backdrop')?.className).toBe('modal-backdrop');
+  expect(dialog).toHaveAttribute('data-kind', 'modal');
+  expect(dialog.className).toBe('');
+  const scrims = document.querySelectorAll('[data-slot="dialog-backdrop"]');
+  expect(scrims).toHaveLength(1);
+  expect(scrims[0]!.className).toBe('');
+  expect(scrims[0]).not.toHaveAttribute('data-for');
+});
+
+test('the scrim says which box it stands behind, by the box’s first class', () => {
+  render(
+    <Modal className="lightbox wide" ariaLabel="Photo" onClose={vi.fn()}>
+      <p>Body</p>
+    </Modal>,
+  );
+  const scrim = document.querySelector('[data-slot="dialog-backdrop"][data-for="lightbox"]');
+  expect(scrim).not.toBeNull();
+  expect(scrim!.className).toBe('');
+});
+
+test('the box takes the focus when what had it is taken off the page', async () => {
+  function Stepping({ shown }: { shown: boolean }) {
+    return (
+      <Modal ariaLabel={shown ? 'First' : 'Second'} onClose={vi.fn()}>
+        <h2>Record</h2>
+        {shown ? <button>Open</button> : <p>Reading…</p>}
+      </Modal>
+    );
+  }
+  const { rerender } = render(<Stepping shown />);
+  screen.getByRole('button', { name: 'Open' }).focus();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open' }));
+  // The dialog's name changes in the same render that removes the focused button, as a glance's does when it steps.
+  rerender(<Stepping shown={false} />);
+  /* At once, not when the box next changes: the watcher over the box is let go and begun again by that same render,
+     so it sees nothing of it, and a reader pressing J again would be typing at the page under the glance. */
+  expect(document.activeElement).toBe(screen.getByRole('dialog', { name: 'Second' }));
 });

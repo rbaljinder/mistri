@@ -53,12 +53,12 @@
 :root[data-theme-style] .applist-title { font-size: var(--type-list-title); line-height: 1.2; font-weight: var(--heading-weight); letter-spacing: var(--track-title); }
 :root[data-theme-style] :is(.root-current, .dash-head .applist-title) { font-size: var(--type-record-title); line-height: 1.2; font-weight: var(--heading-weight); letter-spacing: var(--track-display); }
 :root[data-theme-style] :is(.page-field > dt, .applist-field-label) { font: 500 var(--text-sm) var(--sans); text-transform: none; letter-spacing: normal; color: var(--ink-muted); }
-:root[data-theme-style] :is(.page-section-head, .page-section-title, .page-card-caption) { font: 600 var(--text-md) var(--sans); text-transform: none; letter-spacing: normal; color: var(--ink); }
+:root[data-theme-style] :is(.page-section-head, .page-section-title) { font: 600 var(--text-md) var(--sans); text-transform: none; letter-spacing: normal; color: var(--ink); }
 /* A dashboard section's own title (a list's, a board's) is in the look's heading face, as it always showed. */
 :root[data-theme-style] .page-section-title { font-family: var(--heading-font, var(--sans)); }
 /* Over a record's name, its kind is a label, not a second heading: at 14px
    in bold capitals "ISSUE" weighed as much as the sections under it. */
-:root[data-theme-style] .page-head.has-record :is(.page-title, .page-title-pick .dd-value) { font: 600 var(--text-xs) var(--sans); text-transform: uppercase; letter-spacing: var(--track-caps); color: var(--ink-muted); }
+:root[data-theme-style] .page-head.has-record :is(.page-title, .page-title-pick [data-slot='select-value']) { font: 600 var(--text-xs) var(--sans); text-transform: uppercase; letter-spacing: var(--track-caps); color: var(--ink-muted); }
 
 /* A section's note ("Nothing to count yet.") starts on the section's own
    edge, under its heading, at a size a sentence can be read in: the
@@ -77,8 +77,19 @@
     border-top-width: var(--rules-weight, 2px);
     border-top-color: var(--rules-section, var(--ink));
   }
+  /* An open table's head stands on what the table stands on, and in the pane that is the surface: on the window's
+     ground it was a band behind the head row in every look whose ground is not its surface. Opaque still, since
+     the rows scroll under it. */
+  :root[data-look-table='open'] body.app-sidebar-shell .content th:where(:not([data-slot])) {
+    background: var(--surface);
+  }
   /* `rules: 'hairline'`: a record's sections keep their rules, softened from the ink to the hairline. `double` keeps
      that and adds its own (ledgerLook.css). */
+  /* A look that rules in ink and rules its bar rules the pane's bar in it too (structure.css): the one line the
+     whole room hangs from. A printed page (Atelier) rules its sections in ink under a bar on a hairline. */
+  :root[data-theme-style][data-look-bar='ruled']:not([data-look-rules='hairline'], [data-look-rules='double']) {
+    --pane-rule: 2px solid var(--ink);
+  }
   :root:is([data-look-rules='hairline'], [data-look-rules='double']) .page-section {
     border-top-width: 1px;
     border-top-color: var(--line);
@@ -118,17 +129,17 @@
 :root[data-theme-style] .table-wrap { padding: 0; }
 /* The weight and the cells' padding are the kit's (600; 10px): these rules once said 500 and 11px/14px
    and lost to the kit on specificity, so they never showed. They say what ships. */
-:root[data-theme-style] th { background: var(--ground); font: 600 var(--text-base) var(--sans); color: var(--ink-muted); text-transform: none; letter-spacing: normal; border-bottom: var(--rules-weight, 2px) solid var(--rules-head, var(--ink)); }
+:root[data-theme-style] th:where(:not([data-slot])) { background: var(--ground); font: 600 var(--text-base) var(--sans); color: var(--ink-muted); text-transform: none; letter-spacing: normal; border-bottom: var(--rules-weight, 2px) solid var(--rules-head, var(--ink)); }
 /* A row's own head (a matrix's "Closed won") is a th in the body: it takes
    the row's hairline, not the header's rule, or every row read as underlined. */
-:root[data-theme-style] tbody th { border-bottom: 1px solid var(--line); background: transparent; }
+:root[data-theme-style] tbody th:where(:not([data-slot])) { border-bottom: 1px solid var(--line); background: transparent; }
 /* Where the ground is a panel's — a peek, a dialog — the header takes it. */
-:root[data-theme-style] :is(.peekpanel, .modal) th { background: var(--surface); }
+:root[data-theme-style] :is(.peekpanel,[data-slot='dialog-content'][data-kind='modal']) th { background: var(--surface); }
 /* A form's lines are a form, not a data table: their head is the grid's own quiet caption row (FormLines.css), on
    whatever ground the form stands. Without this the head took the page's ground, a grey band across a white form. */
 :root[data-theme-style] .form-lines-grid th { background: none; font: 500 var(--text-sm) var(--sans); border-bottom: 1px solid var(--line); }
-:root[data-theme-style] td { border-bottom: 1px solid var(--line); }
-:root[data-theme-style] tbody tr:hover td { background: var(--raised); }
+:root[data-theme-style] td:where(:not([data-slot])) { border-bottom: 1px solid var(--line); }
+:root[data-theme-style] tbody tr:hover td:where(:not([data-slot])) { background: var(--raised); }
 :root[data-theme-style] .grid-totals td { background: var(--ground); border-top: 1px solid var(--ink); }
 
 /* A board's lanes stand under a rule in the ink instead of in a box, and a
@@ -152,7 +163,7 @@
 :root[data-theme-style] .triage-lane-count.is-over { color: var(--status-warning); }
 /* A board's card is a card: a theme that names its panel corner (shape.radius.panel) rounds it with its panels and stat
    cards; a look that names none keeps its control's corner on a card this small (design.md, Shape). */
-:root[data-theme-style] :is(.board-card, .triage-card) { background: var(--surface); border: 1px solid var(--line); border-radius: var(--panel-radius, var(--radius)); padding: var(--space-4) var(--space-4h); gap: var(--space-2h); }
+:root[data-theme-style] :is(.board-card, .triage-card) { background: var(--surface); border: 1px solid var(--line); border-radius: var(--panel-radius, var(--radius)); --card-pad: var(--space-4h); padding: var(--space-4) var(--space-4h); gap: var(--space-2h); }
 :root[data-theme-style] .triage-card.has-menu { padding-right: var(--space-7); }
 :root[data-theme-style] :is(.board-card, .triage-card):hover { border-color: var(--line-strong); }
 :root[data-theme-style] .triage-card.is-selected { border-color: var(--accent); }
@@ -197,8 +208,10 @@
 :root[data-theme-style] .app-mode .content { background: var(--ground); }
 :root[data-theme-style] .app-mode .topbar { border-bottom: 1px solid var(--nav-line); }
 :root[data-theme-style] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current="true"]) { background: color-mix(in srgb, var(--nav-ink) 8%, transparent); color: var(--nav-ink); border-radius: var(--radius); }
-:root[data-theme-style] td { font-size: var(--text-md); }
-:root[data-theme-style] .app-mode td:first-child { font-weight: 500; }
+:root[data-theme-style] td:where(:not([data-slot])) { font-size: var(--text-md); }
+/* The row's name anchors it, in every look: its first column a step heavier than the rest, so the eye has somewhere
+   to land before it reads across (a row's tick, where it has one, stands before it). */
+:root[data-theme-style] .app-mode td:is(:first-child:not(.row-host), .row-host + td) { font-weight: 600; }
 :root[data-theme-style] td.num { font-weight: 500; }
 /* List tabs are pills here: the current one filled in the accent. */
 :root[data-theme-style] .tabs { border-bottom: 0; gap: var(--space-2); padding-top: var(--space-4); }
@@ -210,11 +223,18 @@
    sets its own label below. */
 :root[data-theme-style] :is(.tab, :where(body.app-mode) .page-tab) { border: 0; border-radius: var(--radius); padding: var(--space-2) var(--space-4); font: 500 var(--text-base) var(--sans); text-transform: none; letter-spacing: normal; color: var(--ink-muted); }
 :root[data-theme-style] :is(.tab, :where(body.app-mode) .page-tab)[aria-selected="true"] { background: var(--accent); color: var(--on-accent); border-bottom-width: 0; }
-:root[data-theme-style] .tab .tab-count { font-size: var(--text-sm); }
+/* A tab drawn as a box is a control in the list's toolbar: the toolbar's height, so it stands level with the filters
+   beside it (a 24px pill stood beside 30px filters), and the control's corner, so a look whose buttons are pills has
+   pill tabs. The height is the line's, not a box's, so a count beside the name keeps its baseline. */
+:root[data-theme-style]:is([data-look-tabs='pill'], [data-look-tabs='tint'], [data-look-tabs='inverted']) :is(.tab, :where(body.app-mode) .page-tab) { line-height: calc(var(--control-h-sm) - 2 * var(--space-2)); border-radius: var(--control-radius, var(--radius)); }
+/* The chosen pill is a soft one in the ink with an edge of its own: filled in the accent, as the primary button
+   is, it read as a second primary over every list and on every record. */
+html:root[data-theme-style][data-look-tabs='pill'] :is(.tab, :where(body.app-mode) .page-tab)[aria-selected='true'] { background: var(--raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong); }
+:root[data-theme-style] .tab .tab-count { font-size: var(--text-sm); line-height: 1; }
 :root[data-theme-style] button.ghost:not(.fav-star, .dash-open, .account, .live-act, .pager *) { border-color: var(--line); color: var(--ink); background: var(--surface); box-shadow: var(--shadow-control); }
 :root[data-theme-style] button.ghost:not(.fav-star, .dash-open, .account, .live-act, .pager *):hover:not(:disabled) { background: var(--raised); }
 /* A secondary Button that is a toggle says it is on: the ink's edge on the tinted ground, in every look. */
-:root[data-theme-style] button.ghost.btn[aria-pressed="true"] { border-color: var(--ink); background: var(--raised); color: var(--ink); }
+:root[data-theme-style] button[data-slot='button']:not([data-variant])[aria-pressed="true"] { border-color: var(--ink); background: var(--raised); color: var(--ink); }
 /* A list's New is its one primary action, filled in the accent as a record's
    first action is (in the look's primary-action color, `--primary`). Drawn as a quiet outline it weighed the same as Export
    beside it, and a list offered no obvious first thing to do. */
@@ -222,7 +242,7 @@
 :root[data-theme-style] .app-mode button.ghost.applist-new:hover:not(:disabled) { background: color-mix(in srgb, var(--primary, var(--accent)) 86%, var(--ink)); border-color: transparent; }
 /* A field's edge is the look's control border (3:1, docs/design.md Access), not its hairline, which was 1.3:1. A
    form's picker is the quiet form's well instead (formDress.css): the id in this list outranks any class there. */
-:root[data-theme-style] :is(.applist-quick-text, .applist-field .dd-button, .picker:not(:is(.form-page, .command-form, .insert-form-app) .picker:not(.form-lines .picker)), .page-field-edit .cell-edit, .root-current .cell-edit, .page-field-edit .record-picker-trigger, #table-filter) {
+:root[data-theme-style] :is(.applist-quick-text, .applist-field [data-slot='select-trigger'], .picker:not(:is(.form-page, .command-form, .insert-form-app) .picker:not(.form-lines .picker)), .page-field-edit .cell-edit, .root-current .cell-edit, .page-field-edit .record-picker-trigger, #table-filter) {
   background: var(--surface); border-color: var(--line-control); border-radius: var(--field-radius); box-shadow: var(--shadow-control);
 }
 /* The search is a field on the page's surface whatever the bar's ground, so it reads in the page's ink: in the
@@ -260,6 +280,8 @@
 /* The palette: a search field over grouped results, the current one tinted. */
 :root[data-theme-style] .palette-input { padding: var(--space-4h) var(--space-5); font: calc(15px * var(--type-k)) var(--sans); }
 :root[data-theme-style] .palette-input:focus { border-bottom-color: var(--line); }
+/* Its magnifier's room, said after the padding above so the placeholder starts clear of the mark. */
+:root[data-theme-style] .palette-glyph + .palette-input { padding-inline-start: calc(var(--space-5) + 16px + var(--space-3)); }
 :root[data-theme-style] .palette-item.active { background: var(--raised); }
 :root[data-theme-style] .palette-item.active .palette-label { color: var(--ink); }
 :root[data-theme-style] :is(.palette-kind, .palette-detail) { font-family: var(--sans); }
@@ -440,6 +462,27 @@
     box-shadow: none;
     background: var(--surface);
   }
+  /* A record's summary in an App wears the frame its dashboard's figures do, a figure to a box: loose on the page
+     under the workflow they were three small values, read as fields and not as what the record is worth. */
+  :root[data-look-stat='framed'] body.app-mode:not(.public-visitor) .page-field-grid.page-field-summary {
+    gap: var(--space-4);
+    padding-block: 0;
+  }
+  :root[data-look-stat='framed'] body.app-mode:not(.public-visitor) .page-field-summary > .page-field {
+    align-self: stretch;
+    padding: var(--space-4h) var(--space-5) var(--space-5);
+    border: 1px solid var(--ink);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+  :root[data-look-stat='framed'] body.app-mode:not(.public-visitor) .page-field-summary > .page-field:not(.page-field-prose) > dd {
+    font-size: var(--text-xl);
+    font-weight: 600;
+    letter-spacing: -0.012em;
+  }
+  :root[data-look-stat='framed'] body.app-mode:not(.public-visitor) .workflow-status + .page-field-grid.page-field-summary {
+    margin-top: var(--space-3);
+  }
   /* type.roles.figure: a stat's figure. Its tabular figures stay (themeType.ts adds tnum to what a theme says). Over
      the stat recipes' own figure (lumenLook.css's divided and icon, later in `look` and as specific): a role is said,
      a recipe's figure is the look's default. */
@@ -460,6 +503,14 @@
   }
   html:root[data-type-figure~='features'] .home-card .home-card-value {
     font-feature-settings: var(--type-figure-features);
+  }
+  /* A step's count is a figure too, at its own size: in the figure's face and weight, so a breakdown under a strip
+     of figures is set in one hand (a serif 46 over a bold sans 3 read as two pages). */
+  html:root[data-type-figure~='face'] .dash-step-figure {
+    font-family: var(--type-figure-font);
+  }
+  html:root[data-type-figure~='weight'] .dash-step-figure {
+    font-weight: var(--type-figure-weight);
   }
   /* By night the ink is white, and three white frames on black outweighed
    everything under them: the frame is half the ink there. */
@@ -500,10 +551,14 @@
   :root[data-look-links='underline']
     :is(
       td.reflink,
-      :is(:is(.page-field, .page-sheet-row, .page-properties) dd, .page-fact) button.ref-jump,
+      :is(:is(.page-field, .page-sheet-row, .page-properties, .page-card-fact) dd, .page-fact) button.ref-jump,
       button.ref-jump:is(.page-card-name, .page-card-more),
       .front-more a
-    ) {
+    ),
+  /* `name`: a list's row is opened by its name, which is the one thing underlined in it; what the row and a record's
+     facts refer to read as text, and the line that goes on to another record ("View home") keeps its underline. */
+  :root[data-look-links='name'] .app-mode .applist-room td:is(:first-child:not(.row-host), .row-host + td),
+  :root[data-look-links='name'] :is(button.ref-jump.page-card-more, .front-more a) {
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
@@ -523,18 +578,56 @@
     letter-spacing: var(--type-label-tracking, var(--track-caps));
     font-size: var(--text-xs);
   }
-  /* Small capitals on a stat's label; a column's heads in tracked capitals at label size, which reads as small
-     capitals in any face, shipped or not. */
+  /* Where the chosen tab is an inverted block the tabs are words to choose between, and the block already says which:
+     the text face in sentence case, not the label's capitals, which made a row of five read as a table's head. */
+  :root[data-look-tabs='inverted'][data-type-label~='upper'] :is(.tab, :where(body.app-mode) .page-tab) {
+    font-family: var(--sans);
+    font-size: var(--text-base);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  /* Heads in tracked capitals are wider than the same words in sentence case, and a list of ten columns lost a
+     name's last letters to them at a desk: where the heads are capitals a cell keeps a step less before its words.
+     Before only: a head's far side is where its sort ends and its resizer begins (e2e/apps.spec.ts holds the two
+     apart), and a value keeps the edge its head has. */
+  /* An open table (Atelier) sets its words a size up from the platform's, which costs a ten-column list the same few
+     pixels: it keeps the same step less. */
+  :root:is([data-type-label~='upper'], [data-look-table='open']) .app-mode .applist-room :is(td, th):where(:not([data-slot], :first-child, :last-child)) {
+    padding-inline-start: var(--space-3);
+  }
+  /* A look that is both (a ledger: capitals over cells in the figures' face) or sets its words a size up over an
+     open table keeps one step less again: its ten columns were still a few pixels short of a name. */
+  :root:is([data-look-table='open'], [data-look-rules='double'][data-type-label~='upper']) .app-mode .applist-room :is(td, th):where(:not([data-slot], :first-child, :last-child)) {
+    padding-inline-start: var(--space-2h);
+  }
+  /* A record's summary names its figures as a stat names its own, so the role reaches those names too: sentence
+     case over a framed figure, under a strip in capitals on the list before it, read as two kinds of box. */
+  :root[data-type-label~='face'] :where(body.app-mode) .page-field-summary .page-field > dt {
+    font-family: var(--type-label-font);
+  }
+  :root[data-type-label~='upper'] :where(body.app-mode) .page-field-summary .page-field > dt {
+    text-transform: uppercase;
+    letter-spacing: var(--type-label-tracking, var(--track-caps));
+    font-size: var(--text-xs);
+  }
+  /* Small capitals on a stat's label and a column's heads: tracked capitals at label size, which reads as small
+     capitals in any face, shipped or not. Asked of the face itself (`all-small-caps`), a face with none drew some
+     letters as shrunk capitals and left others as they were, a label at two heights. */
   :root[data-type-label~='small-caps'] .home-card-label {
-    font-variant: all-small-caps;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
     letter-spacing: var(--type-label-tracking, var(--track-caps));
   }
-  :root[data-type-label~='small-caps'] thead th {
+  :root[data-type-label~='small-caps'] thead th:where(:not([data-slot])) {
     font: 600 var(--text-xs) var(--type-label-font, var(--sans));
     text-transform: uppercase;
     letter-spacing: var(--type-label-tracking, var(--track-caps));
   }
-  :root[data-type-label~='tracking'] :is(.home-card-label, .table-wrap thead th, .tab, :where(body.app-mode) .page-tab) {
+  /* Small capitals reach a figure's label and a column's heads, never a tab, so their tracking stays with them: a
+     tab in sentence case set at a capital's spacing read as letters drifting apart. */
+  :root[data-type-label~='tracking'] :is(.home-card-label, .table-wrap thead th),
+  :root[data-type-label~='tracking']:not([data-type-label~='small-caps']) :is(.tab, :where(body.app-mode) .page-tab) {
     letter-spacing: var(--type-label-tracking);
   }
   /* A label's own size, a step either side of the base: after the capitals' step, so a size said wins over it. */
@@ -551,8 +644,8 @@
     font-feature-settings: var(--type-label-features);
   }
   /* nav: the menu's entries, in the bar and down the side, and the bar's groups. The side menu answers
-     data-type-nav-side, which a theme wears only for what it sets itself: a look's own nav role (Mono's mono
-     capitals) is the bar's alone, as it was before the role reached the side. */
+     data-type-nav-side, which says the same role: a look's own (Mono's mono capitals) dresses its menu wherever
+     the menu stands. */
   :root[data-type-nav~='face'] :is(.tn-group-button, .topbar .tn-item),
   :root[data-type-nav-side~='face'] :where(body.app-mode) .sidebar li:not(.nav-group) > :is(a, button) {
     font-family: var(--type-nav-font);
@@ -632,32 +725,32 @@
   }
   /* section: a section's title on a record and a dashboard. Its face, case and features reach every section's
      head, as the headings recipe they replace did; its size, weight and tracking reach a dashboard's section title,
-     as the scale they replace did, so every section head, the aside's card captions included, is one role at one size. Over the sheets'
+     as the scale they replace did, so every section head is one role at one size (a card's caption is a label over its name, not a head: page.css). Over the sheets'
      sentence case by one more element in the selector, as both stand in `look`. */
-  html:root[data-type-section~='face'] :is(.page-section-head, .page-section-title, .page-card-caption) {
+  html:root[data-type-section~='face'] :is(.page-section-head, .page-section-title) {
     font-family: var(--type-section-font);
   }
-  :root[data-type-section~='size'] :is(.page-section-title, .page-section-head, .page-card-caption) {
+  :root[data-type-section~='size'] :is(.page-section-title, .page-section-head) {
     font-size: var(--type-section-size);
   }
-  :root[data-type-section~='weight'] :is(.page-section-title, .page-section-head, .page-card-caption) {
+  :root[data-type-section~='weight'] :is(.page-section-title, .page-section-head) {
     font-weight: var(--type-section-weight);
   }
-  :root[data-type-section~='tracking'] :is(.page-section-title, .page-section-head, .page-card-caption) {
+  :root[data-type-section~='tracking'] :is(.page-section-title, .page-section-head) {
     letter-spacing: var(--type-section-tracking);
   }
-  html:root[data-type-section~='upper'] :is(.page-section-head, .page-section-title, .page-card-caption) {
+  html:root[data-type-section~='upper'] :is(.page-section-head, .page-section-title) {
     text-transform: uppercase;
     letter-spacing: var(--type-section-tracking, var(--track-caps));
   }
-  html:root[data-type-section~='small-caps'] :is(.page-section-head, .page-section-title, .page-card-caption) {
+  html:root[data-type-section~='small-caps'] :is(.page-section-head, .page-section-title) {
     font-variant-caps: all-small-caps;
     letter-spacing: var(--type-section-tracking, var(--track-caps));
   }
-  html:root[data-type-section~='numeric'] :is(.page-section-head, .page-section-title, .page-card-caption) {
+  html:root[data-type-section~='numeric'] :is(.page-section-head, .page-section-title) {
     font-variant-numeric: var(--type-section-numeric);
   }
-  html:root[data-type-section~='features'] :is(.page-section-head, .page-section-title, .page-card-caption) {
+  html:root[data-type-section~='features'] :is(.page-section-head, .page-section-title) {
     font-feature-settings: var(--type-section-features);
   }
   /* display: a landing's headline; its size is --type-display. */
@@ -696,30 +789,50 @@
   :root[data-type-data~='features'] .table-wrap td {
     font-feature-settings: var(--type-data-features);
   }
-  /* data's reach. A record header's facts are values too: its figures, its key and its dates are set in the data
-     face, as the same values are in its fields, where they were the one place a theme's data face never reached.
-     `reach: 'figures'` keeps the face to figures, keys and dates everywhere — a table's, a field's, a header's — and
-     a name, a status or a sentence is read in the interface face (columns.js identifierLike says which text is a
+  /* data's reach. `reach: 'figures'` keeps the face to figures, keys and dates — a table's and a field's — and a
+     name, a status or a sentence is read in the interface face (columns.js identifierLike says which text is a
      key). One element more than the looks' own table and field rules, as both stand in `look`. */
-  .app-mode .page-head-facts :is(.num-value, .date-value, .id-value) {
-    font-family: var(--mono);
-    font-variant-numeric: tabular-nums;
-  }
   html:root[data-type-data~='figures'] .app-mode :is(table, .page-field > dd, .ref-jump) {
     font-family: var(--sans);
   }
-  html:root[data-type-data~='figures'] .app-mode :is(td.mono, .num-value, .date-value, .id-value) {
+
+  /* The figures face stands where values are compared down a column, and nowhere else: a table's cells. A single
+     value beside words (a record's field, a side card's fact, a phone row, a worklist's amount) is read as part of
+     its sentence, in the text face with tabular digits; three reports of "two fonts" were each a lone figure here. */
+  html:root[data-type-data~='figures'] .app-mode td:is(.mono, :has(> .num-value, > .date-value, > .id-value)),
+  html:root[data-type-data~='figures'] .app-mode td :is(.num-value, .date-value, .id-value) {
     font-family: var(--mono);
   }
-  /* A data column in Plex Mono, in every look and only there: the ids, codes and numbers a table's cells set apart
-     (`td.mono`, Grid.tsx) and the figures, dates and keys of a record's fields and header facts. Words, headings and
-     a stat's hero figure keep their theme's faces. A theme whose data face reaches figures says its own, above; one that names a figures face (`fonts.figures`, which follows its data face when it names none) wears it as `--figures-face`. */
+  html:root[data-type-data~='figures'] .app-mode :is(.num-value, .date-value, .id-value) {
+    font-variant-numeric: tabular-nums;
+  }
+  /* A record's summary figures are the strip's figures a size down: in the stat's hand (`type.roles.figure`, else the
+     interface face a stat is set in), not the column's data face, and a toned one in the same hand as its neighbours:
+     "$1,502.50" owed in one face beside "$8,477.50" charged in another read as two kinds of value. */
+  html:root:root[data-theme-style] .app-mode .page-field-summary .page-field > dd:has(> .num-value, > .tone-figure),
+  html:root:root[data-theme-style] .app-mode .page-field-summary .page-field > dd > :is(.num-value, .tone-figure) {
+    font-family: var(--type-figure-font, var(--sans));
+    font-weight: var(--type-figure-weight, 600);
+  }
+  /* A record header's facts are read, not compared: a start date and a rent beside the name are a sentence about the
+     record, so they stay in the head's own face under either reach, their digits tabular so a date keeps its width
+     as the record changes. The data face is for where values stand in a column: a table, a field, the summary. */
+  html:root .app-mode .page-head-facts :is(.num-value, .date-value, .id-value) {
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+  }
+  /* A figures face, where a look names one (Plex Mono in five of the built-in looks): the figures, dates and keys of a
+     record's fields. A table's cells are set in the data face with the rest of the row, their digits
+     tabular (`td.mono`, Grid.tsx): a column of codes and dates in a second face read as a second table inside the
+     first. Words, headings and a stat's hero figure keep their theme's faces. A theme whose data face reaches figures says its own, above; one that names a figures face (`fonts.figures`, which follows its data face when it names none) wears it as `--figures-face`. */
   .app-mode {
     --figures: var(--figures-face, 'IBM Plex Mono', 'IBM Plex Mono Fallback', var(--code));
   }
-  .app-mode td.mono,
-  .app-mode :is(.page-field > dd, .page-head-facts) :is(.num-value, .date-value, .id-value) {
+  .app-mode .page-field > dd :is(.num-value, .date-value, .id-value) {
     font-family: var(--figures);
+  }
+  .app-mode td.mono {
+    font-variant-numeric: tabular-nums;
   }
 
   /* ---------- Meaning (recipes.status = dot) ---------- */
@@ -732,6 +845,10 @@
   :root[data-look-status='dot'] :is(td, dd) .tone:not(.record-tag, .tone-neutral) {
     color: var(--ink);
     font-weight: 400;
+    /* A word with no pill round it has nothing to be clipped to: the pill's box cut the last letter's edge
+       (lumenLook.css). */
+    overflow: visible;
+    border-radius: 0;
   }
   :root[data-look-status='dot'] :is(td, dd) .tone:not(.record-tag, .tone-neutral)::before {
     background: var(--tone-dot, currentColor);
@@ -755,6 +872,124 @@
     color: var(--tone-dot);
   }
 
+  /* ---------- A workflow in order (recipes.workflow = markers) ---------- */
+  /* Where the steps are an order (`ordered`), the strip is a way travelled: a numbered mark for each step and a rule
+   to the next, the label under its mark. A step walked is the ink, its number a check and its rule the ink; the
+   current one is the accent on its soft ground; one the record's actions can reach now is ringed in the accent;
+   a step ahead is hollow. The number is the order written down, so a set of states with no order keeps the plain
+   track (page.css), where a 1, 2, 3 would claim one. The marks are drawn by the marker's own box, so a step's words
+   stay the item's text and nothing a reader hears changes. This is the `markers` recipe, every look's but the
+   two that say `pills` (lumenLook.css); with no look at all the strip is the plain track (page.css). */
+  :root[data-look-workflow='markers'] .workflow-steps[data-ordered] {
+    gap: var(--space-3h) 0;
+    counter-reset: workflow-step;
+  }
+  /* Each step but the last keeps room after it: the rule stops short of the next mark, and a label never runs
+     into the next one where the strip is narrow. */
+  :root[data-look-workflow='markers'] .workflow-steps[data-ordered] li {
+    counter-increment: workflow-step;
+    padding-inline-end: var(--space-4h);
+    font-weight: 500;
+  }
+  :root[data-look-workflow='markers'] .workflow-steps[data-ordered] li:last-child {
+    flex: 0 0 auto;
+    padding-inline-end: 0;
+  }
+  :root[data-look-workflow='markers'] .workflow-steps[data-ordered] .workflow-marker,
+  :root[data-look-workflow='markers'] .workflow-steps[data-ordered] li:is([data-passed], [aria-current='step'], [data-reachable]) .workflow-marker {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4h);
+    height: auto;
+    border-radius: 0;
+    background: none;
+    outline: 0;
+  }
+  :root[data-look-workflow='markers'] .workflow-steps[data-ordered] .workflow-marker::before {
+    content: counter(workflow-step);
+    flex: none;
+    box-sizing: border-box;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border: 1.5px solid var(--line-control);
+    border-radius: 999px;
+    color: var(--ink-muted);
+    font: 700 var(--text-xs)/1 var(--sans);
+    font-variant-numeric: tabular-nums;
+  }
+  /* Two pixels: a rule of one and a half is drawn as one sharp row and one grey one. */
+  :root[data-look-workflow='markers'] .workflow-steps[data-ordered] .workflow-marker::after {
+    content: '';
+    flex: 1 1 auto;
+    height: 2px;
+    background: var(--line-strong);
+  }
+  :root[data-look-workflow='markers'] .workflow-steps[data-ordered] li:last-child .workflow-marker::after {
+    content: none;
+  }
+  :root[data-look-workflow='markers'] .workflow-steps[data-ordered] li[data-passed] {
+    color: var(--ink);
+  }
+  /* The check is cut out of the filled mark, so it is the ground behind the strip in every theme and mode. */
+  :root[data-look-workflow='markers'] .workflow-steps[data-ordered] li[data-passed] .workflow-marker::before {
+    content: '';
+    border-color: var(--ink);
+    background: var(--ink);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Cpath fill-rule='evenodd' d='M0 0h22v22H0z M5.6 11.3l1.3-1.3 2.7 2.7 5.5-6.2 1.4 1.2-6.8 7.7z'/%3E%3C/svg%3E")
+      center / 100% 100% no-repeat;
+  }
+  :root[data-look-workflow='markers'] .workflow-steps[data-ordered] li[data-passed] .workflow-marker::after {
+    background: var(--ink);
+  }
+  :root[data-look-workflow='markers'] .workflow-steps[data-ordered] li[aria-current='step'] {
+    font-weight: 600;
+  }
+  :root[data-look-workflow='markers'] .workflow-steps[data-ordered] li[aria-current='step'] .workflow-marker::before {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+  }
+  :root[data-look-workflow='markers'] .workflow-steps[data-ordered] li[data-reachable] .workflow-marker::before {
+    border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+    color: var(--ink);
+  }
+  @media (forced-colors: active) {
+    :root[data-look-workflow='markers'] .workflow-steps[data-ordered] li[data-passed] .workflow-marker::before {
+      mask: none;
+      background: CanvasText;
+    }
+  }
+
+  /* ---------- The record head's status ---------- */
+  /* Beside a record's name the status is a small ruled pill: a label on the name, at a label's size, and not a
+     second word in the title's line. The dot keeps the tone and the word the ink it has. A look that says status
+     with a pill draws its own there; a theme's pill corner is put on it as on every pill (structure.css). */
+  html:root[data-visual-theme]:not([data-look-status^='pill']) .page-head-status > .tone:not(.record-tag) {
+    padding: var(--space-1) var(--space-3h) var(--space-1) var(--space-3);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    line-height: 1.5;
+  }
+
+  /* ---------- The aside's heads ---------- */
+  /* Beside a record the aside is a rail of what belongs to it, and a section's head there is a label on the rail,
+     set as a card's caption is (page.css): the text face, sentence case, whatever the look's section role says,
+     so "Home", "Resident" and "History" are one kind of label down the rail. At the section role's size they
+     outweighed the sections of the page they stand beside. A public page's aside is the offer, and keeps its
+     heads. */
+  html:root[data-visual-theme] body.app-mode:not(.public-visitor) .page-aside .page-section-head:not(.page-fold-head) {
+    margin-bottom: var(--space-4);
+    font: 600 var(--text-sm)/1.4 var(--sans);
+    font-variant-caps: normal;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--ink-muted);
+  }
+
   /* ---------- The header (recipes.header) ---------- */
   /* `band` lays a record's head and a list's on one strip of the raised ground, edge to edge of the pane: the trail with
    the record's verbs, the eyebrow, the name, its status and facts, or a list's title, tabs and filters, as an object
@@ -773,9 +1008,8 @@
       .content:has(.page-head.has-record.is-room, > .applist-host > .applist-controls)
       > .crumbs-host
       > .crumbs,
-    :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .content > .applist-host > .applist-head,
-    :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .page-head.has-record.is-room,
-    :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .content > .applist-host > .applist-controls {
+    :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .content > :is(.applist-host, .landing-host) > .applist-head,
+    :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .page-head.has-record.is-room {
       --raised: color-mix(in oklab, var(--head-band), var(--ink) 7%);
       /* What a fade at a strip's edge fades into (structure.css, a phone's tabs). */
       --strip-ground: var(--head-band);
@@ -784,7 +1018,7 @@
     }
     :root:is([data-look-header='band'], [data-look-header='hero'])
       .app-mode
-      .content:has(.page-head.has-record.is-room, > .applist-host > .applist-controls)
+      .content:has(.page-head.has-record.is-room)
       > .crumbs-host
       > .crumbs {
       border-bottom-color: transparent;
@@ -795,24 +1029,12 @@
       border-image: linear-gradient(to top, var(--head-band-edge) 1px, var(--head-band) 1px) fill 0 / 0 / 48px 100vmax 0;
       padding-bottom: 20px;
     }
-    /* A list's ends under its tabs and filters, where its rows start. */
-    :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .content > .applist-host > .applist-controls {
+    /* A list's is its heading row: its name and its verbs on the band, its tabs and filters under it on the page's
+       ground, where they are read with the rows they refine; a dashboard's head is the same row (it stood bare on
+       the white, the one room of a banded look that began without its band). Under a trail the bar is the band, and its own rule
+       closes it. */
+    :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .content > :is(.applist-host, .landing-host) > .applist-head:not(.in-crumbs) {
       border-image: linear-gradient(to top, var(--head-band-edge) 1px, var(--head-band) 1px) fill 0 / 0 / 0 100vmax;
-    }
-    :root:is([data-look-header='band'], [data-look-header='hero']) .app-mode .content > .applist-host > .applist-controls::after {
-      background: linear-gradient(to right, transparent, var(--head-band));
-    }
-    /* Raised buttons draw a list's search on the raised ground (lumenLook.css), which on the band is the step above: a
-       ground no palette colour is, so `check` passed what grade then read there, Lumen's own placeholder at 4.05:1 and
-       its edge at 2.67:1 (a field report's theme the same). On the band the search is a field on the surface, as it
-       is in focus, and its words, mark and edge are the pairs check measures. */
-    :root:is([data-look-header='band'], [data-look-header='hero'])[data-look-buttons='raised']
-      .app-mode
-      .content
-      > .applist-host
-      > .applist-controls
-      .applist-search-input {
-      background: var(--surface);
     }
     /* `hero` is the band with the record's avatar large beside its name, the head's words a column to its right; on a
      phone it stands over the eyebrow. The room is kept from the first paint wherever the resource says its records
@@ -849,4 +1071,187 @@
    (components/CalendarList.css draws the rest of it). Read off the section recipe, so it is here with the recipes,
    and it answers every look and none, as the open section does. */
 :root:not([data-look-section='card'], [data-look-section='panel']) .page-section .calendar-grid { border: 0; border-radius: 0; background: none; }
+
+/* ---------- Parts that meet ----------
+   A pairing of two parts' values that are two look sheets' is said here, in the first sheet: neither sheet may
+   name the other's value (test/theme-recipes.test.ts), and each is fetched only where its own is worn. */
+/* A record's blocks agree with each other and with a dashboard's. Where a look holds a dashboard's sections in panels
+   or cards (`blocks: panel`, `tile`, `card`), the lists a record relates and its history are held the same way: they
+   stood open on the ground beside the reference cards of the side column, one page in two languages. A summary's
+   few facts still read on the page (sageLook.css says why). The side column's cards take the panel's corner and
+   lift, which the dashboard's panels have. */
+:root:is([data-look-section='panel'], [data-look-section='card'])
+  :is(.page-body:not(.dash-body) > .page-section, .page-tabpanel > .page-tab-sections > .page-section):is(.page-list, .page-history) {
+  background: var(--surface);
+  border: var(--panel-border-width, 1px) solid var(--line);
+  border-radius: var(--radius-lg);
+  /* The inset a dashboard's panel has (sageLook.css), said once: the table in the panel reaches out by it (below). */
+  --panel-pad-inline: 18px;
+  padding: var(--space-5) var(--panel-pad-inline);
+  box-shadow: var(--shadow-card);
+}
+/* The head covers the rows that scroll under it, in the panel's ground or in the band a look draws its heads on. */
+:root:is([data-look-section='panel'], [data-look-section='card'])
+  :is(.page-body:not(.dash-body) > .page-section, .page-tabpanel > .page-tab-sections > .page-section):is(.page-list, .page-history)
+  th {
+  background: var(--table-head-ground, var(--surface));
+}
+/* The table in such a panel reaches both of the panel's edges, as a dashboard's does in its panel (sageLook.css): a
+   section's table reaches out on its start side alone (page.css), which in a box left its rules a hair from one edge
+   and a field's width from the other. The edge cells take the panel's inset, so the first column still starts on
+   the heading's line. */
+:root:is([data-look-section='panel'], [data-look-section='card'])
+  :is(.page-body:not(.dash-body) > .page-section, .page-tabpanel > .page-tab-sections > .page-section).page-list
+  .table-wrap {
+  margin-inline: calc(-1 * var(--panel-pad-inline));
+  max-width: none;
+}
+:root:is([data-look-section='panel'], [data-look-section='card'])
+  :is(.page-body:not(.dash-body) > .page-section, .page-tabpanel > .page-tab-sections > .page-section).page-list
+  .table-wrap
+  :is(th, td):first-child {
+  padding-inline-start: var(--panel-pad-inline);
+}
+:root:is([data-look-section='panel'], [data-look-section='card'])
+  :is(.page-body:not(.dash-body) > .page-section, .page-tabpanel > .page-tab-sections > .page-section).page-list
+  .table-wrap
+  :is(th, td):last-child {
+  padding-inline-end: var(--panel-pad-inline);
+}
+:root:is([data-look-section='panel'], [data-look-section='card']) .page-card {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+/* Cards beside panels need no rule between them: the ground is the gap. */
+:root:is([data-look-section='panel'], [data-look-section='card']) .page-layout > .page-aside {
+  border-inline-start-color: transparent;
+}
+
+/* A strip of figures where sections are cards and a figure is a panel (`blocks: 'card'`, Graphite's pairing): one
+   card ruled into cells, the readings of one instrument, where a card each read as four things. A cell's rule is
+   drawn at its left and its top and cut off at the card's edge, so it holds however the cells wrap (two to a row on
+   a phone, a lone first one a row of its own), and the focus ring stands inside the cell for the same edge. A cell
+   has no mark and its label the whole width: beside a mark, a label in tracked capitals ("Vacant or turning over")
+   wrapped where its neighbours' did not and set its figure a line under theirs. A figure is never broken
+   (docs/design.md, Truncation), a monospace one is a step smaller on a phone (structure.css), and a note stands at
+   the cell's foot, where its neighbour's trend is. */
+:root[data-look-section='card'][data-look-stat='panel'] .dash-strip {
+  --stat-mark-room: 0px;
+  --stat-figure-phone: var(--text-xl);
+}
+:root[data-look-section='card'][data-look-stat='panel'] .dash-strip .home-cards {
+  gap: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: var(--panel-border-width, 1px) solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+:root[data-look-section='card'][data-look-stat='panel'] .dash-strip .home-card:nth-child(n) {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow:
+    -1px 0 0 var(--line),
+    0 -1px 0 var(--line);
+  outline-offset: -2px;
+}
+:root[data-look-section='card'][data-look-stat='panel'] .dash-strip .home-card-label .dash-section-icon {
+  display: none;
+}
+:root[data-look-section='card'][data-look-stat='panel'] .dash-strip .home-card-value {
+  white-space: nowrap;
+}
+:root[data-look-section='card'][data-look-stat='panel'] .dash-strip .home-card > .dash-fixed {
+  margin-top: auto;
+}
+
+/* Tinted steps in a section panel (Bloom's): the panel's sheet draws steps as cells parted by hairlines, which is
+   right for plain steps and was a rule between cards for tiles. A tile keeps its ground, edge and corner and
+   stands a little apart. The room is each step's padding, not the grid's gap: the columns are counted from the
+   row's width, and a gap took one away. */
+:root[data-look-section='panel'][data-look-steps='tinted'] .dash-steps {
+  clip-path: none;
+  margin: calc(-1 * var(--space-2));
+}
+:root[data-look-section='panel'][data-look-steps='tinted'] .dash-steps > .dash-step {
+  box-shadow: none;
+  padding: var(--space-2);
+}
+:root[data-look-section='panel'][data-look-steps='tinted'] .dash-steps > .dash-step > .dash-step-card {
+  border: var(--panel-border-width, 1px) solid color-mix(in srgb, var(--step-ink, var(--accent)) 16%, var(--line));
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--step-ink, var(--accent)) 5%, var(--surface));
+  padding: var(--space-5);
+}
+}
+@layer structure {
+  /* The figures of a row stand on one line and a trend stands beside its figure, in every look that sets the label
+     over the figure (said here and not in structure.css: a rule that names a treatment lives where the menu's test
+     looks for it). Under the figure, the trend made its tile a line taller than the rest and the row as tall as
+     that tile: a well of white under every figure that had no trend. The figure takes the width it needs and the
+     trend what is left, at most 112px. One treatment places a tile's parts itself: `icon`, whose mark is a circle
+     beside the label. */
+  :root[data-theme-style]:not([data-look-stat='icon']) .dash-strip .home-card {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-content: start;
+    column-gap: var(--space-5);
+  }
+  :root[data-theme-style]:not([data-look-stat='icon']) .dash-strip .home-card > * {
+    grid-column: 1 / -1;
+  }
+  :root[data-theme-style]:not([data-look-stat='icon']) .dash-strip .home-card > .home-card-label {
+    grid-row: 1;
+  }
+  :root[data-theme-style]:not([data-look-stat='icon']) .dash-strip .home-card > .home-card-value {
+    grid-row: 2;
+    grid-column: 1;
+    white-space: nowrap;
+  }
+  :root[data-theme-style]:not([data-look-stat='icon']) .dash-strip .home-card > .spark-host {
+    grid-row: 2;
+    grid-column: 2;
+    align-self: center;
+    justify-self: end;
+    width: 100%;
+    max-width: 112px;
+    height: 28px;
+    margin: 0;
+    padding: 0;
+  }
+  :root[data-theme-style]:not([data-look-stat='icon']) .dash-strip .home-card > .spark-host .spark {
+    display: block;
+    height: 28px;
+  }
+  /* Half a phone's row is too narrow for a figure and a trend side by side: there the trend is under the figure, at
+     the tile's width, and the pair of a row stand as tall as each other. */
+  @media (max-width: 700px) {
+    :root[data-theme-style]:not([data-look-stat='icon']) .dash-strip .home-card > .spark-host {
+      grid-row: 3;
+      grid-column: 1 / -1;
+      max-width: none;
+      justify-self: stretch;
+      height: 20px;
+    }
+    :root[data-theme-style]:not([data-look-stat='icon']) .dash-strip .home-card > .spark-host .spark {
+      height: 20px;
+    }
+    /* A figure too long for half a phone breaks where it must, as it did: held to one line it left its tile. */
+    :root[data-theme-style]:not([data-look-stat='icon']) .dash-strip .home-card > .home-card-value {
+      grid-column: 1 / -1;
+      white-space: normal;
+    }
+  }
+}
+@layer look {
+  /* Figures with no box round them (plain, ruled, topline) have only the gap to part them: at a box's gap one tile's
+     mark stood against the next tile's label. */
+  :root[data-visual-theme]:is([data-look-stat='plain'], [data-look-stat='ruled'], [data-look-stat='topline']) .dash-strip .home-cards {
+    gap: var(--space-4) var(--space-6);
+  }
+  /* `filters: 'dashed'`, where a theme asks for it by name: the edge alone (the rest is ListFilterBar.css). */
+  :root[data-look-filters='dashed'] .applist-add {
+    border-style: dashed;
+  }
 }

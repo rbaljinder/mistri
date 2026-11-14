@@ -11,7 +11,7 @@ and `scripts/check-boundary.mjs` still holds it on every `npm run test:static`.
 | layer        | what it is                                                                                                                                                                                                                                                                                                                                                                                                                                  | becomes                  |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
 | `engine`     | the adapters, the server's data paths, the HTTP kit, and the shared rules (filter, schema, query language, view, row scopes, and the looks: the built-in looks, their tokens and which one a page wears, which the server reads to send a first page already in its look, with the looks' published types, `packages/engine/schema/theme.d.ts`). `migrate` and `seed` are engine. No React.                                                 | `@mistriwork/engine`     |
-| `ui`         | the standalone primitives: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField over Base UI, the tokens and the stylesheet they are drawn with, the anchor their popups are placed by and the zoom-aware ruler it measures with (`packages/ui/src`). A primitive reads no walk, address, transport, resource request or copy catalog: its words, icons and answers are props. Each renders under Vitest with no server. | `@mistriwork/ui`         |
+| `ui`         | the standalone primitives: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField over UI SDK, the tokens and the stylesheet they are drawn with, and the zoom-aware ruler a caller measures the page with (`packages/ui/src`). A primitive reads no walk, address, transport, resource request or copy catalog: its words, icons and answers are props. Each renders under Vitest with no server. | `@mistriwork/ui`         |
 | `kit`        | the shared React client: the walk, the address, Grid, Value, the record page, lists, filters, the menus that read the walk (OverflowMenu, ThMenu), the date field, charts, the client's UI tokens and stylesheets, and the client that applies a look                                                                                                                                                                                       | `@mistriwork/kit`        |
 | `mistri`     | the App framework: every App directory under `src/server`, the tenant shell, auth, the API, commands, jobs, workflows, the App stores, the public surface, `@mistriwork/mistri/ui`, `src/embed`, and the rest of `schema/`                                                                                                                                                                                                                  | `mistri`                 |
 | `cloudflare` | the Worker glue `mistri deploy init cloudflare` writes against; it imports nothing of the repository                                                                                                                                                                                                                                                                                                                                        | `@mistriwork/cloudflare` |
@@ -152,7 +152,7 @@ stylesheets. The build writes them one by one, with their declarations,
 stylesheets, fonts and `index.html` (`config/tsconfig.kit-client.json`), into
 the kit's `dist/client`, and a product bundles them with the kit's Vite
 preset (`@mistriwork/kit/vite`), which declares what the client needs —
-React, TanStack, Base UI, tiptap, Vite — as optional peers. An install of the
+React, TanStack, UI SDK, tiptap, Vite — as optional peers. An install of the
 kit names only the client modules on the host list
 (`scripts/pack-manifest.mjs`, `BUNDLER_ONLY`); the others are in the tarball
 for the listed ones to import, never by name. Its server modules and the
@@ -179,7 +179,7 @@ attributes, so every rule in its sheet keys on that. A look may set
 `--data-face` on the root to set the data — the grid's short values
 included — in another face; the reader's explicit Typography (Mono or Sans)
 wins over it. And `@mistriwork/kit/client/fonts/faces.css` declares the
-kit's own faces (Barlow, Barlow Semi Condensed, IBM Plex Mono, Inter, each
+kit's own faces (Barlow, Barlow Semi Condensed, IBM Plex Mono, Inter, Manrope, each
 under the SIL Open Font License, its text beside it), with each `.woff2` a
 subpath of its own, so a host's look can name them.
 

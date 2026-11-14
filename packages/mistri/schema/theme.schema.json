@@ -22,7 +22,10 @@
           "lumen",
           "mono",
           "sage",
-          "ledger"
+          "ledger",
+          "atelier",
+          "graphite",
+          "bloom"
         ]
       }
     },
@@ -39,7 +42,10 @@
             "lumen",
             "mono",
             "sage",
-            "ledger"
+            "ledger",
+            "atelier",
+            "graphite",
+            "bloom"
           ],
           "description": "A built-in look."
         },
@@ -103,6 +109,10 @@
         }
       },
       "description": "Named color variations over the theme's own colors. IDs must be unique within the theme, checked by the App parser."
+    },
+    "brand": {
+      "$ref": "#/$defs/color",
+      "description": "The App's own color, said once, over the look the theme extends: the accent, links, the focus ring, the menu's mark and the first chart series, and over Lumen, Sage and Bloom the hue of the shell's neutrals. A color named under colors wins."
     },
     "defaultPalette": {
       "type": "string",
@@ -650,7 +660,7 @@
             "data": {
               "type": "object",
               "additionalProperties": false,
-              "description": "A table’s cells and a record’s values, in the data face at the base size: their features, tabular figures kept, and its reach: every value, or figures only (figures, keys and dates, a record header’s facts too).",
+              "description": "A table’s cells and a record’s values, in the data face at the base size: their features, tabular figures kept, and its reach: every value, or figures only (figures, keys and dates). A record header’s facts keep the head’s face, their figures tabular.",
               "properties": {
                 "features": {
                   "type": "array",
@@ -779,6 +789,26 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "blocks": {
+          "enum": [
+            "open",
+            "ruled",
+            "card",
+            "panel",
+            "tile"
+          ],
+          "description": "A family: one word that sets the default of section, fields, stat, table, steps; a part said itself still wins. `open`: Every block stands open on the page: sections and tables under a rule, and the stats in one ruled strip, the only box. `ruled`: A printed page: blocks open under rules, each stat under a rule of its own, a record’s side groups captioned between hairlines. `card`: Every block is a card with a hairline and the card shadow: sections, field groups, stats and tables. `panel`: Every block is a panel on the surface with a hairline: sections, field groups and stats; a table stays open inside its panel. `tile`: Every block is a soft tile: stats as tiles with a large figure, a list as one tile with its rows ruled apart, steps tinted with their tone."
+        },
+        "current": {
+          "enum": [
+            "tint",
+            "inverted",
+            "underline",
+            "pill",
+            "lifted"
+          ],
+          "description": "A family: one word that sets the default of nav, tabs, windows; a part said itself still wins. `tint`: The current entry, tab and window each sit on a soft tint of the accent. `inverted`: The current entry and tab are inverted to the ink, and the chosen window is a filled segment: square, high-contrast. `underline`: The current tab, and the current entry in a top bar, are underlined in the accent with no fill; a chosen window sits on a tint. `pill`: The current entry and tab are pills, and the chosen window is a raised key on a tray. `lifted`: The tabs and the windows stand in sunken tracks, the chosen one a raised key lifted out; the menu’s entry sits on a tint."
+        },
         "nav": {
           "enum": [
             "tint",
@@ -787,9 +817,10 @@
             "underline",
             "pill",
             "quiet",
-            "slot"
+            "slot",
+            "float"
           ],
-          "description": "`tint`: The current entry sits on a soft tint of the accent; the other rows stay plain. `inverted`: The current entry is inverted, the menu’s ink as its ground: the boldest mark, square and high-contrast. `wash`: The current entry sits on a wash of the menu’s own accent, stronger than tint, for a menu in a brand color. `underline`: The current entry in the top bar is marked by a 3px rule of the menu’s accent under it, with no fill. `pill`: Every row is a rounded pill with room around it; the current one is filled in the accent’s tint, its word in the accent. `quiet`: The current entry is barely shaded in the menu’s ink, with no accent at all: the calmest mark. `slot`: The current entry is an ink block, as inverted, with a 3px marker of the menu’s accent beside it, like a tool’s slot on a pegboard."
+          "description": "`tint`: The current entry sits on a soft tint of the accent; the other rows stay plain. `inverted`: The current entry is inverted, the menu’s ink as its ground: the boldest mark, square and high-contrast. `wash`: The current entry sits on a wash of the menu’s own accent, stronger than tint, for a menu in a brand color. `underline`: The current entry in the top bar is marked by a 3px rule of the menu’s accent under it, with no fill. `pill`: Every row is a rounded pill with room around it; the current one is filled in the accent’s tint, its word in the accent. `quiet`: The current entry is barely shaded in the menu’s ink, with no accent at all: the calmest mark. `slot`: The current entry is an ink block, as inverted, with a 3px marker of the menu’s accent beside it, like a tool’s slot on a pegboard. `float`: The side menu is a card of its own, standing off the window’s edge with rounded corners; the current entry is a pill in the accent’s tint."
         },
         "bar": {
           "enum": [
@@ -807,17 +838,18 @@
             "inverted",
             "underline",
             "rule",
-            "chosen"
+            "tint",
+            "lifted"
           ],
-          "description": "`pill`: The chosen tab is a filled pill; the others are plain words. `inverted`: The chosen tab is inverted, the ink as its ground: square, high-contrast. `underline`: The tabs stand on a hairline, wide apart, the chosen one underlined in the accent with no fill. `rule`: The chosen tab is underlined by a 2px rule in the link color with no fill, the tabs packed as written. `chosen`: The chosen tab sits on a soft tint of the accent in the ink, wider apart, with no underline."
+          "description": "`pill`: The chosen tab is a soft pill in the ink with an edge of its own; the others are plain words. `inverted`: The chosen tab is inverted, the ink as its ground: square, high-contrast. `underline`: The tabs stand on a hairline, wide apart, the chosen one underlined in the accent with no fill. `rule`: The chosen tab is underlined by a 2px rule in the link color with no fill, the tabs packed as written. `tint`: The chosen tab sits on a soft tint of the accent in the ink, wider apart, with no underline. `lifted`: The tabs stand in a sunken track; the chosen one is a raised key lifted out of it, with no underline."
         },
         "windows": {
           "enum": [
             "segmented",
             "lifted",
-            "chosen"
+            "tint"
           ],
-          "description": "`segmented`: The period picker is a segmented control, the chosen period filled. `lifted`: The period picker is a sunken tray, the chosen period a raised white key on it. `chosen`: The period picker has no tray; the chosen period sits on a soft tint of the accent."
+          "description": "`segmented`: The period picker is a segmented control, the chosen period filled. `lifted`: The period picker is a sunken tray, the chosen period a raised white key on it. `tint`: The period picker has no tray; the chosen period sits on a soft tint of the accent."
         },
         "stat": {
           "enum": [
@@ -827,9 +859,10 @@
             "ruled",
             "icon",
             "panel",
-            "divided"
+            "divided",
+            "bento"
           ],
-          "description": "`plain`: A stat is a figure and its label with no frame. `framed`: Each stat is a card framed by a line in the ink: square and stark. `topline`: Each stat card has a 3px rule in the first chart color along its top. `ruled`: Each stat stands open under a 2px rule in the ink, with no card or shadow, like a printed page. `icon`: Each stat is a card with its icon in a round tint of a chart color above the label, and a large bold figure. `panel`: Each stat is a panel on the surface with a hairline and the look’s card shadow. `divided`: The stats share one strip, parted by hairlines, with no cards: the quietest arrangement."
+          "description": "`plain`: A stat is a figure and its label with no frame. `framed`: Each stat is a card framed by a line in the ink: square and stark. `topline`: Each stat card has a 3px rule in the first chart color along its top. `ruled`: Each stat stands open under a 2px rule in the ink, with no card or shadow, like a printed page. `icon`: Each stat is a card with its icon in a round tint of a chart color above the label, and a large bold figure. `panel`: Each stat is a panel on the surface with a hairline and the look’s card shadow. `divided`: The stats share one strip, a hairline round it and one between its figures, with no card to each: the quietest arrangement. `bento`: Each stat is a soft tile of its own in the raised ground, with no edge and a large figure: the roundest arrangement."
         },
         "section": {
           "enum": [
@@ -855,9 +888,10 @@
             "hairline",
             "card",
             "quiet",
-            "banded"
+            "banded",
+            "rows"
           ],
-          "description": "`open`: Rows stand on the page under a rule, the head as the look draws it. `tinted`: As open, but a hovered row takes a tint of the accent and its check boxes the accent: the same until a pointer moves. `hairline`: The head sits on a hairline in 12.5px semibold, the rows in 13.5px: open, a little roomier. `card`: The table is a card: muted 12px heads on a hairline, faint row rules and taller rows. `quiet`: The table is a card of quiet rows, a work queue’s open button folded to a chevron at the row’s end. `banded`: As open, but every other row lies on the band color (colors.band, or the raised ground), each ink measured on it."
+          "description": "`open`: Rows stand on the page under a rule, the head as the look draws it. `tinted`: As open, but a hovered row takes a tint of the accent and its check boxes the accent: the same until a pointer moves. `hairline`: The head sits on a hairline in 12.5px semibold, the rows in 13.5px: open, a little roomier. `card`: The table is a card: muted 12px heads on a hairline, faint row rules and taller rows. `quiet`: The table is a card of quiet rows, a work queue’s open button folded to a chevron at the row’s end. `banded`: As open, but every other row lies on the band color (colors.band, or the raised ground), each ink measured on it. `rows`: The list is one soft tile on the page’s ground: rows ruled apart by hairlines, the head plain words inside it, the tile’s corners its own."
         },
         "status": {
           "enum": [
@@ -874,7 +908,7 @@
             "soft",
             "strip"
           ],
-          "description": "`ruled`: A board’s lanes are outlined by a hairline; its cards lie flat on them. `soft`: As ruled, but each card casts the look’s card shadow: only the cards lift. `strip`: Each lane is headed by a strip tinted with its tone, its cards white on the lane."
+          "description": "`ruled`: A board’s lanes are outlined by a hairline; its cards lie flat on them. `soft`: Each lane is a quiet tray that holds its head and its cards, each card a sheet on it under the look’s card shadow. `strip`: Each lane is headed by a strip tinted with its tone, its cards white under it; a card with a category wears its color as a stripe."
         },
         "chart": {
           "enum": [
@@ -896,9 +930,10 @@
         "links": {
           "enum": [
             "plain",
-            "underline"
+            "underline",
+            "name"
           ],
-          "description": "`plain`: A link to another record is in the link color without an underline. `underline`: A link to another record is underlined, so it reads as one without color."
+          "description": "`plain`: A link to another record is in the link color without an underline. `underline`: A link to another record is underlined, so it reads as one without color. `name`: A row’s name is underlined, as an index’s entry is, and what the row or a record’s facts refer to reads as text; the line that goes on to another record keeps its underline."
         },
         "rules": {
           "enum": [
@@ -919,9 +954,10 @@
         "workflow": {
           "enum": [
             "markers",
-            "pills"
+            "pills",
+            "segments"
           ],
-          "description": "`markers`: A workflow is a track of thin segments, the label under each. `pills`: A workflow is a row of pills with a dot each: a step walked in the good tint, the current one in the accent’s."
+          "description": "`markers`: A workflow whose steps are an order is numbered marks joined by a rule, the label under each; a set of states with no order is a track of thin segments. `pills`: A workflow is a row of pills with a dot each: a step walked in the good tint, the current one in the accent’s. `segments`: A workflow is one bar cut into segments, a word in each: the steps walked on a tint in the ink, the current one on the accent’s tint, those ahead muted."
         },
         "banner": {
           "enum": [
@@ -957,11 +993,11 @@
         },
         "filters": {
           "enum": [
-            "dashed",
             "solid",
+            "dashed",
             "quiet"
           ],
-          "description": "`dashed`: A list’s filter not yet asked for is its name behind a +, on a dashed hairline: a place for a filter, not a field. `solid`: A list’s filter not yet asked for is its name behind a + on a solid edge: a key, as the search beside it is, not a place. `quiet`: A list’s filter not yet asked for has no edge, its name in the muted ink, until a pointer is over it: then it sits on the raised ground."
+          "description": "`solid`: A list’s filter not yet asked for is its name before a caret on a solid edge: a key, as the search beside it is. `dashed`: The same key on a dashed hairline. No built-in look wears it: to people meeting a list it read as a place left empty. `quiet`: A list’s filter not yet asked for has no edge, its name in the muted ink, until a pointer is over it: then it sits on the raised ground."
         },
         "required": {
           "enum": [
@@ -969,13 +1005,6 @@
             "optional-word"
           ],
           "description": "`star`: A required field wears a red star after its label; an optional one wears nothing. `optional-word`: A required field wears nothing and an optional one says “(optional)” after its label, quietly; the form’s own words, in the reader’s language."
-        },
-        "checkbox": {
-          "enum": [
-            "native",
-            "drawn"
-          ],
-          "description": "`native`: A checkbox is the browser’s own, in the accent. `drawn`: A checkbox is drawn: a square in the field’s fill with the control’s edge and corner, the accent with a check when on."
         },
         "formStep": {
           "enum": [

@@ -23,7 +23,7 @@ async function opened(page: Page, path: string): Promise<string[]> {
     if (url.pathname.startsWith('/api/')) asked.push(`${request.method()} ${url.pathname}`);
   });
   /* Compass does not ask for live sync, so a dashboard's tiles are read again on the wall-clock minute
-     (Dashboard.tsx `minuteTick`), but not an answer younger than the tick's floor: a page opened in a minute's last
+     (dashboardClock.ts `minuteTick`), but not an answer younger than the tick's floor: a page opened in a minute's last
      seconds keeps its first paint's answers through :00 (CI once saw three tile reads at 13:07:00.0). So the page is
      opened whenever the test reaches it, the minute's last seconds included. */
   await page.goto(`${COMPASS}${path}`);

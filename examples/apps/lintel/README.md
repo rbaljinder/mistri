@@ -75,7 +75,9 @@ under [`examples/databases/lintel`](../../databases/lintel/); the generated
   technician's queue, the manager's Today and the resident's portal.
 - [`pages/`](pages/): record pages, one per file, found by their file. A
   repair is a conversation (`layout: 'conversation'`) with a reply and an
-  internal-note composer ending the thread; a lease is its money; a home and
+  internal-note composer ending the thread; a lease is its money (three
+  figures that say what they count, then its charges and payments as one
+  counted tab strip, Add charge in the charges' head); a home and
   a building are showcases (`layout: 'showcase'`), the photos with the asking
   rent or the building's facts beside them. Every page that declares no aside
   gets one of the record's remaining fields; a showcase does not. A repair has two pages, chosen by role: the office's, with the

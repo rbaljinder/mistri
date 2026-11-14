@@ -173,6 +173,9 @@ export function vocabularyWord(text: string): string {
   return VOCABULARY_WORD.test(text) ? humanName(text.replaceAll(' ', '_')) : text;
 }
 
+const TRUE_SPELLINGS = ['1', 't'];
+const FALSE_SPELLINGS = ['0', 'f'];
+
 /**
  * The word a display rule says a stored value as: the author's own
  * (`values`), the value made words where the rule says `humanize`
@@ -186,6 +189,13 @@ export function displayWord(
   text: string,
 ): string | undefined {
   if (rule?.values && Object.hasOwn(rule.values, text)) return rule.values[text];
+  /* A truth is stored as the engine spells it (`true` on Postgres, `1` on SQLite, and a computed one as either): a
+     rule that words `true` and `false` words every spelling of them, or a SQLite list read 1 and 0 under an author's
+     "Low" and "OK". */
+  if (rule?.values) {
+    const truth = TRUE_SPELLINGS.includes(text) ? 'true' : FALSE_SPELLINGS.includes(text) ? 'false' : undefined;
+    if (truth && Object.hasOwn(rule.values, truth)) return rule.values[truth];
+  }
   if (rule?.humanize && text.trim()) {
     const plain = /^[A-Z0-9_]+$/.test(text) ? text.toLowerCase() : text;
     const word = vocabularyWord(plain);

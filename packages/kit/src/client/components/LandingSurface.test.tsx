@@ -224,12 +224,12 @@ test('photo tiles in a mosaic, a badge over the heading, and icon rows under the
     'The forecourt at dusk',
     'A dealer’s desk',
   ]);
-  expect(images[0].closest('.front-hero-tiles')).toHaveClass('front-hero-tiles-3');
+  expect(images[0].closest('[data-slot="photo-tiles"]')).toHaveAttribute('data-count', '3');
   expect(images[0]).toHaveAttribute('fetchpriority', 'high');
   expect(images[1]).toHaveAttribute('loading', 'lazy');
   // The badge comes before the one heading, so the heading still opens the region's words.
   const badge = within(hero).getByText('Decisions in minutes');
-  expect(badge.closest('.front-badge')?.compareDocumentPosition(within(hero).getByRole('heading', { level: 1 }))).toBe(
+  expect(badge.closest('[data-slot="badge"]')?.compareDocumentPosition(within(hero).getByRole('heading', { level: 1 }))).toBe(
     Node.DOCUMENT_POSITION_FOLLOWING,
   );
   expect(

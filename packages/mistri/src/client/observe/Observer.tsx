@@ -15,7 +15,7 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Tabs } from '@base-ui/react/tabs';
+import { Tabs, TabsList, TabsPanel, TabsTab } from '@ui-sdk/react/tabs';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Dropdown } from '@mistriwork/kit/client/components/Dropdown.js';
 import { say } from '../copy/observe/observe/Observer.js';
@@ -837,9 +837,12 @@ export function Observer() {
   const errors = useQuery({ queryKey: ['errors-count'], queryFn: () => get<{ total: number }>('/errors?limit=1'), refetchInterval: 2000 });
   return (
     <div className="obs">
-      <Tabs.Root
+      {/* A tab is chosen with Enter or Space and not by walking to it: each view starts its own polling. */}
+      <Tabs
         value={tab}
+        activation="manual"
         onValueChange={(value) => {
+          if (value === null) return;
           setTab(String(value));
           if (value !== 'requests') go(String(value));
         }}
@@ -848,27 +851,27 @@ export function Observer() {
           <span className="obs-brand">
             <span className="brand-mark" aria-hidden="true" /> {say('observer')}
           </span>
-          <Tabs.List className="obs-tabs" aria-label={say('views')}>
-            <Tabs.Tab className="obs-tab" value="requests">
+          <TabsList className="obs-tabs" aria-label={say('views')}>
+            <TabsTab className="obs-tab" value="requests">
               {say('requests')}
-            </Tabs.Tab>
-            <Tabs.Tab className="obs-tab" value="logs">
+            </TabsTab>
+            <TabsTab className="obs-tab" value="logs">
               {say('logs')}
-            </Tabs.Tab>
-            <Tabs.Tab className="obs-tab" value="errors">
+            </TabsTab>
+            <TabsTab className="obs-tab" value="errors">
               {say('errors')}
               {errors.data?.total ? <span className="obs-count">{errors.data.total}</span> : null}
-            </Tabs.Tab>
-            <Tabs.Tab className="obs-tab" value="statements">
+            </TabsTab>
+            <TabsTab className="obs-tab" value="statements">
               {say('statementsTab')}
-            </Tabs.Tab>
-            <Tabs.Tab className="obs-tab" value="page">
+            </TabsTab>
+            <TabsTab className="obs-tab" value="page">
               {say('page')}
-            </Tabs.Tab>
-            <Tabs.Tab className="obs-tab" value="access">
+            </TabsTab>
+            <TabsTab className="obs-tab" value="access">
               {say('access')}
-            </Tabs.Tab>
-          </Tabs.List>
+            </TabsTab>
+          </TabsList>
           <span className="obs-head-end">
             <span className="obs-faint">{say('devOnly')}</span>
             <Button size="compact" className="obs-quiet" onClick={() => clear.mutate()}>
@@ -876,25 +879,25 @@ export function Observer() {
             </Button>
           </span>
         </header>
-        <Tabs.Panel value="requests" className="obs-panel">
+        <TabsPanel value="requests" className="obs-panel">
           <Requests hash={hash} go={go} />
-        </Tabs.Panel>
-        <Tabs.Panel value="logs" className="obs-panel">
+        </TabsPanel>
+        <TabsPanel value="logs" className="obs-panel">
           <Logs go={go} />
-        </Tabs.Panel>
-        <Tabs.Panel value="errors" className="obs-panel">
+        </TabsPanel>
+        <TabsPanel value="errors" className="obs-panel">
           <Errors go={go} />
-        </Tabs.Panel>
-        <Tabs.Panel value="statements" className="obs-panel">
+        </TabsPanel>
+        <TabsPanel value="statements" className="obs-panel">
           <Statements go={go} />
-        </Tabs.Panel>
-        <Tabs.Panel value="page" className="obs-panel">
+        </TabsPanel>
+        <TabsPanel value="page" className="obs-panel">
           <Page go={go} />
-        </Tabs.Panel>
-        <Tabs.Panel value="access" className="obs-panel">
+        </TabsPanel>
+        <TabsPanel value="access" className="obs-panel">
           <Access />
-        </Tabs.Panel>
-      </Tabs.Root>
+        </TabsPanel>
+      </Tabs>
     </div>
   );
 }

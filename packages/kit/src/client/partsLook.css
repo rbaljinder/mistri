@@ -114,73 +114,73 @@
     font-variant-caps: var(--part-nav-caps);
     letter-spacing: var(--part-nav-tracking);
   }
-  :root[data-parts~="nav.item:ground"] .app-mode .sidebar .app-nav-target:not([aria-current="true"]),
+  :root[data-parts~="nav.item:ground"] .app-mode #table-list li:not(.nav-group) > :not([aria-current="true"]),
     :root[data-parts~="nav.item:ground"] .app-mode .tn-item:not([aria-current="true"]) {
     background: var(--part-nav-item-ground);
   }
-  :root[data-parts~="nav.item:ink"] .app-mode .sidebar .app-nav-target:not([aria-current="true"]),
+  :root[data-parts~="nav.item:ink"] .app-mode #table-list li:not(.nav-group) > :not([aria-current="true"]),
     :root[data-parts~="nav.item:ink"] .app-mode .tn-item:not([aria-current="true"]) {
     color: var(--part-nav-item-ink);
   }
-  :root[data-parts~="nav.item:edge"] .app-mode .sidebar .app-nav-target:not([aria-current="true"]),
+  :root[data-parts~="nav.item:edge"] .app-mode #table-list li:not(.nav-group) > :not([aria-current="true"]),
     :root[data-parts~="nav.item:edge"] .app-mode .tn-item:not([aria-current="true"]) {
     border-color: var(--part-nav-item-edge);
   }
-  :root[data-parts~="nav.item:radius"] .app-mode .sidebar .app-nav-target:not([aria-current="true"]),
+  :root[data-parts~="nav.item:radius"] .app-mode #table-list li:not(.nav-group) > :not([aria-current="true"]),
     :root[data-parts~="nav.item:radius"] .app-mode .tn-item:not([aria-current="true"]) {
     border-radius: var(--part-nav-item-radius);
   }
-  :root[data-parts~="nav.item:lift"] .app-mode .sidebar .app-nav-target:not([aria-current="true"]),
+  :root[data-parts~="nav.item:lift"] .app-mode #table-list li:not(.nav-group) > :not([aria-current="true"]),
     :root[data-parts~="nav.item:lift"] .app-mode .tn-item:not([aria-current="true"]) {
     box-shadow: var(--part-nav-item-lift);
   }
-  :root[data-parts~="nav.item:face"] .app-mode .sidebar .app-nav-target:not([aria-current="true"]),
+  :root[data-parts~="nav.item:face"] .app-mode #table-list li:not(.nav-group) > :not([aria-current="true"]),
     :root[data-parts~="nav.item:face"] .app-mode .tn-item:not([aria-current="true"]) {
     font-family: var(--part-nav-item-face);
   }
-  :root[data-parts~="nav.item:weight"] .app-mode .sidebar .app-nav-target:not([aria-current="true"]),
+  :root[data-parts~="nav.item:weight"] .app-mode #table-list li:not(.nav-group) > :not([aria-current="true"]),
     :root[data-parts~="nav.item:weight"] .app-mode .tn-item:not([aria-current="true"]) {
     font-weight: var(--part-nav-item-weight);
   }
-  :root[data-parts~="nav.item:case"] .app-mode .sidebar .app-nav-target:not([aria-current="true"]),
+  :root[data-parts~="nav.item:case"] .app-mode #table-list li:not(.nav-group) > :not([aria-current="true"]),
     :root[data-parts~="nav.item:case"] .app-mode .tn-item:not([aria-current="true"]) {
     text-transform: var(--part-nav-item-transform);
     font-variant-caps: var(--part-nav-item-caps);
     letter-spacing: var(--part-nav-item-tracking);
   }
-  :root[data-parts~="nav.item:ground"] .app-mode .sidebar .app-nav-target:not([aria-current="true"]):hover,
+  :root[data-parts~="nav.item:ground"] .app-mode #table-list li:not(.nav-group) > :not([aria-current="true"]):hover,
     :root[data-parts~="nav.item:ground"] .app-mode .tn-item:not([aria-current="true"]):hover {
     background: color-mix(in srgb, var(--part-nav-item-ground) 90%, var(--part-nav-item-ink, currentcolor));
   }
-  :root[data-parts~="nav.current:ground"] .app-mode .sidebar .app-nav-target[aria-current="true"],
+  :root[data-parts~="nav.current:ground"] .app-mode #table-list [aria-current="true"],
     :root[data-parts~="nav.current:ground"] .app-mode .tn-item[aria-current="true"] {
     background: var(--part-nav-current-ground);
   }
-  :root[data-parts~="nav.current:ink"] .app-mode .sidebar .app-nav-target[aria-current="true"],
+  :root[data-parts~="nav.current:ink"] .app-mode #table-list [aria-current="true"],
     :root[data-parts~="nav.current:ink"] .app-mode .tn-item[aria-current="true"] {
     color: var(--part-nav-current-ink);
   }
-  :root[data-parts~="nav.current:edge"] .app-mode .sidebar .app-nav-target[aria-current="true"],
+  :root[data-parts~="nav.current:edge"] .app-mode #table-list [aria-current="true"],
     :root[data-parts~="nav.current:edge"] .app-mode .tn-item[aria-current="true"] {
     border-color: var(--part-nav-current-edge);
   }
-  :root[data-parts~="nav.current:radius"] .app-mode .sidebar .app-nav-target[aria-current="true"],
+  :root[data-parts~="nav.current:radius"] .app-mode #table-list [aria-current="true"],
     :root[data-parts~="nav.current:radius"] .app-mode .tn-item[aria-current="true"] {
     border-radius: var(--part-nav-current-radius);
   }
-  :root[data-parts~="nav.current:lift"] .app-mode .sidebar .app-nav-target[aria-current="true"],
+  :root[data-parts~="nav.current:lift"] .app-mode #table-list [aria-current="true"],
     :root[data-parts~="nav.current:lift"] .app-mode .tn-item[aria-current="true"] {
     box-shadow: var(--part-nav-current-lift);
   }
-  :root[data-parts~="nav.current:face"] .app-mode .sidebar .app-nav-target[aria-current="true"],
+  :root[data-parts~="nav.current:face"] .app-mode #table-list [aria-current="true"],
     :root[data-parts~="nav.current:face"] .app-mode .tn-item[aria-current="true"] {
     font-family: var(--part-nav-current-face);
   }
-  :root[data-parts~="nav.current:weight"] .app-mode .sidebar .app-nav-target[aria-current="true"],
+  :root[data-parts~="nav.current:weight"] .app-mode #table-list [aria-current="true"],
     :root[data-parts~="nav.current:weight"] .app-mode .tn-item[aria-current="true"] {
     font-weight: var(--part-nav-current-weight);
   }
-  :root[data-parts~="nav.current:case"] .app-mode .sidebar .app-nav-target[aria-current="true"],
+  :root[data-parts~="nav.current:case"] .app-mode #table-list [aria-current="true"],
     :root[data-parts~="nav.current:case"] .app-mode .tn-item[aria-current="true"] {
     text-transform: var(--part-nav-current-transform);
     font-variant-caps: var(--part-nav-current-caps);
@@ -475,42 +475,42 @@
   }
   :root[data-parts~="field.label:ground"] .app-mode .page-field > dt,
     :root[data-parts~="field.label:ground"] .app-mode .applist-field-label,
-    :root[data-parts~="field.label:ground"] .app-mode .form-field-label {
+    :root[data-parts~="field.label:ground"] .app-mode [data-slot='field-label'] {
     background: var(--part-field-label-ground);
   }
   :root[data-parts~="field.label:ink"] .app-mode .page-field > dt,
     :root[data-parts~="field.label:ink"] .app-mode .applist-field-label,
-    :root[data-parts~="field.label:ink"] .app-mode .form-field-label {
+    :root[data-parts~="field.label:ink"] .app-mode [data-slot='field-label'] {
     color: var(--part-field-label-ink);
   }
   :root[data-parts~="field.label:edge"] .app-mode .page-field > dt,
     :root[data-parts~="field.label:edge"] .app-mode .applist-field-label,
-    :root[data-parts~="field.label:edge"] .app-mode .form-field-label {
+    :root[data-parts~="field.label:edge"] .app-mode [data-slot='field-label'] {
     border-color: var(--part-field-label-edge);
   }
   :root[data-parts~="field.label:radius"] .app-mode .page-field > dt,
     :root[data-parts~="field.label:radius"] .app-mode .applist-field-label,
-    :root[data-parts~="field.label:radius"] .app-mode .form-field-label {
+    :root[data-parts~="field.label:radius"] .app-mode [data-slot='field-label'] {
     border-radius: var(--part-field-label-radius);
   }
   :root[data-parts~="field.label:lift"] .app-mode .page-field > dt,
     :root[data-parts~="field.label:lift"] .app-mode .applist-field-label,
-    :root[data-parts~="field.label:lift"] .app-mode .form-field-label {
+    :root[data-parts~="field.label:lift"] .app-mode [data-slot='field-label'] {
     box-shadow: var(--part-field-label-lift);
   }
   :root[data-parts~="field.label:face"] .app-mode .page-field > dt,
     :root[data-parts~="field.label:face"] .app-mode .applist-field-label,
-    :root[data-parts~="field.label:face"] .app-mode .form-field-label {
+    :root[data-parts~="field.label:face"] .app-mode [data-slot='field-label'] {
     font-family: var(--part-field-label-face);
   }
   :root[data-parts~="field.label:weight"] .app-mode .page-field > dt,
     :root[data-parts~="field.label:weight"] .app-mode .applist-field-label,
-    :root[data-parts~="field.label:weight"] .app-mode .form-field-label {
+    :root[data-parts~="field.label:weight"] .app-mode [data-slot='field-label'] {
     font-weight: var(--part-field-label-weight);
   }
   :root[data-parts~="field.label:case"] .app-mode .page-field > dt,
     :root[data-parts~="field.label:case"] .app-mode .applist-field-label,
-    :root[data-parts~="field.label:case"] .app-mode .form-field-label {
+    :root[data-parts~="field.label:case"] .app-mode [data-slot='field-label'] {
     text-transform: var(--part-field-label-transform);
     font-variant-caps: var(--part-field-label-caps);
     letter-spacing: var(--part-field-label-tracking);
@@ -648,91 +648,91 @@
     font-variant-caps: var(--part-tag-caps);
     letter-spacing: var(--part-tag-tracking);
   }
-  :root[data-parts~="button.primary:ground"] .app-mode .btn-primary {
+  :root[data-parts~="button.primary:ground"] .app-mode [data-slot='button'][data-variant='solid'] {
     background: var(--part-button-primary-ground);
   }
-  :root[data-parts~="button.primary:ink"] .app-mode .btn-primary {
+  :root[data-parts~="button.primary:ink"] .app-mode [data-slot='button'][data-variant='solid'] {
     color: var(--part-button-primary-ink);
   }
-  :root[data-parts~="button.primary:edge"] .app-mode .btn-primary {
+  :root[data-parts~="button.primary:edge"] .app-mode [data-slot='button'][data-variant='solid'] {
     border-color: var(--part-button-primary-edge);
   }
-  :root[data-parts~="button.primary:radius"] .app-mode .btn-primary {
+  :root[data-parts~="button.primary:radius"] .app-mode [data-slot='button'][data-variant='solid'] {
     border-radius: var(--part-button-primary-radius);
   }
-  :root[data-parts~="button.primary:lift"] .app-mode .btn-primary {
+  :root[data-parts~="button.primary:lift"] .app-mode [data-slot='button'][data-variant='solid'] {
     box-shadow: var(--part-button-primary-lift);
   }
-  :root[data-parts~="button.primary:face"] .app-mode .btn-primary {
+  :root[data-parts~="button.primary:face"] .app-mode [data-slot='button'][data-variant='solid'] {
     font-family: var(--part-button-primary-face);
   }
-  :root[data-parts~="button.primary:weight"] .app-mode .btn-primary {
+  :root[data-parts~="button.primary:weight"] .app-mode [data-slot='button'][data-variant='solid'] {
     font-weight: var(--part-button-primary-weight);
   }
-  :root[data-parts~="button.primary:case"] .app-mode .btn-primary {
+  :root[data-parts~="button.primary:case"] .app-mode [data-slot='button'][data-variant='solid'] {
     text-transform: var(--part-button-primary-transform);
     font-variant-caps: var(--part-button-primary-caps);
     letter-spacing: var(--part-button-primary-tracking);
   }
-  :root[data-parts~="button.primary:ground"] .app-mode .btn-primary:hover {
+  :root[data-parts~="button.primary:ground"] .app-mode [data-slot='button'][data-variant='solid']:hover {
     background: color-mix(in srgb, var(--part-button-primary-ground) 90%, var(--part-button-primary-ink, currentcolor));
   }
-  :root[data-parts~="button.secondary:ground"] .app-mode .btn-secondary {
+  :root[data-parts~="button.secondary:ground"] .app-mode [data-slot='button']:not([data-variant]) {
     background: var(--part-button-secondary-ground);
   }
-  :root[data-parts~="button.secondary:ink"] .app-mode .btn-secondary {
+  :root[data-parts~="button.secondary:ink"] .app-mode [data-slot='button']:not([data-variant]) {
     color: var(--part-button-secondary-ink);
   }
-  :root[data-parts~="button.secondary:edge"] .app-mode .btn-secondary {
+  :root[data-parts~="button.secondary:edge"] .app-mode [data-slot='button']:not([data-variant]) {
     border-color: var(--part-button-secondary-edge);
   }
-  :root[data-parts~="button.secondary:radius"] .app-mode .btn-secondary {
+  :root[data-parts~="button.secondary:radius"] .app-mode [data-slot='button']:not([data-variant]) {
     border-radius: var(--part-button-secondary-radius);
   }
-  :root[data-parts~="button.secondary:lift"] .app-mode .btn-secondary {
+  :root[data-parts~="button.secondary:lift"] .app-mode [data-slot='button']:not([data-variant]) {
     box-shadow: var(--part-button-secondary-lift);
   }
-  :root[data-parts~="button.secondary:face"] .app-mode .btn-secondary {
+  :root[data-parts~="button.secondary:face"] .app-mode [data-slot='button']:not([data-variant]) {
     font-family: var(--part-button-secondary-face);
   }
-  :root[data-parts~="button.secondary:weight"] .app-mode .btn-secondary {
+  :root[data-parts~="button.secondary:weight"] .app-mode [data-slot='button']:not([data-variant]) {
     font-weight: var(--part-button-secondary-weight);
   }
-  :root[data-parts~="button.secondary:case"] .app-mode .btn-secondary {
+  :root[data-parts~="button.secondary:case"] .app-mode [data-slot='button']:not([data-variant]) {
     text-transform: var(--part-button-secondary-transform);
     font-variant-caps: var(--part-button-secondary-caps);
     letter-spacing: var(--part-button-secondary-tracking);
   }
-  :root[data-parts~="button.secondary:ground"] .app-mode .btn-secondary:hover {
+  :root[data-parts~="button.secondary:ground"] .app-mode [data-slot='button']:not([data-variant]):hover {
     background: color-mix(in srgb, var(--part-button-secondary-ground) 90%, var(--part-button-secondary-ink, currentcolor));
   }
-  :root[data-parts~="button.quiet:ground"] .app-mode .btn-quiet {
+  :root[data-parts~="button.quiet:ground"] .app-mode [data-slot='button'][data-variant='quiet'] {
     background: var(--part-button-quiet-ground);
   }
-  :root[data-parts~="button.quiet:ink"] .app-mode .btn-quiet {
+  :root[data-parts~="button.quiet:ink"] .app-mode [data-slot='button'][data-variant='quiet'] {
     color: var(--part-button-quiet-ink);
   }
-  :root[data-parts~="button.quiet:edge"] .app-mode .btn-quiet {
+  :root[data-parts~="button.quiet:edge"] .app-mode [data-slot='button'][data-variant='quiet'] {
     border-color: var(--part-button-quiet-edge);
   }
-  :root[data-parts~="button.quiet:radius"] .app-mode .btn-quiet {
+  :root[data-parts~="button.quiet:radius"] .app-mode [data-slot='button'][data-variant='quiet'] {
     border-radius: var(--part-button-quiet-radius);
   }
-  :root[data-parts~="button.quiet:lift"] .app-mode .btn-quiet {
+  :root[data-parts~="button.quiet:lift"] .app-mode [data-slot='button'][data-variant='quiet'] {
     box-shadow: var(--part-button-quiet-lift);
   }
-  :root[data-parts~="button.quiet:face"] .app-mode .btn-quiet {
+  :root[data-parts~="button.quiet:face"] .app-mode [data-slot='button'][data-variant='quiet'] {
     font-family: var(--part-button-quiet-face);
   }
-  :root[data-parts~="button.quiet:weight"] .app-mode .btn-quiet {
+  :root[data-parts~="button.quiet:weight"] .app-mode [data-slot='button'][data-variant='quiet'] {
     font-weight: var(--part-button-quiet-weight);
   }
-  :root[data-parts~="button.quiet:case"] .app-mode .btn-quiet {
+  :root[data-parts~="button.quiet:case"] .app-mode [data-slot='button'][data-variant='quiet'] {
     text-transform: var(--part-button-quiet-transform);
     font-variant-caps: var(--part-button-quiet-caps);
     letter-spacing: var(--part-button-quiet-tracking);
   }
-  :root[data-parts~="button.quiet:ground"] .app-mode .btn-quiet:hover {
+  :root[data-parts~="button.quiet:ground"] .app-mode [data-slot='button'][data-variant='quiet']:hover {
     background: color-mix(in srgb, var(--part-button-quiet-ground) 90%, var(--part-button-quiet-ink, currentcolor));
   }
   :root[data-parts~="link:ground"] .app-mode .reflink,
@@ -1021,28 +1021,28 @@
     font-variant-caps: var(--part-menu-caps);
     letter-spacing: var(--part-menu-tracking);
   }
-  :root[data-parts~="dialog:ground"] .app-mode .modal {
+  :root[data-parts~="dialog:ground"] .app-mode [data-slot='dialog-content'][data-kind='modal'] {
     background: var(--part-dialog-ground);
   }
-  :root[data-parts~="dialog:ink"] .app-mode .modal {
+  :root[data-parts~="dialog:ink"] .app-mode [data-slot='dialog-content'][data-kind='modal'] {
     color: var(--part-dialog-ink);
   }
-  :root[data-parts~="dialog:edge"] .app-mode .modal {
+  :root[data-parts~="dialog:edge"] .app-mode [data-slot='dialog-content'][data-kind='modal'] {
     border-color: var(--part-dialog-edge);
   }
-  :root[data-parts~="dialog:radius"] .app-mode .modal {
+  :root[data-parts~="dialog:radius"] .app-mode [data-slot='dialog-content'][data-kind='modal'] {
     border-radius: var(--part-dialog-radius);
   }
-  :root[data-parts~="dialog:lift"] .app-mode .modal {
+  :root[data-parts~="dialog:lift"] .app-mode [data-slot='dialog-content'][data-kind='modal'] {
     box-shadow: var(--part-dialog-lift);
   }
-  :root[data-parts~="dialog:face"] .app-mode .modal {
+  :root[data-parts~="dialog:face"] .app-mode [data-slot='dialog-content'][data-kind='modal'] {
     font-family: var(--part-dialog-face);
   }
-  :root[data-parts~="dialog:weight"] .app-mode .modal {
+  :root[data-parts~="dialog:weight"] .app-mode [data-slot='dialog-content'][data-kind='modal'] {
     font-weight: var(--part-dialog-weight);
   }
-  :root[data-parts~="dialog:case"] .app-mode .modal {
+  :root[data-parts~="dialog:case"] .app-mode [data-slot='dialog-content'][data-kind='modal'] {
     text-transform: var(--part-dialog-transform);
     font-variant-caps: var(--part-dialog-caps);
     letter-spacing: var(--part-dialog-tracking);

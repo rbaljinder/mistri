@@ -10,7 +10,7 @@ test('a resident reports a problem and follows it from their portal', async ({ p
   const title = `Hallway light flickers ${isMobile ? 'phone' : 'desk'} ${Date.now()}`;
   // Three steps under one progress bar: the problem, in icon cards; the details; how to visit.
   await expect(page.getByRole('heading', { level: 1, name: 'What’s wrong?' })).toBeVisible();
-  await page.getByRole('textbox', { name: /^What’s wrong\?/ }).fill(title);
+  await page.getByRole('textbox', { name: /^The problem, in a few words/ }).fill(title);
   await page.getByRole('radio', { name: 'Electrical' }).check({ force: true });
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Tell us more' })).toBeVisible();

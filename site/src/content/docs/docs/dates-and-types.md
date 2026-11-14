@@ -11,7 +11,7 @@ Know what a column's declared type lets it do (date windows, totals, yes or no) 
       query: 'kind = rent and status = paid',
       over: 'due_on',
       measure: 'sum amount as collected',
-      figure: 'compact',
+      // Exact, as the strip's other figures are: one notation across a row of figures.
       better: 'up',
       // …
     }),
@@ -25,7 +25,7 @@ Know what a column's declared type lets it do (date windows, totals, yes or no) 
     }),
 ```
 
-See it in the sample (`examples/apps/lintel/dashboards.ts:15`); [Sample Apps](/docs/examples/) says how to run Lintel. `due_on` is declared `DATE`, so it is a date.
+See it in the sample (`examples/apps/lintel/dashboards.ts:22`); [Sample Apps](/docs/examples/) says how to run Lintel. `due_on` is declared `DATE`, so it is a date.
 
 ![Lintel's Today over the last 90 days: Rent collected against the prior 90 days with its trend, and rent charged and collected by week, bucketed by the window.](../../../assets/data/dates.webp)
 
@@ -57,7 +57,7 @@ On SQLite, `resources: { work_order: { types: { due_on: 'date', closed_at: 'date
 
 **Large numbers:** PostgreSQL `bigint`, `numeric` and `money`, and any integer past 2^53 arrive as strings, shown as written and never rounded. The generated `Rows` type says `string` (or `number | string`) for them, so a command handler converts on purpose. Every key: [resources reference](/docs/dsl-resources/).
 
-**Said from today, or as the day:** an App says a near date from today ("yesterday", "in 3 days") and the rest as the date. `display: { paid_on: { format: 'date' } }` always says the day, the same on any day and for any reader; `format: 'datetime'` says a moment with its time and zone, in the rule's `timezone` or else `ui.timezone`. A `DATE` is a day and never shifts with a zone. A [document](/docs/documents/) says every date as the day, whatever its rule.
+**Said from today, or as the day:** an App says a near date from today ("yesterday", "in 3 days") and the rest as the date. A moment still to come keeps its time however near ("in 2 days, 9:30 AM"); one gone by keeps it for yesterday and today. Past two weeks a moment is the day by its weekday, with the year only when it is another one ("Tue, Nov 17, 9:30 AM"). `format: 'time'` on a moment says its time of day alone, for a list that is all one day. `display: { paid_on: { format: 'date' } }` always says the day, the same on any day and for any reader; `format: 'datetime'` says a moment with its time and zone, in the rule's `timezone` or else `ui.timezone`; on a screen the zone's name is left off for a reader whose own clock is that zone. A `DATE` is a day and never shifts with a zone. A [document](/docs/documents/) says every date as the day, whatever its rule. Moments shown together that are all of today say their time alone ("9:30 AM" down a column, a worklist or a related list), since the page already says which day; one of another day and each keeps its day. An authored `format: 'date'` or `'time'` is left as written.
 
 **`now` and `today`, or `ctx.now()`:** in a declaration (an action's `set`, a field's or a machine's `default`, a New form's `auto`) write the words `now` and `today`. They are stamps, not values: the server works them out inside the write, in `ui.timezone`, so a request cannot choose them. In a command handler write `ctx.now()` and `ctx.today()` (`handle({ db, now, today })` takes them off the context): the same clock as a `Date` and a `YYYY-MM-DD` day, for code that computes with them, such as a due date `n` days on. `ctx.timezone` is the zone `today()` counts in, for code that says a moment to a person, as a reminder's text does.
 

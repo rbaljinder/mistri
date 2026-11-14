@@ -115,7 +115,7 @@ Add a `theme` to `ui`:
 ```
 
 **You should now see** Tick in Mono, black and white, where it wore Lumen,
-the default. Try `'sage'`; [Looks](/docs/looks/) shows all three.
+the default. Try `'sage'`; [Looks](/docs/looks/) shows all eight.
 
 ## What you built
 

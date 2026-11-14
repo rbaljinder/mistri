@@ -65,8 +65,10 @@ test('a card says its facts in one line, captions kept for assistive technology,
     </QueryClientProvider>,
   );
   const summaries = container.querySelectorAll('.cards-summary');
-  expect(summaries[0]).toHaveTextContent('Year: 2019Miles: 85780Fuel: Electric');
-  expect(summaries[0].querySelectorAll('.visually-hidden')).toHaveLength(3);
+  // A bare number shows its column's caption ("Year 2019"); a word's caption stays for assistive technology alone.
+  expect(summaries[0]).toHaveTextContent('Year 2019Miles 85780Fuel: Electric');
+  expect(summaries[0].querySelectorAll('.cards-summary-word')).toHaveLength(2);
+  expect(summaries[0].querySelectorAll('.visually-hidden')).toHaveLength(1);
   expect(summaries[1].querySelectorAll('.cards-summary-item')).toHaveLength(2);
   // A line through a reference: its caption is the App's, its value the other record's.
   expect(screen.getAllByText('Dealer')).toHaveLength(2);
@@ -93,10 +95,10 @@ test('a fact with a word says it after its value, plural past one, and a masked 
     </QueryClientProvider>,
   );
   const summaries = container.querySelectorAll('.cards-summary');
-  expect(summaries[0]).toHaveTextContent('Year: 20201 owner');
+  expect(summaries[0]).toHaveTextContent('Year 20201 owner');
   expect(summaries[1]).toHaveTextContent('3 owners');
-  // The worded fact's word is its caption for everyone, so it carries no hidden one.
-  expect(summaries[0].querySelectorAll('.visually-hidden')).toHaveLength(1);
+  // The worded fact's word is its caption for everyone, and the bare year shows its own: neither carries a hidden one.
+  expect(summaries[0].querySelectorAll('.visually-hidden')).toHaveLength(0);
   expect(screen.queryByText(/QUJD/)).toBeNull();
   expect(screen.getByRole('button', { name: 'ENC:••••••' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Plain title' })).toBeInTheDocument();

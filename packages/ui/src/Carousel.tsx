@@ -1,7 +1,7 @@
 /**
  * A carousel: one slide at a time from a row of them, chosen with Previous
- * and Next or with a dot per slide. Plain React — Base UI has no carousel,
- * and one slide, two steps and a dot row is all one is. The slides are the
+ * and Next or with a dot per slide. Plain React: one slide, two steps and
+ * a dot row is all one is. The slides are the
  * caller's array (the Tabs pattern), not children kept in step by hand.
  * Controlled with `index`/`onIndexChange`, uncontrolled with
  * `defaultIndex`. The ends do not wrap: Previous disables on the first
@@ -12,12 +12,13 @@
  * is on the carousel or its own controls, so a widget inside a slide
  * keeps its keys — and
  * the slide's movement is silenced for a reader who asked for reduced
- * motion (the track's transition lives under `no-preference` in
- * standalone.css). A step button that disables under a focused finger
+ * motion (the track's transition lives under `no-preference` in the
+ * stylesheet). A step button that disables under a focused finger
  * hands focus to the other step, never to nowhere.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type SyntheticEvent } from 'react';
 import { changeDetails, type ChangeDetails } from './changeDetails.js';
+import { slotted } from './internal/uiKitContext.js';
 
 export interface CarouselSlide {
   /** The slide's short name, said after its number ("1 of 3: Studio"). */
@@ -63,137 +64,160 @@ const ENGLISH: CarouselWords = {
   status: (n, total, label) => `Slide ${n} of ${total}${label ? `: ${label}` : ''}`,
 };
 
-export function Carousel({ slides, index, defaultIndex = 0, onIndexChange, ariaLabel, words: given, className }: CarouselProps) {
+/* One slide at a time, the others out of reach: only the slide in view is in the tab order and the tree. Drawn by
+   hand on the carousel's parts, which the stylesheet dresses: UI SDK's own carousel is a scroller that keeps its
+   neighbours beside the slide and chooses among them with tabs, which is another control with other names. */
+function DefaultCarousel({ slides, index, defaultIndex = 0, onIndexChange, ariaLabel, words: given, className }: CarouselProps) {
   const words = { ...ENGLISH, ...given };
-  const [uncontrolled, setUncontrolled] = useState(defaultIndex);
-  const prevRef = useRef<HTMLButtonElement>(null);
-  const nextRef = useRef<HTMLButtonElement>(null);
-  const regionRef = useRef<HTMLElement>(null);
-  const controlsRef = useRef<HTMLDivElement>(null);
-  /* The step last focused, so a step that disables under it is rescued
-     even where the browser already moved focus to the body on disable. */
-  const lastStepRef = useRef<'prev' | 'next' | null>(null);
-  const current = slides.length ? Math.min(Math.max(index ?? uncontrolled, 0), slides.length - 1) : 0;
-  const go = (next: number, event: { nativeEvent: Event }) => {
-    const clamped = Math.min(Math.max(next, 0), slides.length - 1);
-    if (index === undefined) setUncontrolled(clamped);
-    onIndexChange?.(clamped, changeDetails('navigate', event));
-  };
-  /* A step that disables under its own focus hands focus on: the other
-     step where it is live, the region itself where both ends are shut
-     (one slide). Rescue runs only while focus is still on that step or
-     has already fallen to the body — a reader who tabbed onward is never
-     pulled back, and a caller-driven index change moves nothing. */
+  const [own, setOwn] = useState(defaultIndex);
+  const region = useRef<HTMLElement>(null);
+  const previous = useRef<HTMLButtonElement>(null);
+  const next = useRef<HTMLButtonElement>(null);
+  /* The step the keyboard was last on, so one that disables under it is rescued even where the browser has
+     already dropped the focus to the body. */
+  const lastStep = useRef<'previous' | 'next' | null>(null);
+  const last = slides.length - 1;
+  const at = slides.length ? Math.min(Math.max(index ?? own, 0), last) : 0;
   useEffect(() => {
     if (!slides.length) return;
     const active = document.activeElement;
     const lost = active === document.body;
-    /* The rescued step becomes the last-focused one: the next disable
-       under it rescues again, even where the rescue focus itself is
-       what set the ref (the null-after-focus ordering bug, otherwise). */
-    const focusStep = (step: 'prev' | 'next') => {
-      const other = step === 'prev' ? prevRef.current : nextRef.current;
+    const hand = (to: 'previous' | 'next') => {
+      const other = to === 'previous' ? previous.current : next.current;
       if (other && !other.disabled) {
         other.focus();
-        lastStepRef.current = step;
+        lastStep.current = to;
       } else {
-        regionRef.current?.focus();
-        lastStepRef.current = null;
+        // Both ends shut (one slide): the carousel itself takes it.
+        region.current?.focus();
+        lastStep.current = null;
       }
     };
-    if (current === 0 && lastStepRef.current === 'prev' && (lost || active === prevRef.current)) focusStep('next');
-    else if (current === slides.length - 1 && lastStepRef.current === 'next' && (lost || active === nextRef.current)) focusStep('prev');
-  }, [current, slides.length]);
+    // Only while the focus is still on that step or has fallen from it: a reader who moved on is not pulled back.
+    if (at === 0 && lastStep.current === 'previous' && (lost || active === previous.current)) hand('next');
+    else if (at === last && lastStep.current === 'next' && (lost || active === next.current)) hand('previous');
+  }, [at, last, slides.length]);
   if (!slides.length) return null;
-  const onRegionKeyDown = (event: React.KeyboardEvent) => {
-    /* The keys are the carousel's only while focus is on the carousel itself or its own controls. A widget inside a
-       slide (an input's caret, a slider, a tab list, a menu) owns them, and so does anything drawn in a portal: React
-       delivers a portal's events up through this tree, so the DOM, not the React tree, says whose they are. */
-    const target = event.target as Node | null;
-    if (target !== regionRef.current && !(target && controlsRef.current?.contains(target))) return;
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault();
-      go(current - 1, event);
-    } else if (event.key === 'ArrowRight') {
-      event.preventDefault();
-      go(current + 1, event);
-    } else if (event.key === 'Home') {
-      event.preventDefault();
-      go(0, event);
-    } else if (event.key === 'End') {
-      event.preventDefault();
-      go(slides.length - 1, event);
-    }
+  const go = (to: number, event: SyntheticEvent) => {
+    const place = Math.min(Math.max(to, 0), last);
+    if (place === at) return;
+    if (index === undefined) setOwn(place);
+    onIndexChange?.(place, changeDetails('navigate', event));
+  };
+  /* The keys are the carousel's only while the keyboard is on the carousel itself or on one of its own controls.
+     What is inside a slide (a caret, a slider, a tab row) keeps them, and so does what is drawn in a portal: React
+     hands a portal's events up through this tree, so the document, not the React tree, says whose they are. */
+  const onKeyDown = (event: KeyboardEvent) => {
+    const target = event.target as Element | null;
+    const control = target?.closest?.('[data-part="carousel-control"]');
+    if (target !== region.current && !(control && control.closest('[data-slot="carousel"]') === region.current)) return;
+    const to = { ArrowLeft: at - 1, ArrowRight: at + 1, Home: 0, End: last }[event.key];
+    if (to === undefined) return;
+    event.preventDefault();
+    go(to, event);
   };
   return (
     <section
-      ref={regionRef}
-      className={['ui-carousel', className].filter(Boolean).join(' ')}
+      ref={region}
+      data-slot="carousel"
+      className={className || undefined}
       aria-roledescription="carousel"
       aria-label={ariaLabel ?? words.region}
-      /* Programmatic focus only, for the step-disable rescue above:
-         -1 is no tab stop. */
+      // Reached by the hand-over above and never by Tab.
       tabIndex={-1}
-      onKeyDown={onRegionKeyDown}
+      onKeyDown={onKeyDown}
     >
-      <div className="ui-carousel-viewport">
-        <div className="ui-carousel-track" style={{ transform: `translateX(-${current * 100}%)` }}>
-          {slides.map((slide, i) => (
-            <div
-              key={i}
-              className="ui-carousel-slide"
-              role="group"
-              aria-roledescription="slide"
-              aria-label={words.slide(i + 1, slides.length, slide.label)}
-              aria-hidden={i !== current || undefined}
-              inert={i !== current || undefined}
-            >
-              {slide.children}
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="ui-carousel-controls" ref={controlsRef}>
+      <div data-slot="carousel-stage">
         <button
-          ref={prevRef}
+          ref={previous}
           type="button"
-          className="ui-carousel-step"
-          disabled={current === 0}
+          data-slot="carousel-previous"
+          data-part="carousel-control"
+          data-variant="quiet"
+          disabled={at === 0}
+          data-disabled={at === 0 ? '' : undefined}
           onFocus={() => {
-            lastStepRef.current = 'prev';
+            lastStep.current = 'previous';
           }}
-          onClick={(event) => go(current - 1, event)}
+          onClick={(event) => go(at - 1, event)}
         >
-          {words.previous}
-        </button>
-        <span className="ui-carousel-dots" role="group" aria-label={words.chooseSlide}>
-          {slides.map((slide, i) => (
-            <button
-              key={i}
-              type="button"
-              className="ui-carousel-dot"
-              aria-label={words.goToSlide(i + 1, slide.label)}
-              aria-current={i === current || undefined}
-              onClick={(event) => go(i, event)}
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+            <path
+              d="M10 3.5 5.5 8l4.5 4.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
-          ))}
-        </span>
+          </svg>
+          <span data-slot="visually-hidden">{words.previous}</span>
+        </button>
+        <div data-slot="carousel-viewport" style={{ overflow: 'hidden', minWidth: 0 }}>
+          <div data-slot="carousel-content" style={{ display: 'flex', gap: 0, transform: `translateX(-${at * 100}%)` }}>
+            {slides.map((slide, place) => (
+              <div
+                key={place}
+                data-slot="carousel-item"
+                role="group"
+                aria-roledescription="slide"
+                aria-label={words.slide(place + 1, slides.length, slide.label)}
+                aria-hidden={place !== at || undefined}
+                inert={place !== at || undefined}
+                data-active={place === at ? '' : undefined}
+                style={{ flex: '0 0 100%', minWidth: 0 }}
+              >
+                {slide.children}
+              </div>
+            ))}
+          </div>
+        </div>
         <button
-          ref={nextRef}
+          ref={next}
           type="button"
-          className="ui-carousel-step"
-          disabled={current === slides.length - 1}
+          data-slot="carousel-next"
+          data-part="carousel-control"
+          data-variant="quiet"
+          disabled={at === last}
+          data-disabled={at === last ? '' : undefined}
           onFocus={() => {
-            lastStepRef.current = 'next';
+            lastStep.current = 'next';
           }}
-          onClick={(event) => go(current + 1, event)}
+          onClick={(event) => go(at + 1, event)}
         >
-          {words.next}
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+            <path
+              d="M6 3.5 10.5 8 6 12.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span data-slot="visually-hidden">{words.next}</span>
         </button>
       </div>
-      <p className="ui-carousel-status" aria-live="polite">
-        {words.status(current + 1, slides.length, slides[current]?.label)}
+      <span data-slot="carousel-indicator-group" role="group" aria-label={words.chooseSlide}>
+        {slides.map((slide, place) => (
+          <button
+            key={place}
+            type="button"
+            data-slot="carousel-indicator"
+            data-part="carousel-control"
+            data-selected={place === at ? '' : undefined}
+            aria-label={words.goToSlide(place + 1, slide.label)}
+            aria-current={place === at || undefined}
+            onClick={(event) => go(place, event)}
+          />
+        ))}
+      </span>
+      <p data-slot="visually-hidden" aria-live="polite">
+        {words.status(at + 1, slides.length, slides[at]?.label)}
       </p>
     </section>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Carousel = slotted('Carousel', DefaultCarousel, { onIndexChange: [1, 'navigate'] });

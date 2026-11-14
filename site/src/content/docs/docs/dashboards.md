@@ -47,7 +47,7 @@ export const today = dashboard(
   {
     // …
     areas: [
-      'homes   homes   money    money',
+      'figures figures figures  figures',
       'repairs repairs repairs repairs',
       'trend   trend   trend    building',
       'leases  leases  viewings viewings',
@@ -78,7 +78,7 @@ export const today = dashboard(
 | `chart(title, table, by, opts)` | `shape`: `line`, `bar`, `donut` or `stacked`; by a column or `month close_date`; `curve: 'smooth'` on a line, `total: 'Leads'` in a donut's middle with each slice's share. `scatter` (with `x: 'count'` across and `measure` up), `heatmap` (by two keys, such as `'weekday moved_at, hour moved_at'`), `waterfall` and `treemap` | Stable |
 | `funnel(title, table, stages, opts)` | Two to eight `stages` (`{ label, query?, optional? }`) a row passes in order, counted in one statement: each stage's rows, its share of the stage before it and the rows it lost; a stage opens the rows that reached it (`to`, as a chart's) | Stable |
 | `breakdown`, `matrix` | Ranked bars by one key; counts or sums by two. `shape: 'steps'` draws a breakdown as a row of steps in the vocabulary's order, each with its count and a short `notes` line. `target: { from: 'quota', by: 'owner_id', measure: 'sum amount', over: 'period' }` reads each group's goal from another table and says each bar as a share of it | Stable |
-| `rows`, `board`, `embed(view)` | Matching rows with a `limit` (and `empty`, what it says with none, as a list's), a board, one of the App's lists | Stable |
+| `rows`, `board`, `embed(view)` | Matching rows with a `limit` (and `empty`, what it says with none, as a list's), drawn as a worklist of names where `show` names one to three columns that lead with the record's name, and as a table otherwise; a board; one of the App's lists | Stable |
 | `activity()`, `note()`, `banner()`, `firstRun()` | Recent changes, guidance (`note(text, { variant: 'callout' })`, as on a page), a wide introduction, next steps while the tables are empty; `banner(title, text, { eyebrow, action, image })` is a wide banner with one action. A note's `action.to` opens a list, a dashboard or a signed-in form, as an empty list's action and nav do; a reader whose roles cannot open it is not shown the action, and `mistri check` names those roles | Stable |
 | `custom(title, component, { rows, props, width })` | An [author's component](/docs/custom-components/), its `rows` narrowed by the window where they say `over`, handed the window as `period` and its `region`; as a record page places one | Stable |
 | `find(title, resources, opts)` | One search box over several resources' records, the hits grouped by resource, each opening its record | Stable |
@@ -90,7 +90,7 @@ A metric's data `target` that counts the same measure over the same table, with 
 
 A measure counted in a currency's minor units says `minor: true` where its column's rule does not say so — a cents column drawn by a component, or a computed measure: `metric('Billed', 'invoice', { measure: 'sum total_cents', minor: true })` says "$412,380.49", money where `format` is unsaid. A metric, breakdown, chart or matrix takes it. A breakdown says all its figures one way: compact from a thousand ("$412.4K", "$27.3K") where one reaches a hundred thousand, and exact otherwise.
 
-A money metric says its figure exact, to the cent (or whole, where its column's rule says `whole: true`): a balance reads "$28,123.45", never "$28K". A card glanced at for its size beside a trend says `figure: 'compact'` ("$414.1K"), its exact figure still its title and what a screen reader hears: `metric('Revenue', 'invoice', { measure: 'sum total', format: 'money', figure: 'compact' })`. A six-figure sum with cents that would wrap in a narrow card says `figure: 'whole'`: it is rounded to the currency's major unit ("$412,380") at any size, and the title keeps the cents.
+A money metric says its figure exact: a balance reads "$28,123.45", never "$28K", and a whole amount reads whole ("$56,130", not "$56,130.00"; also where its column's rule says `whole: true`). A card glanced at for its size beside a trend says `figure: 'compact'` ("$414.1K"), its exact figure still its title and what a screen reader hears: `metric('Revenue', 'invoice', { measure: 'sum total', format: 'money', figure: 'compact' })`. A six-figure sum with cents that would wrap in a narrow card says `figure: 'whole'`: it is rounded to the currency's major unit ("$412,380") at any size, and the title keeps the cents.
 
 A dashboard's head is its title, its star and its `description`. `head: 'compact'` draws the title alone on one line with its star, at a list's size, and no description: a working board that should start at once. `head: false` is a dashboard that draws its own head, in a `note()`, a `banner()` or a component: the title stays for a screen reader only (the room's one `h1`), the description is left to you, and the label still names the tab, the crumb and the palette entry. `heading: false` hides only the title and keeps the description.
 

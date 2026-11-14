@@ -273,7 +273,7 @@
   border: 1px solid var(--line-control); border-radius: var(--radius); background: var(--surface); color: var(--ink);
   box-shadow: var(--shadow-control);
 }
-.assistant-compose-row .btn { min-height: 36px; }
+.assistant-compose-row [data-slot='button'] { min-height: 36px; }
 /* Waiting for the person: said over the field it shuts, a dot and its words, and the field names it as the reason. */
 .assistant-waiting { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-base); color: var(--ink); }
 .assistant-waiting-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }

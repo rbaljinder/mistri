@@ -107,7 +107,11 @@ for (const theme of THEME_PRESETS)
         tab.remove();
         return transform;
       });
-      expect(recordTab).toBe(theme.id === 'mono' || theme.id === 'ledger' ? 'uppercase' : 'none');
+      // Graphite's labels are tracked capitals too, and its tabs are not among them: a key in its track says what it
+      // opens in sentence case (docs/design.md, its exceptions; tilesLook.css).
+      /* Mono's and Ledger's tabs are words to choose between, the text face in sentence case, where the label role
+         would set them in capitals (themeFamilies.css, ledgerLook.css). */
+      expect(recordTab).toBe('none');
 
       // Room at every width, on the room with the most in it.
       for (const width of [1440, 1024, 390, 320]) {
@@ -130,7 +134,7 @@ for (const theme of THEME_PRESETS)
       // The other built-in look replaces this one's tokens outright.
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       await page.getByRole('menuitem', { name: /^Preferences/ }).click();
-      const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
+      const prefs = page.getByRole('region', { name: 'Preferences', exact: true });
       await prefs.getByRole('button', { name: /^Visual theme(?: |$)/ }).click();
       const other = THEME_PRESETS.find((preset) => preset.id !== theme.id)!;
       await page.getByRole('option', { name: other.label, exact: true }).click();
@@ -156,7 +160,7 @@ test('a look chosen in Preferences survives a reload, and the walk under it read
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto(CRM);
   await expect(page.locator('.chart-donut')).toBeVisible();
-  const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
+  const prefs = page.getByRole('region', { name: 'Preferences', exact: true });
   const choose = async (control: string, option: string, exact = true) => {
     await prefs.getByRole('button', { name: new RegExp(`^${control}(?: |$)`) }).click();
     await page.getByRole('option', { name: option, exact }).click();
@@ -165,7 +169,8 @@ test('a look chosen in Preferences survives a reload, and the walk under it read
   await page.getByRole('menuitem', { name: /^Preferences/ }).click();
   await choose('Visual theme', theme.label);
   await choose('Color mode', 'Light');
-  await prefs.getByRole('button', { name: 'Close', exact: true }).click();
+  // The preferences are a section of the settings page: leaving it is going back.
+  await page.goBack();
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme-style', theme.id);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
@@ -230,10 +235,10 @@ for (const id of [...THEME_PRESETS.map((theme) => theme.id), 'meridian'])
       if (id === 'meridian') {
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await page.getByRole('menuitem', { name: /^Preferences/ }).click();
-        const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
+        const prefs = page.getByRole('region', { name: 'Preferences', exact: true });
         await prefs.getByRole('button', { name: /^Visual theme(?: |$)/ }).click();
         await page.getByRole('option', { name: 'Meridian', exact: true }).click();
-        await prefs.getByRole('button', { name: 'Close', exact: true }).click();
+        await page.goBack();
         await page.reload();
       }
       await expect(page.locator('html')).toHaveAttribute('data-visual-theme', id);
@@ -271,7 +276,7 @@ for (const id of [...THEME_PRESETS.map((theme) => theme.id), 'meridian'])
           band: head?.backgroundColor,
           crumbs: style(document.querySelector('.crumbs'))?.backgroundColor,
           lookHeader: document.documentElement.dataset.lookHeader,
-          headBand: style(document.querySelector('.applist-host > .applist-controls'))?.backgroundColor,
+          controls: style(document.querySelector('.applist-host > .applist-controls'))?.backgroundColor,
           pageGround: style(document.body)?.backgroundColor,
           boxedTones: [...document.querySelectorAll('.tone:not(.record-tag)')]
             .filter((el) => el.checkVisibility())
@@ -320,6 +325,34 @@ for (const id of [...THEME_PRESETS.map((theme) => theme.id), 'meridian'])
         expect(shape.rule).toBeLessThan(1.5);
         expect(shape.boxedNeutral).toEqual([]);
         expect(shape.boxedTones).toEqual([]);
+      } else if (id === 'atelier') {
+        /* Atelier's recorded exceptions (docs/design.md): a printed table, open on the paper, its head row over the
+       one rule in the ink (`table: 'open'`; it was a hairline under capital heads on a band), and every status a
+       dot and its word. */
+        expect(shape.box).toEqual({ border: '0px', shadow: 'none', fill: 'rgba(0, 0, 0, 0)' });
+        expect(shape.rule).toBeGreaterThan(1.5);
+        expect(shape.rule).toBeLessThan(2.5);
+        expect(shape.boxedNeutral).toEqual([]);
+        expect(shape.boxedTones).toEqual([]);
+      } else if (id === 'graphite') {
+        /* Graphite's (docs/design.md): the list is one of its cards (`blocks: 'card'`), an edge round the surface's
+       own fill, its heads over a hairline, and a status a dot in a pill, the neutral ones too. */
+        expect(shape.box!.border).toBe('1px');
+        expect(shape.box!.fill).not.toBe('rgba(0, 0, 0, 0)');
+        expect(shape.rule).toBeGreaterThan(0.5);
+        expect(shape.rule).toBeLessThan(1.5);
+        expect(shape.boxedTones.length).toBeGreaterThanOrEqual(shape.meaningfulTones);
+      } else if (id === 'bloom') {
+        /* Bloom's (docs/design.md): the list is one soft tile (`table: 'rows'`), the surface's own fill under a ring
+       and the card's shadow with no border of its own, its heads over a hairline, and meaning in tinted pills, as
+       Sage's is. */
+        expect(shape.box!.border).toBe('0px');
+        expect(shape.box!.fill).not.toBe('rgba(0, 0, 0, 0)');
+        expect(shape.box!.shadow).toContain('inset');
+        expect(shape.rule).toBeGreaterThan(0.5);
+        expect(shape.rule).toBeLessThan(1.5);
+        expect(shape.boxedNeutral).toEqual([]);
+        expect(shape.boxedTones.length).toBe(shape.meaningfulTones);
       } else {
         expect(shape.box).toEqual({ border: '0px', shadow: 'none', fill: 'rgba(0, 0, 0, 0)' });
         // 2px, snapped to whole device pixels under the density zoom.
@@ -328,8 +361,10 @@ for (const id of [...THEME_PRESETS.map((theme) => theme.id), 'meridian'])
       }
       expect(shape.crumbs).not.toBe('rgba(0, 0, 0, 0)');
       if (shape.lookHeader === 'band' || shape.lookHeader === 'hero') {
-        expect(shape.crumbs).toBe(shape.headBand);
-        expect(shape.headBand).not.toBe(shape.pageGround);
+        /* A list's band is its heading row, the trail's bar here: its tabs and filters stand under it, on the page's
+           ground, with the rows they refine. */
+        expect(shape.crumbs).not.toBe(shape.pageGround);
+        expect(['rgba(0, 0, 0, 0)', shape.pageGround]).toContain(shape.controls);
         const onBand = await readings(page, [['.crumbs h1.applist-title', 4.5]]);
         expect(onBand.filter((reading) => reading.ratio < reading.need)).toEqual([]);
       } else expect(shape.crumbs).toBe(shape.pageGround);
@@ -362,7 +397,7 @@ for (const id of [...THEME_PRESETS.map((theme) => theme.id), 'meridian'])
       expect(drawn.filter((reading) => reading.ratio < reading.need)).toEqual([]);
       const fields = await page.getByRole('dialog', { name: 'New lead' }).evaluate((dialog) => {
         const ground = getComputedStyle(dialog.querySelector('.insert-form-app') ?? dialog).backgroundColor;
-        return [...dialog.querySelectorAll<HTMLElement>('.insert-input, .dd-button, .picker, .record-picker-trigger')]
+        return [...dialog.querySelectorAll<HTMLElement>('.insert-input, [data-slot="select-trigger"], .picker, .record-picker-trigger')]
           .filter((el) => el.checkVisibility())
           .map((el) => {
             const style = getComputedStyle(el);
@@ -431,13 +466,14 @@ test('lumen: a table anchors on its name, keeps its head in view, and its placeh
     const app = getComputedStyle(document.querySelector('.app-mode')!);
     return {
       name: { weight: getComputedStyle(cells[0]!).fontWeight, color: getComputedStyle(cells[0]!).color },
-      other: getComputedStyle(cells[1]!).color,
+      other: { weight: getComputedStyle(cells[1]!).fontWeight, color: getComputedStyle(cells[1]!).color },
       head: { size: head.fontSize, weight: head.fontWeight },
       dot: neutral && getComputedStyle(neutral, '::before').backgroundColor,
     };
   });
-  expect(read.name.weight).toBe('500');
-  expect(read.other).not.toBe(read.name.color);
+  // The name is the row's one heavier value; the rest are the ink too, at the body's weight (lumenLook.css).
+  expect(read.name.weight).toBe('600');
+  expect(read.other).toEqual({ weight: '400', color: read.name.color });
   expect(read.head).toEqual({ size: '12px', weight: '500' });
   expect(read.dot).not.toBeNull();
   expect(read.dot).not.toBe('rgba(0, 0, 0, 0)');
@@ -466,13 +502,14 @@ test('lumen: a table anchors on its name, keeps its head in view, and its placeh
   expect(Math.abs(heights.skeleton - heights.row!)).toBeLessThan(1.5);
 });
 
-/* Lumen under a band or hero head, as Lintel wears it. The band steps what stands raised in it 7% into the ink, so a
-   chip stands apart from it, and Lumen's raised search stood on that step: a ground no palette color is, so check
-   passed what grade then read there — Lumen's own placeholder at 4.03:1 and its edge at 2.66:1, a field report's
-   theme 3.98:1 and 2.69:1. On the band the search is a field on the surface, which check measures. */
+/* Lumen under a band or hero head. The band steps what stands raised in it 7% into the ink, so a chip stands apart
+   from it, and Lumen's raised search stood on that step once: a ground no palette color is, so check passed what
+   grade then read there — Lumen's own placeholder at 4.03:1 and its edge at 2.66:1, a field report's theme 3.98:1
+   and 2.69:1. A list's band is its heading row now, and its search stands under it on the page's ground, on a pair
+   check measures. */
 for (const header of ['band', 'hero'] as const)
   for (const mode of ['light', 'dark'] as const)
-    test(`lumen with a ${header} head, ${mode}: the list's search reads on the band, its placeholder at 4.5:1 and its edge at 3:1`, async ({
+    test(`lumen with a ${header} head, ${mode}: the list's search reads under the band, its placeholder at 4.5:1 and its edge at 3:1`, async ({
       page,
     }) => {
       await page.addInitScript(() => localStorage.setItem('mistri.visual-theme', 'lumen'));
@@ -555,7 +592,7 @@ test("a theme's round controls are pills, its panels keep their own corner and e
   // A control is a pill over the look's own corner (Lumen draws these at its --radius); a card is not, and keeps
   // the panel's corner with no edge. A phone draws the window as a menu beside the filters.
   await expect.poll(() => radius('.dash-window-button')).toBe('999px');
-  expect(await radius('.dash-picks .dd-button')).toBe('999px');
+  expect(await radius('.dash-picks [data-slot="select-trigger"]')).toBe('999px');
   expect(await radius('.dash-strip .home-card')).toBe('20px');
   expect(
     await page

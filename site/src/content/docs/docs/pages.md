@@ -20,18 +20,18 @@ export default page(
     // …
     history(),
   ],
-  { listTabs: false },
+  { listTabs: true },
 ) satisfies Page;
 ```
 
-See it in the sample (`examples/apps/lintel/pages/lease.ts:7`) (abridged: the full page adds the charges and payments as related lists and the resident's card). A file in `pages/` whose default export is a page is that page, keyed by its name (`pages/lease.ts` is `lease`), with no list in `app.ts`; `mistri check` lists each page it found by its file. A `pages/` module with no default export is one the pages import.
+See it in the sample (`examples/apps/lintel/pages/lease.ts:9`) (abridged: the full page adds the figures with a note under each, the charges and payments as related lists and the resident's card). A file in `pages/` whose default export is a page is that page, keyed by its name (`pages/lease.ts` is `lease`), with no list in `app.ts`; `mistri check` lists each page it found by its file. A `pages/` module with no default export is one the pages import.
 
 ![A Lintel lease: the home's name and the lease's status, its dates, rent and deposit, Give notice and Add charge, the status stepper, the balance due beside what was charged and paid, its charges, and the home and the resident beside them.](../../../assets/guide/pages.webp)
 
 ## What you'll see
 
 - The head: the status as a toned chip beside the name, the start, end, rent and deposit under it, and the record's actions, the forward one filled and `destructive` ones apart; the lease's machine draws its stepper over the figures.
-- Related lists below the figures: stacked, as this page asks with `listTabs: false`; left on, adjacent ones share one tab strip, the open tab in the address (`/leases/1/charges`), and a closed tab is never fetched.
+- Related lists below the figures: one tab strip, as this page asks with `listTabs: true`, each tab saying how many rows it holds, the open tab in the address (`/leases/1/charges`), and a closed tab never fetched; without it they stack, each saying its count beside its heading. The lease's own Add charge stands in the charges' head (`actions: ['addCharge']`), where a charge is read.
 - The aside: the parent as a card, `current()` for the one child that matters now, and a `properties` rail edited in place. On a phone the current row follows the summary, ahead of the related lists; the parent card, the rail and the history follow the main flow.
 
 ## When to use it, and when not
@@ -49,7 +49,7 @@ A page that declares no `region: 'aside'` section gets one: the record's remaini
 | Section | What it draws | Status |
 | --- | --- | --- |
 | `header({ status, facts, primary, destructive, actions })` | The head: a status chip, up to twelve facts (the first six in the line, the rest in a More under it), the verbs in order; `actions: [...]` names the ones drawn and the rest wait in More | Stable |
-| `fields(show, { presentation, editable })` | The record's own values: `summary` (the main column's default), `properties` (the aside's), `facts`, `table`; `editable: true` changes a property in place through the action that sets it | Stable |
+| `fields(show, { presentation, editable, notes })` | The record's own values: `summary` (the main column's default), `properties` (the aside's), `facts`, `table`; `editable: true` changes a property in place through the action that sets it; a summary's `notes: { balance: 'Charges still open' }` says a line under a figure, what it counts | Stable |
 | `card(title, reference, show)` | A box for the record a reference names, in the aside: `card('Sold by', 'dealer_id', ['rating', 'city'])` | Stable |
 | `headline(show, { links, subfigure, was, note })` | A large figure with up to two buttons, in the aside: a price and "Ask about this car" | Stable |
 | `related(title, from, whose \| { same, near }, opts)` | Rows that point at the record, or rows that share a key with it (`{ same: ['account_id'] }`, `near: { price: 0.25 }` within ±25%; over the page's own table the record itself is left out): `show` (4 columns), `query`, `sort`, `create`, `totals`, `empty`, `group` (a header over each record the rows share, a page of groups at a time), `rowActions` (each row's own verbs in a ⋯ at its end); `presentation: cards(…)` draws them as a list view's cards, every key the same | Stable |

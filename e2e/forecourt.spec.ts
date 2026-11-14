@@ -218,10 +218,8 @@ test.describe('Forecourt, browsed signed out', () => {
       await reply.getByRole('button', { name: 'Done', exact: true }).click();
       await expect(page.locator('[data-timeline-row]').filter({ hasText: 'Confirmed the test drive by phone.' })).toBeVisible();
       expect(scalar(sample.db, 'SELECT status FROM inquiry WHERE id = ?', inquiryId)).toBe('replied');
-      if (width === 390) {
-        await page.getByRole('button', { name: 'More actions', exact: true }).click();
-        await page.getByRole('menuitem', { name: 'Close inquiry', exact: true }).click();
-      } else await page.getByRole('button', { name: 'Close inquiry', exact: true }).click();
+      // Two verbs stand side by side on a phone too: More over one entry would hide the other one.
+      await page.getByRole('button', { name: 'Close inquiry', exact: true }).click();
       const close = page.getByRole('dialog', { name: 'Close inquiry' });
       await close.getByLabel('Resolution', { exact: false }).fill('Test drive completed.');
       await close.getByRole('button', { name: 'Close inquiry', exact: true }).click();

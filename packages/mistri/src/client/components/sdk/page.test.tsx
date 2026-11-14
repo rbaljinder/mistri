@@ -200,7 +200,7 @@ describe('Scope and List', () => {
     renderPage(page, { data: BOOKINGS });
     expect(await screen.findByText('No cancellations.')).toBeInTheDocument();
 
-    const said = { 401: 'This list is for signed-in members.', 403: 'This list is not available to your role.' };
+    const said = { 401: 'This list is for signed-in members.', 403: 'Your account does not open this list.' };
     for (const status of [401, 403] as const) {
       const host = fixtureHost(BOOKINGS, {}, []);
       host.rows = async () => {
@@ -312,7 +312,7 @@ describe('a read past its limit, and one that changes under the page', () => {
       ),
     });
     renderPage(page, { data: BOOKINGS, refused: { booking: 403 } });
-    expect(await screen.findByText('This list is not available to your role.')).toBeInTheDocument();
+    expect(await screen.findByText('Your account does not open this list.')).toBeInTheDocument();
     expect(screen.queryByText('Nothing here.')).toBeNull();
   });
 });

@@ -32,7 +32,7 @@ import { navigationPaths } from './components/navigationTree.js';
 import { plural } from './locale.js';
 import { say } from './copy/shell/palette.js';
 import { noteVisit } from './paletteRecents.js';
-import { addHostListener, portalRoot, shellBody, shellQuery } from './shellHost.js';
+import { addHostListener, portalRoot, shellBody, shellById, shellQuery } from './shellHost.js';
 
 /**
  * What a shell adds to the palette beyond the kit's own: places among the
@@ -296,6 +296,23 @@ export function initSidebarToggle() {
         : [svgEl('path', { d: 'M6.5 4l4 4-4 4' }), svgEl('path', { d: 'M3 4l4 4-4 4' })],
     );
 
+  /* The toggle in a bar: the window with its side column, which says what it folds without a direction to keep. */
+  const panel = () =>
+    svgEl(
+      'svg',
+      {
+        viewBox: '0 0 16 16',
+        width: '16',
+        height: '16',
+        'aria-hidden': 'true',
+        fill: 'none',
+        stroke: 'currentColor',
+        'stroke-width': '1.3',
+        'stroke-linejoin': 'round',
+      },
+      [svgEl('rect', { x: '2', y: '3', width: '12', height: '10', rx: '1.5' }), svgEl('path', { d: 'M6 3v10' })],
+    );
+
   const collapse = el(
     'button',
     {
@@ -329,8 +346,16 @@ export function initSidebarToggle() {
     shellBody().classList.toggle('sidebar-hidden', next);
     const inApp = shellBody().classList.contains('app-mode');
     const wasFocused = document.activeElement === collapse;
-    const destination = inApp ? footer : row;
-    if (collapse.parentElement !== destination) destination.append(collapse);
+    /* Where an App's shell stands a bar over the room (`app-sidebar-shell`, the pane's bar), the toggle is that
+       bar's first key, before the words that say where the reader is: the menu's foot is then the workspace alone.
+       The bar is the App's to make, so it is found by its id and the foot stands in until it is there. */
+    const paneBar = inApp && shellBody().classList.contains('app-sidebar-shell') ? shellById('pane-bar') : null;
+    const destination = paneBar ?? (inApp ? footer : row);
+    if (collapse.parentElement !== destination) {
+      if (paneBar) paneBar.prepend(collapse);
+      else destination.append(collapse);
+    }
+    footer.hidden = !footer.childElementCount;
     /* The icon rail (an App's `ui.shell.rail`) folds the sidebar instead of
        hiding it, so the collapse button stays in it and, folded, is the way
        back: it takes the reveal's words and direction. */
@@ -345,8 +370,8 @@ export function initSidebarToggle() {
     collapse.title = inApp ? `${appName} (⌘B)` : back ? say('showTheTableListB') : say('hideTheTableListB');
     reveal.setAttribute('aria-label', inApp ? `${message('navigation.expand')} ${menuWord}` : say('showTheTableList'));
     collapse.replaceChildren(
-      chevrons(back ? 'right' : 'left'),
-      ...(inApp ? [el('span', { class: 'sidebar-collapse-label' }, [message('navigation.collapse')])] : []),
+      paneBar ? panel() : chevrons(back ? 'right' : 'left'),
+      ...(inApp && !paneBar ? [el('span', { class: 'sidebar-collapse-label' }, [message('navigation.collapse')])] : []),
     );
     collapse.setAttribute('aria-expanded', String(!next));
     reveal.setAttribute('aria-expanded', String(!next));
@@ -385,6 +410,8 @@ export function initSidebarToggle() {
   shellQuery('.layout')?.prepend(reveal);
 
   subscribeMessages(renderToggle);
+  /* The App's shell made or took away the bar over the room (sidebarShell.js): the toggle is drawn for where it now stands. */
+  addHostListener(document, 'mistri:pane-bar', renderToggle);
   renderToggle();
   compact.addEventListener('change', () => {
     compactOpen = false;
@@ -395,13 +422,16 @@ export function initSidebarToggle() {
   // An App that asks for the rail (app.js sets `app-nav-rail`) changes what
   // the collapse button says while folded, so that switch re-renders it too.
   let railMode = shellBody().classList.contains('app-nav-rail');
+  let barMode = shellBody().classList.contains('app-sidebar-shell');
   new MutationObserver(() => {
     const next = shellBody().classList.contains('app-mode');
     const nextRail = shellBody().classList.contains('app-nav-rail');
-    if (next === appMode && nextRail === railMode) return;
+    const nextBar = shellBody().classList.contains('app-sidebar-shell');
+    if (next === appMode && nextRail === railMode && nextBar === barMode) return;
     if (next !== appMode) compactOpen = false;
     appMode = next;
     railMode = nextRail;
+    barMode = nextBar;
     renderToggle();
   }).observe(shellBody(), { attributes: true, attributeFilter: ['class'] });
   sidebar.addEventListener('click', (event) => {

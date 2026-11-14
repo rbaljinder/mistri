@@ -21,6 +21,7 @@ import { canStep, stepTrail, stepWithin, trailPosition, type RecordTrail, type T
 import { say } from '../copy/record/components/RecordTrailNav.js';
 import { Icon } from './Icon.js';
 import { addHostListener, removeHostListener } from '../shellHost.js';
+import { personFacing } from '../audience.js';
 
 interface TrailEntry {
   kind: string;
@@ -89,6 +90,8 @@ export function TrailSteps({
   onPointerDown?: () => void;
 }) {
   const { at, of } = trailPosition(trail);
+  /* "10 of 80" is a place in the office's list; a visitor opened one thing (audience.ts). */
+  if (personFacing()) return null;
   return (
     <nav className="record-trail" aria-label={say('recordsInThisList')} aria-busy={reading || undefined}>
       <span className="step-control">

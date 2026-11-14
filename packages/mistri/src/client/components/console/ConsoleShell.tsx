@@ -353,7 +353,7 @@ function rankEntries(entries: readonly PaletteEntry[], text: string): PaletteEnt
  * The jump box: type, arrow to a line, Enter to go. Grouped as the room gave them.
  *
  * A native modal dialog, not the shell's Modal: a room is a component bundle, and the shell's dialog would bring its
- * own copy of Base UI into it. The native one is drawn in the top layer yet stays inside the room's element, so the
+ * own copy of UI SDK into it. The native one is drawn in the top layer yet stays inside the room's element, so the
  * room's scoped styles reach it, and it brings Escape, the inert page behind it and focus returned on close.
  */
 function Palette({ entries, onClose }: { entries: readonly PaletteEntry[]; onClose(): void }) {

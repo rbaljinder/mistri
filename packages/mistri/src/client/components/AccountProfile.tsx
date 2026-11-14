@@ -13,7 +13,19 @@ const PROVIDERS: Record<string, string> = { email: say('emailAndPassword'), gith
 
 /** A session-owned dialog; a profile save never changes authentication identity,
  * grants, account ownership, or another session's UI. */
-export function AccountProfile({ onClose, title = say('yourProfile') }: { onClose: () => void; title?: string }) {
+export function AccountProfile({
+  onClose,
+  title = say('yourProfile'),
+  embedded = false,
+  focus = !embedded,
+}: {
+  onClose: () => void;
+  title?: string;
+  /** Drawn in a page (the settings room) and not as a dialog: no head, no Close, nothing round it. */
+  embedded?: boolean;
+  /** Whether the name takes the focus once the profile has loaded: a dialog's does, a page's only when opened at it. */
+  focus?: boolean;
+}) {
   const owner = useRef(sessionIdentity()).current;
   const identity = useSyncExternalStore(subscribeSessionIdentity, sessionIdentity);
   const alive = useRef(true),
@@ -62,7 +74,7 @@ export function AccountProfile({ onClose, title = say('yourProfile') }: { onClos
     // A menu item opened this dialog: finish the menu's focus restoration
     // before handing focus to the asynchronously loaded editable field.
     const frame = requestAnimationFrame(() => {
-      if (current()) input.current?.focus();
+      if (focus && current()) input.current?.focus();
     });
     return () => cancelAnimationFrame(frame);
   }, [data]);
@@ -115,15 +127,8 @@ export function AccountProfile({ onClose, title = say('yourProfile') }: { onClos
   };
   if (identity !== owner || owner.mode !== 'authenticated') return null;
   const uncertain = phase === 'unknown' || phase === 'checking';
-  return (
-    <Modal className="account-profile" ariaLabel={title} onClose={onClose} closeDisabled={phase === 'saving'} initialFocus={input}>
-      <header>
-        <h2>{title}</h2>
-        <Button intent="quiet" onClick={onClose} disabled={phase === 'saving'} aria-label={say('closeProfile')}>
-          ×
-        </Button>
-      </header>
-      <p className="note">{say('yourNameIsEditable')}</p>
+  const body = (
+    <>
       {phase === 'loading' && <p role="status">{say('loadingProfile')}</p>}
       {data && (
         <form onSubmit={(event) => void submit(event)} noValidate>
@@ -131,7 +136,7 @@ export function AccountProfile({ onClose, title = say('yourProfile') }: { onClos
             <input
               ref={input}
               name="name"
-              className="field-control"
+              data-slot="input"
               autoComplete="name"
               value={name}
               onChange={(event) => {
@@ -144,7 +149,7 @@ export function AccountProfile({ onClose, title = say('yourProfile') }: { onClos
             />
           </Field>
           <Field label={say('common.email')} className="account-profile-field">
-            <input className="field-control" value={data.email} readOnly autoComplete="email" />
+            <input data-slot="input" value={data.email} readOnly autoComplete="email" />
           </Field>
           <div className="account-profile-field">
             <span>{say('signInMethods')}</span>
@@ -154,11 +159,14 @@ export function AccountProfile({ onClose, title = say('yourProfile') }: { onClos
             </p>
           </div>
           <footer className="form-actions">
-            <Button intent="secondary" onClick={onClose} disabled={phase === 'saving'}>
-              {say('common.close')}
-            </Button>
+            {!embedded && (
+              <Button intent="secondary" onClick={onClose} disabled={phase === 'saving'}>
+                {say('common.close')}
+              </Button>
+            )}
+            {/* Nothing to save yet: a quiet key, not a greyed primary that reads as a fault. It fills once the name differs. */}
             <Button
-              intent="primary"
+              intent={profileName(name) === data.name ? 'secondary' : 'primary'}
               type="submit"
               busy={phase === 'saving'}
               busyLabel={say('common.saving')}
@@ -175,7 +183,7 @@ export function AccountProfile({ onClose, title = say('yourProfile') }: { onClos
             <input
               name="newEmail"
               type="email"
-              className="field-control"
+              data-slot="input"
               autoComplete="email"
               value={newEmail}
               placeholder={say('newEmailAddress')}
@@ -209,6 +217,19 @@ export function AccountProfile({ onClose, title = say('yourProfile') }: { onClos
           {say('checkCurrentProfile')}
         </Button>
       )}
+    </>
+  );
+  if (embedded) return <div className="account-profile account-profile-embedded">{body}</div>;
+  return (
+    <Modal className="account-profile" ariaLabel={title} onClose={onClose} closeDisabled={phase === 'saving'} initialFocus={input}>
+      <header>
+        <h2>{title}</h2>
+        <Button intent="quiet" onClick={onClose} disabled={phase === 'saving'} aria-label={say('closeProfile')}>
+          ×
+        </Button>
+      </header>
+      <p className="note">{say('yourNameIsEditable')}</p>
+      {body}
     </Modal>
   );
 }

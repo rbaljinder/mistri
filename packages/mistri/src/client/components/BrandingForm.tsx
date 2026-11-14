@@ -213,7 +213,7 @@ export function BrandingForm() {
         {allowed('name') && (
           <Field label={say('name')} hint={say('nameHint')} problem={problemFor('name')} size="compact">
             <input
-              className="field-control"
+              data-slot="input"
               name="name"
               value={draft.name ?? ''}
               placeholder={app?.name}
@@ -326,7 +326,7 @@ export function BrandingForm() {
                   onChange={(event) => set({ accent: pairFor(event.target.value) })}
                 />
                 <input
-                  className="field-control"
+                  data-slot="input"
                   aria-label={say('accentColor')}
                   value={accentText}
                   placeholder={chosen.light.accent}

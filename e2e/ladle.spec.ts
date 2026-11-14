@@ -145,5 +145,6 @@ test('the school’s site, its own schedule route, and the staff App embedded un
   // The platform's blocks on the same page read the same rows: the metrics move, and the arrival is listed.
   await expect(embed.getByRole('button', { name: /^2 Arrived/ })).toBeVisible();
   await expect(embed.getByRole('button', { name: /^6 Still expected/ })).toBeVisible();
-  await expect(embed.getByRole('row', { name: /Morgan Lee/ })).toBeVisible();
+  // Three columns led by the guest's name: a dashboard draws those rows as its worklist, a list by the section's title.
+  await expect(embed.getByRole('list', { name: 'Arrived' }).getByRole('listitem').filter({ hasText: 'Morgan Lee' })).toBeVisible();
 });

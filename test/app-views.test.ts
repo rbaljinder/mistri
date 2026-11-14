@@ -144,6 +144,42 @@ describe('record labels', () => {
 });
 
 describe('nav holds references to views', () => {
+  test("a list's summary is a dashboard's metrics: parsed in a dashboard's words, over the list's resource, four at most", () => {
+    const app = parse({
+      views: {
+        tasks: {
+          ...LIST,
+          summary: [
+            { kind: 'metric', title: 'Open', segment: 'open' },
+            { kind: 'metric', title: 'Done', from: 'task', query: 'status = done', target: { measure: 'count' } },
+          ],
+        },
+      },
+      home: 'tasks',
+      nav: ['tasks'],
+    });
+    const summary = (app.views.tasks as AppListView).summary!;
+    // A metric that names no resource counts the list's own, and a segment is its word in the query, as on a dashboard.
+    assert.deepEqual(
+      summary.map((section) => [section.kind, section.title, section.table]),
+      [
+        ['metric', 'Open', 'task'],
+        ['metric', 'Done', 'task'],
+      ],
+    );
+    assert.equal(summary[0]!.query, 'open');
+    // Served with the list, so the room draws it without a second request for what it holds.
+    assert.equal((servedApp(app, SCHEMA).views.tasks as { summary?: unknown[] }).summary?.length, 2);
+    const withSummary = (summary: unknown) => () => parse({ views: { tasks: { ...LIST, summary } }, home: 'tasks', nav: ['tasks'] });
+    assert.throws(withSummary([]), /has a "summary" that is not a list of metrics/);
+    assert.throws(withSummary([NOTE]), /"summary", section 1 is a note\. A list's summary holds metrics; a note belongs on a dashboard\./);
+    assert.throws(
+      withSummary(Array.from({ length: 5 }, (_, i) => ({ kind: 'metric', title: `M${i}` }))),
+      /has a "summary" of 5 figures\. A list's summary is one strip over its tabs, four at most/,
+    );
+    assert.throws(withSummary([{ kind: 'metric', title: 'Late', over: 'due_on' }]), /has an "over"\. A list has no window to pick/);
+  });
+
   test('a view id, or { to, label } for the menu word; the view keeps its own label under its key', () => {
     const app = parse({
       views: { tasks: { ...LIST, label: 'Tasks' }, board: DASH },

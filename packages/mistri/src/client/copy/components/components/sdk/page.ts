@@ -9,7 +9,7 @@ export const say = defineMessages({
   defineSurfaceHasNo:
     'defineSurface has no "{name}". It takes label, icon, description, favorite, roles, reads, commands, forms and loader.',
   commandDone: '{label} done.',
-  listNotYours: 'This list is not available to your role.',
+  listNotYours: 'Your account does not open this list.',
   listForMembers: 'This list is for signed-in members.',
   listShowingFirst: 'Showing the first {count}.',
   listNamesNoResource: '<List> reads no resource: give it `from`, or draw it inside a <Scope from>.',

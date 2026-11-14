@@ -1,6 +1,6 @@
 {
   "name": "mistri-workspace",
-  "version": "1.0.0-rc.58",
+  "version": "1.0.0-rc.59",
   "private": true,
   "description": "The workspace root: the packages under packages/ (mistri, create-mistri, @mistriwork/cloudflare, @mistriwork/kit, @mistriwork/ui, @mistriwork/engine), their tests, the site and the tools. Nothing here is published.",
   "license": "MIT",
@@ -50,7 +50,6 @@
   "devDependencies": {
     "@astrojs/starlight": "0.42.0",
     "@axe-core/playwright": "^4.13.0",
-    "@base-ui/react": "^1.8.0",
     "@better-auth/core": "1.7.10",
     "@better-auth/scim": "1.7.10",
     "@better-auth/sso": "1.7.10",
@@ -78,6 +77,8 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@types/sanitize-html": "^2.16.2",
+    "@ui-sdk/core": "0.1.0-beta.2",
+    "@ui-sdk/react": "0.1.0-beta.2",
     "@vitejs/plugin-react": "^6.1.1",
     "ajv": "^8.20.0",
     "astro": "7.4.2",
@@ -174,7 +175,8 @@
           "src/**"
         ],
         "ignoreDependencies": [
-          "@base-ui/react",
+          "@ui-sdk/core",
+          "@ui-sdk/react",
           "react",
           "react-dom"
         ]
@@ -188,7 +190,7 @@
           "src/**"
         ],
         "ignoreDependencies": [
-          "@base-ui/react",
+          "@ui-sdk/react",
           "@tanstack/react-form",
           "@tanstack/react-query",
           "@tanstack/react-table",

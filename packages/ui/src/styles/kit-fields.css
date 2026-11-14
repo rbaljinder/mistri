@@ -1,0 +1,181 @@
+/* What a field's own parts wear that the rest of the kit's stylesheet does not have: the file field, and the
+   check cards where each card is the checkbox (kit/choices.tsx). */
+@layer m-components {
+  /* The browser's input is the control, so it stays in the page and in the tab order, clipped to nothing; the
+     button and the names beside it are what is seen. */
+  [data-slot='file-field'] {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--m-space-3);
+    min-width: 0;
+
+    & input[type='file'] {
+      position: absolute;
+      inset-block-start: 0;
+      inset-inline-start: 0;
+      width: 1px;
+      height: 1px;
+      margin: 0;
+      opacity: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+
+    /* The keyboard is on the input, which is not seen: the ring is drawn on the button that stands for it. */
+    & input[type='file']:focus-visible ~ [data-slot='button'] {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: 2px;
+    }
+
+    & [data-slot='button'] {
+      flex: none;
+    }
+  }
+
+  [data-slot='file-field-names'] {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &[data-none] {
+      color: var(--m-ink-muted);
+    }
+  }
+
+  /* A card of several: the whole card is the checkbox and the one target, the square at its end its picture. */
+  [data-slot='check-cards'] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--m-space-2);
+
+    &[data-fit] {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr));
+    }
+  }
+
+  [data-slot='check-cards-card'] {
+    display: flex;
+    align-items: center;
+    gap: var(--m-space-2h);
+    padding: var(--m-space-2h) var(--m-space-3);
+    border: 1px solid var(--m-line-control);
+    border-radius: var(--m-radius);
+    background: var(--m-surface);
+    /* The card may be a button, which would centre its words and set them in its own face. */
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+    transition:
+      background-color var(--m-fast),
+      border-color var(--m-fast);
+
+    &:hover {
+      background: var(--m-raised);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: 2px;
+    }
+
+    &[data-checked] {
+      border-color: var(--m-accent);
+      background: var(--m-accent-soft);
+      box-shadow: inset 0 0 0 1px var(--m-accent);
+    }
+
+    &[aria-disabled='true'] {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    & [data-slot='choice-label'] {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      /* A lone card's word is centred on its row; here it is a column, where that would centre it across. */
+      align-items: flex-start;
+      font-weight: var(--m-weight-medium);
+    }
+
+    & [data-slot='choice-hint'] {
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-xs);
+      font-weight: var(--m-weight-regular);
+    }
+
+    /* The square is a picture here, not a control: it takes no press of its own. */
+    & [data-slot='checkbox'] {
+      flex: none;
+      margin: 0;
+      pointer-events: none;
+    }
+  }
+
+  /* An amount set by a slider: the browser's own range, so the field's id, its label and a form's reset reach it as
+     they reach any input. The filled part of the track is drawn from --range-share, which the control sets from its
+     value, since WebKit has no part for it. */
+  [data-slot='field-control'][data-kind='range'] {
+    --range-share: 0%;
+    width: 100%;
+    height: 1.375rem;
+    margin: var(--m-space-3) 0 0;
+    padding: 0;
+    background: transparent;
+    appearance: none;
+    cursor: pointer;
+
+    &::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 2px;
+      background: linear-gradient(to right, var(--m-accent) 0 var(--range-share), var(--m-line-strong) var(--range-share) 100%);
+    }
+
+    &::-webkit-slider-thumb {
+      appearance: none;
+      width: 1.125rem;
+      height: 1.125rem;
+      /* Centres the thumb on the 4px track: (4 - 18) / 2. */
+      margin-top: -7px;
+      border: 2px solid var(--m-accent);
+      border-radius: 50%;
+      background: var(--m-surface);
+      box-shadow: var(--m-shadow-control);
+    }
+
+    &::-moz-range-track {
+      height: 4px;
+      border-radius: 2px;
+      background: var(--m-line-strong);
+    }
+
+    &::-moz-range-progress {
+      height: 4px;
+      border-radius: 2px;
+      background: var(--m-accent);
+    }
+
+    &::-moz-range-thumb {
+      width: 0.875rem;
+      height: 0.875rem;
+      border: 2px solid var(--m-accent);
+      border-radius: 50%;
+      background: var(--m-surface);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring);
+      outline-offset: 2px;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}

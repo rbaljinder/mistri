@@ -6,7 +6,7 @@
  * control moves) and the host the component is drawn into.
  */
 import { DashHead } from './DashHead.js';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   allowMutationExit,
   api,
@@ -36,7 +36,7 @@ import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { pluralOf } from '@mistriwork/engine/shared/appNoun.js';
 import { AppList } from './AppList.js';
 import { appListFor, appListQuery, newRecordNoun, splitOf, type ListEntry, type ListSpec } from './appListModel.js';
-import { onDemand } from './onDemand.js';
+import { onDemand, useArrived } from './onDemand.js';
 import { dashboardSelection, rootSlot, type DashboardDef } from './dashboardModel.js';
 import { preloadDashboardParts } from './dashboardParts.js';
 import { NewRecordButton, type FormSpec } from './NewRecordButton.js';
@@ -94,7 +94,7 @@ export function AppListRoom({ entry, spec: given, navigate }: AppListRoomProps) 
   const table = findTable(entry.table) as TableMeta | undefined;
   const noun = newRecordNoun(spec, table?.name ?? entry.table);
   /* An import is the App framework's (ImportButton.tsx), drawn through the shell's slot. */
-  const { ImportButton } = shell().slots;
+  const { ImportButton, ListSummary } = shell().slots;
   return (
     <div className="applist-host">
       <AppList
@@ -102,6 +102,8 @@ export function AppListRoom({ entry, spec: given, navigate }: AppListRoomProps) 
         spec={spec}
         navigate={to}
         embedded={Boolean(navigate)}
+        /* The list's figures are a dashboard's metrics, drawn by the shell that draws dashboards. */
+        summary={ListSummary && spec.summary?.length && !navigate ? <SummaryStrip Part={ListSummary} sections={spec.summary} /> : undefined}
         newButton={
           <>
             {ImportButton && (
@@ -375,5 +377,41 @@ function RowPageRoom({ entry }: { entry: RowEntry }) {
     <p role="status" className="note">
       {say('common.reading')}
     </p>
+  );
+}
+
+/**
+ * A list's summary, with its room held while the part that draws it is on its way (the dashboard's drawing, fetched
+ * the first time a list has one): a strip of as many cards, each with its name and the lines its figure will take,
+ * dressed by the same rules. The list under it then starts where it will stay.
+ */
+function SummaryStrip({
+  Part,
+  sections,
+}: {
+  Part: NonNullable<ReturnType<typeof shell>['slots']['ListSummary']>;
+  sections: readonly unknown[];
+}) {
+  /* The shell's slot is a part fetched on demand (appnav.js); one that is not is here already. */
+  const part = useMemo(() => {
+    const waits = Part as typeof Part & Partial<{ ready(): Promise<void>; here(): boolean }>;
+    return { ready: () => waits.ready?.() ?? Promise.resolve(), here: () => waits.here?.() ?? true };
+  }, [Part]);
+  const here = useArrived(part);
+  if (here) return <Part sections={sections} />;
+  return (
+    <section className="page-section width-full dash-strip list-summary" aria-hidden="true">
+      <div className="home-cards">
+        {(sections as Array<{ title?: string; target?: unknown }>).map((section, at) => (
+          <div key={at} className="home-card home-card-still">
+            <span className="home-card-value">
+              <span className="sk-bar home-card-wait" />
+            </span>
+            <span className="home-card-label">{section.title}</span>
+            {section.target !== undefined && <span className="dash-target">{'\u00a0'}</span>}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

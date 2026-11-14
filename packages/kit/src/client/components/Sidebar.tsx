@@ -248,10 +248,13 @@ export function Sidebar({ host, footerHost: suppliedFooterHost, onSelect, tabNav
         const order = item.footOrder ? { order: item.footOrder } : undefined;
         const indent =
           item.depth && !(rail && folded) ? ({ '--nav-indent': `${Math.min(item.depth, 4) * 12}px`, ...order } as CSSProperties) : order;
+        /* Whether the row stands inside a group, said where a folded rail draws no inset to read it from (the pane
+           bar's trail, sidebarShell.js). */
+        const place = { style: indent, 'data-nested': item.depth ? '' : undefined };
         switch (item.kind) {
           case 'target':
             return (
-              <li key={`target:${i}:${item.href}`} style={indent}>
+              <li key={`target:${i}:${item.href}`} {...place}>
                 <a
                   className="app-nav-target"
                   href={item.href}
@@ -342,7 +345,7 @@ export function Sidebar({ host, footerHost: suppliedFooterHost, onSelect, tabNav
             );
           case 'missing':
             return (
-              <li key={`m${i}`} style={indent}>
+              <li key={`m${i}`} {...place}>
                 <button type="button" className="nav-missing" title={hover(item.label)} onClick={() => toast(item.error, 'error')}>
                   <NavGlyph icon={item.icon} label={item.label} railed={rail} color={item.navColor} />
                   <span className="nav-label">{item.label}</span>
@@ -352,7 +355,7 @@ export function Sidebar({ host, footerHost: suppliedFooterHost, onSelect, tabNav
             );
           case 'dash':
             return (
-              <li key={`d${item.view}`} style={indent}>
+              <li key={`d${item.view}`} {...place}>
                 <button
                   type="button"
                   className={item.error ? 'nav-missing' : undefined}
@@ -377,7 +380,7 @@ export function Sidebar({ host, footerHost: suppliedFooterHost, onSelect, tabNav
             );
           case 'form':
             return (
-              <li key={`f${item.view}`} style={indent}>
+              <li key={`f${item.view}`} {...place}>
                 <button
                   type="button"
                   className={item.error ? 'nav-missing' : undefined}
@@ -403,7 +406,7 @@ export function Sidebar({ host, footerHost: suppliedFooterHost, onSelect, tabNav
           case 'table': {
             const index = tableIndexes[i];
             return (
-              <li key={`r${item.table}|${item.navq ?? '-'}|${i}`} style={indent}>
+              <li key={`r${item.table}|${item.navq ?? '-'}|${i}`} {...place}>
                 <TableRow
                   item={item}
                   index={index}

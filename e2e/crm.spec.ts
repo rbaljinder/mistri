@@ -137,7 +137,7 @@ test("the New form: human labels, the page's own controls, a record picker, and 
   await expect(dialog.locator('.insert-field label')).toHaveCount(7);
   await expect(dialog.getByText(/integer|text required/)).toHaveCount(0);
   await expect(dialog.locator('select')).toHaveCount(0);
-  await expect(dialog.locator('.dd-button')).toHaveCount(1); // source
+  await expect(dialog.locator('[data-slot="select-trigger"]')).toHaveCount(1); // source
   await expect(dialog.locator('.picker')).toHaveCount(1); // owner
   // Submitting empty names every required field, and nothing went to the wire.
   await dialog.getByRole('button', { name: 'Add' }).click();
@@ -177,7 +177,8 @@ test('the New form draws its rows side by side at a desk, boxes level whatever i
     name === 'Owner'
       ? dialog.locator('.picker', { has: page.getByRole('combobox', { name: 'Owner', exact: true }) })
       : name === 'Source'
-        ? dialog.getByRole('button', { name: /^Source(?: |$)/ })
+        ? // The listbox's button, not the line that names it in the form's summary of what is wrong.
+          dialog.locator('[data-slot="select-trigger"]').and(dialog.getByRole('button', { name: /^Source(?: |$)/ }))
         : dialog.getByRole('textbox', { name, exact: true });
   const box = async (name: string) => (await control(name).boundingBox())!;
   const level = async (left: string, right: string) => {
@@ -186,7 +187,7 @@ test('the New form draws its rows side by side at a desk, boxes level whatever i
     expect(Math.abs(a.y - b.y), `${left} and ${right} start level`).toBeLessThan(1);
     expect(Math.abs(a.height - b.height), `${left} and ${right} are one height`).toBeLessThan(1);
   };
-  await expect(dialog.locator('.form-columns')).toHaveCount(2);
+  await expect(dialog.locator('[data-slot="columns"]')).toHaveCount(2);
   await level('Email', 'Phone');
   await level('Source', 'Owner');
   // An error under one half (Email is required) and help under the other (Phone's) leave the boxes level.
@@ -233,8 +234,8 @@ test('form defaults: authored order, cleared presets and explicit null survive a
     const form = page.locator('.newpanel');
     // The authored order; the needed fields are simply asked, and the one that may be left empty says so beside its label.
     await expect(form.locator('.insert-field label')).toHaveText(['Phone', 'Company', 'Name']);
-    await expect(form.locator('.insert-field .form-field-optional-word')).toHaveCount(1);
-    await expect(form.locator('.insert-field').first().locator('.form-field-optional-word')).toHaveText('(optional)');
+    await expect(form.locator('.insert-field [data-slot="field-optional"]')).toHaveCount(1);
+    await expect(form.locator('.insert-field').first().locator('[data-slot="field-optional"]')).toHaveText('(optional)');
     await expect(form.getByRole('textbox', { name: 'Phone', exact: true })).toHaveAttribute('placeholder', 'No value');
     await form.getByRole('textbox', { name: 'Company', exact: true }).clear();
     await form.getByRole('textbox', { name: 'Name', exact: true }).clear();

@@ -84,7 +84,8 @@ export function ClaimInvitation({
           ref={fields.token}
           type="password"
           name="token"
-          className="field-control signin-input"
+          data-slot="input"
+          className="signin-input"
           autoComplete="off"
           spellCheck={false}
           required
@@ -98,7 +99,8 @@ export function ClaimInvitation({
           ref={fields.name}
           type="text"
           name="name"
-          className="field-control signin-input"
+          data-slot="input"
+          className="signin-input"
           autoComplete="name"
           required
           maxLength={120}
@@ -111,7 +113,8 @@ export function ClaimInvitation({
           ref={fields.password}
           type="password"
           name="password"
-          className="field-control signin-input"
+          data-slot="input"
+          className="signin-input"
           autoComplete="new-password"
           required
           minLength={8}
@@ -125,7 +128,8 @@ export function ClaimInvitation({
           ref={fields.confirm}
           type="password"
           name="confirm"
-          className="field-control signin-input"
+          data-slot="input"
+          className="signin-input"
           autoComplete="new-password"
           required
           minLength={8}

@@ -169,7 +169,12 @@ describe('the landing with a dashboard', () => {
     draw(
       <AppLanding
         app={app}
-        firstDash={{ id: 'sales', label: 'Sales', sections: [], windows: ['last 30 days'] }}
+        firstDash={{
+          id: 'sales',
+          label: 'Sales',
+          sections: [{ kind: 'metric', table: 'deal', title: 'Won', over: 'closed_on' }],
+          windows: ['last 30 days'],
+        }}
         loadError=""
         pages={[]}
         dashboardEntry={route}

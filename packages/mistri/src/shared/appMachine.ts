@@ -527,7 +527,7 @@ export function machineActions(
  */
 export function withMachineSteppers<P extends { base: string; sections: ReadonlyArray<object> }>(
   pages: readonly P[],
-  machineOf: (base: string) => { machine: AppMachineDef; words?: Record<string, string> } | undefined,
+  machineOf: (base: string) => { machine: AppMachineDef; words?: Record<string, string>; tones?: Record<string, string> } | undefined,
 ): P[] {
   return pages.map((page) => {
     const found = machineOf(page.base);
@@ -539,12 +539,19 @@ export function withMachineSteppers<P extends { base: string; sections: Readonly
       .map((presentation) => sections.findIndex((section) => section.kind === 'fields' && drawn(section) === presentation))
       .find((index) => index >= 0);
     if (at === undefined || sections[at].workflow) return page;
-    const { machine, words = {} } = found;
-    const steps = machinePath(machine).map((value) => ({
-      value,
-      label: typeof words[value] === 'string' ? words[value] : fieldLabel(value),
-    }));
-    if (steps.length < 2) return page;
+    const { machine, words = {}, tones = {} } = found;
+    const said = (value: string) => (typeof words[value] === 'string' ? words[value] : fieldLabel(value));
+    const road = machinePath(machine);
+    /* A road whose only end is trouble (an order's "Returned", the one final state) stops a step short: the trouble is
+       an outcome, drawn apart, not the fifth step of a good order. So is every other way out (cancelled, withdrawn). */
+    const troubled = (value: string) => tones[value] === 'bad' || tones[value] === 'warn';
+    if (road.length > 2 && troubled(road[road.length - 1])) road.pop();
+    const outcomes = machine.states.filter((state) => state.final && !road.includes(state.name)).map((state) => state.name);
+    const steps: Array<{ value: string; label: string; outcome?: true }> = [
+      ...road.map((value) => ({ value, label: said(value) })),
+      ...outcomes.map((value) => ({ value, label: said(value), outcome: true as const })),
+    ];
+    if (road.length < 2) return page;
     return {
       ...page,
       sections: sections.map((section, index) =>

@@ -6,7 +6,7 @@
    the rest are buttons, quiet until they are pressed. */
 .applist-search { display: inline-flex; flex: 0 1 17rem; min-width: 10rem; }
 .applist-search-input {
-  box-sizing: border-box; width: 100%; min-height: 30px; margin: 0; padding: 0 var(--space-3h);
+  box-sizing: border-box; width: 100%; min-height: var(--control-h-sm); margin: 0; padding: 0 var(--space-3h);
   font: var(--text-base) var(--sans); color: var(--ink);
   background: var(--ground);
   border: 1px solid var(--line-control); border-radius: var(--radius);
@@ -19,26 +19,49 @@
 .applist-search-input:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 1px; }
 
 .applist-slot { display: inline-flex; }
-/* A filter not yet asked for: its name behind a +, on a dashed hairline that
-   says "a place for a filter" without being a field. */
+/* A filter not yet asked for: its name before a caret, on a quiet solid edge, as any control that opens a list is.
+   A + before it on a dashed edge read as "add a building", or as a place left empty, to people who had not met the
+   list. The caret stands in the box the set chip's × takes, so setting a filter adds the value's width alone. */
 .applist-add {
-  display: inline-flex; align-items: center; gap: var(--space-2);
-  box-sizing: border-box; min-height: 30px; margin: 0; padding: 0 var(--space-3h);
+  display: inline-flex; align-items: center; gap: 0;
+  box-sizing: border-box; min-height: var(--control-h-sm); margin: 0; padding: 0 var(--space-1) 0 var(--space-3h);
   font: var(--text-sm) var(--sans); color: var(--ink-muted); white-space: nowrap;
   background: transparent; cursor: pointer;
-  border: 1px dashed var(--line-strong); border-radius: var(--radius);
+  border: 1px solid var(--line-strong); border-radius: var(--pill-radius, 999px);
 }
-.applist-add-mark { color: var(--ink-subtle); font-size: var(--text-md); line-height: 1; }
+.applist-add-mark { min-width: 24px; text-align: center; color: var(--ink-subtle); font-size: var(--text-xs); line-height: 1; }
+/* How many of the filters behind More are set: said on the button, so none narrows the rows unseen. */
+.applist-add-count {
+  margin-left: var(--space-2); padding: 0 var(--space-2); border-radius: 999px;
+  background: var(--accent-soft, var(--raised)); color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums;
+}
 .applist-add:hover, .applist-add[aria-expanded="true"] { color: var(--ink); border-color: var(--ink-muted); }
+/* The list's own control at the bar's end (ListColumns.tsx): a mark and a word, no edge until it is pointed at, so it
+   reads apart from the filters before it. */
+.applist-columns {
+  display: inline-flex; align-items: center; gap: var(--space-2); box-sizing: border-box;
+  min-height: var(--control-h-sm); margin: 0; padding: 0 var(--space-3);
+  border: 0; border-radius: var(--radius); background: none; cursor: pointer;
+  font: 500 var(--text-sm) var(--sans); color: var(--ink-muted); white-space: nowrap;
+}
+.applist-columns[aria-expanded="true"] { background: var(--raised); color: var(--ink); }
+@media (hover: hover) { .applist-columns:hover { background: var(--raised); color: var(--ink); } }
+.applist-columns:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 1px; }
 /* The phone's one button for every picker is a control, not a place: a solid hairline. */
-.applist-sheet-open { border-style: solid; color: var(--ink); }
+.applist-sheet-open { padding-inline: var(--space-3h); color: var(--ink); }
 @media (prefers-reduced-motion: no-preference) {
   .applist-add, .applist-chip-open { transition: color var(--t-hover) var(--ease-out), border-color var(--t-hover) var(--ease-out); }
 }
 
 /* The list's chips, at the height of the row they sit in; a chip's words open its picker. */
-.applist-fields .applist-chip { box-sizing: border-box; min-height: 30px; padding: 0 var(--space-1) 0 0; gap: 0; font-size: var(--text-sm); }
+.applist-fields .applist-chip { box-sizing: border-box; min-height: var(--control-h-sm); padding: 0 var(--space-1) 0 0; gap: 0; font-size: var(--text-sm); }
 .applist-fields .applist-chip > .applist-chip-text { padding: 0 var(--space-2h) 0 var(--space-3h); }
+/* A set filter: the label where the unset one said it, never cut; then what is asked, cut at a cap with the whole
+   phrase in the chip's title and name; then a count of the values after the first. */
+.applist-chip-text { gap: var(--space-2); }
+.applist-chip-label { flex: none; color: var(--ink-muted); }
+.applist-chip-value { min-width: 0; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-weight: 500; }
+.applist-chip-more { flex: none; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 .applist-chip-open {
   align-self: stretch; display: inline-flex; align-items: center; margin: 0;
   border: 0; border-radius: var(--radius); background: none; color: inherit; font: inherit; cursor: pointer;
@@ -50,14 +73,16 @@
 /* On a phone the row's controls are the large size (a Button's 40px), the sort's with them: a thumb's target. */
 @media (max-width: 600px) {
   .applist-search { flex: 1 1 10rem; }
-  .applist-search-input, .applist-sheet-open, .applist-sort .dd-button { min-height: 40px; }
+  .applist-search-input, .applist-sheet-open, .applist-sort [data-slot='select-trigger'] { min-height: 40px; }
 }
 
-/* A picker: one box over the page, hairlines inside. */
+/* A picker: one box over the page, hairlines inside. Its parts pad themselves, so the popover's own padding is none:
+   a facet's rule runs edge to edge. */
 .filter-pop {
   box-sizing: border-box; width: max-content; min-width: 15rem; max-width: min(22rem, var(--available-width, 22rem));
+  padding: 0;
   background: var(--surface); color: var(--ink);
-  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-pop, var(--radius));
   box-shadow: var(--shadow-pop);
 }
 .filter-pop:focus, .filter-pop:focus-visible { outline: none; }
@@ -70,7 +95,7 @@
 .filter-pop .facet { border-top: 0; padding: var(--space-4) var(--space-4h) var(--space-3h); }
 .filter-pop .facet-clear { top: 12px; right: 14px; }
 .filter-pop .facet-values { max-height: min(18rem, 50vh); overflow-y: auto; }
-.filter-pop .applist-quick-text { box-sizing: border-box; width: 100%; min-height: 30px; }
+.filter-pop .applist-quick-text { box-sizing: border-box; width: 100%; min-height: var(--control-h-sm); }
 .filter-pop-foot { display: flex; justify-content: flex-end; padding: var(--space-3h) var(--space-4h) var(--space-4); border-top: 1px solid var(--line); }
-.filter-pop-foot .primary { min-height: 30px; }
+.filter-pop-foot .primary { min-height: var(--control-h-sm); }
 }

@@ -539,7 +539,7 @@ test('before the typed search is asked, the reference list offers only the rows 
   await user.click(box);
   expect(await screen.findAllByRole('option')).toHaveLength(3);
   /* Typed (an `inputType`, so not autofill) and entered with only microtasks
-     between (Base UI lights the first row in one), so the 150 ms pause
+     between (the list lights its first row in one), so the 150 ms pause
      cannot end before Enter. */
   fireEvent.input(box, { target: { value: 'rob' }, inputType: 'insertText' });
   await act(async () => {});

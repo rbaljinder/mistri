@@ -12,11 +12,11 @@ for (const width of [1024, 390])
     const results = page.locator('.applist-grid').first();
     const firstRow = width > 600 ? results.locator('tbody tr').first() : results.getByRole('listitem').first();
     await expect(firstRow).toBeVisible();
-    /* On a phone the tabs take a row of their own under the search and Filters, and fold what does not fit under
-       More (00b025f7): sharing the one row, the first tab's count was cut off. Elsewhere the strip is
-       one row. */
+    /* The tabs take a row of their own and the bar another, at every width (docs/design.md, Standing layout rules):
+       on a desk the tabs stand over the bar, on a rule; on a phone under the search and Filters, and fold what does
+       not fit under More (00b025f7). Sharing one row, the first tab's count was cut off. */
     const phone = width <= 760;
-    await expect(controls).toHaveCSS('flex-wrap', phone ? 'wrap' : 'nowrap');
+    await expect(controls).toHaveCSS('flex-wrap', 'wrap');
     await expect(controls).toHaveCSS('flex-shrink', '0');
     await expect(controls.locator('.applist-fields')).toHaveCSS('flex-wrap', phone ? 'wrap' : 'nowrap');
     const before = { controls: (await controls.boundingBox())!, results: (await results.boundingBox())! };
@@ -58,7 +58,11 @@ for (const width of [1024, 390])
       expect(tabs.y).toBeGreaterThanOrEqual(fields.y + fields.height - 0.5);
       expect(Math.abs(tabs.x - fields.x)).toBeLessThan(1);
       expect(tabs.x + tabs.width).toBeLessThanOrEqual(after.controls.x + after.controls.width + 0.5);
-    } else expect(Math.abs(tabs.y + tabs.height / 2 - fields.y - fields.height / 2)).toBeLessThan(1);
+    } else {
+      // On a desk the tabs' row is over the bar's, both from the room's one left edge.
+      expect(fields.y).toBeGreaterThanOrEqual(tabs.y + tabs.height - 0.5);
+      expect(Math.abs(tabs.x - fields.x)).toBeLessThan(1);
+    }
     // The last control is in reach without scrolling: the filters fold into
     // "+ Filter" and the tabs into More (useTabFold.ts), so neither the row nor
     // the tabs' strip scrolls sideways to show it. The control to try is the one furthest right *on screen*, which is not the

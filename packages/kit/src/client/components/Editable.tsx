@@ -151,7 +151,7 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
       node instanceof HTMLInputElement
         ? node
         : node instanceof HTMLDivElement
-          ? node.querySelector<HTMLInputElement>('input.date-field-input')
+          ? node.querySelector<HTMLInputElement>('[data-slot="date-field"] > input[data-slot="input"]')
           : null;
     return {
       unresolvedReference: unresolved.current,
@@ -194,7 +194,9 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
   useLayoutEffect(() => {
     const node = input.current;
     const control =
-      node instanceof HTMLInputElement || node instanceof HTMLSelectElement ? node : node?.querySelector<HTMLElement>('input, .dd-button');
+      node instanceof HTMLInputElement || node instanceof HTMLSelectElement
+        ? node
+        : node?.querySelector<HTMLElement>('input, [data-slot="select-trigger"]');
     if (!control || !error) return;
     const described = control.getAttribute('aria-describedby')?.split(/\s+/).filter(Boolean) ?? [];
     const invalid = control.getAttribute('aria-invalid');
@@ -218,7 +220,9 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
     const node = input.current;
     if (!error || !node || !takeFieldFocus(table.id, recordKey, column.name)) return;
     const control =
-      node instanceof HTMLInputElement || node instanceof HTMLSelectElement ? node : node.querySelector<HTMLElement>('input, .dd-button');
+      node instanceof HTMLInputElement || node instanceof HTMLSelectElement
+        ? node
+        : node.querySelector<HTMLElement>('input, [data-slot="select-trigger"]');
     control?.focus();
   });
   useLayoutEffect(() => {

@@ -105,8 +105,15 @@ function LanguageRow({ language }: { language: string }) {
   );
 }
 
-export function PrefsDialog({ onClose }: { onClose: () => void }) {
-  const dialog = useRef<ModalHandle>(null);
+/** Which of the rows to draw: a settings page groups them under its own headings; the dialog draws them all. */
+type PrefsPart = 'language' | 'appearance' | 'lists';
+
+/**
+ * The rows themselves, without a dialog round them: the dialog below draws every one, and an App's settings page
+ * (the App framework's SettingsRoom.tsx) draws each part under a heading of its own.
+ */
+export function PrefsRows({ part }: { part?: PrefsPart }) {
+  const shows = (one: PrefsPart) => part === undefined || part === one;
   const language = useSyncExternalStore(subscribeMessages, messageLanguage, messageLanguage);
   const related = useSyncExternalStore(subscribeRelatedRows, relatedRows);
   /* The choices live in their stores; a pick writes there and this looks
@@ -130,12 +137,11 @@ export function PrefsDialog({ onClose }: { onClose: () => void }) {
   /* Which of a suite's Apps opens first is the App framework's (SuiteAppPreference.tsx), drawn through the shell's slot. */
   const { SuitePreference } = shell().slots;
   return (
-    <Modal className="prefs" ref={dialog} onClose={onClose} ariaLabel={message('preferences.title')}>
-      <h2 className="prefs-title">{message('preferences.title')}</h2>
-      {SuitePreference && <SuitePreference />}
-      <LanguageRow language={language} />
+    <>
+      {shows('language') && SuitePreference && <SuitePreference />}
+      {shows('language') && <LanguageRow language={language} />}
       {/* Workbench picks its own look; an App may lock its authored branding. */}
-      {visualThemesOffered() && (
+      {shows('appearance') && visualThemesOffered() && (
         <Row
           label={message('preferences.visualTheme')}
           action={
@@ -158,7 +164,7 @@ export function PrefsDialog({ onClose }: { onClose: () => void }) {
           />
         </Row>
       )}
-      {visualThemesOffered() && visualPaletteOptions().length > 1 && (
+      {shows('appearance') && visualThemesOffered() && visualPaletteOptions().length > 1 && (
         <Row label={message('preferences.palette')} hint={message('preferences.paletteHint')}>
           <Dropdown
             ariaLabel={message('preferences.palette')}
@@ -168,68 +174,88 @@ export function PrefsDialog({ onClose }: { onClose: () => void }) {
           />
         </Row>
       )}
-      {/* A dark-only theme has no light to choose (theme.js shows dark whatever is stored): the pick is shown as what it is. */}
-      <Row label={message('preferences.colorMode')} hint={darkOnly ? message('preferences.colorModeDarkOnly') : undefined}>
-        <Dropdown
-          ariaLabel={message('preferences.colorMode')}
-          disabled={darkOnly}
-          value={darkOnly ? 'dark' : themeChoice()}
-          onChange={(v) => after(() => setTheme(v))}
-          items={[
-            { value: 'system', label: message('preferences.system') },
-            { value: 'light', label: message('preferences.light') },
-            { value: 'dark', label: message('preferences.dark') },
-          ]}
-        />
-      </Row>
-      <Row label={message('preferences.density')}>
-        <Dropdown
-          ariaLabel={message('preferences.density')}
-          value={densityChoice() as string}
-          onChange={(v) => after(() => setDensity(v))}
-          items={[
-            { value: 'comfortable', label: message('preferences.comfortable'), detail: message('preferences.defaultHint') },
-            { value: 'spacious', label: message('preferences.spacious'), detail: message('preferences.spaciousHint') },
-            { value: 'compact', label: message('preferences.compact'), detail: message('preferences.compactHint') },
-          ]}
-        />
-      </Row>
-      <Row label={message('preferences.typography')}>
-        <Dropdown
-          ariaLabel={message('preferences.typography')}
-          value={typographyPreference() as string}
-          onChange={(v) => after(() => setTypography(v))}
-          items={[
-            { value: 'default', label: message('preferences.appDefault') },
-            { value: 'mono', label: message('preferences.mono'), detail: message('preferences.monoHint') },
-            { value: 'sans', label: message('preferences.sans'), detail: message('preferences.sansHint') },
-          ]}
-        />
-      </Row>
-      <Row label={message('preferences.rowsPerList')} hint={message('preferences.rowsPerListHint')}>
-        <Dropdown
-          ariaLabel={message('preferences.rowsPerList')}
-          value={String(pageSize())}
-          onChange={(v) =>
-            after(() => {
-              setPageSize(Number(v));
-              render();
-            })
-          }
-          items={(PAGE_SIZES as number[]).map((n) => ({ value: String(n), label: String(n) }))}
-        />
-      </Row>
-      <Row label={message('preferences.rowsPerRelatedList')} hint={message('preferences.rowsPerRelatedListHint')}>
-        <Dropdown
-          ariaLabel={message('preferences.rowsPerRelatedList')}
-          value={String(related)}
-          onChange={(v) => {
-            setRelatedRows(Number(v));
-            render();
-          }}
-          items={RELATED_SIZES.map((n) => ({ value: String(n), label: String(n) }))}
-        />
-      </Row>
+      {shows('appearance') && (
+        <>
+          {/* A dark-only theme has no light to choose (theme.js shows dark whatever is stored): the pick is shown as what it is. */}
+          <Row label={message('preferences.colorMode')} hint={darkOnly ? message('preferences.colorModeDarkOnly') : undefined}>
+            <Dropdown
+              ariaLabel={message('preferences.colorMode')}
+              disabled={darkOnly}
+              value={darkOnly ? 'dark' : themeChoice()}
+              onChange={(v) => after(() => setTheme(v))}
+              items={[
+                { value: 'system', label: message('preferences.system') },
+                { value: 'light', label: message('preferences.light') },
+                { value: 'dark', label: message('preferences.dark') },
+              ]}
+            />
+          </Row>
+          <Row label={message('preferences.density')}>
+            <Dropdown
+              ariaLabel={message('preferences.density')}
+              value={densityChoice() as string}
+              onChange={(v) => after(() => setDensity(v))}
+              items={[
+                { value: 'comfortable', label: message('preferences.comfortable'), detail: message('preferences.defaultHint') },
+                { value: 'spacious', label: message('preferences.spacious'), detail: message('preferences.spaciousHint') },
+                { value: 'compact', label: message('preferences.compact'), detail: message('preferences.compactHint') },
+              ]}
+            />
+          </Row>
+          <Row label={message('preferences.typography')}>
+            <Dropdown
+              ariaLabel={message('preferences.typography')}
+              value={typographyPreference() as string}
+              onChange={(v) => after(() => setTypography(v))}
+              items={[
+                { value: 'default', label: message('preferences.appDefault') },
+                { value: 'mono', label: message('preferences.mono'), detail: message('preferences.monoHint') },
+                { value: 'sans', label: message('preferences.sans'), detail: message('preferences.sansHint') },
+              ]}
+            />
+          </Row>
+        </>
+      )}
+      {shows('lists') && (
+        <>
+          <Row label={message('preferences.rowsPerList')} hint={message('preferences.rowsPerListHint')}>
+            <Dropdown
+              ariaLabel={message('preferences.rowsPerList')}
+              value={String(pageSize())}
+              onChange={(v) =>
+                after(() => {
+                  setPageSize(Number(v));
+                  render();
+                })
+              }
+              items={(PAGE_SIZES as number[]).map((n) => ({ value: String(n), label: String(n) }))}
+            />
+          </Row>
+          <Row label={message('preferences.rowsPerRelatedList')} hint={message('preferences.rowsPerRelatedListHint')}>
+            <Dropdown
+              ariaLabel={message('preferences.rowsPerRelatedList')}
+              value={String(related)}
+              onChange={(v) => {
+                setRelatedRows(Number(v));
+                render();
+              }}
+              items={RELATED_SIZES.map((n) => ({ value: String(n), label: String(n) }))}
+            />
+          </Row>
+        </>
+      )}
+    </>
+  );
+}
+
+export function PrefsDialog({ onClose }: { onClose: () => void }) {
+  const dialog = useRef<ModalHandle>(null);
+  /* The dialog's own words (its title, Close) follow the language as a row picks it. */
+  useSyncExternalStore(subscribeMessages, messageLanguage, messageLanguage);
+  return (
+    <Modal className="prefs" ref={dialog} onClose={onClose} ariaLabel={message('preferences.title')}>
+      <h2 className="prefs-title">{message('preferences.title')}</h2>
+      <PrefsRows />
       <div className="prefs-foot">
         <button type="button" className="ghost" onClick={() => dialog.current?.close()}>
           {message('common.close')}
