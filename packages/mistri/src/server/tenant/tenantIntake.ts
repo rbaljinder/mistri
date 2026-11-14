@@ -93,6 +93,8 @@ import {
 } from './tenantIntakeModel.js';
 import { observerMounted } from '../observe/mount.js';
 import { captureTenantReadSource, readSharedProfile, type TenantReadSource } from './tenantReadSource.js';
+import { commandZone } from '../app/readerZone.js';
+import { zoneColumn } from '../../shared/appZone.js';
 import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import { scopedLookupReader, type CommandLookupReader } from '../commands/commandLookup.js';
 import { intakeVisitor } from './tenantPublicRead.js';
@@ -466,6 +468,10 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
        only where the submission landed with a tenant. The platform's triage is no one tenant's, so it reads none. */
     const tenant = place === 'tenant' ? await readSharedProfile(reader, app, evidence.tenantId) : undefined;
     admitted.active();
+    /* That tenant's zone for `today()` and `now()`, where `ui.timezone` names a profile column, as its members' commands
+       and its jobs count the day (readerZone.ts). Another table's column is read under a member's scope, which a visitor
+       has none of: the App's zone stands, as it does for a job. */
+    const zone = tenant && zoneColumn(app.ui)?.resource === 'tenant' ? await commandZone(app.ui, deny, tenant) : undefined;
     let run: SavedDraftRun | undefined;
     if (draft) {
       const saved = form as SavedIntakeForm,
@@ -505,6 +511,7 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
               }
             : {}),
           ...(tenant ? { tenant } : {}),
+          ...(zone === undefined ? {} : { timezone: zone }),
           ...(place === 'tenant'
             ? { receiptOwner: captureTenantData({ storeId: identity.storeId, sourceId: identity.source.id, tenantId: evidence.tenantId }) }
             : {}),

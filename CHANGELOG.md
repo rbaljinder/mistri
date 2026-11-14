@@ -5,6 +5,12 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.55
+
+- **A public form's submission counts the day in its tenant's zone.** Where `ui.timezone` names a column of the tenant profile (`tenant.<column>`), a submission placed with a tenant hands its handler that tenant's zone, so `today()` and `now()` agree with the tenant's members' commands and its jobs. A submission sent to the platform's triage, a tenant with no zone on its row, and a zone held on another table keep the App's zone: a visitor has no member scope to read another table under.
+- **A message whose public links cannot be placed drops the sentences that held them.** Previously only the link was removed, which left sentences such as "Apply in steps at." Now the whole sentence goes, the sentences around it stay, and an empty line goes with it.
+- **A command spread back into `defineCommand` keeps the reads its author declared.** Previously a registered command re-wrapped as `{ ...command, handle }`, or adopted, had every table it wrote read as declared, because the declaration lived beside the original object. The declaration now travels with the command. A spread that replaces `read` is read afresh.
+
 ## 1.0.0-rc.54
 
 - **`mistri migrate backstop new` writes a tenant App's row-security backstop** as the next V file (`tenant_backstop`) rather than leaving it to hand-written SQL. Everything in it comes from the App and its tenant policy: the runtime role (made `NOLOGIN`, never `BYPASSRLS`), `USAGE` on the App's schemas, reads and writes on the tables it writes, reads on its global tables, the sequences those tables own, and on each tenant table row security plus the one pinned `mistri_tenant` policy on its ownership column. The SQL is idempotent and applied by `migrate up` as the owner. Signing in as the role stays the operator's step, so no password lands in the file.
