@@ -274,6 +274,12 @@ test("a phone's summaries say a reference by its record's name, as the grid besi
       { name: 'account_id', type: 'TEXT', nullable: false, primaryKey: false },
     ],
   };
+  // A phone: the records are drawn only where the stylesheet shows them.
+  const media = vi
+    .spyOn(window, 'matchMedia')
+    .mockImplementation(
+      (query: string) => ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} }) as unknown as MediaQueryList,
+    );
   try {
     const data: Data = {
       table: 'invoice',
@@ -296,6 +302,25 @@ test("a phone's summaries say a reference by its record's name, as the grid besi
     expect(summarized).toHaveBeenCalledWith(
       expect.objectContaining({ referenceLabels: { account_id: '__account' }, columns: ['id', 'account_id'] }),
     );
+  } finally {
+    media.mockRestore();
+    delete tables.invoice;
+    summarized.mockClear();
+  }
+});
+
+test('a desk draws no summaries: the stylesheet hides them there, and drawing them was a second copy of every row', () => {
+  tables.invoice = {
+    id: 'invoice',
+    name: 'invoice',
+    schema: '',
+    isView: false,
+    columns: [{ name: 'id', type: 'INTEGER', nullable: false, primaryKey: true }],
+  };
+  try {
+    const data: Data = { table: 'invoice', columns: ['id'], rows: [{ id: 1 }], ms: 7 };
+    render(<TableView entry={entry} data={data} chrome={false} interactive={false} export={false} summaries />);
+    expect(summarized).not.toHaveBeenCalled();
   } finally {
     delete tables.invoice;
     summarized.mockClear();

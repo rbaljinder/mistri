@@ -135,11 +135,12 @@ const untitled = (section: { table?: string; by?: string }) => {
   return section.by ? `${table} by ${(columnLabel(section.table ?? '', section.by) as string | null) ?? humanName(section.by)}` : table;
 };
 
+const TRIMMED = /^(?:your|my|our|their|the|all)\s+(?=\S)|[.!?:]+$/gi;
 /** What a section with nothing in it says, from its own title: "No leases ending soon" under "Leases ending soon", where
     the grid's "No rows match." named neither the section nor why. The title's first word is lower-cased unless it is a
-    name or an acronym (a capital past its first letter). */
+    name or an acronym (a capital past its first letter). A leading possessive goes: "Your charges" says "No charges". */
 function nothingIn(title: string): string {
-  const said = title.trim().replace(/[.!?:]+$/, '');
+  const said = title.trim().replace(TRIMMED, '');
   const first = said.split(/\s+/)[0] ?? '';
   const word = /[A-Z]/.test(first.slice(1)) ? first : first.charAt(0).toLowerCase() + first.slice(1);
   return sayCopy('noneIn', { title: `${word}${said.slice(first.length)}` });

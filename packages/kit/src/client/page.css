@@ -1286,8 +1286,10 @@
     margin-inline: auto;
     background: var(--surface);
   }
-  .pb[aria-busy='true'] .pb-head button,
-  .pb[aria-busy='true'] .pb-foot button {
+  /* Every one of these buttons is disabled while the builder is busy, and the rule says so: keyed on a bare
+     `button`, any aria-busy anywhere (a list's table while it sorts) restyled every button under it, since the
+     browser cannot tell which element's aria-busy a rule is about (test/built-client-vitals.mjs). */
+  .pb[aria-busy='true'] :is(.pb-head, .pb-foot) button[disabled] {
     opacity: 0.55;
     cursor: wait;
   }
@@ -1768,7 +1770,11 @@
     flex: 1;
     border-top: 1px solid var(--line);
   }
-  .timeline-rows > * + * {
+  /* Every row but the first, rather than `* + *` (or `li + li`): a `+` whose right side is a bare tag or `*` is a rule
+     the browser checks against the next sibling of every such element added or removed anywhere in the page, and a
+     list's sort restyled its whole filter row for it, a phone's every summary (test/built-client-vitals.mjs).
+     `:first-child` is asked only of this list's own children. */
+  .timeline-rows > :not(:first-child) {
     margin-top: var(--space-4h);
   }
   .timeline-rows > .is-compact + .is-compact,

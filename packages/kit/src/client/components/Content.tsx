@@ -162,7 +162,7 @@ function ContentBody({ onHome }: { onHome: () => void }) {
   const loadError = shell().inApp() ? shell().loadError() : '';
   /* Spelled apart, so a room in one mode is never taken for the same room
      in the other when the mode changes under the same key. An App's list
-     keeps its room through a refinement too (a header's sort, a page): it
+     keeps its room through a refinement too (a tab, a filter, a search, a header's sort, a page): it
      was keyed by the paint, so a sort threw the whole grid away and built
      it again inside the click, the slowest interaction measured on a list
      (test/built-client-vitals.mjs). */

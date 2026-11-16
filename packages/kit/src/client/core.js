@@ -609,21 +609,65 @@ export function refine(fn) {
    being left until the new room is complete. A seam, so core stays free of
    the DOM it holds; nothing registered, a paint is only a paint. */
 let paintHold = null;
-/** @param {{ before(roomChanged: boolean): void; after(): void } | null} hold */
+/** @param {{ before(roomChanged: boolean): void; after(): void; yields?(): boolean } | null} hold */
 export function setPaintHold(hold) {
   paintHold = hold;
 }
+
+/* A room started over by a press is drawn after the frame the press is in,
+   when the hold says the screen being left would only stand as a picture
+   until the room is complete anyway: drawn inside the click, the picture and
+   the room's first render held the press's own frame back past the
+   interaction budget (a cards list's open, test/built-client-vitals.mjs).
+   What is on show is the same either way. A paint asked for while one waits
+   is the same navigation going on (a redirect, a label): it is drawn at
+   once, as a room started over. */
+let waiting = null;
 
 export function render() {
   if (sessionIdentity().mode === 'locked') return;
   paintTick += 1;
   const shape = tableRoomShape();
-  const roomChanged = !refining || shape === null || shape !== roomOnScreen;
+  let roomChanged = !refining || shape === null || shape !== roomOnScreen;
   if (roomChanged) roomTick += 1;
   roomOnScreen = shape;
+  if (waiting) {
+    waiting();
+    waiting = null;
+    roomChanged = true;
+  } else if (roomChanged && paintHold?.yields?.()) {
+    waiting = afterThisFrame(() => {
+      waiting = null;
+      if (sessionIdentity().mode !== 'locked') paint(true);
+    });
+    return;
+  }
+  paint(roomChanged);
+}
+
+function paint(roomChanged) {
   paintHold?.before(roomChanged);
   flushSync(tellWalk);
   paintHold?.after();
+}
+
+/* Runs `fn` once the frame being made now is painted; returns the way to
+   call it off. The timer stands in where frames stop (a hidden tab). */
+function afterThisFrame(fn) {
+  let done = false;
+  const run = () => {
+    if (done) return;
+    done = true;
+    clearTimeout(fallback);
+    fn();
+  };
+  const frame = requestAnimationFrame(() => setTimeout(run, 0));
+  const fallback = setTimeout(run, 100);
+  return () => {
+    done = true;
+    cancelAnimationFrame(frame);
+    clearTimeout(fallback);
+  };
 }
 
 /* The walk as something a component can watch. Every render and every

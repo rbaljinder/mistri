@@ -130,7 +130,9 @@
       padding: var(--m-space-3h) var(--m-space-4h);
     }
 
-    & > div + div {
+    /* Not `div + div`: a bare tag on the right of `+` is checked against the next sibling of every div added or removed
+       anywhere in the page, and a list's filter restyled each of its rows for it. `:first-child` is asked only here. */
+    & > div:not(:first-child) {
       border-block-start: 1px solid var(--m-line);
     }
 

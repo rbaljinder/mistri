@@ -5,6 +5,21 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.60
+
+- A click answers before the list redraws. A tab, a filter, a search, a header's sort and a page now yield to the
+  browser's paint first, as a room change already did, so the pressed state shows at once and the redraw follows.
+- Less is restyled on each change: a chosen row marks itself instead of being found through `:has()` from the grid,
+  the menu says whether any room draws a mark instead of being read through `:has()` above the whole page, and a
+  rule that matched any `div` next to another one names its own children. A list draws its narrow-screen record
+  summaries only on a narrow screen, not hidden beside the grid on a desk.
+- A filter's popup fades in and leaves at once. It used to fade out too, and a dialog opened during the fade (Save
+  view… straight after a pick) kept the closed picker on the page.
+- A public form on an App's public home sends the language the visitor picked, as a form on its own page already
+  did.
+- An empty list or section whose title starts with "Your", "My", "Our", "Their", "The" or "All" says "No charges",
+  not "No your charges".
+
 ## 1.0.0-rc.59
 
 **Upgrading from rc.58.** `@mistriwork/ui` is redrawn over UI SDK, so a few things an App may lean on changed:

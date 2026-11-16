@@ -19,7 +19,9 @@ import { firstPaintRead } from '@mistriwork/kit/client/firstPaint.js';
 import { setTabTitle, shellBody, shellQuery } from '@mistriwork/kit/client/shellHost.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
 import { homeHrefFor } from './publicHomeLink.js';
-import { localeCookieName } from '@mistriwork/engine/shared/appLocale.js';
+import { pickedLanguage } from './publicLanguage.js';
+
+export { pickedLanguage };
 
 /* Fetched when one is shown: FormDialog brings this module into the App
    shell, whose first paint no saved form is ever on. */
@@ -62,28 +64,6 @@ function offerSignIn(appId) {
   link.href = shown(`/${encodeURIComponent(appId)}/sign-in`);
   link.textContent = say('common.signIn');
   bar.append(link);
-}
-
-/**
- * The language this browser picked for an App (kit messages.ts `setMessageLanguage`), as its cookie holds it now;
- * undefined where it picked none. A form is fetched without cookies, so its read and its submission name the pick
- * themselves (`?locale=`), and a pick made since the page arrived is the one they name.
- * @param {string | undefined} appId
- * @returns {string | undefined}
- */
-export function pickedLanguage(appId) {
-  if (!appId) return undefined;
-  const name = localeCookieName(appId);
-  for (const part of document.cookie.split(';')) {
-    const at = part.indexOf('=');
-    if (at < 0 || part.slice(0, at).trim() !== name) continue;
-    try {
-      return decodeURIComponent(part.slice(at + 1).trim()) || undefined;
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
 }
 
 /**

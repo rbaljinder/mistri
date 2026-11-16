@@ -168,6 +168,24 @@ export function installNavigationHold(host: HTMLElement, reads?: HoldProbe): voi
 }
 
 /**
+ * Whether a paint that starts the room over can wait for the frame the press
+ * that asked for it is in (core.js `render`): a step to another place taken
+ * with the pointer, where the hold would stand a picture of the screen on show
+ * over a room hidden outright. Not a control's own press (a checkbox, a
+ * field): React puts a controlled control back as its event ends, unless what
+ * it changed is drawn inside the event.
+ */
+export function yieldsFirst(entry: Place | undefined): boolean {
+  const pane = content;
+  if (!pane?.isConnected || !shown || hold || !pane.firstElementChild) return false;
+  const now = performance.now();
+  if (now - traversedAt < TRAVERSAL_WINDOW || !lastInput.pointer || now - lastInput.at > 1000) return false;
+  if (entry === shown.entry || placeOf(entry) === shown.place) return false;
+  const target = lastInput.target;
+  return !(target instanceof Element && target.closest('input, select, textarea, label, [contenteditable]'));
+}
+
+/**
  * Before a paint: hold the screen on show when the paint starts the room over.
  * `room` is whether the room is new; `entry` and `depth` are the walk's top
  * entry and length as the paint will draw them.
@@ -459,8 +477,12 @@ function picture(pane: HTMLElement): { copy: HTMLElement; picture: HTMLElement; 
   twin.removeAttribute('aria-busy');
   twin.style.height = '100%';
   twin.style.overflow = 'hidden';
+  /* Only what stands above the pane's bottom edge is copied: the picture is cut to the pane's height, and the
+     rows and cards below it, copied, cost a click its style and layout for nothing (a cards list's open, on the
+     vitals' slowed CPU). */
+  const fold = pane.getBoundingClientRect().bottom;
   for (const child of Array.from(pane.children)) {
-    if (child instanceof HTMLElement && !child.classList.contains('nav-held')) twin.append(still(child));
+    if (child instanceof HTMLElement && !child.classList.contains('nav-held')) twin.append(still(child, fold));
   }
   inner.append(twin);
   return { copy, picture: twin, scrolled: pane.scrollTop };
@@ -472,12 +494,30 @@ function picture(pane: HTMLElement): { copy: HTMLElement; picture: HTMLElement; 
  * not join a group), and so does autofocus; a canvas is copied as its
  * picture, and a field as the value typed into it.
  */
-function still(node: HTMLElement): HTMLElement {
-  const copy = node.cloneNode(true) as HTMLElement;
+function still(node: HTMLElement, fold: number): HTMLElement {
+  const copy = upTo(node, fold);
   for (const element of [copy, ...Array.from(copy.querySelectorAll<HTMLElement>('[name], [autofocus]'))]) {
     element.removeAttribute('name');
     element.removeAttribute('autofocus');
   }
+  return copy;
+}
+
+/* An element whose children run past the fold is copied child by child, and a child that starts below it is left
+   out: in the flow it comes after everything on show, so nothing on show moves without it. Anything that ends
+   above the fold is copied whole, natively, as the whole pane once was. */
+function upTo(node: HTMLElement, fold: number): HTMLElement {
+  if (node.childElementCount < 2 || node instanceof HTMLSelectElement || node.getBoundingClientRect().bottom <= fold) return whole(node);
+  const copy = node.cloneNode(false) as HTMLElement;
+  for (const child of Array.from(node.childNodes)) {
+    if (!(child instanceof HTMLElement)) copy.append(child.cloneNode(true));
+    else if (child.getBoundingClientRect().top <= fold) copy.append(upTo(child, fold));
+  }
+  return copy;
+}
+
+function whole(node: HTMLElement): HTMLElement {
+  const copy = node.cloneNode(true) as HTMLElement;
   const from = node.querySelectorAll('canvas');
   if (from.length) {
     const to = copy.querySelectorAll('canvas');

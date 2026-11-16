@@ -182,6 +182,13 @@ export function Sidebar({ host, footerHost: suppliedFooterHost, onSelect, tabNav
   useLayoutEffect(() => {
     host.classList.toggle('skimming', skimming);
   }, [host, skimming]);
+  /* Whether any room draws a mark, said on the list (structure.css, a markless room keeping the mark's place). Read
+     off the list with `#table-list:has(.nav-icon)`, the rule sat above the whole page: any change in the content
+     pane re-matched it against every button there, and a header's sort spent its click restyling them
+     (test/built-client-vitals.mjs). Read after every draw, since the marks are whatever the rows drew. */
+  useLayoutEffect(() => {
+    host.toggleAttribute('data-marks', host.querySelector('.nav-icon') !== null);
+  });
   /* The current row is brought clear of the foot's fade (features.css `scroll-padding-bottom`): a page you are on that
      sits under the fade reads as greyed out, as if disabled. */
   useLayoutEffect(() => {

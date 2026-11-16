@@ -1709,7 +1709,8 @@ div.form-problems {
 }
 div.form-problems > p { margin: 0; font-weight: 600; color: var(--ink); }
 div.form-problems > ul { margin: 0; padding-inline-start: var(--space-5); }
-div.form-problems li + li { margin-top: var(--space-1); }
+/* Not `li + li`: a tag on the right of `+` is checked against every list item added anywhere (page.css, .timeline-rows). */
+div.form-problems li:not(:first-child) { margin-top: var(--space-1); }
 div.form-problems button {
   min-height: 0; height: auto; padding: 0; border: 0; border-radius: var(--radius-sm, 2px); background: none;
   color: var(--status-critical); font: inherit; font-weight: 600;
@@ -1931,8 +1932,11 @@ body.session-locked > :not(#session-lock) { display: none !important; }
 .grid-select-bar .queue-count { margin-inline-end: var(--space-3); font-weight: 600; color: var(--ink); white-space: nowrap; }
 /* A line under the row's name keeps the body's weight (the name's is themeFamilies.css's). */
 .app-mode tbody tr > td:is(:first-child:not(.row-host), .row-host + td) .cell-sub { font-weight: 400; }
-/* A chosen row is on the accent's tint: the tick alone was a mark fifteen pixels wide in a row a thousand long. */
-.table-wrap tbody tr:has(> .row-host > .row-select:checked) > td { background: var(--accent-soft); }
+/* A chosen row is on the accent's tint: the tick alone was a mark fifteen pixels wide in a row a thousand long.
+   The row carries its tick (GridSelection.tsx): read off the box with :has(), the rule put every cell of the grid
+   under any change inside it, and a header's sort restyled all of them in its click (test/built-client-vitals.mjs).
+   The attribute is named twice to keep the weight the :has() rule had over a hovered row's tint. */
+.table-wrap tbody tr[data-chosen][data-chosen] > td { background: var(--accent-soft); }
 .row-host .row-select { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 /* Select all sat against the first column's sort button, a finger's 24px
    round it 0.4px short of clear (WCAG 2.5.8, which a 15px box meets by its

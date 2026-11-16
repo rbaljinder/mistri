@@ -802,7 +802,7 @@ function populate({ put, bins, categoryId, TODAY, START }) {
     for (const l of levels.values()) {
       const bin = bins[l.bin - 1];
       if (bin.warehouse !== 2 || bin.aisle !== 'B') continue;
-      cc.lines.push({ level: l, expected: l.qty, counted: k++ % 2 === 0 ? l.qty + (k === 5 ? -2 : 0) : null, open: true });
+      cc.lines.push({ level: l, expected: l.qty, counted: k++ % 2 === 0 ? Math.max(0, l.qty + (k === 5 ? -2 : 0)) : null, open: true });
     }
     counts.push(cc);
   }

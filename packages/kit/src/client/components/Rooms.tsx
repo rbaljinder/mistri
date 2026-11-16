@@ -20,6 +20,7 @@ import {
   pageFor,
   pageView,
   primaryKey,
+  refine,
   refsTo,
   renderCrumbs,
   state,
@@ -67,7 +68,10 @@ export function AppListRoom({ entry, spec: given, navigate }: AppListRoomProps) 
      the same rows. A key naming no view falls back to the suggestion. */
   const spec =
     entry.view && given.id !== entry.view ? (appListFor(entry.table, entry.query, entry.view) as AppListRoomProps['spec']) : given;
-  const to = navigate ?? ((query: string) => go({ ...tableView(entry.table, query), view: entry.view }, 'replace'));
+  /* A tab, a filter, a search: a refinement of the list on screen, so the room is kept and its Query re-asks in place,
+     as a header's sort is. Painted as a new room, each threw the whole list away inside the click and held a deep copy
+     of it over the pane while the next was built — most of a tab switch's time (test/built-client-vitals.mjs). */
+  const to = navigate ?? ((query: string) => refine(() => go({ ...tableView(entry.table, query), view: entry.view }, 'replace')));
   /* A bare table reached by link — `/crm/task` — is the list on its first
      tab, the way the sidebar opens it. Rendered as it arrived it was every
      column of the table under raw headers with no tab lit: the workbench's

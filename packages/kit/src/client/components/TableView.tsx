@@ -43,6 +43,7 @@ import { BesideDetail } from './besideDetail.js';
 import { editableCells, type CellDraw } from './gridCellModel.js';
 import { canEditRow } from '../rowEditing.js';
 import { RecordSummaries, tableSaysMore } from './RecordSummaries.js';
+import { RECORDS_QUERY, useMediaQuery } from './useMediaQuery.js';
 import { canUseDatabaseTools } from '../connectionScope.js';
 import { shell } from '../shellMode.js';
 import { onDemand, useArrived } from './onDemand.js';
@@ -521,6 +522,9 @@ export function TableView({
   /* Records or table: how a narrow screen shows the rows, the reader's pick. The page's own list draws the switch at
      the end of its control strip (AppList), beside the tabs; anywhere else, over the rows. */
   const [layout, setLayout] = useState('records');
+  /* The records are drawn only where they can be seen. Wider, the stylesheet hides them, and a desk drew every row
+     twice for it — once as a summary nobody saw — in every sort, filter and tab (test/built-client-vitals.mjs). */
+  const narrow = useMediaQuery(RECORDS_QUERY);
   const { controls } = useCrumbSlots();
   const presentationSwitch = (element: ReactNode) => (inCrumbs && controls ? createPortal(element, controls) : element);
   const table = findTable(data.table) as TableMeta | undefined;
@@ -741,17 +745,19 @@ export function TableView({
                 />,
               )}
             {/* A reference says its record's name here too, as the grid beside it does. */}
-            <RecordSummaries
-              table={table}
-              data={data}
-              columns={(data.columns ?? []).filter((name) => !hide?.includes(name))}
-              labels={labels}
-              referenceLabels={referenceLabels}
-              list={list}
-              query={entry.query}
-              {...(group ? { group } : {})}
-              {...(adornCell ? { adornFact: (row: Record<string, unknown>, column: string) => adornCell(row, column, 'summary') } : {})}
-            />
+            {narrow && (
+              <RecordSummaries
+                table={table}
+                data={data}
+                columns={(data.columns ?? []).filter((name) => !hide?.includes(name))}
+                labels={labels}
+                referenceLabels={referenceLabels}
+                list={list}
+                query={entry.query}
+                {...(group ? { group } : {})}
+                {...(adornCell ? { adornFact: (row: Record<string, unknown>, column: string) => adornCell(row, column, 'summary') } : {})}
+              />
+            )}
           </>
         )}
         <div className="result-table" aria-busy={busy || undefined}>

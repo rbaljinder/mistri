@@ -162,7 +162,7 @@ const spec = { id: 'tasks', ...view };
 
 const { AppList } = await import('./AppList.js');
 const { installShell } = await import('../shellMode.js');
-const { PHONE_QUERY, RAIL_QUERY } = await import('./useMediaQuery.js');
+const { PHONE_QUERY, RAIL_QUERY, RECORDS_QUERY } = await import('./useMediaQuery.js');
 const { appListQuery, appCrumbLabel, appListFor, currentNavIndex, defaultListShow, litTabFor, visibleQuestion, wholeQuery } =
   await import('./appListModel.js');
 
@@ -260,13 +260,13 @@ function draw(query: string, props = {}) {
 }
 
 /* A phone, as the media queries the list reads say it: a handset is under
-   the phone width and under the width a filter rail needs, so both match —
+   the phone width, the width the records show at and the width a filter rail needs, so all match —
    mocking only one described a window no device has. */
 const onAPhone = () =>
   vi.spyOn(window, 'matchMedia').mockImplementation(
     (query: string) =>
       ({
-        matches: query === PHONE_QUERY || query === RAIL_QUERY,
+        matches: query === PHONE_QUERY || query === RAIL_QUERY || query === RECORDS_QUERY,
         media: query,
         addEventListener() {},
         removeEventListener() {},

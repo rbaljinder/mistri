@@ -403,13 +403,15 @@ describe('the screen', () => {
           { kind: 'rows', table: 'deal', title: 'Leases ending soon' },
           { kind: 'rows', table: 'deal', title: 'SLA breaches' },
           { kind: 'rows', table: 'deal', title: 'Today’s arrivals.' },
+          { kind: 'rows', table: 'deal', title: 'Your charges' },
         ],
       },
     });
     await screen.findAllByText('12 in all');
     const said = rooms.map((room) => (room.empty as { props: { spec: { title: string } } }).props.spec.title);
-    // The first word is lower-cased unless it is an acronym; a closing full stop is not part of the noun.
-    expect(new Set(said)).toEqual(new Set(['No leases ending soon', 'No SLA breaches', 'No today’s arrivals']));
+    // The first word is lower-cased unless it is an acronym; a closing full stop and a leading possessive are not part
+    // of the noun.
+    expect(new Set(said)).toEqual(new Set(['No leases ending soon', 'No SLA breaches', 'No today’s arrivals', 'No charges']));
   });
 
   test('a rows section that asks for row actions hands its table the resource’s verbs; one that does not, none', async () => {
