@@ -325,6 +325,13 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
     [table, names.join(','), spec, definedBoxes], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const [edits, setEdits] = useState<Record<string, BoxEdit>>({});
+  /* A new question keeps the room (Rooms.tsx), so what was typed toward the last one is let go here, as a room
+     started over let it go: a chip's × must not leave its words standing in the box. */
+  const [editsAsked, setEditsAsked] = useState(entry.query);
+  if (editsAsked !== entry.query) {
+    setEditsAsked(entry.query);
+    setEdits({});
+  }
   const editsNow = useRef(edits);
   editsNow.current = edits;
   const touched = (column: string) => column in editsNow.current;
@@ -516,7 +523,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
     writeViews.mutate((views) => renamedView(views, view.name, String(name)));
   };
 
-  /* The paint that replaced the one this person was using: put focus back
+  /* The paint that answered the control this person was using: put focus back
      on the twin of the control they used — in a rail, the very value. */
   useEffect(() => {
     if (!refocus) return;
@@ -540,7 +547,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
       }
     }
     refocus = null;
-  }, []);
+  }, [entry.query]);
 
   /* The grid: rows only — an entry can carry a workbench tab (diagram,
      definition) across the mode flip, and the diagram under the app's
@@ -1201,6 +1208,9 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
             <div className="applist-advanced" hidden={!showAdvanced}>
               <input
                 ref={filter}
+                /* Drawn afresh for each question: a refinement keeps the room (Rooms.tsx), and a kept box would go on
+                   holding the last one's words, which every control composes from (`currentText`). */
+                key={refinement}
                 type="text"
                 className="applist-filter"
                 defaultValue={refinement}
@@ -1273,9 +1283,12 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
           {...railProps}
           boxes={railed ? boxes : boxes.filter((box) => box !== searchBox)}
           onClose={() => setSheet(false)}
+          /* The sheet goes in the click's own frame and the list is asked after it is painted: the rows stand
+             as they were until the new answer arrives either way, and asked inside the click, the sheet stood
+             over the list while the whole list redrew under it (a phone's filter, test/built-client-vitals.mjs). */
           onApply={(text) => {
             setSheet(false);
-            apply(text);
+            requestAnimationFrame(() => setTimeout(() => apply(text), 0));
           }}
         />
       )}

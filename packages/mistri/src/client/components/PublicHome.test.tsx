@@ -1,7 +1,8 @@
 /** A public home drawn in the shell: the landing when its answer names the served view, else the public form of that key. */
 import { afterEach, expect, test, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { localeCookieName } from '@mistriwork/engine/shared/appLocale.js';
 
 const answers: Record<string, unknown> = {};
 const asked: string[] = [];
@@ -31,6 +32,7 @@ function draw(view: string, landingView?: string | null) {
 }
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   asked.length = 0;
   for (const key of Object.keys(answers)) delete answers[key];
 });
@@ -99,4 +101,26 @@ test('the landing, when the payload names it as the home', async () => {
 test('a home nothing answers for is said, not drawn blank', async () => {
   draw('gone');
   expect(await screen.findByText(/could not be loaded: Not found\./)).toBeInTheDocument();
+});
+
+test("a public home form's submit names the visitor's pick of language, as a form in a dialog does", async () => {
+  answers['/api/forms/finance'] = {
+    app,
+    form: { id: 'finance', label: 'Apply for financing', input: [{ name: 'name', label: 'Name', type: 'text' }] },
+  };
+  const sent = vi.fn(
+    async () => new Response(JSON.stringify({ reference: 'R-1', receipt: { id: 'r1', status: 'applied' } }), { status: 200 }),
+  );
+  vi.stubGlobal('fetch', sent);
+  document.cookie = `${localeCookieName(app.id)}=es-MX; path=/`;
+  try {
+    draw('finance', null);
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Name' }), { target: { value: 'Ana' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    await waitFor(() =>
+      expect(sent).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/forms\/finance\?(.*&)?locale=es-MX$/), expect.anything()),
+    );
+  } finally {
+    document.cookie = `${localeCookieName(app.id)}=; path=/; max-age=0`;
+  }
 });

@@ -406,9 +406,13 @@ test('open: "drawer" makes a row a glance — drawer in, Escape out, page one cl
   await page.evaluate(() => localStorage.setItem('mistri.tour.v1', 'done'));
   await page.goto(`${APP}/`);
   await page.locator('#table-list button', { hasText: 'Shipments' }).click();
-  await expect(page.locator('tbody tr').first()).toBeVisible();
+  // The home's rows can stand as a held picture (.nav-held) until the list is drawn: wait for the list itself.
+  await expect(page).toHaveURL(/\/shipments$/);
+  await expect(page.locator('#content > .nav-held')).toHaveCount(0);
+  const rows = page.locator('tbody tr');
+  await expect(rows.first()).toBeVisible();
   const listUrl = page.url();
-  await page.locator('tbody tr').first().click();
+  await rows.first().click();
   await expect(page.locator('.peekpanel')).toBeVisible();
   await expect(page.locator('.peekpanel .field').first()).toBeVisible();
   // A glance is not a step: the URL did not move.

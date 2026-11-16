@@ -41,7 +41,7 @@ import {
   state,
   toast,
 } from './core.js';
-import { afterPaint, beforePaint, installNavigationHold } from './navigationHold.js';
+import { afterPaint, beforePaint, installNavigationHold, yieldsFirst } from './navigationHold.js';
 import { setStartupProbe } from './startupHold.js';
 import { initWriteMode, prepareEditingExit } from './write.js';
 import { bootstrapRequestIdentity, initConnections, refreshConnections, syncConnectionControls } from './connectionList.js';
@@ -752,6 +752,7 @@ export async function boot(me, landingAt, installed) {
   setPaintHold({
     before: (roomChanged) => beforePaint(roomChanged, currentEntry(), state.stack.length),
     after: () => afterPaint(currentEntry(), state.stack.length),
+    yields: () => yieldsFirst(currentEntry()),
   });
   /* A press on a record begins reading its page, so the hold is short (recordCompose.ts). */
   listenForRecordPresses();

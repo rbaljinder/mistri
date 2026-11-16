@@ -4,6 +4,7 @@
  * for every row at once, and the same bulk bar, the same keys and the same
  * per-record writes as a queue over the resource.
  */
+import { useLayoutEffect, useRef, type ComponentProps } from 'react';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import type { AppAction } from '@mistriwork/engine/schema/model.js';
 import { keyOf, rowLabel } from '../core.js';
@@ -81,14 +82,10 @@ export function GridSelection({
           const some = !all && ids.some((id) => chosen.has(id));
           return (
             <RowDecoration key={host} rowKey={host}>
-              <input
-                type="checkbox"
-                className="row-select"
+              <RowBox
                 aria-label={say('selectGroup', { group: group.head(members[0].row[group.column]).label })}
                 checked={all}
-                ref={(box) => {
-                  if (box) box.indeterminate = some;
-                }}
+                indeterminate={some}
                 onClick={(event) => event.stopPropagation()}
                 onChange={() =>
                   change(all ? selection.filter((id) => !ids.includes(id)) : [...selection, ...ids.filter((id) => !chosen.has(id))])
@@ -100,9 +97,7 @@ export function GridSelection({
       {keyed.map((record) => (
         <RowDecoration key={record.id} rowKey={record.id}>
           {/* Choosing is not opening: the click stays on the box. */}
-          <input
-            type="checkbox"
-            className="row-select"
+          <RowBox
             aria-label={say('select', { label: record.label })}
             checked={chosen.has(record.id)}
             onClick={(event) => event.stopPropagation()}
@@ -113,4 +108,24 @@ export function GridSelection({
       {dialogs}
     </>
   );
+}
+
+/**
+ * A row's box, which marks its row as chosen while it is ticked (features.css tints a marked row). The row
+ * says so itself because a rule reading the box from the row with :has() held every cell of the grid to any
+ * change inside it: a header's sort restyled them all in its click.
+ */
+function RowBox({ checked, indeterminate = false, ...props }: ComponentProps<'input'> & { checked: boolean; indeterminate?: boolean }) {
+  const box = useRef<HTMLInputElement>(null);
+  /* Mixed is a property, not an attribute: set on every paint, as the header's box sets it, since a click clears it. */
+  useLayoutEffect(() => {
+    if (box.current) box.current.indeterminate = indeterminate;
+  });
+  useLayoutEffect(() => {
+    const row = box.current?.closest('tr');
+    if (!row || !checked) return undefined;
+    row.setAttribute('data-chosen', '');
+    return () => row.removeAttribute('data-chosen');
+  }, [checked]);
+  return <input ref={box} type="checkbox" className="row-select" checked={checked} {...props} />;
 }

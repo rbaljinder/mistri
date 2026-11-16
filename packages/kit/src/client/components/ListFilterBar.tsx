@@ -444,7 +444,12 @@ function Picker({
           standing={props.standing}
           unit={props.unitOf(box.column)}
           owned={owned}
-          apply={props.apply}
+          /* Closed as it applies, as a choice is: a refinement keeps the room (Rooms.tsx), so React would carry
+             an open popover from the "+" over to the chip that replaces it, drawn over the grid. */
+          apply={(text, focus) => {
+            setOpen(false);
+            props.apply(text, focus);
+          }}
           close={() => setOpen(false)}
         />
       </PopoverContent>

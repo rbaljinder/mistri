@@ -204,7 +204,11 @@ export function AppColumnMenuPopups({
               standing={h.standing}
               unit={h.unitOf(name)}
               owned={mentionsColumn(h.tabQuery, name)}
-              apply={(text) => h.apply(text, name)}
+              /* Closed as it applies, as a sort from the menu is: a refinement keeps the room, and the header with it. */
+              apply={(text) => {
+                setOpen(null);
+                h.apply(text, name);
+              }}
               close={() => setOpen(null)}
             />
           </PopoverContent>

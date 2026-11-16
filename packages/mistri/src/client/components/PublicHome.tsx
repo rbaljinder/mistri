@@ -17,6 +17,7 @@ import { FormSurface, formArrives, submitPublicForm, type FormPresentation } fro
 import { LoadErrorNote } from '@mistriwork/kit/client/components/Landing.js';
 import type { AppLanding } from '../../shared/app.js';
 import { say } from '../copy/public/components/PublicHome.js';
+import { pickedLanguage } from '../publicLanguage.js';
 
 type PublicApp = { id: string; name: string };
 type Found = { kind: 'landing'; app: PublicApp; landing: AppLanding } | { kind: 'form'; app: PublicApp; form: FormPresentation };
@@ -69,7 +70,9 @@ export function PublicHome({ view, loadError, landingView }: { view: string; loa
           appName={data.app.name}
           visitor={{ app: data.app.id }}
           held={{ form: data.form.id }}
-          submit={(submission, input, guard) => submitPublicForm(data.form.id, submission, input, undefined, guard)}
+          submit={(submission, input, guard) =>
+            submitPublicForm(data.form.id, submission, input, undefined, guard, pickedLanguage(data.app.id))
+          }
         />
       ) : found.error ? (
         <p className="note">{say('thisAppsStartPage', { message: found.error.message })}</p>

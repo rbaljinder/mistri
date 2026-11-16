@@ -89,8 +89,10 @@
 @media (prefers-reduced-motion: no-preference) {
   /* A fade and nothing else: a transform on the popup would make it the
      containing block of the reference typeahead's fixed list, which would
-     land away from its box until the transform ended. */
-  .filter-pop { transition: opacity var(--t-popover) var(--ease-out); @starting-style { opacity: 0; } }
+     land away from its box until the transform ended. In, never out: a popup leaves at once (parts.css), and a
+     fade on the way out outlived a dialog opened from the list just after a filter was applied, which kept the
+     closed picker on the page. */
+  .filter-pop:not([data-ending-style]) { transition: opacity var(--t-popover) var(--ease-out); @starting-style { opacity: 0; } }
 }
 .filter-pop .facet { border-top: 0; padding: var(--space-4) var(--space-4h) var(--space-3h); }
 .filter-pop .facet-clear { top: 12px; right: 14px; }

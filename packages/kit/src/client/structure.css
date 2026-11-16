@@ -1509,8 +1509,9 @@
   }
   /* A room with no mark among rooms with one keeps the mark's place empty, so its words start where theirs do. Set
      at the row's edge it read as a heading among the rooms (a first-time reader took "Post rent" for one). A menu
-     in which no room has a mark is untouched: nothing is held where nothing is drawn. */
-  body.app-mode:not(.sidebar-hidden) #table-list:has(.nav-icon) button:not(.nav-group-fold):not(:has(> :is(.nav-icon, .nav-dot)))::before {
+     in which no room has a mark is untouched: nothing is held where nothing is drawn. The list says it has marks
+     (Sidebar.tsx `data-marks`) rather than this asking with :has(), which put every button on the page under it. */
+  body.app-mode:not(.sidebar-hidden) #table-list[data-marks] button:not(.nav-group-fold):not(:has(> :is(.nav-icon, .nav-dot)))::before {
     content: '';
     flex: none;
     width: 16px;
