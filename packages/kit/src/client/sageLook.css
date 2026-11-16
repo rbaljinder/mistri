@@ -26,7 +26,7 @@
      accent is its ink, a warm grey; in a theme built on it, its own accent's. It was the third chart
      colour's, which named no role: when Sage's charts were reordered it turned lavender, and Payday's
      coral, its colour for attention, read as a brown block on its dark ground. */
-  :root:is([data-look-tabs='chosen'], [data-look-windows='chosen']) {
+  :root:is([data-look-tabs='tint'], [data-look-windows='tint']) {
     --chosen: color-mix(in srgb, var(--accent) 14%, var(--surface));
   }
   @media (prefers-color-scheme: dark) {
@@ -96,6 +96,19 @@
     th {
     background: var(--surface);
   }
+  /* A form is a panel too, a page's form and a drawer's body: on the bare ground its fields were the one block of the
+     page not held, beside panels (`fields: 'card'` has always drawn the form as its card). */
+  :root[data-look-fields='panel'] .form-page {
+    background: var(--surface);
+    border: var(--panel-border-width, 1px) solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: none;
+  }
+  /* On a page of its own the panel stands off the pane's top and foot, as a panel stands off everything: flush with
+     the top its corner read as cut by the window. A drawer's body is the drawer's, edge to edge. */
+  :root[data-look-fields='panel'] .newrecord-page-host > .form-page {
+    margin-block: var(--space-5) var(--space-7);
+  }
   /* The larger identity cue belongs to a record's name, not every table row. */
   :root[data-look-avatar='large'] .page-record-avatar {
     width: 44px;
@@ -112,6 +125,16 @@
     padding: var(--panel-pad-block) var(--panel-pad-inline);
     box-shadow: var(--shadow-card);
   }
+  /* The reader's settings (the App's SettingsRoom) are sections too: each a panel, no rule over it, a field's gap
+     between two. */
+  :root[data-look-section='panel'] .settings-section {
+    margin-block-end: var(--space-5);
+    padding: var(--space-6);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+  }
   /* Supporting dashboard lists read as a quiet column; guidance keeps its panel. */
   :root[data-look-section='panel'] .dashboard-layout .page-aside > .page-section:not(.dash-note, .dash-strip) {
     --panel-pad-block: 0px;
@@ -125,7 +148,8 @@
 
   /* Steps inside a panel are cells divided by hairlines, not cards: a bordered card for each step inside the
      panel's own card was a card in a card. A cell's top and left edge are a shadow clipped at the row's own box, so
-     a row that wraps is divided between its rows as between its cells. */
+     a row that wraps is divided between its rows as between its cells. Tinted steps are tiles and keep their own
+     ground and edge in a panel: themeFamilies.css says that pairing, which is neither sheet's to say alone. */
   :root[data-look-section='panel'] .dash-steps {
     clip-path: inset(1px 0 0 1px);
   }
@@ -165,6 +189,41 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
   }
+  /* A record's summary in an App is the same panels, a figure to each: loose on the ground under the workflow they
+     were three small values, read as fields and not as what the record is worth. */
+  :root[data-look-stat='panel'] body.app-mode:not(.public-visitor) .page-field-grid.page-field-summary {
+    gap: var(--space-4);
+    padding-block: 0;
+  }
+  :root[data-look-stat='panel'] body.app-mode:not(.public-visitor) .page-field-summary > .page-field {
+    align-self: stretch;
+    padding: var(--space-4h) var(--space-5) var(--space-5);
+    background: var(--surface);
+    border: var(--panel-border-width, 1px) solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+  :root[data-look-stat='panel'] body.app-mode:not(.public-visitor) .page-field-summary > .page-field:not(.page-field-prose) > dd {
+    font-size: var(--text-xl);
+    font-weight: 600;
+    letter-spacing: -0.012em;
+  }
+  /* By day a figure's panel is lifted by its shadow alone: the hairline round it drew a second edge inside the
+     shadow's. In the dark a shadow says nothing on a dark ground, so the hairline stays. */
+  :root[data-look-stat='panel'] :is(.dash-strip .home-card:nth-child(n), body.app-mode:not(.public-visitor) .page-field-summary > .page-field) {
+    border-color: transparent;
+  }
+  :root[data-look-stat='panel'][data-theme='dark'] :is(.dash-strip .home-card:nth-child(n), body.app-mode:not(.public-visitor) .page-field-summary > .page-field) {
+    border-color: var(--line);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root[data-look-stat='panel']:not([data-theme='light']) :is(.dash-strip .home-card:nth-child(n), body.app-mode:not(.public-visitor) .page-field-summary > .page-field) {
+      border-color: var(--line);
+    }
+  }
+  :root[data-look-stat='panel'] body.app-mode:not(.public-visitor) .workflow-status + .page-field-grid.page-field-summary {
+    margin-top: var(--space-3);
+  }
   :root[data-look-chart='wash'] .chart-area {
     fill: var(--chart-1);
     opacity: 0.14;
@@ -174,52 +233,62 @@
    related tab was a card, and a record page a stack of them (the refusal
    list's "a box round a table"); a dashboard's panel is the one ground a
    table stands on in white, and there it is rows (above). */
-  :root[data-look-table='hairline'] th {
+  :root[data-look-table='hairline'] th:where(:not([data-slot])) {
     border-bottom: 1px solid var(--line);
     font: 600 var(--text-sm) var(--sans);
     padding-block: var(--space-3h);
   }
-  :root[data-look-table='hairline'] td {
+  :root[data-look-table='hairline'] td:where(:not([data-slot])) {
     font-size: var(--text-base);
+  }
+  /* A lane is a quiet tray that holds its head and its cards, each card a sheet on it: the tray says which cards are
+   one lane, so the head needs no rule and the cards no box drawn round them. It was the ruled board with a shadow
+   under each card, the lane itself only a line over loose cards. The edge is kept in the tray's own colour so a lane
+   a card is carried over can say so in the accent (TriageBoard.css) without moving. */
+  html:root[data-look-board='soft'] .triage-lane {
+    border: 1px solid transparent;
+    border-radius: var(--panel-radius, var(--radius-lg));
+    background: color-mix(in oklab, var(--raised) 70%, var(--surface));
+    padding: var(--space-3);
+  }
+  /* A tray keeps a step of its own round its cards, so a card in it is that much narrower than its lane: the lane
+     is a rem wider where it has room, and a card's quiet line (three facts joined) still stands on one line. */
+  html:root[data-look-board='soft'] .triage-board {
+    --lane-min: 16.5rem;
+  }
+  html:root[data-look-board='soft'] .triage-lane.is-over {
+    border-color: var(--accent);
+  }
+  html:root[data-look-board='soft'] .triage-lane-head {
+    padding: var(--space-2) var(--space-2h) 0;
+  }
+  /* A board of rows keeps its heads once, over the rows: each head is the top of its tray's column, and a cell is a
+   place under it. */
+  html:root[data-look-board='soft'] .triage-lane-top {
+    border-top: 0;
+    padding: var(--space-3) var(--space-3h) 0;
+  }
+  html:root[data-look-board='soft'] .triage-cell {
+    padding: var(--space-3);
+  }
+  html:root[data-look-board='soft'] .triage-cell.is-empty:not(.is-over) {
+    background: transparent;
   }
   :root[data-look-board='soft'] :is(.board-card, .triage-card) {
     box-shadow: var(--shadow-card);
   }
-  /* What is chosen: a tint of the accent and the text's ink, never a fill in the accent. */
-  :root[data-look-tabs='chosen'] .tab[aria-selected='true'] {
+  /* What is chosen: a tint of the accent and the text's ink, never a fill in the accent. A record's tabs are the
+     list's: one soft pill for the group that is open, on a page and on a list alike. */
+  :root[data-look-tabs='tint'] :is(.tab, body.app-mode .page-tab)[aria-selected='true'] {
     background: var(--chosen);
     color: var(--ink);
   }
-  /* Record tabs name groups in ordinary language; the accent line says which group is open. */
-  :root[data-look-tabs='chosen'] .page-tabstrip {
-    gap: var(--space-5);
-  }
-  :root[data-look-tabs='chosen'] body.app-mode .page-tab {
-    border: 0;
-    border-bottom: 2px solid transparent;
-    border-radius: 0;
-    padding: var(--space-3) var(--space-1);
-    background: transparent;
-    font: 500 var(--text-base) var(--sans);
-    text-transform: none;
-    letter-spacing: normal;
-    color: var(--ink-muted);
-  }
-  :root[data-look-tabs='chosen'] body.app-mode .page-tab:hover {
-    background: transparent;
-    color: var(--ink);
-  }
-  :root[data-look-tabs='chosen'] body.app-mode .page-tab[aria-selected='true'] {
-    background: transparent;
-    border-color: transparent transparent var(--accent);
-    color: var(--ink);
-  }
-  :root[data-look-windows='chosen'] .dash-windows {
+  :root[data-look-windows='tint'] .dash-windows {
     background: transparent;
     border-color: transparent;
     gap: var(--space-2h);
   }
-  :root[data-look-windows='chosen'] .dash-window[aria-pressed='true'] {
+  :root[data-look-windows='tint'] .dash-window[aria-pressed='true'] {
     background: var(--chosen);
     border-color: transparent;
     box-shadow: none;

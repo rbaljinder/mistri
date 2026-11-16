@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/engine",
-  "version": "1.0.0-rc.58",
+  "version": "1.0.0-rc.59",
   "description": "The engine both products stand on: the adapters (SQLite, Postgres), the catalog, the query language, keyset pages, the HTTP kit and the shared rules. No React.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -967,6 +967,10 @@
     "./shared/themePresets.js": {
       "mistri-built": "./dist/shared/themePresets.js",
       "default": "./src/shared/themePresets.ts"
+    },
+    "./shared/themeRecipeFamilies.js": {
+      "mistri-built": "./dist/shared/themeRecipeFamilies.js",
+      "default": "./src/shared/themeRecipeFamilies.ts"
     },
     "./shared/themeRecipes.js": {
       "mistri-built": "./dist/shared/themeRecipes.js",

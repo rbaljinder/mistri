@@ -129,7 +129,6 @@ const FULL = {
     header: 'hero',
     filters: 'quiet',
     required: 'optional-word',
-    checkbox: 'drawn',
     formStep: 'ruled',
     actionBar: 'raised',
   },
@@ -158,6 +157,12 @@ const NOT_DRAWN: Record<string, string> = {
   'extends.kind': 'a theme value to start from; extends is a base, not a value worn (theme-package.test.ts)',
   contract: 'the contract a published look was written to; another is refused (theme-package.test.ts)',
   from: 'where a published look’s files are read from, kept off the definition the browser is sent (theme-package.test.ts)',
+  brand:
+    'one colour worked out into the roles it reaches, over a look; this theme extends none and names every colour (theme-spec.test.ts)',
+  /* A family sets the default of its parts, and this theme says every part itself, so dropping the family changes
+     nothing here by design: what a family picks, and what wins over it, is held below. */
+  'recipes.blocks': 'a family: the default of section, fields, stat, table and steps, each of which this theme says itself',
+  'recipes.current': 'a family: the default of nav, tabs and windows, each of which this theme says itself',
 };
 
 type Path = Array<string | number>;
@@ -196,6 +201,33 @@ test('every key the schema accepts reaches the compiled theme, or is refused', (
     if (compiled === full) dropped.push(leaf);
   }
   assert.deepEqual(dropped, [], `accepted and dropped by the compiler: ${dropped.join(', ')}`);
+});
+
+test('a family picks its parts; a part said beside it wins, and a family said over a look wins over the look', () => {
+  const colors = { light: FULL.colors.light, dark: FULL.colors.dark };
+  const own = (recipes: Record<string, string>) => compile({ kind: 'theme', id: 'families', label: 'Families', colors, recipes }).recipes!;
+  /* Alone, a family is the whole pick of its parts, over the plain structure. */
+  const tile = own({ blocks: 'tile' });
+  assert.deepEqual([tile.section, tile.fields, tile.stat, tile.table, tile.steps], ['panel', 'panel', 'bento', 'rows', 'tinted']);
+  assert.equal(tile.nav, 'tint', 'a family leaves the parts that are not its own at the default');
+  const pill = own({ current: 'pill' });
+  assert.deepEqual([pill.nav, pill.tabs, pill.windows], ['pill', 'pill', 'lifted']);
+  /* A part the theme says itself stands over its family, whichever is written first. */
+  assert.equal(own({ table: 'open', blocks: 'tile' }).table, 'open');
+  assert.equal(own({ blocks: 'tile', table: 'open' }).stat, 'bento');
+  /* Over a look, the family the theme says replaces the look's parts; the parts no family covers stay the look's. */
+  const over = compile({ kind: 'theme', id: 'over', label: 'Over', extends: 'lumen', recipes: { blocks: 'card' } }).recipes!;
+  const lumen = themePreset('lumen')!.recipes!;
+  assert.deepEqual([over.section, over.fields, over.stat, over.table, over.steps], ['card', 'card', 'panel', 'card', 'flat']);
+  assert.deepEqual([over.nav, over.tabs, over.bar], [lumen.nav, lumen.tabs, lumen.bar]);
+  /* A compiled theme carries the parts only: the first paint sets one attribute a part and knows no family. */
+  assert.equal('blocks' in tile, false);
+  assert.equal('current' in pill, false);
+  /* Off the menu, a renamed value and a removed part are each refused in words an author can act on. */
+  assert.throws(() => own({ blocks: 'boxed' }), /recipes\.blocks is not a family on the menu: pick one of open, ruled, card, panel, tile/);
+  assert.throws(() => own({ tabs: 'chosen' }), /recipes\.tabs: "chosen" is now "tint"/);
+  assert.throws(() => own({ tabs: 'segment' }), /recipes\.tabs: "segment" is now "lifted"/);
+  assert.throws(() => own({ windows: 'chosen' }), /recipes\.windows: "chosen" is now "tint"/);
 });
 
 test("a panel's corner is compiled, worn as --panel-radius and said by theme show", () => {

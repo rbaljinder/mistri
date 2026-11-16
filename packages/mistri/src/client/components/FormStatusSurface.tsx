@@ -142,7 +142,7 @@ function StepUp({
             required
           >
             <input
-              className="field-control"
+              data-slot="input"
               name="code"
               inputMode="numeric"
               autoComplete="one-time-code"
@@ -362,7 +362,7 @@ export function FormStatusSurface({
         {asked.map((item) => (
           <Field key={item.name} label={item.label} problem={blank[item.name]} required>
             <input
-              className="field-control"
+              data-slot="input"
               name={item.name}
               autoComplete="off"
               spellCheck={false}

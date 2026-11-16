@@ -27,6 +27,7 @@ export const PREVIEW_PATHS: readonly RegExp[] = [
   /\[kind=fields\]\.empty( = .*)?$/, // rc.16: a block of fields leaves out what the record does not have
   /\[kind=headline\]\.subtitle( = .*)?$/, // rc.16: a headline's second line, read from a column of the record
   /^views\.[^.]+\[kind=list\]\.group$/, // rows grouped under a heading
+  /^views\.[^.]+\[kind=list\]\.summary(\[|\.|$)/, // a list's summary: a dashboard's metrics in a strip over its tabs
   /\[kind=calendar\]\.span( = .*)?$/, // a calendar's day, week or month
   /^resources\.[^.]+\.form\.fields\.[^.]+\.tree$/, // a reference offered as the hierarchy its parent column makes
   /^ui\.shell\.breadcrumbs\.(home|top)$/,
@@ -37,6 +38,7 @@ export const PREVIEW_PATHS: readonly RegExp[] = [
 
 /** Whole package entry points that are Preview. */
 export const PREVIEW_ENTRIES: readonly string[] = [
+  './behaviors', // the behaviors a component is built on: UI SDK, under them, is itself a beta
   './openfeature',
   './react/next', // the embed router adapters: one sample at most, each proven against its router's current version only
   './react/react-router',
@@ -82,7 +84,12 @@ export const PREVIEW_EXPORTS: readonly string[] = [
   /* An App's control kit (`uiKit`): the slots are @mistriwork/ui's primitives, Preview as they are. */
   './page: defineUiKit',
   './page: defaultUiKit',
+  './page: dress',
+  './page: extendUiKit',
+  './page: useComponentScope',
+  './page: usePopupHost',
   './page: SlotName',
+  './page: SlotProps',
   './page: UiKit',
   './page: UiKitSlots',
   /* The command aggregates (rc.11): `db.<t>.group(…)` and its types. `RowQuery`, which types the older `where()`, stays. */

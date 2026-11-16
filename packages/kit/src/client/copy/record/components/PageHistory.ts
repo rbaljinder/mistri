@@ -11,8 +11,10 @@ export const say = defineMessages({
   created: 'Created',
   edited: 'Edited',
   changesToThisRecord: 'Changes to this record appear here.',
-  noChangesRecordedYet: 'No changes recorded yet.',
-  eachChangeToThisRecord: 'Each change to this record from now on is listed here, with who made it.',
+  /* The feed is this record's own edits. Beside a list of its payments or notes, "No changes recorded yet" read as
+     if nothing had happened to it: the words say what the card holds and where the rest is. */
+  noChangesRecordedYet: 'No edits since this record was added.',
+  eachChangeToThisRecord: 'An edit to this record is listed here with who made it. What was added about it is in its own lists.',
   showEarlierChanges: 'Show earlier changes',
   changed: 'changed',
   to: 'to',

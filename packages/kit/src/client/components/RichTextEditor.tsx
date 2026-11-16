@@ -15,9 +15,9 @@
  * those programs wrap a paste in are taken out first.
  *
  * The toolbar is one quiet row that wraps at phone width: the marks and
- * lists as buttons, the text styles and the table's verbs in menus (Base UI,
+ * lists as buttons, the text styles and the table's verbs in menus (UI SDK,
  * through DropMenu), the link in a line of its own under the row. The
- * mention list sits under the @ on the house ruler (anchor.ts).
+ * mention list sits under the @, placed by UI SDK's popover.
  */
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
@@ -27,11 +27,9 @@ import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table
 import Mention from '@tiptap/extension-mention';
 import Image from '@tiptap/extension-image';
 import { Placeholder } from '@tiptap/extensions';
-import { Popover } from '@base-ui/react/popover';
+import { Popover, PopoverContent } from '@ui-sdk/react/popover';
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion';
 import { MENTION_QUERY_WORDS, richTextHref, richTextPlain } from '@mistriwork/engine/shared/richText.js';
-import { viewportScale } from '../core.js';
-import { layoutViewport } from '@mistriwork/ui/internal/anchor.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
 import { say } from '../copy/forms/components/RichTextEditor.js';
 import './RichTextEditor.css';
@@ -380,7 +378,7 @@ export function RichTextEditor({
   };
 
   return (
-    <div className={`rich-editor${invalid ? ' is-invalid' : ''}${disabled ? ' is-disabled' : ''}`}>
+    <div className={`rich-editor${disabled ? ' is-disabled' : ''}`} data-invalid={invalid ? '' : undefined}>
       <div className="rich-toolbar" role="toolbar" aria-label={say('formatting', { label })}>
         <ToolButton label={say('bold')} active={editor.isActive('bold')} disabled={disabled} onClick={run((c) => c.toggleBold())}>
           <strong>{say('boldMark')}</strong>
@@ -513,7 +511,7 @@ export function RichTextEditor({
       {linking !== undefined && (
         <div className="rich-link-bar">
           <input
-            className="field-control"
+            data-slot="input"
             type="url"
             autoFocus
             aria-label={say('linkAddress')}
@@ -576,60 +574,52 @@ export function RichTextEditor({
 
 /* The people an @ may name, under the @: a listbox the editor drives by key (the focus stays in the text). */
 function MentionList({ suggesting, onPick }: { suggesting: Suggesting; onPick: (person: MentionPerson) => void }) {
-  const anchor = {
-    getBoundingClientRect: () => {
-      const box = suggesting.box();
-      const z = viewportScale();
-      const top = (box?.top ?? 0) / z,
-        left = (box?.left ?? 0) / z,
-        width = (box?.width ?? 0) / z,
-        height = (box?.height ?? 0) / z;
-      return { x: left, y: top, top, left, width, height, right: left + width, bottom: top + height, toJSON: () => ({}) } as DOMRect;
-    },
-  };
+  /* Where the @ stands, as the window measures it. UI SDK places the list in the same measure and works out the
+     density zoom for itself from the list's own box, so nothing is divided out here. */
+  const anchor = { getBoundingClientRect: () => suggesting.box() ?? new DOMRect() };
   return (
-    <Popover.Root open modal={false}>
-      <Popover.Portal container={popupContainer()}>
-        <Popover.Positioner
-          anchor={anchor}
-          positionMethod="fixed"
-          side="bottom"
-          align="start"
-          sideOffset={4}
-          collisionBoundary={layoutViewport()}
-          collisionPadding={8}
-          style={{ zIndex: 95 }}
-        >
-          <Popover.Popup className="rich-mentions" initialFocus={false} finalFocus={false}>
-            <div role="listbox" aria-label={say('people')}>
-              {suggesting.items.length ? (
-                suggesting.items.map((person, index) => (
-                  <div
-                    key={`${person.kind ?? 'person'}:${person.id}`}
-                    role="option"
-                    aria-selected={index === suggesting.index}
-                    className={`rich-mention-option${index === suggesting.index ? ' is-active' : ''}`}
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      onPick(person);
-                    }}
-                  >
-                    <span>{person.label}</span>
-                    {/* A team tells everyone in it: it says so, in words, where a person shows their handle. */}
-                    {person.kind === 'group' ? (
-                      <span className="rich-mention-kind">{say('group')}</span>
-                    ) : (
-                      person.handle && <span className="rich-mention-handle">@{person.handle}</span>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <div className="rich-mention-none">{say('noPeople')}</div>
-              )}
-            </div>
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
-    </Popover.Root>
+    <Popover open modal={false} dismissible={false}>
+      <PopoverContent
+        /* A popover's panel says it is a dialog named by its trigger. This one has no trigger and takes no focus:
+           it holds the listbox the editor drives, and the panel itself is nothing to a reader. */
+        render={(part) => <div {...part} role="presentation" aria-labelledby={undefined} />}
+        className="rich-mentions"
+        anchor={anchor}
+        side="bottom"
+        align="start"
+        sideOffset={4}
+        collisionPadding={8}
+        container={popupContainer()}
+        initialFocus="none"
+        finalFocus="none"
+      >
+        <div role="listbox" aria-label={say('people')}>
+          {suggesting.items.length ? (
+            suggesting.items.map((person, index) => (
+              <div
+                key={`${person.kind ?? 'person'}:${person.id}`}
+                role="option"
+                aria-selected={index === suggesting.index}
+                className={`rich-mention-option${index === suggesting.index ? ' is-active' : ''}`}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  onPick(person);
+                }}
+              >
+                <span>{person.label}</span>
+                {/* A team tells everyone in it: it says so, in words, where a person shows their handle. */}
+                {person.kind === 'group' ? (
+                  <span className="rich-mention-kind">{say('group')}</span>
+                ) : (
+                  person.handle && <span className="rich-mention-handle">@{person.handle}</span>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="rich-mention-none">{say('noPeople')}</div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

@@ -344,3 +344,22 @@ test('a fact the host draws in place of an empty value, and an empty list of tag
     ['Labels', true],
   ]);
 });
+
+test("a list's own title (`primary`) names each row in place of the record's name, and is not said again as a fact", async () => {
+  const { RowTitleContext } = await import('./rowTitle.js');
+  render(
+    <RowTitleContext.Provider value="owner">
+      <RecordSummaries
+        table={table}
+        columns={['name', 'owner', 'status']}
+        data={{
+          columns: ['tenant', 'id', 'name', 'owner', 'status'],
+          rows: [{ tenant: 1, id: 7, name: 'Ana Ruiz with Maya Okafor', owner: 'Maya Okafor', status: 'Booked' }],
+        }}
+      />
+    </RowTitleContext.Provider>,
+  );
+  expect(document.querySelector('.record-summary-title')?.textContent).toBe('Maya Okafor');
+  expect(screen.queryByText('Ana Ruiz with Maya Okafor')).toBeNull();
+  expect(screen.getAllByText('Maya Okafor')).toHaveLength(1);
+});

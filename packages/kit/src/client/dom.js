@@ -113,11 +113,11 @@ export function trapFocus(panel) {
       ),
     ].filter((node) => node.offsetWidth > 0 || node.offsetHeight > 0 || node === document.activeElement);
 
-  /* Focus in a modal opened over this panel is that modal's to keep. Since
-     Modal.tsx moved every dialog onto Base UI there is no `<dialog open>` to
-     see: a modal is an `aria-modal` element on a portal of its own, and this
-     trap pulled focus back from it while Base UI's pulled it in again — the
-     connection form's name, filled as it opened, landed in the URL box. */
+  /* Focus in a modal opened over this panel is that modal's to keep. Modal.tsx
+     draws no `<dialog open>` to see: a modal is an `aria-modal` element in a
+     layer of its own, and this trap pulled focus back from it while the
+     modal's own pulled it in again — the connection form's name, filled as it
+     opened, landed in the URL box. */
   const aboveUs = (node) => {
     if (shellQuery('dialog[open]')) return true;
     const owner = node instanceof Element ? node.closest('[aria-modal="true"]') : null;

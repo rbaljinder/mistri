@@ -208,9 +208,12 @@ export const LIST_VIEW_KEYS = [
   'filterBar',
   'suggest',
   'advancedFilters',
+  'primary',
   'quickAdd',
   'favorite',
   'totals',
+  // Parsed after every list is (appViews.ts, the second pass): its figures may open another list.
+  'summary',
   'group',
   'density',
   'rowActions',
@@ -324,6 +327,13 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
         views.set(key, {
           ...parsed,
           view: withOpenRoles(parsed.view, raw, at, ctx),
+        });
+      /* A list's summary is a dashboard's metrics, so it is parsed where a dashboard's are: once every list is known. */
+      const listed = views.get(key);
+      if (listed?.kind === 'list' && raw.summary !== undefined)
+        views.set(key, {
+          ...listed,
+          view: { ...listed.view, summary: parseListSummary(raw.summary, at, listed.view.table, ctx.data, views) },
         });
     });
     /* A dashboard over a list that did not parse would only restate that list's refusal. */
@@ -759,6 +769,18 @@ function parseListView(v: Record<string, unknown>, at: string, data: ParsedData)
   if (v.advancedFilters !== undefined && typeof v.advancedFilters !== 'boolean') {
     throw new Error(`${at}: "advancedFilters" must be true or false.`);
   }
+  /* What a row is called in this list, where the record's own name says more than this reader needs: a patient's
+     visits are titled by the therapist, not "Ana Ruiz with Maya Okafor" on every row. One of the columns the list
+     shows, so nothing more is read; a reference says the record it names. */
+  if (v.primary !== undefined) {
+    if (typeof v.primary !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(v.primary.trim()))
+      throw new Error(`${at}: "primary" must name one of the list's own columns, the one a row is titled by: primary: 'therapist_id'.`);
+    const shown = Array.isArray(v.show) ? (v.show as unknown[]).map((one) => (typeof one === 'string' ? one : '')) : undefined;
+    if (shown && !shown.includes(v.primary.trim()))
+      throw new Error(
+        `${at}: "primary" names "${v.primary.trim()}", which "show" does not list: a row is titled by a column the list shows.`,
+      );
+  }
   if (typeof v.filterBar === 'boolean')
     throw new Error(`${at}: "filterBar" is now one of 'bar', 'rail' or 'none': ${v.filterBar ? "true is 'bar'" : "false is 'none'"}.`);
   if (v.filterBar !== undefined && !FILTER_BARS.includes(v.filterBar as FilterBar)) {
@@ -1033,6 +1055,7 @@ function parseListView(v: Record<string, unknown>, at: string, data: ParsedData)
     ...(v.filterBar === undefined ? {} : { filterBar: v.filterBar as FilterBar }),
     ...(suggest ? { suggest } : {}),
     ...(v.advancedFilters === undefined ? {} : { advancedFilters: v.advancedFilters as boolean }),
+    ...(v.primary === undefined ? {} : { primary: (v.primary as string).trim() }),
     ...(v.quickAdd === true ? { quickAdd: true as const } : {}),
     ...(favoriteFlag(v.favorite, at) ? { favorite: true as const } : {}),
     ...(totals ? { totals } : {}),
@@ -1603,6 +1626,37 @@ export function metricCohortQuery(standingQuery: string | undefined, refinement:
   return (standing && own !== standing && !own.startsWith(`${standing} and `) ? andQuery(standing, own) : own) || undefined;
 }
 
+/**
+ * A list's summary: up to four of a dashboard's metrics in one strip over its tabs, in a dashboard's own words
+ * (`summary: [metric('Vacant', { query: 'available' })]`). Each is parsed as a dashboard's section is, over the list's
+ * resource where it names none, so there is one vocabulary for a figure wherever it stands.
+ */
+function parseListSummary(
+  raw: unknown,
+  at: string,
+  table: string,
+  data: ParsedData,
+  views: ReadonlyMap<string, ParsedView>,
+): AppDashSection[] {
+  if (!Array.isArray(raw) || !raw.length)
+    throw new Error(`${at} has a "summary" that is not a list of metrics: summary: [metric('Vacant', { query: 'available' })].`);
+  if (raw.length > 4)
+    throw new Error(
+      `${at} has a "summary" of ${raw.length} figures. A list's summary is one strip over its tabs, four at most; more belong on a dashboard.`,
+    );
+  const sections = parseDashSections(raw, `${at}, "summary"`, table, data, views, []);
+  sections.forEach((section, i) => {
+    const here = `${at}, "summary", section ${i + 1}`;
+    if (section.kind !== 'metric')
+      throw new Error(`${here} is a ${section.kind}. A list's summary holds metrics; a ${section.kind} belongs on a dashboard.`);
+    if (section.over !== undefined)
+      throw new Error(
+        `${here} has an "over". A list has no window to pick: say the period in the metric's "query" ("due_on = this month").`,
+      );
+  });
+  return sections;
+}
+
 function parseDashSections(
   raw: unknown[],
   at: string,
@@ -1940,6 +1994,18 @@ function parseDashSections(
         // later from the effective query.
         if (compare && compare !== PREVIOUS_PERIOD) compare = metricCohortQuery(target.view.query, compare);
       }
+      /* What a row is called in this section, as on a list view: one of the columns it shows. A resident's own
+         repairs are titled by what is wrong, not by the resident on every row. */
+      let rowTitle: string | undefined;
+      if (s.primary !== undefined && kind === 'rows') {
+        if (typeof s.primary !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(s.primary.trim()))
+          throw new Error(`${here}: "primary" must name one of the section's own columns, the one a row is titled by: primary: 'title'.`);
+        rowTitle = s.primary.trim();
+        if (!(card ?? columns)?.some((one) => one === rowTitle))
+          throw new Error(
+            `${here}: "primary" names "${rowTitle}", which "show" does not list: a row is titled by a column the section shows.`,
+          );
+      }
       /* The aside is a narrow column: rows there read as names, each with a
        quiet line under it and a value at its end — never a table's columns. */
       if (aside && kind === 'rows' && columns && columns.length > 3) {
@@ -1994,6 +2060,7 @@ function parseDashSections(
         over: s.over === undefined ? undefined : (s.over as string).trim(),
         ...(windows ? { windows } : {}),
         show: card ?? columns,
+        ...(rowTitle === undefined ? {} : { primary: rowTitle }),
         ...(labels ? { labels } : {}),
         sort: s.sort === undefined ? undefined : (s.sort as string).trim(),
         ...(s.sizing === undefined ? {} : { sizing: parseTableSizing(s.sizing, here) }),

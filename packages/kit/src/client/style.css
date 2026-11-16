@@ -10,12 +10,14 @@
    A later layer wins whatever its specificity: nothing here out-specifies or
    out-loads another to win. */
 @layer base, components, kit, look, theme, structure, print;
-/* The tokens and the primitives' own rules are @mistriwork/ui's (packages/ui/src): taken into base, ahead of the rules
-   here that dress the primitives in place. Its style.css puts them in a layer of their own, for a page that is only
-   the primitives; a layer under base would let every element rule here (`button`, `input`) beat a primitive's class,
-   so here they are base itself, and a rule here still wins over one of them only by specificity, as it did. */
+/* The tokens are @mistriwork/ui's (packages/ui/src), and so is what the controls wear (controls.css): each control is
+   drawn over UI SDK and dressed by its `data-slot`, in layers of its own. Nested in base they stand under every rule
+   written here: a dialog this stylesheet places by its class, a menu a component dresses and a control a toolbar
+   sizes keep their word over the control's own dress, whatever the specificity. What that costs is that a rule here
+   for a bare element would dress a control too, so those rules name what they leave alone
+   (`:where(:not([data-slot]))`). */
 @import '@mistriwork/ui/tokens.css' layer(base);
-@import '@mistriwork/ui/primitives.css' layer(base);
+@import '@mistriwork/ui/controls.css' layer(base);
 
 @layer base {
 * { box-sizing: border-box; }
@@ -155,7 +157,7 @@ body {
    on the dark grounds and 4.4:1 on the Workbench's paper. */
 ::placeholder { color: var(--ink-subtle); opacity: 1; }
 
-button {
+button:where(:not([data-slot]), [data-own]) {
   font: inherit; font-size: var(--text-base);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius);
@@ -165,7 +167,7 @@ button {
 }
 button.ghost { background: transparent; color: var(--ink-muted); border-color: var(--line-strong); }
 button.ghost[aria-pressed="true"] { color: var(--accent-ink); border-color: var(--accent); background: var(--accent-soft); }
-button:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+button:where(:not([data-slot]), [data-own]):focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
 /* In an App, whatever takes the keyboard's focus and names no ring of its own
    wears the house ring (docs/design.md, Access), not the browser's blue: at
    no specificity, so every rule that draws its own still does. The database
@@ -271,9 +273,11 @@ button:focus-visible { outline: var(--focus-width) solid var(--focus); outline-o
      navMuted against the menu ground at 4.5:1, and the page's muted ink
      on a dark menu ground was faint and unmeasured. */
   color: var(--nav-muted);
-  font: var(--text-xs) var(--sans);
+  /* In sentence case at the caption's size, a step heavier than a row: a heading is told from its rooms by its ink
+     and its weight. Capitals shouted a word the reader passes forty times a day; a theme that wants them says so
+     (`parts: nav.group`). */
+  font: 500 var(--text-xs) var(--sans);
   line-height: 1;
-  text-transform: uppercase; letter-spacing: 0.06em;
 }
 #table-list .nav-missing { color: var(--ink-muted); }
 /* A heading that folds keeps the plain heading's geometry: the button is the
@@ -480,54 +484,6 @@ html[data-starting] .content.nav-holding.nav-holding-focusable > :not(.nav-held)
    does not use is a pixel of schema the reader has to pan to instead. */
 .diagram { max-width: none; }
 
-/* A window onto a drawing larger than the window.
-
-   Given a height rather than left to size to its content: a viewport that
-   grows with its content is not a viewport, and the whole point is that the
-   picture can be bigger than the space it is read in. */
-.diagram-viewport {
-  position: relative;
-  height: min(72vh, 760px);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-panel);
-  background: var(--ground);
-  overflow: hidden;
-  cursor: grab;
-  touch-action: none;
-}
-.diagram-viewport.dragging { cursor: grabbing; }
-.diagram-viewport svg { display: block; }
-
-.zoom-controls {
-  position: absolute; right: 10px; bottom: 10px;
-  display: flex; align-items: center; gap: var(--space-2);
-  padding: var(--space-2); border-radius: min(7px, var(--radius-pop));
-  background: var(--surface); border: 1px solid var(--line);
-  box-shadow: var(--shadow-pop);
-}
-.zoom-controls button { padding: var(--space-1) var(--space-3); font-size: var(--text-sm); }
-.zoom-readout {
-  min-width: 3.4rem; text-align: center;
-  font: var(--text-xs) var(--mono); color: var(--ink-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.diagram-head {
-  display: flex; align-items: center; gap: var(--space-4h); flex-wrap: wrap;
-  margin-bottom: var(--space-4);
-}
-.diagram-head .diagram-title { margin: 0; }
-
-.diagram-focus {
-  display: flex; align-items: center; gap: var(--space-2h);
-  margin-left: auto; justify-content: flex-end;
-  /* wrap-reverse so an overflowing row of chips grows upwards. Plain `wrap`
-     would push the field itself onto a second line, which is the same
-     moving-target problem in the other axis. */
-  flex-wrap: wrap-reverse;
-}
-.diagram-focus .picker { flex: none; }
-
 /* A field with a menu we draw ourselves. See picker.js for why. */
 .picker { position: relative; }
 .picker-input {
@@ -554,15 +510,6 @@ html[data-starting] .content.nav-holding.nav-holding-focusable > :not(.nav-held)
 .picker-option.active .picker-label { color: var(--accent-ink); }
 .picker-detail { font: var(--text-xs) var(--mono); color: var(--ink-subtle); }
 .picker-empty { padding: var(--space-3h); margin: 0; font-size: var(--text-sm); color: var(--ink-muted); }
-.diagram-chip {
-  display: inline-flex; align-items: center; gap: var(--space-2h);
-  padding: var(--space-2) var(--space-3); border-radius: 999px;
-  border: 1px solid var(--accent); background: var(--accent-soft);
-  color: var(--accent-ink); font: var(--text-xs) var(--mono); cursor: pointer;
-}
-.diagram-chip .chip-x { opacity: 0.6; }
-.diagram-chip:hover .chip-x { opacity: 1; }
-.diagram-clear { font-size: var(--text-xs); }
 
 /* ---------- command palette ---------- */
 
@@ -603,6 +550,14 @@ html[data-starting] .content.nav-holding.nav-holding-focusable > :not(.nav-held)
    result and back, and coming back to an input with no indicator at all is
    the caret being somewhere nobody can see. */
 .palette-input:focus { outline: none; border-bottom-color: var(--accent); }
+/* The magnifier stands in the input's own leading room: it is laid over it, so the input stays the row's one box
+   and its rule runs the dialog's width. */
+.palette { position: relative; }
+.palette-glyph {
+  position: absolute; inset-inline-start: var(--space-5); top: 0; height: 3.5rem;
+  display: flex; align-items: center; color: var(--ink-muted); pointer-events: none;
+}
+.palette-glyph + .palette-input { padding-inline-start: calc(var(--space-5) + 16px + var(--space-3)); }
 .palette-list { overflow-y: auto; padding: var(--space-2h); }
 .palette-item {
   display: grid; grid-template-columns: 4.6rem 1fr auto;
@@ -673,6 +628,14 @@ html[data-starting] .content.nav-holding.nav-holding-focusable > :not(.nav-held)
 .icon-button[aria-expanded="true"],
 .icon-button[aria-pressed="true"] { color: var(--accent-ink); border-color: var(--accent); background: var(--accent-soft); }
 
+/* A control's popup is a popup like the kit's own (docs/design.md, Shape): as round as the look's popups, a row in
+   it no rounder than a row is, on the edge the kit's own menus have (the stronger line: a popup lies on the page, and
+   in a look with no shadow a hairline was all that set it off), its rows at the text's own size. Said once for every
+   list, menu and popover the controls open, and under any class a caller gives one (`:where`), so a popup with a
+   corner or an edge of its own keeps it. */
+:where([data-slot='select-content'], [data-slot='menu-content'], [data-slot='autocomplete-content'], [data-slot='popover-content']) { border-radius: var(--radius-pop); border-color: var(--line-strong); }
+:where([data-slot='select-item'], [data-slot='menu-item'], [data-slot='autocomplete-item']) { border-radius: var(--radius-item); font-size: var(--text-base); }
+
 .more-list {
   z-index: 70; min-width: 15rem; padding: var(--space-2);
   max-width: var(--available-width, calc(100vw - 16px));
@@ -695,8 +658,8 @@ html[data-starting] .content.nav-holding.nav-holding-focusable > :not(.nav-held)
    rows are transparent, drew none. Where the options take focus (a menu, a
    Select) the ring is the keyboard's alone; where the box keeps focus (the
    palette, a picker, the query's completions) the lit option is the focus. */
-:is(.more-item, .dd-option):focus-visible,
-:is(.dd-option, .palette-item, .picker-option, .ac-item).active:not(:focus) { outline: var(--focus-width) solid var(--focus); outline-offset: -2px; }
+:is(.more-item,:is([data-slot='select-item'], [data-slot='menu-item'])):focus-visible,
+:is(:is([data-slot='select-item'], [data-slot='menu-item']), .palette-item, .picker-option, .ac-item).active:not(:focus) { outline: var(--focus-width) solid var(--focus); outline-offset: -2px; }
 .more-item.no-tick { grid-template-columns: 1fr auto; }
 .more-tick { color: var(--accent-ink); font-size: var(--text-xs); }
 .more-detail { font-size: var(--text-xs); color: var(--ink-subtle); min-width: 0; margin-inline-start: var(--space-3); text-align: end; overflow-wrap: anywhere; }
@@ -830,32 +793,9 @@ body.app-nav-rail.sidebar-hidden #table-list li.nav-group:first-child { border-t
    shrinking the type to fit. */
 .node > rect { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
 .node text { font: var(--text-sm) var(--mono); fill: var(--ink); }
-.node-head { cursor: pointer; }
-.node-head-hit { fill: transparent; stroke: none; }
 .node:hover > rect { stroke: var(--accent); }
-.node-head:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
 .node-focus > rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
-.node-focus .node-head text { fill: var(--accent); }
-.node-head text { font-weight: 600; }
-
-/* The column list. Quieter than the table name it sits under — it is there to
-   be scanned for a name you already have in mind, not read top to bottom. */
-.node-rule { stroke: var(--line); stroke-width: 1; }
-.node-field { font-size: var(--text-xs); fill: var(--ink-muted); }
-.node-field.is-key { fill: var(--ink); }
-.node-field.is-ref { fill: var(--accent); }
-.node-type { font-size: var(--text-xs); fill: var(--ink-subtle); }
-.node-more { cursor: pointer; }
-.node-more-hit { fill: transparent; stroke: none; }
-.node-more text { font-size: var(--text-xs); fill: var(--ink-subtle); }
-.node-more:hover text { fill: var(--accent); }
-.node-more:hover .node-more-hit { fill: var(--accent-soft); }
-.node-more:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 1px; }
 .edge { fill: none; stroke: var(--line-strong); stroke-width: 1.25; }
-.edge-head { fill: var(--line-strong); }
-.edge-label { font: var(--text-xs) var(--mono); fill: var(--ink-muted); }
-.diagram-legend { margin: var(--space-4) 0 0; font-size: var(--text-xs); color: var(--ink-subtle); font-family: var(--mono); }
-.diagram-legend span { color: var(--ink-muted); }
 
 .result-head {
   display: flex; align-items: baseline; gap: var(--space-4);
@@ -883,8 +823,8 @@ body.app-nav-rail.sidebar-hidden #table-list li.nav-group:first-child { border-t
 }
 .table-wrap[data-more~="start"] { --fade-start: 24px; }
 .table-wrap[data-more~="end"] { --fade-end: 24px; }
-th:first-child, td:first-child { padding-left: var(--space-4h); }
-th:last-child, td:last-child { padding-right: var(--space-4h); }
+th:where(:not([data-slot])):first-child,td:where(:not([data-slot])):first-child { padding-left: var(--space-4h); }
+th:where(:not([data-slot])):last-child,td:where(:not([data-slot])):last-child { padding-right: var(--space-4h); }
 th:first-child .th-sort { padding-left: 0; }
 /* A room-level grid: the gutter moves from the edge cells to the wrap,
    so the scroll region stops 14px short of both edges instead of running
@@ -907,14 +847,14 @@ tbody tr:hover .pinned { background: var(--accent-soft); }
 /* One seam, on the rightmost frozen column, rather than a line per column. */
 .pinned-edge { box-shadow: 1px 0 0 var(--line-strong); }
 .table-wrap:not([data-scrolled]) .pinned-edge { box-shadow: none; }
-table { border-collapse: collapse; width: 100%; font: var(--text-sm) var(--mono); }
-th, td {
+table:where(:not([data-slot])) { border-collapse: collapse; width: 100%; font: var(--text-sm) var(--mono); }
+th:where(:not([data-slot])),td:where(:not([data-slot])) {
   text-align: left; padding: 5px var(--space-3h);
   border-bottom: 1px solid var(--line);
   white-space: nowrap; max-width: 30rem;
   overflow: hidden; text-overflow: ellipsis;
 }
-th {
+th:where(:not([data-slot])) {
   position: sticky; top: 0;
   /* Above the pinned body cells, which carry `z-index: 1` so they float over
      the columns they freeze past. Without this, scrolling down slid the
@@ -949,22 +889,6 @@ th.sorted { color: var(--accent-ink); border-bottom-color: var(--accent); }
    ellipsis, inside the column it was given. */
 .th-controls { display: inline-flex; align-items: center; vertical-align: middle; max-width: 100%; }
 .th-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* An App's head wraps at its words, to two lines, before its column widens (gridSizing.ts sizes the floor to the
-   two-line width): a wide list then fits its room instead of scrolling sideways under single-line heads. The head
-   and its row grow by a line; the label breaks only between words, and the clamp is the guard for a head set in
-   a column nothing sized. */
-.app-mode .th-sort { white-space: normal; text-align: start; }
-.app-mode .th-label {
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
-  white-space: normal; overflow-wrap: normal; word-break: normal;
-}
-/* A value the room set on two lines (gridSizing.ts, after the heads wrapped and before anything is cut): it breaks
-   at its words and is kept whole, and a link inside it wraps with it. */
-.app-mode td.wraps { white-space: normal; overflow-wrap: normal; word-break: normal; text-overflow: clip; }
-.app-mode td.wraps :is(.ref-jump, .cell-text) { white-space: normal; }
-/* The row's name over its folded columns (Grid.tsx `more`) is its own line, cut by default: set on two lines, it wraps
-   as the cell does, not "Review security questionn…" over a detail line that wrapped beneath it (G187). */
-.app-mode td.wraps .cell-main { white-space: normal; text-overflow: clip; }
 .th-sort {
   display: inline-flex; align-items: center; gap: var(--space-2); flex: 0 1 auto; min-width: 0;
   background: none; border: none; border-radius: 0;
@@ -1039,7 +963,7 @@ th.sorted { color: var(--accent-ink); border-bottom-color: var(--accent); }
   /* A head whose label fills it (a sorted figure, a head wrapped to the least its column allows) has no bare side:
      the controls then lie over the label's end, and only while the head is hovered or focused, which is raised above
      its neighbours so they, not the neighbour, answer there. */
-  th:has(> .th-controls):is(:hover, :focus-within) { z-index: 3; }
+  th:where(:not([data-slot])):has(> .th-controls):is(:hover, :focus-within) { z-index: 3; }
   /* Stacked: the caret over the label's sort, the sort over the move buttons. Where a head's label fills it the moves
      are under the sort (reached by the keyboard) and the click meant for the sort sorts; the caret is the one control
      with no other way in, so it stays on top. The controls are their own stacking context, drawn on their head's
@@ -1170,9 +1094,10 @@ th .pk { color: var(--status-info); }
 th .fk { color: var(--accent-ink); }
 /* Only where a click goes somewhere. A pointer over a row that does nothing
    advertises an action the row does not have. */
-tbody tr { cursor: default; }
+tbody tr:where(:not([data-slot])) { cursor: default; }
 tbody tr.clickable { cursor: pointer; }
-tbody tr.clickable:hover { background: var(--accent-soft); }
+/* Under the keyboard as under the pointer: a row reached by Tab or the arrows says it opens the same way. */
+tbody tr.clickable:is(:hover, :focus-visible) { background: var(--accent-soft); }
 
 /* Alignment is set per column by the renderer and applied to the header too,
    so a label always sits over its own values. */
@@ -1207,9 +1132,9 @@ td .ref { color: var(--link); text-decoration: underline; text-decoration-style:
 .pager-size { display: flex; gap: var(--space-2h); align-items: center; }
 /* Narrow: the list is four two-or-three-digit numbers, and the shared control
    is sized for connection names. */
-.pager-size .dd { min-width: 0; }
-.pager-size .dd-button { padding: var(--space-1h) var(--space-2h); }
-.pager-size .dd-list { min-width: 0; }
+.pager-size [data-slot='dropdown'] { min-width: 0; }
+.pager-size [data-slot='select-trigger'] { padding: var(--space-1h) var(--space-2h); }
+.pager-size :is([data-slot='select-content'], [data-slot='menu-content']) { min-width: 0; }
 .pager-steps { margin-inline-start: auto; }
 .pager .page-label { display: flex; gap: var(--space-2h); align-items: center; flex-wrap: wrap; }
 @media (max-width: 600px) {
@@ -1264,10 +1189,10 @@ td .ref { color: var(--link); text-decoration: underline; text-decoration-style:
    pager and record head mixed 26, 28, 32 and 36px — 6px of padding on
    differently sized faces — so a row of them never lined up. Scoped to the
    browser (no look attribute): an App keeps its look's own sizes. */
-:root:not([data-visual-theme]) :is(.applist-quick, .applist-go, .applist-toggle, .applist-field .dd-button, .pager .ghost, .pager-size .dd-button, .page-input) {
+:root:not([data-visual-theme]) :is(.applist-quick, .applist-go, .applist-toggle, .applist-field [data-slot='select-trigger'], .pager .ghost, .pager-size [data-slot='select-trigger'], .page-input) {
   box-sizing: border-box; height: 30px; padding-block: 0;
 }
-:root:not([data-visual-theme]) :is(.applist-field .dd-button, .applist-go, .applist-toggle, .pager .ghost) { display: inline-flex; align-items: center; }
+:root:not([data-visual-theme]) :is(.applist-field [data-slot='select-trigger'], .applist-go, .applist-toggle, .pager .ghost) { display: inline-flex; align-items: center; }
 /* The record's head: its name, then small buttons of one weight. "As a page →"
    and "Copy for agent" took the heading's bold beside a Layout half their size. */
 :root:not([data-visual-theme]) :is(.record-heading > button, .record-heading .record-layout, .record-heading .record-trail-step) {
@@ -1468,7 +1393,6 @@ td .ref { color: var(--link); text-decoration: underline; text-decoration-style:
    saying the same thing twice in two places. Its one unique job — showing a
    relationship that has no rows — moved to a disabled tab. */
 
-
 .loading { padding: var(--space-3h) var(--space-4); color: var(--ink-muted); font-size: var(--text-sm); }
 
 /* ---------- placeholders ---------- */
@@ -1590,7 +1514,7 @@ button.danger { background: var(--status-critical); color: var(--surface); borde
   min-width: min(24rem, calc(100vw - 32px - 46px)); max-width: 34rem; padding: 20px 22px;
   font: var(--text-md)/1.55 var(--sans);
 }
-.confirm-backdrop { background: rgb(0 0 0 / 0.45); }
+[data-slot='dialog-backdrop'][data-for='confirm'] { background: rgb(0 0 0 / 0.45); }
 @media (prefers-reduced-motion: no-preference) {
   .confirm {
     /* A modal appears in the middle of the viewport rather than out of a
@@ -1598,7 +1522,7 @@ button.danger { background: var(--status-critical); color: var(--surface); borde
     transition: opacity var(--t-panel) var(--ease-out), transform var(--t-panel) var(--ease-out);
     @starting-style { opacity: 0; transform: scale(0.97); }
   }
-  .confirm-backdrop {
+  [data-slot='dialog-backdrop'][data-for='confirm'] {
     transition: background var(--t-panel) var(--ease-out);
     @starting-style { background: rgb(0 0 0 / 0); }
   }
@@ -1611,7 +1535,7 @@ button.danger { background: var(--status-critical); color: var(--surface); borde
 /* 24px above the actions, as a form's: they close the dialog's question rather than stand as one more row of it. */
 .confirm-actions { display: flex; gap: var(--space-3); justify-content: flex-end; margin-top: var(--space-6); }
 .confirm-fields { display: grid; gap: var(--space-5); }
-.confirm h2 + :is(.form-field, .confirm-fields) { margin-top: var(--space-4h); }
+.confirm h2 + :is([data-slot='field'], .confirm-fields) { margin-top: var(--space-4h); }
 .confirm-diff { width: 100%; margin-bottom: var(--space-4); font: var(--text-sm) var(--mono); }
 .confirm-diff th { text-align: left; color: var(--ink-muted); font-weight: 500; width: 5rem; text-transform: none; letter-spacing: 0; font-size: var(--text-sm); position: static; background: none; border: none; }
 .confirm-diff td { border: none; }
@@ -1636,9 +1560,9 @@ button.danger { background: var(--status-critical); color: var(--surface); borde
 }
 .cell-edit:focus { outline: var(--focus-width) solid var(--focus); outline-offset: -1px; border-color: transparent; }
 .cell-edit-control { min-width: 0; }
-.cell-edit-control .dd-button, .cell-edit-control .picker { width: 100%; min-height: 32px; border-radius: min(2px, var(--radius)); }
-.cell-edit-control.dirty .dd-button, .cell-edit-control.dirty .picker, .cell-edit-control.dirty .date-field-input { border-color: var(--status-warning); background: var(--status-warning-soft, var(--raised)); }
-.cell-edit-control.saved .dd-button, .cell-edit-control.saved .picker, .cell-edit-control.saved .date-field-input { border-color: var(--status-good); }
+.cell-edit-control [data-slot='select-trigger'], .cell-edit-control .picker { width: 100%; min-height: 32px; border-radius: min(2px, var(--radius)); }
+.cell-edit-control.dirty [data-slot='select-trigger'], .cell-edit-control.dirty .picker, .cell-edit-control.dirty :is([data-slot='date-field'] > [data-slot='input']) { border-color: var(--status-warning); background: var(--status-warning-soft, var(--raised)); }
+.cell-edit-control.saved [data-slot='select-trigger'], .cell-edit-control.saved .picker, .cell-edit-control.saved :is([data-slot='date-field'] > [data-slot='input']) { border-color: var(--status-good); }
 
 .record-presentation, .record-summaries { display: none; }
 .more-group-label { padding: var(--space-3) var(--space-4) var(--space-2); color: var(--ink-muted); font: 600 var(--text-xs) var(--sans); }
@@ -1677,14 +1601,14 @@ button.danger { background: var(--status-critical); color: var(--surface); borde
   .record-summary-group-sum { font: var(--text-sm)/1.45 var(--sans); color: var(--ink-muted); }
   .record-summary.is-navigable { cursor: pointer; }
   .record-summary.is-navigable:active { background: var(--raised); }
-  .record-summary-title { display: block; width: 100%; min-height: 32px; padding: var(--space-1h) 0; border: 0; border-radius: 0; background: none; text-align: left; font: 600 calc(15px * var(--type-k))/1.45 var(--sans); letter-spacing: 0; color: var(--ink); overflow-wrap: anywhere; }
+  .record-summary-title { display: block; width: 100%; min-height: 32px; padding: var(--space-1h) 0; border: 0; border-radius: 0; background: none; text-align: left; font: 600 calc(15px * var(--type-k))/1.45 var(--sans); letter-spacing: 0; color: var(--ink); overflow-wrap: break-word; }
   .record-summary-title:hover:not(:disabled) { color: var(--accent-ink); }
   .record-summary dl { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--field-gap); margin: var(--space-1) 0 0; }
   /* A fact wraps whole, never its caption from its value. */
   .record-summary dl > div { display: flex; align-items: baseline; gap: var(--space-2h); min-width: 0; max-width: 100%; }
   .record-summary dt { flex: none; font: 500 var(--text-sm)/1.5 var(--sans); color: var(--ink-muted); }
   .record-summary dd { min-width: 0; margin: 0; font: var(--text-md)/1.45 var(--sans); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-  /* In an App a row says each value once and its caption never (design.md, Mobile): the title, then the first values on
+  /* In an App a row says each value once and its caption only where the value does not say itself (design.md, Mobile; the rule after this block): the title, then the first values on
      one line — a status as its dot and word, a person as avatar and name, a date short — and the caption stays for
      whoever reads by ear, as the grid's header is. Two lines at most: every fact stands in one fixed line box, so the
      rows are whole and a third line is cut off at a fact's edge, never through one. An empty value is not drawn (it
@@ -1704,6 +1628,13 @@ button.danger { background: var(--status-critical); color: var(--surface); borde
   body.app-mode .record-summary dt {
     position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; overflow: hidden;
     clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+  /* A fact that does not say what it is (RecordSummaries.tsx: a date, a count, a disc of initials) keeps its caption,
+     quiet before the value, and the two wrap as one: a lone disc never takes a line to itself. */
+  body.app-mode .record-summary dl > div[data-captioned] { flex: none; max-inline-size: 100%; }
+  body.app-mode .record-summary dl > div[data-captioned] > dt {
+    position: static; inline-size: auto; block-size: auto; margin: 0; overflow: visible; clip-path: none;
+    font-size: var(--text-xs);
   }
   /* A dashboard's list stands on its section's edge, where the section's title does. */
   .dash-list .record-summaries { padding: 0; }
@@ -2012,13 +1943,10 @@ body.app-mode:has(.pending-dock.pending-uncertain) .toast { bottom: calc(35dvh +
 .page-pin:hover { color: var(--ink); border-color: var(--line); }
 .page-pin.is-pinned { color: var(--status-warning); }
 
-.diagram-title { margin: 0 0 var(--space-4h); font: 600 var(--text-lg) var(--mono); letter-spacing: -0.01em; }
-
 .node-view rect { stroke-dasharray: 4 3; }
 .node.dim { opacity: 0.22; }
 .node.lit rect { stroke: var(--accent); stroke-width: 2; fill: var(--accent-soft); }
 .node.lit text { fill: var(--accent); font-weight: 600; }
-.schema-edges path.dim { opacity: 0.1; }
 @media (prefers-reduced-motion: no-preference) {
   .node, .schema-edges path { transition: opacity var(--t-hover) var(--ease-out); }
 }
@@ -2034,7 +1962,7 @@ body.app-mode:has(.pending-dock.pending-uncertain) .toast { bottom: calc(35dvh +
    second query bar. Capped, because a connection named after a URL should
    not push the query bar off the screen. */
 .conn-picker { display: flex; gap: var(--space-2h); align-items: center; flex: none; }
-.conn-picker .dd { min-width: 0; max-width: 200px; }
+.conn-picker [data-slot='dropdown'] { min-width: 0; max-width: 200px; }
 .conn-picker[hidden] { display: none; }
 
 .field-stack { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3h); }
@@ -2119,15 +2047,15 @@ body.app-mode:has(.pending-dock.pending-uncertain) .toast { bottom: calc(35dvh +
 
 /* ---------- themed listbox ---------- */
 
-:where(:root:not([data-visual-theme])) .dd-list { box-shadow: 0 6px 20px rgb(0 0 0 / 0.16); }
+:where(:root:not([data-visual-theme])) :is([data-slot='select-content'], [data-slot='menu-content']) { box-shadow: 0 6px 20px rgb(0 0 0 / 0.16); }
 /* The popup takes focus so the keyboard works from the first arrow; the
    highlighted option is the visible focus, not a ring around the box. */
-.dd-popup:focus, .dd-popup:focus-visible, .more-list:focus, .more-list:focus-visible { outline: none; }
+[data-slot='select-content']:focus,[data-slot='select-content']:focus-visible, .more-list:focus, .more-list:focus-visible { outline: none; }
 /* Every popup that holds its menu's focus while an item carries the highlight:
    the item says where the keyboard is, so the popup draws no ring round
    itself — it drew the browser's blue one round the column menu, in an
    App and in the Workbench alike. */
-:is(.th-menu, .tn-pop, .export-menu, .page-actions-popup, .picker-popup, .pb-menu, .pb-send-menu, .date-field-popup, .account-menu-popup):focus-visible { outline: none; }
+:is(.th-menu, .tn-pop, .export-menu, .page-actions-popup, .picker-popup, .pb-menu, .pb-send-menu,[data-slot='popover-content'][data-kind='calendar'], .account-menu-popup):focus-visible { outline: none; }
 /* A menu item's keyboard ring is drawn inside the item. The house ring sits 2px
    outside, which in a tight menu ran across the rule above and below and into
    the neighbouring rows; hover is the background alone and draws no ring. */
@@ -2136,7 +2064,6 @@ body.app-mode:has(.pending-dock.pending-uncertain) .toast { bottom: calc(35dvh +
   outline-offset: calc(var(--focus-width) * -1);
 }
 :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]):focus:not(:focus-visible) { outline: none; }
-
 
 /* ---------- a row another person changed ---------- */
 
@@ -2298,7 +2225,7 @@ body.app-mode .page-head.has-record + .page-body { padding-bottom: calc(132px + 
 .command-form { width: min(34rem, calc(100% - 32px)); max-height: calc(100% - 32px); overflow-y: auto; border-radius: var(--radius); }
 .command-fields { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: var(--field-gap); }
 .command-field { display: grid; gap: var(--space-2h); min-width: 0; }
-.command-field .field-control { width: 100%; box-sizing: border-box; }
+.command-field :is([data-slot='input'], [data-slot='textarea']) { width: 100%; box-sizing: border-box; }
 .command-field input[type="checkbox"] { width: auto; justify-self: start; }
 .command-field textarea { resize: vertical; }
 .command-help { max-width: 70ch; color: var(--ink-muted); font-size: var(--text-sm); }
@@ -2344,7 +2271,7 @@ body.app-mode .page-head.has-record + .page-body { padding-bottom: calc(132px + 
    column one width down a form and every control on the same left edge and
    width; a control that must not shrink says so itself (the date's floor). */
 .insert-field { display: grid; grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr); gap: var(--space-3h); align-items: baseline; }
-.insert-field > :is(.insert-input, .picker, .dd, .dd-button) { min-width: 0; box-sizing: border-box; }
+.insert-field > :is(.insert-input, .picker,[data-slot='dropdown'],[data-slot='select-trigger']) { min-width: 0; box-sizing: border-box; }
 .insert-field > .insert-input, .insert-field > .picker { width: 100%; }
 .insert-field label { font: var(--text-sm) var(--mono); color: var(--ink); overflow-wrap: anywhere; }
 .insert-field .type { margin-left: var(--space-2h); color: var(--ink-subtle); font-size: var(--text-xs); }
@@ -2473,8 +2400,6 @@ body.app-mode .page-head.has-record + .page-body { padding-bottom: calc(132px + 
 }
 .related-empties:hover { color: var(--accent-ink); border-color: var(--line); }
 .related-list.hide-empty .related-item.empty { display: none; }
-
-
 
 /* Pushed to the far end of the trail, where it is out of the way of reading
    the trail itself but lands under the cursor after a click on the last
@@ -2626,23 +2551,6 @@ body:not(.app-mode) .record .panel { padding-bottom: calc(var(--space-8) + var(-
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* The layout's own name, edited in place in the builder's header. */
-.tpl-title { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
-.tpl-eyebrow {
-  font: var(--text-xs) var(--mono); text-transform: uppercase; letter-spacing: 0.07em;
-  color: var(--ink-subtle);
-}
-.tpl-name {
-  flex: 1 1 8rem; min-width: 0; max-width: 100%;
-  padding: var(--space-1) var(--space-2h); margin: 0 -6px;
-  border: 1px solid transparent; border-radius: var(--radius-item);
-  background: none; color: var(--ink);
-  font: 600 calc(15px * var(--type-k)) var(--mono); letter-spacing: 0;
-}
-.tpl-name:hover { border-color: var(--line); }
-.tpl-name:focus { outline: none; border-color: var(--focus); background: var(--ground); }
-.tpl-for { font: var(--text-xs) var(--mono); color: var(--ink-subtle); overflow-wrap: anywhere; }
-
 /* A drawer, not an overlay.
 
    The builder used to cover the screen, which meant configuring a record
@@ -2667,67 +2575,8 @@ body.editing-layout .record-heading > span { flex-basis: 100%; min-width: 0; ove
 @media (max-width: 700px) {
   .tpl { width: 100%; border-left: 0; }
   body.editing-layout .layout { padding-right: 0; }
-  .tpl-title { display: grid; grid-template-columns: minmax(0, 1fr); }
-  .tpl-name { width: 100%; margin: 0; }
-  .tpl-section-head { flex-wrap: wrap; }
-  .tpl-section-name { overflow-wrap: anywhere; }
 }
-
-.tpl-head {
-  padding: var(--space-4h) var(--space-5) var(--space-4);
-  border-bottom: 1px solid var(--line);
-  display: flex; flex-direction: column; gap: var(--space-2h);
-}
-.tpl-head h2 { margin: 0; font: 600 var(--text-base) var(--sans); letter-spacing: -0.01em; }
 .tpl-lede { margin: 0; color: var(--ink-muted); font-size: var(--text-sm); line-height: 1.45; }
-.tpl-head-actions { display: flex; gap: var(--space-2h); flex-wrap: wrap; margin-top: var(--space-1); }
-.tpl-head-actions button { padding: var(--space-2) var(--space-3h); font-size: var(--text-sm); }
-.tpl-error, .tpl-recovery p { margin: 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
-.tpl-error { color: var(--status-critical); }
-.tpl-recovery { padding-block: var(--space-3); border-block: 1px solid var(--line); }
-.tpl-body[inert] { opacity: 0.6; }
-
-.tpl-body { flex: 1; overflow-y: auto; padding: var(--space-4) var(--space-4h) var(--space-7); }
-
-.tpl-section { border: 1px solid var(--line); border-radius: var(--radius-panel); margin-bottom: var(--space-3); background: var(--ground); }
-.tpl-section.off { opacity: 0.55; }
-.tpl-section-head {
-  display: flex; align-items: center; gap: var(--space-3h);
-  padding: var(--space-3h) var(--space-4);
-  border-bottom: 1px solid var(--line);
-}
-.tpl-section.off .tpl-section-head { border-bottom: none; }
-.tpl-toggle { display: flex; align-items: center; gap: var(--space-3); cursor: pointer; }
-.tpl-section-name { font: 600 var(--text-sm) var(--sans); color: var(--ink); }
-.tpl-section-kind { font: var(--text-xs) var(--mono); color: var(--ink-subtle); }
-.tpl-section-actions { margin-left: auto; display: flex; gap: var(--space-1); }
-.tpl-move {
-  background: none; border: none; border-radius: min(4px, var(--radius));
-  color: var(--ink-muted); cursor: pointer; padding: var(--space-1h) var(--space-3); font-size: var(--text-xs);
-}
-.tpl-move:hover:not([disabled]) { color: var(--accent-ink); background: var(--accent-soft); }
-.tpl-move[disabled] { color: var(--ink-subtle); cursor: default; }
-
-/* The shared arranger (page.css, `.pb-*`) inside a layout card.
-
-   It is drawn there to hang off a builder row — no top border, its own tint,
-   rounded at the bottom only — and a card already provides all three. So it
-   keeps its contents and gives up its box. */
-.tpl-section .pb-panel {
-  margin: 0; padding: var(--space-3) var(--space-3h) var(--space-3h);
-  background: none; border: none; border-radius: 0;
-}
-.tpl-section .pb-arrange { max-height: none; }
-
-.tpl-rows {
-  display: flex; align-items: center; gap: var(--space-3);
-  padding: var(--space-2) var(--space-4) var(--space-4); font-size: var(--text-sm); color: var(--ink-muted);
-}
-.tpl-rows input {
-  width: 4.5rem; padding: var(--space-2) var(--space-3);
-  font: var(--text-sm) var(--mono); color: var(--ink);
-  background: var(--ground); border: 1px solid var(--line-control); border-radius: var(--radius);
-}
 
 /* ---------- agent console ---------- */
 
@@ -2803,7 +2652,6 @@ body.editing-layout .record-heading > span { flex-basis: 100%; min-width: 0; ove
   padding-bottom: var(--space-5);
   border-bottom: 1px solid var(--line);
 }
-.diagram-scope { font-size: var(--text-xs); padding: 1px var(--space-3); }
 
 .conn-brand { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4h); }
 .conn-brand-name { font: 600 var(--text-base) var(--mono); letter-spacing: -0.01em; color: var(--ink-muted); }
@@ -3197,7 +3045,6 @@ tr.expanded > td { border-bottom-color: transparent; background: var(--accent-so
   .cell-copied { transition: background var(--t-hover) var(--ease-out); }
 }
 
-
 /* The expand-every-row control, in the header cell above the expanders. It is
    the same glyph as the row's own, one rank quieter, so it reads as "all of
    these" rather than as a different kind of control. */
@@ -3476,7 +3323,7 @@ tr.expanded > td { border-bottom-color: transparent; background: var(--accent-so
   background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong);
   border-radius: var(--radius); box-shadow: var(--shadow-modal);
 }
-.tenant-chooser-dialog-backdrop { background: var(--scrim); }
+[data-slot='dialog-backdrop'][data-for='tenant-chooser-dialog'] { background: var(--scrim); }
 .tenant-chooser-dialog .tenant-chooser { margin: 0; }
 .tenant-chooser-actions { display: flex; justify-content: flex-end; padding: 0 var(--space-6) var(--space-6); }
 /* What the bar offers beside the control is the dialog's too, and only on a
@@ -3519,9 +3366,13 @@ body.tenant-suspended > :not(.tenant-renewal-overlay) * { visibility: hidden !im
 .skip-link {
   position: fixed; left: 8px; top: 8px; z-index: 400;
   padding: var(--space-3) var(--space-4); border: 1px solid var(--line-control); border-radius: var(--radius);
-  background: var(--surface); color: var(--ink); font: 600 var(--text-base)/20px var(--sans);
+  background: var(--surface); font: 600 var(--text-base)/20px var(--sans);
   transform: translateY(calc(-100% - 16px));
 }
+/* Its own pair, said past the bar's: it sits in the banner, and a bar on a dark ground gives what it holds the
+   bar's light ink, which on the page's surface read 1.2:1 (Graphite). The menu's ink on the menu's ground is a pair
+   every look is checked for (theme.ts), so the link wears that one where a look names it. */
+a.skip-link.skip-link { color: var(--nav-ink, var(--ink)); background: var(--nav-ground, var(--surface)); }
 .skip-link:focus { transform: none; outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
 /* The pane takes the focus only from the skip link or the sidebar's
    ArrowRight; the room it holds already says where the keyboard is. */
@@ -3576,7 +3427,7 @@ body.tenant-suspended > :not(.tenant-renewal-overlay) * { visibility: hidden !im
   /* The skip link is the keyboard's way past the bars, and paper has no keyboard: kept off screen by a transform,
      it was still a fixed box in the print tree, and "Skip to content" came out on the PDF. */
   .skip-link, .topbar, .sidebar, #querybar, #toast, .crumb-tools, .page-head-actions, .page-pending, .pending-dock, .applist-controls,
-  .pager, .quick-add, .page-related-create, .inline-edit-button, .date-field-trigger { display: none !important; }
+  .pager, .quick-add, .page-related-create, .inline-edit-button,:is([data-slot='date-field'] > [data-slot='popover-trigger']) { display: none !important; }
   .page-tabpanel[hidden] { display: none; }
   /* The trail is the walk's, not the sheet's: sticky, it printed over a record's first lines (a quote's
      letterhead). A list's title rides in it (crumb-note), so a list keeps that, in the flow, and a record
@@ -3586,8 +3437,8 @@ body.tenant-suspended > :not(.tenant-renewal-overlay) * { visibility: hidden !im
   .crumbs:has(> .crumb-note:empty) { display: none; }
   .page-layout { display: block; }
   .page-aside { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); margin-top: var(--space-6); padding-top: var(--space-6); }
-  .page-section, .page-field, .page-sheet-row, .timeline-row, .pbd-row, .chart-stacked-row, tr { break-inside: avoid; }
-  h1, h2, h3, .page-section-head, .page-section-title { break-after: avoid; }
+  .page-section, .page-field, .page-sheet-row, .timeline-row, .pbd-row, .chart-stacked-row,tr:where(:not([data-slot])) { break-inside: avoid; }
+  h1:where(:not([data-slot])),h2:where(:not([data-slot])),h3:where(:not([data-slot])), .page-section-head, .page-section-title { break-after: avoid; }
 }
 }
 

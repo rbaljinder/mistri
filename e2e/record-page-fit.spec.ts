@@ -190,7 +190,8 @@ let child: ChildProcess | undefined;
 const section = (page: import('@playwright/test').Page, title: string) =>
   page
     .locator('.page-section')
-    .filter({ has: page.locator('.page-section-head', { hasText: new RegExp(`^\\s*${title}\\s*$`) }) })
+    // A related list's head says how many rows it holds after its title ("Payments 5").
+    .filter({ has: page.locator('.page-section-head', { hasText: new RegExp(`^\\s*${title}(\\s*[\\d,]+\\+?)?\\s*$`) }) })
     .first();
 
 test('beside the aside, a related list keeps its name and its whole status; a flag says yes; words read one way', async ({ page }) => {

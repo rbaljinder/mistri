@@ -105,10 +105,23 @@ export {
 } from '@mistriwork/ui';
 /**
  * An App's control kit (Preview): the module `uiKit` names exports `defineUiKit({ Button, Modal, … })`, each slot
- * drawn with the props the platform's own control takes; `defaultUiKit` holds those defaults, to dress rather than
- * replace one. `mistri check` refuses a slot name the kit does not have.
+ * drawn with the props the platform's own control takes; `defaultUiKit` holds those defaults, and `dress` draws one
+ * with something changed, to dress rather than replace it. `extendUiKit` makes one kit of several. A kit whose own
+ * popups are drawn outside their place in the tree asks `usePopupHost` where and `useComponentScope` under whose
+ * name. `mistri check` refuses a slot name the kit does not have.
  */
-export { defineUiKit, defaultUiKit, type SlotName, type UiKit, type UiKitSlots } from '@mistriwork/ui';
+export {
+  defineUiKit,
+  defaultUiKit,
+  dress,
+  extendUiKit,
+  useComponentScope,
+  usePopupHost,
+  type SlotName,
+  type SlotProps,
+  type UiKit,
+  type UiKitSlots,
+} from '@mistriwork/ui';
 
 /* ---------- what the App's generated types register ---------- */
 

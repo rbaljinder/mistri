@@ -1,6 +1,16 @@
 import { describe, expect, test } from 'vitest';
 import { chartLimit, windowed } from '../../../../engine/src/shared/dashboardAsks.js';
-import { CurrencyFigures, EXACT, figureSayer, legendSayer, namedGroups, ownWindow, sayer, type Section } from './dashboardModel.js';
+import {
+  CurrencyFigures,
+  EXACT,
+  figureSayer,
+  legendSayer,
+  namedGroups,
+  ownWindow,
+  sayer,
+  saysOwnTime,
+  type Section,
+} from './dashboardModel.js';
 import { installShell } from '../shellMode.js';
 
 describe('ownWindow', () => {
@@ -92,9 +102,9 @@ test('a metric card says money exact by default, a balance to the cent; compact 
   const card = sayer(section, undefined, { card: true });
   // A field report's balance read "$28K": a balance is read to the cent, at any size.
   expect(card(28_123.45)).toBe('$28,123.45');
-  expect(card(414_100)).toBe('$414,100.00');
-  expect(card(950)).toBe('$950.00');
-  expect(card(0)).toBe('$0.00');
+  expect(card(414_100)).toBe('$414,100');
+  expect(card(950)).toBe('$950');
+  expect(card(0)).toBe('$0');
   expect(card(-12.5)).toBe('-$12.50');
   expect(card('90071992547409931.25')).toBe('$90,071,992,547,409,931.25');
   // Kept in cents, the sum is said by its digits: 9007199254740993 cents, where Number() reads ...409.92.
@@ -182,4 +192,14 @@ test("a breakdown's figures are one form: every one compact where one reaches a 
   const exact = sayer(section).among([2_730_000, 51_240]);
   expect(exact(2_730_000)).toBe('$27,300.00');
   expect(exact(51_240)).toBe('$512.40');
+});
+
+test('a figure whose own query says a time is about that time, so it is never captioned Right now', () => {
+  expect(saysOwnTime('placed_at = last 7 days and status != returned')).toBe(true);
+  expect(saysOwnTime('due_on = this month')).toBe(true);
+  expect(saysOwnTime('reported_on = today')).toBe(true);
+  // A state, a count, a word that only looks like a time: what stands now, and is said so.
+  expect(saysOwnTime('status = paid')).toBe(false);
+  expect(saysOwnTime('note contains "last week"')).toBe(false);
+  expect(saysOwnTime(undefined)).toBe(false);
 });

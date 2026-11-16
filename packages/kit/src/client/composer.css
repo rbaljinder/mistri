@@ -212,10 +212,10 @@ body.composing { overflow: hidden; }
   margin-top: var(--space-2);
 }
 .composer-menu { display: inline-block; min-width: 9rem; }
-.composer-menu .dd-button { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
+.composer-menu [data-slot='select-trigger'] { padding: var(--space-1) var(--space-3); font-size: var(--text-xs); }
 /* Positioning is handled in the viewport by dropdown.js, so nothing here
    needs to fight the sidebar's clip. */
-.composer-menu .dd-list { min-width: 13rem; }
+.composer-menu :is([data-slot='select-content'], [data-slot='menu-content']) { min-width: 13rem; }
 
 /* ---------- saved views ---------- */
 

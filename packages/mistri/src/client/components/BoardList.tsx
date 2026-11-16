@@ -48,7 +48,7 @@ import { secondLine } from '@mistriwork/kit/client/components/Value.js';
 import { ReasonForm } from './Actions.js';
 import { Suspense, lazy, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useOptimisticMoves } from '@mistriwork/kit/client/components/optimisticMoves.js';
-import { BoardNewForm } from '@mistriwork/kit/client/components/boardNew.js';
+import { BoardNewForm, BoardTotal } from '@mistriwork/kit/client/components/boardNew.js';
 import { openNewRecord } from '@mistriwork/kit/client/insert.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -69,7 +69,7 @@ import { andQuery } from '@mistriwork/engine/shared/query.js';
 import { rowCurrency } from '@mistriwork/engine/shared/money.js';
 import { boardAmount, LANE_COUNT, LANE_CURRENCY, LANE_PAGE, LANE_SUM, laneCountsText } from '@mistriwork/engine/shared/boardLanes.js';
 import { defaultCurrency } from '@mistriwork/kit/client/locale.js';
-import { amountRule, cardCategory, cardFact, dressedValue, laneMark, laneWord, namesPerson, shortAmount } from './boardFace.js';
+import { amountRule, cardCategory, cardFact, dressedValue, laneMark, laneWord, namesPerson, shortAmount, toneOf } from './boardFace.js';
 import { activeApp } from '../appState.js';
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
@@ -143,12 +143,18 @@ interface Named {
   label: string;
 }
 
-/** A fixed edit of the lane column alone, into a lane the board shows. */
+/** The words a fixed edit stamps a column with (ActionSetValue): when it was done and by whom, filled in by the server. */
+const STAMPS: readonly unknown[] = ['now', 'me'];
+/**
+ * A fixed edit of the lane column into a lane the board shows, and of nothing else but the stamps that record the
+ * move: a machine's fixed verb writes its state and when the record came to it (`since`), which is still only the
+ * move. An edit that sets anything more is the record's own verb, and stays on its page.
+ */
 const isMove = (action: AppAction, by: string, lanes: readonly string[]): action is AppUpdateAction =>
   action.command === undefined &&
-  Object.keys(action.set).length === 1 &&
-  Object.keys(action.set)[0] === by &&
-  lanes.includes(String(action.set[by]));
+  Object.hasOwn(action.set, by) &&
+  lanes.includes(String(action.set[by])) &&
+  Object.entries(action.set).every(([column, value]) => column === by || STAMPS.includes(value));
 
 /** A machine's command verb that leads to a lane of the board's column, which this reader is granted. */
 const isCommandMove = (action: AppAction, by: string, lanes: readonly string[]): action is AppCommandAction => {
@@ -575,6 +581,13 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
         };
     });
   }
+  /* The room's title says how many cards the board holds: the lanes' sum, once they are counted. */
+  const sayTotal = useContext(BoardTotal);
+  const boardTotal = query && counted ? lanes.reduce((sum, lane) => sum + (lane.total ?? 0), 0) : null;
+  useEffect(() => {
+    sayTotal?.(boardTotal);
+    return () => sayTotal?.(null);
+  }, [sayTotal, boardTotal]);
   const laneLabel = (id: string) => lanes.find((lane) => lane.id === id)?.label ?? id;
 
   /* ---------- rows ---------- */
@@ -712,7 +725,14 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
         ...(changedRows.has(row) ? { changed: changedRows.get(row) } : {}),
         ...(edited.length ? { edits: edited } : {}),
         ...(spec.category && cardCategory(table.id, spec.category, row[spec.category])
-          ? { category: cardCategory(table.id, spec.category, row[spec.category])! }
+          ? {
+              category: cardCategory(
+                table.id,
+                spec.category,
+                row[spec.category],
+                namedCell(table, spec.category, row, referenceLabels).value,
+              )!,
+            }
           : {}),
         ...(spec.footer
           ? {
@@ -826,7 +846,51 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
           ),
         ];
   const laneMoves = direct || moves.length > 0;
-  const offered = cards.map((card) => ({ ...card, targets: laneMoves ? targets(card) : [] }));
+  /* A card's next step: the first of its verbs, in the order the resource says them, that leads from the card's state
+     to one other lane and takes nothing away — the record head's rule for its filled verb (actionOrder.ts), read for
+     the verbs that move — ahead of a step aside. A step into a final state is offered only where no step keeps the work
+     open and it is the one end the card has (Close, after Completed): beside a step onward it is the way out (Cancel),
+     and of two ends neither is the next (Mark won, Mark lost); they stay in the ⋯. A
+     board whose lanes are the reader's to write has no verbs, so no step: every lane is as likely as the next. */
+  const verbOf = (action: LaneMove, state: string) =>
+    (action.command && (action as AppCommandAction).labels?.find((each) => statesOfWhen(each.when, spec.by, words)?.has(state))?.label) ||
+    action.label;
+  const takesAway = (action: LaneMove, end: string) =>
+    (!action.command && Boolean((action as AppUpdateAction).confirm)) || toneOf(table.id, spec.by, end) === 'bad';
+  /* Every step a verb makes, whatever card it is on: a command's edges, a fixed edit's states to the one it writes. */
+  const stepsOf = (action: LaneMove): Array<readonly [string, string]> =>
+    action.command
+      ? (action as AppCommandAction).move!.edges.map((edge) => [edge.from, edge.to] as const)
+      : [...((action.when && statesOfWhen(action.when, spec.by, words)) || [])].map((from) => [from, String(action.set[spec.by])] as const);
+  /* A step aside: one into a state whose own verbs lead straight back (Put on hold, which Resume undoes). It waits in
+     the ⋯ while the card has a step that goes on. */
+  const aside = (from: string, to: string) => moves.some((action) => stepsOf(action).some(([a, b]) => a === to && b === from));
+  const nextOf = (card: BoardCard): TriageCard['next'] => {
+    if (direct) return undefined;
+    const state = stateOf(card);
+    const steps = actions.flatMap((action) => {
+      const move = moves.find((each) => each === action);
+      if (!move || (move.when && !matched.get(move.when)?.has(card.id))) return [];
+      const ends = lanesOfMove(move, spec.by, state);
+      const lane = ends.length === 1 ? laneOfValue(ends[0]) : undefined;
+      if (lane === undefined || lane === card.laneId || !laneIds.includes(lane) || takesAway(move, ends[0])) return [];
+      return lane === DONE && finalEnd(card) === undefined
+        ? []
+        : [{ label: verbOf(move, state), lane, final: lane === DONE, aside: aside(state, ends[0]) }];
+    });
+    const onward = steps.filter((each) => !each.final);
+    const ends = steps.filter((each) => each.final);
+    const step = onward.find((each) => !each.aside) ?? (ends.length === 1 ? ends[0] : undefined) ?? onward[0];
+    if (!step) return undefined;
+    const urgent = [spec.lines?.[0], ...(spec.footer ?? []).map((fact) => fact.column)].some(
+      (column) => column !== undefined && toneOf(table.id, column, card.row[column]) === 'bad',
+    );
+    return { label: step.label, lane: step.lane, ...(urgent ? { strong: true } : {}) };
+  };
+  const offered = cards.map((card) => {
+    const next = laneMoves && interactive ? nextOf(card) : undefined;
+    return { ...card, targets: laneMoves ? targets(card) : [], ...(next ? { next } : {}) };
+  });
 
   const invalidate = async () => {
     // The rows and the counts have changed, and so may every other card's answer to `when`.

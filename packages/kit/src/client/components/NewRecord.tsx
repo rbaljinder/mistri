@@ -18,6 +18,7 @@
  * the workbench's dialog and the app's drawer over the list, one form
  * wearing either.
  */
+import { personFacing } from '../audience.js';
 import { useMessageLanguage } from './useMessageLanguage.js';
 import { MultiStepForm } from './MultiStepForm.js';
 import { Columns } from '@mistriwork/ui/FormParts.js';
@@ -315,6 +316,15 @@ function NewRecordFormBody({
     firstField?: string;
   }>();
   const tried = validationAttempt !== undefined;
+  /* What is wrong with an answer once the form has been tried, in the words its field says under it: the summary at
+     the form's head says the same line, so the two can never differ. */
+  const answerProblem = (column: ColumnMeta, value: string, values: Record<string, string>): string => {
+    const kind = kindOf(column);
+    if (missingFields([column], insertValues({ [column.name]: value }, defaults, edited.current, table.columns), assigned).length > 0)
+      return say('fill', { column: label(column) });
+    if (invalidDate(column, value, kind)) return kind === 'datetime' ? say('enterAValidDate') : say('enterAValidDateInYyyy');
+    return amountProblem(column, values) || '';
+  };
   const [clearedServerFields, setClearedServerFields] = useState<Set<string>>(new Set());
   const [dirty, setDirty] = useState(false);
   const controls = useRef(new Map<string, Focusable | null>());
@@ -484,8 +494,41 @@ function NewRecordFormBody({
     <f.Subscribe selector={(state) => state.values}>
       {(values) => {
         const visibilityValues = visibilityOf(values);
+        /* After a submit that was refused here, two or more wrong answers are said together at the form's head, each
+           line a press from its field (one is said under its field alone, where the focus lands): a long form's fourth problem is under the fold, and a reader told only "Fill in Rent" under
+           the first does not know there are three more. The line under each field is still the one a screen reader
+           is told (it describes the field the focus lands on), so this is a list to see and step through and no
+           live region: said twice, a problem is two problems. It shortens as answers are put right. An App's form
+           only: the Workbench's dialog is the schema's, a column of boxes read at a glance. */
+        const problems =
+          app && tried
+            ? columns
+                .filter((column) => (!only || only.has(column.name)) && isFormFieldVisible(form, column, visibilityValues, table))
+                .flatMap((column) => {
+                  const value = values[column.name] ?? '';
+                  const rule = textRule(column);
+                  const message = answerProblem(column, value, values) || (rule && textRuleMessage(rule, value)) || '';
+                  return message ? [{ name: column.name, label: label(column), message }] : [];
+                })
+            : [];
         return (
           <>
+            {problems.length > 1 && (
+              <div className="form-problems" data-slot="form-problems">
+                {/* The office is told what to fix; the App's own public, filling in a form about themselves, is asked more gently (audience.ts). */}
+                <p>{say(personFacing() ? 'answersNeedALook' : 'fieldsNeedFixing', { count: problems.length })}</p>
+                <ul>
+                  {problems.map((problem) => (
+                    <li key={problem.name}>
+                      <button type="button" onClick={() => controls.current.get(problem.name)?.focus()}>
+                        {problem.label}
+                      </button>
+                      {`: ${problem.message}`}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {groups.map((group, groupIndex) => {
               const fields = group.columns.filter(
                 (column) => (!only || only.has(column.name)) && isFormFieldVisible(form, column, visibilityValues, table),
@@ -532,50 +575,39 @@ function NewRecordFormBody({
                 return (
                   <f.Field key={column.name} name={column.name}>
                     {(field) => {
-                      const missing =
-                        tried &&
-                        missingFields(
-                          [column],
-                          insertValues({ [column.name]: field.state.value }, defaults, edited.current, table.columns),
-                          assigned,
-                        ).length > 0;
                       const serverError = submission.fieldErrors.find((error) => error.field === column.name);
-                      const fieldMessage = missing
-                        ? say('fill', { column: label(column) })
-                        : tried && invalidDate(column, field.state.value, kind)
-                          ? kind === 'datetime'
-                            ? say('enterAValidDate')
-                            : say('enterAValidDateInYyyy')
-                          : tried && amountProblem(column, values)
-                            ? amountProblem(column, values)
-                            : textRule(column) &&
-                                typeof field.state.value === 'string' &&
-                                textRuleMessage(textRule(column)!, field.state.value)
-                              ? textRuleMessage(textRule(column)!, field.state.value)
-                              : serverError && !clearedServerFields.has(column.name)
-                                ? serverError.message
-                                : '';
+                      const fieldMessage =
+                        (tried && answerProblem(column, field.state.value, values)) ||
+                        (textRule(column) && typeof field.state.value === 'string' && textRuleMessage(textRule(column)!, field.state.value)
+                          ? textRuleMessage(textRule(column)!, field.state.value)
+                          : serverError && !clearedServerFields.has(column.name)
+                            ? serverError.message
+                            : '');
                       const errorId = `${errorPrefix}-${index}-error`;
                       const help = [own?.help, waitingOn ? say('chooseFirst', { waitingOn }) : ''].filter(Boolean).join(' ') || undefined;
                       const helpId = help ? `${errorPrefix}-${index}-help` : undefined;
                       return (
                         <div
-                          data-kind={
+                          /* A field as @mistriwork/ui's own are known: the part's name, the kind of a short answer
+                             and the state, so the controls' stylesheet dresses this column as it dresses theirs. */
+                          data-slot={app ? 'field' : undefined}
+                          data-answer={
                             app && (kind === 'number' || kind === 'money' || kind === 'date' || kind === 'datetime') ? kind : undefined
                           }
-                          className={`insert-field${app ? ' form-field' : ''}${fieldMessage ? ' missing is-invalid' : ''}`}
+                          data-invalid={app && fieldMessage ? '' : undefined}
+                          className={`insert-field${fieldMessage ? ' missing' : ''}`}
                         >
                           {app ? (
                             /* A record's form asks as a command form does: an answer that may be left empty says so
                                in a word beside its label, and a needed one is simply asked (docs/design.md, Access). */
-                            <div className="form-field-label-row">
-                              <label className="form-field-label">{label(column)}</label>
+                            <div data-slot="field-head">
+                              <label data-slot="field-label">{label(column)}</label>
                               {/* The space is in the markup: the stylesheet that once put it in a ::before is the
                                  forms room's, which a New drawer does not load ("Phone(optional)"). */}
                               {!required(column) && (
                                 <>
                                   {' '}
-                                  <span className="form-field-optional-word">{say('optionalWord')}</span>
+                                  <span data-slot="field-optional">{say('optionalWord')}</span>
                                 </>
                               )}
                             </div>
@@ -656,7 +688,7 @@ function NewRecordFormBody({
                             errorId={fieldMessage ? errorId : undefined}
                           />
                           {help && (
-                            <p id={helpId} className="form-field-hint">
+                            <p id={helpId} data-slot="field-description">
                               {help}
                             </p>
                           )}
@@ -776,8 +808,8 @@ function NewRecordFormBody({
         )}
         {live.length > 0 && !lineSets.length && (!steps || stepIndex === steps.length - 1) && liveSummary}
         {offersTags && (!steps || stepIndex === steps.length - 1) && (
-          <div className={`insert-field${app ? ' form-field' : ''}`}>
-            <label className="form-field-label">{humanName(tagTable!.name)}</label>
+          <div data-slot={app ? 'field' : undefined} className="insert-field">
+            <label data-slot="field-label">{humanName(tagTable!.name)}</label>
             <RecordPicker
               table={tagTable!}
               multiple
@@ -1042,29 +1074,33 @@ export function PlatformControl({
     const stacked = cards && words.length > SEGMENTED_WORDS;
     return (
       <div
-        className={stacked ? 'choice-cards' : cards ? 'choice-row' : 'choice-pair'}
+        /* The parts of @mistriwork/ui's own card choice, around the browser's radios: each card is its label, the
+           radio covers it, and the chosen one says so where the stylesheet reads it. */
+        data-slot="radio-group"
+        data-kind="cards"
+        data-fit={stacked ? 'stack' : cards ? 'row' : 'pair'}
         role="radiogroup"
         aria-label={spoken}
         aria-required={required || undefined}
       >
         {words.map(([stored, said], index) => (
-          <label key={stored} className={`${stacked ? 'choice-card' : 'choice-pick'}${value === stored ? ' is-on' : ''}`}>
+          <label key={stored} data-slot="choice" data-checked={value === stored ? '' : undefined}>
             {cards && rule?.icons?.[stored] && isAppIcon(rule.icons[stored]) ? (
-              <span className={stacked ? 'choice-card-icon' : 'choice-pick-icon'} aria-hidden="true">
+              <span data-slot="choice-icon" aria-hidden="true">
                 <Icon name={rule.icons[stored] as AppIconName} />
               </span>
             ) : null}
-            {stacked ? <span className="choice-card-label">{said}</span> : null}
             <input
               type="radio"
               name={radioName}
               value={stored}
-              className="choice-input"
+              data-slot="radio"
+              data-checked={value === stored ? '' : undefined}
               checked={value === stored}
               onChange={() => onChange(stored)}
               ref={index === 0 ? setControl : undefined}
             />
-            {stacked ? <span className="choice-box" aria-hidden="true" /> : said}
+            <span data-slot="choice-label">{said}</span>
           </label>
         ))}
       </div>
@@ -1183,6 +1219,9 @@ export function PlatformControl({
         value={value}
         onChange={onChange}
         withTime={kind === 'datetime'}
+        /* Said as a prop too: the field draws its own box round the input, and the box wears the danger edge from
+           what the field is told, not from an attribute put on the input after it is drawn. */
+        aria-invalid={errorId ? true : undefined}
         aria-label={app ? spoken : `${column.name} (${column.type})`}
         /* A day's box says the locale's pattern, as its hint does and as it reads what is typed (MM/DD/YYYY in
            en-US; ISO is read too): the field's own (DateField.tsx). */
@@ -1416,7 +1455,7 @@ function inertBehind(panel: HTMLElement): () => void {
   for (let node: HTMLElement = panel; node !== top && node.parentElement; node = node.parentElement) {
     for (const sibling of node.parentElement.children) {
       if (sibling === node || !(sibling instanceof HTMLElement) || sibling.inert) continue;
-      if (sibling.matches('[data-base-ui-portal], [aria-live], [role="status"], [role="alert"]')) continue;
+      if (sibling.matches('[popover], [aria-live], [role="status"], [role="alert"]')) continue;
       sibling.inert = true;
       made.push(sibling);
     }
@@ -1454,7 +1493,7 @@ function NewRecordSheet(props: NewRecordProps) {
      control drawn over the form's fields. Released before focus goes back to the New button, which is behind. */
   useLayoutEffect(() => (root.current ? inertBehind(root.current) : undefined), []);
   useEffect(() => {
-    const popupOpen = () => shellQuery('.picker-popup:not([data-closed]) .picker-list, .dd-popup:not([data-closed]) .dd-list');
+    const popupOpen = () => shellQuery('.picker-popup:not([data-closed]) .picker-list, [data-slot="select-content"][data-open]');
     /* Tab stays in the drawer. A pointer on the list closes the drawer first,
        so the keyboard gets no more of the list than the pointer does; and the
        drawer covers the list's right side, where Tab walked on under it. An
@@ -1531,6 +1570,7 @@ export function NewRecordDialog(props: NewRecordProps) {
       closeDisabled={dismissal.pending}
       beforeClose={dismissal.beforeClose}
       ariaLabel={title}
+      closeLabel={say('common.close')}
     >
       <h2>{title}</h2>
       <NewRecordForm

@@ -3,8 +3,10 @@
  * value ignores it; one that must tell a person's choice from its own (a filter that should not save when the page set
  * it, a dialog closed by Escape rather than by Save) reads it instead of keeping a flag beside the control.
  *
- * `reason` is Base UI's word where Base UI gives one (`trigger-press`, `outside-press`, `escape-key`, `item-press`,
- * `focus-out` …) and otherwise one short word per primitive; each callback's type lists the words it can hear.
+ * `reason` is one short word per cause (`trigger-press`, `outside-press`, `escape-key`, `item-press`, `focus-out` …);
+ * each callback's type lists the words it can hear. The words are this package's, not the library's the primitives
+ * are drawn over: they were Base UI's first, callers read them, and they stayed when the drawing moved to UI SDK
+ * (internal/told.ts puts UI SDK's details under them).
  * `source` is the hand that did it. `event` is the DOM event behind it, absent when the page made the change.
  */
 export type ChangeSource = 'pointer' | 'keyboard' | 'program';
@@ -60,17 +62,4 @@ export function changeDetails<Reason extends string>(reason: Reason, event?: Eve
    The last key or pointer press is the best word for which hand. */
 export function keptDetails<Reason extends string>(reason: Reason): ChangeDetails<Reason> {
   return { reason, source: lastKnownHand() };
-}
-
-/** Base UI's details in this shape, its reason kept, or this primitive's own word where Base UI says only `none`: a raw
-    `none` never reaches a caller, who could not tell which of Base UI's unnamed changes it heard. */
-export function fromBaseUi<Reason extends string, Own extends string>(
-  details: { reason: Reason; event: Event },
-  own: Own,
-): ChangeDetails<Exclude<Reason, 'none'> | Own>;
-export function fromBaseUi(details: { reason: string; event: Event }, own: string): ChangeDetails {
-  const reason = details.reason === 'none' ? own : details.reason;
-  // Base UI stands an Event named `base-ui` in for the one it did not have: the page made that change.
-  const event = details.event?.type === 'base-ui' ? undefined : details.event;
-  return event ? { reason, source: changeSource(event), event } : { reason, source: 'program' };
 }

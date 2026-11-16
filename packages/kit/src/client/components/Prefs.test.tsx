@@ -151,7 +151,7 @@ test('visual presets show swatches, persist immediately, and leave the other pre
   expect(screen.getByRole('button', { name: /^Visual theme\b/ })).toHaveTextContent('Workshop');
   await user.click(screen.getByRole('button', { name: /^Visual theme\b/ }));
   const option = screen.getByRole('option', { name: 'Mono' });
-  expect(option.querySelectorAll('.dd-swatches > span')).toHaveLength(3);
+  expect(option.querySelectorAll('[data-slot="swatches"] > span')).toHaveLength(3);
   await user.click(option);
   expect(screen.getByRole('button', { name: /^Visual theme\b/ })).toHaveTextContent('Mono');
   expect(localStorage.getItem(VISUAL_THEME_KEY)).toBe('mono');

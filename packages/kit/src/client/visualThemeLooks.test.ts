@@ -6,6 +6,7 @@ import { afterEach, expect, test } from 'vitest';
 import { configureVisualThemes, customThemeTokens, initVisualTheme, visualThemeOverrides, visualThemePalette } from './visualTheme.js';
 import type { ThemeDefinition } from '../../../engine/src/shared/theme.js';
 import { THEME_PRESETS } from '../../../engine/src/shared/themePresets.js';
+import { ROUND, ROUND_BOX } from '../../../engine/src/shared/themeTokens.js';
 
 afterEach(() => {
   window.localStorage.clear();
@@ -18,7 +19,8 @@ test('a look is exactly its definition', () => {
     configureVisualThemes([], look.id, true);
     expect(visualThemePalette(false)).toEqual(look.light);
     expect(visualThemePalette(true)).toEqual(look.dark);
-    expect(visualThemeOverrides().radius).toBe(look.radius!.control);
+    // A look whose controls are pills (Bloom) keeps a box's corner for everything else: a card is not a pill.
+    expect(visualThemeOverrides().radius).toBe(look.radius!.control === ROUND ? ROUND_BOX : look.radius!.control);
     expect(customThemeTokens(false)['--field-radius']).toBe(look.radius!.field);
   }
 });

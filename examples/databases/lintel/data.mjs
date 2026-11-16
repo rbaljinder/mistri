@@ -561,6 +561,17 @@ export function generate({ today, photos = true } = {}) {
     const begun = i < states.length && (states[i] === 'in_progress' || states[i] === 'on_hold');
     let issue = drawnIssue;
     while (begun && !ISSUES[issue][3].length) issue = (issue + 1) % ISSUES.length;
+    /* One home does not report the same thing twice: two "Outlet not working" on one address read as a mistake in
+       the data. The next issue of the same trade the home has not reported takes its place, with no draw, so the
+       category, and with it every draw that follows, is the same. */
+    const told = (at) => tables.maintenance_request.some((r) => r.unit_id === lease.unit_id && r.title === ISSUES[at][1]);
+    for (let step = 1; told(issue) && step < ISSUES.length; step++) {
+      const next = (issue + step) % ISSUES.length;
+      if (ISSUES[next][0] === ISSUES[issue][0] && !told(next) && (!begun || ISSUES[next][3].length)) {
+        issue = next;
+        break;
+      }
+    }
     const [category, title, description, partSkus] = ISSUES[issue];
     const age = i < states.length ? Math.floor(rand() * 9) : 10 + Math.floor(rand() * 110);
     let reported = addDays(today, -age);

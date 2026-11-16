@@ -1,0 +1,107 @@
+/* A modal and a side panel are one sheet: a head, a body that scrolls, a foot that does not. */
+@layer m-components {
+  :is([data-slot='dialog-content'], [data-slot='drawer-content'])[data-kind='sheet'] {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  [data-slot='dialog-content'][data-kind='sheet'] {
+    width: min(30rem, calc(100% - 2rem));
+    max-height: min(44rem, calc(100dvh - 4rem));
+    border-radius: calc(var(--m-radius) + 4px);
+
+    &[data-size='lg'] {
+      width: min(42rem, calc(100% - 2rem));
+    }
+  }
+
+  /* The panel floats a little off the window's edge, on the same corner as the content pane behind it. */
+  [data-slot='drawer-content'][data-kind='sheet']:is([data-side='right'], [data-side='left']) {
+    width: min(30rem, calc(100vw - 1rem));
+    height: calc(100dvh - 1rem);
+    max-height: none;
+    margin-block: var(--m-space-3);
+    margin-inline-end: var(--m-space-3);
+    border-radius: calc(var(--m-radius) + 4px);
+  }
+
+  [data-slot='sheet-head'] {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--m-space-5);
+    padding: var(--m-space-5) var(--m-space-5h) var(--m-space-5);
+
+    & :is([data-slot='dialog-title'], [data-slot='drawer-title']) {
+      margin: 0;
+    }
+
+    & :is([data-slot='dialog-description'], [data-slot='drawer-description']) {
+      margin: var(--m-space-1h) 0 0;
+      color: var(--m-ink-muted);
+    }
+
+    & :is([data-slot='dialog-close'], [data-slot='drawer-close']) {
+      flex: none;
+      width: calc(var(--ui-spacing) * 7);
+      height: calc(var(--ui-spacing) * 7);
+      margin: calc(var(--m-space-1) * -1) calc(var(--m-space-2h) * -1) 0 0;
+      padding: 0;
+    }
+  }
+
+  [data-slot='sheet-body'] {
+    flex: 1;
+    min-height: 0;
+    padding: var(--m-space-2) var(--m-space-5h) var(--m-space-6);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* The one filled critical button: the answer that destroys, and only inside its confirmation. */
+  [data-slot][data-variant='danger-solid'] {
+    border-color: var(--m-critical);
+    background: var(--m-critical);
+    color: var(--m-surface);
+
+    &:hover:not([data-disabled]) {
+      background: color-mix(in oklab, var(--m-critical) 88%, var(--m-ink));
+    }
+  }
+
+  [data-slot='menu-item'][data-tone='critical'] {
+    color: var(--m-critical);
+  }
+
+  /* A panel beside the page it describes: it dims nothing, so its own edge and shadow are what set it off. */
+  [data-slot='drawer-content'][data-kind='sheet'][data-beside] {
+    border: 1px solid var(--m-line);
+    box-shadow: var(--m-shadow-pop);
+  }
+
+  /* What stands under a panel beside the page steps aside by the panel's width, less the page's own gutter (a page
+     says how far its content already stands from the window's edge in --m-gutter). */
+  :root {
+    --m-beside: 31.25rem;
+  }
+
+  [data-slot='button'][data-kind='sheet-close'] {
+    width: calc(var(--ui-spacing) * 8);
+    padding: 0;
+  }
+}
+
+/* A plain dialog is the caller's box and nothing else: the panel beside a list, the picture viewer and the file
+   preview are placed, sized and painted by their own class. The dialog's default dress, UI SDK's and the
+   browser's own for what sits in the top layer are all taken off, so what the caller does not say is nothing and
+   not a centred card. In the last of the controls' layers, which is still under the caller's rules. */
+@layer m-looks {
+  [data-slot='dialog-content'][data-kind='plain'],
+  [data-slot='dialog-backdrop'][data-kind='plain'] {
+    all: unset;
+    display: block;
+  }
+}

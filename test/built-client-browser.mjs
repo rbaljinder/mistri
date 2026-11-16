@@ -53,8 +53,14 @@ const IMMUTABLE = 'public, max-age=31536000, immutable';
    ceiling moved with them in bundle-budget.mjs) took Forecourt's list to 473.9 KB. rc.47's public-form refusal and
    reply words, radios from a table and the dark bar's workspace tab took the staff sign-in to 260.3 KB and Tick's list to
    590.4 KB; both moved about 0.5% above. rc.50's forms in the visitor's language, the mistri.* form words and dependent
-   choices took the staff sign-in to 262.5 KB; it moved about 0.5% above. */
-const FIRST_PAINT_WIRE_KB = { public: 264, app: 488, workshop: 594 };
+   choices took the staff sign-in to 262.5 KB; it moved about 0.5% above.
+
+   Moved with bundle-budget.mjs's targets when the controls left Base UI for UI SDK, for the reason written there (its
+   core is heavier in a first page, and its sheet is carried under the controls'), and with the three looks added
+   beside it (Atelier, Graphite, Bloom: every built-in look's definition is in the entry, 17 KB raw for the three).
+   Measured cold: 288.1 KB the staff sign-in, 509 KB Forecourt's list (504.6 KB its landing), 621.2 KB Tick's list;
+   the targets sit about 3% above. */
+const FIRST_PAINT_WIRE_KB = { public: 297, app: 525, workshop: 640 };
 const NEVER = {
   public: ['/assets/shell', '/assets/chrome', '/assets/tenant'],
   app: ['/assets/tenant', '/assets/public'],

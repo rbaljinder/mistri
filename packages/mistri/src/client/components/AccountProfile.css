@@ -1,6 +1,6 @@
 /* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
 @layer components {
-.modal.account-profile { width: min(30rem, calc(100vw - 28px)); box-sizing: border-box; padding: var(--space-6); font-family: var(--sans); background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius); }
+[data-slot='dialog-content'][data-kind='modal'].account-profile { width: min(30rem, calc(100vw - 28px)); box-sizing: border-box; padding: var(--space-6); font-family: var(--sans); background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius); }
 .account-profile > header, .account-profile footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4h); }
 .account-profile h2 { margin: 0; font-size: calc(18px * var(--type-k)); }
 .account-profile .note { color: var(--ink-muted); line-height: 1.5; margin: var(--space-5) 0 var(--space-6); padding: 0; }

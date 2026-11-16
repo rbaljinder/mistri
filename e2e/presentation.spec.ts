@@ -43,7 +43,7 @@ test('joined boolean metadata agrees between mobile records and the grid', async
 });
 
 /* An App has no Undo, so `confirm: true` is asked there as in the Workbench: one click writes nothing until the
-   dialog is accepted — a fixed action from a phone's More menu, and a machine's verb from the header. */
+   dialog is accepted — a fixed action from a phone's bar, and a machine's verb from the header. */
 test('App verbs that confirm ask before they write, and write once on yes', async ({ page }) => {
   const writes: string[] = [];
   page.on('request', (request) => {
@@ -52,9 +52,8 @@ test('App verbs that confirm ask before they write, and write once on yes', asyn
   await page.route('**/api/update', (route) => route.fulfill({ json: { affected: 1, applied: route.request().postDataJSON().values } }));
   await page.goto(`${CRM}/@lead~127`);
   await page.setViewportSize({ width: 320, height: 844 });
-  // A phone keeps the first action in the bar; Mark lost is folded into More actions.
-  await page.getByRole('button', { name: 'More actions', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Mark lost', exact: true }).click();
+  // A lead has two verbs, so a phone keeps both in the bar: More over one entry would hide the other one.
+  await page.getByRole('button', { name: 'Mark lost', exact: true }).click();
   const fixed = page.getByRole('dialog', { name: 'Mark lost?' });
   await expect(fixed).toBeVisible();
   expect(writes).toHaveLength(0);

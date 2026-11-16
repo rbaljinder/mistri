@@ -807,7 +807,8 @@ export function LinesEditor({
                     return (
                       <td
                         key={column.name}
-                        className={`${columnClass(kind)}${at === 0 ? ' lines-lead' : ''}${problem ? ' is-invalid' : ''}`}
+                        className={`${columnClass(kind)}${at === 0 ? ' lines-lead' : ''}`}
+                        data-invalid={problem ? '' : undefined}
                         data-label={labelOf(table, column)}
                       >
                         {cell}

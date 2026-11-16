@@ -166,8 +166,10 @@ test('on a phone a layout is one column in reading order and does not scroll sid
    light and dark. */
 test('a folded matrix holds each figure inside its cell, readable on its heaviest tint', async ({ page }) => {
   test.setTimeout(LONG_MS);
+  /* The desk is a narrow one: a section's table starts on its heading now, with no leading padding in its first cell
+     (page.css), and those 14px are what made this matrix too wide for a 1280px window. It fits there, and folds here. */
   for (const [width, height] of [
-    [1280, 800],
+    [1024, 800],
     [390, 844],
   ] as const)
     for (const colorScheme of ['light', 'dark'] as const) {

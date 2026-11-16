@@ -56,7 +56,11 @@ describe('own drawings', () => {
       new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${yesterday}T00:00:00Z`)),
     );
     const moment = dressFor({ format: 'datetime', timezone: 'America/New_York' }, '2026-09-04T21:30:00Z') as { text: string };
-    expect(moment.text.replace(/[\u00a0\u202f]/g, ' ')).toMatch(/5:30 PM EDT$/);
+    /* The zone is named unless it is the reader's own (formatAbsolute's `reader`): the runner's clock decides which. */
+    const mine = new Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(moment.text.replace(/[\u00a0\u202f]/g, ' ')).toMatch(mine === 'America/New_York' ? /5:30 PM$/ : /5:30 PM EDT$/);
+    const own = dressFor({ format: 'datetime', timezone: mine }, '2026-09-04T21:30:00Z') as { text: string };
+    expect(own.text).not.toMatch(/(UTC|GMT[+-]?\d*|[A-Z]{3,5})$/);
     expect((dressFor({ format: 'date', timezone: 'Pacific/Auckland' }, '2026-09-04T21:30:00Z') as { text: string }).text).toMatch(
       /Sep\w* 5/,
     );

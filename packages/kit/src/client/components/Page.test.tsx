@@ -2343,7 +2343,7 @@ describe('the inferred record page', () => {
     await waitFor(() => expect(head.querySelector('.page-head-subtitle:not([aria-hidden])')?.textContent).toMatch(/active/));
   });
 
-  test('a page the App declared is drawn as written: no counts, no classic dress, its history a section of its own', async () => {
+  test('a page the App declared is drawn as written, its tabs counted in one request: no classic dress, its history a section of its own', async () => {
     draw({ page: inferred({ id: 'customer-desk', source: 'config' }), plans: listPlans });
     const strip = await screen.findByRole('tablist', { name: 'Related lists' });
     expect(
@@ -2351,7 +2351,10 @@ describe('the inferred record page', () => {
         .getAllByRole('tab')
         .map((tab) => tab.textContent),
     ).toEqual(['Invoices', 'Notes']);
-    expect(calls.some((call) => call.path === '/api/counts')).toBe(false);
+    // An authored page says how many each related list holds, as an inferred one does: one request for the strip.
+    await waitFor(() => expect(calls.filter((call) => call.path === '/api/counts')).toHaveLength(1));
+    // Seen, not heard: the figure stays out of the tab's name, so "Invoices" is still what a reader asks for.
+    expect(within(strip).getByRole('tab', { name: 'Invoices' }).querySelector('.tab-count')).toHaveAttribute('aria-hidden', 'true');
     await waitFor(() => expect(document.querySelector('dl.page-properties')).not.toBeNull());
     expect(document.querySelector('dl.page-classic')).toBeNull();
   });

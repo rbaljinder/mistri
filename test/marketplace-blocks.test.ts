@@ -197,6 +197,26 @@ const pages = (sections: unknown[]) =>
   );
 const sectionsOf = (sections: unknown[]) => pages(sections)[0].sections;
 
+test('a summary says a line under a figure by its field, as a breakdown’s steps do; only a summary, only a shown field', () => {
+  const [summary] = sectionsOf([{ kind: 'fields', show: ['price', 'mileage'], notes: { price: ' Before fees. ' } }]) as PageFields[];
+  assert.deepEqual(summary.notes, { price: 'Before fees.' });
+  // Written back as it was said (the page's JSON round trip).
+  assert.deepEqual((sectionConfig(summary) as { notes?: unknown }).notes, { price: 'Before fees.' });
+  assert.throws(
+    () => sectionsOf([{ kind: 'fields', presentation: 'table', show: ['price'], notes: { price: 'Before fees.' } }]),
+    /has "notes", which only a summary of figures carries/,
+  );
+  assert.throws(
+    () => sectionsOf([{ kind: 'fields', show: ['price'], notes: { year: 'Model year.' } }]),
+    /has a note for "year", which it does not show/,
+  );
+  assert.throws(
+    () => sectionsOf([{ kind: 'fields', show: ['price'], notes: { price: 'x'.repeat(81) } }]),
+    /a note for "price" that is not a line of 1 to 80 characters/,
+  );
+  assert.throws(() => sectionsOf([{ kind: 'fields', show: ['price'], notes: ['Before fees.'] }]), /not a map of at most 12 fields/);
+});
+
 test('a facts line and a sheet; a headline’s second figure, small print and the forms it starts filled', () => {
   const [facts, sheet, headline] = sectionsOf([
     { kind: 'fields', title: 'Key facts', presentation: 'facts', show: ['year', 'mileage'] },

@@ -24,6 +24,24 @@ describe('textMeasure', () => {
     expect(textMeasure(FACE)!('abcd')).toBe(48); // measured again, not the stale 40
   });
 
+  it('measures a figure and the marks beside it as wide as a tabular setting draws them', () => {
+    loaded = true;
+    /* A face whose tabular figures set a tenth wider than its own, and whose brackets a fifth: the page says so
+       (two spans, one tabular), since a canvas cannot set figures tabular. */
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const tabular = this.style.cssText.includes('tabular-nums');
+      const width = [...(this.textContent ?? '')].reduce(
+        (sum, mark) => sum + 12 * (!tabular ? 1 : /[0-9]/.test(mark) ? 1.1 : mark === '(' || mark === ')' ? 1.2 : 1),
+        0,
+      );
+      return { width } as DOMRect;
+    });
+    const measure = textMeasure('400 16px Barlow, sans-serif')!;
+    expect(measure('(720) 555')).toBeCloseTo(9 * 12 + 6 * 1.2 + 2 * 2.4, 5);
+    // Words with no figure in them are no wider for it.
+    expect(measure('(abc)')).toBe(60);
+  });
+
   it('keeps the widths of a loaded face', () => {
     loaded = true;
     const measure = textMeasure('400 15px Barlow, sans-serif')!;

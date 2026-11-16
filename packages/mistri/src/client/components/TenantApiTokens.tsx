@@ -109,7 +109,7 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
         <div className="api-tokens-secret" role="status">
           <p>{say('madeOnce')}</p>
           <div>
-            <input className="field-control" readOnly value={secret} aria-label={say('title')} onFocus={(event) => event.target.select()} />
+            <input data-slot="input" readOnly value={secret} aria-label={say('title')} onFocus={(event) => event.target.select()} />
             <Button
               size="compact"
               onClick={() => {
@@ -173,7 +173,7 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
           ) : (
             <>
               <Field label={say('label')} hint={say('labelHint')} size="compact" required>
-                <input className="field-control" value={label} maxLength={200} onChange={(event) => setLabel(event.target.value)} />
+                <input data-slot="input" value={label} maxLength={200} onChange={(event) => setLabel(event.target.value)} />
               </Field>
               {listing.choices.roles.length > 1 && (
                 <Field label={say('roles')} size="compact" group>
@@ -197,7 +197,8 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
               )}
               <Field label={say('days')} hint={say('daysHint', { most: listing.choices.maxDays })} size="compact">
                 <input
-                  className="field-control api-tokens-days"
+                  data-slot="input"
+                  className="api-tokens-days"
                   type="number"
                   min={1}
                   max={listing.choices.maxDays}

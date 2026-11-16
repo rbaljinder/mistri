@@ -49,7 +49,7 @@ test.describe('Desk blocks', () => {
       await expect(page.locator('[data-tone="warn"]')).toHaveCount(1);
       const composer = page.locator('.timeline-composer');
       // A form control anywhere but the composer, whose own box is drawn as a field too.
-      const actionForm = page.locator('.field-control:not(.timeline-composer .field-control)');
+      const actionForm = page.locator(':is([data-slot="input"], [data-slot="textarea"]):not(.timeline-composer *)');
       await composer.getByRole('textbox').fill('Rebooted the gateway.');
       await composer.locator('button[type="submit"]').click();
       // While it is in flight the composer alone holds the words: the action bar draws no form of its own.

@@ -30,7 +30,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.58; the
+These App features ship in mistri 1.0.0-rc.59; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -58,7 +58,7 @@ What it builds, each shown once on the site:
 | | |
 |---|---|
 | **The DSL** | Resources, views, actions, commands and a look, typed against your own schema: [the DSL in one App](https://mistriwork.dev/docs/dsl-tour/), then [the reference](https://mistriwork.dev/docs/app-dsl/) |
-| **Five looks, twelve palettes** | Workshop (the default, in Safety orange), Lumen, Mono, Sage and Ledger, each offering the same twelve palettes, one structure and type scale, or a look of the App's own: [looks](https://mistriwork.dev/docs/looks/) |
+| **Eight looks, twelve palettes** | Workshop (the default, in Safety orange), Lumen, Mono, Sage, Ledger, Atelier, Graphite and Bloom, each offering the same twelve palettes, one structure and type scale, or a look of the App's own: [looks](https://mistriwork.dev/docs/looks/) |
 | **Building blocks** | Cards, galleries, facts and sheets, a property rail, a record's sections as tabs, similar lists, a filter bar or a filter rail, boards and calendars you drag in, lists kept in your order: [choose a building block](https://mistriwork.dev/docs/choose/) and the [component tour](https://mistriwork.dev/docs/components/) |
 | **Your own components** | Where no built-in fits, a React module of the App's own as a section, a value renderer, a form's input, a list's rows or a whole room, fed by declared, authorized reads, changing data only through the App's commands and drawn with `@mistriwork/mistri/ui` in every look: [custom components](https://mistriwork.dev/docs/custom-components/) |
 | **An assistant** | People ask the App about their records, see answers drawn as its own tables and records, and confirm the changes it proposes, under their own grants; Claude via `ANTHROPIC_API_KEY`: [add an assistant](https://mistriwork.dev/docs/assistant/) |

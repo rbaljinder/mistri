@@ -34,7 +34,7 @@ process.stdout.write(
         Cancel
       </Button>
       <Field label="Name" hint="As it is written.">
-        {(control) => <input {...control} className="field-control" />}
+        {(control) => <input {...control} data-slot="input" />}
       </Field>
       <Icon name="dot" />
       <DateField

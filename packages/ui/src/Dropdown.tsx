@@ -1,24 +1,33 @@
 /**
- * A themed listbox, over Base UI's Select.
+ * A themed listbox, over UI SDK's Select.
  *
  * A native `<select>` cannot be styled where it matters: the open menu is
  * drawn by the operating system, in the system font, with the system
- * highlight colour, ignoring the page entirely. Base UI gives back what
+ * highlight colour, ignoring the page entirely. UI SDK gives back what
  * the native one gave for free — arrows move, Home and End jump, Enter and
  * Space choose, Escape closes and returns focus, Tab closes, typing jumps
  * to a matching option, the roles and `aria-expanded` — and this draws it
- * in the tool's own classes, so the stylesheet and the browser suite see
- * the control they always saw.
+ * on its parts' slots (`select-trigger`, `select-content`, `select-item`),
+ * which the stylesheet dresses.
  *
  * Actions ride under a divider and are walked with the same arrows, but
  * run rather than become the value: the value stays what the caller says
  * it is, so choosing "re-read the schema" cannot select it.
  */
-import { useEffect, useId, useRef, useState, type Ref } from 'react';
-import { Select } from '@base-ui/react/select';
-import { layoutViewport, zoomAnchor } from './internal/anchor.js';
-import { popupContainer } from './internal/popups.js';
-import { fromBaseUi, type ChangeDetails } from './changeDetails.js';
+import { useId, useRef, type Ref } from 'react';
+import {
+  Select as Listbox,
+  SelectContent,
+  SelectItem,
+  SelectItemIndicator,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from '@ui-sdk/react/select';
+import { useFieldControl } from '@ui-sdk/react/field';
+import type { ChangeDetails } from './changeDetails.js';
+import { popupContainer, useDialogContainer } from './internal/popups.js';
+import { told } from './internal/told.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface DropdownItem {
@@ -32,9 +41,10 @@ export interface DropdownItem {
   swatches?: string[];
 }
 
-/** Why a dropdown's choice moved: an option pressed (or chosen by key); `autofill`, the browser filling the hidden
-    field; or `sync`, which Base UI reports with no event at all — a letter typed on the closed button, or a chosen option
-    that left the list — and cannot be told apart, so it reads as the page's own change. */
+/** Why a dropdown's choice moved: an option pressed (or chosen by key); `autofill`, the browser putting back what the
+    hidden field held; or `sync`, every other way the value follows something else: a letter typed on the closed
+    button, a form reset, a chosen option that left the list. A `sync` with a key behind it says `keyboard`; with
+    nothing behind it, it is the page's own change. */
 export type DropdownChange = ChangeDetails<'item-press' | 'autofill' | 'sync'>;
 
 interface DropdownBase {
@@ -106,197 +116,159 @@ function DefaultMultiDropdown(props: MultiDropdownProps) {
   return <DropdownList {...props} multiple />;
 }
 
-function DropdownList(props: DropdownInput) {
-  const {
-    items,
-    ariaLabel,
-    ariaInvalid,
-    ariaDescribedBy,
-    ariaLabelledBy,
-    id,
-    buttonRef,
-    popupRef,
-    onOpenChange,
-    disabled,
-    readOnly,
-    valueClassName,
-    actions = [],
-    buttonClassName,
-    listClassName,
-    valueId,
-    placeholder,
-  } = props;
-  const many = props.multiple === true;
-  /* A button named only by `ariaLabel` is named by it and then by the value it shows (WCAG 2.5.3, label in name): its
-     own label first, the shown value after, as a field's `labelledby` names it with `valueId`. */
-  const own = useId();
-  const shownId = useId();
-  const buttonId = id ?? own;
-  const chosen: string[] = props.multiple === true ? props.value : [props.value];
-  const selected = items.find((i) => i.value === chosen[0]);
-  /* Nothing chosen: a value no item carries (a form's empty answer) reads as no selection, not as a stray one. */
-  const said = many
-    ? items
-        .filter((i) => chosen.includes(i.value))
-        .map((i) => i.label)
-        .join(', ')
-    : (selected?.label ?? '');
-  /* Where the list is drawn. A list portalled to the end of the body sits
-     behind a modal <dialog>'s top layer, and half the pickers here live in
-     one — so inside a dialog the list is drawn into that dialog, and keeps
-     its stacking context; elsewhere it goes to the body the way every
-     floating surface here does. */
-  const root = useRef<HTMLDivElement>(null);
-  const [container, setContainer] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    setContainer(root.current?.closest('dialog, [role="dialog"]') as HTMLElement | null);
-  }, []);
-  /* The trigger, for the anchor measured with the zoom-aware ruler (anchor.ts). */
-  const trigger = useRef<HTMLButtonElement | null>(null);
-  const setTrigger = (node: HTMLButtonElement | null) => {
-    trigger.current = node;
-    if (typeof buttonRef === 'function') buttonRef(node);
-    else if (buttonRef) (buttonRef as { current: HTMLButtonElement | null }).current = node;
-  };
+/* Why the list opened or closed: UI SDK's own word where it is one this callback's type lists, `implicit` for the
+   ones it has that no caller here reads (the window losing focus, a swipe, the page's own call). */
+const OPENS = new Set(['trigger-press', 'outside-press', 'escape-key', 'item-press', 'focus-out', 'list-navigation'] as const);
+type OpenReason = typeof OPENS extends Set<infer Word> ? Word | 'implicit' : never;
+const openReason = (said: string | undefined): OpenReason => (said && (OPENS as Set<string>).has(said) ? (said as OpenReason) : 'implicit');
+
+/* UI SDK's word for why the value moved, in the three a caller here can hear. `restore` is the browser putting a
+   form's values back (history, autofill); everything else that is not a press follows something else. */
+const changeReason = (said: string | undefined): 'item-press' | 'autofill' | 'sync' =>
+  said === 'item-press' ? 'item-press' : said === 'restore' ? 'autofill' : 'sync';
+
+/* The mark beside a chosen option of several. */
+const Tick = () => (
+  <svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <path d="M3 8.5l3.25 3.25L13 4.75" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+function Swatches({ colours }: { colours: string[] }) {
   return (
-    <div className="dd" ref={root}>
-      <Select.Root
-        multiple={many || undefined}
-        value={(many ? chosen : selected ? selected.value : null) as never}
-        disabled={disabled}
-        readOnly={readOnly}
-        onOpenChange={onOpenChange && ((next, details) => onOpenChange(next, fromBaseUi(details, 'implicit')))}
-        /* The labels, handed over: without them Base UI mounts the list
-           once, hidden, to read the selected label off an item. */
-        items={items.map((i) => ({ value: i.value, label: i.label }))}
-        onValueChange={(next: unknown, details) => {
-          const unnamed = details.event?.type === 'base-ui' ? 'sync' : 'autofill';
-          const change: DropdownChange = fromBaseUi(details as { reason: 'item-press' | 'none'; event: Event }, unnamed);
-          if (props.multiple === true) {
-            if (!Array.isArray(next)) return;
-            const ran = next.find((v): v is string => typeof v === 'string' && v.startsWith(ACTION));
-            if (ran) actions[Number(ran.slice(ACTION.length))]?.onSelect();
-            else
-              props.onChange(
-                items.map((i) => i.value).filter((v) => next.includes(v)),
-                change,
-              );
-            return;
-          }
-          if (typeof next !== 'string') return;
-          if (next.startsWith(ACTION)) {
-            actions[Number(next.slice(ACTION.length))]?.onSelect();
-            return;
-          }
-          if (next !== props.value) props.onChange(next, change);
-        }}
-      >
-        {/* A button that opens a listbox, as it has always been announced —
-            Base UI's own "combobox" role is the other reading of the same
-            pattern, and every test and stylesheet here knows this one. */}
-        <Select.Trigger
-          render={
-            <button
-              type="button"
-              role="button"
-              id={buttonId}
-              className={buttonClassName ? `dd-button ${buttonClassName}` : 'dd-button'}
-              ref={setTrigger}
-              aria-label={ariaLabelledBy ? undefined : ariaLabel}
-              aria-labelledby={ariaLabelledBy ?? (ariaLabel ? `${buttonId} ${valueId ?? shownId}` : undefined)}
-              aria-invalid={ariaInvalid || undefined}
-              aria-describedby={ariaDescribedBy}
-              title={selected?.detail ?? ''}
-            />
-          }
-        >
-          {selected?.swatches && (
-            <span className="dd-swatches" aria-hidden="true">
-              {selected.swatches.map((color, index) => (
-                <span key={index} style={{ background: color }} />
-              ))}
-            </span>
+    <span data-slot="swatches" aria-hidden="true">
+      {colours.map((colour, index) => (
+        <span key={index} style={{ background: colour }} />
+      ))}
+    </span>
+  );
+}
+
+/* The listbox, one choice or several. The button is a button to a reader, as it has always been announced, where
+   UI SDK's trigger calls itself a combobox: the role is said on the element handed to `render`, which is the one
+   place a part's role gives way. */
+function DropdownList(props: DropdownInput) {
+  const { items, actions = [] } = props;
+  /* Where the list is drawn. A list portalled to the end of the body sits behind a modal <dialog>'s top layer, and
+     half the pickers here live in one, so inside a dialog the list is drawn into that dialog and keeps its stacking
+     context; elsewhere it goes where every floating surface here does (internal/popups.ts), which an embedded
+     shell names for itself. */
+  const root = useRef<HTMLSpanElement>(null);
+  const dialog = useDialogContainer(root);
+  /* Nothing chosen: a value no item carries (a form's empty answer) reads as no selection, not as a stray one. An
+     item may itself be the empty value (a sort's "Default order"), and is then the one chosen. */
+  const chosen = props.multiple === true ? props.value : [props.value];
+  const known = items.filter((item) => chosen.includes(item.value));
+  /* An action's row is pressed like an option's, and the press is refused before it becomes the value. */
+  const run = (value: unknown, details: { cancel(): void }): boolean => {
+    const picked = [value].flat().find((one) => typeof one === 'string' && one.startsWith(ACTION));
+    if (typeof picked !== 'string') return false;
+    details.cancel();
+    actions[Number(picked.slice(ACTION.length))]?.onSelect();
+    return true;
+  };
+  /* A button named only by `ariaLabel` is named by it and then by the value it shows (WCAG 2.5.3, label in name):
+     its own label first, the shown value after, as a field's `ariaLabelledBy` names it with `valueId`. */
+  const made = useId();
+  const buttonId = props.id ?? `dropdown-${made}`;
+  const shownId = props.valueId ?? `${buttonId}-value`;
+  const label = props.ariaLabelledBy?.split(' ')[0];
+  const first = props.multiple === true ? undefined : known[0];
+  /* Inside a field UI SDK describes the trigger by the field's hint and problem itself. A Select hands the same
+     ids on as props (so a kit's Dropdown hears them too), and saying them twice would list each id twice. */
+  const wired = (useFieldControl()?.props({}) as Record<string, unknown> | undefined)?.['aria-describedby'];
+  const described = props.ariaDescribedBy && props.ariaDescribedBy === wired ? undefined : props.ariaDescribedBy;
+  const trigger = (
+    <SelectTrigger
+      render={<button type="button" role="button" />}
+      id={buttonId}
+      ref={props.buttonRef}
+      className={props.buttonClassName}
+      aria-label={props.ariaLabelledBy ? undefined : props.ariaLabel}
+      aria-labelledby={props.ariaLabelledBy ?? (props.ariaLabel ? `${buttonId} ${shownId}` : undefined)}
+      aria-describedby={described}
+      aria-invalid={props.ariaInvalid || undefined}
+      title={first?.detail}
+    >
+      {first?.swatches?.length ? <Swatches colours={first.swatches} /> : null}
+      <SelectValue id={shownId} className={props.valueClassName} data-placeholder={known.length ? undefined : ''}>
+        {known.length ? known.map((item) => item.label).join(', ') : (props.placeholder ?? '—')}
+      </SelectValue>
+    </SelectTrigger>
+  );
+  const content = (
+    <SelectContent
+      ref={props.popupRef}
+      className={props.listClassName}
+      container={dialog ?? popupContainer()}
+      // The list is called what the button is, without the value the button also says: UI SDK names it by the
+      // whole button, so the name is put on what it draws.
+      render={(drawn) => <div {...drawn} aria-label={props.ariaLabel} aria-labelledby={props.ariaLabel ? undefined : label} />}
+    >
+      {items.map((item) => (
+        // Named by its word alone, which is what a letter typed in the list looks for: not its detail and badge too.
+        <SelectItem key={item.value} value={item.value} label={item.label} disabled={item.disabled} data-tone={item.tone}>
+          {props.multiple === true && (
+            <SelectItemIndicator keepMounted>
+              <Tick />
+            </SelectItemIndicator>
           )}
-          <span id={valueId ?? shownId} className={`dd-value${valueClassName ? ` ${valueClassName}` : ''}${said ? '' : ' is-empty'}`}>
-            {said || placeholder || '—'}
-          </span>
-          <span className="dd-caret" aria-hidden="true">
-            ▾
-          </span>
-        </Select.Trigger>
-        <Select.Portal container={container ?? popupContainer()}>
-          {/* Below the trigger and flush with its left edge, the way the list
-              has always opened; never over the trigger the way a native
-              select overlaps its own value. Fixed, so a scrolling panel
-              cannot clip it, the way the old list escaped them. */}
-          <Select.Positioner
-            anchor={() => (trigger.current ? zoomAnchor(trigger.current) : null)}
-            alignItemWithTrigger={false}
-            positionMethod="fixed"
-            side="bottom"
-            align="start"
-            sideOffset={4}
-            collisionBoundary={layoutViewport()}
-            collisionPadding={8}
-            style={{ zIndex: 40 }}
-          >
-            <Select.Popup ref={popupRef} className="dd-popup">
-              <Select.List
-                className={['dd-list', many ? 'dd-list-multi' : '', listClassName].filter(Boolean).join(' ')}
-                aria-label={ariaLabel}
-                aria-labelledby={ariaLabel ? undefined : ariaLabelledBy?.split(' ')[0]}
-              >
-                {items.map((item) => (
-                  <Select.Item
-                    key={item.value}
-                    value={item.value}
-                    label={item.label}
-                    disabled={item.disabled}
-                    className={(s) =>
-                      `dd-option${s.selected ? ' selected' : ''}${item.disabled ? ' disabled' : ''}${item.tone ? ` dd-tone-${item.tone}` : ''}${s.highlighted ? ' active' : ''}`
-                    }
-                  >
-                    {many ? (
-                      <span className="dd-box" aria-hidden="true" />
-                    ) : (
-                      <span className="dd-check" aria-hidden="true">
-                        {item.value === props.value ? '✓' : ''}
-                      </span>
-                    )}
-                    {item.swatches && (
-                      <span className="dd-swatches" aria-hidden="true">
-                        {item.swatches.map((color, index) => (
-                          <span key={index} style={{ background: color }} />
-                        ))}
-                      </span>
-                    )}
-                    <span className="dd-text">
-                      <span className="dd-label">{item.label}</span>
-                      {item.detail && <span className="dd-detail">{item.detail}</span>}
-                    </span>
-                    {item.badge && <span className="dd-badge">{item.badge}</span>}
-                  </Select.Item>
-                ))}
-                {actions.length ? <div className="dd-divider" role="presentation" /> : null}
-                {actions.map((action, i) => (
-                  <Select.Item
-                    key={action.label}
-                    value={`${ACTION}${i}`}
-                    label={action.label}
-                    className={(s) => `dd-option dd-action${s.highlighted ? ' active' : ''}`}
-                  >
-                    <span className="dd-check" aria-hidden="true" />
-                    <span className="dd-text">
-                      <span className="dd-label">{action.label}</span>
-                    </span>
-                  </Select.Item>
-                ))}
-              </Select.List>
-            </Select.Popup>
-          </Select.Positioner>
-        </Select.Portal>
-      </Select.Root>
-    </div>
+          {item.swatches?.length ? <Swatches colours={item.swatches} /> : null}
+          <span data-slot="option-label">{item.label}</span>
+          {item.detail ? <span data-slot="option-detail">{item.detail}</span> : null}
+          {item.badge ? <span data-slot="option-badge">{item.badge}</span> : null}
+        </SelectItem>
+      ))}
+      {actions.length ? <SelectSeparator /> : null}
+      {actions.map((action, index) => (
+        <SelectItem key={action.label} value={`${ACTION}${index}`} data-kind="action">
+          {action.label}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  );
+  const open =
+    props.onOpenChange &&
+    ((next: boolean, details: Parameters<typeof told>[1] & { reason?: string }) =>
+      props.onOpenChange?.(next, told(openReason(details?.reason), details)));
+  return (
+    <span ref={root} data-slot="dropdown">
+      {props.multiple === true ? (
+        <Listbox
+          multiple
+          value={props.value}
+          disabled={props.disabled}
+          readOnly={props.readOnly}
+          onOpenChange={open}
+          onValueChange={(next, details) => {
+            if (run(next, details)) return;
+            const picked = next.map(String);
+            // Kept in the items' order, whatever order they were chosen in.
+            props.onChange(
+              items.map((item) => item.value).filter((value) => picked.includes(value)),
+              told(changeReason(details.reason), details),
+            );
+          }}
+        >
+          {trigger}
+          {content}
+        </Listbox>
+      ) : (
+        <Listbox
+          value={known[0]?.value ?? null}
+          disabled={props.disabled}
+          readOnly={props.readOnly}
+          onOpenChange={open}
+          onValueChange={(next, details) => {
+            if (run(next, details)) return;
+            props.onChange(next === null ? '' : String(next), told(changeReason(details.reason), details));
+          }}
+        >
+          {trigger}
+          {content}
+        </Listbox>
+      )}
+    </span>
   );
 }
 

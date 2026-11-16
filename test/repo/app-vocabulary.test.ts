@@ -190,6 +190,8 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'supportAudit',
       'supportLog',
       'ui',
+      // rc.59: 'person' when every role the reader holds is a portal role, so the shell drops the staff chrome.
+      'viewerAudience',
       'viewerRoles',
       'views',
       // rc.50: the platform's form words (`mistri.*`) in the reader's language, for the client's own chrome.

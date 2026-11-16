@@ -7,7 +7,14 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test, type TestContext } from 'node:test';
 import { transpile } from './support/tsc.js';
-import { HOST_MODULES, PAGE_EXPORTS, SERVED_MODULES, UI_EXPORTS } from '../packages/mistri/src/shared/uiSdk.js';
+import {
+  BEHAVIORS_EXPORTS,
+  HOST_MODULES,
+  LAZY_HOST_MODULES,
+  PAGE_EXPORTS,
+  SERVED_MODULES,
+  UI_EXPORTS,
+} from '../packages/mistri/src/shared/uiSdk.js';
 
 // Inspect the actual production packages used by the client build, not a fixed
 // list of React names and not the development-only exports of this test runner.
@@ -20,7 +27,7 @@ const reactExports = JSON.parse(
       `
   import { createRequire } from 'node:module';
   const require = createRequire(${JSON.stringify(import.meta.url)});
-  console.log(JSON.stringify(Object.fromEntries(${JSON.stringify(SERVED_MODULES.filter((name) => name !== '@mistriwork/mistri/ui' && name !== '@mistriwork/mistri/page'))}
+  console.log(JSON.stringify(Object.fromEntries(${JSON.stringify(SERVED_MODULES.filter((name) => !name.startsWith('@mistriwork/mistri/')))}
     .map(name => [name, Object.keys(require(name)).filter(key => /^[A-Za-z_$][\\w$]*$/.test(key) && key !== 'default' && !key.startsWith('__'))]))));
 `,
     ],
@@ -28,7 +35,12 @@ const reactExports = JSON.parse(
   ),
 ) as Record<string, string[]>;
 /* The SDK's own modules are their lists, in their order: what the build captures and the server checks. */
-const expected = { ...reactExports, '@mistriwork/mistri/ui': UI_EXPORTS, '@mistriwork/mistri/page': PAGE_EXPORTS };
+const expected = {
+  ...reactExports,
+  '@mistriwork/mistri/ui': UI_EXPORTS,
+  '@mistriwork/mistri/page': PAGE_EXPORTS,
+  '@mistriwork/mistri/behaviors': BEHAVIORS_EXPORTS,
+};
 
 /** The engine as an install holds it beside the package: its exports answer from dist/, and dist/ has the one module asked for. */
 async function installEngine(dir: string) {
@@ -79,10 +91,13 @@ test('packaged SDK bridges use only the captured host exports without installed 
     for (const name of ${JSON.stringify(Object.keys(reactExports))}) assert.throws(() => require.resolve(name), { code: 'MODULE_NOT_FOUND' });
     const { hostModuleSource } = await import(${JSON.stringify(moduleUrl)});
     const expected = ${JSON.stringify(expected)};
-    globalThis.__mistri = { modules: {} };
+    /* A module the page fetches on demand is asked for (\`load\`), and its bridge waits for it. */
+    const lazy = ${JSON.stringify(LAZY_HOST_MODULES)};
+    globalThis.__mistri = { modules: {}, load: {} };
     for (const [name, file] of Object.entries(${JSON.stringify(Object.fromEntries(SERVED_MODULES.map((name) => [name, HOST_MODULES[name]])))})) {
       const host = Object.fromEntries(expected[name].map(key => [key, { name, key }]));
-      globalThis.__mistri.modules[name] = host;
+      if (lazy.includes(name)) globalThis.__mistri.load[name] = async () => host;
+      else globalThis.__mistri.modules[name] = host;
       const source = hostModuleSource(file);
       assert.equal(hostModuleSource(file), source);
       const bridge = await import('data:text/javascript,' + encodeURIComponent(source));

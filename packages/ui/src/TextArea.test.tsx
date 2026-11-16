@@ -17,7 +17,9 @@ test('the label names the box, typing reports the text across lines, and the box
   render(<Typed />);
   const box = screen.getByRole('textbox', { name: 'Notes' });
   expect(box.tagName).toBe('TEXTAREA');
-  expect(box).toHaveClass('field-control');
+  // The field's own control: the frame it stands in is the one that names and describes it.
+  expect(box.closest('[data-slot="field"]')).toBeInTheDocument();
+  expect(box).toHaveAccessibleDescription('What happened.');
   expect(box).toHaveAttribute('rows', '5');
   expect(box).toHaveAttribute('autocomplete', 'off');
   await user.type(box, 'one{Enter}two');

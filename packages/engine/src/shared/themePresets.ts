@@ -42,11 +42,6 @@ function overlayPalette(base: ThemePalette, over: Partial<ThemePalette> | undefi
   return merged;
 }
 
-/** The nav role its base look sets, which a theme wears on the bar only until it sets the role itself (recipeAttributes). */
-export function lookNavRole(theme: ThemeDefinition) {
-  return themePreset(theme.base)?.type?.roles?.nav;
-}
-
 /** Inherit roles from a data-backed base, then overlay the author's explicit values. */
 export function inheritThemePreset(theme: ThemeDefinition): ThemeDefinition {
   const base = themePreset(theme.base);

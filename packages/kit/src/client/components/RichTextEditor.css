@@ -16,7 +16,7 @@
   outline: var(--focus-width) solid var(--focus);
   outline-offset: -1px;
 }
-.rich-editor.is-invalid {
+.rich-editor[data-invalid] {
   border-color: var(--status-critical);
 }
 .rich-editor.is-disabled {
@@ -103,7 +103,7 @@
   padding: var(--space-2h) var(--space-3);
   border-bottom: 1px solid var(--line);
 }
-.rich-link-bar .field-control {
+.rich-link-bar :is([data-slot='input'], [data-slot='textarea']) {
   flex: 1 1 14rem;
   min-height: 28px;
   padding: var(--space-1h) var(--space-3);

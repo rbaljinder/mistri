@@ -79,7 +79,7 @@ test("a stepper's description is its first step's too; a one-page form keeps it 
 
 test('a row draws its fields side by side', () => {
   const { container } = render(<FormSurface form={intake} appName="Harbor" submit={vi.fn()} />);
-  const row = container.querySelector('.form-columns') as HTMLElement;
+  const row = container.querySelector('[data-slot="columns"]') as HTMLElement;
   expect(row).toBeTruthy();
   expect(within(row).getByLabelText('First name (required)')).toBeInTheDocument();
   expect(within(row).getByLabelText('Last name (required)')).toBeInTheDocument();
@@ -179,9 +179,9 @@ test('the intake style marks a box left holding an answer its rules take; never 
   await formArrives(contact);
   const { container } = render(<FormSurface form={contact} appName="Harbor" submit={vi.fn()} />);
   const email = await screen.findByRole('textbox', { name: /^Email/ });
-  const markOf = (box: HTMLElement) => box.closest('.field-box')?.querySelector('.field-mark') ?? null;
+  const markOf = (box: HTMLElement) => box.closest('[data-slot="field-box"]')?.querySelector('[data-slot="field-mark"]') ?? null;
   // The room for the mark is the box's from the start, so its arriving moves no text.
-  expect(email.closest('.field-box.has-mark')).not.toBeNull();
+  expect(email.closest('[data-slot="field-box"][data-has-mark]')).not.toBeNull();
   fireEvent.change(email, { target: { value: 'ada@example.test' } });
   expect(markOf(email)).toBeNull();
   fireEvent.blur(email);
@@ -196,7 +196,7 @@ test('the intake style marks a box left holding an answer its rules take; never 
   // An answer taken back takes its mark with it.
   fireEvent.change(email, { target: { value: '' } });
   await waitFor(() => expect(markOf(email)).toBeNull());
-  expect(container.querySelectorAll('.field-mark')).toHaveLength(1);
+  expect(container.querySelectorAll('[data-slot="field-mark"]')).toHaveLength(1);
 });
 
 test('an amount and a text typed through its mask are marked too; a sensitive value keeps its show button there', async () => {
@@ -214,18 +214,18 @@ test('an amount and a text typed through its mask are marked too; a sensitive va
   const { container } = render(<FormSurface form={money} appName="Harbor" submit={vi.fn()} />);
   const phone = await screen.findByRole('textbox', { name: /^Phone/ });
   const down = await screen.findByRole('textbox', { name: /^Down payment/ });
-  const markOf = (box: HTMLElement) => box.closest('.field-box')?.querySelector('.field-mark') ?? null;
-  expect(phone.closest('.field-box.has-mark')).not.toBeNull();
-  expect(down.closest('.field-box.has-mark')).not.toBeNull();
+  const markOf = (box: HTMLElement) => box.closest('[data-slot="field-box"]')?.querySelector('[data-slot="field-mark"]') ?? null;
+  expect(phone.closest('[data-slot="field-box"][data-has-mark]')).not.toBeNull();
+  expect(down.closest('[data-slot="field-box"][data-has-mark]')).not.toBeNull();
   fireEvent.change(phone, { target: { value: '6786786781' } });
   fireEvent.change(down, { target: { value: '2500' } });
-  expect(container.querySelectorAll('.field-mark')).toHaveLength(0);
+  expect(container.querySelectorAll('[data-slot="field-mark"]')).toHaveLength(0);
   fireEvent.blur(phone);
   fireEvent.blur(down);
-  await waitFor(() => expect(container.querySelectorAll('.field-mark')).toHaveLength(2));
+  await waitFor(() => expect(container.querySelectorAll('[data-slot="field-mark"]')).toHaveLength(2));
   expect(markOf(phone)).not.toBeNull();
   expect(markOf(down)).not.toBeNull();
-  expect(container.querySelector('input[type="password"]')?.closest('.has-mark')).toBeNull();
+  expect(container.querySelector('input[type="password"]')?.closest('[data-has-mark]')).toBeNull();
   // An amount reads grouped once typed, and the digits alone while it is typed again.
   expect(down).toHaveValue('2,500');
   fireEvent.focus(down);
@@ -249,8 +249,8 @@ test('a consent beside its statement: the paragraph is drawn once, the label nam
   expect(screen.getByRole('checkbox', { name: /^Terms/ })).toBeRequired();
   expect(texts).not.toBeRequired();
   expect(screen.getAllByText(words)).toHaveLength(2);
-  expect(container.querySelector('.form-field-check-row')).toBeNull();
-  for (const label of container.querySelectorAll('label.form-field-label')) expect(label).toHaveClass('form-field-label-hidden');
+  expect(container.querySelector('[data-slot="field-check-row"]')).toBeNull();
+  for (const label of container.querySelectorAll('label[data-slot="field-label"]')) expect(label).toHaveAttribute('data-hidden');
   fireEvent.click(texts);
   expect(texts).toBeChecked();
 });
@@ -278,9 +278,9 @@ test('an amount on a slider is a slider, read in the currency, with its two ends
   expect(screen.queryByRole('textbox')).toBeNull();
   fireEvent.change(slider, { target: { value: '500' } });
   await waitFor(() => expect(slider).toHaveAttribute('aria-valuetext', '$500'));
-  expect(container.querySelector('.field-readout')).toHaveTextContent('$500');
+  expect(container.querySelector('[data-slot="slider-readout"]')).toHaveTextContent('$500');
   expect(container.querySelector('.intake-slider-ends')).toHaveTextContent('$150$1,000');
-  expect(container.querySelector('.has-mark')).toBeNull();
+  expect(container.querySelector('[data-has-mark]')).toBeNull();
 });
 
 test('the stepper style keeps no valid check', async () => {
@@ -288,5 +288,5 @@ test('the stepper style keeps no valid check', async () => {
   await formArrives(stepper);
   const { container } = render(<FormSurface form={stepper} appName="Harbor" submit={vi.fn()} />);
   await screen.findByRole('textbox', { name: /^First name/ });
-  expect(container.querySelector('.field-box')).toBeNull();
+  expect(container.querySelector('[data-slot="field-box"]')).toBeNull();
 });

@@ -60,7 +60,9 @@ export const FIELD_COLUMNS: readonly FieldColumns[] = [1, 2, 3];
  */
 export interface ResolvedWorkflowStatus {
   field: string;
-  steps: Array<{ value: string; label: string }>;
+  /** `outcome`: a way the record can end that is off the road (cancelled, returned): drawn apart from the steps, never
+      as the next of them. */
+  steps: Array<{ value: string; label: string; outcome?: true }>;
   /** The steps are an order: those before the current one draw as passed. The author's statement, not a history. */
   ordered?: true;
 }
@@ -134,6 +136,8 @@ export interface PageFields {
   spans?: Record<string, string>;
   /** A headline's earlier value of its figure — a was-price — struck through beside it when it has one above the figure. */
   was?: string;
+  /** A summary's lines under its figures, by the field each stands under: what the figure counts. */
+  notes?: Record<string, string>;
   /** A headline's line of small print under its actions: what the figures assume. */
   note?: string;
 }
@@ -311,6 +315,8 @@ export interface PageList {
   totals?: string[];
   /** A ⋯ menu at the end of each row with the row's own actions and verbs, as its page offers them. */
   rowActions?: true;
+  /** The shown column a row is titled by where the list is read as records, in place of the record's name. */
+  primary?: string;
   /** Authored `create: false`: no Add, where the reader could otherwise add a row from the list. */
   noCreate?: true;
   /** Authored `actions`: the page record's own verbs, by id, drawn in this list's head and not in the record's. */

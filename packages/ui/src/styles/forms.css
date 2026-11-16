@@ -1,0 +1,346 @@
+/* Forms: label over value, the hint under it, pairs side by side, sections named beside their fields. */
+@layer m-components {
+
+  [data-slot='field'] :is([data-slot='select-trigger'], [data-slot='date-picker'], [data-slot='number-input']) {
+    width: 100%;
+  }
+
+  /* The word is on every field that need not be answered, and seen where the page asked for it. A theme that
+     marks the optional ones and not the required shows it on all of them (theme/looks.css, `required`). */
+  [data-slot='field-optional']:not([data-said]) {
+    display: none;
+  }
+
+  [data-slot='field-optional'] {
+    margin-inline-start: var(--m-space-2h);
+    color: var(--m-ink-subtle);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    font-weight: var(--m-weight-regular);
+  }
+
+  /* A setting: its words, then the switch at the row's end. Rows are ruled apart, not boxed. */
+  [data-slot='field'][data-kind='setting'] {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--m-space-6);
+
+    & + [data-kind='setting'] {
+      padding-block-start: var(--m-space-5);
+      border-block-start: 1px solid var(--m-line);
+    }
+
+    & > div {
+      display: flex;
+      flex-direction: column;
+      gap: var(--m-space-1);
+    }
+
+    & [data-slot='switch'] {
+      flex: none;
+      margin: 0;
+    }
+  }
+
+  [data-slot='field'][data-kind='check'] {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--m-space-3h);
+
+    & > div {
+      display: flex;
+      flex-direction: column;
+      gap: var(--m-space-1);
+    }
+  }
+
+  /* One of a few: each choice is a card, and the chosen one wears the accent's edge and wash. The radio covers
+     its card, so the whole card is the target and the ring is drawn on the card. */
+  [data-slot='radio-group'][data-kind='cards'] {
+    display: grid;
+    gap: var(--m-space-3);
+
+    & [data-slot='choice'] {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: var(--m-space-1);
+      padding: var(--m-space-3) var(--m-space-4);
+      border: 1px solid var(--m-line-control);
+      border-radius: var(--m-radius);
+      background: var(--m-surface);
+      cursor: pointer;
+      transition:
+        background-color var(--m-fast),
+        border-color var(--m-fast);
+
+      &:hover {
+        background: var(--m-raised);
+      }
+
+      &:has([data-slot='radio'][data-checked]) {
+        border-color: var(--m-accent);
+        background: var(--m-accent-soft);
+        box-shadow: inset 0 0 0 1px var(--m-accent);
+      }
+
+      &:has([data-slot='radio']:focus-visible) {
+        outline: 2px solid var(--ui-ring);
+        outline-offset: 2px;
+      }
+    }
+
+    & [data-slot='radio'] {
+      position: absolute;
+      inset: 0;
+      width: auto;
+      height: auto;
+      margin: 0;
+      border: 0;
+      border-radius: inherit;
+      background: none;
+      opacity: 0;
+      /* The card is the radio's label, which hands a press on to it: the cover is there for the keyboard's ring
+         and takes no pointer, so the words under it are still what is pressed (and what a test presses). */
+      pointer-events: none;
+    }
+
+    & [data-slot='choice-label'] {
+      font-weight: var(--m-weight-strong);
+    }
+
+    & [data-slot='choice-hint'] {
+      color: var(--m-ink-muted);
+      font-size: var(--m-size-xs);
+      line-height: var(--m-lead-xs);
+    }
+
+    /* A card says it is one of a few with a round mark at its end, as a card of several says it with a square
+       (kit-fields.css): empty until chosen, then the accent's with a dot. Without it a row of unchosen cards read
+       as buttons, and nothing told one answer from several. A pick (a row of words, a pair) is a button and has
+       none. The mark is drawn on the card, under the radio that covers it: as its `::before`, since on a coarse
+       pointer UI SDK takes the `::after` of a label that holds a radio for the label's touch target, and a mark
+       drawn there was moved onto the card's icon on every phone. */
+    &:not([data-fit='row'], [data-fit='pair'], [data-shape='pair']) [data-slot='choice'] {
+      padding-inline-end: calc(var(--m-space-4) + 1.125rem + var(--m-space-3));
+
+      &::before {
+        content: '';
+        position: absolute;
+        inset-block-start: var(--m-space-3);
+        inset-inline-end: var(--m-space-4);
+        box-sizing: border-box;
+        width: 1.125rem;
+        height: 1.125rem;
+        border: 1.5px solid var(--m-line-control);
+        border-radius: 50%;
+        background: var(--m-surface);
+        transition:
+          background-color var(--m-fast),
+          border-color var(--m-fast);
+      }
+
+      &:has([data-slot='radio'][data-checked])::before {
+        border-color: var(--m-accent);
+        background: radial-gradient(circle, var(--m-on-accent) 0 0.1875rem, var(--m-accent) 0.21875rem);
+      }
+    }
+  }
+
+  /* The bar at the foot of what it ends. It sticks there, so on a step longer than the window the way on is still
+     in reach, and it stays in its own container, so the page keeps its sidebar. Its ground is the surface's, with a
+     rule over it, because what scrolls under it has to end somewhere. */
+  [data-slot='action-bar'] {
+    position: sticky;
+    inset-block-end: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--m-space-3);
+    padding: var(--m-space-4) var(--m-space-5);
+    border-block-start: 1px solid var(--m-line);
+    background: var(--m-surface);
+  }
+
+  /* On a phone the primary takes the row: a thumb finds it without aiming. */
+  @media (max-width: 40rem) {
+    [data-slot='action-bar'] > [data-slot='button'][data-variant='solid'] {
+      flex: 1;
+    }
+  }
+
+  /* What must be answered: a mark in the critical tone beside the label, the word for it said to a screen reader. */
+  [data-slot='field-required'] {
+    margin-inline-start: var(--m-space-1);
+    color: var(--m-critical);
+  }
+
+  [data-slot='field-label'] [data-kind='help-tip'] {
+    margin-inline-start: var(--m-space-2h);
+  }
+
+  /* A label said and not drawn. */
+  [data-slot='field-label'][data-hidden] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* The line under a field: its hint or its problem at the start, how much has been typed at the end. */
+  [data-slot='field-under'] {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--m-space-4);
+
+    & > :first-child {
+      min-width: 0;
+    }
+  }
+
+  /* A line kept for a problem that is not there yet, so the form does not move when it comes. */
+  [data-slot='field-reserve'] {
+    display: block;
+    height: 1.25rem;
+  }
+
+  [data-slot='field-count'] {
+    flex: none;
+    color: var(--m-ink-subtle);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    font-variant-numeric: tabular-nums;
+
+    &[data-near] {
+      color: var(--m-warning);
+    }
+
+    &[data-full] {
+      color: var(--m-critical);
+      font-weight: var(--m-weight-strong);
+    }
+  }
+
+  /* A cross that empties the field stands inside its end, and only while there is something to empty. */
+  [data-slot='input-group'][data-kind='clearable'] {
+    position: relative;
+    display: flex;
+    flex: 1;
+
+    & [data-slot='input'] {
+      flex: 1;
+      padding-inline-end: var(--m-inset-icon);
+    }
+
+    & [data-slot='input-clear'] {
+      position: absolute;
+      inset-block: 0;
+      inset-inline-end: 0.375rem;
+      display: grid;
+      place-items: center;
+      width: 1.5rem;
+      height: 1.5rem;
+      margin-block: auto;
+      padding: 0;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--m-ink-subtle);
+      cursor: pointer;
+
+      &:hover {
+        background: var(--m-raised);
+        color: var(--m-ink);
+      }
+
+      & svg {
+        width: 0.75rem;
+        height: 0.75rem;
+      }
+    }
+  }
+
+  /* A text area grows with what is typed, to a height past which it scrolls. */
+  [data-slot='textarea'] {
+    max-height: 16rem;
+  }
+
+  /* A row that does something rather than being chosen: set off by a rule, in the accent. */
+  [data-slot='select-item'][data-kind='action'] {
+    color: var(--m-accent-ink);
+    font-weight: var(--m-weight-strong);
+
+    &[data-first] {
+      margin-block-start: var(--m-space-2);
+      border-block-start: 1px solid var(--m-line);
+      border-start-start-radius: 0;
+      border-start-end-radius: 0;
+      padding-block-start: var(--m-space-2h);
+    }
+  }
+
+  /* The calendar's head and foot: the month between its two arrows, and today beside the way to empty the field. */
+  [data-slot='calendar-head'] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--m-space-2);
+
+    & [data-slot='calendar-heading'] {
+      margin: 0;
+      font-size: inherit;
+      font-weight: var(--m-weight-strong);
+      letter-spacing: 0;
+    }
+  }
+
+  [data-slot='calendar-foot'] {
+    display: flex;
+    justify-content: space-between;
+    margin-block-start: var(--m-space-2h);
+    padding-block-start: var(--m-space-2h);
+    border-block-start: 1px solid var(--m-line)
+  }
+
+  [data-slot='slider-ends'] {
+    display: flex;
+    flex: 0 0 100%;
+    justify-content: space-between;
+    order: 3;
+    color: var(--m-ink-subtle);
+    font-size: var(--m-size-xs);
+    line-height: var(--m-lead-xs);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A choice's icon stands before its words. */
+  [data-slot='choice-label'] {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--m-space-3);
+
+    & svg {
+      flex: none;
+      width: 1rem;
+      height: 1rem;
+      color: var(--m-ink-muted);
+    }
+  }
+
+  @keyframes m-step {
+    from {
+      opacity: 0;
+      translate: 0.5rem 0;
+    }
+  }
+
+  /* A step's name takes the keyboard when the step changes, to be read out; it is not a control and wears no ring. */
+  [data-slot='step-header'] :is(h1, h2, h3):focus {
+    outline: 0;
+  }
+}

@@ -28,7 +28,7 @@ interface BoardCardEditorProps {
 export default function BoardCardEditor({ table, row, column, recordKey, isCurrent, onClose }: BoardCardEditorProps) {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (column) root.current?.querySelector<HTMLElement>('input, select, .dd-button')?.focus();
+    if (column) root.current?.querySelector<HTMLElement>('input, select, [data-slot="select-trigger"]')?.focus();
   }, [column?.name]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div

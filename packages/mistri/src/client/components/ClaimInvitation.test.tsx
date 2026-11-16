@@ -48,7 +48,7 @@ async function fill(values: Partial<Record<'token' | 'name' | 'password' | 'conf
 
 /** What the form said: beside the field it is about, or in its own alert when it is about no one field. */
 function told(): string {
-  const beside = document.querySelector('.form-field-problem:not([hidden])');
+  const beside = document.querySelector('[data-slot="field-error"]:not([hidden])');
   return (beside ?? screen.getByRole('alert')).textContent ?? '';
 }
 

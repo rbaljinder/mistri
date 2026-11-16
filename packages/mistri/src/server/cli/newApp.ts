@@ -252,7 +252,14 @@ async function runNewFromBrief(file: string, rest: readonly string[]): Promise<n
         theme: brief.theme,
         ...(brief.logo ? { logo: brief.logo } : {}),
         roles: brief.roles,
-        commands: brief.commands.map(({ id: command, on, label, set }) => ({ id: command, table: on, label, set })),
+        commands: brief.commands.map(({ id: command, on, label, set, when, refuse }) => ({
+          id: command,
+          table: on,
+          label,
+          set,
+          ...(when ? { when } : {}),
+          refuse,
+        })),
       },
     });
   } catch (error) {

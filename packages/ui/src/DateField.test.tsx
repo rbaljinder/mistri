@@ -6,7 +6,6 @@ import { DateField as Drawn, type DateFieldProps, type DateFieldWords } from './
 import type { ChangeDetails } from './changeDetails.js';
 import { Modal } from './Modal.js';
 
-vi.mock('./internal/anchor.js', () => ({ zoomAnchor: () => null, layoutViewport: () => ({ x: 0, y: 0, width: 1200, height: 900 }) }));
 afterEach(cleanup);
 
 /* The words a host lends (the kit lends its catalog's): these are the ones the assertions read. */
@@ -28,6 +27,9 @@ const DateField = (props: Omit<DateFieldProps, 'words' | 'calendarIcon'>) => (
   <Drawn {...props} words={words} calendarIcon={<svg aria-hidden="true" />} />
 );
 
+/* A day of the month in view, by the name it is read out with. */
+const day = (name: string) => screen.getByRole('gridcell', { name });
+
 function Field({ blur = () => {}, min, max }: { blur?: () => void; min?: string; max?: string }) {
   const [value, setValue] = useState('2026-09-13');
   return (
@@ -44,27 +46,36 @@ test('calendar walks dates with one day tab stop, clamps months, and selects ISO
   const trigger = screen.getByRole('button', { name: 'Choose date for Due' });
   await user.click(trigger);
   const grid = await screen.findByRole('grid');
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Sunday, September 13, 2026' })).toHaveFocus());
-  expect(grid.querySelectorAll('button[tabindex="0"]')).toHaveLength(1);
+  // A day is a cell of the grid, named and focusable itself.
+  await waitFor(() => expect(day('Sunday, September 13, 2026')).toHaveFocus());
+  expect(grid.querySelectorAll('[role="gridcell"][tabindex="0"]')).toHaveLength(1);
   await user.keyboard('{ArrowRight}{ArrowDown}{Home}');
-  expect(screen.getByRole('button', { name: 'Monday, September 21, 2026' })).toHaveFocus();
+  await waitFor(() => expect(day('Monday, September 21, 2026')).toHaveFocus());
   await user.keyboard('{End}{PageDown}');
-  expect(screen.getByRole('button', { name: 'Tuesday, October 27, 2026' })).toHaveFocus();
-  await user.keyboard('{PageUp}{Enter}');
+  await waitFor(() => expect(day('Tuesday, October 27, 2026')).toHaveFocus());
+  expect(screen.getByRole('grid').querySelectorAll('[role="gridcell"][tabindex="0"]')).toHaveLength(1);
+  await user.keyboard('{PageUp}');
+  await waitFor(() => expect(day('Sunday, September 27, 2026')).toHaveFocus());
+  await user.keyboard('{Enter}');
   expect(screen.getByRole('textbox', { name: 'Due' })).toHaveValue('09/27/2026');
   await waitFor(() => expect(trigger).toHaveFocus());
+  await waitFor(() => expect(screen.queryByRole('grid')).not.toBeInTheDocument());
 });
 
 test('bounds disable outside days and navigation and preserve typed invalid text', async () => {
   const user = userEvent.setup();
   render(<Field min="2026-09-10" max="2026-09-20" />);
   await user.click(screen.getByRole('button', { name: 'Choose date for Due' }));
-  expect(await screen.findByRole('button', { name: 'Wednesday, September 9, 2026' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Previous month' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Next month' })).toBeDisabled();
+  // A day or an arrow that cannot be had says so and stays where the keyboard can read it.
+  expect(await screen.findByRole('gridcell', { name: 'Wednesday, September 9, 2026' })).toHaveAttribute('aria-disabled', 'true');
+  expect(screen.getByRole('button', { name: 'Previous month' })).toHaveAttribute('aria-disabled', 'true');
+  expect(screen.getByRole('button', { name: 'Next month' })).toHaveAttribute('aria-disabled', 'true');
+  await waitFor(() => expect(day('Sunday, September 13, 2026')).toHaveFocus());
+  // A week up is past the first day that can be had, so the keyboard stops on that day.
   await user.keyboard('{ArrowUp}');
-  expect(screen.getByRole('button', { name: 'Thursday, September 10, 2026' })).toHaveFocus();
+  await waitFor(() => expect(day('Thursday, September 10, 2026')).toHaveFocus());
   await user.keyboard('{Escape}');
+  await waitFor(() => expect(screen.queryByRole('grid')).not.toBeInTheDocument());
   const input = screen.getByRole('textbox', { name: 'Due' });
   await user.clear(input);
   await user.type(input, '2026-02-30');
@@ -86,10 +97,11 @@ test('with a time, the calendar picks the date and keeps the time typed; the who
   expect(input).toHaveAttribute('placeholder', 'YYYY-MM-DD HH:MM');
   await user.click(screen.getByRole('button', { name: 'Choose date for At' }));
   expect(open).toHaveBeenLastCalledWith(true, expect.objectContaining({ reason: 'trigger-press', source: 'pointer' }));
-  await user.click(await screen.findByRole('button', { name: 'Tuesday, September 15, 2026' }));
+  await user.click(await screen.findByRole('gridcell', { name: 'Tuesday, September 15, 2026' }));
   expect(input).toHaveValue('2026-09-15 09:30');
   // A day chosen closes the calendar, and says so.
   expect(open).toHaveBeenLastCalledWith(false, expect.objectContaining({ reason: 'day-press', source: 'pointer' }));
+  await waitFor(() => expect(screen.queryByRole('grid')).not.toBeInTheDocument());
   expect(input).toBeValid();
   await user.clear(input);
   await user.type(input, '2026-09-20 12:01');
@@ -166,8 +178,8 @@ test('changed bounds retain a day tab stop; malformed draft bounds disable selec
   await user.click(screen.getByRole('button', { name: 'Choose date' }));
   await screen.findByRole('grid');
   view.rerender(<DateField {...props} min="2026-10-01" />);
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Thursday, October 1, 2026' })).toHaveAttribute('tabindex', '0'));
-  expect(screen.getByRole('grid').querySelectorAll('button[tabindex="0"]')).toHaveLength(1);
+  await waitFor(() => expect(day('Thursday, October 1, 2026')).toHaveAttribute('tabindex', '0'));
+  expect(screen.getByRole('grid').querySelectorAll('[role="gridcell"][tabindex="0"]')).toHaveLength(1);
   view.rerender(<DateField {...props} min="2026-10-" />);
   expect(screen.getByRole('button', { name: 'Choose date' })).toBeDisabled();
   expect(screen.getByRole('textbox')).toBeInvalid();
@@ -211,7 +223,7 @@ test('pointer selection of an adjacent month day does not replace the target bef
   const user = userEvent.setup();
   render(<Field />);
   await user.click(screen.getByRole('button', { name: 'Choose date for Due' }));
-  const adjacent = await screen.findByRole('button', { name: 'Monday, August 31, 2026' });
+  const adjacent = await screen.findByRole('gridcell', { name: 'Monday, August 31, 2026' });
   await user.pointer({ target: adjacent, keys: '[MouseLeft>]' });
   expect(adjacent.isConnected).toBe(true);
   expect(screen.getByRole('grid', { name: 'September 2026' })).toBeInTheDocument();
@@ -269,6 +281,64 @@ test('selection restores focus before publishing a value that can unmount the fi
     />,
   );
   await user.click(screen.getByRole('button', { name: 'Choose date' }));
-  await user.click(await screen.findByRole('button', { name: 'Monday, September 14, 2026' }));
+  await user.click(await screen.findByRole('gridcell', { name: 'Monday, September 14, 2026' }));
   expect(selected).toHaveBeenCalledExactlyOnceWith('2026-09-14', 'Choose date');
+});
+
+test('the day already chosen, pressed again, is chosen again and the calendar closes', async () => {
+  const user = userEvent.setup(),
+    change = vi.fn();
+  render(<DateField id="date" value="2026-09-13" locale="en-US" onChange={change} />);
+  const trigger = screen.getByRole('button', { name: 'Choose date' });
+  await user.click(trigger);
+  // The reader opened the calendar, saw the day was right, and said so: that is an answer, though no day changed.
+  await user.click(await screen.findByRole('gridcell', { name: 'Sunday, September 13, 2026' }));
+  expect(change).toHaveBeenCalledExactlyOnceWith('2026-09-13', expect.objectContaining({ reason: 'day-press', source: 'pointer' }));
+  await waitFor(() => expect(screen.queryByRole('grid')).not.toBeInTheDocument());
+  await user.click(trigger);
+  await waitFor(() => expect(day('Sunday, September 13, 2026')).toHaveFocus());
+  await user.keyboard('{Enter}');
+  expect(change).toHaveBeenCalledTimes(2);
+  expect(change).toHaveBeenLastCalledWith('2026-09-13', expect.objectContaining({ reason: 'day-press', source: 'keyboard' }));
+  await waitFor(() => expect(screen.queryByRole('grid')).not.toBeInTheDocument());
+});
+
+test('the box is described by how a date is typed and the key that opens the calendar', () => {
+  render(<DateField id="date" value="" locale="en-US" onChange={() => {}} aria-describedby="own" />);
+  const [own, hint] = screen.getByRole('textbox').getAttribute('aria-describedby')!.split(' ');
+  expect(own).toBe('own');
+  expect(document.getElementById(hint!)).toHaveTextContent('Date format: MM/DD/YYYY. Alt and Down arrow opens the calendar.');
+});
+
+test('a date and a time has a clock beside the text where the caller names one: it writes the time and keeps the date', () => {
+  function Clocked({ start }: { start: string }) {
+    const [value, setValue] = useState(start);
+    return (
+      <Drawn
+        id="at"
+        aria-label="At"
+        value={value}
+        onChange={setValue}
+        withTime
+        locale="en-US"
+        now={new Date('2026-09-13T12:00:00Z')}
+        timezone="UTC"
+        words={{ ...words, time: (label) => (label ? `Time for ${label}` : 'Time') }}
+        calendarIcon={<svg aria-hidden="true" />}
+      />
+    );
+  }
+  const { unmount } = render(<Clocked start="2026-09-13 09:30" />);
+  const clock = screen.getByLabelText('Time for At');
+  expect(clock).toHaveValue('09:30');
+  fireEvent.change(clock, { target: { value: '14:05' } });
+  expect(screen.getByRole('textbox', { name: 'At' })).toHaveValue('2026-09-13 14:05');
+  unmount();
+  // With no date yet the clock starts on today's; with no word for it, no clock is drawn.
+  render(<Clocked start="" />);
+  fireEvent.change(screen.getByLabelText('Time for At'), { target: { value: '08:00' } });
+  expect(screen.getByRole('textbox', { name: 'At' })).toHaveValue('2026-09-13 08:00');
+  cleanup();
+  render(<Stamp />);
+  expect(screen.queryByLabelText('Time for At')).toBeNull();
 });

@@ -7,10 +7,9 @@
  * is hovered, focused or opened, and a list's first page carries only the
  * buttons.
  */
-import { Fragment, useRef, type RefObject } from 'react';
-import { Menu } from '@base-ui/react/menu';
-import { Popover } from '@base-ui/react/popover';
-import { layoutViewport, zoomAnchor } from '@mistriwork/ui/internal/anchor.js';
+import { Fragment, useEffect, useRef, useState, type RefObject } from 'react';
+import { createMenuController, Menu, MenuContent, MenuItem, MenuSeparator } from '@ui-sdk/react/menu';
+import { createPopoverController, Popover, PopoverContent } from '@ui-sdk/react/popover';
 import { columnDisplay, findTable, labelColumn } from '../core.js';
 import { nextSort, sortDirection } from '../clauses.js';
 import { mentionsColumn, ownedTails, withCondition } from '../filterbar.js';
@@ -23,7 +22,14 @@ import { facetActive } from './filterRailModel.js';
 import { useConditionWords } from './useConditionWords.js';
 import type { AppColumnMenuHost, ColumnMenuProps } from './AppColumnMenu.js';
 import { say as sayCopy } from '../copy/columnMenu/components/AppColumnMenuPopups.js';
-import { popupContainer } from '../shellHost.js';
+import { popupContainer, portalRoot } from '../shellHost.js';
+
+/* Where the menu and the filter are drawn: out of the table, by name. UI SDK draws a layer where its trigger is
+   unless it is told where, and the ⌄ is in a column's head: a form drawn there is a form inside whatever the grid
+   stands in, and every key pressed in the layer went up through the table. The dialog the grid is in keeps the
+   layer, so it stays inside that dialog's focus. */
+const layerHost = (trigger: Element | null): HTMLElement =>
+  trigger?.closest<HTMLElement>('dialog, [role="dialog"]') ?? popupContainer() ?? portalRoot();
 
 /* How a flag's two values read where no display rule words them. */
 const FLAG_WORDS: Record<string, string> = { true: sayCopy('common.yes'), false: sayCopy('common.no') };
@@ -53,6 +59,22 @@ export function AppColumnMenuPopups({
   drawnBy,
 }: PopupsProps) {
   const popup = useRef<HTMLDivElement>(null);
+  /* Neither layer has a trigger of its own (the ⌄ is AppColumnMenu's, which holds the open state), so each is
+     opened and closed through a controller: a layer that is simply drawn open is given no focus, and these are
+     asked for by a press, so the keyboard has to arrive in them. */
+  const [menu] = useState(() => createMenuController());
+  const [filter] = useState(() => createPopoverController());
+  useEffect(() => {
+    if (open === 'menu') void menu.open({ anchor: button.current ?? undefined, focus: 'popup' });
+    else menu.close();
+    if (open === 'filter') void filter.open({ anchor: button.current ?? undefined });
+    else filter.close();
+  }, [open, menu, filter, button]);
+  /* The keyboard goes back to the ⌄, unless what was chosen takes it on (the popover, the rail's facet). Said
+     here and not left to the menu: choosing an entry takes this whole part off the page, menu and all. */
+  const giveBack = () => {
+    if (handBack.current && button.current?.isConnected) button.current.focus();
+  };
   /* The column's own conditions, said as its chip says them, beside Clear filter. */
   const tails = host.current ? (ownedTails(host.current.refinement, name) as string[]) : [];
   const { speaker, sayTails } = useConditionWords(
@@ -105,6 +127,7 @@ export function AppColumnMenuPopups({
       return;
     }
     setOpen(null);
+    giveBack();
     if ((key === 'asc' || key === 'desc') && sortPath) h.navigate(nextSort(h.query, sortPath, key), name);
     else if (key === 'clear') h.apply(withCondition(h.refinement, name, ''), name);
     else if (key === 'pin') togglePin(h.table, columns, name, h.listKey);
@@ -112,92 +135,81 @@ export function AppColumnMenuPopups({
 
   return (
     <>
-      {/* Base UI owns the menu's keyboard: focus moves in on open, the arrows
+      {/* UI SDK owns the menu's keyboard: focus moves in on open, the arrows
           walk the entries, Escape closes it and hands the focus back to the ⌄. */}
-      <Menu.Root
-        open={open === 'menu'}
-        onOpenChange={(next) => {
-          if (!next) setOpen((was) => (was === 'menu' ? null : was));
+      <Menu
+        controller={menu}
+        onOpenChange={(next, details) => {
+          if (next) return;
+          setOpen((was) => (was === 'menu' ? null : was));
+          /* Escape is a step back to where the reader was; a press elsewhere has already said where it is going. */
+          if (details.reason === 'escape-key') giveBack();
         }}
       >
-        <Menu.Portal container={popupContainer()}>
-          <Menu.Positioner
-            anchor={() => (button.current ? zoomAnchor(button.current) : null)}
-            positionMethod="fixed"
+        <MenuContent
+          className="th-menu th-menu-app"
+          aria-label={sayCopy('labelColumn', { label })}
+          anchor={button.current}
+          side="bottom"
+          align="start"
+          sideOffset={4}
+          collisionPadding={12}
+          container={layerHost(button.current)}
+          finalFocus={() => (handBack.current && button.current?.isConnected ? button.current : null)}
+        >
+          {entries.map((entry, i) => (
+            <Fragment key={entry.key}>
+              {/* The pin is about reading the table, not narrowing it: last, and set apart. */}
+              {entry.key === 'pin' && i > 0 ? <MenuSeparator className="th-menu-sep" /> : null}
+              <MenuItem
+                render={<button type="button" />}
+                className={`th-menu-item${entry.key === 'pin' ? ' th-menu-quiet' : ''}`}
+                closeOnSelect={false}
+                onSelect={() => choose(entry.key)}
+                aria-label={entry.detail ? `${entry.label}: ${entry.detail}` : undefined}
+              >
+                <span className="th-menu-label">{entry.label}</span>
+                {entry.detail ? <span className="th-menu-said">{entry.detail}</span> : null}
+              </MenuItem>
+            </Fragment>
+          ))}
+        </MenuContent>
+      </Menu>
+      <Popover
+        controller={filter}
+        onOpenChange={(next) => {
+          if (!next) setOpen((was) => (was === 'filter' ? null : was));
+        }}
+      >
+        {box && (
+          <PopoverContent
+            ref={popup}
+            className="filter-pop"
+            aria-label={sayCopy('filterBy', { label })}
+            anchor={button.current}
             side="bottom"
             align="start"
-            sideOffset={4}
-            collisionBoundary={layoutViewport()}
-            collisionPadding={12}
-            style={{ zIndex: 40 }}
+            sideOffset={6}
+            collisionPadding={8}
+            container={layerHost(button.current)}
+            initialFocus={() =>
+              popup.current?.querySelector<HTMLElement>('input:not([type="hidden"]):not([aria-hidden="true"])') ?? popup.current
+            }
+            finalFocus={() => (button.current?.isConnected ? button.current : null)}
           >
-            <Menu.Popup
-              className="th-menu th-menu-app"
-              aria-label={sayCopy('labelColumn', { label })}
-              finalFocus={() => (handBack.current && button.current?.isConnected ? button.current : false)}
-            >
-              {entries.map((entry, i) => (
-                <Fragment key={entry.key}>
-                  {/* The pin is about reading the table, not narrowing it: last, and set apart. */}
-                  {entry.key === 'pin' && i > 0 ? <Menu.Separator className="th-menu-sep" /> : null}
-                  <Menu.Item
-                    render={<button type="button" className={`th-menu-item${entry.key === 'pin' ? ' th-menu-quiet' : ''}`} />}
-                    nativeButton
-                    closeOnClick={false}
-                    onClick={() => choose(entry.key)}
-                    aria-label={entry.detail ? `${entry.label}: ${entry.detail}` : undefined}
-                  >
-                    <span className="th-menu-label">{entry.label}</span>
-                    {entry.detail ? <span className="th-menu-said">{entry.detail}</span> : null}
-                  </Menu.Item>
-                </Fragment>
-              ))}
-            </Menu.Popup>
-          </Menu.Positioner>
-        </Menu.Portal>
-      </Menu.Root>
-      {box && open === 'filter' && (
-        <Popover.Root
-          open
-          onOpenChange={(next) => {
-            if (!next) setOpen(null);
-          }}
-        >
-          <Popover.Portal container={popupContainer()}>
-            <Popover.Positioner
-              anchor={() => (button.current ? zoomAnchor(button.current) : null)}
-              positionMethod="fixed"
-              side="bottom"
-              align="start"
-              sideOffset={6}
-              collisionBoundary={layoutViewport()}
-              collisionPadding={8}
-              style={{ zIndex: 40 }}
-            >
-              <Popover.Popup
-                ref={popup}
-                className="filter-pop"
-                aria-label={sayCopy('filterBy', { label })}
-                initialFocus={() =>
-                  popup.current?.querySelector<HTMLElement>('input:not([type="hidden"]):not([aria-hidden="true"])') ?? popup.current ?? true
-                }
-                finalFocus={() => (button.current?.isConnected ? button.current : false)}
-              >
-                <h.Picker
-                  box={box}
-                  table={h.table}
-                  refinement={h.refinement}
-                  standing={h.standing}
-                  unit={h.unitOf(name)}
-                  owned={mentionsColumn(h.tabQuery, name)}
-                  apply={(text) => h.apply(text, name)}
-                  close={() => setOpen(null)}
-                />
-              </Popover.Popup>
-            </Popover.Positioner>
-          </Popover.Portal>
-        </Popover.Root>
-      )}
+            <h.Picker
+              box={box}
+              table={h.table}
+              refinement={h.refinement}
+              standing={h.standing}
+              unit={h.unitOf(name)}
+              owned={mentionsColumn(h.tabQuery, name)}
+              apply={(text) => h.apply(text, name)}
+              close={() => setOpen(null)}
+            />
+          </PopoverContent>
+        )}
+      </Popover>
     </>
   );
 }

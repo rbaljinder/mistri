@@ -67,7 +67,8 @@ test.describe('the shared account menu', () => {
         const tokens = await menu.evaluate((node) => {
           const probe = document.createElement('div');
           probe.style.backgroundColor = 'var(--surface)';
-          probe.style.borderRadius = 'var(--radius)';
+          /* A panel's corner, as the bell's menu beside it (AccountMenu.css). */
+          probe.style.borderRadius = 'var(--radius-lg)';
           node.append(probe);
           const style = getComputedStyle(probe);
           const result = { background: style.backgroundColor, radius: style.borderRadius };

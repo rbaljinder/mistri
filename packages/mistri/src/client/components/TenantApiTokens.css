@@ -2,7 +2,7 @@
    The screen is loaded on demand (AccountControl.tsx), so none of it stands in a first paint. */
 @layer components {
 /* One box, hairlines inside, as the support log: a token is a row, the form a section after a rule. */
-.modal.api-tokens { width: min(46rem, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto; box-sizing: border-box;
+[data-slot='dialog-content'][data-kind='modal'].api-tokens { width: min(46rem, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto; box-sizing: border-box;
   padding: var(--space-6); font-family: var(--sans); background: var(--surface); color: var(--ink);
   border: 1px solid var(--line-strong); border-radius: var(--radius); }
 .api-tokens > header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3h); }

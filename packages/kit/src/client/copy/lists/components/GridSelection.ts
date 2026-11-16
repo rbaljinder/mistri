@@ -4,4 +4,5 @@ import { defineMessages } from '../../../messages.js';
 export const say = defineMessages({
   selectAll: 'Select all {noun}',
   select: 'Select {label}',
+  selectGroup: 'Select all in {group}',
 });

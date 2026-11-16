@@ -13,4 +13,6 @@ export const say = defineMessages({
   calendar: 'Calendar for {label}',
   previousMonth: 'Previous month',
   nextMonth: 'Next month',
+  timeFor: 'Time for {label}',
+  time: 'Time',
 });

@@ -536,9 +536,9 @@ describe('the page', () => {
     // The lit tab's badge is the grid's own total; the others count themselves.
     await vi.waitFor(() => expect(within(tabs[1]).getByText('7')).toBeInTheDocument());
     await vi.waitFor(() => expect(within(tabs[0]).getByText('40')).toBeInTheDocument());
-    // The name column is the search; every other filter a "+" that opens its picker, and nothing to press after.
+    // The name column is the search; every other filter its name before a caret that opens its picker, and nothing to press after.
     expect(screen.getByRole('searchbox', { name: 'Filter by Title' })).toHaveAttribute('placeholder', 'Search tasks…');
-    expect(screen.getByRole('button', { name: 'Filter by Status' })).toHaveTextContent('+Status');
+    expect(screen.getByRole('button', { name: 'Filter by Status' })).toHaveTextContent('Status▾');
     expect(screen.getByRole('button', { name: 'Filter by Priority' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Filter' })).not.toBeInTheDocument();
     // The lit tab already says status; no chip repeats it.
@@ -561,7 +561,8 @@ describe('the page', () => {
   test("a refinement is said as chips, and a chip's × takes its condition out", async () => {
     const user = userEvent.setup();
     const { navigate } = draw(`task status = open and priority = 2 ${PLUMBING}`);
-    const chip = screen.getByText('Priority is 2').closest('.applist-chip')!;
+    const chip = document.querySelector('.applist-chip[title="Priority is 2"]')!;
+    expect(chip).toHaveTextContent('Priority: 2');
     await user.click(within(chip as HTMLElement).getByRole('button', { name: 'Remove Priority is 2' }));
     expect(navigate).toHaveBeenCalledWith(`task status = open ${PLUMBING}`);
   });
@@ -571,8 +572,9 @@ describe('the page', () => {
     expect(screen.getByText('Sorted by Due on')).toHaveClass('applist-chip-text');
     expect(screen.getByText('Sorted by Due on').closest('.applist-fields')).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Remove Sorted by Due on' })).toBeInTheDocument();
-    // Offered once the server has said the list keeps saved views.
-    expect(await screen.findByRole('button', { name: 'Save view…' })).toBeInTheDocument();
+    // Offered, under Views at the head, once the server has said the list keeps saved views.
+    await userEvent.click(await screen.findByRole('button', { name: 'Views' }));
+    expect(await screen.findByRole('menuitem', { name: 'Save view…' })).toBeEnabled();
   });
 
   test("a tab click swaps the tab's clause and carries what is typed in the search", async () => {
@@ -608,7 +610,8 @@ describe('the page', () => {
   test("Save view… keeps the question through a fresh read of the server's list; Rename view… renames it; its × removes it", async () => {
     const user = userEvent.setup();
     draw(`task status = open and priority = 2 ${PLUMBING}`);
-    await user.click(await screen.findByRole('button', { name: 'Save view…' }));
+    await user.click(await screen.findByRole('button', { name: 'Views' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Save view…' }));
     const saved = await screen.findByRole('tab', { name: /^Open twos/ });
     expect(prompted.at(-1)?.value).toBe('Status is Open and Priority is 2');
     expect(prompted.at(-1)?.hint).toBeUndefined();
@@ -624,10 +627,12 @@ describe('the page', () => {
     ).toEqual(['/api/filters', '/api/filters/save']);
     // An App without sign-in keeps one list for every reader.
     expect(screen.getByText('Saved views')).toBeInTheDocument();
-    // Kept, so not offered again: the lit view is renamed instead.
-    expect(screen.queryByRole('button', { name: 'Save view…' })).not.toBeInTheDocument();
+    // Kept, so not offered again: the lit view is renamed instead, and is itself among the menu's views.
+    await user.click(screen.getByRole('button', { name: 'Views' }));
+    expect(await screen.findByRole('menuitem', { name: 'Save view…' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('menuitem', { name: 'Open twos' })).toBeInTheDocument();
     promptAnswer = 'Twos';
-    await user.click(screen.getByRole('button', { name: 'Rename view…' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Rename view…' }));
     expect(await screen.findByRole('tab', { name: /^Twos/ })).toHaveAttribute('aria-selected', 'true');
     expect(savedFilters.tasks).toEqual([{ name: 'Twos', query: 'status = open and priority = 2' }]);
     await user.click(screen.getByRole('button', { name: 'Remove the view "Twos"' }));
@@ -640,13 +645,13 @@ describe('the page', () => {
     viewStore = 'account';
     draw(`task status = open and priority = 2 ${PLUMBING}`);
     expect(await screen.findByText('My views')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save view…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Views' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove the view "Twos"' })).toBeInTheDocument();
     cleanup();
     viewStore = 'none';
     draw(`task status = open and priority = 2 ${PLUMBING}`);
     await screen.findByRole('tab', { name: /^Twos/ });
-    expect(screen.queryByRole('button', { name: 'Save view…' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Views' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Remove the view/ })).not.toBeInTheDocument();
   });
 
@@ -662,7 +667,8 @@ describe('the page', () => {
     const user = userEvent.setup();
     promptAnswer = null;
     draw(`task status = open and priority = 2 ${PLUMBING}`);
-    await user.click(await screen.findByRole('button', { name: 'Save view…' }));
+    await user.click(await screen.findByRole('button', { name: 'Views' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Save view…' }));
     await new Promise((r) => setTimeout(r, 20));
     expect(calls.filter((c) => c.path === '/api/filters/save')).toHaveLength(0);
   });
@@ -674,7 +680,7 @@ describe('the page', () => {
       await vi.waitFor(() => expect(calls.some((c) => c.path === '/api/run' || c.path === '/api/counts')).toBe(true));
       await new Promise((r) => setTimeout(r, 20));
       expect(calls.some((c) => c.path.startsWith('/api/filters'))).toBe(false);
-      expect(screen.queryByRole('button', { name: 'Save view…' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Views' })).not.toBeInTheDocument();
     } finally {
       setPublicVisitor(false);
     }
@@ -768,7 +774,7 @@ describe('the bar', () => {
     const { navigate } = draw(`task priority = 2 ${PLUMBING}`);
     expect(screen.getByRole('searchbox', { name: 'Filter by Title' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Filter by Status' })).not.toBeInTheDocument();
-    expect(document.querySelector('.applist-bar-chips')).toHaveTextContent('Priority is 2');
+    expect(document.querySelector('.applist-bar-chips')).toHaveTextContent('Priority: 2');
     await user.click(screen.getByRole('button', { name: 'Filters · 1' }));
     const sheet = await screen.findByRole('dialog', { name: 'Filters' });
     expect(within(sheet).queryByRole('searchbox')).not.toBeInTheDocument();

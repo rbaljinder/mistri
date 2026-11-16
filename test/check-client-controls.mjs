@@ -2,7 +2,7 @@
  * One static check over the client: is every control drawn by a @mistriwork/ui primitive?
  *
  * An App may bring a control kit (packages/ui/src/UiKit.tsx, Preview): its own drawing of the primitives, slot by
- * slot, read where each primitive draws. A control dressed by hand with the primitive's classes — `btn`, `btn-quiet`,
+ * slot, read where each primitive draws. A control dressed by hand as the primitive's part — `data-slot="button"`,
  * a link given `buttonClass(…)` — or a dialog built from `role="dialog"` and `aria-modal` looks the same in the house
  * look and stays the house's in a kit's: a plain button among the kit's, a dialog with none of the kit's frame. Four
  * of those were routed through the primitives once (a Button, a ButtonLink, a Modal); this check finds the next.
@@ -16,7 +16,7 @@ import { treeFiles } from '../scripts/workspace.mjs';
 const ALLOWED = [
   {
     file: 'packages/mistri/src/client/appUnavailable.js',
-    on: "class: 'btn'",
+    on: "'data-slot': 'button'",
     why: 'vanilla: the page an address with no workspace gets, drawn before React or a kit has loaded',
   },
   {
@@ -57,7 +57,7 @@ const ALLOWED = [
 ];
 
 const RULES = [
-  [/(['"`]|\s)btn(?:-[a-z]+)?(?=['"`\s])/, 'a `btn` class by hand: <Button> (or <ButtonLink> for a link)'],
+  [/data-slot["']?\s*[:=]\s*\{?["'`]button["'`]/, 'a button part by hand (`data-slot="button"`): <Button> (or <ButtonLink> for a link)'],
   [/\bbuttonClass\(/, 'buttonClass(…) on another element: <ButtonLink> for a link'],
   [
     /role=["'](?:alert)?dialog["']|role:\s*['"](?:alert)?dialog['"]|aria-modal|<dialog\b|createElement\(['"]dialog['"]\)/,

@@ -19,7 +19,7 @@
  * is a grid embedded in someone else's surface — an app list, a dashboard
  * section, a page's chooser — and touches nothing but its own box.
  */
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useContext, useEffect, useMemo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { $, api, columnLabel, findTable, go, pageSize, setExplain, showErrors, state, tableView } from '../core.js';
 import { explicitLimit } from '../clauses.js';
@@ -46,6 +46,7 @@ import { useListHold } from '../liveState.js';
 import { laneWindow } from '@mistriwork/engine/shared/boardLanes.js';
 import { say } from '../copy/lists/components/TableRoom.js';
 import { PartialNote } from './PartialNote.js';
+import { RowTitleContext } from './rowTitle.js';
 
 /* The diagrams are a chunk of their own, loaded when the Diagram tab is first opened. */
 /**
@@ -56,15 +57,42 @@ import { PartialNote } from './PartialNote.js';
  * tenant's public address keeps the top bar's door, which leaves that address
  * behind on purpose (app.js, showAccount).
  */
-function NotYours({ thing }: { thing: string }) {
+function NotYours({ thing, onStand }: { thing: string; onStand?: (title: string | null) => void }) {
   const app = state.activeConnection;
   const noun = { thing };
+  /* The room around it named itself from the address before the answer came ("No-such-page"), which is no name: while
+     the refusal stands it gives the room's head its own (`onStand`), and the pane bar's trail, which has no menu row
+     to read (sidebarShell.js hears `mistri:room-title`). One title for a room the role may not see and an address
+     that names nothing: the catalog leaves out what the reader cannot see, so the two are not told apart here. */
+  const title = say('notAvailable');
+  useEffect(() => {
+    onStand?.(title);
+    document.dispatchEvent(new CustomEvent('mistri:room-title', { detail: title }));
+    return () => {
+      onStand?.(null);
+      document.dispatchEvent(new CustomEvent('mistri:room-title', { detail: '' }));
+    };
+  }, [title]); // eslint-disable-line react-hooks/exhaustive-deps
   // An App with no roles has none to blame: the list is simply not one this address names.
-  if (!shell().publicVisitor()) return <Refused text={say(appKeepsRoles() ? 'notAvailableToYou' : 'notAvailableHere', noun)} />;
+  if (!shell().publicVisitor())
+    return (
+      <Refused
+        room
+        text={say(appKeepsRoles() ? 'notAvailableToYou' : 'notAvailableHere', noun)}
+        /* A person told no is told where to go: the App's home, which every role has. The wordmark's own press, so
+           home is reached the one way (app.js, goHome). */
+        action={
+          <button type="button" className="ghost" onClick={() => $('home-button')?.click()}>
+            {say('goHome')}
+          </button>
+        }
+      />
+    );
   // Signed out, no role is the reason, wherever the door is.
-  if (typeof app !== 'string' || arrivedPlacement()) return <Refused text={say('signInToSeeThis', noun)} />;
+  if (typeof app !== 'string' || arrivedPlacement()) return <Refused room text={say('signInToSeeThis', noun)} />;
   return (
     <Refused
+      room
       text={say('signInToSeeThis', noun)}
       action={
         <button type="button" className="ghost" onClick={() => shell().signInHere(app)}>
@@ -92,6 +120,8 @@ interface TableRoomProps {
   actions?: TableViewProps['actions'];
   /** The entry's label, the accessible name a presentation goes by. */
   listLabel?: string;
+  /** The shown column a row is titled by where the rows are read as records (rowTitle.ts): an embed's own. */
+  rowTitle?: string;
   /** The view's hand-order column, where it keeps one. */
   order?: string;
   /** A read-only card may still be a doorway to its record. */
@@ -126,6 +156,8 @@ interface TableRoomProps {
   version?: number;
   /** The answer, once it has rows and columns. */
   onResult?: (data: RunData) => void;
+  /** The room's own title while a refusal stands in place of its rows, and null once it no longer does. */
+  onRefused?: (title: string | null) => void;
 }
 
 /** The noun a refused room is: a record when the address names one, a list over a table the reader's catalog has,
@@ -157,10 +189,12 @@ export function TableRoom({
   embedded = false,
   version = 0,
   onResult,
+  onRefused,
   presentation,
   present,
   actions,
   listLabel,
+  rowTitle,
   order,
   recordNavigation = false,
   empty,
@@ -184,8 +218,10 @@ export function TableRoom({
     const bar = $('query') as HTMLInputElement | null;
     if (bar) bar.value = entry.query;
   }, [chrome, entry.query]);
+  /* An embed that names its rows' title says so over whatever the caller set; one that does not leaves it alone. */
+  const outer = useContext(RowTitleContext);
   return (
-    <>
+    <RowTitleContext.Provider value={rowTitle ?? outer}>
       {chrome && (
         <div className="grid-host">
           <ViewTabs entry={entry} />
@@ -226,6 +262,7 @@ export function TableRoom({
             embedded={embedded}
             version={version}
             onResult={onResult}
+            onRefused={onRefused}
             presentation={presentation}
             present={present}
             actions={actions}
@@ -236,7 +273,7 @@ export function TableRoom({
           />
         )}
       </div>
-    </>
+    </RowTitleContext.Provider>
   );
 }
 
@@ -319,6 +356,7 @@ function Rows({
   embedded,
   version,
   onResult,
+  onRefused,
   presentation,
   present,
   actions,
@@ -352,6 +390,7 @@ function Rows({
   summaries: boolean;
   version: number;
   onResult?: (data: RunData) => void;
+  onRefused?: (title: string | null) => void;
 }) {
   /* A grouped list's rows are read in the group's order, each group's together under its head: said to the read and
      the pager that steps it, while the walk keeps the reader's own question (a header's sort writes that). */
@@ -433,7 +472,8 @@ function Rows({
 
   /* A signed-out visitor asking past what the App opens to the public is asked to sign in (401), whether the table
      is a member's or no table at all: offered in place. */
-  if (run.isError && (run.error as { code?: string }).code === 'members_only' && !chrome) return <NotYours thing={thingOf(entry, table)} />;
+  if (run.isError && (run.error as { code?: string }).code === 'members_only' && !chrome)
+    return <NotYours thing={thingOf(entry, table)} onStand={onRefused} />;
   /* An App's list that could not be read says so as every place does (Notes.tsx): the warn mark, the sentence and Try
      again on the list's edge. A bare grey line was a dead end only a reload got out of. The Workbench keeps its note
      under the query bar it can fix the question in. */
@@ -461,7 +501,11 @@ function Rows({
   /* An App's list over a table the role cannot read is answered "No table called ..." (the catalog it sees leaves the table out):
      there is no query bar to fix, only a list that is not this reader's. */
   if (!('ms' in data))
-    return !chrome && !table ? <NotYours thing={thingOf(entry, table)} /> : <p className="note">{say('fixTheQueryAbove')}</p>;
+    return !chrome && !table ? (
+      <NotYours thing={thingOf(entry, table)} onStand={onRefused} />
+    ) : (
+      <p className="note">{say('fixTheQueryAbove')}</p>
+    );
   /* Not over a question that failed: its error says why there are no rows. */
   if (empty && !run.isPlaceholderData && data.rows.length === 0 && page === 0 && !data.errors?.length) return <>{empty}</>;
   return (

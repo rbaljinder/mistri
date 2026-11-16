@@ -121,6 +121,11 @@ const BORN = [/created/i, /opened/i, /received|registered|reported|requested|rai
 /* Columns that hold when something is to happen, not when it did: a schedule's dashboards read "today" and "next". */
 const SCHEDULE =
   /(^|_)(appointment|appt|scheduled|starts?|begins?|follow_?up|planned|booked_for|check_?in|session|visit)(_|$)|^start_(at|on|date|time)$/i;
+/* Tables whose rows are things that happen at a time: their plain dates are when, not when the row was written. */
+/* When a row was written, as against a plain `date` or `at` that may say when the thing it holds happens. */
+const WRITTEN = BORN.slice(0, 4);
+const SCHEDULE_TABLE =
+  /^(appointments?|bookings?|visits?|sessions?|events?|reservations?|shifts?|lessons?|classes|meetings?|rentals?|viewings?)$/i;
 /* Optional by nature: a note may well be blank; every other text column is filled nearly always. */
 const OPTIONAL_TEXT =
   /(^|_)(notes?|comments?|remarks?|cancel(l?ation)?|middle_name|nickname|suffix|address_?line_?2|line_?2|fax|alt|secondary)(_|$)/i;
@@ -582,6 +587,7 @@ export async function seedDatabase(adapter: Adapter, schema: DatabaseSchema, opt
             moment(c, types) &&
             !DUE.test(c.name) &&
             !SCHEDULE.test(c.name) &&
+            !(SCHEDULE_TABLE.test(local(table.name)) && !WRITTEN.some((born) => born.test(c.name))) &&
             !(plan.life && [...plan.life.stamps.values()].flat().includes(c.name)) &&
             c.name !== plan.life?.since,
         );
@@ -698,6 +704,17 @@ export async function seedDatabase(adapter: Adapter, schema: DatabaseSchema, opt
                   : roll < 0.35
                     ? new Date(today.getTime() - dice.int(1, 6) * DAY)
                     : new Date(today.getTime() + dice.int(1, 14) * DAY);
+              }
+              /* A table of things that happen at a time (appointments, bookings, visits) has its plain date that time:
+                 some behind, some today, most ahead, so its "upcoming" list and its calendar have rows to show. */
+              if (
+                SCHEDULE_TABLE.test(local(table.name)) &&
+                !WRITTEN.some((born) => born.test(column.name)) &&
+                !/(^|_)(updated|modified|deleted|archived|ended|completed|cancel(l?ed)?|closed)(_|$)/i.test(column.name)
+              ) {
+                if (plan.life && !life.open)
+                  return new Date(Math.min(life.born.getTime() + dice.int(0, 3) * DAY, today.getTime() - 60_000));
+                return scheduledFor(dice, today);
               }
               if (/birth|dob/i.test(column.name)) return new Date(Date.UTC(dice.int(1955, 2004), dice.int(0, 11), dice.int(1, 28)));
               if (/expir|valid_until|renew|ends?_(at|on)/i.test(column.name)) return new Date(today.getTime() + dice.int(30, 365) * DAY);

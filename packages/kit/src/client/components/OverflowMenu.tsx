@@ -1,19 +1,20 @@
 /**
- * The header's ··· menu — in an App, its settings gear — over Base UI's Menu.
+ * The header's ··· menu — in an App, its settings gear — over UI SDK's Menu.
  *
  * The registry behind it is menu.js's: modules add their commands there,
  * the palette lists the same commands, and this draws them when the menu
  * opens — read at open, not at registration, so a detail that describes
  * current state ("credit_limit on customer 4") is the state now, and a
- * `checked` item reflects the toggle as it stands. Base UI owns what a
+ * `checked` item reflects the toggle as it stands. UI SDK owns what a
  * menu owes the keyboard — arrows, Home/End, typeahead, Escape back to the
  * trigger, outside click — and the roles and `aria-expanded` that go with
- * them. The open state is held here so the shell can be told about it.
+ * them, and where the popup stands against its trigger. The open state is
+ * held here so the shell can be told about it.
  */
-import { useRef, useState, useSyncExternalStore } from 'react';
-import { Menu } from '@base-ui/react/menu';
+import { personFacing } from '../audience.js';
+import { useState, useSyncExternalStore } from 'react';
+import { Menu, MenuCheckboxItem, MenuContent, MenuGroup, MenuGroupLabel, MenuItem, MenuTrigger } from '@ui-sdk/react/menu';
 import { detailOf, menuItems, menuMode, menuVersion, settingsInAccount, whenMenuChanges } from '../menu.js';
-import { layoutViewport, zoomAnchor } from '@mistriwork/ui/internal/anchor.js';
 import { Icon } from './Icon.js';
 import { say } from '../copy/shell/components/OverflowMenu.js';
 import { popupContainer } from '../shellHost.js';
@@ -42,7 +43,7 @@ export function MenuRegistryItems() {
   return (
     <>
       {[...groups].map(([category, entries]) => (
-        <Menu.Group key={category}>
+        <MenuGroup key={category}>
           {/* A heading that only repeats its one item ("Preferences" over "Preferences…") says nothing twice. */}
           {!(
             entries.length === 1 &&
@@ -50,7 +51,7 @@ export function MenuRegistryItems() {
               .replace(/[….]+$/, '')
               .trim()
               .toLowerCase() === category.trim().toLowerCase()
-          ) && <Menu.GroupLabel className="more-group-label">{category}</Menu.GroupLabel>}
+          ) && <MenuGroupLabel className="more-group-label">{category}</MenuGroupLabel>}
           {entries.map((item, i) => {
             const ticks = entries.some((entry) => entry.checked?.() != null);
             const checked = item.checked?.() ?? null;
@@ -66,27 +67,25 @@ export function MenuRegistryItems() {
                 {detailOf(item) ? <span className="more-detail">{detailOf(item)}</span> : null}
               </>
             );
+            const key = `${item.group ?? ''}|${item.label}|${i}`;
             return checked === null ? (
-              <Menu.Item
-                key={`${item.group ?? ''}|${item.label}|${i}`}
-                className={ticks ? 'more-item' : 'more-item no-tick'}
-                onClick={() => item.onSelect()}
-              >
+              <MenuItem key={key} className={ticks ? 'more-item' : 'more-item no-tick'} onSelect={() => item.onSelect()}>
                 {body}
-              </Menu.Item>
+              </MenuItem>
             ) : (
-              <Menu.CheckboxItem
-                key={`${item.group ?? ''}|${item.label}|${i}`}
+              <MenuCheckboxItem
+                key={key}
+                value={key}
                 className={checked ? 'more-item checked' : 'more-item'}
                 checked={checked}
-                closeOnClick
+                closeOnSelect
                 onCheckedChange={() => item.onSelect()}
               >
                 {body}
-              </Menu.CheckboxItem>
+              </MenuCheckboxItem>
             );
           })}
-        </Menu.Group>
+        </MenuGroup>
       ))}
     </>
   );
@@ -97,7 +96,6 @@ export function OverflowMenu() {
   useSyncExternalStore(whenMenuChanges, menuVersion, menuVersion);
   /* Its label is said again when a visitor's language arrives with the App. */
   useMessageLanguage();
-  const trigger = useRef<HTMLButtonElement>(null);
   /* In an App what the menu holds is the reader's settings — Preferences and the
      dark mode — so it wears the settings mark and
      says "Settings": an unlabelled "···" beside the account menu was a second
@@ -106,38 +104,24 @@ export function OverflowMenu() {
      not two side by side. The Workbench's menu is its tools, and keeps "···". */
   const app = menuMode() === 'app';
   if (app && settingsInAccount()) return null;
+  /* A visitor of an App that signs people in has no settings to keep there: the look is the App owner's, and the
+     gear beside "Sign in" read as an account they did not have (audience.ts). */
+  if (app && personFacing()) return null;
   return (
-    <Menu.Root open={open} onOpenChange={setOpen}>
-      <Menu.Trigger
-        render={
-          <button
-            type="button"
-            id="more-button"
-            className={app ? 'icon-button more-settings' : 'icon-button'}
-            title={app ? say('common.settings') : say('common.more')}
-            aria-label={app ? say('common.settings') : say('common.more')}
-            ref={trigger}
-          />
-        }
+    <Menu open={open} onOpenChange={setOpen}>
+      <MenuTrigger
+        id="more-button"
+        className={app ? 'icon-button more-settings' : 'icon-button'}
+        // The kit's own icon button, whole: none of the control's button dress under its classes.
+        data-own=""
+        title={app ? say('common.settings') : say('common.more')}
+        aria-label={app ? say('common.settings') : say('common.more')}
       >
         {app ? <Icon name="gear" className="more-settings-icon" /> : <span aria-hidden="true">···</span>}
-      </Menu.Trigger>
-      <Menu.Portal container={popupContainer()}>
-        <Menu.Positioner
-          anchor={() => (trigger.current ? zoomAnchor(trigger.current) : null)}
-          positionMethod="fixed"
-          side="bottom"
-          align="end"
-          sideOffset={6}
-          collisionBoundary={layoutViewport()}
-          collisionPadding={8}
-          style={{ zIndex: 70 }}
-        >
-          <Menu.Popup className="more-list">
-            <MenuRegistryItems />
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.Root>
+      </MenuTrigger>
+      <MenuContent className="more-list" side="bottom" align="end" sideOffset={6} collisionPadding={8} container={popupContainer()}>
+        <MenuRegistryItems />
+      </MenuContent>
+    </Menu>
   );
 }

@@ -985,6 +985,15 @@ export function resolveViews(app: AppDef, schema: DatabaseSchema): Record<string
             ),
             schema,
           );
+    /* A list's summary is a dashboard's metrics, so it resolves as a dashboard's do: each figure's table by the
+       id-or-name convention, its measure through the grammar its number runs in, and a goal that counts the same
+       rows without the figure's conditions as the whole it is a share of ("46 of 54 (85%)", not a target reached).
+       A figure the catalog refuses is the list's refusal, said at load like any other. */
+    if (!isFormView(view) && !('sections' in view) && view.summary?.length) {
+      const strip = resolveDashboard({ label: view.label ?? key, sections: view.summary }, schema, person, app.views);
+      const list = resolved[key] as ResolvedListView;
+      resolved[key] = { ...list, summary: strip.sections, ...(strip.error && !list.error ? { error: `Summary: ${strip.error}` } : {}) };
+    }
   }
   return resolved;
 }

@@ -48,19 +48,38 @@ export function cardFact(
   return { node: <Dressed dress={dress} compact />, text, person: dress.kind === 'avatar' || dress.kind === 'avatars' };
 }
 
+/** The tone a column's display rule gives a value ("bad" for an urgent priority), where it gives one. */
+export function toneOf(table: string, name: string, value: unknown): string | undefined {
+  const dress = dressFor(columnDisplay(table, name) as DisplayRule | null, value);
+  return dress?.kind === 'tone' ? dress.tone : undefined;
+}
+
 /** Whether a column's rule draws its value as a person (an initials disc, or a stack of them). */
 export function namesPerson(table: string, name: string): boolean {
   const rule = columnDisplay(table, name) as DisplayRule | null;
   return Boolean(rule?.avatar || rule?.format === 'avatars');
 }
 
-/** A card's kind: its value's word, and the series color its rule's `colors` names, else one fixed by its text. */
-export function cardCategory(table: string, name: string, value: unknown): { label: string; color: number } | undefined {
+/* The series slots a kind may take without being told to: the third, fourth and fifth are where a look's series run
+   green, amber and red, and a card of an ordinary kind in red read as an alarm. A rule's own `colors` may still name any. */
+const UNNAMED = [1, 2, 6, 7, 8];
+
+/** A card's kind: its value's word, and the series color its rule's `colors` names, else one fixed by its text that is
+ * never a status's. */
+export function cardCategory(
+  table: string,
+  name: string,
+  value: unknown,
+  /** The record a reference points at, by its name, where the list read one: a category kept in a table of its own
+      is said by that name and never by its key. The colour stays the key's, which does not move when the name does. */
+  said?: unknown,
+): { label: string; color: number } | undefined {
   if (value === null || value === undefined || value === '') return undefined;
   const text = String(value);
   const rule = columnDisplay(table, name) as DisplayRule | null;
   const named = rule?.colors && Object.hasOwn(rule.colors, text) ? rule.colors[text] : undefined;
-  return { label: choiceWord(rule, text), color: named ?? hueOf(text) + 1 };
+  const label = said === null || said === undefined || said === '' || said === value ? choiceWord(rule, text) : String(said);
+  return { label, color: named ?? UNNAMED[hueOf(text) % UNNAMED.length] };
 }
 
 /** The rule of a board's amount column where it says money or a number; null where the column is neither. */

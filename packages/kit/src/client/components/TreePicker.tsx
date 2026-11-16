@@ -20,8 +20,7 @@
 import './TreePicker.css';
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type Ref } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Popover } from '@base-ui/react/popover';
-import { layoutViewport, zoomAnchor } from '@mistriwork/ui/internal/anchor.js';
+import { Popover, PopoverContent } from '@ui-sdk/react/popover';
 import { viewportBox } from '@mistriwork/ui/internal/ruler.js';
 import { popupContainer, shellById } from '../shellHost.js';
 import { andQuery, quoteValue } from '@mistriwork/engine/shared/query.js';
@@ -412,8 +411,10 @@ export function TreePicker({
   };
 
   /* The popup is as wide as the box, measured on the house ruler when it opens and again only when the box resizes:
-     Base UI's own anchor width is recomputed as the rows arrive (Typeahead.tsx says why that loops). */
+     the anchor width the placement works out is read again as the rows arrive, and a width that follows it loops. */
   const frame = useRef<HTMLDivElement>(null);
+  /* What the popup is placed against, read each time it is placed: the frame is not there on the first draw. */
+  const [anchor] = useState(() => ({ getBoundingClientRect: () => frame.current?.getBoundingClientRect() ?? new DOMRect() }));
   const [width, setWidth] = useState<number | null>(null);
   const [container, setContainer] = useState<HTMLElement | null>(null);
   useLayoutEffect(() => {
@@ -466,78 +467,74 @@ export function TreePicker({
           onBlur={close}
           onKeyDown={onKeyDown}
         />
-        <Popover.Root open={open && !disabled} modal={false} onOpenChange={() => {}}>
-          {/* Placed by Base UI against the box on the zoom-aware ruler, fixed to the viewport and drawn inside the
-              enclosing dialog, so a modal's edge cannot clip it. Its own dismissal is not used: the box closes it on
-              blur and Escape, and a row pressed keeps the focus in the box (a combobox's popup is never a stop). */}
-          <Popover.Portal container={container ?? popupContainer()}>
-            <Popover.Positioner
-              anchor={() => (frame.current ? zoomAnchor(frame.current) : null)}
-              positionMethod="fixed"
-              side="bottom"
-              align="start"
-              sideOffset={4}
-              collisionBoundary={layoutViewport()}
-              collisionPadding={8}
-              style={{ zIndex: 40, width: width === null ? 'var(--anchor-width)' : `${width}px`, maxWidth: 'var(--available-width)' }}
-            >
-              <Popover.Popup
-                role="presentation"
-                initialFocus={false}
-                finalFocus={false}
-                className="picker-popup tree-picker-popup"
-                onMouseDown={(event) => event.preventDefault()}
-              >
-                <ul id={listId} role={searching ? 'listbox' : 'tree'} aria-label={ariaLabel ?? listLabel} className="picker-list">
-                  {lines.map((line) => {
-                    const node = line.node;
-                    if (!node)
-                      return (
-                        <li key={line.key} role="presentation" className="picker-empty" style={{ paddingInlineStart: indent(line.depth) }}>
-                          {line.note}
-                        </li>
-                      );
-                    const lit = line === current;
-                    const opens = !searching && branch(node.key);
-                    return (
-                      <li
-                        key={line.key}
-                        id={lineId(line)}
-                        role={searching ? 'option' : 'treeitem'}
-                        aria-level={searching ? undefined : line.depth}
-                        aria-expanded={opens ? opened.has(node.key) : undefined}
-                        aria-selected={lit}
-                        className={`picker-option tree-picker-option${lit ? ' active' : ''}${node.key === chosen ? ' chosen' : ''}`}
-                        style={searching ? undefined : { paddingInlineStart: indent(line.depth) }}
-                        onClick={() => pick(node)}
+        <Popover open={open && !disabled} modal={false} dismissible={false} onOpenChange={() => {}}>
+          {/* Placed by UI SDK against the box, fixed to the viewport and drawn inside the enclosing dialog, so a
+              modal's edge cannot clip it. Its own dismissal is not used: the box closes it on blur and Escape, and
+              a row pressed keeps the focus in the box (a combobox's popup is never a stop). */}
+          <PopoverContent
+            /* A popover's panel says it is a dialog named by its trigger. This one is neither: it is the box's
+               list, which the box names and owns, and the panel itself is nothing to a reader. */
+            render={(part) => <div {...part} role="presentation" aria-labelledby={undefined} />}
+            anchor={anchor}
+            side="bottom"
+            align="start"
+            sideOffset={4}
+            collisionPadding={8}
+            container={container ?? popupContainer()}
+            initialFocus="none"
+            finalFocus="none"
+            className="picker-popup tree-picker-popup"
+            style={{ width: width === null ? 'var(--anchor-width)' : `${width}px`, maxWidth: 'var(--available-width)' }}
+            onMouseDown={(event) => event.preventDefault()}
+          >
+            <ul id={listId} role={searching ? 'listbox' : 'tree'} aria-label={ariaLabel ?? listLabel} className="picker-list">
+              {lines.map((line) => {
+                const node = line.node;
+                if (!node)
+                  return (
+                    <li key={line.key} role="presentation" className="picker-empty" style={{ paddingInlineStart: indent(line.depth) }}>
+                      {line.note}
+                    </li>
+                  );
+                const lit = line === current;
+                const opens = !searching && branch(node.key);
+                return (
+                  <li
+                    key={line.key}
+                    id={lineId(line)}
+                    role={searching ? 'option' : 'treeitem'}
+                    aria-level={searching ? undefined : line.depth}
+                    aria-expanded={opens ? opened.has(node.key) : undefined}
+                    aria-selected={lit}
+                    className={`picker-option tree-picker-option${lit ? ' active' : ''}${node.key === chosen ? ' chosen' : ''}`}
+                    style={searching ? undefined : { paddingInlineStart: indent(line.depth) }}
+                    onClick={() => pick(node)}
+                  >
+                    {!searching && (
+                      <span
+                        className={`tree-picker-caret${opens ? '' : ' is-leaf'}`}
+                        aria-hidden="true"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setActive(node.key);
+                          if (!opens) return;
+                          if (opened.has(node.key)) fold(node.key);
+                          else expand(node.key);
+                        }}
                       >
-                        {!searching && (
-                          <span
-                            className={`tree-picker-caret${opens ? '' : ' is-leaf'}`}
-                            aria-hidden="true"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setActive(node.key);
-                              if (!opens) return;
-                              if (opened.has(node.key)) fold(node.key);
-                              else expand(node.key);
-                            }}
-                          >
-                            {opens && <Icon name={opened.has(node.key) ? 'caret-down' : 'caret-right'} size={12} />}
-                          </span>
-                        )}
-                        <span className="picker-option-label">{node.label}</span>
-                        {line.path && line.path.length > 0 && (
-                          <span className="picker-option-detail tree-picker-path">{line.path.join(' › ')}</span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </Popover.Popup>
-            </Popover.Positioner>
-          </Popover.Portal>
-        </Popover.Root>
+                        {opens && <Icon name={opened.has(node.key) ? 'caret-down' : 'caret-right'} size={12} />}
+                      </span>
+                    )}
+                    <span className="picker-option-label">{node.label}</span>
+                    {line.path && line.path.length > 0 && (
+                      <span className="picker-option-detail tree-picker-path">{line.path.join(' › ')}</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </PopoverContent>
+        </Popover>
       </div>
       {said && (
         <p id={trailId} className="tree-picker-trail" aria-label={say('path')}>

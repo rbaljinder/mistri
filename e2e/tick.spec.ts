@@ -328,7 +328,7 @@ test.describe('Tick checklist', () => {
       .toBe(true);
     for (let i = 0; i < 5; i++) {
       await page.keyboard.press('Tab');
-      // Base UI cycles its focus guards on the next animation frame.
+      // The dialog hands focus round its ends on the next animation frame.
       await expect.poll(() => modal.evaluate((node) => node.contains(document.activeElement))).toBe(true);
     }
     await page.keyboard.press('Escape');

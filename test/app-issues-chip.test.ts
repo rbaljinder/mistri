@@ -10,12 +10,15 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { THEME_PRESETS } from '../packages/engine/src/shared/themePresets.js';
 import { contrastRatio } from '../packages/engine/src/shared/theme.js';
+import { recipeAttributes } from '../packages/engine/src/shared/themeRecipes.js';
 
 const css = readFileSync(new URL('../packages/kit/src/client/features.css', import.meta.url), 'utf8');
 const rule = /\n\.app-issues \{([^}]*)\}/.exec(css)?.[1] ?? '';
 /** A dark bar (Ledger's) stands on the navigation's ground alone, and leans the badge toward the bar's own ink. */
 const brand = readFileSync(new URL('../packages/kit/src/client/brandLook.css', import.meta.url), 'utf8');
 const darkBarRule = /\.topbar \.app-issues \{([^}]*)\}/.exec(brand)?.[1] ?? '';
+/** A bar that is the menu's ground, dark by day under a look with no dark-bar recipe (Graphite's): the same lean. */
+const darkByDayRule = /body\.app-topnav \.topbar \.app-issues \{([^}]*)\}/.exec(css)?.[1] ?? '';
 
 const rgb = (hex: string) => [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16));
 const hex = (channels: number[]) => '#' + channels.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
@@ -47,10 +50,12 @@ test('the authoring chip reads 4.5:1 in every built-in look, light and dark, on 
     for (const mode of ['light', 'dark'] as const) {
       const palette = look[mode] as unknown as Record<string, string>;
       const dark = look.recipes?.bar === 'dark';
+      const darkByDay = recipeAttributes(look).attributes['data-bar-ground'] !== undefined;
       for (const groundRole of dark ? ['navGround'] : ['ground', 'surface', 'navGround', 'raised']) {
         const ground = palette[groundRole]!;
         const background = resolve(declared('background'), palette, ground);
-        const ink = resolve(declared('color', dark ? darkBarRule : rule), palette, ground);
+        const said = dark ? darkBarRule : darkByDay && groundRole === 'navGround' ? darkByDayRule : rule;
+        const ink = resolve(declared('color', said), palette, ground);
         const ratio = contrastRatio(ink, background);
         if (ratio < 4.5) failures.push(`${look.id} ${mode} on ${groundRole}: ${ratio.toFixed(2)}:1`);
       }

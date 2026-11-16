@@ -60,12 +60,14 @@ describe('TriageBoard', () => {
   it("draws a card title's second line quietly under it, before the card's line, and names the card with it", () => {
     render(<TriageBoard lanes={lanes} cards={[{ ...cards[0], second: 'aster@example.test' }, cards[1]]} />);
     const card = screen.getByRole('button', { name: /^Broken login aster@example\.test Aster\b/ });
+    // The name and its second line, then the card's one line of facts, which holds the card's own line.
     expect([...card.children].map((part) => part.className)).toEqual([
       'triage-card-title',
       'triage-card-second',
-      'triage-card-subtitle',
+      'triage-card-facts',
       'triage-card-meta',
     ]);
+    expect(card.querySelector('.triage-card-facts > .triage-card-subtitle')).not.toBeNull();
     expect(screen.getByRole('button', { name: /^Slow export Compass\b/ }).querySelector('.triage-card-second')).toBeNull();
   });
 
@@ -149,28 +151,56 @@ describe('TriageBoard', () => {
     expect(open.closest('.triage-card-wrap')).toBe(menu.closest('.triage-card-wrap'));
   });
 
-  it("draws a card's category as a chip in its series color, and its footer facts with their marks, people last", () => {
+  it("draws a card's category as a word in its series color, its facts on the card's line, and people at its foot", () => {
     const footer = [
       { key: 'due', icon: 'calendar-blank', node: <span>Oct 9</span>, text: 'Due Oct 9' },
       { key: 'owner', node: <span className="avatar-stack">AL</span>, text: 'Ada Lovelace', person: true },
     ];
     render(<TriageBoard lanes={lanes} cards={[{ ...cards[0], category: { label: 'Bug', color: 3 }, footer }, cards[1]]} />);
     const card = screen.getByRole('button', { name: /Broken login/ });
-    expect(card.querySelector('.triage-card-category')).toHaveTextContent('Bug');
+    // The kind leads the card's line of facts, after the name.
+    expect(card.querySelector('.triage-card-facts > .triage-card-category')).toHaveTextContent('Bug');
     // The series color is the card's, the box the button stands in beside its ⋯.
-    expect(card.closest('.triage-card')).toHaveClass('cat-c3');
-    const facts = [...card.querySelectorAll('.triage-card-foot .triage-card-fact')];
-    expect(facts).toHaveLength(2);
+    const box = card.closest('.triage-card')!;
+    expect(box).toHaveClass('cat-c3');
+    const facts = [...card.querySelectorAll('.triage-card-facts .triage-card-fact')];
+    expect(facts).toHaveLength(1);
     expect(facts[0].querySelector('svg')).not.toBeNull();
     expect(facts[0]).not.toHaveClass('is-person');
-    expect(facts[1]).toHaveClass('is-person');
-    expect(facts[1].querySelector('.avatar-stack')).not.toBeNull();
+    // A person stands at the card's foot, outside the button that opens it.
+    const people = [...box.querySelectorAll('.triage-card-foot .triage-card-fact')];
+    expect(people).toHaveLength(1);
+    expect(people[0]).toHaveClass('is-person');
+    expect(people[0].querySelector('.avatar-stack')).not.toBeNull();
+    expect(card.contains(people[0])).toBe(false);
     // The card's name carries its facts for assistive technology.
     expect(card).toHaveAccessibleName(expect.stringContaining('Ada Lovelace'));
     // A card without them draws neither.
     const plain = screen.getByRole('button', { name: /Slow export/ });
     expect(plain.querySelector('.triage-card-category')).toBeNull();
-    expect(plain.querySelector('.triage-card-foot')).toBeNull();
+    expect(plain.closest('.triage-card')!.querySelector('.triage-card-foot')).toBeNull();
+  });
+
+  it("draws a card's next step as a button at its foot, filled where the card will not wait, and it makes that move", async () => {
+    const onMove = vi.fn();
+    render(
+      <TriageBoard
+        lanes={lanes}
+        cards={[
+          { ...cards[0], next: { label: 'Triage', lane: lanes[1].id, strong: true } },
+          { ...cards[1], next: { label: 'Close', lane: lanes[2].id } },
+        ]}
+        onMove={onMove}
+      />,
+    );
+    const step = screen.getByRole('button', { name: 'Triage' });
+    expect(step).toHaveClass('triage-card-next');
+    expect(step).toHaveAttribute('data-variant', 'solid');
+    expect(screen.getByRole('button', { name: 'Close' })).not.toHaveAttribute('data-variant', 'solid');
+    // It is the card's own, beside the button that opens the card and never inside it.
+    expect(step.closest('.triage-card')!.querySelector('.triage-card-open')!.contains(step)).toBe(false);
+    await userEvent.click(step);
+    expect(onMove).toHaveBeenCalledWith(expect.objectContaining({ id: cards[0].id }), { lane: lanes[1].id });
   });
 
   it("puts a + in the head of a lane the host offers New in, and in no other, and it calls the host's New", async () => {

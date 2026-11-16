@@ -103,6 +103,7 @@
  "e2e/notifications.spec.ts": 20.8,
  "e2e/order-lines.spec.ts": 20,
  "e2e/page-kit.spec.ts": 10.9,
+ "e2e/page-behaviors.spec.ts": 15,
  "e2e/page-layers.spec.ts": 12,
  "e2e/page-ownership.spec.ts": 14,
  "e2e/parcel.spec.ts": 8.1,

@@ -24,7 +24,7 @@ a pointer into it.
    exceptions).
 3. **Tokens only.** Every colour, radius, face, duration, space and text
    size is a custom property; a literal outside the tokens (`tokens.css`) and the looks'
-   presets is a bug (Tokens; Space and text). Five looks dress Apps; the database browser wears none of them, only its own (Two dresses). Workshop is
+   presets is a bug (Tokens; Space and text). Eight looks dress Apps; the database browser wears none of them, only its own (Two dresses). Workshop is
    the default, and draws paper on its frame only: its working surfaces are white, and capitals are for the
    brand, not for headings and labels (Workshop's exceptions). Twelve palettes are the same twelve in every look
    (Palettes).
@@ -69,8 +69,9 @@ persuade-mode one: nothing on a working screen exists to win attention.
 
 Every stylesheet stands in a declared layer, named once at the top of
 `style.css`: `base` (the tool's own rules, the component sheets
-`features.css` imports, and ahead of both @mistriwork/ui's tokens and its
-primitives' own rules, `packages/ui/src/tokens.css` and `primitives.css`), `components` (a sheet a component brings with it),
+`features.css` imports, and ahead of both @mistriwork/ui's tokens and what its
+controls wear, `packages/ui/src/tokens.css` and `controls.css`, the second in layers of
+its own nested in `base` so every rule here stands over a control's own dress), `components` (a sheet a component brings with it),
 `kit` (the dress under every look, and custom themes' token machinery), `look`
 (each look), `theme` (what an App's own theme says past the recipe menu: its
 parts' styles in `partsLook.css`, its patterns in `surfacesLook.css` and its
@@ -84,7 +85,8 @@ theme's rules stand over its look's so a part it dresses is dressed whatever
 the look said, and under `structure` so nothing it says moves a box.
 What every look shares, and Mono's rules, are in `themeFamilies.css`;
 Workshop's, Lumen's, Sage's and Ledger's own rules stand in `look` from a sheet of their own
-(`workshopLook.css`, `lumenLook.css`, `sageLook.css`, `ledgerLook.css`), as do the few recipes no
+(`workshopLook.css`, `lumenLook.css`, `sageLook.css`, `ledgerLook.css`), as do the four treatments
+Graphite and Bloom add (`tilesLook.css`: a floating menu, tabs in a track, tiled figures, a list as one tile) and the few recipes no
 built-in but Workshop picks (`brandLook.css`: a dark bar, a washed or underlined
 menu, a ruled stat, a tinted table, small capitals and book figures), fetched when
 worn and waited for before the page is revealed, so a look's own rules add
@@ -137,8 +139,8 @@ root with no kit look (`:root:not([data-visual-theme])`) and it stands in
 stylesheet and in no App's. It replaced the old native dress (warm paper, the
 green accent, the code face in chrome and data alike, tracked capitals on
 labels), which the reader of a database found louder than the values it
-named. The five looks (Workshop, the default an App wears when neither it nor
-its reader names one, then Lumen, Mono, Sage and Ledger, which an App opts into; an App
+named. The eight looks (Workshop, the default an App wears when neither it nor
+its reader names one, then Lumen, Mono, Sage, Ledger, Atelier, Graphite and Bloom, which an App opts into; an App
 may also define its own with `defineTheme`; `visualThemes.css`,
 `themeFamilies.css`) dress Apps only: every one of
 their rules keys on `data-visual-theme`, which the browser carries only
@@ -193,12 +195,24 @@ ink darker than its hairlines and still quieter than its text.
   points at `--sans` unless the App or its preset names a face, and what
   is read character by character — code, the query language, and in
   Mono a grid's short values (ids, dates, codes) — keeps `--code`. A column may ask for a face (`display: { vin: { face: 'code' } }`); unasked, an App sets only keys, references and codes in the data face.
-  **Data columns are IBM Plex Mono** (`--figures`), in every look and in nothing else: the ids, codes and numbers a
-  table's cells set apart (`td.mono`) and the figures, dates and keys of a record's fields and header facts. Body
-  type, headings, names, statuses and a stat's hero figure keep their look's faces. The face is the kit's own, with
+  **One figure system to a look.** A look names the face its figures are in once (`font.figures`, or its data face),
+  figures that stand in a column or beside each other are tabular in every look, and a stat's hero figure is the one
+  place a look may set proportional numerals. `test/theme-type.test.ts` holds it.
+  **A record's figures are IBM Plex Mono** (`--figures`) in the looks that name it, and in nothing else: the figures,
+  dates and keys of a record's fields. **A record header's facts keep the head's face**, their digits tabular: a
+  start date and a rent beside the name are a sentence about the record, read once, and the data face is for where
+  values stand in a column. **Under `reach: 'figures'` the figures face stands in a table's cells and nowhere
+  else**: a single value beside words (a field of a record, a fact on a side card, a phone row, a worklist's amount)
+  is in the text face with tabular digits, since a lone figure in a second face read as "two fonts" to three cold
+  readers. **A table's cells are set in the data face with the rest of
+  their row**, their digits tabular (`td.mono`): a column of codes and dates in a second face read as a second table
+  inside the first. Body type, headings, names, statuses and a stat's hero figure keep their look's faces. The face is the kit's own, with
   its OFL text beside it and a metric-matched fallback (`IBM Plex Mono Fallback`), declared in `themeFamilies.css`;
   a browser fetches it only when a cell is drawn in it, so a page with no data column asks for nothing. A theme
-  whose data face reaches figures (`type.data.reach: 'figures'`) names its own and wins.
+  whose data face reaches figures (`type.data.reach: 'figures'`) names its own and wins. Bloom, Atelier and
+  Graphite name no figures face, so theirs follow their text face, digits a column wide: nothing in Bloom is an
+  instrument, a printed table is set in its text, and Graphite's monospace is for its labels and its readings (a
+  dashboard's figures, a record's leading ones), so a row of its table is read in one face.
   A look's sans is the system's own, and its identity comes from scale,
   weight and tracking — except Workshop's and Lumen's. Workshop is set in
   Barlow, its labels in the semibold, and its titles, a stat's figures and the
@@ -214,8 +228,17 @@ ink darker than its hairlines and still quieter than its text.
   where it was installed, and a Lumen screen was set in a different face on
   every machine. Until it arrives Lumen draws Arial cut to Inter's measure
   (`size-adjust` and the ascent, descent and line-gap overrides), so the swap
-  neither rewraps a line nor moves a baseline. No other face is fetched or
-  bundled.
+  neither rewraps a line nor moves a baseline. Lumen's headings are a second
+  face: Manrope (`manropeFace.css`, its variable face's Latin subset, 25 KB),
+  for a page's title, a section's head, the App's name and the figures of a
+  strip and of a record's summary, and nothing else; a sentence, a label and
+  a table stay in Inter. It is fetched and preloaded the same way, only by a
+  page whose headings lead with it, with Arial Bold cut to its measure while
+  it arrives. A figure in it wears its proportional numerals: alone in its
+  tile it has no column to keep, and Manrope's tabular set widens the comma.
+  One face for every word read as a template; the heading's face is the one
+  place Lumen is told from another product in Inter. No other face is
+  fetched or bundled.
 - **Type**: three steps of heading — `--type-list-title` (20px, a list
   naming itself), `--type-record-title` (26px, a record or a dashboard;
   Mono takes 30px) and `--type-display` (32 to 44px with the
@@ -318,8 +341,9 @@ ink darker than its hairlines and still quieter than its text.
   half, or a semantic token over the scale: `--room-inset` (14px, a room's one
   content edge), `--section-seam` (40px, between a record's sections and a dashboard's rows), `--field-gap`
   (20px, between a form's fields and a record's field columns) and `--row-h`
-  (an App list's row, drawn 32px at compact, 40px at comfortable, 44px at
-  spacious and under a finger, whatever the density's zoom). Every text size
+  (an App list's row, drawn 40px at compact and at comfortable, 44px at
+  spacious and under a finger, whatever the density's zoom; a view that is a
+  ledger says `density: 'compact'` for the tighter row). Every text size
   is a step over `--type-k`, or a heading's role (`--type-list-title` and
   the rest). A theme's `rhythm` moves the layout steps (`--space-5` up) and
   the seam a quarter closer (`tight`) or wider (`airy`), never a control's
@@ -399,7 +423,11 @@ the same effective-color checks as the original pair.
    click during an enter lands on the finished state.
 8. **Data does not dance.** Grids, charts and numbers paint complete.
    A live refresh swaps a finished screen for a finished screen —
-   the reader sees values change, never a loading performance.
+   the reader sees values change, never a loading performance. A bar
+   chart says the period in hand without being asked, as the plot's
+   headline in the corner over its levels; a pill stands over a bar only
+   while the pointer names it, since one left there at rest read as a
+   tooltip that had not gone away.
 9. **A navigation swaps finished screens.** Opening a record, following
    a reference, Back and Forward: the screen being left stays, as a still
    copy where it stood, while the room that replaces it is laid out
@@ -521,10 +549,14 @@ a desk and at 390px).
 ## Truncation
 
 Text is cut only by this policy. **Identifying text wraps**: a record's name,
-a title, a label that says which thing this is. **Secondary metadata
+a title, a label that says which thing this is, everywhere but in a table's
+row, which is one line (Standing layout rules): there the name keeps its
+column and is the last to be cut. **Secondary metadata
 end-truncates** with an ellipsis and carries the whole value in a `title`.
 **File names, paths and ids truncate in the middle**, so the extension and
-the distinguishing tail survive. **Numbers, amounts and dates are never
+the distinguishing tail survive. **A number set in groups is a number**: a telephone number or a code of
+digits stored as text is never cut and never broken at its spaces, and its
+column is as wide as its widest value. **Numbers, amounts and dates are never
 truncated**: the column or the figure gets the room it needs, or the layout
 changes — a grid's total is a figure too, so its column is sized from the
 total's words (set heavier than the rows) as well as from the rows, and its
@@ -534,7 +566,13 @@ wider than its cell, which is the only thing there to read. **In a form
 nothing typed or chosen is cut short**: a label, a choice, an answer and a
 review value are the reader's own words, so they wrap (`overflow-wrap:
 anywhere`), and the smoke's `reflow-320` variant (320px, 2x) holds every App
-page to no sideways scroll.
+page to no sideways scroll. **A column's head gives way before a value does**: where a
+table's columns fit and a value is still a few pixels short, the heads wider
+than their own values lend it the difference, the last first, and are cut to
+their first letters with the whole label in their title. What a head lent it
+does not ask back when the room is shared, and a head is sized by the padding
+and the sort's arrow its look draws, so a short head ("Code") is never cut
+under its own arrow (`gridSizing.ts`).
 
 ## The refusal list (after impeccable.style, kept where it applies)
 
@@ -617,8 +655,13 @@ the cream ground, with fine rules separating related information. A table
 is not one of the exceptions: a list, a related tab and a dashboard's list
 are rows on their ground under a hairline, never a white box of their own
 (boxed, a record page was a stack of cards). Sage record tabs use ordinary sentence
-case with the active group marked by the accent underline. Nothing here is
+case with the open group on the soft tint a list's chosen tab wears. Nothing here is
 open to another look or to an App's tokens.
+
+**How the looks lay a page out.** Beyond their dress, the looks differ in how a page is held: Sage is airy panels,
+Ledger a tight sheet whose tables are banded, Atelier open with no boxes, Graphite tight cards with raised head bands,
+Bloom airy tiles under a floating menu, Mono frames, Workshop and Lumen one ruled strip on an open page. A look's
+`rhythm` and its `blocks` say it; `test/theme-spec.test.ts` holds each look to its own.
 
 **Ledger's exceptions.** Ledger is a bookkeeper's desk, ported as it is
 from a field report's theme (it began as a Lumen with a stylesheet): green-tinted
@@ -627,7 +670,12 @@ refuses beige palettes and the other looks leave the ground plain), every
 figure, id, date and label in a monospace (IBM Plex Mono, shipped with the
 look's own sheet; titles and prose stay in Inter, so only what is counted or
 filed is set in it), and a dark green cover for the menu and the bar with a
-gilt mark for the current entry. Its structure is the menu's, one value
+gilt mark for the current entry. In a side-placed App the pane's bar is that
+cover too: it is given the menu's ground and ink under the page's own role
+names (`ledgerLook.css`), so the trail, the search's well and the keys follow
+without a rule each. A list's and a record's tabs are words to choose
+between, so they stay the text face in sentence case where the label role
+would set them in the book's capitals. Its structure is the menu's, one value
 apiece: field groups, dashboard sections and stat cards are square boxes
 ruled in the strong line (`fields: 'panel'`, `section: 'panel'`), a table's
 heads close with a double rule, as a ledger closes a total (`rules:
@@ -641,6 +689,73 @@ that hue and leaves the paper and the cover the book's own. A form's one
 primary action is Lumen's, the ink. Nothing here is open to another look
 or to an App's tokens.
 
+**Atelier's, Graphite's and Bloom's exceptions.** Three looks that differ in
+what things are, not only in colour, each the menu's values and nothing else.
+Atelier is a printed page: warm paper (a ground the list refuses, as Sage's
+cream is), the machine's book serif for a page's name, its headings and a
+figure (no face is shipped: the serif is the reader's own, and a title in
+Georgia is still that page), a section named in small tracked capitals over a
+rule in the ink, a column's heads and a figure's label quiet in sentence case
+(capital heads over capital labels read as a form, not a page), a table's head
+row over the one rule in the ink, a list's row opened by its underlined name
+while what it refers to reads as text (`links: 'name'`), the menu's current
+entry shaded in the ink (`nav.current`, a colour it names), the pane's bar on a hairline, a page's name large on the paper with no band
+behind it (`header: 'plain'`, a list's name at its `heading` role's 26px), and
+nothing boxed. Its one primary button is the ink wherever it stands; a
+dashboard's figures and a record's are the serif, open with no box and no rule
+(`stat: 'plain'`: four ink rules over four figures were the heaviest thing on a
+list); and a date, a
+telephone number and an amount in a table are the text's own face with their
+digits a column wide, since it names no figures face (Bloom names none either).
+A palette is the page's second ink: the paper stays warm under every one, and
+what is chosen sits on that hue's wash over it. Graphite is an instrument: a near-black menu by day
+and by night beside cool-grey cards, labels in tracked monospace capitals (the
+machine's monospace: column heads, a figure's label, a card's field names),
+tabs as keys in a sunken track (`tabs: 'lifted'`) that say what they open in
+sentence case, rows that tint under the pointer. A list's heads stand on a
+band a step off the card, a row's height; a strip of figures is one card ruled
+into cells, and so are the figures a record leads with, set as the dashboard's
+are a size down; a queue and a phone's summaries are the list's card too. Its
+one primary is the ink, on the page and in a dialog; the bar is the menu's
+ground (`bar: 'dark'`), so its search and its keys are drawn on that ground.
+Its greys are its own under every palette: the hue is one signal lamp (a
+link, the current entry's marker, the focus ring, the first series), and a
+status keeps its own colour. Bloom is everything as a tile on a ground in the palette's faintest tint (grey
+under Slate, its default; lavender under Violet, which its colours are written in):
+the menu a card standing off the window's edge (`nav: 'float'`), a dashboard's
+figures and a record's as wells in the page's tint (`stat: 'bento'`: a white
+tile on the white pane had only its shadow to stand on), buttons as pills, the
+chosen tab a soft pill in the ink (a tab filled like the primary read as a
+second one), a record's states one bar cut into segments, walked on the tint,
+current on the accent's over a rule in the accent, ahead muted, a tick before a step walked
+(`workflow: 'segments'`), and a list as one soft tile with its rows ruled apart by
+hairlines (`table: 'rows'`; it was a card to every row, and fifty outlined
+boxes down a page were the heaviest thing on it). That is the one place a table
+is boxed: the list refuses a box round a table because a record page became a
+stack of cards, so a list room's own grid, a queue and a phone's summaries are that one tile;
+a record's own lists are few rows and each row is a tile under plain head
+words; a dashboard's table, in a panel already, stays open. The rest of Bloom is the same sheet's, read off `stat: 'bento'`:
+the accent washes faintly from the head of every page and is gone a third of
+the way down, so a palette changes the room and not only its buttons; a
+dashboard's windows stand level with its greeting where the browser can anchor
+one box to another (elsewhere under it, as every look draws them); a record's
+leading figures are tiles; a form on a page of its own is a tile; a menu and a
+popover take a field's corner and a dialog a panel's; and an off switch's thumb
+is the field's edge colour. Its figures are set in its sans with digits a
+column wide: no monospace, the one built-in without Plex Mono. Under a palette
+whose hue is green, what is merely so (`info`) keeps the look's own blue, so it
+is never read as what went well. The four values those looks add share one
+sheet (`tilesLook.css`), fetched where a theme picks one. They are the three
+looks' own, and open to an App's theme that picks them from the menu like any
+other value.
+
+**Lumen's signature.** A flat look in one ink reads as nobody's, so the accent has a few fixed places beside the
+primary verb, the current tab and a link, and nowhere else: the App's mark (in the menu and on the door), the count
+beside a list's title (the accent's ink on its wash), the meter. The pane stands a hair off the
+shell on a hairline and the control's shadow; a strip's figure is the heaviest thing in its tile (700, tightened);
+titles are tightened a step; and the sign-in form is a panel on the shell's ground, so a brand's tint is the first
+thing seen (lumenLook.css). With a theme's `brand` the shell's neutrals lean to the same hue (docs/theming.md).
+
 **Lumen's exceptions.** Lumen is flat, calm and modern, with its
 character in details: a faintly warm shell around white working surfaces,
 one confident accent, and elevation only on what floats. It takes these
@@ -651,7 +766,14 @@ of Lumen's picks in `themeLooks.ts`); each is one value on the menu, so the
 departure travels as a whole or not at all. *Hairlines, not the 2px rule*:
 a list, a section and a field group stand open on the ground, divided by
 the look's 1px hairline rather than the ink's 2px rule; a dashboard's
-figures share one strip divided by hairlines. Nothing on the page is
+figures and a record's summary in an App are each one ruled strip in the
+look's larger corner, a figure to a cell and a hairline between cells, so
+a row of figures is read as one thing apart from what is under it, and a
+figure's change is its number in its news's colour, never a chip (a public page keeps its figures on the page; on a phone a
+record's figures stand two to a row with the room's gap between, and each
+is its own hairline box). In
+the rail a card's facts hang from one 2px rule down their leading edge.
+Nothing on the page is
 lifted: a menu, a popover, a drawer and a dialog — what floats — carry
 the look's soft layered shadow (`--shadow-pop`, `--shadow-panel`, never a
 hard offset), and by night the shadow all but goes and the hairline
@@ -661,10 +783,13 @@ column of statuses scans as one; no status is boxed. *A chart's bare
 line*: a series is a 1.5px line with nothing under it, over an unbroken
 grid a shade lighter than a hairline, and points show only under the
 pointer. *The board card's stripe*: a board's lane is headed by a strip
-in its state's tint (grey for a value that says nothing), and each card
-carries a 4px bar at its left in its own toned value's colour, else its
-lane's — a rounded bar inset from the card's edge, never the edge itself,
-and a mark of what the card is, never of what is current. *Radius 8/12*: the authored ceiling and
+in its state's tint (grey for a value that says nothing), and a card with
+a category says its colour as a dot before its word on the card's line,
+so the colour never stands without a key, and carries a 4px bar at its left in that colour — a
+rounded bar inset from the card's edge, never the edge itself,
+and a mark of what the card is, never of what is current. A card with no
+category has no bar: its lane's tone is said once, on the strip, and a
+toned value of its own is a dot and its word on the card's line. *Radius 8/12*: the authored ceiling and
 its one larger step, as Sage's. Everything else holds: one primary action
 filled in the ink, Lumen's primary-action color, on every surface that draws one
 (Standing layout rules), the accent (a confident blue) kept for tabs underlined in it, the
@@ -750,13 +875,21 @@ every look, so the picture it keeps reads on whatever page shows it.
   `test/built-client-vitals.mjs` measures CLS, LCP and INP on the build and
   holds each to a budget tighter than Google's "good".
 - The page never scrolls sideways, and neither does a card, a section, a
-  related list or a dashboard's table. A table is fitted in this order, each
+  related list or a dashboard's table. **A row is one line and so is a head:
+  nothing in a table wraps.** A table is fitted in this order, each
   step taken only where the one before still runs past its room
-  (`gridSizing.ts`): everything whole on one line; an App's heads wrapped at
-  their words; the row's name wrapped to two lines, kept whole, before any
-  other words are; then those wrapped too; the columns that still do not fit
+  (`gridSizing.ts`): everything whole on one line; a head wider than what
+  its column draws cut to its values' width ("Listed online" over a tick is
+  the head to cut, not a name three columns away), the last first, its whole
+  label in its sort's title; the secondary text given
+  way to a floor of about ten characters, the last column first, cut with an
+  ellipsis and its whole value on hover, while a figure, a date, a chip and
+  the row's name keep their width; then the columns that still do not fit
   folded, muted and a size down, under the row's name (or the widest text
-  column where the name is a short key) as a detail line (an App's list) or left out (an embedded grid); only then the secondary text cut. A
+  column where the name is a short key) as a detail line (an App's list): a
+  folded row is two lines, so the name over the fold wraps whole rather than
+  being cut. An
+  embedded grid leaves a column out before it cuts one. A
   dashboard's matrix folds each row into labelled cells, and a strip of
   windows or a board's groups wraps. A row whose job is to scroll — a
   board's lanes, a phone's workflow steps, a heat map past its cells' floor —
@@ -817,9 +950,11 @@ every look, so the picture it keeps reads on whatever page shows it.
   not a flourish: a column must never be cut off without saying so. It is a
   mask, so it moves nothing and takes no room.
 - **A table starts on its section's heading.** Inside a page or dashboard
-  section the wrap reaches 14px past the content edge, so the first cell's
-  text sits on the heading's line and the hover band bleeds past it. The
-  edge cells keep their 14px, which a frozen column needs.
+  section the first cell has no leading padding, so its text and the rules
+  under the rows both begin on the heading's line, as a room's own grid
+  does; a section that is a box keeps the inset the box gives. The wrap
+  used to reach 14px past the content edge instead, which put the text on
+  the line and every rule left of it.
 - Apps may opt into a centered `shell.width` (`wide` or `narrow`) and symmetric
   `shell.gutter` spacing. Omitted settings preserve the full-room default.
   Optional `shell.headerWidth: 'content'` aligns the brand and header controls
@@ -843,18 +978,30 @@ every look, so the picture it keeps reads on whatever page shows it.
   Sort and one Clear all; the rail carries no second one.
 - Otherwise a list's filters are controls, not a form: one search box on the
   name column — the only field in the row, so the only 3:1 edge — then a quiet
-  "+ Status" per filter the view declares, on a dashed hairline, opening the
-  rail's picker for that column in a popover (a checklist, Min/Max, date
-  presets; a reference is a typeahead). What is applied is said as chips in
-  the same row, each in its filter's place: a chip opens its picker again, its
-  × or Backspace removes it, and two or more earn one Clear all. A picker edits
+  "Status ▾" per filter the view declares, its name before a caret on a quiet
+  solid edge, opening the rail's picker for that column in a popover (a
+  checklist, Min/Max, date presets; a reference is a typeahead). A + before
+  the name on a dashed edge read as "add a building", or as a place left
+  empty, to people meeting a list for the first time (two cold reviews), so
+  no look draws either. What is applied is said as chips in the same row,
+  each in its filter's place and under its filter's label: "Building: Alder
+  Court ×", the × in the box the caret stood in, so setting a filter adds the
+  value's width and moves nothing before it; several values are the first
+  and a count ("Building: Alder Court +2"), a range or a date the phrase
+  ("Rent: up to $1,500"), a flag "Listed: Yes". The label is never cut; the
+  value is cut at 22ch, and the whole phrase is the chip's title and its
+  accessible name. A filter never changes place, set or not. A row too
+  narrow folds its last filters, set ones too, behind "More filters", which
+  counts the set ones it holds; the row never takes a second line, so the
+  table does not move. A chip opens its picker again, its × or Backspace
+  removes it, and two or more earn one Clear all. A picker edits
   a draft and applies on one button that says what it will show; a flag's "+"
   is one gesture. On a phone the pickers are the rail's sheet behind one
-  Filters button with the active count. Search, tabs and applied chips stay in
-  one nonshrinking, horizontally scrollable controls row at every width;
-  selecting a longer value never pushes the results down a second row. On a
+  Filters button with the active count. The bar is one row under the tabs' row
+  and neither scrolls; selecting a longer value never pushes the results down
+  a second row. On a
   desk the "+" filters not yet asked for give way from the end, before the row
-  would run past the window, into one "+ Filter" that opens every picker in the
+  would run past the room, into one "+ Filter" that opens every picker in the
   sheet; a chip never gives way.
 - An App says a condition in words wherever it shows one — a chip, a facet's
   note, the column menu's Clear filter, the empty list, a saved view's first
@@ -903,19 +1050,38 @@ every look, so the picture it keeps reads on whatever page shows it.
 - Apps with sidebar navigation use a modal left drawer on phones. The menu
   trigger shares the main header row; the drawer carries navigation and workspace
   identity, dismisses on selection, Escape or backdrop click, and returns focus
-  to its trigger. Desktop sidebar collapse preferences remain independent.
+  to its trigger. Under the rooms it ends with the reader's own two rows, Settings
+  and "Account and sign out", each a press of the bar's own control: on a phone the
+  bar's gear and initials are marks with no words, and the way out is looked for
+  in the menu. Desktop sidebar collapse preferences remain independent.
 - *The default (`shell.header: 'sidebar'`, rc.18):* **a side-placed App
-  draws no bar; the sidebar's head is the bar.** At a desk the sidebar runs
-  the window's full height, 240px: its head a 48px row of the App's mark and
-  name with New as a 28px quiet plus, then a 32px search field showing ⌘K; the
-  groups as above; its foot the bell and the account, the workspace identity,
-  Collapse. The content owns its whole height and each room's own head row (the
-  trail, or the title, then the verbs) is its first line, at least 52px, on a
-  hairline. The bar's recipe (`recipes.bar`: ruled, dark) dresses the sidebar's
-  head instead. Folding leaves the rail, the mark, New and the search's
-  magnifier still in it, so `'sidebar'` refuses `rail: false` (an App that
-  says `rail: false` and no header keeps the bar); the top placement, a phone,
-  public pages and sign-in keep the bar, and `header: 'bar'` is the opt-out.
+  draws no bar across the window; the room is a pane with a bar of its own.**
+  At a desk the sidebar runs the window's full height, 240px: its head a row
+  of the App's mark (an icon in a 24px tile of the menu's ink) and name with
+  New as a 28px quiet plus; the groups as above, their headings in sentence
+  case; its foot the workspace identity alone. A room's row is 32px with a
+  16px mark and 2px between rooms in every look: a look says how the current
+  room is marked, never how tall a room is (the roomier menu an App asks for
+  keeps 46px). **The room is a pane on
+  the menu's ground**: inset 8px from the window's edge on the three sides the
+  menu is not, a hairline round it and corners four pixels rounder than a
+  control's, so the menu reads as the frame and the room as the thing that
+  changes; the menu draws no edge of its own beside the pane's. **The pane's
+  bar** is its head, 52px over a rule (in the ink where the look rules in
+  ink): the menu's toggle first (a 32px key, its mark on the room's left
+  edge; ⌘B does the same, and the menu's foot has no Collapse row), then
+  where the reader is (the menu's group, then the room, said to the eye
+  only), then what is the same in every room at its far end: a 32px search
+  field showing ⌘K, the bell with its unread count as a badge on its corner,
+  a key to the settings page, and the account as its disc. The settings key
+  is a link to a page, not a second menu beside the account's. They stood in
+  the sidebar, at its head and its foot, and the menu was three things. Each room's own head
+  row (the trail, or the title, then the verbs) is the pane's first line, at
+  least 52px. The bar's recipe (`recipes.bar`: ruled, dark) dresses the
+  sidebar's head. Folding leaves the rail with the mark and New still in it,
+  so `'sidebar'` refuses `rail: false` (an App that says `rail: false` and no
+  header keeps the bar); the top placement, a phone, public pages and sign-in
+  keep the bar, and `header: 'bar'` is the opt-out.
   The parts are moved, never drawn twice (`sidebarShell.js`), and nothing
   moves within a session.
 - A record's layout answers to the room it is drawn in, not the window: a
@@ -937,8 +1103,16 @@ every look, so the picture it keeps reads on whatever page shows it.
   a phone, where the bar is condensed to a mark too small to aim at, Back
   stays. Both are decided in the render (a class, a media query), so nothing
   moves when the bar fills.
-- An App list names itself in one row: title, match count and star, then New
-  and Export at its end, with tabs and filters on the one row below. Under a
+- An App list names itself in one row: title, match count and star, then its
+  verbs at the row's end, one family in one order: Views (the saved views,
+  Save view and Rename view, where the list keeps them), Export, Import, then
+  New, the primary one, last. The first three are a mark and a word. Under
+  it the tabs take a row of their own on a rule, and under them the bar that
+  refines the rows: the search first, the filters as chips after it, and the
+  list's own controls (Columns, the layout) at its end. Columns is the
+  reader's choice of which of the view's columns to draw, kept in their
+  browser per view and never in the address: the first column, which a row is
+  known by, always stays. Under a
   bar that row is the bar (the title after the trail); with no bar it is the
   list's own heading row, holding the same things in the same order. A band
   of heading over a table is space a reader scrolls past on every visit. An
@@ -963,7 +1137,11 @@ every look, so the picture it keeps reads on whatever page shows it.
   week lays its records in lanes, and every card of a calendar is one of two
   heights, so a bar keeps its lane across days whose cards say less. A status
   on a card is a dot and its word; a date under the title carries its caption,
-  because a bare date on a calendar reads as the record's own day.
+  because a bare date on a calendar reads as the record's own day. The
+  month's dates are in the text's ink; the days of the months either side
+  stand a step back, on a ground with a trace of the ink in it and in the
+  muted ink, and the first of a month names it ("Oct 1"), so the trailing
+  days say whose they are.
 - A calendar's backdrop is a tint of the day cells a span covers — its tone
   at 9% over the surface, never a bar of its own — so it adds no height and
   the cards stay in front of it. Its label sits in the date's line, beside the
@@ -977,6 +1155,24 @@ every look, so the picture it keeps reads on whatever page shows it.
 - In a dashboard's aside a list is names, not a table: the name whole and
   wrapping, a quiet line under it, a value at the row's end, rows parted by
   hairlines, the row the record's link. A grid there cut its names short.
+  In the main column a plain `rows` of one to three named columns that
+  lead with the record's own name is the same names as a worklist: the
+  section's mark in a soft tile before each row, the value in the text's
+  ink (and its own tone) at the end, and a caret that says the row opens.
+  The tile wears the row's alarm — the strongest `bad` or `warn` any of the
+  record's toned columns says for it, in that tone's ink on a wash of it —
+  and is the quiet neutral otherwise; it is never the accent, which would
+  speak for the colour (fine under a green brand, a warning under an orange).
+  A worklist's `relative` day is said from today however far it is ("5
+  months ago"), its date the title: a column of dates falls back to dates
+  together, but a row of work waiting says how long it has waited.
+  A record's head facts say both, the date first and the day from today
+  quiet beside it ("Nov 8, 2026 · 7 days ago"): a record is where the exact
+  day is read.
+  More columns than three, columns that lead with a date, an amount or a
+  reference, an embedded view, a section that works as its room or offers
+  row actions stays a table: a table is for comparing columns, and a name,
+  a line and a value are not compared.
 - A metric that opens a list says so with an arrow after its label; the whole
   card is the link, and its hover is the look's, colour only.
 - A related list that has nothing may be left out (`empty: 'hide'`) or said in
@@ -1016,9 +1212,9 @@ every look, so the picture it keeps reads on whatever page shows it.
   (outlined), quiet (a word in the link ink) and danger —
   and a size: 28px compact, 34px, 40px large; busy is `aria-disabled` with
   its own words, never disabled. A Field is its label over the control (13px
-  in the text ink; in a form that runs a command or makes a record, 14px at
-  the regular weight, the answer's own size, so the question reads as
-  plainly as the answer, its help 12px in the muted ink; in a form the answers that may be left empty say
+  in the text ink; in a form that runs a command or makes a record, 13px at
+  600, so a form is scanned by its questions and a label is not mistaken for
+  what was typed under it, its help 12px in the muted ink; in a form the answers that may be left empty say
   "(optional)" beside it, and elsewhere a required one wears a star that is
   not part of the name), a hint and then its problem under it, wired into the
   control's description and `aria-invalid`. Every control in a form is one
@@ -1070,7 +1266,21 @@ every look, so the picture it keeps reads on whatever page shows it.
   section as a hairline, a 14px heading and an optional dim line set close
   under it — more room above a section's rule than under its heading, so a
   heading belongs to the fields it names. The last field keeps that 20px from
-  the drawer's foot. It says no generic
+  the drawer's foot, which is a band from the drawer's edge to its edge, a
+  step off the surface, standing at the foot of the drawer however few the
+  fields. At a desk a drawer stands 8px off the window's edge in the look's
+  larger corner, a sheet over the page as a dialog is; a phone's fills the
+  screen. A dialog that asks for fields (a record's New, a command, a field
+  set over many) ends the same way at a desk: its verbs in a band across
+  its foot, ruled off and standing while the fields scroll, and a cross in
+  its top corner (the box's last control, so the first Tab is the question)
+  that steps aside while the form's own button says "Close"; a confirmation
+  has neither. After a submit refused in the browser, two or more wrong
+  answers are also said together at the form's head, the critical tone's
+  wash and edge, each field's name a press that moves the focus to it; one
+  wrong answer is said under its field alone, where the focus lands. The
+  list is not a live region: the line under a field is the one a screen
+  reader is told. It says no generic
   lede ("leave a field empty…"); the author's `description` or nothing. A
   short form (up to 8 fields, no steps) is a drawer beside the list; a
   longer or stepped one is a page of its own in the content pane (the count
@@ -1148,11 +1358,17 @@ every look, so the picture it keeps reads on whatever page shows it.
   someone signed out of an App that signs people in, carries a quiet
   **Sign in** at the top bar's end (`.account-sign-in`, as a public App's
   is): staff reach their door without typing its address.
-- Sign-in is a card at a desk and the screen on a phone (760px and under):
-  no box, the fields the window's width less its gutter. The staff door of an
-  App with public pages leads back to them ("← Payday"). A problem with one
-  field is said beside it; a refusal that must not say which field (a wrong
-  email or password) is the form's one sentence.
+- Sign-in is one column and no box: 22rem at a desk, a little above the
+  screen's middle, and the window's width less its gutter on a phone (760px
+  and under). The App's mark heads it on the column's own edge (a glyph or an
+  initial as one tile in the ink, a tenant's picture as the picture), then
+  the heading at 28px, then the ways in: another account's buttons first and
+  the App's own form under an "or" on a rule, where both are offered. The
+  staff door of an App with public pages leads back to them ("← Payday"). A
+  problem with one field is said beside it; a refusal that must not say which
+  field (a wrong email or password) is the form's one sentence, on a line
+  held inside the gap over the button, so it arrives without moving anything
+  and its empty place is not a hole in the form.
 - The public landing (`LandingSurface`) is the one signed-out screen that is a
   page rather than a form or a tool, and it still does not persuade by
   decoration: one 68rem column (growing on a desk past 1440px to 80rem at
@@ -1187,7 +1403,8 @@ every look, so the picture it keeps reads on whatever page shows it.
   that ends at the list (the heading names the record), no folds, no record
   history (`history()` is the operator's, and its read is behind sign-in), and
   in Sage no editing-group panels, since there is nothing to edit. Its lists show no
-  match-count chip, no star and no page-size choice, and a Sort whose default
+  star and no page-size choice, keep the count beside the title (how many homes
+  there are is the storefront's own fact), and a Sort whose default
   is one of its choices names it ("Newest listings", never "Default order").
   Staff, signed in, keep all of it. The shell is the storefront's too: a
   signed-out visitor gets the top bar (brand, the public entries as links,
@@ -1197,7 +1414,11 @@ every look, so the picture it keeps reads on whatever page shows it.
   refused room and a failed read share one block (`Empty`, `Refused`,
   `Problem` in Notes.tsx): a mark, one 14px line in the muted ink, an optional
   second line, at most one action. A refusal names the right noun (list,
-  record, page). A date is written as the reader's locale writes it and kept
+  record, page). Where the block is all its room has to say (a page the
+  reader may not see, a record that is gone: the block's `room`), the same
+  parts stand in the room's middle, the mark on a tile of the raised ground
+  and the sentence at 16px in the text ink: one grey line on the edge of an
+  empty page read as a page that had not loaded. A date is written as the reader's locale writes it and kept
   as ISO. In an App every stored day and moment, in a grid and on a record,
   is said from today within two weeks ("2 days ago", "yesterday, 2:05 PM")
   and as the date past them (`sayNearDay`), the full day and time on hover;
@@ -1216,8 +1437,13 @@ every look, so the picture it keeps reads on whatever page shows it.
   ink. A boolean in an App's grid says yes as a tick in the ink and no as an
   empty cell, named "No" for assistive tech; the Workbench keeps its cross.
 - A `card()` section is the record a reference names, as one box beside
-  the offer card: its caption the section's title, its title the named
-  record (a link), its facts two across, "View dealer" ruled off at the foot.
+  the offer card: its caption the section's title as a quiet label (12px at
+  600 in the muted ink, never a second title over the name), its title the
+  named record (a link), its facts a list of rows, each caption in a column of
+  its own so the values start on one edge, and "View dealer" at the foot in
+  the link ink. Beside a record in an App the aside is a rail, and every
+  section's head in it is such a label, in the text face and sentence case
+  whatever the look's section role says.
   Two boxes in the aside stand 20px apart, not the 40px section seam. On a
   phone the card, the headline and the current card follow the summary, ahead
   of the related lists they explain; the rail and the history stay last.
@@ -1237,9 +1463,17 @@ every look, so the picture it keeps reads on whatever page shows it.
   never a button: when a resource allows it, it is the last item in More,
   in the danger colour and ruled off from the record's own verbs.
 - A record header (`header()`) is the head, not a section under it: the
-  status is its tone's own dress (a dot and its word) beside the name, the
+  status is its tone's own dress (a dot and its word) beside the name, in a
+  small ruled pill at a label's size where the look says status with a dot
+  (a look that says it with a pill draws its own), so it reads as a label on
+  the name and not a second word in the title's line; the
   facts one line under the name in the name's column, quieter than the name
-  and at the facts line's weight, a reference in them a link as in the
+  and at the facts line's weight, in the head's own face with tabular
+  digits (never the figures face: they are read once, not down a column);
+  the summary's figures in the stat figure's hand (`type.roles.figure`, else
+  the interface face), a toned one with them, and their names under the
+  label role where it says capitals,
+  a reference in them a link as in the
   fields; on a phone the facts stay under the name and the toolbar takes the
   row after. Where the name's column has a second line (its display
   `subtitle`, an email under a guest's name), the inferred page's head says
@@ -1257,14 +1491,13 @@ every look, so the picture it keeps reads on whatever page shows it.
   `plain` is the head on the page's ground under the trail's hairline. `band`
   is one strip of the raised ground from the pane's edge to its edge, from
   the top of the trail (with the record's verbs, which stand there on a
-  desk) through the eyebrow, name, status and facts, or a list's title, tabs
-  and filters, closed by a hairline, as an object page leads with its
-  object; the contents keep their edge, and a band under the facts keeps
-  20px of its own before the body's margin. What stands raised in it steps
-  7% into the ink to stand apart from it, but a list's search, which raised
-  buttons draw on the raised ground, is a field on the surface there: on the
-  step its placeholder read 4.05:1 and its edge 2.67:1, on a ground no
-  palette pair measures. It is drawn as a border image
+  desk) through the eyebrow, name, status and facts, or a list's heading
+  row (its name and its verbs; its tabs and filters stand under the band, on
+  the page's ground, with the rows they refine), closed by a hairline, as
+  an object page leads with its object; the contents keep their edge, and a
+  band under the facts keeps 20px of its own before the body's margin. What
+  stands raised in it steps 7% into the ink to stand apart from it. It is
+  drawn as a border image
   whose outset reaches the pane's edges, which is ink overflow: it adds no
   scroll, clips nothing (a phone's verbs fixed at the foot of the screen
   are the head's) and needs nothing measured, so it stands from the first
@@ -1333,8 +1566,8 @@ every look, so the picture it keeps reads on whatever page shows it.
     range ("21–40 of 312") with Previous and Next; First, Last and the page
     box are the Workbench's. Cards, a queue and a checklist page as the grid
     does;
-  - `density: 'compact'` tightens a ledger's rows — 5px above and below a
-    cell's 12px words, under the row height (`--row-h`) every other list
+  - `density: 'compact'` tightens a ledger's rows — 4px above and below a
+    cell's 12px words (about 26px rows, some 33 to a 1080p screen), under the row height (`--row-h`) every other list
     stands at — in every look (structure.css); the reader's zoom still
     applies on top.
 - A JSON document is laid out by its shape, never printed as braces
@@ -1413,6 +1646,15 @@ every look, so the picture it keeps reads on whatever page shows it.
   dark mode, the Workbench) are behind a gear named "Settings". Signed in,
   they are the account menu's, between the account's own items and Sign out,
   and the gear is not drawn: one menu at the bar's end, not two side by side.
+  Signed in to an App, Preferences and the profile are not dialogs: both
+  menu entries open the settings page, `/{app}/settings` (SettingsRoom.tsx),
+  at their section. The page is sections under one title, each saying what it
+  is about on one side (a title, a sentence in the muted ink) with its rows
+  or fields on the other, a hairline between sections and one column on a
+  phone; a preference still applies as it is chosen, so the page has no Save
+  of its own. An App with a view called `settings` keeps the word, and the
+  menu still opens the page. A signed-out visitor, the Workbench and the
+  database browser keep Preferences as a dialog: there is no such page there.
   Where the App keeps its reader an inbox (`notify`), a bell stands just
   before the account: an icon button like the gear, its unread count a pill
   in the accent beside the mark ("99+" past 99), said in its name too
@@ -1458,7 +1700,14 @@ every look, so the picture it keeps reads on whatever page shows it.
   "$0.00", "-$12.50", never "$24,495" beside "$5,917.40". A figure is read
   by its digits, so one past 2^53 is not the double `Number()` makes of it.
   A stat card says its figure exact by default: a balance read as "≈ $28K"
-  is no balance (a field report). A card glanced at beside its trend, where
+  is no balance (a field report). Exact is to the cent where there are
+  cents and whole where there are none: a headline reads "$56,130", and
+  "$56,130.00" beside "$40.4K" in one strip read as two formats (a cold
+  review); a table's cell keeps its cents. A change larger than the figure
+  it stands under is said as a share of what was there ("↓ 85% vs prior 90
+  days"), never as an amount that reads as money lost, and a trend is drawn
+  where two of its points or more have something to show: one bar in an
+  empty window read as a mark left on the card. A card glanced at beside its trend, where
   the size is the news, says `figure: 'compact'` — from a thousand up
   ("$27.3K", "$414.1K"), as its axis and its change do, the exact figure
   its title and what a screen reader hears. Each card measures alone, so a
@@ -1473,9 +1722,14 @@ every look, so the picture it keeps reads on whatever page shows it.
   It drops zeros and never money, so it holds on every screen, a document and
   the server-drawn page, and a CSV stays exact.
 - A dashboard's `areas` places sections in the named areas of a grid of equal columns (`structure.css`; a look dresses the sections in an area and never moves an area). Areas in one template row stand as tall as the tallest, the sections in an area stack, and the last of them takes the height that is left, so a boxed look's panels end on one line. The DOM is in the order the template reads, which is the one a narrow screen stacks in: below 13rem a column, asked of the grid's own room, not the window's. Metrics and pairs are made per area (nothing pairs in one). An area whose every section leaves out (`empty: 'hide'`) hands its cells to its left neighbour, and that is settled once for each pick the reader makes, when every tile has answered, never on a refresh.
-- A stat card is as tall as what it says: the trend's 32px slot is kept only
-  when a trend is drawn, and the cards of a strip stand from one top edge
-  rather than stretching to the tallest. A trend spans its card and is drawn
+- A stat card is as tall as what it says: its label over its figure, and a
+  trend beside the figure, never under it, so a card with a trend is no
+  taller than one without and the figures of a row stand on one line (at
+  most 112px of trend; on a phone, where half a row has no room beside a
+  figure, it is under it at the card's width). One treatment places a
+  card's parts itself: `icon`. A dashboard's sections stand
+  24px apart and its boxed figures 16, and a section's title starts it,
+  with no margin of its own over it. A trend is drawn
   only from four points, and as a line only where four of them are above zero:
   a run with fewer is thin bars one to a period over a baseline, no wider than
   160px (a line that is flat but for a spike read as a fall to nothing and a
@@ -1561,18 +1815,28 @@ every look, so the picture it keeps reads on whatever page shows it.
   are the real rows' height, and a tab's badge keeps its count while the
   next one is on the way.
 - A workflow strip is drawn from three states up: with one or two, the head's chip
-  already says where the record stands. It is a track of thin segments, one per step, the label
-  under each: a step walked is a quiet tint of the accent, the current one
-  the accent with its label in the ink at 600, a step the record's actions
-  can reach now an outlined segment, a step ahead the rule's grey. The track
-  carries the order, so there is no joining rule and no box around it; on a
+  already says where the record stands. Where its steps are an order
+  (`ordered`) it is a way travelled: a numbered mark for each step and a 2px
+  rule to the next, the label under its mark; a step walked is the ink, its
+  number a check and its rule the ink, the current one the accent on its
+  soft ground with its label in the ink at 600, a step the record's actions
+  can reach now ringed in the accent, a step ahead hollow. A set of states
+  with no order is a track of thin segments, one per step, with no numbers
+  and no joining rule, since a 1, 2, 3 would claim an order: the current one
+  the accent, one that can be reached an outlined segment, the rest the
+  rule's grey. Neither has a box around it; on a
   phone it is one row that scrolls sideways. A step's label is never cut: it
-  takes up to two lines under its segment, in every theme.
+  takes up to two lines under its mark, in every theme.
 - In an App an email address, a phone number and a web address are links
   (`format: 'email' | 'phone' | 'url'`, or a column named like one), in the
   link ink as a named reference is; a web page opens beside the App. Never
   inside another target (a card, a row that opens), and never in the
   Workbench, which shows the data exactly.
+- On a phone a list's row is its title and the first facts on a line, each said once. A status, a name and money
+  say what they are and drop their caption; a date, a count and a disc of initials do not, so each keeps its
+  caption, quiet before it ("Reported Aug 28 · Visit Sep 2"): two bare dates read "reported? visit?" and "SW" read
+  "who?" to a renter on a phone (a cold review). Caption and value wrap as one, so a lone disc never takes a line.
+  A person there is their disc and their name ("Technician SW Sam Walker" never "SW" alone).
 - On a phone a property rail keeps each caption beside its value: a 7.5rem
   caption column and the value after it, one row per fact, the last with no
   rule under it. A wide field (prose, an address) puts its caption over it.
@@ -1619,11 +1883,27 @@ every look, so the picture it keeps reads on whatever page shows it.
   far edge fades until the last is in view.
 - A board is one board wherever it is drawn: a dashboard's and a list's lanes
   say a toned value as its dot and word, with the lane's count as a chip, and
-  a card its title over its quieter, dressed lines. A lane starts at 15rem
-  and shares a wide room up to 320px; in a narrower one the lanes give way
-  together down to 12rem, a card's words wrapping and the lane's sum taking
-  a line under its name, so four lanes and their folded strips fit beside a
-  side menu at 1280. Only more lanes than fit at 12rem scroll, with a fade at the edge, and an
+  a card its title over its quieter, dressed lines. **A list's card is read
+  in three steps.** Its name; then one quiet line of what it is and where —
+  its category as a word in its series colour, its line and its facts, a
+  middle dot between them, wrapping between facts and never inside one, a
+  toned value there a dot and its word and never a pill; then its foot, the
+  card's next step as a button at one end and who has it (the avatars) at
+  the other. **The next step** is the first verb, in the order the resource
+  says them, that moves the card from its state to one other lane and takes
+  nothing away, ahead of a step aside (one whose state leads straight back,
+  as Put on hold does); a step into a final state is offered only where it
+  is the card's one way on. It is outlined, and filled where a value on the
+  card is toned bad: one filled button in a lane is the card that will not
+  wait. Every other move stays in the ⋯ and in the drag. A machine's fixed
+  verb is such a move though it also stamps when the state was entered. In
+  the `soft` board a lane is a quiet tray that holds its head and its cards;
+  in `strip` a tinted strip heads loose cards; otherwise a rule in the ink. A lane starts at 15.5rem
+  and shares a wide room up to 320px: a card's quiet line (three facts joined)
+  is read on one line at that width. Where every lane fits the room at 12rem
+  the lanes give way together down to that, so none stands behind the fade;
+  a board with more lanes than fit even so keeps its lanes at 15.5rem, since
+  it scrolls whatever their width. More lanes than fit scroll, with a fade at the edge, and an
   final state of the column's machine (Won, Closed, Cancelled) is a folded strip (its name, count and sum, opened with a click and remembered), not a full lane, known from the machine and so from the first paint (counts that land after the cards never fold a lane on the page already drawn, which moved every lane to its right). A lane with nothing in it says "Nothing here" quietly. Its head counts the lane over the whole
   list, never the page drawn, and its limit is met by that count; its cards
   are read a page at a time, with "Show 20 more" at its foot. Records with no
@@ -1740,6 +2020,10 @@ at its end that fills in the primary-action color when chosen. At rest a card
 wears the field's outline and no fill (`--choice-edge`, `--choice-well`); a
 chosen card takes its edge in the primary-action color, and the card in hand
 the house ring.
+One answer's cards that carry a round mark stand two across at a phone's
+width (one where even that is too narrow), so a card's words are not set one
+to a line; the mark is the card's `::before`, because UI SDK takes a radio
+label's `::after` for its touch target.
 Several cards are one group to the keyboard as one answer's radios are: one
 Tab stop, the arrows between them, Space to turn one on or off, each saying
 `aria-checked`. The form's description is said once, on the first step under
@@ -1784,6 +2068,23 @@ primary. The intake's own size, type and page are its on-demand file
 (`MultiStepForm.css`), never in the first paint; the outline, ring, optional
 word, Show and primary are every quiet form's (`formDress.css`). Its labels, choices, answers and review values wrap, by the
 truncation policy.
+
+## Who a screen is for
+
+An App has two readers: the office, and the App's own public (a signed-out visitor, a customer, a patient, a
+resident whose role says `portal: true`). One rule says which the reader is (`appAudience.ts` on the server,
+`audience.ts` in the client), and every part that is an office tool asks it before it draws. The public is drawn no
+search across every table, no settings gear before sign-in, no look picker, no list view switch, column chooser or
+record pager; their settings keep their profile and language; a form asks them more gently ("answers need another
+look") where the office is told what to fix ("fields need fixing"). Their bell is drawn once a notice has reached
+them and not before: who a notice tells is named by the record, not by role, so only their inbox knows. A portal is
+never the office's App with the menu taken away. Someone holding an office role beside a portal one is the office.
+
+A moment is said with its time: one still to come keeps it however near, a far one reads by its weekday without this
+year, and the zone's name is left off for a reader whose own clock is that zone. Moments drawn together that are all
+of today say their time alone. A date and a time is asked with the calendar and a clock beside the text, never by a
+typed pattern alone. A list read as records titles each row by the view's `primary` where it names one (a
+dashboard's rows and a related list take it too), so a person's own list does not repeat their name on every row.
 
 ## Access
 
@@ -1850,6 +2151,15 @@ found not to hold.
   its first record, or its "+N more" when all are folded — where Up/Down
   step and Escape comes back to the day. Alt and an arrow still move a
   record. A phone's agenda is a list, and its records stay plain Tab stops.
+- **A month in its own room fills the room.** Every week is one height, the
+  room the pane has under the grid shared between them, never under the
+  day's least (116px) nor over twice it, and a day shows as many records as
+  that height holds — never fewer than three — before its "+N more". The
+  height is measured before the paint, so nothing moves after it. A month in
+  a dashboard or a page section keeps its set height and three a day.
+- **A grouped list that can be chosen from chooses by group too**: each
+  group's head holds a box for every row of the group loaded here,
+  mixed while some are chosen, named "Select all in" and the group.
 - **Native controls follow the mode.** The root declares `color-scheme`
   with the theme, so a checkbox, a radio, a date's calendar and the window's
   scroll bar are drawn dark on a dark ground rather than as white squares.
@@ -1890,15 +2200,53 @@ found not to hold.
   from `--control-h` (`shape.height.control`, 32px to 56px, whole pixels). On a
   touch screen (`pointer: coarse`) none is shorter than 44px, whatever the
   theme says, and the density zoom is divided out so the floor is real pixels.
+  There are two sizes and no third, by where a control stands. In a form, a
+  dialog and a page's head it is the control's own height (`--control-h`; a
+  form's is `--form-control-h`, two pixels more for its larger text, and its
+  picks and buttons take it with its fields). In a bar or a toolbar (a list's
+  search, filters and boxed tabs, a record's actions in the crumb bar, a
+  dashboard's windows) it is the compact one (`--control-h-sm`, four pixels
+  under). Controls that share a row are one size: no sheet writes a control's
+  height as a number, so a theme that makes its fields taller makes its
+  toolbars taller with them.
+- **A part its caller dresses is the caller's.** A trigger given classes by
+  the kit (a filter chip, a tab that opens a menu, an icon button) says
+  `data-own` and wears none of the control's own dress: its height, edge and
+  padding are the class's alone. Without it the two were added together, and a
+  chip stood two pixels over the search box beside it.
+- **One popup.** A menu, a listbox, a picker's list, a popover and the
+  calendar are the same box: the look's popup corner (`--radius-pop`), the
+  stronger line for an edge (a popup lies on the page, and a look without a
+  shadow has only the edge to set it off), the same inset, and rows at the
+  text's own size on the row's corner (`--radius-item`), never rounder than
+  the box. A dialog is a panel and takes the panel's corner.
+- **A listbox's trigger is a field.** It holds a value, so it keeps the
+  field's edge (3:1) and corner, not a button's softer one; while its list is
+  open it wears the focus edge. A button or a menu's trigger whose popup is
+  open stands on the raised ground until it closes.
+- **A page's blocks agree.** Where a look holds a dashboard's sections in
+  panels or cards (`blocks: 'panel'`, `'tile'`, `'card'`), a record's related
+  lists and its history are held the same way, beside the side column's
+  cards, and those cards take the panel's corner. Where every block is a tile
+  (`stat: 'bento'`) one gap separates them all, whichever section holds them:
+  a row of four figures in two blocks is four tiles, evenly spaced. Figures
+  that share a row are one height, the tallest's.
+- **A tab drawn as a box is a toolbar control.** Pill, tint and inverted tabs
+  are the compact height and the control's corner, so they stand level with
+  the filters beside them and are pills where the look's buttons are; the
+  lifted tabs' track is that height.
 - **The optional word.** A long form — every command form and New form —
   marks the answers that may be left empty with "(optional)" beside the
   label, and never the required ones with a star: in an application nearly
   every answer is needed, so a star on each was noise. Elsewhere a theme may
   say `recipes.required: 'optional-word'` for the same. Pick one rule per
   form; a mix of both is noise. `aria-required` is said either way.
-- **A drawn checkbox.** `recipes.checkbox: 'drawn'` replaces the browser's box
-  with one in the field fill and edge, the corner capped at 6px, and a check in
-  `--on-accent`. It keeps focus, disabled and forced-colors states.
+- **A drawn checkbox.** The controls draw a checkbox in every theme: a box in
+  the field fill and edge, its corner capped at 5px, the accent with a check
+  when ticked. It keeps focus, disabled and forced-colors states. It was a
+  recipe (`recipes.checkbox`) while a theme chose between that and the
+  browser's own box; no theme can ask for the browser's now, so the part is
+  off the menu.
 
 - **A chart's first four series read at 3:1** on the card they sit on, in
   every look, light and dark; past four, a chart is a legend's job. Mono's
@@ -2006,13 +2354,16 @@ accent as text and fill, a brighter link by night, the pale tint, the
 focus ring, a signal fill and the words on it, the lead chart series),
 light and dark. Every look offers all twelve and wears one by default
 (Workshop Safety orange, Lumen Cobalt, Mono and Sage Ink, which is each
-look's own ink, Ledger Emerald, in the book's own deeper green); the look keeps its grounds, neutrals, type, shape and
+look's own ink, Ledger Emerald, in the book's own deeper green, Atelier Safety orange at its rust depth,
+Graphite Teal, Bloom Slate, grey until an App picks a hue, its page, hairlines and ink turning with the palette); the look keeps its grounds, neutrals, type, shape and
 recipes, and decides which roles the hue reaches: Workshop the primary
 verb, links, the current tab's rule, the menu's marker, the ring and the
 first series, with no tint; Lumen the accent, its tint, links, the ring, the menu's
 mark and the first series; Mono and Sage the same on their own neutral
 tint for what is chosen; Ledger Lumen's reach, and the rules (the double
-rule under a table's heads) in the hue, the cover staying the book's green. Where a look needs a palette at another depth
+rule under a table's heads) in the hue, the cover staying the book's green; Atelier Mono's reach with the
+primary left the ink and what is chosen on the hue's own wash over its paper; Graphite Lumen's, with the dark menu's marker at the hue's night depth; Bloom Lumen's and
+the primary's fill. Where a look needs a palette at another depth
 (Workshop's own deeper orange ring, each look's own ink for Ink) the
 palette says so for that look rather than forking. A palette's lead
 series takes the place of the look's nearest hue and the rest are ordered
@@ -2053,6 +2404,10 @@ pointing at one sample page that already does it; the reasons live here.
   skeleton a phone drew the asking rent and its call to action after every
   list; an `article` (a task, a policy) is one column at `--page-measure`,
   70ch of the body face, because a full-width column of words has no measure.
+  A record nobody wrote a page for that a list open to every reader draws
+  as a card with a figure and a picture is a showcase of that card: its
+  pictures, its figure beside them, its facts under the name — a visitor
+  reads a product, not an office's record (`pageAnatomy.ts`, `showcaseOf`).
   A page that names none is given the one its sections already make
   (`chooseLayout`): each archetype is chosen by the section it is named for,
   the photos first, the thread last, the record's own long text with no more

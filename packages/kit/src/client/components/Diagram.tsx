@@ -33,6 +33,7 @@ import { SchemaExportControl } from './SchemaExport.js';
 import { formatNumber } from '../locale.js';
 import { say } from '../copy/workbench/components/Diagram.js';
 import { addHostListener, portalRoot, removeHostListener } from '../shellHost.js';
+import './Diagram.css';
 
 /* Session state that a repaint must not forget: which nodes the reader has
    opened, which tables the overview is limited to, and whether they asked for

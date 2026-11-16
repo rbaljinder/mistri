@@ -1,0 +1,36 @@
+/* What the controls wear. A Button, a text box, a listbox, a dialog and the rest are drawn over UI SDK, and a part is
+   dressed by the `data-slot` it carries, never by a class:
+
+     styles/ui-sdk.css     UI SDK's own sheet, without its rules for bare elements (scripts/ui-sdk-css.mjs)
+     styles/m-tokens.css   the scales the parts are set on, and this package's tokens under the names they read
+     styles/parts.css      the dress for UI SDK's parts
+     styles/forms.css      a field, its frame and a form's parts
+     styles/overlays.css   a dialog, a drawer, a popover
+     styles/extras.css     the carousel, the split panes, the scroller, the landing's blocks
+     styles/kit*.css       what the controls add to the parts they are built from
+     styles/screens.css    what a control owes a screen: an answer's width, a finger's target, a phone's text
+     styles/guard.css      what is said a second time against a look's rules for bare elements
+     styles/looks.css      a theme's recipes, part by part
+
+   They are layers of their own (styles/layers.css) inside whichever layer takes this file, in that order whatever the
+   order they load in. One file, and not split by what a first paint draws: two of these sheets in one layer win by
+   the order they arrive in, and one that arrived late would take over rules it is meant to stand under.
+   It is the package's one stylesheet for what it draws, beside its tokens (tokens.css) and its answer to the
+   reader's settings on those tokens (preferences.css). No class names a control: a caller's own `className` is the
+   caller's to dress, and it wins, because whoever takes this file puts it under their own rules. */
+@import './styles/layers.css';
+@import './styles/ui-sdk.css';
+@import './styles/m-tokens.css';
+@import './styles/parts.css';
+@import './styles/forms.css';
+@import './styles/overlays.css';
+@import './styles/extras.css';
+@import './styles/kit.css';
+@import './styles/kit-fields.css';
+@import './styles/kit-parts.css';
+@import './styles/screens.css';
+@import './styles/guard.css';
+@import './styles/looks.css';
+
+/* The Icon primitive (Icon.tsx): a glyph that sits on the line beside its words and is never squeezed by them. */
+.mistri-icon { display: inline-block; flex: none; vertical-align: middle; }

@@ -78,7 +78,9 @@ export function TenantAdministration({ controller, onClose }: { controller: Tena
           })}
         </p>
       )}
-      {view.loading && <p role="status">{say('loadingAuthorizedInformation')}</p>}
+      {/* One thing is said at a time. A change's outcome starts the reload of what it changed, and for a moment both
+          lines stand: the outcome is the one to hear, so the reload is drawn under it and not announced over it. */}
+      {view.loading && <p role={view.message ? undefined : 'status'}>{say('loadingAuthorizedInformation')}</p>}
       {expired && (
         <div>
           <p role="alert">{say('administrationAccessHasExpired')}</p>

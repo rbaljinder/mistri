@@ -40,6 +40,9 @@ test.describe('the ends of a page', () => {
         documentRoom: scroller.scrollHeight - innerHeight,
         sideBottom: side ? Math.round(side.bottom) : null,
         shellBottom: Math.round(box.bottom),
+        /* Where the room is a pane beside the menu (structure.css, `app-sidebar-shell`), the pane stands 8px in
+           from the window's edge and the menu runs to it. */
+        paneInset: document.body.classList.contains('app-sidebar-shell') ? 8 : 0,
       };
     });
 
@@ -61,7 +64,7 @@ test.describe('the ends of a page', () => {
           // The page's bottom padding is 16px; a window of empty ground after the last section is the defect.
           expect(found.past, path).toBeLessThanOrEqual(40);
           expect(found.documentRoom, path).toBeLessThanOrEqual(1);
-          if (width > 760) expect(found.sideBottom, path).toBe(found.shellBottom);
+          if (width > 760) expect(found.sideBottom, path).toBe(found.shellBottom + found.paneInset);
         }
       } finally {
         await sample.stop();

@@ -23,12 +23,12 @@ test("a record's New form: its pickers, its dates, its switch and the sheet's Cl
   await expect(page.locator('html')).not.toHaveAttribute('data-starting', '');
   const form = page.locator('.insert-field').first();
   await expect(form).toBeVisible();
-  await expect(page.locator('.date-field-trigger').first()).toBeVisible();
+  await expect(page.locator('[data-slot="date-field"] > [data-slot="popover-trigger"]').first()).toBeVisible();
   await expect(page.locator('.picker-input').first()).toBeVisible();
   expect(await small(page)).toEqual([]);
   /* The calendar button keeps its place inside its field: its hit area grows round it, not the button out of it. */
-  const field = await page.locator('.date-field').first().boundingBox();
-  const button = await page.locator('.date-field-trigger').first().boundingBox();
+  const field = await page.locator('[data-slot="date-field"]').first().boundingBox();
+  const button = await page.locator('[data-slot="date-field"] > [data-slot="popover-trigger"]').first().boundingBox();
   expect(button!.x + button!.width).toBeLessThanOrEqual(field!.x + field!.width);
   expect(button!.y).toBeGreaterThanOrEqual(field!.y);
 });

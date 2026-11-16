@@ -7,6 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { trapFocus, viewportBox, viewportSize } from '../core.js';
 import { say } from '../copy/shell/components/Tour.js';
 import { addHostListener, removeHostListener, shellQuery } from '../shellHost.js';
+import './Tour.css';
 
 export interface Stop {
   anchor: string | string[] | null;

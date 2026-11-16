@@ -15,8 +15,9 @@ test('the native range is named by the label, says its value in words, and reads
   const range = screen.getByRole('slider', { name: 'Monthly budget' });
   expect(range).toHaveAttribute('aria-valuetext', '$400');
   expect(range).toHaveAttribute('min', '150');
-  expect(document.querySelector('.field-readout')).toHaveTextContent('$400');
-  expect(document.querySelector('.field-range-ends')).toHaveTextContent('$150$1000');
+  expect(document.querySelector('[data-slot="slider-readout"]')).toHaveTextContent('$400');
+  expect(document.querySelector('[data-slot="slider-ends"]')).toHaveTextContent('$150$1000');
+  // The filled share of the track is the range's to say, for the stylesheet to draw.
   expect(range).toHaveStyle({ '--range-share': '29.41176470588235%' });
 });
 
@@ -25,7 +26,7 @@ test('numbers are grouped by default, a change reports a number, and it is the n
   const range = screen.getByRole('slider') as HTMLInputElement;
   fireEvent.change(range, { target: { value: '1000' } });
   expect(range.value).toBe('1000');
-  expect(document.querySelector('.field-readout')).toHaveTextContent('1,000');
+  expect(document.querySelector('[data-slot="slider-readout"]')).toHaveTextContent('1,000');
   // The arrows, Home and End are the native range's: the control adds no key handling of its own.
   expect(range.type).toBe('range');
   range.focus();

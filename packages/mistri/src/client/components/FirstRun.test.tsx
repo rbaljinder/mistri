@@ -81,8 +81,8 @@ test('an empty App is fresh: the welcome, the first step primary, each opening i
   expect(screen.getByText('The companies you sell to.')).toBeInTheDocument();
   const [first, second] = screen.getAllByRole('link', { name: 'Add' });
   expect(first).toHaveAttribute('href', '/crm/accounts!new');
-  expect(first).toHaveClass('btn-primary');
-  expect(second).toHaveClass('btn-secondary');
+  expect(first).toHaveAttribute('data-variant', 'solid');
+  expect(second).not.toHaveAttribute('data-variant');
 });
 
 test('a step with a row is done, quiet, and opens its list; the rest still ask', async () => {
@@ -93,7 +93,7 @@ test('a step with a row is done, quiet, and opens its list; the rest still ask',
   expect(screen.getByText('(done)')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/crm/accounts');
   // The next step not taken is the primary one.
-  expect(screen.getByRole('link', { name: 'Add' })).toHaveClass('btn-primary');
+  expect(screen.getByRole('link', { name: 'Add' })).toHaveAttribute('data-variant', 'solid');
 });
 
 test('every step done, the dashboard is itself again', async () => {

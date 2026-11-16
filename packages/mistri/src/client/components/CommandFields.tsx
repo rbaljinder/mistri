@@ -340,13 +340,23 @@ const FORMAT_SENTENCES = { email: say('anEmailAddress'), url: say('aWebAddressSt
 /** A time's bound and a sibling time are said as a date's are: before, after, on or after. */
 const dated = (type: string) => type === 'date' || type === 'datetime' || type === 'time';
 
+/** A needed answer left empty. A label that is itself a question is quoted and asked for: "What's wrong? is required."
+    ran a question into a statement. */
+/* A missing answer, said as a person would for the label it has: a question is asked again, a phrase ("The problem,
+   in a few words") is quoted, since "… in a few words is required." reads as one broken sentence, and a plain name
+   keeps the short line every other form says. */
+const required = (label: string) =>
+  say(/\?\s*$/.test(label) ? 'answerThis' : /[,;:]/.test(label) || label.trim().split(/\s+/).length > 4 ? 'fillInThis' : 'isRequired', {
+    label,
+  });
+
 /** A field's sentence for what is wrong with it: its own label, and the rule it did not meet; a sibling rule names the sibling. */
 function sentence(fields: readonly AppCommandField[], path: string, reason: CommandInputReason): string {
   const line = lineAt(fields, path);
   if (line) {
     const label = line.label;
     return reason === 'required'
-      ? say('isRequired', { label })
+      ? required(label)
       : reason === 'choice'
         ? say('chooseLabel', { label })
         : reason === 'type'
@@ -371,7 +381,7 @@ function sentence(fields: readonly AppCommandField[], path: string, reason: Comm
   switch (reason) {
     // A box that must be checked is said at the box, which the reader is looking at.
     case 'required':
-      return isCheck(field) ? say('checkThisBoxTo') : say('isRequired', { label });
+      return isCheck(field) ? say('checkThisBoxTo') : required(label);
     case 'too_short':
       return say('mustBeAtLeast', { label, minLength: text?.minLength ?? (field.type === 'richText' ? field.minLength : undefined) ?? '' });
     case 'too_long':
@@ -581,7 +591,6 @@ export function CommandFieldControl({
     'aria-describedby': describedBy,
     'aria-invalid': invalid || undefined,
     required: field.required,
-    className: 'field-control',
     disabled,
     ...(onLeave ? { onBlur: onLeave } : {}),
   };
@@ -592,9 +601,9 @@ export function CommandFieldControl({
       box
     ) : (
       // A control drawn on demand takes no onBlur of its own; the box hears its input leave (focusout bubbles).
-      <div className="field-box has-mark" {...(leaves && onLeave ? { onBlur: onLeave } : {})}>
+      <div data-slot="field-box" data-has-mark="" {...(leaves && onLeave ? { onBlur: onLeave } : {})}>
         {box}
-        {valid ? <span className="field-mark" aria-hidden="true" /> : null}
+        {valid ? <span data-slot="field-mark" aria-hidden="true" /> : null}
       </div>
     );
   if (drawnByIntake(field)) {
@@ -650,6 +659,7 @@ export function CommandFieldControl({
     return (
       <textarea
         {...common}
+        data-slot="textarea"
         rows={3}
         maxLength={field.maxLength}
         placeholder={field.placeholder}
@@ -735,7 +745,8 @@ export function CommandFieldControl({
     return (
       <input
         {...common}
-        className="field-control time-input"
+        data-slot="input"
+        className="time-input"
         type="time"
         min={field.min}
         max={field.max}
@@ -749,6 +760,7 @@ export function CommandFieldControl({
     return marked(
       <input
         {...common}
+        data-slot="input"
         type="number"
         min={field.min}
         max={field.max}
@@ -766,6 +778,7 @@ export function CommandFieldControl({
   return marked(
     <input
       {...common}
+      data-slot="input"
       type={type}
       minLength={field.minLength}
       maxLength={field.maxLength}

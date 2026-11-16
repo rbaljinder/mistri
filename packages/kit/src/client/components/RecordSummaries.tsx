@@ -6,15 +6,17 @@
  */
 import { Fragment, type ReactNode } from 'react';
 import { useMessageLanguage } from './useMessageLanguage.js';
-import { columnLabel, keyOf, labelPath, openRecord, recordLabel, rowLabel, state } from '../core.js';
+import { columnDisplay, columnLabel, keyOf, labelPath, openRecord, recordLabel, rowLabel, state } from '../core.js';
 import { opensRecord } from '../recordIntent.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { isLabelTemplate, parseLabelTemplate } from '@mistriwork/engine/shared/recordLabel.js';
-import { primaryKey, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { columnKind, primaryKey, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { TAGS_TYPE, tagChips } from '@mistriwork/engine/shared/tagLists.js';
 import type { TrailList } from '../recordTrail.js';
-import { Value } from './Value.js';
+import { AvatarText, Value } from './Value.js';
+import { dressFor, type DisplayRule } from './valueModel.js';
 import { rowOpensTarget, useRowOpens } from './rowOpens.js';
+import { useRowTitle } from './rowTitle.js';
 import type { GridData, GridGroup } from './Grid.js';
 import { presentationColumns } from './columnPresentation.js';
 import { splitConditions, splitQuery } from '../clauses.js';
@@ -189,7 +191,15 @@ export function RecordSummaries({
   useMessageLanguage();
   const fixed = fixedColumns(query);
   const linkTitle = linkTitleColumn(table, columns, [...fixed, ...(parent ? [parent] : [])], referenceLabels);
+  /* The list's own title for a row (`primary`, rowTitle.ts) comes before the record's name: said as the column is
+     shown, so a reference is the record it names. An empty one falls back, so no row is left without a name. */
+  const primary = useRowTitle();
+  const titled = primary && columns.includes(primary) ? primary : undefined;
   const linked = (row: Record<string, unknown>) => {
+    if (titled) {
+      const own = shownValue(row, titled, referenceLabels);
+      if (own !== '') return own;
+    }
     const value = linkTitle ? (referenceLabels?.[linkTitle] ? row[referenceLabels[linkTitle]] : row[linkTitle]) : undefined;
     return value == null || String(value) === '' ? undefined : String(value);
   };
@@ -276,11 +286,37 @@ export function RecordSummaries({
                 const empty =
                   adorned === undefined &&
                   (value === null || value === undefined || value === '' || (col.type === TAGS_TYPE && !tagChips(value).length));
+                /* A date, a count or a disc of initials says nothing of what it is: two dates on a row read "reported?
+                   visit?", and "SW" read "who?" (a cold review on a phone). Those keep their caption where the App's
+                   row drops the rest (style.css); a status, a name and money say themselves. */
+                const rule = columnDisplay(table.id, name) as { format?: string; avatar?: unknown } | null;
+                const kind = label == null ? columnKind(col.type) : 'text';
+                const bare =
+                  kind === 'date' ||
+                  (kind === 'number' && rule?.format !== 'money' && rule?.format !== 'percent') ||
+                  rule?.format === 'avatars' ||
+                  Boolean(rule?.avatar);
+                const stack = rule?.format === 'avatars' && !empty ? dressFor(rule as DisplayRule, value) : null;
+                const people = stack?.kind === 'avatars' && !stack.more ? stack.names : null;
                 return (
-                  <div key={name} data-empty={empty ? '' : undefined}>
+                  <div key={name} data-empty={empty ? '' : undefined} data-captioned={bare ? '' : undefined}>
                     <dt>{labels?.[name] ?? columnLabel(table.id, name) ?? humanName(name)}</dt>
                     <dd>
-                      {adorned ?? <Value tableId={table.id} col={label == null ? col : { ...col, type: 'TEXT' }} value={value} compact />}
+                      {adorned ??
+                        (people ? (
+                          /* One person is their disc and their name; several, the discs and then the names: on a row
+                             read down a phone a disc alone asked "who?" (a cold review). */
+                          people.length === 1 ? (
+                            <AvatarText text={people[0]} />
+                          ) : (
+                            <>
+                              <Value tableId={table.id} col={col} value={value} compact />{' '}
+                              <span className="avatar-text">{people.join(', ')}</span>
+                            </>
+                          )
+                        ) : (
+                          <Value tableId={table.id} col={label == null ? col : { ...col, type: 'TEXT' }} value={value} compact />
+                        ))}
                     </dd>
                   </div>
                 );

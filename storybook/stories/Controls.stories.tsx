@@ -120,7 +120,7 @@ export const InDialog: StoryObj = {
      (a typeahead once began 16px left and ran wider, since its grid track
      took the box's min-content), and the buttons stand apart. Measured here
      because happy-dom has no layout. */
-    const edges = ['#person-name', '.dd-button', '.date-field-input', '.picker', '#note'].map((selector) => {
+    const edges = ['#person-name', '[data-slot="select-trigger"]', '[data-slot="date-field"]', '.picker', '#note'].map((selector) => {
       const box = dialog.querySelector(selector)!.getBoundingClientRect();
       return { selector, left: box.left, width: box.width };
     });

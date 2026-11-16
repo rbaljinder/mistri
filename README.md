@@ -39,7 +39,7 @@ Everything below is stable unless it says **Preview**. The
 - Forms from the schema, with groups, defaults, conditions and multiple steps; public forms for signed-out visitors.
 - Dashboards of metrics, charts, breakdowns and waiting work, over a time window the reader picks.
 - One address per thing (`/invoices/12`, `/invoices?tab=overdue`), ⌘K search, j and k through a list's records, phone layouts, light and dark.
-- Five looks (Workshop, Lumen, Mono, Sage, Ledger) and twelve palettes, or a theme of your own from `defineTheme`.
+- Eight looks (Workshop, Lumen, Mono, Sage, Ledger, Atelier, Graphite, Bloom) and twelve palettes, or a theme of your own from `defineTheme`.
 - [Custom components](https://mistriwork.dev/docs/custom-components/) and free-form pages in React, fed by declared, authorized reads.
 
 **Data and rules** — [resources](https://mistriwork.dev/docs/access-model/) ·

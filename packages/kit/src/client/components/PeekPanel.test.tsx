@@ -103,7 +103,7 @@ test('Escape, the backdrop and Details all leave; the page opens directly', asyn
   // The scrim is a dialog's (Modal.tsx): a press on it closes the glance, as it does every dialog.
   onClose = draw();
   await screen.findByText('Replace pump', { selector: 'h2' });
-  await user.click(document.querySelector('.peekpanel-glance-backdrop')!);
+  await user.click(document.querySelector('[data-slot="dialog-backdrop"][data-for="peekpanel-glance"]')!);
   expect(onClose).toHaveBeenCalledTimes(1);
 });
 

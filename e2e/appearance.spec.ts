@@ -35,7 +35,7 @@ test('custom themes: app default, browser override, reload, mode, removal and re
   const more = page.getByRole('button', { name: 'Settings', exact: true });
   await more.click();
   await page.getByRole('menuitem', { name: /^Preferences/ }).click();
-  const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
+  const prefs = page.getByRole('region', { name: 'Preferences', exact: true });
   // The App's own theme is the look in force until the reader picks another.
   await expect(prefs.getByRole('button', { name: /^Visual theme(?: |$)/ })).toContainText('Custom');
   const choose = async (name: string | RegExp) => {
@@ -51,7 +51,8 @@ test('custom themes: app default, browser override, reload, mode, removal and re
   expect(heading).not.toContain('Inter');
   // The App's own theme is marked as such in the list (Prefs.tsx), and picking it stores it like any other pick.
   await choose(/^Custom\s*This App’s theme$/);
-  await prefs.getByRole('button', { name: 'Close', exact: true }).click();
+  // The preferences are a section of the settings page: leaving it is going back.
+  await page.goBack();
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-visual-theme', 'custom');
   await page.emulateMedia({ colorScheme: 'dark' });
@@ -96,20 +97,22 @@ for (const system of ['light', 'dark'] as const) {
 
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('menuitem', { name: /Preferences/ }).click();
-    const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
+    const prefs = page.getByRole('region', { name: 'Preferences', exact: true });
     await prefs.getByRole('button', { name: /^Visual theme(?: |$)/ }).click();
     await page.getByRole('option', { name: 'Sage', exact: true }).click();
     for (const mode of ['Light', 'Dark', 'System']) {
       await prefs.getByRole('button', { name: /^Color mode(?: |$)/ }).click();
       await page.getByRole('option', { name: mode, exact: true }).click();
-      await expect(prefs.getByRole('button', { name: /^Color mode(?: |$)/ }).locator('.dd-value')).toHaveText(mode);
+      await expect(prefs.getByRole('button', { name: /^Color mode(?: |$)/ }).locator('[data-slot="select-value"]')).toHaveText(mode);
       if (mode === 'System') await expect(page.locator('html')).not.toHaveAttribute('data-theme');
       else await expect(page.locator('html')).toHaveAttribute('data-theme', mode.toLowerCase());
       await expect(page.locator('html')).toHaveAttribute('data-visual-theme', 'sage');
     }
     for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 844 });
-      await expect(prefs.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();
+      // On a page the control is reached by scrolling to it, and then stands in view at this width.
+      await prefs.getByRole('button', { name: /^Color mode(?: |$)/ }).scrollIntoViewIfNeeded();
+      await expect(prefs.getByRole('button', { name: /^Color mode(?: |$)/ })).toBeInViewport();
       await prefs.getByRole('button', { name: /^Color mode(?: |$)/ }).click();
       const choices = page.getByRole('listbox', { name: 'Color mode', exact: true });
       await expect(choices).toBeVisible();
@@ -118,7 +121,7 @@ for (const system of ['light', 'dark'] as const) {
       expect(box.x + box.width).toBeLessThanOrEqual(width);
       await page.keyboard.press('Escape');
     }
-    await prefs.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.goBack();
   });
 }
 
@@ -130,10 +133,10 @@ test('appearance: Sage is selectable, responsive, and reversible back to the def
   const original = await header.evaluate((node) => getComputedStyle(node).backgroundColor);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('menuitem', { name: /Preferences/ }).click();
-  const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
+  const prefs = page.getByRole('region', { name: 'Preferences', exact: true });
   await prefs.getByRole('button', { name: /^Visual theme(?: |$)/ }).click();
   await page.getByRole('option', { name: 'Sage', exact: true }).click();
-  await prefs.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.goBack();
   await page.reload();
   await expect(page.locator('.chart-donut')).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('data-visual-theme', 'sage');

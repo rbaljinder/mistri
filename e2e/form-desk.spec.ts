@@ -56,19 +56,23 @@ test.describe('A stepped page form', () => {
     await page.goto(`${app.origin}/form/quote`);
     await address(page);
     await next(page, 2);
+    /* The mark is drawn on the card, at its end: the radio itself covers the card, so the whole card is its target. */
+    const card = (name: string) => page.getByRole('radio', { name, exact: false }).locator('xpath=ancestor::label[1]');
     const mark = (name: string) =>
-      page.getByRole('radio', { name, exact: false }).locator('xpath=ancestor::label[1]').locator('.choice-box');
-    const round = await mark('Townhouse').evaluate((box) => getComputedStyle(box).borderRadius);
-    expect(round).toBe('50%');
+      card(name).evaluate((label) => {
+        const drawn = getComputedStyle(label, '::before');
+        return { round: drawn.borderRadius, width: drawn.width, shown: drawn.content !== 'none' };
+      });
+    expect(await mark('Townhouse')).toEqual({ round: '50%', width: '18px', shown: true });
     await page.getByText('Townhouse', { exact: true }).click();
     await next(page, 3);
     await page.getByRole('slider').focus();
     await page.keyboard.press('ArrowRight');
     await next(page, 4);
-    await page.locator('label.choice-card', { hasText: 'Show me both' }).click();
+    await page.locator(':is([data-slot="choice"], [data-slot="check-cards-card"])', { hasText: 'Show me both' }).click();
     const square = await page
       .getByRole('checkbox', { name: /^Fridge/ })
-      .locator('.choice-box')
+      .locator('[data-slot="checkbox"]')
       .evaluate((box) => getComputedStyle(box).borderRadius);
     expect(square).not.toBe('50%');
   });

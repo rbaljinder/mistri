@@ -7,7 +7,7 @@ keywords: [ui, primitives, components, react, base ui, button, modal, field, sta
 Draw a page of your own with the buttons, fields, dialogs and menus an App is drawn with, without a server behind it.
 
 ```sh
-npm install @mistriwork/ui react react-dom @base-ui/react
+npm install @mistriwork/ui react react-dom @ui-sdk/core @ui-sdk/react
 ```
 
 ```tsx title="Invite.tsx"
@@ -36,7 +36,7 @@ export function Invite() {
 
 <!-- no picture: the component library draws every primitive, in every look. -->
 
-A primitive reads no data, no address and no message catalog: its words, its icons and its answers are props. A name no one sees is `ariaLabel` on every primitive, and `label` is only text drawn on the page; the primitives that carry a few built-in words (Carousel, Resizable, Pagination, DateField) take a `words` object over English defaults. React, React DOM and Base UI are peers, so your project installs them. An App does not need this package: mistri brings it.
+A primitive reads no data, no address and no message catalog: its words, its icons and its answers are props. A name no one sees is `ariaLabel` on every primitive, and `label` is only text drawn on the page; the primitives that carry a few built-in words (Carousel, Resizable, Pagination, DateField) take a `words` object over English defaults. React, React DOM and UI SDK (`@ui-sdk/core`, `@ui-sdk/react`), which the controls are drawn over, are peers, so your project installs them. An App does not need this package: mistri brings it.
 
 ## What you'll see
 
@@ -50,7 +50,7 @@ A primitive reads no data, no address and no message catalog: its words, its ico
 | --- | --- |
 | `Button` | `intent` (`primary`, `secondary`, `quiet`, `danger`), `size` (`compact`, `default`, `large`), `busy` |
 | `Field` | A label over one control, a `hint` under it, then a `problem`; `children` is the control, or a function of its wiring for a control of several parts |
-| `Modal` | Open while mounted; `onClose` is told once, however it closed |
+| `Modal` | Open while mounted; `onClose` is told once, however it closed; `closeLabel` draws a cross in the top corner under that name, which steps aside while a button of your own says the same word |
 | `DropMenu`, `DropItem`, `DropGroup`, `DropSeparator` | A menu on a button |
 | `Dropdown` | A listbox: one choice from a list |
 | `Typeahead` | A box with a list that narrows as you type |
@@ -68,7 +68,7 @@ A primitive reads no data, no address and no message catalog: its words, its ico
 | `ScrollArea` | A region that scrolls inside itself (`label`, `orientation`, `maxHeight`); the viewport is a labeled tab stop with its own thumb |
 | `Tooltip` | A short supplementary note on a `trigger` element, said on hover and on focus alike; the note carries `role="tooltip"` and the trigger names it while open |
 
-Every change callback (`onChange`, `onValueChange`, `onOpenChange`, `onCheckedChange`, `onPageChange`, `onIndexChange`, `onSizesChange`, `onText`, `onToggle`) hears the new value, then its details, `{ reason, source, event? }`. `reason` is Base UI's word where it gives one (`escape-key`, `outside-press`, `item-press`) and one short word otherwise (`toggle`, `select`, `input-change`); each callback's type lists the words it can hear. `source` is `pointer`, `keyboard`, or `program` when the page made the change, and then `event` is absent:
+Every change callback (`onChange`, `onValueChange`, `onOpenChange`, `onCheckedChange`, `onPageChange`, `onIndexChange`, `onSizesChange`, `onText`, `onToggle`) hears the new value, then its details, `{ reason, source, event? }`. `reason` is UI SDK's word where it gives one (`escape-key`, `outside-press`, `item-press`) and one short word otherwise (`toggle`, `select`, `input-change`); each callback's type lists the words it can hear. `source` is `pointer`, `keyboard`, or `program` when the page made the change, and then `event` is absent:
 
 ```tsx
 <Drawer open={open} onOpenChange={(next, details) => {
@@ -77,7 +77,9 @@ Every change callback (`onChange`, `onValueChange`, `onOpenChange`, `onCheckedCh
 }} />
 ```
 
-`style.css` is the tokens and the primitives' rules in a `mistri-ui` cascade layer, so any rule of your page's own wins. To place them in a layer of your own, import the two files it joins: `@import '@mistriwork/ui/tokens.css' layer(base);` and `@mistriwork/ui/primitives.css` the same way.
+`style.css` is the tokens and the primitives' rules in a `mistri-ui` cascade layer, so any rule of your page's own wins. To place them in a layer of your own, import the two files it joins: `@import '@mistriwork/ui/tokens.css' layer(base);` and `@mistriwork/ui/controls.css` the same way. A control's parts are known by their `data-slot` (`[data-slot='button']`, `[data-slot='dialog-content']`), not by a class, so that is what a rule of your own selects.
+
+What a reader moves, walks or edits in place is not a control but a behavior to build one on: `@mistriwork/ui/behaviors/index.js` holds `Sortable`, `Transfer`, `Days`, `Spans`, `Scrub`, `Pick`, `Turns`, `Widths` and `Editable`, with `behaviors.css` beside it. See [Build a component on the behaviors](/docs/behaviors/).
 
 ## Common mistakes
 

@@ -162,10 +162,11 @@ test("the logo's picture is chosen by the bar it is drawn on: a dark bar by day 
     'soft',
   );
   assert.equal(recipeAttributes(soft).attributes['data-bar-ground'], undefined);
-  // Every built-in's bar is its mode's but Ledger's, which is the book's dark cover by day: no word, and the reader's
-  // mode picks the picture as before.
+  // Every built-in's bar is its mode's but Ledger's, which is the book's dark cover by day, and Graphite's, whose menu
+  // is near-black by day too: no word, and the reader's mode picks the picture as before.
+  const darkByDay = new Set(['ledger', 'graphite']);
   for (const look of THEME_PRESETS)
-    assert.equal(recipeAttributes(look).attributes['data-bar-ground'], look.id === 'ledger' ? 'light:dark' : undefined, look.id);
+    assert.equal(recipeAttributes(look).attributes['data-bar-ground'], darkByDay.has(look.id) ? 'light:dark' : undefined, look.id);
   const css = readFileSync(new URL('../packages/mistri/src/client/appBrand.css', import.meta.url), 'utf8');
   assert.match(
     css,

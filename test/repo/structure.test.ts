@@ -478,6 +478,8 @@ const CLIENT_CROSSINGS = [
   'RecordTabPage',
   // A public form saved on every step, fetched when one is shown.
   'SavedFormSurface',
+  // The reader's settings page, named as the shell's `rooms` by appnav.js and fetched on demand.
+  'SettingsRoom',
   'Sidebar',
   'SignIn',
   // A split's record room, named as the shell's `rooms` by appnav.js.
@@ -524,6 +526,9 @@ const CLIENT_CROSSINGS = [
   'uiKitLoader',
   // An App list's presentation chain, installed as the shell's `present` by appnav.js.
   'presentedList',
+  // A list's summary strip (a dashboard's metrics over a list's tabs), installed as the shell's slot by appnav.js and
+  // fetched on demand, with the dashboard's drawing, the first time a list has one.
+  'ListSummary',
   // The server-sent event reader, React-free: live sync's stream (liveSync.ts) reads its frames with the assistant's.
   'assistantStream',
 ];

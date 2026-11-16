@@ -563,15 +563,47 @@ describe('the sign-in screen', () => {
     expect(screen.getByRole('button', { name: 'New here? Create an account' })).toBeInTheDocument();
   });
 
-  test("draws the App's mark over the card, its initial where it names no logo", () => {
+  test('says Caps Lock is on in the held line while the password is hidden, and nothing once it is off or shown', () => {
+    draw(<SignIn info={info} />);
+    const password = screen.getByLabelText('Password');
+    const held = screen.getByRole('alert');
+    const press = (on: boolean) => {
+      const event = new KeyboardEvent('keydown', { key: 'a', bubbles: true });
+      Object.defineProperty(event, 'getModifierState', { value: (key: string) => key === 'CapsLock' && on });
+      fireEvent(password, event);
+    };
+    expect(held).toBeEmptyDOMElement();
+    press(true);
+    expect(held).toHaveTextContent('Caps Lock is on.');
+    // A note, not a refusal: the quiet ink.
+    expect(held).toHaveClass('signin-note');
+    fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+    expect(held).toBeEmptyDOMElement();
+    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    press(false);
+    expect(held).toBeEmptyDOMElement();
+  });
+
+  test("draws the App's mark at the head of the column, its initial where it names no logo", () => {
     const { container } = draw(<SignIn info={info} />);
-    const mark = container.querySelector('.signin > .signin-logo');
+    const mark = container.querySelector('.signin-card > .signin-logo');
     expect(mark).not.toBeNull();
     expect(mark).toHaveAttribute('aria-hidden', 'true');
     expect(mark?.classList.contains('brand-mark--initial')).toBe(true);
     expect(mark?.textContent).toBe('C');
-    // Above the card, not inside it.
-    expect(mark!.compareDocumentPosition(container.querySelector('.signin-card')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // In the column, over its heading: the mark, the heading and the fields share one edge.
+    expect(mark!.compareDocumentPosition(container.querySelector('.signin-title')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test('another account\'s buttons stand over the App\'s own form, an "or" between them only where both are offered', () => {
+    const { container, unmount } = draw(<SignIn info={info} />);
+    const row = container.querySelector('.signin-social-row')!;
+    const form = container.querySelector('form.signin-form')!;
+    expect(row.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(container.querySelector('.signin-or')).toHaveTextContent('or');
+    unmount();
+    const alone = draw(<SignIn info={{ ...info, providers: ['email'] }} />);
+    expect(alone.container.querySelector('.signin-or')).toBeNull();
   });
 
   test('signs in with email and password, then starts over', async () => {

@@ -1,6 +1,6 @@
 /**
  * A scroll area: a region that scrolls inside itself, with its own
- * thumb, instead of growing the page around it. Over Base UI's ScrollArea,
+ * thumb, instead of growing the page around it. Over UI SDK's ScrollArea,
  * which gives it the viewport, the thumb that tracks it and the corner
  * where two thumbs meet. Where its content overflows, the viewport is a
  * tab stop with the region's name, so a keyboard reader can reach it and
@@ -17,7 +17,15 @@
  * whenever the box resizes.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ScrollArea as BaseScrollArea } from '@base-ui/react/scroll-area';
+import { slotted } from './internal/uiKitContext.js';
+import {
+  ScrollArea as Scroller,
+  ScrollAreaContent,
+  ScrollAreaCorner,
+  ScrollAreaScrollbar,
+  ScrollAreaThumb,
+  ScrollAreaViewport,
+} from '@ui-sdk/react/scroll-area';
 
 export interface ScrollAreaProps {
   children: ReactNode;
@@ -29,11 +37,10 @@ export interface ScrollAreaProps {
   className?: string;
 }
 
-export function ScrollArea({ children, ariaLabel, orientation = 'vertical', maxHeight, className }: ScrollAreaProps) {
+function DefaultScrollArea({ children, ariaLabel, orientation = 'vertical', maxHeight, className }: ScrollAreaProps) {
   const vertical = orientation === 'vertical' || orientation === 'both';
   const horizontal = orientation === 'horizontal' || orientation === 'both';
   const viewportRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
   const [overflows, setOverflows] = useState(false);
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -53,8 +60,7 @@ export function ScrollArea({ children, ariaLabel, orientation = 'vertical', maxH
     if (typeof ResizeObserver !== 'undefined') {
       observer = new ResizeObserver(measure);
       observer.observe(viewport);
-      const content = contentRef.current;
-      if (content) observer.observe(content);
+      if (viewport.firstElementChild) observer.observe(viewport.firstElementChild);
     }
     window.addEventListener('resize', measure);
     return () => {
@@ -63,13 +69,11 @@ export function ScrollArea({ children, ariaLabel, orientation = 'vertical', maxH
     };
   }, [vertical, horizontal, children]);
   return (
-    <BaseScrollArea.Root className={['ui-scroll-area', className].filter(Boolean).join(' ')}>
-      <BaseScrollArea.Viewport
+    <Scroller className={className}>
+      <ScrollAreaViewport
         ref={viewportRef}
-        className="ui-scroll-area-viewport"
         tabIndex={overflows ? 0 : -1}
-        /* Base UI renders its viewport as presentation; a named scroll
-           region needs the region role, or the label is dropped with it. */
+        /* A named scroll region needs the region role, or the label is dropped. */
         role="region"
         aria-label={ariaLabel}
         /* A deliberate scroller: the double-scroll probe (gradeProbe.ts) reads this and leaves it alone. */
@@ -78,21 +82,22 @@ export function ScrollArea({ children, ariaLabel, orientation = 'vertical', maxH
       >
         {/* Content is required inside the viewport once the region scrolls
             sideways; it costs nothing vertically, so it is always here. */}
-        <BaseScrollArea.Content ref={contentRef} className="ui-scroll-area-content">
-          {children}
-        </BaseScrollArea.Content>
-      </BaseScrollArea.Viewport>
+        <ScrollAreaContent>{children}</ScrollAreaContent>
+      </ScrollAreaViewport>
       {vertical ? (
-        <BaseScrollArea.Scrollbar className="ui-scroll-area-scrollbar ui-scroll-area-scrollbar-vertical" orientation="vertical">
-          <BaseScrollArea.Thumb className="ui-scroll-area-thumb" />
-        </BaseScrollArea.Scrollbar>
+        <ScrollAreaScrollbar orientation="vertical">
+          <ScrollAreaThumb />
+        </ScrollAreaScrollbar>
       ) : null}
       {horizontal ? (
-        <BaseScrollArea.Scrollbar className="ui-scroll-area-scrollbar ui-scroll-area-scrollbar-horizontal" orientation="horizontal">
-          <BaseScrollArea.Thumb className="ui-scroll-area-thumb" />
-        </BaseScrollArea.Scrollbar>
+        <ScrollAreaScrollbar orientation="horizontal">
+          <ScrollAreaThumb />
+        </ScrollAreaScrollbar>
       ) : null}
-      {vertical && horizontal ? <BaseScrollArea.Corner className="ui-scroll-area-corner" /> : null}
-    </BaseScrollArea.Root>
+      {vertical && horizontal ? <ScrollAreaCorner /> : null}
+    </Scroller>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const ScrollArea = slotted('ScrollArea', DefaultScrollArea);

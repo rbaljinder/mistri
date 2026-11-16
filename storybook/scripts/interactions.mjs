@@ -36,7 +36,7 @@ try {
   await page.getByRole('dialog', { name: 'Edit teammate', exact: true }).waitFor();
   // One field column: every control shares a left edge and a width, and the footer's buttons stand apart.
   const geometry = await page.getByRole('dialog', { name: 'Edit teammate', exact: true }).evaluate((dialog) => ({
-    controls: ['#person-name', '.dd-button', '.date-field-input', '.picker', '#note'].map((selector) => {
+    controls: ['#person-name', '[data-slot="select-trigger"]', '[data-slot="date-field"]', '.picker', '#note'].map((selector) => {
       const box = dialog.querySelector(selector).getBoundingClientRect();
       return { selector, left: box.left, width: box.width };
     }),
@@ -111,7 +111,7 @@ try {
     .evaluate((field) => {
       const label = field.querySelector('label').getBoundingClientRect();
       const input = field.querySelector('input').getBoundingClientRect();
-      const error = field.querySelector('.form-field-problem').getBoundingClientRect();
+      const error = field.querySelector('[data-slot="field-error"]').getBoundingClientRect();
       return { labelLeft: label.left, inputLeft: input.left, errorLeft: error.left, inputBottom: input.bottom, errorTop: error.top };
     });
   assert.equal(feedback.labelLeft, feedback.inputLeft, 'Error does not create a second field column');

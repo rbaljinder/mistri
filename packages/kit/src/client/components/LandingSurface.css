@@ -55,7 +55,7 @@
   .front-hero-beside { grid-template-columns: minmax(0, 3fr) minmax(16rem, 2fr); column-gap: 64px; align-items: center; }
   .front-hero-beside .front-hero-search { grid-column: 1 / -1; }
   .front-hero-points { padding-inline-start: var(--space-7); border-inline-start: 1px solid var(--line); }
-  .front-hero-points .front-points { gap: var(--space-5); font-size: var(--text-md); line-height: 1.45; }
+  .front-hero-points [data-slot='icon-rows'] { gap: var(--space-5); font-size: var(--text-md); line-height: 1.45; }
 }
 .front-hero-overlay { grid-template-columns: minmax(0, 1fr); container: front-hero / inline-size; }
 .front-hero-overlay .front-hero-media, .front-hero-overlay .front-hero-text { grid-column: 1; grid-row: 1; }
@@ -131,7 +131,7 @@
 /* A text box and a Select in one row are one kind of field: the same edge,
    ground, face and height. Left to the browser, the text box drew its own
    inset grey frame beside the look's selects. */
-.front-search-input, .front-search-field .dd-button {
+.front-search-input, .front-search-field [data-slot='select-trigger'] {
   box-sizing: border-box; width: 100%; min-height: 40px; padding: var(--space-3) var(--space-3h);
   font: var(--text-md) var(--sans); color: var(--ink); background: var(--surface);
   border: 1px solid var(--line-control); border-radius: var(--field-radius, var(--radius));

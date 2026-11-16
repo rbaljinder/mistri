@@ -427,8 +427,9 @@ export function ActionBar({
   }, [keys]);
   /* The usual next step is filled and first; a few more stay one tap away
      as quiet buttons, and the rest — Delete always last — are one menu. A
-     phone keeps one button, so the bar never wraps under the name. */
-  const inline = menuOnly ? [] : shown.slice(0, compact ? 1 : named ? named.length : INLINE);
+     phone keeps one button, so the bar never wraps under the name; where the record has only two verbs it shows
+     both: "More" over a single entry hid the one other thing a person came to do (cancel a visit). */
+  const inline = menuOnly ? [] : shown.slice(0, compact ? (shown.length === 2 ? 2 : 1) : named ? named.length : INLINE);
   const folded = shown.slice(inline.length);
   /* While the record's verbs are still being asked about, the first one's
      place is held, unseen: on a phone the bar is a row of its own under the

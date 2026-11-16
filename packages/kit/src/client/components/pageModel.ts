@@ -108,6 +108,8 @@ export interface PageSection {
   subtitle?: string;
   was?: string;
   note?: string;
+  /** A summary's line under a figure, by its field (shared/pageModel.ts, PageFields.notes). */
+  notes?: Record<string, string>;
   /** A similar list: rows of the page's own table sharing the record's `same` values, `near` its numbers. */
   similar?: import('@mistriwork/engine/shared/pageModel.js').PageSimilar;
   opens?: string;

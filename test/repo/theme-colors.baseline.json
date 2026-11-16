@@ -57,14 +57,14 @@
   },
   {
     "file": "packages/kit/src/client/style.css",
-    "context": ".confirm-backdrop",
+    "context": "[data-slot='dialog-backdrop'][data-for='confirm']",
     "property": "background",
     "value": "rgb(0 0 0 / 0.45)",
     "reason": "backdrop"
   },
   {
     "file": "packages/kit/src/client/style.css",
-    "context": "@media (prefers-reduced-motion: no-preference) > .confirm-backdrop > @starting-style",
+    "context": "@media (prefers-reduced-motion: no-preference) > [data-slot='dialog-backdrop'][data-for='confirm'] > @starting-style",
     "property": "background",
     "value": "rgb(0 0 0 / 0)",
     "reason": "backdrop"
@@ -78,7 +78,7 @@
   },
   {
     "file": "packages/kit/src/client/style.css",
-    "context": ":where(:root:not([data-visual-theme])) .dd-list",
+    "context": ":where(:root:not([data-visual-theme])) :is([data-slot='select-content'], [data-slot='menu-content'])",
     "property": "box-shadow",
     "value": "0 6px 20px rgb(0 0 0 / 0.16)",
     "reason": "shadow"
@@ -610,7 +610,7 @@
   },
   {
     "file": "packages/kit/src/client/visualThemes.css",
-    "context": ".dd-swatches > span",
+    "context": "[data-slot='swatches'] > span",
     "property": "border",
     "value": "1px solid #80808050",
     "reason": "swatch-boundary"
@@ -1225,13 +1225,6 @@
     "reason": "signature-ground"
   },
   {
-    "file": "packages/ui/src/forms.css",
-    "context": "[data-look-action-bar=\"raised\"] :is(.intake-actions, .action-bar)",
-    "property": "box-shadow",
-    "value": "0 -6px 18px color-mix(in srgb, var(--shadow-ink, black) 12%, transparent)",
-    "reason": "shadow"
-  },
-  {
     "file": "packages/ui/src/preferences.css",
     "context": "@media (prefers-reduced-transparency: reduce) > :root",
     "property": "--scrim",
@@ -1253,11 +1246,32 @@
     "reason": "backdrop"
   },
   {
-    "file": "packages/ui/src/primitives.css",
-    "context": ".modal-backdrop",
-    "property": "background",
-    "value": "rgb(0 0 0 / 0.1)",
-    "reason": "backdrop"
+    "file": "packages/ui/src/styles/looks.css",
+    "context": "@scope ([data-look-buttons='raised']) to ([data-custom-theme], [data-look-buttons]) > [data-slot='button']:not([data-variant='quiet'], [data-variant='bare'])",
+    "property": "box-shadow",
+    "value": "0 1px 0 light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.06)) inset,\n        0 1px 2px light-dark(rgb(23 23 26 / 0.12), rgb(0 0 0 / 0.5))",
+    "reason": "shadow"
+  },
+  {
+    "file": "packages/ui/src/styles/looks.css",
+    "context": "@scope ([data-look-elevation='soft']) to ([data-custom-theme], [data-look-elevation]) > :scope",
+    "property": "--m-lift-card",
+    "value": "0 1px 2px light-dark(rgb(23 23 26 / 0.05), rgb(0 0 0 / 0.4)), 0 6px 20px -8px light-dark(rgb(23 23 26 / 0.12), rgb(0 0 0 / 0.6))",
+    "reason": "shadow"
+  },
+  {
+    "file": "packages/ui/src/styles/looks.css",
+    "context": "@scope ([data-look-elevation='raised']) to ([data-custom-theme], [data-look-elevation]) > :scope",
+    "property": "--m-lift-card",
+    "value": "0 1px 2px light-dark(rgb(23 23 26 / 0.06), rgb(0 0 0 / 0.4)), 0 10px 28px -10px light-dark(rgb(23 23 26 / 0.18), rgb(0 0 0 / 0.7))",
+    "reason": "shadow"
+  },
+  {
+    "file": "packages/ui/src/styles/m-tokens.css",
+    "context": ":root, body",
+    "property": "--m-shadow-control",
+    "value": "0 1px 1px light-dark(rgb(23 23 26 / 0.05), rgb(0 0 0 / 0.3))",
+    "reason": "shadow"
   },
   {
     "file": "packages/ui/src/tokens.css",

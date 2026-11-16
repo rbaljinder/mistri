@@ -132,7 +132,7 @@ vi.mock('./BrandingForm.js', () => ({ BrandingForm: () => <div data-stub="brandi
 const { Dashboard } = await import('./Dashboard.js');
 const { boardSection, windowed, windowTitle, metricWindow, picked, rootSlot, parseRootSlot, orderGroups, barShare } =
   await import('../../../../kit/src/client/components/dashboardModel.js');
-const { comparedWith, changeTone } = await import('./Dashboard.js');
+const { comparedWith, changeTone } = await import('./dashboardSay.js');
 const { andQuery } = await import('../../../../engine/src/shared/query.js');
 
 const dashboard = {
@@ -487,9 +487,64 @@ describe('the screen', () => {
       resources: {},
       views: { pipeline: { table: 'deal', label: 'Pipeline', presentation: { kind: 'cards', primary: 'name' } } },
     };
-    draw({ dashboard: { id: 'desk', label: 'Desk', sections: [{ kind: 'rows', table: 'deal', show: ['name'] }] } });
+    // No columns named: the list is the table's own grid (a few named columns are a worklist, below).
+    draw({ dashboard: { id: 'desk', label: 'Desk', sections: [{ kind: 'rows', table: 'deal' }] } });
     await screen.findByText('12 in all');
     expect(rooms.at(-1)!.presentation).toBeUndefined();
+  });
+
+  test('a rows section of up to three named columns is a worklist in the main column, not a grid', async () => {
+    rowResults['deal stage = lead sort closed_on show name, stage, closed_on, id limit 5'] = [
+      { id: 1, name: 'Stonebridge Holdings international renewal', stage: 'lead', closed_on: '2026-10-02' },
+      { id: 2, name: 'Wexford', stage: 'lead', closed_on: null },
+    ];
+    draw({
+      dashboard: {
+        id: 'desk',
+        label: 'Desk',
+        sections: [
+          {
+            kind: 'rows',
+            table: 'deal',
+            title: 'Needs you',
+            query: 'stage = lead',
+            sort: 'closed_on',
+            show: ['name', 'stage', 'closed_on'],
+            icon: 'warning',
+          },
+        ],
+      },
+    });
+    const list = await screen.findByRole('list', { name: 'Needs you' });
+    expect(list).toHaveClass('dash-worklist');
+    // Names, not a table: the grid is never asked for.
+    expect(rooms).toHaveLength(0);
+    // Each row is led by the section's mark and closed by the caret that says it opens.
+    const [first] = within(list).getAllByRole('button');
+    expect(first.querySelector('.dash-mini-mark svg')).not.toBeNull();
+    expect(first.querySelector('.dash-mini-name')).toHaveTextContent('Stonebridge Holdings international renewal');
+    expect(first.querySelector('.dash-mini-caret')).not.toBeNull();
+  });
+
+  test("a worklist row's tile wears the row's alarm, read from a toned column the section does not show", async () => {
+    displays['deal.stage'] = { tone: { lost: 'bad', won: 'good' } };
+    rowResults['deal amount > 0 show name, id, stage limit 5'] = [
+      { id: 1, name: 'Stonebridge', stage: 'lost' },
+      { id: 2, name: 'Wexford', stage: 'won' },
+    ];
+    draw({
+      dashboard: {
+        id: 'desk',
+        label: 'Desk',
+        sections: [{ kind: 'rows', table: 'deal', title: 'Needs you', query: 'amount > 0', show: ['name'], icon: 'warning' }],
+      },
+    });
+    const list = await screen.findByRole('list', { name: 'Needs you' });
+    const [alarmed, quiet] = within(list).getAllByRole('button');
+    expect(alarmed.querySelector('.dash-mini-mark')).toHaveAttribute('data-tone', 'bad');
+    // Good is not an alarm: the tile stays the quiet neutral, and it is never the accent.
+    expect(quiet.querySelector('.dash-mini-mark')).not.toHaveAttribute('data-tone');
+    delete displays['deal.stage'];
   });
 
   test('omitted lanes preserve schema vocabulary including empty lanes', async () => {
@@ -1490,7 +1545,7 @@ describe('the dashboard blocks', () => {
       // Only the road is cards; the finished states are not steps on it.
       expect([...document.querySelectorAll('.dash-step-title')].map((title) => title.textContent)).toEqual(['lead']);
       const line = document.querySelector('.dash-steps-ended')!;
-      expect(line).toHaveTextContent('Endedwon 10lost 0');
+      expect(line).toHaveTextContent('Other outcomeswon 10lost 0');
       expect([...line.querySelectorAll('.dash-steps-ended-figure')].map((figure) => figure.classList.contains('is-none'))).toEqual([
         false,
         true,

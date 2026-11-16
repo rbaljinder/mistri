@@ -12,12 +12,21 @@
  * One menu open at a time, and none after the pointer or the keyboard has
  * left: outside click and Escape close whatever is open.
  */
-import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { Menu } from '@base-ui/react/menu';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import {
+  Menu,
+  MenuContent,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuSub,
+  MenuSubContent,
+  MenuSubTrigger,
+  MenuTrigger,
+} from '@ui-sdk/react/menu';
 import { message, messageLanguage, subscribeMessages } from '@mistriwork/kit/client/messages.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { NavGlyph } from '@mistriwork/kit/client/components/NavGlyph.js';
-import { layoutViewport, zoomAnchor } from '@mistriwork/ui/internal/anchor.js';
 import { go, pageView, subscribeWalk, tableView, toast, state } from '@mistriwork/kit/client/core.js';
 import { openPalette } from '@mistriwork/kit/client/palette.js';
 import { appListQuery, currentNavIndex } from '@mistriwork/kit/client/components/appListModel.js';
@@ -92,6 +101,8 @@ export function TopNav({ app, host }: TopNavProps) {
   useSyncExternalStore(subscribeMessages, messageLanguage, messageLanguage);
   const [open, setOpen] = useState<string | null>(null);
   const [folded, setFolded] = useState(false);
+  const [placed, setPlaced] = useState(false);
+  useEffect(() => setPlaced(true), []);
   const [compactSearch, setCompactSearch] = useState(false);
   const [menuPath, setMenuPath] = useState<string[]>([]);
   const returnGroup = useRef<string | null>(null);
@@ -106,24 +117,23 @@ export function TopNav({ app, host }: TopNavProps) {
   /* Starred records and views, first: one menu of the reader's own. */
   const starred = shownFavorites(app);
   const favoriteItems = starred.map((favorite) => (
-    <Menu.Item
+    <MenuItem
       key={favoriteId(favorite)}
       render={<button type="button" className="tn-popitem tn-favorite" />}
-      nativeButton
-      onClick={() => {
+      onSelect={() => {
         setOpen(null);
         openFavorite(app, favorite);
       }}
     >
       <span>{favorite.label}</span>
-    </Menu.Item>
+    </MenuItem>
   ));
   const favoritesSection =
     starred.length > 0 ? (
-      <Menu.Group key="favorites" className="tn-folded-section">
-        <Menu.GroupLabel className="tn-folded-label">{say('common.favorites')}</Menu.GroupLabel>
+      <MenuGroup key="favorites" className="tn-folded-section">
+        <MenuGroupLabel className="tn-folded-label">{say('common.favorites')}</MenuGroupLabel>
         {favoriteItems}
-      </Menu.Group>
+      </MenuGroup>
     ) : null;
   const tables = navigationPaths(tree)
     .map((path) => path.entry)
@@ -212,10 +222,10 @@ export function TopNav({ app, host }: TopNavProps) {
         </button>
       );
     return (
-      <Menu.Item key={key} render={<button type="button" {...shared} />} nativeButton onClick={() => visit(entry)}>
+      <MenuItem key={key} render={<button type="button" {...shared} />} onSelect={() => visit(entry)}>
         <NavGlyph icon={entry.icon} label={entry.label} color={entry.navColor} />
         <span>{entry.label}</span>
-      </Menu.Item>
+      </MenuItem>
     );
   };
   const targetItem = (node: NavigationTargetNode, inPop: boolean): ReactNode => {
@@ -227,9 +237,9 @@ export function TopNav({ app, host }: TopNavProps) {
     );
     const anchor = <a className={`${inPop ? 'tn-popitem' : 'tn-item'} app-nav-target`} href={node.href} />;
     return inPop ? (
-      <Menu.Item key={`target:${node.label}:${node.href}`} render={anchor} nativeButton={false}>
+      <MenuItem key={`target:${node.label}:${node.href}`} render={anchor}>
         {content}
-      </Menu.Item>
+      </MenuItem>
     ) : (
       <a key={`target:${node.label}:${node.href}`} className="tn-item app-nav-target" href={node.href}>
         {content}
@@ -256,7 +266,7 @@ export function TopNav({ app, host }: TopNavProps) {
     ariaLabel: string | undefined,
     children: ReactNode,
   ) => (
-    <Menu.Root
+    <Menu
       open={open === key}
       onOpenChange={(next) => {
         if (next) refreshTargets();
@@ -264,48 +274,41 @@ export function TopNav({ app, host }: TopNavProps) {
         setMenuPath([]);
       }}
     >
-      <Menu.Trigger
-        render={
-          <button
-            type="button"
-            className={buttonClass}
-            aria-label={ariaLabel}
-            ref={(el: HTMLButtonElement | null) => {
-              triggers.current[key] = el;
-            }}
-          />
-        }
+      <MenuTrigger
+        className={buttonClass}
+        // The bar's own item, whole: none of the control's button dress under its classes.
+        data-own=""
+        aria-label={ariaLabel}
+        ref={(el: HTMLButtonElement | null) => {
+          triggers.current[key] = el;
+        }}
       >
         {label}
         <Icon name="caret-down" className="tn-caret" />
-      </Menu.Trigger>
-      <Menu.Portal keepMounted container={host}>
-        {/* Under the button, flush with its left edge, on the zoom-aware ruler (anchor.ts). */}
-        <Menu.Positioner
-          anchor={() => (triggers.current[key] ? zoomAnchor(triggers.current[key]!) : null)}
-          positionMethod="fixed"
+      </MenuTrigger>
+      {/* Under the button, flush with its left edge. Drawn once the strip is on the page (`placed`), so the kept
+          menus stand after it in the bar: a menu drawn in the strip's own first render is put in the bar before the
+          strip, and `#topnav [data-form]` then found a closed menu's entry ahead of the strip's own. */}
+      {placed && (
+        <MenuContent
+          keepMounted
+          container={host}
           side="bottom"
           align="start"
           sideOffset={1}
-          collisionBoundary={layoutViewport()}
           collisionPadding={8}
-          style={{ zIndex: 40 }}
+          className={popClass}
+          aria-label={key === 'folded' ? menuLabel : ariaLabel}
+          aria-busy={pending || undefined}
+          onFocusCapture={(event) => {
+            if ((event.target as HTMLElement).closest('[role="menu"]') === event.currentTarget) focusedPopup.current = event.currentTarget;
+          }}
         >
-          <Menu.Popup
-            className={popClass}
-            aria-label={key === 'folded' ? menuLabel : ariaLabel}
-            aria-busy={pending || undefined}
-            onFocusCapture={(event) => {
-              if ((event.target as HTMLElement).closest('[role="menu"]') === event.currentTarget)
-                focusedPopup.current = event.currentTarget;
-            }}
-          >
-            {children}
-            {pending && loading}
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.Root>
+          {children}
+          {pending && loading}
+        </MenuContent>
+      )}
+    </Menu>
   );
 
   /* An App without nav has no menu: its one room, its home, is in no tree,
@@ -325,14 +328,13 @@ export function TopNav({ app, host }: TopNavProps) {
     if (node.kind === 'target') return targetItem(node, true);
     if (node.kind === 'destination') return item(node.entry, true);
     return (
-      <Menu.SubmenuRoot
+      <MenuSub
         key={node.id}
         onOpenChange={(next) => {
           if (next) refreshTargets();
         }}
       >
-        <Menu.SubmenuTrigger
-          nativeButton
+        <MenuSubTrigger
           onKeyDown={(event) => {
             if (event.key === 'ArrowRight') keyboardSubmenu.current = event.currentTarget;
           }}
@@ -341,9 +343,6 @@ export function TopNav({ app, host }: TopNavProps) {
               type="button"
               className="tn-popitem tn-subgroup"
               data-nav-group={node.id}
-              ref={(element: HTMLButtonElement | null) => {
-                triggers.current[`submenu:${node.id}`] = element;
-              }}
               data-active={navigationContains(node, isCurrent) || undefined}
             />
           }
@@ -353,36 +352,24 @@ export function TopNav({ app, host }: TopNavProps) {
             {node.label}
           </span>
           <Icon name="caret-right" />
-        </Menu.SubmenuTrigger>
-        <Menu.Portal container={host}>
-          <Menu.Positioner
-            anchor={() => {
-              const element = triggers.current[`submenu:${node.id}`];
-              return element ? zoomAnchor(element) : null;
-            }}
-            side="right"
-            align="start"
-            sideOffset={4}
-            collisionPadding={8}
-            collisionBoundary={layoutViewport()}
-            positionMethod="fixed"
-            style={{ zIndex: 41 }}
-          >
-            <Menu.Popup
-              className="tn-pop"
-              aria-label={node.label}
-              aria-busy={pending || undefined}
-              onFocusCapture={(event) => {
-                if ((event.target as HTMLElement).closest('[role="menu"]') === event.currentTarget)
-                  focusedPopup.current = event.currentTarget;
-              }}
-            >
-              {node.children.map(popNode)}
-              {pending && loading}
-            </Menu.Popup>
-          </Menu.Positioner>
-        </Menu.Portal>
-      </Menu.SubmenuRoot>
+        </MenuSubTrigger>
+        <MenuSubContent
+          container={host}
+          side="right"
+          align="start"
+          sideOffset={4}
+          collisionPadding={8}
+          className="tn-pop"
+          aria-label={node.label}
+          aria-busy={pending || undefined}
+          onFocusCapture={(event) => {
+            if ((event.target as HTMLElement).closest('[role="menu"]') === event.currentTarget) focusedPopup.current = event.currentTarget;
+          }}
+        >
+          {node.children.map(popNode)}
+          {pending && loading}
+        </MenuSubContent>
+      </MenuSub>
     );
   };
   const back = () => {
@@ -391,8 +378,9 @@ export function TopNav({ app, host }: TopNavProps) {
   };
   useLayoutEffect(() => {
     if (!open) return;
-    // Base UI focuses an empty popup while checks run. Once items arrive, give
-    // the keyboard its first item without closing/reopening (and rechecking).
+    // A menu that opens with no item in it, while checks run, leaves the keyboard on the button that opened it (or
+    // on the popup, if it was already in there). Once items arrive, give the keyboard its first item without
+    // closing/reopening (and rechecking).
     const frame = requestAnimationFrame(() => {
       const focused = document.activeElement;
       const previous = focusedPopup.current;
@@ -402,7 +390,8 @@ export function TopNav({ app, host }: TopNavProps) {
           ? shellById(requested.getAttribute('aria-controls') ?? '')
           : null;
       if (!pending) keyboardSubmenu.current = null;
-      if (!opening && focused !== previous && focused !== document.body && focused?.isConnected) return;
+      const waiting = focused === previous || focused === triggers.current[open] || focused === document.body || !focused?.isConnected;
+      if (!opening && !waiting) return;
       const popup =
         opening ??
         (previous?.isConnected && previous.hasAttribute('data-open')
@@ -547,16 +536,11 @@ export function TopNav({ app, host }: TopNavProps) {
                 }}
               >
                 {menuPath.length > 0 && (
-                  <Menu.Item
-                    closeOnClick={false}
-                    render={<button type="button" className="tn-popitem tn-back" />}
-                    nativeButton
-                    onClick={back}
-                  >
+                  <MenuItem closeOnSelect={false} render={<button type="button" className="tn-popitem tn-back" />} onSelect={back}>
                     <Icon name="arrow-left" />
                     <span>{say('common.back')}</span>
                     <span className="tn-level-label">{menuLabel}</span>
-                  </Menu.Item>
+                  </MenuItem>
                 )}
                 {menuPath.length === 0 && favoritesSection}
                 {menuChildren.map((node) =>
@@ -565,10 +549,9 @@ export function TopNav({ app, host }: TopNavProps) {
                   ) : node.kind === 'destination' ? (
                     item(node.entry, true)
                   ) : (
-                    <Menu.Item
+                    <MenuItem
                       key={node.id}
-                      closeOnClick={false}
-                      nativeButton
+                      closeOnSelect={false}
                       render={
                         <button
                           type="button"
@@ -577,7 +560,7 @@ export function TopNav({ app, host }: TopNavProps) {
                           data-active={navigationContains(node, isCurrent) || undefined}
                         />
                       }
-                      onClick={() => {
+                      onSelect={() => {
                         refreshTargets();
                         setMenuPath((path) => [...path, node.id]);
                       }}
@@ -587,7 +570,7 @@ export function TopNav({ app, host }: TopNavProps) {
                         {node.label}
                       </span>
                       <Icon name="caret-right" />
-                    </Menu.Item>
+                    </MenuItem>
                   ),
                 )}
               </div>
@@ -600,10 +583,10 @@ export function TopNav({ app, host }: TopNavProps) {
                   ) : node.kind === 'destination' ? (
                     item(node.entry, true)
                   ) : (
-                    <Menu.Group key={index} className="tn-folded-section">
-                      <Menu.GroupLabel className="tn-folded-label">{node.label}</Menu.GroupLabel>
+                    <MenuGroup key={index} className="tn-folded-section">
+                      <MenuGroupLabel className="tn-folded-label">{node.label}</MenuGroupLabel>
                       {node.children.map(popNode)}
-                    </Menu.Group>
+                    </MenuGroup>
                   ),
                 ),
               ]

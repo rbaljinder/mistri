@@ -61,8 +61,8 @@
 
 /* A Modal (HelpPanel.tsx): the scrim is its backdrop, and the box hangs from the top rather than sitting centered, so
    the sections do not jump as the examples sharpen. */
-.modal-backdrop.help-panel-backdrop { background: var(--scrim); }
-.modal.help-panel {
+[data-slot='dialog-backdrop'][data-for='help-panel'] { background: var(--scrim); }
+[data-slot='dialog-content'][data-kind='modal'].help-panel {
   inset: 8vh 0 auto; margin: 0 auto; padding: 0;
   width: min(720px, 96vw); max-width: none; height: auto; max-height: 84vh;
   color: var(--ink);

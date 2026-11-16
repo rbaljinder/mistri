@@ -132,7 +132,6 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "header": "band",
       "filters": "solid",
       "required": "star",
-      "checkbox": "native",
       "formStep": "plain",
       "actionBar": "plain"
     },
@@ -280,7 +279,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     "fonts": {
       "ui": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
       "data": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
-      "heading": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "heading": "Manrope, \"Manrope Fallback\", Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
       "figures": "'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, Menlo, monospace"
     },
     "radius": {
@@ -311,7 +310,6 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "header": "plain",
       "filters": "quiet",
       "required": "star",
-      "checkbox": "native",
       "formStep": "plain",
       "actionBar": "plain"
     },
@@ -320,11 +318,12 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "roles": {
         "title": {
           "size": "28px",
-          "weight": 600,
+          "weight": 700,
           "tracking": "-0.02em"
         },
         "heading": {
           "size": "24px",
+          "weight": 700,
           "tracking": "-0.018em"
         },
         "section": {
@@ -449,9 +448,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "steps": "flat",
       "lanes": "tint",
       "header": "plain",
-      "filters": "dashed",
+      "filters": "solid",
       "required": "star",
-      "checkbox": "native",
       "formStep": "plain",
       "actionBar": "plain"
     },
@@ -573,8 +571,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     "recipes": {
       "nav": "quiet",
       "bar": "soft",
-      "tabs": "chosen",
-      "windows": "chosen",
+      "tabs": "tint",
+      "windows": "tint",
       "stat": "panel",
       "section": "panel",
       "fields": "panel",
@@ -591,9 +589,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "steps": "flat",
       "lanes": "tint",
       "header": "band",
-      "filters": "dashed",
+      "filters": "solid",
       "required": "star",
-      "checkbox": "native",
       "formStep": "plain",
       "actionBar": "plain"
     },
@@ -606,6 +603,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       }
     },
     "density": "compact",
+    "rhythm": "airy",
     "base": "sage"
   },
   {
@@ -691,7 +689,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     "fonts": {
       "ui": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
       "data": "'IBM Plex Mono', ui-monospace, Menlo, monospace",
-      "heading": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "heading": "Manrope, \"Manrope Fallback\", Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
       "figures": "'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, Menlo, monospace"
     },
     "radius": {
@@ -711,7 +709,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "stat": "divided",
       "section": "panel",
       "fields": "panel",
-      "table": "hairline",
+      "table": "banded",
       "status": "quiet",
       "board": "ruled",
       "chart": "plain",
@@ -724,9 +722,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "steps": "strip",
       "lanes": "plain",
       "header": "plain",
-      "filters": "dashed",
+      "filters": "solid",
       "required": "star",
-      "checkbox": "native",
       "formStep": "plain",
       "actionBar": "plain"
     },
@@ -735,7 +732,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "roles": {
         "title": {
           "size": "26px",
-          "weight": 600,
+          "weight": 700,
           "tracking": "-0.01em"
         },
         "heading": {
@@ -744,11 +741,11 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
           "tracking": "-0.018em"
         },
         "section": {
-          "face": "data",
           "size": "12px",
           "weight": 500,
-          "case": "upper",
-          "tracking": "0.08em"
+          "tracking": "0.08em",
+          "face": "data",
+          "case": "upper"
         },
         "label": {
           "face": "data",
@@ -779,6 +776,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       }
     },
     "density": "compact",
+    "rhythm": "tight",
     "surface": {
       "ground": {
         "kind": "grid",
@@ -786,5 +784,462 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       }
     },
     "base": "ledger"
+  },
+  {
+    "id": "atelier",
+    "label": "Atelier",
+    "light": p("#f6f3ee #fffdf8 #f0ece4 #e4dfd4 #aba391 #8a8372 #1d1a16 #57514a #6a6359 #b33d0b #f6e6dc #b33d0b #d4612a - - #2c6a46 #855600 #b3261e #2b5fa8 #f6f3ee #1d1a16 #57514a #e4dfd4 #b33d0b #e9e4da #1d1a16 #e8691f #2b5fa8 #2c6a46 #7b4a8c #8a6d1f #2f7f86 #a3510b #8a8578 - - - - #1d1a16 #fffdf8"),
+    "dark": p("#141210 #1b1815 #25211d #2e2a25 #5a544b #7f786d #f1ece4 #b8b0a4 #9a9286 #ff9d66 #36281f #ffb88f #d8743a - - #6fc08f #e0b055 #f08a80 #86b4f0 #141210 #f1ece4 #b8b0a4 #2e2a25 #ffb88f #25211d #f1ece4 #f07a32 #86b4f0 #6fc08f #c79ad6 #d8b65c #6fc7cf #d99a5b #8c887f - - - - #f1ece4 #141210"),
+    "palettes": [
+      {
+        "id": "crimson",
+        "label": "Crimson",
+        "light": p("- - - - - - - - - #b42318 #f6e3dd #b42318 #d9534a - - - - - - - - - - #b42318 - - #d63a32"),
+        "dark": p("- - - - - - - - - #ff8f85 #362622 #ffaca5 #e06158 - - - - - - - - - - #ffaca5 - - #e5534b")
+      },
+      {
+        "id": "safety",
+        "label": "Safety orange",
+        "light": p("-"),
+        "dark": p("-")
+      },
+      {
+        "id": "amber",
+        "label": "Amber",
+        "light": p("- - - - - - - - - #875a00 #f1e9da #875a00 #b57a33 - - - - - - - - - - #875a00 - - #d97706"),
+        "dark": p("- - - - - - - - - #f4b24a #352a1b #fbcf86 #b07d2d - - - - - - - - - - #fbcf86 - - #c88317 - #e2896b - #6fc08f #8c887f #d8b65c #6fc7cf")
+      },
+      {
+        "id": "moss",
+        "label": "Moss",
+        "light": p("- - - - - - - - - #436e10 #e8ecdc #436e10 #638f2a - - - - - - - - - - #436e10 - - #6b9e1f #b4472a #2b5fa8 #2c6a46 #7b4a8c #8a8578 - #2f7f86"),
+        "dark": p("- - - - - - - - - #a6d468 #2c2f1f #bfe28f #7aa743 - - - - - - - - - - #bfe28f - - #8cbf45 - #e2896b")
+      },
+      {
+        "id": "emerald",
+        "label": "Emerald",
+        "light": p("- - - - - - - - - #08734f #e1ece4 #08734f #36966f - - - - - - - - - - #08734f - - #0e9a6c #b4472a #2b5fa8 #2c6a46 #7b4a8c #8a6d1f #8a8578 #a3510b"),
+        "dark": p("- - - - - - - - - #4ad6a0 #212f26 #7ee6bd #279771 - - - - - - - - - - #7ee6bd - - #12a678 - #e2896b")
+      },
+      {
+        "id": "teal",
+        "label": "Teal",
+        "light": p("- - - - - - - - - #0b6f86 #e2ecea #00687e #3c90a4 - - - - - - - - - - #00687e - - #0e8fb0 #b4472a #2b5fa8 #2c6a46 #7b4a8c #8a6d1f #8a8578 #a3510b"),
+        "dark": p("- - - - - - - - - #4cc6db #212d2d #79d6e6 #2a8a9c - - - - - - - - - - #79d6e6 - - #0c8ab0 #e2896b #86b4f0 #6fc08f #c79ad6 #d8b65c #6fc7cf #d99a5b")
+      },
+      {
+        "id": "cobalt",
+        "label": "Cobalt",
+        "light": p("- - - - - - - - - #2d4fd6 #e6e8f4 #2d4fd6 #6880e0 - - - - - - - - - - #2d4fd6 - - #2557e0 #b4472a #7b4a8c #2c6a46 #2f7f86 #8a6d1f #8a8578 #a3510b"),
+        "dark": p("- - - - - - - - - #8aa1ff #282831 #91a8ff #5a73d6 - - - - - - - - - - #91a8ff - - #4369f0 #e2896b #c79ad6 #6fc08f #8c887f #d8b65c #6fc7cf #d99a5b")
+      },
+      {
+        "id": "violet",
+        "label": "Violet",
+        "light": p("- - - - - - - - - #6534d8 #ede5f4 #6534d8 #8a6ee6 - - - - - - - - - - #6534d8 - - #9a6cf7 #b4472a #2b5fa8 #2c6a46 #2f7f86 #8a6d1f #8a8578 #a3510b"),
+        "dark": p("- - - - - - - - - #ad91ff #2d2731 #bea8ff #7c63cf - - - - - - - - - - #bea8ff - - #9a78ec #e2896b #86b4f0 #6fc08f #8c887f #d8b65c #6fc7cf #d99a5b")
+      },
+      {
+        "id": "plum",
+        "label": "Plum",
+        "light": p("- - - - - - - - - #8a1f8f #f1e2eb #8a1f8f #b65bbb - - - - - - - - - - #8a1f8f - - #b847c0 #b4472a #2b5fa8 #2c6a46 #2f7f86 #8a6d1f #8a8578 #a3510b"),
+        "dark": p("- - - - - - - - - #e28cea #33262f #edaef2 #b366bb - - - - - - - - - - #edaef2 - - #d062d8 #e2896b #86b4f0 #6fc08f #8c887f #d8b65c #6fc7cf #d99a5b")
+      },
+      {
+        "id": "rose",
+        "label": "Rose",
+        "light": p("- - - - - - - - - #b4185a #f6e2e5 #b4185a #d0608f - - - - - - - - - - #b4185a - - #e0428a #2c6a46 #2b5fa8 #8a6d1f #7b4a8c #8a8578 - #2f7f86"),
+        "dark": p("- - - - - - - - - #f57ab9 #352429 #f9a6cf #bd5a8f - - - - - - - - - - #f9a6cf - - #e0559b")
+      },
+      {
+        "id": "slate",
+        "label": "Slate",
+        "light": p("- - - - - - - - - #3f5670 #e8e9e8 #3f5670 #6e8399 - - - - - - - - - - #3f5670 - - #5f7690 #b4472a #2b5fa8 #2c6a46 #7b4a8c #8a6d1f #8a8578 #a3510b"),
+        "dark": p("- - - - - - - - - #a8bbd2 #2c2c2c #c2d0e1 #6f86a3 - - - - - - - - - - #c2d0e1 - - #8a9fba #e2896b #c79ad6 #6fc08f #8c887f #d8b65c #6fc7cf #d99a5b")
+      },
+      {
+        "id": "ink",
+        "label": "Ink",
+        "light": p("- - - - - - - - - #1c1a17 #e4e2dd #1c1a17 #726c64 - - - - - - - - - - #1c1a17 - - #2b2620 #b4472a #2b5fa8 #8a6d1f #7b4a8c #8a8578 - #2f7f86"),
+        "dark": p("- - - - - - - - - #eeece8 #34312e #eeece8 #9f9a92 - - - - - - - - - - #eeece8 - - #d9d0c0 #e2896b #86b4f0 #6fc08f #c79ad6 #d99a5b #6fc7cf")
+      }
+    ],
+    "defaultPalette": "safety",
+    "fonts": {
+      "ui": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "data": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "heading": "\"Iowan Old Style\", \"Palatino Linotype\", Palatino, \"Book Antiqua\", Georgia, serif",
+      "figures": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif"
+    },
+    "radius": {
+      "control": "4px",
+      "field": "4px",
+      "pill": "4px",
+      "panel": "6px"
+    },
+    "recipes": {
+      "nav": "quiet",
+      "bar": "plain",
+      "tabs": "rule",
+      "windows": "tint",
+      "stat": "plain",
+      "section": "open",
+      "fields": "rail",
+      "table": "open",
+      "status": "quiet",
+      "board": "ruled",
+      "chart": "line",
+      "buttons": "accent",
+      "links": "name",
+      "rules": "ink",
+      "avatar": "plain",
+      "workflow": "markers",
+      "banner": "plain",
+      "steps": "strip",
+      "lanes": "plain",
+      "header": "plain",
+      "filters": "quiet",
+      "required": "optional-word",
+      "formStep": "ruled",
+      "actionBar": "plain"
+    },
+    "elevation": "flat",
+    "type": {
+      "roles": {
+        "title": {
+          "face": "heading",
+          "size": "30px",
+          "weight": 400,
+          "tracking": "-0.01em"
+        },
+        "heading": {
+          "face": "heading",
+          "size": "26px",
+          "weight": 400,
+          "tracking": "-0.01em"
+        },
+        "section": {
+          "face": "ui",
+          "size": "12px",
+          "weight": 600,
+          "case": "upper",
+          "tracking": "0.09em"
+        },
+        "figure": {
+          "face": "heading",
+          "size": "34px",
+          "weight": 400,
+          "tracking": "-0.01em",
+          "features": [
+            "lnum"
+          ]
+        }
+      }
+    },
+    "density": "compact",
+    "rhythm": "airy",
+    "base": "atelier"
+  },
+  {
+    "id": "graphite",
+    "label": "Graphite",
+    "light": p("#f1f3f5 #ffffff #eceef1 #e1e4e8 #9aa1ab #78808c #0f1216 #474e58 #5c646f #0b6f86 #e3f5f8 #0b6f86 #3c90a4 - - #16714a #8a5700 #bb2a2a #2459b8 #0f1216 #e6e9ee #a3abb7 #232830 #79d6e6 #1c222b #ffffff #0e8fb0 #9a6cf7 #0e9a6c #d97706 #e0428a #2557e0 #a3510b #94a3b8 #e1e4e8 #e1e4e8 1px - #0f1216 #ffffff"),
+    "dark": p("#0b0d10 #111418 #191d23 #232830 #4a525e #727b88 #eef1f5 #aab2be #8c95a2 #4cc6db #0f3540 #79d6e6 #2a8a9c - - #5fcf98 #e2b04e #ff8a80 #8ab4ff #07090b #e6e9ee #a3abb7 #1c2128 #79d6e6 #171c23 #ffffff #0c8ab0 #9a78ec #12a678 #c88317 #e0559b #3559e6 #d26b3b #6b7694 #232830 #232830 1px - #eef1f5 #0b0d10"),
+    "palettes": [
+      {
+        "id": "crimson",
+        "label": "Crimson",
+        "light": p("- - - - - - - - - #b42318 #fdecea #b42318 #d9534a - - - - - - - - - - #ffaca5 - - #d63a32 #0e8fb0 #9a6cf7 #0e9a6c #d97706 #e0428a #2557e0"),
+        "dark": p("- - - - - - - - - #ff8f85 #3d1715 #ffaca5 #e06158 - - - - - - - - - - #ffaca5 - - #e5534b #1597b9 - #9a78ec #c88317 #e0559b #3559e6")
+      },
+      {
+        "id": "safety",
+        "label": "Safety orange",
+        "light": p("- - - - - - - - - #b33d0b #fdeee4 #b33d0b #d4612a - - - - - - - - - - #ffb88f - - #e8691f #0e8fb0 #9a6cf7 #0e9a6c #2557e0 #e0428a"),
+        "dark": p("- - - - - - - - - #ff9d66 #3b2112 #ffb88f #d8743a - - - - - - - - - - #ffb88f - - #f07a32 #1597b9 - #9a78ec #c88317 #e0559b #3559e6")
+      },
+      {
+        "id": "amber",
+        "label": "Amber",
+        "light": p("- - - - - - - - - #875a00 #fbf2dc #875a00 #b57a33 - - - - - - - - - - #fbcf86 - - #d97706 #0e8fb0 #9a6cf7 #0e9a6c #2557e0 #e0428a"),
+        "dark": p("- - - - - - - - - #f4b24a #3a2a10 #fbcf86 #b07d2d - - - - - - - - - - #fbcf86 - - #c88317 #1597b9 - #9a78ec")
+      },
+      {
+        "id": "moss",
+        "label": "Moss",
+        "light": p("- - - - - - - - - #436e10 #eef4e2 #436e10 #638f2a - - - - - - - - - - #bfe28f - - #6b9e1f #0e8fb0 #9a6cf7"),
+        "dark": p("- - - - - - - - - #a6d468 #232f15 #bfe28f #7aa743 - - - - - - - - - - #bfe28f - - #8cbf45 #1597b9 #c88317 #9a78ec")
+      },
+      {
+        "id": "emerald",
+        "label": "Emerald",
+        "light": p("- - - - - - - - - #08734f #e4f6ed #08734f #36966f - - - - - - - - - - #7ee6bd - - #0e9a6c #0e8fb0 #9a6cf7"),
+        "dark": p("- - - - - - - - - #4ad6a0 #0f3529 #7ee6bd #279771 - - - - - - - - - - #7ee6bd - - #12a678 #1597b9 #c88317 #9a78ec")
+      },
+      {
+        "id": "teal",
+        "label": "Teal",
+        "light": p("-"),
+        "dark": p("-")
+      },
+      {
+        "id": "cobalt",
+        "label": "Cobalt",
+        "light": p("- - - - - - - - - #2d4fd6 #eef1fd #2d4fd6 #6880e0 - - - - - - - - - - #91a8ff - - #2557e0 #0e8fb0 #9a6cf7 #0e9a6c #d97706 #e0428a"),
+        "dark": p("- - - - - - - - - #8aa1ff #1d2547 #91a8ff #5a73d6 - - - - - - - - - - #91a8ff - - #4369f0 #1597b9 - #9a78ec #c88317 #e0559b")
+      },
+      {
+        "id": "violet",
+        "label": "Violet",
+        "light": p("- - - - - - - - - #6534d8 #f1ecff #6534d8 #8a6ee6 - - - - - - - - - - #bea8ff - - #9a6cf7 #0e8fb0"),
+        "dark": p("- - - - - - - - - #ad91ff #2a2154 #bea8ff #7c63cf - - - - - - - - - - #bea8ff - - #9a78ec #12a678 #1597b9")
+      },
+      {
+        "id": "plum",
+        "label": "Plum",
+        "light": p("- - - - - - - - - #8a1f8f #f8eaf8 #8a1f8f #b65bbb - - - - - - - - - - #edaef2 - - #b847c0 #0e9a6c #0e8fb0"),
+        "dark": p("- - - - - - - - - #e28cea #3a1840 #edaef2 #b366bb - - - - - - - - - - #edaef2 - - #d062d8 #12a678 #1597b9 - #9a78ec")
+      },
+      {
+        "id": "rose",
+        "label": "Rose",
+        "light": p("- - - - - - - - - #b4185a #fdebf2 #b4185a #d0608f - - - - - - - - - - #f9a6cf - - #e0428a #0e8fb0 #9a6cf7 #0e9a6c #d97706"),
+        "dark": p("- - - - - - - - - #f57ab9 #3e1631 #f9a6cf #bd5a8f - - - - - - - - - - #f9a6cf - - #e0559b #1597b9 - #9a78ec #c88317")
+      },
+      {
+        "id": "slate",
+        "label": "Slate",
+        "light": p("- - - - - - - - - #3f5670 #ebeff4 #3f5670 #6e8399 - - - - - - - - - - #c2d0e1 - - #5f7690"),
+        "dark": p("- - - - - - - - - #a8bbd2 #1f2733 #c2d0e1 #6f86a3 - - - - - - - - - - #c2d0e1 - - #8a9fba")
+      },
+      {
+        "id": "ink",
+        "label": "Ink",
+        "light": p("- - - - - - - - - #1c1a17 #eeedeb #1c1a17 #726c64 - - - - - - - - - - #eeece8 - - #2b2620 #0e8fb0 #9a6cf7 #0e9a6c #d97706 #e0428a #2557e0"),
+        "dark": p("- - - - - - - - - #eeece8 #2a2826 #eeece8 #9f9a92 - - - - - - - - - - #eeece8 - - #d9d0c0 #1597b9 - #9a78ec")
+      }
+    ],
+    "defaultPalette": "teal",
+    "fonts": {
+      "ui": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "data": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "heading": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "code": "ui-monospace, \"SF Mono\", Menlo, Consolas, monospace",
+      "figures": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif"
+    },
+    "radius": {
+      "control": "6px",
+      "field": "6px",
+      "pill": "4px",
+      "panel": "8px"
+    },
+    "recipes": {
+      "nav": "slot",
+      "bar": "dark",
+      "tabs": "lifted",
+      "windows": "segmented",
+      "stat": "panel",
+      "section": "card",
+      "fields": "card",
+      "table": "card",
+      "status": "pill-dot",
+      "board": "strip",
+      "chart": "gradient",
+      "buttons": "accent",
+      "links": "plain",
+      "rules": "hairline",
+      "avatar": "plain",
+      "workflow": "pills",
+      "banner": "plain",
+      "steps": "strip",
+      "lanes": "tag",
+      "header": "plain",
+      "filters": "solid",
+      "required": "star",
+      "formStep": "ruled",
+      "actionBar": "plain"
+    },
+    "elevation": "hairline",
+    "type": {
+      "roles": {
+        "title": {
+          "weight": 600,
+          "tracking": "-0.015em"
+        },
+        "section": {
+          "face": "code",
+          "size": "12px",
+          "weight": 600,
+          "case": "upper",
+          "tracking": "0.06em"
+        },
+        "label": {
+          "face": "code",
+          "size": "11px",
+          "weight": 500,
+          "case": "upper",
+          "tracking": "0.06em"
+        },
+        "data": {
+          "features": [
+            "tnum"
+          ]
+        },
+        "figure": {
+          "face": "code",
+          "weight": 500,
+          "tracking": "-0.02em",
+          "features": [
+            "tnum",
+            "zero"
+          ]
+        }
+      }
+    },
+    "density": "compact",
+    "rhythm": "tight",
+    "base": "graphite"
+  },
+  {
+    "id": "bloom",
+    "label": "Bloom",
+    "light": p("#f2f3f5 #ffffff #eeeff2 #e2e3e7 #abafb6 #82878f #181c21 #4e5259 #60656c #3f5670 #ebeff4 #3f5670 #6e8399 - - #1c7550 #875600 #c0263b #3f5670 #ffffff #181c21 #4e5259 #e2e3e7 #3f5670 - - #5f7690 #9a6cf7 #0e9a6c #d97706 #e0428a #2557e0 #a3510b #94a3b8 #e2e3e7 #e2e3e7 1px - #3f5670 - - - #ffffff"),
+    "dark": p("#0e1114 #15191c #1e2126 #272b31 #4f5660 #777f88 #eceff2 #b1b6be #9298a0 #a8bbd2 #1f2733 #c2d0e1 #6f86a3 - - #6fd0a0 #e6b458 #ff8f9d #c2d0e1 #15191c #eceff2 #b1b6be #272b31 #c2d0e1 - - #8a9fba #9a78ec #12a678 #c88317 #e0559b #3559e6 #d26b3b #6b7694 #272b31 #272b31 1px - #a8bbd2 - - - #15191c"),
+    "palettes": [
+      {
+        "id": "crimson",
+        "label": "Crimson",
+        "light": p("#faf1ed - #f8ede9 #f0e0d9 #c7a79b #a27d71 #2b1510 #684a41 #7c5b53 #b42318 #fdecea #b42318 #d9534a - - - - - #b42318 - #2b1510 #684a41 #f0e0d9 #b42318 - - #d63a32 - - - - #0e8fb0 #2557e0 - #f0e0d9 #f0e0d9 - - #b42318"),
+        "dark": p("#1a0c0b #251311 #301a18 #3d2320 #754742 #9f716a #faebe8 #d0ada6 #b38d87 #ff8f85 #3d1715 #ffaca5 #e06158 - - - - - #ffaca5 #251311 #faebe8 #d0ada6 #3d2320 #ffaca5 - - #e5534b - - - - #1597b9 #3559e6 - #3d2320 #3d2320 - - #ff8f85 - - - #251311")
+      },
+      {
+        "id": "safety",
+        "label": "Safety orange",
+        "light": p("#f9f1ed - #f6ede8 #eee1d9 #c3a99b #9e7f70 #29160f #654b40 #785d51 #b33d0b #fdeee4 #b33d0b #d4612a - - - - - #b33d0b - #29160f #654b40 #eee1d9 #b33d0b - - #e8691f - - #0e8fb0 - - - - #eee1d9 #eee1d9 - - #b33d0b"),
+        "dark": p("#1a0d07 #24140b #2f1c11 #3b2418 #724b35 #9c745e #f9ece4 #cdaf9d #b0907d #ff9d66 #3b2112 #ffb88f #d8743a - - - - - #ffb88f #24140b #f9ece4 #cdaf9d #3b2418 #ffb88f - - #f07a32 - - - - #1597b9 #3559e6 - #3b2418 #3b2418 - - #ff9d66 - - - #24140b")
+      },
+      {
+        "id": "amber",
+        "label": "Amber",
+        "light": p("#f5f3ee - #f1efea #e7e3db #b6ae9e #8f8573 #211a10 #595142 #6c6353 #875a00 #fbf2dc #875a00 #b57a33 - - - - - #875a00 - #211a10 #595142 #e7e3db #875a00 - - #d97706 - - #0e8fb0 - - - - #e7e3db #e7e3db - - #875a00"),
+        "dark": p("#170f04 #211607 #2b1e0b #372811 #6a5029 #937a54 #f5eee1 #c5b397 #a99476 #f4b24a #3a2a10 #fbcf86 #b07d2d - - - - - #fbcf86 #211607 #f5eee1 #c5b397 #372811 #fbcf86 - - #c88317 - - #1597b9 - - - - #372811 #372811 - - #f4b24a - - - #211607")
+      },
+      {
+        "id": "moss",
+        "label": "Moss",
+        "light": p("#f0f4f0 - #ecf1ec #dee6de #a5b4a3 #7c8c78 #161e12 #4a5646 #5c6957 #436e10 #eef4e2 #436e10 #638f2a - - - - - #2f62c9 - #161e12 #4a5646 #dee6de #436e10 - - #6b9e1f - #d97706 #e0428a #0e8fb0 - - - #dee6de #dee6de - - #436e10"),
+        "dark": p("#0d1306 #141b0a #1c2510 #242f17 #4a5d33 #72865d #eaf2e5 #acbd9f #8d9e7d #a6d468 #232f15 #bfe28f #7aa743 - - - - - #8fb5ff #141b0a #eaf2e5 #acbd9f #242f17 #bfe28f - - #8cbf45 - #c88317 #e0559b #1597b9 - - - #242f17 #242f17 - - #a6d468 - - - #141b0a")
+      },
+      {
+        "id": "emerald",
+        "label": "Emerald",
+        "light": p("#eff4f2 - #eaf1ef #dce6e3 #a0b4ad #768c84 #121f19 #455750 #566961 #08734f #e4f6ed #08734f #36966f - - - - - #2f62c9 - #121f19 #455750 #dce6e3 #08734f - - #0e9a6c - #d97706 #e0428a #0e8fb0 - - - #dce6e3 #dce6e3 - - #08734f"),
+        "dark": p("#05140d #081d14 #0d271c #143225 #2d614c #598a75 #e3f3ec #9cc0b0 #7aa290 #4ad6a0 #0f3529 #7ee6bd #279771 - - - - - #8fb5ff #081d14 #e3f3ec #9cc0b0 #143225 #7ee6bd - - #12a678 - #c88317 #e0559b #1597b9 - - - #143225 #143225 - - #4ad6a0 - - - #081d14")
+      },
+      {
+        "id": "teal",
+        "label": "Teal",
+        "light": p("#eff4f6 - #ebf0f3 #dde5e9 #a3b1b9 #788a92 #121e22 #46555b #57676e #0b6f86 #e3f5f8 #0b6f86 #3c90a4 - - - - - #0b6f86 - #121e22 #46555b #dde5e9 #0b6f86 - - #0e8fb0 - - - - - - - #dde5e9 #dde5e9 - - #0b6f86"),
+        "dark": p("#061315 #091b1f #0f2529 #152f34 #305d66 #5c868f #e5f1f5 #9ebcc4 #7d9ea6 #4cc6db #0f3540 #79d6e6 #2a8a9c - - - - - #79d6e6 #091b1f #e5f1f5 #9ebcc4 #152f34 #79d6e6 - - #0c8ab0 - - - - - - - #152f34 #152f34 - - #4cc6db - - - #091b1f")
+      },
+      {
+        "id": "cobalt",
+        "label": "Cobalt",
+        "light": p("#f1f2fb - #edeefa #e0e2f3 #a7adce #7c84a9 #141a30 #49506f #5a6383 #2d4fd6 #eef1fd #2d4fd6 #6880e0 - - - - - #2d4fd6 - #141a30 #49506f #e0e2f3 #2d4fd6 - - #2557e0 - - - - #0e8fb0 - - #e0e2f3 #e0e2f3 - - #2d4fd6"),
+        "dark": p("#0c101c #131727 #1b2033 #232940 #49537a #727ca3 #ebeefb #aeb4d2 #8e96b6 #8aa1ff #1d2547 #91a8ff #5a73d6 - - - - - #91a8ff #131727 #ebeefb #aeb4d2 #232940 #91a8ff - - #4369f0 #12a678 #9a78ec - - #1597b9 - - #232940 #232940 - - #8aa1ff - - - #131727")
+      },
+      {
+        "id": "violet",
+        "label": "Violet",
+        "light": p("#f4f1fb - #f1edf9 #e6e0f2 #b3a8cc #8a7fa8 #1c1730 #544c6e #665e82 #6534d8 #f1ecff #6534d8 #8a6ee6 - - - - - #6534d8 - #1c1730 #544c6e #e6e0f2 #6534d8 - - #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0 - - - #e6e0f2 #e6e0f2 - - #6534d8"),
+        "dark": p("#110e1c #191527 #221d33 #2c2640 #584d7a #8176a3 #f0ecfb #b9b0d2 #9a91b6 #ad91ff #2a2154 #bea8ff #7c63cf - - - - - #bea8ff #191527 #f0ecfb #b9b0d2 #2c2640 #bea8ff - - #9a78ec #12a678 #c88317 #e0559b #1597b9 - - - #2c2640 #2c2640 - - #ad91ff - - - #191527")
+      },
+      {
+        "id": "plum",
+        "label": "Plum",
+        "light": p("#f8f0f6 - #f6ecf2 #eddfe8 #c1a5b9 #9a7b93 #261525 #62495d #755b70 #8a1f8f #f8eaf8 #8a1f8f #b65bbb - - - - - #8a1f8f - #261525 #62495d #eddfe8 #8a1f8f - - #b847c0 #0e9a6c #d97706 #e0428a #0e8fb0 - - - #eddfe8 #eddfe8 - - #8a1f8f"),
+        "dark": p("#170c18 #201322 #2b1a2c #362238 #6a476c #947095 #f7eaf6 #c8acc6 #aa8caa #e28cea #3a1840 #edaef2 #b366bb - - - - - #edaef2 #201322 #f7eaf6 #c8acc6 #362238 #edaef2 - - #d062d8 #12a678 #9a78ec - #1597b9 - - - #362238 #362238 - - #e28cea - - - #201322")
+      },
+      {
+        "id": "rose",
+        "label": "Rose",
+        "light": p("#faf0f0 - #f8ecec #f1dedf #c9a4a7 #a37a7f #2b1319 #69484c #7d595e #b4185a #fdebf2 #b4185a #d0608f - - - - - #b4185a - #2b1319 #69484c #f1dedf #b4185a - - #e0428a - - - #0e8fb0 - - - #f1dedf #f1dedf - - #b4185a"),
+        "dark": p("#1a0b12 #24111b #301824 #3c212e #74445b #9e6d83 #fbe9ef #d0aab8 #b38a9b #f57ab9 #3e1631 #f9a6cf #bd5a8f - - - - - #f9a6cf #24111b #fbe9ef #d0aab8 #3c212e #f9a6cf - - #e0559b - - - #1597b9 - - - #3c212e #3c212e - - #f57ab9 - - - #24111b")
+      },
+      {
+        "id": "slate",
+        "label": "Slate",
+        "light": p("-"),
+        "dark": p("-")
+      },
+      {
+        "id": "ink",
+        "label": "Ink",
+        "light": p("#f3f3f2 - #efefef #e3e3e3 #afafae #878685 #1c1c1b #525251 #656463 #1c1a17 #eeedeb #1c1a17 #726c64 - - - - - #1c1a17 - #1c1c1b #525251 #e3e3e3 #1c1a17 - - #2b2620 - - - - #0e8fb0 #2557e0 - #e3e3e3 #e3e3e3 - - #1c1a17"),
+        "dark": p("#111010 #191818 #212120 #2b2b2a #565554 #7f7e7c #efeeee #b6b6b5 #989796 #eeece8 #2a2826 #eeece8 #9f9a92 - - - - - #eeece8 #191818 #efeeee #b6b6b5 #2b2b2a #eeece8 - - #d9d0c0 - - #1597b9 - - - - #2b2b2a #2b2b2a - - #eeece8 - - - #191818")
+      }
+    ],
+    "defaultPalette": "slate",
+    "fonts": {
+      "ui": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "data": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "heading": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "figures": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif"
+    },
+    "radius": {
+      "control": "999px",
+      "field": "12px",
+      "pill": "999px",
+      "panel": "20px"
+    },
+    "recipes": {
+      "nav": "float",
+      "bar": "soft",
+      "tabs": "pill",
+      "windows": "lifted",
+      "stat": "bento",
+      "section": "panel",
+      "fields": "panel",
+      "table": "rows",
+      "status": "pill",
+      "board": "soft",
+      "chart": "wash",
+      "buttons": "accent",
+      "links": "plain",
+      "rules": "hairline",
+      "avatar": "round",
+      "workflow": "segments",
+      "banner": "gradient",
+      "steps": "tinted",
+      "lanes": "tint",
+      "header": "plain",
+      "filters": "solid",
+      "required": "star",
+      "formStep": "plain",
+      "actionBar": "raised"
+    },
+    "elevation": "soft",
+    "type": {
+      "roles": {
+        "title": {
+          "size": "30px",
+          "weight": 700,
+          "tracking": "-0.02em"
+        },
+        "section": {
+          "size": "16px",
+          "weight": 600,
+          "tracking": "-0.01em"
+        },
+        "figure": {
+          "size": "32px",
+          "weight": 700,
+          "tracking": "-0.03em"
+        }
+      }
+    },
+    "density": "compact",
+    "rhythm": "airy",
+    "base": "bloom"
   }
 ];

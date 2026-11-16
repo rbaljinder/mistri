@@ -37,7 +37,7 @@ async function edit(page: Page, label: string) {
 
 async function leaveField(page: Page) {
   // A real click on passive field-heading text, outside the complete editor.
-  // Base UI marks outside content aria-hidden while its popup is open; the
+  // An open popup may mark the content outside it aria-hidden; the
   // heading remains visible and is a legitimate outside-pointer destination.
   await page.getByRole('heading', { name: 'Task fields', exact: true, includeHidden: true }).click();
 }
@@ -388,7 +388,7 @@ for (const width of [1440, 390])
       expect(sample.snapshot()).toEqual(expected);
     });
 
-    test('FK search blocks the draft; real portalled pointer/keyboard picks, Escape and nullable/required Clear', async ({
+    test('FK search blocks the draft; real popup pointer/keyboard picks, Escape and nullable/required Clear', async ({
       page,
       sample,
       updates,
@@ -408,9 +408,9 @@ for (const width of [1440, 390])
       await assignee.fill('Bea');
       const option = page.getByRole('option', { name: /Bea South/ });
       await expect(option).toBeVisible();
-      // Prove this is the actual portal, outside the field that owns the input.
-      const field = await assignee.locator('xpath=ancestor::*[@data-edit-field][1]').elementHandle();
-      expect(await option.evaluate((node, owner) => owner!.contains(node), field)).toBe(false);
+      // Prove this is the control's real popup: an open popover in the top layer, over the page, where no field or
+      // pane clips it.
+      expect(await option.evaluate((node) => Boolean(node.closest('[popover]')?.matches(':popover-open')))).toBe(true);
       await quiet(page, updates, 0);
       await leaveField(page);
       await expect(assignee).toHaveAttribute('aria-invalid', 'true');

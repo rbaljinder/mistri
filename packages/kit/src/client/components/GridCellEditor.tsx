@@ -270,7 +270,7 @@ export function GridCellEdit({
       return;
     }
     const node = surface.current;
-    node?.querySelector<HTMLElement>('input, .dd-button, button')?.focus();
+    node?.querySelector<HTMLElement>('input, [data-slot="select-trigger"], button')?.focus();
   }, [editing]);
 
   const open = () => {
@@ -387,7 +387,14 @@ export function GridCellEdit({
       const node = surface.current;
       const active = document.activeElement;
       if (!alive.current || !node || !editing) return;
-      if (active && (node.contains(active) || active.closest('[role="listbox"], [role="dialog"], .dd-popup, .date-field-popup'))) return;
+      if (
+        active &&
+        (node.contains(active) ||
+          active.closest(
+            '[role="listbox"], [role="dialog"], [data-slot="select-content"], [data-slot="popover-content"][data-kind="calendar"]',
+          ))
+      )
+        return;
       void commit(draft, false, pickedLabel());
     });
   };

@@ -24,8 +24,9 @@
  * the agenda, each record with its times.
  */
 import './CalendarList.css';
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { addHostListener, removeHostListener, shellRoot } from '@mistriwork/kit/client/shellHost.js';
 import { api, columnLabel, findTable, keyOf, openRecord, refsFrom, state, toast, writeAllowed } from '@mistriwork/kit/client/core.js';
 import { appNow, formatDateTime, formatLocale, formatNumber } from '@mistriwork/kit/client/locale.js';
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
@@ -53,7 +54,7 @@ import { SLOT_MINUTES, momentOf, shifted, type Moment } from './calendarTime.js'
 
 /** A month is read in one request; past this, the calendar says so rather than silently dropping days. */
 const LIMIT = 500;
-/** A day shows this many before saying how many more; the rest are one press away. */
+/** A day in a dashboard or page section shows this many before saying how many more; in its own room it shows as many as its height holds (the fit, below). The rest are one press away. */
 const SHOWN = 3;
 const pad = (n: number) => String(n).padStart(2, '0');
 const iso = (day: Date) => `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
@@ -394,11 +395,61 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
     }
     return out;
   }, [month]);
+  /* A month in its own room fills the room: every week the same height, sized from the room the pane has below the
+     grid, never under the day's least, and a day shows as many as that height holds before saying how many more.
+     Measured before the paint, so the rows come up at their height and nothing moves after. In a dashboard or a page
+     section the month keeps its set height and three a day. */
+  const [fit, setFit] = useState<{ row: number; all: number; folded: number } | null>(null);
+  const fitted = interactive && !timed && !phone;
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!fitted || !grid || grid.closest('.page-section')) {
+      setFit(null);
+      return;
+    }
+    const px = (value: string, fallback: number) => {
+      const n = parseFloat(value);
+      if (!Number.isFinite(n)) return fallback;
+      return value.trim().endsWith('rem') ? n * parseFloat(getComputedStyle(shellRoot()).fontSize || '16') : n;
+    };
+    const measure = () => {
+      const cell = grid.querySelector<HTMLElement>('tbody td.calendar-day');
+      /* Nothing laid out (a document with no layout, a hidden pane): there is no height to fit, so three a day. */
+      if (!cell || cell.getBoundingClientRect().height === 0) return;
+      const style = getComputedStyle(cell);
+      const least = px(getComputedStyle(grid).getPropertyValue('--calendar-day-least'), 116);
+      let pane: HTMLElement | null = grid.parentElement;
+      while (pane && !/(auto|scroll)/.test(getComputedStyle(pane).overflowY)) pane = pane.parentElement;
+      const box = grid.getBoundingClientRect();
+      const top = pane ? box.top - pane.getBoundingClientRect().top + pane.scrollTop : box.top + window.scrollY;
+      const height = pane ? pane.clientHeight : window.innerHeight;
+      const head = grid.tHead?.getBoundingClientRect().height ?? 0;
+      const room = height - top - head - 16;
+      const row = Math.round(Math.min(Math.max(room / weeks.length, least), least * 2));
+      const pad = px(style.paddingTop, 6) + px(style.paddingBottom, 6) + 2;
+      const date = cell.querySelector<HTMLElement>('.calendar-date')?.offsetHeight ?? 24;
+      const lane = twoLines ? 40 : 24;
+      const gap = px(getComputedStyle(grid).getPropertyValue('--space-1h'), 6);
+      const margin = px(getComputedStyle(grid).getPropertyValue('--space-2'), 8);
+      const more = 22 + gap;
+      const inside = row - pad - date - margin;
+      /* Never fewer than a day showed before it was measured: where the room gives a week less than three, the busy
+         week stands taller, as every week did; where it gives more, a day shows more. */
+      const all = Math.max(SHOWN, Math.floor((inside + gap) / (lane + gap)));
+      const folded = Math.max(SHOWN, Math.floor((inside - more + gap) / (lane + gap)));
+      setFit((was) => (was && was.row === row && was.all === all && was.folded === folded ? was : { row, all, folded }));
+    };
+    measure();
+    addHostListener(window, 'resize', measure);
+    return () => removeHostListener(window, 'resize', measure);
+  }, [fitted, weeks.length, twoLines, answer.isPending, answer.isError]);
   const weekdays = useMemo(() => {
     const say = new Intl.DateTimeFormat(locale, { weekday: 'short' });
     return Array.from({ length: 7 }, (_, i) => say.format(new Date(2024, 0, 1 + i)));
   }, [locale]);
   const fullDate = new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long' });
+  /* The first of a month names its month ("Dec 1"): the days of the months either side then say whose they are. */
+  const firstOf = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' });
   /* A week or a day: its days, and its name over the grid ("November 2 – 8, 2026", "Tuesday, November 3, 2026"). */
   const periodDays = useMemo(
     () => (timed ? Array.from({ length: span === 'week' ? 7 : 1 }, (_, i) => addDays(first, i)) : []),
@@ -790,6 +841,8 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
       className="calendar-grid"
       role="grid"
       ref={gridRef}
+      data-fit={fit ? '' : undefined}
+      style={fit ? ({ '--calendar-row': `${fit.row}px` } as CSSProperties) : undefined}
       aria-label={new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(month)}
     >
       <thead>
@@ -806,7 +859,8 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
           const days = week.map(iso);
           const placed = placeWeek(days, all);
           // A week opens whole: a bar in a folded lane would run past the days still folded.
-          const shown = opened.has(days[0]) ? Infinity : SHOWN;
+          const lanes = placed.reduce((top, piece) => Math.max(top, piece.lane + 1), 0);
+          const shown = opened.has(days[0]) ? Infinity : fit ? (lanes <= fit.all ? Infinity : fit.folded) : SHOWN;
           return (
             <tr key={i}>
               {week.map((day, column) => {
@@ -828,7 +882,7 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
                     className={`calendar-day${outside ? ' is-outside' : ''}${date === today ? ' is-today' : ''}${over === date ? ' is-over' : ''}`}
                   >
                     <span className="calendar-date">
-                      <span aria-hidden="true">{day.getDate()}</span>
+                      <span aria-hidden="true">{day.getDate() === 1 ? firstOf.format(day) : day.getDate()}</span>
                       <span className="calendar-sr">{fullDate.format(day)}</span>
                     </span>
                     {named.map((span, n) => spanLabel(span, n))}

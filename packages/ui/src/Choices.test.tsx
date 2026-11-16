@@ -1,4 +1,4 @@
-/** Yes/No, cards, checkbox and consent: native radios and checkboxes under their faces, so the keyboard is the browser's. */
+/** Yes/No, cards, checkbox and consent: radios and checkboxes by their roles under their faces, and what the keyboard does with them. */
 import { afterEach, expect, test, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
@@ -17,7 +17,8 @@ test('the question names a radiogroup of two radios', () => {
   const group = screen.getByRole('radiogroup', { name: 'Do you own a home?' });
   expect(group).toHaveAttribute('aria-invalid', 'true');
   expect(group).toHaveAccessibleDescription('Answer this.');
-  expect(screen.getAllByRole('radio').map((r) => (r as HTMLInputElement).checked)).toEqual([false, false]);
+  // Each is a radio by its role, and says whether it is chosen as one does.
+  expect(screen.getAllByRole('radio').map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'false']);
 });
 
 test('choosing and the arrow keys move the answer, and the chosen face says so', async () => {
@@ -27,7 +28,9 @@ test('choosing and the arrow keys move the answer, and the chosen face says so',
   expect(screen.getByRole('radio', { name: 'Yes' })).toBeChecked();
   await user.keyboard('{ArrowRight}');
   expect(screen.getByRole('radio', { name: 'No' })).toBeChecked();
-  expect(screen.getByRole('radio', { name: 'No' }).closest('label')).toHaveClass('is-on');
+  // The face is the label round the radio, dressed by the radio's own state.
+  const no = screen.getByRole('radio', { name: 'No' });
+  expect(no.closest('label')!.querySelector('[data-slot="radio"][data-checked]')).toBe(no);
   expect(screen.getByRole('radiogroup')).not.toHaveAttribute('aria-invalid');
 });
 
@@ -122,7 +125,8 @@ test('a consent is a checkbox whose long paragraph is the label, in its own clas
   const box = screen.getByRole('checkbox', { name: 'I agree to the terms and the privacy notice.' });
   expect(box).toHaveAccessibleDescription('Required.');
   expect(box).toHaveAttribute('aria-invalid', 'true');
-  expect(document.querySelector('.form-field-consent')).toBeInTheDocument();
+  // What sets the paragraph in the body's weight.
+  expect(box.closest('[data-slot="field"]')).toHaveClass('consent');
 });
 
 test('several cards are one Tab stop: the arrows move, Space toggles, and each says aria-checked', async () => {

@@ -53,7 +53,11 @@ test('the said title is sealed to its place and opens only there', async () => {
   assert.doesNotMatch(sealed, /482913/);
   assert.equal(openNoticeWords('desk', ['desk', '7'], sealed), 'Your code is 482913');
   assert.equal(openNoticeWords('desk', ['desk', '8'], sealed), undefined, 'another row');
-  assert.equal(openNoticeWords('desk', ['desk', '7'], `${sealed.slice(0, -2)}AA`), undefined, 'damaged');
+  /* One character in the middle, changed to one it is not: the last characters of a base64 text can carry bits
+     nothing reads, so a changed tail is, once in a few hundred seals, the same bytes. */
+  const at = sealed.length >> 1;
+  const damaged = `${sealed.slice(0, at)}${sealed[at] === 'A' ? 'B' : 'A'}${sealed.slice(at + 1)}`;
+  assert.equal(openNoticeWords('desk', ['desk', '7'], damaged), undefined, 'damaged');
   await withoutKey(() => assert.throws(() => assertNoticeWordsKey('desk'), /MISTRI_SECRETS_KEY/));
 });
 

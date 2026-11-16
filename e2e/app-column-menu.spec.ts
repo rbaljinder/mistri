@@ -40,14 +40,14 @@ test("a column menu has at most five entries in words, and Filter… narrows thr
   // One button, saying what it will show; the popover's live count says it to a screen reader too.
   await expect(pop.getByRole('status')).toHaveText(/\d+ match/);
   await pop.getByRole('button', { name: /^Show \d/ }).click();
-  await expect(page.locator('.applist-chip', { hasText: 'Stage is Negotiation' })).toBeVisible();
+  await expect(page.locator('.applist-chip[title*="Stage is Negotiation"]')).toBeVisible();
   await expect(count).not.toHaveText(everything);
   // The focus comes back to the ⌄ the choice was made from.
   await expect(header(page, 'Stage')).toBeFocused();
 
   // Filtered, the menu offers its way out.
   await (await menu(page, 'Stage')).getByRole('menuitem', { name: 'Clear filter' }).click();
-  await expect(page.locator('.applist-chip', { hasText: 'Stage is' })).toHaveCount(0);
+  await expect(page.locator('.applist-chip[title*="Stage is"]')).toHaveCount(0);
   await expect(count).toHaveText(everything);
 
   // A figure sorts Low → high, and then that entry is not offered again.
@@ -69,7 +69,7 @@ test('beside a rail, Filter… goes to the facet; the rail and the menu say one 
 
   // Set in the rail: the column menu knows, and clears it.
   await priority.getByRole('checkbox').first().check();
-  await expect(page.locator('.applist-chip', { hasText: 'Priority is' })).toBeVisible();
+  await expect(page.locator('.applist-chip[title*="Priority is"]')).toBeVisible();
   const menuNow = await menu(page, 'Priority');
   await expect(menuNow.getByRole('menuitem', { name: 'Clear filter' })).toBeVisible();
   // Filter… does not draw a second control over the rail's: it goes to the facet.
@@ -77,7 +77,7 @@ test('beside a rail, Filter… goes to the facet; the rail and the menu say one 
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(priority.getByRole('checkbox').first()).toBeFocused();
   await (await menu(page, 'Priority')).getByRole('menuitem', { name: 'Clear filter' }).click();
-  await expect(page.locator('.applist-chip', { hasText: 'Priority is' })).toHaveCount(0);
+  await expect(page.locator('.applist-chip[title*="Priority is"]')).toHaveCount(0);
   await expect(priority.getByRole('checkbox').first()).not.toBeChecked();
 });
 
@@ -93,7 +93,7 @@ test("where the rail is a sheet, the menu's popover and the sheet are one contro
   const pop = page.getByRole('dialog', { name: 'Filter by Priority' });
   await pop.getByRole('checkbox', { name: /^3/ }).check();
   await pop.getByRole('button', { name: /^Show/ }).click();
-  await expect(page.locator('.applist-chip', { hasText: 'Priority is 3' })).toBeVisible();
+  await expect(page.locator('.applist-chip[title*="Priority is 3"]')).toBeVisible();
   await page.getByRole('button', { name: /^Filters/ }).click();
   const sheet = page.getByRole('dialog', { name: 'Filters' });
   await expect(sheet.getByRole('group', { name: 'Priority' }).getByRole('checkbox', { name: /^3/ })).toBeChecked();
@@ -101,7 +101,7 @@ test("where the rail is a sheet, the menu's popover and the sheet are one contro
   // Set in the sheet, it reads back chosen in the menu's popover.
   await sheet.getByRole('group', { name: 'Due' }).getByRole('radio', { name: 'Next 7 days' }).check();
   await sheet.getByRole('button', { name: /^Show \d/ }).click();
-  await expect(page.locator('.applist-chip', { hasText: 'Due in the next 7 days' })).toBeVisible();
+  await expect(page.locator('.applist-chip[title*="Due in the next 7 days"]')).toBeVisible();
   await (await menu(page, 'Due')).getByRole('menuitem', { name: 'Filter…' }).click();
   await expect(page.getByRole('dialog', { name: 'Filter by Due' }).getByRole('radio', { name: 'Next 7 days' })).toBeChecked();
   await page.keyboard.press('Escape');
@@ -115,5 +115,5 @@ test("where the rail is a sheet, the menu's popover and the sheet are one contro
   await task.getByRole('radio', { name: 'Starts with' }).check();
   await task.getByRole('textbox', { name: 'Starts with' }).fill('Call');
   await page.keyboard.press('Enter');
-  await expect(page.locator('.applist-chip', { hasText: 'Task starts with “Call”' })).toBeVisible();
+  await expect(page.locator('.applist-chip[title*="Task starts with “Call”"]')).toBeVisible();
 });

@@ -14,6 +14,44 @@ See it in the sample (`examples/apps/lintel/blueprint.ts:58`).
 
 Each row is a CRM App in Lumen (a sample since retired), with one part changed and everything else left as Lumen has it. The value Lumen wears is marked, and each value is said in words under its picture: some differ only on a page that has the thing they draw. Make a sheet like these for your own App and page with `mistri shot --recipes <part> [page]`, which notes the values that draw your page nearly alike, or try values live on the theme bench `mistri dev` serves at `/_theme`.
 
+## Families
+
+Two words choose several parts at once, so a page's blocks agree without a theme saying each one. A family sets the default of its parts; a part the theme says itself still wins, and a family a theme says wins over the parts of the look it extends.
+
+```ts
+recipes: { blocks: 'panel', current: 'pill', table: 'open' },
+```
+
+That theme's sections, field groups and stats are panels, its menu entry and tabs pills, and its tables, which the family would have set on a hairline, stand open because it says so.
+
+### `blocks`
+
+How a page's blocks are held: `section`, `fields`, `stat`, `table` and `steps`.
+
+<!-- family words: blocks -->
+
+- `open`: Every block stands open on the page: sections and tables under a rule, and the stats in one ruled strip, the only box. (`section: 'open'`, `fields: 'open'`, `stat: 'divided'`, `table: 'open'`, `steps: 'strip'`)
+- `ruled`: A printed page: blocks open under rules, each stat under a rule of its own, a record’s side groups captioned between hairlines. (`section: 'open'`, `fields: 'rail'`, `stat: 'ruled'`, `table: 'hairline'`, `steps: 'strip'`)
+- `card`: Every block is a card with a hairline and the card shadow: sections, field groups, stats and tables. (`section: 'card'`, `fields: 'card'`, `stat: 'panel'`, `table: 'card'`, `steps: 'flat'`)
+- `panel`: Every block is a panel on the surface with a hairline: sections, field groups and stats; a table stays open inside its panel. (`section: 'panel'`, `fields: 'panel'`, `stat: 'panel'`, `table: 'hairline'`, `steps: 'flat'`)
+- `tile`: Every block is a soft tile: stats as tiles with a large figure, a list as one tile with its rows ruled apart, steps tinted with their tone. (`section: 'panel'`, `fields: 'panel'`, `stat: 'bento'`, `table: 'rows'`, `steps: 'tinted'`)
+
+<!-- /family words -->
+
+### `current`
+
+How the current one of several is shown: `nav`, `tabs` and `windows`.
+
+<!-- family words: current -->
+
+- `tint`: The current entry, tab and window each sit on a soft tint of the accent. (`nav: 'tint'`, `tabs: 'tint'`, `windows: 'tint'`)
+- `inverted`: The current entry and tab are inverted to the ink, and the chosen window is a filled segment: square, high-contrast. (`nav: 'inverted'`, `tabs: 'inverted'`, `windows: 'segmented'`)
+- `underline`: The current tab, and the current entry in a top bar, are underlined in the accent with no fill; a chosen window sits on a tint. (`nav: 'underline'`, `tabs: 'underline'`, `windows: 'tint'`)
+- `pill`: The current entry and tab are pills, and the chosen window is a raised key on a tray. (`nav: 'pill'`, `tabs: 'pill'`, `windows: 'lifted'`)
+- `lifted`: The tabs and the windows stand in sunken tracks, the chosen one a raised key lifted out; the menu’s entry sits on a tint. (`nav: 'tint'`, `tabs: 'lifted'`, `windows: 'lifted'`)
+
+<!-- /family words -->
+
 ## `nav`
 
 The menu: how its current entry is marked.
@@ -29,6 +67,7 @@ The menu: how its current entry is marked.
 - `pill`: Every row is a rounded pill with room around it; the current one is filled in the accent’s tint, its word in the accent.
 - `quiet`: The current entry is barely shaded in the menu’s ink, with no accent at all: the calmest mark.
 - `slot`: The current entry is an ink block, as inverted, with a 3px marker of the menu’s accent beside it, like a tool’s slot on a pegboard.
+- `float`: The side menu is a card of its own, standing off the window’s edge with rounded corners; the current entry is a pill in the accent’s tint.
 
 <!-- /recipe words -->
 
@@ -56,11 +95,12 @@ A record's tabs.
 
 <!-- recipe words: tabs -->
 
-- `pill`: The chosen tab is a filled pill; the others are plain words.
+- `pill`: The chosen tab is a soft pill in the ink with an edge of its own; the others are plain words.
 - `inverted`: The chosen tab is inverted, the ink as its ground: square, high-contrast.
 - `underline`: The tabs stand on a hairline, wide apart, the chosen one underlined in the accent with no fill.
 - `rule`: The chosen tab is underlined by a 2px rule in the link color with no fill, the tabs packed as written.
-- `chosen`: The chosen tab sits on a soft tint of the accent in the ink, wider apart, with no underline.
+- `tint`: The chosen tab sits on a soft tint of the accent in the ink, wider apart, with no underline.
+- `lifted`: The tabs stand in a sunken track; the chosen one is a raised key lifted out of it, with no underline.
 
 <!-- /recipe words -->
 
@@ -74,7 +114,7 @@ A dashboard's period picker.
 
 - `segmented`: The period picker is a segmented control, the chosen period filled.
 - `lifted`: The period picker is a sunken tray, the chosen period a raised white key on it.
-- `chosen`: The period picker has no tray; the chosen period sits on a soft tint of the accent.
+- `tint`: The period picker has no tray; the chosen period sits on a soft tint of the accent.
 
 <!-- /recipe words -->
 
@@ -92,7 +132,8 @@ A stat tile.
 - `ruled`: Each stat stands open under a 2px rule in the ink, with no card or shadow, like a printed page.
 - `icon`: Each stat is a card with its icon in a round tint of a chart color above the label, and a large bold figure.
 - `panel`: Each stat is a panel on the surface with a hairline and the look’s card shadow.
-- `divided`: The stats share one strip, parted by hairlines, with no cards: the quietest arrangement.
+- `divided`: The stats share one strip, a hairline round it and one between its figures, with no card to each: the quietest arrangement.
+- `bento`: Each stat is a soft tile of its own in the raised ground, with no edge and a large figure: the roundest arrangement.
 
 <!-- /recipe words -->
 
@@ -139,6 +180,7 @@ A list.
 - `card`: The table is a card: muted 12px heads on a hairline, faint row rules and taller rows.
 - `quiet`: The table is a card of quiet rows, a work queue’s open button folded to a chevron at the row’s end.
 - `banded`: As open, but every other row lies on the band color (colors.band, or the raised ground), each ink measured on it.
+- `rows`: The list is one soft tile on the page’s ground: rows ruled apart by hairlines, the head plain words inside it, the tile’s corners its own.
 
 <!-- /recipe words -->
 
@@ -166,8 +208,8 @@ A board's cards.
 <!-- recipe words: board -->
 
 - `ruled`: A board’s lanes are outlined by a hairline; its cards lie flat on them.
-- `soft`: As ruled, but each card casts the look’s card shadow: only the cards lift.
-- `strip`: Each lane is headed by a strip tinted with its tone, its cards white on the lane.
+- `soft`: Each lane is a quiet tray that holds its head and its cards, each card a sheet on it under the look’s card shadow.
+- `strip`: Each lane is headed by a strip tinted with its tone, its cards white under it; a card with a category wears its color as a stripe.
 
 <!-- /recipe words -->
 
@@ -210,6 +252,7 @@ Links to another record.
 
 - `plain`: A link to another record is in the link color without an underline.
 - `underline`: A link to another record is underlined, so it reads as one without color.
+- `name`: A row’s name is underlined, as an index’s entry is, and what the row or a record’s facts refer to reads as text; the line that goes on to another record keeps its underline.
 
 <!-- /recipe words -->
 
@@ -249,8 +292,9 @@ A record's workflow steps.
 
 <!-- recipe words: workflow -->
 
-- `markers`: A workflow is a track of thin segments, the label under each.
+- `markers`: A workflow whose steps are an order is numbered marks joined by a rule, the label under each; a set of states with no order is a track of thin segments.
 - `pills`: A workflow is a row of pills with a dot each: a step walked in the good tint, the current one in the accent’s.
+- `segments`: A workflow is one bar cut into segments, a word in each: the steps walked on a tint in the ink, the current one on the accent’s tint, those ahead muted.
 
 <!-- /recipe words -->
 
@@ -316,8 +360,8 @@ A list's filter not yet asked for, the "+ Status" beside its search: a dashed pl
 
 <!-- recipe words: filters -->
 
-- `dashed`: A list’s filter not yet asked for is its name behind a +, on a dashed hairline: a place for a filter, not a field.
-- `solid`: A list’s filter not yet asked for is its name behind a + on a solid edge: a key, as the search beside it is, not a place.
+- `solid`: A list’s filter not yet asked for is its name before a caret on a solid edge: a key, as the search beside it is.
+- `dashed`: The same key on a dashed hairline. No built-in look wears it: to people meeting a list it read as a place left empty.
 - `quiet`: A list’s filter not yet asked for has no edge, its name in the muted ink, until a pointer is over it: then it sits on the raised ground.
 
 <!-- /recipe words -->
@@ -330,17 +374,6 @@ How a form says a field is needed: a red star after the label of a required fiel
 
 - `star`: A required field wears a red star after its label; an optional one wears nothing.
 - `optional-word`: A required field wears nothing and an optional one says “(optional)” after its label, quietly; the form’s own words, in the reader’s language.
-
-<!-- /recipe words -->
-
-## `checkbox`
-
-A checkbox: the browser's own, or drawn in the field's fill with the control's edge and corner, and the accent with a check when on. The box is still the native input, so the keyboard and the focus ring are unchanged.
-
-<!-- recipe words: checkbox -->
-
-- `native`: A checkbox is the browser’s own, in the accent.
-- `drawn`: A checkbox is drawn: a square in the field’s fill with the control’s edge and corner, the accent with a check when on.
 
 <!-- /recipe words -->
 
@@ -407,7 +440,7 @@ type: {
 - `section`: A section’s title on a record and a dashboard: its face, case and features; a dashboard’s section title also takes a size (12px to 20px), tracking and weight.
 - `body`: Prose, fields and the interface, at the base size: its leading (1.35 to 1.8) and features.
 - `label`: A column’s head, a stat’s label and a record’s tabs, at the base size: their face, size (11px to 14px), tracking, weight (400 to 700), case and features; upper sets them a step smaller unless a size is said.
-- `data`: A table’s cells and a record’s values, in the data face at the base size: their features, tabular figures kept, and its reach: every value, or figures only (figures, keys and dates, a record header’s facts too).
+- `data`: A table’s cells and a record’s values, in the data face at the base size: their features, tabular figures kept, and its reach: every value, or figures only (figures, keys and dates). A record header’s facts keep the head’s face, their figures tabular.
 - `figure`: A stat’s figure: its face, size (18px to 40px), tracking, weight and features, tabular figures kept.
 - `nav`: The menu’s entries in the bar, at the base size: their face, tracking, weight (400 to 600) and case; upper sets them a step smaller.
 

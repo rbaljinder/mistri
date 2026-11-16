@@ -9,6 +9,8 @@ export const say = defineMessages({
   aColor: 'a color, such as #1d6a5a',
   theFormHasAnInput: 'The form has an input it does not ask for.',
   isRequired: '{label} is required.',
+  answerThis: 'Please answer “{label}”',
+  fillInThis: 'Fill in “{label}”.',
   requiredWord: '(required)',
   optionalWord: '(optional)',
   checkThisBoxTo: 'Check this box to continue.',

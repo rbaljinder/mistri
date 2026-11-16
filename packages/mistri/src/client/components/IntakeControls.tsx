@@ -296,7 +296,7 @@ export function IntakeControl(props: IntakeControlProps) {
         <input
           {...aria}
           id={id}
-          className="field-control"
+          data-slot="input"
           style={{ paddingInlineStart: `calc(var(--money-pad) + ${symbol.length}ch + var(--space-2))` }}
           type="text"
           inputMode={
@@ -322,7 +322,8 @@ export function IntakeControl(props: IntakeControlProps) {
       <input
         {...aria}
         id={id}
-        className="field-control intake-month"
+        data-slot="input"
+        className="intake-month"
         type="text"
         inputMode="numeric"
         enterKeyHint="next"
@@ -345,14 +346,15 @@ export function IntakeControl(props: IntakeControlProps) {
     const said = saying(at);
     return (
       <div className="intake-slider">
-        <output className="field-control field-readout" htmlFor={id} aria-hidden="true">
+        <output data-slot="slider-readout" htmlFor={id} aria-hidden="true">
           {said}
         </output>
         <input
           {...aria}
           id={id}
           type="range"
-          className="field-range"
+          data-slot="field-control"
+          data-kind="range"
           min={min}
           max={max}
           step={field.step ?? (field.type === 'money' ? 1 : field.integer ? 1 : 'any')}
@@ -374,11 +376,12 @@ export function IntakeControl(props: IntakeControlProps) {
     const raw = typeof value === 'string' ? value : '';
     const drawn = field.mask ? maskShown(field.mask, raw) : raw;
     return (
-      <div className="field-with-action">
+      <div data-slot="field-with-action">
         <input
           {...aria}
           id={id}
-          className={`field-control${shown ? '' : ' field-hidden'}`}
+          data-slot="input"
+          data-hidden={shown ? undefined : ''}
           type={shown ? 'text' : 'password'}
           inputMode={field.mask ? maskKeys(field.mask) : 'text'}
           enterKeyHint="next"
@@ -406,7 +409,7 @@ export function IntakeControl(props: IntakeControlProps) {
       <input
         {...aria}
         id={id}
-        className="field-control"
+        data-slot="input"
         type="text"
         inputMode={maskKeys(mask)}
         enterKeyHint="next"
@@ -422,13 +425,15 @@ export function IntakeControl(props: IntakeControlProps) {
   if (field.type === 'boolean') {
     if (field.as === 'buttons') {
       return (
-        <div className="choice-pair" role="radiogroup" id={id} aria-labelledby={`${id}-label`} {...aria}>
+        <div data-slot="radio-group" data-kind="cards" data-fit="pair" role="radiogroup" id={id} aria-labelledby={`${id}-label`} {...aria}>
           {([true, false] as const).map((answer) => (
-            <label key={String(answer)} className={`choice-pick${value === answer ? ' is-on' : ''}`}>
+            <label key={String(answer)} data-slot="choice" data-checked={value === answer ? '' : undefined}>
+              {/* The browser's own radio under the part's name: the stylesheet lays it over its card and reads which is on. */}
               <input
                 type="radio"
                 name={id}
-                className="choice-input"
+                data-slot="radio"
+                data-checked={value === answer ? '' : undefined}
                 checked={value === answer}
                 disabled={disabled}
                 onChange={() => onChange(answer)}
@@ -446,7 +451,7 @@ export function IntakeControl(props: IntakeControlProps) {
           {...aria}
           id={id}
           type="checkbox"
-          className="command-check field-check"
+          className="command-check"
           required={field.accept === true}
           checked={value === true}
           disabled={disabled}
@@ -491,8 +496,10 @@ export function IntakeControl(props: IntakeControlProps) {
       );
     return (
       <div
-        className={buttons ? 'choice-pair intake-buttons' : 'choice-cards'}
-        data-fit={buttons ? undefined : cardFit(field.options)}
+        data-slot="radio-group"
+        data-kind="cards"
+        className={buttons ? 'intake-buttons' : undefined}
+        data-fit={buttons ? 'pair' : cardFit(field.options)}
         role={several ? 'group' : 'radiogroup'}
         id={id}
         aria-labelledby={`${id}-label`}
@@ -502,25 +509,25 @@ export function IntakeControl(props: IntakeControlProps) {
         {field.options.map((option) => {
           const on = chosen.includes(option.value);
           return (
-            <label key={optionKey(option)} className={`${buttons ? 'choice-pick' : 'choice-card'}${on ? ' is-on' : ''}`}>
+            <label key={optionKey(option)} data-slot="choice" data-checked={on ? '' : undefined}>
               {option.icon && !buttons && isAppIcon(option.icon) ? (
-                <span className="choice-card-icon" aria-hidden="true">
+                <span data-slot="choice-icon" aria-hidden="true">
                   <Icon name={option.icon} />
                 </span>
               ) : null}
-              <span className="choice-card-label">
+              <span data-slot="choice-label">
                 {option.label}
                 {option.help && !buttons ? <span className="intake-choice-help">{option.help}</span> : null}
               </span>
               <input
                 type={several ? 'checkbox' : 'radio'}
                 name={several ? undefined : id}
-                className="choice-input"
+                data-slot="radio"
+                data-checked={on ? '' : undefined}
                 checked={on}
                 disabled={disabled}
                 onChange={(event) => toggle(option, event.target.checked)}
               />
-              {buttons ? null : <span className="choice-box" aria-hidden="true" />}
             </label>
           );
         })}

@@ -17,10 +17,17 @@ const isPlain = (value: unknown): value is Record<string, unknown> =>
 
 export function parseRelatedCreate(raw: unknown, at: string): RelatedCreate<string> {
   if (typeof raw === 'string') raw = { label: raw };
-  if (!isPlain(raw)) throw new Error(`${at}: create must be an object.`);
+  if (!isPlain(raw))
+    throw new Error(
+      `${at}: create must be an object: create: {} for the list's own New form, or { label, show, defaults, prefill } to say it.`,
+    );
   const value = raw;
-  if (Object.keys(value).some((key) => !CREATE_KEYS.includes(key)))
-    throw new Error(`${at}: create accepts label, show, defaults and prefill.`);
+  const unknown = Object.keys(value).filter((key) => !CREATE_KEYS.includes(key));
+  if (unknown.length)
+    throw new Error(
+      `${at}: create accepts label, show, defaults and prefill; it was given ${unknown.map((key) => `"${key}"`).join(', ')}.` +
+        (unknown.includes('fields') ? ' The fields its form asks are "show".' : ''),
+    );
   if (typeof value.label !== 'string' || !value.label.trim()) throw new Error(`${at}: create needs a label.`);
   if (value.show !== undefined && (!Array.isArray(value.show) || value.show.some((c) => typeof c !== 'string' || !c.trim())))
     throw new Error(`${at}: create.show must contain column names.`);

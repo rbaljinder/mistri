@@ -18,7 +18,7 @@ import { extname, join, normalize, relative, sep } from 'node:path';
 import { SOURCE_CLIENT, devClient, type ClientFiles } from './devclient.js';
 import { localePreloads, lookPreloads, SURFACE_PAGES, surfaceFor, tenantPreloads, type PageGrounds } from './clientSurface.js';
 import { FONT_TOKENS, PALETTE_TOKENS, parseThemes, shapeTokens } from '../shared/theme.js';
-import { headingWeight, inheritThemePreset, lookNavRole } from '../shared/themePresets.js';
+import { headingWeight, inheritThemePreset } from '../shared/themePresets.js';
 import { typeTokens } from '../shared/themeType.js';
 import { fieldEdge } from '../shared/themeColor.js';
 import { recipeAttributes } from '../shared/themeRecipes.js';
@@ -323,7 +323,7 @@ function brandingHead(html: string, presentation: HeadBranding, base?: string): 
   );
   const block = `<style id="mistri-branding-style">${css}</style><script type="application/json" id="mistri-branding">${json}</script>`;
   /* The recipes are menu values (parseThemes refused anything else), written as attributes the sheets answer. */
-  const looks = Object.entries(recipeAttributes(inheritThemePreset(theme), lookNavRole(theme)).attributes)
+  const looks = Object.entries(recipeAttributes(inheritThemePreset(theme)).attributes)
     .map(([name, value]) => ` ${name}="${escapeHtml(value)}"`)
     .join('');
   let out = html.replace(

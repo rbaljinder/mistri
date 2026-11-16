@@ -24,7 +24,7 @@ report: commandForm(
 ),
 ```
 
-See it in the sample (`examples/apps/lintel/views.ts:228`).
+See it in the sample (`examples/apps/lintel/views.ts:235`).
 Its command, `reportIssue`, says `targets: 'none'`: it names no record and inserts one.
 
 ![Lintel's Report a problem, as a resident: its sentence, what's wrong, the kind of problem, more detail, two checkboxes and Send report.](../../../assets/guide/command-form.webp)

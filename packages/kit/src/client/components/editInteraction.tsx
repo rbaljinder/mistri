@@ -28,7 +28,7 @@ const action = (target: EventTarget | null) =>
   );
 
 /** A blur is evidence to examine, not permission to submit. Focus and pointer
- * ownership are checked after Base UI has settled selection/return focus. */
+ * ownership are checked after the control has settled selection/return focus. */
 export function useEditInteraction(options: EditInteractionOptions) {
   const latest = useRef(options);
   latest.current = options;

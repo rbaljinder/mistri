@@ -1,8 +1,7 @@
-/* The house controls a free-form page draws (`@mistriwork/mistri/page`), dressed as the shell dresses its own: the form
-   controls' rules and the standalone primitives' ride this chunk, so a page that draws none fetches neither, and one
-   that does gets them before its first control paints (page.tsx loads each control through here). */
+/* The house controls a free-form page draws (`@mistriwork/mistri/page`), dressed as the shell dresses its own. What
+   they wear is in the shell's first stylesheet with the tokens; the answers to the reader's own settings ride this
+   chunk, so a page that draws no control does not fetch them (page.tsx loads each control through here). */
 import '@mistriwork/kit/client/formControls.css';
-import './pageControls.css';
 import { createElement, type ComponentProps } from 'react';
 import { Drawer as UiDrawer } from '@mistriwork/ui/Drawer.js';
 import { message } from '@mistriwork/kit/client/messages.js';

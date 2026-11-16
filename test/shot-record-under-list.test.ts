@@ -50,3 +50,40 @@ test("the resource's view decides which list that is, and an address already can
   assert.equal(canonical.shots[0].path, '/shop/jobs/12');
   assert.deepEqual(canonical.said, []);
 });
+
+test("a visitor's record stays under the list they are served where the canonical one is the office's", async () => {
+  const app = parseAppConfig(
+    {
+      id: 'shop',
+      name: 'Shop',
+      resources: { job: {} },
+      auth: { roles: { owner: { read: ['job'] } } },
+      views: { jobs: { kind: 'list', from: 'job', roles: ['owner'] }, catalogue: { kind: 'list', from: 'job' } },
+      nav: ['jobs', 'catalogue'],
+      home: 'catalogue',
+    },
+    'shop App',
+  );
+  const loaded = { path: 'shop.ts', sources: {}, pages: [], app } as never;
+  const open = async (reader: string | null | undefined) => {
+    const said: string[] = [];
+    const shots = await addresses(
+      ['/shop/catalogue/12'],
+      loaded,
+      appRoutes(loaded, schema),
+      async () => '1',
+      undefined,
+      mount,
+      [],
+      said,
+      reader,
+    );
+    return { path: shots[0].path, said };
+  };
+  // Signed out: the office's list is not theirs, so the record is shot where they asked for it.
+  assert.deepEqual(await open(null), { path: '/shop/catalogue/12', said: [] });
+  // The owner is served both: the canonical address, said.
+  assert.equal((await open('owner')).path, '/shop/jobs/12');
+  // A run that does not say who it is keeps the canonical address, as before.
+  assert.equal((await open(undefined)).path, '/shop/jobs/12');
+});

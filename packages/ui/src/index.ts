@@ -1,7 +1,9 @@
 /**
- * @mistriwork/ui: the primitives every dialog, menu, listbox, icon and form here is drawn with, over Base UI and dressed in
- * the house classes (`modal`, `dd-*`, `btn`, `form-field`, `date-field`, `mistri-icon`), which its own stylesheet styles
- * (`@mistriwork/ui/style.css`). A primitive reads no walk, no address, no transport and no copy catalog: its words, its
+ * @mistriwork/ui: the primitives every dialog, menu, listbox, icon and form here is drawn with, over UI SDK (`@ui-sdk/core`,
+ * `@ui-sdk/react`). A part is known by the `data-slot` it carries and its state by attributes (`data-variant`,
+ * `data-checked`, `data-open`), never by a class, and the package's own stylesheet dresses them
+ * (`@mistriwork/ui/controls.css`; `@mistriwork/ui/style.css` is that with the tokens and the reader's settings, for a page
+ * with no kit). A primitive reads no walk, no address, no transport and no copy catalog: its words, its
  * icons, its answers and its hooks are props (scripts/check-boundary.mjs holds the `ui` layer to importing only
  * itself).
  */
@@ -69,7 +71,6 @@ export {
 export { Badge, IconRows, PhotoTiles, type BadgeProps, type IconRowsProps, type PhotoTile, type PhotoTilesProps } from './HeroBlocks.js';
 export { digits, grouped, isoDay, maskNamed, masks, type Mask, type MaskName } from './masks.js';
 export { ComponentStyleScope } from './internal/ComponentStyleScope.js';
-export { layoutViewport, zoomAnchor } from './internal/anchor.js';
 export { popupContainer, drawPopupsIn } from './internal/popups.js';
 export { measureFrom, refreshViewportScale, viewportBox, viewportScale, viewportSize } from './internal/ruler.js';
 /* The standalone primitives added for the showcase's missing list: a switch, tabs, a drawer, a popover, an avatar disc and pagination. Preview, like the controls. */
@@ -90,9 +91,14 @@ export {
   UiKitProvider,
   defaultUiKit,
   defineUiKit,
+  dress,
+  extendUiKit,
   installUiKit,
   uiKitProblems,
+  useComponentScope,
+  usePopupHost,
   type SlotName,
+  type SlotProps,
   type UiKit,
   type UiKitSlots,
 } from './UiKit.js';

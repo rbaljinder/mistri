@@ -22,9 +22,9 @@ Show a table's rows the way the work divides, by tab, filter and sort, as a grid
   }),
 ```
 
-See it in the sample (`examples/apps/lintel/views.ts:143`) (some tabs left out); each tab names a segment, a condition declared once on the repair resource in `resources.ts`. [Sample Apps](/docs/examples/) says how to run Lintel.
+See it in the sample (`examples/apps/lintel/views.ts:150`) (some tabs left out); each tab names a segment, a condition declared once on the repair resource in `resources.ts`. [Sample Apps](/docs/examples/) says how to run Lintel.
 
-![Lintel's Repairs as a split: counted tabs from To triage to All, the rows beside the picked repair, its conversation and a Reply / Internal note composer.](../../../assets/guide/lists.webp)
+![Lintel's Repairs as a split: counted tabs from To review to All, the rows beside the picked repair, its conversation and a Reply / Internal note composer.](../../../assets/guide/lists.webp)
 
 ## What you'll see
 
@@ -51,12 +51,13 @@ See it in the sample (`examples/apps/lintel/views.ts:143`) (some tabs left out);
 | `board` | `{ by, primary, … }`: lanes of cards by one column; `category` puts a colored tag on each card, `footer: [{ column: 'close_date', icon: 'calendar' }, 'team']` a row of up to four facts under it | no board | Stable |
 | `split` | `{ detail, limit, row }`: the list beside the picked record; `row: { primary, lines, properties, badge, avatar }` says how a row reads, and the view's `shortcuts: { s: 'startWork' }` binds single keys to the picked record's actions (shown beside each verb, off while an input has focus) | no split | Stable |
 | `editable`, `totals`, `rowActions` | Cells edited in place, sums over the whole tab, a row's own actions | off | Stable |
+| `summary` | `summary: [metric('Vacant', { query: 'available' }), metric('Overdue', 'charge', { segment: 'overdue', measure: 'sum amount as owed' })]`: up to four figures in one strip between the list's name and its tabs, each a dashboard's [`metric`](/docs/dashboards/) in a dashboard's own words (`measure`, `query`, `target`, `figure`, `better`). A metric that names no resource counts the list's own; no `over`, since a list has no window to pick (**Preview**) | none | Preview |
 | `group` | `group: 'stage'`: the grid's rows under a head for each value, saying how many it holds and each of `totals` summed under its column, over the whole tab; a head folds its group. A grid only, not beside `order` | none | Stable |
 | `open`, `order`, `import` | `'drawer'` or `'modal'`; a column people drag rows by; Import from CSV | page; none; off | Stable |
 | `opens` | a reference column: a row opens the record it names, so a list of `ticket_watcher` opens each ticket; a grid only | the row | Stable |
 | `empty` | `{ title, description?, action? }`: what the list says while it has no row, as it opens; a tab says its own with `{ segment, empty }` | "No work orders yet." | Stable |
 
-A tab's `query` is the [query language](/docs/query/) without the table name: `status = open and due_on < today`, `close_date = next 90 days`, `account_id.rating = hot`. With the generated `mistri-schema.d.ts` beside the App, every query string is typed: `` `amout` is not a column of opportunity `` is a type error at the string. That needs exactly one App's schema in the TypeScript project; with none or two, the types stand down and `check` judges the strings ([the limit](/docs/app-dsl/#typed-query-strings)). Every key: [views reference](/docs/dsl-views/#viewskindlisttabs). Each presentation is pictured in the [blocks gallery](/docs/blocks/).
+A tab's `query` is the [query language](/docs/query/) without the table name: `status = open and due_on < today`, `close_date = next 90 days`, `account_id.rating = hot`. With the generated `mistri-schema.d.ts` beside the App, every query string is typed: `` `amout` is not a column of opportunity `` is a type error at the string. That needs exactly one App's schema in the TypeScript project; with none or two, the types stand down and `check` judges the strings ([the limit](/docs/app-dsl/#typed-query-strings)). Every key: [views reference](/docs/dsl-views/#viewskindlisttabs). Each presentation is pictured in the [blocks gallery](/docs/blocks/). The search box is the list's name column among its `filters`: a list whose `filters` hold no column of text it can search has no box. `resources.*.search` is not a list of columns to search: it plugs in a search provider (`{ connection, fields }`, [Search](/docs/services/)) whose index the box, the pickers and the palette then ask.
 
 An empty list says one of three things. A search or filter past the tab that found nothing says No matches, with Clear. Otherwise a tab with an `empty` of its own says it (`{ segment: 'overdue', empty: { title: 'No overdue jobs' } }`); the first tab, where the list opens, says the list's `empty`; and any other tab names itself ("No work orders in Overdue right now."). An `empty.action` opens a view by key, or a list on one of its tabs by the tab's address word: `{ label: 'See overdue', to: { view: 'work-orders', tab: 'overdue' } }`. A headline link and a note's action take the same `to`.
 

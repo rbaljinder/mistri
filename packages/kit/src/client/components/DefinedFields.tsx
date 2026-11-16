@@ -226,8 +226,8 @@ export function DefinedInputs({
           money: field.type === 'money',
         });
         return (
-          <div key={field.key} className={`insert-field form-field${error ? ' missing is-invalid' : ''}`}>
-            <label className="form-field-label">
+          <div key={field.key} data-slot="field" data-invalid={error ? '' : undefined} className={`insert-field${error ? ' missing' : ''}`}>
+            <label data-slot="field-label">
               {field.label}
               {field.required && <span className="req">*</span>}
             </label>
@@ -270,7 +270,7 @@ export function DefinedInputs({
               />
             )}
             {field.help && (
-              <p id={helpId} className="form-field-hint">
+              <p id={helpId} data-slot="field-description">
                 {field.help}
               </p>
             )}

@@ -98,7 +98,8 @@ export function showNoWorkspace(name, signIn) {
     el('div', { class: 'welcome' }, [
       el('h1', {}, [say('noWorkspaceHere')]),
       el('p', {}, [say('noWorkspaceLivesAt')]),
-      el('a', { class: 'btn', href: signIn }, [say('signIn')]),
+      // A link dressed as the package's filled button: the part's name and variant, which its stylesheet dresses.
+      el('a', { 'data-slot': 'button', 'data-variant': 'solid', href: signIn }, [say('signIn')]),
     ]),
   );
 }

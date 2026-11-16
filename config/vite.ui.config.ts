@@ -1,7 +1,7 @@
 /**
- * `@mistriwork/mistri/ui`, `@mistriwork/mistri/ui/testing` and `@mistriwork/mistri/page` as the published
- * package carries them: dist/ui, for a custom component's or a free-form
- * page's own tests and nothing else.
+ * `@mistriwork/mistri/ui`, `@mistriwork/mistri/ui/testing`, `@mistriwork/mistri/page` and
+ * `@mistriwork/mistri/behaviors` as the published package carries them: dist/ui, for a custom component's or a
+ * free-form page's own tests and nothing else.
  *
  * In the page a component never loads these files. Its bare `@mistriwork/mistri/ui`
  * is served as the path of the page's own copy of the SDK
@@ -40,11 +40,16 @@ export default defineConfig({
     minify: false,
     sourcemap: true,
     lib: {
-      entry: { index: resolve(SDK, 'index.ts'), testing: resolve(SDK, 'testing.tsx'), page: resolve(SDK, 'page.tsx') },
+      entry: {
+        index: resolve(SDK, 'index.ts'),
+        testing: resolve(SDK, 'testing.tsx'),
+        page: resolve(SDK, 'page.tsx'),
+        behaviors: resolve(SDK, 'behaviors.ts'),
+      },
       formats: ['es'],
     },
     rolldownOptions: {
-      /* Base UI's CommonJS helpers must share the author's ESM React too. */
+      /* A dependency's CommonJS helper (use-sync-external-store) must share the author's ESM React too. */
       plugins: [esmExternalRequirePlugin({ external: [/^react(\/|$)/, /^react-dom(\/|$)/, /^@testing-library\//] })],
       output: { entryFileNames: '[name].js', chunkFileNames: 'shared-[hash].js' },
     },

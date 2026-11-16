@@ -45,3 +45,30 @@ test('no auth.me, or a tenant App, keeps the throwaway addresses; a role past th
   const many = await devPeople(app({ me: { from: 'mechanic', column: 'email' } }), ['a', 'b', 'c', 'd'], registry);
   assert.deepEqual([...many.keys()], ['a', 'b', 'c']);
 });
+
+test("a role with a table of its own people takes a row of that table, not the next row of auth.me's", async () => {
+  const patient = {
+    id: 'patients',
+    name: 'patients',
+    columns: [
+      { name: 'id', type: 'INTEGER', primaryKey: true },
+      { name: 'name', type: 'TEXT' },
+      { name: 'email', type: 'TEXT' },
+    ],
+  };
+  const both = {
+    list: () => [{ id: 'shop', name: 'shop' }],
+    open: async () => ({
+      schema: { tables: [mechanic, patient] },
+      adapter: {
+        query: async (asked: { table: string }) =>
+          asked.table === 'patients' ? { rows: [{ id: 1, name: 'Ana Ruiz', email: 'ana@clinic.test' }] } : { rows },
+      },
+    }),
+  } as unknown as Registry;
+  const people = await devPeople(app({ me: { from: 'mechanic', column: 'email' }, roles: {} }), ['mechanic', 'patient'], both);
+  assert.deepEqual(Object.fromEntries(people), {
+    mechanic: { email: 'rosa@spoke.test', name: 'Rosa Delgado' },
+    patient: { email: 'ana@clinic.test', name: 'Ana Ruiz' },
+  });
+});

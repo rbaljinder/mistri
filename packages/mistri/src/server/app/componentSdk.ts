@@ -1,8 +1,9 @@
 /**
  * The modules a custom component imports by bare name — `react`, its JSX
- * runtime, `react-dom`, `@mistriwork/mistri/ui`, `@mistriwork/mistri/page` — as the browser receives them: a few
- * lines each over the page's own copy, which the page puts on one frozen
- * global when it first draws a component (components/sdk/host.tsx). A
+ * runtime, `react-dom`, `@mistriwork/mistri/ui`, `@mistriwork/mistri/page`, `@mistriwork/mistri/behaviors` — as the
+ * browser receives them: a few lines each over the page's own copy, which the page puts on one frozen
+ * global when it first draws a component (components/sdk/host.tsx), or fetches when the module is first asked for
+ * (the behaviors: `LAZY_HOST_MODULES`). A
  * component's bare imports are written as these paths when it is served
  * (http/componentRoutes.ts), so no page needs an import map for them.
  *
@@ -16,7 +17,16 @@
  */
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { HOST_GLOBAL, HOST_MODULES, PAGE_EXPORTS, SERVED_MODULES, UI_EXPORTS, type HostModule } from '../../shared/uiSdk.js';
+import {
+  BEHAVIORS_EXPORTS,
+  HOST_GLOBAL,
+  HOST_MODULES,
+  LAZY_HOST_MODULES,
+  PAGE_EXPORTS,
+  SERVED_MODULES,
+  UI_EXPORTS,
+  type HostModule,
+} from '../../shared/uiSdk.js';
 import { FROM_SOURCE } from '@mistriwork/engine/server/devclient.js';
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
@@ -44,7 +54,8 @@ function packagedExports(): Readonly<Record<HostModule, readonly string[]>> {
     }
     if (
       JSON.stringify(manifest['@mistriwork/mistri/ui']) !== JSON.stringify(UI_EXPORTS) ||
-      JSON.stringify(manifest['@mistriwork/mistri/page']) !== JSON.stringify(PAGE_EXPORTS)
+      JSON.stringify(manifest['@mistriwork/mistri/page']) !== JSON.stringify(PAGE_EXPORTS) ||
+      JSON.stringify(manifest['@mistriwork/mistri/behaviors']) !== JSON.stringify(BEHAVIORS_EXPORTS)
     )
       throw new Error('The SDK exports do not match this build.');
     return (packagedNames = manifest as Record<HostModule, string[]>);
@@ -58,6 +69,7 @@ export function exportNames(module: HostModule): readonly string[] {
   if (!FROM_SOURCE) return packagedExports()[module];
   if (module === '@mistriwork/mistri/ui') return UI_EXPORTS;
   if (module === '@mistriwork/mistri/page') return PAGE_EXPORTS;
+  if (module === '@mistriwork/mistri/behaviors') return BEHAVIORS_EXPORTS;
   /* The CommonJS exports object: what the page's bundle hands a named import.
      React's `__…INTERNALS…` are not a component's to reach. */
   return Object.keys(createRequire(import.meta.url)(module) as object).filter(
@@ -72,9 +84,13 @@ export function hostModuleSource(file: string): string | undefined {
   let source = made.get(module);
   if (source === undefined) {
     const names = exportNames(module);
+    /* A module the page fetches on demand is waited for: the component's own module does not run until it is here. */
+    const read = LAZY_HOST_MODULES.includes(module)
+      ? `const m = await globalThis.${HOST_GLOBAL}?.load?.[${JSON.stringify(module)}]?.();`
+      : `const m = globalThis.${HOST_GLOBAL}?.modules?.[${JSON.stringify(module)}];`;
     source = [
       `// ${module}, the page's own copy, for a custom component. Served by mistri; see packages/mistri/src/server/app/componentSdk.ts.`,
-      `const m = globalThis.${HOST_GLOBAL}?.modules?.[${JSON.stringify(module)}];`,
+      read,
       `if (!m) throw new Error(${JSON.stringify(`mistri: ${module} is the page's, and the page has not provided it; a custom component is loaded by the section that draws it.`)});`,
       'export default m.default ?? m;',
       `export const { ${names.join(', ')} } = m;`,

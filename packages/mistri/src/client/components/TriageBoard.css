@@ -9,8 +9,14 @@
      card's words rather than pushing the last lane past the edge: beside a side menu at 1280, four lanes at 15rem
      and two folded strips stood 80px wider than the room, the fourth lane's sum behind the fade and the folded
      strips out of sight. Only a board with more lanes than fit at the floor scrolls, with the fade at its edge. */
-  --lane-min: 15rem;
-  --lane-floor: 12rem;
+  --lane-min: 15.5rem;
+  /* The floor is 12rem while every lane fits the room at that width: four lanes beside a side menu give way together
+     and none stands behind the fade. A board with more lanes than fit even so scrolls whatever their width, so its
+     lanes keep the width a card's quiet line (three facts joined) is read on one line at; squeezed to 12rem they
+     broke to a fact a line and every card stood a third taller. `--lanes` and `--lanes-folded` are the board's own
+     count (TriageBoard.tsx); the room is the board's width, which is why it is a size container. */
+  --lane-room: calc(var(--lanes, 1) * 12rem + var(--lanes-folded, 0) * 44px + (var(--lanes, 1) + var(--lanes-folded, 0) - 1) * var(--lane-gap));
+  --lane-floor: clamp(12rem, (var(--lane-room) - 100cqw) * 999, var(--lane-min));
   --lane-max: 320px;
   position: relative;
   display: flex;
@@ -18,7 +24,7 @@
   gap: var(--lane-gap);
   overflow-x: auto;
   padding: var(--space-3) 0 var(--space-3h);
-  container-type: scroll-state;
+  container-type: inline-size scroll-state;
 }
 
 /* More lanes than the window holds: the far edge fades while there is more
@@ -139,6 +145,35 @@
 .triage-card-title { font-size: var(--text-base); }
 .triage-card-second, .triage-card-subtitle, .triage-card-meta { color: var(--ink-muted); font-size: var(--text-sm); }
 .triage-card-meta { font-family: var(--mono); font-size: var(--text-xs); }
+/* What the card is and where, on one quiet line under its name: its kind, its line and its facts, a middle dot between
+   them. Each keeps to one line and the line wraps between them, never inside one. They were a chip over the name, a
+   line under it and a foot under a rule: four levels on a card whose name is the one thing read first. The dot stands
+   in each part's own leading padding, which a negative margin puts outside the line's start: the line clips there, so
+   a part that starts a line (the first, or one that wrapped) has no dot before it. The same room after a part is what
+   the next one's margin takes back, so two on a line stand one dot apart. */
+.triage-card-facts {
+  --fact-sep: var(--space-4);
+  display: flex; flex-wrap: wrap; align-items: center; align-self: stretch; min-width: 0; overflow-x: clip;
+  color: var(--ink-muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums;
+}
+.triage-card-facts > :not(.visually-hidden) {
+  position: relative; display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; max-width: 100%;
+  margin-inline-start: calc(-1 * var(--fact-sep)); padding-inline: var(--fact-sep); white-space: nowrap;
+}
+.triage-card-facts > :not(.visually-hidden)::before {
+  /* Drawn, not said: the dot has an empty alternative, so a card is still named by its words alone. */
+  content: '\b7' / ''; position: absolute; inset-inline-start: 0; width: var(--fact-sep); text-align: center; color: var(--ink-subtle);
+}
+/* A toned value on the card's line is a dot in its tone and its word in that ink, never a pill: the line is one run
+   of words, and a pill in it was the loudest thing on the card. A value with a mark of its own keeps the mark. */
+.triage-card-facts .tone {
+  display: inline-flex; align-items: center; gap: var(--space-2); padding: 0; border-radius: 0; background: none;
+  font: inherit; letter-spacing: inherit; text-transform: none;
+}
+.triage-card-facts .tone:not(.tone-neutral, .tone-marked)::before {
+  content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+}
+.triage-card-facts .tone-neutral { color: inherit; }
 /* A card's kind, over its title: a chip in one of the theme's series colors, which a look may also draw as the card's
    stripe (lumenLook.css). The ink is the series deepened by the text's as an avatar's initials are (features.css), 45%
    of it: at 72%, as the tone pills', Mono's grey eighth series read 3.0:1 and a custom theme's amber 4.3:1, and no
@@ -152,20 +187,33 @@
 .triage-card.cat-c6 { --cat-ink: var(--chart-6, var(--link)); }
 .triage-card.cat-c7 { --cat-ink: var(--chart-7, var(--ink-muted)); }
 .triage-card.cat-c8 { --cat-ink: var(--chart-8, var(--ink-muted)); }
-.triage-card-category {
-  max-width: 100%; padding: 0 var(--space-3); border-radius: 999px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font: 600 var(--text-xs)/1.75 var(--sans);
-  color: color-mix(in srgb, var(--cat-ink) 45%, var(--ink));
-  background: color-mix(in srgb, var(--cat-ink) 13%, transparent);
+/* The kind leads the card's line as a word in its series colour: on the card's own ground it needs no tint to be
+   told from the facts after it, and a pill there was a second thing to read before the name. */
+.triage-card-category { font-weight: 500; color: color-mix(in srgb, var(--cat-ink) 45%, var(--ink)); }
+/* The category's colour is said beside its word, a dot before it: a stripe down the card's edge with no key left
+   the colour to be guessed (two first-time readers asked what pink and teal meant). The stripe, where a look draws
+   one, is that dot's echo. It is the word's `::after`, set first in its row: the line's separator is each fact's `::before`. */
+.triage-card-facts > .triage-card-category::after {
+  content: '';
+  order: -1;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cat-ink);
 }
-/* The foot: facts in a row, each a mark and its value, a person at the right end; it wraps rather than overflowing. */
-.triage-card-foot {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); align-self: stretch;
-  margin-top: var(--space-2); color: var(--ink-muted); font-size: var(--text-sm);
-}
-.triage-card-fact { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .triage-card-fact-icon { flex: none; color: var(--ink-subtle); }
-.triage-card-fact.is-person { margin-left: auto; }
+/* The foot: the card's next step and who has it, at the two ends of one line. It is outside the button that opens the
+   card (a button holds no button) and over that button's hit area, which it lets through everywhere but on its own
+   parts; it reaches the card's edge under the ⋯'s column, which only the words above keep clear of. */
+.triage-card-foot {
+  position: relative; display: flex; align-items: center; gap: var(--space-3); align-self: stretch;
+  margin-top: var(--space-2); pointer-events: none;
+}
+.triage-card-foot > * { pointer-events: auto; }
+.triage-card.has-menu > .triage-card-foot { margin-inline-end: calc(var(--card-pad, var(--space-3)) - var(--space-7)); }
+.triage-card-next { max-width: 100%; }
+.triage-card-fact.is-person { display: inline-flex; align-items: center; margin-inline-start: auto; }
 .triage-card-fact.is-person .avatar-text { display: none; }
 /* A New record in a lane: a quiet "+" at the head's end, the size a finger is promised. */
 .triage-lane-new {

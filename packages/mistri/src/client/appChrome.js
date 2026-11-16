@@ -9,6 +9,7 @@
  * the App's payload as the shell's `appChrome`. Nothing here runs at import:
  * every page names the chrome, and a test that reads one part loads no other.
  */
+import { personFacing } from '@mistriwork/kit/client/audience.js';
 import { createElement } from 'react';
 import { AssistantTrigger } from './components/AssistantTrigger.js';
 import { element, mount, queryClient, unmount } from '@mistriwork/kit/client/components/mount.js';
@@ -37,7 +38,7 @@ import { finishStartup } from '@mistriwork/kit/client/startup.js';
 import { lookSheetReady } from '@mistriwork/kit/client/visualTheme.js';
 import { settingsEntries } from './appSettings.js';
 import { onDemand, sayUnavailable } from '@mistriwork/kit/client/components/onDemand.js';
-import { activeApp, appFollowsSaves, appLoadProblem, inAppMode } from './appState.js';
+import { activeApp, appFollowsSaves, appLoadProblem, inAppMode, setProfileOffered } from './appState.js';
 import { sayUnknownIcons } from '@mistriwork/kit/client/components/Icon.js';
 import { applyAppTheme, retireAppTheme, shellPlacement } from './appTheme.js';
 import { loadSavedFilters } from './applist.js';
@@ -298,6 +299,7 @@ export async function showAccount(me, kit) {
       return;
     }
     if (!me.signedIn || !me.who) return;
+    setProfileOffered(me.accountProfile === true);
     const navigationApp = activeApp();
     const account = createElement(AccountControl, {
       key: captureAccountIdentity().epoch,
@@ -388,7 +390,8 @@ export function appMenuShell() {
   const mobileDrawer = Boolean(app && rooms && !noMenu && placement !== 'top' && compactAppNavigation.matches);
   const topMode = Boolean(app && rooms && (placement === 'top' || noMenu) && !mobileDrawer);
   shellBody().classList.toggle('app-hide-menu', appMode && noMenu);
-  shellBody().classList.toggle('app-hide-search', appMode && !headerSearchShown(app?.ui.shell?.search));
+  /* The App's own public is given no search across every table (kit audience.ts): a list they may search has its own box. */
+  shellBody().classList.toggle('app-hide-search', appMode && (!headerSearchShown(app?.ui.shell?.search) || personFacing()));
   shellBody().classList.toggle('app-hide-menu-search', appMode && app?.ui.shell?.menuSearch !== true);
   shellBody().classList.toggle('app-custom-gutter', appMode && app?.ui.shell?.gutter !== undefined);
   shellBody().classList.toggle('app-topnav', topMode);

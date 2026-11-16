@@ -415,7 +415,21 @@ function cutAndTidy(text: string, ranges: Array<[number, number]>): string {
     };
     for (const { holder } of objectsUnder(text, ANCHORS)) visit(holder, { start: 0, end: text.length, props: [] });
   }
-  return text;
+  return closedEmpties(text);
+}
+
+/* A resource whose last rule went stays, since the App names it, and is written `staff: {},`: braces left a line
+   apart read as a rule someone forgot. Found in the masked text, so a brace inside a string or a comment is not one. */
+function closedEmpties(text: string): string {
+  const masked = maskedText(text);
+  if (masked.length !== text.length) return text;
+  let out = '';
+  let from = 0;
+  for (const found of masked.matchAll(/\{[ \t]*\r?\n\s*\}/g)) {
+    out += `${text.slice(from, found.index)}{}`;
+    from = found.index + found[0].length;
+  }
+  return out + text.slice(from);
 }
 
 /* Brackets that close in order and no comma standing alone (`{ ,`, `, ,`): the shape the rewrite must keep. */
@@ -680,6 +694,49 @@ function tablesAround(text: string, at: number): string[] {
  * `query:` written word for word, and the resource's own object is found
  * once; anything else is said and left.
  */
+/**
+ * Delete each command input label that is its key made words (commandRestated.ts): `label: 'Reason'` on `reason`.
+ * The label is found in the commands module beside its key (`reason: field.text({ label: 'Reason', … })`); where the
+ * same key and words are written twice, or not as a literal, it is left and said.
+ */
+export function fixCommandLabels(warnings: readonly string[], file: string | undefined): FixResult {
+  const result: FixResult = { fixed: [], left: [] };
+  const named = warnings.flatMap((warning) => {
+    const found = /^command "([^"]+)" \[restated\]: input "([^"]+)" says label "((?:[^"\\]|\\.)*)"/.exec(warning);
+    return found ? [{ command: found[1], path: found[2], label: found[3] }] : [];
+  });
+  if (!named.length) return result;
+  const what = (rule: (typeof named)[number]) => `command "${rule.command}": input "${rule.path}" label "${rule.label}"`;
+  if (!file) return { fixed: [], left: named.map((rule) => `${what(rule)}: no commands module found; delete it by hand`) };
+  let text = readFileSync(file, 'utf8');
+  const name = relative(process.cwd(), file) || file;
+  const escaped = (words: string) => words.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  for (const rule of named) {
+    const key = rule.path.slice(rule.path.lastIndexOf('.') + 1);
+    /* The key, its field call, and the label inside the call's first object: nothing between them but that object's
+       earlier keys. A label after a nested brace is another object's, and is not matched. */
+    const pattern = new RegExp(
+      `(\\b${escaped(key)}\\s*:\\s*field\\.\\w+\\((?:[^(){}]*,\\s*)?\\{[^{}]*?)\\blabel\\s*:\\s*(['"\`])${escaped(rule.label)}\\2\\s*,?[ \\t]*`,
+      'g',
+    );
+    const places = [...text.matchAll(pattern)];
+    if (places.length !== 1) {
+      result.left.push(
+        `${what(rule)}: ${places.length ? `written in ${places.length} places` : 'not found as written'}; delete it by hand`,
+      );
+      continue;
+    }
+    text = text.replace(pattern, '$1');
+    result.fixed.push(`${name}: ${what(rule)}: deleted`);
+  }
+  if (result.fixed.length) {
+    /* An object the label was alone in says nothing: `field.text({})` is `field.text()`, and `field.choice([…], {})` loses its comma too. */
+    text = text.replace(/(field\.\w+\()\{\s*\}\)/g, '$1)').replace(/,\s*\{\s*\}\)/g, ')');
+    writeFileSync(file, text);
+  }
+  return result;
+}
+
 export function fixRepeatedQueries(app: AppDef, schema: DatabaseSchema, dir: string): FixResult {
   const result: FixResult = { fixed: [], left: [] };
   const repeated = repeatedQueries(app, schema);

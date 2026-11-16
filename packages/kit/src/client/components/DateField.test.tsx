@@ -1,13 +1,9 @@
 /* The field's behaviour is @mistriwork/ui's (packages/ui/src/DateField.test.tsx); here, what the kit lends it. */
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { DateField } from './DateField.js';
 
-vi.mock('@mistriwork/ui/internal/anchor.js', () => ({
-  zoomAnchor: () => null,
-  layoutViewport: () => ({ x: 0, y: 0, width: 1200, height: 900 }),
-}));
 afterEach(cleanup);
 
 test("the field says the catalog's words and draws the kit's calendar icon", async () => {

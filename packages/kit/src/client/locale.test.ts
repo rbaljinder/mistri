@@ -313,10 +313,12 @@ describe('relative days', () => {
     expect(say('2026-09-01')).toEqual({ text: '2 days ago', title: 'Tuesday, September 1, 2026' });
     expect(say('2026-09-17'), 'two weeks is still near').toEqual({ text: 'in 2 weeks', title: 'Thursday, September 17, 2026' });
     expect(say('2026-09-18'), 'past two weeks the day itself').toEqual({ text: 'Sep 18, 2026', title: 'Friday, September 18, 2026' });
-    /* A moment of yesterday, today or tomorrow keeps its time; further off the day is enough to read. */
+    /* A moment of yesterday or today, and any still to come, keeps its time; further back the day is enough to read. */
     expect(say('2026-09-02 14:05:00', true)).toEqual({ text: 'yesterday, 2:05 PM', title: 'Wednesday, September 2, 2026 at 2:05 PM' });
     expect(say('2026-08-30 14:05:00', true)?.text).toBe('4 days ago');
-    expect(say('2026-07-30 14:05:00', true)?.text).toBe('Jul 30, 2026, 2:05 PM');
+    expect(say('2026-09-05 09:30:00', true)?.text, 'one still to come keeps its time').toBe('in 2 days, 9:30 AM');
+    expect(say('2026-07-30 14:05:00', true)?.text, 'far off: the weekday, and no year while it is this one').toBe('Thu, Jul 30, 2:05 PM');
+    expect(say('2025-07-30 14:05:00', true)?.text).toBe('Wed, Jul 30, 2025, 2:05 PM');
     expect(say('2026-09-02 14:05:00')?.text, 'a column of days drops the time').toBe('yesterday');
     expect(say('14:05')).toBeNull();
     expect(say('soon')).toBeNull();

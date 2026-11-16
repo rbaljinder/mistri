@@ -1,10 +1,10 @@
 /**
  * What every form control says about its frame, once: the label, the hint, the problem, the word for an optional
- * field and a help tip. `frameOf` turns it into the Field's props, so a control never joins them by hand.
+ * field and a help tip. internal/Frame.tsx draws it around the control, so a control never joins them by hand.
  */
 import type { ReactNode } from 'react';
 import type { AnswerKind } from './Field.js';
-import { HelpTip, type HelpTipProps } from './FormParts.js';
+import type { HelpTipProps } from './FormParts.js';
 
 export interface FieldFrame {
   label: ReactNode;
@@ -26,20 +26,4 @@ export interface FieldFrame {
   /** The control's id; one is made when not given. */
   id?: string;
   className?: string;
-}
-
-export function frameOf(p: FieldFrame) {
-  return {
-    label: p.label,
-    hint: p.hint,
-    problem: p.problem,
-    required: p.required,
-    labelHidden: p.labelHidden,
-    id: p.id,
-    kind: p.kind,
-    className: p.className,
-    optional: p.optional,
-    labelAside: p.tip ? <HelpTip {...p.tip} /> : undefined,
-    reserve: p.reserve ?? true,
-  };
 }

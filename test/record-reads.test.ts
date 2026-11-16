@@ -168,11 +168,25 @@ test("an inferred page's strip counts every tab in one read, and its history is 
     opened(HISTORY_TAB).map((read) => read.path),
     ['/api/record-history', '/api/counts'],
   );
-  // A declared page's history is a section of its own and its tabs are not counted: nothing changes there.
+  // A declared page's history is a section of its own, and its strip counts its tabs as an inferred page's does:
+  // the very body the strip asks (PageSections.tsx). A list it stands alone asks for its own.
   const declared = recordPageReads(names, { ...page, id: 'account' }, account, plans, { id: 1 }, { rows: 10, history: true }).reads;
   assert.deepEqual(
     declared.map((read) => read.path),
-    ['/api/view/run', '/api/record-history'],
+    ['/api/view/run', '/api/record-history', '/api/counts'],
+  );
+  assert.deepEqual(declared.at(-1)?.body, counts);
+  const stacked = recordPageReads(
+    names,
+    { ...page, id: 'account', listTabs: false },
+    account,
+    plans,
+    { id: 1 },
+    { rows: 10, history: false },
+  ).reads;
+  assert.deepEqual(
+    stacked.filter((read) => read.path === '/api/counts').map((read) => read.body),
+    counts.items.map((item) => ({ items: [item], countLimit: RELATED_COUNT_LIMIT })),
   );
   // A list that is not one hop back to this record has no question to ask.
   assert.equal(relatedCountQuestion(schema, { kind: 'list', from: 'deal' }, account, { id: 1 }), undefined);

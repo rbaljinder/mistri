@@ -71,7 +71,8 @@ export function TenantInvitations({
       </header>
       <p className="note">{say('invitationsEnrollAnExisting')}</p>
       {view.message && <p role={view.phase === 'unknown' ? 'alert' : 'status'}>{view.message}</p>}
-      {view.loading && <p role="status">{say('loadingInvitationInformation')}</p>}
+      {/* One thing is said at a time (TenantAdministration.tsx): an outcome standing above is the one to hear. */}
+      {view.loading && <p role={view.message ? undefined : 'status'}>{say('loadingInvitationInformation')}</p>}
       {view.result && (
         <p className="administration-receipt">
           {say('receiptChangeConfirmed', { receiptId: view.result.receiptId, at: formatDateTime(new Date(view.result.completedAt)) })}

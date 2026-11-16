@@ -27,7 +27,7 @@ layer of [the import boundary](boundary.md) (the sixth is `create-mistri`), each
 | `@mistriwork/engine` | `packages/engine` | the adapters, the server's data paths, the HTTP kit, the shared rules; no React |
 | `@mistriwork/ui` | `packages/ui` | the standalone primitives (Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon, DateField), the tokens and the primitives' stylesheet, and the zoom-aware ruler; words and icons as props, no server |
 | `@mistriwork/kit` | `packages/kit` | the shared React client: the page, the boot and the shell each product builds its client from (mistri here, the database browser in its own repository) |
-| `@mistriwork/mistri` | `packages/mistri` | the App framework and its bin, `mistri`; its published types and JSON schemas (`schema/`), `@mistriwork/mistri/ui`, `@mistriwork/mistri/react` |
+| `@mistriwork/mistri` | `packages/mistri` | the App framework and its bin, `mistri`; its published types and JSON schemas (`schema/`), `@mistriwork/mistri/ui`, `@mistriwork/mistri/behaviors`, `@mistriwork/mistri/react` |
 | `create-mistri` | `packages/create-mistri` | `npm create mistri`: a bin that runs `mistri new` from the `@mistriwork/mistri` it depends on, at the same version |
 | `@mistriwork/cloudflare` | `packages/cloudflare` | the Worker glue `mistri deploy init cloudflare` writes against; imports nothing of the repository |
 
@@ -235,17 +235,18 @@ nothing has to be built first. The build is the maintainer's, never the user's.
   record page (`slots`, `rooms`) — through `shellMode.ts`, so no kit component
   imports a product. Each page preloads its chunks (the kit's preset,
   `surfaces`): an App's the shell and the chrome.
-- **Headless controls** come from Base UI, dressed in the tool's own classes:
+- **Headless controls** come from UI SDK (`@ui-sdk/react`), each part known by its `data-slot` and dressed by that:
   `Modal.tsx` for every dialog, `DropMenu.tsx`/`OverflowMenu.tsx`/`ThMenu.tsx`/
   `TopNav.tsx` for every menu, `Dropdown.tsx` for the listbox, `Typeahead.tsx`
   for every box-with-a-list. The ones that read no walk, address or catalog
   are `@mistriwork/ui`'s (`packages/ui/src/`): they take their words as props, and
   the kit supplies its catalog's where a caller names none (the kit's
   `Dropdown.tsx`). OverflowMenu, ThMenu and TopNav read the walk and stay with
-  the shells. Popups are anchored through `anchor.ts`, which
-  measures on the zoom-aware ruler (`packages/ui/src/internal/ruler.ts`, which core.js
-  re-exports) because Floating UI does not know about the
-  density zoom on the root.
+  the shells. UI SDK places its own popups, in the browser's top layer. What the
+  kit measures by hand (the peek card, the grid's keyboard, a folded row of
+  tabs) reads the zoom-aware ruler (`packages/ui/src/internal/ruler.ts`, which
+  core.js re-exports), because a rectangle read off the page does not know
+  about the density zoom on the root.
 - **A part that throws stays in its place.** Every page section, dashboard
   section and room, and every root `mount` draws, stands behind an error
   boundary (`components/ErrorBoundary.tsx`) that draws the shared problem note
@@ -268,7 +269,11 @@ nothing has to be built first. The build is the maintainer's, never the user's.
   imports are written, as each file is served, as absolute paths (under the
   base path) to small modules over the page's own copies — no import map, so
   a host page that mounts an App needs none (`packages/mistri/src/server/app/componentSdk.ts`,
-  `components/sdk/host.tsx`), so there is one React and one query cache. The
+  `components/sdk/host.tsx`), so there is one React and one query cache.
+  `@mistriwork/mistri/behaviors` (what a component is built on where a reader
+  moves or edits something in place) is a host module too, and the one the page
+  fetches only when a component first imports it: its served module waits for
+  the page's copy, so no first paint carries a drag. The
   SDK (`components/sdk/`) reaches the page only through a host interface —
   the page's over the session endpoints, a test's over fixtures — never the
   walk's globals; `Value`'s drawing rules moved to `components/Dressed.tsx`
@@ -339,7 +344,8 @@ nothing has to be built first. The build is the maintainer's, never the user's.
 
 ## What ships
 
-mistri's `dist/ui` is `@mistriwork/mistri/ui` and `@mistriwork/mistri/ui/testing` built for a component's
+mistri's `dist/ui` is `@mistriwork/mistri/ui`, `@mistriwork/mistri/ui/testing`, `@mistriwork/mistri/page` and
+`@mistriwork/mistri/behaviors` built for a component's
 own tests (`config/vite.ui.config.ts`); the page never loads it. mistri's `dist/embed` is
 `@mistriwork/mistri/react` (`config/vite.embed.config.ts`, `packages/mistri/src/embed/`): the same client
 built once more for a host's React app, with `shellHost.ts`, `addressMount.js`

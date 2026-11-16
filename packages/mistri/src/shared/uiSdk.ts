@@ -20,6 +20,7 @@ export const HOST_MODULES = {
   'react-dom': 'react-dom.js',
   '@mistriwork/mistri/ui': 'ui.js',
   '@mistriwork/mistri/page': 'page.js',
+  '@mistriwork/mistri/behaviors': 'behaviors.js',
 } as const;
 export type HostModule = keyof typeof HOST_MODULES;
 /** The host modules once each. Pure, so the page's bundle, which reads only `HOST_GLOBAL` here, drops it. */
@@ -27,6 +28,13 @@ export const SERVED_MODULES = /* @__PURE__ */ Object.keys(HOST_MODULES) as HostM
 
 /** The global the page puts its modules on, read only by the served host modules. */
 export const HOST_GLOBAL = '__mistri';
+
+/**
+ * The host modules the page fetches only when a component asks: a page's first components import `ui` or `page`, which
+ * the page holds already, and few import the behaviors, which no page pays for until one does. The served module
+ * waits for the page's copy (`load`) where the others read it (`modules`).
+ */
+export const LAZY_HOST_MODULES: readonly HostModule[] = ['@mistriwork/mistri/behaviors'];
 
 /** Every value `@mistriwork/mistri/ui` exports. */
 export const UI_EXPORTS = [
@@ -143,6 +151,10 @@ const PAGE_ONLY = [
   'Tooltip',
   'defineUiKit',
   'defaultUiKit',
+  'dress',
+  'extendUiKit',
+  'useComponentScope',
+  'usePopupHost',
 ] as const;
 
 /**
@@ -152,6 +164,49 @@ const PAGE_ONLY = [
 export const PAGE_EXPORTS = [...UI_EXPORTS, ...PAGE_ONLY] as const;
 
 /** Where an App's compiled components are served: `/{app}/_components/<file>`. */
+/**
+ * Every value `@mistriwork/mistri/behaviors` exports: the React parts of the behaviors a component is built on
+ * (@mistriwork/ui's behaviors/index.ts) and the helpers their callers need. The primitives under them are UI SDK's to
+ * type and are not a component's to reach; a test holds the list to the module that implements it.
+ */
+export const BEHAVIORS_EXPORTS = [
+  'Days',
+  'DaysDay',
+  'addDays',
+  'addMonths',
+  'dayAt',
+  'inMonth',
+  'localToday',
+  'monthOf',
+  'weeksOf',
+  'Editable',
+  'EditableInput',
+  'EditableValue',
+  'Pick',
+  'PickBack',
+  'PickList',
+  'PickOption',
+  'PickPane',
+  'Scrub',
+  'ScrubTrack',
+  'Sortable',
+  'SortableHandle',
+  'SortableItem',
+  'Spans',
+  'SpansSpan',
+  'SpansTrack',
+  'Transfer',
+  'TransferHandle',
+  'TransferItem',
+  'TransferList',
+  'Turns',
+  'TurnsName',
+  'TurnsSkip',
+  'Widths',
+  'WidthsColumn',
+  'WidthsHandle',
+] as const;
+
 export const COMPONENTS_SEGMENT = '_components';
 
 /**

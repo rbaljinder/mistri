@@ -22,10 +22,11 @@ for (const [width, theme] of [
     await page.goto(`${CRM}/@opportunity~1`);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByRole('menuitem', { name: /^Preferences/ }).click();
-    const prefs = page.getByRole('dialog', { name: 'Preferences', exact: true });
+    const prefs = page.getByRole('region', { name: 'Preferences', exact: true });
     await prefs.getByRole('button', { name: /^Visual theme(?: |$)/ }).click();
     await page.getByRole('option', { name: theme, exact: true }).click();
-    await prefs.getByRole('button', { name: 'Close', exact: true }).click();
+    // The preferences are a section of the settings page: leaving it is going back to the record.
+    await page.goBack();
     await page.getByRole('button', { name: /^Edit Opportunity(?: |$)/ }).click();
     const input = page.getByRole('textbox', { name: 'Opportunity', exact: true });
     const geometry = () =>

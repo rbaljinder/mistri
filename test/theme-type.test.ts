@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FONT_TOKENS, parseThemes, themeTypeWarnings } from '../packages/engine/src/shared/theme.js';
 import { compileAppTheme } from '../packages/mistri/src/shared/themeSpec.js';
-import { THEME_PRESETS, headingWeight, lookNavRole, themePreset } from '../packages/engine/src/shared/themePresets.js';
+import { THEME_PRESETS, headingWeight, themePreset } from '../packages/engine/src/shared/themePresets.js';
 import { recipeAttributes, typeAttributes } from '../packages/engine/src/shared/themeRecipes.js';
 import { typeTokens } from '../packages/engine/src/shared/themeType.js';
 import { headingFace } from '../packages/engine/src/shared/themeFaces.js';
@@ -87,14 +87,14 @@ test('a role merges over the look’s, property by property', () => {
   assert.deepEqual(lumen.type, {
     base: '15px',
     roles: {
-      title: { size: '32px', weight: 600, tracking: '-0.02em' },
-      heading: { size: '24px', tracking: '-0.018em' },
+      title: { size: '32px', weight: 700, tracking: '-0.02em' },
+      heading: { size: '24px', weight: 700, tracking: '-0.018em' },
       section: { size: '16px', weight: 600, tracking: '-0.01em' },
     },
   });
   // The title's weight is every heading's, and the face a theme preloads is the one at that weight.
   assert.equal(headingWeight(theme({ roles: { title: { weight: 700 } } })), 700);
-  assert.equal(headingWeight(themePreset('lumen')!), 600);
+  assert.equal(headingWeight(themePreset('lumen')!), 700);
   const served = theme({ font: { heading: 'Workshop, serif' }, roles: { title: { weight: 600 } } }, {});
   assert.equal(
     headingFace({
@@ -177,27 +177,28 @@ test('the nav role reaches the menu wherever it is drawn: the bar’s entries an
   }
 });
 
-test('a theme that sets the nav role dresses the side menu; a built-in look that sets it keeps the side menu as it was', () => {
-  // Mono sets nav (mono capitals) itself: its bar wears it, its side menu has no attribute to answer.
+test('the nav role dresses the menu wherever it stands: the side menu wears what the bar does', () => {
+  // Mono sets nav (mono capitals) itself: its bar and its side menu both wear it.
   const mono = themePreset('mono')!;
   assert.ok(mono.type?.roles?.nav);
-  const worn = recipeAttributes(mono, lookNavRole(mono)).attributes;
+  const worn = recipeAttributes(mono).attributes;
   assert.equal(worn['data-type-nav'], 'face upper');
-  assert.equal(worn['data-type-nav-side'], undefined);
-  // A theme extending it that restates the same role changes nothing down the side; one that sets its own does.
-  const same = theme({ roles: { nav: { face: 'code', case: 'upper' } } }, { extends: 'mono' });
-  assert.equal(recipeAttributes(same, lookNavRole(same)).attributes['data-type-nav-side'], undefined);
+  assert.equal(worn['data-type-nav-side'], 'face upper');
+  // A theme extending it that sets its own role says the merged role in both places.
   const own = theme({ roles: { nav: { weight: 600, case: 'small-caps' } } }, { extends: 'mono' });
-  assert.equal(recipeAttributes(own, lookNavRole(own)).attributes['data-type-nav-side'], 'weight small-caps');
+  const ownWorn = recipeAttributes(own).attributes;
+  assert.equal(ownWorn['data-type-nav-side'], ownWorn['data-type-nav']);
   // A look without a nav role, extended by a theme that sets one.
   const sage = theme({ roles: { nav: { case: 'small-caps' } } });
-  assert.equal(recipeAttributes(sage, lookNavRole(sage)).attributes['data-type-nav-side'], 'small-caps');
-  // Every built-in look: no side attribute at all.
-  for (const preset of THEME_PRESETS)
-    assert.equal(recipeAttributes(preset, lookNavRole(preset)).attributes['data-type-nav-side'], undefined, preset.id);
+  assert.equal(recipeAttributes(sage).attributes['data-type-nav-side'], 'small-caps');
+  // Every built-in look: the side says what the bar says, or nothing where the look sets no role.
+  for (const preset of THEME_PRESETS) {
+    const said = recipeAttributes(preset).attributes;
+    assert.equal(said['data-type-nav-side'], said['data-type-nav'], preset.id);
+  }
 });
 
-test('the data role reaches every value, or only figures, keys and dates; a header’s facts are reached either way', async () => {
+test('the data role reaches every value, or only figures, keys and dates; a header’s facts keep the head’s face either way', async () => {
   refuse({ roles: { data: { reach: 'names' } } }, /theme\.type\.roles\.data\.reach must be values .* or figures/);
   refuse({ roles: { label: { reach: 'figures' } } }, /label has no "reach"/);
   const figures = theme({ font: { data: 'ui-monospace, monospace' }, roles: { data: { reach: 'figures' } } });
@@ -206,14 +207,19 @@ test('the data role reaches every value, or only figures, keys and dates; a head
   // Omitted, or said as the default, it sets no word: every value is in the data face, as before.
   assert.equal(typeAttributes(theme({ roles: { data: { reach: 'values' } } }).type)['data-type-data'], undefined);
   const css = (await import('node:fs')).readFileSync('packages/kit/src/client/themeFamilies.css', 'utf8');
-  assert.match(css, /\.app-mode \.page-head-facts :is\(\.num-value, \.date-value, \.id-value\) \{\s*font-family: var\(--mono\)/);
+  // A header's facts keep the head's face under either reach, their digits tabular: the data face is for a column.
+  assert.match(
+    css,
+    /html:root \.app-mode \.page-head-facts :is\(\.num-value, \.date-value, \.id-value\) \{\s*font-family: inherit;\s*font-variant-numeric: tabular-nums/,
+  );
+  assert.doesNotMatch(css, /\.page-head-facts[^{]*\{\s*font-family: var\(--(?:mono|figures)\)/);
   assert.match(
     css,
     /html:root\[data-type-data~='figures'\] \.app-mode :is\(table, \.page-field > dd, \.ref-jump\) \{\s*font-family: var\(--sans\)/,
   );
   assert.match(
     css,
-    /html:root\[data-type-data~='figures'\] \.app-mode :is\(td\.mono, \.num-value, \.date-value, \.id-value\) \{\s*font-family: var\(--mono\)/,
+    /html:root\[data-type-data~='figures'\] \.app-mode td :is\(\.num-value, \.date-value, \.id-value\) \{\s*font-family: var\(--mono\)/,
   );
 });
 
@@ -239,9 +245,25 @@ test("a theme's figures face: named, it is --figures-face; naming a data face al
   // Naming neither keeps the look's own.
   assert.equal(theme({ roles: { title: { weight: 600 } } }).fonts?.figures, themePreset('sage')!.fonts?.figures);
   assert.match(String(themePreset('sage')!.fonts?.figures), /^'IBM Plex Mono', 'IBM Plex Mono Fallback'/);
-  for (const preset of THEME_PRESETS) if (preset.fonts?.data) assert.match(String(preset.fonts.figures), /IBM Plex Mono/, preset.id);
+  /* Bloom, Atelier and Graphite are the built-ins that set no data column in a monospace: a soft look's dates,
+     phone numbers and amounts are its sans, a printed table's are its text face, and an instrument's monospace is
+     for its labels and its readings, so a row is read in one face. Their digits are a column wide. Every other look
+     keeps Plex Mono. */
+  const inText = ['bloom', 'atelier', 'graphite'];
+  for (const preset of THEME_PRESETS)
+    if (preset.fonts?.data && !inText.includes(preset.id)) assert.match(String(preset.fonts.figures), /IBM Plex Mono/, preset.id);
+  for (const id of inText) assert.equal(themePreset(id)!.fonts?.figures, themePreset(id)!.fonts?.data, id);
   assert.throws(() => theme({ font: { figures: 'x(' } }), /theme\.type\.font\.figures must be a CSS font-family list/);
   // The App's sheet draws --figures from it, and from Plex Mono when a theme names none.
   const sheet = readFileSync(new URL('../packages/kit/src/client/themeFamilies.css', import.meta.url), 'utf8');
   assert.match(sheet, /\.app-mode \{\s*--figures: var\(--figures-face, 'IBM Plex Mono', 'IBM Plex Mono Fallback', var\(--code\)\);/);
+  /* One figure system to a look: whatever face a look's figures are in, the ones that stand in a column or beside
+     each other are tabular in every look (a table's cells and heads, a chart's ticks, a figure's change), and a
+     stat's hero figure is the one place a look may set proportional numerals (Lumen's Manrope). */
+  assert.match(
+    sheet,
+    /:root\[data-theme-style\] :is\(td, th, \.home-card-value, \.dash-delta, \.chart-tick[^{]*\{[^}]*font-variant-numeric: tabular-nums/,
+  );
+  for (const preset of THEME_PRESETS)
+    assert.ok(preset.fonts?.figures || preset.fonts?.data || !preset.fonts, `${preset.id} names the face its figures are in`);
 });

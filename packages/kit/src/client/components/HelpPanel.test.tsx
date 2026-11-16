@@ -70,7 +70,7 @@ test('names the database, draws grammar and examples, and says why a section is 
   expect(document.querySelectorAll('.help-section')).toHaveLength(5);
   expect(screen.getByText('invoice status = value')).toBeInTheDocument();
   expect(screen.getByText('This database has no foreign keys, so there is nothing to walk.')).toBeInTheDocument();
-  /* A Modal now: Base UI hands focus over once the box has attached. */
+  /* A Modal now: focus is handed over once the box has attached. */
   await waitFor(() => expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus());
 });
 

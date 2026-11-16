@@ -180,7 +180,8 @@ async function phoneFits(page: Page) {
 async function openPreferences(page: Page) {
   await page.getByRole('button', { name: /^Account:/ }).click();
   await page.getByRole('menuitem', { name: /^Preferences/ }).click();
-  const dialog = page.getByRole('dialog', { name: 'Preferences', exact: true });
+  // In an App the preferences are a section of the settings page (SettingsRoom.tsx), not a dialog.
+  const dialog = page.getByRole('region', { name: 'Preferences', exact: true });
   await expect(dialog).toBeVisible();
   return dialog;
 }
@@ -263,7 +264,7 @@ test('390px keyboard switcher uses document navigation and native new-tab anchor
   await page.evaluate(() => {
     document.documentElement.dataset.previousDocument = 'lender';
   });
-  // As with the Default App list below: Base UI moves focus into the menu a frame
+  // As with the Default App list below: the menu takes focus a frame
   // after it opens, and an End pressed before that lands on the trigger and is lost.
   await expect(page.locator('[role="menu"]:focus-within')).toHaveCount(1);
   await page.keyboard.press('End');
@@ -328,12 +329,12 @@ test('real Preferences saves by keyboard, survives fresh login and suite restart
   await expect(dialog.getByText(/Saved to your account/)).toBeVisible();
   await choice.focus();
   await page.keyboard.press('Space');
-  // Base UI moves focus into the list a frame after it opens, and only the list
+  // The list takes focus a frame after it opens, and only the list
   // answers Home and End: a key pressed in that frame lands on the button and is
   // lost. Wait for the list to hold focus, as a person sees it open, before walking it.
-  await expect(dialog.getByRole('option', { name: 'Ask each time', exact: true })).toBeFocused();
+  await expect(page.getByRole('option', { name: 'Ask each time', exact: true })).toBeFocused();
   await page.keyboard.press('End');
-  await expect(dialog.getByRole('option', { name: 'Benefits', exact: true })).toBeFocused();
+  await expect(page.getByRole('option', { name: 'Benefits', exact: true })).toBeFocused();
   await phoneFits(page);
   await page.keyboard.press('Enter');
   await expect(choice).toContainText('Benefits');
@@ -343,7 +344,7 @@ test('real Preferences saves by keyboard, survives fresh login and suite restart
   await phoneFits(page);
   const saved = await suite.preference(page.request, account.id);
   expect(saved).toMatchObject({ accountId: account.id, defaultApp: 'benefits', revision: 1 });
-  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.goBack();
   await page.goto(`${suite.origin}${BASE}/`);
   await expectHome(page, 'benefits');
 
@@ -538,7 +539,7 @@ test('late App/preference responses cannot publish after the browser locks for a
     await expect(page.locator('#session-lock')).toBeVisible();
     await releaseDelayed(page, 2);
     await expect(page.getByRole('button', { name: 'Switch App', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('dialog', { name: 'Preferences', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Preferences', exact: true })).toHaveCount(0);
     await expect(page.getByText(APP_ROWS.lender, { exact: true })).toHaveCount(0);
     await page.goto(suite.appURL('benefits'));
     await expectHome(page, 'benefits');

@@ -58,7 +58,8 @@ import { onDemand } from './components/onDemand.js';
 import { forgetPages, pagesFor, prefetchPages, recordPageId, whenPagesChange } from './page.js';
 import { listenForRecordPresses, prefetchRecordPage } from './recordPress.js';
 import { installShell, shell } from './shellMode.js';
-import { onLanguagePicked, subscribeMessages } from './messages.js';
+import { message, onLanguagePicked, subscribeMessages } from './messages.js';
+import { SETTINGS_PAGE } from './components/appRooms.js';
 import { applyDensity } from './density.js';
 import { applyTypography } from './typography.js';
 import { openPrefs } from './prefs.js';
@@ -341,7 +342,16 @@ function applyBrand() {
       label: () => say('preferences'),
       category: () => say('preferences.title'),
       detail: () => say('appearanceAndListSettings'),
-      onSelect: openPrefs,
+      /* In an App the preferences are a section of its settings page (the App framework's SettingsRoom.tsx), which
+         has an address and room for the profile beside them. Where there is no such room, the Workbench and the
+         database browser, they stay the dialog; and for a signed-out visitor too, who has no settings to keep and
+         whose storefront page should stay under the choice being made. */
+      onSelect: () => {
+        if (!shell().inApp() || !shell().rooms.Settings || shell().publicVisitor()) return openPrefs();
+        const here = currentEntry();
+        if (here?.kind === 'page' && here.pageId === SETTINGS_PAGE) return;
+        go({ ...pageView(SETTINGS_PAGE, undefined, undefined, message('common.settings')), tab: 'preferences' }, 'push');
+      },
     },
   ]);
 }

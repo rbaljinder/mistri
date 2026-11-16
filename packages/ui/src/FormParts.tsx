@@ -3,8 +3,10 @@
  * review group and a row of columns. Props only: every word and every picture arrives as a prop, and none of them
  * knows a field, a step or an address. Preview: @mistriwork/ui is Preview at 1.0.
  */
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Button } from './Button.js';
+import { HelpTip } from './internal/HelpTip.js';
+import { slotted } from './internal/uiKitContext.js';
 
 export interface HelpTipProps {
   /** The tip's text. */
@@ -13,46 +15,6 @@ export interface HelpTipProps {
   label: string;
   /** The mark on the button; without one, an "i". */
   icon?: ReactNode;
-}
-
-/** The "i" beside a label: a button that opens its text under it. Escape and a press elsewhere close it. */
-export function HelpTip({ text, label, icon }: HelpTipProps): ReactNode {
-  const [open, setOpen] = useState(false);
-  const tipId = useId();
-  const root = useRef<HTMLSpanElement | null>(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    const outside = (e: Event): void => {
-      if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', outside);
-    return () => document.removeEventListener('pointerdown', outside);
-  }, [open]);
-  return (
-    <span className="help-tip" ref={root}>
-      <button
-        type="button"
-        className="help-tip-button"
-        aria-label={label}
-        aria-expanded={open}
-        aria-describedby={open ? tipId : undefined}
-        onClick={() => setOpen(!open)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape' && open) {
-            e.stopPropagation();
-            setOpen(false);
-          }
-        }}
-      >
-        {icon ?? <span aria-hidden="true">i</span>}
-      </button>
-      {open ? (
-        <span role="tooltip" id={tipId} className="help-tip-text">
-          {text}
-        </span>
-      ) : null}
-    </span>
-  );
 }
 
 export interface ProgressBarProps {
@@ -66,15 +28,17 @@ export interface ProgressBarProps {
 }
 
 /** How far along: a filled track. It is information that moves often, so the fill is not animated. */
-export function ProgressBar({ value, max, min = 0, label, decorative }: ProgressBarProps): ReactNode {
+function DefaultProgressBar({ value, max, min = 0, label, decorative }: ProgressBarProps): ReactNode {
   return (
     <div
-      className="progress-bar"
+      data-slot="progress-track"
+      data-kind="bar"
       {...(decorative
         ? { 'aria-hidden': true }
         : { role: 'progressbar', 'aria-label': label, 'aria-valuemin': min, 'aria-valuemax': max, 'aria-valuenow': value })}
     >
-      <span className="progress-bar-fill" style={{ width: `${max > 0 ? Math.min(100, (value / max) * 100) : 0}%` }} />
+      {/* A share of the whole, not of the range: on step 1 of 5 a fifth is filled, as a reader counts it. */}
+      <span data-slot="progress-indicator" style={{ width: `${max > 0 ? Math.min(100, (value / max) * 100) : 0}%` }} />
     </div>
   );
 }
@@ -90,20 +54,21 @@ export interface StepHeaderProps {
   mark?: ReactNode;
 }
 
-/** A step's title and the quiet lead under it. */
-export function StepHeader({ title, lead, mark, level = 1, id }: StepHeaderProps): ReactNode {
+/** A step's title and the quiet lead under it. The heading takes the keyboard when the step changes, so the next key
+    is about it. */
+function DefaultStepHeader({ title, lead, mark, level = 1, id }: StepHeaderProps): ReactNode {
   const Heading = level === 1 ? 'h1' : 'h2';
   return (
-    <header className="step-header">
-      <Heading className="step-title" id={id} tabIndex={-1}>
+    <header data-slot="step-header">
+      <Heading id={id} tabIndex={-1}>
         {mark ? (
-          <span className="step-mark" aria-hidden="true">
+          <span data-slot="step-mark" aria-hidden="true">
             {mark}
           </span>
         ) : null}
         {title}
       </Heading>
-      {lead ? <p className="step-lead">{lead}</p> : null}
+      {lead ? <p data-slot="step-lead">{lead}</p> : null}
     </header>
   );
 }
@@ -116,11 +81,11 @@ export interface ActionBarProps {
 }
 
 /** The bar fixed to the foot of its container: Back as a quiet word, and a filled primary that takes the rest of the width. */
-export function ActionBar({ back, primary, className }: ActionBarProps): ReactNode {
+function DefaultActionBar({ back, primary, className }: ActionBarProps): ReactNode {
   return (
-    <footer className={className ? `action-bar ${className}` : 'action-bar'}>
+    <footer data-slot="action-bar" className={className || undefined}>
       {back ? (
-        <Button intent="quiet" size="large" className="action-bar-back" onClick={back.onClick}>
+        <Button intent="quiet" size="large" onClick={back.onClick}>
           {back.icon}
           {back.label}
         </Button>
@@ -128,7 +93,6 @@ export function ActionBar({ back, primary, className }: ActionBarProps): ReactNo
       <Button
         intent="primary"
         size="large"
-        className="action-bar-primary"
         disabled={primary.disabled}
         busy={primary.busy}
         busyLabel={primary.busyLabel}
@@ -141,20 +105,35 @@ export function ActionBar({ back, primary, className }: ActionBarProps): ReactNo
   );
 }
 
-/** Fields side by side; `cols` is a grid template such as "1fr 1.8fr". A row stacks where its fields no longer fit. */
-export function Columns({ cols, children }: { cols?: string; children: ReactNode }): ReactNode {
+/** Fields side by side; `cols` is a grid template such as "1fr 1.8fr". A row stacks where its fields no longer fit:
+    the template is handed to the stylesheet as a property and not written as the grid itself, so it can. */
+function DefaultColumns({ cols, children }: { cols?: string; children: ReactNode }): ReactNode {
   return (
-    <div className="form-columns" style={cols ? ({ '--form-columns': cols } as CSSProperties) : undefined}>
+    <div
+      data-slot="columns"
+      data-kind={cols ? 'template' : undefined}
+      style={cols ? ({ '--form-columns': cols } as CSSProperties) : undefined}
+    >
       {children}
     </div>
   );
 }
 
 /** The editable review: earlier steps' fields drawn again in one labelled group. */
-export function ReviewList({ label, children }: { label: string; children: ReactNode }): ReactNode {
+function DefaultReviewList({ label, children }: { label: string; children: ReactNode }): ReactNode {
   return (
-    <div className="review-list" role="group" aria-label={label}>
+    <div data-slot="review-list" data-kind="group" role="group" aria-label={label}>
       {children}
     </div>
   );
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. The "i"
+   beside a label is a button that opens its text under it; Escape and a press elsewhere close it. Its default is
+   drawn in a module of its own (internal/HelpTip.tsx), which a field's frame also draws from. */
+export { HelpTip };
+export const ProgressBar = slotted('ProgressBar', DefaultProgressBar);
+export const StepHeader = slotted('StepHeader', DefaultStepHeader);
+export const ActionBar = slotted('ActionBar', DefaultActionBar);
+export const Columns = slotted('Columns', DefaultColumns);
+export const ReviewList = slotted('ReviewList', DefaultReviewList);

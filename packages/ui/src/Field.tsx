@@ -12,6 +12,7 @@
  * its focusable is.
  */
 import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from 'react';
+import { slotted } from './internal/uiKitContext.js';
 
 /** The short answers: a count, an amount, a day, a day and its time, a time of day. */
 export type AnswerKind = 'number' | 'money' | 'date' | 'datetime' | 'time';
@@ -59,7 +60,7 @@ interface FieldProps {
   children: ReactElement<Record<string, unknown>> | ((control: FieldControlProps) => ReactNode);
 }
 
-export function Field({
+function DefaultField({
   label,
   hint,
   problem,
@@ -73,7 +74,7 @@ export function Field({
   labelAside,
   labelHidden = false,
   reserve = false,
-  className = '',
+  className,
   children,
 }: FieldProps) {
   const made = useId();
@@ -82,17 +83,6 @@ export function Field({
   const problemId = `${controlId}-problem`;
   const holdsProblem = problem !== undefined && problem !== null && problem !== false && problem !== '';
   const labelId = `${controlId}-label`;
-  const labelClass = labelHidden ? 'form-field-label form-field-label-hidden' : 'form-field-label';
-  const caption = group ? (
-    <span id={labelId} className={labelClass}>
-      {label}
-    </span>
-  ) : (
-    <label id={labelId} htmlFor={controlId} className={labelClass}>
-      {label}
-    </label>
-  );
-  const word = optional && !required ? <span className="form-field-optional-word">{optional}</span> : null;
   const control: FieldControlProps = {
     id: controlId,
     ...(hintId || holdsProblem ? { 'aria-describedby': [hintId, holdsProblem ? problemId : undefined].filter(Boolean).join(' ') } : {}),
@@ -106,55 +96,73 @@ export function Field({
       : isValidElement(children)
         ? cloneElement(children, { ...control, ...joined(children.props, control) })
         : children;
-  /* The star is the stylesheet's (`.is-required`), not text: a label's words
-     stay its name, to a query by label as to a screen reader, which hears
-     "required" from `aria-required` instead. */
+  const caption = group ? (
+    <span id={labelId} data-slot="field-label" data-hidden={labelHidden ? '' : undefined}>
+      {label}
+    </span>
+  ) : (
+    <label id={labelId} htmlFor={controlId} data-slot="field-label" data-hidden={labelHidden ? '' : undefined}>
+      {label}
+    </label>
+  );
+  /* Beside the label and not in it, so a label's words stay its name, to a query by label as to a screen reader,
+     which hears "required" from `aria-required` instead: the mark for what must be answered, and the word for what
+     need not, which a theme shows in the mark's place (`recipes.required`). */
+  const marks = (
+    <>
+      {required && (
+        <span data-slot="field-required" aria-hidden="true">
+          *
+        </span>
+      )}
+      {optional && !required ? <span data-slot="field-optional">{optional}</span> : null}
+    </>
+  );
+  /* `data-kind` is the stylesheet's word for which shape of a slot this is (a check row), so the answer's kind is
+     said as `data-answer`. */
   return (
     <div
-      data-kind={kind}
-      className={[
-        'form-field',
-        size === 'compact' ? 'form-field-compact' : '',
-        check ? 'form-field-check' : '',
-        reserve ? 'form-field-reserve' : '',
-        required ? 'is-required' : '',
-        holdsProblem ? 'is-invalid' : '',
-        className,
-      ]
-        .filter(Boolean)
-        .join(' ')}
+      data-slot="field"
+      data-kind={check ? 'check' : undefined}
+      data-answer={kind}
+      data-size={size === 'compact' ? 'compact' : undefined}
+      data-invalid={holdsProblem ? '' : undefined}
+      data-required={required ? '' : undefined}
+      className={className || undefined}
     >
       {check ? (
-        <div className="form-field-check-row">
+        <div data-slot="field-check-row">
           {drawn}
-          <label id={labelId} htmlFor={controlId} className="form-field-label">
+          <label id={labelId} htmlFor={controlId} data-slot="field-label">
             {label}
           </label>
-          {word}
+          {marks}
         </div>
       ) : (
         <>
-          {labelAside || word ? (
-            <div className="form-field-label-row">
-              {caption}
-              {word}
-              {labelAside}
-            </div>
-          ) : (
-            caption
-          )}
+          <div data-slot="field-head" data-kind={labelHidden ? 'visually-hidden' : undefined}>
+            {caption}
+            {marks}
+            {labelAside}
+          </div>
           {drawn}
         </>
       )}
       {hint ? (
-        <p id={hintId} className="form-field-hint">
+        <p id={hintId} data-slot="field-description">
           {hint}
         </p>
       ) : null}
       {/* Always drawn, hidden while empty, as the command forms' feedback is: a
         problem that arrives lands in a polite region that was already there,
         and the control names it in its description once it is said. */}
-      <p id={problemId} className="form-field-problem" aria-live="polite" hidden={!holdsProblem && !reserve}>
+      <p
+        id={problemId}
+        data-slot="field-error"
+        aria-live="polite"
+        hidden={!holdsProblem && !reserve}
+        data-reserve={reserve && !holdsProblem ? '' : undefined}
+      >
         {holdsProblem ? problem : null}
       </p>
     </div>
@@ -167,3 +175,6 @@ function joined(props: Record<string, unknown>, control: FieldControlProps): Par
   const described = [own, control['aria-describedby']].filter(Boolean).join(' ');
   return described ? { 'aria-describedby': described } : {};
 }
+
+/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+export const Field = slotted('Field', DefaultField);

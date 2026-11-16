@@ -12,12 +12,12 @@ Every dashboard block, list presentation and value display in Lumen, each with t
       over: 'due_on',
       measure: 'sum amount as collected',
       better: 'up',
-      area: 'money',
+      area: 'figures',
       icon: 'bank',
     }),
 ```
 
-See it in the sample (`examples/apps/lintel/dashboards.ts:15`). Dashboard blocks go in a [dashboard](/docs/dashboards/)'s sections, presentations in a [list](/docs/lists/), and display rules under a resource's `display`.
+See it in the sample (`examples/apps/lintel/dashboards.ts:22`). Dashboard blocks go in a [dashboard](/docs/dashboards/)'s sections, presentations in a [list](/docs/lists/), and display rules under a resource's `display`.
 
 The pictures were taken by `scripts/docs-shots.mjs`, some from Apps that are no longer samples (a CRM, a warehouse and a project tracker); a caption names the kind of App it shows. A snippet is a shortened declaration; where it is Lintel's rather than the picture's App, its caption says so.
 
@@ -190,7 +190,7 @@ breakdown('Pipeline by stage', 'opportunity', 'stage', {
 `shape: 'steps'` draws a pipeline as a row of steps in the vocabulary's order, each with its count and a short `notes` line.
 
 ```ts title="examples/apps/lintel/dashboards.ts"
-    breakdown('Repairs by state', 'maintenance_request', 'status', {
+    breakdown('Repairs by status', 'maintenance_request', 'status', {
       query: 'outstanding',
       shape: 'steps',
       to: 'repairs',
@@ -202,7 +202,7 @@ breakdown('Pipeline by stage', 'opportunity', 'stage', {
     }),
 ```
 
-See it in the sample (`examples/apps/lintel/dashboards.ts:26`); the picture is a warehouse App's pick lists.
+See it in the sample (`examples/apps/lintel/dashboards.ts:33`); the picture is a warehouse App's pick lists.
 
 ![A warehouse App: four steps from To pick to Shipped, each with its count and a line.](../../../assets/gallery/steps.webp)
 
@@ -272,9 +272,12 @@ presentation: cards('name', { icon: 'kind', media: 'icon', description: 'summary
 
 ### Board
 
-Lanes of cards by one column; a card takes up to four `footer` facts, each with an optional icon, and a `category` tag.
-A line may be a rollup or a computed column. Where the column is a `machine`'s, a card moves through its verbs: to the
-lane a verb leads to from the card's state, or to any end of a verb whose command asks for the column.
+Lanes of cards by one column; a card takes up to four `footer` facts, each with an optional icon, and a `category`.
+A card reads its name, then one line of what it is and where (the category, the line and the facts, a dot between
+them), then its foot: its next step as a button and the people on it. A line may be a rollup or a computed column.
+Where the column is a `machine`'s, a card moves through its verbs: to the lane a verb leads to from the card's state,
+or to any end of a verb whose command asks for the column. The next step is the first of those verbs that moves the
+card on and ends nothing, ahead of a step aside such as Put on hold; the others are in the card's menu.
 
 ```ts title="examples/apps/lintel/views.ts"
     board: {
@@ -286,7 +289,7 @@ lane a verb leads to from the card's state, or to any end of a verb whose comman
     },
 ```
 
-See it in the sample (`examples/apps/lintel/views.ts:134`); the picture is a CRM's pipeline.
+See it in the sample (`examples/apps/lintel/views.ts:141`); the picture is a CRM's pipeline.
 
 ![A CRM App: the pipeline board, each card with its amount, close date and team.](../../../assets/gallery/board.webp)
 
@@ -300,7 +303,7 @@ Records on their dates; the list's tabs narrow what the month shows.
     presentation: calendar('preferred_on', 'name', { lines: ['unit_id'], badge: 'status' }),
 ```
 
-See it in the sample (`examples/apps/lintel/views.ts:93`); the picture is a CRM's tasks.
+See it in the sample (`examples/apps/lintel/views.ts:100`); the picture is a CRM's tasks.
 
 ![A CRM App: tasks on their due dates in a month grid.](../../../assets/gallery/calendar.webp)
 

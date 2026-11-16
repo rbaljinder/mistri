@@ -152,7 +152,7 @@ describe('Button', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
     const link = screen.getByRole('link', { name: 'Docs' });
     expect(link.getAttribute('href')).toBe('https://example.test/x');
-    expect(link.className).toContain('btn');
+    expect(link).toHaveAttribute('data-slot', 'button');
   });
 
   test('an address of this App is followed in place; a modified click or another origin keeps the browser’s', () => {

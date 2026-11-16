@@ -19,7 +19,7 @@
  * the list's question as text, so opening one is the ordinary list address.
  */
 import { filterLabel } from '@mistriwork/engine/shared/listFilters.js';
-import { BoardNewForm } from './boardNew.js';
+import { BoardNewForm, BoardTotal } from './boardNew.js';
 import { useMessageLanguage } from './useMessageLanguage.js';
 import { createPortal } from 'react-dom';
 import { listControlsRef, listHeadRef, useCrumbSlots } from './crumbSlot.js';
@@ -62,6 +62,8 @@ import { onDemand } from './onDemand.js';
 import { useGridGroups } from './useGridGroups.js';
 import { ListSubtitles } from './listSubtitles.js';
 import { LayoutSwitch, useListLayout } from './LayoutSwitch.js';
+import { ListColumns, useListColumns } from './ListColumns.js';
+import { personFacing } from '../audience.js';
 
 const DefinedBoxes = onDemand(() => import('./DefinedFields.js'), 'DefinedBoxes', { quiet: true });
 
@@ -83,6 +85,7 @@ import { renamedView, useSavedViews, withView, withoutView, writeSavedViews, typ
 import { PHONE_QUERY, RAIL_QUERY, useMediaQuery } from './useMediaQuery.js';
 import { TableRoom } from './TableRoom.js';
 import { RowOpensContext } from './rowOpens.js';
+import { RowTitleContext } from './rowTitle.js';
 import { ListEmpty } from './ListEmpty.js';
 import { Empty } from './Notes.js';
 import { Button } from '@mistriwork/ui/Button.js';
@@ -105,6 +108,8 @@ interface AppListProps {
   inDashboard?: boolean;
   /** Rows the list matched, once known, for a heading drawn outside the list (a dashboard section's count). */
   onTotal?: (total: number | undefined) => void;
+  /** The list's summary strip, drawn between its heading and its tabs (Rooms.tsx, through the shell's slot). */
+  summary?: ReactNode;
 }
 
 /* What the next paint should hand focus back to. The redraw replaces the
@@ -208,9 +213,51 @@ function TabCount({ counted }: { counted?: Counted | null }) {
   return <span className="tab-count">{said && <span>{said}</span>}</span>;
 }
 
-export function AppList({ entry, spec, navigate, embedded = false, newButton, inDashboard = false, onTotal }: AppListProps) {
+/* The switch's width where a list has drawn one, by the list's table: a list is made again on a change of tab, and
+   the room it held would be forgotten with it. */
+const switchRoom = new Map<string, number>();
+
+/**
+ * Where a phone's Records/Table switch is drawn, at the end of the tabs' line. The list draws the switch once it has
+ * rows (TableView), so on every change of tab it left the line while the rows came and took its place again after:
+ * the strip beside it was a switch wider for those frames, and a tab came out from under More and went back. Once
+ * the switch has stood here its room is held (`data-held`, and its width) for as long as the page lives.
+ */
+function PresentationHost({ list }: { list: string }) {
+  const host = useRef<HTMLSpanElement | null>(null);
+  const [room, setRoom] = useState(() => switchRoom.get(list));
+  useEffect(() => {
+    const node = host.current;
+    if (!node) return;
+    const hold = () => {
+      const drawn = node.firstElementChild as HTMLElement | null;
+      // Layout pixels in, layout pixels out: nothing of the screen's is read.
+      const width = drawn?.offsetWidth;
+      if (!width) return;
+      switchRoom.set(list, width);
+      setRoom(width);
+    };
+    hold();
+    const seen = new MutationObserver(hold);
+    seen.observe(node, { childList: true });
+    return () => seen.disconnect();
+  }, [list]);
+  // One function for the element's life: the slot is told of the element when it comes and when it goes, not on every draw.
+  const place = useCallback((node: HTMLSpanElement | null) => {
+    host.current = node;
+    listControlsRef(node);
+  }, []);
+  return (
+    <span className="applist-presentation" ref={place} data-held={room ? '' : undefined} style={room ? { minWidth: room } : undefined} />
+  );
+}
+
+export function AppList({ entry, spec, navigate, embedded = false, newButton, inDashboard = false, onTotal, summary }: AppListProps) {
   useMessageLanguage();
-  const caption = spec.label;
+  /* A refusal standing in place of the rows titles the room (TableRoom.tsx): the label made from an address that
+     names nothing the reader may see is not a name. */
+  const [refusedAs, setRefusedAs] = useState<string | null>(null);
+  const caption = refusedAs ?? spec.label;
   /* A list whose machine has a handful of open states may be read as a board too (listInference.ts): the reader's
      choice, kept in their browser per view, as a board's folds are. */
   const boardable = Boolean(spec.asBoard && !spec.presentation && !embedded && !inDashboard);
@@ -251,7 +298,10 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
   }>();
   const connection = state.activeConnection;
   const gridCurrent = gridResult?.query === entry.query && gridResult.connection === connection ? gridResult : undefined;
+  /* A board reads no total; it says its lanes' sum here once they are counted (boardNew.ts). */
+  const [boardTotal, setBoardTotal] = useState<number | null>(null);
   const gridTotal = gridCurrent?.total;
+  const titleTotal = presented?.kind === 'board' ? (boardTotal ?? undefined) : gridTotal;
   const gridCapped = gridCurrent?.capped === true;
   const [advancedOpen, setAdvanced] = useState(false);
   const rail = useRef<HTMLElement>(null);
@@ -366,7 +416,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
   if (residueChip) chips.push(residueChip);
 
   const chipList = chips.map((c) => (
-    <span key={c.text} className="applist-chip">
+    <span key={c.text} className="applist-chip" title={c.text}>
       <span className="applist-chip-text">{c.text}</span>
       <button type="button" className="applist-chip-x" aria-label={say('common.remove2', { text: c.text })} onClick={c.remove}>
         ×
@@ -516,6 +566,10 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
           ]),
         ].filter((name) => !chosen.has(name))
       : named;
+  /* The columns the reader left out (ListColumns.tsx): offered where the view names its columns and draws them as a
+     table on its own page. A choice of how to read the list, so the rows are asked for as they were. */
+  const choosable = !embedded && !inDashboard && !presented && table && (spec.show?.length ?? 0) > 2 ? spec.show! : [];
+  const [leftOut, setLeftOut] = useListColumns(spec.id, choosable);
   /* A join table's list opens what each row is about, by its name where the list shows it. */
   const rowOpens = useMemo(
     () =>
@@ -717,8 +771,8 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
      unchanged. The search box is this room's state, so each character typed
      redrew the room and, with it, the whole grid under the box; now a
      keystroke redraws the box and the chips, and the rows are left alone. */
-  const hideKey = hide.join('\n');
-  const keptHide = useMemo(() => hide, [hideKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hideKey = [...hide, ...leftOut].join('\n');
+  const keptHide = useMemo(() => [...hide, ...leftOut], [hideKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const totalsKey = totals ? JSON.stringify(totals) : '';
   const keptTotals = useMemo(() => totals, [totalsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const onGridNow = useRef(onGrid);
@@ -776,48 +830,53 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
             />
           </div>
         )}
-        <BoardNewForm.Provider value={offersNew ? (spec.form ?? {}) : null}>
-          <RowOpensContext.Provider value={rowOpens}>
-            <ListSubtitles.Provider value={spec.subtitles}>
-              <TableRoom
-                entry={gridEntry}
-                sizing={spec.sizing}
-                chrome={false}
-                summaries
-                inset={!inDashboard}
-                embedded={inDashboard}
-                hide={keptHide}
-                referenceLabels={referenceLabels}
-                totals={keptTotals}
-                {...(gridGroup ? { group: gridGroup } : {})}
-                density={spec.density}
-                /* A ⋯ with nothing a reader may run is a dead control and a reserved column; the App payload already says what they may run. */
-                rowActions={Boolean(
-                  spec.rowActions && !presented && !embedded && mayRunAny(shell().app(), entry.table, spec.actions ?? []),
-                )}
-                editable={presented || embedded ? undefined : spec.editable}
-                inCrumbs={inCrumbs}
-                onResult={keptOnGrid}
-                presentation={embedded ? undefined : presented}
-                present={shell().present ?? undefined}
-                empty={
-                  embedded ? undefined : narrowedPast ? (
-                    noMatches
-                  ) : authoredEmpty ? (
-                    <ListEmpty spec={authoredEmpty} />
-                  ) : (
-                    (nothingYet ?? tabEmpty)
-                  )
-                }
-                actions={embedded ? undefined : spec.actions}
-                listLabel={caption}
-                order={embedded ? undefined : spec.order}
-                export={exportOff ? false : undefined}
-                interactive={embedded ? false : undefined}
-              />
-            </ListSubtitles.Provider>
-          </RowOpensContext.Provider>
-        </BoardNewForm.Provider>
+        <BoardTotal.Provider value={ownList ? setBoardTotal : null}>
+          <BoardNewForm.Provider value={offersNew ? (spec.form ?? {}) : null}>
+            <RowOpensContext.Provider value={rowOpens}>
+              <RowTitleContext.Provider value={spec.primary}>
+                <ListSubtitles.Provider value={spec.subtitles}>
+                  <TableRoom
+                    entry={gridEntry}
+                    sizing={spec.sizing}
+                    chrome={false}
+                    summaries
+                    inset={!inDashboard}
+                    embedded={inDashboard}
+                    hide={keptHide}
+                    referenceLabels={referenceLabels}
+                    totals={keptTotals}
+                    {...(gridGroup ? { group: gridGroup } : {})}
+                    density={spec.density}
+                    /* A ⋯ with nothing a reader may run is a dead control and a reserved column; the App payload already says what they may run. */
+                    rowActions={Boolean(
+                      spec.rowActions && !presented && !embedded && mayRunAny(shell().app(), entry.table, spec.actions ?? []),
+                    )}
+                    editable={presented || embedded ? undefined : spec.editable}
+                    inCrumbs={inCrumbs}
+                    onResult={keptOnGrid}
+                    onRefused={setRefusedAs}
+                    presentation={embedded ? undefined : presented}
+                    present={shell().present ?? undefined}
+                    empty={
+                      embedded ? undefined : narrowedPast ? (
+                        noMatches
+                      ) : authoredEmpty ? (
+                        <ListEmpty spec={authoredEmpty} />
+                      ) : (
+                        (nothingYet ?? tabEmpty)
+                      )
+                    }
+                    actions={embedded ? undefined : spec.actions}
+                    listLabel={caption}
+                    order={embedded ? undefined : spec.order}
+                    export={exportOff ? false : undefined}
+                    interactive={embedded ? false : undefined}
+                  />
+                </ListSubtitles.Provider>
+              </RowTitleContext.Provider>
+            </RowOpensContext.Provider>
+          </BoardNewForm.Provider>
+        </BoardTotal.Provider>
       </div>
     ),
     [
@@ -848,21 +907,80 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
     ],
   );
   /* A signed-out visitor reads the storefront, not the tool (docs/design.md,
-     public pages): a match count chip and a favourites star are an
-     operator's furniture there. */
+     public pages): a favourites star is an operator's furniture there. How
+     many homes or cars there are is the storefront's own fact, so the count
+     stays beside the title for a visitor too. */
   const visitor = shell().publicVisitor();
+  const scopeCount = narrowedPast && litTab >= 0 && yourLit === -1 ? countOf(litTab) : undefined;
+  const scopeTotal = scopeCount && !scopeCount.capped ? scopeCount.total : undefined;
   const title = (
     <>
       <h1 className={`applist-title${spec.heading === false ? ' visually-hidden' : ''}`}>{caption}</h1>
-      {typeof gridTotal === 'number' && !visitor && spec.heading !== false && (
+      {typeof titleTotal === 'number' && spec.heading !== false && (
         <span className="applist-count" title={say('rowsTheTabAndFilters')}>
-          {formatNumber(gridTotal)}
+          {formatNumber(titleTotal)}
           {gridCapped ? '+' : ''}
         </span>
+      )}
+      {/* Narrowed past its tab, the count is said against the tab's own, quiet beside it: "23" beside a lit
+          "All 400" read as two counts that disagreed. */}
+      {typeof titleTotal === 'number' && spec.heading !== false && typeof scopeTotal === 'number' && scopeTotal !== titleTotal && (
+        <span className="applist-count-of">{say('ofTotal', { total: formatNumber(scopeTotal) })}</span>
       )}
       {spec.favorite && spec.id && !visitor && <FavoriteStar favorite={{ kind: 'view', view: spec.id, label: caption }} name={caption} />}
     </>
   );
+  /* The list's kept questions and the two verbs that keep one, at the head of the page's verbs: what a reader has
+     saved, then Save and Rename. The saved ones are tabs too, after the list's own; the verbs stood at the end of
+     the filter bar, where they came and went with the question and moved the controls beside them. */
+  const viewsMenu =
+    ownList && savable ? (
+      <DropMenu
+        className="applist-views"
+        triggerClassName="export-summary"
+        label={
+          <>
+            <svg className="applist-verb-mark" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path d="M4.5 2.5h7v11L8 11l-3.5 2.5z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            </svg>
+            <span className="export-word">{say('views')}</span>
+          </>
+        }
+        popupClassName="page-actions-popup"
+        align="end"
+      >
+        {yours.length > 0 && (
+          <DropGroup labelClassName="more-group-label" label={store === 'account' ? say('myViews') : say('savedViews')}>
+            {yours.map((view) => (
+              <DropItem
+                key={view.name}
+                className="page-actions-item"
+                onClick={() => {
+                  state.page = 0;
+                  apply(view.query);
+                }}
+              >
+                {view.name}
+              </DropItem>
+            ))}
+          </DropGroup>
+        )}
+        <DropItem
+          className="page-actions-item"
+          disabled={!offerSave}
+          title={store === 'account' ? say('keepThisTabIts') : say('keepThisTabItsFilters')}
+          onClick={() => void save()}
+        >
+          {say('saveView')}
+        </DropItem>
+        {yourLit >= 0 && (
+          <DropItem className="page-actions-item" onClick={() => void rename(yours[yourLit])}>
+            {say('renameView')}
+          </DropItem>
+        )}
+      </DropMenu>
+    ) : null;
+  const pageVerbs = !spec.quickAdd && newButton;
   return (
     <>
       {boundNames.map((name) => (
@@ -875,12 +993,29 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
         />
       ))}
       {inBar && createPortal(title, crumbs.note!)}
-      {inCrumbs && !spec.quickAdd && newButton && createPortal(newButton, (crumbs.tools ?? crumbs.head)!)}
+      {inBar &&
+        createPortal(
+          <>
+            {viewsMenu}
+            {pageVerbs}
+          </>,
+          crumbs.tools!,
+        )}
       <div className={`applist-head${inBar ? ' in-crumbs' : ''}`}>
         {!inBar && !inDashboard && (
           <div className="applist-head-row" ref={head}>
             {title}
-            {ownList ? <div className="applist-head-tools" ref={listHeadRef} /> : !spec.quickAdd && newButton}
+            {/* One family, in one order: Views, Export (the rows draw it into the place between, TableView.tsx),
+                Import, and New last, where the primary action is looked for. */}
+            {ownList ? (
+              <div className="applist-head-tools">
+                {viewsMenu}
+                <span className="applist-head-slot" ref={listHeadRef} />
+                {pageVerbs}
+              </div>
+            ) : (
+              pageVerbs
+            )}
           </div>
         )}
         {/* In the layout under a heading, chips or none: a row that appears with the
@@ -888,6 +1023,8 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
             Beside a title in the crumb bar the empty row folds away (features.css). */}
         {!beside && !chipsInBar && <div className="applist-chips">{chipList}</div>}
       </div>
+      {/* The list's summary, between its name and its tabs: what the whole list comes to, before it is narrowed. */}
+      {summary}
       <div className="applist-controls" role="group" aria-label={say('listControls', { caption })}>
         {(tabs.length > 1 || yours.length > 0) && (
           <div className="tabs folds" ref={tabStrip}>
@@ -1051,21 +1188,13 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
                     {say('advanced')}
                   </button>
                 )}
-                {/* Saving and renaming never both apply: a question already kept is not offered again. */}
-                {offerSave && (
-                  <button
-                    type="button"
-                    className="applist-toggle"
-                    title={store === 'account' ? say('keepThisTabIts') : say('keepThisTabItsFilters')}
-                    onClick={() => void save()}
-                  >
-                    {say('saveView')}
-                  </button>
-                )}
-                {savable && yourLit >= 0 && (
-                  <button type="button" className="applist-toggle" onClick={() => void rename(yours[yourLit])}>
-                    {say('renameView')}
-                  </button>
+                {choosable.length > 0 && !personFacing() && (
+                  <ListColumns
+                    columns={choosable.map((name) => ({ name, label: captionOf(name) }))}
+                    hidden={leftOut}
+                    onChange={setLeftOut}
+                    caption={caption}
+                  />
                 )}
               </div>
             </div>
@@ -1091,7 +1220,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
         )}
         {/* A phone's Records/Table switch, drawn here by the list (TableView): its own row over the rows cost a
             line of every list's first screen. */}
-        {inCrumbs && <span className="applist-presentation" ref={listControlsRef} />}
+        {inCrumbs && <PresentationHost list={viewKey} />}
       </div>
       {beside && railProps ? (
         <div className="applist-body has-rail">

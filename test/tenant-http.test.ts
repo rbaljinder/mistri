@@ -482,7 +482,8 @@ test("a composed record page is read on one context, each part as its own reques
   const planned = await f.data('/api/pages/plan', a, { page: 'items', key: { id: 'north-item' } });
   assert.deepEqual(composed.body.plans, planned.body.plans);
   const reads = composed.body.reads as Array<{ path: string; body: Record<string, unknown>; status: number; reply: unknown }>;
-  assert.deepEqual(reads.map((read) => read.path).sort(), ['/api/record-history', '/api/view/run', '/api/view/run']);
+  // The related list's count is a read of its own, composed with the rest so the page is still one request.
+  assert.deepEqual(reads.map((read) => read.path).sort(), ['/api/counts', '/api/record-history', '/api/view/run', '/api/view/run']);
   for (const read of reads) {
     const alone = await f.data(read.path, a, read.body);
     owned(alone, a);

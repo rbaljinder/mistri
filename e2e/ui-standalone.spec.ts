@@ -4,12 +4,11 @@
  * the `mistri-ui` layer, so a rule of the page's own wins over it whatever its specificity.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test } from './support/harness';
 
 const ORIGIN = 'http://ui.test';
-const SHEETS = ['style.css', 'tokens.css', 'primitives.css'];
 
 /* The primitives, as React renders them (support/uiMarkup.tsx). */
 const markup = execFileSync(resolve('node_modules/.bin/tsx'), ['e2e/support/uiMarkup.tsx'], { encoding: 'utf8' });
@@ -19,7 +18,9 @@ test('a page drawn with @mistriwork/ui alone wears its stylesheet, under any rul
   try {
     await context.route(`${ORIGIN}/**`, (route) => {
       const name = new URL(route.request().url()).pathname.slice(1);
-      if (SHEETS.includes(name))
+      /* style.css and every sheet it imports, each from its own place in the package: the controls' dress is a
+         folder of them (controls.css). */
+      if (name.endsWith('.css') && existsSync(resolve('packages/ui/src', name)))
         return route.fulfill({ contentType: 'text/css', body: readFileSync(resolve('packages/ui/src', name), 'utf8') });
       return route.fulfill({
         contentType: 'text/html',
@@ -36,23 +37,31 @@ test('a page drawn with @mistriwork/ui alone wears its stylesheet, under any rul
         .evaluate((node, name) => getComputedStyle(node).getPropertyValue(name), property);
     const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
     expect(accent).not.toBe('');
-    // The Button: one height per size, the accent for primary, a box for secondary.
-    expect(await style('.btn-primary', 'min-height')).toBe('34px');
-    expect(await style('.btn-primary', 'display')).toBe('inline-flex');
-    expect(await style('.btn-primary', 'background-color')).not.toBe('rgba(0, 0, 0, 0)');
-    expect(await style('.btn-secondary', 'border-top-style')).toBe('solid');
+    // The Button: one height per size, the accent for primary, a box for secondary. The height is the package's
+    // own token for a control (`--control-h`), which a theme moves, so a button and a field stand level.
+    const tall = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--control-h').trim());
+    expect(tall).toBe('34px');
+    const solid = '[data-slot="button"][data-variant="solid"]';
+    const plain = '[data-slot="button"]:not([data-variant])';
+    expect(await style(solid, 'height')).toBe(tall);
+    expect(await style(solid, 'display')).toBe('inline-flex');
+    // The package's own accent, read through the names the controls are dressed by.
+    expect(await style(solid, 'background-color')).toBe('rgb(29, 106, 90)');
+    expect(await style(plain, 'border-top-style')).toBe('solid');
     // The page's own rule wins over the compact size by layer, not by specificity.
-    expect(await style('.btn-secondary', 'min-height')).toBe('50px');
+    expect(await style(plain, 'min-height')).toBe('50px');
     // The Field: a column, its control one edge and one height.
-    expect(await style('.form-field', 'display')).toBe('grid');
-    expect(await style('.form-field-hint', 'margin-top')).toBe('0px');
-    expect(await style('.field-control', 'min-height')).toBe('34px');
-    expect(await style('.field-control', 'border-top-width')).toBe('1px');
-    // The icon and the date field.
+    expect(await style('[data-slot="field"]', 'display')).toBe('flex');
+    expect(await style('[data-slot="field"]', 'flex-direction')).toBe('column');
+    expect(await style('[data-slot="field-description"]', 'margin-top')).toBe('0px');
+    expect(await style('[data-slot="field"] > [data-slot="input"]', 'height')).toBe(tall);
+    expect(await style('[data-slot="field"] > [data-slot="input"]', 'border-top-width')).toBe('1px');
+    // The icon and the date field: one box, with the text and the calendar's button inside its edge.
     expect(await style('.mistri-icon', 'display')).toBe('inline-block');
-    expect(await style('.date-field', 'display')).toBe('flex');
-    expect(await style('.date-field-trigger', 'position')).toBe('absolute');
-    expect(await style('.date-field-hint', 'position')).toBe('absolute');
+    expect(await style('[data-slot="date-field"]', 'display')).toBe('flex');
+    expect(await style('[data-slot="date-field"]', 'border-top-width')).toBe('1px');
+    expect(await style('[data-slot="date-field"] > [data-slot="input"]', 'border-top-width')).toBe('0px');
+    expect(await style('[data-slot="date-field-hint"]', 'position')).toBe('absolute');
   } finally {
     await context.close();
   }

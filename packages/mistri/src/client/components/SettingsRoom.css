@@ -1,0 +1,21 @@
+/* The settings page (SettingsRoom.tsx): what a section is about on one side, its rows on the other, a rule between
+   sections. Brought with the room's own chunk, so no first page carries it. */
+@layer components {
+.settings { max-width: 68rem; padding-bottom: var(--space-8); }
+/* The title stands off the first section's rule by a field's gap: the head's own foot is for a toolbar under it. */
+.settings > .applist-head { padding-bottom: var(--space-5); }
+.settings-group { display: contents; }
+.settings-section {
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 11fr); gap: var(--space-6) var(--space-8);
+  margin-inline: var(--space-4h); padding-block: var(--space-7); border-top: 1px solid var(--line);
+}
+.settings-about h2 { margin: 0; font: var(--heading-weight, 600) var(--text-lg) / 1.3 var(--heading-font, var(--sans)); }
+.settings-about p { margin: var(--space-2) 0 0; color: var(--ink-muted); line-height: 1.5; text-wrap: pretty; }
+.settings-rows { min-width: 0; }
+/* The rows start at the section's own top edge, as its title does. */
+.settings-rows > .prefs-row:first-child { padding-top: 0; }
+/* On a phone the two sides are one column: what it is about, then its rows. */
+@media (max-width: 760px) {
+  .settings-section { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); padding-block: var(--space-6); }
+}
+}

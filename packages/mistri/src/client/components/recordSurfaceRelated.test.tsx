@@ -287,7 +287,8 @@ test('nested shared form/picker insert preserves the exact mounted parent editor
   const view = draw();
   const opened = await fillRelated();
   expect(opened.dialog).toHaveClass('insert-dialog');
-  expect(opened.dialog).toHaveAttribute('data-nested');
+  // Nested: opened over the record's own dialog, which stays mounted under it.
+  expect(document.querySelector('[role="dialog"].record-modal')).not.toBeNull();
   expect(screen.queryByRole('textbox', { name: 'Issue id' })).toBeNull();
   expect(model.mount).not.toHaveBeenCalled();
   expect(document.querySelector('.newpanel-host')).toBeNull();

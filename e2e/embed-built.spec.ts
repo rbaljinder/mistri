@@ -112,7 +112,7 @@ test('the built @mistriwork/mistri/react starts in a host’s page and draws the
   await embed.getByRole('button', { name: 'Sign in' }).click();
   await expect(embed.getByRole('heading', { level: 1, name: 'Classes' })).toBeVisible();
   await expect(embed.getByRole('row').filter({ hasText: 'Sourdough' }).first()).toBeVisible();
-  // A Base UI part, which is what reached use-sync-external-store: the App's menu is drawn with it.
+  // A menu, which is what reached use-sync-external-store then: the App's is a control of the library's, drawn over UI SDK now.
   await embed.getByRole('navigation', { name: 'App menu' }).getByRole('button', { name: 'Bookings' }).click();
   await expect(embed.getByRole('heading', { level: 1, name: 'Bookings' })).toBeVisible();
 

@@ -6,22 +6,26 @@ a look and declare display rules (`mistri docs looks`, `mistri docs vocabularies
 For what a whole App of a kind looks like on its first try, see
 [recipes.md](recipes.md); this file is the rule for each part.
 
-## The look: Workshop unless the work says otherwise
+## The look: by the work, in the App's own color
 
-Write `ui.theme` even for the default, so the choice is visible in review.
+Write `ui.theme` with the look and a palette, an accent or a theme with `brand`: a draft starts in Lumen under a palette picked by its name, to be changed.
 
 | The App is | Look | Example |
 | --- | --- | --- |
 | Operations, field work, a desk, anything run from a dashboard home | `preset: 'workshop'` (the default) | `mistri docs looks` |
-| A polished workspace product: sales, a client-facing desk | `preset: 'lumen'` | [lintel/app.ts:175](../../../examples/apps/lintel/app.ts#L175) |
+| A polished workspace product: sales, a client-facing desk | `preset: 'lumen'` | [lintel/app.ts:177](../../../examples/apps/lintel/app.ts#L177) |
 | Dense back office: ledgers, admin tables, read in rows all day | `preset: 'mono'` | `mistri docs looks` |
 | People, care, scheduling: soft cards, a calmer page | `preset: 'sage'` | `mistri docs looks` |
+| Books and figures kept in ruled columns | `preset: 'ledger'` | `mistri docs looks` |
+| Read more than worked: a client's portal, a report, a catalogue | `preset: 'atelier'` | `mistri docs looks` |
+| A dense console people are in all day: operations, support, finance | `preset: 'graphite'` | `mistri docs looks` |
+| A friendly product people meet now and then: bookings, a members' area | `preset: 'bloom'` | `mistri docs looks` |
 | A brand or a reading product with its own grounds and inks | a `defineTheme` in `theme.ts`, `extends` a built-in | `mistri docs themes` |
 | A tenant App whose tenants want their own logo and accent | `branding` plus a `brandingForm()` section | `mistri docs themes` |
 
 - **Adjust before you define**: `palette` (one of the twelve every look offers: `crimson`, `safety`, `amber`, `moss`, `emerald`, `teal`, `cobalt`, `violet`, `plum`, `rose`, `slate`, `ink`), then `accent`, `radius`, `font` on a built-in look,
   beside `preset` in `ui.theme` (Lintel writes only the preset, line 159 above).
-- **A theme of your own is small**: `extends: 'sage'` (or `'workshop'`, `'lumen'`, `'mono'`)
+- **A theme of your own is small**: `extends: 'sage'` (or any other built-in look)
   and only what differs, registered in `customThemes` and named in
   `theme: { preset }`. It is done when `mistri check --app .` passes: the
   validator measures text and the accent at 4.5:1, controls and the first four
@@ -33,7 +37,7 @@ Write `ui.theme` even for the default, so the choice is visible in review.
   App and a settings dashboard with `brandingForm('Branding')`; the tenant can
   never change grounds, ink or recipes, and every save is validated as a theme.
 - **A mark** (`ui.logo`) and an `icon` on every view, of what it lists —
-  [lintel/app.ts:174](../../../examples/apps/lintel/app.ts#L174),
+  [lintel/app.ts:176](../../../examples/apps/lintel/app.ts#L176),
   [lintel/views.ts:25](../../../examples/apps/lintel/views.ts#L25).
 
 ## Make it look like the domain
@@ -44,11 +48,18 @@ in three words (`hard-wearing, labelled, loud`), find its row below, and start
 from those recipes; then colors and a face, not the other way round. Every
 value is pictured in `mistri docs theme-recipes`.
 
+Start with the two families, which each set several parts so a page's blocks
+agree: `blocks` (`open`, `ruled`, `card`, `panel`, `tile`) is how sections,
+field groups, stats, tables and steps are held, and `current` (`tint`,
+`inverted`, `underline`, `pill`, `lifted`) how the menu's entry, a tab and a
+window are shown when chosen. Then say only the parts where the theme means
+something else: `recipes: { blocks: 'panel', current: 'tint', nav: 'quiet' }`.
+
 | Character | Extends | Recipes | Shape and type |
 | --- | --- | --- | --- |
 | Industrial: a workshop, a warehouse, a fleet | `mono` | `bar: 'dark'`, `nav: 'inverted'`, `tabs: 'inverted'`, `stat: 'framed'`, `status: 'pill'`, `lanes: 'tag'`, `table: 'tinted'` | `radius: { control: '2px', pill: '2px' }`, `elevation: 'flat'`, `rules.control: '2px'`, a condensed sans heading; `roles: { section: { case: 'upper', size: '12px' } }` (Mono's labels and figures come with it) |
 | Editorial: a publication, research, a reading product | `lumen` | `bar: 'ruled'`, `nav: 'underline'`, `tabs: 'rule'`, `stat: 'ruled'`, `status: 'quiet'`, `links: 'underline'`, `rules: 'ink'` | `elevation: 'hairline'`, a serif heading; `roles: { section: { case: 'small-caps' }, label: { case: 'small-caps' }, figure: { face: 'heading', weight: 600, features: ['lnum'] } }` |
-| Soft: care, scheduling, people | `sage` | `bar: 'soft'`, `nav: 'quiet'`, `tabs: 'chosen'`, `windows: 'chosen'`, `stat: 'panel'`, `section: 'panel'`, `fields: 'panel'`, `status: 'pill'`, `avatar: 'large'`, `board: 'soft'`, `chart: 'wash'` | `radius: '8px'`, `elevation: 'soft'` |
+| Soft: care, scheduling, people | `sage` | `blocks: 'panel'`, `current: 'tint'`, `bar: 'soft'`, `nav: 'quiet'`, `status: 'pill'`, `avatar: 'large'`, `board: 'soft'`, `chart: 'wash'` | `radius: '8px'`, `elevation: 'soft'` |
 | Dense ledger: accounts, admin, anything read in rows all day | `mono` | `bar: 'ruled'`, `nav: 'tint'`, `tabs: 'underline'`, `stat: 'divided'`, `section: 'open'`, `table: 'quiet'`, `status: 'dot'`, `lanes: 'plain'`, `rules: 'hairline'` | `density: 'compact'`, `roles: { title: { size: '22px' } }` (Mono's labels and figures come with it) |
 
 - **Measure the distance from the base**: `npx @mistriwork/mistri theme show <id> --app . --diff <base>`
@@ -84,14 +95,14 @@ value is pictured in `mistri docs theme-recipes`.
 
 - **A state wears a tone**: `{ tone: { ... } }` to `good`, `warn`, `bad`,
   `info`, `neutral`, with `'*': 'neutral'`. Tone only what carries meaning —
-  [lintel/resources.ts:64](../../../examples/apps/lintel/resources.ts#L64).
+  [lintel/resources.ts:63](../../../examples/apps/lintel/resources.ts#L63).
 - **A state people scan for** (locked, held): `icons`, never a dot and a mark
   together —
-  [lintel/resources.ts:216](../../../examples/apps/lintel/resources.ts#L216).
+  [lintel/resources.ts:215](../../../examples/apps/lintel/resources.ts#L215).
 - **A kind, not a state** (design, research, ops): `colors: { design: 1, research: 3 }`,
   so it keeps one chart color in every look; a board shows it as `category`.
 - **A trend** is green or red only where `better` says which way is good —
-  [lintel/dashboards.ts:20](../../../examples/apps/lintel/dashboards.ts#L20).
+  [lintel/dashboards.ts:27](../../../examples/apps/lintel/dashboards.ts#L27).
 
 ## Values drawn, not printed
 
@@ -100,12 +111,12 @@ Every status, figure, person and date gets a rule. One line per intent:
 | Value | Rule | Example |
 | --- | --- | --- |
 | Money | none for a number named like money (`amount`, `price`, `…_total`); `{ format: 'money' }` where the name does not say it; `ui.currency` once; cents stored as whole numbers add `minor: true` | [lintel/resources.ts:12](../../../examples/apps/lintel/resources.ts#L12) |
-| A figure with a unit | `{ unit: 'min' }`, money too (`unit: '/mo'`) | [lintel/resources.ts:59](../../../examples/apps/lintel/resources.ts#L59) |
+| A figure with a unit | `{ unit: 'min' }`, money too (`unit: '/mo'`) | [lintel/resources.ts:117](../../../examples/apps/lintel/resources.ts#L117) |
 | A share compared down a list | `{ format: 'percent', bar: true }` | `mistri docs vocabularies` |
 | Progress toward a whole, on a record | `{ format: 'percent', ring: true }` | `mistri docs vocabularies` |
 | A date said from today ("in 3 days") | none for a date named like a due date; `{ format: 'relative' }` for another | `mistri docs vocabularies` |
 | A person or a company | `{ avatar: true, subtitle: 'email' }` | `mistri docs vocabularies` |
-| The people on a thing | `{ format: 'avatars' }` | [lintel/resources.ts:225](../../../examples/apps/lintel/resources.ts#L225) |
+| The people on a thing | `{ format: 'avatars' }` | [lintel/resources.ts:224](../../../examples/apps/lintel/resources.ts#L224) |
 | A thing's kind in a list | `{ icon: { mark: 'tag', toneOf: 'status' } }` | `mistri docs vocabularies` |
 | A score out of N | `{ format: 'rating', outOf: 5 }` | `mistri docs vocabularies` |
 | A color, a time, a month, a year | `format: 'color'`, `'time'`, `'month'`, `'year'` | `mistri docs vocabularies` |
@@ -125,10 +136,10 @@ A drawn format (`avatars`, `rating`, `color`, `time`, `month`, `year`,
   refuses a write that is not JSON.
 - A code read off a box (UPC, serial): `scan: true` on the text column.
 - Proof of delivery or consent: `signature: true` on a reference to a `file`
-  resource (a `file` resource, such as Lintel's photos at [lintel/resources.ts:36](../../../examples/apps/lintel/resources.ts#L36)).
+  resource (a `file` resource, such as Lintel's photos at [lintel/resources.ts:35](../../../examples/apps/lintel/resources.ts#L35)).
 - A vocabulary of a few kinds, in a New form: cards with their icons,
   `form: { fields: { category: { as: 'cards' } } }` —
-  [lintel/resources.ts:206](../../../examples/apps/lintel/resources.ts#L206); `'buttons'`,
+  [lintel/resources.ts:202](../../../examples/apps/lintel/resources.ts#L202); `'buttons'`,
   `'radios'` and `'select'` are the others. A command's inputs say the same
   with `as` ([recipes.md](recipes.md#forms-a-record-form-in-rows-an-application-as-an-intake)).
 
@@ -141,9 +152,9 @@ fit them (`mistri docs command-forms`, `mistri docs forms`).
   (`var(--field-edge)`, derived per look), never the soft well with no edge: a
   fill alone read as disabled. A theme may set `colors.<mode>.field`, and
   `check` measures the ink on it at 4.5:1.
-- **"(optional)" stands beside an optional label**, and a needed one wears no
-  star. A `help` says what to put there or what leaving it empty does, never
-  "Optional" again.
+- **Needed or optional is said by the look** (`recipes.required`): `star` on a needed label, or `optional-word` beside
+  an optional one. Do not write either into a label. A `help` says what to put there or what leaving it empty does,
+  never "Optional" again.
 - **One step indicator**: every stepped form, either style, page or dialog,
   says "Step n of m" beside one thin bar; there is no row of numbered tabs,
   and the primary says Continue or the step's `next`.
@@ -156,7 +167,7 @@ fit them (`mistri docs command-forms`, `mistri docs forms`).
   sensitive answer as its last four.
 - **Rows of fields**: up to three read together side by side, one height,
   stacking on a narrow form — `['part_id', 'quantity']` at
-  [lintel/resources.ts:334](../../../examples/apps/lintel/resources.ts#L334);
+  [lintel/resources.ts:332](../../../examples/apps/lintel/resources.ts#L332);
   never four, never a field named twice.
 
 ## Dashboards: say one thing per section
@@ -167,15 +178,15 @@ pairs, then the lists of waiting work. Blocks by intent:
 | Intent | Section | Example |
 | --- | --- | --- |
 | Introduce the board and its one next step | `banner(title, text, { eyebrow, action })`, once, first | `mistri docs compose-dashboard` |
-| A flow through ordered states (received, picked, shipped) | `breakdown(..., { shape: 'steps', notes })`, full width | [lintel/dashboards.ts:28](../../../examples/apps/lintel/dashboards.ts#L28) |
-| A trend over time | `chart(..., 'month <date>', { curve: 'smooth' })` | [lintel/dashboards.ts:41](../../../examples/apps/lintel/dashboards.ts#L41) |
+| A flow through ordered states (received, picked, shipped) | `breakdown(..., { shape: 'steps', notes })`, full width | [lintel/dashboards.ts:35](../../../examples/apps/lintel/dashboards.ts#L35) |
+| A trend over time | `chart(..., 'month <date>', { curve: 'smooth' })` | [lintel/dashboards.ts:48](../../../examples/apps/lintel/dashboards.ts#L48) |
 | Shares of a whole, at most six parts | `shape: 'donut', total: 'Leads'` | `mistri docs compose-dashboard` |
 | How far rows get through a pipeline | `shape: 'funnel'` | `mistri docs compose-dashboard` |
 | Two figures per group (count against value) | `shape: 'scatter', x: 'count'` | `mistri docs compose-dashboard` |
 | When work happens (weekday by hour) | `shape: 'heatmap'` over `weekday <ts>, hour <ts>` | `mistri docs compose-dashboard` |
 | Where a total sits, too many parts for a donut | `shape: 'treemap'` | `mistri docs compose-dashboard` |
 | Rises and falls that make a net | `shape: 'waterfall'` | `mistri docs compose-dashboard` |
-| The page's window as one date button | `windowControl: 'button'` with `windows` | [lintel/dashboards.ts:74](../../../examples/apps/lintel/dashboards.ts#L74) |
+| The page's window as one date button | `windowControl: 'button'` with `windows` | [lintel/dashboards.ts:101](../../../examples/apps/lintel/dashboards.ts#L101) |
 
 Charts follow the data-visualization rules, or they are left out:
 
@@ -212,12 +223,12 @@ sections follow the period, and say "now" figures in their `query` without it.
 - **A board**: `board: { by, primary, lines, category, footer }` — `category`
   a kind chip, `footer` up to four facts with icons, people last; each names a
   column of the record's own (a card draws a reference as its bare key) —
-  [lintel/views.ts:134](../../../examples/apps/lintel/views.ts#L134).
+  [lintel/views.ts:141](../../../examples/apps/lintel/views.ts#L141).
 - **A hierarchy** (parent companies, locations, categories) with a
   self-reference: `presentation: tree('parent_id', 'name', { lines: ['city'] })`.
 - **Spans between two dates** (campaigns, projects, rotas):
   `presentation: gantt('starts_on', 'ends_on', 'name', { by: 'kind', progress })` —
-  [lintel/views.ts:81](../../../examples/apps/lintel/views.ts#L81).
+  [lintel/views.ts:88](../../../examples/apps/lintel/views.ts#L88).
 - Every list: tabs in working order with All last, a filter per way it is
   narrowed, an `empty` that says what belongs there.
 
@@ -225,10 +236,10 @@ sections follow the period, and say "now" figures in their `query` without it.
 
 - **`recordLabel`** is words and references, never an amount or an id; a date
   only beside the parent it tells apart —
-  [lintel/resources.ts:49](../../../examples/apps/lintel/resources.ts#L49).
+  [lintel/resources.ts:48](../../../examples/apps/lintel/resources.ts#L48).
 - **No raw ids**: a reference by name through a label path (`owner_id.name`),
   captioned once in `labels`, keys out of `show` —
-  [lintel/resources.ts:68](../../../examples/apps/lintel/resources.ts#L68).
+  [lintel/resources.ts:67](../../../examples/apps/lintel/resources.ts#L67).
 
 ## One primary action
 
@@ -236,7 +247,7 @@ sections follow the period, and say "now" figures in their `query` without it.
   label), else the first non-destructive verb; the next two quiet, the rest
   under More. The forward verb first; Delete never a button; a destructive
   verb last, with `confirm: true` —
-  [lintel/resources.ts:176](../../../examples/apps/lintel/resources.ts#L176).
+  [lintel/resources.ts:171](../../../examples/apps/lintel/resources.ts#L171).
 - **A verb says what it does to what**: `label: 'Cancel request'`, not "Cancel" —
   [lintel/resources.ts:14](../../../examples/apps/lintel/resources.ts#L14).
 - A list's New is its one primary action.
@@ -244,7 +255,7 @@ sections follow the period, and say "now" figures in their `query` without it.
 ## Copy: en-US, sentence case, the reader's words
 
 - `locale`, `timezone` and `currency` in `ui` —
-  [lintel/app.ts:191](../../../examples/apps/lintel/app.ts#L191).
+  [lintel/app.ts:193](../../../examples/apps/lintel/app.ts#L193).
 - Sentence case, American spelling. A heading names what the section shows,
   never "Details", "Info" or "Data".
 - A form's `description` says in one sentence what a new record is for; a

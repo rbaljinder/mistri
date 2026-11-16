@@ -537,7 +537,15 @@ export async function addresses(
   skipped: Unshot[] = [],
   /** Each address opened under another, as the browser rewrites it, said so the run's reader can see which one was shot. */
   rewritten: string[] = [],
+  /** Who the run opens the App as: a role, or `null` signed out. Absent, the run does not say, and every view is taken
+      as served. A record's address is the first list over its table that this reader is served (shared/appAddress.ts),
+      so a visitor's `/shop/1` stays under the catalogue where the office's list is not theirs to open. */
+  reader?: string | null,
 ): Promise<Shot[]> {
+  const served = (view: string | undefined): boolean => {
+    const roles = view === undefined ? undefined : (loaded.app.views[view] as { roles?: readonly string[] } | undefined)?.roles;
+    return reader === undefined || !roles || (reader !== null && roles.includes(reader));
+  };
   const app = encodeURIComponent(loaded.app.id);
   if (asked.length) {
     return asked.map((said) => {
@@ -587,6 +595,11 @@ export async function addresses(
         const home = table ? book.records.get(table) : undefined;
         /* The browser opens a record under any list over its table and lands on the table's canonical address
            (shared/appAddress.ts: the resource's `view`, else the first plain list in menu order); so does this. */
+        /* The list its records are addressed through is one this reader is not served, and the one asked is theirs:
+           the server opens the record where they asked for it, and so does this. */
+        const homeView = home && 'view' in home.target ? home.target.view : undefined;
+        if (home && target.kind === 'list' && !served(homeView) && served(target.view))
+          return { path, name: slug(path.split('?')[0].slice(app.length + 1)) };
         if (home && (target.kind === 'list' || target.kind === 'table')) {
           const canonical = `/${app}/${encodeURIComponent(home.segment)}/${deeper.map(encodeURIComponent).join('/')}`;
           const query = path.includes('?') ? path.slice(path.indexOf('?')) : '';
@@ -621,6 +634,7 @@ export async function addresses(
   const other = realm === 'tenant' ? "the platform's" : "a tenant's";
   for (const [segment, target] of book.routes) {
     if (target.kind === 'table') continue; // a table no view declares: its rows are addressed through its records
+    if (target.kind === 'settings') continue; // the reader's own settings: the product's page, not one the App wrote
     if (elsewhere(target)) {
       skipped.push({ what: `/${app}/${segment}`, why: `${other}, not this context's` });
       continue;
@@ -966,10 +980,9 @@ export const RECIPE_REGIONS: Readonly<Record<RecipePart, readonly string[]>> = {
   rules: ['.page-section'],
   avatar: ['.page-head:has(.page-record-avatar)', '.page-head'],
   workflow: ['.workflow-steps'],
-  required: ['.form-field.is-required', '.form-field'],
-  checkbox: ['.form-field-check-row', '.field-check'],
+  required: ["[data-slot='field'][data-required]", "[data-slot='field']"],
   formStep: ['.intake-head'],
-  actionBar: ['.intake-actions', '.action-bar'],
+  actionBar: ['.intake-actions', "[data-slot='action-bar']"],
   banner: ['.page-section.dash-banner', '.dashboard-note.is-banner'],
   steps: ['.dash-steps', ':has(> .dash-step)'],
   lanes: ['.board-list', '.dash-board', '.triage-board'],
@@ -1647,7 +1660,17 @@ class ShotRun {
       const skipped: Unshot[] = [];
       const rewritten: string[] = [];
       const shots = (
-        await addresses(options.routes, loaded, appRoutes(loaded, schema), firstKey, this.member?.realm, mount, skipped, rewritten)
+        await addresses(
+          options.routes,
+          loaded,
+          appRoutes(loaded, schema),
+          firstKey,
+          this.member?.realm,
+          mount,
+          skipped,
+          rewritten,
+          options.as ?? null,
+        )
       ).map((shot) => ({
         ...shot,
         path: outward(mount, shot.path),

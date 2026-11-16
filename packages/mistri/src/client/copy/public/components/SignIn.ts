@@ -3,6 +3,7 @@ import { defineMessages } from '@mistriwork/kit/client/messages.js';
 
 export const say = defineMessages({
   google: 'Google',
+  or: 'or',
   anAccountAlreadyUsesThisEmail: 'An account already uses this email address. Sign in instead.',
   enterAnEmailAddress: 'Enter an email address, like name@example.com.',
   useAtLeastCharacters: 'Use at least {min} characters.',
@@ -22,6 +23,7 @@ export const say = defineMessages({
   youExampleCom: 'you@example.com',
   atLeastCharacters: 'At least {min} characters.',
   hide: 'Hide',
+  capsLockIsOn: 'Caps Lock is on.',
   show: 'Show',
   createAccount: 'Create account',
   forgotPassword: 'Forgot password?',

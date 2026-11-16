@@ -123,7 +123,10 @@ export const rollup = Object.freeze({
 const measured = (kind, title, from, opts, rest) => ({ kind, title, from, ...rest, ...opts });
 /** A metric: one number — `metric('Pipeline', 'opportunity', { measure: 'sum amount', compare })` on a dashboard,
     `metric('Open tasks', 'task', { whose: 'account_id', query: 'status = open' })` on a page. */
-export const metric = (title, from, opts = {}) => measured('metric', title, from, opts, {});
+/* A list's summary may name no table (`metric('Vacant', { query: 'available' })`): the list's own is meant, as a
+   dashboard's `from` is for a section that names none. The object then stands where the table would. */
+export const metric = (title, from, opts = {}) =>
+  from !== null && typeof from === 'object' ? { kind: 'metric', title, ...from } : measured('metric', title, from, opts, {});
 /** A chart: a line (bucketed by), bars or a donut — `chart('Bookings', 'opportunity', 'month close_date')` on a dashboard,
     `chart('Billed by month', 'invoice', 'month issued_on', { whose: 'customer_id', measure: 'sum total' })` on a page. */
 export const chart = (title, from, by, opts = {}) => measured('chart', title, from, opts, { by });

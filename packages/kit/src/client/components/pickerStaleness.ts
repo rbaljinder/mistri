@@ -16,6 +16,14 @@
  *
  * `answered` also says whether "nothing matches" may be said yet: an empty
  * filtered list is not the server's answer.
+ *
+ * The rows on screen may name nothing the box now says: an editable field
+ * asks for its chosen record's label while it shows it, so when someone then
+ * types, the answer that lands first is for that label, and filtering it
+ * leaves nothing. The rows offered a moment ago that the box's text does name
+ * (`last`) stand in until the real answer lands: they were on screen, they
+ * pass the same rule, and without them the list went away for the length of
+ * the pause and came back, with a press on an option landing on the page.
  */
 export function offeredChoices<T>({
   typed,
@@ -23,6 +31,7 @@ export function offeredChoices<T>({
   placeholder = false,
   rows,
   label,
+  last,
 }: {
   /** What the box says now. */
   typed: string;
@@ -32,10 +41,14 @@ export function offeredChoices<T>({
   placeholder?: boolean;
   rows: T[] | undefined;
   label: (row: T) => string;
+  /** The rows last offered, for when the rows on screen answer other text and name nothing the box says. */
+  last?: readonly T[];
 }): { choices: T[]; answered: boolean } {
   const needle = typed.trim();
   const answered = asked === needle && !placeholder;
   if (answered) return { choices: rows ?? [], answered };
   const folded = needle.toLowerCase();
-  return { choices: (rows ?? []).filter((row) => label(row).toLowerCase().includes(folded)), answered };
+  const named = (list: readonly T[]) => list.filter((row) => label(row).toLowerCase().includes(folded));
+  const kept = named(rows ?? []);
+  return { choices: kept.length || !last ? kept : named(last), answered };
 }

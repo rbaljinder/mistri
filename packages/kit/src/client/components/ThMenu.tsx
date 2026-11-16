@@ -4,8 +4,8 @@
  * always, ranges where a range means anything. The sampling round trip
  * stays in `thmenu.js`; this is the menu, and the rule for what it offers.
  */
-import { Menu } from '@base-ui/react/menu';
-import { layoutViewport, zoomAnchor } from '@mistriwork/ui/internal/anchor.js';
+import { useEffect, useState } from 'react';
+import { createMenuController, Menu, MenuContent, MenuItem, MenuSeparator } from '@ui-sdk/react/menu';
 import { go, quote, refine, render, tableView } from '../core.js';
 import { addSort, nextSort, sortCount, sortDirection } from '../clauses.js';
 import { SORT_SCAN_BELOW } from '../columns.js';
@@ -15,7 +15,7 @@ import { pinnedFor, togglePin } from '../pins.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { formatNumber } from '../locale.js';
 import { say } from '../copy/columnMenu/components/ThMenu.js';
-import { popupContainer } from '../shellHost.js';
+import { popupContainer, portalRoot } from '../shellHost.js';
 
 export type Kind = 'boolean' | 'date' | 'number' | 'text' | string;
 type Row = Record<string, unknown>;
@@ -180,14 +180,23 @@ export function FilterMenu({ anchor, name, kind, metaType, dateish, rows, table,
     });
     if (range) apply(`${name} between ${quoteValue(offer.asStamp(range.from))} and ${quoteValue(offer.asStamp(range.to))}`);
   };
-  /* Base UI owns the menu's keyboard and its dismissal: focus moves in on
+  /* UI SDK owns the menu's keyboard and its dismissal: focus moves in on
      open, arrows walk the items, Escape and a click outside close only this
-     layer, and focus goes back to the ⌄ that opened it. Placed under the
-     header on the zoom-aware ruler, flipped or shifted when it would run
-     off an edge — which happens constantly on a wide table scrolled to the end. */
+     layer, and focus goes back to the ⌄ that opened it. It has no trigger of
+     its own: the ⌄ is the grid's, and the menu is placed under it, flipped or
+     shifted when it would run off an edge — which happens constantly on a
+     wide table scrolled to the end.
+
+     It is opened through a controller and not by an `open` prop: a menu that
+     is simply drawn open is given no focus, and this one is asked for by a
+     press on the ⌄, so the keyboard has to arrive in it. */
+  const [controller] = useState(() => createMenuController());
+  useEffect(() => {
+    void controller.open({ anchor, focus: 'popup' });
+  }, [controller, anchor]);
   return (
-    <Menu.Root
-      open
+    <Menu
+      controller={controller}
       onOpenChange={(next) => {
         if (next) return;
         /* Dismissed rather than used: the keyboard goes back to the ⌄. */
@@ -195,68 +204,65 @@ export function FilterMenu({ anchor, name, kind, metaType, dateish, rows, table,
         onClose();
       }}
     >
-      <Menu.Portal container={popupContainer()}>
-        <Menu.Positioner
-          anchor={() => zoomAnchor(anchor)}
-          positionMethod="fixed"
-          side="bottom"
-          align="start"
-          sideOffset={4}
-          collisionBoundary={layoutViewport()}
-          collisionPadding={12}
-          style={{ zIndex: 40 }}
-        >
-          <Menu.Popup className="th-menu" finalFocus={() => (anchor.isConnected ? anchor : false)}>
-            {/* First, because it is the one item about *reading* the table rather than narrowing it. */}
-            {table ? (
-              <Item
-                onClick={() => {
-                  togglePin(table, columns, name);
-                  onClose();
-                  render();
-                }}
-              >
-                <span className="th-menu-label">{pinned.includes(name) ? say('unpinThisColumn') : say('pinThisColumn')}</span>
-                <span className="th-menu-cond">{pinned.includes(name) ? say('letItScrollAway') : say('keepItInView')}</span>
-              </Item>
-            ) : null}
-            {sortItem(say('sortAscending'), 'asc')}
-            {sortItem(say('sortDescending'), 'desc')}
-            {/* "Then by" appears only once there is something to be *after*. */}
-            {sortsAlready ? sortItem(say('thenByAscending'), 'asc', true) : null}
-            {sortsAlready ? sortItem(say('thenByDescending'), 'desc', true) : null}
-            {table ? <Menu.Separator className="th-menu-sep" /> : null}
-            {offer.typed.map((typed) => (
-              <Item key={typed.label} className="th-menu-item th-menu-typed" onClick={() => void ask(typed)}>
-                <span className="th-menu-label">{typed.label}</span>
-              </Item>
-            ))}
-            {offer.ranges.map((range) => (
-              <Item key={range[0]} className="th-menu-item th-menu-typed" onClick={() => void askRange(range)}>
-                <span className="th-menu-label">{range[0]}</span>
-              </Item>
-            ))}
-            {offer.typed.length ? <Menu.Separator className="th-menu-sep" /> : null}
-            {offer.options.map(([label, condition]) => (
-              <Item key={condition + label} onClick={() => add(condition)}>
-                <span className="th-menu-label">{label}</span>
-                <span className="th-menu-cond">{condition}</span>
-              </Item>
-            ))}
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.Root>
+      <MenuContent
+        className="th-menu"
+        anchor={anchor}
+        side="bottom"
+        align="start"
+        sideOffset={4}
+        collisionPadding={12}
+        /* Out of the table, by name (AppColumnMenuPopups.tsx says why): the dialog the grid is in, else the page. */
+        container={anchor.closest<HTMLElement>('dialog, [role="dialog"]') ?? popupContainer() ?? portalRoot()}
+        finalFocus={() => (anchor.isConnected ? anchor : null)}
+      >
+        {/* First, because it is the one item about *reading* the table rather than narrowing it. */}
+        {table ? (
+          <Item
+            onClick={() => {
+              togglePin(table, columns, name);
+              onClose();
+              render();
+            }}
+          >
+            <span className="th-menu-label">{pinned.includes(name) ? say('unpinThisColumn') : say('pinThisColumn')}</span>
+            <span className="th-menu-cond">{pinned.includes(name) ? say('letItScrollAway') : say('keepItInView')}</span>
+          </Item>
+        ) : null}
+        {sortItem(say('sortAscending'), 'asc')}
+        {sortItem(say('sortDescending'), 'desc')}
+        {/* "Then by" appears only once there is something to be *after*. */}
+        {sortsAlready ? sortItem(say('thenByAscending'), 'asc', true) : null}
+        {sortsAlready ? sortItem(say('thenByDescending'), 'desc', true) : null}
+        {table ? <MenuSeparator className="th-menu-sep" /> : null}
+        {offer.typed.map((typed) => (
+          <Item key={typed.label} className="th-menu-item th-menu-typed" onClick={() => void ask(typed)}>
+            <span className="th-menu-label">{typed.label}</span>
+          </Item>
+        ))}
+        {offer.ranges.map((range) => (
+          <Item key={range[0]} className="th-menu-item th-menu-typed" onClick={() => void askRange(range)}>
+            <span className="th-menu-label">{range[0]}</span>
+          </Item>
+        ))}
+        {offer.typed.length ? <MenuSeparator className="th-menu-sep" /> : null}
+        {offer.options.map(([label, condition]) => (
+          <Item key={condition + label} onClick={() => add(condition)}>
+            <span className="th-menu-label">{label}</span>
+            <span className="th-menu-cond">{condition}</span>
+          </Item>
+        ))}
+      </MenuContent>
+    </Menu>
   );
 }
 
 /** One row of the menu, drawn as the button it always was. */
 function Item({ className = 'th-menu-item', onClick, children }: { className?: string; onClick: () => void; children: React.ReactNode }) {
   /* The handlers close the menu themselves (onClose unmounts it), so the
-     item does not also ask Base UI to — that told the caller twice. */
+     item does not also ask the menu to — that told the caller twice. */
   return (
-    <Menu.Item render={<button type="button" className={className} />} nativeButton closeOnClick={false} onClick={onClick}>
+    <MenuItem render={<button type="button" />} className={className} closeOnSelect={false} onSelect={onClick}>
       {children}
-    </Menu.Item>
+    </MenuItem>
   );
 }

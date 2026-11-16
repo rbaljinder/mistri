@@ -31,6 +31,8 @@
   /* A row's hairline, a step fainter than a card's edge. */
   :root[data-look-table='card'] {
     --row-rule: color-mix(in srgb, var(--line) 70%, var(--surface));
+    /* The band its heads stand on, wherever a table is: a list, a dashboard's card, a record's related rows. */
+    --table-head-ground: var(--raised);
   }
   /* The current room and a tint of what is chosen. */
   :root:is([data-look-nav='pill'], [data-look-workflow='pills'], [data-look-avatar='round']) {
@@ -112,7 +114,7 @@
     font-weight: 500;
   }
   :root[data-look-nav='pill'] :is(#table-list, .mobile-nav-list) button[aria-current='true'] .nav-icon {
-    color: var(--current-ink);
+    color: inherit;
   }
   /* A room's count is a quiet figure at the row's end, in the menu's quiet ink (nav.muted): a pill on every row made each
      room shout its size. A count that says work is late takes the danger's ink (Sidebar.tsx, is-overdue). */
@@ -131,14 +133,12 @@
     color: var(--status-critical);
     font-weight: 600;
   }
-  /* A group's heading: small capitals, tracked, in the faint ink. */
+  /* A group's heading: the menu's quiet ink, a step further in than a row. */
   :root[data-look-nav='pill'] #table-list li.nav-group {
     padding: 18px var(--space-4) var(--space-2h) calc(12px + var(--nav-group-inset, 0px));
     /* The menu's quiet ink on the menu's ground (nav.muted, measured there), not the page's caption: under a dark
        side menu the page's ink read as nothing. */
     color: var(--nav-muted);
-    font: 500 var(--text-xs) var(--sans);
-    letter-spacing: var(--track-caps);
   }
   :root[data-look-avatar='round'] .sidebar-identity-mark {
     border-radius: 50%;
@@ -235,7 +235,7 @@
     font-size: var(--text-md);
   }
   :root[data-look-banner='plain'] .dashboard-note.is-banner .dashboard-note-action {
-    min-height: 30px;
+    min-height: var(--control-h-sm);
     margin-top: var(--space-4);
     font-size: var(--text-base);
   }
@@ -276,7 +276,7 @@
     box-shadow: var(--shadow-card);
   }
   :root[data-look-section='card'] .dash-body .page-section:not(.dash-strip) th {
-    background: var(--surface);
+    background: var(--table-head-ground, var(--surface));
   }
   :root[data-look-section='card'] .dash-body .page-section:not(.dash-strip) .dash-list .table-wrap {
     margin-inline: calc(-1 * var(--panel-pad-inline));
@@ -489,20 +489,26 @@
   }
 
   /* ---------- Tables ---------- */
-  /* Heads in sentence case on no band, rows divided by the faintest hairline. */
-  :root[data-look-table='card'] th {
+  /* Heads on a band a step off the surface, ruled under, and rows divided by the faintest hairline. The band is
+     what tells a card of rows from a card of anything else, and it stays over the rows as they scroll. */
+  :root[data-look-table='card'] th:where(:not([data-slot])) {
     font: 500 var(--text-sm) var(--sans);
     color: var(--ink-muted);
+    background: var(--table-head-ground);
     border-bottom: 1px solid var(--line);
   }
-  :root[data-look-table='card'] td {
+  :root[data-look-table='card'] td:where(:not([data-slot])) {
     font-size: var(--text-base);
     border-bottom-color: var(--row-rule);
   }
   :root[data-look-table='card'] .app-mode :is(td, th) {
     padding-block: var(--space-3h);
   }
-  :root[data-look-table='card'] tbody tr:hover td {
+  /* The band is a row's height: at a title's, the head of a tight look stood half as tall again as its rows. */
+  :root[data-look-table='card'] .app-mode thead th {
+    padding-block: var(--space-2h);
+  }
+  :root[data-look-table='card'] tbody tr:hover td:where(:not([data-slot])) {
     background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
   }
   :root[data-look-table='card'] .grid-totals td {
@@ -518,7 +524,31 @@
     overflow: hidden;
   }
   :root[data-look-table='card'] .applist-room .table-wrap th {
+    background: var(--table-head-ground);
+  }
+  /* A list read as a queue (a row and its two lines) and a list's records as summaries, which is how a phone reads
+     a table, are the same card: ruled apart on the bare ground they were the lists of the look not held. */
+  :root[data-look-table='card'] .app-mode .applist-room :is(.queue-list, .record-summaries) {
+    overflow: hidden;
     background: var(--surface);
+    border: var(--panel-border-width, 1px) solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+  :root[data-look-table='card'] .app-mode .applist-room .record-summaries {
+    padding-inline: var(--space-5);
+  }
+  :root[data-look-table='card'] .app-mode .applist-room .record-summaries > .record-summary:first-child {
+    border-top-color: transparent;
+  }
+  /* On a phone the summaries reach the pane's edges (style.css); a card stands in from them by the page's gutter. */
+  @media (max-width: 760px) {
+    :root[data-look-table='card'] .app-mode .applist-room .record-summaries {
+      margin-inline: var(--space-4);
+    }
+  }
+  :root[data-look-table='card'] .app-mode .applist-room .queue-list > .queue-row:last-child {
+    border-bottom-color: transparent;
   }
 
   /* ---------- Meaning ---------- */
@@ -612,7 +642,7 @@
   }
   /* A record's second verb ("Mark lost") stands as a button beside the first, not a blue word: in the bar the
      link's blue beside the accent's fill read as two primaries. */
-  :root[data-look-buttons='raised'] .page-action.btn.btn-quiet {
+  :root[data-look-buttons='raised'] .page-action[data-slot='button'][data-variant='quiet'] {
     padding-inline: var(--space-4);
     border-color: var(--line);
     background: var(--surface);
@@ -627,13 +657,13 @@
       padding-block: 0 var(--space-2h);
     }
     :root[data-look-buttons='raised'] .page-section-bar > .page-related-create button {
-      min-height: 30px;
+      min-height: var(--control-h-sm);
       padding: var(--space-2) var(--space-4);
       font-size: var(--text-sm);
     }
   }
   :root[data-look-buttons='raised'] .app-mode button.ghost.applist-new,
-  :root[data-look-buttons='raised'] .btn-primary {
+  :root[data-look-buttons='raised'] [data-slot='button'][data-variant='solid'] {
     background: var(--primary, var(--accent));
     border-color: var(--primary, var(--accent));
     color: var(--on-primary, var(--on-accent));
@@ -643,7 +673,7 @@
   :root[data-look-buttons='raised']
     :is(
       .applist-quick-text,
-      .applist-field .dd-button,
+      .applist-field [data-slot='select-trigger'],
       .picker,
       .page-field-edit .cell-edit,
       #table-filter
@@ -656,10 +686,10 @@
      chevron. The window's menu stood 32px tall behind a calendar mark while the filters were 23px pills with a
      text caret, three kinds of control in one row. Its edge is a field's (--line-control), not a card's hairline:
      these are Selects, and a sort drawn in --line stood at 1.22:1 on the list, where a control needs 3:1. */
-  :root[data-look-buttons='raised'] :is(.dash-window-button, .dash-picks .dd-button, .dash-period .dd-button, .applist-sort .dd-button, .chart-series-pick) {
+  :root[data-look-buttons='raised'] :is(.dash-window-button, .dash-picks [data-slot='select-trigger'], .dash-period [data-slot='select-trigger'], .applist-sort [data-slot='select-trigger'], .chart-series-pick) {
     box-sizing: border-box;
-    height: 30px;
-    min-height: 30px;
+    height: var(--control-h-sm);
+    min-height: var(--control-h-sm);
     padding: 0 var(--space-3h);
     gap: var(--space-2h);
     border: 1px solid var(--line-control);
@@ -672,10 +702,10 @@
   :root[data-look-buttons='raised'] .dash-window-icon {
     display: none;
   }
-  :root[data-look-buttons='raised'] :is(.dash-window-caret, .dash-picks .dd-caret, .dash-period .dd-caret, .applist-sort .dd-caret) {
+  :root[data-look-buttons='raised'] :is(.dash-window-caret, .dash-picks [data-slot='select-trigger']::after, .dash-period [data-slot='select-trigger']::after, .applist-sort [data-slot='select-trigger']::after) {
     color: var(--ink-subtle);
   }
-  :root[data-look-buttons='raised'] :is(.dash-picks, .dash-period, .applist-sort) .dd-caret {
+  :root[data-look-buttons='raised'] :is(.dash-picks, .dash-period, .applist-sort) [data-slot='select-trigger']::after {
     width: 5px;
     height: 5px;
     margin: -3px var(--space-1) 0 var(--space-1);
@@ -885,8 +915,8 @@
     pointer-events: none;
   }
   :root[data-look-buttons='raised'] .applist-search-input {
-    height: 30px;
-    min-height: 30px;
+    height: var(--control-h-sm);
+    min-height: var(--control-h-sm);
     padding-left: var(--space-7);
     border: 1px solid var(--line-control);
     border-radius: var(--control-radius, var(--radius));
@@ -899,18 +929,19 @@
   :root[data-look-buttons='raised'] .applist-search-input:focus {
     background: var(--surface);
   }
-  /* `filters: 'quiet'`: a filter not yet asked for has no edge until a pointer is over it. Its own recipe, worn by
-     Lumen beside its raised buttons, so a theme may pick either without the other. */
+  /* `filters: 'quiet'`: a filter not yet asked for is a chip on the raised ground with no edge, a step darker under
+     a pointer. Its own recipe, worn by Lumen beside its raised buttons, so a theme may pick either without the other. */
   :root[data-look-filters='quiet'] .applist-add {
-    height: 30px;
-    padding: 0 var(--space-3);
+    height: var(--control-h-sm);
+    padding: 0 var(--space-3h);
     border: 1px solid transparent;
+    background: var(--raised);
     color: var(--ink-muted);
     font-weight: 500;
   }
   :root[data-look-filters='quiet'] .applist-add:is(:hover, [aria-expanded='true']) {
     border-color: transparent;
-    background: var(--raised);
+    background: color-mix(in srgb, var(--ink) 9%, var(--surface));
     color: var(--ink);
   }
   :root[data-look-buttons='raised'] .applist-sheet-open {
@@ -923,7 +954,7 @@
      thumb as a 30px search, a 36px Filters and a 30px Sort (ListFilterBar.css says the same for the other looks). */
   @media (max-width: 600px) {
     :root[data-look-buttons='raised'] :is(.applist-search-input, .applist-sheet-open),
-    :root[data-look-buttons='raised'] .applist-sort .dd-button {
+    :root[data-look-buttons='raised'] .applist-sort [data-slot='select-trigger'] {
       height: 40px;
       min-height: 40px;
     }
@@ -936,7 +967,7 @@
     font-weight: 500;
   }
   :root[data-look-buttons='raised'] .applist-fields .applist-chip {
-    height: 30px;
+    height: var(--control-h-sm);
     border-color: transparent;
     background: color-mix(in srgb, var(--accent) 8%, var(--surface));
     color: var(--ink);
@@ -951,7 +982,7 @@
   }
   :root[data-look-buttons='raised'] .applist-toggle {
     box-sizing: border-box;
-    height: 30px;
+    height: var(--control-h-sm);
     padding: 0 var(--space-4);
     border: 1px solid var(--line);
     border-radius: var(--control-radius, var(--radius));
@@ -1000,8 +1031,8 @@
   }
   :root[data-look-buttons='raised'] .facet :is(input[type='text'], input[type='search'], input[type='number'], input:not([type])) {
     box-sizing: border-box;
-    height: 30px;
-    min-height: 30px;
+    height: var(--control-h-sm);
+    min-height: var(--control-h-sm);
     /* A control's edge, as the list's search box keeps (WCAG 1.4.11): the hairline on the raised fill read 1.11:1,
        a grey patch with no edge. */
     border: 1px solid var(--line-control);
@@ -1056,7 +1087,7 @@
   }
   /* The strip look keeps a stripe in the first 10px of the card; the drag grip (TriageBoard.css, drawn only where a
      pointer hovers) stands in the padding beside it. This is the look's rule, so it lives in the look's sheet. */
-  :root[data-look-board='strip'] .triage-card[data-draggable='true']::after {
+  :root[data-look-board='strip'] .triage-card.has-category[data-draggable='true']::after {
     left: 12px;
   }
   :root[data-look-board='strip'] :is(.triage-lane-head, .board-lane-head, .triage-lane-top) {
@@ -1102,17 +1133,32 @@
     padding-top: 0;
   }
   :root[data-look-board='strip'] :is(.board-card, .triage-card) {
-    --card-hue: var(--lane-hue);
     position: relative;
     gap: var(--space-2);
-    padding: var(--space-4) var(--space-4h) var(--space-4) var(--space-5);
+    --card-pad: var(--space-4h);
+    padding: var(--space-4) var(--space-4h);
     background: var(--surface);
     border: var(--panel-border-width, 1px) solid var(--line);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
   }
-  /* The stripe is a bar of its own, inset from the edge with rounded ends: a mark of what the card is, never its edge. */
-  :root[data-look-board='strip'] :is(.board-card, .triage-card)::before {
+  /* A declared category is what the card is: its colour is a stripe of its own, inset from the edge with rounded
+   ends, and its word leads the card's line. A card with none has no stripe: its lane's tone is said once, on the
+   lane's strip, and a toned value of its own is a dot and its word on the card's line. Every card wore a stripe, its
+   lane's where it had none of its own, and a lane of five read as five marks saying one thing. */
+  /* The words stand a step clear of the bar, which ends 10px in: at the rhythm's own step alone a compact rhythm
+   (Graphite's) set them 2px from it. */
+  :root[data-look-board='strip'] .triage-card.has-category,
+  :root[data-look-board='strip'] .board-card {
+    padding-left: calc(var(--space-3h) + var(--space-3));
+  }
+  :root[data-look-board='strip'] .board-card {
+    --card-hue: var(--lane-hue);
+  }
+  :root[data-look-board='strip'] .triage-card.has-category {
+    --card-hue: var(--cat-ink);
+  }
+  :root[data-look-board='strip'] :is(.board-card, .triage-card.has-category)::before {
     content: '';
     position: absolute;
     left: 6px;
@@ -1122,29 +1168,20 @@
     border-radius: 999px;
     background: var(--card-hue);
   }
-  :root[data-look-board='strip'] :is(.board-card, .triage-card):has(.tone-good) {
+  :root[data-look-board='strip'] .board-card:has(.tone-good) {
     --card-hue: var(--status-good);
   }
-  :root[data-look-board='strip'] :is(.board-card, .triage-card):has(.tone-warn) {
+  :root[data-look-board='strip'] .board-card:has(.tone-warn) {
     --card-hue: var(--status-warning);
   }
-  :root[data-look-board='strip'] :is(.board-card, .triage-card):has(.tone-info) {
+  :root[data-look-board='strip'] .board-card:has(.tone-info) {
     --card-hue: var(--status-info);
   }
-  :root[data-look-board='strip'] :is(.board-card, .triage-card):has(.tone-bad) {
+  :root[data-look-board='strip'] .board-card:has(.tone-bad) {
     --card-hue: var(--status-critical);
   }
-  /* A declared category is what the card is, ahead of any toned value on it: its color is the stripe. */
-  :root[data-look-board='strip'] .triage-card.has-category {
-    --card-hue: var(--cat-ink);
-  }
-  /* The category is said once more as words, not as a second pill: the stripe is its colour, the word is its name. */
   :root[data-look-board='strip'] .triage-card-category {
-    padding: 0;
-    border-radius: 0;
-    background: none;
     color: var(--ink-muted);
-    font: 500 var(--text-sm)/1.4 var(--sans);
   }
   /* The ⋯ is a kebab at the card's top right, always there in the faint ink, as the card's own menu. */
   :root[data-look-board='strip'] .triage-card-menu-button {
@@ -1156,8 +1193,6 @@
   }
   :root[data-look-board='strip'] .triage-card-foot {
     margin-top: var(--space-2h);
-    padding-top: var(--space-3);
-    border-top: 1px solid var(--line);
   }
   :root[data-look-board='strip'] .triage-lane-new {
     color: var(--lane-ink);
@@ -1190,13 +1225,13 @@
      place, said as a rule of its own rather than as `:has(> .tone:not(.tone-neutral))`: a :not() inside :has() lets
      any element added anywhere change what :has() matches, and Chrome then restyled the whole pane — the screen held
      for a navigation with it — for each one (test/built-client-vitals.mjs). */
-  :root[data-look-board='strip'] :is(.board-card-line, .triage-card-subtitle):has(> .tone) {
+  :root[data-look-board='strip'] .board-card-line:has(> .tone) {
     order: -1;
   }
-  :root[data-look-board='strip'] :is(.board-card-line, .triage-card-subtitle):has(> .tone-neutral) {
+  :root[data-look-board='strip'] .board-card-line:has(> .tone-neutral) {
     order: 0;
   }
-  html:root[data-look-board='strip'] :is(.board-card-line, .triage-card-subtitle) > .tone:not(.tone-neutral) {
+  html:root[data-look-board='strip'] .board-card-line > .tone:not(.tone-neutral) {
     padding: 0 var(--space-3);
     font-size: var(--text-xs);
     font-weight: 600;
@@ -1204,7 +1239,7 @@
     text-transform: uppercase;
     line-height: 1.7;
   }
-  html:root[data-look-board='strip'] :is(.board-card-line, .triage-card-subtitle) > .tone:not(.tone-neutral)::before {
+  html:root[data-look-board='strip'] .board-card-line > .tone:not(.tone-neutral)::before {
     content: none;
   }
 
@@ -1232,6 +1267,59 @@
     font-size: var(--text-sm);
     color: var(--ink-muted);
   }
+  /* A field's name is a label, set as the look sets every label (`type.roles.label`): beside column heads and stat
+     labels in tracked capitals, a card's "Building" in sentence case was a second kind of label on one page. A
+     theme that says nothing of labels keeps the sans above. A form's labels are not these, nor the facts under a
+     record's title: they are read as sentences are, beside the name they belong to. */
+  :root[data-look-fields='card'][data-type-label~='face'] :is(.page-field > dt, .page-card-fact > dt) {
+    font-family: var(--type-label-font);
+  }
+  :root[data-look-fields='card'][data-type-label~='upper'] :is(.page-field > dt, .page-card-fact > dt) {
+    font-size: var(--type-label-size, var(--text-xs));
+    font-weight: var(--type-label-weight, 500);
+    text-transform: uppercase;
+    letter-spacing: var(--type-label-tracking, var(--track-caps));
+  }
+  /* A record's figures are a card too, ruled into cells as a dashboard's strip is: bare on the ground between a
+     card above and a card below, they were the one block of the page not held. */
+  :root[data-look-fields='card'] body:not(.public-visitor) .page-field-grid.page-field-summary {
+    padding: var(--space-4) var(--space-5);
+    background: var(--surface);
+    border: var(--panel-border-width, 1px) solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+  /* At a desk, where the cells stand in their own columns; a phone's two to a row keep the gap between them
+     (structure.css), and a rule drawn across a gap is a broken one. */
+  @media (min-width: 761px) {
+    :root[data-look-fields='card'] body:not(.public-visitor) .page-field-grid.page-field-summary {
+      gap: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    :root[data-look-fields='card'] body:not(.public-visitor) .page-field-summary > .page-field {
+      padding: var(--space-4) var(--space-5);
+      box-shadow:
+        -1px 0 0 var(--line),
+        0 -1px 0 var(--line);
+    }
+  }
+  /* Its figures are set as the look sets a figure (`type.roles.figure`), a size under a dashboard's: a balance in
+     the body's size under a label read as one more field. A date, a name or a sentence in a summary stays text. */
+  :root[data-look-fields='card'][data-type-figure~='face'] .page-field-summary .page-field > dd:has(> .num-value, > .tone-figure),
+  :root[data-look-fields='card'][data-type-figure~='face'] .page-field-summary .page-field > dd > .num-value {
+    font-family: var(--type-figure-font);
+  }
+  :root[data-look-fields='card'][data-type-figure~='face'] .page-field-summary .page-field > dd:has(> .num-value, > .tone-figure) {
+    font-size: var(--text-xl);
+    font-weight: var(--type-figure-weight, 500);
+    letter-spacing: var(--type-figure-tracking, normal);
+  }
+  /* A toned figure stands on its neighbours' line: set to the middle as a chip is, "$1,502.50" owed stood a pixel
+     and a half under the figures beside it. */
+  :root[data-look-fields='card'] .page-field-summary .page-field > dd > .tone-figure {
+    vertical-align: baseline;
+  }
   :root[data-look-fields='card'] .page-field > dd {
     font-family: var(--sans);
   }
@@ -1241,6 +1329,16 @@
     border: var(--panel-border-width, 1px) solid var(--line);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
+  }
+  /* On a page of its own the card stands off the pane's top and foot, as a card stands off everything: flush with
+     the top its corner read as cut by the window. A drawer's body is the drawer's, edge to edge. */
+  :root[data-look-fields='card'] .newrecord-page-host > .form-page {
+    margin-block: var(--space-5) var(--space-7);
+  }
+  /* A visitor's form is a page of its own too (FormSurface.tsx, under the bar alone): its card met the bar edge to
+     edge, a white box hung from a dark strip. */
+  :root[data-look-fields='card'] body.public-form-mode .form-page {
+    margin-block: var(--space-6) var(--space-7);
   }
   /* A workflow's steps read as the reference's pipeline: a step walked is a
    green pill with its dot, the current one the accent's blue pill, a step
@@ -1299,14 +1397,14 @@
   }
 
   /* ---------- Popups ---------- */
-  :root[data-look-elevation='raised'] :is(.modal, .palette) {
+  :root[data-look-elevation='raised'] :is([data-slot='dialog-content'][data-kind='modal'], .palette) {
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-modal);
   }
   /* A popup is edged by the hairline and lifted by its shadow, as the references' are, not outlined in the strong rule. */
   :root[data-look-elevation='raised']
-    :is(.export-menu, .page-actions-popup, .peek, .pb-menu, .picker-list, .more-list, .th-menu, .dd-list, .ac, .date-field-popup) {
+    :is(.export-menu, .page-actions-popup, .peek, .pb-menu, .picker-list, .more-list, .th-menu,:is([data-slot='select-content'], [data-slot='menu-content']), .ac,[data-slot='popover-content'][data-kind='calendar']) {
     border-color: var(--line);
   }
   :root[data-look-elevation='raised'] .palette-item.active {
@@ -1339,13 +1437,14 @@
   /* The caption is a section's head like the rest (themeFamilies.css), at the section role's size. */
   :root[data-look-fields='rail'] .page-card-title {
     font-size: var(--text-lg);
-    font-weight: 600;
+    /* A theme that says its headings' weight (a book serif at the regular) says this one too. */
+    font-weight: var(--type-heading-weight, 600);
   }
-  :root[data-look-fields='rail'] .page-card-fact > dt {
-    font-size: var(--text-sm);
-  }
-  :root[data-look-fields='rail'] .page-card-fact > dd {
-    font-size: var(--text-base);
+  /* The rail's facts hang from one rule down their leading edge, so a group of properties reads as one thing under
+     its name without a box round it. */
+  :root[data-look-fields='rail'] .page-aside .page-card-facts {
+    padding-inline-start: var(--space-4h);
+    border-inline-start: 2px solid var(--line);
   }
   :root[data-look-fields='rail'] .page-aside .page-properties .page-field > dt {
     font: 500 var(--text-sm)/1.4 var(--sans);
@@ -1381,9 +1480,64 @@
     color: var(--ink-muted);
   }
   :root[data-look-stat='divided'] .page-field-summary .page-field > dd {
-    font-size: calc(18px * var(--type-k));
+    font-size: var(--text-xl);
     font-weight: 600;
     letter-spacing: -0.012em;
+  }
+  /* In an App it is one ruled strip, a figure to a cell and a hairline between cells: what a record is worth is
+     read as one thing, apart from the fields under it. Each cell rules its own leading and top edge and the strip
+     clips the ones on its outside, so the rules stand between figures however many columns the width leaves them
+     in. A public page keeps its figures on the page: a storefront has no panels. */
+  :root[data-look-stat='divided'] body.app-mode:not(.public-visitor) .page-field-grid.page-field-summary {
+    gap: 0;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg, var(--radius));
+    /* The surface, where the page behind it is a ground of its own (Ledger's ruled paper). */
+    background: var(--surface);
+    overflow: hidden;
+  }
+  :root[data-look-stat='divided'] body.app-mode:not(.public-visitor) .page-field-summary > .page-field {
+    align-self: stretch;
+    padding: var(--space-4h) var(--space-5) var(--space-5);
+    box-shadow: -1px -1px 0 0 var(--line);
+  }
+  /* On a phone, and in a room as narrow, the figures stand two to a row with the room's own gap between them
+     (structure.css), which no look may close: each is its own hairline box there, since a strip's rules would
+     stop short of each other across the gap. */
+  @media (max-width: 760px) {
+    :root[data-look-stat='divided'] body.app-mode:not(.public-visitor) .page-field-grid.page-field-summary {
+      border: 0;
+      border-radius: 0;
+      background: none;
+      overflow: visible;
+    }
+    :root[data-look-stat='divided'] body.app-mode:not(.public-visitor) .page-field-summary > .page-field {
+      padding-inline: var(--space-4h);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg, var(--radius));
+      box-shadow: none;
+      background: var(--surface);
+    }
+  }
+  @container record-host (max-width: 600px) {
+    :root[data-look-stat='divided'] body.app-mode:not(.public-visitor) .page-field-grid.page-field-summary {
+      border: 0;
+      border-radius: 0;
+      background: none;
+      overflow: visible;
+    }
+    :root[data-look-stat='divided'] body.app-mode:not(.public-visitor) .page-field-summary > .page-field {
+      padding-inline: var(--space-4h);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg, var(--radius));
+      box-shadow: none;
+      background: var(--surface);
+    }
+  }
+  /* Under a workflow strip the figures stand off it by the strip's own height, as two things, not one. */
+  :root[data-look-stat='divided'] body.app-mode:not(.public-visitor) .workflow-status + .page-field-grid.page-field-summary {
+    margin-top: var(--space-3);
   }
   /* …but prose in a summary is a paragraph, never a figure: body weight and size. */
   :root[data-look-stat='divided'] .page-field-summary .page-field.page-field-prose > dd {
@@ -1395,18 +1549,20 @@
     --page-row-gap: 28px;
   }
 
-  /* A metric row: figures on the ground, one hairline above and below the row and one between figures, the
-     label over the figure, the change a small chip in its news's tint and the window said in words under it.
-     No mark in a bubble: an author's icon stands small before the label, in the caption's ink. */
+  /* A metric row: one box round the figures and a hairline between them, the label over the figure, the change in
+     its news's colour beside the window it is measured against. The row was open, a rule above it and none round
+     it, and a strip that shares a line with another (two areas of a template) read as one run of figures with a
+     hole in it; boxed, each strip is one thing. No mark in a bubble: an author's icon is not drawn here. */
   :root[data-look-stat='divided'] .dash-strip {
     padding: 0;
     border: 0;
   }
   :root[data-look-stat='divided'] .dash-strip .home-cards {
     gap: 0;
-    margin-top: var(--space-2);
-    /* One rule above the row; the section after it brings its own below. */
-    border-top: 1px solid var(--line);
+    margin-top: var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
   }
   :root[data-look-stat='divided'] .dash-strip .home-card,
   :root[data-look-stat='divided'] .dash-strip .home-card:nth-child(n) {
@@ -1420,7 +1576,6 @@
   }
   :root[data-look-stat='divided'] .dash-strip .home-card:first-child {
     border-inline-start: 0;
-    padding-inline-start: 0;
   }
   :root[data-look-stat='divided'] .dash-strip .home-card:hover {
     background: none;
@@ -1470,19 +1625,17 @@
     font: 500 var(--text-sm)/1.5 var(--sans);
     color: var(--ink-subtle);
   }
+  /* The change is a figure in its news's colour, its arrow before it: a chip round it made the smallest words on
+     the tile the loudest thing on it. */
   :root[data-look-stat='divided'] .dash-strip .dash-delta-figure {
-    padding: 0 var(--space-2h);
-    border-radius: 999px;
-    background: var(--raised);
     color: var(--ink-muted);
     font-weight: 600;
+    font-variant-numeric: tabular-nums;
   }
   :root[data-look-stat='divided'] .dash-strip .dash-delta.good .dash-delta-figure {
-    background: color-mix(in srgb, var(--status-good) 12%, transparent);
     color: color-mix(in srgb, var(--status-good) 80%, var(--ink));
   }
   :root[data-look-stat='divided'] .dash-strip .dash-delta.bad .dash-delta-figure {
-    background: color-mix(in srgb, var(--status-critical) 11%, transparent);
     color: color-mix(in srgb, var(--status-critical) 80%, var(--ink));
   }
   :root[data-look-stat='divided'] .dash-strip .dash-delta-period {
@@ -1545,11 +1698,10 @@
     /* Two figures a row on a phone (structure.css): the hairline divides the pair and rules each row. */
     :root[data-look-stat='divided'] .dash-strip .home-card,
     :root[data-look-stat='divided'] .dash-strip .home-card:nth-child(n) {
-      padding: var(--space-4) 0 var(--space-4h) var(--space-4h);
+      padding: var(--space-4) var(--space-4h) var(--space-4h);
     }
     :root[data-look-stat='divided'] .dash-strip .home-card:nth-child(odd) {
       border-inline-start: 0;
-      padding-inline-start: 0;
     }
     :root[data-look-stat='divided'] .dash-strip .home-card:nth-child(n + 3) {
       border-top: 1px solid var(--line);
@@ -1559,11 +1711,9 @@
        leads" beside it had none. */
     :root[data-look-stat='divided'] .dash-strip .home-cards:has(> .home-card:first-child:nth-last-child(odd)) > .home-card:nth-child(n) {
       border-inline-start: 1px solid var(--line);
-      padding-inline-start: var(--space-4h);
     }
     :root[data-look-stat='divided'] .dash-strip .home-cards:has(> .home-card:first-child:nth-last-child(odd)) > .home-card:is(:first-child, :nth-child(even)) {
       border-inline-start: 0;
-      padding-inline-start: 0;
     }
     :root[data-look-stat='divided'] .dash-strip .home-cards:has(> .home-card:first-child:nth-last-child(odd)) > .home-card:nth-child(n + 2) {
       border-top: 1px solid var(--line);
@@ -1580,8 +1730,6 @@
       max-width: none;
       justify-self: stretch;
       height: 20px;
-      /* The pair's hairline is the card's edge: the trend's last dot stops short of it, as the figure does. */
-      margin-inline-end: var(--space-4h);
     }
     :root[data-look-stat='divided'] .dash-strip .spark {
       height: 20px;
@@ -1594,28 +1742,17 @@
   :root[data-look-table='quiet'] {
     --row-rule: color-mix(in srgb, var(--line) 72%, var(--surface));
   }
-  :root[data-look-table='quiet'] th {
+  :root[data-look-table='quiet'] th:where(:not([data-slot])) {
     font: 500 var(--text-sm) var(--sans);
     color: var(--ink-subtle);
     border-bottom: 1px solid var(--line);
   }
-  /* The record's name anchors the row: its first column in the ink at 500, the rest in the second ink at the
-     body's weight, so the eye has somewhere to land before it reads across. */
+  /* Every value in the ink, the row's name a step heavier (features.css). The rest stood in the second ink once, and
+     a row of ten values read as its name and nine captions. */
   :root[data-look-table='quiet'] .app-mode tbody td {
-    color: var(--ink-muted);
-  }
-  /* A heat map's cell says its figure on a tint of the accent up to 62%: the second ink fails there, the ink does not. */
-  :root[data-look-table='quiet'] .app-mode tbody td.matrix-cell {
     color: var(--ink);
   }
-  :root[data-look-table='quiet'] .app-mode tbody tr > td:is(:first-child:not(.row-host), .row-host + td) {
-    color: var(--ink);
-    font-weight: 500;
-  }
-  :root[data-look-table='quiet'] .app-mode tbody tr > td:is(:first-child:not(.row-host), .row-host + td) .cell-sub {
-    font-weight: 400;
-  }
-  :root[data-look-table='quiet'] td {
+  :root[data-look-table='quiet'] td:where(:not([data-slot])) {
     font-size: var(--text-base);
     border-bottom-color: var(--row-rule);
   }
@@ -1626,15 +1763,8 @@
     --sk-row-h: 43px;
     --sk-head-h: 43.5px;
   }
-  :root[data-look-table='quiet'] tbody tr:hover td {
+  :root[data-look-table='quiet'] tbody tr:hover td:where(:not([data-slot])) {
     background: color-mix(in srgb, var(--ink) 2.5%, var(--surface));
-  }
-  /* A row's tick waits for its row where a pointer hovers: shown while the row is under it, holds focus or is
-     ticked, and on every row once any is ticked. It keeps its cell, so nothing moves when it shows. */
-  @media (hover: hover) {
-    :root[data-look-table='quiet'] table:not(:has(.row-select:checked)) tr:not(:hover, :focus-within) > .row-host > .row-select:not(:checked) {
-      opacity: 0;
-    }
   }
   :root[data-look-table='quiet'] .grid-totals td {
     border-top: 1px solid var(--line);
@@ -1647,6 +1777,12 @@
      colour too; a neutral value's dot is grey and its word keeps the cell's weight, so the column scans. Every
      look that draws a dot now says this in a cell and a field (themeFamilies.css); `quiet` says it everywhere
      a tone is drawn, with the smaller dot. */
+  /* A word with no pill round it has nothing to be clipped to: the pill's box, with no padding of its own, cut the
+     last letter's edge ("Vacan" and half a t). Its cell cuts it where the column is too narrow. */
+  html:root[data-look-status='quiet'] .tone:not(.record-tag) {
+    overflow: visible;
+    border-radius: 0;
+  }
   html:root[data-look-status='quiet'] .tone:not(.record-tag, .tone-neutral) {
     --tone-dot: var(--status-info);
     gap: 7px;
@@ -1804,5 +1940,59 @@
   :root[data-look-stat='divided'] .dash-strip .home-card > .spark-host {
     margin-top: 0;
     padding-top: 0;
+  }
+}
+@layer look {
+  /* Lumen's signature: where the accent is, and nowhere else. A flat look in one ink reads as nobody's; these are
+     the few fixed places a reader learns to find the App's colour, beside the primary verb, the current tab and a
+     link: the App's mark, the count beside a list's title, the meter. The pane stands a hair
+     off the shell (a hairline and the control's fall, the softest the look has), and a figure is the heaviest thing in its tile. The count is
+     the accent's ink on its wash, which `check` measures as the soft pair (docs/design.md, Lumen). */
+  :root:root[data-look-buttons='raised'] .brand-mark:is(.brand-mark--logo, .brand-mark--initial) {
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+  :root[data-look-buttons='raised'] .applist-count {
+    padding: var(--space-1) var(--space-3);
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-ink, var(--accent));
+    font: 600 var(--text-sm)/1.4 var(--sans);
+  }
+  /* A worklist's tile is never the accent: its mark is the section's (a warning sign over urgent repairs), and in
+     the App's colour it would speak for the colour — fine under a green brand, a warning under an orange one. It
+     stands on the shell's tint in the muted ink, which a brand turns to its hue at a wash and no further
+     (themeBrand.ts), so it is the App's without impersonating what a colour means. */
+  :root[data-look-buttons='raised'] .dash-worklist .dash-mini-mark:not([data-tone]) {
+    background: var(--raised);
+    color: var(--ink-muted);
+  }
+  :root[data-look-buttons='raised'] body.app-sidebar-shell .layout > .content {
+    box-shadow: var(--shadow-control);
+  }
+  :root[data-look-buttons='raised'] :is(.dash-title, .applist-title, .page-title, .signin-title) {
+    letter-spacing: -0.022em;
+  }
+  /* A strip's figure and a record's leading figures are in the heading's face (Manrope, manropeFace.css): the
+     figure is the page's largest word after its title, and the two read as one hand. A table's figures keep theirs. */
+  :root[data-look-stat='divided'] :is(.dash-strip .home-card-value, .page-field-summary .page-field > dd) {
+    font-family: var(--heading-font, var(--sans));
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    /* Its own figures, not the table's: Manrope's tabular set also widens the comma and the one, which reads
+       "$56, 130" at a figure's size, and a figure alone in its tile has no column to keep. */
+    font-variant-numeric: normal;
+  }
+  /* The door stands on the shell's ground, the form on a panel: the brand's tint is the first thing seen. */
+  :root[data-look-buttons='raised']:has(.signin-card) :is(body, .layout, .content) {
+    background: var(--raised);
+  }
+  :root[data-look-buttons='raised'] .signin-card {
+    padding: var(--space-7);
+    border: 1px solid var(--line);
+    border-radius: calc(var(--radius) + 4px);
+    background: var(--surface);
+    box-shadow: var(--shadow-control);
+    width: min(26rem, 100%);
   }
 }

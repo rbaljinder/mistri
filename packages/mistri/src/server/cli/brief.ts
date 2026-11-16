@@ -53,7 +53,7 @@ interface BriefCommand {
 
 export interface Brief {
   name: string;
-  theme: 'workshop' | 'lumen' | 'mono' | 'sage' | 'ledger';
+  theme: 'workshop' | 'lumen' | 'mono' | 'sage' | 'ledger' | 'atelier' | 'graphite' | 'bloom';
   /** An icon name for the App's mark; absent means the scaffold picks one. */
   logo?: string;
   entities: BriefEntity[];
@@ -65,7 +65,7 @@ export interface Brief {
 export class BriefRefusal extends Error {}
 
 const NAME = /^[a-z][a-z0-9_]*$/;
-const THEMES = ['workshop', 'lumen', 'mono', 'sage', 'ledger'] as const;
+const THEMES = ['workshop', 'lumen', 'mono', 'sage', 'ledger', 'atelier', 'graphite', 'bloom'] as const;
 /** The words that begin a SQL statement's name or are reserved in the three engines: a table so named needs quoting nobody wrote. */
 const RESERVED = new Set(['order', 'group', 'user', 'table', 'select', 'index', 'transaction', 'check', 'default', 'column', 'references']);
 
@@ -98,7 +98,7 @@ function readBrief(raw: unknown): Brief {
   const app = record(root.app, '"app"');
   const name = typeof app.name === 'string' ? app.name.trim() : '';
   if (!name || !/[a-z]/i.test(name)) throw new BriefRefusal('"app.name" needs a name with a letter in it.');
-  const theme = (app.theme ?? 'workshop') as string;
+  const theme = (app.theme ?? 'lumen') as string;
   if (!(THEMES as readonly string[]).includes(theme))
     throw new BriefRefusal(`"app.theme" is "${theme}"; the built-in looks are ${THEMES.join(', ')}.`);
   if (app.logo !== undefined && !isAppIcon(app.logo))
@@ -225,7 +225,8 @@ function columnSql(field: BriefField): string {
   const unique = field.unique ? ' UNIQUE' : '';
   switch (field.type) {
     case 'ref':
-      return `${column} INTEGER${notNull} REFERENCES ${field.to}(id)`;
+      /* One row per referenced record where the brief says so (an intake per patient): the key keeps it. */
+      return `${column} INTEGER${notNull}${unique} REFERENCES ${field.to}(id)`;
     case 'choice': {
       /* A choice that starts somewhere is never empty: a status with no value is a state the life cycle does not draw. */
       const initial = field.default ?? (field.required ? field.values![0] : undefined);
@@ -278,8 +279,17 @@ export function schemaSql(brief: Brief): string {
 /** commands.ts: one stub per command the brief names, each a working change, refused until the person's rules are written. */
 export function commandsModule(brief: Brief, connection: string): string {
   const stubs = brief.commands.map((command) => {
+    /* A yes/no column is typed boolean in the App's schema types: a brief's "1" written as a number fails the draft's own typecheck. */
+    const yesNo = new Set(
+      brief.entities
+        .find((entity) => entity.name === command.on)
+        ?.fields.filter((f) => f.type === 'bool')
+        .map((f) => columnOf(f)),
+    );
+    const literal = (column: string, value: string) =>
+      yesNo.has(column) ? String(/^(1|true|yes)$/i.test(value)) : /^-?\d+(\.\d+)?$/.test(value) ? value : quote(value);
     const update = Object.entries(command.set)
-      .map(([column, value]) => `${column}: ${/^-?\d+(\.\d+)?$/.test(value) ? value : quote(value)}`)
+      .map(([column, value]) => `${column}: ${literal(column, value)}`)
       .join(', ');
     /* Fails closed: a command whose refusals are still TODO lines refuses until they are written, so a scaffold that
        runs before its rules cannot make the change they were meant to stop. */

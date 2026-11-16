@@ -78,7 +78,8 @@ a.dash-step-card { text-decoration: none; }
 /* A step nothing is in is said quieter, and the states a thing ends in are one line after the road, not a card each. */
 .dash-step-figure.is-none { color: var(--ink-muted); font-weight: 500; }
 .dash-steps-ended { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1h) var(--space-4); margin: var(--space-3) 0 0; font: var(--text-sm)/1.4 var(--sans); color: var(--ink-muted); }
-.dash-steps-ended-label { font-weight: 500; }
+/* Named as a record's strip names them (page.css, .workflow-outcomes), in the quietest ink. */
+.dash-steps-ended-label { color: var(--ink-subtle); }
 .dash-steps-ended-item { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: none; }
 :is(button, a).dash-steps-ended-item { cursor: pointer; }
 @media (hover: hover) {
@@ -105,4 +106,147 @@ a.dash-step-card { text-decoration: none; }
 /* A custom section whose component draws nothing (a section for a role this reader does not hold) takes no place, as on
    a record page. */
 .page-section.dash-custom:has(> .custom-section:empty) { display: none; }
+}
+
+/* Moved here from features.css: these dress only what this component draws, so they travel with
+   it and not in every first paint (scripts/bundle-budget.mjs). */
+@layer base {
+  /* Filter controls already separate the heading from the dashboard body. */
+  .dash-head:has(+ div .dash-controls) { margin-bottom: 0; }
+  /* Aligned with the head and the body's centered column, above the grid
+     and outside it — a control row is not a section. */
+  .dash-controls {
+    display: flex; align-items: center; gap: var(--space-2) 18px; flex-wrap: wrap;
+    width: 100%; padding: var(--space-4) var(--space-4h) var(--space-2);
+  }
+  .dash-picks { display: flex; gap: var(--space-3); margin-left: auto; }
+  .dash-pick [data-slot='select-trigger'] { font-size: var(--text-sm); padding: var(--space-1h) var(--space-3); }
+  .dash-delta { font-size: var(--text-sm); color: var(--ink-muted); font-family: var(--mono); }
+  /* Only when the author said which way is better: a fall in "won" is bad,
+     a fall in "overdue" is good, and the card cannot know without being told. */
+  .dash-delta.good { color: var(--status-good); }
+  .dash-delta.bad { color: var(--status-critical); }
+  /* A change names what it is a change from, a step quieter than the change. */
+  .dash-delta-period { color: var(--ink-muted); font-family: var(--sans); }
+  /* The period phrase is one unit: a line breaks before "vs", never inside "prior 30 days", and never inside the change
+     ("↓ $785.1K" broke under its own arrow in half a phone's row). */
+  .dash-delta-period, .dash-delta-whole, .dash-delta-figure { white-space: nowrap; }
+  /* A card the reader's window does not move says so, in the caption's ink. */
+  .dash-fixed { font-size: var(--text-sm); color: var(--ink-muted); }
+  .dash-list-head, .board-head { display: flex; align-items: baseline; gap: var(--space-3h); }
+  /* A section's title may wrap; its count and its way to the full list do not.
+     Each stays one line, level with the title's first: "2 in all" broke into
+     "2 in / all" beside a two-line title in a narrow aside. */
+  :is(.dash-list-head, .board-head) > .page-section-title { flex: 0 1 auto; min-width: 0; }
+  :is(.dash-list-head, .board-head) > :not(.page-section-title) { flex: none; white-space: nowrap; }
+  /* "View all" is a way on, not a thing to read: muted ink with its arrow, and the underline and the ink only under the
+     pointer. A bold underlined link in link ink was the loudest word on a section whose rows were the point. */
+  button.ghost.dash-open { margin-left: auto; padding: var(--space-2) 0; border: 0; background: none; box-shadow: none; color: var(--ink-muted); font-size: var(--text-base); font-weight: 500; text-decoration: none; text-underline-offset: 3px; white-space: nowrap; }
+  /* The arrow is drawn, not said: the button's name stays "View all" (alt text after the slash). */
+  button.ghost.dash-open::after { content: ' →' / ''; }
+  button.ghost.dash-open:hover { color: var(--ink); background: none; text-decoration: underline; }
+  .dash-count { font-size: var(--text-sm); color: var(--ink-muted); font-family: var(--mono); }
+  .dash-target-meter { flex: 0 0 64px; height: 4px; background: var(--raised); }
+  .dash-target-meter > span { display: block; height: 100%; background: var(--accent); }
+  /* ---------- the matrix ---------- */
+
+  .matrix-host { margin-top: var(--space-3); }
+  .matrix-wrap { overflow-x: auto; padding-bottom: var(--space-2); }
+  .matrix-col { color: var(--ink-subtle); font-weight: 400; font-size: var(--text-xs); }
+  .matrix-row { text-align: left; color: var(--ink-muted); font-weight: 400; padding-left: 0; }
+  /* A cell's heat (Dashboard.tsx sets --heat, its share of the heaviest) tints it with the accent, from 6% up to the
+     palette's heat top: the strongest tint its ink still reads on at 4.5:1 (appTheme.js, theme.ts heatTop), 62% where
+     nothing measured one. The figure, and folded its column's name, are in the ink. */
+  .matrix-cell {
+    min-width: 4.5rem; border-radius: min(3px, var(--radius)); color: var(--ink);
+    --heat-fill: color-mix(in srgb, var(--accent) max(6%, var(--heat-top, 62%) * var(--heat, 0)), transparent);
+  }
+  .matrix-drill {
+    background: none; border: none; padding: 0; font: inherit;
+    color: inherit; cursor: pointer;
+  }
+  .matrix-drill:hover { color: var(--accent-ink); }
+  /* A matrix wider than its section is folded (Dashboard.tsx, useMatrixFold) rather than scrolled sideways: each row
+     its name over its figures, each figure under its column's name, as many to a line as fit. The heads stay for a
+     reader that hears them; to the eye each cell carries its own. */
+  .matrix-host[data-fold] .matrix-wrap { overflow-x: visible; }
+  .matrix-host[data-fold] :is(.matrix, .matrix tbody) { display: block; }
+  .matrix-host[data-fold] .matrix thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .matrix-host[data-fold] .matrix tr {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr)); gap: var(--space-1);
+    padding: var(--space-3) 0; border-bottom: 1px solid var(--line);
+  }
+  .matrix-host[data-fold] .matrix .matrix-row { grid-column: 1 / -1; padding: 0 0 var(--space-1); }
+  .matrix-host[data-fold] .matrix-cell {
+    display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; text-align: left; padding: var(--space-2) var(--space-3);
+  }
+  .matrix-host[data-fold] .matrix-cell::before { content: attr(data-label); color: var(--ink-subtle); font-size: var(--text-xs); }
+  /* On a tinted cell the column's name is in the cell's ink, as its figure is: the second and third inks fell to 2:1
+     on the heaviest step. Its size, not a fainter ink, sets it under the figure. */
+  .matrix-host[data-fold] .matrix-cell[style]::before { color: inherit; }
+  .board-lane-head {
+    display: flex; align-items: baseline; gap: var(--space-3);
+    padding: 0 var(--space-1) var(--space-3); font-size: var(--text-sm);
+  }
+  .board-lane-name { color: var(--ink-muted); }
+  .board-lane-count { margin-left: auto; color: var(--ink-subtle); font-family: var(--mono); font-size: var(--text-xs); }
+  .board-cards { display: flex; flex-direction: column; gap: var(--space-2h); }
+  .board-card-title { font-size: var(--text-base); }
+  .board-card-line { font-size: var(--text-sm); color: var(--ink-muted); }
+  .board-more { align-self: flex-start; font-size: var(--text-sm); color: var(--ink-muted); padding: var(--space-2) var(--space-1); }
+  .board-more:hover { color: var(--ink); }
+  /* Card embeds carry their own boundaries; a heavy section rule competes
+     with the cards and makes adjacent dashboard columns look misaligned. */
+  :root[data-theme-style] .dash-body > .page-section.dash-cards-section {
+    border: 0; padding: 0; background: none; box-shadow: none;
+  }
+  .dash-cards-section .dash-list-head { margin-bottom: var(--space-5); }
+  /* Dashboards with supporting content flow independently in each column. */
+  .dashboard-layout.page-layout { grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); padding: 0 var(--space-4h) 56px; }
+  .dashboard-layout > .dash-body { padding: 0; align-content: start; }
+  .dashboard-layout > .page-aside { border: 0; padding: 0; }
+  .dashboard-layout .page-aside .dash-body { padding: 0; }
+  .dashboard-layout .page-aside .page-section { flex-basis: 100%; }
+  @media (max-width: 1100px) {
+    .dashboard-layout.page-layout { grid-template-columns: minmax(0, 1fr); }
+  }
+  .dashboard-layout .page-aside .dashboard-note-title { font-size: calc(17px * var(--type-k)); line-height: 1.35; }
+  /* ---------- A metric that opens its list, and the aside's lists ----------
+     A metric naming a view (`view`) is a way in, and says so: an arrow after
+     its label, which moves toward the ink with the card's hover — colour only. */
+  .home-card-go { display: inline; margin-left: var(--space-2h); color: var(--ink-muted); font-family: var(--sans); letter-spacing: 0; transition: color var(--t-hover) var(--ease-out); }
+  .home-card.opens-view:hover .home-card-go, .home-card.opens-view:focus-visible .home-card-go { color: var(--accent-ink); }
+  @media (prefers-reduced-motion: reduce) { .home-card-go { transition: none; } }
+  /* A list in the aside is names, not a table: one row a record, its name
+     whole and wrapping (never cut to "Riley C…"), a quiet line under it and a
+     value at its end, rows parted by hairlines. The row is the record's link. */
+  .dash-mini { list-style: none; margin: var(--space-1) 0 0; padding: 0; }
+  .dash-mini > li + li { border-top: 1px solid var(--line); }
+  .app-mode button.dash-mini-row, button.dash-mini-row {
+    display: flex; align-items: baseline; gap: var(--space-4); width: 100%; min-height: 0; padding: var(--space-3) 0; margin: 0;
+    border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--ink); text-align: left; font: inherit; cursor: pointer;
+  }
+  button.dash-mini-row:disabled { cursor: default; }
+  /* The same rows in the main column are a worklist: the section's mark in a soft tile before each, its parts centred
+     on the tile, and a caret at the end that says the row opens. The value keeps its own tone, so what is late or owed
+     reads in its colour at the row's end. */
+  .dash-worklist button.dash-mini-row { align-items: center; padding-block: var(--space-3h); }
+  .dash-mini-mark {
+    display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: var(--radius);
+    background: var(--raised); color: var(--ink-muted);
+  }
+  /* A row in alarm says so on its tile: the tone's ink on a wash of it. The value at the row's end keeps its own. */
+  .dash-mini-mark[data-tone='bad'] { background: color-mix(in oklab, var(--status-critical) 12%, var(--surface)); color: var(--status-critical); }
+  .dash-mini-mark[data-tone='warn'] { background: color-mix(in oklab, var(--status-warning) 14%, var(--surface)); color: var(--status-warning); }
+  .dash-worklist .dash-mini-name { font-weight: 600; }
+  .dash-worklist .dash-mini-value { color: var(--ink); font-size: var(--text-base); }
+  .dash-mini-caret { flex: none; color: var(--ink-subtle); }
+  @media (hover: hover) { button.dash-mini-row:hover:not(:disabled) .dash-mini-caret { color: var(--ink); } }
+  button.dash-mini-row:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: -2px; }
+  .dash-mini-text { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-width: 0; }
+  .dash-mini-name { font-size: var(--text-base); font-weight: 500; line-height: 1.35; overflow-wrap: anywhere; transition: color var(--t-hover) var(--ease-out); }
+  button.dash-mini-row:hover:not(:disabled) .dash-mini-name { color: var(--link); }
+  .dash-mini-line { color: var(--ink-muted); font-size: var(--text-sm); line-height: 1.35; overflow-wrap: anywhere; }
+  .dash-mini-value { flex: none; color: var(--ink-muted); font-size: var(--text-sm); line-height: 1.35; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  @media (prefers-reduced-motion: reduce) { .dash-mini-name { transition: none; } }
 }

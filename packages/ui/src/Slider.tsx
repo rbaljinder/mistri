@@ -1,12 +1,16 @@
 /**
- * An amount set by a slider and read out in a box above it, with the range's ends labelled. The slider is the native
- * range input, so the arrows, Home, End and Page keys are the browser's. Props only. Preview: @mistriwork/ui is Preview at 1.0.
+ * An amount set by a slider and read out in a box above it, with the range's ends labelled. The slider is the
+ * browser's own range input, so the arrows, Home, End and the Page keys are the platform's, and it is the control of
+ * UI SDK's field around it, which hands it its id, its name and what describes it as it does a text box. It is not
+ * UI SDK's slider: that one is a track and a thumb over an input of its own whose id it decides, where this control
+ * is one labelable element that takes the id a caller gives it. Props only. Preview: @mistriwork/ui is Preview at 1.0.
  */
-import type { CSSProperties, ReactNode } from 'react';
-import { Field } from './Field.js';
-import { frameOf, type FieldFrame } from './fieldFrame.js';
-import { grouped } from './masks.js';
+import { FieldControl } from '@ui-sdk/react/field';
+import type { ChangeEvent, CSSProperties, ReactNode } from 'react';
 import { changeDetails, type ChangeDetails } from './changeDetails.js';
+import type { FieldFrame } from './fieldFrame.js';
+import { grouped } from './masks.js';
+import { Frame } from './internal/Frame.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface SliderProps extends FieldFrame {
@@ -23,34 +27,31 @@ export interface SliderProps extends FieldFrame {
 function DefaultSlider(props: SliderProps): ReactNode {
   const say = props.format ?? grouped;
   const span = props.max - props.min;
+  // The filled share of the track, for the stylesheet to draw (a range's own fill cannot be dressed everywhere).
   const share = span > 0 ? ((props.value - props.min) / span) * 100 : 0;
   return (
-    <Field {...frameOf(props)}>
-      {(control) => (
-        <>
-          <div className="field-control field-readout" aria-hidden="true">
-            {say(props.value)}
-          </div>
-          <input
-            {...control}
-            type="range"
-            className="field-range"
-            min={props.min}
-            max={props.max}
-            step={props.step}
-            value={props.value}
-            disabled={props.disabled}
-            aria-valuetext={say(props.value)}
-            style={{ '--range-share': `${share}%` } as CSSProperties}
-            onChange={(e) => props.onChange(Number(e.target.value), changeDetails('slide', e))}
-          />
-          <div className="field-range-ends" aria-hidden="true">
-            <span>{say(props.min)}</span>
-            <span>{say(props.max)}</span>
-          </div>
-        </>
-      )}
-    </Field>
+    <Frame {...props}>
+      <div data-slot="slider-readout" aria-hidden="true">
+        {say(props.value)}
+      </div>
+      <FieldControl
+        id={props.id}
+        type="range"
+        data-kind="range"
+        min={props.min}
+        max={props.max}
+        step={props.step}
+        value={props.value}
+        disabled={props.disabled}
+        aria-valuetext={say(props.value)}
+        style={{ '--range-share': `${share}%` } as CSSProperties}
+        onChange={(event: ChangeEvent<HTMLInputElement>) => props.onChange(Number(event.target.value), changeDetails('slide', event))}
+      />
+      <div data-slot="slider-ends" aria-hidden="true">
+        <span>{say(props.min)}</span>
+        <span>{say(props.max)}</span>
+      </div>
+    </Frame>
   );
 }
 

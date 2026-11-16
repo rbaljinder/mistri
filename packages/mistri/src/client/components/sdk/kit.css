@@ -209,9 +209,10 @@
     gap: var(--section-seam);
   }
   /* A field keeps its problem's line in the flow (reserve), so a problem that arrives moves nothing: that line is the gap
-     under it, not a second one on top of the stack's own. */
-  .kit-stack.kit-gap-field > .form-field-reserve:not(:last-child) {
-    margin-block-end: calc(var(--space-2h) - var(--field-gap));
+     under it, not a second one on top of the stack's own. The line is a full line of the problem's text now, so what is
+     left under it is a hair, and the two fields stand as far apart as two that reserve nothing. */
+  .kit-stack.kit-gap-field > [data-slot='field']:has(> :is([data-slot='field-reserve'], [data-slot='field-error']:not([hidden]))):not(:last-child) {
+    margin-block-end: calc(var(--space-2) - var(--field-gap));
   }
   .kit-row.kit-gap-field {
     gap: var(--space-4) var(--field-gap);
@@ -670,7 +671,7 @@
     align-items: center;
     gap: var(--space-2h);
   }
-  .kit-param > .dd,
+  .kit-param > [data-slot='dropdown'],
   .kit-param > .kit-param-search {
     flex: 1 1 14rem;
     max-width: 24rem;
@@ -682,7 +683,7 @@
     align-items: center;
     gap: var(--space-2h);
   }
-  .kit-param-dates > .date-field {
+  .kit-param-dates > [data-slot='date-field'] {
     flex: 1 1 10rem;
     min-width: 0;
     max-width: 14rem;

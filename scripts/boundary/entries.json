@@ -34,6 +34,11 @@
       "source": "packages/mistri/src/client/components/sdk/testing.tsx",
       "types": "packages/mistri/schema/ui-testing.d.ts"
     },
+    "@mistriwork/mistri/behaviors": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/client/components/sdk/behaviors.ts",
+      "types": "packages/mistri/schema/behaviors.d.ts"
+    },
     "@mistriwork/mistri/commands": {
       "layer": "mistri",
       "source": "packages/mistri/src/server/commands.ts",
@@ -261,6 +266,7 @@
         "./client/requestIdentity.js",
         "./client/resourceRequests.js",
         "./client/savedPages.js",
+        "./client/audience.js",
         "./client/sessionIdentity.js",
         "./client/shellHost.js",
         "./client/shellMode.js",

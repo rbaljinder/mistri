@@ -25,8 +25,8 @@ test('a box and the viewport come back divided by the root zoom, read once until
   root.remove();
 });
 
-test('popups go where Base UI chooses until a shell names its own container', () => {
-  expect(popupContainer()).toBeUndefined();
+test('popups go on the page until a shell names its own container', () => {
+  expect(popupContainer()).toBe(document.body);
   const portals = document.createElement('div');
   drawPopupsIn(() => portals);
   expect(popupContainer()).toBe(portals);

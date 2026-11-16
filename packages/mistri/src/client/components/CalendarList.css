@@ -22,6 +22,12 @@
     gap: var(--space-2h);
   }
   /* A month's steps are marks at the interface's icon size, not 5px glyphs of the text face. */
+  /* The calendar's toolbar is a toolbar: its steps and Today are the compact size, as a list's filters are. On the
+     base button's padding they stood 37px, over every other control on the page. */
+  .calendar-nav > button {
+    min-height: var(--control-h-sm);
+    padding-block: 0;
+  }
   .calendar-nav .mistri-icon {
     display: block;
     width: 16px;
@@ -68,11 +74,15 @@
     height: 64px;
   }
   .calendar-day {
-    height: 116px;
+    height: var(--calendar-day-least);
     padding: var(--space-2h);
     vertical-align: top;
     border-right: 1px solid var(--line);
     border-bottom: 1px solid var(--line);
+  }
+  /* A month in its own room: every week the height the room gives it (CalendarList.tsx measures it). */
+  .calendar-grid[data-fit] .calendar-day {
+    height: var(--calendar-row);
   }
   .calendar-grid tr > .calendar-day:last-child {
     border-right: 0;
@@ -82,12 +92,17 @@
   }
   /* Days of the months either side hold the grid's shape and nothing else:
    they take the page's ground, a step back from the month's own days. As the
-   second surface they stood lighter than the month by night. */
+   second surface they stood lighter than the month by night. A trace of the
+   ink is mixed in: where the room is a pane on the ground's own colour the
+   two were one white, and only the fainter date said a day was not the
+   month's. */
   .calendar-day.is-outside {
-    background: var(--ground);
+    background: var(--calendar-outside, color-mix(in srgb, var(--ink) 3%, transparent));
   }
+  /* The month's own dates are in the text's ink and the others in the muted one: on its stepped-back ground the
+   faint ink fell under 4.5:1, and the month's dates in the muted ink read as no more the month's than these. */
   .calendar-day.is-outside .calendar-date {
-    color: var(--ink-subtle);
+    color: var(--ink-muted);
   }
   /* A week is not a list row. The looks tint a table's hovered row
    (visualThemes.css, themeFamilies.css), and over that tint an outside day's
@@ -102,7 +117,7 @@
     justify-content: center;
     border-radius: 999px;
     font: 500 var(--text-sm) var(--sans);
-    color: var(--ink-muted);
+    color: var(--ink);
     font-variant-numeric: tabular-nums;
   }
   .calendar-day.is-today .calendar-date {
@@ -156,6 +171,10 @@
     overflow: hidden;
     white-space: normal;
     overflow-wrap: anywhere;
+    /* The clamp's box is one line tall and cuts at its edge: at the card's 1.3 leading a "g" or a "p" lost its tail
+       ("Signal Hill", "Runner Up"). A pixel under the line is inside the box. */
+    padding-bottom: 1px;
+    line-height: 1.4;
   }
   .calendar-card-line {
     color: var(--ink-muted);
@@ -248,6 +267,7 @@
    heights — one line, or a line under the title. A bar that runs on from the
    week before, or into the next, is square on that side: it has no end there. */
   .calendar-list {
+    --calendar-day-least: 116px;
     --calendar-pad: 6px;
     --calendar-rule: 1px;
   }

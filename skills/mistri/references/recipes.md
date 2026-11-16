@@ -12,12 +12,12 @@ page. Every recipe shares a spine:
   any trend, calendar or `relative` ([choices.md](choices.md)).
 - **Look**: `ui.theme` written out (Workshop unless [design-language.md](design-language.md)
   says otherwise), `ui.logo`, `locale`, `timezone`, `currency` —
-  [lintel/app.ts:173](../../../examples/apps/lintel/app.ts#L173).
+  [lintel/app.ts:175](../../../examples/apps/lintel/app.ts#L175).
 - **Home**: a dashboard, first in the menu, as the day's starting page: three
   or four figures of one width, the flow or trend, charts in pairs, the waiting
   work as a pair of half `rows`; a `firstRun` for an empty database. Under a
   side menu, an `aside` only beside metrics with no `width` ([design-language.md](design-language.md)).
-  A different home for each role: `home` takes a view per role, a `signedOut: true` one first — [lintel/app.ts:166](../../../examples/apps/lintel/app.ts#L166).
+  A different home for each role: `home` takes a view per role, a `signedOut: true` one first — [lintel/app.ts:168](../../../examples/apps/lintel/app.ts#L168).
 - **A board's cards**: the record's own columns only.
 - **Every value drawn**: a tone on each status, `money` on each amount, an
   `avatar` on each person, `relative` on each due date, a unit on each count.
@@ -35,24 +35,24 @@ Lintel is the whole of this recipe. Look: Lumen, side menu with `rail: true`.
 
 - **Home** "Today", by role: occupancy and rent as half-width `metric`s, rent
   compared to the previous period —
-  [lintel/dashboards.ts:14](../../../examples/apps/lintel/dashboards.ts#L14);
+  [lintel/dashboards.ts:21](../../../examples/apps/lintel/dashboards.ts#L21);
   the repairs' road as a `shape: 'steps'` breakdown with `notes` —
-  [lintel/dashboards.ts:28](../../../examples/apps/lintel/dashboards.ts#L28);
+  [lintel/dashboards.ts:35](../../../examples/apps/lintel/dashboards.ts#L35);
   rent by month as a stacked `chart`, leases ending soon as `rows`, the day's
   viewings as an `embed`. A resident's `portal` is their balance, their
   open repairs and two embedded lists —
-  [lintel/dashboards.ts:79](../../../examples/apps/lintel/dashboards.ts#L79).
+  [lintel/dashboards.ts:106](../../../examples/apps/lintel/dashboards.ts#L106).
 - **Lists** with counted `tabs` from `segments` and `rowActions` —
-  [lintel/views.ts:104](../../../examples/apps/lintel/views.ts#L104);
+  [lintel/views.ts:111](../../../examples/apps/lintel/views.ts#L111);
   `totals` under a column —
-  [lintel/views.ts:67](../../../examples/apps/lintel/views.ts#L67); the storeroom with `editable` columns —
-  [lintel/views.ts:181](../../../examples/apps/lintel/views.ts#L181).
+  [lintel/views.ts:74](../../../examples/apps/lintel/views.ts#L74); the storeroom with `editable` columns —
+  [lintel/views.ts:188](../../../examples/apps/lintel/views.ts#L188).
 - **Record**: the state beside the name, facts under it, the conversation as a
   `timeline` with a composer, parts used as a `related` list —
   [lintel/pages/maintenance_request.ts:20](../../../examples/apps/lintel/pages/maintenance_request.ts#L20).
 - **Values**: money from whole cents with `minor: true`
   ([lintel/resources.ts:12](../../../examples/apps/lintel/resources.ts#L12)), a `tone` on each status
-  ([lintel/resources.ts:64](../../../examples/apps/lintel/resources.ts#L64)), a road as a `machine` whose verbs are the
+  ([lintel/resources.ts:63](../../../examples/apps/lintel/resources.ts#L63)), a road as a `machine` whose verbs are the
   buttons (see the service desk below).
 
 ## CRM: leads, accounts, deals
@@ -66,10 +66,10 @@ Look: Lumen with the brand's `accent`, top menu.
   beside a donut with `total`, a funnel beside a rep scatter, "Closing soon"
   rows; `windowControl: 'button'` and owner and stage filters.
 - **Lists**: `leads` tabbed by status with `rowActions`, as the ledger is
-  ([lintel/views.ts:104](../../../examples/apps/lintel/views.ts#L104)); deals with `totals`; the pipeline as a `board`
-  whose lanes are the stage ([lintel/views.ts:129](../../../examples/apps/lintel/views.ts#L129)), with a `footer`;
+  ([lintel/views.ts:111](../../../examples/apps/lintel/views.ts#L111)); deals with `totals`; the pipeline as a `board`
+  whose lanes are the stage ([lintel/views.ts:136](../../../examples/apps/lintel/views.ts#L136)), with a `footer`;
   accounts as a `tree` by parent; campaigns as a `gantt`
-  ([lintel/views.ts:81](../../../examples/apps/lintel/views.ts#L81)).
+  ([lintel/views.ts:88](../../../examples/apps/lintel/views.ts#L88)).
 - **Record**: the deal, stage beside the name, money and close date as facts,
   rollups as the summary, quote and activity as tabs, account card and
   properties in the aside, as a `page('opportunity', …)`
@@ -79,44 +79,44 @@ Look: Lumen with the brand's `accent`, top menu.
 
 ## Service desk or ticketing: requests worked through states
 
-Look: Lumen, side menu with `rail: true` ([lintel/app.ts:179](../../../examples/apps/lintel/app.ts#L179)).
+Look: Lumen, side menu with `rail: true` ([lintel/app.ts:181](../../../examples/apps/lintel/app.ts#L181)).
 
 - **Home** "Workspace": opened and closed metrics compared to the previous
   period, a "Needs attention" `rows` of urgent open work; add a `shape: 'steps'`
-  breakdown of the status flow ([lintel/dashboards.ts:28](../../../examples/apps/lintel/dashboards.ts#L28)) and a `heatmap` of
+  breakdown of the status flow ([lintel/dashboards.ts:35](../../../examples/apps/lintel/dashboards.ts#L35)) and a `heatmap` of
   when requests arrive (`weekday created_at, hour created_at`).
 - **Lists**: an `inbox` as a `split` (list beside the request, keys for the
   verbs); `triage` as a `queue`
-  ([lintel/views.ts:148](../../../examples/apps/lintel/views.ts#L148)); a `board` in the machine's states with
+  ([lintel/views.ts:155](../../../examples/apps/lintel/views.ts#L155)); a `board` in the machine's states with
   work-in-progress `limits`
-  ([lintel/views.ts:129](../../../examples/apps/lintel/views.ts#L129)).
+  ([lintel/views.ts:136](../../../examples/apps/lintel/views.ts#L136)).
 - **Record**: the forward verbs in the header, the conversation as a `timeline`
   with its own Add —
   [lintel/pages/maintenance_request.ts:20](../../../examples/apps/lintel/pages/maintenance_request.ts#L20);
   priority and assignment editable in the aside.
 - **Values**: `status` in a `machine`, toned by meaning (only what is urgent is
-  red), its verbs the page's buttons ([lintel/resources.ts:240](../../../examples/apps/lintel/resources.ts#L240)); replies as `richText` with `mentions`; an
+  red), its verbs the page's buttons ([lintel/resources.ts:239](../../../examples/apps/lintel/resources.ts#L239)); replies as `richText` with `mentions`; an
   SLA date `relative`; queues or teams in the menu told apart by `color` dots.
 
 ## Inventory or warehouse: stock that moves
 
 Look: Lumen, side menu, `shell: { placement: 'side', counts: true }`
-([lintel/app.ts:177](../../../examples/apps/lintel/app.ts#L177)).
+([lintel/app.ts:179](../../../examples/apps/lintel/app.ts#L179)).
 
 - **Home** "Operations": `firstRun` for an empty depot; metrics with an `icon`
-  and a `to` list ([lintel/dashboards.ts:24](../../../examples/apps/lintel/dashboards.ts#L24)); the floor's flow as `steps` with
+  and a `to` list ([lintel/dashboards.ts:31](../../../examples/apps/lintel/dashboards.ts#L31)); the floor's flow as `steps` with
   `notes`; two embedded queues at half; moves by day, a `heatmap`, a `treemap`
   of stock value beside a `waterfall` of net units; an `aside` with `activity`
   and the low-stock list.
 - **Lists**: the floor's work as a `queue`; orders and products at `density: 'compact'` with
-  `editable` triage columns ([lintel/views.ts:181](../../../examples/apps/lintel/views.ts#L181)); a catalog as `cards`.
+  `editable` triage columns ([lintel/views.ts:188](../../../examples/apps/lintel/views.ts#L188)); a catalog as `cards`.
 - **Record**: the product's `facts` line, photos, stock summary, the ledger and
   purchasing as tabs, properties and `history` in the aside
   ([lintel/pages/maintenance_request.ts:35](../../../examples/apps/lintel/pages/maintenance_request.ts#L35) ends on `history`).
 - **Values and inputs**: the product name with `icon: { mark, tone }`, money and
   units everywhere, the UPC with `scan: true`, delivery proof as a `signature`;
   stock changes only by a take or a receipt that moves the shelf and refuses
-  past zero ([lintel/resources.ts:296](../../../examples/apps/lintel/resources.ts#L296) is the `consumes` side).
+  past zero ([lintel/resources.ts:295](../../../examples/apps/lintel/resources.ts#L295) is the `consumes` side).
 
 ## Community or forum: reading first
 
@@ -125,7 +125,7 @@ more than they operate; top menu, `width: 'wide'`.
 
 - **Home** by role: signed-out readers a landing, members the latest threads,
   moderators a health `dashboard`, the `home` list choosing by `roles`
-  ([lintel/app.ts:165](../../../examples/apps/lintel/app.ts#L165)). The dashboard is metrics with sparks, posts by
+  ([lintel/app.ts:167](../../../examples/apps/lintel/app.ts#L167)). The dashboard is metrics with sparks, posts by
   month, busiest boards beside a donut, the queues at half, an `aside` of
   `activity` and guidance notes.
 - **Lists** as `cards`: threads with their board and author; members by name
@@ -133,7 +133,7 @@ more than they operate; top menu, `width: 'wide'`.
 - **Record**: a member as an overview page (avatar, figures, activity chart,
   what they wrote), `page('member', …)`.
 - **Values**: locked, held and removed as `icons`
-  ([lintel/resources.ts:216](../../../examples/apps/lintel/resources.ts#L216)); people with photo avatars; posting and
+  ([lintel/resources.ts:215](../../../examples/apps/lintel/resources.ts#L215)); people with photo avatars; posting and
   moderation only through commands, readers who may only read.
 
 ## Marketplace or catalog: browsing first
@@ -142,7 +142,7 @@ Lintel's public side is this recipe. Look: Lumen or its own theme on Lumen
 (`customThemes`), top menu, `width: 'wide'`.
 
 - **Access**: the catalog is `public`, read signed out, and sign-up gives the
-  smallest role — [lintel/app.ts:140](../../../examples/apps/lintel/app.ts#L140).
+  smallest role — [lintel/app.ts:142](../../../examples/apps/lintel/app.ts#L142).
 - **Front page**: a `landing` whose `hero` is a photograph with the heading
   over it, then rows of photo cards as `embed`s —
   [lintel/landing.ts:7](../../../examples/apps/lintel/landing.ts#L7).
@@ -169,7 +169,7 @@ Look: Sage, or a small `extends: 'sage'` theme for people work, named in
 
 - **Home** "Today", a to-do `dashboard`: embedded queues of what waits on the
   reader, an aside of who starts soon and what is coming up
-  (the resident's `portal`, [lintel/dashboards.ts:79](../../../examples/apps/lintel/dashboards.ts#L79), embeds two lists).
+  (the resident's `portal`, [lintel/dashboards.ts:106](../../../examples/apps/lintel/dashboards.ts#L106), is two figures, a worklist and a list).
 - **Lists**: each approval a `queue` with a `badge`, its facts and an
   `openLabel` verb; lookups and settings in a folded
   group.
@@ -183,7 +183,7 @@ Look: Sage, or a small `extends: 'sage'` theme for people work, named in
 
 A record's New form asks its columns in noun-named groups; fields read
 together share a row of up to three, `['part_id', 'quantity']` as Lintel's
-delivery does — [lintel/resources.ts:334](../../../examples/apps/lintel/resources.ts#L334).
+delivery does — [lintel/resources.ts:332](../../../examples/apps/lintel/resources.ts#L332).
 `show`, a group's `fields` and a step take the same rows (`mistri docs forms`):
 
 ```ts
@@ -196,7 +196,7 @@ form: {
 ```
 
 A long application, public or signed in, is a `commandForm` with
-`style: 'intake'` — [lintel/views.ts:237](../../../examples/apps/lintel/views.ts#L237);
+`style: 'intake'` — [lintel/views.ts:244](../../../examples/apps/lintel/views.ts#L244);
 a public one starts from `npx @mistriwork/mistri new --template intake`
 (`mistri docs command-forms`):
 

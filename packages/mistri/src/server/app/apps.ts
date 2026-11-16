@@ -57,6 +57,7 @@ import { appAddressBook, naturalKeyProblems, type AddressBook } from '../../shar
 import { appSurfaceForRealm } from '../../shared/appTenancy.js';
 import { appForRoles, pagesForRoles } from '../../shared/appViewRoles.js';
 import { appThemeWarnings } from '@mistriwork/engine/shared/theme.js';
+import { checkoutManifest } from './buildResolution.js';
 import { readAppFonts, type AppFonts } from './appFonts.js';
 import { readAppBrand, type AppBrand } from './appBrand.js';
 import { checkThemeWithFixes, type FixedThemeProblem } from '../../shared/themeFix.js';
@@ -176,7 +177,12 @@ function importFresh(
        const seen = new Set();
        try {
          require('node:module').registerHooks({ resolve(specifier, context, next) {
-           const out = next(specifier, context);
+           /* From a source checkout an App outside it finds the framework in the checkout (buildResolution.ts). */
+           let out;
+           try { out = next(specifier, context); } catch (error) {
+             if (!workerData.framework || !specifier.startsWith('@mistriwork/') || error.code !== 'ERR_MODULE_NOT_FOUND') throw error;
+             out = next(specifier, { ...context, parentURL: workerData.framework });
+           }
            if (out.url.startsWith('file:') && !out.url.includes('/node_modules/')) seen.add(out.url);
            return out;
          } });
@@ -223,7 +229,7 @@ function importFresh(
          authority.lock). */
       {
         eval: true,
-        workerData: { href, names, roots },
+        workerData: { href, names, roots, framework: checkoutManifest() },
         env: Object.fromEntries(names.filter((name) => process.env[name] !== undefined).map((name) => [name, process.env[name]!])),
       },
     );
@@ -902,10 +908,11 @@ function parseDefinition(input: DefinitionInput, sayer: MessageSayer | undefined
   const stepped = withMachineSteppers(pages, (base) => {
     const resource = app.resources?.[base];
     if (!resource?.machine) return undefined;
-    const rule = resource.display?.[resource.machine.column] as { values?: unknown } | undefined;
+    const rule = resource.display?.[resource.machine.column] as { values?: unknown; tone?: unknown } | undefined;
     return {
       machine: resource.machine,
       ...(rule?.values && typeof rule.values === 'object' ? { words: rule.values as Record<string, string> } : {}),
+      ...(rule?.tone && typeof rule.tone === 'object' ? { tones: rule.tone as Record<string, string> } : {}),
     };
   });
   return {

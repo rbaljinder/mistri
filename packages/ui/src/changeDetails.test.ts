@@ -1,14 +1,13 @@
-/* The second word of every change callback: which hand moved the value, and Base UI's details in the same shape. */
+/* The second word of every change callback: which hand moved the value, and the details of a kit built over Base UI in the same shape. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /* The last hand is the module's own state, kept from load: each test loads it fresh, so no test hears another's press. */
 let changeDetails: typeof import('./changeDetails.js').changeDetails;
 let changeSource: typeof import('./changeDetails.js').changeSource;
-let fromBaseUi: typeof import('./changeDetails.js').fromBaseUi;
 let keptDetails: typeof import('./changeDetails.js').keptDetails;
 beforeEach(async () => {
   vi.resetModules();
-  ({ changeDetails, changeSource, fromBaseUi, keptDetails } = await import('./changeDetails.js'));
+  ({ changeDetails, changeSource, keptDetails } = await import('./changeDetails.js'));
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -66,26 +65,6 @@ describe('changeDetails', () => {
     const native = new KeyboardEvent('keydown');
     expect(changeDetails('select', { nativeEvent: native })).toEqual({ reason: 'select', source: 'keyboard', event: native });
     expect(changeDetails('select')).toEqual({ reason: 'select', source: 'program' });
-  });
-});
-
-describe('fromBaseUi', () => {
-  it("keeps Base UI's reason, and puts this primitive's word where Base UI says only none", () => {
-    const press = new MouseEvent('click', { detail: 1 });
-    expect(fromBaseUi({ reason: 'escape-key', event: press }, 'implicit')).toMatchObject({
-      reason: 'escape-key',
-      source: 'pointer',
-      event: press,
-    });
-    expect(fromBaseUi({ reason: 'none', event: press }, 'toggle').reason).toBe('toggle');
-    expect(fromBaseUi({ reason: 'none', event: press }, 'implicit').reason).toBe('implicit');
-  });
-
-  it("reads Base UI's stand-in event as the page's own change", () => {
-    expect(fromBaseUi({ reason: 'imperative-action', event: new Event('base-ui') }, 'implicit')).toEqual({
-      reason: 'imperative-action',
-      source: 'program',
-    });
   });
 });
 

@@ -57,8 +57,8 @@ const WORN: Record<string, Record<string, string>> = {
   sage: {
     nav: 'quiet',
     bar: 'soft',
-    tabs: 'chosen',
-    windows: 'chosen',
+    tabs: 'tint',
+    windows: 'tint',
     stat: 'panel',
     section: 'panel',
     fields: 'panel',
@@ -78,7 +78,7 @@ const WORN: Record<string, Record<string, string>> = {
     stat: 'divided',
     section: 'panel',
     fields: 'panel',
-    table: 'hairline',
+    table: 'banded',
     status: 'quiet',
     board: 'ruled',
     chart: 'plain',
@@ -89,6 +89,79 @@ const WORN: Record<string, Record<string, string>> = {
     lanes: 'plain',
     header: 'plain',
   },
+  atelier: {
+    nav: 'quiet',
+    bar: 'plain',
+    tabs: 'rule',
+    windows: 'tint',
+    stat: 'plain',
+    section: 'open',
+    fields: 'rail',
+    table: 'open',
+    status: 'quiet',
+    board: 'ruled',
+    chart: 'line',
+    buttons: 'accent',
+    links: 'name',
+    rules: 'ink',
+    avatar: 'plain',
+    workflow: 'markers',
+    banner: 'plain',
+    steps: 'strip',
+    lanes: 'plain',
+    header: 'plain',
+    filters: 'quiet',
+    required: 'optional-word',
+    formStep: 'ruled',
+  },
+  graphite: {
+    nav: 'slot',
+    bar: 'dark',
+    tabs: 'lifted',
+    windows: 'segmented',
+    stat: 'panel',
+    section: 'card',
+    fields: 'card',
+    table: 'card',
+    status: 'pill-dot',
+    board: 'strip',
+    chart: 'gradient',
+    buttons: 'accent',
+    links: 'plain',
+    rules: 'hairline',
+    avatar: 'plain',
+    workflow: 'pills',
+    banner: 'plain',
+    steps: 'strip',
+    lanes: 'tag',
+    header: 'plain',
+    filters: 'solid',
+    formStep: 'ruled',
+  },
+  bloom: {
+    nav: 'float',
+    bar: 'soft',
+    tabs: 'pill',
+    windows: 'lifted',
+    stat: 'bento',
+    section: 'panel',
+    fields: 'panel',
+    table: 'rows',
+    status: 'pill',
+    board: 'soft',
+    chart: 'wash',
+    buttons: 'accent',
+    links: 'plain',
+    rules: 'hairline',
+    avatar: 'round',
+    workflow: 'segments',
+    banner: 'gradient',
+    steps: 'tinted',
+    lanes: 'tint',
+    header: 'plain',
+    filters: 'solid',
+    actionBar: 'raised',
+  },
 };
 const SHAPE: Record<string, { elevation: string; title?: string }> = {
   workshop: { elevation: 'flat', title: '28px' },
@@ -96,6 +169,9 @@ const SHAPE: Record<string, { elevation: string; title?: string }> = {
   mono: { elevation: 'flat', title: '30px' },
   sage: { elevation: 'soft' },
   ledger: { elevation: 'flat', title: '26px' },
+  atelier: { elevation: 'flat', title: '30px' },
+  graphite: { elevation: 'hairline' },
+  bloom: { elevation: 'soft', title: '30px' },
 };
 
 const spec = (extra: Record<string, unknown> = {}) => ({
@@ -203,6 +279,26 @@ test('a theme the compiler refuses says where, and what the choices are', () => 
   refuse(spec({ shape: { elevation: 'sky' } }), /shape\.elevation must be one of/);
   refuse(spec({ kind: 'preset' }), /kind must be "theme"/);
   refuse(spec({ palette: spec().colors }), /ui\.theme\.palette is now colors: \{ light, dark \}/);
+});
+
+test("a palette's wash is its own hue's where the theme's soft accent is its accent's wash; a soft accent the theme chose stays", () => {
+  /* Atelier says no soft accent: the menu's current entry sat on the orange's tint under Emerald, a green word on peach. */
+  const atelier = themePreset('atelier')!;
+  const emerald = atelier.palettes!.find((palette) => palette.id === 'emerald')!;
+  assert.notEqual(emerald.light.accentSoft, undefined);
+  assert.notEqual(emerald.light.accentSoft, atelier.light.accentSoft);
+  assert.notEqual(emerald.dark.accentSoft, atelier.dark.accentSoft);
+  // The default palette is the look's own colours, and says nothing.
+  assert.deepEqual(atelier.palettes!.find((palette) => palette.id === 'safety')!.light, {});
+  // Mono's grey under what is chosen is a colour it chose: no palette moves it.
+  for (const palette of themePreset('mono')!.palettes!) assert.equal(palette.light.accentSoft, undefined, palette.id);
+  // An App's theme with palettes of its own is built the same way.
+  const worn = compileAppTheme(
+    spec({ palettes: [{ id: 'green', label: 'Green', light: { accent: '#0a6b3d' }, dark: { accent: '#7ad6a4' } }] }),
+    'probe',
+  );
+  assert.match(String(worn.palettes![0]!.light.accentSoft), /^#[0-9a-f]{6}$/);
+  assert.notEqual(worn.palettes![0]!.light.accentSoft, worn.light.accentSoft);
 });
 
 test('a theme that extends a built-in changes only what it says, and derives what follows from it', () => {
@@ -513,12 +609,15 @@ test('a theme moves at a pace: house, brisk or still, worn as one attribute and 
 });
 
 test('a theme stands things apart at a rhythm: tight, house or airy, worn as one attribute and kept by a theme that extends it', () => {
-  const base = { kind: 'theme', id: 'rhythm', label: 'Rhythm', extends: 'sage' };
+  const base = { kind: 'theme', id: 'rhythm', label: 'Rhythm', extends: 'lumen' };
   const airy = compileAppTheme({ ...base, rhythm: 'airy' }, 'theme');
   assert.equal(airy.rhythm, 'airy');
   assert.equal(recipeAttributes(airy).attributes['data-look-rhythm'], 'airy');
   assert.equal(recipeAttributes(compileAppTheme(base, 'theme')).attributes['data-look-rhythm'], 'house');
-  for (const preset of THEME_PRESETS) assert.equal(recipeAttributes(preset).attributes['data-look-rhythm'], 'house', preset.id);
+  // Each built-in at its own: the instrument tight, the printed page and the tiles airy, the rest the platform's.
+  const worn: Record<string, string> = { graphite: 'tight', ledger: 'tight', atelier: 'airy', bloom: 'airy', sage: 'airy' };
+  for (const preset of THEME_PRESETS)
+    assert.equal(recipeAttributes(preset).attributes['data-look-rhythm'], worn[preset.id] ?? 'house', preset.id);
   assert.deepEqual(parseThemes([airy], 'app')![0]!.rhythm, 'airy');
   assert.throws(() => compileAppTheme({ ...base, rhythm: 'loose' }, 'theme'), /theme\.rhythm must be one of house, tight, airy/);
   assert.throws(() => parseThemes([{ ...airy, rhythm: 'loose' }], 'app'), /rhythm/);
@@ -631,4 +730,48 @@ test('a theme that extends a look and names an accent but no chart wears the acc
   assert.equal(plum({ accent: '#7a1fa2', chart: ['#0e8fb0'] }).light.chart1, '#0e8fb0');
   assert.equal(plum({ ink: '#101010' }).light.chart1, mono.light.chart1);
   assert.notEqual(mono.light.chart1, '#7a1fa2');
+});
+
+test('a brand is said once: the signal roles in every look, the neutrals’ hue where the look wears a tint, and what the theme names wins', () => {
+  const branded = (base: string, more: Record<string, unknown> = {}) =>
+    compileAppTheme({ kind: 'theme', id: 'own', label: 'Own', extends: base, brand: '#0B7A5C', ...more } as never, 'probe');
+  const lumen = themePreset('lumen')!;
+  const worn = branded('lumen');
+  // The colour as written by day, and every role a reader takes for the App's.
+  for (const role of ['accent', 'link', 'focus', 'navAccent', 'chart1'] as const) assert.equal(worn.light[role], '#0b7a5c', role);
+  // By night it is lit until a dark panel shows it.
+  assert.notEqual(worn.dark.accent, '#0b7a5c');
+  assert.ok(contrastRatio(worn.dark.accent, worn.dark.surface) >= 4.5, `${worn.dark.accent} on ${worn.dark.surface}`);
+  // Lumen's neutrals take the hue and keep their lightness: what read on them still reads.
+  for (const mode of ['light', 'dark'] as const) {
+    assert.notEqual(worn[mode].raised, lumen[mode].raised, `${mode} raised`);
+    assert.notEqual(worn[mode].navGround, lumen[mode].navGround, `${mode} menu ground`);
+    assert.equal(worn[mode].surface, lumen[mode].surface, `${mode} surface`);
+    assert.equal(worn[mode].ink, lumen[mode].ink, `${mode} ink`);
+    for (const ink of ['ink', 'inkMuted', 'inkSubtle'] as const)
+      for (const ground of ['surface', 'raised', 'navGround'] as const)
+        assert.ok(contrastRatio(worn[mode][ink]!, worn[mode][ground]!) >= 4.5, `${mode}: ${ink} on ${ground}`);
+    // What a colour means is never turned.
+    assert.equal(worn[mode].statusGood, lumen[mode].statusGood);
+  }
+  // A look whose greys are its own keeps them, and takes the signal alone.
+  const mono = themePreset('mono')!;
+  const plain = branded('mono');
+  assert.equal(plain.light.accent, '#0b7a5c');
+  assert.equal(plain.light.raised, mono.light.raised);
+  assert.equal(plain.light.navGround, mono.light.navGround);
+  // A colour the theme names wins over the one worked out.
+  const named = branded('lumen', { colors: { light: { raised: '#f0f0f0', link: '#084c3a' } } });
+  assert.equal(named.light.raised, '#f0f0f0');
+  assert.equal(named.light.link, '#084c3a');
+  // A grey brand turns nothing into a guess at a hue.
+  const grey = compileAppTheme({ kind: 'theme', id: 'grey', label: 'Grey', extends: 'lumen', brand: '#555555' } as never, 'probe');
+  const [r, g, b] = [1, 3, 5].map((at) => parseInt(grey.light.raised!.slice(at, at + 2), 16));
+  assert.ok(Math.max(r!, g!, b!) - Math.min(r!, g!, b!) <= 2, grey.light.raised);
+  // Worn over a look: a theme that extends nothing names its accent among its colours.
+  assert.throws(
+    () =>
+      compileAppTheme({ kind: 'theme', id: 'bare', label: 'Bare', brand: '#0b7a5c', colors: { light: {}, dark: {} } } as never, 'probe'),
+    /brand is worn over a look/,
+  );
 });

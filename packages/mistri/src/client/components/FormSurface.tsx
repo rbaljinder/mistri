@@ -10,6 +10,7 @@
  * in memory: a retry after a lost answer replays the same receipt, and
  * nothing typed is ever written to browser storage.
  */
+import { personFacing } from '@mistriwork/kit/client/audience.js';
 import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AppCommandField } from '../../shared/command.js';
 import type { FormStep, FormStyle } from '../../shared/formRules.js';
@@ -46,6 +47,7 @@ import type { HeldTarget } from './HeldFiles.js';
 import { ReviewValue, type ReviewSource } from './ReviewValue.js';
 import { say } from '../copy/forms/components/FormSurface.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
+import { shellById } from '@mistriwork/kit/client/shellHost.js';
 import { appWord, holdAppWords } from '@mistriwork/kit/client/messages.js';
 import type { ChallengeWidget, FormGuard, GuardHandle } from './PublicGuard.js';
 
@@ -624,6 +626,40 @@ export function FormSurface({
     );
   }
 
+  /* What a refused step or submit got wrong, where it is two answers or more, said together over its fields, each a
+     press from its answer (one is said beside its field alone): the line
+     under a field says the same words, and is the one a screen reader is told (CommandFields.tsx), so this is a
+     list to see and step through, not a second announcement. The intake style asks one question to a page and says
+     its problem under it. */
+  const wrongIn = (list: readonly AppCommandField[]) =>
+    intake ? [] : Object.entries(problems).filter(([path, said]) => said && list.some((field) => field.name === rootOf(path)));
+  const problemsOver = (list: readonly AppCommandField[]) =>
+    wrongIn(list).length > 1 && (
+      <div className="form-problems" data-slot="form-problems">
+        {/* The office is told what to fix; a visitor's own form, and one the App's own public fills in signed in, asks
+            more gently (kit audience.ts; a public form has no App shell to ask, so its `visitor` says it). */}
+        <p>{say(visitor || personFacing() ? 'answersNeedALook' : 'fieldsNeedFixing', { count: wrongIn(list).length })}</p>
+        <ul>
+          {wrongIn(list).map(([path, said]) => (
+            <li key={path}>
+              <button
+                type="button"
+                onClick={() => {
+                  const at = shellById(`${id}-field-${path.replace(/[^A-Za-z0-9_-]/g, '-')}`);
+                  (at?.matches('input, select, textarea, button')
+                    ? at
+                    : at?.querySelector<HTMLElement>('input, select, textarea, button')
+                  )?.focus();
+                }}
+              >
+                {byName.get(rootOf(path))?.label ?? rootOf(path)}
+              </button>
+              {`: ${said}`}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
   const controls = (list: readonly AppCommandField[]) => (
     <CommandFields
       fields={list}
@@ -888,7 +924,10 @@ export function FormSurface({
                 ) : (
                   <>
                     {index === 0 && description}
-                    <fieldset className="command-fields">{body(step)}</fieldset>
+                    <fieldset className="command-fields">
+                      {problemsOver(stepFields(step))}
+                      {body(step)}
+                    </fieldset>
                   </>
                 )
               }
@@ -896,6 +935,7 @@ export function FormSurface({
           ) : (
             <>
               <fieldset className="command-fields" disabled={pending}>
+                {problemsOver(fields)}
                 {controls(fields)}
               </fieldset>
               {guard}

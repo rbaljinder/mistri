@@ -123,6 +123,12 @@ export function ExportControl({ entry, data }: { entry: Entry; data: ExportData 
         triggerTitle={say('downloadThisResult')}
         label={
           <>
+            {/* An App's page verbs each lead with a mark (AppList.tsx): Views, Export, Import. */}
+            {!workbench && (
+              <svg className="applist-verb-mark" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                <path d="M8 2.5v8M5 7.5l3 3 3-3M2.5 10v3.5h11V10" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              </svg>
+            )}
             <span className="export-word">{say('export')}</span>
             <span className="export-more" aria-hidden="true">
               ⋯

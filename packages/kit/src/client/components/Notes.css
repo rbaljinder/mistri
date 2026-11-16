@@ -12,6 +12,15 @@
 .empty-note-detail { display: block; }
 /* A refusal stands where a room's content would: on the room's edge, as the bare note it replaces did. */
 .empty-note.is-refused { padding: var(--space-4h) var(--room-inset, 12px); }
+/* The block that is all its room has to say (`room`, Notes.tsx: a page refused, a record gone) stands in the room's
+   middle, a little above it, as the sign-in column does: the mark on a tile of the raised ground, the sentence in the
+   text ink a step up, the action under it. One block still, with the same parts in the same order. */
+.empty-note.is-room { grid-template-columns: minmax(0, 1fr); justify-items: center; row-gap: var(--space-2); max-width: 28rem; margin: clamp(var(--space-7), 16vh, calc(3 * var(--space-8))) auto var(--space-8); padding: 0 var(--space-5); text-align: center; }
+.empty-note.is-room > * { grid-column: 1; grid-row: auto; }
+.empty-note.is-room > .empty-note-mark { box-sizing: content-box; width: 1em; height: 1em; margin: 0 0 var(--space-3); padding: var(--space-3); border-radius: var(--radius); background: var(--raised); color: var(--ink-muted); font-size: var(--text-xl); }
+.empty-note.is-room > .empty-note-text { color: var(--ink); font-size: var(--text-lg); font-weight: 500; text-wrap: balance; }
+.empty-note.is-room .empty-note-detail { margin-top: var(--space-1); font-size: var(--text-md); font-weight: 400; }
+.empty-note.is-room > .empty-note-action { margin-top: var(--space-4); }
 .empty-note-text { margin: 0; color: var(--ink-muted); font-size: var(--text-md); line-height: 1.5; }
 .empty-note-detail { color: var(--ink-muted); }
 /* An authored title leads in the text ink at the same size: the sentence is what it says, not a heading. */

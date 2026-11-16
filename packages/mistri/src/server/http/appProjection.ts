@@ -6,6 +6,7 @@
  */
 import { suggestPage, validatePage } from '@mistriwork/engine/shared/page.js';
 import { assistantModel } from '../assistant/assistantModel.js';
+import { viewerAudience } from '../../shared/appAudience.js';
 import { servedDecisions } from '../decide/decisionServing.js';
 import { anatomyPage, type AnatomyHints } from '@mistriwork/engine/shared/pageAnatomy.js';
 import { headingOf, pluralOf, recordNoun } from '@mistriwork/engine/shared/appNoun.js';
@@ -146,6 +147,9 @@ export function browserApp(ctx: RequestContext, source: ResolvedSource) {
   if (app && host?.app.app.auth && !identity.id) app = withoutSignedInParts(app, schema);
   /* The roles the reader holds, for a component that offers by role (`useViewer().roles`); the server still decides every request. */
   if (app && host?.app.app.auth && identity.id) app = { ...app, viewerRoles: [...roles] };
+  /* And who the shell is drawn for: the App's own public is offered none of the office's tools (appAudience.ts). */
+  if (app && host && viewerAudience(host.app.app.auth, { signedIn: Boolean(identity.id), roles }))
+    app = { ...app, viewerAudience: 'person' };
   /* Export is a grant of its own in an App that grants by role (appExportable): the tables this reader may export,
      and no Export menu at all when there are none. The export route refuses the same. */
   const exportable = app && host ? appExportable(host.app.app, schema!, roles, Boolean(identity.id)) : undefined;
@@ -438,5 +442,31 @@ function anatomyHints(app: AppDef, pages: readonly PageDef[], table: string): An
     },
     moved: (of, column) => resource(of.id)?.machine?.column === column,
     caption: (of, column) => resource(of.id)?.labels?.[column],
+    /* The card a list open to every reader (no `roles`, the one a signed-out visitor is served) draws this resource
+       as, where it names a figure and a picture of its own rows. A list only the office reads keeps the office's
+       record. */
+    card: (of) => {
+      const lists = Object.values(app.views ?? {}).flatMap((view) => {
+        const shown = view as {
+          table?: string;
+          roles?: readonly string[];
+          presentation?: { kind?: string; value?: string; facts?: string[]; image?: unknown };
+        };
+        const card = shown.presentation;
+        if (shown.table !== of.id || card?.kind !== 'cards' || !card.value || card.value.includes('.')) return [];
+        const image = card.image;
+        if (!image || typeof image !== 'object' || 'about' in image) return [];
+        return [
+          {
+            open: !shown.roles?.length,
+            value: card.value,
+            facts: card.facts?.filter((fact) => typeof fact === 'string'),
+            image: image as { from: string; whose: string; sort?: string },
+          },
+        ];
+      });
+      const chosen = lists.find((list) => list.open);
+      return chosen ? { value: chosen.value, ...(chosen.facts?.length ? { facts: chosen.facts } : {}), image: chosen.image } : undefined;
+    },
   };
 }

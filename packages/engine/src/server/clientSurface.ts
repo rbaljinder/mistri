@@ -132,6 +132,7 @@ function wornTheme(ui: LookChoice | undefined, audience: Audience = {}) {
 const SHEET_FACES: Readonly<Record<string, { families: readonly string[]; file: RegExp; data?: true }>> = {
   barlow: { families: ['Barlow', 'Barlow Semi Condensed'], file: /^assets\/barlow-(?:400|semi-condensed-700)-[\w-]+\.woff2$/ },
   inter: { families: ['Inter'], file: /^assets\/inter-latin-[\w-]+\.woff2$/ },
+  manrope: { families: ['Manrope'], file: /^assets\/manrope-latin-[\w-]+\.woff2$/ },
   ledger: { families: ['IBM Plex Mono'], data: true, file: /^assets\/ibm-plex-mono-400-[\w-]+\.woff2$/ },
 };
 

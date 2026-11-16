@@ -187,11 +187,11 @@ describe('what the form asks for', () => {
     expect(within(fields[0] as HTMLElement).queryByText('*')).toBeNull();
     expect(within(fields[2] as HTMLElement).getByText('(optional)')).toBeInTheDocument();
     // The word stands a space apart from the label in the markup itself: no stylesheet of the forms room is loaded here.
-    expect(fields[2].querySelector('.form-field-label-row')?.textContent).toBe('Status (optional)');
+    expect(fields[2].querySelector('[data-slot="field-head"]')?.textContent).toBe('Status (optional)');
     // A vocabulary is a listbox, a reference a picker, a date a date box.
     expect(screen.getByRole('button', { name: /^Source\b/ })).toHaveAttribute('aria-haspopup', 'listbox');
     // With nothing chosen the listbox asks, in the placeholder's quiet ink, rather than showing a dash.
-    const unchosen = screen.getByRole('button', { name: /^Source\b/ }).querySelector('.dd-value');
+    const unchosen = screen.getByRole('button', { name: /^Source\b/ }).querySelector('[data-slot="select-value"]');
     expect(unchosen).toHaveTextContent('Choose source');
     expect(unchosen).toHaveClass('is-empty');
     expect(screen.getByRole('combobox', { name: 'Owner' })).toBeInTheDocument();
@@ -430,7 +430,8 @@ describe('required means required', () => {
     } else if (role === 'combobox') {
       await user.type(control, 'Arjun');
       expect(control).toHaveAccessibleDescription('More help. Fill in Choice.');
-      await user.click(await screen.findByText('Arjun Mehta'));
+      // By its role and name: the typed letters are picked out in a mark of their own, so the name is not one text node.
+      await user.click(await screen.findByRole('option', { name: /^Arjun Mehta/ }));
     } else {
       await user.type(control, 'A');
     }
@@ -556,7 +557,7 @@ describe('required means required', () => {
     await user.click(screen.getByRole('button', { name: 'Add' }));
     expect(insert).not.toHaveBeenCalled();
     await user.type(picker, 'Arjun');
-    await user.click(await screen.findByText('Arjun Rao'));
+    await user.click(await screen.findByRole('option', { name: /^Arjun Rao/ }));
     await user.click(screen.getByRole('button', { name: 'Add' }));
     expect(insert).toHaveBeenCalledExactlyOnceWith({ owner_id: '9' });
   });
@@ -670,6 +671,26 @@ describe('required means required', () => {
     expect(screen.getByLabelText('Name')).toHaveFocus();
     expect(calls.filter((c) => c.path === '/api/insert')).toHaveLength(0);
     expect(p.onAdded).not.toHaveBeenCalled();
+  });
+
+  test('two wrong answers are also said together at the head, each a press from its field; one is said under its field alone', async () => {
+    const user = userEvent.setup();
+    draw(<NewRecordForm {...props()} />);
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    const summary = document.querySelector<HTMLElement>('[data-slot="form-problems"]')!;
+    expect(within(summary).getByText('2 fields need fixing.')).toBeVisible();
+    expect(
+      within(summary)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Name: Fill in Name.', 'Company: Fill in Company.']);
+    // A list to see and step through: the line under each field is the one announcement.
+    expect(summary).not.toHaveAttribute('role');
+    await user.click(within(summary).getByRole('button', { name: 'Company' }));
+    expect(screen.getByLabelText('Company')).toHaveFocus();
+    await user.type(screen.getByLabelText('Company'), 'Stonebridge');
+    expect(document.querySelector('[data-slot="form-problems"]')).toBeNull();
+    expect(screen.getByText('Fill in Name.')).toBeVisible();
   });
 });
 
@@ -796,7 +817,7 @@ describe('the save', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
     fireEvent.submit(document.querySelector('.insert-form')!);
     await user.keyboard('{Escape}');
-    fireEvent.pointerDown(document.querySelector('.peekpanel-backdrop, .confirm-backdrop')!);
+    fireEvent.pointerDown(document.querySelector('.peekpanel-backdrop, [data-slot="dialog-backdrop"][data-for="confirm"]')!);
     expect(p.onCancel).not.toHaveBeenCalled();
     expect(insert).toHaveBeenCalledTimes(1);
     await act(async () => release({ errors: [{ message: 'Duplicate name' }] }));
@@ -983,7 +1004,7 @@ describe('the controls', () => {
     await vi.waitFor(() =>
       expect(calls.some((c) => c.path === '/api/run' && String((c.body as { q: string }).q).includes('contains "Arjun"'))).toBe(true),
     );
-    await user.click(await screen.findByText('Arjun Mehta'));
+    await user.click(await screen.findByRole('option', { name: /^Arjun Mehta/ }));
     expect(picker).toHaveValue('Arjun Mehta');
     await user.type(screen.getByLabelText('Name'), 'Ada');
     await user.type(screen.getByLabelText('Company'), 'Acme');

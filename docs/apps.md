@@ -353,11 +353,12 @@ first document. A `nav` that leaves it out gets it as its first item,
 Overview; `nav` may place it as `overview` itself, and a view of the App's own
 at that key is the App's, and then it must name its home.
 
-**A sidebar that holds the bar.** A side-placed App's signed-in screens at a
+**A sidebar beside a pane.** A side-placed App's signed-in screens at a
 desk draw no band across the window (`ui.shell.header`, `'sidebar'` unless
-said): the sidebar runs the window's full height with the App's mark, New and
-the search (⌘K) at its head and the bell and the account at its foot, and each
-room's own head row is the content's first line. Folding leaves the icon rail.
+said): the sidebar runs the window's full height with the App's mark and New
+at its head, and the room is a pane beside it whose own bar says where the
+reader is and holds the search (⌘K), the bell and the account at its far end;
+each room's own head row is the pane's first line under that bar. Folding leaves the icon rail.
 A phone keeps the bar over its drawer, and public pages, sign-in and the top
 placement keep the bar as before. `header: 'bar'` puts the bar back across the
 window; so does `rail: false` with no `header`, since a sidebar folded away

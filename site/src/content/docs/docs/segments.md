@@ -17,7 +17,7 @@ segments: {
 },
 ```
 
-See it in the sample (`examples/apps/lintel/resources.ts:40`).
+See it in the sample (`examples/apps/lintel/resources.ts:39`).
 
 ## Names
 

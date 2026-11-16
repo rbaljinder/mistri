@@ -1,4 +1,4 @@
-import { calendar, cards, commandForm, gantt, listView, queue, step } from '@mistriwork/mistri/app';
+import { calendar, cards, commandForm, gantt, listView, metric, queue, step } from '@mistriwork/mistri/app';
 import type { Views } from './mistri-schema.d.ts';
 import { lintelLanding } from './landing.ts';
 
@@ -51,6 +51,13 @@ export const views = {
     editable: ['market_rent', 'available_on', 'listed'],
     filters: ['property_id', 'bedrooms', 'status'],
     totals: ['market_rent'],
+    // What the whole roll comes to, over its tabs: a dashboard's metrics, in a dashboard's words.
+    summary: [
+      metric('Occupied', 'unit', { query: 'status = occupied or status = notice', target: { measure: 'count' } }),
+      metric('Vacant or turning over', 'unit', { query: 'available' }),
+      metric('Asking rent', 'unit', { measure: 'sum market_rent as asking', figure: 'whole' }),
+      metric('Overdue', 'charge', { segment: 'overdue', measure: 'sum amount as owed', figure: 'whole' }),
+    ],
     tabs: [
       { label: 'All', sort: 'code' },
       { segment: 'vacant', sort: 'available_on' },
@@ -109,11 +116,11 @@ export const views = {
       { label: 'All', sort: 'due_on desc' },
     ],
   }),
-  /* The rent poster posts each month's rent by itself (jobs.ts); the books post it by hand when a month is late or a
-     lease was signed after the first. Posting twice posts nothing new. */
+  /* The rent poster posts each month's rent (jobs.ts); the books post a late month by hand. Twice posts nothing new. */
   'post-rent': commandForm('Post rent', 'postRent', {
     description: 'Charges every current lease its rent for the month, once. The rent poster does this at 6 a.m. on the first.',
     submitLabel: 'Post rent',
+    icon: 'calendar',
   }),
   payments: listView('Payments', 'payment', {
     icon: 'bank',

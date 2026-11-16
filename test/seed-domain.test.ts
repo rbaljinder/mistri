@@ -160,3 +160,37 @@ describe('seed reads the domain off the schema', async () => {
     assert.ok(Math.max(...ahead.map((d) => Date.parse(d))) - Date.parse(today) <= 22 * 86_400_000);
   });
 });
+
+test('a table of things that happen at a time dates its plain date around today, and keeps when it was written behind', async () => {
+  const file = join(dir, 'bookings.db');
+  const db = new DatabaseSync(file);
+  db.exec(`CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+    CREATE TABLE bookings (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(id),
+      date TEXT NOT NULL, created_at TEXT NOT NULL);`);
+  db.close();
+  const adapter = connect(file, { schemas: [] });
+  try {
+    const schema = await adapter.introspect();
+    await seedDatabase(adapter, schema, { rows: 40, seed: 11, today: TODAY, resources: { customers: {}, bookings: {} } });
+  } finally {
+    await adapter.close();
+  }
+  const read = new DatabaseSync(file, { readOnly: true });
+  try {
+    const today = TODAY.toISOString().slice(0, 10);
+    const rows = read.prepare('SELECT substr(date, 1, 10) AS day, substr(created_at, 1, 10) AS written FROM bookings').all() as Array<{
+      day: string;
+      written: string;
+    }>;
+    // An upcoming list over the bookings has rows to show, and so does the past.
+    assert.ok(rows.filter((r) => r.day > today).length >= 3, 'no booking ahead');
+    assert.ok(rows.filter((r) => r.day < today).length >= 3, 'no booking behind');
+    // When the booking was written is never in the future.
+    assert.ok(
+      rows.every((r) => r.written <= today),
+      'a booking written after today',
+    );
+  } finally {
+    read.close();
+  }
+});

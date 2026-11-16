@@ -291,3 +291,42 @@ test('a display of restated and kept rules keeps only what the App adds, and an 
     assert.deepEqual(fixRestated(fixed, paymentSchema, dir), { fixed: [], left: [] });
   });
 });
+
+{
+  const warning = (command: string, path: string, label: string) =>
+    `command "${command}" [restated]: input "${path}" says label "${label}", which is its key made words. Delete it.`;
+  test('a command input label that is its key made words is deleted from the commands module, an emptied object with it; the same words written twice are left', async (t) => {
+    const { mkdtempSync, writeFileSync: write, readFileSync: read } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join: at } = await import('node:path');
+    const { fixCommandLabels } = await import('../packages/mistri/src/server/build/checkFix.js');
+    const dir = mkdtempSync(at(tmpdir(), 'fix-labels-'));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const file = at(dir, 'commands.ts');
+    write(
+      file,
+      [
+        'export const cancel = defineCommand({',
+        "  input: { reason: field.text({ label: 'Reason', max: 160 }), priority: field.choice(['low', 'high'], { label: 'Priority' }), note: field.text({ label: 'Note' }) },",
+        '});',
+        "export const hold = defineCommand({ input: { why: field.text({ label: 'Why' }) } });",
+        "export const park = defineCommand({ input: { why: field.text({ label: 'Why' }) } });",
+        '',
+      ].join('\n'),
+    );
+    const result = fixCommandLabels(
+      [
+        warning('cancel', 'reason', 'Reason'),
+        warning('cancel', 'priority', 'Priority'),
+        warning('cancel', 'note', 'Note'),
+        warning('hold', 'why', 'Why'),
+      ],
+      file,
+    );
+    assert.equal(result.fixed.length, 3);
+    assert.match(result.left[0]!, /input "why" label "Why": written in 2 places; delete it by hand/);
+    const text = read(file, 'utf8');
+    assert.match(text, /reason: field\.text\(\{ max: 160 \}\), priority: field\.choice\(\['low', 'high'\]\), note: field\.text\(\) \}/);
+    assert.match(text, /why: field\.text\(\{ label: 'Why' \}\)/);
+  });
+}

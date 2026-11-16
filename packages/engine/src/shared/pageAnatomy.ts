@@ -62,6 +62,12 @@ export interface AnatomyHints {
   /** What the caller calls a column (its `labels`): a reference's card is titled as its field is ("Class", not
       "Class session"). */
   caption?: (table: TableMeta, column: string) => string | undefined;
+  /** The card a person-facing list draws this table's records as (a list view's `cards(...)` with a `value` and an
+      `image`), where the App has one: the record it opens is drawn as that card is read, large — its pictures first,
+      its figure beside them with presence, its facts under the name — rather than as an office's record. */
+  card?: (
+    table: TableMeta,
+  ) => { value: string; facts?: readonly string[]; image: { from: string; whose: string; sort?: string } } | undefined;
 }
 
 interface RelatedPick {
@@ -624,14 +630,57 @@ export function anatomyPage(schema: DatabaseSchema, baseId: string, hints: Anato
   const base = findTable(schema, baseId);
   const sections = base ? inferredSections(schema, base, hints) : null;
   if (!base || !sections) return null;
+  const shown = showcaseOf(schema, base, sections, hints);
   return {
     id: `suggested:${base.id}`,
     name: base.name,
     base: base.id,
-    sections,
-    listTabs: true,
+    sections: shown ?? sections,
+    listTabs: !shown,
+    ...(shown ? { layout: 'showcase' as const } : {}),
     source: 'suggested',
   };
+}
+
+/**
+ * A record the App shows people as a card (a list's `cards(...)` with a `value` and an `image`) is drawn, when nobody
+ * wrote its page, the way that card reads, large: a showcase (pageLayouts.ts) — its pictures first, its figure beside
+ * them in the panel with presence, the card's facts under the name, and the rest of the record under both. The
+ * vocabulary is the card's own, so there is no second place to name a product's price.
+ */
+function showcaseOf(schema: DatabaseSchema, base: TableMeta, sections: PageSection[], hints: AnatomyHints): PageSection[] | null {
+  const card = hints.card?.(base);
+  if (!card || !findTable(schema, card.image.from) || !base.columns.some((column) => column.name === card.value)) return null;
+  const [sort, way] = (card.image.sort ?? '').trim().split(/\s+/);
+  const gallery: PageSection = {
+    kind: 'list',
+    title: 'Photos',
+    from: card.image.from,
+    path: card.image.whose,
+    columns: [],
+    presentation: 'gallery',
+    limit: 6,
+    ...(sort ? { orderBy: [{ column: sort, direction: way === 'desc' ? ('desc' as const) : ('asc' as const) }] } : {}),
+  };
+  const figure: PageSection = { kind: 'fields', presentation: 'headline', region: 'aside', paths: [card.value] };
+  const head = sections.find((section) => section.kind === 'fields' && section.presentation === 'header');
+  const headPaths: readonly string[] = head?.kind === 'fields' ? (head.paths ?? []) : [];
+  const facts = (card.facts?.length ? [...card.facts] : [...headPaths]).filter((path) => path !== card.value);
+  /* What the head and the figure say is not said again under them: a fact read through its reference
+     ("category_id.name") is its reference's column. */
+  const said = new Set([card.value, ...facts.map((path) => path.split('.')[0])]);
+  const rest = sections.flatMap((section): PageSection[] => {
+    if (section === head && section.kind === 'fields') return [{ ...section, paths: facts }];
+    /* The figure is said beside the pictures; the office's cards and its history stay the office's page. */
+    if (section.region === 'aside' || section.kind === 'history') return [];
+    if (section.kind === 'fields') {
+      const paths = (section.paths ?? []).filter((path) => !said.has(path.split('.')[0]));
+      return paths.length ? [{ ...section, paths }] : [];
+    }
+    return [section];
+  });
+  const [lead, ...body] = rest;
+  return [lead, gallery, figure, ...body];
 }
 
 /**

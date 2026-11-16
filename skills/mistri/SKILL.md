@@ -25,8 +25,8 @@ task needs with `npx @mistriwork/mistri docs <topic>` (`app-dsl` indexes every k
    `npx @mistriwork/mistri migrate up --app ./my-app --config mistri.json` (migrations, the stores it uses, check) and `seed` with the same flags (its connection `"writable": true`); a seed script
    (outside the App's folder) only for rows it cannot make ([handback.md](references/handback.md)). The draft has a look, an Overview, a machine per status, sign-in for staff, and its recipe.
 4. **Aim for a finished first shot**: take the recipe the draft's README names, from [recipes.md](references/recipes.md)
-   (CRM, service desk, inventory, forum, marketplace, admin tool) for the look, the home dashboard and each list's
-   presentation, and draw every status, amount, person and date ([design-language.md](references/design-language.md)).
+   (CRM, service desk, inventory, forum, marketplace, admin tool), build each room from its pattern in
+   [patterns.md](references/patterns.md), and draw every status, amount, person and date ([design-language.md](references/design-language.md)).
 5. **Page by page** (shell, home dashboard, lists, record pages, forms), in the App's folder:
    1. pick blocks by intent (`npx @mistriwork/mistri docs choose`) and read the page's guide (`compose-shell`,
       `compose-list`, `compose-dashboard`, `compose-record-page`, `compose-overview`, `compose-form`); a form's rows,
@@ -81,5 +81,5 @@ task needs with `npx @mistriwork/mistri docs <topic>` (`app-dsl` indexes every k
 
 - [interview.md](references/interview.md), [brief-template.md](references/brief-template.md): step 0, the questions and the brief.
 - [choices.md](references/choices.md), [security.md](references/security.md): identity, data, access mode, public forms, environment, workflows; what only hides a value, and the checks before shipping.
-- [recipes.md](references/recipes.md), [design-language.md](references/design-language.md): what a finished App of each kind holds, as patterns; looks and themes, drawn values, inputs, dashboard blocks, chart rules.
+- [recipes.md](references/recipes.md), [patterns.md](references/patterns.md), [design-language.md](references/design-language.md): what a finished App of each kind holds; each room made well, with Lintel's lines, and the rows to judge it on; looks and themes, drawn values, inputs, dashboard blocks, chart rules.
 - [rubric.md](references/rubric.md), [handback.md](references/handback.md): the per-page and whole-App yes/no checks; what a finished App has beyond its pages.

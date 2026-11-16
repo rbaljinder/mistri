@@ -1,5 +1,5 @@
 /**
- * Tabs: one panel at a time, chosen from a row. Over Base UI's Tabs, which
+ * Tabs: one panel at a time, chosen from a row. Over UI SDK's Tabs, which
  * gives it the tablist, the arrow-key walk between tabs and the panel that
  * belongs to the chosen one; a disabled tab is skipped by that walk, never
  * a dead end. Controlled with `value`/`onValueChange`, uncontrolled with
@@ -7,8 +7,9 @@
  * the caller keeps in step.
  */
 import type { ReactNode } from 'react';
-import { Tabs as BaseTabs } from '@base-ui/react/tabs';
-import { fromBaseUi, type ChangeDetails } from './changeDetails.js';
+import { Tabs as TabSet, TabsIndicator, TabsList, TabsPanel, TabsTab } from '@ui-sdk/react/tabs';
+import type { ChangeDetails } from './changeDetails.js';
+import { told } from './internal/told.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface TabItem {
@@ -22,7 +23,7 @@ export interface TabsProps {
   tabs: readonly TabItem[];
   value?: string;
   defaultValue?: string;
-  /** `select` when a person chose the tab; Base UI's `disabled`, `missing` or `initial` when the chosen tab went away. */
+  /** `select` when a person chose the tab; `disabled`, `missing` or `initial` when the chosen tab went away. */
   onValueChange?: (value: string, details: ChangeDetails<'select' | 'disabled' | 'missing' | 'initial'>) => void;
   className?: string;
   /** The tablist's accessible name ("Settings sections"). Give one: a tab list without a name is read as "tab list" and
@@ -32,25 +33,26 @@ export interface TabsProps {
 
 function DefaultTabs({ tabs, value, defaultValue, onValueChange, className, ariaLabel }: TabsProps) {
   return (
-    <BaseTabs.Root
-      className={['ui-tabs', className].filter(Boolean).join(' ')}
+    <TabSet
+      className={className}
       value={value}
-      defaultValue={defaultValue ?? tabs.find((tab) => !tab.disabled)?.value}
-      onValueChange={onValueChange && ((next, details) => onValueChange(next as string, fromBaseUi(details, 'select')))}
+      defaultValue={value === undefined ? (defaultValue ?? tabs.find((tab) => !tab.disabled)?.value) : undefined}
+      onValueChange={onValueChange && ((next, details) => next !== null && onValueChange(String(next), told('select', details)))}
     >
-      <BaseTabs.List className="ui-tabs-list" aria-label={ariaLabel}>
+      <TabsList aria-label={ariaLabel}>
         {tabs.map((tab) => (
-          <BaseTabs.Tab key={tab.value} className="ui-tab" value={tab.value} disabled={tab.disabled}>
+          <TabsTab key={tab.value} value={tab.value} disabled={tab.disabled}>
             {tab.label}
-          </BaseTabs.Tab>
+          </TabsTab>
         ))}
-      </BaseTabs.List>
+        <TabsIndicator />
+      </TabsList>
       {tabs.map((tab) => (
-        <BaseTabs.Panel key={tab.value} className="ui-tab-panel" value={tab.value}>
+        <TabsPanel key={tab.value} value={tab.value} data-kind="kit">
           {tab.children}
-        </BaseTabs.Panel>
+        </TabsPanel>
       ))}
-    </BaseTabs.Root>
+    </TabSet>
   );
 }
 

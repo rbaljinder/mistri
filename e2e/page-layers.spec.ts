@@ -33,19 +33,25 @@ test.describe('A free-form page and what it draws around itself', () => {
       await expect(facts).toHaveCSS('display', 'grid');
       // A layer's box, not a rectangle in the flow.
       const box =
-        layer === 'drawer' ? page.locator('.ui-drawer') : layer === 'modal' ? page.locator('.modal') : page.locator('.ui-popover');
+        layer === 'drawer'
+          ? page.locator('[data-slot="drawer-content"]')
+          : layer === 'modal'
+            ? page.locator('[data-slot="dialog-content"]')
+            : page.locator('[data-slot="popover-content"]');
       await expect(box).toBeVisible();
       const centre = await box.boundingBox();
       const hit = await page.evaluate(
         ([x, y]) => {
           const found = document.elementFromPoint(x, y);
-          return found?.closest('.ui-drawer, .modal, .ui-popover') !== null;
+          return found?.closest('[data-slot="drawer-content"], [data-slot="dialog-content"], [data-slot="popover-content"]') !== null;
         },
         [centre!.x + centre!.width / 2, centre!.y + 12],
       );
       expect(hit, 'the page child at z-index 9 does not paint over the layer').toBe(true);
       if (layer !== 'popover') {
-        const scrim = page.locator(layer === 'drawer' ? '.ui-drawer-backdrop' : '.modal-backdrop');
+        const scrim = page.locator(
+          layer === 'drawer' ? '[data-slot="drawer-backdrop"]' : '[data-slot="dialog-backdrop"][data-kind="modal"]',
+        );
         await expect(scrim).toBeVisible();
         const covers = await scrim.boundingBox();
         const viewport = page.viewportSize()!;
@@ -89,8 +95,10 @@ test.describe('A free-form page and what it draws around itself', () => {
     await page.goto(`${app.origin}/hero`);
     await settled(page);
     const pane = await page.locator('#content').boundingBox();
+    // The pane's own edge: beside a side menu the room is a pane with a rule over it, and its content starts under the rule.
+    const rule = await page.locator('#content').evaluate((node) => node.clientTop);
     const first = await page.locator('.c-page-hero').boundingBox();
-    expect(first!.y).toBeCloseTo(pane!.y, 0);
+    expect(first!.y).toBeCloseTo(pane!.y + rule, 0);
   });
 
   /* A field report: openPage loaded the App again, so a marker on the window was lost and the context ran once more. */
@@ -133,8 +141,8 @@ test.describe('A free-form page and what it draws around itself', () => {
     await settled(page);
     const name = await page.getByLabel('Name').boundingBox();
     const kind = await page
-      .locator('.form-field')
-      .filter({ has: page.locator('.field-select') })
+      .locator('[data-slot="field"]')
+      .filter({ has: page.locator('[data-slot="select-trigger"]') })
       .boundingBox();
     expect(kind!.y - (name!.y + name!.height)).toBeLessThan(32);
   });

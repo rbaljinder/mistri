@@ -89,7 +89,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 process.env.MISTRI_TEST_AUTH_LIMITS ??= 'off';
 process.env.NODE_ENV ??= 'test'; // the seam is read only where the process says it is a test (auth/requestRules.ts)
 export const OUT = join(ROOT, '.visual');
-export const LOOKS = ['workshop', 'lumen', 'mono', 'sage', 'ledger'];
+export const LOOKS = ['workshop', 'lumen', 'mono', 'sage', 'ledger', 'atelier', 'graphite', 'bloom'];
 /* An App's own look: nothing chosen, so the App's `ui.theme` is what draws.
    Stories have no App, so no such column. */
 export const APP_DEFAULT = 'default';

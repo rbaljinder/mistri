@@ -8,7 +8,7 @@ Say a column's stored values in words, colors, icons, money and units everywhere
 
 ```ts title="examples/apps/lintel/resources.ts"
     display: {
-      market_rent: dollars,
+      market_rent: { ...dollars, whole: true }, // a round figure, said without ".00": the rent roll's names need the room
       // …
       status: {
         // A vacant home is income to chase, not an alarm: warning, with the notice and turnover ahead of it in info.
@@ -18,14 +18,14 @@ Say a column's stored values in words, colors, icons, money and units everywhere
     },
 ```
 
-See it in the sample (`examples/apps/lintel/resources.ts:56`) (on `unit`); `dollars` is `{ format: 'money', minor: true }`, whole cents said as dollars. [Sample Apps](/docs/examples/) says how to run Lintel.
+See it in the sample (`examples/apps/lintel/resources.ts:55`) (on `unit`); `dollars` is `{ format: 'money', minor: true }`, whole cents said as dollars. [Sample Apps](/docs/examples/) says how to run Lintel.
 
 ![Lintel's rent roll: asking rent and rent per square foot as dollars, status as toned words, Occupied in green, Vacant in amber and On notice in blue.](../../../assets/data/display-rules.webp)
 
 ## What you'll see
 
 - `notice` said "On notice" and `turnover` said "Turnover", in a tone, in grid cells, record fields, cards, group headings, board lanes, a machine's stepper and the filter's choices.
-- `market_rent` as `$1,825.00` because its rule says money in whole cents (a number named like money is money without one), and a figure with a `unit` beside it, as `rent_per_sqft` says `/sq ft`.
+- `market_rent` as `$1,825` because its rule says money in cents, whole where there are none to say (a number named like money is money without one); a lease's `rent` says its `unit` after it, `$1,395.00/mo`.
 - Filters, sorts, exports and writes still use the stored value (`status = notice`), and `tone` and `icons` stay keyed by it.
 
 ## When to use it, and when not

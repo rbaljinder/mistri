@@ -1,7 +1,7 @@
 /** The new standalone primitives: Switch, Tabs, Drawer, Popover, Avatar and Pagination. */
 import '@testing-library/jest-dom/vitest';
 import { afterEach, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { Switch, type SwitchProps } from './Switch.js';
 import { Tabs } from './Tabs.js';
@@ -52,19 +52,17 @@ test('a drawer mounts only while open and closes on Escape', async () => {
       <button>Inside</button>
     </Drawer>,
   );
-  expect(screen.getByText('Filters')).toBeVisible();
+  expect(screen.getByRole('dialog', { name: 'Filters' })).toHaveTextContent('Filters');
   await userEvent.keyboard('{Escape}');
-  /* Base UI reports the open state first and the reason second; the
-     test's claim is the state, not the reason. */
   expect(onOpenChange.mock.calls[0]?.[0]).toBe(false);
+  expect(onOpenChange.mock.calls[0]?.[1]).toMatchObject({ reason: 'escape-key', source: 'keyboard' });
   rerender(
     <Drawer open={false} title="Filters" onOpenChange={onOpenChange}>
       <button>Inside</button>
     </Drawer>,
   );
-  /* Base UI keeps the sheet in the tree for its exit animation; the
-     claim that matters here is that it is no longer the open sheet. */
-  expect(screen.queryByRole('dialog')).not.toHaveAttribute('data-open');
+  // Closed, the sheet is out of the tree: nothing in it is read while it is shut.
+  expect(screen.queryByRole('dialog')).toBeNull();
 });
 
 test("a drawer has a close control, named in the caller's words, that asks to close it", async () => {
@@ -87,6 +85,16 @@ test('a popover opens from its trigger and shows its layer', async () => {
   expect(screen.queryByText('Popover body')).toBeNull();
   await userEvent.click(screen.getByRole('button', { name: 'Open' }));
   expect(screen.getByText('Popover body')).toBeVisible();
+});
+
+test('a popover is named by the label it is given, not by the words on its trigger', async () => {
+  render(
+    <Popover trigger={<button>Status is Open</button>} ariaLabel="Filter by Status">
+      <p>Popover body</p>
+    </Popover>,
+  );
+  await userEvent.click(screen.getByRole('button', { name: 'Status is Open' }));
+  expect(screen.getByRole('dialog', { name: 'Filter by Status' })).toBeVisible();
 });
 
 test('an avatar falls back to initials, two words then one', () => {
@@ -200,13 +208,14 @@ test('resizable panes start at their shares, and the handle walks on arrow keys 
       onSizesChange={onSizesChange}
     />,
   );
+  // The handle says its share once the group has laid its panes out, a turn after it is drawn.
   const handle = screen.getByRole('separator', { name: 'Resize Record and Detail' });
-  expect(handle).toHaveAttribute('aria-valuenow', '60');
+  await waitFor(() => expect(handle).toHaveAttribute('aria-valuenow', '60'));
   // Panes side by side are parted by a vertical line, so that is the separator's orientation.
   expect(handle).toHaveAttribute('aria-orientation', 'vertical');
   // A named pane has a role to be named by, and says it scrolls on purpose (the double-scroll probe reads that).
   const pane = screen.getByRole('group', { name: 'Record' });
-  expect(pane).toHaveClass('ui-resizable-panel');
+  expect(pane).toHaveAttribute('data-slot', 'resizable-panel');
   expect(pane).toHaveAttribute('data-scrolls');
   handle.focus();
   await userEvent.keyboard('{ArrowRight}');
@@ -230,7 +239,7 @@ test('stacked resizable panes are parted by a horizontal line', () => {
   expect(screen.getByRole('separator')).toHaveAttribute('aria-orientation', 'horizontal');
 });
 
-test('resizable panes scale shares that do not add to 100, and refuse fewer than two panes', () => {
+test('resizable panes scale shares that do not add to 100, and refuse fewer than two panes', async () => {
   const { container, rerender } = render(
     <Resizable
       panels={[
@@ -239,8 +248,8 @@ test('resizable panes scale shares that do not add to 100, and refuse fewer than
       ]}
     />,
   );
-  const panels = container.querySelectorAll('.ui-resizable-panel');
-  expect(panels[0]?.getAttribute('style')).toContain('33.333');
+  const panels = container.querySelectorAll('[data-slot="resizable-panel"]');
+  await waitFor(() => expect(panels[0]?.getAttribute('style')).toContain('33.333'));
   expect(panels[1]?.getAttribute('style')).toContain('66.666');
   rerender(<Resizable panels={[{ children: 'Only' }]} />);
   expect(container).toBeEmptyDOMElement();
@@ -277,7 +286,7 @@ test('a tooltip says its note on hover and on focus, and names it from the trigg
   render(<Tooltip trigger={<button>Save</button>}>Saves the record without leaving the page.</Tooltip>);
   const trigger = screen.getByRole('button', { name: 'Save' });
   await userEvent.hover(trigger);
-  /* Base UI waits out its open delay before the note appears. */
+  /* The tooltip waits out its open delay before the note appears. */
   const note = await screen.findByRole('tooltip', {}, { timeout: 3000 });
   expect(note).toHaveTextContent('Saves the record without leaving the page.');
   expect(trigger).toHaveAttribute('aria-describedby', note.id);

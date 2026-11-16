@@ -25,7 +25,7 @@ test.describe('a signed-out visitor', () => {
     await page.goto(`${sample.origin}/inquiries`);
     const main = page.locator('main');
     await expect(main).toContainText('This page is for signed-in members.');
-    await expect(main).not.toContainText('not available to your role');
+    await expect(main).not.toContainText('does not open this');
     await main.getByRole('button', { name: 'Sign in' }).click();
     await expect(page.getByRole('heading', { name: /Sign in/, level: 1 })).toBeVisible();
     // One main landmark: the screen is drawn in the shell's pane, not beside it.

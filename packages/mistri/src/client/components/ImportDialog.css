@@ -20,7 +20,7 @@
 .import-problem { margin: var(--space-4) 0 0; color: var(--status-critical); }
 .import-actions { flex-wrap: wrap; }
 /* A quiet download stands at the start of the row, the answers at its end. */
-.import-actions > .btn-quiet { margin-right: auto; }
+.import-actions > [data-slot='button'][data-variant='quiet'] { margin-right: auto; }
 
 /* The file: one place to choose it or drop it. The input is the control a
    keyboard reaches; the whole area is its label, and its focus the house ring. */
@@ -40,7 +40,7 @@
 /* The mapping: each column of the file, its example under its name, and the field it fills. */
 .import-map { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--space-4h) 20px; margin: 0; padding: 0; list-style: none; }
 .import-map-row { min-width: 0; }
-.import-map .form-field-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.import-map [data-slot='field-description'] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* The check: the file's rows as read, those with a problem first. */
 .import-preview { max-height: 22rem; overflow: auto; border-top: 2px solid var(--ink); }
@@ -61,6 +61,39 @@
 @layer structure {
 .import-preview td.import-status { min-width: min(18rem, 60vw); white-space: normal; overflow: visible; text-overflow: clip; }
 @media (max-width: 640px) {
-  [role="dialog"].confirm.modal-fullscreen-mobile > .import-step { display: flex; flex-direction: column; flex: 1 0 auto; }
+  [role="dialog"].confirm[data-slot='dialog-content'][data-fullscreen='mobile'] > .import-step { display: flex; flex-direction: column; flex: 1 0 auto; }
 }
+}
+
+/* Moved here from features.css: these dress only what this component draws, so they travel with
+   it and not in every first paint (scripts/bundle-budget.mjs). */
+@layer base {
+  /* The nav scrolls itself and nothing else: it is the step's own width, so the page never moves sideways to reach the
+     current item (MultiStepForm.tsx sets its scrollLeft). Relative, so an item's offset is the nav's. */
+  .multi-step-nav { position: relative; container-type: inline-size; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .multi-step-nav ol { display: flex; gap: var(--space-2); min-width: max-content; margin: 0; padding: 0; list-style: none; }
+  .multi-step-nav-item { display: inline-flex; align-items: center; gap: var(--space-3); min-height: 40px; padding: var(--space-2h) var(--space-3h); border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--ink-muted); font: inherit; cursor: pointer; }
+  .multi-step-nav-item[aria-current='step'] { border-bottom-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  .multi-step-nav-item:disabled { cursor: default; opacity: .6; }
+  .multi-step-nav-item:not(:disabled):hover { background: var(--raised); color: var(--ink); }
+  .multi-step-label { display: block; min-width: 0; }
+  /* The current step's name keeps to half the row and ends in an ellipsis, so the numbers stay in view at 411px. */
+  .multi-step-nav-item[aria-current='step'] .multi-step-label { max-width: 50cqw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .multi-step-number { flex: none; display: inline-grid; place-items: center; width: 20px; height: 20px; border: 1px solid currentColor; border-radius: 50%; font: 600 var(--text-xs) var(--mono); }
+}
+
+@layer base {
+  @media (max-width: 600px) {
+    .multi-step-nav-item { padding-inline: var(--space-3); }
+  }
+}
+
+@layer base {
+  /* On a phone the steps ahead and behind are their numbers; the current one
+     keeps its name. Three names across 390px ran the third off the edge. */
+  @media (max-width: 760px) {
+    .multi-step-nav-item:not([aria-current='step']) .multi-step-label {
+      position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+  }
 }

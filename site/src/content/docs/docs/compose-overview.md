@@ -18,7 +18,7 @@ that keeps the operational anatomy.
   draws the name a second time — `examples/apps/lintel/pages/resident.ts:8`.
 - **When its figures are counted from other tables**, declare `rollups` and
   show them in a `summary`, a `fields()` of them; a sum two references away takes
-  `whose: 'lease_id.resident_id'` — `examples/apps/lintel/resources.ts:89`,
+  `whose: 'lease_id.resident_id'` — `examples/apps/lintel/resources.ts:86`,
   `examples/apps/lintel/pages/resident.ts:9`.
 - **When it has prose of its own** (a bio, a description), a one-column
   `fields` section after the figures —

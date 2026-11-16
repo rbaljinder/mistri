@@ -9,8 +9,10 @@ import { message, messageLanguage, subscribeMessages } from '@mistriwork/kit/cli
 import { WorkspaceSwitcher } from './WorkspaceSwitcher.js';
 import { openPalette } from '@mistriwork/kit/client/palette.js';
 import { headerSearchShown } from '../publicVisitor.js';
+import { personFacing } from '@mistriwork/kit/client/audience.js';
 import { say } from '@mistriwork/kit/client/copy/shell/components/MobileNavDrawer.js';
 import type { ShownApp } from '@mistriwork/kit/client/components/appRooms.js';
+import { shellQuery } from '@mistriwork/kit/client/shellHost.js';
 
 interface MobileNavDrawerProps {
   app: Partial<Pick<AppPayloadApp, 'name' | 'ui' | 'nav' | 'views' | 'resources' | 'home'>>;
@@ -60,7 +62,7 @@ function MobileDrawerContents({
         <header className="mobile-nav-head">
           <strong>{name}</strong>
           <span className="mobile-nav-head-actions">
-            {headerSearchShown(app.ui?.shell?.search) ? (
+            {headerSearchShown(app.ui?.shell?.search) && !personFacing() ? (
               <button
                 type="button"
                 className="mobile-nav-search"
@@ -80,9 +82,47 @@ function MobileDrawerContents({
         {/* At the top of the menu, then that workspace's entries: a phone's header has no room for a row of them. */}
         {app.nav ? <WorkspaceSwitcher app={app as ShownApp} variant="drawer" /> : null}
         <ul ref={setList} className="mobile-nav-list" />
+        <AccountRows onClose={onClose} />
         <div ref={setFooter} className="mobile-nav-footer" />
         {list ? createPortal(<Sidebar tabNavigation host={list} footerHost={footer} onSelect={onClose} />, list) : null}
       </nav>
     </Modal>
+  );
+}
+
+/**
+ * The reader's own entries at the menu's foot: their settings, and their account with the way out. On a phone the
+ * bar's gear and initials are small marks with no words, and a person looking for "sign out" looks in the menu.
+ * Each row presses the bar's own control, so the settings room and the account's menu (its sign-out and what guards
+ * it) stay in one place (AccountControl.tsx).
+ */
+function AccountRows({ onClose }: { onClose: () => void }) {
+  const settings = shellQuery<HTMLButtonElement>('.settings-trigger');
+  const account = shellQuery<HTMLButtonElement>('.account-menu button.account, button.account');
+  if (!settings && !account) return null;
+  const press = (control: HTMLButtonElement) => () => {
+    onClose();
+    // After the drawer has given the focus back, so the menu it opens is not closed by that.
+    setTimeout(() => control.click(), 0);
+  };
+  return (
+    <ul className="mobile-nav-list mobile-nav-account">
+      {settings && (
+        <li>
+          <button type="button" onClick={press(settings)}>
+            <Icon name="gear" className="nav-icon" />
+            <span className="nav-label">{message('common.settings')}</span>
+          </button>
+        </li>
+      )}
+      {account && (
+        <li>
+          <button type="button" onClick={press(account)}>
+            <Icon name="lock" className="nav-icon" />
+            <span className="nav-label">{say('account')}</span>
+          </button>
+        </li>
+      )}
+    </ul>
   );
 }

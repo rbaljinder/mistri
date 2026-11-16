@@ -7,7 +7,6 @@ import {
   effectiveThemeDefinition,
   headingWeight,
   inheritThemePreset,
-  lookNavRole,
   themePreset,
   THEME_PRESETS,
 } from '@mistriwork/engine/shared/themePresets.js';
@@ -293,8 +292,11 @@ const LOOK_SHEETS: Readonly<Record<string, () => Promise<unknown>>> = {
   /* The faces the kit ships, each apart from its look (themeRecipes.ts KIT_FACE_SHEETS). */
   inter: () => import('./interFace.css'),
   barlow: () => import('./barlowFace.css'),
+  manrope: () => import('./manropeFace.css'),
   sage: () => import('./sageLook.css'),
   ledger: () => import('./ledgerLook.css'),
+  /* The four treatments that draw a thing as a tile of its own; Graphite and Bloom wear them (tilesLook.css). */
+  tiles: () => import('./tilesLook.css'),
   brand: () => import('./brandLook.css'),
   /* What a theme says beyond the menu: its parts' own styles and its patterns (themeParts.ts). */
   parts: () => import('./partsLook.css'),
@@ -443,7 +445,7 @@ function apply() {
   /* The theme a derived one (a tenant's) started from, so a page can tell its look when the look's own id is `tenant`. */
   root.dataset.themePreset = definition.startedFrom ?? definition.id;
   root.dataset.themePalette = visualPaletteChoice();
-  const { attributes, sheets } = recipeAttributes(definition, lookNavRole(definition));
+  const { attributes, sheets } = recipeAttributes(definition);
   /* A role the worn theme leaves to the look has no attribute, so one the last theme set goes. */
   for (const name of OPTIONAL_ATTRIBUTES) if (!(name in attributes)) root.removeAttribute(name);
   for (const [name, value] of Object.entries(attributes)) root.setAttribute(name, value);

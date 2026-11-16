@@ -1,4 +1,4 @@
-/** The Button primitive: an intent's classes, and busy that keeps the focus. */
+/** The Button primitive: an intent's attributes, and busy that keeps the focus. */
 import { afterEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Button, buttonClass, type ButtonIntent, type ButtonSize } from './Button.js';
@@ -15,22 +15,27 @@ test('every intent and size is one button with one class of its own', () => {
       )}
     </>,
   );
+  // An intent and a size are attributes of the one button part; the outlined secondary and the default size say none.
+  const variant = { primary: 'solid', secondary: null, quiet: 'quiet', danger: 'destructive' };
+  const scale = { compact: 'sm', default: null, large: 'lg' };
   for (const intent of intents)
     for (const size of sizes) {
       const button = screen.getByRole('button', { name: `${intent} ${size}` });
-      expect(button).toHaveClass('btn', `btn-${intent}`);
-      if (size !== 'default') expect(button).toHaveClass(`btn-${size}`);
+      expect(button).toHaveAttribute('data-slot', 'button');
+      expect(button.getAttribute('data-variant')).toBe(variant[intent]);
+      expect(button.getAttribute('data-size')).toBe(scale[size]);
     }
 });
 
 test('each intent wears the class the looks already dress, beside its own', () => {
-  expect(buttonClass({ intent: 'primary' }).split(' ')).toEqual(expect.arrayContaining(['btn', 'primary', 'btn-primary']));
-  expect(buttonClass({ intent: 'secondary' }).split(' ')).toEqual(expect.arrayContaining(['btn', 'ghost']));
-  expect(buttonClass({ intent: 'danger' }).split(' ')).toEqual(expect.arrayContaining(['btn', 'danger']));
+  // What holds is that each intent has a word of its own, beside the button's.
+  expect(buttonClass({ intent: 'primary' }).split(' ')).toEqual(expect.arrayContaining(['ui-button', 'ui-button-primary']));
+  expect(buttonClass({ intent: 'secondary' }).split(' ')).toEqual(expect.arrayContaining(['ui-button', 'ui-button-secondary']));
+  expect(buttonClass({ intent: 'danger' }).split(' ')).toEqual(expect.arrayContaining(['ui-button', 'ui-button-danger']));
   // Quiet is a word in the link ink, not the outlined secondary.
-  expect(buttonClass({ intent: 'quiet' }).split(' ')).not.toContain('ghost');
-  expect(buttonClass({ size: 'large', block: true, className: 'x' })).toMatch(/btn-large.*btn-block.*x/);
-  expect(buttonClass({ size: 'default' })).not.toMatch(/btn-default/);
+  expect(buttonClass({ intent: 'quiet' }).split(' ')).not.toContain('ui-button-secondary');
+  expect(buttonClass({ size: 'large', block: true, className: 'x' })).toMatch(/ui-button-large.*ui-button-block.*x/);
+  expect(buttonClass({ size: 'default' })).not.toMatch(/ui-button-default/);
 });
 
 test('a button is a plain button unless it says it submits', () => {

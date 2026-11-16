@@ -16,9 +16,7 @@ export const resources = {
     access: 'write',
     delete: true,
     // …
-  staff: {
-    recordLabel: 'name',
-  },
+  staff: {},
 ```
 
 See it in the sample (`examples/apps/lintel/resources.ts:19`) (other keys left out); [Sample Apps](/docs/examples/) says how to run Lintel.

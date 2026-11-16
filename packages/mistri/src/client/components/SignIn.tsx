@@ -9,7 +9,7 @@
  * name), because the person is signing in to the app, not to the tool
  * underneath.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { Button } from '@mistriwork/ui/Button.js';
@@ -187,6 +187,10 @@ export function SignIn({
   const [notice, setNotice] = useState('');
   const first = useRef<HTMLInputElement>(null);
   const [revealed, setRevealed] = useState(false);
+  /* Caps Lock is read off the keys pressed in the password box: there is no event for the lock itself, and a
+     hidden password is the one answer whose case cannot be seen being typed wrong. */
+  const [capsLock, setCapsLock] = useState(false);
+  const readCapsLock = (event: KeyboardEvent<HTMLInputElement>) => setCapsLock(event.getModifierState?.('CapsLock') === true);
   const [problems, setProblems] = useState<Problems>({});
   const [formProblem, setFormProblem] = useState(() => (arrived?.failed ? say('thatLinkHasExpired') : arrivedRefusal(info.app)));
   const [sentTo, setSentTo] = useState('');
@@ -392,15 +396,10 @@ export function SignIn({
 
   return (
     <div className="signin">
-      {/* The way back to the App's public pages, when it has them: the door is not a dead end. */}
-      {home && (
-        <a className="signin-home" href={home.href} aria-label={say('back', { app: info.app })}>
-          <span aria-hidden="true">←</span> {info.app}
-        </a>
-      )}
-      <SignInMark info={info} />
       <div className="signin-card">
-        {/* The heading says what this screen is for, and whose; the mark above it is the App's. */}
+        {/* The heading says what this screen is for, and whose; the mark over it is the App's, on the column's own
+            edge: one line down the left from the mark through the fields to the links. */}
+        <SignInMark info={info} />
         <h1 className="signin-title">{title}</h1>
         {mode === 'claim' && claims && (
           <ClaimInvitation
@@ -419,6 +418,39 @@ export function SignIn({
           </p>
         )}
         {lead && !notice && (mode === 'in' || mode === 'up') && <p className="signin-notice">{lead}</p>}
+        {(mode === 'in' || mode === 'up') && (listed.length > 0 || organizations) && (
+          <div className="signin-social-row">
+            {listed.map((provider) => (
+              <Button
+                key={provider}
+                intent="secondary"
+                size="large"
+                block
+                className="signin-social"
+                busy={social.isPending}
+                onClick={() => social.mutate({ provider })}
+              >
+                {MARKS[provider] && (
+                  <svg className="signin-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    {MARKS[provider]}
+                  </svg>
+                )}
+                {say('continue')} {info.labels?.[provider] ?? NAMES[provider] ?? providerId(provider)}
+              </Button>
+            ))}
+            {organizations && (
+              <Button intent="secondary" size="large" block className="signin-social" onClick={() => go('work')}>
+                {say('workEmail')}
+              </Button>
+            )}
+          </div>
+        )}
+        {/* "or", on a rule, only where both ways in are offered: another account first, the App's own under it. */}
+        {email && (mode === 'in' || mode === 'up') && (listed.length > 0 || organizations) && (
+          <p className="signin-or">
+            <span>{say('or')}</span>
+          </p>
+        )}
         {email && (mode === 'in' || mode === 'up') && (
           <form className="signin-form" onSubmit={submit} noValidate key={claimed ?? ''}>
             {mode === 'up' && (
@@ -427,7 +459,8 @@ export function SignIn({
                   ref={bind('name', true)}
                   type="text"
                   name="name"
-                  className="field-control signin-input"
+                  data-slot="input"
+                  className="signin-input"
                   autoComplete="name"
                   required
                   placeholder={say('yourName')}
@@ -440,7 +473,8 @@ export function SignIn({
                 ref={bind('email', mode !== 'up')}
                 type="email"
                 name="email"
-                className="field-control signin-input"
+                data-slot="input"
+                className="signin-input"
                 autoComplete="email"
                 required
                 placeholder={say('youExampleCom')}
@@ -461,10 +495,14 @@ export function SignIn({
                     ref={bind('password', false)}
                     type={revealed ? 'text' : 'password'}
                     name="password"
-                    className="field-control signin-input"
+                    data-slot="input"
+                    className="signin-input"
                     autoComplete={mode === 'up' ? 'new-password' : 'current-password'}
                     required
                     onInput={clear('password')}
+                    onKeyDown={readCapsLock}
+                    onKeyUp={readCapsLock}
+                    onBlur={() => setCapsLock(false)}
                   />
                   {/* Named "Show"/"Hide", not "Show password": the field's own name stays the only "Password" on the page.
                       Beside the field, not drawn over its right end: two controls in one box, one tapped for the other. */}
@@ -482,8 +520,13 @@ export function SignIn({
             </Field>
             {/* The refusal stands with the fields it is about, above the button that was just pressed, in a line held
                 even while empty: below the links it arrived after the button and pushed "Create an account" down. */}
-            <p className="signin-problem signin-problem-held" role="alert">
-              {formProblem && !credentials.isPending ? formProblem : null}
+            {/* The same held line says Caps Lock is on, in the quiet ink, while it has no refusal to say: nothing moves
+                when the lock is pressed, and a refusal is never hidden by it. */}
+            <p
+              className={`signin-problem signin-problem-held${capsLock && !revealed && !(formProblem && !credentials.isPending) ? ' signin-note' : ''}`}
+              role="alert"
+            >
+              {formProblem && !credentials.isPending ? formProblem : capsLock && !revealed ? say('capsLockIsOn') : null}
             </p>
             {/* Busy, not disabled: a disabled button drops the focus it holds, and a
                 refused sign-in left the reader on the page itself. submit refuses a second press. */}
@@ -511,7 +554,8 @@ export function SignIn({
                     ref={bind('email', true)}
                     type="email"
                     name="email"
-                    className="field-control signin-input"
+                    data-slot="input"
+                    className="signin-input"
                     autoComplete="email"
                     required
                     placeholder={say('youExampleCom')}
@@ -533,7 +577,8 @@ export function SignIn({
                 ref={bind('password', true)}
                 type="password"
                 name="password"
-                className="field-control signin-input"
+                data-slot="input"
+                className="signin-input"
                 autoComplete="new-password"
                 required
                 onInput={clear('password')}
@@ -544,7 +589,8 @@ export function SignIn({
                 ref={bind('confirm', false)}
                 type="password"
                 name="confirm"
-                className="field-control signin-input"
+                data-slot="input"
+                className="signin-input"
                 autoComplete="new-password"
                 required
                 onInput={clear('confirm')}
@@ -563,7 +609,8 @@ export function SignIn({
                 ref={bind('email', true)}
                 type="email"
                 name="email"
-                className="field-control signin-input"
+                data-slot="input"
+                className="signin-input"
                 autoComplete="email"
                 required
                 placeholder={say('youExampleCom')}
@@ -574,33 +621,6 @@ export function SignIn({
               {say('findMyOrganization')}
             </Button>
           </form>
-        )}
-        {(mode === 'in' || mode === 'up') && (listed.length > 0 || organizations) && (
-          <div className="signin-social-row">
-            {listed.map((provider) => (
-              <Button
-                key={provider}
-                intent="secondary"
-                size="large"
-                block
-                className="signin-social"
-                busy={social.isPending}
-                onClick={() => social.mutate({ provider })}
-              >
-                {MARKS[provider] && (
-                  <svg className="signin-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                    {MARKS[provider]}
-                  </svg>
-                )}
-                {say('continue')} {info.labels?.[provider] ?? NAMES[provider] ?? providerId(provider)}
-              </Button>
-            ))}
-            {organizations && (
-              <Button intent="secondary" size="large" block className="signin-social" onClick={() => go('work')}>
-                {say('workEmail')}
-              </Button>
-            )}
-          </div>
         )}
         {mode !== 'claim' && !(email && (mode === 'in' || mode === 'up')) && (
           <p className="signin-problem" role="alert" hidden={!formProblem || pending}>
@@ -630,6 +650,13 @@ export function SignIn({
           </Button>
         ) : null}
       </div>
+      {/* The way back to the App's public pages, when it has them: the door is not a dead end. Under the form, not
+          over the mark: above it the link was the first thing read on a page whose subject is signing in. */}
+      {home && (
+        <a className="signin-home" href={home.href} aria-label={say('back', { app: info.app })}>
+          <span aria-hidden="true">←</span> {info.app}
+        </a>
+      )}
     </div>
   );
 }

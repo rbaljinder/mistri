@@ -28,10 +28,8 @@ test.describe('Forecourt account workflows', () => {
       await page.getByRole('button', { name: 'Save vehicle', exact: true }).click();
       await expect(page.locator('#toast')).toContainText('Vehicle saved.');
       await expect(page.getByRole('dialog', { name: 'Save vehicle' })).toHaveCount(0);
-      if (width === 390) {
-        await page.getByRole('button', { name: 'More actions', exact: true }).click();
-        await page.getByRole('menuitem', { name: 'Send account inquiry', exact: true }).click();
-      } else await page.getByRole('button', { name: 'Send account inquiry', exact: true }).click();
+      // Two verbs stand side by side on a phone too: More over one entry would hide the other one.
+      await page.getByRole('button', { name: 'Send account inquiry', exact: true }).click();
       const inquiry = page.getByRole('dialog', { name: 'Send account inquiry' });
       await inquiry.getByLabel('Your name', { exact: false }).fill('Shopper A inquiry');
       await inquiry.getByLabel('Email', { exact: false }).fill(email);

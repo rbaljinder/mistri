@@ -418,3 +418,15 @@ test("a card titles each record by its column's display rule, as the grid does",
   // A row with no value is untitled, and a value the rule has no words for stays the value.
   expect(within(screen.getAllByRole('listitem')[1]).getByRole('button', { name: /untitled/i })).toBeInTheDocument();
 });
+
+test('a fact that is a bare number is said with its caption, and a value that says what it is stays alone', () => {
+  draw({ kind: 'cards', primary: 'title', value: 'price', facts: ['year', 'fuel'] });
+  const summary = screen.getAllByRole('listitem')[0].querySelector('.cards-summary')!;
+  const [year, fuel] = [...summary.querySelectorAll('.cards-summary-item')];
+  // "Year 2021": a count with no unit, format or word of its own would read as a bare "2021".
+  expect(year.querySelector('.cards-summary-word')).toHaveTextContent('Year');
+  expect(year.querySelector('.visually-hidden')).toBeNull();
+  // Text says what it is: its caption stays for assistive technology only.
+  expect(fuel.querySelector('.cards-summary-word')).toBeNull();
+  expect(fuel.querySelector('.visually-hidden')).toHaveTextContent('Fuel type:');
+});

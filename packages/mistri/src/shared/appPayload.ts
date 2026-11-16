@@ -105,6 +105,9 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
   revokesLinks?: string[];
   /** The roles this person holds here, as `useViewer().roles` says them: only in an App that grants by role, and only to a signed-in reader. */
   viewerRoles?: string[];
+  /** Who the shell is drawn for: `'person'` for a signed-out visitor of an App that signs people in and for a reader
+      whose every role says `portal: true` (appAudience.ts); absent for the office. */
+  viewerAudience?: 'person';
   /** Every command an action this principal may run references, whichever view shows it, and each its signed-in forms run (servedCommandIds). */
   grantedCommands?: string[];
   /** The commands this principal runs that name no record and that no signed-in form runs, by id, as a form's

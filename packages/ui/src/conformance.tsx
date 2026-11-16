@@ -19,20 +19,28 @@ import { act, createRef, useState, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Avatar } from './Avatar.js';
 import { Button, ButtonLink } from './Button.js';
+import { Carousel } from './Carousel.js';
 import { CheckCards, Checkbox, ChoiceCards, Consent, YesNo } from './Choices.js';
 import { DateField, type DateFieldWords } from './DateField.js';
 import { Drawer } from './Drawer.js';
+import { Field } from './Field.js';
+import { FileField } from './FileField.js';
+import { ActionBar, Columns, HelpTip, ProgressBar, ReviewList, StepHeader } from './FormParts.js';
+import { Badge, IconRows, PhotoTiles } from './HeroBlocks.js';
 import { DropGroup, DropItem, DropMenu, DropSeparator } from './DropMenu.js';
 import { Dropdown, MultiDropdown } from './Dropdown.js';
 import { Modal, type ModalHandle } from './Modal.js';
 import { Pagination } from './Pagination.js';
 import { Popover } from './Popover.js';
+import { Resizable } from './Resizable.js';
+import { ScrollArea } from './ScrollArea.js';
 import { MultiSelect, Select } from './Select.js';
 import { SensitiveField } from './SensitiveField.js';
 import { Slider } from './Slider.js';
 import { Switch } from './Switch.js';
 import { Tabs } from './Tabs.js';
-import { MaskedField, MoneyField, TextField } from './TextField.js';
+import { TextArea } from './TextArea.js';
+import { MaskedField, MoneyField, TextField, ValidMark } from './TextField.js';
 import { Tooltip } from './Tooltip.js';
 import { Typeahead } from './Typeahead.js';
 import { UiKitProvider, type UiKit } from './UiKit.js';
@@ -762,5 +770,177 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
     );
     await until(() => find('dialog', 'Filters'), 'Drawer: no dialog named by its title is drawn while open');
     await patterns('Drawer');
+  });
+
+  /* The parts a page draws with that are not controls of one value: a kit that fills one keeps what the platform's
+     screens read from it, which is a name, a role and the words it was handed. */
+  it('Field names any control by its label, and describes it by its hint and the problem it holds', async (mount) => {
+    await mount(
+      <Field label="Company" hint="As it is registered" problem="Say which company" required>
+        {(control) => <input {...control} />}
+      </Field>,
+    );
+    const box = get('textbox', 'Company', 'Field');
+    const described = (box.getAttribute('aria-describedby') ?? '')
+      .split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent ?? '')
+      .join(' ');
+    check(described.includes('As it is registered'), 'Field: the control is not described by the hint');
+    check(described.includes('Say which company'), 'Field: the control is not described by the problem it holds');
+    check(box.getAttribute('aria-invalid') === 'true', 'Field: a control that holds a problem is not marked invalid');
+    check(box.getAttribute('aria-required') === 'true', 'Field: a required control does not say so');
+  });
+
+  it('TextArea is named by its label, shows its value and reports what is typed', async (mount) => {
+    const changed = heard<[string, ChangeDetails?]>();
+    await mount(<TextArea label="Notes" value="First line" onChange={changed} />);
+    const box = get('textbox', 'Notes', 'TextArea') as HTMLTextAreaElement;
+    check(box.value === 'First line', `TextArea: the box shows "${box.value}", not its value`);
+    await type(box, 'First line and more');
+    check(changed.calls.at(-1)?.[0] === 'First line and more', 'TextArea: onChange was not told the typed text');
+    heardDetails(changed, 1, 'TextArea: onChange');
+  });
+
+  it('FileField is a file input named by its label that takes the accept list, and says the words it is given', async (mount) => {
+    await mount(
+      <FileField label="Contacts" accept=".csv" value={null} onChange={() => {}} chooseLabel="Pick a file" noneLabel="Nothing picked" />,
+    );
+    const input = [...document.querySelectorAll<HTMLInputElement>('input[type="file"]')].find((one) => nameOf(one) === 'Contacts');
+    check(input, 'FileField: no file input named by its label is drawn');
+    check(input.accept === '.csv', 'FileField: the input does not take the accept list');
+    showsText('Pick a file', 'FileField');
+    showsText('Nothing picked', 'FileField');
+  });
+
+  it('HelpTip is a button in the caller’s word that shows its text once pressed', async (mount) => {
+    await mount(<HelpTip label="About visits" text="We text the morning of the visit" />);
+    await click(get('button', 'About visits', 'HelpTip'));
+    await until(
+      () => document.body.textContent?.includes('We text the morning of the visit'),
+      'HelpTip: its text is not shown after a press',
+    );
+  });
+
+  it('ProgressBar says how far along it is, under the name it is given', async (mount) => {
+    await mount(<ProgressBar value={3} min={1} max={12} label="Step 3 of 12" />);
+    const bar = get('progressbar', 'Step 3 of 12', 'ProgressBar');
+    check(bar.getAttribute('aria-valuenow') === '3', 'ProgressBar: it does not say its value');
+    check(
+      bar.getAttribute('aria-valuemin') === '1' && bar.getAttribute('aria-valuemax') === '12',
+      'ProgressBar: it does not say its range',
+    );
+  });
+
+  it('StepHeader is a heading at the level it is told, and ActionBar runs what its two buttons are for', async (mount) => {
+    const back = heard();
+    const go = heard();
+    await mount(
+      <>
+        <StepHeader level={2} title="When can we visit?" lead="A technician needs an hour" />
+        <ActionBar back={{ label: 'Back', onClick: back }} primary={{ label: 'Continue', onClick: go }} />
+      </>,
+    );
+    const heading = [...document.querySelectorAll('h1, h2, h3, [role="heading"]')].find((one) =>
+      one.textContent?.includes('When can we visit?'),
+    );
+    check(heading, 'StepHeader: no heading with its title is drawn');
+    check(
+      heading.tagName === 'H2' || heading.getAttribute('aria-level') === '2',
+      'StepHeader: the heading is not at the level it was told',
+    );
+    showsText('A technician needs an hour', 'StepHeader');
+    await click(get('button', 'Back', 'ActionBar'));
+    await click(get('button', 'Continue', 'ActionBar'));
+    check(back.calls.length === 1 && go.calls.length === 1, 'ActionBar: a press did not run its button’s onClick');
+  });
+
+  it('Columns, ReviewList and ValidMark draw what they are handed', async (mount) => {
+    await mount(
+      <>
+        <Columns cols="1fr 1fr">
+          <p>Left of two</p>
+        </Columns>
+        <ReviewList label="What you told us">
+          <p>Home: AC-204</p>
+        </ReviewList>
+        <ValidMark icon={<i data-mark="" />} />
+      </>,
+    );
+    showsText('Left of two', 'Columns');
+    const review = get('group', 'What you told us', 'ReviewList');
+    check(review.textContent?.includes('Home: AC-204'), 'ReviewList: what it lists is not inside the group it names');
+    const mark = document.querySelector('[data-mark]');
+    check(mark, 'ValidMark: the icon it was handed is not drawn');
+    check(mark.closest('[aria-hidden="true"]'), 'ValidMark: the mark is not hidden from assistive technology');
+  });
+
+  it('Badge, PhotoTiles and IconRows draw their words, their pictures with their descriptions, and their lines', async (mount) => {
+    await mount(
+      <>
+        <Badge>Now letting</Badge>
+        <PhotoTiles
+          tiles={[
+            { src: '/a.jpg', alt: 'The front of the house' },
+            { src: '/b.jpg', alt: 'A kitchen' },
+          ]}
+        />
+        <IconRows rows={[{ icon: <i />, text: 'Repairs answered within a day' }]} />
+      </>,
+    );
+    showsText('Now letting', 'Badge');
+    for (const alt of ['The front of the house', 'A kitchen'])
+      check(document.querySelector(`img[alt="${alt}"]`), `PhotoTiles: no picture described as "${alt}" is drawn`);
+    showsText('Repairs answered within a day', 'IconRows');
+  });
+
+  it('Carousel is a named region that shows one slide and steps to the next', async (mount) => {
+    const moved = heard<[number, ChangeDetails?]>();
+    await mount(
+      <Carousel
+        ariaLabel="Homes to let"
+        onIndexChange={moved}
+        words={{ next: 'Onward' }}
+        slides={[
+          { label: 'Studio', children: <p>A studio flat</p> },
+          { label: 'One bedroom', children: <p>A one bedroom flat</p> },
+        ]}
+      />,
+    );
+    check(
+      [...document.querySelectorAll('section, [role="region"]')].some((one) => nameOf(one) === 'Homes to let'),
+      'Carousel: no region under its name is drawn',
+    );
+    showsText('A studio flat', 'Carousel');
+    await click(get('button', 'Onward', 'Carousel'));
+    check(moved.calls.at(-1)?.[0] === 1, 'Carousel: onIndexChange was not told the slide it moved to');
+    heardDetails(moved, 1, 'Carousel: onIndexChange');
+  });
+
+  it('Resizable parts its panes with a handle that says its place, and ScrollArea is a region under its name', async (mount) => {
+    await mount(
+      <>
+        <Resizable
+          ariaLabel="Record and detail"
+          panels={[
+            { label: 'Record', defaultSize: 60, children: <p>The record</p> },
+            { label: 'Detail', defaultSize: 40, children: <p>The detail</p> },
+          ]}
+        />
+        <ScrollArea ariaLabel="Recent payments">
+          <p>Payment one</p>
+        </ScrollArea>
+      </>,
+    );
+    showsText('The record', 'Resizable');
+    showsText('The detail', 'Resizable');
+    const handle = await until(
+      () => all('separator').find((one) => one.getAttribute('aria-valuenow') !== null),
+      'Resizable: no handle that says its place is drawn',
+    );
+    check(Number(handle.getAttribute('aria-valuenow')) === 60, 'Resizable: the handle does not say the first pane’s share');
+    const scroller =
+      all('region').find((one) => nameOf(one) === 'Recent payments') ?? all('group').find((one) => nameOf(one) === 'Recent payments');
+    check(scroller, 'ScrollArea: nothing under its name is drawn');
+    check(scroller.textContent?.includes('Payment one'), 'ScrollArea: what it holds is not inside it');
   });
 }

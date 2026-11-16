@@ -1,7 +1,7 @@
 {
   "name": "@mistriwork/ui",
-  "version": "1.0.0-rc.58",
-  "description": "The standalone React primitives both shells are drawn with: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField over Base UI, Switch, Tabs, Drawer, Popover, Avatar, Pagination, Carousel, Resizable, ScrollArea and Tooltip, the form controls built on them (text, masked, money and sensitive boxes, listboxes, choices, slider, progress and action bar; Preview), the landing hero's blocks (badge, photo tiles, icon rows; Preview), their tokens and stylesheet, and the zoom-aware ruler their popups are placed by.",
+  "version": "1.0.0-rc.59",
+  "description": "The standalone React primitives both shells are drawn with: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField over UI SDK, Switch, Tabs, Drawer, Popover, Avatar, Pagination, Carousel, Resizable, ScrollArea and Tooltip, the form controls built on them (text, masked, money and sensitive boxes, listboxes, choices, slider, progress and action bar; Preview), the landing hero's blocks (badge, photo tiles, icon rows; Preview), their tokens and stylesheet, and the zoom-aware ruler their popups are placed by.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
     "url": "https://github.com/rbaljinder/mistri/issues"
@@ -31,6 +31,10 @@
     "./Avatar.js": {
       "mistri-built": "./dist/Avatar.js",
       "default": "./src/Avatar.tsx"
+    },
+    "./behaviors/index.js": {
+      "mistri-built": "./dist/behaviors/index.js",
+      "default": "./src/behaviors/index.ts"
     },
     "./Button.js": {
       "mistri-built": "./dist/Button.js",
@@ -140,21 +144,17 @@
       "mistri-built": "./dist/Tooltip.js",
       "default": "./src/Tooltip.tsx"
     },
-    "./internal/anchor.js": {
-      "mistri-built": "./dist/internal/anchor.js",
-      "default": "./src/internal/anchor.ts"
-    },
     "./internal/datePickerModel.js": {
       "mistri-built": "./dist/internal/datePickerModel.js",
       "default": "./src/internal/datePickerModel.ts"
     },
-    "./forms.css": {
-      "mistri-built": "./dist/forms.css",
-      "default": "./src/forms.css"
+    "./controls.css": {
+      "mistri-built": "./dist/controls.css",
+      "default": "./src/controls.css"
     },
-    "./hero.css": {
-      "mistri-built": "./dist/hero.css",
-      "default": "./src/hero.css"
+    "./behaviors.css": {
+      "mistri-built": "./dist/behaviors.css",
+      "default": "./src/behaviors.css"
     },
     "./preferences.css": {
       "mistri-built": "./dist/preferences.css",
@@ -163,14 +163,6 @@
     "./internal/popups.js": {
       "mistri-built": "./dist/internal/popups.js",
       "default": "./src/internal/popups.ts"
-    },
-    "./primitives.css": {
-      "mistri-built": "./dist/primitives.css",
-      "default": "./src/primitives.css"
-    },
-    "./standalone.css": {
-      "mistri-built": "./dist/standalone.css",
-      "default": "./src/standalone.css"
     },
     "./internal/ruler.js": {
       "mistri-built": "./dist/internal/ruler.js",
@@ -204,18 +196,22 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "peerDependencies": {
-    "@base-ui/react": "^1.8.0",
+    "@ui-sdk/core": "0.1.0-beta.2",
+    "@ui-sdk/react": "0.1.0-beta.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "peerDependenciesMeta": {
-    "@base-ui/react": {
-      "optional": true
-    },
     "react": {
       "optional": true
     },
     "react-dom": {
+      "optional": true
+    },
+    "@ui-sdk/core": {
+      "optional": true
+    },
+    "@ui-sdk/react": {
       "optional": true
     }
   },

@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
+import { useState } from 'react';
 import { DropGroup, DropItem, DropMenu, DropSeparator } from './DropMenu.js';
 
 afterEach(cleanup);
@@ -64,8 +65,62 @@ test('a menu given no classes still draws: the house trigger, surface and items 
       <DropSeparator />
     </DropMenu>,
   );
-  expect(screen.getByRole('button', { name: 'More' })).toHaveClass('btn');
+  // With no class of the caller's, each is the menu's own part, which the stylesheet dresses.
+  expect(screen.getByRole('button', { name: 'More' })).toHaveAttribute('data-slot', 'menu-trigger');
   await user.click(screen.getByRole('button', { name: 'More' }));
-  expect(screen.getByRole('menuitem', { name: 'Rename' })).toHaveClass('dd-option');
-  expect(screen.getByRole('menu')).toHaveClass('dd-list');
+  expect(screen.getByRole('menuitem', { name: 'Rename' })).toHaveAttribute('data-slot', 'menu-item');
+  expect(screen.getAllByRole('menu')).toHaveLength(1);
+  expect(screen.getByRole('menu')).toHaveAttribute('data-slot', 'menu-content');
+  expect(screen.getAllByRole('separator')).toHaveLength(1);
+});
+
+test('a caller says where the focus goes on close: an element, the trigger, or nowhere', async () => {
+  const user = userEvent.setup();
+  let answer: boolean | HTMLElement | null = null;
+  render(
+    <>
+      <button>Elsewhere</button>
+      <DropMenu label="Move" finalFocus={() => answer}>
+        <DropItem onClick={() => {}}>Up</DropItem>
+      </DropMenu>
+    </>,
+  );
+  const trigger = screen.getByRole('button', { name: 'Move' });
+  const elsewhere = screen.getByRole('button', { name: 'Elsewhere' });
+  // An element: the row the item moved, say.
+  answer = elsewhere;
+  await user.click(trigger);
+  await user.click(await screen.findByRole('menuitem', { name: 'Up' }));
+  expect(elsewhere).toHaveFocus();
+  // `true` is the trigger, as when the caller says nothing.
+  answer = true;
+  await user.click(trigger);
+  await user.click(await screen.findByRole('menuitem', { name: 'Up' }));
+  expect(trigger).toHaveFocus();
+  // `false` leaves the focus be: it is not handed to the trigger.
+  answer = false;
+  await user.click(trigger);
+  await user.click(await screen.findByRole('menuitem', { name: 'Up' }));
+  expect(trigger).not.toHaveFocus();
+});
+
+test('a menu that opens before its items arrive gives the keyboard the first one when it does', async () => {
+  const user = userEvent.setup();
+  function Loads() {
+    const [items, setItems] = useState<string[]>([]);
+    return (
+      <DropMenu label="Views" onOpenChange={(open) => open && setTimeout(() => setItems(['Mine', 'All']), 30)}>
+        {items.map((item) => (
+          <DropItem key={item} onClick={() => {}}>
+            {item}
+          </DropItem>
+        ))}
+      </DropMenu>
+    );
+  }
+  render(<Loads />);
+  screen.getByRole('button', { name: 'Views' }).focus();
+  await user.keyboard('{Enter}');
+  const first = await screen.findByRole('menuitem', { name: 'Mine' });
+  await waitFor(() => expect(first).toHaveFocus());
 });

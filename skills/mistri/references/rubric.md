@@ -46,7 +46,7 @@ The checks are `mistri docs build-with-an-agent`'s; a test keeps them identical.
 - No aside half empty beside a long main column.
 
 **List** — worked example Lintel's repairs,
-[lintel/views.ts:143](../../../examples/apps/lintel/views.ts#L143) (`repairs`)
+[lintel/views.ts:150](../../../examples/apps/lintel/views.ts#L150) (`repairs`)
 - The first column names the row; no raw id, and a reference reads by name.
 - Four to seven columns fit at 1280 wide without cutting the status.
 - Tabs are counted, in working order, All last.

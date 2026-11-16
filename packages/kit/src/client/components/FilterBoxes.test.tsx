@@ -159,7 +159,7 @@ describe('the workbench bar', () => {
       draw('task');
       await user.click(screen.getByRole('combobox', { name: 'Filter by owner_id' }));
       const option = await screen.findByRole('option', { name: 'Nia Patel' });
-      expect(option.querySelector('.dd-detail')).toBeNull();
+      expect(option.querySelector('[data-slot="option-detail"]')).toBeNull();
     } finally {
       appLabels.on = false;
     }
@@ -177,7 +177,7 @@ describe('the workbench bar', () => {
     await user.click(screen.getByRole('combobox', { name: 'Filter by owner_id' }));
     const loading = await screen.findByRole('status');
     expect(loading).toHaveTextContent('Loading...');
-    expect(loading.closest('.dd-list')).not.toBeNull();
+    expect(loading.closest('[data-slot="autocomplete-content"]')).not.toBeNull();
     await act(async () => {
       resolve({ rows: [] });
     });

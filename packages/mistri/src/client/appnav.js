@@ -48,6 +48,8 @@ export const appChrome = {
       /* The suite's switcher and its preference, with their rules: fetched when the preferences are opened, as the preferences themselves are. */
       SuitePreference: onDemand(() => import('./components/SuiteAppPreference.js'), 'SuiteAppPreference'),
       ImportButton,
+      /* A list's summary strip is a dashboard's metrics: fetched with the dashboard's drawing, the first time a list has one. */
+      ListSummary: onDemand(() => import('./components/ListSummary.js'), 'ListSummary', { quiet: true }),
       /* An embedded list's own component, and the page's side of @mistriwork/mistri/ui with it: fetched the first time a page holds one. */
       CustomList: onDemand(() => import('./components/sdk/CustomList.js'), 'CustomList'),
       /* An author's section component, and the page's side of @mistriwork/mistri/ui with it: fetched the first time a page holds one. */
@@ -84,6 +86,8 @@ export const appChrome = {
       Assistant: onDemand(() => import('./components/AssistantPanel.js'), 'AssistantRoom'),
       /* A long menu's Directory: its own part, fetched when it is first opened, so no first page grows by it. */
       Directory: onDemand(() => import('./components/Directory.js'), 'DirectoryRoom'),
+      /* The reader's settings: the profile and the preferences as one page, fetched when it is first opened. */
+      Settings: onDemand(() => import('./components/SettingsRoom.js'), 'SettingsRoom'),
       Page: FreePage,
       /* A free-form page that is a record's tab: drawn by the record page's tab strip (PageSections.tsx). */
       RecordTab: RecordTabPage,

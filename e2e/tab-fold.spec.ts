@@ -51,7 +51,14 @@ for (const [where, size] of [
       expect(settled.scrolls, 'the strip and its row do not scroll').toBe(false);
       expect(settled.past, 'no tab is past the window').toBe(false);
       expect(settled.shown, 'the tabs drawn at the first paint are the ones drawn after').toEqual(first.shown);
-      expect(settled.folded, 'six tabs and the list controls do not fit here').toBeGreaterThan(0);
+      /* A list's tabs have a line of their own at a desk, the search and the filters under them: six tabs fit one
+         800px wide and none is under More. A phone's line is 390px, and there they fold. */
+      if (where === 'a narrow desk') {
+        expect(settled.folded, 'six tabs on a line of their own fit a narrow desk').toBe(0);
+        await expect(strip.locator('.tab-more button')).toBeHidden();
+        return;
+      }
+      expect(settled.folded, 'six tabs do not fit a phone').toBeGreaterThan(0);
       const more = strip.locator('.tab-more button');
       await expect(more).toBeVisible();
       await more.click();
@@ -201,7 +208,8 @@ test.describe('while a chosen tab loads its rows', () => {
     /* The narrowest window that draws every tab, All chosen: one pixel less and a tab goes under More. */
     const folded = () => strip.evaluate((box) => box.querySelectorAll('[data-fold][data-folded]').length);
     let fits = 1280;
-    let short = 600;
+    /* A phone's width, where they fold (above): the tabs' own line holds all six down to a window narrower than a desk. */
+    let short = 360;
     while (fits - short > 1) {
       const width = Math.round((fits + short) / 2);
       await page.setViewportSize({ width, height: 800 });

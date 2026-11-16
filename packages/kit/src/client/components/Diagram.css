@@ -1,0 +1,82 @@
+/* What dresses the schema and neighbourhood diagrams. These rules match nothing else, so they travel with the component's chunk and are not in
+   every first paint (scripts/bundle-budget.mjs); each keeps the layer it stood in. */
+@layer base {
+  /* A window onto a drawing larger than the window.
+
+     Given a height rather than left to size to its content: a viewport that
+     grows with its content is not a viewport, and the whole point is that the
+     picture can be bigger than the space it is read in. */
+  .diagram-viewport {
+    position: relative;
+    height: min(72vh, 760px);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+    background: var(--ground);
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+  }
+  .diagram-viewport.dragging { cursor: grabbing; }
+  .diagram-viewport svg { display: block; }
+  .zoom-controls {
+    position: absolute; right: 10px; bottom: 10px;
+    display: flex; align-items: center; gap: var(--space-2);
+    padding: var(--space-2); border-radius: min(7px, var(--radius-pop));
+    background: var(--surface); border: 1px solid var(--line);
+    box-shadow: var(--shadow-pop);
+  }
+  .zoom-controls button { padding: var(--space-1) var(--space-3); font-size: var(--text-sm); }
+  .zoom-readout {
+    min-width: 3.4rem; text-align: center;
+    font: var(--text-xs) var(--mono); color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .diagram-head {
+    display: flex; align-items: center; gap: var(--space-4h); flex-wrap: wrap;
+    margin-bottom: var(--space-4);
+  }
+  .diagram-head .diagram-title { margin: 0; }
+  .diagram-focus {
+    display: flex; align-items: center; gap: var(--space-2h);
+    margin-left: auto; justify-content: flex-end;
+    /* wrap-reverse so an overflowing row of chips grows upwards. Plain `wrap`
+       would push the field itself onto a second line, which is the same
+       moving-target problem in the other axis. */
+    flex-wrap: wrap-reverse;
+  }
+  .diagram-focus .picker { flex: none; }
+  .diagram-chip {
+    display: inline-flex; align-items: center; gap: var(--space-2h);
+    padding: var(--space-2) var(--space-3); border-radius: 999px;
+    border: 1px solid var(--accent); background: var(--accent-soft);
+    color: var(--accent-ink); font: var(--text-xs) var(--mono); cursor: pointer;
+  }
+  .diagram-chip .chip-x { opacity: 0.6; }
+  .diagram-chip:hover .chip-x { opacity: 1; }
+  .diagram-clear { font-size: var(--text-xs); }
+  .node-head { cursor: pointer; }
+  .node-head-hit { fill: transparent; stroke: none; }
+  .node-head:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
+  .node-focus .node-head text { fill: var(--accent); }
+  .node-head text { font-weight: 600; }
+  /* The column list. Quieter than the table name it sits under — it is there to
+     be scanned for a name you already have in mind, not read top to bottom. */
+  .node-rule { stroke: var(--line); stroke-width: 1; }
+  .node-field { font-size: var(--text-xs); fill: var(--ink-muted); }
+  .node-field.is-key { fill: var(--ink); }
+  .node-field.is-ref { fill: var(--accent); }
+  .node-type { font-size: var(--text-xs); fill: var(--ink-subtle); }
+  .node-more { cursor: pointer; }
+  .node-more-hit { fill: transparent; stroke: none; }
+  .node-more text { font-size: var(--text-xs); fill: var(--ink-subtle); }
+  .node-more:hover text { fill: var(--accent); }
+  .node-more:hover .node-more-hit { fill: var(--accent-soft); }
+  .node-more:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 1px; }
+  .edge-head { fill: var(--line-strong); }
+  .edge-label { font: var(--text-xs) var(--mono); fill: var(--ink-muted); }
+  .diagram-legend { margin: var(--space-4) 0 0; font-size: var(--text-xs); color: var(--ink-subtle); font-family: var(--mono); }
+  .diagram-legend span { color: var(--ink-muted); }
+  .diagram-title { margin: 0 0 var(--space-4h); font: 600 var(--text-lg) var(--mono); letter-spacing: -0.01em; }
+  .schema-edges path.dim { opacity: 0.1; }
+  .diagram-scope { font-size: var(--text-xs); padding: 1px var(--space-3); }
+}

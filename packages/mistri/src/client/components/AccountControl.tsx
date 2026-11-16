@@ -21,9 +21,14 @@ import { post, reload } from './authRequest.js';
 import { menuItems, menuMode, setAccountMenu, whenMenuChanges } from '@mistriwork/kit/client/menu.js';
 import { MenuRegistryItems } from '@mistriwork/kit/client/components/OverflowMenu.js';
 import { InboxBell } from './InboxBell.js';
+import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import type { AppSwitcherConfig, AppSwitcherLocal } from './SuiteAppSwitcher.js';
 import { say } from '../copy/account/components/AccountControl.js';
 import { shellById, shellQuery } from '@mistriwork/kit/client/shellHost.js';
+import { shell } from '@mistriwork/kit/client/shellMode.js';
+import { go, pageView } from '@mistriwork/kit/client/core.js';
+import { SETTINGS_PAGE } from '@mistriwork/kit/client/components/appRooms.js';
+import { message } from '@mistriwork/kit/client/messages.js';
 import { subscribeTenantContextEntry, tenantContextEntry } from '../tenantContextEntry.js';
 
 const looksLikeEmail = (value: string) => /^[^\s@]+@[^\s@]+$/.test(value);
@@ -202,11 +207,25 @@ export function AccountControl({
     .map((part) => Array.from(part)[0])
     .join('')
     .toUpperCase();
+  const settingsRoom = inApp && Boolean(shell().rooms.Settings);
   return (
     <>
       {appSwitcher?.placement === 'navbar' && <SuiteAppSwitcher config={appSwitcher} local={appSwitcherLocal} placement="navbar" />}
-      <span ref={host} className={inbox ? 'account-with-inbox' : undefined} onPointerEnter={reach} onFocusCapture={reach}>
+      <span ref={host} className={inbox || settingsRoom ? 'account-with-inbox' : undefined} onPointerEnter={reach} onFocusCapture={reach}>
         {inbox && <InboxBell />}
+        {/* The reader's settings are a room with an address (SettingsRoom.tsx): a key that goes there, between the
+            bell and the account. A link to a page, not a second menu beside the account's. */}
+        {settingsRoom && (
+          <button
+            type="button"
+            className="icon-button settings-trigger"
+            title={message('common.settings')}
+            aria-label={message('common.settings')}
+            onClick={() => go(pageView(SETTINGS_PAGE, undefined, undefined, message('common.settings')), 'push')}
+          >
+            <Icon name="gear" />
+          </button>
+        )}
         <DropMenu
           className="account-menu"
           triggerClassName="ghost account"
@@ -218,9 +237,6 @@ export function AccountControl({
                 {initials}
               </span>
               {!address && <span className="account-name">{who}</span>}
-              <span className="account-caret" aria-hidden="true">
-                ▾
-              </span>
             </>
           }
           popupClassName="more-list account-menu-popup"
@@ -250,7 +266,12 @@ export function AccountControl({
             <DropItem
               className="account-menu-signout"
               onClick={() => {
-                if (captureAccountIdentity() === owner && owner.mode === 'authenticated') setProfileOpen(true);
+                if (captureAccountIdentity() !== owner || owner.mode !== 'authenticated') return;
+                /* In an App the profile is a section of the settings page (SettingsRoom.tsx), which has an address;
+                   where there is no such room it stays the dialog. */
+                if (shell().inApp() && shell().rooms.Settings)
+                  go({ ...pageView(SETTINGS_PAGE, undefined, undefined, message('common.settings')), tab: 'profile' }, 'push');
+                else setProfileOpen(true);
               }}
             >
               {profileLabel}

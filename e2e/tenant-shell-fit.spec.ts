@@ -49,7 +49,9 @@ test.describe('the tenant control fits its place', () => {
           const found = await page.evaluate(`(() => {
             const rect = (e) => e.getBoundingClientRect();
             const host = document.querySelector('.tenant-control-host');
-            const box = host.closest('.sidebar, .topbar');
+            // Beside a side menu at a desk the control stands in the bar over the room (the pane's bar), with the search and the account.
+            const box = host.closest('.sidebar, .topbar, .pane-bar');
+            const bar = box.classList.contains('topbar') || box.classList.contains('pane-bar');
             const content = rect(document.querySelector('#content'));
             const problems = [];
             const pieces = [...host.querySelectorAll('button')].filter((b) => rect(b).width > 0);
@@ -57,8 +59,8 @@ test.describe('the tenant control fits its place', () => {
               const r = rect(b), c = rect(box);
               if (r.right > c.right + 0.5 || r.left < c.left - 0.5) problems.push(b.textContent + ' runs past the ' + box.className + ': ' + [r.left, r.right, c.left, c.right].map(Math.round));
               const overlaps = r.left < content.right - 0.5 && r.right > content.left + 0.5 && r.top < content.bottom && r.bottom > content.top;
-              if (overlaps && !box.classList.contains('topbar')) problems.push(b.textContent + ' sits on the content');
-              if (box.classList.contains('topbar') && r.top < content.top - 0.5 && r.bottom > content.top + 0.5) problems.push(b.textContent + ' crosses the content edge');
+              if (overlaps && !bar) problems.push(b.textContent + ' sits on the content');
+              if (bar && r.top < content.top - 0.5 && r.bottom > content.top + 0.5) problems.push(b.textContent + ' crosses the content edge');
             }
             for (let i = 0; i < pieces.length; i++) for (let j = i + 1; j < pieces.length; j++) {
               const a = rect(pieces[i]), b = rect(pieces[j]);

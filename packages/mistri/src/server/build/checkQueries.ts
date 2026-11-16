@@ -243,6 +243,19 @@ export async function pageQueryFailures(
   };
   const payload = servedApp(app, schema, pages);
   const rules: ListRules = { schema, resources: payload.resources };
+  /* What a dashboard's sections would send, each planned under the room's name. */
+  const planned = async (name: string, path: string, plan: RoomPlan) => {
+    for (const batch of plan.batches)
+      for (const item of batch.items) {
+        const sent = item.sent as { text?: string; limit?: number; run?: { q?: string; limit?: number } };
+        if (sent.run?.q) await text(name, '', path, sent.run.q, sent.run.limit);
+        else if (sent.text) {
+          location = { at: name, path };
+          const parsed = textToBreakdown(schema, sent.text, { now });
+          if (parsed.breakdown) await breakdown(sent.limit ? { ...parsed.breakdown, limit: sent.limit } : parsed.breakdown);
+        }
+      }
+  };
   for (const [key, raw] of Object.entries(payload.views)) {
     const room = raw as unknown as ListQuestionSpec & { error?: string; sections?: unknown; presentation?: { kind?: string } };
     if (room.error || isFormView(room as never)) continue;
@@ -263,21 +276,25 @@ export async function pageQueryFailures(
           plan,
           periods,
         );
-        for (const batch of plan.batches)
-          for (const item of batch.items) {
-            const sent = item.sent as { text?: string; limit?: number; run?: { q?: string; limit?: number } };
-            const name = `dashboard:${key}`;
-            if (sent.run?.q) await text(name, '', `views.${key}`, sent.run.q, sent.run.limit);
-            else if (sent.text) {
-              location = { at: name, path: `views.${key}` };
-              const parsed = textToBreakdown(schema, sent.text, { now });
-              if (parsed.breakdown) await breakdown(sent.limit ? { ...parsed.breakdown, limit: sent.limit } : parsed.breakdown);
-            }
-          }
+        await planned(`dashboard:${key}`, `views.${key}`, plan);
       }
       continue;
     }
     if (!room.table || !findTable(schema, room.table)) continue;
+    /* A list's summary strip is a dashboard's metrics over the list (ListSummary.tsx): asked as a dashboard's are. */
+    const summary = (room as { summary?: unknown[] }).summary;
+    if (summary?.length) {
+      const plan: RoomPlan = { reads: [], batches: [] };
+      const strip = { ...payload, views: { ...payload.views, [key]: { label: key, sections: summary } } } as typeof payload;
+      dashboardReads(
+        { app: app.id, path: '', search: '', payload: strip, schema, pages: {}, me: {}, visitor: false },
+        rules,
+        key,
+        plan,
+        {},
+      );
+      await planned(`list:${key}[summary]`, `views.${key}.summary`, plan);
+    }
     const kind = room.presentation?.kind;
     /* A board, calendar, tree, gantt or split asks otherwise (and its tabs the same): the list's own are the grid's and cards'. */
     if (kind === 'board' || kind === 'calendar' || kind === 'tree' || kind === 'gantt' || kind === 'split') continue;

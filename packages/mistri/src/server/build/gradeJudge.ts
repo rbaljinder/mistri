@@ -88,6 +88,10 @@ export const GRADE_CODES = {
     severity: 'warning',
     fix: "a section with nothing in it says what belongs there: empty: 'No visits yet.' on the list, or hide it (hidden when empty)",
   },
+  'unseeded-list': {
+    severity: 'warning',
+    fix: 'rows to judge the page on: npx @mistriwork/mistri seed --app . (--rows <n> for more; the connection "writable": true), then grade again; a list meant to start empty keeps its empty: copy',
+  },
   'mixed-format': {
     severity: 'warning',
     fix: "one surface says its figures one way: one format for the column (display: { col: { format: 'money' } }), not text built by hand",
@@ -393,6 +397,9 @@ export function judge(
         `${count(probe.empty.length, 'section')} with nothing in ${probe.empty.length === 1 ? 'it' : 'them'}: ${some(probe.empty, (what) => what)}`,
       ),
     );
+  /* Read once, at the desk: the same list is as empty in every window. */
+  if (probe.rowless && window.width === 1280 && !window.dark)
+    found.push(judged('unseeded-list', 'the list has no rows, so its columns, tones, counts and tabs cannot be judged'));
   for (const group of probe.figures) {
     const why = mixedFormats(group.values, { column: group.column ?? true });
     if (why) found.push(judged('mixed-format', `${group.where} says its figures two ways: ${why}`));

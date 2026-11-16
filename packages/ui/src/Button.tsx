@@ -1,14 +1,15 @@
 /**
  * The one button: an intent, a size, and the states the platform already
- * has. Every look dresses the classes it renders — `primary`, `ghost` and
- * `danger` are what the looks' rules already name, `btn` and its modifiers
- * are the primitive's own — so a form, a dialog and the sign-in card draw the
- * same control instead of each dressing a `<button>` of its own.
+ * has, over UI SDK's Button. An intent and a size are attributes of the one
+ * button part (`data-variant`, `data-size`), which the stylesheet and every
+ * look dress, so a form, a dialog and the sign-in card draw the same control
+ * instead of each dressing a `<button>` of its own.
  *
  * Busy is not disabled (docs/design.md, Access): a disabled button drops the
  * focus it holds, so a busy one says `aria-disabled` and refuses the press
  * itself — a click, and the implicit submission Enter makes through it.
  */
+import { Button as Behavior } from '@ui-sdk/react/button';
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from 'react';
 import { slotted } from './internal/uiKitContext.js';
 
@@ -29,13 +30,10 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
   ref?: Ref<HTMLButtonElement>;
 }
 
-/* The class a look already dresses for each intent, beside the primitive's own. */
-const DRESS: Record<ButtonIntent, string> = {
-  primary: 'primary btn-primary',
-  secondary: 'ghost btn-secondary',
-  quiet: 'btn-quiet',
-  danger: 'danger btn-danger',
-};
+/* What the button part says of each intent and size. The outlined secondary and the default size are the part as
+   it stands, so they say nothing. */
+const VARIANT: Record<ButtonIntent, string | undefined> = { primary: 'solid', secondary: undefined, quiet: 'quiet', danger: 'destructive' };
+const SIZE: Record<ButtonSize, string | undefined> = { compact: 'sm', default: undefined, large: 'lg' };
 
 /** The classes, for the few controls that must stay another element (a link dressed as a button). */
 export function buttonClass({
@@ -49,7 +47,9 @@ export function buttonClass({
   block?: boolean;
   className?: string;
 } = {}): string {
-  return ['btn', DRESS[intent], size === 'default' ? '' : `btn-${size}`, block ? 'btn-block' : '', className].filter(Boolean).join(' ');
+  return ['ui-button', `ui-button-${intent}`, size === 'default' ? '' : `ui-button-${size}`, block ? 'ui-button-block' : '', className]
+    .filter(Boolean)
+    .join(' ');
 }
 
 function DefaultButton({
@@ -59,31 +59,31 @@ function DefaultButton({
   busyLabel,
   block = false,
   type = 'button',
-  className,
   onClick,
   children,
-  ref,
   ...rest
 }: ButtonProps) {
-  const press = (event: MouseEvent<HTMLButtonElement>) => {
+  /* UI SDK types the press by the part, which may be drawn as any element; here it is always the button. */
+  const press = (event: MouseEvent<HTMLElement>) => {
     if (busy) {
       event.preventDefault();
       return;
     }
-    onClick?.(event);
+    onClick?.(event as MouseEvent<HTMLButtonElement>);
   };
   return (
-    <button
+    <Behavior
       {...rest}
-      ref={ref}
       type={type}
-      className={buttonClass({ intent, size, block, className })}
+      data-variant={VARIANT[intent]}
+      data-size={SIZE[size]}
+      data-block={block ? '' : undefined}
+      data-busy={busy ? '' : undefined}
       aria-disabled={busy || rest['aria-disabled'] || undefined}
-      data-busy={busy || undefined}
       onClick={press}
     >
       {busy && busyLabel !== undefined ? busyLabel : children}
-    </button>
+    </Behavior>
   );
 }
 
@@ -94,9 +94,10 @@ export interface ButtonLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement>
   ref?: Ref<HTMLAnchorElement>;
 }
 
-/** A link dressed as a button: it goes somewhere (a download, another page) rather than doing something here. */
-function DefaultButtonLink({ intent, size, block, className, ...rest }: ButtonLinkProps) {
-  return <a {...rest} className={buttonClass({ intent, size, block, className })} />;
+/** A link dressed as a button: it goes somewhere (a download, another page) rather than doing something here, so it
+    is an anchor and nothing more, wearing the button's part for its look. */
+function DefaultButtonLink({ intent = 'secondary', size = 'default', block, ...rest }: ButtonLinkProps) {
+  return <a {...rest} data-slot="button" data-variant={VARIANT[intent]} data-size={SIZE[size]} data-block={block ? '' : undefined} />;
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */

@@ -8,22 +8,29 @@ import { breakdown, chart, dashboard, embed, metric, rows } from '@mistriwork/mi
 export const today = dashboard(
   'Today',
   [
-    metric('Occupied homes', 'unit', { query: 'status = occupied or status = notice', to: 'units', icon: 'house', area: 'homes' }),
-    metric('Vacant or turning over', 'unit', { query: 'available', to: 'units', icon: 'key', area: 'homes' }),
+    // Of every home: the goal counts the same homes with no condition, so the card says the share lived in, on a meter.
+    metric('Occupied homes', 'unit', {
+      query: 'status = occupied or status = notice',
+      target: { measure: 'count' },
+      to: 'units',
+      icon: 'house',
+      area: 'figures',
+    }),
+    metric('Vacant or turning over', 'unit', { query: 'available', to: 'units', icon: 'key', area: 'figures' }),
     // Over the window the reader picks above the cards, beside its change from the period before and its trend across
     // the window, both of which a metric over a clock draws unasked.
     metric('Rent collected', 'charge', {
       query: 'kind = rent and status = paid',
       over: 'due_on',
       measure: 'sum amount as collected',
-      figure: 'compact',
+      // Exact, as the strip's other figures are: one notation across a row of figures.
       better: 'up',
-      area: 'money',
+      area: 'figures',
       icon: 'bank',
     }),
-    metric('Overdue', 'charge', { segment: 'overdue', measure: 'sum amount as owed', to: 'ledger', area: 'money', icon: 'warning' }),
+    metric('Overdue', 'charge', { segment: 'overdue', measure: 'sum amount as owed', to: 'ledger', area: 'figures', icon: 'warning' }),
     // Every repair by where it stands, in the road's order: a card per state, a click to its list.
-    breakdown('Repairs by state', 'maintenance_request', 'status', {
+    breakdown('Repairs by status', 'maintenance_request', 'status', {
       query: 'outstanding',
       shape: 'steps',
       to: 'repairs',
@@ -56,16 +63,36 @@ export const today = dashboard(
       area: 'leases',
     }),
     embed('viewings', { title: 'Viewings', area: 'viewings', limit: 6, icon: 'calendar-check' }),
+    // What needs someone today, as two worklists under the figures: each leads with the record's own name, so a row is
+    // a name, a line and a value, and opens its record.
+    rows('Urgent repairs', 'maintenance_request', {
+      segment: 'urgent',
+      show: ['title', 'unit_id', 'reported_on'],
+      sort: 'reported_on',
+      limit: 5,
+      icon: 'warning',
+      area: 'urgent',
+    }),
+    rows('Overdue charges', 'charge', {
+      segment: 'overdue',
+      show: ['description', 'lease_id', 'amount'],
+      sort: 'due_on',
+      limit: 5,
+      icon: 'receipt',
+      area: 'overdue',
+    }),
   ],
   {
     icon: 'gauge',
     roles: ['manager', 'admin', 'leasing'],
     heading: 'Good morning, {me.name}',
     description: 'Three buildings at a glance: who is in, what is owed and what needs fixing.',
-    // The grid, so each answer stands where it reads: the two pairs of figures across the top, the road of repairs under
-    // them, the chart's three quarters with the buildings beside it, and the two lists a half each.
+    // The grid, so each answer stands where it reads: the four figures in one strip across the top, what needs someone
+    // under them, the road of repairs, the chart's three quarters with the buildings beside it, and the two lists a
+    // half each.
     areas: [
-      'homes   homes   money    money',
+      'figures figures figures  figures',
+      'urgent  urgent  overdue  overdue',
       'repairs repairs repairs repairs',
       'trend   trend   trend    building',
       'leases  leases  viewings viewings',
@@ -80,14 +107,25 @@ export const portal = dashboard(
   'Home',
   [
     metric('Balance due', 'charge', { query: 'unpaid', measure: 'sum amount as owed', to: 'my-charges', width: 'half', icon: 'receipt' }),
-    metric('Open repairs', 'maintenance_request', { query: 'outstanding', to: 'my-requests', width: 'half', icon: 'wrench' }),
-    embed('my-requests', { title: 'Your repairs', limit: 5, icon: 'wrench' }),
+    metric('Open repairs', 'maintenance_request', {
+      query: 'underway',
+      to: 'my-requests',
+      width: 'half',
+      icon: 'wrench',
+    }),
+    rows('Repairs in progress', 'maintenance_request', {
+      query: 'underway',
+      show: ['title', 'status', 'scheduled_on'],
+      sort: 'reported_on',
+      limit: 5,
+      icon: 'wrench',
+    }),
     embed('my-charges', { title: 'Your charges', limit: 6, icon: 'receipt' }),
   ],
   {
     icon: 'house',
     roles: ['resident'],
     heading: 'Welcome home',
-    description: 'Your lease, your charges and your repairs. Something broken? Report it and the office books a visit.',
+    description: 'What you owe and how your repairs stand. Something broken? Report it and the office books a visit.',
   },
 );

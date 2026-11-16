@@ -231,8 +231,33 @@ export async function devPeople(loaded: LoadedApp, roles: readonly string[], reg
     );
     if (own) take(role, own);
   }
+  /* A role with a table of its own people (patients, for patient) is one of them, not the next row of auth.me's
+     table: given a therapist's address, a clinic's patient signed in and saw none of their own visits. It takes the
+     address of a row of the table named as it is, where that table keeps one, so a policy that knows people by their
+     address finds them. A role with no such table is the next row here, as before. */
   for (const role of roles) {
     if (chosen.has(role)) continue;
+    const own = schema.tables.find((candidate) => candidate.id !== table.id && singular(candidate.name) === singular(role));
+    const address = own?.columns.find((column) => column.name === me.column || column.name === 'email');
+    const ownKey = own && primaryKey(own)[0];
+    if (own && address && ownKey) {
+      const names = ['name', 'full_name', 'display_name'].find((column) => own.columns.some((c) => c.name === column));
+      const found = await adapter.query({
+        table: own.id,
+        columns: [ownKey, address.name, ...(names ? [names] : [])],
+        orderBy: [{ column: ownKey, direction: 'asc' }],
+        limit: 50,
+        offset: 0,
+      });
+      const person = found.rows.find((row) => typeof row[address.name] === 'string' && /@/.test(row[address.name] as string));
+      if (person) {
+        chosen.set(role, {
+          email: person[address.name] as string,
+          ...(names && typeof person[names] === 'string' ? { name: person[names] as string } : {}),
+        });
+        continue;
+      }
+    }
     const next = rows.find((row) => !taken.has(row));
     if (next) take(role, next);
   }

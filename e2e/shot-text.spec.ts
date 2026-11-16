@@ -146,9 +146,10 @@ test('--as <email> signs in as an account already there, over a copy of its stor
 
   const signedIn = await shot(['tasks', '--text', '--as', email], { app, env: { MISTRI_AS_PASSWORD: password } });
   expect(signedIn.code, signedIn.err).toBe(0);
-  /* The administrator's page, not the sign-in card a signed-out shot gets: the App's own room, since an App never
-     draws the Workbench (appState.js), even for an account its roles give no view. */
-  expect(signedIn.out).toMatch(/^ {2}title: Tasks · Signed$/m);
+  /* The administrator's page, not the sign-in card a signed-out shot gets: the App's own refusal page in its own shell,
+     since an App never draws the Workbench (appState.js), even for an account its roles give no view. */
+  expect(signedIn.out).toMatch(/^ {2}title: Not available · Signed$/m);
+  expect(signedIn.out).toContain('Your account does not open this page.');
   expect(signedIn.out).not.toMatch(/Sign in/);
   expect(signedIn.out + signedIn.err).not.toContain(password);
   // The run signed in to its copy: the store the account lives in has no session it made.

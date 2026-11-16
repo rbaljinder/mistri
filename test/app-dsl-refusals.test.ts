@@ -190,7 +190,7 @@ describe('any other unknown key gets the ordinary refusal: the place, the key, w
     [
       'a role key',
       { auth: { roles: { reader: { read: true, writable: true } } } },
-      /role "reader" has no "writable"\. It takes: label, extends, read, write, create, export, commands, actions, operations, fields, realm, claims, service, flags, experiments\.$/,
+      /role "reader" has no "writable"\. It takes: label, extends, read, write, create, export, commands, actions, operations, fields, realm, claims, service, portal, flags, experiments\.$/,
     ],
     [
       'a form key',

@@ -73,7 +73,7 @@ test.describe('Thread addresses', () => {
     await page.setViewportSize({ width: 1440, height: 924 });
     await page.goto(`${sample.origin}/issues?priority=high`);
     await expect(lit(page)).toHaveText(/^Active/);
-    const chip = page.locator('.applist-chip', { hasText: 'Priority is High' });
+    const chip = page.locator('.applist-chip[title*="Priority is High"]');
     await expect(chip).toBeVisible();
     await expect(count(page)).toHaveText(
       many(scalar(sample.db, "SELECT count(*) FROM issue WHERE status NOT IN ('done', 'canceled') AND priority = 'high'")),
@@ -86,7 +86,7 @@ test.describe('Thread addresses', () => {
     await picker.getByRole('button', { name: /^Show/ }).click();
     await expect.poll(() => new URL(page.url()).searchParams.get('priority')).toBe('high,low');
     await page.reload();
-    const both = page.locator('.applist-chip', { hasText: 'Priority is High or Low' });
+    const both = page.locator('.applist-chip[title*="Priority is High or Low"]');
     await expect(both).toBeVisible();
     await expect(count(page)).toHaveText(
       many(scalar(sample.db, "SELECT count(*) FROM issue WHERE status NOT IN ('done', 'canceled') AND priority IN ('high', 'low')")),

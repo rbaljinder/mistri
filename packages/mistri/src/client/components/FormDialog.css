@@ -5,7 +5,7 @@
    rather than the browser's black hairline. Wide enough for its fields, never
    so wide that it stops being a dialog, and its own scroll so a long form
    does not push the dialog past the window. */
-.form-dialog.modal {
+.form-dialog[data-slot='dialog-content'][data-kind='modal'] {
   width: min(34rem, calc(100% - 24px));
   max-height: min(44rem, calc(100% - 48px));
   overflow-y: auto;

@@ -25,8 +25,36 @@
   :root[data-look-rules='double'] .app-mode .table-wrap thead th {
     border-bottom: 3px double var(--rules-head);
   }
+  /* The book's cover runs over the pane as it runs down the menu: the pane's bar stands on the menu's ground in the
+     menu's ink. The bar's own rules read the page's colour roles (structure.css), so the bar is given the menu's
+     under those names and everything in it — the trail, the search's well, the keys — follows without a rule each. */
+  :root[data-look-rules='double'] body.app-sidebar-shell .layout > .pane-bar {
+    --surface: var(--nav-ground);
+    --raised: color-mix(in srgb, var(--nav-ink) 8%, var(--nav-ground));
+    --ground: var(--raised);
+    --field-fill: var(--raised);
+    --line: var(--nav-line);
+    --line-control: var(--nav-line);
+    --ink: var(--nav-ink);
+    --ink-muted: var(--nav-muted);
+    --ink-subtle: var(--nav-muted);
+    color: var(--nav-ink);
+  }
+  /* A list's tabs are words to choose between, not a column's head: the text face in sentence case, where the
+     label role would set them in the book's capitals. */
+  :root[data-look-rules='double'][data-type-label~='upper'] :is(.tab, :where(body.app-mode) .page-tab) {
+    font-family: var(--sans);
+    text-transform: none;
+    letter-spacing: 0;
+  }
   /* A field group, a dashboard section and a stat card are ruled boxes in the strong line, not the hairline. */
   :root[data-look-rules='double'] .app-mode :is(.page-fields, .page-section, .home-card) {
     border-color: var(--line-strong);
+  }
+  /* A ledger sets every cell in the figures' face, a tenth wider a letter than the text's: a ten-column list at a
+     desk cut its residents' names by a letter or two. Its list cells are set at the platform's size, not the book's
+     own a step up, and the names are whole. A record's own tables keep the book's size. */
+  :root[data-look-rules='double'] .app-mode .applist-room td {
+    font-size: calc(var(--text-base) / var(--type-k, 1));
   }
 }

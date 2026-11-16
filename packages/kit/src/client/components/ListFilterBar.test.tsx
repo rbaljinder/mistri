@@ -7,6 +7,7 @@
  * The conditions underneath are filterbar's and filterRailModel's; this is
  * what a reader sees and presses.
  */
+import { Fragment, type ReactNode } from 'react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
@@ -66,28 +67,32 @@ const apply = vi.fn();
 const onType = vi.fn();
 const onSearch = vi.fn();
 const onSheet = vi.fn();
-function draw(props: { refinement?: string; tabQuery?: string; phone?: boolean; typed?: string } = {}) {
+function draw(props: { refinement?: string; tabQuery?: string; phone?: boolean; typed?: string; row?: boolean } = {}) {
   refinement = props.refinement ?? '';
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  /* `row`: inside the list's control row, which is what the bar measures to fold its filters. */
+  const Row = props.row ? ({ children }: { children: ReactNode }) => <div className="applist-controls">{children}</div> : Fragment;
   render(
     <QueryClientProvider client={client}>
-      <ListFilterBar
-        table={task}
-        boxes={boxes}
-        search={boxes[0]}
-        refinement={refinement}
-        tabQuery={props.tabQuery ?? ''}
-        standing=""
-        unitOf={() => undefined}
-        typed={props.typed}
-        onType={onType}
-        onSearch={onSearch}
-        apply={apply}
-        current={() => refinement}
-        listLabel="Tasks"
-        phone={props.phone ?? false}
-        onSheet={onSheet}
-      />
+      <Row>
+        <ListFilterBar
+          table={task}
+          boxes={boxes}
+          search={boxes[0]}
+          refinement={refinement}
+          tabQuery={props.tabQuery ?? ''}
+          standing=""
+          unitOf={() => undefined}
+          typed={props.typed}
+          onType={onType}
+          onSearch={onSearch}
+          apply={apply}
+          current={() => refinement}
+          listLabel="Tasks"
+          phone={props.phone ?? false}
+          onSheet={onSheet}
+        />
+      </Row>
     </QueryClientProvider>,
   );
 }
@@ -198,10 +203,67 @@ test('on a phone the pickers are one Filters button that counts what applies, an
 test('a chip says its condition in words in an App, and in the language without one', () => {
   draw({ refinement: 'status != done and is_urgent = true' });
   const said = () => [...document.querySelectorAll('.applist-chip-text')].map((chip) => chip.textContent);
-  expect(said()).toEqual(['Status is not Done', 'Is urgent is Yes']);
+  /* The label, which stays where the unset filter said it, then what is asked; the whole phrase names the chip. */
+  expect(said()).toEqual(['Status: is not Done', 'Is urgent: Yes']);
+  expect(document.querySelector('.applist-chip')).toHaveAttribute('title', 'Status is not Done');
   expect(screen.getByRole('button', { name: 'Remove Status is not Done' })).toBeInTheDocument();
   cleanup();
   inApp = false;
   draw({ refinement: 'status != done' });
   expect(said()).toEqual(['status != done']);
+});
+
+test('a set filter keeps its label, says one value, and counts the rest; the whole phrase is its title and name', () => {
+  draw({ refinement: 'status = open' });
+  const chip = () => document.querySelector('.applist-chip[data-column="status"]') as HTMLElement;
+  expect(chip().querySelector('.applist-chip-label')).toHaveTextContent('Status:');
+  expect(chip().querySelector('.applist-chip-value')).toHaveTextContent('Open');
+  expect(chip().querySelector('.applist-chip-more')).toBeNull();
+  cleanup();
+
+  draw({ refinement: 'status in (open, done)' });
+  expect(chip().querySelector('.applist-chip-label')).toHaveTextContent('Status:');
+  expect(chip().querySelector('.applist-chip-value')).toHaveTextContent('Open');
+  expect(chip().querySelector('.applist-chip-more')).toHaveTextContent('+1');
+  // What is not drawn is still said: on hover and to a screen reader.
+  expect(chip()).toHaveAttribute('title', 'Status is Open or Done');
+  expect(screen.getByRole('button', { name: 'Status is Open or Done' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Remove Status is Open or Done' })).toBeInTheDocument();
+});
+
+test('a long value is the value part alone, which the sheet cuts; the label is its own part and never cut', () => {
+  draw({ refinement: 'status != done' });
+  const chip = document.querySelector('.applist-chip[data-column="status"]') as HTMLElement;
+  // Not a value from a list: the phrase without its label, in the part that carries the cap.
+  expect(chip.querySelector('.applist-chip-value')).toHaveTextContent('is not Done');
+  expect(chip.querySelector('.applist-chip-label')).not.toContainElement(chip.querySelector('.applist-chip-value') as HTMLElement);
+  expect(chip).toHaveAttribute('title', 'Status is not Done');
+});
+
+test('a filter keeps its place set or not, and a row too narrow folds the last ones, set too, behind More with their count', () => {
+  draw({ refinement: 'is_urgent = true' });
+  // Declared order, whichever is set: the chip stands where its unset filter stood.
+  const order = () =>
+    [...document.querySelectorAll(':is(.applist-slot, .applist-chip)[data-column]')].map((slot) => slot.getAttribute('data-column'));
+  expect(order()).toEqual(['status', 'is_urgent']);
+  cleanup();
+
+  const widths = { scrollWidth: 500, clientWidth: 300 };
+  const scroll = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('applist-controls') ? widths.scrollWidth : 0;
+  });
+  const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('applist-controls') ? widths.clientWidth : 0;
+  });
+  try {
+    draw({ refinement: 'is_urgent = true', row: true });
+    const more = screen.getByRole('button', { name: /^More filters: / });
+    expect(more).toHaveTextContent('More filters');
+    // One of the filters behind it is set, and the button says so.
+    expect(more.querySelector('.applist-add-count')).toHaveTextContent('1');
+    expect(document.querySelector('.applist-chip[data-column="is_urgent"]')).toBeNull();
+  } finally {
+    scroll.mockRestore();
+    client.mockRestore();
+  }
 });

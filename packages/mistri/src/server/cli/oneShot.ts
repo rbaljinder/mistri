@@ -6,6 +6,7 @@
  * on stdout, every startup line already sent to stderr — and a build step
  * that starts a web server is one nobody wires into CI.
  */
+import { withMachineStates } from '../../shared/appRollups.js';
 import { learnValueLabels } from '../app/valueLabels.js';
 import { startupReport } from '@mistriwork/engine/shared/refusal.js';
 import { fontWarnings } from '../app/appFonts.js';
@@ -106,6 +107,9 @@ export async function typesOfApp(
   /** The App's free-form pages, which say a record's tabs with its views: left out, the tab words are not typed. */
   pages?: readonly PageDef[],
 ): Promise<string> {
+  /* A machine's states and groups ride on its column (appRollups.ts), where the types read them: without them a
+     view's `status is onBench` was a type error the server accepted, and only a segment could say it. */
+  whole = withMachineStates(app, whole);
   const access = resolveAppAccess(app, whole, grantsByRole(app) ? Object.keys(app.auth!.roles!) : []);
   const served = accessibleSchema(whole, access);
   const declared = new Set(

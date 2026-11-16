@@ -184,7 +184,7 @@ test('runtime UX: creation fields and validation stay inside the mobile drawer',
     expect(panel!.x + panel!.width).toBeLessThanOrEqual(width + 1);
     const boxes = await form
       .locator(
-        '.insert-field > label, .insert-field > .form-field-label-row, .insert-field > .insert-input, .insert-field > .dd, .insert-field > .picker, .insert-missing:not([hidden])',
+        '.insert-field > label, .insert-field > [data-slot="field-head"], .insert-field > .insert-input, .insert-field > [data-slot="dropdown"], .insert-field > .picker, .insert-missing:not([hidden])',
       )
       .evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().toJSON()));
     for (const box of boxes) {

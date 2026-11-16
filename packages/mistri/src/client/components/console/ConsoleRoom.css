@@ -35,7 +35,7 @@
   .console-confirm-reason input { inline-size: 100%; min-height: 28px; padding: 0 var(--space-3); border: 1px solid var(--line-control, var(--line)); border-radius: var(--radius); background: var(--surface); color: var(--ink); font: inherit; }
   .console-record { min-width: 0; overflow-wrap: anywhere; }
   .console-caption { color: var(--ink-muted); font-size: var(--text-sm); line-height: 1.5; }
-  .console-value-settings > .form-field { flex: 1 1 12rem; min-width: 0; }
+  .console-value-settings > [data-slot='field'] { flex: 1 1 12rem; min-width: 0; }
   .console-history p { margin: 0; }
   .console-history time { color: var(--ink-muted); font-size: var(--text-sm); }
   .console-results p { margin: 0; }
@@ -75,7 +75,7 @@
   .console-palette-detail { margin-inline-start: auto; flex: none; color: var(--ink-muted); font-size: var(--text-sm); }
   .console-palette-empty { margin: 0; padding: var(--space-5) var(--space-3); color: var(--ink-muted); font-size: var(--text-base); }
   .console-updated { display: inline-block; min-inline-size: 9.5rem; text-align: end; color: var(--ink-muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .console-refresh.btn { min-inline-size: 28px; padding-inline: var(--space-2h); font-size: calc(15px * var(--type-k)); line-height: 1; }
+  .console-refresh[data-slot='button'] { min-inline-size: 28px; padding-inline: var(--space-2h); font-size: calc(15px * var(--type-k)); line-height: 1; }
   /* Operations: four figures over the views, each the same height whether or not its trend has drawn yet. */
   .console-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
   .console-metrics .kit-stat-change { min-height: 1lh; }

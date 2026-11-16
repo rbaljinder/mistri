@@ -8,7 +8,7 @@ import type { Page } from '../mistri-schema.d.ts';
 export default page(
   'maintenance_request',
   [
-    header({ status: 'status', facts: ['unit_id', 'priority', 'assigned_to', 'scheduled_on'], actions: ['messageOffice'] }),
+    header({ status: 'status', facts: ['unit_id', 'assigned_to', 'scheduled_on'], actions: ['messageOffice'] }),
     timeline('Conversation', [stream('request_note', 'request_id', 'sent_at', 'body', { author: 'author', badge: 'kind' })], {
       newest: 'last',
       limit: 60,

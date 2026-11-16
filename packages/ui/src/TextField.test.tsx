@@ -25,29 +25,34 @@ test('the label names the box, typing reports the text, and autofill is off unle
 
 test('a problem is said in the description and marks the box invalid; its line was already in the flow', () => {
   const { rerender } = render(<TextField label="Email" value="" onChange={() => {}} hint="Where we write." />);
-  const line = () => document.querySelector('.form-field-problem') as HTMLElement;
-  expect(line()).not.toHaveAttribute('hidden');
+  const slot = (name: string) => document.querySelector(`[data-slot="${name}"]`);
+  // The line a problem will stand on is kept while there is none.
+  expect(slot('field-reserve')).toBeInTheDocument();
   expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid');
   rerender(<TextField label="Email" value="" onChange={() => {}} hint="Where we write." problem="Enter an email." />);
   const box = screen.getByRole('textbox', { name: 'Email' });
   expect(box).toHaveAttribute('aria-invalid', 'true');
   expect(box).toHaveAccessibleDescription('Where we write. Enter an email.');
-  expect(document.querySelector('.form-field-reserve')).toBeInTheDocument();
+  // The problem stands where the kept line stood, so nothing under it moved.
+  expect(slot('field-reserve')).toBeNull();
+  expect(slot('field-error')).toHaveTextContent('Enter an email.');
 });
 
 test('reserve off lets the empty problem line go, as a Field does', () => {
   render(<TextField label="Email" value="" onChange={() => {}} reserve={false} />);
-  expect(document.querySelector('.form-field-problem')).toHaveAttribute('hidden');
+  expect(document.querySelector('[data-slot="field-reserve"]')).toBeNull();
+  expect(document.querySelector('[data-slot="field-error"]')).toBeNull();
 });
 
 test('the mark is decorative, and its room is kept from the first draw, shown or not', () => {
   const { rerender } = render(<Typed valid={false} />);
-  expect(document.querySelector('.field-box')).toHaveClass('has-mark');
-  expect(document.querySelector('.field-mark')).toBeNull();
+  const slot = (name: string) => document.querySelector(`[data-slot="${name}"]`);
+  expect(slot('field-box')).toHaveAttribute('data-has-mark');
+  expect(slot('field-mark')).toBeNull();
   rerender(<Typed valid />);
-  expect(document.querySelector('.field-mark')).toHaveAttribute('aria-hidden', 'true');
+  expect(slot('field-mark')).toHaveAttribute('aria-hidden', 'true');
   rerender(<Typed />);
-  expect(document.querySelector('.field-box')).not.toHaveClass('has-mark');
+  expect(slot('field-box')).not.toHaveAttribute('data-has-mark');
 });
 
 test('an optional word stands beside the label, outside its name, and a tip rides beside it', async () => {
@@ -62,7 +67,7 @@ test('an optional word stands beside the label, outside its name, and a tip ride
     />,
   );
   expect(screen.getByRole('textbox', { name: 'Employer' })).toBeInTheDocument();
-  expect(document.querySelector('.form-field-optional-word')).toHaveTextContent('(optional)');
+  expect(document.querySelector('[data-slot="field-optional"]')).toHaveTextContent('(optional)');
   await user.click(screen.getByRole('button', { name: 'More information' }));
   expect(screen.getByRole('tooltip')).toHaveTextContent('Who pays you.');
 });

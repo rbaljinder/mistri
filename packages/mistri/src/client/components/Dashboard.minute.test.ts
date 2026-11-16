@@ -4,7 +4,7 @@
  * wall would never move.
  */
 import { afterEach, expect, test, vi } from 'vitest';
-import { minuteTick } from './Dashboard.js';
+import { minuteTick } from './dashboardClock.js';
 import { resetLiveState, setLiveActive, setLiveOff } from '@mistriwork/kit/client/liveState.js';
 
 afterEach(() => vi.useRealTimers());

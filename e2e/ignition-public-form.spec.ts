@@ -65,7 +65,7 @@ async function apply(page: Page, applicant: string): Promise<string> {
   await expect(page.getByText(/command input/)).toHaveCount(0);
   await expect(page.locator('.form-page-failure:not([hidden])')).toHaveCount(0);
   // Its label is beside it and checks it.
-  await page.locator('.form-field-check-row label', { hasText: 'The details I gave are true' }).click();
+  await page.locator('[data-slot="field-check-row"] label', { hasText: 'The details I gave are true' }).click();
   await expect(consent).toBeChecked();
   await expect(page.getByText('Check this box to continue.')).toHaveCount(0);
   await page.getByRole('button', { name: 'Submit application' }).click();

@@ -86,16 +86,7 @@ function Pick({
   return short ? (
     <Segmented label={name} value={value} options={items} onChange={pick} />
   ) : (
-    // Dressed as a field box, as Select dresses it: the bare listbox is the grid's (mono, small, no control height),
-    // and beside a param's search box, which is a TextField, it read as a small native select.
-    <Dropdown
-      items={items}
-      value={value}
-      onChange={pick}
-      ariaLabel={name}
-      placeholder={say('choose')}
-      buttonClassName="field-control field-select"
-    />
+    <Dropdown items={items} value={value} onChange={pick} ariaLabel={name} placeholder={say('choose')} />
   );
 }
 

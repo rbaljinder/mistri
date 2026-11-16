@@ -145,7 +145,7 @@ export function AccountAdministration({ onClose }: { onClose: () => void }) {
             >
               <input
                 type="search"
-                className="field-control"
+                data-slot="input"
                 aria-label={say('searchAccountsByEmail')}
                 placeholder={say('searchByEmail')}
                 value={search}
@@ -433,7 +433,7 @@ function AccountEditor({
           <Field label={say('common.password')} hint={say('giveItToThem')} problem={problem}>
             <input
               type="password"
-              className="field-control"
+              data-slot="input"
               autoComplete="new-password"
               value={password}
               maxLength={PASSWORD_MAX}
@@ -543,18 +543,12 @@ function NewAccount({
       </h2>
       <p className="note">{passwords ? say('theySignInWithThisEmail') : say('theySignInWithThis')}</p>
       <Field label={say('common.name')} required problem={problems.name}>
-        <input
-          className="field-control"
-          autoComplete="off"
-          value={name}
-          maxLength={120}
-          onChange={(event) => setName(event.target.value)}
-        />
+        <input data-slot="input" autoComplete="off" value={name} maxLength={120} onChange={(event) => setName(event.target.value)} />
       </Field>
       <Field label={say('common.email')} required problem={problems.email}>
         <input
           type="email"
-          className="field-control"
+          data-slot="input"
           autoComplete="off"
           value={email}
           maxLength={254}
@@ -571,7 +565,7 @@ function NewAccount({
         <Field label={say('common.password')} required hint={say('giveItToThem')} problem={problems.password}>
           <input
             type="password"
-            className="field-control"
+            data-slot="input"
             autoComplete="new-password"
             value={password}
             maxLength={PASSWORD_MAX}

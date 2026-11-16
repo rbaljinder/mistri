@@ -34,7 +34,7 @@ export const reportIssue = defineCommand({
   read: ['resident', 'lease', 'unit'],
   write: ['request_note'],
   input: {
-    title: field.text({ label: 'What’s wrong?', max: 120, help: 'A few words, such as “Kitchen sink drips”.' }),
+    title: field.text({ label: 'The problem, in a few words', max: 120, help: 'Such as “Kitchen sink drips”.' }),
     category: field.choice(CATEGORIES, { label: 'Kind of problem', as: 'cards' }),
     description: field.textarea({ label: 'Tell us more', max: 2000, help: 'Where it is, when it started, anything you have tried.' }),
     urgent: field.bool({ label: 'Is it urgent?', help: 'Water, gas, no heat or no power.', as: 'buttons' }),

@@ -688,8 +688,16 @@ export function TableView({
   const selected =
     table && selectableGrid(table, actions ?? [], interactive, editing) ? (
       <RowHosts>
-        <GridSelection table={table} rows={data.rows} actions={actions ?? []} interactive={interactive} editable={editing} />
         {ordered}
+        {/* After the rows: its bar stands at their foot, held in view while they are (features.css). */}
+        <GridSelection
+          table={table}
+          rows={data.rows}
+          actions={actions ?? []}
+          interactive={interactive}
+          editable={editing}
+          {...(group ? { group } : {})}
+        />
       </RowHosts>
     ) : !hasOrder ? (
       ordered

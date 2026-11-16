@@ -7,11 +7,11 @@
  */
 import { shell } from '../shellMode.js';
 import { useMessageLanguage } from './useMessageLanguage.js';
-import { useContext, useEffect, type CSSProperties, type ReactNode } from 'react';
+import { cloneElement, useContext, useEffect, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { readRecordSource, shareRecordSource } from '../recordSource.js';
 import { readPageFields } from './pageFieldsRead.js';
-import { choiceWord, dressFor, sayValue, type DisplayRule } from './valueModel.js';
+import { choiceWord, dressFor, hueOf, initialsOf, sayValue, type DisplayRule } from './valueModel.js';
 import { pathEqualityFilter, recordKey as checkedRecordKey } from '../resourceRequests.js';
 import { columnDisplay, columnLabel, emptyWord, findTable, labelPath, primaryKey, rowLabel, state } from '../core.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
@@ -19,7 +19,7 @@ import { resourceOf } from './appRooms.js';
 import { recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import { canEditRow } from '../write.js';
 import { cardStem, sharedPrefix } from '@mistriwork/engine/shared/pagePaths.js';
-import type { ColumnMeta } from '@mistriwork/engine/shared/schema.js';
+import { labelColumn, type ColumnMeta, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { Editable } from './Editable.js';
 import { RefJump, Value } from './Value.js';
 import { defaultFieldPaths, definedThrough, fieldsColumns } from '@mistriwork/engine/shared/recordReads.js';
@@ -346,6 +346,15 @@ export function FieldsSection({
           (findTable(reference.table) as { name?: string } | undefined)?.name ?? reference.table,
         )
       : '';
+    /* A person's card wears the disc their name wears in a list: the record the card names says so itself, where its
+       name column is drawn with an avatar (`display: { name: { avatar: true } }`). The disc is decoration; the name
+       stays the link's text. */
+    const referred = reference ? (findTable(reference.table) as TableMeta | undefined) : undefined;
+    const nameColumn = referred ? labelColumn(referred) : undefined;
+    const person =
+      referred && nameColumn && (columnDisplay(referred.id, nameColumn) as DisplayRule | null)?.avatar && titleLabel
+        ? String(row[titleLabel] ?? '').trim()
+        : '';
     const jump = (className: string, text?: string) => (
       <RefJump
         references={reference!}
@@ -362,7 +371,12 @@ export function FieldsSection({
       <section className={`${sectionClass(section)} page-card-section page-reference-card`}>
         <div className="page-card">
           {section.title && <h2 className="page-card-caption">{section.title}</h2>}
-          <p className="page-card-title">
+          <p className={person ? 'page-card-title has-avatar' : 'page-card-title'}>
+            {person && (
+              <span className={`avatar avatar-c${hueOf(person)}`} aria-hidden="true">
+                {initialsOf(person)}
+              </span>
+            )}
             {reference ? (
               jump('page-card-name')
             ) : filled(titlePath) ? (
@@ -582,12 +596,25 @@ export function FieldsSection({
     const lone = Boolean(section.title) && paths.length === 1 && (!rail || long);
     /* …and set as a paragraph: body weight and size, a readable measure, never the weight of a heading. */
     const prose = lone && typeof value === 'string' && !column?.references;
+    /* A summary's line under its figure (`notes`): what the figure counts, in the value's own cell so it is read with
+       it and every look's rule for the value's box holds it too. */
+    const note = presentation === 'summary' ? section.notes?.[path] : undefined;
+    const cell = note
+      ? cloneElement(
+          dd as ReactElement<{ children?: ReactNode }>,
+          undefined,
+          (dd as ReactElement<{ children?: ReactNode }>).props.children,
+          <span key="note" className="page-field-note">
+            {note}
+          </span>,
+        )
+      : dd;
     return (
       <div key={path} className={`page-field${long ? ' page-field-wide' : ''}${prose ? ' page-field-prose' : ''}`}>
         <dt title={path} className={lone ? 'visually-hidden' : undefined}>
           {label}
         </dt>
-        {dd}
+        {cell}
       </div>
     );
   });

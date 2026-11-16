@@ -13,10 +13,14 @@
 .chart-bar-guide { stroke: var(--ink-muted); stroke-width: 1; stroke-dasharray: 3 3; }
 .chart-bar-tip rect { fill: var(--ink); rx: min(10px, var(--radius)); }
 .chart-bar-tip text { font: 500 var(--text-xs) var(--sans); fill: var(--ground); }
+/* At rest the value in hand is the plot's headline, not a pill: nothing stands over a bar until the pointer names one. */
+.chart-bar-tip.is-rest text { fill: var(--ink); }
 .chart-x-tick.is-active { fill: var(--ink); }
 /* Stacked columns: each series its token in every column; the current column is named by its tick and its pill, not by a tint. */
 .chart-columns { display: grid; gap: var(--space-3h); min-width: 0; }
+/* A column is one shape: its parts are square where they meet and its top part takes the bar's small corner. */
 .chart-column-part { rx: 0; }
+.chart-column-part.is-top { rx: min(3px, var(--radius)); }
 /* A column that drills: a door over its whole band (the hit rect is clear), the pointer saying it goes somewhere, and
    while it holds the keyboard the house ring round the band, as a line's point widens its stroke. */
 .chart-column-door { cursor: pointer; outline: none; }

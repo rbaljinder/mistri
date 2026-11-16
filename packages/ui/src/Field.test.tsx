@@ -45,7 +45,8 @@ test('required says so to assistive technology, and its star is not part of the 
   );
   const input = screen.getByRole('textbox', { name: 'Name' });
   expect(input).toHaveAttribute('aria-required', 'true');
-  expect(container.querySelector('.form-field')).toHaveClass('is-required');
+  // The field says it too, for the stylesheet's mark.
+  expect(container.querySelector('[data-slot="field"]')).toHaveAttribute('data-required');
   expect(screen.getByLabelText('Name')).toBe(input);
 });
 
@@ -60,7 +61,7 @@ test('the optional word stands beside the label of a field that is not required,
       </Field>
     </>,
   );
-  const words = container.querySelectorAll('.form-field-optional-word');
+  const words = container.querySelectorAll('[data-slot="field-optional"]');
   expect(words).toHaveLength(1);
   expect(words[0]).toHaveTextContent('(optional)');
   expect(words[0]!.closest('label')).toBeNull();
@@ -109,7 +110,7 @@ test('a group names its control by the caption rather than a <label>', () => {
     </Field>,
   );
   expect(screen.getByRole('radiogroup', { name: 'Equipment' })).toBeInTheDocument();
-  expect(document.querySelector('label.form-field-label')).toBeNull();
+  expect(document.querySelector('label[data-slot="field-label"]')).toBeNull();
 });
 
 test('a short answer says its kind, for the form to size and row it by the data; text says none', () => {
@@ -126,6 +127,7 @@ test('a short answer says its kind, for the form to size and row it by the data;
       </Field>
     </>,
   );
-  const fields = [...container.querySelectorAll('.form-field')];
-  expect(fields.map((field) => field.getAttribute('data-kind'))).toEqual(['number', 'datetime', null]);
+  // Said as `data-answer`: `data-kind` is the stylesheet's word for which shape of a slot this is.
+  const fields = [...container.querySelectorAll('[data-slot="field"]')];
+  expect(fields.map((field) => field.getAttribute('data-answer'))).toEqual(['number', 'datetime', null]);
 });

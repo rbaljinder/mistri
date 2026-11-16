@@ -15,7 +15,7 @@
 .branding-form-logo-box--dark { background: var(--ink); color: var(--surface); padding: var(--space-2) var(--space-3); }
 .branding-form-logo-box img, .branding-preview img { display: block; width: 96px; height: 24px; object-fit: contain; object-position: left center; }
 .branding-form-accent input[type="color"] { width: 32px; height: 32px; flex: none; padding: var(--space-1); border: 1px solid var(--line-control); border-radius: var(--radius); background: var(--surface); }
-.branding-form-accent .field-control { width: 8rem; font-family: var(--mono); }
+.branding-form-accent :is([data-slot='input'], [data-slot='textarea']) { width: 8rem; font-family: var(--mono); }
 .branding-form .form-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-2); }
 .branding-form-status { flex: 1; margin: 0; color: var(--ink-muted); font-size: var(--text-base); }
 /* The preview wears the tenant's colors through its own properties, never the page's: what is drawn is the draft. */

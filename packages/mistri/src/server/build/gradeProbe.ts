@@ -119,7 +119,7 @@ export function contrastReadings(input: { states: ReadonlyArray<readonly [string
      title's picker, a focused field whose ring stands in for it). */
   const edges = [
     ...document.querySelectorAll<HTMLElement>(
-      'input:not([type="checkbox"], [type="radio"], [type="hidden"]), textarea, select, .dd-button, .picker',
+      'input:not([type="checkbox"], [type="radio"], [type="hidden"]), textarea, select, [data-slot="select-trigger"], .picker',
     ),
   ]
     .filter(
@@ -198,6 +198,8 @@ export interface Probe {
   small: Array<{ what: string; width: number; height: number }>;
   /** Sections drawn with nothing in them: no words but their heading, no picture, no field. */
   empty: string[];
+  /** A list drawn with no rows under no search or filter of the reader's: the room's opening state, empty. */
+  rowless?: boolean;
   /** The figures each surface shows — a table's column, a strip of metrics, a section — by where they stand. */
   figures: Array<{ where: string; values: string[]; column?: boolean }>;
   /** Each chart axis's labels, by chart. */
@@ -443,6 +445,11 @@ export function probePage(input: { tap: number; record: boolean }): Probe {
       if (b.box.left >= a.box.right - 2) break;
       if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
       if (inPadding(a.el, b.el) || inPadding(b.el, a.el)) continue;
+      /* A calendar's card that runs several days is drawn through the days it covers, in its own lane of that week:
+         the day the keyboard stands on is a control (the grid's one tab stop), and the card crossing it is the picture. */
+      const runsThrough = (card: Element, day: Element) =>
+        card.matches('.calendar-card.is-span') && day.matches('td.calendar-day') && card.closest('tr') === day.closest('tr');
+      if (runsThrough(a.el, b.el) || runsThrough(b.el, a.el)) continue;
       const width = Math.min(a.box.right, b.box.right) - Math.max(a.box.left, b.box.left);
       const height = Math.min(a.box.bottom, b.box.bottom) - Math.max(a.box.top, b.box.top);
       if (width < 3 || height < 3) continue;
@@ -594,6 +601,7 @@ export function probePage(input: { tap: number; record: boolean }): Probe {
     overlaps,
     small,
     empty,
+    ...(document.querySelector('.grid-empty, .list-empty:not(.list-no-matches)') ? { rowless: true } : {}),
     figures,
     axes,
     ...(title ? { title } : {}),

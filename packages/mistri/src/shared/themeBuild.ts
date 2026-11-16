@@ -7,8 +7,10 @@
  * here, on the server or in the branding form, never at first paint.
  */
 import { mergeType } from '@mistriwork/engine/shared/themeType.js';
+import { brandRoles } from './themeBrand.js';
 import type { ThemeColorsOver, ThemeDefinition, ThemeDensity, ThemePalette, ThemeSpec } from '@mistriwork/engine/schema/theme.js';
 import { DEFAULT_RECIPES } from '@mistriwork/engine/shared/themeRecipes.js';
+import { familyRecipes, recipeParts } from '@mistriwork/engine/shared/themeRecipeFamilies.js';
 import { ROUND } from '@mistriwork/engine/shared/themeTokens.js';
 
 /* ---------- colors: names by purpose, and the roles they fill ---------- */
@@ -191,7 +193,9 @@ export function buildTheme(spec: ThemeSpec, base?: ThemeDefinition): ThemeDefini
   /* A dark-only theme has one set of colors, worn in both slots: nothing downstream has a light mode to be missing. */
   const darkOnly = spec.scheme === 'dark-only';
   const mode = (name: 'light' | 'dark'): ThemePalette => {
-    const given = { ...rolesOf(colors[name]), ...widths };
+    /* A brand is said once and worn in every role it reaches (themeBrand.ts); a colour the theme names wins. */
+    const brand = spec.brand ? brandRoles(spec.brand, name, base) : {};
+    const given = { ...brand, ...rolesOf(colors[name]), ...widths };
     return base ? overlay(base[name], given) : derive(given, name);
   };
   /* `round` is a pill's corner: a length past any box's (themeTokens.ts ROUND). */
@@ -203,11 +207,24 @@ export function buildTheme(spec: ThemeSpec, base?: ThemeDefinition): ThemeDefini
     ...(border?.focus ? { focus: border.focus } : {}),
   };
   const height = spec.shape?.height?.control ? { control: spec.shape.height.control } : undefined;
+  const light = mode(darkOnly ? 'dark' : 'light');
+  const dark = mode('dark');
+  /* A theme that says no soft accent wears its accent's own wash on its surface (`derive`, `overlay`). A palette that
+     moves the accent and says no wash either would keep that one: Atelier's menu marked its current entry in an
+     emerald word on the orange's tint. Its wash is worked out the same way, on the surface it is worn over. A theme
+     whose soft accent is a colour it chose (Mono's grey) keeps it under every palette. */
+  const washed = (roles: Partial<ThemePalette>, of: ThemePalette): Partial<ThemePalette> =>
+    roles.accent !== undefined &&
+    roles.accent !== of.accent &&
+    roles.accentSoft === undefined &&
+    of.accentSoft === mixHex(of.accent, of.surface, 0.12)
+      ? { ...roles, accentSoft: mixHex(roles.accent, roles.surface ?? of.surface, 0.12) }
+      : roles;
   const palettes = spec.palettes?.map((variant) => ({
     id: variant.id,
     label: variant.label.trim(),
-    light: rolesOf(darkOnly ? variant.dark : variant.light),
-    dark: rolesOf(variant.dark),
+    light: washed(rolesOf(darkOnly ? variant.dark : variant.light), light),
+    dark: washed(rolesOf(variant.dark), dark),
   }));
   const font = spec.type?.font;
   const named = typeof font === 'string' ? { ui: font, data: font, heading: font } : font;
@@ -247,8 +264,8 @@ export function buildTheme(spec: ThemeSpec, base?: ThemeDefinition): ThemeDefini
     id: spec.id,
     label: spec.label.trim(),
     ...(base?.base ? { base: base.base } : {}),
-    light: mode(darkOnly ? 'dark' : 'light'),
-    dark: mode('dark'),
+    light,
+    dark,
     ...((spec.scheme ?? base?.scheme) ? { scheme: (spec.scheme ?? base?.scheme)! } : {}),
     ...(palettes === undefined ? (base?.palettes && spec.colors === undefined ? { palettes: base.palettes } : {}) : { palettes }),
     ...(spec.defaultPalette === undefined ? {} : { defaultPalette: spec.defaultPalette }),
@@ -257,7 +274,8 @@ export function buildTheme(spec: ThemeSpec, base?: ThemeDefinition): ThemeDefini
     radius: { control: '4px', field: '4px', ...base?.radius, ...radius },
     ...(base?.border || Object.keys(ownBorder).length ? { border: { ...base?.border, ...ownBorder } } : {}),
     ...(base?.height || height ? { height: { ...base?.height, ...height } } : {}),
-    recipes: { ...DEFAULT_RECIPES, ...base?.recipes, ...spec.recipes },
+    /* A family the theme says picks its parts over the base's; a part the theme says itself wins over its family. */
+    recipes: { ...DEFAULT_RECIPES, ...base?.recipes, ...familyRecipes(spec.recipes), ...recipeParts(spec.recipes) },
     /* A preset is the look's own drawing of its lifts; `{ card, float }` steps over the base's, which stays. */
     elevation: (typeof spec.shape?.elevation === 'string' ? spec.shape.elevation : undefined) ?? base?.elevation ?? 'hairline',
     ...(lifts ? { lifts } : {}),

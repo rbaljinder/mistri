@@ -1,0 +1,4 @@
+/* What the behaviors wear (@mistriwork/ui's behaviors.css), taken into the layer the controls are in (the kit's
+   style.css), so an App's own rules for a component built on one stand over it. It arrives with the behaviors' module
+   and not with any page's first stylesheet. */
+@import '@mistriwork/ui/behaviors.css' layer(base);

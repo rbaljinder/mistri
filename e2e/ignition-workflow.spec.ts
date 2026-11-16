@@ -87,7 +87,9 @@ test.describe('Ignition workflow strips', () => {
        is the filled one, and Disqualify, named destructive in the header, is
        drawn last and quiet. */
     await expect(actions(page)).toHaveText(['Convert to application', 'Disqualify']);
-    await expect(page.locator('.page-head-actions .page-action.btn-primary')).toHaveText('Convert to application');
+    await expect(page.locator('.page-head-actions .page-action[data-slot="button"][data-variant="solid"]')).toHaveText(
+      'Convert to application',
+    );
   });
 
   test('the application strip moves with the row, and the action bar is what could move it', async ({ page }) => {

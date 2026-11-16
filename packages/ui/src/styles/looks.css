@@ -1,0 +1,374 @@
+/* The recipes. A theme in mistri picks one treatment a part from a closed menu (`recipes: { tabs: 'pill', status:
+   'dot' }`), and wears each as an attribute (`data-look-tabs="pill"`). These are UI SDK's answers, on its own
+   parts, to that same menu: the names and values are mistri's (packages/engine/src/shared/themeRecipes.ts), so a
+   built-in look, a palette and an App's own `defineTheme` dress these components as they dress mistri's, and an
+   App writes no CSS.
+
+   A value answered here is one of mistri's; where UI SDK's own drawing already is that treatment (its tabs are
+   underlined, its status is a dot and a word) the value needs no rule and has none. Past mistri's menu there are values of
+   UI SDK's own (RECIPES in ../theme.ts), at the end. An attribute is read from
+   whatever wears it, the root or any part of the page, and a part answers the nearest: every rule is a scope
+   that starts at the attribute and ends at the next theme inside it (`@scope … to`), so a theme worn by a part
+   of a page is not also dressed by the page's. kit/theme.test.tsx holds this sheet to the menu: every value it
+   answers is on it. */
+@layer m-looks {
+  /* ---------- tabs: pill, inverted, underline (UI SDK's own), rule, chosen, segment ---------- */
+  @scope (:is([data-look-tabs='pill'], [data-look-tabs='inverted'], [data-look-tabs='tint'])) to ([data-custom-theme], [data-look-tabs]) {
+    :scope {
+      & [data-slot='tabs-list'] {
+        gap: var(--m-space-2);
+        padding-block-end: var(--m-space-3);
+      }
+
+      & [data-slot='tabs-tab'] {
+        height: calc(var(--m-unit) * 8);
+        padding-inline: var(--m-space-4);
+      }
+
+      & [data-slot='tabs-indicator'] {
+        display: none;
+      }
+    }
+  }
+
+  @scope ([data-look-tabs='pill']) to ([data-custom-theme], [data-look-tabs]) {
+    [data-slot='tabs-tab'] {
+      border-radius: var(--m-radius-pill, 999px);
+
+      &:hover {
+        background: var(--m-raised);
+      }
+
+      &[data-selected] {
+        background: var(--m-raised);
+        box-shadow: inset 0 0 0 1px var(--m-line-strong);
+      }
+    }
+  }
+
+  @scope ([data-look-tabs='inverted']) to ([data-custom-theme], [data-look-tabs]) {
+    [data-slot='tabs-tab'] {
+      border-radius: var(--m-radius);
+
+      &[data-selected] {
+        background: var(--m-ink);
+        color: var(--m-surface)
+      }
+    }
+  }
+
+  @scope ([data-look-tabs='tint']) to ([data-custom-theme], [data-look-tabs]) {
+    [data-slot='tabs-tab'] {
+      border-radius: var(--m-radius);
+
+      &[data-selected] {
+        background: var(--m-accent-soft);
+        color: var(--m-accent-ink);
+        font-weight: var(--m-weight-bold);
+      }
+    }
+  }
+
+  /* segment: the tabs stand in a sunken track and the chosen one is a key lifted out of it, so no rule runs under
+     them (the kit's own tabs are drawn so in tilesLook.css). */
+  @scope ([data-look-tabs='lifted']) to ([data-custom-theme], [data-look-tabs]) {
+    [data-slot='tabs-list'] {
+      display: inline-flex;
+      gap: var(--m-space-1);
+      width: fit-content;
+      max-width: 100%;
+      padding: var(--m-space-1h);
+      border: 0;
+      border-radius: calc(var(--m-radius) + 3px);
+      background: var(--m-raised);
+      box-shadow: inset 0 0 0 1px var(--m-line);
+    }
+
+    [data-slot='tabs-tab'] {
+      height: calc(var(--m-unit) * 7);
+      padding-inline: var(--m-space-4);
+      border-radius: var(--m-radius);
+
+      &[data-selected] {
+        background: var(--m-surface);
+        box-shadow: var(--m-shadow-control);
+      }
+    }
+
+    [data-slot='tabs-indicator'] {
+      display: none;
+    }
+
+    /* The track is not a rule across the page, so what is under it needs its own room. */
+    [data-slot='tabs-panel'] {
+      padding-block-start: var(--m-space-5);
+    }
+  }
+
+  @scope ([data-look-tabs='rule']) to ([data-custom-theme], [data-look-tabs]) {
+    :scope {
+      & [data-slot='tabs-list'] {
+        border-block-end: var(--m-rule-weight, 2px) solid var(--m-rule-section, var(--m-ink));
+      }
+
+      & [data-slot='tabs-indicator'] {
+        inset-block-end: calc(var(--m-rule-weight, 2px) * -1);
+        height: 4px;
+        background: var(--m-accent);
+      }
+    }
+  }
+
+  /* ---------- board and its lanes: ruled, soft (UI SDK's own), strip; tint, tag, plain ---------- */
+  @scope ([data-look-board='ruled']) to ([data-custom-theme], [data-look-board]) {
+    [data-kind='board-lane'] {
+      padding-inline: 0;
+      border-radius: 0;
+      background: none;
+
+      & > header {
+        padding: 0 0 var(--m-space-3);
+        border-block-end: var(--m-rule-weight, 2px) solid var(--m-rule-section, var(--m-ink));
+      }
+    }
+  }
+
+  @scope ([data-look-board='strip']) to ([data-custom-theme], [data-look-board]) {
+    [data-kind='board-lane'] {
+      background: none;
+
+      & > header {
+        padding: var(--m-space-2h) var(--m-space-3h);
+        border-radius: calc(var(--m-radius) - 2px);
+        background: var(--m-raised);
+      }
+    }
+  }
+
+  /* ---------- buttons: accent, raised, keyed ----------
+     `accent` is the filled primary as the part draws it (./parts.css): in the look's primary, which is its accent
+     where it names none. A rule here that filled it in the accent gave a look whose primary is its ink (Atelier,
+     Graphite) two leading buttons, the list's New in the ink and a record's and a form's in the hue. */
+  @scope ([data-look-buttons='raised']) to ([data-custom-theme], [data-look-buttons]) {
+    [data-slot='button']:not([data-variant='quiet'], [data-variant='bare']) {
+      box-shadow:
+        0 1px 0 light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.06)) inset,
+        0 1px 2px light-dark(rgb(23 23 26 / 0.12), rgb(0 0 0 / 0.5));
+    }
+  }
+
+  /* A key: a hard edge under it, which goes when it is pressed. */
+  @scope ([data-look-buttons='keyed']) to ([data-custom-theme], [data-look-buttons]) {
+    [data-slot='button']:not([data-variant='quiet'], [data-variant='bare']) {
+      border-radius: calc(var(--m-radius) - 2px);
+      box-shadow: 0 2px 0 var(--m-ink);
+      translate: 0 -1px;
+
+      &:active {
+        box-shadow: 0 0 0 var(--m-ink);
+        translate: 0 1px;
+      }
+    }
+  }
+
+  /* ---------- links: plain (UI SDK's own), underline ---------- */
+  @scope ([data-look-links='underline']) to ([data-custom-theme], [data-look-links]) {
+    :is([data-slot='more-link'], [data-slot='prose'] a, td[data-primary] a) {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      text-decoration-thickness: 1px;
+    }
+  }
+
+  /* ---------- filters: dashed (UI SDK's own), solid, quiet ---------- */
+  @scope ([data-look-filters='solid']) to ([data-custom-theme], [data-look-filters]) {
+    [data-kind='filter-chip'] {
+      border-style: solid;
+      border-color: var(--m-ink);
+      color: var(--m-ink);
+    }
+  }
+
+  @scope ([data-look-filters='quiet']) to ([data-custom-theme], [data-look-filters]) {
+    [data-kind='filter-chip'] {
+      border-color: transparent;
+      background: var(--m-raised);
+    }
+  }
+
+  /* ---------- avatar: plain, large, round (UI SDK's own) ---------- */
+  @scope ([data-look-avatar='plain']) to ([data-custom-theme], [data-look-avatar]) {
+    [data-slot='avatar'] {
+      border-radius: calc(var(--m-radius) - 2px);
+    }
+  }
+
+  @scope ([data-look-avatar='large']) to ([data-custom-theme], [data-look-avatar]) {
+    [data-slot='avatar']:not([data-size='sm']) {
+      width: 2.5rem;
+      height: 2.5rem;
+    }
+  }
+
+  /* ---------- rhythm: house (UI SDK's own), tight, airy ----------
+     How far apart things stand. As in mistri, it moves the page's air (the steps from 16px up, and the seam
+     between sections) a quarter closer or wider, and never a control's own padding or a row's height. A box's
+     padding is made from a step, so it is made again here: a token that names another is settled where it is
+     written. */
+  @scope ([data-look-rhythm='tight']) to ([data-custom-theme], [data-look-rhythm]) {
+    :scope {
+      --m-space-5: 0.75rem;
+      --m-space-5h: 0.9375rem;
+      --m-space-6: 1.125rem;
+      --m-space-7: 1.5rem;
+      --m-space-8: 2.25rem;
+      --m-seam: 1.875rem;
+      --m-pad-box: var(--m-space-5);
+    }
+  }
+
+  @scope ([data-look-rhythm='airy']) to ([data-custom-theme], [data-look-rhythm]) {
+    :scope {
+      --m-space-5: 1.25rem;
+      --m-space-5h: 1.5625rem;
+      --m-space-6: 1.875rem;
+      --m-space-7: 2.5rem;
+      --m-space-8: 3.75rem;
+      --m-seam: 3.125rem;
+      --m-pad-box: var(--m-space-5);
+    }
+  }
+
+  /* A rhythm goes down into a theme worn inside this one, as any token does: the house's says its own. */
+  @scope ([data-look-rhythm='house']) to ([data-custom-theme], [data-look-rhythm]) {
+    :scope:not(:root, body) {
+      --m-space-5: 1rem;
+      --m-space-5h: 1.25rem;
+      --m-space-6: 1.5rem;
+      --m-space-7: 2rem;
+      --m-space-8: 3rem;
+      --m-seam: 2.5rem;
+      --m-pad-box: var(--m-space-5);
+    }
+  }
+
+  /* ---------- how far things are lifted: hairline (UI SDK's own), flat, soft, raised ---------- */
+  /* The lift is a token, and a token goes down into a theme worn inside this one: the hairline says its own. */
+  @scope ([data-look-elevation='hairline']) to ([data-custom-theme], [data-look-elevation]) {
+    :scope {
+      --m-lift-card: initial;
+    }
+  }
+
+  @scope ([data-look-elevation='flat']) to ([data-custom-theme], [data-look-elevation]) {
+    :scope {
+      --m-shadow-control: none;
+      --m-shadow-pop: 0 0 0 1px var(--m-ink);
+      --ui-shadow: var(--m-shadow-pop);
+      --m-lift-card: 0 0 0 1px var(--m-line-strong);
+    }
+  }
+
+  @scope ([data-look-elevation='soft']) to ([data-custom-theme], [data-look-elevation]) {
+    :scope {
+      --m-lift-card:
+        0 1px 2px light-dark(rgb(23 23 26 / 0.05), rgb(0 0 0 / 0.4)), 0 6px 20px -8px light-dark(rgb(23 23 26 / 0.12), rgb(0 0 0 / 0.6));
+    }
+  }
+
+  @scope ([data-look-elevation='raised']) to ([data-custom-theme], [data-look-elevation]) {
+    :scope {
+      --m-lift-card:
+        0 1px 2px light-dark(rgb(23 23 26 / 0.06), rgb(0 0 0 / 0.4)), 0 10px 28px -10px light-dark(rgb(23 23 26 / 0.18), rgb(0 0 0 / 0.7));
+    }
+  }
+
+  /* ---------- a theme's faces ---------- */
+  @scope ([data-custom-theme]) to ([data-custom-theme]) {
+    /* Headings, but not the small caption over a record's fields: that is a label that happens to be an h2. */
+    :is(h1, h2:not([data-slot='properties'] > h2), [data-slot='chart-title'], [data-slot='shell-brand']) {
+      font-family: var(--m-font-heading, inherit);
+      font-weight: var(--m-heading-weight, revert-layer);
+    }
+
+    /* What stands in a heading and is not its words (a status, a count) keeps the interface's face. */
+    :is(h1, h2) :is([data-slot='status'], [data-slot='list-count'], [data-slot='badge']) {
+      font-family: var(--m-sans);
+      letter-spacing: 0;
+    }
+  }
+
+  /* A field's label takes the role's weight and nothing else of it: it is text over a control, not a caption, and
+     a theme that sets its captions in small capitals does not mean its forms. */
+  @scope ([data-type-label~='weight']) to ([data-custom-theme]) {
+    :is(
+      [data-slot='data-table'] thead :is(th, th button),
+      [data-slot='stats'] dt,
+      [data-slot='metric-label'],
+      [data-slot='properties'] dt,
+      [data-slot='field-label']
+    ) {
+      font-weight: var(--type-label-weight);
+    }
+  }
+
+  /* ---------- required: star (UI SDK's own), optional-word ---------- */
+  /* The fields that need not be answered are the ones marked; the ones that must are left bare. */
+  @scope ([data-look-required='optional-word']) to ([data-custom-theme], [data-look-required]) {
+    [data-slot='field-required'] {
+      display: none;
+    }
+
+    [data-slot='field-optional']:not([data-said]) {
+      display: inline;
+    }
+  }
+
+  /* ---------- formStep: plain (UI SDK's own), ruled ---------- */
+  /* The bar a form's actions stand on, lifted off the page under it instead of ruled off: the package's own bar,
+     and the one a form draws by hand for the same purpose. A popup's foot (a calendar's Clear and Today) is not
+     one: nothing scrolls under it, and lifted it was a white slab with a shadow inside the popup. */
+  @scope ([data-look-action-bar='raised']) to ([data-custom-theme], [data-look-action-bar]) {
+    :is([data-slot='action-bar'], .intake-actions):not([data-slot='popover-content'] *) {
+      border-block-start-color: transparent;
+      background: var(--m-surface);
+      box-shadow: 0 -6px 18px color-mix(in oklab, var(--m-ink) 12%, transparent);
+    }
+  }
+
+  @scope ([data-look-form-step='ruled']) to ([data-custom-theme], [data-look-form-step]) {
+    [data-slot='step-header'] {
+      padding-block-end: var(--m-space-4);
+      border-block-end: 1px solid var(--m-line);
+    }
+  }
+
+  /* ---------- a theme's corners ----------
+     mistri says four: a control's, a field's, a pill's and a panel's. A field's and a control's are their own
+     where a theme says them (Ledger squares its fields and softens its buttons), and the one corner every box
+     follows where it does not; a pill's is read wherever a word stands in a rounded box (`--m-radius-pill`). */
+  :is(
+    [data-slot='input'],
+    [data-slot='textarea'],
+    [data-slot='select-trigger'],
+    [data-slot='autocomplete-input'],
+    [data-slot='date-field'],
+    [data-slot='file-field'],
+    [data-slot='check-cards-card'],
+    [data-slot='choice']
+  ) {
+    border-radius: var(--m-radius-field, var(--m-radius));
+  }
+
+  /* A box to tick is a box whatever the theme's corners: rounded past a third of its side it reads as a radio. */
+  [data-slot='checkbox'] {
+    border-radius: min(var(--m-radius), 5px);
+  }
+
+  :is(
+    [data-slot='button'],
+    [data-slot$='-trigger']:not([data-slot='select-trigger'], [data-slot='accordion-trigger'], [data-kind='filter-chip'], [data-kind='help-tip'])
+  ) {
+    border-radius: var(--m-radius-control, var(--m-radius));
+  }
+}

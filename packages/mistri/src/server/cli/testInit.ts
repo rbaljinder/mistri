@@ -38,6 +38,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join, relative, resolve } from 'node:path';
 import { loadApp, type LoadedApp } from '../app/apps.js';
+import { checkoutManifest } from '../app/buildResolution.js';
+import { fileURLToPath } from 'node:url';
 import { authorityReport } from '../../shared/appAuthority.js';
 import { grantsByRole, homeSourceOf, isRowPolicyApp, isTenantApp, logicalResource, navViewKeys, viewOrder } from '../../shared/appModel.js';
 import { columnKind, findTable, primaryKey, tableNamed } from '@mistriwork/engine/shared/schema.js';
@@ -767,6 +769,25 @@ export async function runTestCommand(argv: string[]): Promise<number> {
         ? "Run them with: node --test 'tests/*.test.ts'"
         : "Run them with: MISTRI_TEST_CONFIG=<mistri.json naming its database> node --test 'tests/*.test.ts'",
     );
+    /* Run from a source checkout, the suite's own imports are Node's to resolve, not this command's: an App outside
+       the checkout has no mistri above it, and the checkout's modules are TypeScript. Said here, where the first
+       `node --test` otherwise fails on "Cannot find package". */
+    const checkout = checkoutManifest();
+    if (checkout) {
+      const root = resolve(fileURLToPath(checkout), '../../..');
+      let found = true;
+      try {
+        createRequire(join(dir, 'package.json')).resolve('@mistriwork/mistri/package.json');
+      } catch {
+        found = false;
+      }
+      console.log(
+        `From this checkout, add --import tsx: node --import ${join(root, 'node_modules/tsx/dist/loader.mjs')} --test 'tests/*.test.ts'` +
+          (found
+            ? ''
+            : `\nThe App is outside the checkout, so link the packages it imports once: mkdir -p node_modules/@mistriwork && ln -s ${join(root, 'packages')}/{mistri,engine,kit,ui} node_modules/@mistriwork/`),
+      );
+    }
     return 0;
   } catch (error) {
     console.error(`mistri test: ${startupReport(error)}`);

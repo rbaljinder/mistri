@@ -126,14 +126,13 @@ function Fields({ state, size = 'default' }: { state: FieldState; size?: 'compac
   const [open, setOpen] = useState(false);
   const disabled = state === 'disabled';
   const said = SAID[state];
-  const control = 'field-control';
   return (
     <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fill, minmax(15rem, 1fr))' }}>
       <Field label="Name" required {...said} size={size}>
-        <input className={control} defaultValue="Maya Chen" disabled={disabled} />
+        <input data-slot="input" defaultValue="Maya Chen" disabled={disabled} />
       </Field>
       <Field label="Password" {...said} size={size}>
-        <input className={control} type="password" defaultValue="correct-horse" disabled={disabled} />
+        <input data-slot="input" type="password" defaultValue="correct-horse" disabled={disabled} />
       </Field>
       <Field label="Team" {...said} size={size}>
         {(c) => (
@@ -156,7 +155,6 @@ function Fields({ state, size = 'default' }: { state: FieldState; size?: 'compac
             value={date}
             onChange={setDate}
             disabled={disabled}
-            className="field-control"
             aria-invalid={c['aria-invalid']}
             aria-describedby={c['aria-describedby']}
           />
@@ -188,7 +186,7 @@ function Fields({ state, size = 'default' }: { state: FieldState; size?: 'compac
         )}
       </Field>
       <Field label="Note" {...said} size={size}>
-        <textarea className={control} rows={3} placeholder="Add useful context" disabled={disabled} />
+        <textarea data-slot="textarea" rows={3} placeholder="Add useful context" disabled={disabled} />
       </Field>
     </div>
   );
@@ -206,7 +204,7 @@ export const FieldsWithActions: StoryObj = {
   render: () => (
     <form style={{ maxWidth: 420 }} onSubmit={(event) => event.preventDefault()}>
       <Field label="Project name" required hint="Shown to everyone on the team.">
-        <input className="field-control" defaultValue="Customer onboarding" />
+        <input data-slot="input" defaultValue="Customer onboarding" />
       </Field>
       <div className="form-actions">
         <Button intent="secondary">Cancel</Button>

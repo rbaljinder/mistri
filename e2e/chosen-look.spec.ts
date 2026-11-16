@@ -19,7 +19,7 @@ for (const mode of ['light', 'dark'] as const) {
     const preferences = async () => {
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       await page.getByRole('menuitem', { name: /^Preferences/ }).click();
-      return page.getByRole('dialog', { name: 'Preferences', exact: true });
+      return page.getByRole('region', { name: 'Preferences', exact: true });
     };
     const prefs = await preferences();
     for (const [control, option] of [
@@ -30,7 +30,7 @@ for (const mode of ['light', 'dark'] as const) {
       await prefs.getByRole('button', { name: new RegExp(`^${control}(?: |$)`) }).click();
       await page.getByRole('option', { name: option, exact: control !== 'Density' }).click();
     }
-    await prefs.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.goBack();
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme-style', 'sage');
     await expect(page.locator('html')).toHaveAttribute('data-theme', mode);

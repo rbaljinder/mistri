@@ -67,3 +67,15 @@ export function appFollowsSaves() {
 export function appSaveMode() {
   return inAppMode() && activeApp()?.ui.editing?.save === 'blur' ? 'blur' : 'explicit';
 }
+
+/* Whether this session may edit its own profile, as the server's answer for the account menu said (appChrome.js).
+   The settings room reads it too: a page cannot ask the menu what it was told. */
+let profileOffered = false;
+/** @param {boolean} offered */
+export function setProfileOffered(offered) {
+  profileOffered = offered;
+}
+/** Whether the signed-in person's profile is theirs to edit here. */
+export function profileIsOffered() {
+  return profileOffered;
+}

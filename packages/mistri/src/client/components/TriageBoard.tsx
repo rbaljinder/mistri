@@ -8,9 +8,10 @@
  * (BoardList.tsx) decides whether the move is allowed and writes it.
  */
 import { memo, useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent, MutableRefObject, ReactNode, RefObject } from 'react';
+import type { CSSProperties, KeyboardEvent, MutableRefObject, ReactNode, RefObject } from 'react';
 import './TriageBoard.css';
 import { formatNumber } from '@mistriwork/kit/client/locale.js';
+import { Button } from '@mistriwork/ui/Button.js';
 import { DropGroup, DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
 import { Icon, type IconName } from '@mistriwork/kit/client/components/Icon.js';
 import { PLACES, placeIndex as indexIn, type Place } from '@mistriwork/kit/client/components/placeOrder.js';
@@ -91,6 +92,12 @@ export interface TriageCard {
   changed?: 1 | 2;
   /** A move of it drawn before the server has it: being saved, or waiting on a form the move opened. */
   pending?: 'saving' | 'asking';
+  /**
+   * The card's next step, decided by the host: the one move it most needs, said as its verb ("Start work") on a button
+   * at the card's foot, so the usual step is one press and the rest stay in the ⋯. `strong` fills the button, for a
+   * card that will not wait (its tone is the bad one).
+   */
+  next?: { label: string; lane: string; strong?: boolean };
 }
 
 /** Where a move sends a card: a lane, a row on a board with rows, and a place among the cards there. */
@@ -544,6 +551,7 @@ export function TriageBoard({
       card.meta,
       card.pending,
       card.changed,
+      card.next ? `${card.next.label}:${card.next.lane}:${card.next.strong ? 1 : 0}` : '',
       card.category ? `${card.category.label}:${card.category.color}` : '',
       (card.footer ?? []).map((fact) => `${fact.key}:${fact.icon ?? ''}:${fact.text}:${fact.person ? 1 : 0}:${fact.hear ?? ''}`).join(','),
       selectedId === card.id,
@@ -593,7 +601,21 @@ export function TriageBoard({
       <>
         {boardEmpty && <Empty className="triage-board-empty" text={emptyBoardMessage} />}
         {picker}
-        <div ref={board} className="triage-board" data-scrolls="" role="group" aria-label={ariaLabel}>
+        <div
+          ref={board}
+          className="triage-board"
+          data-scrolls=""
+          role="group"
+          aria-label={ariaLabel}
+          /* How many lanes stand open and how many are folded strips: the sheet reads the two to know whether the
+             lanes fit the room at their floor (TriageBoard.css, --lane-floor). */
+          style={
+            {
+              '--lanes': lanes.filter((lane) => !(lane.folded && lane.onFold)).length,
+              '--lanes-folded': lanes.filter((lane) => lane.folded && lane.onFold).length,
+            } as CSSProperties
+          }
+        >
           {lanes.map((lane, laneIndex) => {
             const laneCards = byCell.get(cellKey(undefined, lane.id)) ?? [];
             /* A folded lane is a strip that opens on a click: its name, its count and its sum, written down its side.
@@ -751,6 +773,8 @@ const BoardCard = memo(
     const { laneTargets, rowTargets, places, edits, rowsLabel } = view;
     const menu = laneTargets.length + rowTargets.length + places.length + edits.length > 0;
     const act = acts.current;
+    const facts = (card.footer ?? []).filter((fact) => !fact.person);
+    const people = (card.footer ?? []).filter((fact) => fact.person);
     return (
       <article className="triage-card-wrap" role="listitem" data-drop-item={card.id}>
         {/* The card draws the box, and the button that opens it stops short of the ⋯'s column, so neither is drawn over
@@ -773,26 +797,53 @@ const BoardCard = memo(
             onClick={() => acts.current.select(card)}
             onKeyDown={(event) => acts.current.keyDown(event, card)}
           >
-            {card.category && <span className="triage-card-category">{card.category.label}</span>}
             <span className="triage-card-title">{card.title}</span>
             {card.second && <span className="triage-card-second">{card.second}</span>}
-            {card.subtitle && <span className="triage-card-subtitle">{card.line ?? card.subtitle}</span>}
-            {card.hear && <span className="visually-hidden">, {card.hear} </span>}
-            {card.meta && <span className="triage-card-meta">{card.meta}</span>}
-            {card.footer?.length ? (
-              <span className="triage-card-foot">
-                {card.footer.map((fact) => (
-                  <span key={fact.key} className={`triage-card-fact${fact.person ? ' is-person' : ''}`} title={fact.text}>
+            {/* What the card is and where, on one quiet line under its name: its kind, its line and its facts, a
+                middle dot between them (TriageBoard.css). They were three lines and a ruled foot. */}
+            {(card.category || card.subtitle || facts.length > 0) && (
+              <span className="triage-card-facts">
+                {card.category && <span className="triage-card-category">{card.category.label}</span>}
+                {card.subtitle && <span className="triage-card-subtitle">{card.line ?? card.subtitle}</span>}
+                {card.hear && <span className="visually-hidden">, {card.hear} </span>}
+                {facts.map((fact) => (
+                  <span key={fact.key} className="triage-card-fact" title={fact.text}>
                     {fact.icon && <Icon name={fact.icon as IconName} size={13} className="triage-card-fact-icon" />}
                     {fact.node}
-                    {/* An avatar draws initials; the person's name is what the card's name still owes assistive technology. */}
-                    {fact.person && <span className="visually-hidden"> {fact.text}</span>}
                     {fact.hear && <span className="visually-hidden">, {fact.hear} </span>}
                   </span>
                 ))}
               </span>
-            ) : null}
+            )}
+            {card.meta && <span className="triage-card-meta">{card.meta}</span>}
+            {/* An avatar draws initials at the card's foot, outside this button; the person's name is what the card's
+                name still owes assistive technology. */}
+            {people.map((fact) => (
+              <span key={fact.key} className="visually-hidden">
+                , {fact.text}
+              </span>
+            ))}
           </button>
+          {(card.next || people.length > 0) && (
+            <div className="triage-card-foot">
+              {card.next && (
+                <Button
+                  size="compact"
+                  intent={card.next.strong ? 'primary' : 'secondary'}
+                  className="triage-card-next"
+                  disabled={moving || card.pending !== undefined}
+                  onClick={() => acts.current.move(card, { lane: card.next!.lane })}
+                >
+                  {card.next.label}
+                </Button>
+              )}
+              {people.map((fact) => (
+                <span key={fact.key} className="triage-card-fact is-person" title={fact.text} aria-hidden="true">
+                  {fact.node}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         {menu && (
           /* In the card's column but outside what is dragged, so a press on it never lifts the card. */

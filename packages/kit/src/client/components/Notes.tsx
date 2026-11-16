@@ -88,6 +88,10 @@ export function Problem({ text, retry, crashed = false }: { text: string; retry?
  * The state block, one shape for three states (`Empty`, `Refused`, and `Problem` above): a mark, one line at body
  * size, an optional muted second line, and at most one compact action. It stands on the section's own edge; a
  * look dresses it through the tokens it already sets (ink, line, the warning ink for a failure).
+ *
+ * `room`: the block is all its room has to say (a page the reader may not see, a record that is gone). The same
+ * parts then stand in the room's middle, the mark on a tile and the sentence in the text ink: on the edge of an
+ * otherwise empty page, one grey line read as a page that had failed to load.
  */
 function StateBlock({
   mark,
@@ -96,6 +100,7 @@ function StateBlock({
   action,
   className,
   role,
+  room,
 }: {
   mark: 'tray' | 'lock' | null;
   text: ReactNode;
@@ -103,9 +108,10 @@ function StateBlock({
   action?: ReactNode;
   className: string;
   role?: 'status';
+  room?: boolean;
 }) {
   return (
-    <div className={className} {...(role ? { role } : {})}>
+    <div className={`${className}${room ? ' is-room' : ''}`} {...(role ? { role } : {})}>
       {mark ? <Icon name={mark} className="empty-note-mark" /> : null}
       <p className="empty-note-text">
         {text}
@@ -131,6 +137,7 @@ export function Empty({
   action,
   className = '',
   mark = 'tray',
+  room,
 }: {
   text: ReactNode;
   detail?: ReactNode;
@@ -138,8 +145,19 @@ export function Empty({
   className?: string;
   /** The block's mark; none where the place is too small to carry one. */
   mark?: 'tray' | null;
+  /** The block is the whole room's answer, and stands in its middle. */
+  room?: boolean;
 }) {
-  return <StateBlock mark={mark} text={text} detail={detail} action={action} className={`empty-note${className ? ` ${className}` : ''}`} />;
+  return (
+    <StateBlock
+      mark={mark}
+      text={text}
+      detail={detail}
+      action={action}
+      room={room}
+      className={`empty-note${className ? ` ${className}` : ''}`}
+    />
+  );
 }
 
 /**
@@ -151,11 +169,14 @@ export function Refused({
   detail,
   action,
   className = '',
+  room,
 }: {
   text: ReactNode;
   detail?: ReactNode;
   action?: ReactNode;
   className?: string;
+  /** The refusal is the whole room's answer, and stands in its middle. */
+  room?: boolean;
 }) {
   return (
     <StateBlock
@@ -164,6 +185,7 @@ export function Refused({
       text={text}
       detail={detail}
       action={action}
+      room={room}
       className={`empty-note is-refused${className ? ` ${className}` : ''}`}
     />
   );

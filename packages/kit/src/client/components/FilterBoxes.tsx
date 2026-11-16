@@ -376,12 +376,12 @@ export function RefBox({
         items={options}
         itemKey={(item) => String(item.id)}
         itemLabel={(item) => item.label}
-        itemClassName={(_item, highlighted) => `dd-option${highlighted ? ' active' : ''}`}
+        itemClassName={() => ''}
         renderItem={(item) => (
-          <span className="dd-text">
-            <span className="dd-label">{item.label}</span>
-            {appReader ? null : <span className="dd-detail">{String(item.id)}</span>}
-          </span>
+          <>
+            <span data-slot="option-label">{item.label}</span>
+            {appReader ? null : <span data-slot="option-detail">{String(item.id)}</span>}
+          </>
         )}
         onPick={pick}
         inputProps={{
@@ -393,8 +393,8 @@ export function RefBox({
               ? `${box.column} = ${chosenId}`
               : say('typeANameAndPick', { name: target?.name ?? '' }),
         }}
-        popupClassName="dd-popup"
-        listClassName="dd-list"
+        popupClassName=""
+        listClassName=""
         empty={empty}
         emptyClassName="picker-empty"
         portal={portal}

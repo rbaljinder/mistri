@@ -692,6 +692,8 @@ export interface ServedApp<View extends object = ServedDashboardView | ServedFor
   /** The tables whose records' capability links this reader may revoke from the record page (appPayload.ts). */
   revokesLinks?: string[];
   viewerRoles?: string[];
+  /** `'person'` where the reader is the App's own public (a visitor, or a `portal` role's holder): no office tools. */
+  viewerAudience?: 'person';
   grantedCommands?: string[];
   grantedActions?: Record<string, string[]>;
   assistant?: { page?: true; record?: true };
@@ -727,6 +729,9 @@ export const ASSISTANT_ROOM = 'assistant';
 
 /** The Directory's address, `/{app}/all-pages`: every list, page and New of a long menu, with a filter box. */
 export const DIRECTORY_ROOM = 'all-pages';
+/** The reader's settings, `/{app}/settings`: their profile and their preferences on one page. An App that already
+ * uses the word keeps it, as with the Directory, and the account menu still opens the room. */
+export const SETTINGS_ROOM = 'settings';
 /** How many places a menu holds before a Directory is offered beside it: past a dozen, scanning a menu is a search. */
 export const DIRECTORY_AT = 12;
 

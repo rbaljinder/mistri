@@ -1,21 +1,40 @@
 /* A kit is refused in words before it draws anything, and a slot it leaves out draws as the platform's own. */
-import { act } from 'react';
+import { act, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Button } from './Button.js';
 import { Switch } from './Switch.js';
-import { SLOT_NAMES, UiKitProvider, defaultUiKit, defineUiKit, installUiKit, uiKitProblems } from './UiKit.js';
+import * as everything from './index.js';
+import { Modal } from './Modal.js';
+import {
+  SLOT_NAMES,
+  UiKitProvider,
+  defaultUiKit,
+  defineUiKit,
+  dress,
+  extendUiKit,
+  installUiKit,
+  uiKitProblems,
+  useComponentScope,
+  usePopupHost,
+} from './UiKit.js';
+import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 
 const Plain = (props: { children?: React.ReactNode }) => <button data-kit="button">{props.children}</button>;
 
+const roots: Array<ReturnType<typeof createRoot>> = [];
 function draw(node: React.ReactNode): HTMLElement {
   const host = document.createElement('div');
   document.body.append(host);
-  act(() => createRoot(host).render(node));
+  const root = createRoot(host);
+  roots.push(root);
+  act(() => root.render(node));
   return host;
 }
 
 afterEach(() => {
+  // Taken down, not only taken out of the page: a dialog still mounted keeps the page behind it from a press.
+  for (const root of roots.splice(0)) act(() => root.unmount());
   installUiKit(undefined);
   document.body.replaceChildren();
 });
@@ -30,7 +49,7 @@ describe('defineUiKit', () => {
   it('refuses a slot it does not have, naming the nearest one', () => {
     expect(() => defineUiKit({ button: Plain } as never)).toThrow(/no slot named "button" \(did you mean "Button"\?\)/);
     expect(() => defineUiKit({ Buton: Plain } as never)).toThrow(/did you mean "Button"/);
-    expect(() => defineUiKit({ Carousel: Plain } as never)).toThrow(/no slot named "Carousel"; the slots are Button, ButtonLink/);
+    expect(() => defineUiKit({ Sparkline: Plain } as never)).toThrow(/no slot named "Sparkline"; the slots are Button, ButtonLink/);
   });
 
   it('refuses a slot given something that is not a component', () => {
@@ -55,9 +74,21 @@ describe('the seam', () => {
     expect(Object.keys(defaultUiKit)).toContain('Button');
   });
 
+  /* A component the package hands out and a kit cannot reach is one a design system has to live with: the seam is
+     every drawing, so a name added to the index without a slot fails here until it has one. */
+  it('has a slot for every component the package draws, and a default for every slot', () => {
+    // The whole package is loaded (the import above), so every slotted module has filled its default.
+    expect(SLOT_NAMES.filter((name) => typeof defaultUiKit[name] !== 'function')).toEqual([]);
+    const NOT_DRAWN_BY_A_KIT = ['Icon', 'UiKitProvider'];
+    const components = Object.entries(everything)
+      .filter(([name, value]) => /^[A-Z][a-z]/.test(name) && typeof value === 'function' && !NOT_DRAWN_BY_A_KIT.includes(name))
+      .map(([name]) => name);
+    expect(components.filter((name) => !(SLOT_NAMES as readonly string[]).includes(name))).toEqual([]);
+  });
+
   it('draws the default where no kit is given', () => {
     const host = draw(<Button>Save</Button>);
-    expect(host.querySelector('button.btn')?.textContent).toBe('Save');
+    expect(host.querySelector('button[data-slot="button"]')?.textContent).toBe('Save');
   });
 
   it("draws a provider's kit with the same props", () => {
@@ -67,6 +98,82 @@ describe('the seam', () => {
       </UiKitProvider>,
     );
     expect(host.querySelector('[data-kit="button"]')?.textContent).toBe('Save');
+  });
+
+  it('layers a provider over the kit around it, and draws with its kit alone when asked', () => {
+    const Toggle = () => <i data-kit="switch" />;
+    installUiKit({ Switch: Toggle });
+    const inside = (alone: boolean) =>
+      draw(
+        <UiKitProvider kit={{ Button: Plain }} alone={alone}>
+          <Button>Save</Button>
+          <Switch />
+        </UiKitProvider>,
+      );
+    // The provider says nothing of the switch, so the installed kit still draws it.
+    const layered = inside(false);
+    expect(layered.querySelector('[data-kit="button"]')).not.toBeNull();
+    expect(layered.querySelector('[data-kit="switch"]')).not.toBeNull();
+    const alone = inside(true);
+    expect(alone.querySelector('[data-kit="button"]')).not.toBeNull();
+    expect(alone.querySelector('[data-kit="switch"]')).toBeNull();
+    expect(alone.querySelector('[role="switch"]')).not.toBeNull();
+    // A provider inside a provider: the inner one's slot, the outer one's for the rest.
+    const Inner = () => <b data-kit="inner" />;
+    const nested = draw(
+      <UiKitProvider kit={{ Button: Plain }}>
+        <UiKitProvider kit={{ Switch: Inner }}>
+          <Button>Save</Button>
+          <Switch />
+        </UiKitProvider>
+      </UiKitProvider>,
+    );
+    expect(nested.querySelector('[data-kit="button"]')).not.toBeNull();
+    expect(nested.querySelector('[data-kit="inner"]')).not.toBeNull();
+  });
+
+  it('dresses a default: the platform’s own control, handed to the kit with the props it was drawn with', () => {
+    const kit = defineUiKit({ Button: dress('Button', (Default, props) => <Default {...props} data-dressed="" size="large" />) });
+    const host = draw(
+      <UiKitProvider kit={kit}>
+        <Button intent="primary">Save</Button>
+      </UiKitProvider>,
+    );
+    const button = host.querySelector('button')!;
+    expect(button.textContent).toBe('Save');
+    expect(button.hasAttribute('data-dressed')).toBe(true);
+    // The default itself, not the slot again: a dressed slot that drew the slot would never end.
+    expect(host.querySelectorAll('button')).toHaveLength(1);
+  });
+
+  it('makes one kit of several, a later one over an earlier, and holds the result to a kit’s rules', () => {
+    const Other = () => <i />;
+    const kit = extendUiKit({ Button: Plain, Switch: Other }, { Button: Other });
+    expect(kit.Button).toBe(Other);
+    expect(kit.Switch).toBe(Other);
+    expect(Object.isFrozen(kit)).toBe(true);
+    expect(() => extendUiKit({ Button: Plain }, { DropMenu: Plain } as never)).toThrow(/draws DropMenu but not/);
+  });
+
+  it('tells a kit where its own popup goes and under whose name', () => {
+    const seen: { host?: HTMLElement; scope?: string } = {};
+    /* A kit's control as it is written: a ref on its own trigger, read once the trigger is in the page. */
+    const Probe = () => {
+      const trigger = useRef<HTMLSpanElement>(null);
+      seen.host = usePopupHost(trigger);
+      seen.scope = useComponentScope();
+      return <span ref={trigger} />;
+    };
+    draw(
+      <ComponentStyleScope.Provider value="release-editor">
+        <Modal ariaLabel="Edit" onClose={() => {}}>
+          <Probe />
+        </Modal>
+      </ComponentStyleScope.Provider>,
+    );
+    // Read after the effect that looks for the dialog: the probe draws again once it is found.
+    expect(seen.scope).toBe('release-editor');
+    expect(seen.host?.getAttribute('role') ?? seen.host?.tagName.toLowerCase()).toMatch(/dialog/);
   });
 
   it('draws an installed kit with no provider, and the default again once it is taken away', () => {
@@ -130,7 +237,7 @@ describe('the seam', () => {
     expect(second).toHaveLength(1);
   });
 
-  it("gives a hand to details a kit passed that name none, keeping Base UI's cancel live and never a raw none", () => {
+  it("gives a hand to details a kit passed that name none, keeping a Base UI kit's cancel live and never a raw none", () => {
     const heard: unknown[][] = [];
     let canceled = false;
     const raw = {

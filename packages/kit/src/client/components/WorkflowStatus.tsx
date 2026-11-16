@@ -26,7 +26,11 @@ export function WorkflowStatus({
   value: unknown;
   reachable?: ReadonlySet<string>;
 }) {
-  const current = definition.steps.findIndex((step) => step.value === value);
+  /* The road, and the ways off it: an outcome is never the next numbered step. */
+  const road = definition.steps.filter((step) => !step.outcome);
+  const outcomes = definition.steps.filter((step) => step.outcome);
+  const current = road.findIndex((step) => step.value === value);
+  const ended = outcomes.some((step) => step.value === value);
   const known = current !== -1;
   /* On a narrow screen the strip is one line that scrolls sideways (page.css); the current step is brought into
      view by moving the strip alone, never the page, so a record opened at "Negotiation" shows Negotiation. */
@@ -41,7 +45,7 @@ export function WorkflowStatus({
     ol.scrollLeft = Math.max(0, from.offsetLeft - ol.offsetLeft);
     edges(ol);
   }, [current]);
-  if (definition.steps.length < 3) return null;
+  if (road.length < 3) return null;
   return (
     <div className="workflow-status">
       <ol
@@ -52,7 +56,7 @@ export function WorkflowStatus({
         data-scrolls=""
         data-ordered={definition.ordered === true || undefined}
       >
-        {definition.steps.map((step, index) => {
+        {road.map((step, index) => {
           const passed = definition.ordered === true && known && index < current;
           const next = index !== current && reachable?.has(String(step.value)) === true;
           return (
@@ -70,7 +74,16 @@ export function WorkflowStatus({
           );
         })}
       </ol>
-      {!known && (
+      {outcomes.length > 0 && (
+        <ul className="workflow-outcomes" aria-label={say('otherOutcomes')}>
+          {outcomes.map((step) => (
+            <li key={step.value} aria-current={step.value === value ? 'step' : undefined}>
+              {step.label}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!known && !ended && (
         <p className="workflow-unmapped" role="status">
           {say('currentState')} {value === null || value === undefined || value === '' ? say('notSet') : workflowLabel(String(value))}
         </p>

@@ -165,7 +165,7 @@ export function Steps({ command, param, steps, record, done, onDone }: StepsProp
     const invalid = refusal ? root.current?.querySelector<HTMLElement>('[aria-invalid="true"]') : undefined;
     const field = invalid?.matches(CONTROLS) ? invalid : invalid?.querySelector<HTMLElement>(CONTROLS);
     // preventScroll: the stepper brings a new step to its top on the block axis alone (docs/design.md, rule 10).
-    (field ?? root.current?.querySelector<HTMLElement>('.step-title'))?.focus({ preventScroll: true });
+    (field ?? root.current?.querySelector<HTMLElement>('[data-slot="step-header"] > :is(h1, h2)'))?.focus({ preventScroll: true });
   }, [shown, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!handle.granted) return null;

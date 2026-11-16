@@ -11,6 +11,7 @@ import { shell } from '../shellMode.js';
 import { bulkKey } from '../bulkActions.js';
 import { resourceOf } from './appRooms.js';
 import { RowDecoration, RowHeadDecoration } from './RowHost.js';
+import { groupHostKey, type GridGroup } from './Grid.js';
 import { useBulkSelection, type BulkRecord } from './useBulkSelection.js';
 import { say } from '../copy/lists/components/GridSelection.js';
 
@@ -20,6 +21,7 @@ export function GridSelection({
   actions,
   interactive,
   editable = [],
+  group,
 }: {
   table: TableMeta;
   rows: Array<Record<string, unknown>>;
@@ -27,6 +29,8 @@ export function GridSelection({
   interactive: boolean;
   /** The list's editable columns: the selection offers "Set field…" over them. */
   editable?: readonly string[];
+  /** The list's groups (a list view's `group`): each group's head gets a box for every row of it loaded here. */
+  group?: GridGroup;
 }) {
   const keyed: BulkRecord[] = rows.flatMap((row) => {
     const key = keyOf(table, row) as Record<string, unknown> | null;
@@ -43,7 +47,10 @@ export function GridSelection({
   const noun = resourceOf(shell().app(), table.id)?.noun?.many ?? 'rows';
   return (
     <>
-      <div className="grid-select-bar">{bar}</div>
+      {/* At the foot of the rows it acts on, over them (features.css): choosing a row moves nothing. */}
+      <div className="grid-select-bar">
+        <div className="grid-select-float">{bar}</div>
+      </div>
       {keyed.length > 0 && (
         <RowHeadDecoration>
           {/* Mixed is a property, not an attribute: set on every paint, because
@@ -60,6 +67,36 @@ export function GridSelection({
           />
         </RowHeadDecoration>
       )}
+      {group &&
+        [
+          ...keyed.reduce((groups, record) => {
+            const host = groupHostKey(record.row[group.column]);
+            groups.set(host, [...(groups.get(host) ?? []), record]);
+            return groups;
+          }, new Map<string, BulkRecord[]>()),
+        ].map(([host, members]) => {
+          /* Every row of the group that is loaded here, as the header's box takes every row loaded. */
+          const ids = members.map((record) => record.id);
+          const all = ids.every((id) => chosen.has(id));
+          const some = !all && ids.some((id) => chosen.has(id));
+          return (
+            <RowDecoration key={host} rowKey={host}>
+              <input
+                type="checkbox"
+                className="row-select"
+                aria-label={say('selectGroup', { group: group.head(members[0].row[group.column]).label })}
+                checked={all}
+                ref={(box) => {
+                  if (box) box.indeterminate = some;
+                }}
+                onClick={(event) => event.stopPropagation()}
+                onChange={() =>
+                  change(all ? selection.filter((id) => !ids.includes(id)) : [...selection, ...ids.filter((id) => !chosen.has(id))])
+                }
+              />
+            </RowDecoration>
+          );
+        })}
       {keyed.map((record) => (
         <RowDecoration key={record.id} rowKey={record.id}>
           {/* Choosing is not opening: the click stays on the box. */}

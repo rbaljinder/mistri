@@ -645,7 +645,7 @@ test("a short answer says its kind so the form sizes it by the data; text, a cho
       onChange={() => {}}
     />,
   );
-  const kinds = [...container.querySelectorAll('.command-field')].map((field) => field.getAttribute('data-kind'));
+  const kinds = [...container.querySelectorAll('.command-field')].map((field) => field.getAttribute('data-answer'));
   expect(kinds).toEqual([null, 'number', 'money', 'date', 'datetime', 'time', null]);
 });
 

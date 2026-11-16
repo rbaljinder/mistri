@@ -324,6 +324,6 @@ describe('MultiStepForm, the intake style', () => {
 
   it('spaces a row of two fields in the stepper as the fields around it (a rule, as happy-dom lays nothing out)', () => {
     const css = readFileSync('packages/kit/src/client/features.css', 'utf8');
-    expect(css).toMatch(/\.multi-step-form:not\(\[data-style='intake'\]\) \.form-columns \{[^}]*row-gap: var\(--field-gap\)/);
+    expect(css).toMatch(/\.multi-step-form:not\(\[data-style='intake'\]\) \[data-slot='columns'\] \{[^}]*row-gap: var\(--field-gap\)/);
   });
 });

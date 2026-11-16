@@ -989,6 +989,7 @@ export function sectionConfig(s: PageSection): AuthoredSection {
         ...(s.presentation ? { presentation: s.presentation } : {}),
         ...(s.edit ? { editable: true } : {}),
         ...(s.emptyMode ? { empty: s.emptyMode } : {}),
+        ...(s.notes ? { notes: s.notes } : {}),
       };
     case 'timeline':
       return {

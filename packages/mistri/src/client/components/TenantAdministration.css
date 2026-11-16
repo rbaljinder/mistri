@@ -1,6 +1,6 @@
 /* A component's own rules, brought with it: after the base, before any look (style.css names the order). */
 @layer components {
-.modal.tenant-administration { width: min(46rem, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto; box-sizing: border-box; padding: var(--space-6); font-family: var(--sans); background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius); }
+[data-slot='dialog-content'][data-kind='modal'].tenant-administration { width: min(46rem, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto; box-sizing: border-box; padding: var(--space-6); font-family: var(--sans); background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--radius); }
 .tenant-administration > header, .tenant-administration > footer, .administration-actions, .administration-paging { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3h); }
 .tenant-administration > header { justify-content: space-between; }
 .tenant-administration > footer { justify-content: flex-end; margin-top: var(--space-6); }

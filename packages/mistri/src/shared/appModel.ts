@@ -144,6 +144,9 @@ export interface AppListView {
   suggest?: Record<string, string[]>;
   /** Opt in to the raw query editor and Advanced filter action. Hidden by default. */
   advancedFilters?: boolean;
+  /** The shown column a row is titled by in this list alone, where it is read as records (a phone, a related
+      list): absent, the record's name (`recordLabel`). A reference says the record it names. */
+  primary?: string;
   /** Inline the resource's New form, subject to the ordinary create gates. */
   quickAdd?: true;
   /** The list's own CSV import, or false for none where the resource offers one (appImport.ts). */
@@ -152,6 +155,9 @@ export interface AppListView {
   favorite?: true;
   /** Numeric columns summed in a footer row over the whole query, not the page. A grid only. */
   totals?: string[];
+  /** Up to four of a dashboard's metrics in one strip over the list's tabs, each over the list's resource where it
+      names none (appViews.ts parseListSummary). */
+  summary?: AppDashSection[];
   /** The column the grid's rows are grouped by, each group under a head with its count and subtotals. A grid only. */
   group?: string;
   /** Row height; 'comfortable' is the default. */
@@ -400,6 +406,10 @@ export interface AppRoleGrant {
       free-form page is offered to it only where the page names it, and it is never the default role or a
       claim's. Declared, never inferred: the jobs module is read after the App. */
   service?: true;
+  /** A role the App's own public holds (a customer, a patient, a resident), who came for their own things: the shell
+      offers its holder what they can use and none of the office's tools (appAudience.ts). It arranges and grants
+      nothing: the grants above still decide every read and write. Declared, never inferred. */
+  portal?: true;
 }
 
 export interface AppFieldAccess {
@@ -576,6 +586,8 @@ export interface DashTarget {
 
 export interface AppDashSection {
   sizing?: TableSizing;
+  /** A rows section: the shown column a row is titled by, in place of the record's name (a list view's `primary`). */
+  primary?: string;
   /** A rows section's guidance when it has no row: what belongs there, and where to start. */
   empty?: AppListEmpty;
   /** Authored `empty: 'hide'` (a metric takes none): the section is left out of the dashboard while it has nothing. */
@@ -1679,6 +1691,7 @@ export const SECTION_KEYS: Record<AppDashSection['kind'] | 'banner', readonly st
     'query',
     'segment',
     'show',
+    'primary',
     'sort',
     'limit',
     'over',

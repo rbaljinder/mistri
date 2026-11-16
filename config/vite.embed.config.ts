@@ -215,7 +215,7 @@ const EXTERNAL = [/^react(\/|$)/, /^react-dom(\/|$)/, /^next(\/|$)/, /^react-rou
 
 /*
  * The plugin is what makes these external, and the only thing that may:
- * Base UI's CommonJS helpers (use-sync-external-store) `require("react")`,
+ * a dependency's CommonJS helper (use-sync-external-store) `require("react")`s,
  * and the plugin turns each such call into an import of the host's React.
  * Naming the same specifiers in `external` as well resolves them before
  * the plugin sees them, and the require() is left to rolldown's runtime,

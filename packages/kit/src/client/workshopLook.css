@@ -10,12 +10,12 @@
      a list's New and a dashboard's action are, re-pointed as a form's one action is (features.css): a button reads
      `--accent`, which an App's own `ui.theme.accent` is worn over, so a record's first action was the App's blue
      with paper words beside an orange New. */
-  :root[data-look-buttons='keyed'] .app-mode .btn-primary {
+  :root[data-look-buttons='keyed'] .app-mode [data-slot='button'][data-variant='solid'] {
     --accent: var(--primary);
     --on-accent: var(--on-primary);
     border: 1px solid var(--ink);
   }
-  :root[data-look-buttons='keyed'] .app-mode .btn-secondary {
+  :root[data-look-buttons='keyed'] .app-mode [data-slot='button']:not([data-variant]) {
     border-color: var(--ink);
   }
   /* The slot menu: the current entry is a block, and beside it a 3px marker of the menu's accent — under it in the top
@@ -75,13 +75,8 @@
      capitals; this takes that back where the worn theme's label role is in sentence case, as Workshop's is (and a
      theme on its base inherits). Keyed on the role, not the family's name, which no selector reads
      (test/theme-recipes.test.ts): a theme that wears a Workshop recipe and no label of its own keeps the capitals. */
-  :root:root[data-type-label]:not([data-type-label~='upper'], [data-type-label~='small-caps']) .page-head.has-record :is(.page-title, .page-title-pick .dd-value) {
+  :root:root[data-type-label]:not([data-type-label~='upper'], [data-type-label~='small-caps']) .page-head.has-record :is(.page-title, .page-title-pick [data-slot='select-value']) {
     text-transform: none;
     letter-spacing: 0;
-  }
-  /* `filters: 'solid'`: a filter not yet asked for is a key on a solid edge, as the search beside it is, not a dashed
-     place; its colors, at rest and under a pointer, stay the filter bar's own (ListFilterBar.css). */
-  :root[data-look-filters='solid'] .app-mode .applist-add {
-    border-style: solid;
   }
 }

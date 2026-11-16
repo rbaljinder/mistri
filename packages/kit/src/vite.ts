@@ -125,7 +125,16 @@ export function noDevtoolsClient(): Plugin {
  * (components/onDemand.tsx) stays a chunk of its own, as it always was. The server names a path's surface in the page
  * it sends (the engine's server/clientSurface.ts, with `surfacePages` below), so the entry and its surface download
  * at once.
+ *
+ * A barrel is not followed (`BARRELS`). UI SDK's React parts all import one module of its core, `renderer.js`, which
+ * re-exports a little of a dozen families, and a primitive of our own is defined from its `index.js`, which
+ * re-exports all of it: followed, they made the menu's code the entry's, because the entry draws a button, and then
+ * the drag and drop under the behaviors, which only a component fetched on demand uses. A family is given to
+ * whoever imports the family. What only a barrel reaches is given to no part here: the bundler places it with
+ * whatever uses it, which is the entry where the entry does and the part fetched on demand where only that does.
  */
+const BARRELS = [/\/node_modules\/@ui-sdk\/core\/dist\/(?:renderer|index)\.js$/];
+const barrel = (id: string) => BARRELS.some((one) => one.test(id));
 interface Surfaces {
   /** Modules the entry's chunk holds beside the entry's own graph, by path. */
   index?: readonly string[];
@@ -153,7 +162,7 @@ function surfaces({ index = [], surfaces: parts, sharedWithEntry = [] }: Surface
           const id = pending.pop()!;
           if (seen.has(id) || stop.has(id)) continue;
           seen.add(id);
-          pending.push(...(this.getModuleInfo(id)?.importedIds ?? []));
+          if (!barrel(id)) pending.push(...(this.getModuleInfo(id)?.importedIds ?? []));
         }
         return seen;
       };
@@ -162,7 +171,8 @@ function surfaces({ index = [], surfaces: parts, sharedWithEntry = [] }: Surface
           if (!ids.includes(file)) this.error(`The ${name} surface's module, ${file}, is not in the build.`);
           return file;
         });
-      const entry = reach([...ids.filter((id) => this.getModuleInfo(id)?.isEntry), ...rooted('index', index)]);
+      const entryRoots = [...ids.filter((id) => this.getModuleInfo(id)?.isEntry), ...rooted('index', index)];
+      const entry = reach(entryRoots);
       const from = new Map(Object.entries(parts).map(([name, files]) => [name, reach(rooted(name, files), entry)]));
       home.clear();
       for (const id of entry) home.set(id, 'index');
@@ -289,7 +299,7 @@ function precompress(outDir: string): Plugin {
  * The maps keep our own sources and drop the libraries'.
  *
  * The maps ship with their sources inside so a person debugging an installed copy can read the code a trace lands in
- * — and that is ours: React's, TanStack's and Base UI's sources are published in their own packages, and were a
+ * — and that is ours: React's, TanStack's and UI SDK's sources are published in their own packages, and were a
  * quarter of the package's bytes (1.9 MB of the maps' 7.9). A frame in a library still maps to its file and line;
  * devtools shows the file's name and asks for its text. Ours is ours wherever it was installed from: a product built
  * over the published kit keeps the kit's modules too. Rewritten on disk after the write, because a map is neither

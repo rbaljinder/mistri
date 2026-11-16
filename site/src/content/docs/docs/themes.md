@@ -11,11 +11,12 @@ export const lintel = defineTheme({
   id: 'lintel',
   label: 'Lintel',
   extends: 'lumen',
-  recipes: { header: 'hero' },
+  recipes: { filters: 'solid' },
+  parts: { 'nav.current': { ground: 'raised', ink: 'ink', weight: 600 } },
 });
 ```
 
-See it in the sample (`examples/apps/lintel/theme.ts:7`). That is the smallest theme: Lumen with one recipe changed. `defineTheme` checks every color and shape.
+See it in the sample (`examples/apps/lintel/theme.ts:8`). That is a small theme: Lumen with one recipe and one part changed. `defineTheme` checks every color and shape.
 
 <!-- no picture: a theme is every page of the App; the looks page shows them -->
 
@@ -52,7 +53,7 @@ See it in the sample (`examples/apps/lintel/theme.ts:7`). That is the smallest t
 | `type.icons` | The icons' weight: `regular`, `light`, `bold` or `fill` | `regular` | Stable |
 | `stylesheet` | A `.css` file beside the theme, at most 8 KB, that dresses published parts only: `[data-part="stat"]` rules, role colors, pictures beside it, edges, corners, lifts and faces, never a size or a place; refused by line otherwise. No glow: a shadow is one of the look's lifts in the theme's `shadow`, which C2 refuses lighter than the ground, and `text-shadow` and `filter` are refused | none | Stable |
 | `contract`, `from` | A published look says the contract it was written to (`1`) and `from: import.meta.url`, so its faces and stylesheet are read from its package | none | Stable |
-| `recipes` | Each part's treatment from a closed menu: `nav`, `bar`, `tabs`, `stat`, `table`, `buttons` and more, each value pictured in [Theme recipes](/docs/theme-recipes/) | the base's | Stable |
+| `recipes` | Each part's treatment from a closed menu: `nav`, `bar`, `tabs`, `stat`, `table`, `buttons` and more, each value pictured in [Theme recipes](/docs/theme-recipes/). Two families set several parts with one word, so a page's blocks agree: `blocks` (`open`, `ruled`, `card`, `panel`, `tile`) for sections, field groups, stats, tables and steps, and `current` (`tint`, `inverted`, `underline`, `pill`, `lifted`) for the menu's entry, tabs and windows; a part said itself wins over its family | the base's | Stable |
 | `shell.placement` | Where the menu goes, `'side'` or `'top'`, when this is the App's theme; `ui.shell.placement` wins | the App's | Stable |
 | `ui.theme.for` | A theme per audience: `public` for every page a signed-out visitor sees, worn whatever a reader picked, and `roles: { rider: 'cadence' }`, the first entry the account holds, over a tenant's saved theme; a reader's own pick still wins in the shell | none | Stable |
 | `branding.allow` | What a tenant may change (`logo` includes the dark logo and the tab icon): `logo`, `name`, `accent`, `palette`, `radius`, `density`, `preset`, `font` (the interface's face: Inter, Barlow, or a face a theme of `branding.themes` ships), `locale` | required | Stable |
@@ -90,6 +91,16 @@ export function ProgramBadge({ program }: { program: { name: string; tone: 'prim
 ```
 
 `useLook()` returns the theme's id (`look`; `tenant` on a page a tenant's branding dresses), the theme it started from (`preset`: the App's own theme there, such as `workshop`, and the same as `look` everywhere else), the mode and the density, and updates when any of them changes. The sub-brand's own name or color is data the App keeps in a table and draws; it never replaces the tenant's look.
+
+## A brand in one word
+
+Say the App's color once, on a theme that extends a look:
+
+```ts
+export const lintel = defineTheme({ id: 'lintel', label: 'Lintel', extends: 'lumen', brand: '#2d4fd6' });
+```
+
+`brand` becomes the accent, links, the focus ring, the menu's mark and the first chart series, in light and dark. Over Lumen, Sage and Bloom the shell's neutrals take its hue too, so two Apps on one look differ in more than their button; Workshop, Mono, Graphite, Ledger and Atelier keep their own neutrals. Name a color under `colors` to overrule the one worked out. `mistri check` measures the result like any theme.
 
 ## A brand in one block
 

@@ -35,11 +35,14 @@ import {
   LIFTS,
   MOTIONS,
   RECIPE_MENU,
+  RECIPES_REMOVED,
   RECIPES_RENAMED,
+  RECIPE_VALUES_RENAMED,
   RHYTHMS,
   RECIPE_PARTS,
   type ResolvedRecipes,
 } from '@mistriwork/engine/shared/themeRecipes.js';
+import { RECIPE_FAMILIES, RECIPE_FAMILY_NAMES } from '@mistriwork/engine/shared/themeRecipeFamilies.js';
 import { TYPE_MOVED, typeOf } from '@mistriwork/engine/shared/themeType.js';
 import { parseScheme, THEME_PRESETS, themePreset } from '@mistriwork/engine/shared/themePresets.js';
 import { iconsOf, partsOf, surfaceOf } from '@mistriwork/engine/shared/themePartsCheck.js';
@@ -180,6 +183,7 @@ const SPEC_KEYS = [
   'id',
   'label',
   'extends',
+  'brand',
   'colors',
   'palettes',
   'defaultPalette',
@@ -266,6 +270,11 @@ export function compileTheme(
   } else if (spec.extends !== undefined) {
     base = typeof spec.extends === 'string' ? builtIn(spec.extends) : undefined;
     if (!base) throw new Error(`${where}.extends must name a built-in look.`);
+  }
+  if (spec.brand !== undefined) {
+    hex(spec.brand, `${where}.brand`);
+    /* A brand is laid over a look: a theme that extends nothing names its own accent among the colours it must. */
+    if (!base) throw new Error(`${where}.brand is worn over a look: say extends, or name the colour as colors.light.accent.`);
   }
   const colors = spec.colors === undefined && base ? {} : record(spec.colors, `${where}.colors`);
   only(colors, ['light', 'dark'], `${where}.colors`);
@@ -465,8 +474,21 @@ function recipesOf(raw: unknown, where: string): Partial<ResolvedRecipes> {
     const moved = TYPE_MOVED[`recipes.${part}`];
     if (moved) throw new Error(`${where}.${part} is now ${where.replace(/\.recipes$/, '')}.${moved}.`);
     if (Object.hasOwn(RECIPES_RENAMED, part)) throw new Error(`${where}.${part} is now ${where}.${RECIPES_RENAMED[part]}.`);
+    if (Object.hasOwn(RECIPES_REMOVED, part)) throw new Error(`${where}.${part} is off the menu: ${RECIPES_REMOVED[part]}.`);
+    /* A family is said among the parts and picks several of them (themeRecipeFamilies.ts). */
+    const family = (RECIPE_FAMILIES as Record<string, Record<string, unknown>>)[part];
+    if (family) {
+      if (typeof pick !== 'string' || !Object.hasOwn(family, pick))
+        throw new Error(`${where}.${part} is not a family on the menu: pick one of ${Object.keys(family).join(', ')}.`);
+      continue;
+    }
     const menu = (RECIPE_MENU as Record<string, Record<string, unknown>>)[part];
-    if (!menu) throw new Error(`${where} has no part "${part}". The parts are: ${RECIPE_PARTS.join(', ')}.`);
+    if (!menu)
+      throw new Error(
+        `${where} has no part "${part}". The parts are: ${RECIPE_PARTS.join(', ')}. The families are: ${RECIPE_FAMILY_NAMES.join(', ')}.`,
+      );
+    const renamed = typeof pick === 'string' ? RECIPE_VALUES_RENAMED[part]?.[pick] : undefined;
+    if (renamed) throw new Error(`${where}.${part}: "${pick}" is now "${renamed}".`);
     if (typeof pick !== 'string' || !Object.hasOwn(menu, pick))
       throw new Error(`${where}.${part} is not on the menu: pick one of ${Object.keys(menu).join(', ')}.`);
   }

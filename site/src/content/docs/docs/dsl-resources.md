@@ -468,7 +468,7 @@ another door always is. A second process writes its own row.
 | `resources.*.display.*.tone` | object | Stable | Value → tone pills. Keys may be exact values, or numeric thresholds like ">= 90" — for numbers, the first satisfied threshold (in written order) wins. On a date (also with format "date" or "datetime") a key may be a date comparison with a phrase a list takes, like "&lt; today" or "&lt;= next 7 days", judged by the App's today. The key "*" is the fallback; values it does not name wear neutral. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `resources.*.display.*.unit` | string | Stable | With "number", "money" or no format on a numeric column: the unit said after the figure — "mi", "kg", "/mo" (a leading slash joins without a space: "$242/mo"). Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.display.*.values` | object | Stable | The words a vocabulary's values are said as: a map of stored value to word ({ "PUB": "Published" }); any value it does not name is still said as words, as are the values of a column with a tone (IN_REVIEW reads "In review"). The stored value still sorts, filters and keys tone and icons. Used in `examples/apps/lintel/resources.ts`. |
-| `resources.*.display.*.whole` |  | Preview | With "money": a whole amount is said without its minor digits ("$24,495"); an amount with cents still shows them ("$24,495.50"). For a listing price. A CSV export stays exact. One of `true`. |
+| `resources.*.display.*.whole` |  | Preview | With "money": a whole amount is said without its minor digits ("$24,495"); an amount with cents still shows them ("$24,495.50"). For a listing price. A CSV export stays exact. One of `true`. Used in `examples/apps/lintel/resources.ts`. |
 
 ## `resources.*.favorite`
 

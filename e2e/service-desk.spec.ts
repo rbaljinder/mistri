@@ -149,7 +149,7 @@ test.describe('Service Atlas ITSM', () => {
         scalar(sample.db, 'SELECT count(*) FROM incident WHERE service_id = ? AND status NOT IN (?, ?)', selectedId, 'resolved', 'closed'),
       );
       // The chip says the name the box used to show; the question keeps the id.
-      const chip = page.locator('.applist-chip', { hasText: 'Service is Identity and access' });
+      const chip = page.locator('.applist-chip[title*="Service is Identity and access"]');
       if (width <= 600) {
         /* On a phone the filters are one sheet: a reference is its checklist of
          names with counts, and a tick writes the id as the typeahead's pick did. */
@@ -172,14 +172,14 @@ test.describe('Service Atlas ITSM', () => {
       await page.getByRole('button', { name: 'Filter by Service', exact: true }).click();
       const service = page.getByRole('combobox', { name: 'Filter by Service', exact: true });
       await expect(service).toBeFocused();
-      const popup = page.locator('.dd-popup:visible');
+      const popup = page.locator('[data-slot="autocomplete-content"]:visible');
       const services = rows<{ name: string }>(sample.db, 'SELECT name FROM service ORDER BY name LIMIT 8');
       await expect(popup.getByRole('option')).toHaveCount(services.length);
       for (const { name } of services) await expect(popup.getByRole('option', { name: new RegExp(name) })).toBeVisible();
-      await expect(popup.locator('.dd-list')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+      await expect(popup).toHaveCSS('background-color', 'rgb(255, 255, 255)');
       // The App's preset is Lumen and it names no radius of its own: Lumen's one radius is 8px.
-      await expect(popup.locator('.dd-list')).toHaveCSS('border-radius', '8px');
-      await expect(popup.locator('.dd-list')).toHaveCSS('opacity', '1');
+      await expect(popup).toHaveCSS('border-radius', '8px');
+      await expect(popup).toHaveCSS('opacity', '1');
       const bounds = (await popup.boundingBox())!;
       const box = (await service.boundingBox())!;
       expect(bounds.x).toBeGreaterThanOrEqual(0);
@@ -211,8 +211,8 @@ test.describe('Service Atlas ITSM', () => {
       await service.fill('zz-no-such-service');
       await expect(popup).toContainText('Nothing matches.');
       await expect(popup.getByRole('option')).toHaveCount(0);
-      await expect(popup.locator('.dd-list')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-      await expect(popup.locator('.dd-list')).toHaveCSS('opacity', '1');
+      await expect(popup).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+      await expect(popup).toHaveCSS('opacity', '1');
       await page.screenshot({ path: info.outputPath(`atlas-service-filter-empty-${width}.png`) });
       await page.keyboard.press('Escape');
       await expect(popup).toHaveCount(0);
@@ -243,7 +243,7 @@ test.describe('Service Atlas ITSM', () => {
       // "+ Service" opens its picker with the list already asked for.
       await page.getByRole('button', { name: 'Filter by Service', exact: true }).click();
       await expect.poll(() => lookupStarted).toBe(true);
-      const popup = page.locator('.dd-popup:visible');
+      const popup = page.locator('[data-slot="autocomplete-content"]:visible');
       await expect(popup).toContainText(/Loading/);
       await expect(popup.getByRole('option')).toHaveCount(0);
       release();

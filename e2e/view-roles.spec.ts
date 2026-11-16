@@ -72,7 +72,7 @@ test.describe('a view that names its roles', () => {
     const said = async (address: string, heading: string) => {
       await requester.goto(`${app.origin}/${address}`);
       const main = requester.locator('main');
-      await expect(main).toContainText('This page is not available to your role.');
+      await expect(main).toContainText('Your account does not open this page.');
       // The shell holds main hidden until its first paint settles; read the words once they are shown.
       await expect(main).toBeVisible();
       return {

@@ -95,6 +95,8 @@ export interface Section {
   target?: number | { table: string; query?: string; measure: string; by?: string; over?: string; windowBase?: string };
   targetWhole?: true;
   show?: string[];
+  /** A rows section: the shown column a row is titled by (`primary`), in place of the first shown. */
+  primary?: string;
   labels?: Record<string, string>;
   sort?: string;
   text?: string;
@@ -322,6 +324,24 @@ export function sayer(
     /* `figure: 'whole'` rounds a card's money to the major unit: a six-figure sum with cents wrapped in a quarter-width card. */
     card && !whole && section.figure === 'whole' ? false : undefined,
   );
+  /* A card's exact money that is whole is said whole: a headline reads "$56,130", and "$56,130.00" beside a strip's
+     other figures read as a second format. A figure with cents keeps them, and a table's cell is not a card. Each
+     card still measures alone, so the rule holds before its neighbours answer. */
+  const headline =
+    card && !whole && !section.figure && dress?.format === 'money'
+      ? (v: unknown) => {
+          if (v instanceof CurrencyFigures || v === null || v === undefined || v === '') return said(v);
+          const minor = dress.minor ? 10 ** currencyDigits(dress.currency || defaultCurrency()) : 1;
+          /* Read off the digits where the figure is text: a sum past 2^53 is whole as a number whatever its cents. */
+          const round =
+            minor === 1 && typeof v === 'string'
+              ? /^\s*[+-]?\d+(\.0+)?\s*$/.test(v)
+              : Number.isSafeInteger(Number(v)) && Number(v) % minor === 0;
+          if (!round) return said(v);
+          const text = dressedFigure(dress, v, false, EXACT);
+          return text === null ? said(v) : section.unit ? withUnit(text, section.unit) : text;
+        }
+      : said;
   /* Figures said side by side, in one form: where every one is a thousand or more, money drops its cents, so
      "$67,713.40" never stands beside "$17,970" in one breakdown; else every figure says cents if one has some. */
   const among = (values: readonly unknown[]) => {
@@ -337,7 +357,7 @@ export function sayer(
     const one = (v: unknown) => dressedFigure(dress, v, cents, compact ? CARD_COMPACT : COMPACT_FROM) ?? said(v);
     return section.unit ? (v: unknown) => withUnit(one(v), section.unit!) : one;
   };
-  return Object.assign(said, { tick: tickSayer(dress, section.unit), among });
+  return Object.assign(headline === said ? said : (v: unknown) => headline(v), { tick: tickSayer(dress, section.unit), among });
 }
 
 /**
@@ -465,6 +485,18 @@ export function metricWindow(
   if (named) return { title: windowNow ? windowTitle(title, section, windowNow) : title };
   if (!windowNow && authored) return { title, note: authored.charAt(0).toUpperCase() + authored.slice(1) };
   return { title };
+}
+
+/**
+ * Whether a figure's own query already says a time ("placed_at = last 7 days", "due_on = this month", "= today"):
+ * such a card is about that time whatever the picker above says, so it is never captioned "Right now" — "Sales,
+ * past 7 days" over "Right now" was two times on one card.
+ */
+export function saysOwnTime(query: string | undefined): boolean {
+  return (
+    !!query &&
+    /(?:=|\bin\b)\s*(?:(?:last|past|this|next)\s+(?:\d+\s+)?(?:day|week|month|quarter|year)s?|today|yesterday|tomorrow)\b/i.test(query)
+  );
 }
 
 /** The window phrase a query gives its `over` column (`close_date = last 90 days` → "last 90 days"). */

@@ -1,0 +1,309 @@
+/* What the behaviors wear (./behaviors/index.ts): only what each needs to work wherever it stands, and a plain default for the
+   two parts a reader has to find (a grip, a value that can be edited). A dragged item follows the pointer, a carried
+   thing is not selected as text by the press that carries it, a finger on a track still scrolls the page. What a
+   component built on a behavior looks like is said of that component, by its own sheet, never of the slot.
+
+   It is not one of the controls' sheets (./controls.css): no control uses a behavior, so this arrives with the
+   behaviors and a page that draws none of them never fetches it. Its rules are in the controls' own layer for a
+   part's dress, so whoever takes this file puts it where they put the controls, under their own rules, and a
+   caller's class wins. The colours, the ring and the pace are the ones the controls read (./styles/m-tokens.css). */
+@layer m-parts {
+  /* A grip is the button an item is picked up by with the keyboard or a finger: bare, and it alone takes a finger's
+     drag, so the rest of the item still scrolls the page. Empty, it draws six dots; a caller's own icon replaces
+     them. */
+  :is([data-slot='sortable-handle'], [data-slot='transfer-handle']) {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: 1rem;
+    height: 1.5rem;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: max(0px, calc(var(--m-radius) - 3px));
+    background: transparent;
+    box-shadow: none;
+    color: var(--m-ink-subtle);
+    cursor: grab;
+    touch-action: none;
+
+    &:empty::before {
+      width: 0.375rem;
+      height: 0.625rem;
+      background: radial-gradient(circle, currentColor 0.0625rem, transparent 0.078125rem) 0 0 / 0.1875rem 0.21875rem;
+      content: '';
+    }
+
+    & svg {
+      width: 0.875rem;
+      height: 0.875rem;
+    }
+
+    @media (hover: hover) {
+      &:hover {
+        color: var(--m-ink);
+      }
+    }
+
+    &:focus-visible,
+    &:is([data-grabbed], [data-carried]) {
+      color: var(--m-accent-ink);
+      outline: 2px solid var(--ui-ring-border);
+      outline-offset: 1px;
+    }
+  }
+
+  /* An item of a sortable list follows the pointer that drags it, over its neighbours; picked up with the keys it
+     stands where it would land, marked. */
+  [data-slot='sortable-item'] {
+    user-select: none;
+
+    &[data-dragging] {
+      position: relative;
+      z-index: 1;
+      /* Where UI SDK says, with the pointer's part put right for a zoomed page (./behaviors/sortable.ts). */
+      translate: calc(var(--drag-x, 0px) + var(--drag-dx, 0px) * var(--drag-ease, 0))
+        calc(var(--drag-y, 0px) + var(--drag-dy, 0px) * var(--drag-ease, 0));
+      box-shadow: var(--m-shadow-pop);
+      cursor: grabbing;
+    }
+
+    &[data-grabbed]:not([data-dragging]) {
+      box-shadow: 0 0 0 2px var(--ui-ring-border);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring-border);
+      outline-offset: 1px;
+    }
+  }
+
+  /* A thing that is carried is not also selected as text by the press that carries it; the one the keys hold is
+     marked, and a list that would take it says so. */
+  [data-slot='transfer-item'],
+  [data-slot='transfer'][data-carrying] {
+    user-select: none;
+  }
+
+  [data-slot='transfer-item'] {
+    &[data-carried]:not([data-dragging]) {
+      box-shadow: 0 0 0 2px var(--ui-ring-border);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring-border);
+      outline-offset: 1px;
+    }
+  }
+
+  [data-slot='transfer-list'][data-over] {
+    outline: 2px solid var(--ui-ring-border);
+    outline-offset: -2px;
+
+    &[data-refuses] {
+      outline-color: var(--m-line-strong);
+      outline-style: dashed;
+    }
+  }
+
+  /* The copy under the pointer lifts off the page, and squares up with an edge in the accent over a place that would
+     take it. It is drawn on the page's top layer, outside whatever it was lifted from. */
+  [data-drag-preview] {
+    /* A copy of a list's item is outside its list, and would grow the marker its list had taken off. */
+    list-style: none;
+    box-shadow: var(--m-shadow-pop);
+    cursor: grabbing;
+    outline: 2px solid transparent;
+
+    &[data-over] {
+      outline-color: var(--ui-ring-border);
+    }
+  }
+
+  /* Column widths. The root lays nothing out. A column's bar is a strip over its far edge, wider than the line it
+     draws; the line shows when the column is pointed at, and turns to the accent under the pointer and while it is
+     dragged. */
+  [data-slot='widths'] {
+    display: contents;
+
+    &[data-sizing] {
+      cursor: col-resize;
+      user-select: none;
+    }
+  }
+
+  [data-slot='widths-column'] {
+    position: relative;
+  }
+
+  [data-slot='widths-handle'] {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: -0.3125rem;
+    z-index: 1;
+    width: 0.625rem;
+    cursor: col-resize;
+    touch-action: none;
+
+    &::after {
+      position: absolute;
+      inset-block: 28%;
+      inset-inline-start: calc(50% - 0.5px);
+      width: 1px;
+      background: var(--m-line-strong);
+      content: '';
+      opacity: 0;
+    }
+
+    @media (hover: hover) {
+      [data-slot='widths-column']:hover > &::after {
+        opacity: 1;
+      }
+    }
+
+    &[data-sizing]::after {
+      inset-block: 0;
+      width: 2px;
+      background: var(--m-accent);
+      opacity: 1;
+    }
+
+    /* Under a pointer that can hover, the handle shows as it will while it is dragged. */
+    @media (hover: hover) {
+      &:hover::after {
+        inset-block: 0;
+        width: 2px;
+        background: var(--m-accent);
+        opacity: 1;
+      }
+    }
+  }
+
+  /* Values edited where they stand. The root lays nothing out. That a value can be changed is said by its edge on
+     the way to it; nothing is drawn on a value at rest. */
+  [data-slot='editable'] {
+    display: contents;
+  }
+
+  [data-slot='editable-value'] {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-height: 1.5rem;
+    border-radius: max(0px, calc(var(--m-radius) - 3px));
+    cursor: text;
+
+    &[data-locked] {
+      cursor: default;
+    }
+
+    @media (hover: hover) {
+      &:not([data-editing], [data-locked]):hover {
+        box-shadow: inset 0 0 0 1px var(--m-line-control);
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring-border);
+      outline-offset: 1px;
+    }
+  }
+
+  /* The box is laid over the value, not in its place, so nothing around it is laid out again. */
+  [data-slot='editable-input'] {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    z-index: 1;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 6rem;
+    height: 100%;
+    margin: 0;
+    padding: 0 var(--m-space-2h);
+    border: 0;
+    border-radius: max(0px, calc(var(--m-radius) - 3px));
+    background: var(--m-surface);
+    box-shadow: inset 0 0 0 1px var(--ui-ring-border);
+    color: var(--m-ink);
+    font: inherit;
+    text-align: inherit;
+    outline: 2px solid var(--ui-ring);
+    outline-offset: 1px;
+  }
+
+  /* A finger moving along a track reads it; moving down the page still scrolls. */
+  [data-slot='scrub-track'] {
+    touch-action: pan-y;
+
+    &:focus-visible {
+      outline: 2px solid var(--ui-ring-border);
+      outline-offset: 2px;
+    }
+  }
+
+  /* Stretches are placed by their track, which is the caller's to lay out; the root is only a box to find them in. */
+  [data-slot='spans'] {
+    display: block;
+  }
+
+  [data-slot='spans-span']:focus-visible,
+  [data-slot='days-day']:focus-visible,
+  [data-slot='pick-option']:focus-visible,
+  [data-slot='turns-name']:focus-visible {
+    outline: 2px solid var(--ui-ring-border);
+    outline-offset: 1px;
+  }
+
+  /* Hover and the lift are 120ms of colour and edge and nothing else, and none of it where the reader asked for
+     less motion (docs/design.md, Motion). */
+  @media (prefers-reduced-motion: no-preference) {
+    :is([data-slot='sortable-handle'], [data-slot='transfer-handle']) {
+      transition: color var(--m-fast);
+    }
+
+    [data-drag-preview] {
+      rotate: 1.5deg;
+      transition:
+        rotate var(--m-fast),
+        outline-color var(--m-fast);
+
+      &[data-over] {
+        rotate: 0deg;
+      }
+    }
+
+    [data-slot='widths-handle']::after {
+      transition:
+        opacity var(--m-fast),
+        background-color var(--m-fast);
+    }
+  }
+
+  /* Under a finger a grip is as large a target as any button without being drawn any larger: the area round it
+     answers for it. */
+  @media (pointer: coarse) {
+    :is([data-slot='sortable-handle'], [data-slot='transfer-handle']) {
+      position: relative;
+
+      &::after {
+        position: absolute;
+        inset: 50% auto auto 50%;
+        width: 2.75rem;
+        height: 2.75rem;
+        translate: -50% -50%;
+        content: '';
+      }
+    }
+  }
+
+  /* Where the system draws in its own few colours a shadow is not drawn, so what is held or carried is marked by an
+     outline in the system's own highlight. */
+  @media (forced-colors: active) {
+    :is([data-slot='sortable-item'], [data-slot='transfer-item']):is([data-grabbed], [data-carried], [data-dragging]),
+    [data-drag-preview] {
+      outline: 2px solid Highlight;
+    }
+  }
+}

@@ -1,16 +1,25 @@
 /**
- * Pagination: the pages of a list, as a row of buttons. Plain React —
- * Base UI has no pagination, and a row of buttons is all one is — with
- * the rules a list's pages need: the current page is `aria-current`,
- * never a button to itself; Previous and Next are disabled at the ends,
- * never hidden, so the row keeps its shape; and a long run of pages is
- * shortened with an ellipsis, never with a jump the reader cannot see.
- * Pages are 1-based, as the reader counts them; `pages` is the count of
- * pages, not of rows. With one page or none, the row renders nothing:
- * a pager for a single page is noise.
+ * Pagination: the pages of a list, as a row of buttons, over UI SDK's
+ * Pagination, with the rules a list's pages need: the current page is
+ * `aria-current`, never a button to itself; Previous and Next are
+ * disabled at the ends, never hidden, so the row keeps its shape; and a
+ * long run of pages is shortened with an ellipsis, never with a jump the
+ * reader cannot see. Pages are 1-based, as the reader counts them;
+ * `pages` is the count of pages, not of rows. With one page or none, the
+ * row renders nothing: a pager for a single page is noise.
  */
+import {
+  Pagination as Pages,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationList,
+  PaginationNext,
+  PaginationPrevious,
+} from '@ui-sdk/react/pagination';
 import type { ReactNode } from 'react';
-import { changeDetails, type ChangeDetails } from './changeDetails.js';
+import type { ChangeDetails } from './changeDetails.js';
+import { told } from './internal/told.js';
 import { slotted } from './internal/uiKitContext.js';
 
 export interface PaginationProps {
@@ -46,46 +55,46 @@ export function paginationItems(page: number, pages: number): Array<number | '�
   return items;
 }
 
+/* A step is typed as the link it can be and drawn as a button here, where no page has an address: `disabled` is
+   the button's. */
+const shut = (at: boolean): object => (at ? { disabled: true } : {});
+
 function DefaultPagination({ page, pages, onPageChange, ariaLabel, words: given }: PaginationProps) {
   const words: PaginationWords = { pages: 'Pages', previous: 'Previous', next: 'Next', ...given };
   if (pages <= 1) return null;
   const current = Math.min(Math.max(page, 1), pages);
   return (
-    <nav className="ui-pagination" aria-label={ariaLabel ?? words.pages}>
-      <button
-        type="button"
-        className="ui-page ui-page-step"
-        disabled={current === 1}
-        onClick={(e) => onPageChange(current - 1, changeDetails('page-press', e))}
-      >
-        {words.previous}
-      </button>
-      {paginationItems(current, pages).map((item, i) =>
-        item === '…' ? (
-          <span key={`gap-${i}`} className="ui-page-gap" aria-hidden="true">
-            …
-          </span>
-        ) : (
-          <button
-            key={item}
-            type="button"
-            className="ui-page"
-            aria-current={item === current ? 'page' : undefined}
-            onClick={(e) => onPageChange(item, changeDetails('page-press', e))}
-          >
-            {item}
-          </button>
-        ),
-      )}
-      <button
-        type="button"
-        className="ui-page ui-page-step"
-        disabled={current === pages}
-        onClick={(e) => onPageChange(current + 1, changeDetails('page-press', e))}
-      >
-        {words.next}
-      </button>
-    </nav>
+    <Pages
+      aria-label={ariaLabel ?? words.pages}
+      page={current}
+      pageCount={pages}
+      siblings={2}
+      onPageChange={(next, details) => onPageChange(next, told('page-press', details))}
+    >
+      <PaginationList>
+        {({ items }) => (
+          <>
+            <PaginationItem>
+              {/* An end with nowhere to go is disabled outright, and not only said to be, so the row keeps its shape
+                  and the keyboard passes it. */}
+              <PaginationPrevious data-kind="words" {...shut(current === 1)}>
+                {words.previous}
+              </PaginationPrevious>
+            </PaginationItem>
+            {items.map((item) => (
+              <PaginationItem key={item}>
+                {typeof item === 'number' ? <PaginationLink page={item} /> : <PaginationEllipsis />}
+              </PaginationItem>
+            ))}
+            <PaginationItem>
+              <PaginationNext data-kind="words" {...shut(current === pages)}>
+                {words.next}
+              </PaginationNext>
+            </PaginationItem>
+          </>
+        )}
+      </PaginationList>
+    </Pages>
   );
 }
 

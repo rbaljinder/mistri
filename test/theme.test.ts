@@ -19,6 +19,7 @@ import { defineTheme, type ThemeSpec } from '@mistriwork/mistri/app';
 import type { ThemeDefinition } from '../packages/engine/schema/theme.js';
 import { COLOR_ROLES } from '../packages/mistri/src/shared/themeBuild.js';
 import { DENSITIES, ELEVATIONS, LIFTS, MOTIONS, RECIPE_MENU, RECIPE_PARTS } from '../packages/engine/src/shared/themeRecipes.js';
+import { RECIPE_FAMILY_NAMES } from '../packages/engine/src/shared/themeRecipeFamilies.js';
 import { TYPE_BASES, TYPE_ROLES } from '../packages/engine/src/shared/themeType.js';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
 import {
@@ -235,7 +236,7 @@ test('theme schema mirrors the public token, font, radius, and base keys', () =>
   assert.deepEqual(Object.keys(schema.properties.type.properties.font.oneOf[1].properties), Object.keys(FONT_TOKENS));
   assert.deepEqual(Object.keys(schema.properties.shape.properties.radius.properties), Object.keys(RADIUS_TOKENS));
   assert.deepEqual(schema.properties.extends.anyOf[0].enum, [...THEME_BASES]);
-  assert.deepEqual(Object.keys(schema.properties.recipes.properties), RECIPE_PARTS);
+  assert.deepEqual(Object.keys(schema.properties.recipes.properties), [...RECIPE_FAMILY_NAMES, ...RECIPE_PARTS]);
   for (const part of RECIPE_PARTS) assert.deepEqual(schema.properties.recipes.properties[part].enum, Object.keys(RECIPE_MENU[part]), part);
   assert.deepEqual([...schema.properties.shape.properties.elevation.oneOf[0].enum].sort(), Object.keys(ELEVATIONS).sort());
   for (const step of ['card', 'float'])
@@ -349,20 +350,24 @@ test('contrast warnings also check colors inherited from a new theme base', () =
 test('the four built-in looks read as a sans interface with AA accents, and every one is an inheritable base', () => {
   assert.deepEqual(
     THEME_PRESETS.map((preset) => preset.id),
-    ['workshop', 'lumen', 'mono', 'sage', 'ledger'],
+    ['workshop', 'lumen', 'mono', 'sage', 'ledger', 'atelier', 'graphite', 'bloom'],
   );
-  assert.deepEqual([...THEME_BASES], ['workshop', 'lumen', 'mono', 'sage', 'ledger']);
+  assert.deepEqual([...THEME_BASES], ['workshop', 'lumen', 'mono', 'sage', 'ledger', 'atelier', 'graphite', 'bloom']);
   assert.equal(parseAppConfig({ name: 'Unchanged default', ...HOME }, 'app').ui.theme, undefined);
   for (const preset of THEME_PRESETS) {
     // The interface and its data are one sans, except Ledger's, whose data is a monospace (its figures line up down a
-    // page); a look may set its titles in a book face or a condensed cut of its own sans (Workshop's), and nothing else.
+    // page); a look may set its titles in a book face, a condensed cut of its own sans (Workshop's), or a display sans
+    // that falls back to its interface's stack whole (Lumen's Manrope over Inter), and nothing else.
     const ui = preset.fonts?.ui ?? '';
     const heading = preset.fonts?.heading ?? '';
     assert.match(ui, /sans-serif$/, `${preset.id} interface face`);
     if (preset.id === 'ledger') assert.match(preset.fonts?.data ?? '', /^'IBM Plex Mono', .*monospace$/, 'ledger data face');
     else assert.equal(preset.fonts?.data, preset.fonts?.ui, `${preset.id} data face`);
     assert.ok(
-      heading === ui || /(^|, )serif$/.test(heading) || (/Condensed/.test(heading) && heading.includes(ui.split(',')[0]!)),
+      heading === ui ||
+        /(^|, )serif$/.test(heading) ||
+        (/Condensed/.test(heading) && heading.includes(ui.split(',')[0]!)) ||
+        (heading !== ui && heading.endsWith(`, ${ui}`)),
       `${preset.id} heading face`,
     );
     for (const mode of ['light', 'dark'] as const) {
@@ -380,7 +385,7 @@ test('the four built-in looks read as a sans interface with AA accents, and ever
   assert.equal(inherited.light.accent, authored.light.accent);
   assert.throws(
     () => parseThemes([{ ...sample(), base: 'studio' as never }], 'app'),
-    /base must be one of workshop, lumen, mono, sage, ledger/,
+    /base must be one of workshop, lumen, mono, sage, ledger, atelier, graphite, bloom/,
   );
 });
 

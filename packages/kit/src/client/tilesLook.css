@@ -1,0 +1,502 @@
+/* The recipes that draw a thing as a tile of its own: the menu as a card (`nav: float`), tabs as keys in a track
+   (`tabs: lifted`), a dashboard's figures as tiles (`stat: bento`) and a list as one tile with its rows ruled apart
+   inside it (`table: rows`). Graphite wears the second and Bloom the other three; an App's own theme may pick any of
+   them. Fetched when a worn theme picks one rather than carried in every App's first stylesheet (visualTheme.ts,
+   LOOK_SHEETS; lumenLook.css says why). They stand in `look` as every look's rules do; the rules all the looks share
+   stay in themeFamilies.css. No colour is named here: a tile is the theme's surface on its ground, a tint is mixed
+   from its accent. */
+@layer look {
+  /* A tile's lift: a faint ring in the accent's tint over the look's card shadow. One token, so the five tiles agree. */
+  :root:is([data-look-stat='bento'], [data-look-table='rows']) {
+    --tile-lift: inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent), var(--shadow-card, 0 0 0 transparent);
+  }
+  /* ---------- nav: float ----------
+     The side menu is a card standing off the window's edge, as a panel stands off the page: the ground shows round
+     it, so a look whose ground and menu are one colour would draw a card nobody can see (Bloom's are the tinted
+     page and white). Its rows are pills with room between them and the current one sits on the accent's tint, as
+     `pill` draws them. */
+  :root[data-look-nav='float'] {
+    --current-ground: var(--accent-soft);
+    --current-ink: var(--nav-accent);
+    --nav-float-inset: var(--space-4);
+  }
+  /* Beside the page only. On a phone the menu is a drawer over the page, and a collapsed rail is a strip of icons:
+     neither has an edge to stand off. */
+  @media (min-width: 721px) {
+    :root[data-look-nav='float'] body.app-mode:not(.app-topnav, .sidebar-hidden) .layout {
+      background: var(--ground);
+    }
+    :root[data-look-nav='float'] body.app-mode:not(.app-topnav, .sidebar-hidden) .sidebar {
+      margin: var(--nav-float-inset) 0 var(--nav-float-inset) var(--nav-float-inset);
+      border: 1px solid var(--nav-line);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
+      /* The bar that heads the menu (sidebarShell.js) and the foot under it are cut to the card's corners. */
+      overflow: hidden;
+    }
+    /* The foot's rule would be a second edge a few pixels above the card's own. */
+    :root[data-look-nav='float'] body.app-mode:not(.app-topnav, .sidebar-hidden) .sidebar-footer {
+      border-top-color: transparent;
+    }
+  }
+  :root[data-look-nav='float'] #table-list {
+    padding-inline: var(--space-3);
+  }
+  :root[data-look-nav='float'] #table-list li {
+    margin-bottom: var(--space-1);
+  }
+  /* A room's row, not a section's fold: the fold keeps its heading's geometry (style.css). */
+  :root[data-look-nav='float'] #table-list button:not(.nav-group-fold) {
+    align-items: center;
+    min-height: 36px;
+    padding: var(--space-2h) var(--space-4);
+    gap: var(--space-4);
+    border-radius: var(--control-radius, var(--radius));
+    color: var(--nav-muted);
+    font: 500 var(--text-sm)/1.35 var(--sans);
+  }
+  :root[data-look-nav='float'] #table-list .nav-icon {
+    width: var(--icon-ui);
+    height: var(--icon-ui);
+    color: var(--nav-muted);
+  }
+  @media (hover: hover) {
+    :root[data-look-nav='float'] #table-list button:hover:not([aria-current='true'], .nav-group-fold) {
+      background: color-mix(in srgb, var(--nav-ink) 5%, transparent);
+      color: var(--nav-ink);
+    }
+  }
+  /* Twice, so the current row keeps its ground under the pointer over the base sheet's hover (style.css). */
+  :root[data-look-nav='float'] :is(#table-list, .mobile-nav-list) button[aria-current='true'][aria-current='true'] {
+    background: var(--current-ground);
+    color: var(--current-ink);
+    font-weight: 600;
+  }
+  :root[data-look-nav='float'] :is(#table-list, .mobile-nav-list) button[aria-current='true'] .nav-icon {
+    color: inherit;
+  }
+  /* A room's count is a quiet figure at the row's end, in the menu's quiet ink: a pill on every row made each room
+     shout its size. A count that says work is late takes the danger's ink (Sidebar.tsx, is-overdue). */
+  :root[data-look-nav='float'] #table-list .rows {
+    align-self: center;
+    min-width: 22px;
+    padding: 0;
+    box-sizing: border-box;
+    text-align: right;
+    background: none;
+    color: var(--nav-muted);
+    font: 500 var(--text-xs)/1.6 var(--sans);
+    font-variant-numeric: tabular-nums;
+  }
+  :root[data-look-nav='float'] #table-list .rows.is-overdue {
+    color: var(--status-critical);
+    font-weight: 600;
+  }
+  :root[data-look-nav='float'] #table-list li.nav-group {
+    padding: var(--space-5) var(--space-4) var(--space-2h) calc(12px + var(--nav-group-inset, 0px));
+    color: var(--nav-muted);
+    font: 600 var(--text-xs) var(--sans);
+    letter-spacing: var(--track-caps);
+  }
+  /* The menu drawn in the bar has no card to be: its items are the pills. */
+  :root[data-look-nav='float'] .app-mode .topbar :is(.tn-item, .tn-group-button) {
+    border-radius: var(--control-radius, var(--radius));
+  }
+  :root[data-look-nav='float'] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current='true']) {
+    background: var(--current-ground);
+    color: var(--current-ink);
+    box-shadow: none;
+  }
+  :root[data-look-nav='float'] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current='true']) .nav-icon {
+    color: var(--current-ink);
+  }
+
+  /* ---------- tabs: segment ----------
+     The tabs stand in a sunken track and the chosen one is a key lifted out of it: which is on is said by its
+     ground, so no rule runs across the page under them. The track is the tab list itself where the strip holds
+     more than tabs (a list's strip also holds its fold and its filter adder), and the strip where it is the list. */
+  :root[data-look-tabs='lifted'] {
+    --segment-corner: min(var(--control-radius, var(--radius)), 10px);
+    /* A list's strip draws its rule inside itself (structure.css): none under a track. */
+    --tabs-rule: none;
+  }
+  :root[data-look-tabs='lifted'] .tabs {
+    align-items: center;
+    padding-bottom: var(--space-3);
+    border-bottom-color: transparent;
+  }
+  :root[data-look-tabs='lifted'] .tabs > :is(.tabs-row, .tabs-list),
+  :root[data-look-tabs='lifted'] :where(body.app-mode) .page-tabstrip {
+    display: inline-flex;
+    flex: 0 1 auto;
+    gap: var(--space-1);
+    width: fit-content;
+    max-width: 100%;
+    padding: var(--space-1h);
+    border: 0;
+    border-radius: calc(var(--segment-corner) + 3px);
+    background: var(--raised);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  :root[data-look-tabs='lifted'] :where(body.app-mode) .page-tabstrip {
+    margin-bottom: var(--space-4);
+  }
+  :root[data-look-tabs='lifted'] :is(.tab, :where(body.app-mode) .page-tab) {
+    /* The track, not the key in it, is what stands beside a list's filters: the toolbar's height less the track's
+       own padding, so the two are level. */
+    min-height: calc(var(--control-h-sm) - 2 * var(--space-1h));
+    padding: var(--space-1h) var(--space-4);
+    border: 0;
+    border-radius: var(--segment-corner);
+    background: transparent;
+    color: var(--ink-muted);
+    font: 500 var(--text-sm) var(--sans);
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  /* A key says what it opens, in the interface face and sentence case, whatever the look sets its labels in: the
+     label role reaches a tab (themeFamilies.css), and a track of tracked monospace capitals read as a row of column
+     heads, the count beside each as one more word. The attribute twice, to stand over the role's rules. */
+  html:root[data-look-tabs='lifted'][data-look-tabs] :is(.tab, :where(body.app-mode) .page-tab) {
+    font-family: var(--sans);
+    font-size: var(--text-sm);
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  @media (hover: hover) {
+    :root[data-look-tabs='lifted'] :is(.tab, :where(body.app-mode) .page-tab):hover:not([aria-selected='true']) {
+      background: color-mix(in srgb, var(--ink) 5%, transparent);
+      color: var(--ink);
+    }
+  }
+  :root[data-look-tabs='lifted'] :is(.tab, :where(body.app-mode) .page-tab)[aria-selected='true'] {
+    background: var(--surface);
+    color: var(--ink);
+    font-weight: 600;
+    box-shadow:
+      0 0 0 1px var(--line),
+      var(--shadow-control, 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent));
+  }
+  /* The ring stands inside the key, or the track's own edge would cut it. */
+  :root[data-look-tabs='lifted'] :is(.tab, :where(body.app-mode) .page-tab):focus-visible {
+    outline-offset: -2px;
+  }
+
+  /* ---------- a page of tiles ----------
+     Where the figures are tiles the page under them is not flat: the accent blooms faintly from the head of the
+     pane and is gone a third of the way down, so the hue is felt on every page and a palette changes the room, not
+     only its buttons. It is a wash on the ground, under everything and behind no words that are not already on the
+     ground's tint; a tile, a panel and the menu's card stand on it as they stand on the ground. */
+  :root[data-look-stat='bento'] body.app-mode .content {
+    background-image: radial-gradient(
+      ellipse 70rem 22rem at 18% -6rem,
+      color-mix(in srgb, var(--accent) 13%, transparent),
+      transparent 72%
+    );
+    background-repeat: no-repeat;
+  }
+  /* What opens over a page of tiles is as soft as they are: a popup takes a field's corner (a menu rounder than
+     12px loses its first row's corner, and a field here is no rounder) and a dialog a panel's. A look whose
+     controls are pills has no one corner to give them, and they fell back to the house's 8px: the squarest boxes
+     on the page were the ones laid over it. */
+  :root[data-look-stat='bento'] body {
+    --radius-pop: min(var(--field-radius, var(--radius)), 12px);
+  }
+  :root[data-look-stat='bento'] :is([data-slot='popover-content'], .account-menu-popup) {
+    border-radius: var(--radius-pop);
+  }
+  :root[data-look-stat='bento'] [data-slot='dialog-content']:is([data-kind='modal'], [data-kind='sheet']) {
+    border-radius: var(--radius-dialog, var(--radius-lg));
+  }
+  /* A switch that is off is quiet on such a page: its thumb in the colour of a field's edge, not in the muted ink,
+     which beside soft pills was the darkest mark on a form. On, it is the accent, as everywhere. */
+  :root[data-look-stat='bento'] .app-mode .insert-switch input:not(:checked)::after {
+    background: var(--line-control);
+  }
+  /* A form on a page of its own is a tile like the rest: the panel's surface under the same faint ring and card
+     shadow, where a panel look draws it with a hairline alone. */
+  :root[data-look-stat='bento'] .app-mode .newrecord-page-host > .form-page {
+    border-color: transparent;
+    box-shadow: var(--tile-lift);
+  }
+  /* The windows keep a tile's gap over the first tiles, which start where their area does (below). */
+  :root[data-look-stat='bento'] .app-mode .dash-controls {
+    padding-bottom: var(--space-5);
+  }
+  /* A dashboard leads with its greeting, and the windows it is read through stand at the head's far end, level with
+     the title, where there is room for both: under the title they were a second line of furniture before the first
+     figure. Only the windows move (a dashboard that also has pickers keeps its row of controls), and only where the
+     browser can anchor one box to another: elsewhere they stay under the head, as every look draws them. */
+  @supports (anchor-name: --dash-title) {
+    @media (min-width: 1100px) {
+      :root[data-look-stat='bento'] .app-mode .dash-head {
+        anchor-name: --dash-head;
+      }
+      :root[data-look-stat='bento'] .app-mode .dash-head .applist-title {
+        anchor-name: --dash-title;
+      }
+      /* Level with the title, at the head's far end less the head's own inset: the title is as wide as its words. */
+      :root[data-look-stat='bento'] .app-mode .dash-head + div > .dash-controls:has(> .dash-windows:only-child) {
+        position: absolute;
+        top: anchor(--dash-title top);
+        right: calc(anchor(--dash-head right) + var(--space-4h));
+        left: auto;
+        width: max-content;
+        margin: 0;
+        padding: 0;
+      }
+      /* The head keeps room under it, where the controls' row was. */
+      :root[data-look-stat='bento'] .app-mode .dash-head:has(+ div > .dash-controls > .dash-windows:only-child) {
+        margin-bottom: var(--space-6);
+      }
+    }
+  }
+  /* A strip of tiles is not a section with a heading: it starts where its area does, so two strips one over the
+     other on a phone stand a tile's gap apart, as two tiles side by side do. */
+  :root[data-look-stat='bento'] .dash-body .dash-strip {
+    padding-top: 0;
+  }
+
+  /* ---------- stat: bento ----------
+     Each figure is a soft tile of its own: the surface on the page's ground under the look's card shadow, the
+     panel's corner, and the figure set large. Its one edge is a ring of the accent too faint to read as a line,
+     there so a tile still has a shape where a theme's ground is its surface and its cards cast no shadow. Tiles
+     stand a gap apart, never ruled apart. */
+  /* One gap between every tile on the page, whichever block holds it: two blocks of two figures stood a section's
+     seam apart and their tiles a control's gap apart, so a row of four read as two pairs. */
+  :root[data-look-stat='bento'] .dash-body {
+    --page-row-gap: var(--space-5);
+    --dash-column-gap: var(--space-5);
+  }
+  :root[data-look-stat='bento'] .dash-strip .home-cards {
+    gap: var(--space-5);
+    margin: 0;
+  }
+  /* A figure's tile is a well in the page's tint, not a white card lifted off it: on the pane, which is the surface
+     already, a white tile had only its shadow to stand on, and a row of four shadows was the heaviest thing there. */
+  :root[data-look-stat='bento'] .dash-strip .home-card:nth-child(n) {
+    padding: var(--space-5) var(--space-5h, 20px);
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: var(--raised);
+    box-shadow: none;
+  }
+  @media (hover: hover) {
+    :root[data-look-stat='bento'] .dash-strip a.home-card:nth-child(n):hover {
+      background: color-mix(in srgb, var(--accent) 7%, var(--raised));
+    }
+  }
+
+  /* ---------- workflow: segments ----------
+     A record's states as one bar cut into segments, a word in each: those walked stand on the tint in the ink, the
+     current one on the accent's tint in the accent's ink and a weight up, those ahead muted on the faintest ground.
+     Three grounds, a tick on a step walked and a rule under the current one: how far the record has come. */
+  :root[data-look-workflow='segments'] .workflow-steps {
+    flex-wrap: nowrap;
+    gap: var(--space-1);
+    padding: var(--space-4h) 0;
+  }
+  :root[data-look-workflow='segments'] .workflow-steps li {
+    flex: 1 1 0;
+    min-width: 0;
+    flex-direction: row;
+    align-items: center;
+    min-height: var(--control-h-sm);
+    padding: var(--space-2) var(--space-4h);
+    background: color-mix(in srgb, var(--ink) 4%, var(--surface));
+    color: var(--ink-muted);
+    font: 500 var(--text-sm) var(--sans);
+  }
+  :root[data-look-workflow='segments'] .workflow-steps li:first-child {
+    border-start-start-radius: var(--control-radius, var(--radius));
+    border-end-start-radius: var(--control-radius, var(--radius));
+  }
+  :root[data-look-workflow='segments'] .workflow-steps li:last-child {
+    border-start-end-radius: var(--control-radius, var(--radius));
+    border-end-end-radius: var(--control-radius, var(--radius));
+  }
+  :root[data-look-workflow='segments'] .workflow-marker {
+    display: none;
+  }
+  :root[data-look-workflow='segments'] .workflow-steps li[data-passed] {
+    background: var(--raised);
+    color: var(--ink);
+  }
+  /* A step walked says so with a tick before its word, and the current one stands on a rule in the accent: under a
+     palette whose accent is nearly its ink (Bloom's Slate) the two grounds were both grey and only a weight told
+     them apart. */
+  :root[data-look-workflow='segments'] .workflow-steps li[data-passed]::before {
+    content: '';
+    flex: none;
+    width: var(--space-3);
+    height: var(--space-2);
+    margin-inline-end: var(--space-2);
+    border: solid currentColor;
+    border-width: 0 0 2px 2px;
+    transform: translateY(-1px) rotate(-45deg);
+  }
+  :root[data-look-workflow='segments'] .workflow-steps li[aria-current='step'] {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    font-weight: 600;
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+  :root[data-look-workflow='segments'] .workflow-steps li[data-reachable] {
+    color: var(--ink);
+  }
+  :root[data-look-stat='bento'] .dash-strip .home-card-label {
+    font: 500 var(--text-sm) var(--sans);
+    color: var(--ink-muted);
+  }
+  /* The figure's size, weight and face are the theme's to say (`type.roles.figure`, themeFamilies.css): a tile only
+     gives it a tighter line, so a large figure does not push its label away. */
+  :root[data-look-stat='bento'] .dash-strip .home-card-value {
+    line-height: 1.15;
+    /* A figure is never broken (docs/design.md, Truncation): two tiles across a phone left "$56,130.0" over "0". */
+    white-space: nowrap;
+  }
+  /* Where the tiles are too narrow for the figure at its size, the figure is set a step down, not cut. */
+  :root[data-look-stat='bento'] .dash-strip {
+    container: stat-strip / inline-size;
+  }
+  @container stat-strip (max-width: 24rem) {
+    :root[data-look-stat='bento'] .dash-strip .home-card-value {
+      font-size: min(var(--figure-size, calc(28px * var(--type-k, 1))), calc(22px * var(--type-k, 1)));
+    }
+  }
+
+  /* ---------- table: rows ----------
+     A list is one soft tile and its rows are ruled apart inside it by hairlines: the surface on the page's ground,
+     the panel's corner, the same faint ring and card shadow a figure's tile has, the head plain words at its top.
+     It was a card to every row, each with an edge of its own: fifty outlined boxes down a page were the heaviest
+     thing on it, beside a record whose lists are one panel each. A row is still marked as a whole under the pointer
+     and when chosen, by a tint from edge to edge. A row is as tall as the reader's density makes it (structure.css),
+     so the grid that draws only the rows in view is the same tile. A table inside a record or a dashboard is already
+     in a panel and keeps its lines. */
+  :root[data-look-table='rows'] .app-mode .applist-room .result-table > .table-wrap {
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--tile-lift);
+    /* The tile's corner would cut the first and last rows' own corners square without it; the ring is inside. */
+    padding: 1px;
+  }
+  :root[data-look-table='rows'] .app-mode .applist-room .result-table > .table-wrap th {
+    border-bottom-color: var(--line);
+    background: var(--surface);
+    font: 500 var(--text-sm) var(--sans);
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--ink-muted);
+  }
+  :root[data-look-table='rows'] .app-mode .applist-room .result-table > .table-wrap thead tr:first-child th:first-child {
+    border-start-start-radius: var(--radius-lg);
+  }
+  :root[data-look-table='rows'] .app-mode .applist-room .result-table > .table-wrap thead tr:first-child th:last-child {
+    border-start-end-radius: var(--radius-lg);
+  }
+  :root[data-look-table='rows'] .app-mode .applist-room .result-table > .table-wrap tbody td {
+    border-bottom-color: var(--line);
+    background: transparent;
+    font-size: var(--text-base);
+  }
+  /* The last row closes on the tile's own edge, not on a rule a hair above it. */
+  :root[data-look-table='rows'] .app-mode .applist-room .result-table > .table-wrap tbody tr:last-child td {
+    border-bottom-color: transparent;
+  }
+  :root[data-look-table='rows'] .app-mode .applist-room .result-table > .table-wrap tbody tr:last-child td:first-child {
+    border-end-start-radius: var(--radius-lg);
+  }
+  :root[data-look-table='rows'] .app-mode .applist-room .result-table > .table-wrap tbody tr:last-child td:last-child {
+    border-end-end-radius: var(--radius-lg);
+  }
+  /* Chosen, or the one whose record is open beside the list: the accent's faintest tint across the row. */
+  :root[data-look-table='rows'] .app-mode .applist-room .result-table > .table-wrap tbody tr:is(.selected, [aria-selected='true'], [aria-current='true']) td {
+    background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  }
+  @media (hover: hover) {
+    :root[data-look-table='rows'] .app-mode .applist-room .result-table > .table-wrap tbody tr:hover td {
+      background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+    }
+  }
+  /* A group's heading and the totals are not records: they stand on the raised ground, edge to edge. */
+  :root[data-look-table='rows'] .app-mode .applist-room .result-table > .table-wrap tbody tr:is(.grid-group-head, .grid-totals) td {
+    background: var(--raised);
+  }
+
+  /* A list read as a queue (a row and its two lines, the record beside it) is the same tile: its rows were ruled
+     apart on the bare ground, the one list in the look not held. */
+  :root[data-look-table='rows'] .app-mode .applist-room :is(.queue-list, .record-summaries) {
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--tile-lift);
+  }
+  /* A list's records as summaries, which is how a phone reads a table: each keeps its rule, inside the tile. */
+  :root[data-look-table='rows'] .app-mode .applist-room .record-summaries {
+    padding-inline: var(--space-5);
+  }
+  :root[data-look-table='rows'] .app-mode .applist-room .record-summaries > .record-summary:first-child {
+    border-top-color: transparent;
+  }
+  /* On a phone the summaries reach the pane's edges (style.css); a tile stands in from them by the page's gutter. */
+  @media (max-width: 760px) {
+    :root[data-look-table='rows'] .app-mode .applist-room .record-summaries {
+      margin-inline: var(--space-4);
+    }
+  }
+  :root[data-look-table='rows'] .app-mode .applist-room .queue-list > .queue-row:last-child {
+    border-bottom-color: transparent;
+  }
+
+  /* ---------- a record's figures ----------
+     The few figures a record leads with (a summary's fields) are tiles too where a dashboard's are: bare words on
+     the tint beside a page of tiles were the one block of the record not held. The value is set as a figure, a step
+     under a dashboard's, since three stand in a record's column. */
+  :root[data-look-stat='bento'] .app-mode .page-field-summary {
+    gap: var(--space-5);
+  }
+  :root[data-look-stat='bento'] .app-mode .page-field-summary > .page-field {
+    padding: var(--space-4h) var(--space-5);
+    border-radius: var(--radius-lg);
+    /* A well in the tint, as a dashboard's figure is (above). */
+    background: var(--raised);
+  }
+  /* A record's own lists (a related tab, a section's table) are few rows, and each is a tile of its own under plain
+     head words: the room's list is one tile ruled apart because fifty edged rows were heavy, and five are not. */
+  :root[data-look-table='rows'] .app-mode .page-list-body .result-table > .table-wrap table {
+    border-collapse: separate;
+    border-spacing: 0 var(--space-2h);
+  }
+  :root[data-look-table='rows'] .app-mode .page-list-body .result-table > .table-wrap thead th {
+    border: 0;
+    background: transparent;
+  }
+  :root[data-look-table='rows'] .app-mode .page-list-body .result-table > .table-wrap tbody td {
+    border-block: 1px solid var(--line);
+    background: var(--surface);
+  }
+  :root[data-look-table='rows'] .app-mode .page-list-body .result-table > .table-wrap tbody td:first-child {
+    border-inline-start: 1px solid var(--line);
+    border-start-start-radius: var(--field-radius, var(--radius));
+    border-end-start-radius: var(--field-radius, var(--radius));
+    padding-inline-start: var(--space-4h);
+  }
+  :root[data-look-table='rows'] .app-mode .page-list-body .result-table > .table-wrap tbody td:last-child {
+    border-inline-end: 1px solid var(--line);
+    border-start-end-radius: var(--field-radius, var(--radius));
+    border-end-end-radius: var(--field-radius, var(--radius));
+  }
+  :root[data-look-table='rows'] .app-mode .page-list-body .result-table > .table-wrap thead th:first-child {
+    padding-inline-start: var(--space-4h);
+  }
+  :root[data-look-stat='bento'] .app-mode .page-field-summary > .page-field > dd {
+    font-size: var(--text-xl);
+    font-weight: var(--type-figure-weight, 700);
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+  :root[data-look-stat='bento'] .app-mode .page-field-summary > .page-field > dd :is(.num-value, .date-value, .tone) {
+    font: inherit;
+    letter-spacing: inherit;
+  }
+}

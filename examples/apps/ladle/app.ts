@@ -85,6 +85,8 @@ export default defineApp({
   home: 'classes',
   ui: {
     logo: 'fork-knife',
+    // The kitchen's one colour, over the look it wears.
+    theme: { preset: 'workshop', accent: '#9a3412' },
     locale: 'en-US',
     timezone: 'America/Chicago',
     currency: 'USD',

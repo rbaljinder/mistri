@@ -55,8 +55,8 @@ test('Show draws the number with its mask; Hide puts the dots back', async () =>
 test('the button stands beside the box, not inside it', () => {
   render(<Ssn />);
   const button = screen.getByRole('button', { name: 'Show' });
-  expect(button.closest('.field-box')).toBeNull();
-  expect(button.parentElement).toHaveClass('field-with-action');
+  expect(button.closest('[data-slot="field-box"]')).toBeNull();
+  expect(button.parentElement).toHaveAttribute('data-slot', 'field-with-action');
   expect(button.parentElement).toContainElement(screen.getByRole('textbox'));
 });
 
@@ -82,5 +82,6 @@ test('it logs and stores nothing', async () => {
 test('the note and the mark are drawn, and the mark is decorative', async () => {
   render(<Ssn start="123456789" />);
   expect(screen.getByText('Stored securely')).toBeInTheDocument();
-  expect(document.querySelector('.field-mark')).toHaveAttribute('aria-hidden', 'true');
+  expect(screen.getByText('Stored securely')).toHaveAttribute('data-slot', 'field-note');
+  expect(document.querySelector('[data-slot="field-mark"]')).toHaveAttribute('aria-hidden', 'true');
 });

@@ -92,7 +92,8 @@ export function PromptDialog({
               ref={(node) => {
                 input.current = node;
               }}
-              className="field-control prompt-multiline"
+              data-slot="textarea"
+              className="prompt-multiline"
               rows={10}
               defaultValue={value}
               placeholder={placeholder ?? ''}
@@ -106,7 +107,6 @@ export function PromptDialog({
               value={date}
               onChange={setDate}
               withTime={dateTime}
-              className="field-control"
               aria-label={label}
               placeholder={dateTime ? undefined : placeholder}
               locale={formatLocale()}
@@ -119,7 +119,7 @@ export function PromptDialog({
                 input.current = node;
               }}
               type={type}
-              className="field-control"
+              data-slot="input"
               defaultValue={value}
               placeholder={placeholder ?? ''}
             />
@@ -195,7 +195,6 @@ export function RangeDialog({ title, fromLabel, toLabel, hint, type = 'text', pl
                 inputRef={from}
                 value={fromDate}
                 onChange={setFromDate}
-                className="field-control"
                 withTime={type === 'datetime-local'}
                 aria-label={fromLabel}
                 placeholder={type === 'date' ? placeholder : undefined}
@@ -204,7 +203,7 @@ export function RangeDialog({ title, fromLabel, toLabel, hint, type = 'text', pl
                 now={appNow()}
               />
             ) : (
-              <input ref={from} type={type} className="field-control" placeholder={placeholder ?? ''} />
+              <input ref={from} type={type} data-slot="input" placeholder={placeholder ?? ''} />
             )}
           </Field>
           <Field label={toLabel} id={`${fieldId}-to`}>
@@ -214,7 +213,6 @@ export function RangeDialog({ title, fromLabel, toLabel, hint, type = 'text', pl
                 inputRef={to}
                 value={toDate}
                 onChange={setToDate}
-                className="field-control"
                 withTime={type === 'datetime-local'}
                 aria-label={toLabel}
                 placeholder={type === 'date' ? placeholder : undefined}
@@ -223,7 +221,7 @@ export function RangeDialog({ title, fromLabel, toLabel, hint, type = 'text', pl
                 now={appNow()}
               />
             ) : (
-              <input ref={to} type={type} className="field-control" placeholder={placeholder ?? ''} />
+              <input ref={to} type={type} data-slot="input" placeholder={placeholder ?? ''} />
             )}
           </Field>
         </div>

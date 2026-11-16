@@ -34,6 +34,7 @@ import { auditedResources, ensureAppReadAudit } from '../readAuditStore.js';
 import { ensureAppLive, liveStartupLines, settleLiveStartup } from '../live/liveBinding.js';
 import { closeLiveStreams } from '../live/liveStream.js';
 import { appKeepsInbox, ensureAppInbox } from '../inbox.js';
+import { InboxUnavailable } from '../../adapters/inbox/inbox.js';
 import { purgeAppAssistants, purgeOnSchedule } from '../assistant/assistantRetention.js';
 import { assistantStoreFor } from '../assistant/assistantStores.js';
 import { assistantModel } from '../assistant/assistantModel.js';
@@ -990,6 +991,20 @@ export async function startServing(
                       }
                     }
                     if (stopping) return;
+                    /* A save that starts telling people on a connection whose notification store is not provisioned
+                       would refuse every request from then on (inbox.ts provisions nothing at startup): the last good
+                       App is served instead, and the command that provisions the store is said with the App's own
+                       directory in it. The store is made once, by the person, never quietly on a save. */
+                    if (appKeepsInbox(candidate.app.app)) {
+                      try {
+                        await ensureAppInbox(registry, candidate);
+                      } catch (error) {
+                        if (!(error instanceof InboxUnavailable) || !error.message) throw error;
+                        host.loadError = `${error.message.replace("<the App's directory>", appTarget)} Still serving the last good app.`;
+                        console.error(`App error: ${host.loadError}`);
+                        return;
+                      }
+                    }
                     host.app = candidate.app;
                     host.pages = candidate.pages;
                     host.loadError = candidate.loadError;

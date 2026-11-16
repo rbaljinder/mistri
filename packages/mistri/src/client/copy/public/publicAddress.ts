@@ -5,4 +5,5 @@ export const say = defineMessages({
   notifications: 'Notifications',
   assistant: 'Assistant',
   allPages: 'All pages',
+  settings: 'Settings',
 });

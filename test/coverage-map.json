@@ -524,6 +524,12 @@
       "browser": true
     },
     {
+      "id": "behaviors",
+      "surface": ["package: export ./behaviors"],
+      "tests": [{ "file": "packages/mistri/src/client/components/sdk/behaviors.test.tsx" }, { "file": "e2e/page-behaviors.spec.ts" }],
+      "browser": true
+    },
+    {
       "id": "component-examples",
       "surface": ["package: export ./ui/testing"],
       "tests": [{ "file": "packages/mistri/src/client/components/sdk/sdk.surfaces.test.tsx" }]
