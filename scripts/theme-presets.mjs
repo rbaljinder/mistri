@@ -68,6 +68,7 @@ const ROLES = [
   'shadow',
   'band',
   'field',
+  'ai',
 ];
 
 /* A palette written as its values in ROLES order, one space apart, "-" where it sets none. Spelled out, the

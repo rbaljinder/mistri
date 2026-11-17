@@ -12,6 +12,7 @@ export type {
   Integration,
   IntegrationActionDefinition,
   IntegrationChannelDefinition,
+  IntegrationCheckResult,
   IntegrationDefinition,
   IntegrationDelivery,
   IntegrationEvent,

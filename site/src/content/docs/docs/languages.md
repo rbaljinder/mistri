@@ -101,7 +101,7 @@ export default defineMessages<typeof en>('es', {
 | `mistri.form.yes` | Yes | |
 | `mistri.form.no` | No | |
 | `mistri.form.monthHint` | MM/YYYY | |
-| `mistri.form.dateTimeHint` | YYYY-MM-DD HH:MM | |
+| `mistri.form.timeHint` | HH:MM | How a time of day is written after the date |
 | `mistri.status.offerEmail` | We can email a code to the address on this application. It opens its details once, for 10 minutes. | |
 | `mistri.status.offerText` | We can send a code to the phone number on this application. It opens its details once, for 10 minutes. | |
 | `mistri.status.askEmail` | Email me a code | |

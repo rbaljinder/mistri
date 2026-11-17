@@ -71,13 +71,13 @@ test('a starting instant is drawn as its wall time, and the keyboard calendar mo
   render(<Form />);
   const box = await screen.findByRole('textbox', { name: 'Visit at (required)' });
   // 15:00 UTC on the day the clocks went forward is eleven in the morning in New York.
-  expect(box).toHaveValue('2026-03-08 11:00');
-  expect(box).toHaveAttribute('placeholder', 'YYYY-MM-DD HH:MM');
+  expect(box).toHaveValue('03/08/2026 11:00');
+  expect(box).toHaveAttribute('placeholder', 'MM/DD/YYYY HH:MM');
   await user.click(box);
   await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
   await screen.findByRole('grid');
   await user.keyboard('{ArrowRight}{Enter}');
-  await waitFor(() => expect(box).toHaveValue('2026-03-09 11:00'));
+  await waitFor(() => expect(box).toHaveValue('03/09/2026 11:00'));
   expect(seen.at(-1)).toBe('2026-03-09T15:00:00.000Z');
   // A half-typed time stays in the box as typed, and reaches the form as text, not as some moment.
   await user.clear(box);

@@ -164,8 +164,17 @@ ink darker than its hairlines and still quieter than its text.
   then the one that reads is derived) (+ `--accent-soft`, derived when an App gives
   one colour, and the first chart series, so a brand's charts are the brand's
   colour), `--link`, `--status-warning`, `--status-critical`, `--status-info` (identifiers /
-  info), `--status-good` (success — deliberately *not* the accent, so an
-  indigo-themed app still says "paid" in green).
+  info — a hue of its own in every look, palette and mode, at least 50 degrees
+  of OKLab's wheel from that palette's accent: a look's blue under Cobalt, or
+  Bloom wearing the palette's hue for it, was the accent said twice, so a tab, a
+  link and a "new" chip read as one thing; `infoApart` in `lookPalettes.ts`
+  turns it to the first of blue, cyan, violet and teal that stands clear, and
+  `test/contrast.test.ts` holds the gap), `--status-good` (success — deliberately *not* the accent, so an
+  indigo-themed app still says "paid" in green) and `--ai`, the mark of what an
+  AI made (a generated draft's badge, a suggestion's edge, the assistant's
+  avatar): a fuchsia no status colour wears, 3:1 as a mark on every ground,
+  light and dark. A theme may say its own (`colors.ai`, checked at 3:1 where it
+  is read); unsaid, the platform's stands, as the browser's tokens say it.
 - **The navigation**: `--nav-ground`, `--nav-ink`, `--nav-muted`,
   `--nav-line`, `--nav-accent`, `--nav-current`, `--nav-on-current` — the
   bar and the side menu, whichever the shell draws, under every bar recipe:
@@ -339,7 +348,7 @@ ink darker than its hairlines and still quieter than its text.
   padding, which no rhythm moves; the smallest is also a caption's
   gap over its value. Every padding, margin and gap is a step, a
   half, or a semantic token over the scale: `--room-inset` (14px, a room's one
-  content edge), `--section-seam` (40px, between a record's sections and a dashboard's rows), `--field-gap`
+  content edge), `--page-top` (24px, 16px on a phone: the top bar to a page's first heading), `--section-seam` (40px, between a record's sections and a dashboard's rows), `--field-gap`
   (20px, between a form's fields and a record's field columns) and `--row-h`
   (an App list's row, drawn 40px at compact and at comfortable, 44px at
   spacious and under a finger, whatever the density's zoom; a view that is a

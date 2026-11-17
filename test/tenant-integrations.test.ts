@@ -363,7 +363,10 @@ test("each tenant's secrets are its own: North's call uses North's key, South is
   // The settings screen says which are set, and when; never a value.
   const settings = await shop.integrations.settings!.read('north');
   assert.deepEqual(
-    settings.integrations.map((entry) => ({ ...entry, secrets: entry.secrets.map(({ name, set }) => ({ name, set })) })),
+    settings.integrations.map(({ canCheck: _canCheck, ...entry }) => ({
+      ...entry,
+      secrets: entry.secrets.map(({ name, set }) => ({ name, set })),
+    })),
     [
       {
         name: 'fakepay',

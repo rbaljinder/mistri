@@ -47,6 +47,11 @@ const MOST: Record<Group, number> = { recent: 4, pages: 8, create: 5, commands: 
     first screen. A menu that fits the shortlist (MOST.pages) is shown whole: cut to five, an App of seven lists hid
     two of them until a word was typed. */
 const FIRST_PAGES = 5;
+/** Once a word is typed the list is what it names, not a shortlist: every page the word matches stays reachable, the
+    cap only keeps a one-letter term from drawing a screenful. (The shortlist above capped a typed App at eight pages,
+    and the ninth named by the word could not be reached by any word.) Records are not here: the database answers those
+    a few at a time (`MOST.records`). */
+const MOST_TYPED: Record<Group, number> = { recent: MOST.recent, pages: 60, create: 20, commands: 20, records: MOST.records };
 
 const groupOf = (item: PaletteItem): Group =>
   item.kind === 'page' ? 'pages' : item.kind === 'create' ? 'create' : item.kind === 'record' ? 'records' : 'commands';
@@ -224,8 +229,8 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
     .filter(({ points }) => points > 0)
     .sort((a, b) => b.points - a.points)
     .map(({ item }) => item);
-  // Bounded because a palette is a shortlist.
-  const named = ranked.slice(0, 20);
+  // Bounded because a palette is a shortlist, past a typed word's own matches (MOST_TYPED).
+  const named = ranked.slice(0, term ? 60 : 20);
   /* Hits for earlier text keep only the rows this text also names: with
      nothing named above them, the first is lit and Enter would open a record
      the box never named. Until the hits answer this text, "nothing matches"
@@ -247,14 +252,14 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
         : (group === 'records'
             ? hits.choices
             : ranked.filter((item) => groupOf(item) === group && !(item.room !== undefined && recentRooms.has(item.room)))
-          ).slice(0, group === 'pages' && !term && pageCount > MOST.pages ? FIRST_PAGES : MOST[group]),
+          ).slice(0, group === 'pages' && !term && pageCount > MOST.pages ? FIRST_PAGES : term ? MOST_TYPED[group] : MOST[group]),
   }))
     .filter(({ items }) => items.length)
     .map((entry, at, every) => ({ ...entry, from: every.slice(0, at).reduce((sum, { items }) => sum + items.length, 0) }));
   /* Record hits ride below the named things: a table you typed exactly still wins the top. */
   const rows = inApp
     ? grouped.flatMap(({ group, items }) => items.map((item) => ({ item, group })))
-    : [...named, ...hits.choices].slice(0, 20).map((item) => ({ item, group: groupOf(item) }));
+    : [...named, ...hits.choices].slice(0, term ? 60 : 20).map((item) => ({ item, group: groupOf(item) }));
   const shown = rows.map(({ item }) => item);
   const current = shown.length ? ((active % shown.length) + shown.length) % shown.length : 0;
 

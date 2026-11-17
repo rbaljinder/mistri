@@ -168,7 +168,9 @@ test.describe('Compass: one address per record', () => {
   test('a reference opens its own address, and Back and the crumbs retrace the walk', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 924 });
     await page.goto(`${CRM}/leads/${lead.id}`);
-    await expect(crumbs(page)).toContainText(name);
+    // The record's name is its page's title, said once: the trail ends at the list it came from.
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
+    await expect(crumbs(page)).not.toContainText(name);
     await expect(crumbs(page)).toContainText('Leads');
     // The owner is a sales rep, addressed under the view that lists them — not a path that grows.
     await page.locator('main .ref-jump').first().click();
@@ -179,7 +181,7 @@ test.describe('Compass: one address per record', () => {
     await expect(crumbs(page)).toContainText(name);
     await page.goBack();
     await expect.poll(() => address(page)).toBe(`/leads/${lead.id}`);
-    await expect(crumbs(page)).toContainText(name);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
   });
 
   test('the trail an older link wrote in its path opens, and is said as the last record alone', async ({ page }) => {

@@ -42,6 +42,7 @@ export interface ThemePalette {
   rulesHead?: string;
   shadow?: string;
   band?: string;
+  ai?: string;
   rulesWeight?: '1px' | '2px' | '3px';
   rulesControl?: '0px' | '1px' | '2px';
   chart1?: string;
@@ -187,6 +188,7 @@ export type ThemeColorPath =
   | 'surface'
   | 'raised'
   | 'band'
+  | 'ai'
   | 'ink'
   | 'inkMuted'
   | 'inkSubtle'
@@ -437,6 +439,9 @@ export interface ThemeColors {
   shadow?: string;
   /** Every other row of a `banded` table (`recipes.table`). Omitted, `raised`. Text on it is checked as on `ground`. */
   band?: string;
+  /** The mark of what an AI made: a generated draft's badge, a suggestion's edge, the assistant's avatar. Omitted, the
+      platform's (`--ai`, a violet apart from every look's accent, info and status colors). Checked at 3:1 on the page, as a mark is. */
+  ai?: string;
 }
 
 /** A control's height in pixels, 32 to 56. */

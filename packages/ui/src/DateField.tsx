@@ -59,14 +59,15 @@ import { slotted } from './internal/uiKitContext.js';
 
 /** What a date field says. A `format` is the locale's numeric date pattern ("MM/DD/YYYY"). */
 export interface DateFieldWords {
-  /** The placeholder and the format a date and a time are typed in. */
-  dateTimePattern: string;
-  /** The box's complaint at a date and time it cannot take. */
-  enterDateAndTime: string;
+  /** How a wall-clock time is written in the box ("HH:MM"). A date and a time are typed as the locale's date, then this:
+      the one format the box shows, the placeholder says and the hint reads. */
+  timePattern: string;
+  /** The box's complaint at a date and time it cannot take, given the format it takes. */
+  enterDateAndTime: (format: string) => string;
   /** The box's complaint at a date it cannot take. */
   enterDate: (format: string) => string;
   /** The hint read with the box: its format, for a date and a time. */
-  dateAndTimeFormat: string;
+  dateAndTimeFormat: (format: string) => string;
   /** The hint read with the box: its format, for a date. */
   dateFormat: (format: string) => string;
   /** The hint's second sentence: the key that opens the calendar. */
@@ -112,6 +113,25 @@ function localeText(iso: string, mask: { order: string[]; sep: string }): string
 }
 
 const isoDate = (text: string): boolean => isPickerDate(text);
+
+/** A date and a time as the box shows them: the locale's date, then the time as it is stored. */
+function localeDateTime(iso: string, mask: { order: string[]; sep: string }): string {
+  const parts = splitDateTime(iso);
+  return parts ? `${localeText(parts.date, mask)} ${parts.time}` : iso;
+}
+
+/** What was typed as a date and a time, read in the locale's order (or ISO) as `YYYY-MM-DD HH:MM`, else undefined: a draft
+    stays text. */
+function readDateTime(text: string, mask: { order: string[] }): string | undefined {
+  const typed = text.trim();
+  if (isPickerDateTime(text)) return text;
+  const split = typed.match(/^(\S+)[ T](\d{1,2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?)$/);
+  if (!split) return undefined;
+  const date = readDate(split[1]!, mask);
+  const time = /^\d:/.test(split[2]!) ? `0${split[2]}` : split[2]!;
+  const iso = date && `${date} ${time}`;
+  return iso && isPickerDateTime(iso) ? iso : undefined;
+}
 
 /** What was typed, read as a whole date in the locale's order (or ISO), else undefined: a draft stays text. */
 function readDate(text: string, mask: { order: string[] }): string | undefined {
@@ -270,9 +290,14 @@ function DefaultDateField({
      field is left, so a half-typed date is never rewritten under the caret. A date with a time stays ISO text. */
   const mask = useMemo(() => dateMask(locale), [locale]);
   const [draft, setDraft] = useState<string | null>(null);
-  const shown = withTime ? value : (draft ?? (isPickerDate(value) ? localeText(value, mask) : value));
+  const read = (text: string) => (withTime ? readDateTime(text, mask) : readDate(text, mask));
+  const shown =
+    draft ??
+    (withTime ? (isPickerDateTime(value) ? localeDateTime(value, mask) : value) : isPickerDate(value) ? localeText(value, mask) : value);
+  /* One format, the locale's, for the box, its placeholder and the hint a screen reader hears. */
+  const pattern = withTime ? `${mask.hint} ${words.timePattern}` : mask.hint;
   useEffect(() => {
-    if (draft !== null && value !== (readDate(draft, mask) ?? draft)) setDraft(null);
+    if (draft !== null && value !== (read(draft) ?? draft)) setDraft(null);
   }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
   const bad =
     !configuredBounds ||
@@ -281,8 +306,8 @@ function DefaultDateField({
         ? !isPickerDateTime(value) || !dateWithinBounds(datePart, bounds) || !dateTimeWithinBounds(value, min, max)
         : !dateWithinBounds(value, bounds)));
   useEffect(() => {
-    input.current?.setCustomValidity(!bad ? '' : withTime ? words.enterDateAndTime : words.enterDate(mask.hint));
-  }, [bad, withTime, mask]); // eslint-disable-line react-hooks/exhaustive-deps
+    input.current?.setCustomValidity(!bad ? '' : withTime ? words.enterDateAndTime(pattern) : words.enterDate(pattern));
+  }, [bad, withTime, pattern]); // eslint-disable-line react-hooks/exhaustive-deps
   /* While the calendar is open and what bounds it moves under it, the month in view goes to where a day can still
      be chosen, and the keyboard goes with it where it was on a day. */
   useLayoutEffect(() => {
@@ -353,7 +378,7 @@ function DefaultDateField({
         name={name}
         type="text"
         value={shown}
-        placeholder={placeholder ?? (withTime ? words.dateTimePattern : mask.hint)}
+        placeholder={placeholder ?? pattern}
         disabled={disabled}
         required={required}
         autoComplete="off"
@@ -368,9 +393,8 @@ function DefaultDateField({
         onChange={(event) => {
           const text = event.target.value;
           const said = changeDetails('input-change', event);
-          if (withTime) return onChange(text, said);
           setDraft(text);
-          onChange(readDate(text, mask) ?? text, said);
+          onChange(read(text) ?? text, said);
         }}
         onKeyDown={(event) => {
           if (event.altKey && event.key === 'ArrowDown') {
@@ -400,7 +424,7 @@ function DefaultDateField({
       )}
       {/* Read with the box and not seen: how a date is typed, and the key that opens the calendar. */}
       <span id={hint} data-slot="date-field-hint" data-kind="visually-hidden">
-        {withTime ? words.dateAndTimeFormat : words.dateFormat(mask.hint)} {words.openWithKeys}
+        {withTime ? words.dateAndTimeFormat(pattern) : words.dateFormat(pattern)} {words.openWithKeys}
       </span>
       <Popover
         open={open && !shut}

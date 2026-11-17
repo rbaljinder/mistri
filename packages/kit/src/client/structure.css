@@ -1646,7 +1646,7 @@
   body.app-sidebar-shell #content > .applist-head:first-child {
     margin-top: 0;
     /* A step of air under the pane's bar: at the row's own 10px a list's title stood against the bar's rule. */
-    padding-block: var(--space-5) var(--space-3h);
+    padding-block: var(--page-top) var(--space-3h);
     border-bottom: 1px solid var(--line);
   }
   /* The trail's bar stands on the pane it is in: on the window's ground it was a grey band across a white pane in

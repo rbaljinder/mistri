@@ -160,7 +160,7 @@ function Known({
  * workbench; a row click opens this record as a page, because the walk is
  * already in page view and `openRecord` keeps it there.
  */
-function Rootless({
+export function Rootless({
   entry,
   page,
   base,
@@ -180,6 +180,13 @@ function Rootless({
     }
   }, [entry, page.name]);
   const spec = shell().inApp() ? (appListFor(base.id) as ListSpec) : null;
+  /* A page opened with no record is a dead end where its table has a list of its own: the person came for a record,
+     and the list is where they are picked, at the one address it has. Replaced, so Back does not return to the empty
+     page. Where there is no list the chooser below stays, and says to pick one. */
+  useEffect(() => {
+    if (spec) go(tableView(base.id), 'replace');
+  }, [spec, base.id]);
+  if (spec) return null;
   return (
     <PageView
       entry={entry}

@@ -23,10 +23,12 @@ export function columnResizeStep(shiftKey: boolean): number {
   return shiftKey ? RESIZE_SHIFT_STEP : RESIZE_STEP;
 }
 
-/** A width a column may actually be given: whole pixels, never below its floor. */
-export function clampColumnWidth(width: number): number {
-  if (!Number.isFinite(width)) return MIN_COLUMN_WIDTH;
-  return Math.max(MIN_COLUMN_WIDTH, Math.round(width));
+/** A width a column may actually be given: whole pixels, never below its floor — the grid's own, or the wider one its
+    type asks (gridSizing.ts columnFloor: a date, a figure or a status chip is never dragged under its value). */
+export function clampColumnWidth(width: number, floor = 0): number {
+  const least = Math.max(MIN_COLUMN_WIDTH, Math.ceil(floor));
+  if (!Number.isFinite(width)) return least;
+  return Math.max(least, Math.round(width));
 }
 
 /**
@@ -61,9 +63,10 @@ export function applyColumnWidths(
   fitted: readonly number[],
   columns: readonly string[],
   overrides: Readonly<Record<string, number>>,
+  floors: Readonly<Record<string, number>> = {},
 ): number[] {
   return columns.map((name, index) => {
     const override = overrides[name];
-    return override === undefined ? (fitted[index] ?? 0) : clampColumnWidth(override);
+    return override === undefined ? (fitted[index] ?? 0) : clampColumnWidth(override, floors[name]);
   });
 }

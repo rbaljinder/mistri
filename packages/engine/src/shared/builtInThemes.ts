@@ -2,7 +2,7 @@
    Change a look there and run `node --import tsx scripts/theme-presets.mjs`. */
 import type { ThemeDefinition, ThemePalette } from '../../schema/theme.js';
 
-const ROLES = ["ground","surface","raised","line","lineStrong","lineControl","ink","inkMuted","inkSubtle","accent","accentSoft","link","focus","onAccent","accentInk","statusGood","statusWarning","statusCritical","statusInfo","navGround","navInk","navMuted","navLine","navAccent","navCurrent","navOnCurrent","chart1","chart2","chart3","chart4","chart5","chart6","chart7","chart8","rulesSection","rulesHead","rulesWeight","rulesControl","primary","onPrimary","shadow","band","field"] as const;
+const ROLES = ["ground","surface","raised","line","lineStrong","lineControl","ink","inkMuted","inkSubtle","accent","accentSoft","link","focus","onAccent","accentInk","statusGood","statusWarning","statusCritical","statusInfo","navGround","navInk","navMuted","navLine","navAccent","navCurrent","navOnCurrent","chart1","chart2","chart3","chart4","chart5","chart6","chart7","chart8","rulesSection","rulesHead","rulesWeight","rulesControl","primary","onPrimary","shadow","band","field","ai"] as const;
 
 /** A palette from its values in ROLES order ("-" for a role it leaves to its base). */
 function p(values: string): ThemePalette {
@@ -53,20 +53,20 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "teal",
         "label": "Teal",
-        "light": p("- - - - - - - - - #17a9c4 - #00687e #0b6f86 #1b1813 #1b1813 - - - - - - - - #00687e - - #0e8fb0 - - - #d97706 - - - - - - - #17a9c4"),
+        "light": p("- - - - - - - - - #17a9c4 - #00687e #0b6f86 #1b1813 #1b1813 - - - #56477e - - - - #00687e - - #0e8fb0 - - - #d97706 - - - - - - - #17a9c4"),
         "dark": p("- - - - - - - - - #3ccbe0 - #79d6e6 #4cc6db #15130f #efe9de - - - - - - - - #79d6e6 - - #0c8ab0 - - - #c88317 - #d26b3b - - - - - #3ccbe0")
       },
       {
         "id": "cobalt",
         "label": "Cobalt",
-        "light": p("- - - - - - - - - #2f5ce8 - #2d4fd6 #2d4fd6 #faf8f3 #1b1813 - - - - - - - - #2d4fd6 - - #2557e0 - #0e9a6c #d97706 #e0428a #0e8fb0 - - - - - - #2f5ce8 #faf8f3"),
-        "dark": p("- - - - - - - - - #7f9cff - #91a8ff #8aa1ff #15130f #efe9de - - - - - - - - #91a8ff - - #4369f0 - #12a678 #c88317 #e0559b #1597b9 #d26b3b - - - - - #7f9cff")
+        "light": p("- - - - - - - - - #2f5ce8 - #2d4fd6 #2d4fd6 #faf8f3 #1b1813 - - - #105c6b - - - - #2d4fd6 - - #2557e0 - #0e9a6c #d97706 #e0428a #0e8fb0 - - - - - - #2f5ce8 #faf8f3"),
+        "dark": p("- - - - - - - - - #7f9cff - #91a8ff #8aa1ff #15130f #efe9de - - - #1cc2e0 - - - - #91a8ff - - #4369f0 - #12a678 #c88317 #e0559b #1597b9 #d26b3b - - - - - #7f9cff")
       },
       {
         "id": "violet",
         "label": "Violet",
-        "light": p("- - - - - - - - - #7445e8 - #6534d8 #6534d8 #faf8f3 #1b1813 - - - - - - - - #6534d8 - - #9a6cf7 - #0e9a6c #d97706 #e0428a #0e8fb0 - - - - - - #7445e8 #faf8f3"),
-        "dark": p("- - - - - - - - - #a98cff - #bea8ff #ad91ff #15130f #efe9de - - - - - - - - #bea8ff - - #9a78ec - #12a678 #c88317 #e0559b #1597b9 #d26b3b - - - - - #a98cff")
+        "light": p("- - - - - - - - - #7445e8 - #6534d8 #6534d8 #faf8f3 #1b1813 - - - #005e71 - - - - #6534d8 - - #9a6cf7 - #0e9a6c #d97706 #e0428a #0e8fb0 - - - - - - #7445e8 #faf8f3"),
+        "dark": p("- - - - - - - - - #a98cff - #bea8ff #ad91ff #15130f #efe9de - - - #1cc2e0 - - - - #bea8ff - - #9a78ec - #12a678 #c88317 #e0559b #1597b9 #d26b3b - - - - - #a98cff")
       },
       {
         "id": "plum",
@@ -83,8 +83,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "slate",
         "label": "Slate",
-        "light": p("- - - - - - - - - #4c6584 - #3f5670 #3f5670 #faf8f3 #1b1813 - - - - - - - - #3f5670 - - #5f7690 - - - #d97706 - - - - - - - #4c6584 #faf8f3"),
-        "dark": p("- - - - - - - - - #9fb4cf - #c2d0e1 #a8bbd2 #15130f #efe9de - - - - - - - - #c2d0e1 - - #8a9fba - - - #c88317 - #d26b3b - - - - - #9fb4cf")
+        "light": p("- - - - - - - - - #4c6584 - #3f5670 #3f5670 #faf8f3 #1b1813 - - - #006158 - - - - #3f5670 - - #5f7690 - - - #d97706 - - - - - - - #4c6584 #faf8f3"),
+        "dark": p("- - - - - - - - - #9fb4cf - #c2d0e1 #a8bbd2 #15130f #efe9de - - - #1bc8b8 - - - - #c2d0e1 - - #8a9fba - - - #c88317 - #d26b3b - - - - - #9fb4cf")
       },
       {
         "id": "ink",
@@ -199,44 +199,44 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
   {
     "id": "lumen",
     "label": "Lumen",
-    "light": p("#ffffff #ffffff #f5f4f2 #ebe8e4 #8f8a83 #8f8a83 #1c1a17 #5c5852 #726c64 #2d4fd6 #eef1fd #2d4fd6 #6880e0 - - #127a40 #a65308 #c52a2a #2d4fd6 #fbfaf9 #1c1a17 #5c5852 #ebe8e4 #2d4fd6 - - #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0 #a3510b #94a3b8 #ebe8e4 #ebe8e4 1px - #1c1a17 #ffffff"),
-    "dark": p("#121110 #161514 #201f1d #2d2b27 #726d65 #726d65 #eeece8 #b8b3ab #9f9a92 #8aa1ff #1d2547 #91a8ff #5a73d6 - - #4ade80 #fbbf24 #f87171 #91a8ff #141312 #eeece8 #aaa59d #262422 #91a8ff - - #4369f0 #12a678 #9a78ec #c88317 #e0559b #1597b9 #d26b3b #6b7694 #2d2b27 #2d2b27 1px - #eeece8 #121110"),
+    "light": p("#ffffff #ffffff #f5f4f2 #ebe8e4 #8f8a83 #8f8a83 #1c1a17 #5c5852 #726c64 #2d4fd6 #eef1fd #2d4fd6 #6880e0 - - #127a40 #a65308 #c52a2a #1c6c7d #fbfaf9 #1c1a17 #5c5852 #ebe8e4 #2d4fd6 - - #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0 #a3510b #94a3b8 #ebe8e4 #ebe8e4 1px - #1c1a17 #ffffff"),
+    "dark": p("#121110 #161514 #201f1d #2d2b27 #726d65 #726d65 #eeece8 #b8b3ab #9f9a92 #8aa1ff #1d2547 #91a8ff #5a73d6 - - #4ade80 #fbbf24 #f87171 #1cc2e0 #141312 #eeece8 #aaa59d #262422 #91a8ff - - #4369f0 #12a678 #9a78ec #c88317 #e0559b #1597b9 #d26b3b #6b7694 #2d2b27 #2d2b27 1px - #eeece8 #121110"),
     "palettes": [
       {
         "id": "crimson",
         "label": "Crimson",
-        "light": p("- - - - - - - - - #b42318 #fdecea #b42318 #d9534a - - - - - - - - - - #b42318 - - #d63a32 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0"),
-        "dark": p("- - - - - - - - - #ff8f85 #3d1715 #ffaca5 #e06158 - - - - - - - - - - #ffaca5 - - #e5534b #3559e6 - #12a678 #1597b9 #e0559b #c88317")
+        "light": p("- - - - - - - - - #b42318 #fdecea #b42318 #d9534a - - - - - #2d4fd6 - - - - #b42318 - - #d63a32 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0"),
+        "dark": p("- - - - - - - - - #ff8f85 #3d1715 #ffaca5 #e06158 - - - - - #91a8ff - - - - #ffaca5 - - #e5534b #3559e6 - #12a678 #1597b9 #e0559b #c88317")
       },
       {
         "id": "safety",
         "label": "Safety orange",
-        "light": p("- - - - - - - - - #b33d0b #fdeee4 #b33d0b #d4612a - - - - - - - - - - #b33d0b - - #e8691f #2557e0 #9a6cf7 #0e9a6c #0e8fb0 #e0428a"),
-        "dark": p("- - - - - - - - - #ff9d66 #3b2112 #ffb88f #d8743a - - - - - - - - - - #ffb88f - - #f07a32 #3559e6 - #12a678 #1597b9 #e0559b #c88317")
+        "light": p("- - - - - - - - - #b33d0b #fdeee4 #b33d0b #d4612a - - - - - #2d4fd6 - - - - #b33d0b - - #e8691f #2557e0 #9a6cf7 #0e9a6c #0e8fb0 #e0428a"),
+        "dark": p("- - - - - - - - - #ff9d66 #3b2112 #ffb88f #d8743a - - - - - #91a8ff - - - - #ffb88f - - #f07a32 #3559e6 - #12a678 #1597b9 #e0559b #c88317")
       },
       {
         "id": "amber",
         "label": "Amber",
-        "light": p("- - - - - - - - - #875a00 #fbf2dc #875a00 #b57a33 - - - - - - - - - - #875a00 - - #d97706 #2557e0 #9a6cf7 #0e9a6c #0e8fb0 #e0428a"),
-        "dark": p("- - - - - - - - - #f4b24a #3a2a10 #fbcf86 #b07d2d - - - - - - - - - - #fbcf86 - - #c88317 #3559e6 - #12a678 #1597b9 #e0559b")
+        "light": p("- - - - - - - - - #875a00 #fbf2dc #875a00 #b57a33 - - - - - #2d4fd6 - - - - #875a00 - - #d97706 #2557e0 #9a6cf7 #0e9a6c #0e8fb0 #e0428a"),
+        "dark": p("- - - - - - - - - #f4b24a #3a2a10 #fbcf86 #b07d2d - - - - - #91a8ff - - - - #fbcf86 - - #c88317 #3559e6 - #12a678 #1597b9 #e0559b")
       },
       {
         "id": "moss",
         "label": "Moss",
-        "light": p("- - - - - - - - - #436e10 #eef4e2 #436e10 #638f2a - - - - - - - - - - #436e10 - - #6b9e1f #2557e0 #9a6cf7"),
-        "dark": p("- - - - - - - - - #a6d468 #232f15 #bfe28f #7aa743 - - - - - - - - - - #bfe28f - - #8cbf45 #3559e6")
+        "light": p("- - - - - - - - - #436e10 #eef4e2 #436e10 #638f2a - - - - - #2d4fd6 - - - - #436e10 - - #6b9e1f #2557e0 #9a6cf7"),
+        "dark": p("- - - - - - - - - #a6d468 #232f15 #bfe28f #7aa743 - - - - - #91a8ff - - - - #bfe28f - - #8cbf45 #3559e6")
       },
       {
         "id": "emerald",
         "label": "Emerald",
-        "light": p("- - - - - - - - - #08734f #e4f6ed #08734f #36966f - - - - - - - - - - #08734f - - #0e9a6c #2557e0 #9a6cf7"),
-        "dark": p("- - - - - - - - - #4ad6a0 #0f3529 #7ee6bd #279771 - - - - - - - - - - #7ee6bd - - #12a678 #3559e6")
+        "light": p("- - - - - - - - - #08734f #e4f6ed #08734f #36966f - - - - - #2d4fd6 - - - - #08734f - - #0e9a6c #2557e0 #9a6cf7"),
+        "dark": p("- - - - - - - - - #4ad6a0 #0f3529 #7ee6bd #279771 - - - - - #91a8ff - - - - #7ee6bd - - #12a678 #3559e6")
       },
       {
         "id": "teal",
         "label": "Teal",
-        "light": p("- - - - - - - - - #0b6f86 #e3f5f8 #0b6f86 #3c90a4 - - - - - - - - - - #0b6f86 - - #0e8fb0 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a"),
-        "dark": p("- - - - - - - - - #4cc6db #0f3540 #79d6e6 #2a8a9c - - - - - - - - - - #79d6e6 - - #0c8ab0 #3559e6 - #12a678 #c88317 #e0559b")
+        "light": p("- - - - - - - - - #0b6f86 #e3f5f8 #0b6f86 #3c90a4 - - - - - #684fa2 - - - - #0b6f86 - - #0e8fb0 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a"),
+        "dark": p("- - - - - - - - - #4cc6db #0f3540 #79d6e6 #2a8a9c - - - - - #91a8ff - - - - #79d6e6 - - #0c8ab0 #3559e6 - #12a678 #c88317 #e0559b")
       },
       {
         "id": "cobalt",
@@ -247,32 +247,32 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "violet",
         "label": "Violet",
-        "light": p("- - - - - - - - - #6534d8 #f1ecff #6534d8 #8a6ee6 - - - - - - - - - - #6534d8 - - #9a6cf7 #2557e0"),
+        "light": p("- - - - - - - - - #6534d8 #f1ecff #6534d8 #8a6ee6 - - - - - #00728f - - - - #6534d8 - - #9a6cf7 #2557e0"),
         "dark": p("- - - - - - - - - #ad91ff #2a2154 #bea8ff #7c63cf - - - - - - - - - - #bea8ff - - #9a78ec #3559e6 #12a678")
       },
       {
         "id": "plum",
         "label": "Plum",
-        "light": p("- - - - - - - - - #8a1f8f #f8eaf8 #8a1f8f #b65bbb - - - - - - - - - - #8a1f8f - - #b847c0 #0e9a6c #2557e0"),
-        "dark": p("- - - - - - - - - #e28cea #3a1840 #edaef2 #b366bb - - - - - - - - - - #edaef2 - - #d062d8 #3559e6 - #12a678 #c88317")
+        "light": p("- - - - - - - - - #8a1f8f #f8eaf8 #8a1f8f #b65bbb - - - - - #2d4fd6 - - - - #8a1f8f - - #b847c0 #0e9a6c #2557e0"),
+        "dark": p("- - - - - - - - - #e28cea #3a1840 #edaef2 #b366bb - - - - - #91a8ff - - - - #edaef2 - - #d062d8 #3559e6 - #12a678 #c88317")
       },
       {
         "id": "rose",
         "label": "Rose",
-        "light": p("- - - - - - - - - #b4185a #fdebf2 #b4185a #d0608f - - - - - - - - - - #b4185a - - #e0428a #2557e0 #9a6cf7 #0e9a6c #d97706"),
-        "dark": p("- - - - - - - - - #f57ab9 #3e1631 #f9a6cf #bd5a8f - - - - - - - - - - #f9a6cf - - #e0559b #3559e6 - #12a678 #c88317")
+        "light": p("- - - - - - - - - #b4185a #fdebf2 #b4185a #d0608f - - - - - #2d4fd6 - - - - #b4185a - - #e0428a #2557e0 #9a6cf7 #0e9a6c #d97706"),
+        "dark": p("- - - - - - - - - #f57ab9 #3e1631 #f9a6cf #bd5a8f - - - - - #91a8ff - - - - #f9a6cf - - #e0559b #3559e6 - #12a678 #c88317")
       },
       {
         "id": "slate",
         "label": "Slate",
-        "light": p("- - - - - - - - - #3f5670 #ebeff4 #3f5670 #6e8399 - - - - - - - - - - #3f5670 - - #5f7690 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a"),
-        "dark": p("- - - - - - - - - #a8bbd2 #1f2733 #c2d0e1 #6f86a3 - - - - - - - - - - #c2d0e1 - - #8a9fba #3559e6 - #12a678 #c88317 #e0559b")
+        "light": p("- - - - - - - - - #3f5670 #ebeff4 #3f5670 #6e8399 - - - - - #00776b - - - - #3f5670 - - #5f7690 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a"),
+        "dark": p("- - - - - - - - - #a8bbd2 #1f2733 #c2d0e1 #6f86a3 - - - - - #1bc8b8 - - - - #c2d0e1 - - #8a9fba #3559e6 - #12a678 #c88317 #e0559b")
       },
       {
         "id": "ink",
         "label": "Ink",
-        "light": p("- - - - - - - - - #1c1a17 #eeedeb #1c1a17 #726c64 - - - - - - - - - - #1c1a17 - - #2b2620 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0"),
-        "dark": p("- - - - - - - - - #eeece8 #2a2826 #eeece8 #9f9a92 - - - - - - - - - - #eeece8 - - #d9d0c0 #3559e6 - #12a678 #1597b9 #e0559b")
+        "light": p("- - - - - - - - - #1c1a17 #eeedeb #1c1a17 #726c64 - - - - - #2d4fd6 - - - - #1c1a17 - - #2b2620 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0"),
+        "dark": p("- - - - - - - - - #eeece8 #2a2826 #eeece8 #9f9a92 - - - - - #91a8ff - - - - #eeece8 - - #d9d0c0 #3559e6 - #12a678 #1597b9 #e0559b")
       }
     ],
     "defaultPalette": "cobalt",
@@ -375,20 +375,20 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "teal",
         "label": "Teal",
-        "light": p("- - - - - - - - - #0b6f86 - #0b6f86 #3c90a4 - - - - - - - - - - #0b6f86 - - #0e8fb0 #000000 #6b6b6b #333333"),
+        "light": p("- - - - - - - - - #0b6f86 - #0b6f86 #3c90a4 - - - - - #60479a - - - - #0b6f86 - - #0e8fb0 #000000 #6b6b6b #333333"),
         "dark": p("- - - - - - - - - #4cc6db - #79d6e6 #2a8a9c - - - - - - - - - - #79d6e6 - - #0c8ab0 #ffffff")
       },
       {
         "id": "cobalt",
         "label": "Cobalt",
-        "light": p("- - - - - - - - - #2d4fd6 - #2d4fd6 #6880e0 - - - - - - - - - - #2d4fd6 - - #2557e0 #000000"),
-        "dark": p("- - - - - - - - - #8aa1ff - #91a8ff #5a73d6 - - - - - - - - - - #91a8ff - - #4369f0 #ffffff #8a8a8a #cccccc")
+        "light": p("- - - - - - - - - #2d4fd6 - #2d4fd6 #6880e0 - - - - - #106575 - - - - #2d4fd6 - - #2557e0 #000000"),
+        "dark": p("- - - - - - - - - #8aa1ff - #91a8ff #5a73d6 - - - - - #52c9e4 - - - - #91a8ff - - #4369f0 #ffffff #8a8a8a #cccccc")
       },
       {
         "id": "violet",
         "label": "Violet",
-        "light": p("- - - - - - - - - #6534d8 - #6534d8 #8a6ee6 - - - - - - - - - - #6534d8 - - #9a6cf7 #000000 #6b6b6b #333333"),
-        "dark": p("- - - - - - - - - #ad91ff - #bea8ff #7c63cf - - - - - - - - - - #bea8ff - - #9a78ec #ffffff")
+        "light": p("- - - - - - - - - #6534d8 - #6534d8 #8a6ee6 - - - - - #006a87 - - - - #6534d8 - - #9a6cf7 #000000 #6b6b6b #333333"),
+        "dark": p("- - - - - - - - - #ad91ff - #bea8ff #7c63cf - - - - - #52c9e4 - - - - #bea8ff - - #9a78ec #ffffff")
       },
       {
         "id": "plum",
@@ -405,8 +405,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "slate",
         "label": "Slate",
-        "light": p("- - - - - - - - - #3f5670 - #3f5670 #6e8399 - - - - - - - - - - #3f5670 - - #5f7690 #000000"),
-        "dark": p("- - - - - - - - - #a8bbd2 - #c2d0e1 #6f86a3 - - - - - - - - - - #c2d0e1 - - #8a9fba #ffffff #8a8a8a #cccccc #6a6a6a")
+        "light": p("- - - - - - - - - #3f5670 - #3f5670 #6e8399 - - - - - #006f63 - - - - #3f5670 - - #5f7690 #000000"),
+        "dark": p("- - - - - - - - - #a8bbd2 - #c2d0e1 #6f86a3 - - - - - #53cfc1 - - - - #c2d0e1 - - #8a9fba #ffffff #8a8a8a #cccccc #6a6a6a")
       },
       {
         "id": "ink",
@@ -516,20 +516,20 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "teal",
         "label": "Teal",
-        "light": p("- - - - - - - - - #0b6f86 - #0b6f86 #3c90a4 - - - - - - - - - - #0b6f86 - - #0e8fb0 #3a8560 #7b61c4 #c4573f #b25c8c #a8781f"),
-        "dark": p("- - - - - - - - - #4cc6db - #79d6e6 #2a8a9c - - - - - - - - - - #79d6e6 - - #0c8ab0 #7fd1a0 #c4b1f2 #f2a08a #f08cc4 #ecc36e #6fd1c8 #92b8f2")
+        "light": p("- - - - - - - - - #0b6f86 - #0b6f86 #3c90a4 - - - - - #664f9c - - - - #0b6f86 - - #0e8fb0 #3a8560 #7b61c4 #c4573f #b25c8c #a8781f"),
+        "dark": p("- - - - - - - - - #4cc6db - #79d6e6 #2a8a9c - - - - - #baabec - - - - #79d6e6 - - #0c8ab0 #7fd1a0 #c4b1f2 #f2a08a #f08cc4 #ecc36e #6fd1c8 #92b8f2")
       },
       {
         "id": "cobalt",
         "label": "Cobalt",
-        "light": p("- - - - - - - - - #2d4fd6 - #2d4fd6 #6880e0 - - - - - - - - - - #2d4fd6 - - #2557e0 #3a8560 #7b61c4 #c4573f #b25c8c #a8781f"),
-        "dark": p("- - - - - - - - - #8aa1ff - #91a8ff #5a73d6 - - - - - - - - - - #91a8ff - - #4369f0 #7fd1a0 #c4b1f2 #f2a08a #f08cc4 #ecc36e #6fd1c8 #92b8f2")
+        "light": p("- - - - - - - - - #2d4fd6 - #2d4fd6 #6880e0 - - - - - #236a79 - - - - #2d4fd6 - - #2557e0 #3a8560 #7b61c4 #c4573f #b25c8c #a8781f"),
+        "dark": p("- - - - - - - - - #8aa1ff - #91a8ff #5a73d6 - - - - - #69c6db - - - - #91a8ff - - #4369f0 #7fd1a0 #c4b1f2 #f2a08a #f08cc4 #ecc36e #6fd1c8 #92b8f2")
       },
       {
         "id": "violet",
         "label": "Violet",
-        "light": p("- - - - - - - - - #6534d8 - #6534d8 #8a6ee6 - - - - - - - - - - #6534d8 - - #9a6cf7 #3a8560 #7b61c4 #c4573f #2f8f89 #a8781f"),
-        "dark": p("- - - - - - - - - #ad91ff - #bea8ff #7c63cf - - - - - - - - - - #bea8ff - - #9a78ec #7fd1a0 #92b8f2 #f2a08a #f08cc4 #ecc36e #6fd1c8")
+        "light": p("- - - - - - - - - #6534d8 - #6534d8 #8a6ee6 - - - - - #006f8a - - - - #6534d8 - - #9a6cf7 #3a8560 #7b61c4 #c4573f #2f8f89 #a8781f"),
+        "dark": p("- - - - - - - - - #ad91ff - #bea8ff #7c63cf - - - - - #69c6db - - - - #bea8ff - - #9a78ec #7fd1a0 #92b8f2 #f2a08a #f08cc4 #ecc36e #6fd1c8")
       },
       {
         "id": "plum",
@@ -546,8 +546,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "slate",
         "label": "Slate",
-        "light": p("- - - - - - - - - #3f5670 - #3f5670 #6e8399 - - - - - - - - - - #3f5670 - - #5f7690 #c4573f #b25c8c #a8781f #7b61c4 #3a8560"),
-        "dark": p("- - - - - - - - - #a8bbd2 - #c2d0e1 #6f86a3 - - - - - - - - - - #c2d0e1 - - #8a9fba #7fd1a0 #c4b1f2 #f2a08a #f08cc4 #ecc36e #6fd1c8 #92b8f2")
+        "light": p("- - - - - - - - - #3f5670 - #3f5670 #6e8399 - - - - - #007469 - - - - #3f5670 - - #5f7690 #c4573f #b25c8c #a8781f #7b61c4 #3a8560"),
+        "dark": p("- - - - - - - - - #a8bbd2 - #c2d0e1 #6f86a3 - - - - - #6acabe - - - - #c2d0e1 - - #8a9fba #7fd1a0 #c4b1f2 #f2a08a #f08cc4 #ecc36e #6fd1c8 #92b8f2")
       },
       {
         "id": "ink",
@@ -645,20 +645,20 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "teal",
         "label": "Teal",
-        "light": p("- - - - - - - - - #0b6f86 #e3f5f8 #0b6f86 #3c90a4 #ffffff #0b6f86 - - - - - - - - - - - #0e8fb0 #0f6b4a #9a6cf7 #0e9a6c #d97706 #e0428a - - #0b6f86 #0b6f86 - - #0b6f86"),
+        "light": p("- - - - - - - - - #0b6f86 #e3f5f8 #0b6f86 #3c90a4 #ffffff #0b6f86 - - - #684fa2 - - - - - - - #0e8fb0 #0f6b4a #9a6cf7 #0e9a6c #d97706 #e0428a - - #0b6f86 #0b6f86 - - #0b6f86"),
         "dark": p("- - - - - - - - - #4cc6db #0f3540 #79d6e6 #2a8a9c #0b1310 #79d6e6 - - - - - - - - - - - #0c8ab0 #5fbf92 #9a78ec #12a678 #c88317 #e0559b - - #2a8a9c #2a8a9c - - #4cc6db")
       },
       {
         "id": "cobalt",
         "label": "Cobalt",
-        "light": p("- - - - - - - - - #2d4fd6 #eef1fd #2d4fd6 #6880e0 #ffffff #2d4fd6 - - - - - - - - - - - #2557e0 #0f6b4a - - - - - - #2d4fd6 #2d4fd6 - - #2d4fd6"),
-        "dark": p("- - - - - - - - - #8aa1ff #1d2547 #91a8ff #5a73d6 #0b1310 #91a8ff - - - - - - - - - - - #4369f0 #5fbf92 #c88317 #12a678 #1597b9 #e0559b - - #5a73d6 #5a73d6 - - #8aa1ff")
+        "light": p("- - - - - - - - - #2d4fd6 #eef1fd #2d4fd6 #6880e0 #ffffff #2d4fd6 - - - #1c6c7d - - - - - - - #2557e0 #0f6b4a - - - - - - #2d4fd6 #2d4fd6 - - #2d4fd6"),
+        "dark": p("- - - - - - - - - #8aa1ff #1d2547 #91a8ff #5a73d6 #0b1310 #91a8ff - - - #1cc2e0 - - - - - - - #4369f0 #5fbf92 #c88317 #12a678 #1597b9 #e0559b - - #5a73d6 #5a73d6 - - #8aa1ff")
       },
       {
         "id": "violet",
         "label": "Violet",
-        "light": p("- - - - - - - - - #6534d8 #f1ecff #6534d8 #8a6ee6 #ffffff #6534d8 - - - - - - - - - - - #9a6cf7 #0f6b4a - - - - - - #6534d8 #6534d8 - - #6534d8"),
-        "dark": p("- - - - - - - - - #ad91ff #2a2154 #bea8ff #7c63cf #0b1310 #bea8ff - - - - - - - - - - - #9a78ec #5fbf92 #c88317 #12a678 #1597b9 #e0559b - - #7c63cf #7c63cf - - #ad91ff")
+        "light": p("- - - - - - - - - #6534d8 #f1ecff #6534d8 #8a6ee6 #ffffff #6534d8 - - - #006f8c - - - - - - - #9a6cf7 #0f6b4a - - - - - - #6534d8 #6534d8 - - #6534d8"),
+        "dark": p("- - - - - - - - - #ad91ff #2a2154 #bea8ff #7c63cf #0b1310 #bea8ff - - - #1cc2e0 - - - - - - - #9a78ec #5fbf92 #c88317 #12a678 #1597b9 #e0559b - - #7c63cf #7c63cf - - #ad91ff")
       },
       {
         "id": "plum",
@@ -675,8 +675,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "slate",
         "label": "Slate",
-        "light": p("- - - - - - - - - #3f5670 #ebeff4 #3f5670 #6e8399 #ffffff #3f5670 - - - - - - - - - - - #5f7690 #0f6b4a #9a6cf7 #0e9a6c #d97706 #e0428a - - #3f5670 #3f5670 - - #3f5670"),
-        "dark": p("- - - - - - - - - #a8bbd2 #1f2733 #c2d0e1 #6f86a3 #0b1310 #c2d0e1 - - - - - - - - - - - #8a9fba #5fbf92 #9a78ec #12a678 #c88317 #e0559b - - #6f86a3 #6f86a3 - - #a8bbd2")
+        "light": p("- - - - - - - - - #3f5670 #ebeff4 #3f5670 #6e8399 #ffffff #3f5670 - - - #007468 - - - - - - - #5f7690 #0f6b4a #9a6cf7 #0e9a6c #d97706 #e0428a - - #3f5670 #3f5670 - - #3f5670"),
+        "dark": p("- - - - - - - - - #a8bbd2 #1f2733 #c2d0e1 #6f86a3 #0b1310 #c2d0e1 - - - #1bc8b8 - - - - - - - #8a9fba #5fbf92 #9a78ec #12a678 #c88317 #e0559b - - #6f86a3 #6f86a3 - - #a8bbd2")
       },
       {
         "id": "ink",
@@ -824,20 +824,20 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "teal",
         "label": "Teal",
-        "light": p("- - - - - - - - - #0b6f86 #e2ecea #00687e #3c90a4 - - - - - - - - - - #00687e - - #0e8fb0 #b4472a #2b5fa8 #2c6a46 #7b4a8c #8a6d1f #8a8578 #a3510b"),
-        "dark": p("- - - - - - - - - #4cc6db #212d2d #79d6e6 #2a8a9c - - - - - - - - - - #79d6e6 - - #0c8ab0 #e2896b #86b4f0 #6fc08f #c79ad6 #d8b65c #6fc7cf #d99a5b")
+        "light": p("- - - - - - - - - #0b6f86 #e2ecea #00687e #3c90a4 - - - - - #674ea1 - - - - #00687e - - #0e8fb0 #b4472a #2b5fa8 #2c6a46 #7b4a8c #8a6d1f #8a8578 #a3510b"),
+        "dark": p("- - - - - - - - - #4cc6db #212d2d #79d6e6 #2a8a9c - - - - - #b5a5ea - - - - #79d6e6 - - #0c8ab0 #e2896b #86b4f0 #6fc08f #c79ad6 #d8b65c #6fc7cf #d99a5b")
       },
       {
         "id": "cobalt",
         "label": "Cobalt",
-        "light": p("- - - - - - - - - #2d4fd6 #e6e8f4 #2d4fd6 #6880e0 - - - - - - - - - - #2d4fd6 - - #2557e0 #b4472a #7b4a8c #2c6a46 #2f7f86 #8a6d1f #8a8578 #a3510b"),
-        "dark": p("- - - - - - - - - #8aa1ff #282831 #91a8ff #5a73d6 - - - - - - - - - - #91a8ff - - #4369f0 #e2896b #c79ad6 #6fc08f #8c887f #d8b65c #6fc7cf #d99a5b")
+        "light": p("- - - - - - - - - #2d4fd6 #e6e8f4 #2d4fd6 #6880e0 - - - - - #1b6b7c - - - - #2d4fd6 - - #2557e0 #b4472a #7b4a8c #2c6a46 #2f7f86 #8a6d1f #8a8578 #a3510b"),
+        "dark": p("- - - - - - - - - #8aa1ff #282831 #91a8ff #5a73d6 - - - - - #5bc1d9 - - - - #91a8ff - - #4369f0 #e2896b #c79ad6 #6fc08f #8c887f #d8b65c #6fc7cf #d99a5b")
       },
       {
         "id": "violet",
         "label": "Violet",
-        "light": p("- - - - - - - - - #6534d8 #ede5f4 #6534d8 #8a6ee6 - - - - - - - - - - #6534d8 - - #9a6cf7 #b4472a #2b5fa8 #2c6a46 #2f7f86 #8a6d1f #8a8578 #a3510b"),
-        "dark": p("- - - - - - - - - #ad91ff #2d2731 #bea8ff #7c63cf - - - - - - - - - - #bea8ff - - #9a78ec #e2896b #86b4f0 #6fc08f #8c887f #d8b65c #6fc7cf #d99a5b")
+        "light": p("- - - - - - - - - #6534d8 #ede5f4 #6534d8 #8a6ee6 - - - - - #00708d - - - - #6534d8 - - #9a6cf7 #b4472a #2b5fa8 #2c6a46 #2f7f86 #8a6d1f #8a8578 #a3510b"),
+        "dark": p("- - - - - - - - - #ad91ff #2d2731 #bea8ff #7c63cf - - - - - #5bc1d9 - - - - #bea8ff - - #9a78ec #e2896b #86b4f0 #6fc08f #8c887f #d8b65c #6fc7cf #d99a5b")
       },
       {
         "id": "plum",
@@ -854,8 +854,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "slate",
         "label": "Slate",
-        "light": p("- - - - - - - - - #3f5670 #e8e9e8 #3f5670 #6e8399 - - - - - - - - - - #3f5670 - - #5f7690 #b4472a #2b5fa8 #2c6a46 #7b4a8c #8a6d1f #8a8578 #a3510b"),
-        "dark": p("- - - - - - - - - #a8bbd2 #2c2c2c #c2d0e1 #6f86a3 - - - - - - - - - - #c2d0e1 - - #8a9fba #e2896b #c79ad6 #6fc08f #8c887f #d8b65c #6fc7cf #d99a5b")
+        "light": p("- - - - - - - - - #3f5670 #e8e9e8 #3f5670 #6e8399 - - - - - #00766a - - - - #3f5670 - - #5f7690 #b4472a #2b5fa8 #2c6a46 #7b4a8c #8a6d1f #8a8578 #a3510b"),
+        "dark": p("- - - - - - - - - #a8bbd2 #2c2c2c #c2d0e1 #6f86a3 - - - - - #5cc6b9 - - - - #c2d0e1 - - #8a9fba #e2896b #c79ad6 #6fc08f #8c887f #d8b65c #6fc7cf #d99a5b")
       },
       {
         "id": "ink",
@@ -943,37 +943,37 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
   {
     "id": "graphite",
     "label": "Graphite",
-    "light": p("#f1f3f5 #ffffff #eceef1 #e1e4e8 #9aa1ab #78808c #0f1216 #474e58 #5c646f #0b6f86 #e3f5f8 #0b6f86 #3c90a4 - - #16714a #8a5700 #bb2a2a #2459b8 #0f1216 #e6e9ee #a3abb7 #232830 #79d6e6 #1c222b #ffffff #0e8fb0 #9a6cf7 #0e9a6c #d97706 #e0428a #2557e0 #a3510b #94a3b8 #e1e4e8 #e1e4e8 1px - #0f1216 #ffffff"),
+    "light": p("#f1f3f5 #ffffff #eceef1 #e1e4e8 #9aa1ab #78808c #0f1216 #474e58 #5c646f #0b6f86 #e3f5f8 #0b6f86 #3c90a4 - - #16714a #8a5700 #bb2a2a #664ca0 #0f1216 #e6e9ee #a3abb7 #232830 #79d6e6 #1c222b #ffffff #0e8fb0 #9a6cf7 #0e9a6c #d97706 #e0428a #2557e0 #a3510b #94a3b8 #e1e4e8 #e1e4e8 1px - #0f1216 #ffffff"),
     "dark": p("#0b0d10 #111418 #191d23 #232830 #4a525e #727b88 #eef1f5 #aab2be #8c95a2 #4cc6db #0f3540 #79d6e6 #2a8a9c - - #5fcf98 #e2b04e #ff8a80 #8ab4ff #07090b #e6e9ee #a3abb7 #1c2128 #79d6e6 #171c23 #ffffff #0c8ab0 #9a78ec #12a678 #c88317 #e0559b #3559e6 #d26b3b #6b7694 #232830 #232830 1px - #eef1f5 #0b0d10"),
     "palettes": [
       {
         "id": "crimson",
         "label": "Crimson",
-        "light": p("- - - - - - - - - #b42318 #fdecea #b42318 #d9534a - - - - - - - - - - #ffaca5 - - #d63a32 #0e8fb0 #9a6cf7 #0e9a6c #d97706 #e0428a #2557e0"),
+        "light": p("- - - - - - - - - #b42318 #fdecea #b42318 #d9534a - - - - - #2459b8 - - - - #ffaca5 - - #d63a32 #0e8fb0 #9a6cf7 #0e9a6c #d97706 #e0428a #2557e0"),
         "dark": p("- - - - - - - - - #ff8f85 #3d1715 #ffaca5 #e06158 - - - - - - - - - - #ffaca5 - - #e5534b #1597b9 - #9a78ec #c88317 #e0559b #3559e6")
       },
       {
         "id": "safety",
         "label": "Safety orange",
-        "light": p("- - - - - - - - - #b33d0b #fdeee4 #b33d0b #d4612a - - - - - - - - - - #ffb88f - - #e8691f #0e8fb0 #9a6cf7 #0e9a6c #2557e0 #e0428a"),
+        "light": p("- - - - - - - - - #b33d0b #fdeee4 #b33d0b #d4612a - - - - - #2459b8 - - - - #ffb88f - - #e8691f #0e8fb0 #9a6cf7 #0e9a6c #2557e0 #e0428a"),
         "dark": p("- - - - - - - - - #ff9d66 #3b2112 #ffb88f #d8743a - - - - - - - - - - #ffb88f - - #f07a32 #1597b9 - #9a78ec #c88317 #e0559b #3559e6")
       },
       {
         "id": "amber",
         "label": "Amber",
-        "light": p("- - - - - - - - - #875a00 #fbf2dc #875a00 #b57a33 - - - - - - - - - - #fbcf86 - - #d97706 #0e8fb0 #9a6cf7 #0e9a6c #2557e0 #e0428a"),
+        "light": p("- - - - - - - - - #875a00 #fbf2dc #875a00 #b57a33 - - - - - #2459b8 - - - - #fbcf86 - - #d97706 #0e8fb0 #9a6cf7 #0e9a6c #2557e0 #e0428a"),
         "dark": p("- - - - - - - - - #f4b24a #3a2a10 #fbcf86 #b07d2d - - - - - - - - - - #fbcf86 - - #c88317 #1597b9 - #9a78ec")
       },
       {
         "id": "moss",
         "label": "Moss",
-        "light": p("- - - - - - - - - #436e10 #eef4e2 #436e10 #638f2a - - - - - - - - - - #bfe28f - - #6b9e1f #0e8fb0 #9a6cf7"),
+        "light": p("- - - - - - - - - #436e10 #eef4e2 #436e10 #638f2a - - - - - #2459b8 - - - - #bfe28f - - #6b9e1f #0e8fb0 #9a6cf7"),
         "dark": p("- - - - - - - - - #a6d468 #232f15 #bfe28f #7aa743 - - - - - - - - - - #bfe28f - - #8cbf45 #1597b9 #c88317 #9a78ec")
       },
       {
         "id": "emerald",
         "label": "Emerald",
-        "light": p("- - - - - - - - - #08734f #e4f6ed #08734f #36966f - - - - - - - - - - #7ee6bd - - #0e9a6c #0e8fb0 #9a6cf7"),
+        "light": p("- - - - - - - - - #08734f #e4f6ed #08734f #36966f - - - - - #2459b8 - - - - #7ee6bd - - #0e9a6c #0e8fb0 #9a6cf7"),
         "dark": p("- - - - - - - - - #4ad6a0 #0f3529 #7ee6bd #279771 - - - - - - - - - - #7ee6bd - - #12a678 #1597b9 #c88317 #9a78ec")
       },
       {
@@ -985,37 +985,37 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "cobalt",
         "label": "Cobalt",
-        "light": p("- - - - - - - - - #2d4fd6 #eef1fd #2d4fd6 #6880e0 - - - - - - - - - - #91a8ff - - #2557e0 #0e8fb0 #9a6cf7 #0e9a6c #d97706 #e0428a"),
-        "dark": p("- - - - - - - - - #8aa1ff #1d2547 #91a8ff #5a73d6 - - - - - - - - - - #91a8ff - - #4369f0 #1597b9 - #9a78ec #c88317 #e0559b")
+        "light": p("- - - - - - - - - #2d4fd6 #eef1fd #2d4fd6 #6880e0 - - - - - #186a7a - - - - #91a8ff - - #2557e0 #0e8fb0 #9a6cf7 #0e9a6c #d97706 #e0428a"),
+        "dark": p("- - - - - - - - - #8aa1ff #1d2547 #91a8ff #5a73d6 - - - - - #44c7e3 - - - - #91a8ff - - #4369f0 #1597b9 - #9a78ec #c88317 #e0559b")
       },
       {
         "id": "violet",
         "label": "Violet",
-        "light": p("- - - - - - - - - #6534d8 #f1ecff #6534d8 #8a6ee6 - - - - - - - - - - #bea8ff - - #9a6cf7 #0e8fb0"),
-        "dark": p("- - - - - - - - - #ad91ff #2a2154 #bea8ff #7c63cf - - - - - - - - - - #bea8ff - - #9a78ec #12a678 #1597b9")
+        "light": p("- - - - - - - - - #6534d8 #f1ecff #6534d8 #8a6ee6 - - - - - #006f8c - - - - #bea8ff - - #9a6cf7 #0e8fb0"),
+        "dark": p("- - - - - - - - - #ad91ff #2a2154 #bea8ff #7c63cf - - - - - #44c7e3 - - - - #bea8ff - - #9a78ec #12a678 #1597b9")
       },
       {
         "id": "plum",
         "label": "Plum",
-        "light": p("- - - - - - - - - #8a1f8f #f8eaf8 #8a1f8f #b65bbb - - - - - - - - - - #edaef2 - - #b847c0 #0e9a6c #0e8fb0"),
+        "light": p("- - - - - - - - - #8a1f8f #f8eaf8 #8a1f8f #b65bbb - - - - - #2459b8 - - - - #edaef2 - - #b847c0 #0e9a6c #0e8fb0"),
         "dark": p("- - - - - - - - - #e28cea #3a1840 #edaef2 #b366bb - - - - - - - - - - #edaef2 - - #d062d8 #12a678 #1597b9 - #9a78ec")
       },
       {
         "id": "rose",
         "label": "Rose",
-        "light": p("- - - - - - - - - #b4185a #fdebf2 #b4185a #d0608f - - - - - - - - - - #f9a6cf - - #e0428a #0e8fb0 #9a6cf7 #0e9a6c #d97706"),
+        "light": p("- - - - - - - - - #b4185a #fdebf2 #b4185a #d0608f - - - - - #2459b8 - - - - #f9a6cf - - #e0428a #0e8fb0 #9a6cf7 #0e9a6c #d97706"),
         "dark": p("- - - - - - - - - #f57ab9 #3e1631 #f9a6cf #bd5a8f - - - - - - - - - - #f9a6cf - - #e0559b #1597b9 - #9a78ec #c88317")
       },
       {
         "id": "slate",
         "label": "Slate",
-        "light": p("- - - - - - - - - #3f5670 #ebeff4 #3f5670 #6e8399 - - - - - - - - - - #c2d0e1 - - #5f7690"),
-        "dark": p("- - - - - - - - - #a8bbd2 #1f2733 #c2d0e1 #6f86a3 - - - - - - - - - - #c2d0e1 - - #8a9fba")
+        "light": p("- - - - - - - - - #3f5670 #ebeff4 #3f5670 #6e8399 - - - - - #007569 - - - - #c2d0e1 - - #5f7690"),
+        "dark": p("- - - - - - - - - #a8bbd2 #1f2733 #c2d0e1 #6f86a3 - - - - - #44ccbe - - - - #c2d0e1 - - #8a9fba")
       },
       {
         "id": "ink",
         "label": "Ink",
-        "light": p("- - - - - - - - - #1c1a17 #eeedeb #1c1a17 #726c64 - - - - - - - - - - #eeece8 - - #2b2620 #0e8fb0 #9a6cf7 #0e9a6c #d97706 #e0428a #2557e0"),
+        "light": p("- - - - - - - - - #1c1a17 #eeedeb #1c1a17 #726c64 - - - - - #2459b8 - - - - #eeece8 - - #2b2620 #0e8fb0 #9a6cf7 #0e9a6c #d97706 #e0428a #2557e0"),
         "dark": p("- - - - - - - - - #eeece8 #2a2826 #eeece8 #9f9a92 - - - - - - - - - - #eeece8 - - #d9d0c0 #1597b9 - #9a78ec")
       }
     ],
@@ -1103,26 +1103,26 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
   {
     "id": "bloom",
     "label": "Bloom",
-    "light": p("#f2f3f5 #ffffff #eeeff2 #e2e3e7 #abafb6 #82878f #181c21 #4e5259 #60656c #3f5670 #ebeff4 #3f5670 #6e8399 - - #1c7550 #875600 #c0263b #3f5670 #ffffff #181c21 #4e5259 #e2e3e7 #3f5670 - - #5f7690 #9a6cf7 #0e9a6c #d97706 #e0428a #2557e0 #a3510b #94a3b8 #e2e3e7 #e2e3e7 1px - #3f5670 - - - #ffffff"),
-    "dark": p("#0e1114 #15191c #1e2126 #272b31 #4f5660 #777f88 #eceff2 #b1b6be #9298a0 #a8bbd2 #1f2733 #c2d0e1 #6f86a3 - - #6fd0a0 #e6b458 #ff8f9d #c2d0e1 #15191c #eceff2 #b1b6be #272b31 #c2d0e1 - - #8a9fba #9a78ec #12a678 #c88317 #e0559b #3559e6 #d26b3b #6b7694 #272b31 #272b31 1px - #a8bbd2 - - - #15191c"),
+    "light": p("#f2f3f5 #ffffff #eeeff2 #e2e3e7 #abafb6 #82878f #181c21 #4e5259 #60656c #3f5670 #ebeff4 #3f5670 #6e8399 - - #1c7550 #875600 #c0263b #00776a #ffffff #181c21 #4e5259 #e2e3e7 #3f5670 - - #5f7690 #9a6cf7 #0e9a6c #d97706 #e0428a #2557e0 #a3510b #94a3b8 #e2e3e7 #e2e3e7 1px - #3f5670 - - - #ffffff"),
+    "dark": p("#0e1114 #15191c #1e2126 #272b31 #4f5660 #777f88 #eceff2 #b1b6be #9298a0 #a8bbd2 #1f2733 #c2d0e1 #6f86a3 - - #6fd0a0 #e6b458 #ff8f9d #4ccdbf #15191c #eceff2 #b1b6be #272b31 #c2d0e1 - - #8a9fba #9a78ec #12a678 #c88317 #e0559b #3559e6 #d26b3b #6b7694 #272b31 #272b31 1px - #a8bbd2 - - - #15191c"),
     "palettes": [
       {
         "id": "crimson",
         "label": "Crimson",
-        "light": p("#faf1ed - #f8ede9 #f0e0d9 #c7a79b #a27d71 #2b1510 #684a41 #7c5b53 #b42318 #fdecea #b42318 #d9534a - - - - - #b42318 - #2b1510 #684a41 #f0e0d9 #b42318 - - #d63a32 - - - - #0e8fb0 #2557e0 - #f0e0d9 #f0e0d9 - - #b42318"),
-        "dark": p("#1a0c0b #251311 #301a18 #3d2320 #754742 #9f716a #faebe8 #d0ada6 #b38d87 #ff8f85 #3d1715 #ffaca5 #e06158 - - - - - #ffaca5 #251311 #faebe8 #d0ada6 #3d2320 #ffaca5 - - #e5534b - - - - #1597b9 #3559e6 - #3d2320 #3d2320 - - #ff8f85 - - - #251311")
+        "light": p("#faf1ed - #f8ede9 #f0e0d9 #c7a79b #a27d71 #2b1510 #684a41 #7c5b53 #b42318 #fdecea #b42318 #d9534a - - - - - #2f62c9 - #2b1510 #684a41 #f0e0d9 #b42318 - - #d63a32 - - - - #0e8fb0 #2557e0 - #f0e0d9 #f0e0d9 - - #b42318"),
+        "dark": p("#1a0c0b #251311 #301a18 #3d2320 #754742 #9f716a #faebe8 #d0ada6 #b38d87 #ff8f85 #3d1715 #ffaca5 #e06158 - - - - - #8fb5ff #251311 #faebe8 #d0ada6 #3d2320 #ffaca5 - - #e5534b - - - - #1597b9 #3559e6 - #3d2320 #3d2320 - - #ff8f85 - - - #251311")
       },
       {
         "id": "safety",
         "label": "Safety orange",
-        "light": p("#f9f1ed - #f6ede8 #eee1d9 #c3a99b #9e7f70 #29160f #654b40 #785d51 #b33d0b #fdeee4 #b33d0b #d4612a - - - - - #b33d0b - #29160f #654b40 #eee1d9 #b33d0b - - #e8691f - - #0e8fb0 - - - - #eee1d9 #eee1d9 - - #b33d0b"),
-        "dark": p("#1a0d07 #24140b #2f1c11 #3b2418 #724b35 #9c745e #f9ece4 #cdaf9d #b0907d #ff9d66 #3b2112 #ffb88f #d8743a - - - - - #ffb88f #24140b #f9ece4 #cdaf9d #3b2418 #ffb88f - - #f07a32 - - - - #1597b9 #3559e6 - #3b2418 #3b2418 - - #ff9d66 - - - #24140b")
+        "light": p("#f9f1ed - #f6ede8 #eee1d9 #c3a99b #9e7f70 #29160f #654b40 #785d51 #b33d0b #fdeee4 #b33d0b #d4612a - - - - - #2f62c9 - #29160f #654b40 #eee1d9 #b33d0b - - #e8691f - - #0e8fb0 - - - - #eee1d9 #eee1d9 - - #b33d0b"),
+        "dark": p("#1a0d07 #24140b #2f1c11 #3b2418 #724b35 #9c745e #f9ece4 #cdaf9d #b0907d #ff9d66 #3b2112 #ffb88f #d8743a - - - - - #8fb5ff #24140b #f9ece4 #cdaf9d #3b2418 #ffb88f - - #f07a32 - - - - #1597b9 #3559e6 - #3b2418 #3b2418 - - #ff9d66 - - - #24140b")
       },
       {
         "id": "amber",
         "label": "Amber",
-        "light": p("#f5f3ee - #f1efea #e7e3db #b6ae9e #8f8573 #211a10 #595142 #6c6353 #875a00 #fbf2dc #875a00 #b57a33 - - - - - #875a00 - #211a10 #595142 #e7e3db #875a00 - - #d97706 - - #0e8fb0 - - - - #e7e3db #e7e3db - - #875a00"),
-        "dark": p("#170f04 #211607 #2b1e0b #372811 #6a5029 #937a54 #f5eee1 #c5b397 #a99476 #f4b24a #3a2a10 #fbcf86 #b07d2d - - - - - #fbcf86 #211607 #f5eee1 #c5b397 #372811 #fbcf86 - - #c88317 - - #1597b9 - - - - #372811 #372811 - - #f4b24a - - - #211607")
+        "light": p("#f5f3ee - #f1efea #e7e3db #b6ae9e #8f8573 #211a10 #595142 #6c6353 #875a00 #fbf2dc #875a00 #b57a33 - - - - - #2f62c9 - #211a10 #595142 #e7e3db #875a00 - - #d97706 - - #0e8fb0 - - - - #e7e3db #e7e3db - - #875a00"),
+        "dark": p("#170f04 #211607 #2b1e0b #372811 #6a5029 #937a54 #f5eee1 #c5b397 #a99476 #f4b24a #3a2a10 #fbcf86 #b07d2d - - - - - #8fb5ff #211607 #f5eee1 #c5b397 #372811 #fbcf86 - - #c88317 - - #1597b9 - - - - #372811 #372811 - - #f4b24a - - - #211607")
       },
       {
         "id": "moss",
@@ -1139,32 +1139,32 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "teal",
         "label": "Teal",
-        "light": p("#eff4f6 - #ebf0f3 #dde5e9 #a3b1b9 #788a92 #121e22 #46555b #57676e #0b6f86 #e3f5f8 #0b6f86 #3c90a4 - - - - - #0b6f86 - #121e22 #46555b #dde5e9 #0b6f86 - - #0e8fb0 - - - - - - - #dde5e9 #dde5e9 - - #0b6f86"),
-        "dark": p("#061315 #091b1f #0f2529 #152f34 #305d66 #5c868f #e5f1f5 #9ebcc4 #7d9ea6 #4cc6db #0f3540 #79d6e6 #2a8a9c - - - - - #79d6e6 #091b1f #e5f1f5 #9ebcc4 #152f34 #79d6e6 - - #0c8ab0 - - - - - - - #152f34 #152f34 - - #4cc6db - - - #091b1f")
+        "light": p("#eff4f6 - #ebf0f3 #dde5e9 #a3b1b9 #788a92 #121e22 #46555b #57676e #0b6f86 #e3f5f8 #0b6f86 #3c90a4 - - - - - #6f57ab - #121e22 #46555b #dde5e9 #0b6f86 - - #0e8fb0 - - - - - - - #dde5e9 #dde5e9 - - #0b6f86"),
+        "dark": p("#061315 #091b1f #0f2529 #152f34 #305d66 #5c868f #e5f1f5 #9ebcc4 #7d9ea6 #4cc6db #0f3540 #79d6e6 #2a8a9c - - - - - #8fb5ff #091b1f #e5f1f5 #9ebcc4 #152f34 #79d6e6 - - #0c8ab0 - - - - - - - #152f34 #152f34 - - #4cc6db - - - #091b1f")
       },
       {
         "id": "cobalt",
         "label": "Cobalt",
-        "light": p("#f1f2fb - #edeefa #e0e2f3 #a7adce #7c84a9 #141a30 #49506f #5a6383 #2d4fd6 #eef1fd #2d4fd6 #6880e0 - - - - - #2d4fd6 - #141a30 #49506f #e0e2f3 #2d4fd6 - - #2557e0 - - - - #0e8fb0 - - #e0e2f3 #e0e2f3 - - #2d4fd6"),
-        "dark": p("#0c101c #131727 #1b2033 #232940 #49537a #727ca3 #ebeefb #aeb4d2 #8e96b6 #8aa1ff #1d2547 #91a8ff #5a73d6 - - - - - #91a8ff #131727 #ebeefb #aeb4d2 #232940 #91a8ff - - #4369f0 #12a678 #9a78ec - - #1597b9 - - #232940 #232940 - - #8aa1ff - - - #131727")
+        "light": p("#f1f2fb - #edeefa #e0e2f3 #a7adce #7c84a9 #141a30 #49506f #5a6383 #2d4fd6 #eef1fd #2d4fd6 #6880e0 - - - - - #237182 - #141a30 #49506f #e0e2f3 #2d4fd6 - - #2557e0 - - - - #0e8fb0 - - #e0e2f3 #e0e2f3 - - #2d4fd6"),
+        "dark": p("#0c101c #131727 #1b2033 #232940 #49537a #727ca3 #ebeefb #aeb4d2 #8e96b6 #8aa1ff #1d2547 #91a8ff #5a73d6 - - - - - #4bc8e3 #131727 #ebeefb #aeb4d2 #232940 #91a8ff - - #4369f0 #12a678 #9a78ec - - #1597b9 - - #232940 #232940 - - #8aa1ff - - - #131727")
       },
       {
         "id": "violet",
         "label": "Violet",
-        "light": p("#f4f1fb - #f1edf9 #e6e0f2 #b3a8cc #8a7fa8 #1c1730 #544c6e #665e82 #6534d8 #f1ecff #6534d8 #8a6ee6 - - - - - #6534d8 - #1c1730 #544c6e #e6e0f2 #6534d8 - - #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0 - - - #e6e0f2 #e6e0f2 - - #6534d8"),
-        "dark": p("#110e1c #191527 #221d33 #2c2640 #584d7a #8176a3 #f0ecfb #b9b0d2 #9a91b6 #ad91ff #2a2154 #bea8ff #7c63cf - - - - - #bea8ff #191527 #f0ecfb #b9b0d2 #2c2640 #bea8ff - - #9a78ec #12a678 #c88317 #e0559b #1597b9 - - - #2c2640 #2c2640 - - #ad91ff - - - #191527")
+        "light": p("#f4f1fb - #f1edf9 #e6e0f2 #b3a8cc #8a7fa8 #1c1730 #544c6e #665e82 #6534d8 #f1ecff #6534d8 #8a6ee6 - - - - - #00718e - #1c1730 #544c6e #e6e0f2 #6534d8 - - #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0 - - - #e6e0f2 #e6e0f2 - - #6534d8"),
+        "dark": p("#110e1c #191527 #221d33 #2c2640 #584d7a #8176a3 #f0ecfb #b9b0d2 #9a91b6 #ad91ff #2a2154 #bea8ff #7c63cf - - - - - #4bc8e3 #191527 #f0ecfb #b9b0d2 #2c2640 #bea8ff - - #9a78ec #12a678 #c88317 #e0559b #1597b9 - - - #2c2640 #2c2640 - - #ad91ff - - - #191527")
       },
       {
         "id": "plum",
         "label": "Plum",
-        "light": p("#f8f0f6 - #f6ecf2 #eddfe8 #c1a5b9 #9a7b93 #261525 #62495d #755b70 #8a1f8f #f8eaf8 #8a1f8f #b65bbb - - - - - #8a1f8f - #261525 #62495d #eddfe8 #8a1f8f - - #b847c0 #0e9a6c #d97706 #e0428a #0e8fb0 - - - #eddfe8 #eddfe8 - - #8a1f8f"),
-        "dark": p("#170c18 #201322 #2b1a2c #362238 #6a476c #947095 #f7eaf6 #c8acc6 #aa8caa #e28cea #3a1840 #edaef2 #b366bb - - - - - #edaef2 #201322 #f7eaf6 #c8acc6 #362238 #edaef2 - - #d062d8 #12a678 #9a78ec - #1597b9 - - - #362238 #362238 - - #e28cea - - - #201322")
+        "light": p("#f8f0f6 - #f6ecf2 #eddfe8 #c1a5b9 #9a7b93 #261525 #62495d #755b70 #8a1f8f #f8eaf8 #8a1f8f #b65bbb - - - - - #2f62c9 - #261525 #62495d #eddfe8 #8a1f8f - - #b847c0 #0e9a6c #d97706 #e0428a #0e8fb0 - - - #eddfe8 #eddfe8 - - #8a1f8f"),
+        "dark": p("#170c18 #201322 #2b1a2c #362238 #6a476c #947095 #f7eaf6 #c8acc6 #aa8caa #e28cea #3a1840 #edaef2 #b366bb - - - - - #8fb5ff #201322 #f7eaf6 #c8acc6 #362238 #edaef2 - - #d062d8 #12a678 #9a78ec - #1597b9 - - - #362238 #362238 - - #e28cea - - - #201322")
       },
       {
         "id": "rose",
         "label": "Rose",
-        "light": p("#faf0f0 - #f8ecec #f1dedf #c9a4a7 #a37a7f #2b1319 #69484c #7d595e #b4185a #fdebf2 #b4185a #d0608f - - - - - #b4185a - #2b1319 #69484c #f1dedf #b4185a - - #e0428a - - - #0e8fb0 - - - #f1dedf #f1dedf - - #b4185a"),
-        "dark": p("#1a0b12 #24111b #301824 #3c212e #74445b #9e6d83 #fbe9ef #d0aab8 #b38a9b #f57ab9 #3e1631 #f9a6cf #bd5a8f - - - - - #f9a6cf #24111b #fbe9ef #d0aab8 #3c212e #f9a6cf - - #e0559b - - - #1597b9 - - - #3c212e #3c212e - - #f57ab9 - - - #24111b")
+        "light": p("#faf0f0 - #f8ecec #f1dedf #c9a4a7 #a37a7f #2b1319 #69484c #7d595e #b4185a #fdebf2 #b4185a #d0608f - - - - - #2f62c9 - #2b1319 #69484c #f1dedf #b4185a - - #e0428a - - - #0e8fb0 - - - #f1dedf #f1dedf - - #b4185a"),
+        "dark": p("#1a0b12 #24111b #301824 #3c212e #74445b #9e6d83 #fbe9ef #d0aab8 #b38a9b #f57ab9 #3e1631 #f9a6cf #bd5a8f - - - - - #8fb5ff #24111b #fbe9ef #d0aab8 #3c212e #f9a6cf - - #e0559b - - - #1597b9 - - - #3c212e #3c212e - - #f57ab9 - - - #24111b")
       },
       {
         "id": "slate",
@@ -1175,8 +1175,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "ink",
         "label": "Ink",
-        "light": p("#f3f3f2 - #efefef #e3e3e3 #afafae #878685 #1c1c1b #525251 #656463 #1c1a17 #eeedeb #1c1a17 #726c64 - - - - - #1c1a17 - #1c1c1b #525251 #e3e3e3 #1c1a17 - - #2b2620 - - - - #0e8fb0 #2557e0 - #e3e3e3 #e3e3e3 - - #1c1a17"),
-        "dark": p("#111010 #191818 #212120 #2b2b2a #565554 #7f7e7c #efeeee #b6b6b5 #989796 #eeece8 #2a2826 #eeece8 #9f9a92 - - - - - #eeece8 #191818 #efeeee #b6b6b5 #2b2b2a #eeece8 - - #d9d0c0 - - #1597b9 - - - - #2b2b2a #2b2b2a - - #eeece8 - - - #191818")
+        "light": p("#f3f3f2 - #efefef #e3e3e3 #afafae #878685 #1c1c1b #525251 #656463 #1c1a17 #eeedeb #1c1a17 #726c64 - - - - - #2f62c9 - #1c1c1b #525251 #e3e3e3 #1c1a17 - - #2b2620 - - - - #0e8fb0 #2557e0 - #e3e3e3 #e3e3e3 - - #1c1a17"),
+        "dark": p("#111010 #191818 #212120 #2b2b2a #565554 #7f7e7c #efeeee #b6b6b5 #989796 #eeece8 #2a2826 #eeece8 #9f9a92 - - - - - #8fb5ff #191818 #efeeee #b6b6b5 #2b2b2a #eeece8 - - #d9d0c0 - - #1597b9 - - - - #2b2b2a #2b2b2a - - #eeece8 - - - #191818")
       }
     ],
     "defaultPalette": "slate",

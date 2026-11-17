@@ -52,7 +52,7 @@ test('a signed-out App whose home is public asks for it, and signs in when nothi
   await act(async () => {
     await import('./boot.js');
   });
-  expect(await screen.findByRole('heading', { name: 'Sign in to Ignition · Assignments' }, { timeout: 20_000 })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: 'Ignition · Assignments' }, { timeout: 20_000 })).toBeInTheDocument();
   // No `/api/landing` probe: who-am-I names no landing here, so the boot resolves it to null and
   // the public home goes straight to the form instead of probing a landing that answers 404.
   expect(fetch.mock.calls.map(([path]) => path)).toEqual(['/api/whoami?app=ignition-commands', '/api/forms/welcome']);
@@ -118,7 +118,7 @@ test.each(['whoami', 'tenant-whoami', 'runtime-401'])(
     await act(async () => {
       await import('./boot.js');
     });
-    expect(await screen.findByRole('heading', { name: 'Sign in to Ignition · Assignments' }, { timeout: 20_000 })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Ignition · Assignments' }, { timeout: 20_000 })).toBeInTheDocument();
     const { finishStartup, failStartup } = await import('./startup.js');
     await vi.waitFor(() => expect(finishStartup).toHaveBeenCalled());
     expect(failStartup).not.toHaveBeenCalled();

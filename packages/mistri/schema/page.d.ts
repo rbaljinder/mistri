@@ -758,6 +758,15 @@ export type BlockWidth = 'full' | 'half' | 'third' | 'two-thirds';
 
 /** The page's grid: blocks and panels side by side by their `width`, wrapping as a dashboard's sections do. */
 export declare function Grid(props: { children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
+/** A head for a page that draws its own (`head: false`), in the platform's head markup: the title, a line of intro, the
+    page's verbs at the far end and a way back (an address of this App, followed in place). An h2: the page's one h1 is the platform's.
+    `<PageHeader title="Pick walk" actions={<CommandForm command="releaseOrder" />} back={{ label: 'All lists', href: '/pick-lists' }} />`. */
+export declare function PageHeader(props: {
+  title: ReactTypes.ReactNode;
+  description?: ReactTypes.ReactNode;
+  actions?: ReactTypes.ReactNode;
+  back?: { label: string; href: string };
+}): ReactTypes.ReactElement;
 /** A titled region of the grid: `<Panel title="Open lines" width="half">…</Panel>`. */
 export declare function Panel(props: { title?: ReactTypes.ReactNode; width?: BlockWidth; children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
 /** Tabs, each panel drawn the first time it is opened; `param` (one of the page's `params`) keeps the open tab in the

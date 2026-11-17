@@ -53,6 +53,28 @@
       flex-direction: column;
       gap: var(--m-space-1);
     }
+
+    /* The box, its words and their mark share one line. The rule above makes any other child of a check a column,
+       which stood the box over its label; the words are the box's target, and the box sits level with their first
+       line however many lines they run to. */
+    & > [data-slot='field-check-row'] {
+      flex-direction: row;
+      align-items: flex-start;
+      gap: var(--m-space-3h);
+      min-width: 0;
+    }
+
+    & > [data-slot='field-check-row'] > [data-slot='field-label'] {
+      flex: 1 1 auto;
+      min-width: 0;
+      cursor: pointer;
+      line-height: var(--m-leading);
+    }
+
+    & > [data-slot='field-check-row'] > :not([data-slot='field-label'], [data-slot='field-required'], [data-slot='field-optional']) {
+      flex: none;
+      margin-block-start: 0.2em;
+    }
   }
 
   /* One of a few: each choice is a card, and the chosen one wears the accent's edge and wash. The radio covers

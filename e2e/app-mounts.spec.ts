@@ -137,7 +137,9 @@ test.describe('Compass, placed three ways', () => {
         await page.goto(`${server.origin}${at(`/leads/${lead}`)}`);
         // A fresh server compiles the client from source on its first page.
         await expect(page.locator('html')).not.toHaveAttribute('data-starting', { timeout: 60_000 });
-        await expect(page.locator('.crumbs')).toContainText(name);
+        // The record's name is its page's title; the trail ends at the list it came from.
+        await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
+        await expect(page.locator('.crumbs')).toContainText('Leads');
         expect(address(page)).toBe(at(`/leads/${lead}`));
         await page.locator('main .ref-jump').first().click();
         await expect.poll(() => address(page)).toMatch(new RegExp(`^${at('/sales-team/')}\\d+$`));

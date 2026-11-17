@@ -176,7 +176,6 @@
 :root[data-visual-theme] .crumbs { flex: none; min-height: 51px; padding-block: var(--space-3h); background: var(--ground); z-index: 5; isolation: isolate; }
 :root[data-visual-theme] .app-mode .crumbs > :is(button, .current) { font-family: var(--sans); font-size: var(--text-sm); }
 :root[data-visual-theme] .app-mode .crumbs .current { font-weight: 600; }
-:root[data-visual-theme] .applist-head { padding-top: var(--space-6); }
 /* A head holding only the hidden heading (a room that draws its own title) takes no room: the heading stays for assistive tech, the band above the room goes. */
 :root[data-visual-theme] .applist-head.dash-head:has(> .applist-title.visually-hidden:only-child) { margin: 0; padding: 0; min-height: 0; }
 :root[data-visual-theme] .applist-head-row { align-items: center; }
@@ -361,7 +360,6 @@
   :root[data-visual-theme] body.app-topnav .topbar { padding-block: var(--space-2); }
   :root[data-visual-theme] body.app-topnav .topbar:not([data-header-width="content"]) { padding-inline: var(--space-5); }
   :root[data-visual-theme] .brand-name { font-size: calc(18px * var(--type-k)); }
-  :root[data-visual-theme] .applist-head { padding-top: var(--space-5); }
   :root[data-visual-theme] .dash-strip .home-cards { gap: var(--space-4) 20px; }
   :root[data-visual-theme] .dash-strip .home-card { padding-block: var(--space-4); }
   :root[data-visual-theme] .home-card-value { font-size: calc(26px * var(--type-k)); }

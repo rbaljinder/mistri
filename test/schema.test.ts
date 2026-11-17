@@ -775,7 +775,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // A role's `portal`, the App's own public (one entry and its name), and a list view's `primary`, a row's title
     // there (one entry; the name was a card's already): 1768/524.
     // A dashboard's rows and a record page's related list take that `primary` too (two entries, no new name): 1770/524.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1770, names: 524 });
+    // A theme's `ai` in a mode's colors, the mark of what an AI made (two entries, a mode each, and one new name): 1772/525.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1772, names: 525 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

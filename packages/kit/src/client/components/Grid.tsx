@@ -95,6 +95,7 @@ import { usePins } from './usePins.js';
 import { useStickyHead } from './useStickyHead.js';
 import type { TableSizing } from '@mistriwork/engine/shared/tableSizing.js';
 import {
+  columnFloor,
   fitGridColumns,
   keepFitting,
   tagsThatFit,
@@ -550,6 +551,17 @@ function numberShown(value: unknown, plan: { decimals?: number; group?: boolean 
    measure. (Only a number's or a date's dress is read for this: an avatar or a signature is text's.) */
 const drawsWords = (dress: NonNullable<ReturnType<typeof dressFor>>) =>
   dress.kind !== 'meter' && !('bar' in dress && dress.bar) && !('ring' in dress && dress.ring);
+
+/* What a bar or a ring draws beside its words: its width and the gap before the words (features.css: .pct-bar
+   52px, a meter's 64px, .pct-ring 16px, gap --space-3). Sized by its words alone, Compass's probability column
+   held 88px and cut "100%" to "10…" beside its bar. */
+const BESIDE_GAP = 8;
+const besideWords = (dress: NonNullable<ReturnType<typeof dressFor>>): number => {
+  if (dress.kind === 'meter') return 64 + BESIDE_GAP;
+  if ('bar' in dress && dress.bar !== undefined) return 52 + BESIDE_GAP;
+  if ('ring' in dress && dress.ring !== undefined) return 16 + BESIDE_GAP;
+  return 0;
+};
 
 /* A record's tags in a list's cell: as many whole chips as the cell holds
    (at most TAGS_SHOWN, at least one), then how many more. Clipped by the
@@ -1164,8 +1176,15 @@ export function Grid({
             rows.slice(0, GRID_SIZE_SAMPLE).every((row) => {
               if (row[name] == null) return true;
               const dress = dressFor(display, row[name]);
-              return dress ? drawsWords(dress) : plan.kind === 'number' && numberShown(row[name], plan) != null;
+              return dress ? drawsWords(dress) || besideWords(dress) > 0 : plan.kind === 'number' && numberShown(row[name], plan) != null;
             }),
+          beside:
+            labelColumn || display?.component
+              ? undefined
+              : rows.slice(0, GRID_SIZE_SAMPLE).reduce((most, row) => {
+                  const dress = row[name] == null ? undefined : dressFor(display, row[name]);
+                  return Math.max(most, dress ? besideWords(dress) : 0);
+                }, 0) || undefined,
           /* A date no rule dresses is drawn as the cell formats it, and sized by that. */
           drawnDate: plan.kind === 'date' && !labelColumn && !display?.component,
           status:
@@ -1246,9 +1265,21 @@ export function Grid({
      columns untouched — a grid that was never arranged draws exactly as it
      did. */
   const hasWidthOverrides = Object.keys(columnWidths).length > 0;
+  /* What a dragged column may not go under: a date, a figure or a status pill holds its value's width, text keeps its
+     ellipsis (gridSizing.ts columnFloor). */
+  const floors = useMemo(
+    () =>
+      Object.fromEntries(
+        ordered.map((name, index) => [
+          name,
+          columnFloor(orderedHints[index]!, headChar, measureOrdered && ((text) => measureOrdered(text, index))),
+        ]),
+      ),
+    [ordered, orderedHints, headChar, measureOrdered],
+  );
   const colWidths = useMemo(
-    () => (hasWidthOverrides ? applyColumnWidths(fit.columns, ordered, columnWidths) : fit.columns),
-    [hasWidthOverrides, fit.columns, ordered, columnWidths],
+    () => (hasWidthOverrides ? applyColumnWidths(fit.columns, ordered, columnWidths, floors) : fit.columns),
+    [hasWidthOverrides, fit.columns, ordered, columnWidths, floors],
   );
   const useColgroup = sizing === 'fit' || hasWidthOverrides;
   const tableWidth = hasWidthOverrides
@@ -1262,10 +1293,10 @@ export function Grid({
   const setColumnWidth = useCallback(
     (name: string, width: number) =>
       setColumnWidths((current) => {
-        const next = clampColumnWidth(width);
+        const next = clampColumnWidth(width, floors[name]);
         return current[name] === next ? current : { ...current, [name]: next };
       }),
-    [],
+    [floors],
   );
   const resetColumnWidth = useCallback(
     (name: string) =>
@@ -1766,7 +1797,7 @@ export function Grid({
                 const seed = drag.seed;
                 drag.seed = null;
                 drag.seeded = true;
-                setColumnWidths({ ...seed, [name]: clampColumnWidth(width) });
+                setColumnWidths({ ...seed, [name]: clampColumnWidth(width, floors[name]) });
                 return;
               }
               setColumnWidth(name, width);
@@ -1801,7 +1832,7 @@ export function Grid({
               const seed = sizing !== 'fit' && !hasWidthOverrides ? measureDrawn(e.currentTarget) : null;
               const current = seed?.[name] ?? appliedWidth ?? colWidths[index] ?? 0;
               const width = current + (e.key === 'ArrowRight' ? 1 : -1) * columnResizeStep(e.shiftKey);
-              if (seed) setColumnWidths({ ...seed, [name]: clampColumnWidth(width) });
+              if (seed) setColumnWidths({ ...seed, [name]: clampColumnWidth(width, floors[name]) });
               else setColumnWidth(name, width);
             }}
             onDoubleClick={() => resetColumnWidth(name)}

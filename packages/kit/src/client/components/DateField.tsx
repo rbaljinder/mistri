@@ -9,10 +9,10 @@ import { appWord } from '../messages.js';
 
 /* Read when a field draws, so a catalog worn later is the one said. */
 const words = (): DateFieldWords => ({
-  dateTimePattern: appWord('mistri.form.dateTimeHint', say('yyyyMmDdHh')),
-  enterDateAndTime: say('enterADateAndTime'),
+  timePattern: appWord('mistri.form.timeHint', say('hhMm')),
+  enterDateAndTime: (format) => say('enterADateAndTime', { format }),
   enterDate: (format) => say('enterADateInYyyy', { format }),
-  dateAndTimeFormat: say('dateAndTimeFormat'),
+  dateAndTimeFormat: (format) => say('dateAndTimeFormat', { format }),
   dateFormat: (format) => say('dateFormatIs', { format }),
   openWithKeys: say('altAndDownArrow'),
   chooseDate: (label) => (label ? say('chooseDateFor', { label }) : say('chooseDate')),

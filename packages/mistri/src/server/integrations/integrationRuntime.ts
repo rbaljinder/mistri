@@ -277,6 +277,11 @@ async function call(
 export interface IntegrationSettings {
   readonly integrations: readonly Readonly<{
     name: string;
+    /** The package's own words for the screen; absent, the screen makes the name readable. */
+    label?: string;
+    description?: string;
+    /** Whether the package declares a connection check, so the screen offers "Test connection". */
+    canCheck: boolean;
     /** `least`: the fewest characters the secret is saved with, said beside its input (a webhook's signing secret). */
     secrets: readonly Readonly<{ name: string; set: boolean; savedAt: number | null; least?: number }>[];
     webhook: string | null;
@@ -293,6 +298,9 @@ export async function readIntegrationSettings(
   return Object.freeze({
     integrations: [...runtime.declared.use.values()].map((integration) => ({
       name: integration.name,
+      ...(integration.label ? { label: integration.label } : {}),
+      ...(integration.description ? { description: integration.description } : {}),
+      canCheck: !!integration.check,
       secrets: integration.secrets.map((name) => {
         const row = rows.find((candidate) => candidate.integration === integration.name && candidate.name === name);
         return {
@@ -346,5 +354,57 @@ export async function saveIntegrationSettings(runtime: IntegrationRuntime, tenan
       savedBy: by,
       at,
     });
+  }
+}
+
+/** How long a connection check may take: a person is watching the button. */
+const CHECK_LIMIT_MS = 10_000;
+
+/** What "Test connection" answers: the check's own result, or a fixed sentence when it could not give one. */
+export type IntegrationCheckOutcome = Readonly<{ ok: true }> | Readonly<{ ok: false; message: string }>;
+
+/**
+ * Run an integration's connection check under one tenant's saved secrets: `{ integration }`. Every secret the
+ * integration declares must be saved first. A throw, a time-out or an answer that is not `{ ok }` is a fixed sentence,
+ * never the error's text (an SDK's error can carry the key it was given), and a failure message the package wrote
+ * has any saved secret value taken out of it before it leaves.
+ */
+export async function checkIntegrationConnection(
+  runtime: IntegrationRuntime,
+  tenant: string,
+  body: unknown,
+  limitMs: number = CHECK_LIMIT_MS,
+): Promise<IntegrationCheckOutcome> {
+  const value = body as { integration?: unknown } | null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new IntegrationSettingsRefusal('Send { integration }.');
+  const integration = typeof value.integration === 'string' ? runtime.declared.use.get(value.integration) : undefined;
+  if (!integration) throw new IntegrationSettingsRefusal('That is not an integration this App uses.');
+  if (!integration.check) throw new IntegrationSettingsRefusal(`${integration.name} has no connection check.`);
+  const secrets = await runtime.secrets(tenant, integration.name);
+  if (!secrets) return { ok: false, message: 'Save every secret first, then test the connection.' };
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const answer = await Promise.race([
+      Promise.resolve().then(() => integration.check!({ secrets, signal: controller.signal })),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error('timeout'));
+        }, limitMs);
+      }),
+    ]);
+    const got = answer as { ok?: unknown; message?: unknown } | null;
+    if (got && typeof got === 'object' && got.ok === true) return { ok: true };
+    if (got && typeof got === 'object' && got.ok === false && typeof got.message === 'string' && got.message.trim()) {
+      let said = got.message.trim().slice(0, 300);
+      for (const secret of Object.values(secrets)) if (secret.length >= 4) said = said.split(secret).join('…');
+      return { ok: false, message: said };
+    }
+    return { ok: false, message: 'The connection check gave no answer.' };
+  } catch {
+    return { ok: false, message: 'The connection could not be tested. Check the saved secrets and try again.' };
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }

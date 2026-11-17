@@ -17,9 +17,12 @@ import { Button } from '@mistriwork/ui/Button.js';
 import { offeredChoices } from '@mistriwork/kit/client/components/pickerStaleness.js';
 import { readsAsName } from '@mistriwork/kit/client/components/Dropdown.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
+import { Icon } from '@mistriwork/kit/client/components/Icon.js';
+import { recentVisits } from '@mistriwork/kit/client/paletteRecents.js';
 import { say as sayField } from '../copy/forms/components/CommandFields.js';
 import { say } from '../copy/forms/components/CommandReference.js';
 import { andQuery, splitClauseTail } from '@mistriwork/engine/shared/query.js';
+import { pluralOf } from '@mistriwork/engine/shared/appNoun.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { collidingNames, referenceSubline, sublineText, type Subline } from '@mistriwork/engine/shared/referenceSubline.js';
 import { knownReferenceName, rememberReferenceName } from './referenceNames.js';
@@ -320,6 +323,20 @@ function FlatReferenceField({
       return result;
     },
   });
+  /* An empty, focused box offers the records this person opened lately first (paletteRecents.ts: in memory, this page's
+     life only). Each is read back under the field's own filter, so a record the field would not accept is never offered. */
+  const recentKeys = open && !disabled && text.trim() === '' ? recentKeysOf(field) : [];
+  const recents = useQuery({
+    queryKey: ['command-choices-recent', identityEpoch, connection, field, recentKeys],
+    retry: false,
+    enabled: recentKeys.length > 0 && isCurrent(),
+    queryFn: async () => {
+      const read = await readChoices(field, '', connection, recentKeys.length, 0, recentKeys);
+      // The recents' own order is the person's: newest first.
+      return recentKeys.flatMap((key) => read.choices.filter((choice) => String(choice.value) === String(key)));
+    },
+  });
+  const recentChoices = recentKeys.length && !asked ? (recents.data ?? []) : [];
   /* For the pause before the typed search is asked, the list answers earlier
      text with its first row lit: offer only the rows the box's text names, so
      Enter cannot put a reviewer nobody typed into the command. */
@@ -327,12 +344,16 @@ function FlatReferenceField({
     typed: text,
     asked,
     placeholder: choices.isPlaceholderData,
-    rows: choices.data,
+    rows: choices.data && recentChoices.length ? mergeRecent(recentChoices, choices.data) : choices.data,
     label: (choice) => choice.label,
   });
   const twice = collidingNames(offered.map((choice) => choice.label));
   return (
     <div className="picker">
+      {/* A search box, as the bar's and the palette's are: the list under it is what its words find. */}
+      <span className="picker-glyph" aria-hidden="true">
+        <Icon name="magnifying-glass" size={14} />
+      </span>
       <Typeahead
         text={text}
         onText={(next) => {
@@ -370,9 +391,7 @@ function FlatReferenceField({
           required: field.required,
           disabled,
           className: 'picker-input',
-          placeholder: readsAsName(field.label)
-            ? sayField('choosePlaceholder', { label: field.label.toLowerCase() })
-            : sayField('chooseOne'),
+          placeholder: searchPlaceholder(field.label),
         }}
         fit="width"
         popupClassName="picker-popup"
@@ -397,6 +416,27 @@ interface Choice {
   /** The App's display asked for the line: drawn under every choice, not only where two names collide. */
   declared?: boolean;
 }
+/** What the picker's box says before anything is typed: "Search reviewers…", or a bare "Search…" where the label is a sentence. */
+function searchPlaceholder(label: string): string {
+  return readsAsName(label) ? say('searchPlaceholder', { label: pluralOf(label.trim().toLowerCase()) }) : say('searchBare');
+}
+
+/** The keys of the records of this field's table the person opened lately, newest first. Only a record keyed by the
+    field's own value column can be offered; a visit that cannot say it is left out. */
+function recentKeysOf(field: ReferenceField): Array<string | number> {
+  return recentVisits().flatMap((visit) => {
+    if (!('table' in visit) || visit.table !== field.from) return [];
+    const key = visit.key[field.by];
+    return typeof key === 'string' || (typeof key === 'number' && Number.isSafeInteger(key)) ? [key] : [];
+  });
+}
+
+/** The recent choices first, then the rest as the search ordered them, none twice. */
+function mergeRecent(recent: Choice[], rest: Choice[]): Choice[] {
+  const seen = new Set(recent.map((choice) => String(choice.value)));
+  return [...recent, ...rest.filter((choice) => !seen.has(String(choice.value)))];
+}
+
 export async function commandChoices(field: ReferenceField, text: string, source: ChoiceSource): Promise<Choice[]> {
   return (await readChoices(field, text, source, 20, 0)).choices;
 }
@@ -422,9 +462,13 @@ async function readChoices(
   source: ChoiceSource,
   limit: number,
   offset: number,
+  only?: Array<string | number>,
 ): Promise<{ choices: Choice[]; rows: number }> {
   // Authored filters constrain eligibility; this picker owns projection, ordering and page size.
-  const condition = andQuery(splitClauseTail(field.query ?? '').head, text ? `${field.labelColumn} contains ${JSON.stringify(text)}` : '');
+  const condition = andQuery(
+    andQuery(splitClauseTail(field.query ?? '').head, text ? `${field.labelColumn} contains ${JSON.stringify(text)}` : ''),
+    only ? `${field.by} in (${only.map((key) => JSON.stringify(key)).join(', ')})` : '',
+  );
   const detail = referenceDetail(field, source);
   const q = [field.from, condition, shown(field, detail), `sort ${field.labelColumn}`].filter(Boolean).join(' ');
   const data = await run(source, { q, limit, offset, count: 'none' });

@@ -172,3 +172,25 @@ test('a list the page reads is read with the where bound, once per change of the
   run.mockReset();
   run.mockImplementation(async () => ({ rows: [{ id: 'own', name: 'Read by the page' }] }));
 });
+
+/* A month-only field follows the locale as a date does: its order, its separator, its hint. */
+test('a month field says, shows and reads the reader’s own month order', () => {
+  const month = { name: 'renews', label: 'Renews', type: 'month' } as AppCommandField;
+  const drawn = (locale: string, value: string) => {
+    reader.locale = locale;
+    const onChange = vi.fn();
+    const { container, unmount } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <IntakeControl field={month} id="renews" value={value} onChange={onChange} />
+      </QueryClientProvider>,
+    );
+    const input = container.querySelector('input')!;
+    const out = { placeholder: input.placeholder, shown: input.value, onChange, input };
+    unmount();
+    return out;
+  };
+  expect(drawn('en-US', '2026-10')).toMatchObject({ placeholder: 'MM/YYYY', shown: '10/2026' });
+  const sv = drawn('sv-SE', '2026-10');
+  expect(sv.placeholder).toBe('YYYY-MM');
+  expect(sv.shown).toBe('2026-10');
+});

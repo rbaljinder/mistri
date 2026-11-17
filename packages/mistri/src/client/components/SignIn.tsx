@@ -15,7 +15,7 @@ import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Field } from '@mistriwork/ui/Field.js';
 import { AuthRefusal, post, reload } from './authRequest.js';
-import { applyBrandLogo, headBrandingMark } from '../appBrand.js';
+import { applyBrandLogo, brandShape, headBrandingMark } from '../appBrand.js';
 import { say } from '../copy/public/components/SignIn.js';
 import { navReplace, navState } from '@mistriwork/kit/client/shellHost.js';
 
@@ -75,14 +75,65 @@ const MARKS: Record<string, ReactNode> = {
     </>
   ),
 };
-/** The App's own mark, centered over the card where the App's top bar would have been: the same glyph, picture or initial
-    the bar draws (appBrand.tsx), so the door wears the App's dress and not the tool's. */
-function SignInMark({ info }: { info: SignInInfo }) {
+/** A picture this much wider than tall is a wordmark, and stays over the heading; a squarer one is a mark, and sits beside it. */
+const WORDMARK_RATIO = 1.25;
+
+/** How the mark stands beside the heading: `inline` (a tile, or a squarish picture), `wordmark` (a picture known to be
+    wide), or `unknown` (a picture whose shape no one has said yet). */
+type MarkShape = 'inline' | 'wordmark' | 'unknown';
+
+/** A picture's shape from its width over its height. */
+const shapeOf = (aspect: number): MarkShape => (aspect < WORDMARK_RATIO ? 'inline' : 'wordmark');
+
+/** Where the mark stands, from what is known before anything loads: a tile is square, and a picture is as the server read
+    it from the file (`aspect`). `unknown` for a picture whose shape no one said (a row saved before the server read it). */
+function placed(logo: unknown): MarkShape {
+  const shape = brandShape(logo);
+  if (!shape.picture) return 'inline';
+  return shape.aspect === undefined ? 'unknown' : shapeOf(shape.aspect);
+}
+
+/** The App's own mark and the heading it belongs to: the same glyph, picture or initial the bar draws (appBrand.tsx), so
+    the door wears the App's dress and not the tool's. A mark (a glyph and an initial are tiles; a picture as tall as it
+    is wide) stands beside the heading, on its first line; a wordmark stays over it. The server reads a picture's shape from
+    its file (imageShape.ts) and the page is placed from it on its first render, so nothing moves when the picture
+    arrives. Only a picture with no shape said (a tenant's logo saved before that) is measured once it has loaded, and
+    until then it stands over the heading.
+
+    A wordmark already says the App's name, so the heading under it is said to a screen reader alone (`data-wordmark`,
+    appBrand.css): it stays the page's h1, and the name is not printed twice. Never for a tile, which is a letter or a
+    glyph and names nothing, and not while a picture's shape is unknown, so a square logo never flashes its heading. */
+function SignInHead({ info, title }: { info: SignInInfo; title: string }) {
   const host = useRef<HTMLSpanElement>(null);
+  const [shape, setShape] = useState<MarkShape>(() => placed(headBrandingMark() ?? info.look?.logo));
   useLayoutEffect(() => {
-    applyBrandLogo(host.current, headBrandingMark() ?? info.look?.logo, info.app, info.look?.icons);
+    const mark = host.current;
+    const logo = headBrandingMark() ?? info.look?.logo;
+    applyBrandLogo(mark, logo, info.app, info.look?.icons);
+    const known = placed(logo);
+    setShape(known);
+    if (!mark || known !== 'unknown') return;
+    // The light picture stands for both: the dark one is drawn in its place and is the same logo.
+    const measure = () => {
+      const picture = mark.querySelector<HTMLImageElement>('img.brand-image:not(.brand-image--dark)');
+      if (picture?.complete && picture.naturalWidth > 0 && picture.naturalHeight > 0)
+        setShape(shapeOf(picture.naturalWidth / picture.naturalHeight));
+    };
+    // `load` does not bubble, so it is heard on the way down; a cached picture may be complete already.
+    mark.addEventListener('load', measure, true);
+    measure();
+    return () => mark.removeEventListener('load', measure, true);
   }, [info.app, info.look]);
-  return <span ref={host} className="signin-logo brand-mark" aria-hidden="true" />;
+  return (
+    <div
+      className="signin-head"
+      data-mark={shape === 'inline' ? 'inline' : 'stacked'}
+      data-wordmark={shape === 'wordmark' ? '' : undefined}
+    >
+      <span ref={host} className="signin-logo brand-mark" aria-hidden="true" />
+      <h1 className="signin-title">{title}</h1>
+    </div>
+  );
 }
 
 /** Each tenant's own identity providers, of either kind: found by the domain of the email a person types, never listed. */
@@ -397,10 +448,9 @@ export function SignIn({
   return (
     <div className="signin">
       <div className="signin-card">
-        {/* The heading says what this screen is for, and whose; the mark over it is the App's, on the column's own
+        {/* The heading says what this screen is for, and whose; the mark with it is the App's, on the column's own
             edge: one line down the left from the mark through the fields to the links. */}
-        <SignInMark info={info} />
-        <h1 className="signin-title">{title}</h1>
+        <SignInHead info={info} title={title} />
         {mode === 'claim' && claims && (
           <ClaimInvitation
             appId={info.invitationClaim!}
@@ -452,7 +502,14 @@ export function SignIn({
           </p>
         )}
         {email && (mode === 'in' || mode === 'up') && (
-          <form className="signin-form" onSubmit={submit} noValidate key={claimed ?? ''}>
+          <form
+            className="signin-form"
+            onSubmit={submit}
+            noValidate
+            key={claimed ?? ''}
+            // The plain screen's heading is the App's name; the form says what it is for.
+            aria-label={mode === 'in' ? say('common.signIn') : undefined}
+          >
             {mode === 'up' && (
               <Field label={say('common.name')} problem={problems.name}>
                 <input

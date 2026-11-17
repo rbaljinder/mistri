@@ -87,10 +87,15 @@ const EMBED = join(ROOT, 'packages/mistri/dist/embed/react');
    sheet is carried for the parts drawn (42 KB), the controls' dress over it is 50 KB where the old four sheets were
    about 40 KB, and naming a part by `[data-slot='button']` where a class was four letters is the rest; brotli takes most
    of the last back. What would bring it down: the calendar behind onDemand (about 21 KB of script on both pages),
-   and the carried sheet cut to the slots drawn instead of the families (scripts/ui-sdk-css.mjs, up to 14 KB). */
+   and the carried sheet cut to the slots drawn instead of the families (scripts/ui-sdk-css.mjs, up to 14 KB).
+
+   rc.63 moved the public script's raw target: a field report's form fixes, all drawn on a public form's first page
+   (the accept checkbox beside its label, the tenant chooser's foot, one locale date format with a month control, and
+   the record picker's search and recent records). Measured 778,547 raw, 500 bytes over 778,000; set about 3% above.
+   Its brotli stayed inside its target. */
 export const BUDGET = {
   mistri: {
-    public: { script: { raw: 778_000, br: 218_000 }, style: { raw: 514_000, br: 66_700 } },
+    public: { script: { raw: 802_000, br: 218_000 }, style: { raw: 514_000, br: 66_700 } },
     app: { script: { raw: 1_590_000, br: 437_000 }, style: { raw: 514_000, br: 66_700 } },
   },
 };

@@ -515,6 +515,7 @@ sets its navy dark family in full.
 | `primary`, `onPrimary`                                                        | a form's primary action (Continue, Submit, Add) and the words on it |
 | `field`                                                                       | a field's fill                                                 |
 | `status.good`, `.warning`, `.critical`, `.info`                               | meaning                                                        |
+| `ai`                                                                          | the mark of what an AI made (a draft's badge, a suggestion's edge); omitted, the platform's `--ai`, checked at 3:1 |
 | `nav.ground`, `.ink`, `.muted`, `.line`, `.accent`, `.current`, `.onCurrent`  | the bar and the menu, whichever the shell draws                |
 | `rules.section`, `.head`                                                      | the rule over a section and under a table's heads              |
 | `chart[0]` … `chart[7]`                                                       | the series, in order; `null` keeps a series                    |

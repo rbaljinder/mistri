@@ -225,6 +225,24 @@ const brandedApp = () =>
     'branding fixture',
   );
 
+test('a saved logo keeps the shape its bytes said, so the sign-in door is placed before the picture loads', async () => {
+  const app = brandedApp();
+  const store = memoryStore();
+  const service = createTenantBrandingService({ app, store, cache: new MemoryCacheStore() });
+  const header = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(header);
+  header.write('IHDR', 12, 'latin1');
+  header.writeUInt32BE(200, 16);
+  header.writeUInt32BE(50, 20);
+  await service.save('north', { value: { name: 'North Co' }, logo: header.toString('base64') }, 'alice');
+  const saved = JSON.parse(store.writes.at(-1)!.value) as { logo: { aspect?: number } };
+  assert.equal(saved.logo.aspect, 4);
+  assert.equal((await service.presentation('north'))?.value.mark?.aspect, 4);
+  // A body cannot say it: the server reads it from the upload and from nothing else.
+  await service.save('south', { value: { logo: { hash: 'f'.repeat(64), type: 'image/png', aspect: 1 } } }, 'alice');
+  assert.equal(JSON.parse(store.writes.at(-1)!.value).logo, undefined);
+});
+
 test('every instance reads a save on its next page: the copy they share is dropped, and a body cannot name a logo it did not upload', async () => {
   const app = brandedApp();
   const store = memoryStore();

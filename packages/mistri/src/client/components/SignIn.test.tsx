@@ -586,13 +586,102 @@ describe('the sign-in screen', () => {
 
   test("draws the App's mark at the head of the column, its initial where it names no logo", () => {
     const { container } = draw(<SignIn info={info} />);
-    const mark = container.querySelector('.signin-card > .signin-logo');
+    const mark = container.querySelector('.signin-card > .signin-head > .signin-logo');
     expect(mark).not.toBeNull();
     expect(mark).toHaveAttribute('aria-hidden', 'true');
     expect(mark?.classList.contains('brand-mark--initial')).toBe(true);
     expect(mark?.textContent).toBe('C');
     // In the column, over its heading: the mark, the heading and the fields share one edge.
     expect(mark!.compareDocumentPosition(container.querySelector('.signin-title')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  describe('the mark and the heading', () => {
+    const src = `/api/branding/logo/${'b'.repeat(64)}`;
+    const head = (container: HTMLElement) => container.querySelector('.signin-head')!;
+    /** A picture the browser has loaded, at the shape the test names. */
+    const loaded = (container: HTMLElement, width: number, height: number) => {
+      const picture = container.querySelector<HTMLImageElement>('img.brand-image:not(.brand-image--dark)')!;
+      Object.defineProperty(picture, 'complete', { configurable: true, value: true });
+      Object.defineProperty(picture, 'naturalWidth', { configurable: true, value: width });
+      Object.defineProperty(picture, 'naturalHeight', { configurable: true, value: height });
+      act(() => {
+        picture.dispatchEvent(new Event('load'));
+      });
+    };
+
+    test('a tile, an App icon or its initial, sits beside the heading from the first paint', () => {
+      const initial = draw(<SignIn info={info} />);
+      expect(head(initial.container)).toHaveAttribute('data-mark', 'inline');
+      expect(head(initial.container).querySelector(':scope > h1.signin-title')).not.toBeNull();
+      initial.unmount();
+      const icon = draw(<SignIn info={{ ...info, look: { logo: 'list-checks' } } as unknown as SignInInfo} />);
+      expect(head(icon.container)).toHaveAttribute('data-mark', 'inline');
+    });
+
+    test('a picture stays over the heading until it has loaded wider than tall, and a square one then moves beside it', () => {
+      const { container } = draw(<SignIn info={{ ...info, look: { logo: { src } } } as unknown as SignInInfo} />);
+      expect(container.querySelector('.signin-logo')).toHaveClass('brand-mark--image');
+      // Its shape is not known before it loads: the stacked mark it always was.
+      expect(head(container)).toHaveAttribute('data-mark', 'stacked');
+      loaded(container, 400, 100);
+      expect(head(container)).toHaveAttribute('data-mark', 'stacked');
+      loaded(container, 128, 128);
+      expect(head(container)).toHaveAttribute('data-mark', 'inline');
+    });
+
+    test('a picture the server read the shape of is placed on the first render, with no load event', () => {
+      const square = draw(<SignIn info={{ ...info, look: { logo: { src, aspect: 1 } } } as unknown as SignInInfo} />);
+      expect(square.container.querySelector('.signin-logo')).toHaveClass('brand-mark--image');
+      expect(head(square.container)).toHaveAttribute('data-mark', 'inline');
+      square.unmount();
+      const wide = draw(<SignIn info={{ ...info, look: { logo: { src, aspect: 4 } } } as unknown as SignInInfo} />);
+      expect(head(wide.container)).toHaveAttribute('data-mark', 'stacked');
+      // A measure of the loaded file does not overrule what the server said.
+      loaded(wide.container, 100, 100);
+      expect(head(wide.container)).toHaveAttribute('data-mark', 'stacked');
+    });
+
+    test('an App picture is placed from the aspect its load named', () => {
+      const href = '/acme/_brand/logo-0123456789ab.png';
+      const { container } = draw(
+        <SignIn info={{ ...info, look: { logo: { src: 'logo.png', href, aspect: 1.1 } } } as unknown as SignInInfo} />,
+      );
+      expect(head(container)).toHaveAttribute('data-mark', 'inline');
+    });
+
+    test('a wide picture is the name, so the heading under it is said only to a screen reader', () => {
+      const wide = draw(<SignIn info={{ ...info, look: { logo: { src, aspect: 4 } } } as unknown as SignInInfo} />);
+      expect(head(wide.container)).toHaveAttribute('data-wordmark');
+      // Still the page's h1: hidden by appBrand.css's clip, not taken out of the tree.
+      expect(wide.getByRole('heading', { level: 1 })).toHaveClass('signin-title');
+      wide.unmount();
+      const measured = draw(<SignIn info={{ ...info, look: { logo: { src } } } as unknown as SignInInfo} />);
+      // Not while its shape is unknown, so a square logo never hides and shows its heading.
+      expect(head(measured.container)).not.toHaveAttribute('data-wordmark');
+      loaded(measured.container, 400, 100);
+      expect(head(measured.container)).toHaveAttribute('data-wordmark');
+      expect(measured.getByRole('heading', { level: 1 })).toBeInTheDocument();
+    });
+
+    test('a square picture and a tile keep the heading in sight', () => {
+      const square = draw(<SignIn info={{ ...info, look: { logo: { src, aspect: 1 } } } as unknown as SignInInfo} />);
+      expect(head(square.container)).not.toHaveAttribute('data-wordmark');
+      expect(square.getByRole('heading', { level: 1 })).toBeVisible();
+      square.unmount();
+      const tile = draw(<SignIn info={{ ...info, look: { logo: 'list-checks' } } as unknown as SignInInfo} />);
+      expect(head(tile.container)).not.toHaveAttribute('data-wordmark');
+      expect(tile.getByRole('heading', { level: 1 })).toBeVisible();
+    });
+
+    test('a dark picture is drawn beside the light one and does not decide the shape', () => {
+      const { container } = draw(
+        <SignIn info={{ ...info, look: { logo: { src, dark: `/api/branding/logo/${'c'.repeat(64)}` } } } as unknown as SignInInfo} />,
+      );
+      expect(container.querySelectorAll('img.brand-image')).toHaveLength(2);
+      loaded(container, 120, 100);
+      expect(head(container)).toHaveAttribute('data-mark', 'inline');
+      expect(container.querySelector('.brand-image--dark')).not.toBeNull();
+    });
   });
 
   test('another account\'s buttons stand over the App\'s own form, an "or" between them only where both are offered', () => {
@@ -825,7 +914,7 @@ describe('the sign-in screen', () => {
       'If an account uses ada@example.org, a link to choose a new password is on its way.',
     );
     await user.click(screen.getByRole('button', { name: 'Back to sign in' }));
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Sign in to Compass CRM');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Compass CRM');
   });
 
   test('without a delivery for reset links, the screen says who resets a password', async () => {
@@ -862,7 +951,7 @@ describe('the sign-in screen', () => {
     await user.click(screen.getByRole('button', { name: 'Change password' }));
     expect(calls).toEqual([{ path: '/api/auth/reset-password', body: { newPassword: 'second-horse', token: 'abc' } }]);
     expect(await screen.findByRole('status')).toHaveTextContent('Your password is changed. Sign in with the new one.');
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Sign in to Compass CRM');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Compass CRM');
     replace.mockRestore();
   });
 
@@ -1158,5 +1247,5 @@ test("a saved form's account screen opens the door on creating an account where 
   cleanup();
   // An App that only invites people has no sign-up to open on.
   draw(<SignIn info={{ ...info, signUp: 'invite' }} start="up" />);
-  expect(screen.getByRole('heading', { name: 'Sign in to Compass CRM' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Compass CRM' })).toBeInTheDocument();
 });

@@ -131,3 +131,18 @@ test('a short answer says its kind, for the form to size and row it by the data;
   const fields = [...container.querySelectorAll('[data-slot="field"]')];
   expect(fields.map((field) => field.getAttribute('data-answer'))).toEqual(['number', 'datetime', null]);
 });
+
+test('a check field draws the box and its words in one row, the words naming the box', () => {
+  const { container } = render(
+    <Field label="I accept the terms" check>
+      <input type="checkbox" />
+    </Field>,
+  );
+  const row = container.querySelector('[data-slot="field-check-row"]')!;
+  const box = screen.getByRole('checkbox', { name: 'I accept the terms' });
+  const label = row.querySelector('[data-slot="field-label"]')!;
+  // Both are the row's own children, the box first, so the stylesheet lines them up on one row.
+  expect(row.children[0]).toBe(box);
+  expect(row.children[1]).toBe(label);
+  expect(container.querySelector('[data-slot="field"]')).toHaveAttribute('data-kind', 'check');
+});

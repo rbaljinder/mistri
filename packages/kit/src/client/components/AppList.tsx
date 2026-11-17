@@ -46,6 +46,7 @@ import { sameReads } from '../liveReads.js';
 import {
   appListQuery,
   litTabFor,
+  tabPinnedColumns,
   residueOf,
   searchColumn,
   shownTabs,
@@ -778,8 +779,11 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
      unchanged. The search box is this room's state, so each character typed
      redrew the room and, with it, the whole grid under the box; now a
      keystroke redraws the box and the chips, and the rows are left alone. */
-  const hideKey = [...hide, ...leftOut].join('\n');
-  const keptHide = useMemo(() => [...hide, ...leftOut], [hideKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* A column the lit tab pins to one value repeats it on every row; the tab says it once. A view with two columns or
+     fewer keeps what it has, so the tab never empties the grid. */
+  const pinned = litTab >= 0 && (spec.show?.length ?? 0) > 2 ? tabPinnedColumns(spec, tabs[litTab].query ?? '', spec.show!) : [];
+  const hideKey = [...hide, ...leftOut, ...pinned].join('\n');
+  const keptHide = useMemo(() => [...hide, ...leftOut, ...pinned], [hideKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const totalsKey = totals ? JSON.stringify(totals) : '';
   const keptTotals = useMemo(() => totals, [totalsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const onGridNow = useRef(onGrid);

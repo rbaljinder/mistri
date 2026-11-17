@@ -42,6 +42,7 @@ import { say } from './copy/shell/core.js';
 import { shellById, shellQuery, shellQueryAll, shellRoot } from './shellHost.js';
 import { fetchServer } from './transport.js';
 import { fileReads } from './liveReads.js';
+import { sayDayLabel } from './dayLabel.js';
 export { andQuery, splitClauseTail } from '@mistriwork/engine/shared/query.js';
 export { humanName } from '@mistriwork/engine/shared/model.js';
 /* Building DOM and the popups' keyboard manners live in dom.js; re-exported
@@ -493,7 +494,7 @@ export function rowLabel(table, row) {
   const configured = recordLabel(table) !== undefined;
   for (const name of configured ? [labelPath(table)] : [labelPath(table), labelColumn(table)]) {
     const value = name != null ? row[name] : undefined;
-    if (value !== null && value !== undefined && String(value) !== '') return String(value);
+    if (value !== null && value !== undefined && String(value) !== '') return sayDayLabel(value) ?? String(value);
   }
   const values = primaryKey(table).map((c) => row[c]);
   if (configured && values.some((value) => value == null)) return '(row)';

@@ -27,10 +27,25 @@ test.describe('Parcel, an App over an API', () => {
     await expect(page.getByRole('searchbox', { name: 'Filter by Tracking number' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Filter by Tracking number' })).toHaveCount(0);
 
-    await page.getByRole('tab', { name: 'Held' }).click();
     const statuses = page.getByRole('gridcell', { name: /^(Exception|In transit|Delivered|Out for delivery|Label created)$/ });
-    await expect(statuses.first()).toHaveText('Exception');
-    expect(new Set(await statuses.allInnerTexts())).toEqual(new Set(['Exception']));
+    const statusHeader = page.getByRole('columnheader', { name: 'Status' });
+    // All asks for every status, so its column says which each row is.
+    await page.getByRole('tab', { name: 'All' }).click();
+    await expect(page.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true');
+    await expect(statusHeader).toBeVisible();
+    // The rows are drawn again when All's answer lands, so the count is read until it settles.
+    await expect.poll(async () => new Set(await statuses.allInnerTexts()).size).toBeGreaterThan(1);
+
+    // Held asks the API for exceptions alone, so its Status column would say one word on every row: it is left out.
+    await page.getByRole('tab', { name: 'Held' }).click();
+    await expect(statusHeader).toHaveCount(0);
+    await expect(statuses).toHaveCount(0);
+    // Each row it lists is one the API holds: its own page says so.
+    const held = page.getByRole('row').nth(1);
+    const tracking = (await held.getByRole('gridcell').first().innerText()).trim();
+    await held.click();
+    await expect(page.getByRole('heading', { name: tracking, level: 1 })).toBeVisible();
+    await expect(page.getByText('Exception', { exact: true }).filter({ visible: true }).first()).toBeVisible();
   });
 
   test("a shipment page draws its sections from the API's item path", async ({ page }) => {

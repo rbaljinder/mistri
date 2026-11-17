@@ -71,7 +71,8 @@ test('a row read beside a plain list is still a crumb of its own', () => {
     { kind: 'row', table: 'issue', key: { id: 2 }, label: 'Repair keyboard focus', view: 'issues' },
   ];
   render(<Crumbs onHome={() => {}} />);
-  expect(screen.getByText('Repair keyboard focus')).toBeInTheDocument();
+  // The record's name is its page's title, beside the trail: the trail ends at the list it came from.
+  expect(screen.queryByText('Repair keyboard focus')).toBeNull();
   expect(screen.getByRole('button', { name: 'Back' })).toHaveAttribute('title', 'Back to Leads · issue show name');
 });
 
@@ -274,8 +275,10 @@ describe('what the App asks of its trail (ui.shell.breadcrumbs)', () => {
     const nav = container.querySelector('.crumbs')!;
     expect(nav.firstElementChild).toHaveTextContent('Leads · lead');
     expect(nav.firstElementChild?.tagName).toBe('BUTTON');
-    expect(container.querySelectorAll('.sep')).toHaveLength(1);
-    expect(screen.getByText('Ada Stone')).toHaveClass('current');
+    expect(container.querySelectorAll('.sep')).toHaveLength(0);
+    // The name is the page's title; the trail does not say it a second time.
+    expect(screen.queryByText('Ada Stone')).toBeNull();
+    expect(nav.firstElementChild).toHaveAttribute('data-crumb', 'first');
   });
 
   test('a record reached straight, with no list before it, starts at its table without a separator first', () => {
@@ -295,7 +298,7 @@ describe('what the App asks of its trail (ui.shell.breadcrumbs)', () => {
       walk.stack = [list, lead];
       const { container } = render(<Crumbs onHome={() => {}} />);
       expect(container.querySelector('.crumbs')!.firstElementChild).toHaveClass('crumb-home');
-      expect(container.querySelectorAll('.sep')).toHaveLength(2);
+      expect(container.querySelectorAll('.sep')).toHaveLength(1);
       cleanup();
     }
   });
@@ -323,6 +326,23 @@ describe('what the App asks of its trail (ui.shell.breadcrumbs)', () => {
     cleanup();
     walk.stack = [list, tabbed];
     render(<Crumbs onHome={() => {}} />);
-    expect(screen.getByText('Ada Stone')).toHaveClass('current');
+    expect(screen.queryByText('Ada Stone')).toBeNull();
   });
+});
+
+test('a deep trail marks its first and last steps and the ones between, so a short bar cuts the middle first', () => {
+  appMode = true;
+  app = { name: 'Compass', views: {}, nav: [], resources: {}, ui: { shell: { breadcrumbs: true } } };
+  walk.stack = [
+    { kind: 'table', table: 'account', query: 'account', view: 'accounts' },
+    { kind: 'row', table: 'account', key: { id: 1 }, label: 'Northwind' },
+    { kind: 'row', table: 'contact', key: { id: 2 }, label: 'Ada Stone' },
+    { kind: 'row', table: 'lead', key: { id: 3 }, label: 'Renewal' },
+  ];
+  const { container } = render(<Crumbs onHome={() => {}} />);
+  expect([...container.querySelectorAll('[data-crumb]')].map((node) => node.getAttribute('data-crumb'))).toEqual(
+    expect.arrayContaining(['first', 'middle', 'last']),
+  );
+  // The reader's own record is the title, never a crumb as well.
+  expect(screen.queryByText('Renewal')).toBeNull();
 });

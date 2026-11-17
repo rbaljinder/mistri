@@ -106,7 +106,7 @@ test.describe('private tenant browser ownership', () => {
     });
     await page.goto(app.origin + '/');
     await expect(page).toHaveURL(`${app.origin}/${app.appId}`);
-    await expect(page.getByRole('heading', { name: `Sign in to ${app.appName}` })).toBeVisible();
+    await expect(page.getByRole('heading', { name: app.appName })).toBeVisible();
     await page.getByLabel('Email', { exact: true }).fill(app.accounts.alice.email);
     await page.getByLabel('Password', { exact: true }).fill(app.accounts.alice.password);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();

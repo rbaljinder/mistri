@@ -57,6 +57,23 @@ test('ui.logo is an icon, or the App own picture by its path; a URL, a stranger 
     );
 });
 
+test("a logo's shape is read from its light picture at load, before any page paints", async () => {
+  const dir = appDir('aspect');
+  const app: { id: string; ui: { logo: AppLogoImage } } = {
+    id: 'acme',
+    ui: { logo: { src: './brand/acme.png', dark: './brand/acme-night.svg' } },
+  };
+  await readAppBrand(app, dir, 'app.ts');
+  assert.equal(app.ui.logo.aspect, 1, 'the one-pixel PNG is square');
+  // The dark picture is not the one that decides it.
+  const wide: { id: string; ui: { logo: AppLogoImage } } = {
+    id: 'acme',
+    ui: { logo: { src: './brand/acme-night.svg', dark: './brand/acme.png' } },
+  };
+  await readAppBrand(wide, dir, 'app.ts');
+  assert.equal(wide.ui.logo.aspect, 4, 'the SVG is 96 by 24');
+});
+
 test('read from the App directory, admitted as an upload is, and named for its content', async () => {
   const dir = appDir('read');
   const app: { id: string; ui: { logo: AppLogoImage } } = {

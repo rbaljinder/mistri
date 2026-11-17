@@ -24,6 +24,7 @@
  */
 import { createContext, createElement, useContext, useMemo, type ComponentType, type ReactNode } from 'react';
 import { Refused } from '@mistriwork/kit/client/components/Notes.js';
+import { PageHeading } from '@mistriwork/kit/client/components/PageHeading.js';
 import {
   resourceOfRow,
   useAction,
@@ -113,6 +114,43 @@ export const Tooltip = onDemand(controls, 'Tooltip', { quiet: true });
 /** The page's grid: blocks and panels side by side by their `width`, wrapping as a dashboard's sections do. */
 export function Grid({ children }: { children?: ReactNode }) {
   return <div className="page-body">{children}</div>;
+}
+
+/**
+ * A head for a page that draws its own (`head: false`): the title, a line of intro, the page's verbs at the far end
+ * (typically `<CommandForm>` buttons) and a way back, in the platform's own head markup, so it reads like every other
+ * page's in every theme. The page's one h1 is the platform's (`head: false` keeps it for a screen reader), so this is
+ * an h2. `back`: an address of this App, followed in place.
+ *
+ *   <PageHeader title="Pick walk" description="Lists due today" back={{ label: 'All lists', href: '/pick-lists' }}
+ *     actions={<CommandForm command="releaseOrder" />} />
+ */
+export function PageHeader({
+  title,
+  description,
+  actions,
+  back,
+}: {
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+  back?: { label: string; href: string };
+}) {
+  return (
+    <PageHeading
+      level={2}
+      title={title}
+      description={description}
+      actions={actions}
+      back={
+        back ? (
+          <Button intent="quiet" size="compact" href={back.href}>
+            {say('backTo', { label: back.label })}
+          </Button>
+        ) : undefined
+      }
+    />
+  );
 }
 
 /** A titled region of the grid, a dashboard section's box: `<Panel title="Open lines" width="half">…</Panel>`. */

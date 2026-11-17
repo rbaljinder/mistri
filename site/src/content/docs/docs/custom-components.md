@@ -293,6 +293,7 @@ The platform's sections are components of `@mistriwork/mistri/page`, each taking
 - `<Board from by … />`, `<Calendar from date … />`, `<Gallery from image … />` and `<Split from row … />`: a list's `board()`, `calendar()`, `cards()` with an `image`, and `split()`; see [Lists as blocks](#lists-as-blocks).
 - `<Assistant />`: the App's assistant, where it declares one.
 - `<Grid>`, `<Panel title width>` and `<Tabs tabs param>`: the layout, with `width` `full`, `half`, `third` or `two-thirds`.
+- `<PageHeader title description actions back />`: the head for a page that sets `head: false` and draws its own, in the platform's head markup so it reads like every other page's in every theme. `actions` is the page's verbs at the head's far end (typically `<CommandForm>` buttons), `back` is `{ label, href }`, an address of this App followed in place. It draws an `h2`: the page's one `h1` is the platform's.
 
 A word a block does not take, or a resource the page does not read, stands as a problem note in the block's place.
 

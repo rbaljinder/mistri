@@ -27,7 +27,7 @@ test.describe('a signed-out visitor', () => {
     await expect(main).toContainText('This page is for signed-in members.');
     await expect(main).not.toContainText('does not open this');
     await main.getByRole('button', { name: 'Sign in' }).click();
-    await expect(page.getByRole('heading', { name: /Sign in/, level: 1 })).toBeVisible();
+    await expect(page.locator('h1.signin-title')).toBeVisible();
     // One main landmark: the screen is drawn in the shell's pane, not beside it.
     await expect(page.getByRole('main')).toHaveCount(1);
     await page.getByLabel('Email').fill(FORECOURT_STAFF.email);

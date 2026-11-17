@@ -3787,6 +3787,7 @@ function fenceDoors(): Record<string, Door> {
     },
     '/api/integrations': { lease: { body: {} } },
     '/api/integrations/save': { lease: { body: { integration: 'fence', secrets: {} } } },
+    '/api/integrations/check': { lease: { body: { integration: 'fence' } } },
     [PAGE_LOAD_PATH]: {
       lease: {
         body: { page: 'items' },
@@ -3987,6 +3988,7 @@ test("every lease route answers another tenant's key and selector exactly as a m
         save: async (tenantId: string) => {
           seen.push(`save:${tenantId}`);
         },
+        check: async (tenantId: string) => (seen.push(`check:${tenantId}`), { ok: true as const }),
       },
     },
   });

@@ -20,7 +20,7 @@ auth: {
 
 See it in the sample (`examples/apps/lintel/app.ts:59`): the `admin` role is the account a first start bootstraps (`MISTRI_AUTH_ADMIN_EMAIL`).
 
-![Lintel's sign-in card: Sign in to Lintel, an email and a password field, a Sign in button and Forgot password?.](../../../assets/guide/sign-in.webp)
+![Lintel's sign-in card: Lintel's name, an email and a password field, a Sign in button and Forgot password?.](../../../assets/guide/sign-in.webp)
 
 ## What you'll see
 

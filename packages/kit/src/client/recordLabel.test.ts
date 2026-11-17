@@ -73,3 +73,15 @@ test('an unset record-label source retains the legacy inferred label only when n
     'legacy-account-name',
   );
 });
+
+test('a date used as a row name is said as the grid says a date, never as the stored ISO text', () => {
+  state.schema = schema;
+  useLabel('saved_at');
+  const said = rowLabel(savedVehicle, { account_id: 'a', vehicle_id: 'v', saved_at: '2026-09-20T00:00:00' });
+  expect(said).not.toContain('2026-09-20');
+  expect(said).toMatch(/2026/);
+  // A moment keeps its time; a big-int id is still its exact string.
+  expect(rowLabel(savedVehicle, { account_id: 'a', vehicle_id: 'v', saved_at: '2026-09-20T12:30:00' })).toMatch(/12|30|PM|AM/);
+  useLabel('vehicle_id');
+  expect(rowLabel(savedVehicle, { account_id: 'a', vehicle_id: '9007199254740993', saved_at: 'x' })).toBe('9007199254740993');
+});

@@ -231,7 +231,9 @@ for (const id of [...THEME_PRESETS.map((theme) => theme.id), 'meridian'])
       await page.setViewportSize({ width: 1440, height: 924 });
       // The server's pinned day, so the calendar below opens on a month with days either side of it.
       await page.clock.setFixedTime(new Date(CRM_CLOCK));
-      await page.goto(`${CRM}/lead`);
+      /* All, where the status column stays: a tab that fixes one status (New, the default) leaves it out, and its
+         tones with it. */
+      await page.goto(`${CRM}/leads?tab=all`);
       if (id === 'meridian') {
         await page.getByRole('button', { name: 'Settings', exact: true }).click();
         await page.getByRole('menuitem', { name: /^Preferences/ }).click();
@@ -454,7 +456,9 @@ test('lumen: a table anchors on its name, keeps its head in view, and its placeh
   await page.addInitScript(() => localStorage.setItem('mistri.visual-theme', 'lumen'));
   await page.setViewportSize({ width: 1440, height: 700 });
   await page.clock.setFixedTime(new Date(CRM_CLOCK));
-  await page.goto(`${CRM}/lead`);
+  /* All, where the status column stays: a tab that fixes one status (New, the default) leaves it out, and its
+     tones with it. */
+  await page.goto(`${CRM}/leads?tab=all`);
   await expect(page.locator('html')).toHaveAttribute('data-visual-theme', 'lumen');
   const row = page.locator('.table-wrap tbody tr').first();
   await expect(row).toBeVisible();

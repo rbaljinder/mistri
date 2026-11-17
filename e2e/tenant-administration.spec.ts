@@ -33,7 +33,7 @@ const tenant = (status: AdministrationTenantImage['status'], version: string): A
 async function enter(page: Page, app: Fixture, role: 'operator' | 'outsider' = 'operator') {
   await page.addInitScript(() => localStorage.setItem('mistri.tour', 'done'));
   await page.goto(`${app.origin}/item`);
-  await expect(page.getByRole('heading', { name: `Sign in to ${app.appName}`, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: app.appName, exact: true })).toBeVisible();
   const account = app.accounts[role];
   await page.getByLabel('Email', { exact: true }).fill(account.email);
   await page.getByLabel('Password', { exact: true }).fill(account.password);

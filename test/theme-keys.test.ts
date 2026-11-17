@@ -62,6 +62,7 @@ function colors(mode: 'light' | 'dark', shift: number) {
     rules: { section: next(), head: next() },
     shadow: next(),
     band: next(),
+    ai: next(),
     chart: Array.from({ length: 8 }, next),
   };
 }

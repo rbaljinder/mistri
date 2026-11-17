@@ -24,10 +24,12 @@ import { CHANNEL_DESTINATION_PREFIX, type Webhook } from '../commands/commandEff
 import { openEffectHost, type EffectHost } from '../effects/effectHost.js';
 import { channelTransports } from '../integrations/integrationChannels.js';
 import {
+  checkIntegrationConnection,
   createIntegrationRuntime,
   readIntegrationSettings,
   registerIntegrationRuntime,
   saveIntegrationSettings,
+  type IntegrationCheckOutcome,
   type IntegrationRuntime,
   type IntegrationSettings,
 } from '../integrations/integrationRuntime.js';
@@ -51,6 +53,7 @@ export interface TenantIntegrations {
     editors: readonly string[];
     read(tenant: string): Promise<IntegrationSettings>;
     save(tenant: string, by: string, body: unknown): Promise<void>;
+    check(tenant: string, body: unknown): Promise<IntegrationCheckOutcome>;
   }>;
   /** Deliver what is due once (effects, then held messages): what a test drives instead of the loop. */
   tick(): Promise<boolean>;
@@ -166,6 +169,7 @@ export async function openTenantIntegrations<Request = IncomingMessage>(
               editors: owned.integrations.editors,
               read: (tenant: string) => readIntegrationSettings(live, tenant, (name) => `${base}/api/inbound/${name}/${tenant}`),
               save: (tenant: string, by: string, body: unknown) => saveIntegrationSettings(live, tenant, by, body),
+              check: (tenant: string, body: unknown) => checkIntegrationConnection(live, tenant, body),
             }),
           }
         : {}),

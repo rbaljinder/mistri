@@ -68,10 +68,23 @@
    bar, at the head of its column and on the column's own edge. A glyph and an initial are one tile in the ink, the
    look's corner on it: on a screen with nothing else, a bare 32px line drawing in the accent read as a stray icon.
    A tenant's picture stays a picture. `:root:root` to stand over the bar's own sizes above. */
+/* The mark and the heading are one block: a mark (a tile, or a picture as tall as wide: SignIn.tsx) beside the heading,
+   level with its first line, and a wordmark over it. A long heading wraps in its own column and the mark keeps its size. */
+.signin-head { --signin-mark: 36px; display: grid; gap: var(--space-5); }
+.signin-head[data-mark='inline'] { grid-template-columns: auto minmax(0, 1fr); align-items: start; column-gap: var(--space-4); }
+/* The heading is at least the mark's height with its first line centred in it, so the two centre together, and a
+   heading of several lines keeps the mark on its first. */
+.signin-head[data-mark='inline'] .signin-title { display: grid; align-content: center; min-height: var(--signin-mark); }
+/* A wordmark says the App's name already: the heading under it stays the page's h1 for a screen reader, and is not
+   drawn a second time (SignIn.tsx). The kit's .visually-hidden, said here because the door may draw without it. */
+.signin-head[data-wordmark] .signin-title { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 :root:root .signin-logo.brand-mark { justify-self: start; }
 :root:root .signin-logo.brand-mark:is(.brand-mark--logo, .brand-mark--initial) { width: 36px; height: 36px; border-radius: var(--radius); background: var(--ink); color: var(--surface); }
 :root:root .signin-logo.brand-mark.brand-mark--logo .brand-logo { width: 20px; height: 20px; }
 :root:root .signin-logo.brand-mark.brand-mark--initial { font-size: var(--text-lg); }
 :root:root .signin-logo.brand-mark.brand-mark--image { width: 144px; height: 36px; }
 :root:root .signin-logo.brand-mark.brand-mark--image .brand-image { width: 144px; height: 36px; }
+/* A square picture is one tile's size beside the heading, fitted inside it. */
+:root:root .signin-head[data-mark='inline'] .signin-logo.brand-mark.brand-mark--image,
+:root:root .signin-head[data-mark='inline'] .signin-logo.brand-mark.brand-mark--image .brand-image { width: var(--signin-mark); height: var(--signin-mark); }
 }

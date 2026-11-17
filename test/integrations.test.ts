@@ -502,6 +502,7 @@ test('on a single-App server the settings route says which secrets are set, neve
     integrations: [
       {
         name: 'fakepay',
+        canCheck: false,
         secrets: [
           { name: 'apiKey', set: false, savedAt: null },
           { name: 'webhookSecret', set: false, savedAt: null, least: 24 },

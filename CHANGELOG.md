@@ -5,6 +5,21 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.63
+
+- `defineIntegration` takes an optional `label`, `description` and `check`. The settings screen shows the label (the
+  humanized name when there is none) and the description. When `check` is declared, the card has a "Test connection"
+  button for the people who may edit the settings: the server runs `check({ secrets, signal })` under the saved
+  secrets, with a 10 second limit, and the card shows `{ ok: true }` or the failure's `message`. A throw or a time-out
+  is a generic failure, never the error's text, and a saved secret that appears in a message is taken out. New route:
+  `/api/integrations/check`, with the same grant as a save.
+- `<PageHeader title description actions back />` in `@mistriwork/mistri/page`: a head for a free-form page that sets
+  `head: false`, in the platform's own head markup (shared with the dashboard head), so it reads like every other
+  page's in every theme.
+- On the sign-in page, a logo known to be a wordmark (a picture at least 1.25 times as wide as it is tall) no longer
+  has the App's name printed again under it: the heading stays the page's h1 for a screen reader. A square picture, a
+  glyph, an initial, or a picture whose shape is not yet known keeps the heading in sight.
+
 ## 1.0.0-rc.62
 
 Fixes from a field report on rc.59.
