@@ -452,6 +452,12 @@ answer is `temporarily_unavailable`.
 
 A command's form, and a public form, end in one outcome view: **Done** with the handler's `message` (and a link to the record when the person is not already on it), **Not done** with the refusal's own words and the next step by its code (a public form's, worded for a submission: it changed no record to refresh; a refusal naming a field on an earlier step opens that step, beside the field), or **Result not confirmed** when the answer was lost, with a check that reads the receipt before anything is sent twice. A handler that has accepted the work but not finished it says so beside its message: `return { message: 'Sent to a manager.', pending: 'approval' }` reads **Awaiting approval**, `pending: 'queued'` **Queued** (declare it in `output` with `pending: literal('approval')` where the command has a shape). The words are yours; the title, the dot in the state's tone and the next step are the platform's.
 
+A handler that hands back an address — a link it minted, a sign-up page, an export — shows it where the command ends: the done state draws the address and a **Copy** button, and the notice of a command run on one click carries the address with a Copy beside it. A string that is an `http(s)` address, at the top of the output or one level inside it, is read this way; the rest of the output is still the handler's own.
+
+```ts
+async handle({ link }) { return { message: 'Invitation ready.', url: await link('invite') }; },
+```
+
 ## Who may run it
 
 The server runs a command only for a role granted it:

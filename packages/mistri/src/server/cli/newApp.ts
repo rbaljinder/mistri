@@ -15,7 +15,7 @@ import { insideCheckout, nodeTypesRange, slug, typescriptRange } from './newApi.
 
 const TABLES = `-- The schema this App wants. Change it here, then write the migration that gets a database there.
 CREATE TABLE task (
-  id INTEGER PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL CHECK (length(trim(name)) > 0),
   completed BOOLEAN NOT NULL DEFAULT 0 CHECK (completed IN (0, 1)),
   due_on DATE,

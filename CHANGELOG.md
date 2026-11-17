@@ -5,6 +5,34 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.62
+
+Fixes from a field report on rc.59.
+
+- `mistri grade --as all` and `mistri shot` no longer stop at 429 when they sign in as several roles. The server they
+  start listens on 127.0.0.1 only and runs without the sign-in rate limit; the per-account lockout stays. A 429 from
+  any other cause is retried once, after its `Retry-After`.
+- A command that hands back a link (a share link, a form link) shows it in its done state, in a read-only field with
+  a Copy button. Before, the toast said only "done" and the link was lost.
+- `startTestApp` gives the App a random form key for the run, so links and keyed public inputs work in a test with no
+  environment set. A key that the run names itself still wins.
+- `mistri shot --click <name>` presses the visible, enabled match. When more than one would do, it refuses and says
+  how many matched. When a click times out, it says what it found.
+- `mistri check --schema-file` creates the command journal and the App's declared stores in its scratch database
+  before running checks, so a check that reads them no longer fails on a sound schema.
+- A command with `targets: 'none'` accepts its target members left out, `null`, or empty.
+- `mistri dev` binds a role's dev account to a row of that role's own people table, where there is one, and prints
+  which row. When the dev store cannot be opened, `mistri tenant grant` names the one command that makes it.
+- When a tenant App fails to start on ownership, the error names the table, the column and the rule that failed.
+- New Apps, APIs and intakes, and the Apps `brief` scaffolds, give an integer primary key `AUTOINCREMENT` on SQLite,
+  so a deleted row's id, and a link minted for it, is never reused.
+- The seed spreads schedule-like rows (`at`, `*_at` on schedule tables) over two weeks either side of today, so a
+  calendar's week and its upcoming and past lists all have rows.
+- On a phone:
+  - A directory line and a finished step on a dashboard are at least 44px tall under a coarse pointer.
+  - A record page leaves room under its last section for the sticky action bar.
+  - A board shows one whole lane at a time, and its card titles wrap.
+
 ## 1.0.0-rc.61
 
 **Upgrading from rc.59 or rc.60.** Three things a browser test of an App may lean on moved (a field report):

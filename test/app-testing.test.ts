@@ -548,3 +548,15 @@ test('a permissions matrix reads a refused read as a table the role cannot see',
   ]);
   await assert.rejects(assertPermissions(host, [{ role: 'clerk', read: 'salary', allowed: true }]), /clerk may read salary: refused/);
 });
+
+test("a test host gives its App server a form key: the run's own when it names one, else a fresh random one", async () => {
+  const { hostFormKey } = await import('../packages/mistri/src/server/testing/host.js');
+  assert.equal(
+    hostFormKey({ MISTRI_FORM_KEY: 'named-by-the-run-of-at-least-thirty-two-bytes' }),
+    'named-by-the-run-of-at-least-thirty-two-bytes',
+  );
+  const a = hostFormKey({}),
+    b = hostFormKey({});
+  assert.ok(Buffer.byteLength(a, 'utf8') >= 32);
+  assert.notEqual(a, b);
+});

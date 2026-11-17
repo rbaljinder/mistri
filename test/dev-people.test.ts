@@ -40,7 +40,7 @@ test("a role's dev account is a row of auth.me's table: one naming the role, the
 });
 
 test('no auth.me, or a tenant App, keeps the throwaway addresses; a role past the rows keeps its own', async () => {
-  assert.equal((await devPeople(app({ roles: {} }), ['mechanic'], registry)).size, 0);
+  assert.equal((await devPeople(app({ roles: {} }), ['owner'], registry)).size, 0);
   assert.equal((await devPeople(app({ rows: 'tenant', me: { from: 'mechanic', column: 'email' } }), ['mechanic'], registry)).size, 0);
   const many = await devPeople(app({ me: { from: 'mechanic', column: 'email' } }), ['a', 'b', 'c', 'd'], registry);
   assert.deepEqual([...many.keys()], ['a', 'b', 'c']);
@@ -69,6 +69,34 @@ test("a role with a table of its own people takes a row of that table, not the n
   const people = await devPeople(app({ me: { from: 'mechanic', column: 'email' }, roles: {} }), ['mechanic', 'patient'], both);
   assert.deepEqual(Object.fromEntries(people), {
     mechanic: { email: 'rosa@spoke.test', name: 'Rosa Delgado' },
-    patient: { email: 'ana@clinic.test', name: 'Ana Ruiz' },
+    patient: { email: 'ana@clinic.test', name: 'Ana Ruiz', from: 'patients' },
   });
+});
+
+test("without auth.me, a role with a table of its own people is bound to that table's first row by key", async () => {
+  const resident = {
+    id: 'residents',
+    name: 'residents',
+    columns: [
+      { name: 'id', type: 'INTEGER', primaryKey: true },
+      { name: 'email', type: 'TEXT' },
+    ],
+  };
+  const flats = {
+    list: () => [{ id: 'shop', name: 'shop' }],
+    open: async () => ({
+      schema: { tables: [resident] },
+      adapter: {
+        query: async () => ({
+          rows: [
+            { id: 4, email: null },
+            { id: 5, email: 'kim@flats.test' },
+            { id: 6, email: 'lee@flats.test' },
+          ],
+        }),
+      },
+    }),
+  } as unknown as Registry;
+  const people = await devPeople(app({ roles: {} }), ['resident', 'manager'], flats);
+  assert.deepEqual(Object.fromEntries(people), { resident: { email: 'kim@flats.test', from: 'residents' } });
 });

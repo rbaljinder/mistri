@@ -87,6 +87,7 @@ import { placements, savePlaces, wholeColumn } from '@mistriwork/kit/client/comp
 import type { ModalRecord } from './RecordModal.js';
 import type { CloseReason } from './BoardCardEditor.js';
 import { say } from '../copy/lists/components/BoardList.js';
+import { toastDone } from './commandResult.js';
 
 /* The editors load with the first card opened for editing. */
 const BoardCardEditor = lazy(() => import('./BoardCardEditor.js'));
@@ -1035,7 +1036,7 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
       }
       optimistic.saving(token);
       // In the command's own words when it said any, as a one-click command's notice is (Actions.tsx).
-      toast(outcome.message ?? say('actionDone', { label: action.label }), 'ok');
+      toastDone(outcome.message ?? say('actionDone', { label: action.label }), outcome.output);
       moved = true;
     } else if (laneChange && action) {
       const failed = await write(card, values!, isCurrent);

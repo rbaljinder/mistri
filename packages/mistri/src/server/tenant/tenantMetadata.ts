@@ -255,14 +255,18 @@ export function captureTenantPages(app: AppDef, input: unknown): readonly PageDe
         tenantIdentifier(value.id, 1024);
         tenantIdentifier(value.name, 1024);
         tenantIdentifier(value.base);
-        if (
-          value.id.startsWith('suggested:') ||
-          ids.has(value.id) ||
-          value.error !== undefined ||
-          (value.source !== undefined && value.source !== 'config') ||
-          (value.connection !== undefined && value.connection !== app.sources?.[homeSourceOf(app)!]?.connection)
-        )
-          return denyTenant();
+        const unfit = value.id.startsWith('suggested:')
+          ? 'its id may not start with "suggested:", which is for pages the server proposes'
+          : ids.has(value.id)
+            ? "its id is also another page's"
+            : value.error !== undefined
+              ? 'it failed to load, so it has an "error"'
+              : value.source !== undefined && value.source !== 'config'
+                ? 'its "source" must be the App\'s config'
+                : value.connection !== undefined && value.connection !== app.sources?.[homeSourceOf(app)!]?.connection
+                  ? `its "connection" must be the App's own source's (${app.sources?.[homeSourceOf(app)!]?.connection})`
+                  : undefined;
+        if (unfit) return denyTenant(new Error(`${at} — ${unfit}.`));
         ids.add(value.id);
         const original = rest as unknown as PageDef;
         const authored = pageConfig(original);

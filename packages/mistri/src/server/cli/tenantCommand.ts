@@ -64,6 +64,9 @@ const HELP = `${TENANT_USAGE}
 Exit codes: 1 could not run.`;
 
 const TENANT = /^[a-z0-9][a-z0-9_-]{0,127}$/;
+/** The sign-in store grant reads could not be opened: said as one refusal naming the next step, not a stack. */
+class GrantStoreRefusal extends Error {}
+
 const COMMANDS = new Set(['init', 'grant', 'brand', 'clone', 'import', 'clock']);
 const FLAGS = ['--app', '--policy', '--operator', '--ahead', '--rate', '--roles', '--tenant', '--name', '--days', '--preset', '--file'];
 const DURATION = /^(\d+)(ms|s|m|h|d)?$/;
@@ -242,7 +245,14 @@ export async function runTenantCommand(
       if (local.env.XDG_CONFIG_HOME === undefined) delete process.env.XDG_CONFIG_HOME;
       else process.env.XDG_CONFIG_HOME = local.env.XDG_CONFIG_HOME;
       try {
-        let accountId = await maintenance.findAppAccount(app, email!);
+        let accountId = await maintenance.findAppAccount(app, email!).catch((error: Error) => {
+          // The store grant was pointed at could not be opened: where dev has not started the App, the one command that
+          // makes dev's store is the way on, rather than the store's own error alone.
+          throw new GrantStoreRefusal(
+            `the sign-in store could not be opened (${local.store}): ${error.message.split('\n')[0]}` +
+              (local.kept === 'dev' ? '' : `\nStart the App's dev server, then grant again: mistri dev --app ${flags['--app']}`),
+          );
+        });
         if (accountId === null) {
           // A password on the command line would be in the shell's history and the process list.
           const password = process.env.MISTRI_ACCOUNT_PASSWORD;
@@ -265,6 +275,9 @@ export async function runTenantCommand(
           `${email}: ${roles.join(', ')} of ${tenantId ?? 'the platform realm'} until ${new Date(validUntil).toISOString().slice(0, 10)}. Receipt ${granted.receiptId}.`,
         );
         return 0;
+      } catch (error) {
+        if (error instanceof GrantStoreRefusal) return fail(error.message);
+        throw error;
       } finally {
         if (saved === undefined) delete process.env.XDG_CONFIG_HOME;
         else process.env.XDG_CONFIG_HOME = saved;

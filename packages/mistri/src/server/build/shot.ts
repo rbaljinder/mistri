@@ -708,6 +708,18 @@ const freePort = () =>
     });
   });
 
+/* `grade --as all` signs in as every role from this one address, past the three in ten seconds Better Auth allows, and
+   was answered 429. The server listens on 127.0.0.1 only, which is what the seam requires beside NODE_ENV=test; nothing
+   else here reads NODE_ENV=test but the test host's own control, which also needs a token this server is never given.
+   The per-account lockout stays. */
+export const shotAuthLimits = { NODE_ENV: 'test', MISTRI_TEST_AUTH_LIMITS: 'off' } as const;
+
+/** Seconds to wait before one retry of a 429, from Retry-After (a count of seconds), capped so a bad header cannot stall a run. */
+export function retryAfterMs(header: string | undefined): number {
+  const seconds = Number(header);
+  return Number.isFinite(seconds) && seconds >= 0 ? Math.min(seconds, 15) * 1000 : 1000;
+}
+
 /** The App served on a free port, its config directory a temporary one: never the reader's auth store or layouts. */
 async function serve(args: string[], env: Record<string, string>): Promise<{ origin: string; child: ChildProcess }> {
   const child = spawn(process.execPath, [...selfInvocation(), ...args, '--port', String(await freePort()), '--host', '127.0.0.1'], {
@@ -773,7 +785,12 @@ async function signIn(
 ) {
   const context = await browser.newContext();
   const post = async (path: string, data: Record<string, unknown>) => {
-    const answer = await context.request.post(`${origin}${path}`, { headers: { origin }, data });
+    let answer = await context.request.post(`${origin}${path}`, { headers: { origin }, data });
+    /* Once: a limiter that still refuses after the wait is a real refusal, not something to loop on. */
+    if (answer.status() === 429) {
+      await new Promise((done) => setTimeout(done, retryAfterMs(answer.headers()['retry-after'])));
+      answer = await context.request.post(`${origin}${path}`, { headers: { origin }, data });
+    }
     if (!answer.ok()) throw new Refusal(`signing in as "${role}" failed: ${path} answered ${answer.status()}.`);
   };
   await post('/api/auth/sign-in/email', admin);
@@ -1698,6 +1715,7 @@ class ShotRun {
           XDG_CONFIG_HOME: this.xdg,
           /* A look is not a change: a scheduled job would write to the database the pages are read from (a field report). */
           MISTRI_JOBS: 'off',
+          ...shotAuthLimits,
           ...(auth ? { BETTER_AUTH_SECRET: randomBytes(32).toString('base64url') } : {}),
           ...(admin ? { MISTRI_AUTH_ADMIN_EMAIL: admin.email, MISTRI_AUTH_ADMIN_PASSWORD: admin.password } : {}),
         },

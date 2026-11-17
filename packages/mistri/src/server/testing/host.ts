@@ -110,6 +110,10 @@ async function stop(child: ChildProcess) {
     clearTimeout(timer);
   }
 }
+/** The form key a host's App server runs with: the run's own when it names one, else a fresh random one. */
+export function hostFormKey(env: NodeJS.ProcessEnv = process.env): string {
+  return env.MISTRI_FORM_KEY ?? randomBytes(32).toString('hex');
+}
 async function startHost(options: HostOptions, argumentsFor: (port: number) => Promise<string[]>) {
   const timeout = options.timeoutMs ?? 30000;
   if (!Number.isFinite(timeout) || timeout <= 0) throw new Error('Test host timeout must be positive.');
@@ -131,6 +135,11 @@ async function startHost(options: HostOptions, argumentsFor: (port: number) => P
         NODE_ENV: 'test',
         ...(!built ? { TSX_TSCONFIG_PATH: fileURLToPath(new URL('../../../../../tsconfig.json', import.meta.url)) } : {}),
         BETTER_AUTH_SECRET: randomBytes(32).toString('hex'),
+        /* The allowlist above would drop the key links and keyed public inputs are signed with, and an App that has
+           either would not start under test. A key the run's own environment names is passed on; otherwise this host
+           makes one for the run (forms/formKey.ts wants 32 bytes), so a restart of the host is a new key, as it is
+           a new database. */
+        MISTRI_FORM_KEY: hostFormKey(),
         /* A suite signs in many times a second from this one machine, which Better Auth's per-address limits refuse
            with 429 past the third in ten seconds. The host listens on loopback only, where the server honours this
            (auth/requestRules.ts); the per-account lockout stays. A test of the limits passes "on" in `environment`. */

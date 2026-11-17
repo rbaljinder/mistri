@@ -17,10 +17,11 @@
  */
 import { fieldLabel as humanized } from '../../shared/command.js';
 import { say } from '../copy/forms/components/outcomeModel.js';
+import { resultLinks } from './commandResult.js';
 
 type Waiting = 'sending' | 'checking' | 'queued' | 'approval';
 export type Outcome =
-  | { state: 'done'; said: string; changed?: { label: string } }
+  | { state: 'done'; said: string; changed?: { label: string }; links?: string[] }
   | { state: 'pending'; waiting: Waiting; said?: string }
   | { state: 'refused'; said: string; next: string }
   | { state: 'unknown'; said: string; next: string };
@@ -126,7 +127,13 @@ export function outcomeOfOperation(
       const waiting = pendingOf(operation.output);
       if (waiting)
         return { state: 'pending', waiting, said: operation.said ?? (waiting === 'queued' ? say('queuedBody') : say('approvalBody')) };
-      return { state: 'done', said: operation.said ?? say('doneBody'), ...(record ? { changed: record } : {}) };
+      const links = resultLinks(operation.output);
+      return {
+        state: 'done',
+        said: operation.said ?? say('doneBody'),
+        ...(record ? { changed: record } : {}),
+        ...(links.length ? { links } : {}),
+      };
     }
     case 'error':
       return { state: 'refused', said: operation.message, next: refusalNext(operation.code, fieldLabel) };

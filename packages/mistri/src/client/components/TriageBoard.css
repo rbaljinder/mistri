@@ -314,12 +314,15 @@
 @media (max-width: 760px) {
   .triage-board { --lane-gap: 8px; padding-inline: var(--space-4h); }
   .triage-board:not(.has-rows)::after, .triage-heads::after, .triage-swimlane-cells::after { right: -14px; }
-  /* One lane and the edge of the next, snapping into place as they are
-     swiped, so a lane is never left half in view; the picker above says
-     which one it is and how many there are. */
+  /* One whole lane to a screen, snapping into place as they are swiped, so a lane is never left half in view (the
+     next one's edge standing beside it read as a card cut off); the picker above says which one it is and how many
+     there are. The lane is the board's own width (cqw: the board is the container), widened over the padding on the far side less the gap, so the next lane starts at the room's edge and no sliver of it shows. */
   .triage-board { scroll-snap-type: x mandatory; scroll-padding-inline: 14px; }
-  .triage-lane, .triage-lane-top { flex: 0 0 min(248px, calc(100vw - 88px)); min-width: min(248px, calc(100vw - 88px)); max-width: none; scroll-snap-align: start; }
-  .triage-lane.is-folded { flex: 0 0 44px; min-width: 44px; max-width: 44px; scroll-snap-align: none; }
+  .triage-lane, .triage-lane-top { flex: 0 0 calc(100cqw + var(--space-4h) - var(--lane-gap)); min-width: calc(100cqw + var(--space-4h) - var(--lane-gap)); max-width: none; scroll-snap-align: start; }
+  /* A card's title wraps, whole, rather than being cut where the lane ends. */
+  .triage-card-title { white-space: normal; overflow-wrap: anywhere; }
+  /* A folded lane snaps by its far edge: with a whole lane to a screen, one with no stop of its own past the last open lane could never be brought into view. */
+  .triage-lane.is-folded { flex: 0 0 44px; min-width: 44px; max-width: 44px; scroll-snap-align: end; }
   .triage-lane-picker {
     display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-4h) var(--space-2h);
   }

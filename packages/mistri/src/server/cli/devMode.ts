@@ -185,6 +185,8 @@ export function prepareDev(argv: string[], env: NodeJS.ProcessEnv = process.env)
 interface Person {
   email: string;
   name?: string;
+  /** The table whose row the address is, where it is not auth.me's. */
+  from?: string;
 }
 
 /**
@@ -197,39 +199,47 @@ interface Person {
 export async function devPeople(loaded: LoadedApp, roles: readonly string[], registry: Registry): Promise<Map<string, Person>> {
   const me = loaded.app.auth?.me;
   const chosen = new Map<string, Person>();
-  if (!me || isTenantApp(loaded.app) || me.by === 'account') return chosen;
+  if (isTenantApp(loaded.app) || me?.by === 'account') return chosen;
+  /* Without auth.me a row policy still keys on an address (a resident sees the rows where residents.email is theirs),
+     in code this cannot read: a role with a table of its own people is bound to that table's first row below. */
+  if (!me && !loaded.app.auth?.roles) return chosen;
   const sources = Object.values(loaded.app.sources ?? {});
   const bound = loaded.app.connection ?? (sources.length === 1 ? sources[0].connection : undefined);
   const connection = registry.list().find((c) => c.id === bound || c.name === bound) ?? (bound ? undefined : registry.list()[0]);
   if (!connection) return chosen;
   const { adapter, schema } = await registry.open(connection.id);
-  const table = tableNamed(schema, me.from);
+  const table = me ? tableNamed(schema, me.from) : undefined;
   const key = table && primaryKey(table)[0];
-  if (!table || !key || !table.columns.some((column) => column.name === me.column)) return chosen;
-  const named = ['name', 'full_name', 'display_name', 'title'].find((column) => table.columns.some((c) => c.name === column));
-  /* Every text column by name: the adapter's own pick may leave the email out, as a reader's grid does. */
-  const columns = table.columns.filter((column) => column.name === key || columnKind(column.type) === 'text').map((column) => column.name);
-  const result = await adapter.query({ table: table.id, columns, orderBy: [{ column: key, direction: 'asc' }], limit: 200, offset: 0 });
-  const rows = result.rows.filter((row) => typeof row[me.column] === 'string' && /@/.test(row[me.column] as string));
+  const meRows = Boolean(me && table && key && table.columns.some((column) => column.name === me.column));
+  const named = table && ['name', 'full_name', 'display_name', 'title'].find((column) => table.columns.some((c) => c.name === column));
   const taken = new Set<unknown>();
-  const take = (role: string, row: Record<string, unknown>) => {
-    taken.add(row);
-    chosen.set(role, { email: row[me.column] as string, ...(named && typeof row[named] === 'string' ? { name: row[named] } : {}) });
-  };
   const word = (role: string) => role.toLowerCase().replace(/[_-]+/g, ' ');
-  /* A role named as the table is (mechanic, of mechanic or mechanics) is the one the table's rows are people of: it
-     is given a row first, so a manager declared before it does not take the row its views are about. */
   const singular = (name: string) => word(name).replace(/s$/, '');
-  roles = [...roles].sort((a, b) => Number(singular(b) === singular(me.from)) - Number(singular(a) === singular(me.from)));
-  for (const role of roles) {
-    const own = rows.find(
-      (row) =>
-        !taken.has(row) &&
-        Object.entries(row).some(
-          ([column, value]) => column !== me.column && typeof value === 'string' && value.toLowerCase() === word(role),
-        ),
-    );
-    if (own) take(role, own);
+  let rows: Record<string, unknown>[] = [];
+  if (meRows && me && table && key) {
+    /* Every text column by name: the adapter's own pick may leave the email out, as a reader's grid does. */
+    const columns = table.columns
+      .filter((column) => column.name === key || columnKind(column.type) === 'text')
+      .map((column) => column.name);
+    const result = await adapter.query({ table: table.id, columns, orderBy: [{ column: key, direction: 'asc' }], limit: 200, offset: 0 });
+    rows = result.rows.filter((row) => typeof row[me.column] === 'string' && /@/.test(row[me.column] as string));
+    const take = (role: string, row: Record<string, unknown>) => {
+      taken.add(row);
+      chosen.set(role, { email: row[me.column] as string, ...(named && typeof row[named] === 'string' ? { name: row[named] } : {}) });
+    };
+    /* A role named as the table is (mechanic, of mechanic or mechanics) is the one the table's rows are people of: it
+       is given a row first, so a manager declared before it does not take the row its views are about. */
+    roles = [...roles].sort((a, b) => Number(singular(b) === singular(me.from)) - Number(singular(a) === singular(me.from)));
+    for (const role of roles) {
+      const own = rows.find(
+        (row) =>
+          !taken.has(row) &&
+          Object.entries(row).some(
+            ([column, value]) => column !== me.column && typeof value === 'string' && value.toLowerCase() === word(role),
+          ),
+      );
+      if (own) take(role, own);
+    }
   }
   /* A role with a table of its own people (patients, for patient) is one of them, not the next row of auth.me's
      table: given a therapist's address, a clinic's patient signed in and saw none of their own visits. It takes the
@@ -237,8 +247,8 @@ export async function devPeople(loaded: LoadedApp, roles: readonly string[], reg
      address finds them. A role with no such table is the next row here, as before. */
   for (const role of roles) {
     if (chosen.has(role)) continue;
-    const own = schema.tables.find((candidate) => candidate.id !== table.id && singular(candidate.name) === singular(role));
-    const address = own?.columns.find((column) => column.name === me.column || column.name === 'email');
+    const own = schema.tables.find((candidate) => candidate.id !== table?.id && singular(candidate.name) === singular(role));
+    const address = own?.columns.find((column) => column.name === me?.column || column.name === 'email');
     const ownKey = own && primaryKey(own)[0];
     if (own && address && ownKey) {
       const names = ['name', 'full_name', 'display_name'].find((column) => own.columns.some((c) => c.name === column));
@@ -253,13 +263,17 @@ export async function devPeople(loaded: LoadedApp, roles: readonly string[], reg
       if (person) {
         chosen.set(role, {
           email: person[address.name] as string,
+          from: own.name,
           ...(names && typeof person[names] === 'string' ? { name: person[names] as string } : {}),
         });
         continue;
       }
     }
     const next = rows.find((row) => !taken.has(row));
-    if (next) take(role, next);
+    if (next && me) {
+      taken.add(next);
+      chosen.set(role, { email: next[me.column] as string, ...(named && typeof next[named] === 'string' ? { name: next[named] } : {}) });
+    }
   }
   return chosen;
 }
@@ -436,9 +450,10 @@ async function accounts(opts: Options, loadedApps: LoadedApp[], dev: DevFile, fi
     for (const role of roles) {
       const person = persons.get(role);
       console.log(`  ${role.padEnd(width)}  ${addressOf(role)}  ${dev.passwords[role]}`);
-      if (person) console.log(`  ${' '.repeat(width)}  ${person.name ?? 'a row'} in ${loaded.app.auth!.me!.from}: \`me\` is that row`);
+      if (person?.from) console.log(`  ${' '.repeat(width)}  bound to ${person.email}, the first row of ${person.from}`);
+      else if (person) console.log(`  ${' '.repeat(width)}  ${person.name ?? 'a row'} in ${loaded.app.auth!.me!.from}: \`me\` is that row`);
     }
-    if (persons.size)
+    if (loaded.app.auth?.me && [...persons.values()].some((person) => !person.from))
       console.log(
         `  An account takes the email of a ${loaded.app.auth!.me!.from} row (auth.me), one per role, so a view of \`= me\` shows that person's records.`,
       );
